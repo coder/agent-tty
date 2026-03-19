@@ -155,7 +155,7 @@ export async function sendRpc(
     socket.on('timeout', () => {
       rejectWithCliError(
         makeCliError(ERROR_CODES.HOST_TIMEOUT, {
-          message: `RPC request timed out after ${effectiveTimeoutMs}ms.`,
+          message: `RPC request timed out after ${String(effectiveTimeoutMs)}ms.`,
           details: {
             method,
             socketPath,

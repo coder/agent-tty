@@ -24,12 +24,12 @@ function formatSessionLines(session: SessionRecord): string[] {
     `Status: ${session.status}`,
     `Command: ${session.command.join(' ')}`,
     `Working Directory: ${session.cwd}`,
-    `Size: ${session.cols}x${session.rows}`,
+    `Size: ${String(session.cols)}x${String(session.rows)}`,
     `Created At: ${session.createdAt}`,
     `Updated At: ${session.updatedAt}`,
-    `Host PID: ${session.hostPid ?? '-'}`,
-    `Child PID: ${session.childPid ?? '-'}`,
-    `Exit Code: ${session.exitCode ?? '-'}`,
+    `Host PID: ${String(session.hostPid ?? '-')}`,
+    `Child PID: ${String(session.childPid ?? '-')}`,
+    `Exit Code: ${String(session.exitCode ?? '-')}`,
     `Exit Signal: ${session.exitSignal ?? '-'}`,
   ];
 }

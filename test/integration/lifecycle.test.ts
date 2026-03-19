@@ -86,12 +86,18 @@ async function cleanupHome(home: string): Promise<void> {
           if (typeof pid === 'number' && pid > 0) {
             try {
               process.kill(pid, 'SIGKILL');
-            } catch {}
+            } catch {
+              // best-effort cleanup, ignore errors
+            }
           }
         }
-      } catch {}
+      } catch {
+        // best-effort cleanup, ignore errors
+      }
     }
-  } catch {}
+  } catch {
+    // best-effort cleanup, ignore errors
+  }
 
   await rm(home, { recursive: true, force: true });
 }
