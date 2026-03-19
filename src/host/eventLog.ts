@@ -17,6 +17,47 @@ const OutputEventPayloadSchema = z
 
 type OutputEventPayload = z.infer<typeof OutputEventPayloadSchema>;
 
+const InputTextEventPayloadSchema = z
+  .object({
+    data: z.string(),
+  })
+  .strict();
+
+type InputTextEventPayload = z.infer<typeof InputTextEventPayloadSchema>;
+
+const InputPasteEventPayloadSchema = z
+  .object({
+    data: z.string(),
+  })
+  .strict();
+
+type InputPasteEventPayload = z.infer<typeof InputPasteEventPayloadSchema>;
+
+const InputKeysEventPayloadSchema = z
+  .object({
+    keys: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+
+type InputKeysEventPayload = z.infer<typeof InputKeysEventPayloadSchema>;
+
+const ResizeEventPayloadSchema = z
+  .object({
+    cols: z.number().int().positive(),
+    rows: z.number().int().positive(),
+  })
+  .strict();
+
+type ResizeEventPayload = z.infer<typeof ResizeEventPayloadSchema>;
+
+const SignalEventPayloadSchema = z
+  .object({
+    signal: z.string().min(1),
+  })
+  .strict();
+
+type SignalEventPayload = z.infer<typeof SignalEventPayloadSchema>;
+
 const ExitEventPayloadSchema = z
   .object({
     exitCode: z.number().int().nullable(),
@@ -26,8 +67,22 @@ const ExitEventPayloadSchema = z
 
 type ExitEventPayload = z.infer<typeof ExitEventPayloadSchema>;
 
-type EventLogEventType = 'output' | 'exit';
-type EventLogPayload = OutputEventPayload | ExitEventPayload;
+type EventLogEventType =
+  | 'output'
+  | 'input_text'
+  | 'input_paste'
+  | 'input_keys'
+  | 'resize'
+  | 'signal'
+  | 'exit';
+type EventLogPayload =
+  | OutputEventPayload
+  | InputTextEventPayload
+  | InputPasteEventPayload
+  | InputKeysEventPayload
+  | ResizeEventPayload
+  | SignalEventPayload
+  | ExitEventPayload;
 
 function assertFilePath(filePath: string): void {
   invariant(filePath.length > 0, 'filePath must be a non-empty string');
@@ -41,6 +96,31 @@ function validatePayload(
     case 'output': {
       const result = OutputEventPayloadSchema.safeParse(payload);
       invariant(result.success, 'output payload must match schema');
+      return result.data;
+    }
+    case 'input_text': {
+      const result = InputTextEventPayloadSchema.safeParse(payload);
+      invariant(result.success, 'input_text payload must match schema');
+      return result.data;
+    }
+    case 'input_paste': {
+      const result = InputPasteEventPayloadSchema.safeParse(payload);
+      invariant(result.success, 'input_paste payload must match schema');
+      return result.data;
+    }
+    case 'input_keys': {
+      const result = InputKeysEventPayloadSchema.safeParse(payload);
+      invariant(result.success, 'input_keys payload must match schema');
+      return result.data;
+    }
+    case 'resize': {
+      const result = ResizeEventPayloadSchema.safeParse(payload);
+      invariant(result.success, 'resize payload must match schema');
+      return result.data;
+    }
+    case 'signal': {
+      const result = SignalEventPayloadSchema.safeParse(payload);
+      invariant(result.success, 'signal payload must match schema');
       return result.data;
     }
     case 'exit': {
@@ -107,6 +187,11 @@ export class EventLog {
   }
 
   async append(type: 'output', payload: OutputEventPayload): Promise<void>;
+  async append(type: 'input_text', payload: InputTextEventPayload): Promise<void>;
+  async append(type: 'input_paste', payload: InputPasteEventPayload): Promise<void>;
+  async append(type: 'input_keys', payload: InputKeysEventPayload): Promise<void>;
+  async append(type: 'resize', payload: ResizeEventPayload): Promise<void>;
+  async append(type: 'signal', payload: SignalEventPayload): Promise<void>;
   async append(type: 'exit', payload: ExitEventPayload): Promise<void>;
   async append(type: EventLogEventType, payload: EventLogPayload): Promise<void> {
     invariant(!this.isClosed, 'cannot append to a closed event log');

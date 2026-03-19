@@ -1,6 +1,7 @@
 import { stat, unlink } from 'node:fs/promises';
 import net from 'node:net';
 
+import { CliError } from '../cli/errors.js';
 import { ERROR_CODES } from '../protocol/errors.js';
 import {
   RpcMethodSchemas,
@@ -99,6 +100,24 @@ function buildErrorResponse(id: string, message: string): RpcResponse {
   invariant(
     responseResult.success,
     'RPC error response must satisfy RpcResponseSchema.',
+  );
+
+  return responseResult.data;
+}
+
+function buildCliErrorResponse(id: string, error: CliError): RpcResponse {
+  const response = {
+    id,
+    ok: false,
+    error: {
+      code: error.code,
+      message: error.message,
+    },
+  } as const;
+  const responseResult = RpcResponseSchema.safeParse(response);
+  invariant(
+    responseResult.success,
+    'RPC CliError response must satisfy RpcResponseSchema.',
   );
 
   return responseResult.data;
@@ -347,13 +366,15 @@ export class RpcServer {
     } catch (error) {
       this.sendResponse(
         socket,
-        buildErrorResponse(
-          request.id,
-          toErrorMessage(
-            error,
-            `RPC handler failed for method "${request.method}".`,
-          ),
-        ),
+        error instanceof CliError
+          ? buildCliErrorResponse(request.id, error)
+          : buildErrorResponse(
+              request.id,
+              toErrorMessage(
+                error,
+                `RPC handler failed for method "${request.method}".`,
+              ),
+            ),
       );
     }
   }

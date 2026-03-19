@@ -36,6 +36,16 @@ export class SessionState {
     this.touch();
   }
 
+  public setDimensions(cols: number, rows: number): void {
+    invariant(this.#record.status === 'running', 'Cannot set dimensions unless session is running');
+    invariant(Number.isInteger(cols) && cols > 0, 'Columns must be a positive integer');
+    invariant(Number.isInteger(rows) && rows > 0, 'Rows must be a positive integer');
+
+    this.#record.cols = cols;
+    this.#record.rows = rows;
+    this.touch();
+  }
+
   public requestDestroy(): void {
     invariant(this.#record.status === 'running', 'Cannot request destroy unless session is running');
 
