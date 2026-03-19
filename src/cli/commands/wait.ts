@@ -3,7 +3,11 @@ import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import { resolveHome } from '../../storage/home.js';
-import { manifestPath, sessionDir, socketPath } from '../../storage/sessionPaths.js';
+import {
+  manifestPath,
+  sessionDir,
+  socketPath,
+} from '../../storage/sessionPaths.js';
 
 export interface WaitResult {
   exitCode?: number;
@@ -105,7 +109,8 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     idleMs: options.idleMs ?? undefined,
     timeoutMs: options.timeout ?? undefined,
   };
-  const clientTimeout = options.timeout !== undefined ? options.timeout + 5_000 : 0;
+  const clientTimeout =
+    options.timeout !== undefined ? options.timeout + 5_000 : 0;
   const result = (await sendRpc(
     socketPath(sessionDirectory),
     'wait',

@@ -19,27 +19,48 @@ export class SessionState {
   }
 
   public setHostPid(pid: number): void {
-    invariant(this.#record.status === 'running', 'Cannot set host PID unless session is running');
+    invariant(
+      this.#record.status === 'running',
+      'Cannot set host PID unless session is running',
+    );
     invariant(this.#record.hostPid === null, 'Host PID has already been set');
-    invariant(Number.isInteger(pid) && pid > 0, 'Host PID must be a positive integer');
+    invariant(
+      Number.isInteger(pid) && pid > 0,
+      'Host PID must be a positive integer',
+    );
 
     this.#record.hostPid = pid;
     this.touch();
   }
 
   public setChildPid(pid: number): void {
-    invariant(this.#record.status === 'running', 'Cannot set child PID unless session is running');
+    invariant(
+      this.#record.status === 'running',
+      'Cannot set child PID unless session is running',
+    );
     invariant(this.#record.childPid === null, 'Child PID has already been set');
-    invariant(Number.isInteger(pid) && pid > 0, 'Child PID must be a positive integer');
+    invariant(
+      Number.isInteger(pid) && pid > 0,
+      'Child PID must be a positive integer',
+    );
 
     this.#record.childPid = pid;
     this.touch();
   }
 
   public setDimensions(cols: number, rows: number): void {
-    invariant(this.#record.status === 'running', 'Cannot set dimensions unless session is running');
-    invariant(Number.isInteger(cols) && cols > 0, 'Columns must be a positive integer');
-    invariant(Number.isInteger(rows) && rows > 0, 'Rows must be a positive integer');
+    invariant(
+      this.#record.status === 'running',
+      'Cannot set dimensions unless session is running',
+    );
+    invariant(
+      Number.isInteger(cols) && cols > 0,
+      'Columns must be a positive integer',
+    );
+    invariant(
+      Number.isInteger(rows) && rows > 0,
+      'Rows must be a positive integer',
+    );
 
     this.#record.cols = cols;
     this.#record.rows = rows;
@@ -47,7 +68,10 @@ export class SessionState {
   }
 
   public requestDestroy(): void {
-    invariant(this.#record.status === 'running', 'Cannot request destroy unless session is running');
+    invariant(
+      this.#record.status === 'running',
+      'Cannot request destroy unless session is running',
+    );
 
     this.#record.status = 'exiting';
     this.touch();

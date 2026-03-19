@@ -25,7 +25,14 @@ import {
 } from '../storage/sessionPaths.js';
 import { invariant } from '../util/assert.js';
 
-const ALLOWED_SIGNALS = ['SIGTERM', 'SIGINT', 'SIGKILL', 'SIGHUP', 'SIGUSR1', 'SIGUSR2'] as const;
+const ALLOWED_SIGNALS = [
+  'SIGTERM',
+  'SIGINT',
+  'SIGKILL',
+  'SIGHUP',
+  'SIGUSR1',
+  'SIGUSR2',
+] as const;
 
 type WaitOutcome = {
   exitCode?: number;
@@ -52,7 +59,10 @@ function rethrowAsync(error: unknown): void {
 }
 
 export async function runHost(sessionId: string): Promise<void> {
-  invariant(typeof sessionId === 'string' && sessionId.length > 0, 'sessionId must be a non-empty string');
+  invariant(
+    typeof sessionId === 'string' && sessionId.length > 0,
+    'sessionId must be a non-empty string',
+  );
 
   const home = resolveHome();
   const sessDir = sessionDir(home, sessionId);
@@ -61,10 +71,16 @@ export async function runHost(sessionId: string): Promise<void> {
   const sPath = socketPath(sessDir);
 
   const manifest = await readManifest(mPath);
-  invariant(manifest.sessionId === sessionId, 'session manifest sessionId must match the requested session');
+  invariant(
+    manifest.sessionId === sessionId,
+    'session manifest sessionId must match the requested session',
+  );
 
   const state = new SessionState(manifest);
-  invariant(Number.isInteger(process.pid) && process.pid > 0, 'process.pid must be a positive integer');
+  invariant(
+    Number.isInteger(process.pid) && process.pid > 0,
+    'process.pid must be a positive integer',
+  );
   state.setHostPid(process.pid);
 
   const eventLog = await EventLog.open(ePath);
@@ -97,7 +113,10 @@ export async function runHost(sessionId: string): Promise<void> {
     rows: manifest.rows,
   });
 
-  invariant(Number.isInteger(pty.pid) && pty.pid > 0, 'PTY child PID must be a positive integer');
+  invariant(
+    Number.isInteger(pty.pid) && pty.pid > 0,
+    'PTY child PID must be a positive integer',
+  );
   state.setChildPid(pty.pid);
 
   const initiateShutdown = (): Promise<void> => {
@@ -166,7 +185,9 @@ export async function runHost(sessionId: string): Promise<void> {
       const { text } = params as TypeParams;
 
       if (!isSessionRunning(state)) {
-        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, { message: 'Session is not running.' });
+        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
+          message: 'Session is not running.',
+        });
       }
 
       invariant(typeof text === 'string', 'type text must be a string');
@@ -178,10 +199,15 @@ export async function runHost(sessionId: string): Promise<void> {
       const { text } = params as PasteParams;
 
       if (!isSessionRunning(state)) {
-        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, { message: 'Session is not running.' });
+        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
+          message: 'Session is not running.',
+        });
       }
 
-      invariant(typeof text === 'string' && text.length > 0, 'paste text must be a non-empty string');
+      invariant(
+        typeof text === 'string' && text.length > 0,
+        'paste text must be a non-empty string',
+      );
       const encoded = encodePaste(text);
       pty.write(encoded);
       await eventLog.append('input_paste', { data: encoded });
@@ -191,17 +217,23 @@ export async function runHost(sessionId: string): Promise<void> {
       const { keys } = params as SendKeysParams;
 
       if (!isSessionRunning(state)) {
-        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, { message: 'Session is not running.' });
+        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
+          message: 'Session is not running.',
+        });
       }
 
-      invariant(Array.isArray(keys) && keys.length > 0, 'keys must be a non-empty array');
+      invariant(
+        Array.isArray(keys) && keys.length > 0,
+        'keys must be a non-empty array',
+      );
 
       let encoded: string;
       try {
         encoded = keys.map((key) => encodeKey(key)).join('');
       } catch (error) {
         throw makeCliError(ERROR_CODES.INVALID_KEYS, {
-          message: error instanceof Error ? error.message : 'Invalid key sequence.',
+          message:
+            error instanceof Error ? error.message : 'Invalid key sequence.',
           cause: error,
         });
       }
@@ -214,11 +246,19 @@ export async function runHost(sessionId: string): Promise<void> {
       const { cols, rows } = params as ResizeParams;
 
       if (!isSessionRunning(state)) {
-        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, { message: 'Session is not running.' });
+        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
+          message: 'Session is not running.',
+        });
       }
 
-      invariant(Number.isInteger(cols) && cols > 0, 'cols must be a positive integer');
-      invariant(Number.isInteger(rows) && rows > 0, 'rows must be a positive integer');
+      invariant(
+        Number.isInteger(cols) && cols > 0,
+        'cols must be a positive integer',
+      );
+      invariant(
+        Number.isInteger(rows) && rows > 0,
+        'rows must be a positive integer',
+      );
 
       pty.resize(cols, rows);
       state.setDimensions(cols, rows);
@@ -230,12 +270,19 @@ export async function runHost(sessionId: string): Promise<void> {
       const { signal } = params as SignalParams;
 
       if (!isSessionRunning(state)) {
-        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, { message: 'Session is not running.' });
+        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
+          message: 'Session is not running.',
+        });
       }
 
-      invariant(typeof signal === 'string' && signal.length > 0, 'signal must be a non-empty string');
+      invariant(
+        typeof signal === 'string' && signal.length > 0,
+        'signal must be a non-empty string',
+      );
 
-      if (!ALLOWED_SIGNALS.includes(signal as (typeof ALLOWED_SIGNALS)[number])) {
+      if (
+        !ALLOWED_SIGNALS.includes(signal as (typeof ALLOWED_SIGNALS)[number])
+      ) {
         throw makeCliError(ERROR_CODES.INVALID_SIGNAL, {
           message: `Invalid signal: ${signal}. Allowed: ${ALLOWED_SIGNALS.join(', ')}`,
           details: { signal, allowed: [...ALLOWED_SIGNALS] },
@@ -243,7 +290,10 @@ export async function runHost(sessionId: string): Promise<void> {
       }
 
       const childPid = state.snapshot().childPid;
-      invariant(childPid !== null && childPid > 0, 'child PID must be set for signal delivery');
+      invariant(
+        childPid !== null && childPid > 0,
+        'child PID must be set for signal delivery',
+      );
       process.kill(childPid, signal as (typeof ALLOWED_SIGNALS)[number]);
 
       await eventLog.append('signal', { signal });
@@ -261,10 +311,16 @@ export async function runHost(sessionId: string): Promise<void> {
       }
 
       if (hasIdle) {
-        invariant(Number.isInteger(idleMs) && idleMs > 0, 'idleMs must be a positive integer');
+        invariant(
+          Number.isInteger(idleMs) && idleMs > 0,
+          'idleMs must be a positive integer',
+        );
       }
       if (timeoutMs !== undefined) {
-        invariant(Number.isInteger(timeoutMs) && timeoutMs > 0, 'timeoutMs must be a positive integer');
+        invariant(
+          Number.isInteger(timeoutMs) && timeoutMs > 0,
+          'timeoutMs must be a positive integer',
+        );
       }
 
       let waitCondition: Promise<WaitOutcome>;
@@ -290,27 +346,35 @@ export async function runHost(sessionId: string): Promise<void> {
         });
       } else {
         if (!isSessionRunning(state)) {
-          throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, { message: 'Session is not running.' });
+          throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
+            message: 'Session is not running.',
+          });
         }
 
         const idleDuration = idleMs ?? 0;
-        invariant(Number.isInteger(idleDuration) && idleDuration > 0, 'idleMs must be a positive integer');
+        invariant(
+          Number.isInteger(idleDuration) && idleDuration > 0,
+          'idleMs must be a positive integer',
+        );
 
         waitCondition = new Promise<WaitOutcome>((resolve) => {
-          const checkInterval = setInterval(() => {
-            const elapsed = Date.now() - lastOutputAt;
-            if (elapsed < idleDuration) {
-              return;
-            }
+          const checkInterval = setInterval(
+            () => {
+              const elapsed = Date.now() - lastOutputAt;
+              if (elapsed < idleDuration) {
+                return;
+              }
 
-            clearInterval(checkInterval);
-            const snapshot = state.snapshot();
-            const result: WaitOutcome = { timedOut: false };
-            if (snapshot.exitCode !== null) {
-              result.exitCode = snapshot.exitCode;
-            }
-            resolve(result);
-          }, Math.min(idleDuration / 2, 100));
+              clearInterval(checkInterval);
+              const snapshot = state.snapshot();
+              const result: WaitOutcome = { timedOut: false };
+              if (snapshot.exitCode !== null) {
+                result.exitCode = snapshot.exitCode;
+              }
+              resolve(result);
+            },
+            Math.min(idleDuration / 2, 100),
+          );
 
           clearWaitCondition = (): void => {
             clearInterval(checkInterval);

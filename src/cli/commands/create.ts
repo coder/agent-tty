@@ -11,7 +11,11 @@ import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { resolveHome } from '../../storage/home.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
-import { manifestPath, sessionDir, socketPath } from '../../storage/sessionPaths.js';
+import {
+  manifestPath,
+  sessionDir,
+  socketPath,
+} from '../../storage/sessionPaths.js';
 
 const READINESS_POLL_INTERVAL_MS = 100;
 const READINESS_MAX_ATTEMPTS = 50;
@@ -62,7 +66,9 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
         (error.code === ERROR_CODES.HOST_UNREACHABLE ||
           error.code === ERROR_CODES.HOST_TIMEOUT)
       ) {
-        const manifest = await readManifestIfExists(manifestPath(sessionDirectory));
+        const manifest = await readManifestIfExists(
+          manifestPath(sessionDirectory),
+        );
         if (manifest?.status === 'exited') {
           emitSuccess({
             command: 'create',

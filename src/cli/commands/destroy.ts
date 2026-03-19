@@ -12,7 +12,9 @@ interface CommandOptions {
   force: boolean;
 }
 
-export async function runDestroyCommand(options: CommandOptions): Promise<void> {
+export async function runDestroyCommand(
+  options: CommandOptions,
+): Promise<void> {
   await destroySession(options.sessionId, options.force);
 
   emitSuccess({

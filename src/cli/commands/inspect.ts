@@ -7,7 +7,11 @@ import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { readManifest, readManifestIfExists } from '../../storage/manifests.js';
 import { resolveHome } from '../../storage/home.js';
-import { manifestPath, sessionDir, socketPath } from '../../storage/sessionPaths.js';
+import {
+  manifestPath,
+  sessionDir,
+  socketPath,
+} from '../../storage/sessionPaths.js';
 
 export interface InspectResult {
   session: SessionRecord;
@@ -34,7 +38,9 @@ function formatSessionLines(session: SessionRecord): string[] {
   ];
 }
 
-export async function runInspectCommand(options: CommandOptions): Promise<void> {
+export async function runInspectCommand(
+  options: CommandOptions,
+): Promise<void> {
   const home = resolveHome();
   const sessionDirectory = sessionDir(home, options.sessionId);
   const manifestFile = manifestPath(sessionDirectory);
@@ -52,7 +58,10 @@ export async function runInspectCommand(options: CommandOptions): Promise<void> 
 
   if (session.status !== 'exited') {
     try {
-      const liveResult = (await sendRpc(socketPath(sessionDirectory), 'inspect')) as InspectResult;
+      const liveResult = (await sendRpc(
+        socketPath(sessionDirectory),
+        'inspect',
+      )) as InspectResult;
       session = liveResult.session;
     } catch (error) {
       if (

@@ -78,7 +78,9 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
     expect(waitForReady.command).toBe('wait');
     expect(waitForReady.result.timedOut).toBe(false);
     await expect(
-      readOutput(testHome, sessionId).then((output) => normalizeTerminalOutput(output)),
+      readOutput(testHome, sessionId).then((output) =>
+        normalizeTerminalOutput(output),
+      ),
     ).resolves.toContain('READY> ');
 
     const typeEnvelope = runCliJson<SuccessEnvelope<Record<string, never>>>(
@@ -110,7 +112,9 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
     );
     expect(waitForEcho.result.timedOut).toBe(false);
     await expect(
-      readOutput(testHome, sessionId).then((output) => normalizeTerminalOutput(output)),
+      readOutput(testHome, sessionId).then((output) =>
+        normalizeTerminalOutput(output),
+      ),
     ).resolves.toContain('ECHO: hello world\nREADY> ');
 
     const inspectRunning = runCliJson<SuccessEnvelope<InspectResult>>(
@@ -130,23 +134,30 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
     expect(typeExitEnvelope.command).toBe('type');
     expect(typeExitEnvelope.result).toEqual({});
 
-    const sendExitEnterEnvelope = runCliJson<SuccessEnvelope<Record<string, never>>>(
-      ['send-keys', sessionId, 'Enter'],
-      env,
-    );
+    const sendExitEnterEnvelope = runCliJson<
+      SuccessEnvelope<Record<string, never>>
+    >(['send-keys', sessionId, 'Enter'], env);
     expect(sendExitEnterEnvelope.ok).toBe(true);
     expect(sendExitEnterEnvelope.command).toBe('send-keys');
     expect(sendExitEnterEnvelope.result).toEqual({});
 
     const waitForExit = runCliJson<SuccessEnvelope<WaitResult>>(
-      ['wait', sessionId, '--exit', '--timeout', String(DEFAULT_WAIT_TIMEOUT_MS)],
+      [
+        'wait',
+        sessionId,
+        '--exit',
+        '--timeout',
+        String(DEFAULT_WAIT_TIMEOUT_MS),
+      ],
       env,
     );
     expect(waitForExit.ok).toBe(true);
     expect(waitForExit.result.timedOut).toBe(false);
     expect(waitForExit.result.exitCode).toBe(0);
     await expect(
-      readOutput(testHome, sessionId).then((output) => normalizeTerminalOutput(output)),
+      readOutput(testHome, sessionId).then((output) =>
+        normalizeTerminalOutput(output),
+      ),
     ).resolves.toContain('BYE\n');
 
     const inspectExited = runCliJson<SuccessEnvelope<InspectResult>>(
@@ -156,16 +167,17 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
     expect(inspectExited.result.session.status).toBe('exited');
     expect(inspectExited.result.session.exitCode).toBe(0);
 
-    const destroyEnvelope = runCliJson<SuccessEnvelope<{ sessionId: string; destroyed: boolean }>>(
-      ['destroy', sessionId, '--force'],
-      env,
-    );
+    const destroyEnvelope = runCliJson<
+      SuccessEnvelope<{ sessionId: string; destroyed: boolean }>
+    >(['destroy', sessionId, '--force'], env);
     expect(destroyEnvelope.ok).toBe(true);
     expect(destroyEnvelope.command).toBe('destroy');
     expect(destroyEnvelope.result.sessionId).toBe(sessionId);
     expect(destroyEnvelope.result.destroyed).toBe(true);
 
-    createdSessionIds = createdSessionIds.filter((value) => value !== sessionId);
+    createdSessionIds = createdSessionIds.filter(
+      (value) => value !== sessionId,
+    );
   });
 
   it('paste and exit-code', () => {
@@ -207,7 +219,13 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
     expect(sendKeysEnvelope.result).toEqual({});
 
     const waitForExit = runCliJson<SuccessEnvelope<WaitResult>>(
-      ['wait', sessionId, '--exit', '--timeout', String(DEFAULT_WAIT_TIMEOUT_MS)],
+      [
+        'wait',
+        sessionId,
+        '--exit',
+        '--timeout',
+        String(DEFAULT_WAIT_TIMEOUT_MS),
+      ],
       env,
     );
     expect(waitForExit.ok).toBe(true);
@@ -237,23 +255,33 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
     );
     expect(waitForReady.result.timedOut).toBe(false);
 
-    const signalEnvelope = runCliJson<SuccessEnvelope<{ signal: string; delivered: boolean }>>(
-      ['signal', sessionId, 'SIGINT'],
-      env,
-    );
+    const signalEnvelope = runCliJson<
+      SuccessEnvelope<{ signal: string; delivered: boolean }>
+    >(['signal', sessionId, 'SIGINT'], env);
     expect(signalEnvelope.ok).toBe(true);
     expect(signalEnvelope.command).toBe('signal');
-    expect(signalEnvelope.result).toEqual({ signal: 'SIGINT', delivered: true });
+    expect(signalEnvelope.result).toEqual({
+      signal: 'SIGINT',
+      delivered: true,
+    });
 
     const waitForExit = runCliJson<SuccessEnvelope<WaitResult>>(
-      ['wait', sessionId, '--exit', '--timeout', String(DEFAULT_WAIT_TIMEOUT_MS)],
+      [
+        'wait',
+        sessionId,
+        '--exit',
+        '--timeout',
+        String(DEFAULT_WAIT_TIMEOUT_MS),
+      ],
       env,
     );
     expect(waitForExit.ok).toBe(true);
     expect(waitForExit.result.timedOut).toBe(false);
     expect(waitForExit.result.exitCode).toBe(130);
     await expect(
-      readOutput(testHome, sessionId).then((output) => normalizeTerminalOutput(output)),
+      readOutput(testHome, sessionId).then((output) =>
+        normalizeTerminalOutput(output),
+      ),
     ).resolves.toContain('INTERRUPTED\n');
   });
 });

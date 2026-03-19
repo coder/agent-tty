@@ -105,13 +105,15 @@ async function main(): Promise<void> {
     .description('Destroy a session')
     .option('--force', 'Skip graceful shutdown', false)
     .option('--json', 'Emit a JSON command envelope', false)
-    .action(async (sessionId: string, options: { force: boolean; json: boolean }) => {
-      await runDestroyCommand({
-        json: options.json,
-        sessionId,
-        force: options.force,
-      });
-    });
+    .action(
+      async (sessionId: string, options: { force: boolean; json: boolean }) => {
+        await runDestroyCommand({
+          json: options.json,
+          sessionId,
+          force: options.force,
+        });
+      },
+    );
 
   // --- Session control ---
   program
@@ -147,11 +149,7 @@ async function main(): Promise<void> {
     .description('Send keys to a session')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
-      async (
-        sessionId: string,
-        keys: string[],
-        options: { json: boolean },
-      ) => {
+      async (sessionId: string, keys: string[], options: { json: boolean }) => {
         await runSendKeysCommand({
           json: options.json,
           sessionId,
@@ -200,7 +198,11 @@ async function main(): Promise<void> {
     .description('Wait for a session condition')
     .option('--exit', 'Wait for process exit', false)
     .option('--idle-ms <ms>', 'Wait for output idle period', parseIntegerOption)
-    .option('--timeout <ms>', 'Maximum wait time in milliseconds', parseIntegerOption)
+    .option(
+      '--timeout <ms>',
+      'Maximum wait time in milliseconds',
+      parseIntegerOption,
+    )
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       async (

@@ -56,7 +56,11 @@ function runCli(
     },
   );
 
-  return { stdout: result.stdout, stderr: result.stderr, status: result.status };
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    status: result.status,
+  };
 }
 
 async function cleanupHome(home: string): Promise<void> {
@@ -102,12 +106,17 @@ function createSession(
   expect(result.status).toBe(0);
   expect(result.stderr).toBe('');
 
-  const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{ sessionId: string }>;
+  const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+    sessionId: string;
+  }>;
   expect(envelope.ok).toBe(true);
   return envelope.result.sessionId;
 }
 
-async function readEvents(testHome: string, sessionId: string): Promise<EventRecord[]> {
+async function readEvents(
+  testHome: string,
+  sessionId: string,
+): Promise<EventRecord[]> {
   const eventsPath = join(testHome, 'sessions', sessionId, 'events.jsonl');
   const content = await readFile(eventsPath, 'utf8');
 
@@ -166,15 +175,21 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec /bin/sh']);
       await sleep(500);
 
-      const typeResult = runCli(['type', sessionId, 'echo test-marker', '--json'], {
-        AGENT_TERMINAL_HOME: testHome,
-      });
+      const typeResult = runCli(
+        ['type', sessionId, 'echo test-marker', '--json'],
+        {
+          AGENT_TERMINAL_HOME: testHome,
+        },
+      );
       expect(typeResult.status).toBe(0);
       expect(typeResult.stderr).toBe('');
 
-      const sendKeysResult = runCli(['send-keys', sessionId, 'Enter', '--json'], {
-        AGENT_TERMINAL_HOME: testHome,
-      });
+      const sendKeysResult = runCli(
+        ['send-keys', sessionId, 'Enter', '--json'],
+        {
+          AGENT_TERMINAL_HOME: testHome,
+        },
+      );
       expect(sendKeysResult.status).toBe(0);
       expect(sendKeysResult.stderr).toBe('');
 
@@ -185,7 +200,9 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       );
       expect(waitResult.status).toBe(0);
       expect(waitResult.stderr).toBe('');
-      const envelope = JSON.parse(waitResult.stdout) as SuccessEnvelope<WaitResult>;
+      const envelope = JSON.parse(
+        waitResult.stdout,
+      ) as SuccessEnvelope<WaitResult>;
       expect(envelope.ok).toBe(true);
       expect(envelope.result.timedOut).toBe(false);
 
@@ -217,12 +234,17 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       });
       expect(signalResult.status).toBe(0);
       expect(signalResult.stderr).toBe('');
-      const signalEnvelope = JSON.parse(signalResult.stdout) as SuccessEnvelope<{
+      const signalEnvelope = JSON.parse(
+        signalResult.stdout,
+      ) as SuccessEnvelope<{
         signal: string;
         delivered: boolean;
       }>;
       expect(signalEnvelope.ok).toBe(true);
-      expect(signalEnvelope.result).toEqual({ signal: 'SIGTERM', delivered: true });
+      expect(signalEnvelope.result).toEqual({
+        signal: 'SIGTERM',
+        delivered: true,
+      });
 
       const waitResult = runCli(
         ['wait', sessionId, '--exit', '--timeout', '5000', '--json'],
@@ -231,7 +253,9 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       );
       expect(waitResult.status).toBe(0);
       expect(waitResult.stderr).toBe('');
-      const waitEnvelope = JSON.parse(waitResult.stdout) as SuccessEnvelope<WaitResult>;
+      const waitEnvelope = JSON.parse(
+        waitResult.stdout,
+      ) as SuccessEnvelope<WaitResult>;
       expect(waitEnvelope.ok).toBe(true);
       expect(waitEnvelope.result.timedOut).toBe(false);
 
@@ -258,7 +282,9 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       );
       expect(waitResult.status).toBe(0);
       expect(waitResult.stderr).toBe('');
-      const envelope = JSON.parse(waitResult.stdout) as SuccessEnvelope<WaitResult>;
+      const envelope = JSON.parse(
+        waitResult.stdout,
+      ) as SuccessEnvelope<WaitResult>;
       expect(envelope.ok).toBe(true);
       expect(envelope.result.exitCode).toBe(42);
       expect(envelope.result.timedOut).toBe(false);
@@ -284,7 +310,9 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       );
       expect(waitResult.status).toBe(0);
       expect(waitResult.stderr).toBe('');
-      const envelope = JSON.parse(waitResult.stdout) as SuccessEnvelope<WaitResult>;
+      const envelope = JSON.parse(
+        waitResult.stdout,
+      ) as SuccessEnvelope<WaitResult>;
       expect(envelope.ok).toBe(true);
       expect(envelope.result.exitCode).toBe(0);
       expect(envelope.result.timedOut).toBe(false);

@@ -66,7 +66,11 @@ function runCli(
       timeout: 15000,
     },
   );
-  return { stdout: result.stdout, stderr: result.stderr, status: result.status };
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    status: result.status,
+  };
 }
 
 async function cleanupHome(home: string): Promise<void> {
@@ -128,7 +132,9 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(typeof sessionId).toBe('string');
     expect(sessionId.length).toBeGreaterThan(0);
 
-    const listResult = runCli(['list', '--json'], { AGENT_TERMINAL_HOME: testHome });
+    const listResult = runCli(['list', '--json'], {
+      AGENT_TERMINAL_HOME: testHome,
+    });
     expect(listResult.status).toBe(0);
     expect(listResult.stderr).toBe('');
     const listEnvelope = JSON.parse(listResult.stdout) as SuccessEnvelope<{
@@ -146,7 +152,9 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     });
     expect(inspectResult.status).toBe(0);
     expect(inspectResult.stderr).toBe('');
-    const inspectEnvelope = JSON.parse(inspectResult.stdout) as SuccessEnvelope<{
+    const inspectEnvelope = JSON.parse(
+      inspectResult.stdout,
+    ) as SuccessEnvelope<{
       session: SessionRecord;
     }>;
     expect(inspectEnvelope.ok).toBe(true);
@@ -160,7 +168,9 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     });
     expect(destroyResult.status).toBe(0);
     expect(destroyResult.stderr).toBe('');
-    const destroyEnvelope = JSON.parse(destroyResult.stdout) as SuccessEnvelope<{
+    const destroyEnvelope = JSON.parse(
+      destroyResult.stdout,
+    ) as SuccessEnvelope<{
       sessionId: string;
       destroyed: boolean;
     }>;
@@ -185,11 +195,15 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(destroyResult.status).toBe(0);
     expect(destroyResult.stderr).toBe('');
 
-    const listDefault = runCli(['list', '--json'], { AGENT_TERMINAL_HOME: testHome });
+    const listDefault = runCli(['list', '--json'], {
+      AGENT_TERMINAL_HOME: testHome,
+    });
     expect(listDefault.status).toBe(0);
     expect(listDefault.stderr).toBe('');
     const defaultSessions = (
-      JSON.parse(listDefault.stdout) as SuccessEnvelope<{ sessions: SessionSummary[] }>
+      JSON.parse(listDefault.stdout) as SuccessEnvelope<{
+        sessions: SessionSummary[];
+      }>
     ).result.sessions;
     expect(
       defaultSessions.find((session) => session.sessionId === sessionId),
@@ -201,7 +215,9 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(listAll.status).toBe(0);
     expect(listAll.stderr).toBe('');
     const allSessions = (
-      JSON.parse(listAll.stdout) as SuccessEnvelope<{ sessions: SessionSummary[] }>
+      JSON.parse(listAll.stdout) as SuccessEnvelope<{
+        sessions: SessionSummary[];
+      }>
     ).result.sessions;
     expect(allSessions).toEqual(
       expect.arrayContaining([
@@ -223,7 +239,14 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
   it('event log contains output and exit records', async () => {
     const createResult = runCli(
-      ['create', '--json', '--', '/bin/sh', '-c', 'echo marker-test-output; exit 0'],
+      [
+        'create',
+        '--json',
+        '--',
+        '/bin/sh',
+        '-c',
+        'echo marker-test-output; exit 0',
+      ],
       { AGENT_TERMINAL_HOME: testHome },
     );
     expect(createResult.status).toBe(0);

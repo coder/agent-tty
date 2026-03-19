@@ -51,7 +51,11 @@ function runCli(
     },
   );
 
-  return { stdout: result.stdout, stderr: result.stderr, status: result.status };
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    status: result.status,
+  };
 }
 
 async function cleanupHome(home: string): Promise<void> {
@@ -97,12 +101,17 @@ function createSession(
   expect(result.status).toBe(0);
   expect(result.stderr).toBe('');
 
-  const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{ sessionId: string }>;
+  const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+    sessionId: string;
+  }>;
   expect(envelope.ok).toBe(true);
   return envelope.result.sessionId;
 }
 
-async function readEvents(testHome: string, sessionId: string): Promise<EventRecord[]> {
+async function readEvents(
+  testHome: string,
+  sessionId: string,
+): Promise<EventRecord[]> {
   const eventsPath = join(testHome, 'sessions', sessionId, 'events.jsonl');
   const content = await readFile(eventsPath, 'utf8');
 
@@ -166,13 +175,17 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
       });
       expect(typeResult.status).toBe(0);
       expect(typeResult.stderr).toBe('');
-      const envelope = JSON.parse(typeResult.stdout) as SuccessEnvelope<Record<string, never>>;
+      const envelope = JSON.parse(typeResult.stdout) as SuccessEnvelope<
+        Record<string, never>
+      >;
       expect(envelope.ok).toBe(true);
 
       await sleep(300);
 
       const events = await readEvents(testHome, sessionId);
-      const inputTextEvents = events.filter((event) => event.type === 'input_text');
+      const inputTextEvents = events.filter(
+        (event) => event.type === 'input_text',
+      );
       expect(inputTextEvents.length).toBeGreaterThan(0);
       expect(inputTextEvents[0]?.payload.data).toBe('hello');
     } finally {
@@ -187,18 +200,25 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
       sessionId = createSession(testHome);
       await sleep(500);
 
-      const sendKeysResult = runCli(['send-keys', sessionId, 'Enter', '--json'], {
-        AGENT_TERMINAL_HOME: testHome,
-      });
+      const sendKeysResult = runCli(
+        ['send-keys', sessionId, 'Enter', '--json'],
+        {
+          AGENT_TERMINAL_HOME: testHome,
+        },
+      );
       expect(sendKeysResult.status).toBe(0);
       expect(sendKeysResult.stderr).toBe('');
-      const envelope = JSON.parse(sendKeysResult.stdout) as SuccessEnvelope<Record<string, never>>;
+      const envelope = JSON.parse(sendKeysResult.stdout) as SuccessEnvelope<
+        Record<string, never>
+      >;
       expect(envelope.ok).toBe(true);
 
       await sleep(300);
 
       const events = await readEvents(testHome, sessionId);
-      const inputKeyEvents = events.filter((event) => event.type === 'input_keys');
+      const inputKeyEvents = events.filter(
+        (event) => event.type === 'input_keys',
+      );
       expect(inputKeyEvents.length).toBeGreaterThan(0);
       expect(inputKeyEvents[0]?.payload.keys).toEqual(['Enter']);
     } finally {
@@ -218,13 +238,17 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
       });
       expect(pasteResult.status).toBe(0);
       expect(pasteResult.stderr).toBe('');
-      const envelope = JSON.parse(pasteResult.stdout) as SuccessEnvelope<Record<string, never>>;
+      const envelope = JSON.parse(pasteResult.stdout) as SuccessEnvelope<
+        Record<string, never>
+      >;
       expect(envelope.ok).toBe(true);
 
       await sleep(300);
 
       const events = await readEvents(testHome, sessionId);
-      const inputPasteEvents = events.filter((event) => event.type === 'input_paste');
+      const inputPasteEvents = events.filter(
+        (event) => event.type === 'input_paste',
+      );
       expect(inputPasteEvents.length).toBeGreaterThan(0);
 
       const data = inputPasteEvents[0]?.payload.data;

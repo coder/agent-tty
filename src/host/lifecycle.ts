@@ -10,8 +10,16 @@ import { CliError } from '../cli/errors.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import type { SessionRecord } from '../protocol/schemas.js';
 import { ensureHome, resolveHome } from '../storage/home.js';
-import { readManifest, readManifestIfExists, writeManifest } from '../storage/manifests.js';
-import { manifestPath, sessionDir, socketPath } from '../storage/sessionPaths.js';
+import {
+  readManifest,
+  readManifestIfExists,
+  writeManifest,
+} from '../storage/manifests.js';
+import {
+  manifestPath,
+  sessionDir,
+  socketPath,
+} from '../storage/sessionPaths.js';
 import { invariant } from '../util/assert.js';
 import { sendRpc } from './rpcClient.js';
 
@@ -51,7 +59,10 @@ function hasErrorCode(error: unknown, code: string): boolean {
 }
 
 function assertPositiveInteger(value: number, label: string): void {
-  invariant(Number.isInteger(value) && value > 0, `${label} must be a positive integer`);
+  invariant(
+    Number.isInteger(value) && value > 0,
+    `${label} must be a positive integer`,
+  );
 }
 
 function assertNonEmptyString(
@@ -234,7 +245,10 @@ export async function allocateSession(
   config: AllocateConfig,
 ): Promise<AllocateResult> {
   const rawConfig: unknown = config;
-  invariant(rawConfig !== null && typeof rawConfig === 'object', 'config must be an object');
+  invariant(
+    rawConfig !== null && typeof rawConfig === 'object',
+    'config must be an object',
+  );
   invariant(Array.isArray(config.command), 'command must be an array');
   assertNonEmptyString(config.cwd, 'cwd');
   assertPositiveInteger(config.cols, 'cols');
@@ -249,7 +263,10 @@ export async function allocateSession(
 
   const resolvedCwd = resolve(config.cwd);
   const cwdStats = await stat(resolvedCwd);
-  invariant(cwdStats.isDirectory(), 'cwd must resolve to an existing directory');
+  invariant(
+    cwdStats.isDirectory(),
+    'cwd must resolve to an existing directory',
+  );
 
   const effectiveCommand =
     config.command.length > 0 ? [...config.command] : [config.shellCommand];
@@ -310,7 +327,8 @@ export async function destroySession(
   sessionId: string,
   force?: boolean,
 ): Promise<void> {
-  const { sessionDirectory, manifestFile, socketFile } = getSessionPaths(sessionId);
+  const { sessionDirectory, manifestFile, socketFile } =
+    getSessionPaths(sessionId);
   const manifest = await readSessionManifestOrThrow(sessionId, manifestFile);
 
   if (isSessionTerminal(manifest)) {
@@ -348,7 +366,10 @@ export async function destroySession(
   try {
     await sendRpc(socketFile, 'destroy');
   } catch (error) {
-    if (!(error instanceof CliError) || error.code !== ERROR_CODES.HOST_UNREACHABLE) {
+    if (
+      !(error instanceof CliError) ||
+      error.code !== ERROR_CODES.HOST_UNREACHABLE
+    ) {
       throw error;
     }
 
@@ -370,7 +391,10 @@ export async function destroySession(
   }
 
   await reconcileSession(sessionDirectory);
-  const reconciledManifest = await readSessionManifestOrThrow(sessionId, manifestFile);
+  const reconciledManifest = await readSessionManifestOrThrow(
+    sessionId,
+    manifestFile,
+  );
   if (isSessionTerminal(reconciledManifest)) {
     return;
   }
@@ -447,7 +471,9 @@ export async function listSessions(
   return summaries;
 }
 
-export async function reconcileSession(sessionDirectory: string): Promise<void> {
+export async function reconcileSession(
+  sessionDirectory: string,
+): Promise<void> {
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
 

@@ -144,7 +144,10 @@ export class RpcServer {
   private server: net.Server | null = null;
   private closePromise: Promise<void> | null = null;
 
-  public constructor(socketPath: string, handlers: Record<string, MethodHandler>) {
+  public constructor(
+    socketPath: string,
+    handlers: Record<string, MethodHandler>,
+  ) {
     invariant(socketPath.length > 0, 'RPC socket path must not be empty.');
 
     this.socketPath = socketPath;
@@ -318,13 +321,13 @@ export class RpcServer {
     const request = requestResult.data;
     const params = request.params ?? {};
 
-    if (!Object.hasOwn(this.handlers, request.method) || !isKnownRpcMethod(request.method)) {
+    if (
+      !Object.hasOwn(this.handlers, request.method) ||
+      !isKnownRpcMethod(request.method)
+    ) {
       this.sendResponse(
         socket,
-        buildErrorResponse(
-          request.id,
-          `Unsupported method: ${request.method}`,
-        ),
+        buildErrorResponse(request.id, `Unsupported method: ${request.method}`),
       );
       return;
     }
@@ -335,7 +338,8 @@ export class RpcServer {
       `RPC handler for method "${request.method}" must be a function.`,
     );
 
-    const paramsResult = RpcMethodSchemas[request.method].params.safeParse(params);
+    const paramsResult =
+      RpcMethodSchemas[request.method].params.safeParse(params);
 
     if (!paramsResult.success) {
       this.sendResponse(
@@ -347,9 +351,8 @@ export class RpcServer {
 
     try {
       const result = await handler(paramsResult.data);
-      const resultResult = RpcMethodSchemas[request.method].result.safeParse(
-        result,
-      );
+      const resultResult =
+        RpcMethodSchemas[request.method].result.safeParse(result);
 
       if (!resultResult.success) {
         this.sendResponse(

@@ -3,10 +3,7 @@ import type { FileHandle } from 'node:fs/promises';
 
 import { z } from 'zod';
 
-import {
-  EventRecordSchema,
-  type EventRecord,
-} from '../protocol/schemas.js';
+import { EventRecordSchema, type EventRecord } from '../protocol/schemas.js';
 import { invariant } from '../util/assert.js';
 
 const OutputEventPayloadSchema = z
@@ -152,7 +149,10 @@ function deriveNextSeq(content: string): number {
   }
 
   const parsedRecord = EventRecordSchema.safeParse(parsedLine);
-  invariant(parsedRecord.success, 'last event log line must match EventRecordSchema');
+  invariant(
+    parsedRecord.success,
+    'last event log line must match EventRecordSchema',
+  );
 
   const { seq } = parsedRecord.data;
   invariant(Number.isInteger(seq), 'event log seq must be an integer');
@@ -189,13 +189,25 @@ export class EventLog {
   }
 
   async append(type: 'output', payload: OutputEventPayload): Promise<void>;
-  async append(type: 'input_text', payload: InputTextEventPayload): Promise<void>;
-  async append(type: 'input_paste', payload: InputPasteEventPayload): Promise<void>;
-  async append(type: 'input_keys', payload: InputKeysEventPayload): Promise<void>;
+  async append(
+    type: 'input_text',
+    payload: InputTextEventPayload,
+  ): Promise<void>;
+  async append(
+    type: 'input_paste',
+    payload: InputPasteEventPayload,
+  ): Promise<void>;
+  async append(
+    type: 'input_keys',
+    payload: InputKeysEventPayload,
+  ): Promise<void>;
   async append(type: 'resize', payload: ResizeEventPayload): Promise<void>;
   async append(type: 'signal', payload: SignalEventPayload): Promise<void>;
   async append(type: 'exit', payload: ExitEventPayload): Promise<void>;
-  async append(type: EventLogEventType, payload: EventLogPayload): Promise<void> {
+  async append(
+    type: EventLogEventType,
+    payload: EventLogPayload,
+  ): Promise<void> {
     invariant(!this.isClosed, 'cannot append to a closed event log');
 
     const validatedPayload = validatePayload(type, payload);
@@ -210,7 +222,10 @@ export class EventLog {
     };
 
     const parsedRecord = EventRecordSchema.safeParse(record);
-    invariant(parsedRecord.success, 'event record must match EventRecordSchema');
+    invariant(
+      parsedRecord.success,
+      'event record must match EventRecordSchema',
+    );
 
     const line = `${JSON.stringify(parsedRecord.data)}\n`;
     this.writeQueue = this.writeQueue.then(() =>

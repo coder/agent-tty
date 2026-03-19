@@ -26,8 +26,14 @@ function parseExitCode(input: string): number {
   const exitCode = Number.parseInt(rawCode, 10);
 
   assert(rawCode.length > 0, 'exit-code command requires a numeric argument');
-  assert(Number.isInteger(exitCode), 'exit-code command must parse to an integer');
-  assert(String(exitCode) === rawCode, 'exit-code command only accepts canonical integers');
+  assert(
+    Number.isInteger(exitCode),
+    'exit-code command must parse to an integer',
+  );
+  assert(
+    String(exitCode) === rawCode,
+    'exit-code command only accepts canonical integers',
+  );
 
   return exitCode;
 }

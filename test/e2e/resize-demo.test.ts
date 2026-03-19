@@ -83,13 +83,14 @@ describe('resize-demo e2e', { timeout: 30_000 }, () => {
     expect(waitForInitialOutput.ok).toBe(true);
     expect(waitForInitialOutput.result.timedOut).toBe(false);
     await expect(
-      readOutput(testHome, sessionId).then((output) => normalizeTerminalOutput(output)),
+      readOutput(testHome, sessionId).then((output) =>
+        normalizeTerminalOutput(output),
+      ),
     ).resolves.toContain('SIZE: 80x24\n');
 
-    const resizeEnvelope = runCliJson<SuccessEnvelope<{ cols: number; rows: number }>>(
-      ['resize', sessionId, '--cols', '120', '--rows', '40'],
-      env,
-    );
+    const resizeEnvelope = runCliJson<
+      SuccessEnvelope<{ cols: number; rows: number }>
+    >(['resize', sessionId, '--cols', '120', '--rows', '40'], env);
     expect(resizeEnvelope.ok).toBe(true);
     expect(resizeEnvelope.command).toBe('resize');
     expect(resizeEnvelope.result.cols).toBe(120);
@@ -108,7 +109,9 @@ describe('resize-demo e2e', { timeout: 30_000 }, () => {
     );
     expect(waitForResizeOutput.result.timedOut).toBe(false);
     await expect(
-      readOutput(testHome, sessionId).then((output) => normalizeTerminalOutput(output)),
+      readOutput(testHome, sessionId).then((output) =>
+        normalizeTerminalOutput(output),
+      ),
     ).resolves.toContain('SIZE: 120x40\n');
 
     const typeQuitEnvelope = runCliJson<SuccessEnvelope<Record<string, never>>>(
@@ -128,7 +131,13 @@ describe('resize-demo e2e', { timeout: 30_000 }, () => {
     expect(sendKeysEnvelope.result).toEqual({});
 
     const waitForExit = runCliJson<SuccessEnvelope<WaitResult>>(
-      ['wait', sessionId, '--exit', '--timeout', String(DEFAULT_WAIT_TIMEOUT_MS)],
+      [
+        'wait',
+        sessionId,
+        '--exit',
+        '--timeout',
+        String(DEFAULT_WAIT_TIMEOUT_MS),
+      ],
       env,
     );
     expect(waitForExit.ok).toBe(true);
@@ -145,10 +154,9 @@ describe('resize-demo e2e', { timeout: 30_000 }, () => {
     const sessionId = createEnvelope.result.sessionId;
     createdSessionIds.push(sessionId);
 
-    const resizeEnvelope = runCliJson<SuccessEnvelope<{ cols: number; rows: number }>>(
-      ['resize', sessionId, '--cols', '100', '--rows', '50'],
-      env,
-    );
+    const resizeEnvelope = runCliJson<
+      SuccessEnvelope<{ cols: number; rows: number }>
+    >(['resize', sessionId, '--cols', '100', '--rows', '50'], env);
     expect(resizeEnvelope.ok).toBe(true);
     expect(resizeEnvelope.result.cols).toBe(100);
     expect(resizeEnvelope.result.rows).toBe(50);

@@ -3,7 +3,11 @@ import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import { resolveHome } from '../../storage/home.js';
-import { manifestPath, sessionDir, socketPath } from '../../storage/sessionPaths.js';
+import {
+  manifestPath,
+  sessionDir,
+  socketPath,
+} from '../../storage/sessionPaths.js';
 
 export interface TypeResult {
   [key: string]: never;

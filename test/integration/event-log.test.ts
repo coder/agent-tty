@@ -40,7 +40,11 @@ function runCli(
     },
   );
 
-  return { stdout: result.stdout, stderr: result.stderr, status: result.status };
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    status: result.status,
+  };
 }
 
 async function cleanupHome(home: string): Promise<void> {
@@ -86,12 +90,17 @@ function createSession(
   expect(result.status).toBe(0);
   expect(result.stderr).toBe('');
 
-  const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{ sessionId: string }>;
+  const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+    sessionId: string;
+  }>;
   expect(envelope.ok).toBe(true);
   return envelope.result.sessionId;
 }
 
-async function readEvents(testHome: string, sessionId: string): Promise<EventRecord[]> {
+async function readEvents(
+  testHome: string,
+  sessionId: string,
+): Promise<EventRecord[]> {
   const eventsPath = join(testHome, 'sessions', sessionId, 'events.jsonl');
   const content = await readFile(eventsPath, 'utf8');
 
@@ -125,7 +134,10 @@ function runMixedActionSequence(testHome: string, sessionId: string): void {
   expect(typeResult.status).toBe(0);
   expect(typeResult.stderr).toBe('');
 
-  const sendKeysResult = runCli(['send-keys', sessionId, 'Enter', '--json'], env);
+  const sendKeysResult = runCli(
+    ['send-keys', sessionId, 'Enter', '--json'],
+    env,
+  );
   expect(sendKeysResult.status).toBe(0);
   expect(sendKeysResult.stderr).toBe('');
 
@@ -175,7 +187,9 @@ describe('event-log integration', { timeout: 30000 }, () => {
 
       const events = await readEvents(testHome, sessionId);
       expect(events.length).toBeGreaterThan(0);
-      expect(events.map((event) => event.seq)).toEqual(events.map((_, index) => index));
+      expect(events.map((event) => event.seq)).toEqual(
+        events.map((_, index) => index),
+      );
 
       const eventTypes = new Set(events.map((event) => event.type));
       expect([...eventTypes]).toEqual(

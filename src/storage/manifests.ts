@@ -1,20 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import {
-  mkdir,
-  readFile,
-  rename,
-  rm,
-  writeFile,
-} from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute } from 'node:path';
 
-import {
-  ERROR_CODES,
-  makeCliError,
-} from '../protocol/errors.js';
-import {
-  SessionRecordSchema,
-} from '../protocol/schemas.js';
+import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
+import { SessionRecordSchema } from '../protocol/schemas.js';
 import { invariant } from '../util/assert.js';
 import type { SessionRecord } from '../protocol/schemas.js';
 
@@ -35,10 +24,7 @@ function isEnoentError(error: unknown): error is Error & NodeError {
   );
 }
 
-function validateManifestData(
-  path: string,
-  data: unknown,
-): SessionRecord {
+function validateManifestData(path: string, data: unknown): SessionRecord {
   const parsedManifest = SessionRecordSchema.safeParse(data);
 
   if (parsedManifest.success) {

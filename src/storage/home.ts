@@ -11,7 +11,10 @@ export function resolveHome(): string {
   const configuredHome = process.env.AGENT_TERMINAL_HOME;
 
   if (configuredHome !== undefined) {
-    invariant(configuredHome.length > 0, 'AGENT_TERMINAL_HOME must not be empty');
+    invariant(
+      configuredHome.length > 0,
+      'AGENT_TERMINAL_HOME must not be empty',
+    );
     invariant(
       isAbsolute(configuredHome),
       'AGENT_TERMINAL_HOME must be an absolute path',

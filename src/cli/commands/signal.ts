@@ -3,7 +3,11 @@ import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import { resolveHome } from '../../storage/home.js';
-import { manifestPath, sessionDir, socketPath } from '../../storage/sessionPaths.js';
+import {
+  manifestPath,
+  sessionDir,
+  socketPath,
+} from '../../storage/sessionPaths.js';
 
 const ALLOWED_SIGNALS = [
   'SIGTERM',
@@ -51,7 +55,11 @@ export async function runSignalCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  if (!ALLOWED_SIGNALS.includes(options.signal as (typeof ALLOWED_SIGNALS)[number])) {
+  if (
+    !ALLOWED_SIGNALS.includes(
+      options.signal as (typeof ALLOWED_SIGNALS)[number],
+    )
+  ) {
     throw makeCliError(ERROR_CODES.INVALID_SIGNAL, {
       message: `Signal must be one of: ${ALLOWED_SIGNALS.join(', ')}.`,
       details: {

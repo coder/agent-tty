@@ -20,8 +20,7 @@ export const ERROR_CODES = {
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
-export type ProtocolErrorCode =
-  (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+export type ProtocolErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
 
 export const DEFAULT_ERROR_MESSAGES: Record<ProtocolErrorCode, string> = {
   [ERROR_CODES.SESSION_NOT_FOUND]: 'Session not found.',

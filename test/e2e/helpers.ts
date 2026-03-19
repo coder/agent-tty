@@ -83,7 +83,10 @@ function withJsonFlag(args: string[]): string[] {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- typed JSON helper keeps call sites concise in test code.
-export function runCliJson<TResult>(args: string[], env: Record<string, string>): TResult {
+export function runCliJson<TResult>(
+  args: string[],
+  env: Record<string, string>,
+): TResult {
   const { stdout } = runCli(withJsonFlag(args), env);
 
   assert(stdout.length > 0, 'expected JSON output from CLI command');
@@ -112,10 +115,9 @@ export async function cleanupHome(home: string): Promise<void> {
       const manifestFile = join(sessionsDir, entry, 'session.json');
 
       try {
-        const manifest = JSON.parse(await readFile(manifestFile, 'utf8')) as Record<
-          string,
-          unknown
-        >;
+        const manifest = JSON.parse(
+          await readFile(manifestFile, 'utf8'),
+        ) as Record<string, unknown>;
 
         for (const pidKey of ['childPid', 'hostPid'] as const) {
           const pid = manifest[pidKey];
@@ -138,7 +140,10 @@ export async function cleanupHome(home: string): Promise<void> {
   await rm(home, { recursive: true, force: true });
 }
 
-export async function readEvents(home: string, sessionId: string): Promise<EventRecord[]> {
+export async function readEvents(
+  home: string,
+  sessionId: string,
+): Promise<EventRecord[]> {
   const eventsPath = join(home, 'sessions', sessionId, 'events.jsonl');
   const content = await readFile(eventsPath, 'utf8');
 
@@ -153,7 +158,10 @@ export async function readEvents(home: string, sessionId: string): Promise<Event
     .map((line) => JSON.parse(line) as EventRecord);
 }
 
-export async function readOutput(home: string, sessionId: string): Promise<string> {
+export async function readOutput(
+  home: string,
+  sessionId: string,
+): Promise<string> {
   const events = await readEvents(home, sessionId);
 
   return events
@@ -165,6 +173,8 @@ export async function readOutput(home: string, sessionId: string): Promise<strin
     .join('');
 }
 
-export function fixtureCommand(appName: 'hello-prompt' | 'resize-demo'): string[] {
+export function fixtureCommand(
+  appName: 'hello-prompt' | 'resize-demo',
+): string[] {
   return ['node', '--import', 'tsx', `test/fixtures/apps/${appName}/main.ts`];
 }
