@@ -179,6 +179,7 @@ This design file is the entry point. Detailed supporting docs live in `design/20
 - [03-rendering-and-artifacts.md](./20260319_agent-terminal-v1/03-rendering-and-artifacts.md)
 - [04-implementation-plan.md](./20260319_agent-terminal-v1/04-implementation-plan.md)
 - [05-dogfooding-and-validation.md](./20260319_agent-terminal-v1/05-dogfooding-and-validation.md)
+- [06-roadmap-and-week-1-plan.md](./20260319_agent-terminal-v1/06-roadmap-and-week-1-plan.md)
 
 ## High-level architecture
 
