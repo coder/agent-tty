@@ -1,0 +1,57 @@
+=== Step 2: New empty buffer named 'dogfood' ===
+" ============================================================================
+" Netrw Directory Listing                                        (netrw v171)
+"   /home/coder/.mux/src/agent-terminal/planning-ws01
+"   Sorted by      name
+"   Sort sequence: [\/]$,\<core\%(\.\d\+\)\=\>,\.h$,\.c$,\.cpp$,\~\=\*$,*,\.o$,\.obj$,\.info$,\.swp$
+"   Quick Help: <F1>:help  -:go up dir  D:delete  R:rename  s:sort-by  x:special
+" ==============================================================================
+../                                                                                                 
+./
+.github/
+.mux/
+design/
+dist/
+dogfood/
+node_modules/
+src/
+test/
+.editorconfig
+.git
+.gitignore
+.prettierignore
+.prettierrc.json
+.tsconfig.build.tsbuildinfo
+.tsconfig.tsbuildinfo
+README.md
+eslint.config.mjs
+mise.toml
+package-lock.json
+[No Name] [RO]                                                                    8,1            Top^[          :enew
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~    0,0-1          All:filedogfooddogfood  

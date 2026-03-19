@@ -1,0 +1,65 @@
+{"seq":0,"ts":"2026-03-19T18:23:55.324Z","type":"output","payload":{"data":"\u001b[?1049h\u001b[22;0;0t\u001b[22;0t\u001b[?1h\u001b=\u001b[H\u001b[2J\u001b]11;?\u0007\u001b[?2004h\u001b[?u\u001b[c\u001b[?25h"}}
+{"seq":1,"ts":"2026-03-19T18:23:55.368Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[m\u001b[H\u001b[2J\u001b[96m\" ============================================================================\u001b(B\u001b[m\u001b[K\r\n\u001b[96m\" Netrw Directory Listing                                        \u001b(B\u001b[0;1m\u001b[96m(netrw v171)\u001b(B\u001b[m\u001b[K\r\n\u001b[96m\"   /home/coder/.mux/src/agent-terminal/planning-ws01\u001b(B\u001b[m\u001b[K\r\n\u001b[96m\"   Sorted by\u001b(B\u001b[m\u001b[93m      name\u001b(B\u001b[m\u001b[K\r\n\u001b[96m\"   Sort sequence:\u001b(B\u001b[m\u001b[93m [\\/]$\u001b(B\u001b[m\u001b[96m,\u001b(B\u001b[m\u001b[93m\\<core\\%(\\.\\d\\+\\)\\=\\>\u001b(B\u001b[m\u001b[96m,\u001b(B\u001b[m\u001b[93m\\.h$\u001b(B\u001b[m\u001b[96m,\u001b(B\u001b[m\u001b[93m\\.c$\u001b(B\u001b[m\u001b[96m,\u001b(B\u001b[m\u001b[93m\\.cpp$\u001b(B\u001b[m\u001b[96m,\u001b(B\u001b[m\u001b[93m\\~\\=\\*$\u001b(B\u001b[m\u001b[96m,\u001b(B\u001b[m\u001b[93m*\u001b(B\u001b[m\u001b[96m,\u001b(B\u001b[m\u001b[93m\\.o$\u001b(B\u001b[m\u001b[96m,\u001b(B\u001b[m\u001b[93m\\.obj$\u001b(B\u001b[m\u001b[96m,\u001b(B\u001b[m\u001b[93m\\.info$\u001b(B\u001b[m\u001b[96m,\u001b(B\u001b[m\u001b[93m\\.swp$\r\n\u001b(B\u001b[m\u001b[96m\"   Quick Help: \u001b(B\u001b[0;1m\u001b[96m<F1>\u001b(B\u001b[m\u001b[38;5;224m:\u001b(B\u001b[mhelp  \u001b(B\u001b[0;1m\u001b[96m-\u001b(B\u001b[m\u001b[38;5;224m:\u001b(B\u001b[mgo up dir  \u001b(B\u001b[0;1m\u001b[96mD\u001b(B\u001b[m\u001b[38;5;224m:\u001b(B\u001b[mdelete  \u001b(B\u001b[0;1m\u001b[96mR\u001b(B\u001b[m\u001b[38;5;224m:\u001b(B\u001b[mrename  \u001b(B\u001b[0;1m\u001b[96ms\u001b(B\u001b[m\u001b[38;5;224m:\u001b(B\u001b[msort-by  \u001b(B\u001b[0;1m\u001b[96mx\u001b(B\u001b[m\u001b[38;5;224m:\u001b(B\u001b[mspecial\u001b[K\r\n\u001b[96m\" ==============================================================================\u001b(B\u001b[m\u001b[K\r\n\u001b(B\u001b[0;4m\u001b[38;5;159m..\u001b(B\u001b[0;1;4m\u001b[96m/\u001b(B\u001b[0;4m                                                                                                 \r\n\u001b(B\u001b[m\u001b[38;5;159m.\u001b(B\u001b[0;1m\u001b[96m/\u001b(B\u001b[m\u001b[K\r\n\u001b[38;5;159m.github\u001b(B\u001b[0;1m\u001b[96m/\u001b(B\u001b[m\u001b[K\r\n\u001b[38;5;159m.mux\u001b(B\u001b[0;1m\u001b[96m/\u001b(B\u001b[m\u001b[K\r\n\u001b[38;5;159mdesign\u001b(B\u001b[0;1m\u001b[96m/\u001b(B\u001b[m\u001b[K\r\n\u001b[38;5;159mdist\u001b(B\u001b[0;1m\u001b[96m/\u001b(B\u001b[m\u001b[K\r\n\u001b[38;5;159mdogfood\u001b(B\u001b[0;1m\u001b[96m/\u001b(B\u001b[m\u001b[K\r\n\u001b[38;5;159mnode_modules\u001b(B\u001b[0;1m\u001b[96m/\u001b(B\u001b[m\u001b[K\r\n\u001b[38;5;159msrc\u001b(B\u001b[0;1m\u001b[96m/\u001b(B\u001b[m\u001b[K\r\n\u001b[38;5;159mtest\u001b(B\u001b[0;1m\u001b[96m/\u001b(B\u001b[m\u001b[K\r\n.editorconfig\u001b[K\r\n.git\u001b[K\r\n.gitignore\u001b[K\r\n.prettierignore\u001b[K\r\n.prettierrc.json\u001b[K\r\n.tsconfig.build.tsbuildinfo\u001b[K\r\n.tsconfig.tsbuildinfo\u001b[K\r\nREADME.md\u001b[K\r\neslint.config.mjs\u001b[K\r\nmise.toml\u001b[K\r\npackage-lock.json\u001b[K\r\n\u001b(B\u001b[0;1;7m[No Name] [RO]                                                                    8,1            Top\u001b]112\u0007\u001b[2 q\u001b]112\u0007\u001b[2 q\r\u001b[21A\u001b[?25h"}}
+{"seq":2,"ts":"2026-03-19T18:23:55.408Z","type":"output","payload":{"data":"\u001b[?25l\u001b[?1004h\u001b[?25h"}}
+{"seq":3,"ts":"2026-03-19T18:24:34.585Z","type":"input_keys","payload":{"keys":["Escape"]}}
+{"seq":4,"ts":"2026-03-19T18:24:34.635Z","type":"output","payload":{"data":"\u001b[?25l\u001b[30;90H\u001b(B\u001b[m^[        \r\u001b[22A\u001b[?25h\u001b[?25l\u001b[30;90H  \r\u001b[22A\u001b[?25h"}}
+{"seq":5,"ts":"2026-03-19T18:24:35.206Z","type":"input_text","payload":{"data":":enew"}}
+{"seq":6,"ts":"2026-03-19T18:24:35.207Z","type":"output","payload":{"data":"\u001b[?25l\u001b[22B\u001b[J:enew\u001b]112\u0007\u001b[2 q\u001b[?25h"}}
+{"seq":7,"ts":"2026-03-19T18:24:35.840Z","type":"input_keys","payload":{"keys":["Enter"]}}
+{"seq":8,"ts":"2026-03-19T18:24:35.840Z","type":"output","payload":{"data":"\u001b[?25l\r\u001b[30;1H\u001b[?25h"}}
+{"seq":9,"ts":"2026-03-19T18:24:35.841Z","type":"output","payload":{"data":"\u001b[?25l\u001b[H\u001b[78X\n\u001b[94m~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\r\n~\u001b[K\u001b(B\u001b[0;1;7m\u001b[29;11H    \u001b[68C0,0-1          All\u001b]112\u0007\u001b[2 q\u001b[H\u001b[?25h"}}
+{"seq":10,"ts":"2026-03-19T18:24:37.175Z","type":"input_text","payload":{"data":":file dogfood"}}
+{"seq":11,"ts":"2026-03-19T18:24:37.176Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[m\u001b[29B\u001b[5X:file\u001b[Cdogfood\u001b]112\u0007\u001b[2 q\u001b[?25h"}}
+{"seq":12,"ts":"2026-03-19T18:24:37.751Z","type":"input_keys","payload":{"keys":["Enter"]}}
+{"seq":13,"ts":"2026-03-19T18:24:37.751Z","type":"output","payload":{"data":"\u001b[?25l\r\u001b[30;1H\u001b[?25h"}}
+{"seq":14,"ts":"2026-03-19T18:24:37.752Z","type":"output","payload":{"data":"\u001b[?25l\u001b[A\u001b(B\u001b[0;1;7mdogfood  \u001b]112\u0007\u001b[2 q\u001b[H\u001b[?25h"}}
+{"seq":15,"ts":"2026-03-19T18:24:55.669Z","type":"input_keys","payload":{"keys":["i"]}}
+{"seq":16,"ts":"2026-03-19T18:24:55.670Z","type":"output","payload":{"data":"\u001b[?25l\u001b[30;90H\u001b(B\u001b[mi\u001b[H\u001b[?25h\u001b[?25l\u001b[30;90H \u001b]112\u0007\u001b[6 q\u001b[H\u001b[?25h\u001b[?25l\u001b[29B\u001b(B\u001b[0;1m-- INSERT --\u001b(B\u001b[m \b\u001b[?25h\u001b[?25l\u001b[29;85H\u001b(B\u001b[0;1;7m1  \u001b[H\u001b[?25h"}}
+{"seq":17,"ts":"2026-03-19T18:24:56.319Z","type":"input_text","payload":{"data":"# Dogfood Demo"}}
+{"seq":18,"ts":"2026-03-19T18:24:56.319Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[m# Dogfood Demo\u001b[29;9H\u001b(B\u001b[0;1;7m[+]\u001b[71C1,15\u001b[1;15H\u001b[?25h"}}
+{"seq":19,"ts":"2026-03-19T18:24:56.985Z","type":"input_keys","payload":{"keys":["Enter"]}}
+{"seq":20,"ts":"2026-03-19T18:24:56.985Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[m\r\n\u001b[K\u001b[29;83H\u001b(B\u001b[0;1;7m2,1 \r\u001b[27A\u001b[?25h"}}
+{"seq":21,"ts":"2026-03-19T18:24:57.575Z","type":"input_keys","payload":{"keys":["Enter"]}}
+{"seq":22,"ts":"2026-03-19T18:24:57.575Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[m\n\u001b[K\u001b[29;83H\u001b(B\u001b[0;1;7m3\r\u001b[26A\u001b[?25h"}}
+{"seq":23,"ts":"2026-03-19T18:24:58.228Z","type":"input_text","payload":{"data":"This file was created by agent-terminal driving neovim."}}
+{"seq":24,"ts":"2026-03-19T18:24:58.229Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[mThis file was created by agent-terminal driving neovim.\u001b[29;85H\u001b(B\u001b[0;1;7m56\u001b[3;56H\u001b[?25h"}}
+{"seq":25,"ts":"2026-03-19T18:24:58.852Z","type":"input_keys","payload":{"keys":["Enter"]}}
+{"seq":26,"ts":"2026-03-19T18:24:58.853Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[m\r\n\u001b[K\u001b[29;83H\u001b(B\u001b[0;1;7m4,1 \r\u001b[25A\u001b[?25h"}}
+{"seq":27,"ts":"2026-03-19T18:24:59.542Z","type":"input_text","payload":{"data":"All keystrokes were sent via the agent-terminal CLI."}}
+{"seq":28,"ts":"2026-03-19T18:24:59.542Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[mAll keystrokes were sent via the agent-terminal CLI.\u001b[29;85H\u001b(B\u001b[0;1;7m53\u001b[4;53H\u001b[?25h"}}
+{"seq":29,"ts":"2026-03-19T18:25:00.177Z","type":"input_keys","payload":{"keys":["Enter"]}}
+{"seq":30,"ts":"2026-03-19T18:25:00.178Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[m\r\n\u001b[K\u001b[29;83H\u001b(B\u001b[0;1;7m5,1 \r\u001b[24A\u001b[?25h"}}
+{"seq":31,"ts":"2026-03-19T18:25:00.797Z","type":"input_keys","payload":{"keys":["Enter"]}}
+{"seq":32,"ts":"2026-03-19T18:25:00.798Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[m\n\u001b[K\u001b[29;83H\u001b(B\u001b[0;1;7m6\r\u001b[23A\u001b[?25h"}}
+{"seq":33,"ts":"2026-03-19T18:25:01.417Z","type":"input_text","payload":{"data":"Session ID: 01KM3NDZK4TXG5C3SQJ811ZGVJ"}}
+{"seq":34,"ts":"2026-03-19T18:25:01.418Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[mSession ID: 01KM3NDZK4TXG5C3SQJ811ZGVJ\u001b[29;85H\u001b(B\u001b[0;1;7m39\u001b[6;39H\u001b[?25h"}}
+{"seq":35,"ts":"2026-03-19T18:25:15.048Z","type":"input_keys","payload":{"keys":["Escape"]}}
+{"seq":36,"ts":"2026-03-19T18:25:15.099Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[m\r\u001b[24B\u001b[12X\u001b[29;86H\u001b(B\u001b[0;1;7m8\u001b]112\u0007\u001b[2 q\u001b[6;38H\u001b[?25h"}}
+{"seq":37,"ts":"2026-03-19T18:25:16.377Z","type":"input_text","payload":{"data":":w"}}
+{"seq":38,"ts":"2026-03-19T18:25:16.377Z","type":"output","payload":{"data":"\u001b[?25l\r\u001b[24B\u001b(B\u001b[m:w\u001b]112\u0007\u001b[2 q\u001b[?25h"}}
+{"seq":39,"ts":"2026-03-19T18:25:16.987Z","type":"input_keys","payload":{"keys":["Enter"]}}
+{"seq":40,"ts":"2026-03-19T18:25:16.987Z","type":"output","payload":{"data":"\u001b[?25l\r\u001b[30;1H\u001b[?25h"}}
+{"seq":41,"ts":"2026-03-19T18:25:16.987Z","type":"output","payload":{"data":"\u001b[?25l\u001b[97m\u001b[41mE17: \"/home/coder/.mux/src/agent-terminal/planning-ws01/dogfood\" is a directory\u001b]112\u0007\u001b[2 q\u001b[6;38H\u001b[?25h"}}
+{"seq":42,"ts":"2026-03-19T18:25:31.906Z","type":"input_text","payload":{"data":":file dogfood.md"}}
+{"seq":43,"ts":"2026-03-19T18:25:31.906Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[m\r\u001b[24B\u001b[79X:file\u001b[Cdogfood.md\u001b]112\u0007\u001b[2 q\u001b[?25h"}}
+{"seq":44,"ts":"2026-03-19T18:25:32.480Z","type":"input_keys","payload":{"keys":["Enter"]}}
+{"seq":45,"ts":"2026-03-19T18:25:32.481Z","type":"output","payload":{"data":"\u001b[?25l\r\u001b[30;1H\u001b[?25h"}}
+{"seq":46,"ts":"2026-03-19T18:25:32.481Z","type":"output","payload":{"data":"\u001b[?25l\u001b[29;8H\u001b(B\u001b[0;1;7m.md [+]\u001b]112\u0007\u001b[2 q\u001b[6;38H\u001b[?25h"}}
+{"seq":47,"ts":"2026-03-19T18:25:33.779Z","type":"input_text","payload":{"data":":w"}}
+{"seq":48,"ts":"2026-03-19T18:25:33.779Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[m\r\u001b[24B\u001b[16X:w\u001b]112\u0007\u001b[2 q\u001b[?25h"}}
+{"seq":49,"ts":"2026-03-19T18:25:34.443Z","type":"input_keys","payload":{"keys":["Enter"]}}
+{"seq":50,"ts":"2026-03-19T18:25:34.443Z","type":"output","payload":{"data":"\u001b[?25l\r\u001b[30;1H\u001b[?25h"}}
+{"seq":51,"ts":"2026-03-19T18:25:34.443Z","type":"output","payload":{"data":"\u001b[?25l\"dogfood.md\"\u001b]112\u0007\u001b[2 q\u001b[?25h"}}
+{"seq":52,"ts":"2026-03-19T18:25:34.444Z","type":"output","payload":{"data":"\u001b[?25l\u001b[C[New] 6L, 165B written\u001b(B\u001b[0;1;7m\u001b[29;12H   \u001b[6;38H\u001b[?25h"}}
+{"seq":53,"ts":"2026-03-19T18:25:48.912Z","type":"input_keys","payload":{"keys":["g"]}}
+{"seq":54,"ts":"2026-03-19T18:25:48.912Z","type":"output","payload":{"data":"\u001b[?25l\u001b[30;90H\u001b(B\u001b[mg\u001b[6;38H\u001b[?25h"}}
+{"seq":55,"ts":"2026-03-19T18:25:49.539Z","type":"input_keys","payload":{"keys":["g"]}}
+{"seq":56,"ts":"2026-03-19T18:25:49.540Z","type":"output","payload":{"data":"\u001b[?25l\u001b[30;90H \u001b[6;38H\u001b[?25h\u001b[?25l\u001b[30;90Hgg\u001b[6;38H\u001b[?25h"}}
+{"seq":57,"ts":"2026-03-19T18:25:49.540Z","type":"output","payload":{"data":"\u001b[?25l\u001b[30;90H  \u001b[29;83H\u001b(B\u001b[0;1;7m1,14\u001b[1;14H\u001b[?25h"}}
+{"seq":58,"ts":"2026-03-19T18:25:57.400Z","type":"input_text","payload":{"data":":q"}}
+{"seq":59,"ts":"2026-03-19T18:25:57.400Z","type":"output","payload":{"data":"\u001b[?25l\u001b(B\u001b[m\r\u001b[29B\u001b[35X:q\u001b]112\u0007\u001b[2 q\u001b[?25h"}}
+{"seq":60,"ts":"2026-03-19T18:25:58.055Z","type":"input_keys","payload":{"keys":["Enter"]}}
+{"seq":61,"ts":"2026-03-19T18:25:58.055Z","type":"output","payload":{"data":"\u001b[?25l\r\u001b[30;1H\u001b[?25h"}}
+{"seq":62,"ts":"2026-03-19T18:25:58.067Z","type":"output","payload":{"data":"\u001b[?25l\u001b]112\u0007\u001b[2 q\u001b[?25h"}}
+{"seq":63,"ts":"2026-03-19T18:25:58.067Z","type":"output","payload":{"data":"\u001b[?25l\u001b]112\u0007\u001b[2 q\u001b(B\u001b[m\u001b[?25h\u001b[?1l\u001b>\u001b[?1049l\u001b[23;0;0t\u001b[23;0t\u001b[?2004l\u001b[?1004l\u001b[?25h"}}
+{"seq":64,"ts":"2026-03-19T18:25:58.079Z","type":"exit","payload":{"exitCode":0,"exitSignal":null}}
