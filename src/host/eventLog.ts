@@ -162,6 +162,8 @@ function deriveNextSeq(content: string): number {
 }
 
 export class EventLog {
+  private writeQueue: Promise<void> = Promise.resolve();
+
   private constructor(
     private readonly fileHandle: FileHandle,
     private nextSeq: number,
@@ -197,8 +199,11 @@ export class EventLog {
     invariant(!this.isClosed, 'cannot append to a closed event log');
 
     const validatedPayload = validatePayload(type, payload);
+    const seq = this.nextSeq;
+    this.nextSeq += 1;
+
     const record: EventRecord = {
-      seq: this.nextSeq,
+      seq,
       ts: new Date().toISOString(),
       type,
       payload: validatedPayload,
@@ -207,8 +212,11 @@ export class EventLog {
     const parsedRecord = EventRecordSchema.safeParse(record);
     invariant(parsedRecord.success, 'event record must match EventRecordSchema');
 
-    await this.fileHandle.appendFile(`${JSON.stringify(parsedRecord.data)}\n`, 'utf8');
-    this.nextSeq += 1;
+    const line = `${JSON.stringify(parsedRecord.data)}\n`;
+    this.writeQueue = this.writeQueue.then(() =>
+      this.fileHandle.appendFile(line, 'utf8'),
+    );
+    await this.writeQueue;
   }
 
   async close(): Promise<void> {
