@@ -1,10 +1,17 @@
 [tools]
+# CI intentionally tracks major tool versions for v1; we are not committing a
+# mise.lock file yet because the current quality gates only require stable major
+# versions in automation.
 node = "24"
 python = "3"
 
 [tasks.bootstrap]
-description = "Install deps and Chromium"
+description = "Install deps and Chromium for local development"
 run = "npm install && npx playwright install chromium"
+
+[tasks.bootstrap-ci]
+description = "Install deps for CI without browser downloads"
+run = "npm ci"
 
 [tasks.clean]
 description = "Clean artifacts"
@@ -68,4 +75,4 @@ sources = [
 
 [tasks.ci]
 description = "Run CI checks"
-run = "npm run verify"
+run = "mise run format-check && mise run lint && mise run typecheck && mise run test && mise run build"
