@@ -1,5 +1,5 @@
-import { CliError } from '../errors.js';
 import { emitSuccess } from '../output.js';
+import { destroySession } from '../../host/lifecycle.js';
 
 export interface DestroyResult {
   sessionId: string;
@@ -13,10 +13,15 @@ interface CommandOptions {
 }
 
 export async function runDestroyCommand(options: CommandOptions): Promise<void> {
-  void emitSuccess;
-  await Promise.resolve();
+  await destroySession(options.sessionId, options.force);
 
-  throw new CliError('NOT_IMPLEMENTED', 'destroy command is not yet implemented', {
-    details: { options },
+  emitSuccess({
+    command: 'destroy',
+    json: options.json,
+    result: {
+      sessionId: options.sessionId,
+      destroyed: true,
+    },
+    lines: [`Session destroyed: ${options.sessionId}`],
   });
 }

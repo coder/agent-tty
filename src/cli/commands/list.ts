@@ -1,5 +1,6 @@
-import { CliError } from '../errors.js';
 import { emitSuccess } from '../output.js';
+import { listSessions } from '../../host/lifecycle.js';
+import { resolveHome } from '../../storage/home.js';
 
 export interface ListResult {
   sessions: Array<{
@@ -16,10 +17,17 @@ interface CommandOptions {
 }
 
 export async function runListCommand(options: CommandOptions): Promise<void> {
-  void emitSuccess;
-  await Promise.resolve();
+  const home = resolveHome();
+  const sessions = await listSessions(home, options.all);
+  const lines = sessions.map(
+    (session) =>
+      `${session.sessionId}  ${session.status}  ${session.command.join(' ')}`,
+  );
 
-  throw new CliError('NOT_IMPLEMENTED', 'list command is not yet implemented', {
-    details: { options },
+  emitSuccess({
+    command: 'list',
+    json: options.json,
+    result: { sessions },
+    lines,
   });
 }
