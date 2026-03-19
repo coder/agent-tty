@@ -222,6 +222,14 @@ async function main(): Promise<void> {
       },
     );
 
+  program
+    .command('_host <session-id>', { hidden: true })
+    .description('Internal: run the session host process')
+    .action(async (sessionId: string) => {
+      const { runHost } = await import('../host/hostMain.js');
+      await runHost(sessionId);
+    });
+
   await program.parseAsync();
 }
 
@@ -229,9 +237,10 @@ try {
   await main();
 } catch (error: unknown) {
   if (error instanceof CliError) {
+    const json = process.argv.includes('--json');
     emitFailure({
       command: 'agent-terminal',
-      json: false,
+      json,
       error: {
         code: error.code,
         message: error.message,
