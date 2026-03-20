@@ -1,0 +1,338 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
+
+const mocks = vi.hoisted(() => ({
+  emitSuccess: vi.fn(),
+  sendRpc: vi.fn(),
+  readManifestIfExists: vi.fn(),
+  resolveHome: vi.fn(),
+  sessionDir: vi.fn(),
+  manifestPath: vi.fn(),
+  socketPath: vi.fn(),
+}));
+
+vi.mock('../../../src/cli/output.js', () => ({
+  emitSuccess: mocks.emitSuccess,
+}));
+
+vi.mock('../../../src/host/rpcClient.js', () => ({
+  sendRpc: mocks.sendRpc,
+}));
+
+vi.mock('../../../src/storage/manifests.js', () => ({
+  readManifestIfExists: mocks.readManifestIfExists,
+}));
+
+vi.mock('../../../src/storage/home.js', () => ({
+  resolveHome: mocks.resolveHome,
+}));
+
+vi.mock('../../../src/storage/sessionPaths.js', () => ({
+  sessionDir: mocks.sessionDir,
+  manifestPath: mocks.manifestPath,
+  socketPath: mocks.socketPath,
+}));
+
+import { runWaitCommand } from '../../../src/cli/commands/wait.js';
+
+function createSessionRecord(
+  status: 'running' | 'exited' = 'running',
+  exitCode: number | null = null,
+) {
+  return {
+    version: 1,
+    sessionId: 'session-01',
+    createdAt: '2026-03-19T12:00:00.000Z',
+    updatedAt: '2026-03-19T12:00:01.000Z',
+    status,
+    command: ['/bin/sh'],
+    cwd: '/tmp/workspace',
+    cols: 80,
+    rows: 24,
+    hostPid: status === 'running' ? 123 : null,
+    childPid: status === 'running' ? 456 : null,
+    exitCode,
+    exitSignal: null,
+  };
+}
+
+function createOptions(
+  overrides: Partial<Parameters<typeof runWaitCommand>[0]> = {},
+) {
+  return {
+    json: false,
+    sessionId: 'session-01',
+    waitForExit: false,
+    idleMs: undefined,
+    timeout: undefined,
+    text: undefined,
+    regex: undefined,
+    screenStableMs: undefined,
+    ...overrides,
+  };
+}
+
+describe('wait command', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.resolveHome.mockReturnValue('/tmp/agent-terminal');
+    mocks.sessionDir.mockImplementation(
+      (_home: string, sessionId: string) =>
+        `/tmp/agent-terminal/sessions/${sessionId}`,
+    );
+    mocks.manifestPath.mockImplementation(
+      (sessionDirectory: string) => `${sessionDirectory}/session.json`,
+    );
+    mocks.socketPath.mockImplementation(
+      (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
+    );
+    mocks.readManifestIfExists.mockResolvedValue(createSessionRecord());
+  });
+
+  it('rejects --text and --regex together', async () => {
+    await expect(
+      runWaitCommand(createOptions({ text: 'hello', regex: 'world' })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      message: '--text and --regex are mutually exclusive.',
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects mixing --exit with render wait flags', async () => {
+    await expect(
+      runWaitCommand(createOptions({ waitForExit: true, text: 'hello' })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      message: expect.stringContaining('Cannot mix legacy wait flags'),
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects mixing --idle-ms with render wait flags', async () => {
+    await expect(
+      runWaitCommand(createOptions({ idleMs: 500, regex: '\\d+' })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      message: expect.stringContaining('Cannot mix legacy wait flags'),
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects negative --screen-stable-ms values', async () => {
+    await expect(
+      runWaitCommand(createOptions({ screenStableMs: -1 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_DURATION,
+      details: { screenStableMs: -1 },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-integer --screen-stable-ms values', async () => {
+    await expect(
+      runWaitCommand(createOptions({ screenStableMs: 1.5 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_DURATION,
+      details: { screenStableMs: 1.5 },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('accepts --timeout 0 for infinite render waits', async () => {
+    const result = {
+      matched: true,
+      timedOut: false,
+      matchedText: 'hello',
+      capturedAtSeq: 12,
+    };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runWaitCommand(createOptions({ text: 'hello', timeout: 0 }));
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'waitForRender',
+      {
+        text: 'hello',
+        regex: undefined,
+        screenStableMs: undefined,
+        timeoutMs: undefined,
+      },
+      0,
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'wait',
+        result,
+      }),
+    );
+  });
+
+  it('rejects negative --timeout values for render waits', async () => {
+    await expect(
+      runWaitCommand(createOptions({ text: 'hello', timeout: -1 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_DURATION,
+      details: { timeout: -1 },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('requires one wait mode when no flags are provided', async () => {
+    await expect(runWaitCommand(createOptions())).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_DURATION,
+      message: 'Specify exactly one of --exit or --idle-ms.',
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('routes --exit waits to the legacy wait RPC', async () => {
+    const result = { timedOut: false, exitCode: 0 };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runWaitCommand(createOptions({ waitForExit: true }));
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'wait',
+      {
+        exit: true,
+        idleMs: undefined,
+        timeoutMs: 600_000,
+      },
+      605_000,
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'wait',
+        result,
+      }),
+    );
+  });
+
+  it('routes --idle-ms waits to the legacy wait RPC', async () => {
+    const result = { timedOut: false };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runWaitCommand(createOptions({ idleMs: 500 }));
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'wait',
+      {
+        exit: undefined,
+        idleMs: 500,
+        timeoutMs: 600_000,
+      },
+      605_000,
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'wait',
+        result,
+      }),
+    );
+  });
+
+  it('routes --text waits to the render wait RPC', async () => {
+    const result = {
+      matched: true,
+      timedOut: false,
+      matchedText: 'hello',
+      capturedAtSeq: 7,
+    };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runWaitCommand(createOptions({ text: 'hello' }));
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'waitForRender',
+      {
+        text: 'hello',
+        regex: undefined,
+        screenStableMs: undefined,
+        timeoutMs: 600_000,
+      },
+      605_000,
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'wait',
+        result,
+      }),
+    );
+  });
+
+  it('routes --regex waits to the render wait RPC', async () => {
+    const result = {
+      matched: true,
+      timedOut: false,
+      matchedText: '42',
+      capturedAtSeq: 9,
+    };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runWaitCommand(createOptions({ regex: '\\d+' }));
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'waitForRender',
+      {
+        text: undefined,
+        regex: '\\d+',
+        screenStableMs: undefined,
+        timeoutMs: 600_000,
+      },
+      605_000,
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'wait',
+        result,
+      }),
+    );
+  });
+
+  it('rejects missing sessions before contacting RPC', async () => {
+    mocks.readManifestIfExists.mockResolvedValue(null);
+
+    await expect(
+      runWaitCommand(createOptions({ waitForExit: true })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.SESSION_NOT_FOUND,
+      details: {
+        sessionId: 'session-01',
+        manifestPath: '/tmp/agent-terminal/sessions/session-01/session.json',
+      },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('surfaces render wait errors when the session is no longer running', async () => {
+    mocks.readManifestIfExists.mockResolvedValue(
+      createSessionRecord('exited', 0),
+    );
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
+        message: 'Session "session-01" is not running.',
+        details: {
+          sessionId: 'session-01',
+          status: 'exited',
+        },
+      }),
+    );
+
+    await expect(
+      runWaitCommand(createOptions({ text: 'hello' })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.SESSION_NOT_RUNNING,
+      details: {
+        sessionId: 'session-01',
+        status: 'exited',
+      },
+    });
+  });
+});
