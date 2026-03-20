@@ -101,22 +101,32 @@ describe('wait command', () => {
   });
 
   it('rejects mixing --exit with render wait flags', async () => {
-    await expect(
-      runWaitCommand(createOptions({ waitForExit: true, text: 'hello' })),
-    ).rejects.toMatchObject({
+    const promise = runWaitCommand(
+      createOptions({ waitForExit: true, text: 'hello' }),
+    );
+
+    await expect(promise).rejects.toMatchObject({
       code: ERROR_CODES.INVALID_INPUT,
-      message: expect.stringContaining('Cannot mix legacy wait flags'),
     });
+    await expect(promise).rejects.toHaveProperty(
+      'message',
+      expect.stringContaining('Cannot mix legacy wait flags'),
+    );
     expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
 
   it('rejects mixing --idle-ms with render wait flags', async () => {
-    await expect(
-      runWaitCommand(createOptions({ idleMs: 500, regex: '\\d+' })),
-    ).rejects.toMatchObject({
+    const promise = runWaitCommand(
+      createOptions({ idleMs: 500, regex: '\\d+' }),
+    );
+
+    await expect(promise).rejects.toMatchObject({
       code: ERROR_CODES.INVALID_INPUT,
-      message: expect.stringContaining('Cannot mix legacy wait flags'),
     });
+    await expect(promise).rejects.toHaveProperty(
+      'message',
+      expect.stringContaining('Cannot mix legacy wait flags'),
+    );
     expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
 

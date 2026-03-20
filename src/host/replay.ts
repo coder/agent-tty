@@ -63,7 +63,7 @@ export async function readEventLogRecords(
   const fileStats = await stat(filePath);
   invariant(
     fileStats.size <= MAX_EVENT_LOG_SIZE,
-    `event log file exceeds 50 MB size limit (${fileStats.size} bytes)`,
+    `event log file exceeds 50 MB size limit (${String(fileStats.size)} bytes)`,
   );
 
   const content = await readFile(filePath, 'utf8');

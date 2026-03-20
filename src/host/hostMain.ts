@@ -136,7 +136,7 @@ export async function runHost(sessionId: string): Promise<void> {
     backendFactory: (sid, profile) => new GhosttyWebBackend(sid, profile),
   });
 
-  const loadReplayInput = async () => {
+  const loadReplayInput = () => {
     const events = [...eventLog.getEvents()];
     const replayInput = buildReplayInput(sessionId, state.snapshot(), events);
     return replayInput.targetSeq === -1 ? null : replayInput;
@@ -250,7 +250,7 @@ export async function runHost(sessionId: string): Promise<void> {
       const format = requestedFormat ?? 'structured';
 
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
-      const replayInput = await loadReplayInput();
+      const replayInput = loadReplayInput();
       const backend = await rendererManager.getBackend(profile, replayInput);
       const snapshot = await backend.snapshot();
 
@@ -325,7 +325,7 @@ export async function runHost(sessionId: string): Promise<void> {
         }
       })();
 
-      const replayInput = await loadReplayInput();
+      const replayInput = loadReplayInput();
       const backend = await rendererManager.getBackend(profile, replayInput);
       await ensureArtifactsDir(sessDir);
       const temporaryOutputPath = artifactPath(
@@ -651,7 +651,7 @@ export async function runHost(sessionId: string): Promise<void> {
       if (regex !== undefined) {
         invariant(
           regex.length <= MAX_WAIT_FOR_RENDER_REGEX_LENGTH,
-          `regex pattern must not exceed ${MAX_WAIT_FOR_RENDER_REGEX_LENGTH} characters`,
+          `regex pattern must not exceed ${String(MAX_WAIT_FOR_RENDER_REGEX_LENGTH)} characters`,
         );
         try {
           compiledRegex = new RegExp(regex);
@@ -681,7 +681,7 @@ export async function runHost(sessionId: string): Promise<void> {
           pollInFlight = true;
           void (async () => {
             try {
-              const replayInput = await loadReplayInput();
+              const replayInput = loadReplayInput();
               const backend = await rendererManager.getBackend(
                 profile,
                 replayInput,
@@ -756,20 +756,18 @@ export async function runHost(sessionId: string): Promise<void> {
           resolved = true;
           clearWaitPoll?.();
 
-          void (async () => {
-            try {
-              const replayInput = await loadReplayInput();
-              latestCapturedAtSeq = replayInput?.targetSeq ?? 0;
-            } catch {
-              // Best-effort snapshot for timeout reporting.
-            }
+          try {
+            const replayInput = loadReplayInput();
+            latestCapturedAtSeq = replayInput?.targetSeq ?? 0;
+          } catch {
+            // Best-effort snapshot for timeout reporting.
+          }
 
-            resolve({
-              matched: false,
-              timedOut: true,
-              capturedAtSeq: latestCapturedAtSeq,
-            });
-          })();
+          resolve({
+            matched: false,
+            timedOut: true,
+            capturedAtSeq: latestCapturedAtSeq,
+          });
         }, timeoutMs);
 
         void pollCondition.then((result) => {
