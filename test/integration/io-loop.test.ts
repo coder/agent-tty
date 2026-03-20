@@ -222,6 +222,44 @@ describe('io-loop integration', { timeout: 30000 }, () => {
     }
   });
 
+  it('wait --idle-ms times out when timeout expires first', async () => {
+    let sessionId = '';
+
+    try {
+      sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec cat']);
+      await sleep(500);
+
+      const typeResult = runCli(['type', sessionId, 'keepalive', '--json'], {
+        AGENT_TERMINAL_HOME: testHome,
+      });
+      expect(typeResult.status).toBe(0);
+      expect(typeResult.stderr).toBe('');
+
+      const sendKeysResult = runCli(
+        ['send-keys', sessionId, 'Enter', '--json'],
+        {
+          AGENT_TERMINAL_HOME: testHome,
+        },
+      );
+      expect(sendKeysResult.status).toBe(0);
+      expect(sendKeysResult.stderr).toBe('');
+
+      const waitResult = runCli(
+        ['wait', sessionId, '--idle-ms', '60000', '--timeout', '300', '--json'],
+        { AGENT_TERMINAL_HOME: testHome },
+        30000,
+      );
+      expect(waitResult.status).toBe(0);
+      expect(waitResult.stderr).toBe('');
+
+      const envelope = JSON.parse(waitResult.stdout) as SuccessEnvelope<WaitResult>;
+      expect(envelope.ok).toBe(true);
+      expect(envelope.result.timedOut).toBe(true);
+    } finally {
+      destroySession(testHome, sessionId);
+    }
+  });
+
   it('signal SIGTERM terminates session', async () => {
     let sessionId = '';
 
