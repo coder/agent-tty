@@ -1,6 +1,8 @@
 import process from 'node:process';
 
 import { EventLog } from './eventLog.js';
+import { readEventLogRecords, buildReplayInput } from './replay.js';
+import { HostRendererManager } from './renderer.js';
 import { RpcServer, type MethodHandler } from './rpcServer.js';
 import { SessionState } from './sessionState.js';
 import { createPty } from '../pty/createPty.js';
@@ -10,11 +12,15 @@ import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import type {
   PasteParams,
   ResizeParams,
+  ScreenshotParams,
   SendKeysParams,
   SignalParams,
+  SnapshotParams,
   TypeParams,
   WaitParams,
 } from '../protocol/messages.js';
+import { GhosttyWebBackend } from '../renderer/ghosttyWeb/index.js';
+import { resolveProfile } from '../renderer/profiles.js';
 import { readManifest, writeManifest } from '../storage/manifests.js';
 import { resolveHome } from '../storage/home.js';
 import {
@@ -33,6 +39,8 @@ const ALLOWED_SIGNALS = [
   'SIGUSR1',
   'SIGUSR2',
 ] as const;
+
+const DEFAULT_RENDER_PROFILE_NAME = 'reference-dark';
 
 type WaitOutcome = {
   exitCode?: number;
@@ -84,6 +92,18 @@ export async function runHost(sessionId: string): Promise<void> {
   state.setHostPid(process.pid);
 
   const eventLog = await EventLog.open(ePath);
+
+  const rendererManager = new HostRendererManager({
+    sessionId,
+    sessionDir: sessDir,
+    backendFactory: (sid, profile) => new GhosttyWebBackend(sid, profile),
+  });
+
+  const loadReplayInput = async () => {
+    const events = await readEventLogRecords(ePath);
+    const replayInput = buildReplayInput(sessionId, state.snapshot(), events);
+    return replayInput.targetSeq === -1 ? null : replayInput;
+  };
 
   let eventLogClosed = false;
   let ptyExitHandled = false;
@@ -144,6 +164,12 @@ export async function runHost(sessionId: string): Promise<void> {
             eventLogClosed = true;
           }
 
+          try {
+            await rendererManager.dispose();
+          } catch {
+            // best-effort cleanup
+          }
+
           await rpcServer.close();
         }
       }
@@ -181,6 +207,85 @@ export async function runHost(sessionId: string): Promise<void> {
 
   const handlers: Record<string, MethodHandler> = {
     inspect: () => Promise.resolve({ session: state.snapshot() }),
+    snapshot: async (params: unknown) => {
+      const { format: requestedFormat } = params as SnapshotParams;
+      const format = requestedFormat ?? 'structured';
+
+      invariant(
+        format === 'structured' || format === 'text',
+        'snapshot format must be structured or text',
+      );
+
+      const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
+      const replayInput = await loadReplayInput();
+      const backend = await rendererManager.getBackend(profile, replayInput);
+      const snapshot = await backend.snapshot();
+
+      invariant(
+        snapshot.sessionId === sessionId,
+        'renderer snapshot sessionId must match host sessionId',
+      );
+
+      if (format === 'structured') {
+        return { format: 'structured', ...snapshot };
+      }
+
+      const text = snapshot.visibleLines.map((line) => line.text).join('\n');
+      return {
+        format: 'text',
+        sessionId: snapshot.sessionId,
+        capturedAtSeq: snapshot.capturedAtSeq,
+        cols: snapshot.cols,
+        rows: snapshot.rows,
+        cursorRow: snapshot.cursorRow,
+        cursorCol: snapshot.cursorCol,
+        text,
+      };
+    },
+    screenshot: async (params: unknown) => {
+      const { profile: requestedProfileName } = params as ScreenshotParams;
+
+      const profile = (() => {
+        try {
+          return resolveProfile(
+            requestedProfileName ?? DEFAULT_RENDER_PROFILE_NAME,
+          );
+        } catch (error) {
+          throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+            message:
+              error instanceof Error ? error.message : 'Invalid render profile.',
+            ...(requestedProfileName === undefined
+              ? {}
+              : { details: { profile: requestedProfileName } }),
+            cause: error,
+          });
+        }
+      })();
+
+      const replayInput = await loadReplayInput();
+      const backend = await rendererManager.getBackend(profile, replayInput);
+      const outputPath = rendererManager.screenshotPath(profile.name);
+      const result = await backend.screenshot(outputPath);
+
+      invariant(
+        result.sessionId === sessionId,
+        'renderer screenshot sessionId must match host sessionId',
+      );
+      invariant(
+        result.pngSizeBytes > 0,
+        'renderer screenshot pngSizeBytes must be positive',
+      );
+
+      return {
+        sessionId: result.sessionId,
+        capturedAtSeq: result.capturedAtSeq,
+        profileName: result.profileName,
+        cols: result.cols,
+        rows: result.rows,
+        artifactPath: result.pngPath,
+        pngSizeBytes: result.pngSizeBytes,
+      };
+    },
     type: async (params: unknown) => {
       const { text } = params as TypeParams;
 
