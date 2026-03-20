@@ -16,6 +16,7 @@ import {
 import { invariant } from '../util/assert.js';
 
 const DEFAULT_TIMEOUT_MS = 5_000;
+const MAX_RPC_BUFFER_BYTES = 1_048_576;
 const HOST_UNREACHABLE_SOCKET_CODES = new Set([
   'ECONNREFUSED',
   'ENOENT',
@@ -171,6 +172,16 @@ export async function sendRpc(
 
     socket.on('data', (chunk: string) => {
       if (responseHandled) {
+        return;
+      }
+
+      if (buffer.length + chunk.length > MAX_RPC_BUFFER_BYTES) {
+        rejectWithCliError(
+          makeCliError(ERROR_CODES.RPC_ERROR, {
+            message: 'RPC response exceeds maximum buffer size.',
+            details: { method, socketPath },
+          }),
+        );
         return;
       }
 

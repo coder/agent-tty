@@ -13,6 +13,7 @@ import {
 import { invariant } from '../util/assert.js';
 
 const MAX_UNIX_SOCKET_PATH = 104;
+const MAX_RPC_BUFFER_BYTES = 1_048_576;
 
 const UNKNOWN_REQUEST_ID = 'unknown';
 
@@ -259,6 +260,18 @@ export class RpcServer {
 
     socket.on('data', (chunk: string) => {
       if (handled) {
+        return;
+      }
+
+      if (buffer.length + chunk.length > MAX_RPC_BUFFER_BYTES) {
+        handled = true;
+        this.sendResponse(
+          socket,
+          buildErrorResponse(
+            extractRequestId(undefined),
+            'RPC request exceeds maximum buffer size.',
+          ),
+        );
         return;
       }
 
