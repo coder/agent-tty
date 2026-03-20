@@ -1,16 +1,16 @@
-import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-interface SuccessEnvelope<TResult> {
-  ok: true;
-  command: string;
-  result: TResult;
-}
+import {
+  cleanupHome,
+  runCli,
+  type EventRecord,
+  type SessionRecord,
+  type SuccessEnvelope,
+} from '../helpers.js';
 
 interface ErrorEnvelope {
   ok: false;
@@ -28,82 +28,6 @@ interface SessionSummary {
   status: string;
   command: string[];
   createdAt: string;
-}
-
-interface SessionRecord extends SessionSummary {
-  version: 1;
-  updatedAt: string;
-  cwd: string;
-  cols: number;
-  rows: number;
-  hostPid: number | null;
-  childPid: number | null;
-  exitCode: number | null;
-  exitSignal: string | null;
-}
-
-interface EventRecord {
-  seq: number;
-  ts: string;
-  type: string;
-  payload: {
-    data?: string;
-    exitCode?: number;
-  };
-}
-
-function runCli(
-  args: string[],
-  env?: Record<string, string>,
-): { stdout: string; stderr: string; status: number | null } {
-  const result = spawnSync(
-    process.execPath,
-    ['--import', 'tsx', './src/cli/main.ts', ...args],
-    {
-      cwd: process.cwd(),
-      encoding: 'utf8',
-      env: { ...process.env, ...env },
-      timeout: 15000,
-    },
-  );
-  return {
-    stdout: result.stdout,
-    stderr: result.stderr,
-    status: result.status,
-  };
-}
-
-async function cleanupHome(home: string): Promise<void> {
-  try {
-    const sessionsDir = join(home, 'sessions');
-    const entries = await readdir(sessionsDir).catch((): string[] => []);
-
-    for (const entry of entries) {
-      const manifestFile = join(sessionsDir, entry, 'session.json');
-
-      try {
-        const raw = await readFile(manifestFile, 'utf8');
-        const manifest = JSON.parse(raw) as Record<string, unknown>;
-
-        for (const pidKey of ['childPid', 'hostPid'] as const) {
-          const pid = manifest[pidKey];
-          if (typeof pid === 'number' && pid > 0) {
-            try {
-              process.kill(pid, 'SIGKILL');
-            } catch {
-              // best-effort cleanup, ignore errors
-            }
-          }
-        }
-      } catch {
-        // best-effort cleanup, ignore errors
-      }
-    }
-  } catch {
-    // best-effort cleanup, ignore errors
-  }
-
-  await rm(home, { recursive: true, force: true });
 }
 
 let testHome = '';
@@ -270,7 +194,10 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(outputEvents.length).toBeGreaterThan(0);
 
     const allOutput = outputEvents
-      .map((event) => event.payload.data ?? '')
+      .map((event) => {
+        const data = event.payload.data;
+        return typeof data === 'string' ? data : '';
+      })
       .join('');
     expect(allOutput).toContain('marker-test-output');
 

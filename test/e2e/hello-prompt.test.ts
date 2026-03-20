@@ -12,6 +12,7 @@ import {
   runCliJson,
   type SessionRecord,
   type SuccessEnvelope,
+  type WaitResult,
 } from './helpers.js';
 
 interface CreateResult {
@@ -20,11 +21,6 @@ interface CreateResult {
 
 interface InspectResult {
   session: SessionRecord;
-}
-
-interface WaitResult {
-  exitCode?: number;
-  timedOut: boolean;
 }
 
 function testEnv(home: string): Record<string, string> {
