@@ -23,12 +23,23 @@ describe('CLI integration', () => {
     expect(result.stderr).toBe('');
 
     const parsed = JSON.parse(result.stdout) as SuccessEnvelope<{
-      checks: Array<{ ok: boolean; name: string }>;
+      ok: boolean;
+      checks: {
+        environment: Array<{ name: string; status: string }>;
+        renderer: Array<{ name: string; status: string }>;
+      };
     }>;
+
+    const allChecks = [
+      ...parsed.result.checks.environment,
+      ...parsed.result.checks.renderer,
+    ];
 
     expect(parsed.ok).toBe(true);
     expect(parsed.command).toBe('doctor');
-    expect(parsed.result.checks.length).toBeGreaterThan(0);
-    expect(parsed.result.checks.every((check) => check.ok)).toBe(true);
+    expect(parsed.result.ok).toBe(true);
+    expect(parsed.result.checks.environment.length).toBeGreaterThan(0);
+    expect(parsed.result.checks.renderer.length).toBeGreaterThan(0);
+    expect(allChecks.every((check) => check.status === 'pass')).toBe(true);
   });
 });
