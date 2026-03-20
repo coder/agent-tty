@@ -4,7 +4,7 @@ import process from 'node:process';
 import { ulid } from 'ulid';
 
 import { EventLog } from './eventLog.js';
-import { readEventLogRecords, buildReplayInput } from './replay.js';
+import { buildReplayInput } from './replay.js';
 import { HostRendererManager } from './renderer.js';
 import { RpcServer, type MethodHandler } from './rpcServer.js';
 import { SessionState } from './sessionState.js';
@@ -119,7 +119,7 @@ export async function runHost(sessionId: string): Promise<void> {
   });
 
   const loadReplayInput = async () => {
-    const events = await readEventLogRecords(ePath);
+    const events = [...eventLog.getEvents()];
     const replayInput = buildReplayInput(sessionId, state.snapshot(), events);
     return replayInput.targetSeq === -1 ? null : replayInput;
   };
