@@ -1,3 +1,4 @@
+import { rm } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { CliError } from '../errors.js';
@@ -35,7 +36,7 @@ interface CommandOptions {
 }
 
 export async function runCreateCommand(options: CommandOptions): Promise<void> {
-  let sessionId: string;
+  let sessionId: string | undefined;
 
   try {
     const allocatedSession = await allocateSession({
@@ -49,6 +50,14 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
 
     launchHost(sessionId);
   } catch (error) {
+    if (sessionId !== undefined) {
+      const home = resolveHome();
+      await rm(sessionDir(home, sessionId), {
+        recursive: true,
+        force: true,
+      }).catch(() => undefined);
+    }
+
     if (error instanceof CliError) {
       throw error;
     }

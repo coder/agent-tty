@@ -535,6 +535,10 @@ export async function reconcileSession(
     return;
   }
 
+  if (manifest.childPid !== null && isProcessAlive(manifest.childPid)) {
+    killProcessBestEffort(manifest.childPid);
+  }
+
   const reconciledManifest: SessionRecord = {
     ...manifest,
     status: 'exited',
