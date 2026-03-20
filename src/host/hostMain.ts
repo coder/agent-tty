@@ -264,7 +264,7 @@ export async function runHost(sessionId: string): Promise<void> {
       state.setDimensions(cols, rows);
       await writeManifest(mPath, state.snapshot());
       await eventLog.append('resize', { cols, rows });
-      return {};
+      return { cols, rows };
     },
     signal: async (params: unknown) => {
       const { signal } = params as SignalParams;

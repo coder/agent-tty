@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   DestroyParamsSchema,
   InspectResultSchema,
+  PasteParamsSchema,
+  ResizeResultSchema,
   RpcMethodSchemas,
   RpcRequestSchema,
   RpcResponseSchema,
   SendKeysParamsSchema,
+  WaitParamsSchema,
   WaitResultSchema,
 } from '../../../src/protocol/messages.js';
 import {
@@ -138,6 +141,46 @@ describe('RPC message schemas', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it('rejects empty paste text', () => {
+    const result = PasteParamsSchema.safeParse({
+      text: '',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects zero-valued wait durations', () => {
+    expect(
+      WaitParamsSchema.safeParse({
+        idleMs: 0,
+      }).success,
+    ).toBe(false);
+    expect(
+      WaitParamsSchema.safeParse({
+        timeoutMs: 0,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts resize results with positive dimensions', () => {
+    const result = ResizeResultSchema.safeParse({
+      cols: 120,
+      rows: 40,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects resize results without positive dimensions', () => {
+    expect(ResizeResultSchema.safeParse({}).success).toBe(false);
+    expect(
+      ResizeResultSchema.safeParse({
+        cols: 0,
+        rows: 40,
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects invalid wait result exit codes', () => {

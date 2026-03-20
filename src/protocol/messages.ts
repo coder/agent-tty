@@ -4,7 +4,7 @@ import { SessionRecordSchema } from './schemas.js';
 
 const EmptyObjectSchema = z.object({}).strict();
 const NonEmptyStringSchema = z.string().min(1);
-const DurationSchema = z.number().int().nonnegative();
+const DurationSchema = z.number().int().positive();
 
 export const RpcRequestSchema = z
   .object({
@@ -69,7 +69,7 @@ export type TypeResult = z.infer<typeof TypeResultSchema>;
 
 export const PasteParamsSchema = z
   .object({
-    text: z.string(),
+    text: z.string().min(1),
   })
   .strict();
 export type PasteParams = z.infer<typeof PasteParamsSchema>;
@@ -95,7 +95,12 @@ export const ResizeParamsSchema = z
   .strict();
 export type ResizeParams = z.infer<typeof ResizeParamsSchema>;
 
-export const ResizeResultSchema = EmptyObjectSchema;
+export const ResizeResultSchema = z
+  .object({
+    cols: z.number().int().positive(),
+    rows: z.number().int().positive(),
+  })
+  .strict();
 export type ResizeResult = z.infer<typeof ResizeResultSchema>;
 
 export const SignalParamsSchema = z
