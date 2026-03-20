@@ -75,7 +75,10 @@
       }
 
       function assertPositiveNumber(value, message) {
-        invariant(typeof value === 'number' && Number.isFinite(value) && value > 0, message);
+        invariant(
+          typeof value === 'number' && Number.isFinite(value) && value > 0,
+          message,
+        );
       }
 
       function assertPositiveInteger(value, message) {
@@ -96,13 +99,28 @@
           );
         }
 
-        invariant(parsedProfile !== null && typeof parsedProfile === 'object', 'profile must be an object');
+        invariant(
+          parsedProfile !== null && typeof parsedProfile === 'object',
+          'profile must be an object',
+        );
 
         const profile = parsedProfile;
-        assertNonEmptyString(profile.name, 'profile.name must be a non-empty string');
-        invariant(profile.theme === 'dark' || profile.theme === 'light', 'profile.theme must be dark or light');
-        assertNonEmptyString(profile.fontFamily, 'profile.fontFamily must be a non-empty string');
-        assertPositiveNumber(profile.fontSize, 'profile.fontSize must be a positive number');
+        assertNonEmptyString(
+          profile.name,
+          'profile.name must be a non-empty string',
+        );
+        invariant(
+          profile.theme === 'dark' || profile.theme === 'light',
+          'profile.theme must be dark or light',
+        );
+        assertNonEmptyString(
+          profile.fontFamily,
+          'profile.fontFamily must be a non-empty string',
+        );
+        assertPositiveNumber(
+          profile.fontSize,
+          'profile.fontSize must be a positive number',
+        );
         invariant(
           profile.cursorStyle === 'block' ||
             profile.cursorStyle === 'bar' ||
@@ -110,11 +128,13 @@
           'profile.cursorStyle must be block, bar, or underline',
         );
         invariant(
-          typeof profile.backgroundColor === 'string' && /^#[0-9a-fA-F]{6}$/u.test(profile.backgroundColor),
+          typeof profile.backgroundColor === 'string' &&
+            /^#[0-9a-fA-F]{6}$/u.test(profile.backgroundColor),
           'profile.backgroundColor must be a hex color',
         );
         invariant(
-          typeof profile.foregroundColor === 'string' && /^#[0-9a-fA-F]{6}$/u.test(profile.foregroundColor),
+          typeof profile.foregroundColor === 'string' &&
+            /^#[0-9a-fA-F]{6}$/u.test(profile.foregroundColor),
           'profile.foregroundColor must be a hex color',
         );
 
@@ -147,7 +167,10 @@
 
         invariant(state.ready, 'ghostty-web harness is not ready');
         invariant(state.terminal !== null, 'terminal instance is unavailable');
-        invariant(state.terminal.wasmTerm, 'terminal WASM instance is unavailable');
+        invariant(
+          state.terminal.wasmTerm,
+          'terminal WASM instance is unavailable',
+        );
         return state.terminal;
       }
 
@@ -156,10 +179,22 @@
         invariant(wasmTerm, 'terminal WASM instance is unavailable');
 
         const dimensions = wasmTerm.getDimensions();
-        assertPositiveInteger(dimensions.cols, 'terminal cols must be a positive integer');
-        assertPositiveInteger(dimensions.rows, 'terminal rows must be a positive integer');
-        invariant(dimensions.cols === terminal.cols, 'terminal cols drifted from WASM dimensions');
-        invariant(dimensions.rows === terminal.rows, 'terminal rows drifted from WASM dimensions');
+        assertPositiveInteger(
+          dimensions.cols,
+          'terminal cols must be a positive integer',
+        );
+        assertPositiveInteger(
+          dimensions.rows,
+          'terminal rows must be a positive integer',
+        );
+        invariant(
+          dimensions.cols === terminal.cols,
+          'terminal cols drifted from WASM dimensions',
+        );
+        invariant(
+          dimensions.rows === terminal.rows,
+          'terminal rows drifted from WASM dimensions',
+        );
         return dimensions;
       }
 
@@ -168,17 +203,27 @@
         const activeBuffer = terminal.buffer.active;
         const viewportY = activeBuffer.viewportY;
         assertPositiveInteger(rows, 'visible row count must be positive');
-        invariant(Number.isInteger(viewportY) && viewportY >= 0, 'viewportY must be a non-negative integer');
+        invariant(
+          Number.isInteger(viewportY) && viewportY >= 0,
+          'viewportY must be a non-negative integer',
+        );
 
         const visibleLines = [];
         for (let row = 0; row < rows; row += 1) {
           const line = activeBuffer.getLine(viewportY + row);
-          const text = line === undefined ? '' : line.translateToString(true, 0, cols);
-          invariant(typeof text === 'string', `decoded line ${row} must be a string`);
+          const text =
+            line === undefined ? '' : line.translateToString(true, 0, cols);
+          invariant(
+            typeof text === 'string',
+            `decoded line ${row} must be a string`,
+          );
           visibleLines.push({ row, text });
         }
 
-        invariant(visibleLines.length === rows, 'visible line count must match terminal rows');
+        invariant(
+          visibleLines.length === rows,
+          'visible line count must match terminal rows',
+        );
         return { cols, rows, visibleLines };
       }
 
@@ -190,10 +235,22 @@
         const cursor = wasmTerm.getCursor();
         const { cols, rows, visibleLines } = decodeVisibleLines(terminal);
 
-        invariant(Number.isInteger(cursor.x) && cursor.x >= 0, 'cursor.x must be a non-negative integer');
-        invariant(Number.isInteger(cursor.y) && cursor.y >= 0, 'cursor.y must be a non-negative integer');
-        invariant(cursor.x < cols, 'cursor.x must be within the terminal width');
-        invariant(cursor.y < rows, 'cursor.y must be within the terminal height');
+        invariant(
+          Number.isInteger(cursor.x) && cursor.x >= 0,
+          'cursor.x must be a non-negative integer',
+        );
+        invariant(
+          Number.isInteger(cursor.y) && cursor.y >= 0,
+          'cursor.y must be a non-negative integer',
+        );
+        invariant(
+          cursor.x < cols,
+          'cursor.x must be within the terminal width',
+        );
+        invariant(
+          cursor.y < rows,
+          'cursor.y must be within the terminal height',
+        );
 
         return {
           cols,
@@ -229,15 +286,23 @@
           return getSnapshotPayload();
         },
         getVisibleText() {
-          return decodeVisibleLines(getReadyTerminal()).visibleLines.map((line) => line.text).join('\n');
+          return decodeVisibleLines(getReadyTerminal())
+            .visibleLines.map((line) => line.text)
+            .join('\n');
         },
         isReady() {
           return state.ready;
         },
         resize(cols, rows) {
           const terminal = getReadyTerminal();
-          assertPositiveInteger(cols, 'resize() cols must be a positive integer');
-          assertPositiveInteger(rows, 'resize() rows must be a positive integer');
+          assertPositiveInteger(
+            cols,
+            'resize() cols must be a positive integer',
+          );
+          assertPositiveInteger(
+            rows,
+            'resize() rows must be a positive integer',
+          );
           terminal.resize(cols, rows);
           updateDocumentState();
         },

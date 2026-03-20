@@ -133,10 +133,7 @@ function parseEventLogLine(line: string, lineNumber: number): EventRecord {
   try {
     parsedLine = JSON.parse(line) as unknown;
   } catch {
-    invariant(
-      false,
-      `event log line ${String(lineNumber)} must be valid JSON`,
-    );
+    invariant(false, `event log line ${String(lineNumber)} must be valid JSON`);
   }
 
   const parsedRecord = EventRecordSchema.safeParse(parsedLine);
@@ -174,7 +171,9 @@ function parseEventLogContent(content: string): EventRecord[] {
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
-  const records = lines.map((line, index) => parseEventLogLine(line, index + 1));
+  const records = lines.map((line, index) =>
+    parseEventLogLine(line, index + 1),
+  );
   assertContiguousSequence(records);
   return records;
 }
@@ -247,7 +246,10 @@ export class EventLog {
 
     const validatedPayload = validatePayload(type, payload);
     const seq = this.nextSeq;
-    invariant(seq === this.nextSeq, 'event seq must match the expected next seq');
+    invariant(
+      seq === this.nextSeq,
+      'event seq must match the expected next seq',
+    );
     invariant(seq >= 0, 'event seq must be non-negative');
     this.nextSeq += 1;
 
@@ -258,7 +260,10 @@ export class EventLog {
       payload: validatedPayload,
     };
 
-    invariant(record.seq === seq, 'event record seq must match the reserved seq');
+    invariant(
+      record.seq === seq,
+      'event record seq must match the reserved seq',
+    );
 
     const parsedRecord = EventRecordSchema.safeParse(record);
     invariant(

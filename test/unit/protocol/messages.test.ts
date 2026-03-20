@@ -155,9 +155,9 @@ describe('RPC message schemas', () => {
 
   it('accepts snapshot params and discriminated snapshot results', () => {
     expect(SnapshotParamsSchema.safeParse({}).success).toBe(true);
-    expect(
-      SnapshotParamsSchema.safeParse({ format: 'text' }).success,
-    ).toBe(true);
+    expect(SnapshotParamsSchema.safeParse({ format: 'text' }).success).toBe(
+      true,
+    );
     expect(
       SnapshotResultSchema.safeParse({
         format: 'structured',
@@ -231,9 +231,9 @@ describe('RPC message schemas', () => {
   });
 
   it('rejects empty screenshot profile names', () => {
-    expect(
-      ScreenshotParamsSchema.safeParse({ profile: '' }).success,
-    ).toBe(false);
+    expect(ScreenshotParamsSchema.safeParse({ profile: '' }).success).toBe(
+      false,
+    );
   });
 
   it('accepts waitForRender params for text, regex, and stable-screen waits', () => {

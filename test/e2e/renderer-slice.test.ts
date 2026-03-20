@@ -64,7 +64,12 @@ function runCliEnvelope<TResult>(
 }
 
 function stateTransitionCommand(): string[] {
-  return ['node', '--import', 'tsx', 'test/fixtures/apps/state-transition/main.ts'];
+  return [
+    'node',
+    '--import',
+    'tsx',
+    'test/fixtures/apps/state-transition/main.ts',
+  ];
 }
 
 async function createRendererSession(
@@ -98,7 +103,9 @@ async function createRendererSession(
   expect(waitEnvelope.result.timedOut).toBe(false);
 
   await expect(
-    readOutput(home, sessionId).then((output) => normalizeTerminalOutput(output)),
+    readOutput(home, sessionId).then((output) =>
+      normalizeTerminalOutput(output),
+    ),
   ).resolves.toContain('Loading...\n');
 
   return sessionId;
@@ -154,7 +161,14 @@ describe('renderer slice e2e', { timeout: 120_000 }, () => {
     const sessionId = await createRendererSession(testHome, createdSessionIds);
 
     const waitEnvelope = runCliEnvelope<WaitForRenderResult>(
-      ['wait', sessionId, '--text', 'Ready', '--timeout', String(RENDER_WAIT_TIMEOUT_MS)],
+      [
+        'wait',
+        sessionId,
+        '--text',
+        'Ready',
+        '--timeout',
+        String(RENDER_WAIT_TIMEOUT_MS),
+      ],
       env,
       20_000,
     );
@@ -163,13 +177,24 @@ describe('renderer slice e2e', { timeout: 120_000 }, () => {
     expect(waitEnvelope.result.timedOut).toBe(false);
     expect(waitEnvelope.result.matchedText).toBe('Ready');
 
-    const snapshotEnvelope = runCliEnvelope<SnapshotResult>(['snapshot', sessionId], env);
+    const snapshotEnvelope = runCliEnvelope<SnapshotResult>(
+      ['snapshot', sessionId],
+      env,
+    );
     expect(snapshotEnvelope.ok).toBe(true);
     expect(snapshotEnvelope.command).toBe('snapshot');
     expectStructuredSnapshot(snapshotEnvelope.result);
     expect(snapshotEnvelope.result.sessionId).toBe(sessionId);
-    expect(snapshotEnvelope.result.visibleLines.some((line) => line.text.includes('3 items'))).toBe(true);
-    expect(snapshotEnvelope.result.visibleLines.some((line) => line.text.includes('Ready'))).toBe(true);
+    expect(
+      snapshotEnvelope.result.visibleLines.some((line) =>
+        line.text.includes('3 items'),
+      ),
+    ).toBe(true);
+    expect(
+      snapshotEnvelope.result.visibleLines.some((line) =>
+        line.text.includes('Ready'),
+      ),
+    ).toBe(true);
   });
 
   it('returns text snapshots with --format text', async () => {
@@ -177,7 +202,14 @@ describe('renderer slice e2e', { timeout: 120_000 }, () => {
     const sessionId = await createRendererSession(testHome, createdSessionIds);
 
     const waitEnvelope = runCliEnvelope<WaitForRenderResult>(
-      ['wait', sessionId, '--text', 'Ready', '--timeout', String(RENDER_WAIT_TIMEOUT_MS)],
+      [
+        'wait',
+        sessionId,
+        '--text',
+        'Ready',
+        '--timeout',
+        String(RENDER_WAIT_TIMEOUT_MS),
+      ],
       env,
       20_000,
     );
@@ -201,14 +233,24 @@ describe('renderer slice e2e', { timeout: 120_000 }, () => {
     const sessionId = await createRendererSession(testHome, createdSessionIds);
 
     const readyEnvelope = runCliEnvelope<WaitForRenderResult>(
-      ['wait', sessionId, '--text', 'Ready', '--timeout', String(RENDER_WAIT_TIMEOUT_MS)],
+      [
+        'wait',
+        sessionId,
+        '--text',
+        'Ready',
+        '--timeout',
+        String(RENDER_WAIT_TIMEOUT_MS),
+      ],
       env,
       20_000,
     );
     expect(readyEnvelope.result.matched).toBe(true);
     expect(readyEnvelope.result.timedOut).toBe(false);
 
-    const snapshotEnvelope = runCliEnvelope<SnapshotResult>(['snapshot', sessionId], env);
+    const snapshotEnvelope = runCliEnvelope<SnapshotResult>(
+      ['snapshot', sessionId],
+      env,
+    );
     expect(snapshotEnvelope.ok).toBe(true);
     expectStructuredSnapshot(snapshotEnvelope.result);
 
@@ -230,10 +272,14 @@ describe('renderer slice e2e', { timeout: 120_000 }, () => {
     const screenshotStats = await stat(screenshotEnvelope.result.artifactPath);
     expect(screenshotStats.size).toBe(screenshotEnvelope.result.pngSizeBytes);
 
-    const screenshotFile = await readFile(screenshotEnvelope.result.artifactPath);
+    const screenshotFile = await readFile(
+      screenshotEnvelope.result.artifactPath,
+    );
     expect(screenshotFile.subarray(0, 8).toString('hex')).toBe(PNG_MAGIC_HEX);
 
-    const manifest = await readArtifactManifest(sessionDir(testHome, sessionId));
+    const manifest = await readArtifactManifest(
+      sessionDir(testHome, sessionId),
+    );
     expect(manifest.sessionId).toBe(sessionId);
     expect(manifest.artifacts).toHaveLength(2);
     expect(manifest.artifacts.map((artifact) => artifact.kind)).toEqual([
@@ -264,7 +310,14 @@ describe('renderer slice e2e', { timeout: 120_000 }, () => {
     const sessionId = await createRendererSession(testHome, createdSessionIds);
 
     const readyEnvelope = runCliEnvelope<WaitForRenderResult>(
-      ['wait', sessionId, '--text', 'Ready', '--timeout', String(RENDER_WAIT_TIMEOUT_MS)],
+      [
+        'wait',
+        sessionId,
+        '--text',
+        'Ready',
+        '--timeout',
+        String(RENDER_WAIT_TIMEOUT_MS),
+      ],
       env,
       20_000,
     );
@@ -282,7 +335,9 @@ describe('renderer slice e2e', { timeout: 120_000 }, () => {
     expect(screenshotEnvelope.result.profileName).toBe('reference-light');
     expect(screenshotEnvelope.result.pngSizeBytes).toBeGreaterThan(0);
 
-    const manifest = await readArtifactManifest(sessionDir(testHome, sessionId));
+    const manifest = await readArtifactManifest(
+      sessionDir(testHome, sessionId),
+    );
     expect(manifest.artifacts).toHaveLength(1);
     expect(manifest.artifacts[0]).toMatchObject({
       kind: 'screenshot',
@@ -300,7 +355,14 @@ describe('renderer slice e2e', { timeout: 120_000 }, () => {
     const sessionId = await createRendererSession(testHome, createdSessionIds);
 
     const waitEnvelope = runCliEnvelope<WaitForRenderResult>(
-      ['wait', sessionId, '--text', 'Ready', '--timeout', String(RENDER_WAIT_TIMEOUT_MS)],
+      [
+        'wait',
+        sessionId,
+        '--text',
+        'Ready',
+        '--timeout',
+        String(RENDER_WAIT_TIMEOUT_MS),
+      ],
       env,
       20_000,
     );
@@ -318,7 +380,14 @@ describe('renderer slice e2e', { timeout: 120_000 }, () => {
     const sessionId = await createRendererSession(testHome, createdSessionIds);
 
     const waitEnvelope = runCliEnvelope<WaitForRenderResult>(
-      ['wait', sessionId, '--regex', '\\d+ items', '--timeout', String(RENDER_WAIT_TIMEOUT_MS)],
+      [
+        'wait',
+        sessionId,
+        '--regex',
+        '\\d+ items',
+        '--timeout',
+        String(RENDER_WAIT_TIMEOUT_MS),
+      ],
       env,
       20_000,
     );
@@ -336,7 +405,14 @@ describe('renderer slice e2e', { timeout: 120_000 }, () => {
     const sessionId = await createRendererSession(testHome, createdSessionIds);
 
     const readyEnvelope = runCliEnvelope<WaitForRenderResult>(
-      ['wait', sessionId, '--text', 'Ready', '--timeout', String(RENDER_WAIT_TIMEOUT_MS)],
+      [
+        'wait',
+        sessionId,
+        '--text',
+        'Ready',
+        '--timeout',
+        String(RENDER_WAIT_TIMEOUT_MS),
+      ],
       env,
       20_000,
     );
@@ -375,9 +451,15 @@ describe('renderer slice e2e', { timeout: 120_000 }, () => {
     expect(doctorEnvelope.result.checks.environment.length).toBeGreaterThan(0);
     expect(doctorEnvelope.result.checks.renderer).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: 'playwright_available', status: 'pass' }),
+        expect.objectContaining({
+          name: 'playwright_available',
+          status: 'pass',
+        }),
         expect.objectContaining({ name: 'browser_launch', status: 'pass' }),
-        expect.objectContaining({ name: 'ghostty_web_available', status: 'pass' }),
+        expect.objectContaining({
+          name: 'ghostty_web_available',
+          status: 'pass',
+        }),
         expect.objectContaining({ name: 'screenshot_viable', status: 'pass' }),
       ]),
     );

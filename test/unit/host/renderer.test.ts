@@ -57,9 +57,11 @@ function createReplayInput(overrides: Partial<ReplayInput> = {}): ReplayInput {
   };
 }
 
-function createFakeBackend(options: {
-  bootImplementation?: () => Promise<void>;
-} = {}): FakeRendererBackend {
+function createFakeBackend(
+  options: {
+    bootImplementation?: () => Promise<void>;
+  } = {},
+): FakeRendererBackend {
   let booted = false;
   const bootMock = vi.fn((): Promise<void> => {
     if (options.bootImplementation !== undefined) {
@@ -69,37 +71,40 @@ function createFakeBackend(options: {
     booted = true;
     return Promise.resolve();
   });
-  const replayToMock = vi.fn((input: ReplayInput): Promise<ReplayState> =>
-    Promise.resolve({
-      lastSeq: input.targetSeq,
-      cols: input.initialCols,
-      rows: input.initialRows,
-      cursorRow: 0,
-      cursorCol: 0,
-    }),
+  const replayToMock = vi.fn(
+    (input: ReplayInput): Promise<ReplayState> =>
+      Promise.resolve({
+        lastSeq: input.targetSeq,
+        cols: input.initialCols,
+        rows: input.initialRows,
+        cursorRow: 0,
+        cursorCol: 0,
+      }),
   );
-  const snapshotMock = vi.fn((): Promise<SemanticSnapshot> =>
-    Promise.resolve({
-      sessionId: 'session-01',
-      capturedAtSeq: 0,
-      cols: 80,
-      rows: 24,
-      cursorRow: 0,
-      cursorCol: 0,
-      isAltScreen: false,
-      visibleLines: [],
-    }),
+  const snapshotMock = vi.fn(
+    (): Promise<SemanticSnapshot> =>
+      Promise.resolve({
+        sessionId: 'session-01',
+        capturedAtSeq: 0,
+        cols: 80,
+        rows: 24,
+        cursorRow: 0,
+        cursorCol: 0,
+        isAltScreen: false,
+        visibleLines: [],
+      }),
   );
-  const screenshotMock = vi.fn((outputPath: string): Promise<ScreenshotResult> =>
-    Promise.resolve({
-      sessionId: 'session-01',
-      capturedAtSeq: 0,
-      profileName: 'default',
-      cols: 80,
-      rows: 24,
-      pngPath: outputPath,
-      pngSizeBytes: 1,
-    }),
+  const screenshotMock = vi.fn(
+    (outputPath: string): Promise<ScreenshotResult> =>
+      Promise.resolve({
+        sessionId: 'session-01',
+        capturedAtSeq: 0,
+        profileName: 'default',
+        cols: 80,
+        rows: 24,
+        pngPath: outputPath,
+        pngSizeBytes: 1,
+      }),
   );
   const getVisibleTextMock = vi.fn((): Promise<string> => Promise.resolve(''));
   const disposeMock = vi.fn((): Promise<void> => {
@@ -242,7 +247,10 @@ describe('HostRendererManager', () => {
     });
 
     const firstBackend = await manager.getBackend(createProfile('dark'), null);
-    const secondBackend = await manager.getBackend(createProfile('light'), null);
+    const secondBackend = await manager.getBackend(
+      createProfile('light'),
+      null,
+    );
 
     expect(secondBackend).not.toBe(firstBackend);
     expect(backendFactory).toHaveBeenCalledTimes(2);
@@ -275,7 +283,9 @@ describe('HostRendererManager', () => {
 
     await manager.getBackend(createProfile(), replayInput);
 
-    expect(getCreatedBackend(backends, 0).replayToMock).toHaveBeenCalledTimes(1);
+    expect(getCreatedBackend(backends, 0).replayToMock).toHaveBeenCalledTimes(
+      1,
+    );
     expect(getCreatedBackend(backends, 0).replayToMock).toHaveBeenCalledWith(
       replayInput,
     );
@@ -341,7 +351,9 @@ describe('HostRendererManager', () => {
       expect(relative(sessionDir, outputPath)).toBe(
         join('screenshots', 'default-123456789.png'),
       );
-      await expect(access(join(sessionDir, 'screenshots'))).resolves.toBeUndefined();
+      await expect(
+        access(join(sessionDir, 'screenshots')),
+      ).resolves.toBeUndefined();
     } finally {
       nowSpy.mockRestore();
     }

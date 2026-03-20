@@ -4,10 +4,7 @@ import { ulid } from 'ulid';
 import { z } from 'zod';
 
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
-import {
-  readValidatedJsonFile,
-  writeValidatedJsonFile,
-} from './manifests.js';
+import { readValidatedJsonFile, writeValidatedJsonFile } from './manifests.js';
 import { artifactPath } from './artifactPaths.js';
 import { invariant } from '../util/assert.js';
 
@@ -50,7 +47,10 @@ function artifactManifestPath(sessionDir: string): string {
 
 function sessionIdFromSessionDir(sessionDir: string): string {
   const sessionId = basename(resolve(sessionDir));
-  invariant(sessionId.length > 0, 'sessionDir must resolve to a non-empty sessionId');
+  invariant(
+    sessionId.length > 0,
+    'sessionDir must resolve to a non-empty sessionId',
+  );
   return sessionId;
 }
 
@@ -165,7 +165,8 @@ export async function appendArtifact(
   const expectedSessionId = sessionIdFromSessionDir(resolvedSessionDir);
   const validatedEntry = validateArtifactEntry(entry, expectedSessionId);
 
-  const previousWrite = appendQueues.get(resolvedSessionDir) ?? Promise.resolve();
+  const previousWrite =
+    appendQueues.get(resolvedSessionDir) ?? Promise.resolve();
 
   const queuedWrite = previousWrite
     .then(async () => {

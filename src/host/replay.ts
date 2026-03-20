@@ -54,16 +54,15 @@ function parseEventLogLine(line: string, lineNumber: number): EventRecord {
   try {
     parsedLine = JSON.parse(line) as unknown;
   } catch {
-    invariant(
-      false,
-      `event log line ${String(lineNumber)} must be valid JSON`,
-    );
+    invariant(false, `event log line ${String(lineNumber)} must be valid JSON`);
   }
 
   return parseEventRecord(parsedLine, lineNumber);
 }
 
-export async function readEventLogRecords(filePath: string): Promise<EventRecord[]> {
+export async function readEventLogRecords(
+  filePath: string,
+): Promise<EventRecord[]> {
   assertNonEmptyString(filePath, 'filePath must be a non-empty string');
 
   const content = await readFile(filePath, 'utf8');
@@ -97,7 +96,9 @@ export function buildReplayInput(
   invariant(parsedManifest.data.cols > 0, 'initial cols must be positive');
   invariant(parsedManifest.data.rows > 0, 'initial rows must be positive');
 
-  const validatedEvents = events.map((event, index) => parseEventRecord(event, index));
+  const validatedEvents = events.map((event, index) =>
+    parseEventRecord(event, index),
+  );
   assertContiguousEventSequence(validatedEvents);
 
   let lastSeq = -1;
@@ -109,7 +110,10 @@ export function buildReplayInput(
 
   const resolvedTargetSeq = targetSeq ?? lastSeq;
 
-  invariant(Number.isInteger(resolvedTargetSeq), 'targetSeq must be an integer');
+  invariant(
+    Number.isInteger(resolvedTargetSeq),
+    'targetSeq must be an integer',
+  );
 
   if (validatedEvents.length === 0) {
     invariant(

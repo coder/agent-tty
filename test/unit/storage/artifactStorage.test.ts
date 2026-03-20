@@ -146,9 +146,9 @@ describe('artifact manifest storage', () => {
     await writeArtifactManifest(sessionDir, manifest);
 
     await expect(readArtifactManifest(sessionDir)).resolves.toEqual(manifest);
-    await expect(readFile(artifactPath(sessionDir, 'manifest.json'), 'utf8')).resolves.toMatch(
-      /\n$/u,
-    );
+    await expect(
+      readFile(artifactPath(sessionDir, 'manifest.json'), 'utf8'),
+    ).resolves.toMatch(/\n$/u);
   });
 
   it('rejects invalid manifest contents and mismatched entries', async () => {

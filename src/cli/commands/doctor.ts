@@ -10,10 +10,11 @@ import { emitSuccess } from '../output.js';
 const COMMAND_NAME = 'doctor';
 const CHECK_TIMEOUT_MS = 10_000;
 const DOCTOR_GROUP_ORDER = ['environment', 'renderer'] as const;
-const DOCTOR_GROUP_LABELS: Readonly<Record<DoctorCheckGroupName, string>> = Object.freeze({
-  environment: 'Environment',
-  renderer: 'Renderer',
-});
+const DOCTOR_GROUP_LABELS: Readonly<Record<DoctorCheckGroupName, string>> =
+  Object.freeze({
+    environment: 'Environment',
+    renderer: 'Renderer',
+  });
 const DOCTOR_CHECK_LABELS: Readonly<Record<string, string>> = Object.freeze({
   'node-runtime': 'node',
   'cwd-access': 'cwd',
@@ -93,7 +94,10 @@ async function withTimeout<TResult>(
   timeoutMs: number,
   timeoutMessage: string,
 ): Promise<TResult> {
-  assert(Number.isInteger(timeoutMs) && timeoutMs > 0, 'timeoutMs must be a positive integer');
+  assert(
+    Number.isInteger(timeoutMs) && timeoutMs > 0,
+    'timeoutMs must be a positive integer',
+  );
 
   let timeoutHandle: NodeJS.Timeout | undefined;
   try {
@@ -125,7 +129,10 @@ async function runDoctorCheck(
       CHECK_TIMEOUT_MS,
       `${name} timed out after ${String(CHECK_TIMEOUT_MS)}ms`,
     );
-    assert(message.length > 0, 'doctor check success message must be non-empty');
+    assert(
+      message.length > 0,
+      'doctor check success message must be non-empty',
+    );
 
     return {
       name,
@@ -135,7 +142,10 @@ async function runDoctorCheck(
     };
   } catch (error) {
     const message = formatErrorMessage(error);
-    assert(message.length > 0, 'doctor check failure message must be non-empty');
+    assert(
+      message.length > 0,
+      'doctor check failure message must be non-empty',
+    );
 
     return {
       name,
@@ -158,8 +168,14 @@ async function runCheckGroup(
 }
 
 function runNodeRuntimeCheck(): string {
-  const majorVersion = Number.parseInt(process.versions.node.split('.')[0] ?? '', 10);
-  assert(Number.isInteger(majorVersion), 'unable to parse Node runtime version');
+  const majorVersion = Number.parseInt(
+    process.versions.node.split('.')[0] ?? '',
+    10,
+  );
+  assert(
+    Number.isInteger(majorVersion),
+    'unable to parse Node runtime version',
+  );
   assert(majorVersion >= 24, `Node ${process.versions.node} requires 24+`);
   return `Node ${process.versions.node} ok`;
 }
@@ -223,7 +239,11 @@ async function importGhosttyWebModule(): Promise<GhosttyWebModuleLike> {
 
 async function runGhosttyWebAvailableCheck(): Promise<string> {
   const ghosttyModule = await importGhosttyWebModule();
-  assert.equal(typeof ghosttyModule.init, 'function', 'ghostty-web init must be a function');
+  assert.equal(
+    typeof ghosttyModule.init,
+    'function',
+    'ghostty-web init must be a function',
+  );
   assert.equal(
     typeof ghosttyModule.Terminal,
     'function',
@@ -234,7 +254,9 @@ async function runGhosttyWebAvailableCheck(): Promise<string> {
 
 async function runScreenshotViabilityCheck(): Promise<string> {
   const chromium = await getPlaywrightChromium();
-  const temporaryDirectory = await mkdtemp(join(tmpdir(), 'agent-terminal-doctor-'));
+  const temporaryDirectory = await mkdtemp(
+    join(tmpdir(), 'agent-terminal-doctor-'),
+  );
   const screenshotPath = join(temporaryDirectory, 'smoke-check.png');
   let browser: BrowserLike | null = null;
 
@@ -268,7 +290,9 @@ async function runScreenshotViabilityCheck(): Promise<string> {
     if (browser !== null) {
       await browser.close().catch(() => undefined);
     }
-    await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined);
+    await rm(temporaryDirectory, { recursive: true, force: true }).catch(
+      () => undefined,
+    );
   }
 }
 

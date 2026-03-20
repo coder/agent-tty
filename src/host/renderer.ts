@@ -143,7 +143,9 @@ export class HostRendererManager {
     return this.currentBackend;
   }
 
-  private async bootBackend(backend: RendererBackend): Promise<RendererBackend> {
+  private async bootBackend(
+    backend: RendererBackend,
+  ): Promise<RendererBackend> {
     if (this.bootPromise === null) {
       this.bootPromise = (async () => {
         await backend.boot();
@@ -154,7 +156,10 @@ export class HostRendererManager {
     }
 
     const bootedBackend = await this.bootPromise;
-    invariant(bootedBackend === backend, 'booted backend must match the requested backend');
+    invariant(
+      bootedBackend === backend,
+      'booted backend must match the requested backend',
+    );
     return bootedBackend;
   }
 

@@ -131,8 +131,7 @@ export const ReplayInputSchema = z
         context.addIssue({
           code: 'custom',
           path: ['events', index, 'seq'],
-          message:
-            'events must be ordered by strictly increasing seq values',
+          message: 'events must be ordered by strictly increasing seq values',
         });
       }
 

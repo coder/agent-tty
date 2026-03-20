@@ -50,7 +50,9 @@ async function waitForOutputMarker(
 
   expect(waitResult.status).toBe(0);
   expect(waitResult.stderr).toBe('');
-  const waitEnvelope = JSON.parse(waitResult.stdout) as SuccessEnvelope<WaitResult>;
+  const waitEnvelope = JSON.parse(
+    waitResult.stdout,
+  ) as SuccessEnvelope<WaitResult>;
   expect(waitEnvelope.ok).toBe(true);
   expect(waitEnvelope.result.timedOut).toBe(false);
 
@@ -167,7 +169,9 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
-    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<WaitForRenderResult>;
+    const envelope = JSON.parse(
+      result.stdout,
+    ) as SuccessEnvelope<WaitForRenderResult>;
     expect(envelope.ok).toBe(true);
     expect(envelope.result.matched).toBe(true);
     expect(envelope.result.timedOut).toBe(false);
@@ -176,14 +180,24 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
   it('matches regex via CLI --regex', () => {
     const result = runCli(
-      ['wait', sessionId, '--regex', '\\d+ items', '--timeout', '15000', '--json'],
+      [
+        'wait',
+        sessionId,
+        '--regex',
+        '\\d+ items',
+        '--timeout',
+        '15000',
+        '--json',
+      ],
       { AGENT_TERMINAL_HOME: testHome },
       20_000,
     );
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
-    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<WaitForRenderResult>;
+    const envelope = JSON.parse(
+      result.stdout,
+    ) as SuccessEnvelope<WaitForRenderResult>;
     expect(envelope.ok).toBe(true);
     expect(envelope.result.matched).toBe(true);
     expect(envelope.result.timedOut).toBe(false);
@@ -216,7 +230,9 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
-    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<WaitForRenderResult>;
+    const envelope = JSON.parse(
+      result.stdout,
+    ) as SuccessEnvelope<WaitForRenderResult>;
     expect(envelope.ok).toBe(true);
     expect(envelope.result.matched).toBe(true);
     expect(envelope.result.timedOut).toBe(false);
@@ -265,7 +281,11 @@ describe('wait render integration', { timeout: 120_000 }, () => {
   });
 
   it('legacy wait --exit still works', () => {
-    const shortSessionId = createSession(testHome, ['/bin/sh', '-c', 'echo done; exit 0']);
+    const shortSessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      'echo done; exit 0',
+    ]);
     const result = runCli(
       ['wait', shortSessionId, '--exit', '--timeout', '10000', '--json'],
       { AGENT_TERMINAL_HOME: testHome },

@@ -47,7 +47,9 @@ export const InputPasteEventPayloadSchema = z
     data: z.string(),
   })
   .strict();
-export type InputPasteEventPayload = z.infer<typeof InputPasteEventPayloadSchema>;
+export type InputPasteEventPayload = z.infer<
+  typeof InputPasteEventPayloadSchema
+>;
 
 export const InputKeysEventPayloadSchema = z
   .object({

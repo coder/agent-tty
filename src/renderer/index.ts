@@ -1,4 +1,8 @@
-export { BUILTIN_PROFILE_NAMES, getBuiltinProfile, resolveProfile } from './profiles.js';
+export {
+  BUILTIN_PROFILE_NAMES,
+  getBuiltinProfile,
+  resolveProfile,
+} from './profiles.js';
 export {
   RenderProfileConfigSchema,
   ReplayEventSchema,

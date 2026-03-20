@@ -1,9 +1,19 @@
 import { createRequire } from 'node:module';
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from 'node:http';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from 'playwright';
 
 import { invariant, assertString, unreachable } from '../../util/assert.js';
 import type { RendererBackend } from '../backend.js';
@@ -360,27 +370,44 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
 </html>
 `;
 
-let servedAssetsPromise: Promise<ReadonlyMap<string, GhosttyServedAsset>> | null = null;
+let servedAssetsPromise: Promise<
+  ReadonlyMap<string, GhosttyServedAsset>
+> | null = null;
 
-function assertNonNegativeInteger(value: unknown, message: string): asserts value is number {
+function assertNonNegativeInteger(
+  value: unknown,
+  message: string,
+): asserts value is number {
   invariant(
     typeof value === 'number' && Number.isInteger(value) && value >= 0,
     message,
   );
 }
 
-function assertPositiveInteger(value: unknown, message: string): asserts value is number {
+function assertPositiveInteger(
+  value: unknown,
+  message: string,
+): asserts value is number {
   invariant(
     typeof value === 'number' && Number.isInteger(value) && value > 0,
     message,
   );
 }
 
-function assertPositiveNumber(value: unknown, message: string): asserts value is number {
-  invariant(typeof value === 'number' && Number.isFinite(value) && value > 0, message);
+function assertPositiveNumber(
+  value: unknown,
+  message: string,
+): asserts value is number {
+  invariant(
+    typeof value === 'number' && Number.isFinite(value) && value > 0,
+    message,
+  );
 }
 
-function assertHexColor(value: unknown, message: string): asserts value is string {
+function assertHexColor(
+  value: unknown,
+  message: string,
+): asserts value is string {
   assertString(value, message);
   invariant(/^#[0-9a-fA-F]{6}$/u.test(value), message);
 }
@@ -420,17 +447,30 @@ async function loadHarnessHtml(): Promise<string> {
   }
 }
 
-async function loadServedAssets(): Promise<ReadonlyMap<string, GhosttyServedAsset>> {
+async function loadServedAssets(): Promise<
+  ReadonlyMap<string, GhosttyServedAsset>
+> {
   const require = createRequire(import.meta.url);
   const ghosttyRequireEntry = require.resolve('ghostty-web');
   const ghosttyDistDirectory = dirname(ghosttyRequireEntry);
   const ghosttyPackageDirectory = resolve(ghosttyDistDirectory, '..');
-  const ghosttyModulePath = join(ghosttyPackageDirectory, 'dist', 'ghostty-web.js');
-  const ghosttyWasmPath = join(ghosttyPackageDirectory, 'dist', 'ghostty-vt.wasm');
-  const ghosttyDistEntries = await readdir(join(ghosttyPackageDirectory, 'dist'));
+  const ghosttyModulePath = join(
+    ghosttyPackageDirectory,
+    'dist',
+    'ghostty-web.js',
+  );
+  const ghosttyWasmPath = join(
+    ghosttyPackageDirectory,
+    'dist',
+    'ghostty-vt.wasm',
+  );
+  const ghosttyDistEntries = await readdir(
+    join(ghosttyPackageDirectory, 'dist'),
+  );
   const browserExternalEntries = ghosttyDistEntries.filter(
     (entryName) =>
-      entryName.startsWith('__vite-browser-external-') && entryName.endsWith('.js'),
+      entryName.startsWith('__vite-browser-external-') &&
+      entryName.endsWith('.js'),
   );
 
   invariant(
@@ -462,16 +502,21 @@ async function loadServedAssets(): Promise<ReadonlyMap<string, GhosttyServedAsse
   assetEntries.set('/', htmlAsset);
   assetEntries.set('/harness.html', htmlAsset);
 
-  const packageAssetEntries: ReadonlyArray<readonly [string, string, string]> = [
-    ['/assets/ghostty-web.js', ghosttyModulePath, GHOSTTY_JAVASCRIPT_CONTENT_TYPE],
+  const packageAssetEntries: ReadonlyArray<readonly [string, string, string]> =
     [
-      '/assets/' + browserExternalEntry,
-      browserExternalPath,
-      GHOSTTY_JAVASCRIPT_CONTENT_TYPE,
-    ],
-    ['/assets/ghostty-vt.wasm', ghosttyWasmPath, WASM_CONTENT_TYPE],
-    ['/ghostty-vt.wasm', ghosttyWasmPath, WASM_CONTENT_TYPE],
-  ];
+      [
+        '/assets/ghostty-web.js',
+        ghosttyModulePath,
+        GHOSTTY_JAVASCRIPT_CONTENT_TYPE,
+      ],
+      [
+        '/assets/' + browserExternalEntry,
+        browserExternalPath,
+        GHOSTTY_JAVASCRIPT_CONTENT_TYPE,
+      ],
+      ['/assets/ghostty-vt.wasm', ghosttyWasmPath, WASM_CONTENT_TYPE],
+      ['/ghostty-vt.wasm', ghosttyWasmPath, WASM_CONTENT_TYPE],
+    ];
 
   for (const [routePath, filePath, contentType] of packageAssetEntries) {
     const assetFile = await readFile(filePath);
@@ -485,7 +530,9 @@ async function loadServedAssets(): Promise<ReadonlyMap<string, GhosttyServedAsse
   return assetEntries;
 }
 
-async function getServedAssets(): Promise<ReadonlyMap<string, GhosttyServedAsset>> {
+async function getServedAssets(): Promise<
+  ReadonlyMap<string, GhosttyServedAsset>
+> {
   servedAssetsPromise ??= loadServedAssets();
   return servedAssetsPromise;
 }
@@ -505,8 +552,14 @@ function validateHarnessSnapshot(snapshot: unknown): GhosttyHarnessSnapshot {
     visibleLines?: unknown;
   };
 
-  assertPositiveInteger(candidate.cols, 'snapshot cols must be a positive integer');
-  assertPositiveInteger(candidate.rows, 'snapshot rows must be a positive integer');
+  assertPositiveInteger(
+    candidate.cols,
+    'snapshot cols must be a positive integer',
+  );
+  assertPositiveInteger(
+    candidate.rows,
+    'snapshot rows must be a positive integer',
+  );
   assertNonNegativeInteger(
     candidate.cursorRow,
     'snapshot cursorRow must be a non-negative integer',
@@ -603,12 +656,18 @@ export class GhosttyWebBackend implements RendererBackend {
 
   public constructor(sessionId: string, profile: RenderProfileConfig) {
     invariant(sessionId.length > 0, 'sessionId must be a non-empty string');
-    invariant(profile.name.length > 0, 'profile.name must be a non-empty string');
+    invariant(
+      profile.name.length > 0,
+      'profile.name must be a non-empty string',
+    );
     invariant(
       profile.fontFamily.length > 0,
       'profile.fontFamily must be a non-empty string',
     );
-    assertPositiveNumber(profile.fontSize, 'profile.fontSize must be a positive number');
+    assertPositiveNumber(
+      profile.fontSize,
+      'profile.fontSize must be a positive number',
+    );
     assertHexColor(
       profile.backgroundColor,
       'profile.backgroundColor must be a hex color',
@@ -686,7 +745,10 @@ export class GhosttyWebBackend implements RendererBackend {
     let highestProcessedSeq = this.lastAppliedSeq;
 
     for (const event of input.events) {
-      assertNonNegativeInteger(event.seq, 'replay event seq must be a non-negative integer');
+      assertNonNegativeInteger(
+        event.seq,
+        'replay event seq must be a non-negative integer',
+      );
       invariant(
         event.seq > previousEventSeq,
         'replay events must be ordered by strictly increasing seq values',
@@ -783,7 +845,10 @@ export class GhosttyWebBackend implements RendererBackend {
       this.lastAppliedSeq >= 0,
       'screenshot() requires replayTo() to advance to a non-negative sequence first',
     );
-    invariant(outputPath.length > 0, 'screenshot outputPath must be a non-empty string');
+    invariant(
+      outputPath.length > 0,
+      'screenshot outputPath must be a non-empty string',
+    );
     invariant(
       isAbsolute(outputPath),
       'screenshot outputPath must be an absolute path',
@@ -885,7 +950,9 @@ export class GhosttyWebBackend implements RendererBackend {
           return;
         }
 
-        this.recordUnexpectedFailure(new Error('ghostty-web page closed unexpectedly'));
+        this.recordUnexpectedFailure(
+          new Error('ghostty-web page closed unexpectedly'),
+        );
       });
       this.page.on('crash', () => {
         this.recordUnexpectedFailure(new Error('ghostty-web page crashed'));
@@ -1025,7 +1092,8 @@ export class GhosttyWebBackend implements RendererBackend {
   private async readHarnessErrorMessage(page: Page): Promise<string | null> {
     try {
       const harnessError = await page.evaluate(() => {
-        const bodyDataset = (globalThis as GhosttyBrowserGlobal).document?.body?.dataset;
+        const bodyDataset = (globalThis as GhosttyBrowserGlobal).document?.body
+          ?.dataset;
         const errorMessage = bodyDataset?.error;
         return typeof errorMessage === 'string' && errorMessage.length > 0
           ? errorMessage
@@ -1038,7 +1106,9 @@ export class GhosttyWebBackend implements RendererBackend {
     }
   }
 
-  private async readHarnessSnapshot(page: Page): Promise<GhosttyHarnessSnapshot> {
+  private async readHarnessSnapshot(
+    page: Page,
+  ): Promise<GhosttyHarnessSnapshot> {
     const snapshot = await page.evaluate(() => {
       const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
       if (bridge === undefined || typeof bridge.getSnapshot !== 'function') {
@@ -1083,8 +1153,14 @@ export class GhosttyWebBackend implements RendererBackend {
       );
     }
 
-    invariant(this.isBooted, `${methodName} requires a booted GhosttyWebBackend`);
-    invariant(this.page !== null, `${methodName} requires an active Playwright page`);
+    invariant(
+      this.isBooted,
+      `${methodName} requires a booted GhosttyWebBackend`,
+    );
+    invariant(
+      this.page !== null,
+      `${methodName} requires an active Playwright page`,
+    );
     invariant(
       !this.page.isClosed(),
       `${methodName} requires an open Playwright page`,
@@ -1093,18 +1169,31 @@ export class GhosttyWebBackend implements RendererBackend {
     return this.page;
   }
 
-  private async resizeBridge(page: Page, cols: number, rows: number): Promise<void> {
-    assertPositiveInteger(cols, 'bridge resize cols must be a positive integer');
-    assertPositiveInteger(rows, 'bridge resize rows must be a positive integer');
+  private async resizeBridge(
+    page: Page,
+    cols: number,
+    rows: number,
+  ): Promise<void> {
+    assertPositiveInteger(
+      cols,
+      'bridge resize cols must be a positive integer',
+    );
+    assertPositiveInteger(
+      rows,
+      'bridge resize rows must be a positive integer',
+    );
 
-    await page.evaluate(async ([nextCols, nextRows]) => {
-      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
-      if (bridge === undefined || typeof bridge.resize !== 'function') {
-        throw new Error('ghostty-web bridge resize() is unavailable');
-      }
+    await page.evaluate(
+      async ([nextCols, nextRows]) => {
+        const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
+        if (bridge === undefined || typeof bridge.resize !== 'function') {
+          throw new Error('ghostty-web bridge resize() is unavailable');
+        }
 
-      await bridge.resize(nextCols, nextRows);
-    }, [cols, rows] as const);
+        await bridge.resize(nextCols, nextRows);
+      },
+      [cols, rows] as const,
+    );
   }
 
   private async startServer(
@@ -1130,7 +1219,10 @@ export class GhosttyWebBackend implements RendererBackend {
       address !== null && typeof address === 'object',
       'ghostty-web server must expose a TCP address',
     );
-    assertPositiveInteger(address.port, 'ghostty-web server port must be positive');
+    assertPositiveInteger(
+      address.port,
+      'ghostty-web server port must be positive',
+    );
 
     return {
       origin: 'http://127.0.0.1:' + String(address.port),

@@ -101,7 +101,10 @@ export function resolveProfile(
   nameOrConfig: string | RenderProfileConfig,
 ): RenderProfileConfig {
   if (typeof nameOrConfig === 'string') {
-    invariant(nameOrConfig.length > 0, 'profile name must be a non-empty string');
+    invariant(
+      nameOrConfig.length > 0,
+      'profile name must be a non-empty string',
+    );
 
     const builtinProfile = getBuiltinProfile(nameOrConfig);
     invariant(

@@ -43,7 +43,9 @@ async function waitForOutputMarker(
 
   expect(waitResult.status).toBe(0);
   expect(waitResult.stderr).toBe('');
-  const waitEnvelope = JSON.parse(waitResult.stdout) as SuccessEnvelope<WaitResult>;
+  const waitEnvelope = JSON.parse(
+    waitResult.stdout,
+  ) as SuccessEnvelope<WaitResult>;
   expect(waitEnvelope.ok).toBe(true);
   expect(waitEnvelope.result.timedOut).toBe(false);
 
@@ -68,202 +70,206 @@ async function waitForOutputMarker(
   throw new Error(`timed out waiting for output marker ${marker}`);
 }
 
-describe('host renderer snapshot/screenshot RPC integration', { timeout: 120_000 }, () => {
-  let testHome = '';
-  let sessionId = '';
-  let rpcSocketPath = '';
-  let sessDir = '';
+describe(
+  'host renderer snapshot/screenshot RPC integration',
+  { timeout: 120_000 },
+  () => {
+    let testHome = '';
+    let sessionId = '';
+    let rpcSocketPath = '';
+    let sessDir = '';
 
-  beforeEach(async () => {
-    testHome = await mkdtemp(join(tmpdir(), 'agent-terminal-host-renderer-'));
-    sessionId = createSession(testHome, [
-      '/bin/sh',
-      '-c',
-      `echo ${OUTPUT_MARKER}; exec cat`,
-    ]);
+    beforeEach(async () => {
+      testHome = await mkdtemp(join(tmpdir(), 'agent-terminal-host-renderer-'));
+      sessionId = createSession(testHome, [
+        '/bin/sh',
+        '-c',
+        `echo ${OUTPUT_MARKER}; exec cat`,
+      ]);
 
-    await waitForOutputMarker(testHome, sessionId, OUTPUT_MARKER);
+      await waitForOutputMarker(testHome, sessionId, OUTPUT_MARKER);
 
-    sessDir = sessionDir(testHome, sessionId);
-    rpcSocketPath = socketPath(sessDir);
-  });
-
-  afterEach(async () => {
-    destroySession(testHome, sessionId);
-    await cleanupHome(testHome);
-    sessDir = '';
-    sessionId = '';
-    rpcSocketPath = '';
-    testHome = '';
-  });
-
-  it('returns structured snapshots over RPC', async () => {
-    const result = (await sendRpc(
-      rpcSocketPath,
-      'snapshot',
-      { format: 'structured' },
-      SNAPSHOT_TIMEOUT_MS,
-    )) as SnapshotResult;
-
-    expect(result.format).toBe('structured');
-    expect(result.sessionId).toBe(sessionId);
-
-    if (result.format !== 'structured') {
-      throw new Error('expected structured snapshot result');
-    }
-
-    expect(Array.isArray(result.visibleLines)).toBe(true);
-    expect(
-      result.visibleLines.some((line) => line.text.includes(OUTPUT_MARKER)),
-    ).toBe(true);
-
-    const filename = snapshotFilename(result.capturedAtSeq, 'structured');
-    const manifest = await readArtifactManifest(sessDir);
-    const artifactContents = JSON.parse(
-      await readFile(artifactPath(sessDir, filename), 'utf8'),
-    ) as SnapshotResult;
-
-    expect(artifactContents).toEqual(result);
-    expect(manifest.artifacts).toHaveLength(1);
-    expect(manifest.artifacts[0]).toMatchObject({
-      kind: 'snapshot',
-      filename,
-      sessionId,
-      capturedAtSeq: result.capturedAtSeq,
-      metadata: {
-        format: 'structured',
-        cols: result.cols,
-        rows: result.rows,
-        cursorRow: result.cursorRow,
-        cursorCol: result.cursorCol,
-      },
+      sessDir = sessionDir(testHome, sessionId);
+      rpcSocketPath = socketPath(sessDir);
     });
-  });
 
-  it('returns text snapshots over RPC', async () => {
-    const result = (await sendRpc(
-      rpcSocketPath,
-      'snapshot',
-      { format: 'text' },
-      SNAPSHOT_TIMEOUT_MS,
-    )) as SnapshotResult;
-
-    expect(result.format).toBe('text');
-    expect(result.sessionId).toBe(sessionId);
-
-    if (result.format !== 'text') {
-      throw new Error('expected text snapshot result');
-    }
-
-    expect(result.text).toContain(OUTPUT_MARKER);
-
-    const filename = snapshotFilename(result.capturedAtSeq, 'text');
-    const manifest = await readArtifactManifest(sessDir);
-    const artifactContents = JSON.parse(
-      await readFile(artifactPath(sessDir, filename), 'utf8'),
-    ) as SnapshotResult;
-
-    expect(artifactContents).toEqual(result);
-    expect(manifest.artifacts).toHaveLength(1);
-    expect(manifest.artifacts[0]).toMatchObject({
-      kind: 'snapshot',
-      filename,
-      sessionId,
-      capturedAtSeq: result.capturedAtSeq,
-      metadata: {
-        format: 'text',
-        cols: result.cols,
-        rows: result.rows,
-        cursorRow: result.cursorRow,
-        cursorCol: result.cursorCol,
-      },
+    afterEach(async () => {
+      destroySession(testHome, sessionId);
+      await cleanupHome(testHome);
+      sessDir = '';
+      sessionId = '';
+      rpcSocketPath = '';
+      testHome = '';
     });
-  });
 
-  it('defaults snapshot RPCs to structured format', async () => {
-    const result = (await sendRpc(
-      rpcSocketPath,
-      'snapshot',
-      {},
-      SNAPSHOT_TIMEOUT_MS,
-    )) as SnapshotResult;
+    it('returns structured snapshots over RPC', async () => {
+      const result = (await sendRpc(
+        rpcSocketPath,
+        'snapshot',
+        { format: 'structured' },
+        SNAPSHOT_TIMEOUT_MS,
+      )) as SnapshotResult;
 
-    expect(result.format).toBe('structured');
+      expect(result.format).toBe('structured');
+      expect(result.sessionId).toBe(sessionId);
 
-    if (result.format !== 'structured') {
-      throw new Error('expected structured snapshot result');
-    }
+      if (result.format !== 'structured') {
+        throw new Error('expected structured snapshot result');
+      }
 
-    expect(
-      result.visibleLines.some((line) => line.text.includes(OUTPUT_MARKER)),
-    ).toBe(true);
-  });
+      expect(Array.isArray(result.visibleLines)).toBe(true);
+      expect(
+        result.visibleLines.some((line) => line.text.includes(OUTPUT_MARKER)),
+      ).toBe(true);
 
-  it('captures screenshots with the default render profile', async () => {
-    const result = (await sendRpc(
-      rpcSocketPath,
-      'screenshot',
-      {},
-      SNAPSHOT_TIMEOUT_MS,
-    )) as ScreenshotResult;
-    const fileStats = await stat(result.artifactPath);
-    const filename = screenshotFilename(
-      result.capturedAtSeq,
-      result.profileName,
-    );
-    const manifest = await readArtifactManifest(sessDir);
+      const filename = snapshotFilename(result.capturedAtSeq, 'structured');
+      const manifest = await readArtifactManifest(sessDir);
+      const artifactContents = JSON.parse(
+        await readFile(artifactPath(sessDir, filename), 'utf8'),
+      ) as SnapshotResult;
 
-    expect(result.sessionId).toBe(sessionId);
-    expect(result.profileName).toBe('reference-dark');
-    expect(result.artifactPath).toBe(artifactPath(sessDir, filename));
-    expect(result.pngSizeBytes).toBeGreaterThan(0);
-    expect(fileStats.size).toBe(result.pngSizeBytes);
-    expect(manifest.artifacts).toHaveLength(1);
-    expect(manifest.artifacts[0]).toMatchObject({
-      kind: 'screenshot',
-      filename,
-      sessionId,
-      capturedAtSeq: result.capturedAtSeq,
-      metadata: {
-        profileName: result.profileName,
-        cols: result.cols,
-        rows: result.rows,
-        pngSizeBytes: result.pngSizeBytes,
-      },
+      expect(artifactContents).toEqual(result);
+      expect(manifest.artifacts).toHaveLength(1);
+      expect(manifest.artifacts[0]).toMatchObject({
+        kind: 'snapshot',
+        filename,
+        sessionId,
+        capturedAtSeq: result.capturedAtSeq,
+        metadata: {
+          format: 'structured',
+          cols: result.cols,
+          rows: result.rows,
+          cursorRow: result.cursorRow,
+          cursorCol: result.cursorCol,
+        },
+      });
     });
-  });
 
-  it('captures screenshots with an explicit render profile', async () => {
-    const result = (await sendRpc(
-      rpcSocketPath,
-      'screenshot',
-      { profile: 'reference-light' },
-      SNAPSHOT_TIMEOUT_MS,
-    )) as ScreenshotResult;
-    const fileStats = await stat(result.artifactPath);
-    const filename = screenshotFilename(
-      result.capturedAtSeq,
-      result.profileName,
-    );
-    const manifest = await readArtifactManifest(sessDir);
+    it('returns text snapshots over RPC', async () => {
+      const result = (await sendRpc(
+        rpcSocketPath,
+        'snapshot',
+        { format: 'text' },
+        SNAPSHOT_TIMEOUT_MS,
+      )) as SnapshotResult;
 
-    expect(result.sessionId).toBe(sessionId);
-    expect(result.profileName).toBe('reference-light');
-    expect(result.artifactPath).toBe(artifactPath(sessDir, filename));
-    expect(result.pngSizeBytes).toBeGreaterThan(0);
-    expect(fileStats.size).toBe(result.pngSizeBytes);
-    expect(manifest.artifacts).toHaveLength(1);
-    expect(manifest.artifacts[0]).toMatchObject({
-      kind: 'screenshot',
-      filename,
-      sessionId,
-      capturedAtSeq: result.capturedAtSeq,
-      metadata: {
-        profileName: result.profileName,
-        cols: result.cols,
-        rows: result.rows,
-        pngSizeBytes: result.pngSizeBytes,
-      },
+      expect(result.format).toBe('text');
+      expect(result.sessionId).toBe(sessionId);
+
+      if (result.format !== 'text') {
+        throw new Error('expected text snapshot result');
+      }
+
+      expect(result.text).toContain(OUTPUT_MARKER);
+
+      const filename = snapshotFilename(result.capturedAtSeq, 'text');
+      const manifest = await readArtifactManifest(sessDir);
+      const artifactContents = JSON.parse(
+        await readFile(artifactPath(sessDir, filename), 'utf8'),
+      ) as SnapshotResult;
+
+      expect(artifactContents).toEqual(result);
+      expect(manifest.artifacts).toHaveLength(1);
+      expect(manifest.artifacts[0]).toMatchObject({
+        kind: 'snapshot',
+        filename,
+        sessionId,
+        capturedAtSeq: result.capturedAtSeq,
+        metadata: {
+          format: 'text',
+          cols: result.cols,
+          rows: result.rows,
+          cursorRow: result.cursorRow,
+          cursorCol: result.cursorCol,
+        },
+      });
     });
-  });
-});
+
+    it('defaults snapshot RPCs to structured format', async () => {
+      const result = (await sendRpc(
+        rpcSocketPath,
+        'snapshot',
+        {},
+        SNAPSHOT_TIMEOUT_MS,
+      )) as SnapshotResult;
+
+      expect(result.format).toBe('structured');
+
+      if (result.format !== 'structured') {
+        throw new Error('expected structured snapshot result');
+      }
+
+      expect(
+        result.visibleLines.some((line) => line.text.includes(OUTPUT_MARKER)),
+      ).toBe(true);
+    });
+
+    it('captures screenshots with the default render profile', async () => {
+      const result = (await sendRpc(
+        rpcSocketPath,
+        'screenshot',
+        {},
+        SNAPSHOT_TIMEOUT_MS,
+      )) as ScreenshotResult;
+      const fileStats = await stat(result.artifactPath);
+      const filename = screenshotFilename(
+        result.capturedAtSeq,
+        result.profileName,
+      );
+      const manifest = await readArtifactManifest(sessDir);
+
+      expect(result.sessionId).toBe(sessionId);
+      expect(result.profileName).toBe('reference-dark');
+      expect(result.artifactPath).toBe(artifactPath(sessDir, filename));
+      expect(result.pngSizeBytes).toBeGreaterThan(0);
+      expect(fileStats.size).toBe(result.pngSizeBytes);
+      expect(manifest.artifacts).toHaveLength(1);
+      expect(manifest.artifacts[0]).toMatchObject({
+        kind: 'screenshot',
+        filename,
+        sessionId,
+        capturedAtSeq: result.capturedAtSeq,
+        metadata: {
+          profileName: result.profileName,
+          cols: result.cols,
+          rows: result.rows,
+          pngSizeBytes: result.pngSizeBytes,
+        },
+      });
+    });
+
+    it('captures screenshots with an explicit render profile', async () => {
+      const result = (await sendRpc(
+        rpcSocketPath,
+        'screenshot',
+        { profile: 'reference-light' },
+        SNAPSHOT_TIMEOUT_MS,
+      )) as ScreenshotResult;
+      const fileStats = await stat(result.artifactPath);
+      const filename = screenshotFilename(
+        result.capturedAtSeq,
+        result.profileName,
+      );
+      const manifest = await readArtifactManifest(sessDir);
+
+      expect(result.sessionId).toBe(sessionId);
+      expect(result.profileName).toBe('reference-light');
+      expect(result.artifactPath).toBe(artifactPath(sessDir, filename));
+      expect(result.pngSizeBytes).toBeGreaterThan(0);
+      expect(fileStats.size).toBe(result.pngSizeBytes);
+      expect(manifest.artifacts).toHaveLength(1);
+      expect(manifest.artifacts[0]).toMatchObject({
+        kind: 'screenshot',
+        filename,
+        sessionId,
+        capturedAtSeq: result.capturedAtSeq,
+        metadata: {
+          profileName: result.profileName,
+          cols: result.cols,
+          rows: result.rows,
+          pngSizeBytes: result.pngSizeBytes,
+        },
+      });
+    });
+  },
+);

@@ -8,10 +8,7 @@ import {
 describe('doctor command', () => {
   it('returns unique passing checks across environment and renderer groups', async () => {
     const result = await runDoctorChecks();
-    const allChecks = [
-      ...result.checks.environment,
-      ...result.checks.renderer,
-    ];
+    const allChecks = [...result.checks.environment, ...result.checks.renderer];
     const checkNames = allChecks.map((check) => check.name);
 
     expect(result.ok).toBe(true);
@@ -19,7 +16,9 @@ describe('doctor command', () => {
     expect(result.checks.renderer.length).toBeGreaterThan(0);
     expect(new Set(checkNames).size).toBe(checkNames.length);
     expect(allChecks.every((check) => check.status === 'pass')).toBe(true);
-    expect(allChecks.every((check) => typeof check.durationMs === 'number')).toBe(true);
+    expect(
+      allChecks.every((check) => typeof check.durationMs === 'number'),
+    ).toBe(true);
   });
 
   it('formats grouped human-readable output', () => {

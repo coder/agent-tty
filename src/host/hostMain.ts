@@ -296,7 +296,9 @@ export async function runHost(sessionId: string): Promise<void> {
         } catch (error) {
           throw makeCliError(ERROR_CODES.INVALID_INPUT, {
             message:
-              error instanceof Error ? error.message : 'Invalid render profile.',
+              error instanceof Error
+                ? error.message
+                : 'Invalid render profile.',
             ...(requestedProfileName === undefined
               ? {}
               : { details: { profile: requestedProfileName } }),
@@ -605,7 +607,9 @@ export async function runHost(sessionId: string): Promise<void> {
         params as WaitForRenderParams;
 
       invariant(
-        text !== undefined || regex !== undefined || screenStableMs !== undefined,
+        text !== undefined ||
+          regex !== undefined ||
+          screenStableMs !== undefined,
         'waitForRender requires at least one of text, regex, or screenStableMs',
       );
       invariant(
@@ -656,13 +660,19 @@ export async function runHost(sessionId: string): Promise<void> {
           void (async () => {
             try {
               const replayInput = await loadReplayInput();
-              const backend = await rendererManager.getBackend(profile, replayInput);
+              const backend = await rendererManager.getBackend(
+                profile,
+                replayInput,
+              );
               const visibleText = await backend.getVisibleText();
               const capturedAtSeq = replayInput?.targetSeq ?? 0;
               latestCapturedAtSeq = capturedAtSeq;
 
               const now = Date.now();
-              if (lastVisibleText === undefined || visibleText !== lastVisibleText) {
+              if (
+                lastVisibleText === undefined ||
+                visibleText !== lastVisibleText
+              ) {
                 lastVisibleText = visibleText;
                 lastTextChangeAt = now;
               }

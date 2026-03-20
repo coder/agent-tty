@@ -18,7 +18,10 @@ function assertNonEmptyString(
 }
 
 function assertNonNegativeInteger(value: number, label: string): void {
-  invariant(Number.isInteger(value) && value >= 0, `${label} must be a non-negative integer`);
+  invariant(
+    Number.isInteger(value) && value >= 0,
+    `${label} must be a non-negative integer`,
+  );
 }
 
 function assertAbsolutePath(pathValue: string, label: string): void {
@@ -58,7 +61,10 @@ function artifactsDir(sessionDir: string): string {
 
 export function screenshotFilename(seq: number, profileName: string): string {
   assertNonNegativeInteger(seq, 'seq');
-  const sanitizedProfileName = sanitizeFilenameComponent(profileName, 'profileName');
+  const sanitizedProfileName = sanitizeFilenameComponent(
+    profileName,
+    'profileName',
+  );
   return `screenshot-${String(seq)}-${sanitizedProfileName}.png`;
 }
 

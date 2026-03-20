@@ -77,7 +77,9 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     expect(replayState.lastSeq).toBe(0);
     expect(snapshot.capturedAtSeq).toBe(0);
     expect(
-      snapshot.visibleLines.some((line) => line.text.includes('hello from replay')),
+      snapshot.visibleLines.some((line) =>
+        line.text.includes('hello from replay'),
+      ),
     ).toBe(true);
   });
 
@@ -184,7 +186,9 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       ]),
     );
 
-    const outputDir = await mkdtemp(join(tmpdir(), 'agent-terminal-renderer-shot-'));
+    const outputDir = await mkdtemp(
+      join(tmpdir(), 'agent-terminal-renderer-shot-'),
+    );
     const outputPath = join(outputDir, 'renderer.png');
 
     try {
