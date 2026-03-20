@@ -12,6 +12,8 @@ import {
 } from '../protocol/messages.js';
 import { invariant } from '../util/assert.js';
 
+const MAX_UNIX_SOCKET_PATH = 104;
+
 const UNKNOWN_REQUEST_ID = 'unknown';
 
 export type MethodHandler = (params: unknown) => Promise<unknown>;
@@ -158,6 +160,10 @@ export class RpcServer {
     invariant(this.server === null, 'RPC server is already listening.');
 
     await this.removeStaleSocketIfNeeded();
+    invariant(
+      this.socketPath.length <= MAX_UNIX_SOCKET_PATH,
+      `Socket path exceeds Unix domain socket limit of ${String(MAX_UNIX_SOCKET_PATH)} bytes: ${this.socketPath} (${String(this.socketPath.length)} bytes)`,
+    );
     invariant(
       !(await socketPathExists(this.socketPath)),
       `RPC socket path must not exist before listen(): ${this.socketPath}`,

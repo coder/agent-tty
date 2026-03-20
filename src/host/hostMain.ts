@@ -294,6 +294,16 @@ export async function runHost(sessionId: string): Promise<void> {
         childPid !== null && childPid > 0,
         'child PID must be set for signal delivery',
       );
+
+      try {
+        process.kill(childPid, 0);
+      } catch {
+        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
+          message: 'Child process is no longer running.',
+          details: { childPid },
+        });
+      }
+
       process.kill(childPid, signal as (typeof ALLOWED_SIGNALS)[number]);
 
       await eventLog.append('signal', { signal });
@@ -357,10 +367,12 @@ export async function runHost(sessionId: string): Promise<void> {
           'idleMs must be a positive integer',
         );
 
+        const idleAnchor = Date.now();
         waitCondition = new Promise<WaitOutcome>((resolve) => {
           const checkInterval = setInterval(
             () => {
-              const elapsed = Date.now() - lastOutputAt;
+              const effectiveLastOutput = Math.max(lastOutputAt, idleAnchor);
+              const elapsed = Date.now() - effectiveLastOutput;
               if (elapsed < idleDuration) {
                 return;
               }

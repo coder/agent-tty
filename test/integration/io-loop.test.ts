@@ -222,6 +222,32 @@ describe('io-loop integration', { timeout: 30000 }, () => {
     }
   });
 
+  it('wait --idle-ms measures idle from call time, not host startup', async () => {
+    let sessionId = '';
+
+    try {
+      sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec cat']);
+      await sleep(2000);
+
+      const start = Date.now();
+      const waitResult = runCli(
+        ['wait', sessionId, '--idle-ms', '1000', '--timeout', '5000', '--json'],
+        { AGENT_TERMINAL_HOME: testHome },
+        30000,
+      );
+      const elapsed = Date.now() - start;
+
+      expect(waitResult.status).toBe(0);
+      expect(waitResult.stderr).toBe('');
+      const envelope = JSON.parse(waitResult.stdout) as SuccessEnvelope<WaitResult>;
+      expect(envelope.ok).toBe(true);
+      expect(envelope.result.timedOut).toBe(false);
+      expect(elapsed).toBeGreaterThan(800);
+    } finally {
+      destroySession(testHome, sessionId);
+    }
+  });
+
   it('wait --idle-ms times out when timeout expires first', async () => {
     let sessionId = '';
 
