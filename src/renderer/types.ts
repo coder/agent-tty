@@ -1,8 +1,10 @@
 import { z } from 'zod';
 
+import { VisibleLineSchema, type VisibleLine } from '../protocol/schemas.js';
+
 const NonEmptyStringSchema = z.string().min(1);
-const NonNegativeIntegerSchema = z.number().int().nonnegative();
-const PositiveIntegerSchema = z.number().int().positive();
+const NonNegativeIntSchema = z.number().int().nonnegative();
+const PositiveIntSchema = z.number().int().positive();
 const PositiveNumberSchema = z.number().positive();
 const CursorStyleSchema = z.enum(['block', 'bar', 'underline']);
 const ThemeSchema = z.enum(['dark', 'light']);
@@ -12,7 +14,7 @@ const HexColorSchema = z
 
 const OutputReplayEventSchema = z
   .object({
-    seq: NonNegativeIntegerSchema,
+    seq: NonNegativeIntSchema,
     ts: z.iso.datetime(),
     type: z.literal('output'),
     payload: z
@@ -25,7 +27,7 @@ const OutputReplayEventSchema = z
 
 const InputTextReplayEventSchema = z
   .object({
-    seq: NonNegativeIntegerSchema,
+    seq: NonNegativeIntSchema,
     ts: z.iso.datetime(),
     type: z.literal('input_text'),
     payload: z
@@ -38,7 +40,7 @@ const InputTextReplayEventSchema = z
 
 const InputPasteReplayEventSchema = z
   .object({
-    seq: NonNegativeIntegerSchema,
+    seq: NonNegativeIntSchema,
     ts: z.iso.datetime(),
     type: z.literal('input_paste'),
     payload: z
@@ -51,7 +53,7 @@ const InputPasteReplayEventSchema = z
 
 const InputKeysReplayEventSchema = z
   .object({
-    seq: NonNegativeIntegerSchema,
+    seq: NonNegativeIntSchema,
     ts: z.iso.datetime(),
     type: z.literal('input_keys'),
     payload: z
@@ -64,13 +66,13 @@ const InputKeysReplayEventSchema = z
 
 const ResizeReplayEventSchema = z
   .object({
-    seq: NonNegativeIntegerSchema,
+    seq: NonNegativeIntSchema,
     ts: z.iso.datetime(),
     type: z.literal('resize'),
     payload: z
       .object({
-        cols: PositiveIntegerSchema,
-        rows: PositiveIntegerSchema,
+        cols: PositiveIntSchema,
+        rows: PositiveIntSchema,
       })
       .strict(),
   })
@@ -78,7 +80,7 @@ const ResizeReplayEventSchema = z
 
 const SignalReplayEventSchema = z
   .object({
-    seq: NonNegativeIntegerSchema,
+    seq: NonNegativeIntSchema,
     ts: z.iso.datetime(),
     type: z.literal('signal'),
     payload: z
@@ -91,7 +93,7 @@ const SignalReplayEventSchema = z
 
 const ExitReplayEventSchema = z
   .object({
-    seq: NonNegativeIntegerSchema,
+    seq: NonNegativeIntSchema,
     ts: z.iso.datetime(),
     type: z.literal('exit'),
     payload: z
@@ -117,10 +119,10 @@ export type ReplayEvent = z.infer<typeof ReplayEventSchema>;
 export const ReplayInputSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
-    initialCols: PositiveIntegerSchema,
-    initialRows: PositiveIntegerSchema,
+    initialCols: PositiveIntSchema,
+    initialRows: PositiveIntSchema,
     events: z.array(ReplayEventSchema),
-    targetSeq: NonNegativeIntegerSchema,
+    targetSeq: NonNegativeIntSchema,
   })
   .strict()
   .superRefine(({ events }, context) => {
@@ -142,31 +144,26 @@ export type ReplayInput = z.infer<typeof ReplayInputSchema>;
 
 export const ReplayStateSchema = z
   .object({
-    lastSeq: NonNegativeIntegerSchema,
-    cols: PositiveIntegerSchema,
-    rows: PositiveIntegerSchema,
-    cursorRow: NonNegativeIntegerSchema,
-    cursorCol: NonNegativeIntegerSchema,
+    lastSeq: NonNegativeIntSchema,
+    cols: PositiveIntSchema,
+    rows: PositiveIntSchema,
+    cursorRow: NonNegativeIntSchema,
+    cursorCol: NonNegativeIntSchema,
   })
   .strict();
 export type ReplayState = z.infer<typeof ReplayStateSchema>;
 
-export const VisibleLineSchema = z
-  .object({
-    row: NonNegativeIntegerSchema,
-    text: z.string(),
-  })
-  .strict();
-export type VisibleLine = z.infer<typeof VisibleLineSchema>;
+export { VisibleLineSchema };
+export type { VisibleLine };
 
 export const SemanticSnapshotSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntegerSchema,
-    cols: PositiveIntegerSchema,
-    rows: PositiveIntegerSchema,
-    cursorRow: NonNegativeIntegerSchema,
-    cursorCol: NonNegativeIntegerSchema,
+    capturedAtSeq: NonNegativeIntSchema,
+    cols: PositiveIntSchema,
+    rows: PositiveIntSchema,
+    cursorRow: NonNegativeIntSchema,
+    cursorCol: NonNegativeIntSchema,
     isAltScreen: z.boolean(),
     visibleLines: z.array(VisibleLineSchema),
   })
@@ -176,11 +173,11 @@ export type SemanticSnapshot = z.infer<typeof SemanticSnapshotSchema>;
 export const TextSnapshotSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntegerSchema,
-    cols: PositiveIntegerSchema,
-    rows: PositiveIntegerSchema,
-    cursorRow: NonNegativeIntegerSchema,
-    cursorCol: NonNegativeIntegerSchema,
+    capturedAtSeq: NonNegativeIntSchema,
+    cols: PositiveIntSchema,
+    rows: PositiveIntSchema,
+    cursorRow: NonNegativeIntSchema,
+    cursorCol: NonNegativeIntSchema,
     text: z.string(),
   })
   .strict();
@@ -189,12 +186,12 @@ export type TextSnapshot = z.infer<typeof TextSnapshotSchema>;
 export const ScreenshotResultSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntegerSchema,
+    capturedAtSeq: NonNegativeIntSchema,
     profileName: NonEmptyStringSchema,
-    cols: PositiveIntegerSchema,
-    rows: PositiveIntegerSchema,
-    pngPath: NonEmptyStringSchema,
-    pngSizeBytes: PositiveIntegerSchema,
+    cols: PositiveIntSchema,
+    rows: PositiveIntSchema,
+    artifactPath: NonEmptyStringSchema,
+    pngSizeBytes: PositiveIntSchema,
   })
   .strict();
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;

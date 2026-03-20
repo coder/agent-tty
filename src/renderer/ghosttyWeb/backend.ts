@@ -884,7 +884,7 @@ export class GhosttyWebBackend implements RendererBackend {
       profileName: this.profile.name,
       cols: this.currentCols,
       rows: this.currentRows,
-      pngPath: outputPath,
+      artifactPath: outputPath,
       pngSizeBytes: screenshotFile.size,
     };
   }

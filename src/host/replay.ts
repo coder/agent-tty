@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 
+import type { ReplayInput } from '../renderer/types.js';
 import {
   EventRecordSchema,
   SessionRecordSchema,
@@ -7,14 +8,6 @@ import {
   type SessionRecord,
 } from '../protocol/schemas.js';
 import { invariant } from '../util/assert.js';
-
-export interface ReplayInput {
-  sessionId: string;
-  initialCols: number;
-  initialRows: number;
-  events: EventRecord[];
-  targetSeq: number;
-}
 
 function assertNonEmptyString(value: string, message: string): void {
   invariant(value.length > 0, message);

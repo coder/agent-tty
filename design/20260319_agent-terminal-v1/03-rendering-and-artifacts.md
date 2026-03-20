@@ -50,13 +50,7 @@ Everything visual should be reproducible from:
 ### 4.1 Replay input
 
 ```ts
-export interface ReplayInput {
-  sessionId: string;
-  events: ReplayEvent[];
-  rows: number;
-  cols: number;
-  renderProfile: ResolvedRenderProfile;
-}
+const replayInput = ReplayInputSchema.parse(rawReplayInput);
 ```
 
 ### 4.2 Replay rules

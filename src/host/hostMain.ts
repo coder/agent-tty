@@ -327,7 +327,7 @@ export async function runHost(sessionId: string): Promise<void> {
           'renderer screenshot profileName must match the requested profile',
         );
         invariant(
-          result.pngPath === temporaryOutputPath,
+          result.artifactPath === temporaryOutputPath,
           'renderer screenshot path must match the requested output path',
         );
         invariant(

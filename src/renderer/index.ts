@@ -11,8 +11,8 @@ export {
   ScreenshotResultSchema,
   SemanticSnapshotSchema,
   TextSnapshotSchema,
-  VisibleLineSchema,
 } from './types.js';
+export { VisibleLineSchema } from '../protocol/schemas.js';
 export type { RendererBackend } from './backend.js';
 export { GhosttyWebBackend } from './ghosttyWeb/index.js';
 export type {
@@ -23,5 +23,5 @@ export type {
   ScreenshotResult,
   SemanticSnapshot,
   TextSnapshot,
-  VisibleLine,
 } from './types.js';
+export type { VisibleLine } from '../protocol/schemas.js';

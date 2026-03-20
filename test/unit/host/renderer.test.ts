@@ -102,7 +102,7 @@ function createFakeBackend(
         profileName: 'default',
         cols: 80,
         rows: 24,
-        pngPath: outputPath,
+        artifactPath: outputPath,
         pngSizeBytes: 1,
       }),
   );

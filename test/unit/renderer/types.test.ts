@@ -186,7 +186,7 @@ describe('renderer schemas', () => {
         profileName: 'reference-dark',
         cols: 80,
         rows: 24,
-        pngPath: '/tmp/screenshot.png',
+        artifactPath: '/tmp/screenshot.png',
         pngSizeBytes: 1024,
       }).success,
     ).toBe(true);

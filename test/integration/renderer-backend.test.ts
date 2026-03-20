@@ -195,7 +195,7 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       const screenshot = await backend.screenshot(outputPath);
       const fileStats = await stat(outputPath);
 
-      expect(screenshot.pngPath).toBe(outputPath);
+      expect(screenshot.artifactPath).toBe(outputPath);
       expect(screenshot.pngSizeBytes).toBeGreaterThan(0);
       expect(fileStats.size).toBe(screenshot.pngSizeBytes);
     } finally {
