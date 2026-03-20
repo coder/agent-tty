@@ -1,10 +1,11 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, open, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  MAX_EVENT_LOG_SIZE,
   buildReplayInput,
   readEventLogRecords,
 } from '../../../src/host/replay.js';
@@ -123,6 +124,20 @@ describe('replay helpers', () => {
         createEvents(),
       ),
     ).toThrow('manifest must match SessionRecordSchema');
+  });
+
+  it('readEventLogRecords rejects event logs larger than 50 MB', async () => {
+    const fileHandle = await open(eventLogPath, 'w');
+
+    try {
+      await fileHandle.truncate(MAX_EVENT_LOG_SIZE + 1);
+    } finally {
+      await fileHandle.close();
+    }
+
+    await expect(readEventLogRecords(eventLogPath)).rejects.toThrow(
+      `event log file exceeds 50 MB size limit (${String(MAX_EVENT_LOG_SIZE + 1)} bytes)`,
+    );
   });
 
   it('readEventLogRecords parses and validates JSONL event logs', async () => {

@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 
 import type { ReplayInput } from '../renderer/types.js';
 import {
@@ -8,6 +8,8 @@ import {
   type SessionRecord,
 } from '../protocol/schemas.js';
 import { invariant } from '../util/assert.js';
+
+export const MAX_EVENT_LOG_SIZE = 50 * 1024 * 1024;
 
 function assertNonEmptyString(value: string, message: string): void {
   invariant(value.length > 0, message);
@@ -57,6 +59,12 @@ export async function readEventLogRecords(
   filePath: string,
 ): Promise<EventRecord[]> {
   assertNonEmptyString(filePath, 'filePath must be a non-empty string');
+
+  const fileStats = await stat(filePath);
+  invariant(
+    fileStats.size <= MAX_EVENT_LOG_SIZE,
+    `event log file exceeds 50 MB size limit (${fileStats.size} bytes)`,
+  );
 
   const content = await readFile(filePath, 'utf8');
   const lines = content
