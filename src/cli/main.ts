@@ -151,7 +151,10 @@ async function main(): Promise<void> {
     .action(
       wrapAction(
         'destroy',
-        async (sessionId: string, options: { force: boolean; json: boolean }) => {
+        async (
+          sessionId: string,
+          options: { force: boolean; json: boolean },
+        ) => {
           await runDestroyCommand({
             json: options.json,
             sessionId,
@@ -203,7 +206,11 @@ async function main(): Promise<void> {
     .action(
       wrapAction(
         'send-keys',
-        async (sessionId: string, keys: string[], options: { json: boolean }) => {
+        async (
+          sessionId: string,
+          keys: string[],
+          options: { json: boolean },
+        ) => {
           await runSendKeysCommand({
             json: options.json,
             sessionId,
@@ -243,7 +250,11 @@ async function main(): Promise<void> {
     .action(
       wrapAction(
         'signal',
-        async (sessionId: string, signal: string, options: { json: boolean }) => {
+        async (
+          sessionId: string,
+          signal: string,
+          options: { json: boolean },
+        ) => {
           await runSignalCommand({
             json: options.json,
             sessionId,
