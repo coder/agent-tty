@@ -1,4 +1,7 @@
+import { rename, rm } from 'node:fs/promises';
 import process from 'node:process';
+
+import { ulid } from 'ulid';
 
 import { EventLog } from './eventLog.js';
 import { readEventLogRecords, buildReplayInput } from './replay.js';
@@ -23,8 +26,22 @@ import type {
 } from '../protocol/messages.js';
 import { GhosttyWebBackend } from '../renderer/ghosttyWeb/index.js';
 import { resolveProfile } from '../renderer/profiles.js';
-import { readManifest, writeManifest } from '../storage/manifests.js';
+import {
+  appendArtifact,
+  createArtifactEntry,
+} from '../storage/artifactManifest.js';
+import {
+  artifactPath,
+  ensureArtifactsDir,
+  screenshotFilename,
+  snapshotFilename,
+} from '../storage/artifactPaths.js';
 import { resolveHome } from '../storage/home.js';
+import {
+  readManifest,
+  writeManifest,
+  writeTextFileAtomic,
+} from '../storage/manifests.js';
 import {
   eventLogPath,
   manifestPath,
@@ -211,12 +228,8 @@ export async function runHost(sessionId: string): Promise<void> {
     inspect: () => Promise.resolve({ session: state.snapshot() }),
     snapshot: async (params: unknown) => {
       const { format: requestedFormat } = params as SnapshotParams;
-      const format = requestedFormat ?? 'structured';
 
-      invariant(
-        format === 'structured' || format === 'text',
-        'snapshot format must be structured or text',
-      );
+      const format = requestedFormat ?? 'structured';
 
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
       const replayInput = await loadReplayInput();
@@ -228,21 +241,49 @@ export async function runHost(sessionId: string): Promise<void> {
         'renderer snapshot sessionId must match host sessionId',
       );
 
-      if (format === 'structured') {
-        return { format: 'structured', ...snapshot };
-      }
+      const snapshotResult =
+        format === 'structured'
+          ? { format: 'structured' as const, ...snapshot }
+          : {
+              format: 'text' as const,
+              sessionId: snapshot.sessionId,
+              capturedAtSeq: snapshot.capturedAtSeq,
+              cols: snapshot.cols,
+              rows: snapshot.rows,
+              cursorRow: snapshot.cursorRow,
+              cursorCol: snapshot.cursorCol,
+              text: snapshot.visibleLines.map((line) => line.text).join('\n'),
+            };
 
-      const text = snapshot.visibleLines.map((line) => line.text).join('\n');
-      return {
-        format: 'text',
-        sessionId: snapshot.sessionId,
-        capturedAtSeq: snapshot.capturedAtSeq,
-        cols: snapshot.cols,
-        rows: snapshot.rows,
-        cursorRow: snapshot.cursorRow,
-        cursorCol: snapshot.cursorCol,
-        text,
-      };
+      await ensureArtifactsDir(sessDir);
+      const filename = snapshotFilename(snapshot.capturedAtSeq, format);
+      const snapshotArtifactPath = artifactPath(sessDir, filename);
+
+      await writeTextFileAtomic({
+        path: snapshotArtifactPath,
+        pathLabel: 'snapshot artifact path',
+        contents: `${JSON.stringify(snapshotResult, null, 2)}\n`,
+        writeErrorMessage: `Failed to write snapshot artifact at ${snapshotArtifactPath}.`,
+      });
+
+      await appendArtifact(
+        sessDir,
+        createArtifactEntry({
+          kind: 'snapshot',
+          filename,
+          sessionId: snapshot.sessionId,
+          capturedAtSeq: snapshot.capturedAtSeq,
+          metadata: {
+            format,
+            cols: snapshot.cols,
+            rows: snapshot.rows,
+            cursorRow: snapshot.cursorRow,
+            cursorCol: snapshot.cursorCol,
+          },
+        }),
+      );
+
+      return snapshotResult;
     },
     screenshot: async (params: unknown) => {
       const { profile: requestedProfileName } = params as ScreenshotParams;
@@ -266,27 +307,68 @@ export async function runHost(sessionId: string): Promise<void> {
 
       const replayInput = await loadReplayInput();
       const backend = await rendererManager.getBackend(profile, replayInput);
-      const outputPath = rendererManager.screenshotPath(profile.name);
-      const result = await backend.screenshot(outputPath);
-
-      invariant(
-        result.sessionId === sessionId,
-        'renderer screenshot sessionId must match host sessionId',
-      );
-      invariant(
-        result.pngSizeBytes > 0,
-        'renderer screenshot pngSizeBytes must be positive',
+      await ensureArtifactsDir(sessDir);
+      const temporaryOutputPath = artifactPath(
+        sessDir,
+        `.tmp-screenshot-${ulid()}.png`,
       );
 
-      return {
-        sessionId: result.sessionId,
-        capturedAtSeq: result.capturedAtSeq,
-        profileName: result.profileName,
-        cols: result.cols,
-        rows: result.rows,
-        artifactPath: result.pngPath,
-        pngSizeBytes: result.pngSizeBytes,
-      };
+      try {
+        const result = await backend.screenshot(temporaryOutputPath);
+
+        invariant(
+          result.sessionId === sessionId,
+          'renderer screenshot sessionId must match host sessionId',
+        );
+        invariant(
+          result.profileName === profile.name,
+          'renderer screenshot profileName must match the requested profile',
+        );
+        invariant(
+          result.pngPath === temporaryOutputPath,
+          'renderer screenshot path must match the requested output path',
+        );
+        invariant(
+          result.pngSizeBytes > 0,
+          'renderer screenshot pngSizeBytes must be positive',
+        );
+
+        const filename = screenshotFilename(
+          result.capturedAtSeq,
+          result.profileName,
+        );
+        const finalArtifactPath = artifactPath(sessDir, filename);
+
+        await rename(temporaryOutputPath, finalArtifactPath);
+        await appendArtifact(
+          sessDir,
+          createArtifactEntry({
+            kind: 'screenshot',
+            filename,
+            sessionId: result.sessionId,
+            capturedAtSeq: result.capturedAtSeq,
+            metadata: {
+              profileName: result.profileName,
+              cols: result.cols,
+              rows: result.rows,
+              pngSizeBytes: result.pngSizeBytes,
+            },
+          }),
+        );
+
+        return {
+          sessionId: result.sessionId,
+          capturedAtSeq: result.capturedAtSeq,
+          profileName: result.profileName,
+          cols: result.cols,
+          rows: result.rows,
+          artifactPath: finalArtifactPath,
+          pngSizeBytes: result.pngSizeBytes,
+        };
+      } catch (error) {
+        await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
+        throw error;
+      }
     },
     type: async (params: unknown) => {
       const { text } = params as TypeParams;
@@ -565,61 +647,63 @@ export async function runHost(sessionId: string): Promise<void> {
       const pollCondition = new Promise<WaitForRenderResult>((resolve) => {
         let pollInFlight = false;
 
-        const checkInterval = setInterval(async () => {
+        const checkInterval = setInterval(() => {
           if (pollInFlight) {
             return;
           }
 
           pollInFlight = true;
-          try {
-            const replayInput = await loadReplayInput();
-            const backend = await rendererManager.getBackend(profile, replayInput);
-            const visibleText = await backend.getVisibleText();
-            const capturedAtSeq = replayInput?.targetSeq ?? 0;
-            latestCapturedAtSeq = capturedAtSeq;
+          void (async () => {
+            try {
+              const replayInput = await loadReplayInput();
+              const backend = await rendererManager.getBackend(profile, replayInput);
+              const visibleText = await backend.getVisibleText();
+              const capturedAtSeq = replayInput?.targetSeq ?? 0;
+              latestCapturedAtSeq = capturedAtSeq;
 
-            const now = Date.now();
-            if (lastVisibleText === undefined || visibleText !== lastVisibleText) {
-              lastVisibleText = visibleText;
-              lastTextChangeAt = now;
-            }
-
-            let textMatched = false;
-            let matchedText: string | undefined;
-            if (text !== undefined) {
-              if (visibleText.includes(text)) {
-                textMatched = true;
-                matchedText = text;
+              const now = Date.now();
+              if (lastVisibleText === undefined || visibleText !== lastVisibleText) {
+                lastVisibleText = visibleText;
+                lastTextChangeAt = now;
               }
-            } else if (compiledRegex !== undefined) {
-              const match = compiledRegex.exec(visibleText);
-              if (match !== null) {
+
+              let textMatched = false;
+              let matchedText: string | undefined;
+              if (text !== undefined) {
+                if (visibleText.includes(text)) {
+                  textMatched = true;
+                  matchedText = text;
+                }
+              } else if (compiledRegex !== undefined) {
+                const match = compiledRegex.exec(visibleText);
+                if (match !== null) {
+                  textMatched = true;
+                  matchedText = match[0];
+                }
+              } else {
                 textMatched = true;
-                matchedText = match[0];
               }
-            } else {
-              textMatched = true;
-            }
 
-            let stableMatched = true;
-            if (screenStableMs !== undefined) {
-              stableMatched = now - lastTextChangeAt >= screenStableMs;
-            }
+              let stableMatched = true;
+              if (screenStableMs !== undefined) {
+                stableMatched = now - lastTextChangeAt >= screenStableMs;
+              }
 
-            if (textMatched && stableMatched) {
-              clearInterval(checkInterval);
-              resolve({
-                matched: true,
-                timedOut: false,
-                ...(matchedText === undefined ? {} : { matchedText }),
-                capturedAtSeq,
-              });
+              if (textMatched && stableMatched) {
+                clearInterval(checkInterval);
+                resolve({
+                  matched: true,
+                  timedOut: false,
+                  ...(matchedText === undefined ? {} : { matchedText }),
+                  capturedAtSeq,
+                });
+              }
+            } catch {
+              // Retry on the next poll; render state may still be catching up.
+            } finally {
+              pollInFlight = false;
             }
-          } catch {
-            // Retry on the next poll; render state may still be catching up.
-          } finally {
-            pollInFlight = false;
-          }
+          })();
         }, pollIntervalMs);
 
         clearWaitPoll = (): void => {
@@ -632,21 +716,23 @@ export async function runHost(sessionId: string): Promise<void> {
       }
 
       return await new Promise<WaitForRenderResult>((resolve) => {
-        const timeoutHandle = setTimeout(async () => {
+        const timeoutHandle = setTimeout(() => {
           clearWaitPoll?.();
 
-          try {
-            const replayInput = await loadReplayInput();
-            latestCapturedAtSeq = replayInput?.targetSeq ?? 0;
-          } catch {
-            // Best-effort snapshot for timeout reporting.
-          }
+          void (async () => {
+            try {
+              const replayInput = await loadReplayInput();
+              latestCapturedAtSeq = replayInput?.targetSeq ?? 0;
+            } catch {
+              // Best-effort snapshot for timeout reporting.
+            }
 
-          resolve({
-            matched: false,
-            timedOut: true,
-            capturedAtSeq: latestCapturedAtSeq,
-          });
+            resolve({
+              matched: false,
+              timedOut: true,
+              capturedAtSeq: latestCapturedAtSeq,
+            });
+          })();
         }, timeoutMs);
 
         void pollCondition.then((result) => {
