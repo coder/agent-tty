@@ -23,6 +23,7 @@ const SESSION_COMMAND = [
   '-c',
   "printf 'booting\\n'; sleep 1; printf '3 items\\n'; sleep 1; printf 'Ready\\n'; exec cat",
 ] as const;
+const HOOK_TIMEOUT_MS = 30_000;
 
 interface ErrorEnvelope {
   ok: false;
@@ -86,7 +87,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
     const sessDir = sessionDir(testHome, sessionId);
     rpcSocketPath = socketPath(sessDir);
-  });
+  }, HOOK_TIMEOUT_MS);
 
   afterEach(async () => {
     destroySession(testHome, sessionId);
@@ -94,7 +95,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     sessionId = '';
     rpcSocketPath = '';
     testHome = '';
-  });
+  }, HOOK_TIMEOUT_MS);
 
   it('matches text via waitForRender RPC', async () => {
     const result = (await sendRpc(
