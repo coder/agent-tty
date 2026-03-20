@@ -1,3 +1,4 @@
+import { CliError } from '../errors.js';
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
@@ -20,6 +21,14 @@ interface CommandOptions {
 }
 
 export async function runPasteCommand(options: CommandOptions): Promise<void> {
+  if (options.text.length === 0) {
+    throw new CliError('INVALID_INPUT', 'Text must not be empty.', {
+      details: {
+        text: options.text,
+      },
+    });
+  }
+
   const home = resolveHome();
   const sessionDirectory = sessionDir(home, options.sessionId);
   const manifestFile = manifestPath(sessionDirectory);

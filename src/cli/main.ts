@@ -23,6 +23,35 @@ function parseIntegerOption(value: string): number {
   return Number.parseInt(value, 10);
 }
 
+function wrapAction<Args extends unknown[]>(
+  commandName: string,
+  fn: (...args: Args) => Promise<void>,
+): (...args: Args) => Promise<void> {
+  return async (...args: Args) => {
+    try {
+      await fn(...args);
+    } catch (error: unknown) {
+      if (error instanceof CliError) {
+        const json = process.argv.includes('--json');
+        emitFailure({
+          command: commandName,
+          json,
+          error: {
+            code: error.code,
+            message: error.message,
+            retryable: error.retryable,
+            details: error.details,
+          },
+        });
+        process.exitCode = 1;
+        return;
+      }
+
+      throw error;
+    }
+  };
+}
+
 async function main(): Promise<void> {
   const program = new Command()
     .name('agent-terminal')
@@ -33,17 +62,21 @@ async function main(): Promise<void> {
     .command('version')
     .description('Print version')
     .option('--json', 'Emit a JSON command envelope', false)
-    .action(async (options: { json: boolean }) => {
-      await runVersionCommand(options);
-    });
+    .action(
+      wrapAction('version', async (options: { json: boolean }) => {
+        await runVersionCommand(options);
+      }),
+    );
 
   program
     .command('doctor')
     .description('Check env')
     .option('--json', 'Emit a JSON command envelope', false)
-    .action(async (options: { json: boolean }) => {
-      await runDoctorCommand(options);
-    });
+    .action(
+      wrapAction('doctor', async (options: { json: boolean }) => {
+        await runDoctorCommand(options);
+      }),
+    );
 
   // --- Session lifecycle ---
   program
@@ -59,25 +92,28 @@ async function main(): Promise<void> {
     .option('--rows <n>', 'Initial rows', parseIntegerOption, 24)
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
-      async (
-        command: string[],
-        options: {
-          command: string;
-          cwd: string;
-          cols: number;
-          rows: number;
-          json: boolean;
+      wrapAction(
+        'create',
+        async (
+          command: string[],
+          options: {
+            command: string;
+            cwd: string;
+            cols: number;
+            rows: number;
+            json: boolean;
+          },
+        ) => {
+          await runCreateCommand({
+            json: options.json,
+            command,
+            shellCommand: options.command,
+            cwd: options.cwd,
+            cols: options.cols,
+            rows: options.rows,
+          });
         },
-      ) => {
-        await runCreateCommand({
-          json: options.json,
-          command,
-          shellCommand: options.command,
-          cwd: options.cwd,
-          cols: options.cols,
-          rows: options.rows,
-        });
-      },
+      ),
     );
 
   program
@@ -85,20 +121,27 @@ async function main(): Promise<void> {
     .description('List sessions')
     .option('--all', 'Include exited sessions', false)
     .option('--json', 'Emit a JSON command envelope', false)
-    .action(async (options: { all: boolean; json: boolean }) => {
-      await runListCommand(options);
-    });
+    .action(
+      wrapAction('list', async (options: { all: boolean; json: boolean }) => {
+        await runListCommand(options);
+      }),
+    );
 
   program
     .command('inspect <session-id>')
     .description('Inspect a session')
     .option('--json', 'Emit a JSON command envelope', false)
-    .action(async (sessionId: string, options: { json: boolean }) => {
-      await runInspectCommand({
-        json: options.json,
-        sessionId,
-      });
-    });
+    .action(
+      wrapAction(
+        'inspect',
+        async (sessionId: string, options: { json: boolean }) => {
+          await runInspectCommand({
+            json: options.json,
+            sessionId,
+          });
+        },
+      ),
+    );
 
   program
     .command('destroy <session-id>')
@@ -106,13 +149,16 @@ async function main(): Promise<void> {
     .option('--force', 'Skip graceful shutdown', false)
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
-      async (sessionId: string, options: { force: boolean; json: boolean }) => {
-        await runDestroyCommand({
-          json: options.json,
-          sessionId,
-          force: options.force,
-        });
-      },
+      wrapAction(
+        'destroy',
+        async (sessionId: string, options: { force: boolean; json: boolean }) => {
+          await runDestroyCommand({
+            json: options.json,
+            sessionId,
+            force: options.force,
+          });
+        },
+      ),
     );
 
   // --- Session control ---
@@ -121,13 +167,16 @@ async function main(): Promise<void> {
     .description('Type text into a session')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
-      async (sessionId: string, text: string, options: { json: boolean }) => {
-        await runTypeCommand({
-          json: options.json,
-          sessionId,
-          text,
-        });
-      },
+      wrapAction(
+        'type',
+        async (sessionId: string, text: string, options: { json: boolean }) => {
+          await runTypeCommand({
+            json: options.json,
+            sessionId,
+            text,
+          });
+        },
+      ),
     );
 
   program
@@ -135,13 +184,16 @@ async function main(): Promise<void> {
     .description('Paste text into a session')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
-      async (sessionId: string, text: string, options: { json: boolean }) => {
-        await runPasteCommand({
-          json: options.json,
-          sessionId,
-          text,
-        });
-      },
+      wrapAction(
+        'paste',
+        async (sessionId: string, text: string, options: { json: boolean }) => {
+          await runPasteCommand({
+            json: options.json,
+            sessionId,
+            text,
+          });
+        },
+      ),
     );
 
   program
@@ -149,13 +201,16 @@ async function main(): Promise<void> {
     .description('Send keys to a session')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
-      async (sessionId: string, keys: string[], options: { json: boolean }) => {
-        await runSendKeysCommand({
-          json: options.json,
-          sessionId,
-          keys,
-        });
-      },
+      wrapAction(
+        'send-keys',
+        async (sessionId: string, keys: string[], options: { json: boolean }) => {
+          await runSendKeysCommand({
+            json: options.json,
+            sessionId,
+            keys,
+          });
+        },
+      ),
     );
 
   program
@@ -165,17 +220,20 @@ async function main(): Promise<void> {
     .requiredOption('--rows <n>', 'Rows', parseIntegerOption)
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
-      async (
-        sessionId: string,
-        options: { cols: number; rows: number; json: boolean },
-      ) => {
-        await runResizeCommand({
-          json: options.json,
-          sessionId,
-          cols: options.cols,
-          rows: options.rows,
-        });
-      },
+      wrapAction(
+        'resize',
+        async (
+          sessionId: string,
+          options: { cols: number; rows: number; json: boolean },
+        ) => {
+          await runResizeCommand({
+            json: options.json,
+            sessionId,
+            cols: options.cols,
+            rows: options.rows,
+          });
+        },
+      ),
     );
 
   program
@@ -183,13 +241,16 @@ async function main(): Promise<void> {
     .description('Send a signal to a session')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
-      async (sessionId: string, signal: string, options: { json: boolean }) => {
-        await runSignalCommand({
-          json: options.json,
-          sessionId,
-          signal,
-        });
-      },
+      wrapAction(
+        'signal',
+        async (sessionId: string, signal: string, options: { json: boolean }) => {
+          await runSignalCommand({
+            json: options.json,
+            sessionId,
+            signal,
+          });
+        },
+      ),
     );
 
   // --- Observation ---
@@ -200,28 +261,31 @@ async function main(): Promise<void> {
     .option('--idle-ms <ms>', 'Wait for output idle period', parseIntegerOption)
     .option(
       '--timeout <ms>',
-      'Maximum wait time in milliseconds',
+      'Maximum wait time in milliseconds (0 for infinite)',
       parseIntegerOption,
     )
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
-      async (
-        sessionId: string,
-        options: {
-          exit: boolean;
-          idleMs?: number;
-          timeout?: number;
-          json: boolean;
+      wrapAction(
+        'wait',
+        async (
+          sessionId: string,
+          options: {
+            exit: boolean;
+            idleMs?: number;
+            timeout?: number;
+            json: boolean;
+          },
+        ) => {
+          await runWaitCommand({
+            json: options.json,
+            sessionId,
+            waitForExit: options.exit,
+            idleMs: options.idleMs,
+            timeout: options.timeout,
+          });
         },
-      ) => {
-        await runWaitCommand({
-          json: options.json,
-          sessionId,
-          waitForExit: options.exit,
-          idleMs: options.idleMs,
-          timeout: options.timeout,
-        });
-      },
+      ),
     );
 
   program
