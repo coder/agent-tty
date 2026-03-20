@@ -70,7 +70,9 @@ describe('EventLog', () => {
       expect(eventLog.getEvents().map((event) => event.payload)).toEqual([
         { data: 'hello' },
       ]);
-      expect(eventLog.getEventsSince(-1).map((event) => event.seq)).toEqual([0]);
+      expect(eventLog.getEventsSince(-1).map((event) => event.seq)).toEqual([
+        0,
+      ]);
       expect(eventLog.getEventsSince(0)).toEqual([]);
       await expect(eventLog.readAll()).resolves.toEqual(eventLog.getEvents());
     } finally {
@@ -110,9 +112,7 @@ describe('EventLog', () => {
       await eventLog.append('signal', { signal: 'SIGTERM' });
 
       expect((await eventLog.readAll()).map((event) => event.seq)).toEqual([
-        0,
-        1,
-        2,
+        0, 1, 2,
       ]);
     } finally {
       await eventLog.close();

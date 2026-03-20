@@ -94,7 +94,9 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     );
 
     const snapshot = await backend.snapshot();
-    const visibleText = snapshot.visibleLines.map((line) => line.text).join('\n');
+    const visibleText = snapshot.visibleLines
+      .map((line) => line.text)
+      .join('\n');
 
     expect(replayState.lastSeq).toBe(2);
     expect(snapshot.capturedAtSeq).toBe(2);
@@ -129,7 +131,9 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     );
 
     const snapshot = await backend.snapshot();
-    const visibleText = snapshot.visibleLines.map((line) => line.text).join('\n');
+    const visibleText = snapshot.visibleLines
+      .map((line) => line.text)
+      .join('\n');
 
     expect(replayState.lastSeq).toBe(2);
     expect(replayState.cols).toBe(40);
