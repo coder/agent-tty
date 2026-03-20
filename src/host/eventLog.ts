@@ -128,47 +128,81 @@ function validatePayload(
   }
 }
 
-function deriveNextSeq(content: string): number {
-  const lines = content
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-
-  if (lines.length === 0) {
-    return 0;
-  }
-
-  const lastLine = lines.at(-1);
-  invariant(lastLine !== undefined, 'event log must contain a last line');
-
+function parseEventLogLine(line: string, lineNumber: number): EventRecord {
   let parsedLine: unknown;
   try {
-    parsedLine = JSON.parse(lastLine);
+    parsedLine = JSON.parse(line) as unknown;
   } catch {
-    invariant(false, 'last event log line must be valid JSON');
+    invariant(
+      false,
+      `event log line ${String(lineNumber)} must be valid JSON`,
+    );
   }
 
   const parsedRecord = EventRecordSchema.safeParse(parsedLine);
   invariant(
     parsedRecord.success,
-    'last event log line must match EventRecordSchema',
+    `event log line ${String(lineNumber)} must match EventRecordSchema`,
   );
 
-  const { seq } = parsedRecord.data;
-  invariant(Number.isInteger(seq), 'event log seq must be an integer');
-  invariant(seq >= 0, 'event log seq must be non-negative');
+  return parsedRecord.data;
+}
 
-  return seq + 1;
+function assertContiguousSequence(records: EventRecord[]): void {
+  if (records.length === 0) {
+    return;
+  }
+
+  invariant(records[0]?.seq === 0, 'first event log seq must be 0');
+
+  for (let index = 1; index < records.length; index += 1) {
+    const previous = records[index - 1];
+    const current = records[index];
+
+    invariant(previous !== undefined, 'previous event record must exist');
+    invariant(current !== undefined, 'current event record must exist');
+    invariant(
+      current.seq === previous.seq + 1,
+      'event log seq values must increase by 1 without gaps',
+    );
+  }
+}
+
+function parseEventLogContent(content: string): EventRecord[] {
+  const lines = content
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  const records = lines.map((line, index) => parseEventLogLine(line, index + 1));
+  assertContiguousSequence(records);
+  return records;
+}
+
+function deriveNextSeq(content: string): number {
+  const records = parseEventLogContent(content);
+
+  if (records.length === 0) {
+    return 0;
+  }
+
+  const lastRecord = records.at(-1);
+  invariant(lastRecord !== undefined, 'event log must contain a last record');
+  invariant(lastRecord.seq >= 0, 'event log seq must be non-negative');
+
+  return lastRecord.seq + 1;
 }
 
 export class EventLog {
   private writeQueue: Promise<void> = Promise.resolve();
 
   private constructor(
+    private readonly filePath: string,
     private readonly fileHandle: FileHandle,
     private nextSeq: number,
     private isClosed = false,
   ) {
+    invariant(filePath.length > 0, 'filePath must be a non-empty string');
     invariant(Number.isInteger(nextSeq), 'nextSeq must be an integer');
     invariant(nextSeq >= 0, 'nextSeq must be non-negative');
   }
@@ -183,9 +217,10 @@ export class EventLog {
     if (fileStats.size > 0) {
       const existingContent = await readFile(filePath, 'utf8');
       nextSeq = deriveNextSeq(existingContent);
+      invariant(nextSeq >= 0, 'derived next seq must be non-negative');
     }
 
-    return new EventLog(fileHandle, nextSeq);
+    return new EventLog(filePath, fileHandle, nextSeq);
   }
 
   async append(type: 'output', payload: OutputEventPayload): Promise<void>;
@@ -212,14 +247,18 @@ export class EventLog {
 
     const validatedPayload = validatePayload(type, payload);
     const seq = this.nextSeq;
+    invariant(seq === this.nextSeq, 'event seq must match the expected next seq');
+    invariant(seq >= 0, 'event seq must be non-negative');
     this.nextSeq += 1;
 
-    const record: EventRecord = {
+    const record = {
       seq,
       ts: new Date().toISOString(),
       type,
       payload: validatedPayload,
     };
+
+    invariant(record.seq === seq, 'event record seq must match the reserved seq');
 
     const parsedRecord = EventRecordSchema.safeParse(record);
     invariant(
@@ -232,6 +271,12 @@ export class EventLog {
       this.fileHandle.appendFile(line, 'utf8'),
     );
     await this.writeQueue;
+  }
+
+  async readAll(): Promise<EventRecord[]> {
+    await this.writeQueue;
+    const content = await readFile(this.filePath, 'utf8');
+    return parseEventLogContent(content);
   }
 
   async close(): Promise<void> {

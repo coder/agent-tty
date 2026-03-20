@@ -8,8 +8,14 @@ import {
   RpcMethodSchemas,
   RpcRequestSchema,
   RpcResponseSchema,
+  ScreenshotParamsSchema,
+  ScreenshotResultSchema,
   SendKeysParamsSchema,
+  SnapshotParamsSchema,
+  SnapshotResultSchema,
   TypeParamsSchema,
+  WaitForRenderParamsSchema,
+  WaitForRenderResultSchema,
   WaitParamsSchema,
   WaitResultSchema,
 } from '../../../src/protocol/messages.js';
@@ -63,12 +69,23 @@ describe('protocol schemas', () => {
     expect(result.success).toBe(true);
   });
 
+  it('rejects an event record with a mismatched payload shape', () => {
+    const result = EventRecordSchema.safeParse({
+      seq: 0,
+      ts: '2026-03-19T12:00:02.000Z',
+      type: 'resize',
+      payload: { cols: 120 },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it('rejects an event record with a negative sequence', () => {
     const result = EventRecordSchema.safeParse({
       seq: -1,
       ts: '2026-03-19T12:00:02.000Z',
       type: 'resize',
-      payload: {},
+      payload: { cols: 120, rows: 40 },
     });
 
     expect(result.success).toBe(false);
@@ -134,6 +151,126 @@ describe('RPC message schemas', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it('accepts snapshot params and discriminated snapshot results', () => {
+    expect(SnapshotParamsSchema.safeParse({}).success).toBe(true);
+    expect(
+      SnapshotParamsSchema.safeParse({ format: 'text' }).success,
+    ).toBe(true);
+    expect(
+      SnapshotResultSchema.safeParse({
+        format: 'structured',
+        sessionId: 'session-01',
+        capturedAtSeq: 5,
+        cols: 80,
+        rows: 24,
+        cursorRow: 2,
+        cursorCol: 4,
+        isAltScreen: false,
+        visibleLines: [
+          {
+            row: 0,
+            text: 'hello',
+          },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      SnapshotResultSchema.safeParse({
+        format: 'text',
+        sessionId: 'session-01',
+        capturedAtSeq: 5,
+        cols: 80,
+        rows: 24,
+        cursorRow: 2,
+        cursorCol: 4,
+        text: 'hello\nworld',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects snapshot results with invalid discriminants or extra fields', () => {
+    expect(
+      SnapshotResultSchema.safeParse({
+        format: 'structured',
+        sessionId: 'session-01',
+        capturedAtSeq: 5,
+        cols: 80,
+        rows: 24,
+        cursorRow: 2,
+        cursorCol: 4,
+        isAltScreen: false,
+        visibleLines: [],
+        text: 'unexpected',
+      }).success,
+    ).toBe(false);
+    expect(
+      SnapshotResultSchema.safeParse({
+        format: 'binary',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts screenshot params and results', () => {
+    expect(ScreenshotParamsSchema.safeParse({}).success).toBe(true);
+    expect(
+      ScreenshotParamsSchema.safeParse({ profile: 'reference-dark' }).success,
+    ).toBe(true);
+    expect(
+      ScreenshotResultSchema.safeParse({
+        sessionId: 'session-01',
+        capturedAtSeq: 5,
+        profileName: 'reference-dark',
+        cols: 80,
+        rows: 24,
+        artifactPath: '/tmp/screenshot.png',
+        pngSizeBytes: 1024,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects empty screenshot profile names', () => {
+    expect(
+      ScreenshotParamsSchema.safeParse({ profile: '' }).success,
+    ).toBe(false);
+  });
+
+  it('accepts waitForRender params for text, regex, and stable-screen waits', () => {
+    expect(
+      WaitForRenderParamsSchema.safeParse({ text: 'Ready', timeoutMs: 1000 })
+        .success,
+    ).toBe(true);
+    expect(
+      WaitForRenderParamsSchema.safeParse({ regex: 'Ready|Done' }).success,
+    ).toBe(true);
+    expect(
+      WaitForRenderParamsSchema.safeParse({ screenStableMs: 250 }).success,
+    ).toBe(true);
+  });
+
+  it('rejects invalid waitForRender params', () => {
+    expect(WaitForRenderParamsSchema.safeParse({}).success).toBe(false);
+    expect(
+      WaitForRenderParamsSchema.safeParse({
+        text: 'Ready',
+        regex: 'Done',
+      }).success,
+    ).toBe(false);
+    expect(
+      WaitForRenderParamsSchema.safeParse({ screenStableMs: 0 }).success,
+    ).toBe(false);
+  });
+
+  it('accepts waitForRender results with replay metadata', () => {
+    expect(
+      WaitForRenderResultSchema.safeParse({
+        matched: true,
+        timedOut: false,
+        matchedText: 'Ready',
+        capturedAtSeq: 7,
+      }).success,
+    ).toBe(true);
   });
 
   it('rejects empty key arrays for sendKeys', () => {
@@ -206,15 +343,18 @@ describe('RPC message schemas', () => {
     expect(DestroyParamsSchema.safeParse({ force: true }).success).toBe(true);
   });
 
-  it('exposes method schemas for every Week 1 RPC method', () => {
+  it('exposes method schemas for every RPC method', () => {
     expect(Object.keys(RpcMethodSchemas)).toEqual([
       'inspect',
+      'snapshot',
+      'screenshot',
       'type',
       'paste',
       'sendKeys',
       'resize',
       'signal',
       'wait',
+      'waitForRender',
       'destroy',
     ]);
   });

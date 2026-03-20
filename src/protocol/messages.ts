@@ -1,6 +1,23 @@
 import { z } from 'zod';
 
-import { SessionRecordSchema } from './schemas.js';
+import {
+  ScreenshotParamsSchema,
+  ScreenshotResultSchema,
+  SessionRecordSchema,
+  SnapshotParamsSchema,
+  SnapshotResultSchema,
+  WaitForRenderParamsSchema,
+  WaitForRenderResultSchema,
+} from './schemas.js';
+
+export {
+  ScreenshotParamsSchema,
+  ScreenshotResultSchema,
+  SnapshotParamsSchema,
+  SnapshotResultSchema,
+  WaitForRenderParamsSchema,
+  WaitForRenderResultSchema,
+} from './schemas.js';
 
 const EmptyObjectSchema = z.object({}).strict();
 const NonEmptyStringSchema = z.string().min(1);
@@ -56,6 +73,14 @@ export const InspectResultSchema = z
   })
   .strict();
 export type InspectResult = z.infer<typeof InspectResultSchema>;
+
+export type SnapshotParams = z.infer<typeof SnapshotParamsSchema>;
+
+export type SnapshotResult = z.infer<typeof SnapshotResultSchema>;
+
+export type ScreenshotParams = z.infer<typeof ScreenshotParamsSchema>;
+
+export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;
 
 export const TypeParamsSchema = z
   .object({
@@ -130,6 +155,10 @@ export const WaitResultSchema = z
   .strict();
 export type WaitResult = z.infer<typeof WaitResultSchema>;
 
+export type WaitForRenderParams = z.infer<typeof WaitForRenderParamsSchema>;
+
+export type WaitForRenderResult = z.infer<typeof WaitForRenderResultSchema>;
+
 export const DestroyParamsSchema = z
   .object({
     force: z.boolean().optional(),
@@ -142,12 +171,15 @@ export type DestroyResult = z.infer<typeof DestroyResultSchema>;
 
 const RPC_METHODS = [
   'inspect',
+  'snapshot',
+  'screenshot',
   'type',
   'paste',
   'sendKeys',
   'resize',
   'signal',
   'wait',
+  'waitForRender',
   'destroy',
 ] as const;
 
@@ -158,6 +190,14 @@ export const RpcMethodSchemas = {
   inspect: {
     params: InspectParamsSchema,
     result: InspectResultSchema,
+  },
+  snapshot: {
+    params: SnapshotParamsSchema,
+    result: SnapshotResultSchema,
+  },
+  screenshot: {
+    params: ScreenshotParamsSchema,
+    result: ScreenshotResultSchema,
   },
   type: {
     params: TypeParamsSchema,
@@ -182,6 +222,10 @@ export const RpcMethodSchemas = {
   wait: {
     params: WaitParamsSchema,
     result: WaitResultSchema,
+  },
+  waitForRender: {
+    params: WaitForRenderParamsSchema,
+    result: WaitForRenderResultSchema,
   },
   destroy: {
     params: DestroyParamsSchema,
