@@ -116,8 +116,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     idleMs: options.idleMs ?? undefined,
     timeoutMs: effectiveTimeout === 0 ? undefined : effectiveTimeout,
   };
-  const clientTimeout =
-    effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
+  const clientTimeout = effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
   const result = (await sendRpc(
     socketPath(sessionDirectory),
     'wait',
