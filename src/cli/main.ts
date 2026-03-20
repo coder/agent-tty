@@ -324,6 +324,13 @@ async function main(): Promise<void> {
       parseIntegerOption,
     )
     .option('--json', 'Emit a JSON command envelope', false)
+    .option('--text <string>', 'Wait for text to appear in rendered output')
+    .option('--regex <pattern>', 'Wait for regex match in rendered output')
+    .option(
+      '--screen-stable-ms <ms>',
+      'Wait for screen to be stable for given ms',
+      parseIntegerOption,
+    )
     .action(
       wrapAction(
         'wait',
@@ -334,6 +341,9 @@ async function main(): Promise<void> {
             idleMs?: number;
             timeout?: number;
             json: boolean;
+            text?: string;
+            regex?: string;
+            screenStableMs?: number;
           },
         ) => {
           await runWaitCommand({
@@ -342,6 +352,9 @@ async function main(): Promise<void> {
             waitForExit: options.exit,
             idleMs: options.idleMs,
             timeout: options.timeout,
+            text: options.text,
+            regex: options.regex,
+            screenStableMs: options.screenStableMs,
           });
         },
       ),
