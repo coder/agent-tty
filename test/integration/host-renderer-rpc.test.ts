@@ -238,6 +238,55 @@ describe(
       });
     });
 
+    it('handles concurrent snapshot and screenshot requests', async () => {
+      const [snapshot, screenshot] = (await Promise.all([
+        sendRpc(
+          rpcSocketPath,
+          'snapshot',
+          { format: 'structured' },
+          SNAPSHOT_TIMEOUT_MS,
+        ),
+        sendRpc(rpcSocketPath, 'screenshot', {}, SNAPSHOT_TIMEOUT_MS),
+      ])) as [SnapshotResult, ScreenshotResult];
+      const screenshotStats = await stat(screenshot.artifactPath);
+      const manifest = await readArtifactManifest(sessDir);
+
+      expect(snapshot.sessionId).toBe(sessionId);
+      expect(snapshot.format).toBe('structured');
+      if (snapshot.format !== 'structured') {
+        throw new Error('expected structured snapshot result');
+      }
+      expect(
+        snapshot.visibleLines.some((line) => line.text.includes(OUTPUT_MARKER)),
+      ).toBe(true);
+
+      expect(screenshot.sessionId).toBe(sessionId);
+      expect(screenshot.profileName).toBe('reference-dark');
+      expect(screenshot.pngSizeBytes).toBeGreaterThan(0);
+      expect(screenshotStats.size).toBe(screenshot.pngSizeBytes);
+
+      expect(manifest.artifacts).toHaveLength(2);
+      expect(manifest.artifacts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'snapshot',
+            filename: snapshotFilename(snapshot.capturedAtSeq, 'structured'),
+            sessionId,
+            capturedAtSeq: snapshot.capturedAtSeq,
+          }),
+          expect.objectContaining({
+            kind: 'screenshot',
+            filename: screenshotFilename(
+              screenshot.capturedAtSeq,
+              screenshot.profileName,
+            ),
+            sessionId,
+            capturedAtSeq: screenshot.capturedAtSeq,
+          }),
+        ]),
+      );
+    });
+
     it('captures screenshots with an explicit render profile', async () => {
       const result = (await sendRpc(
         rpcSocketPath,

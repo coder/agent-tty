@@ -160,6 +160,27 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     expect(result.capturedAtSeq).toBeGreaterThanOrEqual(0);
   });
 
+  it('matches text AND screen stability together', async () => {
+    await sendRpc(
+      rpcSocketPath,
+      'waitForRender',
+      { regex: '\\d+ items', timeoutMs: 15_000 },
+      20_000,
+    );
+
+    const result = (await sendRpc(
+      rpcSocketPath,
+      'waitForRender',
+      { text: 'Ready', screenStableMs: 500, timeoutMs: 15_000 },
+      20_000,
+    )) as WaitForRenderResult;
+
+    expect(result.matched).toBe(true);
+    expect(result.timedOut).toBe(false);
+    expect(result.matchedText).toBe('Ready');
+    expect(result.capturedAtSeq).toBeGreaterThanOrEqual(0);
+  });
+
   it('matches text via CLI --text', () => {
     const result = runCli(
       ['wait', sessionId, '--text', 'Ready', '--timeout', '15000', '--json'],
