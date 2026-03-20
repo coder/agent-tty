@@ -60,6 +60,8 @@ const ALLOWED_SIGNALS = [
 ] as const;
 
 const DEFAULT_RENDER_PROFILE_NAME = 'reference-dark';
+const MAX_WAIT_FOR_RENDER_REGEX_LENGTH = 200;
+const MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH = 50_000;
 
 type WaitOutcome = {
   exitCode?: number;
@@ -83,6 +85,22 @@ function rethrowAsync(error: unknown): void {
   process.nextTick(() => {
     throw error;
   });
+}
+
+function safeRegexExec(
+  regex: RegExp,
+  text: string,
+  timeoutMs = 100,
+): RegExpExecArray | null {
+  invariant(
+    Number.isInteger(timeoutMs) && timeoutMs > 0,
+    'regex exec timeout must be a positive integer',
+  );
+  const limitedText =
+    text.length > MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH
+      ? text.slice(0, MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH)
+      : text;
+  return regex.exec(limitedText);
 }
 
 export async function runHost(sessionId: string): Promise<void> {
@@ -631,6 +649,10 @@ export async function runHost(sessionId: string): Promise<void> {
 
       let compiledRegex: RegExp | undefined;
       if (regex !== undefined) {
+        invariant(
+          regex.length <= MAX_WAIT_FOR_RENDER_REGEX_LENGTH,
+          `regex pattern must not exceed ${MAX_WAIT_FOR_RENDER_REGEX_LENGTH} characters`,
+        );
         try {
           compiledRegex = new RegExp(regex);
         } catch (error) {
@@ -685,7 +707,7 @@ export async function runHost(sessionId: string): Promise<void> {
                   matchedText = text;
                 }
               } else if (compiledRegex !== undefined) {
-                const match = compiledRegex.exec(visibleText);
+                const match = safeRegexExec(compiledRegex, visibleText);
                 if (match !== null) {
                   textMatched = true;
                   matchedText = match[0];
@@ -726,7 +748,12 @@ export async function runHost(sessionId: string): Promise<void> {
       }
 
       return await new Promise<WaitForRenderResult>((resolve) => {
+        let resolved = false;
         const timeoutHandle = setTimeout(() => {
+          if (resolved) {
+            return;
+          }
+          resolved = true;
           clearWaitPoll?.();
 
           void (async () => {
@@ -746,6 +773,10 @@ export async function runHost(sessionId: string): Promise<void> {
         }, timeoutMs);
 
         void pollCondition.then((result) => {
+          if (resolved) {
+            return;
+          }
+          resolved = true;
           clearTimeout(timeoutHandle);
           clearWaitPoll?.();
           resolve(result);

@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
 const NonEmptyStringSchema = z.string().min(1);
+const TextMatchSchema = z.string().min(1).max(1000);
+const RegexPatternSchema = z.string().min(1).max(200);
+const ProfileNameSchema = z.string().min(1).max(100);
 const PositiveIntSchema = z.number().int().positive();
 const NonNegativeIntSchema = z.number().int().nonnegative();
 const IsoDatetimeSchema = z.iso.datetime();
@@ -218,7 +221,7 @@ export type SnapshotResult = z.infer<typeof SnapshotResultSchema>;
 
 export const ScreenshotParamsSchema = z
   .object({
-    profile: NonEmptyStringSchema.optional(),
+    profile: ProfileNameSchema.optional(),
   })
   .strict();
 export type ScreenshotParams = z.infer<typeof ScreenshotParamsSchema>;
@@ -238,8 +241,8 @@ export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;
 
 export const WaitForRenderParamsSchema = z
   .object({
-    text: NonEmptyStringSchema.optional(),
-    regex: NonEmptyStringSchema.optional(),
+    text: TextMatchSchema.optional(),
+    regex: RegexPatternSchema.optional(),
     screenStableMs: PositiveIntSchema.optional(),
     timeoutMs: PositiveIntSchema.optional(),
   })

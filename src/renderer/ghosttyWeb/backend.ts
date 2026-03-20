@@ -880,6 +880,21 @@ export class GhosttyWebBackend implements RendererBackend {
       'screenshot() requires known terminal dimensions',
     );
 
+    await page.evaluate(() => {
+      const requestNextFrame = (
+        globalThis as unknown as {
+          requestAnimationFrame: (callback: () => void) => number;
+        }
+      ).requestAnimationFrame;
+      return new Promise<void>((resolve) => {
+        requestNextFrame(() => {
+          requestNextFrame(() => {
+            resolve();
+          });
+        });
+      });
+    });
+
     await page.locator('#terminal').screenshot({
       animations: 'disabled',
       caret: 'hide',
