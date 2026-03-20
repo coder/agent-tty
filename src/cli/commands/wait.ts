@@ -22,6 +22,8 @@ interface CommandOptions {
   timeout: number | undefined;
 }
 
+const DEFAULT_WAIT_TIMEOUT_MS = 600_000;
+
 function isPositiveInteger(value: number | undefined): value is number {
   return value !== undefined && Number.isInteger(value) && value > 0;
 }
@@ -70,9 +72,13 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  if (options.timeout !== undefined && !isPositiveInteger(options.timeout)) {
+  if (
+    options.timeout !== undefined &&
+    options.timeout !== 0 &&
+    !isPositiveInteger(options.timeout)
+  ) {
     throw makeCliError(ERROR_CODES.INVALID_DURATION, {
-      message: '--timeout must be a positive integer.',
+      message: '--timeout must be a non-negative integer (0 for infinite).',
       details: {
         timeout: options.timeout,
       },
@@ -104,13 +110,14 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     return;
   }
 
+  const effectiveTimeout = options.timeout ?? DEFAULT_WAIT_TIMEOUT_MS;
   const params = {
     exit: options.waitForExit || undefined,
     idleMs: options.idleMs ?? undefined,
-    timeoutMs: options.timeout ?? undefined,
+    timeoutMs: effectiveTimeout === 0 ? undefined : effectiveTimeout,
   };
   const clientTimeout =
-    options.timeout !== undefined ? options.timeout + 5_000 : 0;
+    effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
   const result = (await sendRpc(
     socketPath(sessionDirectory),
     'wait',

@@ -9,6 +9,7 @@ import {
   RpcRequestSchema,
   RpcResponseSchema,
   SendKeysParamsSchema,
+  TypeParamsSchema,
   WaitParamsSchema,
   WaitResultSchema,
 } from '../../../src/protocol/messages.js';
@@ -145,6 +146,14 @@ describe('RPC message schemas', () => {
 
   it('rejects empty paste text', () => {
     const result = PasteParamsSchema.safeParse({
+      text: '',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty type text', () => {
+    const result = TypeParamsSchema.safeParse({
       text: '',
     });
 

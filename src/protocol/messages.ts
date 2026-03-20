@@ -59,7 +59,7 @@ export type InspectResult = z.infer<typeof InspectResultSchema>;
 
 export const TypeParamsSchema = z
   .object({
-    text: z.string(),
+    text: z.string().min(1),
   })
   .strict();
 export type TypeParams = z.infer<typeof TypeParamsSchema>;
