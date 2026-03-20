@@ -70,10 +70,7 @@ function makeInvalidDimensionError(
   });
 }
 
-function makeInvalidCwdError(
-  cwd: unknown,
-  cause?: unknown,
-): CliError {
+function makeInvalidCwdError(cwd: unknown, cause?: unknown): CliError {
   return makeCliError(ERROR_CODES.STORAGE_READ_ERROR, {
     message:
       typeof cwd === 'string' && cwd.length > 0

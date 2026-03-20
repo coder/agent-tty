@@ -252,7 +252,9 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       expect(waitResult.status).toBe(0);
       expect(waitResult.stderr).toBe('');
 
-      const envelope = JSON.parse(waitResult.stdout) as SuccessEnvelope<WaitResult>;
+      const envelope = JSON.parse(
+        waitResult.stdout,
+      ) as SuccessEnvelope<WaitResult>;
       expect(envelope.ok).toBe(true);
       expect(envelope.result.timedOut).toBe(true);
     } finally {
