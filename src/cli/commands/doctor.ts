@@ -29,7 +29,7 @@ type DoctorCheckStatus = 'pass' | 'fail' | 'skip';
 type DoctorCheckOperation = () => Promise<string> | string;
 
 interface BrowserPageLike {
-  screenshot(options: { path: string; timeout: number }): Promise<void>;
+  screenshot(options: { path: string; timeout: number }): Promise<Buffer>;
   setContent(
     html: string,
     options: { timeout: number; waitUntil: 'load' },
