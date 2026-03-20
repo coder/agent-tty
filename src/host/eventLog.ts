@@ -81,6 +81,9 @@ type EventLogPayload =
   | SignalEventPayload
   | ExitEventPayload;
 
+// Keep this in sync with the replay loader's event-log size limit.
+const MAX_EVENT_LOG_SIZE = 50 * 1024 * 1024;
+
 function assertFilePath(filePath: string): void {
   invariant(filePath.length > 0, 'filePath must be a non-empty string');
 }
@@ -217,6 +220,10 @@ export class EventLog {
 
     const fileHandle = await open(filePath, 'a');
     const fileStats = await fileHandle.stat();
+    invariant(
+      fileStats.size <= MAX_EVENT_LOG_SIZE,
+      `event log file exceeds size limit (${String(fileStats.size)} bytes, max ${String(MAX_EVENT_LOG_SIZE)})`,
+    );
 
     let eventBuffer: EventRecord[] = [];
     let nextSeq = 0;
@@ -285,10 +292,41 @@ export class EventLog {
     this.eventBuffer.push(parsedRecord.data);
 
     const line = `${JSON.stringify(parsedRecord.data)}\n`;
-    this.writeQueue = this.writeQueue.then(() =>
-      this.fileHandle.appendFile(line, 'utf8'),
+    const writePromise = this.writeQueue.then(async () => {
+      try {
+        await this.fileHandle.appendFile(line, 'utf8');
+      } catch (error) {
+        this.rollbackBufferedEventsFrom(seq);
+        throw error;
+      }
+    });
+    this.writeQueue = writePromise;
+
+    try {
+      await writePromise;
+    } catch (error) {
+      this.rollbackBufferedEventsFrom(seq);
+      throw error;
+    }
+  }
+
+  private rollbackBufferedEventsFrom(failedSeq: number): void {
+    invariant(Number.isInteger(failedSeq), 'failedSeq must be an integer');
+    invariant(failedSeq >= 0, 'failedSeq must be non-negative');
+
+    if (this.eventBuffer.length <= failedSeq) {
+      return;
+    }
+
+    const failedRecord = this.eventBuffer[failedSeq];
+    invariant(failedRecord !== undefined, 'failed event record must exist');
+    invariant(
+      failedRecord.seq === failedSeq,
+      'failed event seq must match the buffered rollback position',
     );
-    await this.writeQueue;
+
+    this.eventBuffer.splice(failedSeq);
+    this.nextSeq = this.eventBuffer.length;
   }
 
   getEvents(): readonly EventRecord[] {

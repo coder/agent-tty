@@ -82,6 +82,9 @@ const HARNESS_CONTENT_SECURITY_POLICY = [
 const HTML_CONTENT_TYPE = 'text/html; charset=utf-8';
 const WASM_CONTENT_TYPE = 'application/wasm';
 
+const MAX_REPLAY_BATCH_SIZE = 1000;
+const RAF_TIMEOUT_MS = 5_000;
+
 const EMBEDDED_HARNESS_HTML = `<!doctype html>
 <html lang="en">
   <head>
@@ -750,7 +753,7 @@ export class GhosttyWebBackend implements RendererBackend {
         return;
       }
 
-      await this.writeBatchBridge(page, pendingOutputChunks);
+      await this.flushOutputBatch(page, pendingOutputChunks);
       pendingOutputChunks = [];
     };
 
@@ -880,20 +883,7 @@ export class GhosttyWebBackend implements RendererBackend {
       'screenshot() requires known terminal dimensions',
     );
 
-    await page.evaluate(() => {
-      const requestNextFrame = (
-        globalThis as unknown as {
-          requestAnimationFrame: (callback: () => void) => number;
-        }
-      ).requestAnimationFrame;
-      return new Promise<void>((resolve) => {
-        requestNextFrame(() => {
-          requestNextFrame(() => {
-            resolve();
-          });
-        });
-      });
-    });
+    await this.waitForScreenshotPaint(page);
 
     await page.locator('#terminal').screenshot({
       animations: 'disabled',
@@ -1226,6 +1216,57 @@ export class GhosttyWebBackend implements RendererBackend {
     );
   }
 
+  private async waitForScreenshotPaint(page: Page): Promise<void> {
+    await Promise.race([
+      page.evaluate(() => {
+        const requestNextFrame = (
+          globalThis as unknown as {
+            requestAnimationFrame: (callback: () => void) => number;
+          }
+        ).requestAnimationFrame;
+        return new Promise<void>((resolve) => {
+          requestNextFrame(() => {
+            requestNextFrame(() => {
+              resolve();
+            });
+          });
+        });
+      }),
+      new Promise<void>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Screenshot paint wait timed out after 5s'));
+        }, RAF_TIMEOUT_MS);
+      }),
+    ]);
+  }
+
+  private async flushOutputBatch(
+    page: Page,
+    dataChunks: string[],
+  ): Promise<void> {
+    invariant(
+      dataChunks.length > 0,
+      'flushOutputBatch requires at least one data chunk',
+    );
+
+    for (
+      let batchStart = 0;
+      batchStart < dataChunks.length;
+      batchStart += MAX_REPLAY_BATCH_SIZE
+    ) {
+      const batch = dataChunks.slice(
+        batchStart,
+        batchStart + MAX_REPLAY_BATCH_SIZE,
+      );
+      invariant(batch.length > 0, 'flushOutputBatch batch must not be empty');
+      invariant(
+        batch.length <= MAX_REPLAY_BATCH_SIZE,
+        'flushOutputBatch batch size must respect MAX_REPLAY_BATCH_SIZE',
+      );
+      await this.writeBatchBridge(page, batch);
+    }
+  }
+
   private async startServer(
     servedAssets: ReadonlyMap<string, GhosttyServedAsset>,
   ): Promise<{
@@ -1310,6 +1351,10 @@ export class GhosttyWebBackend implements RendererBackend {
     invariant(
       dataChunks.length > 0,
       'writeBatchBridge requires at least one data chunk',
+    );
+    invariant(
+      dataChunks.length <= MAX_REPLAY_BATCH_SIZE,
+      'writeBatchBridge batch size must not exceed MAX_REPLAY_BATCH_SIZE',
     );
     for (const chunk of dataChunks) {
       assertString(chunk, 'bridge batch write chunk must be a string');

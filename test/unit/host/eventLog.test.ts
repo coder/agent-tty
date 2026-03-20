@@ -1,10 +1,11 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventLog } from '../../../src/host/eventLog.js';
+import { MAX_EVENT_LOG_SIZE } from '../../../src/host/replay.js';
 
 let tempDir = '';
 let eventLogPath = '';
@@ -114,6 +115,51 @@ describe('EventLog', () => {
       expect((await eventLog.readAll()).map((event) => event.seq)).toEqual([
         0, 1, 2,
       ]);
+    } finally {
+      await eventLog.close();
+    }
+  });
+
+  it('rejects oversized logs before reading them into memory', async () => {
+    await truncate(eventLogPath, MAX_EVENT_LOG_SIZE + 1);
+
+    await expect(EventLog.open(eventLogPath)).rejects.toThrow(
+      `event log file exceeds size limit (${String(MAX_EVENT_LOG_SIZE + 1)} bytes, max ${String(MAX_EVENT_LOG_SIZE)})`,
+    );
+  });
+
+  it('rolls back buffered events when append disk writes fail', async () => {
+    const eventLog = await EventLog.open(eventLogPath);
+    const eventLogInternals = eventLog as unknown as {
+      fileHandle: {
+        appendFile: (data: string, encoding: BufferEncoding) => Promise<void>;
+      };
+      nextSeq: number;
+      writeQueue: Promise<void>;
+    };
+
+    try {
+      await eventLog.append('output', { data: 'persisted' });
+      const appendFileSpy = vi
+        .spyOn(eventLogInternals.fileHandle, 'appendFile')
+        .mockRejectedValueOnce(new Error('disk full'));
+
+      await expect(
+        eventLog.append('signal', { signal: 'SIGTERM' }),
+      ).rejects.toThrow('disk full');
+
+      expect(eventLog.getEvents().map((event) => event.seq)).toEqual([0]);
+      expect(eventLog.getEvents().map((event) => event.type)).toEqual([
+        'output',
+      ]);
+      expect(eventLogInternals.nextSeq).toBe(1);
+
+      const logContent = await readFile(eventLogPath, 'utf8');
+      expect(logContent).toContain('"seq":0');
+      expect(logContent).not.toContain('"seq":1');
+
+      appendFileSpy.mockRestore();
+      eventLogInternals.writeQueue = Promise.resolve();
     } finally {
       await eventLog.close();
     }
