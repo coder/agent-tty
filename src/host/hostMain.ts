@@ -62,6 +62,7 @@ const ALLOWED_SIGNALS = [
 const DEFAULT_RENDER_PROFILE_NAME = 'reference-dark';
 const MAX_WAIT_FOR_RENDER_REGEX_LENGTH = 200;
 const MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH = 50_000;
+const BRACED_QUANTIFIER_PATTERN = /^\{(?:\d+|\d+,\d*)\}/;
 
 type WaitOutcome = {
   exitCode?: number;
@@ -87,15 +88,98 @@ function rethrowAsync(error: unknown): void {
   });
 }
 
-function safeRegexExec(
-  regex: RegExp,
-  text: string,
-  timeoutMs = 100,
-): RegExpExecArray | null {
-  invariant(
-    Number.isInteger(timeoutMs) && timeoutMs > 0,
-    'regex exec timeout must be a positive integer',
-  );
+function isRegexQuantifierAt(pattern: string, index: number): boolean {
+  const nextChar = pattern[index];
+  if (nextChar === '*' || nextChar === '+' || nextChar === '?') {
+    return true;
+  }
+
+  if (nextChar !== '{') {
+    return false;
+  }
+
+  return BRACED_QUANTIFIER_PATTERN.test(pattern.slice(index));
+}
+
+/**
+ * Reject regex patterns with obvious ReDoS-prone constructs:
+ * - Nested quantifiers: (x+)+, (x*)+, (x+)*, (x?){n}, etc.
+ * - Star-height > 1 patterns
+ *
+ * This is a heuristic check, not a full regex analysis.
+ * It catches the most common catastrophic backtracking patterns.
+ */
+export function hasNestedQuantifiers(pattern: string): boolean {
+  invariant(typeof pattern === 'string', 'regex pattern must be a string');
+
+  const groupHasQuantifierStack: boolean[] = [];
+  let inCharacterClass = false;
+
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    invariant(char !== undefined, 'regex pattern character must exist');
+
+    if (char === '\\') {
+      index += 1;
+      continue;
+    }
+
+    if (char === '[') {
+      inCharacterClass = true;
+      continue;
+    }
+
+    if (char === ']' && inCharacterClass) {
+      inCharacterClass = false;
+      continue;
+    }
+
+    if (inCharacterClass) {
+      continue;
+    }
+
+    if (char === '(') {
+      groupHasQuantifierStack.push(false);
+      continue;
+    }
+
+    if (char === ')') {
+      const groupHasQuantifier = groupHasQuantifierStack.pop() ?? false;
+      const groupIsQuantified = isRegexQuantifierAt(pattern, index + 1);
+      if (groupHasQuantifier && groupIsQuantified) {
+        return true;
+      }
+
+      const parentGroupIndex = groupHasQuantifierStack.length - 1;
+      if (parentGroupIndex >= 0 && (groupHasQuantifier || groupIsQuantified)) {
+        groupHasQuantifierStack[parentGroupIndex] = true;
+      }
+
+      continue;
+    }
+
+    const currentGroupIndex = groupHasQuantifierStack.length - 1;
+    if (currentGroupIndex < 0) {
+      continue;
+    }
+
+    if (char === '*' || char === '+' || char === '?') {
+      const previousChar = pattern[index - 1];
+      if (previousChar !== '(') {
+        groupHasQuantifierStack[currentGroupIndex] = true;
+      }
+      continue;
+    }
+
+    if (char === '{' && isRegexQuantifierAt(pattern, index)) {
+      groupHasQuantifierStack[currentGroupIndex] = true;
+    }
+  }
+
+  return false;
+}
+
+function safeRegexExec(regex: RegExp, text: string): RegExpExecArray | null {
   const limitedText =
     text.length > MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH
       ? text.slice(0, MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH)
@@ -653,6 +737,12 @@ export async function runHost(sessionId: string): Promise<void> {
           regex.length <= MAX_WAIT_FOR_RENDER_REGEX_LENGTH,
           `regex pattern must not exceed ${String(MAX_WAIT_FOR_RENDER_REGEX_LENGTH)} characters`,
         );
+        if (hasNestedQuantifiers(regex)) {
+          throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+            message:
+              'Regex pattern contains nested quantifiers which may cause catastrophic backtracking. Simplify the pattern.',
+          });
+        }
         try {
           compiledRegex = new RegExp(regex);
         } catch (error) {
