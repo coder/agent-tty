@@ -10,6 +10,7 @@ export {
   VisibleLineSchema,
 } from './types.js';
 export type { RendererBackend } from './backend.js';
+export { GhosttyWebBackend } from './ghosttyWeb/index.js';
 export type {
   RenderProfileConfig,
   ReplayEvent,
