@@ -17,6 +17,8 @@ import type {
   SignalParams,
   SnapshotParams,
   TypeParams,
+  WaitForRenderParams,
+  WaitForRenderResult,
   WaitParams,
 } from '../protocol/messages.js';
 import { GhosttyWebBackend } from '../renderer/ghosttyWeb/index.js';
@@ -512,6 +514,144 @@ export async function runHost(sessionId: string): Promise<void> {
         void waitCondition.then((result) => {
           clearTimeout(timeoutHandle);
           clearWaitCondition?.();
+          resolve(result);
+        });
+      });
+    },
+    waitForRender: async (params: unknown) => {
+      const { text, regex, screenStableMs, timeoutMs } =
+        params as WaitForRenderParams;
+
+      invariant(
+        text !== undefined || regex !== undefined || screenStableMs !== undefined,
+        'waitForRender requires at least one of text, regex, or screenStableMs',
+      );
+      invariant(
+        !(text !== undefined && regex !== undefined),
+        'waitForRender text and regex filters are mutually exclusive',
+      );
+      if (screenStableMs !== undefined) {
+        invariant(
+          Number.isInteger(screenStableMs) && screenStableMs > 0,
+          'screenStableMs must be a positive integer',
+        );
+      }
+      if (timeoutMs !== undefined) {
+        invariant(
+          Number.isInteger(timeoutMs) && timeoutMs > 0,
+          'timeoutMs must be a positive integer',
+        );
+      }
+
+      let compiledRegex: RegExp | undefined;
+      if (regex !== undefined) {
+        try {
+          compiledRegex = new RegExp(regex);
+        } catch (error) {
+          throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+            message: `Invalid regex pattern: ${error instanceof Error ? error.message : String(error)}`,
+            cause: error,
+          });
+        }
+      }
+
+      const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
+      const pollIntervalMs = 200;
+      let lastVisibleText: string | undefined;
+      let lastTextChangeAt = Date.now();
+      let latestCapturedAtSeq = 0;
+      let clearWaitPoll: (() => void) | null = null;
+
+      const pollCondition = new Promise<WaitForRenderResult>((resolve) => {
+        let pollInFlight = false;
+
+        const checkInterval = setInterval(async () => {
+          if (pollInFlight) {
+            return;
+          }
+
+          pollInFlight = true;
+          try {
+            const replayInput = await loadReplayInput();
+            const backend = await rendererManager.getBackend(profile, replayInput);
+            const visibleText = await backend.getVisibleText();
+            const capturedAtSeq = replayInput?.targetSeq ?? 0;
+            latestCapturedAtSeq = capturedAtSeq;
+
+            const now = Date.now();
+            if (lastVisibleText === undefined || visibleText !== lastVisibleText) {
+              lastVisibleText = visibleText;
+              lastTextChangeAt = now;
+            }
+
+            let textMatched = false;
+            let matchedText: string | undefined;
+            if (text !== undefined) {
+              if (visibleText.includes(text)) {
+                textMatched = true;
+                matchedText = text;
+              }
+            } else if (compiledRegex !== undefined) {
+              const match = compiledRegex.exec(visibleText);
+              if (match !== null) {
+                textMatched = true;
+                matchedText = match[0];
+              }
+            } else {
+              textMatched = true;
+            }
+
+            let stableMatched = true;
+            if (screenStableMs !== undefined) {
+              stableMatched = now - lastTextChangeAt >= screenStableMs;
+            }
+
+            if (textMatched && stableMatched) {
+              clearInterval(checkInterval);
+              resolve({
+                matched: true,
+                timedOut: false,
+                ...(matchedText === undefined ? {} : { matchedText }),
+                capturedAtSeq,
+              });
+            }
+          } catch {
+            // Retry on the next poll; render state may still be catching up.
+          } finally {
+            pollInFlight = false;
+          }
+        }, pollIntervalMs);
+
+        clearWaitPoll = (): void => {
+          clearInterval(checkInterval);
+        };
+      });
+
+      if (timeoutMs === undefined) {
+        return await pollCondition;
+      }
+
+      return await new Promise<WaitForRenderResult>((resolve) => {
+        const timeoutHandle = setTimeout(async () => {
+          clearWaitPoll?.();
+
+          try {
+            const replayInput = await loadReplayInput();
+            latestCapturedAtSeq = replayInput?.targetSeq ?? 0;
+          } catch {
+            // Best-effort snapshot for timeout reporting.
+          }
+
+          resolve({
+            matched: false,
+            timedOut: true,
+            capturedAtSeq: latestCapturedAtSeq,
+          });
+        }, timeoutMs);
+
+        void pollCondition.then((result) => {
+          clearTimeout(timeoutHandle);
+          clearWaitPoll?.();
           resolve(result);
         });
       });
