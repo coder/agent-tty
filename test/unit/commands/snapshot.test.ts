@@ -177,7 +177,7 @@ describe('snapshot command', () => {
       code: ERROR_CODES.PROTOCOL_ERROR,
       message: 'Unexpected response from host',
       details: {
-        issues: expect.any(Array),
+        issues: expect.any(Array) as unknown,
       },
     });
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
