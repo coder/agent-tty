@@ -26,7 +26,7 @@ function parseIntegerOption(value: string): number {
 async function main(): Promise<void> {
   const program = new Command()
     .name('agent-terminal')
-    .description('Terminal CLI')
+    .description('CLI for managing and controlling terminal sessions')
     .showHelpAfterError();
 
   program
@@ -51,7 +51,7 @@ async function main(): Promise<void> {
     .description('Create a session')
     .option(
       '--command <cmd>',
-      'Command string to run (defaults to the user shell)',
+      'Shell executable (defaults to $SHELL or sh)',
       process.env.SHELL ?? process.env.ComSpec ?? 'sh',
     )
     .option('--cwd <dir>', 'Working directory', process.cwd())

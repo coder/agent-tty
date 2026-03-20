@@ -58,6 +58,32 @@ function hasErrorCode(error: unknown, code: string): boolean {
   return isNodeError(error) && error.code === code;
 }
 
+function makeInvalidDimensionError(
+  label: 'cols' | 'rows',
+  value: unknown,
+): CliError {
+  return makeCliError(ERROR_CODES.INVALID_DIMENSIONS, {
+    message: `${label} must be a positive integer, got: ${String(value)}`,
+    details: {
+      [label]: value,
+    },
+  });
+}
+
+function makeInvalidCwdError(
+  cwd: unknown,
+  cause?: unknown,
+): CliError {
+  return makeCliError(ERROR_CODES.STORAGE_READ_ERROR, {
+    message:
+      typeof cwd === 'string' && cwd.length > 0
+        ? `Working directory does not exist or is not accessible: ${cwd}`
+        : 'Working directory must be a non-empty string.',
+    details: { cwd },
+    cause,
+  });
+}
+
 function assertPositiveInteger(value: number, label: string): void {
   invariant(
     Number.isInteger(value) && value > 0,
@@ -250,9 +276,23 @@ export async function allocateSession(
     'config must be an object',
   );
   invariant(Array.isArray(config.command), 'command must be an array');
-  assertNonEmptyString(config.cwd, 'cwd');
-  assertPositiveInteger(config.cols, 'cols');
-  assertPositiveInteger(config.rows, 'rows');
+  if (
+    typeof config.cols !== 'number' ||
+    !Number.isInteger(config.cols) ||
+    config.cols <= 0
+  ) {
+    throw makeInvalidDimensionError('cols', config.cols);
+  }
+  if (
+    typeof config.rows !== 'number' ||
+    !Number.isInteger(config.rows) ||
+    config.rows <= 0
+  ) {
+    throw makeInvalidDimensionError('rows', config.rows);
+  }
+  if (typeof config.cwd !== 'string' || config.cwd.length === 0) {
+    throw makeInvalidCwdError(config.cwd);
+  }
 
   const sessionId = ulid();
   assertNonEmptyString(sessionId, 'sessionId');
@@ -262,11 +302,23 @@ export async function allocateSession(
   await mkdir(sessionDirectory, { recursive: true });
 
   const resolvedCwd = resolve(config.cwd);
-  const cwdStats = await stat(resolvedCwd);
-  invariant(
-    cwdStats.isDirectory(),
-    'cwd must resolve to an existing directory',
-  );
+  try {
+    const cwdStats = await stat(resolvedCwd);
+    invariant(
+      cwdStats.isDirectory(),
+      'cwd must resolve to an existing directory',
+    );
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+
+    throw makeCliError(ERROR_CODES.STORAGE_READ_ERROR, {
+      message: `Working directory does not exist or is not accessible: ${resolvedCwd}`,
+      details: { cwd: resolvedCwd },
+      cause: error,
+    });
+  }
 
   const effectiveCommand =
     config.command.length > 0 ? [...config.command] : [config.shellCommand];

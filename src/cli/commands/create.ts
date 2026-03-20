@@ -35,15 +35,30 @@ interface CommandOptions {
 }
 
 export async function runCreateCommand(options: CommandOptions): Promise<void> {
-  const { sessionId } = await allocateSession({
-    command: options.command,
-    shellCommand: options.shellCommand,
-    cwd: options.cwd,
-    cols: options.cols,
-    rows: options.rows,
-  });
+  let sessionId: string;
 
-  launchHost(sessionId);
+  try {
+    const allocatedSession = await allocateSession({
+      command: options.command,
+      shellCommand: options.shellCommand,
+      cwd: options.cwd,
+      cols: options.cols,
+      rows: options.rows,
+    });
+    sessionId = allocatedSession.sessionId;
+
+    launchHost(sessionId);
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+
+    throw makeCliError(ERROR_CODES.INTERNAL_ERROR, {
+      message:
+        error instanceof Error ? error.message : 'Failed to create session.',
+      cause: error,
+    });
+  }
 
   const home = resolveHome();
   const sessionDirectory = sessionDir(home, sessionId);
