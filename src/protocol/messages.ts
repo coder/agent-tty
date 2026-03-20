@@ -8,6 +8,7 @@ import {
   SnapshotResultSchema,
   WaitForRenderParamsSchema,
   WaitForRenderResultSchema,
+  WaitResultSchema,
 } from './schemas.js';
 
 export {
@@ -17,6 +18,7 @@ export {
   SnapshotResultSchema,
   WaitForRenderParamsSchema,
   WaitForRenderResultSchema,
+  WaitResultSchema,
 } from './schemas.js';
 
 const EmptyObjectSchema = z.object({}).strict();
@@ -147,12 +149,6 @@ export const WaitParamsSchema = z
   .strict();
 export type WaitParams = z.infer<typeof WaitParamsSchema>;
 
-export const WaitResultSchema = z
-  .object({
-    exitCode: z.number().int().optional(),
-    timedOut: z.boolean(),
-  })
-  .strict();
 export type WaitResult = z.infer<typeof WaitResultSchema>;
 
 export type WaitForRenderParams = z.infer<typeof WaitForRenderParamsSchema>;

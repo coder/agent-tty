@@ -6,6 +6,7 @@ import {
   SnapshotParamsSchema,
   type SnapshotParams,
 } from '../../protocol/messages.js';
+import { SnapshotResultSchema } from '../../protocol/schemas.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import { resolveHome } from '../../storage/home.js';
@@ -125,9 +126,21 @@ export async function runSnapshotCommand(
     });
   }
 
-  const result = (await sendRpc(socketPath(sessionDirectory), 'snapshot', {
-    format,
-  })) as SnapshotResult;
+  const rawResult: unknown = await sendRpc(
+    socketPath(sessionDirectory),
+    'snapshot',
+    {
+      format,
+    },
+  );
+  const parsedResult = SnapshotResultSchema.safeParse(rawResult);
+  if (!parsedResult.success) {
+    throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
+      message: 'Unexpected response from host',
+      details: { issues: parsedResult.error.issues },
+    });
+  }
+  const result: SnapshotResult = parsedResult.data;
 
   emitSuccess({
     command: 'snapshot',

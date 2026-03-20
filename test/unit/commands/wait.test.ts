@@ -306,6 +306,43 @@ describe('wait command', () => {
     );
   });
 
+  it('rejects malformed legacy wait RPC responses', async () => {
+    mocks.sendRpc.mockResolvedValue({
+      timedOut: false,
+      exitCode: 1.5,
+    });
+
+    await expect(
+      runWaitCommand(createOptions({ waitForExit: true })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.PROTOCOL_ERROR,
+      message: 'Unexpected response from host',
+      details: {
+        issues: expect.any(Array),
+      },
+    });
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed render wait RPC responses', async () => {
+    mocks.sendRpc.mockResolvedValue({
+      matched: true,
+      timedOut: false,
+      capturedAtSeq: '7',
+    });
+
+    await expect(
+      runWaitCommand(createOptions({ text: 'hello' })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.PROTOCOL_ERROR,
+      message: 'Unexpected response from host',
+      details: {
+        issues: expect.any(Array),
+      },
+    });
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
   it('rejects missing sessions before contacting RPC', async () => {
     mocks.readManifestIfExists.mockResolvedValue(null);
 

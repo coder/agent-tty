@@ -3,6 +3,7 @@ import type { ScreenshotResult } from '../../protocol/messages.js';
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ScreenshotParamsSchema } from '../../protocol/messages.js';
+import { ScreenshotResultSchema } from '../../protocol/schemas.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import { resolveHome } from '../../storage/home.js';
@@ -101,9 +102,21 @@ export async function runScreenshotCommand(
     });
   }
 
-  const result = (await sendRpc(socketPath(sessionDirectory), 'screenshot', {
-    profile,
-  })) as ScreenshotResult;
+  const rawResult: unknown = await sendRpc(
+    socketPath(sessionDirectory),
+    'screenshot',
+    {
+      profile,
+    },
+  );
+  const parsedResult = ScreenshotResultSchema.safeParse(rawResult);
+  if (!parsedResult.success) {
+    throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
+      message: 'Unexpected response from host',
+      details: { issues: parsedResult.error.issues },
+    });
+  }
+  const result: ScreenshotResult = parsedResult.data;
 
   emitSuccess({
     command: 'screenshot',

@@ -71,6 +71,16 @@ const DEFAULT_PAGE_VIEWPORT = Object.freeze({
   width: 1024,
 });
 const GHOSTTY_JAVASCRIPT_CONTENT_TYPE = 'text/javascript; charset=utf-8';
+/**
+ * The embedded ghostty-web harness currently needs a broader CSP than we would
+ * prefer. `unsafe-inline` is required because the harness bootstraps
+ * ghostty-web with an inline module script, and `unsafe-eval` is required by
+ * the ghostty-web WASM module's dynamic code path. Current browsers do not make
+ * `wasm-unsafe-eval` alone sufficient for this setup, so we keep both
+ * directives and constrain the risk by serving the renderer only on the local
+ * loopback interface; this harness is localhost-only infrastructure, not a
+ * user-facing web surface.
+ */
 const HARNESS_CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",

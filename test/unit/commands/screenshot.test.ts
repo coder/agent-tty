@@ -146,6 +146,31 @@ describe('screenshot command', () => {
     });
   });
 
+  it('rejects malformed screenshot RPC responses', async () => {
+    mocks.sendRpc.mockResolvedValue({
+      sessionId: 'session-01',
+      capturedAtSeq: 12,
+      profileName: 'reference-dark',
+      cols: 120,
+      rows: 40,
+      artifactPath: '/tmp/snapshot.png',
+    });
+
+    await expect(
+      runScreenshotCommand({
+        json: false,
+        sessionId: 'session-01',
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.PROTOCOL_ERROR,
+      message: 'Unexpected response from host',
+      details: {
+        issues: expect.any(Array),
+      },
+    });
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid session identifiers before reading the manifest', async () => {
     mocks.sessionDir.mockImplementation(() => {
       throw new Error('sessionId must not contain path separators');

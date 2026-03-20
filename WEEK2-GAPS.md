@@ -23,3 +23,7 @@ The Week 2 renderer-backed inspection slice is complete, but the following work 
 - **Screenshot pixel-perfect determinism** is not guaranteed; font rendering can still vary by environment.
 - **Scrollback in snapshots** is not implemented; snapshots currently report the visible viewport only.
 - **Cursor blink animation in screenshots** is not captured; screenshots represent a static frame.
+
+## Security & Isolation
+
+- **Renderer CSP trade-off** currently allows `unsafe-inline`/`unsafe-eval` for the ghostty-web harness because the localhost-only loopback renderer still needs inline bootstrap code and WASM eval support in current browsers.

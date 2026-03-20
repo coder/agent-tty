@@ -18,6 +18,7 @@ export const ERROR_CODES = {
   STORAGE_WRITE_ERROR: 'STORAGE_WRITE_ERROR',
   MANIFEST_VALIDATION_ERROR: 'MANIFEST_VALIDATION_ERROR',
   RPC_ERROR: 'RPC_ERROR',
+  PROTOCOL_ERROR: 'PROTOCOL_ERROR',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
@@ -39,6 +40,7 @@ export const DEFAULT_ERROR_MESSAGES: Record<ProtocolErrorCode, string> = {
   [ERROR_CODES.STORAGE_WRITE_ERROR]: 'Failed to write session storage.',
   [ERROR_CODES.MANIFEST_VALIDATION_ERROR]: 'Session manifest is invalid.',
   [ERROR_CODES.RPC_ERROR]: 'RPC request failed.',
+  [ERROR_CODES.PROTOCOL_ERROR]: 'Unexpected response from host.',
   [ERROR_CODES.INTERNAL_ERROR]: 'Internal error.',
 };
 

@@ -270,6 +270,14 @@ export const WaitForRenderParamsSchema = z
   });
 export type WaitForRenderParams = z.infer<typeof WaitForRenderParamsSchema>;
 
+export const WaitResultSchema = z
+  .object({
+    exitCode: z.number().int().optional(),
+    timedOut: z.boolean(),
+  })
+  .strict();
+export type WaitResult = z.infer<typeof WaitResultSchema>;
+
 export const WaitForRenderResultSchema = z
   .object({
     matched: z.boolean(),

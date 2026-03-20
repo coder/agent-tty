@@ -1,6 +1,15 @@
+import type {
+  WaitForRenderResult,
+  WaitResult,
+} from '../../protocol/messages.js';
+
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
+import {
+  WaitForRenderResultSchema,
+  WaitResultSchema,
+} from '../../protocol/schemas.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import { resolveHome } from '../../storage/home.js';
 import {
@@ -8,18 +17,6 @@ import {
   sessionDir,
   socketPath,
 } from '../../storage/sessionPaths.js';
-
-export interface WaitResult {
-  exitCode?: number;
-  timedOut: boolean;
-}
-
-export interface WaitForRenderResult {
-  matched: boolean;
-  timedOut: boolean;
-  matchedText?: string;
-  capturedAtSeq: number;
-}
 
 interface CommandOptions {
   json: boolean;
@@ -137,12 +134,20 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       timeoutMs: effectiveTimeout === 0 ? undefined : effectiveTimeout,
     };
     const clientTimeout = effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
-    const result = (await sendRpc(
+    const rawResult: unknown = await sendRpc(
       socketPath(sessionDirectory),
       'waitForRender',
       params,
       clientTimeout,
-    )) as WaitForRenderResult;
+    );
+    const parsedResult = WaitForRenderResultSchema.safeParse(rawResult);
+    if (!parsedResult.success) {
+      throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
+        message: 'Unexpected response from host',
+        details: { issues: parsedResult.error.issues },
+      });
+    }
+    const result: WaitForRenderResult = parsedResult.data;
 
     emitSuccess({
       command: 'wait',
@@ -214,12 +219,20 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     timeoutMs: effectiveTimeout === 0 ? undefined : effectiveTimeout,
   };
   const clientTimeout = effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
-  const result = (await sendRpc(
+  const rawResult: unknown = await sendRpc(
     socketPath(sessionDirectory),
     'wait',
     params,
     clientTimeout,
-  )) as WaitResult;
+  );
+  const parsedResult = WaitResultSchema.safeParse(rawResult);
+  if (!parsedResult.success) {
+    throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
+      message: 'Unexpected response from host',
+      details: { issues: parsedResult.error.issues },
+    });
+  }
+  const result: WaitResult = parsedResult.data;
 
   emitSuccess({
     command: 'wait',
