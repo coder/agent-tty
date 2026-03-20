@@ -4,7 +4,10 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { EventLog } from '../../../src/host/eventLog.js';
+import {
+  EventLog,
+  MAX_EVENT_BUFFER_ENTRIES,
+} from '../../../src/host/eventLog.js';
 import { MAX_EVENT_LOG_SIZE } from '../../../src/host/replay.js';
 
 let tempDir = '';
@@ -126,6 +129,34 @@ describe('EventLog', () => {
     await expect(EventLog.open(eventLogPath)).rejects.toThrow(
       `event log file exceeds size limit (${String(MAX_EVENT_LOG_SIZE + 1)} bytes, max ${String(MAX_EVENT_LOG_SIZE)})`,
     );
+  });
+
+  it('rejects appends when the in-memory buffer reaches the runtime cap', async () => {
+    const eventLog = await EventLog.open(eventLogPath);
+    const eventLogInternals = eventLog as unknown as {
+      eventBuffer: unknown[];
+      nextSeq: number;
+    };
+
+    try {
+      eventLogInternals.eventBuffer = new Array(
+        MAX_EVENT_BUFFER_ENTRIES,
+      ) as unknown[];
+      eventLogInternals.nextSeq = MAX_EVENT_BUFFER_ENTRIES;
+
+      await expect(
+        eventLog.append('output', { data: 'overflow' }),
+      ).rejects.toThrow(
+        `event buffer exceeds ${String(MAX_EVENT_BUFFER_ENTRIES)} entries; session event log is too large`,
+      );
+
+      expect(eventLogInternals.eventBuffer).toHaveLength(
+        MAX_EVENT_BUFFER_ENTRIES,
+      );
+      expect(eventLogInternals.nextSeq).toBe(MAX_EVENT_BUFFER_ENTRIES);
+    } finally {
+      await eventLog.close();
+    }
   });
 
   it('rolls back buffered events when append disk writes fail', async () => {

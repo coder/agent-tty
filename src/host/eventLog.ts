@@ -84,6 +84,12 @@ type EventLogPayload =
 // Keep this in sync with the replay loader's event-log size limit.
 const MAX_EVENT_LOG_SIZE = 50 * 1024 * 1024;
 
+/**
+ * Maximum number of events retained in the in-memory buffer.
+ * At ~200 bytes per event object, 250k events ≈ 50MB — consistent with the file size limit.
+ */
+export const MAX_EVENT_BUFFER_ENTRIES = 250_000;
+
 function assertFilePath(filePath: string): void {
   invariant(filePath.length > 0, 'filePath must be a non-empty string');
 }
@@ -284,6 +290,13 @@ export class EventLog {
     invariant(
       parsedRecord.success,
       'event record must match EventRecordSchema',
+    );
+    if (this.eventBuffer.length >= MAX_EVENT_BUFFER_ENTRIES) {
+      this.nextSeq = seq;
+    }
+    invariant(
+      this.eventBuffer.length < MAX_EVENT_BUFFER_ENTRIES,
+      `event buffer exceeds ${String(MAX_EVENT_BUFFER_ENTRIES)} entries; session event log is too large`,
     );
     invariant(
       parsedRecord.data.seq === this.eventBuffer.length,

@@ -62,6 +62,7 @@ const ALLOWED_SIGNALS = [
 const DEFAULT_RENDER_PROFILE_NAME = 'reference-dark';
 const MAX_WAIT_FOR_RENDER_REGEX_LENGTH = 200;
 export const MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH = 50_000;
+export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
 const BRACED_QUANTIFIER_PATTERN = /^\{(?:\d+|\d+,\d*)\}/;
 
 type WaitOutcome = {
@@ -765,6 +766,7 @@ export async function runHost(sessionId: string): Promise<void> {
 
       const pollCondition = new Promise<WaitForRenderResult>((resolve) => {
         let pollInFlight = false;
+        let consecutiveFailures = 0;
 
         const checkInterval = setInterval(() => {
           if (pollInFlight) {
@@ -782,6 +784,7 @@ export async function runHost(sessionId: string): Promise<void> {
               const visibleText = await backend.getVisibleText();
               const capturedAtSeq = replayInput?.targetSeq ?? 0;
               latestCapturedAtSeq = capturedAtSeq;
+              consecutiveFailures = 0;
 
               const now = Date.now();
               if (
@@ -823,8 +826,19 @@ export async function runHost(sessionId: string): Promise<void> {
                   capturedAtSeq,
                 });
               }
-            } catch {
-              // Retry on the next poll; render state may still be catching up.
+            } catch (pollError) {
+              void pollError;
+              consecutiveFailures += 1;
+              if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+                clearInterval(checkInterval);
+                resolve({
+                  matched: false,
+                  timedOut: true,
+                  capturedAtSeq: latestCapturedAtSeq,
+                });
+                return;
+              }
+              // Transient — retry on next poll.
             } finally {
               pollInFlight = false;
             }

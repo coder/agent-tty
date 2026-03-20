@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   hasNestedQuantifiers,
+  MAX_CONSECUTIVE_POLL_FAILURES,
   MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH,
   safeRegexExec,
 } from '../../../src/host/hostMain.js';
@@ -22,6 +23,12 @@ describe('hasNestedQuantifiers', () => {
     expect(hasNestedQuantifiers('\\d{3}')).toBe(false);
     expect(hasNestedQuantifiers('[a-z]+')).toBe(false);
     expect(hasNestedQuantifiers('(a|b)+')).toBe(false);
+  });
+});
+
+describe('waitForRender polling limits', () => {
+  it('exports the consecutive renderer failure cap', () => {
+    expect(MAX_CONSECUTIVE_POLL_FAILURES).toBe(10);
   });
 });
 
