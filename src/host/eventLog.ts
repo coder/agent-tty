@@ -236,7 +236,8 @@ export class EventLog {
 
   async close(): Promise<void> {
     invariant(!this.isClosed, 'event log is already closed');
-
+    // Drain any in-flight append writes before closing the file.
+    await this.writeQueue;
     await this.fileHandle.sync();
     await this.fileHandle.close();
     this.isClosed = true;
