@@ -19,9 +19,10 @@ describe('GhosttyWebBackend unit guards', () => {
       backend as unknown as {
         writeBatchBridge: (page: object, dataChunks: string[]) => Promise<void>;
       }
-    ).writeBatchBridge = vi.fn(async (_page: object, dataChunks: string[]) => {
+    ).writeBatchBridge = vi.fn((_page: object, dataChunks: string[]) => {
       recordedBatchSizes.push(dataChunks.length);
       recordedChunks.push(...dataChunks);
+      return Promise.resolve();
     });
 
     const chunks = Array.from(

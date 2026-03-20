@@ -236,6 +236,36 @@ describe('RPC message schemas', () => {
     );
   });
 
+  it('accepts screenshot profiles at the maximum length', () => {
+    expect(
+      ScreenshotParamsSchema.safeParse({ profile: 'x'.repeat(100) }).success,
+    ).toBe(true);
+  });
+
+  it('rejects screenshot profiles beyond the maximum length', () => {
+    expect(
+      ScreenshotParamsSchema.safeParse({ profile: 'x'.repeat(101) }).success,
+    ).toBe(false);
+  });
+
+  it('accepts waitForRender text and regex at their maximum lengths', () => {
+    expect(
+      WaitForRenderParamsSchema.safeParse({ text: 'x'.repeat(1000) }).success,
+    ).toBe(true);
+    expect(
+      WaitForRenderParamsSchema.safeParse({ regex: 'x'.repeat(200) }).success,
+    ).toBe(true);
+  });
+
+  it('rejects waitForRender text and regex beyond their maximum lengths', () => {
+    expect(
+      WaitForRenderParamsSchema.safeParse({ text: 'x'.repeat(1001) }).success,
+    ).toBe(false);
+    expect(
+      WaitForRenderParamsSchema.safeParse({ regex: 'x'.repeat(201) }).success,
+    ).toBe(false);
+  });
+
   it('accepts waitForRender params for text, regex, and stable-screen waits', () => {
     expect(
       WaitForRenderParamsSchema.safeParse({ text: 'Ready', timeoutMs: 1000 })

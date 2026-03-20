@@ -61,7 +61,7 @@ const ALLOWED_SIGNALS = [
 
 const DEFAULT_RENDER_PROFILE_NAME = 'reference-dark';
 const MAX_WAIT_FOR_RENDER_REGEX_LENGTH = 200;
-const MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH = 50_000;
+export const MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH = 50_000;
 const BRACED_QUANTIFIER_PATTERN = /^\{(?:\d+|\d+,\d*)\}/;
 
 type WaitOutcome = {
@@ -179,7 +179,10 @@ export function hasNestedQuantifiers(pattern: string): boolean {
   return false;
 }
 
-function safeRegexExec(regex: RegExp, text: string): RegExpExecArray | null {
+export function safeRegexExec(
+  regex: RegExp,
+  text: string,
+): RegExpExecArray | null {
   const limitedText =
     text.length > MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH
       ? text.slice(0, MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH)

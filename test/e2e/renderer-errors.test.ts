@@ -38,6 +38,10 @@ function runCliErrorEnvelope(
   return envelope;
 }
 
+function repeatCharacter(length: number): string {
+  return 'x'.repeat(length);
+}
+
 describe('renderer error paths e2e', { timeout: 120_000 }, () => {
   let testHome = '';
   let createdSessionIds: string[] = [];
@@ -69,6 +73,24 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
     expect(envelope.error.message).toContain('unknown render profile');
   });
 
+  it('returns an error for screenshot profiles beyond the schema maximum length', () => {
+    const sessionId = createSession(testHome);
+    createdSessionIds.push(sessionId);
+    const oversizedProfile = repeatCharacter(101);
+
+    const envelope = runCliErrorEnvelope(
+      ['screenshot', sessionId, '--profile', oversizedProfile],
+      { AGENT_TERMINAL_HOME: testHome },
+    );
+
+    expect(envelope.command).toBe('screenshot');
+    expect(envelope.error.code).toBe(ERROR_CODES.INVALID_INPUT);
+    expect(envelope.error.message).toContain('non-empty string');
+    expect(envelope.error.details).toMatchObject({
+      profile: oversizedProfile,
+    });
+  });
+
   it('returns an error for snapshot requests after the session has exited', () => {
     const sessionId = createSession(testHome, [
       '/bin/sh',
@@ -96,6 +118,53 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
       sessionId,
       status: 'exited',
     });
+  });
+
+  it('returns an error for wait text beyond the schema maximum length', () => {
+    const sessionId = createSession(testHome);
+    createdSessionIds.push(sessionId);
+
+    const envelope = runCliErrorEnvelope(
+      ['wait', sessionId, '--text', repeatCharacter(1001)],
+      { AGENT_TERMINAL_HOME: testHome },
+      15_000,
+    );
+
+    expect(envelope.command).toBe('wait');
+    expect(envelope.error.code).toBe(ERROR_CODES.RPC_ERROR);
+    expect(envelope.error.message).toContain('1000');
+    expect(envelope.error.message).toContain('text');
+  });
+
+  it('returns an error for wait regex beyond the schema maximum length', () => {
+    const sessionId = createSession(testHome);
+    createdSessionIds.push(sessionId);
+
+    const envelope = runCliErrorEnvelope(
+      ['wait', sessionId, '--regex', repeatCharacter(201)],
+      { AGENT_TERMINAL_HOME: testHome },
+      15_000,
+    );
+
+    expect(envelope.command).toBe('wait');
+    expect(envelope.error.code).toBe(ERROR_CODES.RPC_ERROR);
+    expect(envelope.error.message).toContain('200');
+    expect(envelope.error.message).toContain('regex');
+  });
+
+  it('returns an error for wait regex patterns with nested quantifiers', () => {
+    const sessionId = createSession(testHome);
+    createdSessionIds.push(sessionId);
+
+    const envelope = runCliErrorEnvelope(
+      ['wait', sessionId, '--regex', '(a+)+'],
+      { AGENT_TERMINAL_HOME: testHome },
+      15_000,
+    );
+
+    expect(envelope.command).toBe('wait');
+    expect(envelope.error.code).toBe(ERROR_CODES.INVALID_INPUT);
+    expect(envelope.error.message).toContain('nested quantifiers');
   });
 
   it('returns an error for malformed wait regex patterns', () => {
