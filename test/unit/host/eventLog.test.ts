@@ -42,10 +42,11 @@ describe('EventLog', () => {
     }
   });
 
-  it('readAll rejects gaps in stored sequence numbers', async () => {
+  it('returns buffered events without rereading the log file', async () => {
     const eventLog = await EventLog.open(eventLogPath);
 
     try {
+      await eventLog.append('output', { data: 'hello' });
       await writeFile(
         eventLogPath,
         [
@@ -53,24 +54,94 @@ describe('EventLog', () => {
             seq: 0,
             ts: '2026-03-19T12:00:00.000Z',
             type: 'output',
-            payload: { data: 'hello' },
+            payload: { data: 'disk-only' },
           }),
           JSON.stringify({
             seq: 2,
             ts: '2026-03-19T12:00:01.000Z',
             type: 'output',
-            payload: { data: 'world' },
+            payload: { data: 'gap' },
           }),
           '',
         ].join('\n'),
         'utf8',
       );
 
-      await expect(eventLog.readAll()).rejects.toThrow(
-        'event log seq values must increase by 1 without gaps',
-      );
+      expect(eventLog.getEvents().map((event) => event.payload)).toEqual([
+        { data: 'hello' },
+      ]);
+      expect(eventLog.getEventsSince(-1).map((event) => event.seq)).toEqual([0]);
+      expect(eventLog.getEventsSince(0)).toEqual([]);
+      await expect(eventLog.readAll()).resolves.toEqual(eventLog.getEvents());
     } finally {
       await eventLog.close();
     }
+  });
+
+  it('hydrates the in-memory buffer from an existing log on open', async () => {
+    await writeFile(
+      eventLogPath,
+      [
+        JSON.stringify({
+          seq: 0,
+          ts: '2026-03-19T12:00:00.000Z',
+          type: 'output',
+          payload: { data: 'hello' },
+        }),
+        JSON.stringify({
+          seq: 1,
+          ts: '2026-03-19T12:00:01.000Z',
+          type: 'resize',
+          payload: { cols: 100, rows: 30 },
+        }),
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const eventLog = await EventLog.open(eventLogPath);
+
+    try {
+      expect(eventLog.getEvents().map((event) => event.seq)).toEqual([0, 1]);
+      expect(eventLog.getEventsSince(0).map((event) => event.type)).toEqual([
+        'resize',
+      ]);
+
+      await eventLog.append('signal', { signal: 'SIGTERM' });
+
+      expect((await eventLog.readAll()).map((event) => event.seq)).toEqual([
+        0,
+        1,
+        2,
+      ]);
+    } finally {
+      await eventLog.close();
+    }
+  });
+
+  it('rejects gaps in stored sequence numbers when opening the log', async () => {
+    await writeFile(
+      eventLogPath,
+      [
+        JSON.stringify({
+          seq: 0,
+          ts: '2026-03-19T12:00:00.000Z',
+          type: 'output',
+          payload: { data: 'hello' },
+        }),
+        JSON.stringify({
+          seq: 2,
+          ts: '2026-03-19T12:00:01.000Z',
+          type: 'output',
+          payload: { data: 'world' },
+        }),
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    await expect(EventLog.open(eventLogPath)).rejects.toThrow(
+      'event log seq values must increase by 1 without gaps',
+    );
   });
 });

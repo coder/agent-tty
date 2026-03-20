@@ -178,9 +178,7 @@ function parseEventLogContent(content: string): EventRecord[] {
   return records;
 }
 
-function deriveNextSeq(content: string): number {
-  const records = parseEventLogContent(content);
-
+function deriveNextSeq(records: readonly EventRecord[]): number {
   if (records.length === 0) {
     return 0;
   }
@@ -195,15 +193,23 @@ function deriveNextSeq(content: string): number {
 export class EventLog {
   private writeQueue: Promise<void> = Promise.resolve();
 
+  private eventBuffer: EventRecord[] = [];
+
   private constructor(
-    private readonly filePath: string,
+    filePath: string,
     private readonly fileHandle: FileHandle,
     private nextSeq: number,
+    eventBuffer: EventRecord[] = [],
     private isClosed = false,
   ) {
     invariant(filePath.length > 0, 'filePath must be a non-empty string');
     invariant(Number.isInteger(nextSeq), 'nextSeq must be an integer');
     invariant(nextSeq >= 0, 'nextSeq must be non-negative');
+    invariant(
+      nextSeq === eventBuffer.length,
+      'nextSeq must match buffered event count',
+    );
+    this.eventBuffer = eventBuffer;
   }
 
   static async open(filePath: string): Promise<EventLog> {
@@ -212,14 +218,16 @@ export class EventLog {
     const fileHandle = await open(filePath, 'a');
     const fileStats = await fileHandle.stat();
 
+    let eventBuffer: EventRecord[] = [];
     let nextSeq = 0;
     if (fileStats.size > 0) {
       const existingContent = await readFile(filePath, 'utf8');
-      nextSeq = deriveNextSeq(existingContent);
+      eventBuffer = parseEventLogContent(existingContent);
+      nextSeq = deriveNextSeq(eventBuffer);
       invariant(nextSeq >= 0, 'derived next seq must be non-negative');
     }
 
-    return new EventLog(filePath, fileHandle, nextSeq);
+    return new EventLog(filePath, fileHandle, nextSeq, eventBuffer);
   }
 
   async append(type: 'output', payload: OutputEventPayload): Promise<void>;
@@ -270,6 +278,11 @@ export class EventLog {
       parsedRecord.success,
       'event record must match EventRecordSchema',
     );
+    invariant(
+      parsedRecord.data.seq === this.eventBuffer.length,
+      'event record seq must match the buffered event count',
+    );
+    this.eventBuffer.push(parsedRecord.data);
 
     const line = `${JSON.stringify(parsedRecord.data)}\n`;
     this.writeQueue = this.writeQueue.then(() =>
@@ -278,10 +291,24 @@ export class EventLog {
     await this.writeQueue;
   }
 
+  getEvents(): readonly EventRecord[] {
+    return this.eventBuffer;
+  }
+
+  getEventsSince(afterSeq: number): EventRecord[] {
+    invariant(Number.isInteger(afterSeq), 'afterSeq must be an integer');
+    invariant(afterSeq >= -1, 'afterSeq must be greater than or equal to -1');
+
+    if (afterSeq >= this.eventBuffer.length) {
+      return [];
+    }
+
+    return this.eventBuffer.slice(afterSeq + 1);
+  }
+
   async readAll(): Promise<EventRecord[]> {
     await this.writeQueue;
-    const content = await readFile(this.filePath, 'utf8');
-    return parseEventLogContent(content);
+    return this.eventBuffer.slice();
   }
 
   async close(): Promise<void> {
