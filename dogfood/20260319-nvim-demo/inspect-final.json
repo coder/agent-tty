@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-19T18:26:09.136Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KM3NDZK4TXG5C3SQJ811ZGVJ",
+      "createdAt": "2026-03-19T18:23:54.983Z",
+      "updatedAt": "2026-03-19T18:25:58.079Z",
+      "status": "exited",
+      "command": ["nvim", "."],
+      "cwd": "/home/coder/.mux/src/agent-terminal/planning-ws01",
+      "cols": 100,
+      "rows": 30,
+      "hostPid": 347474,
+      "childPid": 347584,
+      "exitCode": 0,
+      "exitSignal": null
+    }
+  }
+}

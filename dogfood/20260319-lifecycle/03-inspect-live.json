@@ -1,0 +1,27 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-19T18:02:15.861Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KM3M69V23RWMMDMS1EK3ZXB4",
+      "createdAt": "2026-03-19T18:02:14.759Z",
+      "updatedAt": "2026-03-19T18:02:15.078Z",
+      "status": "running",
+      "command": [
+        "node",
+        "--import",
+        "tsx",
+        "../../test/fixtures/apps/hello-prompt/main.ts"
+      ],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_d1aeb26ed6/dogfood/20260319-lifecycle",
+      "cols": 80,
+      "rows": 24,
+      "hostPid": 278189,
+      "childPid": 278201,
+      "exitCode": null,
+      "exitSignal": null
+    }
+  }
+}
