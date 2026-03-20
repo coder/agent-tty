@@ -58,32 +58,51 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     expect(backend.isBooted).toBe(false);
   });
 
-  it('replays output events and snapshots visible text', async () => {
+  it('replays consecutive output events and flushes batches before target breaks', async () => {
     await backend.boot();
 
     const replayState = await backend.replayTo(
-      createReplayInput([
-        {
-          seq: 0,
-          ts: timestampFor(0),
-          type: 'output',
-          payload: { data: 'hello from replay\r\n' },
-        },
-      ]),
+      createReplayInput(
+        [
+          {
+            seq: 0,
+            ts: timestampFor(0),
+            type: 'output',
+            payload: { data: 'hello ' },
+          },
+          {
+            seq: 1,
+            ts: timestampFor(1),
+            type: 'output',
+            payload: { data: 'from ' },
+          },
+          {
+            seq: 2,
+            ts: timestampFor(2),
+            type: 'output',
+            payload: { data: 'replay\r\n' },
+          },
+          {
+            seq: 3,
+            ts: timestampFor(3),
+            type: 'output',
+            payload: { data: 'should not be applied\r\n' },
+          },
+        ],
+        { targetSeq: 2 },
+      ),
     );
 
     const snapshot = await backend.snapshot();
+    const visibleText = snapshot.visibleLines.map((line) => line.text).join('\n');
 
-    expect(replayState.lastSeq).toBe(0);
-    expect(snapshot.capturedAtSeq).toBe(0);
-    expect(
-      snapshot.visibleLines.some((line) =>
-        line.text.includes('hello from replay'),
-      ),
-    ).toBe(true);
+    expect(replayState.lastSeq).toBe(2);
+    expect(snapshot.capturedAtSeq).toBe(2);
+    expect(visibleText).toContain('hello from replay');
+    expect(visibleText).not.toContain('should not be applied');
   });
 
-  it('applies resize events during replay', async () => {
+  it('flushes output batches before resize events and preserves dimensions', async () => {
     await backend.boot();
 
     const replayState = await backend.replayTo(
@@ -100,16 +119,25 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
           type: 'resize',
           payload: { cols: 40, rows: 12 },
         },
+        {
+          seq: 2,
+          ts: timestampFor(2),
+          type: 'output',
+          payload: { data: 'after resize\r\n' },
+        },
       ]),
     );
 
     const snapshot = await backend.snapshot();
+    const visibleText = snapshot.visibleLines.map((line) => line.text).join('\n');
 
-    expect(replayState.lastSeq).toBe(1);
+    expect(replayState.lastSeq).toBe(2);
     expect(replayState.cols).toBe(40);
     expect(replayState.rows).toBe(12);
     expect(snapshot.cols).toBe(40);
     expect(snapshot.rows).toBe(12);
+    expect(visibleText).toContain('before resize');
+    expect(visibleText).toContain('after resize');
   });
 
   it('ignores non-rendering replay event types without failing', async () => {

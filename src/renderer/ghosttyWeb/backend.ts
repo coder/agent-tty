@@ -743,6 +743,16 @@ export class GhosttyWebBackend implements RendererBackend {
 
     let previousEventSeq = -1;
     let highestProcessedSeq = this.lastAppliedSeq;
+    let pendingOutputChunks: string[] = [];
+
+    const flushOutputBatch = async (): Promise<void> => {
+      if (pendingOutputChunks.length === 0) {
+        return;
+      }
+
+      await this.writeBatchBridge(page, pendingOutputChunks);
+      pendingOutputChunks = [];
+    };
 
     for (const event of input.events) {
       assertNonNegativeInteger(
@@ -760,15 +770,17 @@ export class GhosttyWebBackend implements RendererBackend {
       }
 
       if (event.seq > input.targetSeq) {
+        await flushOutputBatch();
         break;
       }
 
       switch (event.type) {
         case 'output': {
-          await this.writeBridge(page, event.payload.data);
+          pendingOutputChunks.push(event.payload.data);
           break;
         }
         case 'resize': {
+          await flushOutputBatch();
           assertPositiveInteger(
             event.payload.cols,
             'resize event cols must be a positive integer',
@@ -787,6 +799,7 @@ export class GhosttyWebBackend implements RendererBackend {
         case 'input_keys':
         case 'signal':
         case 'exit': {
+          await flushOutputBatch();
           break;
         }
         default: {
@@ -796,6 +809,8 @@ export class GhosttyWebBackend implements RendererBackend {
 
       highestProcessedSeq = event.seq;
     }
+
+    await flushOutputBatch();
 
     if (highestProcessedSeq < 0) {
       highestProcessedSeq = input.targetSeq;
@@ -1271,6 +1286,30 @@ export class GhosttyWebBackend implements RendererBackend {
     }
 
     response.end(asset.body);
+  }
+
+  private async writeBatchBridge(
+    page: Page,
+    dataChunks: string[],
+  ): Promise<void> {
+    invariant(
+      dataChunks.length > 0,
+      'writeBatchBridge requires at least one data chunk',
+    );
+    for (const chunk of dataChunks) {
+      assertString(chunk, 'bridge batch write chunk must be a string');
+    }
+
+    await page.evaluate(async (chunks: string[]) => {
+      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
+      if (bridge === undefined || typeof bridge.write !== 'function') {
+        throw new Error('ghostty-web bridge write() is unavailable');
+      }
+
+      for (const chunk of chunks) {
+        await bridge.write(chunk);
+      }
+    }, dataChunks);
   }
 
   private async writeBridge(page: Page, data: string): Promise<void> {
