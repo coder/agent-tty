@@ -73,7 +73,12 @@ export async function readOutput(
 }
 
 export function fixtureCommand(
-  appName: 'hello-prompt' | 'resize-demo',
+  appName:
+    | 'hello-prompt'
+    | 'resize-demo'
+    | 'color-grid'
+    | 'alt-screen-demo'
+    | 'crash-demo',
 ): string[] {
   return ['node', '--import', 'tsx', `test/fixtures/apps/${appName}/main.ts`];
 }
