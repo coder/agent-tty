@@ -10,6 +10,7 @@ import { runDoctorCommand } from './commands/doctor.js';
 import { runInspectCommand } from './commands/inspect.js';
 import { runListCommand } from './commands/list.js';
 import { runPasteCommand } from './commands/paste.js';
+import { runRecordExportCommand } from './commands/record-export.js';
 import { runResizeCommand } from './commands/resize.js';
 import { runScreenshotCommand } from './commands/screenshot.js';
 import { runSendKeysCommand } from './commands/send-keys.js';
@@ -308,6 +309,37 @@ async function main(): Promise<void> {
             json: options.json,
             sessionId,
             profile: options.profile,
+          });
+        },
+      ),
+    );
+
+  const recordCommand = program
+    .command('record')
+    .description('Manage recorded session artifacts');
+
+  recordCommand
+    .command('export <session-id>')
+    .description('Export a recorded session artifact')
+    .requiredOption('--format <format>', "Export format: 'asciicast' or 'webm'")
+    .option('--out <path>', 'Explicit output path')
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'record export',
+        async (
+          sessionId: string,
+          options: {
+            format: string;
+            out?: string;
+            json: boolean;
+          },
+        ) => {
+          await runRecordExportCommand({
+            json: options.json,
+            sessionId,
+            format: options.format,
+            ...(options.out !== undefined ? { out: options.out } : {}),
           });
         },
       ),

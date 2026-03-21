@@ -289,12 +289,12 @@ export const WaitForRenderResultSchema = z
 export const RecordExportResultSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
-    format: NonEmptyStringSchema,
+    format: z.enum(['asciicast', 'webm']),
     artifactPath: NonEmptyStringSchema,
-    bytes: z.number().int().nonnegative(),
+    bytes: PositiveIntSchema,
     sha256: NonEmptyStringSchema,
     capturedAtSeq: NonNegativeIntSchema,
-    durationMs: z.number().int().nonnegative().optional(),
+    durationMs: NonNegativeIntSchema.optional(),
     metadata: z.record(z.string(), z.unknown()),
   })
   .strict();

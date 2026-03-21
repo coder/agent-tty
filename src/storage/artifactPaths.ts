@@ -80,7 +80,8 @@ export function snapshotFilename(
 export function recordingFilename(seq: number, format: string): string {
   assertNonNegativeInteger(seq, 'seq');
   const sanitizedFormat = sanitizeFilenameComponent(format, 'format');
-  return `recording-${String(seq)}-${sanitizedFormat}.json`;
+  const extension = sanitizedFormat === 'asciicast' ? 'cast' : 'json';
+  return `recording-${String(seq)}-${sanitizedFormat}.${extension}`;
 }
 
 export function videoFilename(seq: number, profileName: string): string {

@@ -65,12 +65,12 @@ describe('artifact paths', () => {
     const sessionDir = await createSessionDir();
     const screenshot = screenshotFilename(7, 'reference dark / baseline');
     const snapshot = snapshotFilename(7, 'structured');
-    const recording = recordingFilename(7, 'asciicast / v2');
+    const recording = recordingFilename(7, 'asciicast');
     const video = videoFilename(7, 'reference dark / baseline');
 
     expect(screenshot).toBe('screenshot-7-reference-dark-baseline.png');
     expect(snapshot).toBe('snapshot-7-structured.json');
-    expect(recording).toBe('recording-7-asciicast-v2.json');
+    expect(recording).toBe('recording-7-asciicast.cast');
     expect(video).toBe('video-7-reference-dark-baseline.mp4');
     expect(artifactPath(sessionDir, screenshot)).toBe(
       join(sessionDir, 'artifacts', screenshot),
@@ -110,7 +110,7 @@ describe('artifact entry schema', () => {
       ArtifactEntrySchema.safeParse(
         createArtifactEntry({
           kind: 'recording',
-          filename: 'recording-4-asciicast-v2.json',
+          filename: 'recording-4-asciicast.cast',
         }),
       ).success,
     ).toBe(true);

@@ -308,8 +308,8 @@ describe('RPC message schemas', () => {
     expect(
       RecordExportResultSchema.safeParse({
         sessionId: 'session-01',
-        format: 'asciicast-v2',
-        artifactPath: '/tmp/session-01/artifacts/recording-7-asciicast-v2.json',
+        format: 'asciicast',
+        artifactPath: '/tmp/session-01/artifacts/recording-7-asciicast.cast',
         bytes: 4096,
         sha256: 'abc123',
         capturedAtSeq: 7,
@@ -320,15 +320,27 @@ describe('RPC message schemas', () => {
         },
       }).success,
     ).toBe(true);
+    expect(
+      RecordExportResultSchema.safeParse({
+        sessionId: 'session-01',
+        format: 'webm',
+        artifactPath: '/tmp/session-01/artifacts/recording-7-webm.json',
+        bytes: 4096,
+        sha256: 'abc123',
+        capturedAtSeq: 7,
+        metadata: {},
+      }).success,
+    ).toBe(true);
   });
 
   it('rejects invalid record export results', () => {
     expect(
       RecordExportResultSchema.safeParse({
         sessionId: 'session-01',
-        format: 'asciicast-v2',
-        artifactPath: '/tmp/session-01/artifacts/recording-7-asciicast-v2.json',
-        bytes: 4096,
+        format: 'asciicast',
+        artifactPath: '/tmp/session-01/artifacts/recording-7-asciicast.cast',
+        bytes: 0,
+        sha256: 'abc123',
         capturedAtSeq: 7,
         metadata: {},
       }).success,
@@ -337,7 +349,18 @@ describe('RPC message schemas', () => {
       RecordExportResultSchema.safeParse({
         sessionId: 'session-01',
         format: 'asciicast-v2',
-        artifactPath: '/tmp/session-01/artifacts/recording-7-asciicast-v2.json',
+        artifactPath: '/tmp/session-01/artifacts/recording-7-asciicast.cast',
+        bytes: 4096,
+        sha256: 'abc123',
+        capturedAtSeq: 7,
+        metadata: {},
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordExportResultSchema.safeParse({
+        sessionId: 'session-01',
+        format: 'asciicast',
+        artifactPath: '/tmp/session-01/artifacts/recording-7-asciicast.cast',
         bytes: 4096,
         sha256: 'abc123',
         capturedAtSeq: 7,
