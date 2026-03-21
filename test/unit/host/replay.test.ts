@@ -140,6 +140,18 @@ describe('replay helpers', () => {
     );
   });
 
+  it('readEventLogRecords rejects malformed JSONL lines', async () => {
+    await writeFile(
+      eventLogPath,
+      `${JSON.stringify(createEvents()[0])}\n{"seq":1`,
+      'utf8',
+    );
+
+    await expect(readEventLogRecords(eventLogPath)).rejects.toThrow(
+      'event log line 2 must be valid JSON',
+    );
+  });
+
   it('readEventLogRecords parses and validates JSONL event logs', async () => {
     await writeFile(
       eventLogPath,

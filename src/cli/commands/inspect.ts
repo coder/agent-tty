@@ -1,3 +1,7 @@
+import {
+  InspectResultSchema,
+  type InspectResult,
+} from '../../protocol/messages.js';
 import type { SessionRecord } from '../../protocol/schemas.js';
 
 import { CliError } from '../errors.js';
@@ -12,10 +16,6 @@ import {
   sessionDir,
   socketPath,
 } from '../../storage/sessionPaths.js';
-
-export interface InspectResult {
-  session: SessionRecord;
-}
 
 interface CommandOptions {
   json: boolean;
@@ -58,10 +58,18 @@ export async function runInspectCommand(
 
   if (session.status !== 'exited') {
     try {
-      const liveResult = (await sendRpc(
+      const rawResult: unknown = await sendRpc(
         socketPath(sessionDirectory),
         'inspect',
-      )) as InspectResult;
+      );
+      const parsedResult = InspectResultSchema.safeParse(rawResult);
+      if (!parsedResult.success) {
+        throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
+          message: 'Unexpected response from host',
+          details: { issues: parsedResult.error.issues },
+        });
+      }
+      const liveResult: InspectResult = parsedResult.data;
       session = liveResult.session;
     } catch (error) {
       if (

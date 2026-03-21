@@ -306,6 +306,22 @@ describe('wait command', () => {
     );
   });
 
+  it('surfaces RPC timeout errors for render waits', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_TIMEOUT, {
+        message: 'Session host timed out.',
+      }),
+    );
+
+    await expect(
+      runWaitCommand(createOptions({ text: 'hello', timeout: 1 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.HOST_TIMEOUT,
+      message: 'Session host timed out.',
+    });
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
   it('rejects malformed legacy wait RPC responses', async () => {
     mocks.sendRpc.mockResolvedValue({
       timedOut: false,
