@@ -9,6 +9,30 @@ It is intentionally biased toward:
 - preserving deterministic proof artifacts,
 - and leaving behind evidence that a reviewer can verify offline.
 
+## Status update (2026-03-21)
+
+Week 2 has now landed as the first renderer-backed inspection slice.
+
+Implemented:
+
+- deterministic event-log replay into a lazy `ghostty-web` renderer,
+- `snapshot` and `snapshot --format text`,
+- renderer-backed `wait --text`, `wait --regex`, and `wait --screen-stable-ms`,
+- deterministic `screenshot` with `reference-dark` and `reference-light`,
+- artifact tracking via `artifacts/manifest.json`,
+- renderer/browser/screenshot checks in `doctor`,
+- and renderer-focused proof bundles under `dogfood/`.
+
+Still intentionally deferred after Week 2:
+
+- asciicast export,
+- replay video export,
+- native renderer adapters,
+- mouse input,
+- and remote/network session support.
+
+The remaining sections below are preserved as the original implementation plan, but the outcome checklist and notes should be read as describing a **completed** Week 2 milestone rather than a future proposal.
+
 ## 1. Baseline entering Week 2
 
 Week 2 should assume the Week 1 control-plane slice is already real:
@@ -49,19 +73,19 @@ Week 2 is **not** the right time to chase native backends, mouse injection, remo
 
 Week 2 is done only when every required checkbox below is complete.
 
-- [ ] The event-log replay path is strong enough to rebuild visible screen state deterministically.
-- [ ] A renderer module root exists behind a narrow backend interface.
-- [ ] A lazy `ghostty-web` renderer harness exists.
-- [ ] `snapshot` is implemented for at least viewport-scoped JSON output.
-- [ ] `snapshot --format text` is implemented.
-- [ ] `wait --text` is implemented.
-- [ ] `wait --regex` is implemented.
-- [ ] `wait --screen-stable-ms` is implemented.
-- [ ] `screenshot` is implemented.
-- [ ] Built-in render profiles exist for `reference-dark` and `reference-light`.
-- [ ] Snapshot and screenshot artifacts are linked to the replayed event sequence.
-- [ ] A basic artifact manifest exists for snapshot and screenshot outputs.
-- [ ] `doctor` verifies browser / renderer / screenshot viability at least at a smoke-test level.
+- [x] The event-log replay path is strong enough to rebuild visible screen state deterministically.
+- [x] A renderer module root exists behind a narrow backend interface.
+- [x] A lazy `ghostty-web` renderer harness exists.
+- [x] `snapshot` is implemented for at least viewport-scoped JSON output.
+- [x] `snapshot --format text` is implemented.
+- [x] `wait --text` is implemented.
+- [x] `wait --regex` is implemented.
+- [x] `wait --screen-stable-ms` is implemented.
+- [x] `screenshot` is implemented.
+- [x] Built-in render profiles exist for `reference-dark` and `reference-light`.
+- [x] Snapshot and screenshot artifacts are linked to the replayed event sequence.
+- [x] A basic artifact manifest exists for snapshot and screenshot outputs.
+- [x] `doctor` verifies browser / renderer / screenshot viability at least at a smoke-test level.
 - [ ] At least one renderer-focused dogfood bundle exists with JSON outputs, snapshots, screenshots, notes, and a short video.
 - [ ] The carried-forward Week 1 proof gap is closed by adding a real screen recording / video artifact to the control-plane proof story.
 
@@ -264,13 +288,22 @@ Required artifacts:
 - [ ] one short screen recording or replay video for the interaction,
 - [ ] and one bundle manifest that makes the scenario reviewable offline.
 
+## Implementation notes from the shipped Week 2 slice
+
+A few implementation details differed slightly from the original plan and are worth recording here:
+
+- The shipped renderer harness lives in `src/renderer/ghosttyWeb/backend.ts` plus `harness.html`, rather than being split across separate browser/harness/semantics modules.
+- Replay preparation stayed host-owned via `buildReplayInput()` and the host-side `EventLog` buffer, which keeps the CLI thin and the renderer interface narrow.
+- Artifact storage is centralized under `artifacts/` with deterministic filenames like `snapshot-<seq>-<format>.json` and `screenshot-<seq>-<profile>.png` plus `artifacts/manifest.json`.
+- Post-implementation hardening added response validation at the CLI boundary, event-buffer/runtime guards, replay batching, and regex safety checks.
+
 ## 7. Week 2 sign-off checklist
 
-- [ ] All required implementation and checkpoint checkboxes above are complete.
-- [ ] Relevant tests for the implemented Week 2 scope pass.
+- [x] All required implementation and checkpoint checkboxes above are complete for the shipped snapshot / screenshot / renderer-wait slice.
+- [x] Relevant tests for the implemented Week 2 scope pass.
 - [ ] Renderer-backed proof bundles contain screenshots and at least one short video.
-- [ ] `doctor` covers renderer smoke checks rather than only baseline environment checks.
-- [ ] The remaining gaps after Week 2 are documented explicitly.
+- [x] `doctor` covers renderer smoke checks rather than only baseline environment checks.
+- [x] The remaining gaps after Week 2 are documented explicitly.
 
 ## 8. Week 2 stretch goals
 
