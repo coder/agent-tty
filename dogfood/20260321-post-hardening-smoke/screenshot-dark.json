@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "command": "screenshot",
+  "timestamp": "2026-03-21T14:50:49.454Z",
+  "result": {
+    "sessionId": "01KM8E12G4CCE32NE70RFTS6VY",
+    "capturedAtSeq": 4,
+    "profileName": "reference-dark",
+    "cols": 80,
+    "rows": 24,
+    "artifactPath": "/tmp/agent-terminal-dogfood-prvAiK/sessions/01KM8E12G4CCE32NE70RFTS6VY/artifacts/screenshot-4-reference-dark.png",
+    "pngSizeBytes": 6517
+  }
+}

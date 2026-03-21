@@ -19,6 +19,19 @@ It is designed to let an agent:
 
 This design intentionally describes a **general product**, not a Mux-specific implementation. A future Mux integration should consume `agent-terminal` as an external CLI/runtime rather than baking Mux-specific assumptions into the design.
 
+## Current shipped status (2026-03-21)
+
+The repository now ships the first renderer-backed vertical slice of this design:
+
+- long-lived session hosts,
+- PTY control and append-only event logs,
+- renderer-backed `snapshot` and `wait`,
+- deterministic `screenshot`,
+- artifact manifests,
+- and proof bundles under `dogfood/`.
+
+Replay export artifacts such as asciicast and video remain part of the design direction, but they are still future work rather than shipped functionality.
+
 ## Executive summary
 
 The recommended v1 shape is:
@@ -165,10 +178,10 @@ V1 is successful when an AI agent can:
 4. wait until the screen reaches a target state,
 5. fetch a semantic snapshot of the screen,
 6. capture a PNG screenshot,
-7. export an asciicast,
-8. export a replay video,
-9. destroy the session,
-10. and leave behind an artifact bundle that a human reviewer can inspect.
+7. destroy the session,
+8. and leave behind an artifact bundle that a human reviewer can inspect.
+
+Asciicast and replay-video export remain intended follow-on capabilities rather than current success criteria for the shipped slice.
 
 ## Deliverables in this design set
 
