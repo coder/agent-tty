@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "command": "screenshot",
+  "timestamp": "2026-03-20T17:08:24.736Z",
+  "result": {
+    "sessionId": "01KM63G9DJ4DZD5RCXFJG547XG",
+    "capturedAtSeq": 4,
+    "profileName": "reference-light",
+    "cols": 80,
+    "rows": 24,
+    "artifactPath": "/tmp/tmp.7gryzxE6RZ/sessions/01KM63G9DJ4DZD5RCXFJG547XG/artifacts/screenshot-4-reference-light.png",
+    "pngSizeBytes": 5689
+  }
+}

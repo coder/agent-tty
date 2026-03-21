@@ -9,6 +9,23 @@ It is intentionally biased toward:
 - proof-heavy validation,
 - and getting to a usable dogfood loop early.
 
+## Status update (2026-03-21)
+
+Week 1 is complete and has been superseded by a shipped Week 2 renderer-backed slice.
+
+What shipped from the Week 1 plan:
+
+- real session creation, inspection, listing, and teardown,
+- a background host process per session,
+- PTY spawn and output capture,
+- input, paste, key, resize, and signal control,
+- append-only event logging,
+- `wait --exit` and `wait --idle-ms`,
+- deterministic fixture coverage,
+- and terminal-only proof bundles.
+
+Week 2 then added renderer-backed snapshots, waits, screenshots, artifact manifests, and browser smoke checks. The Week 1 plan below is preserved as the original execution record, but its outcome and sign-off checklists should now be read as **completed history** rather than future work.
+
 ## 1. Current baseline in this repository
 
 As of this draft, the repository already contains a narrow Phase 0 scaffold:
@@ -213,15 +230,15 @@ A coding agent working from this section should treat every unchecked item below
 
 ### Week 1 outcome checklist
 
-- [ ] Real session creation and teardown exist.
-- [ ] A background host process exists and is used for sessions.
-- [ ] PTY spawn and output capture work.
-- [ ] `create`, `list`, `inspect`, and `destroy` are implemented.
-- [ ] `type`, `paste`, `send-keys`, `resize`, and `signal` are implemented.
-- [ ] Append-only event logging exists.
-- [ ] `wait --exit` and `wait --idle-ms` are implemented.
-- [ ] One or two deterministic fixture apps exist.
-- [ ] A terminal-only proof bundle shows that the control plane works.
+- [x] Real session creation and teardown exist.
+- [x] A background host process exists and is used for sessions.
+- [x] PTY spawn and output capture work.
+- [x] `create`, `list`, `inspect`, and `destroy` are implemented.
+- [x] `type`, `paste`, `send-keys`, `resize`, and `signal` are implemented.
+- [x] Append-only event logging exists.
+- [x] `wait --exit` and `wait --idle-ms` are implemented.
+- [x] One or two deterministic fixture apps exist.
+- [x] A terminal-only proof bundle shows that the control plane works.
 
 Renderer work is a stretch goal for week 1, not the baseline commitment.
 
@@ -301,10 +318,10 @@ Renderer work is a stretch goal for week 1, not the baseline commitment.
 
 ### Week 1 sign-off checklist
 
-- [ ] All required implementation and checkpoint checkboxes above are complete.
-- [ ] Relevant tests for the implemented week 1 scope pass.
+- [x] All required implementation and checkpoint checkboxes above are complete.
+- [x] Relevant tests for the implemented week 1 scope pass.
 - [ ] The dogfood bundle contains screenshots and a screen recording.
-- [ ] Remaining gaps are documented explicitly rather than implied.
+- [x] Remaining gaps are documented explicitly rather than implied.
 
 ### Week 1 stretch goals
 

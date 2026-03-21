@@ -6,6 +6,26 @@ It is intentionally prescriptive.
 
 A follow-up AI coding agent should treat this file as the minimum review protocol, not optional guidance.
 
+## Current shipped state (2026-03-21)
+
+This document still describes the *target* dogfooding protocol, but the current shipped product only supports a subset of the artifact expectations below.
+
+Shipped today:
+
+- JSON command outputs,
+- semantic snapshots,
+- PNG screenshots,
+- artifact manifests,
+- and notes / proof bundles under `dogfood/`.
+
+Not yet shipped:
+
+- `.cast` export,
+- replay video export,
+- and some of the richer fixture scenarios listed below.
+
+Read the remainder of this file as the broader validation target, not a claim that every artifact class is already implemented.
+
 ## 1. Dogfooding goals
 
 Dogfooding must prove that an agent can:

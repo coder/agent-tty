@@ -1,6 +1,11 @@
+import { rename, rm } from 'node:fs/promises';
 import process from 'node:process';
 
+import { ulid } from 'ulid';
+
 import { EventLog } from './eventLog.js';
+import { buildReplayInput } from './replay.js';
+import { HostRendererManager } from './renderer.js';
 import { RpcServer, type MethodHandler } from './rpcServer.js';
 import { SessionState } from './sessionState.js';
 import { createPty } from '../pty/createPty.js';
@@ -10,13 +15,33 @@ import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import type {
   PasteParams,
   ResizeParams,
+  ScreenshotParams,
   SendKeysParams,
   SignalParams,
+  SnapshotParams,
   TypeParams,
+  WaitForRenderParams,
+  WaitForRenderResult,
   WaitParams,
 } from '../protocol/messages.js';
-import { readManifest, writeManifest } from '../storage/manifests.js';
+import { GhosttyWebBackend } from '../renderer/ghosttyWeb/index.js';
+import { resolveProfile } from '../renderer/profiles.js';
+import {
+  appendArtifact,
+  createArtifactEntry,
+} from '../storage/artifactManifest.js';
+import {
+  artifactPath,
+  ensureArtifactsDir,
+  screenshotFilename,
+  snapshotFilename,
+} from '../storage/artifactPaths.js';
 import { resolveHome } from '../storage/home.js';
+import {
+  readManifest,
+  writeManifest,
+  writeTextFileAtomic,
+} from '../storage/manifests.js';
 import {
   eventLogPath,
   manifestPath,
@@ -33,6 +58,12 @@ const ALLOWED_SIGNALS = [
   'SIGUSR1',
   'SIGUSR2',
 ] as const;
+
+const DEFAULT_RENDER_PROFILE_NAME = 'reference-dark';
+const MAX_WAIT_FOR_RENDER_REGEX_LENGTH = 200;
+export const MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH = 50_000;
+export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
+const BRACED_QUANTIFIER_PATTERN = /^\{(?:\d+|\d+,\d*)\}/;
 
 type WaitOutcome = {
   exitCode?: number;
@@ -56,6 +87,108 @@ function rethrowAsync(error: unknown): void {
   process.nextTick(() => {
     throw error;
   });
+}
+
+function isRegexQuantifierAt(pattern: string, index: number): boolean {
+  const nextChar = pattern[index];
+  if (nextChar === '*' || nextChar === '+' || nextChar === '?') {
+    return true;
+  }
+
+  if (nextChar !== '{') {
+    return false;
+  }
+
+  return BRACED_QUANTIFIER_PATTERN.test(pattern.slice(index));
+}
+
+/**
+ * Reject regex patterns with obvious ReDoS-prone constructs:
+ * - Nested quantifiers: (x+)+, (x*)+, (x+)*, (x?){n}, etc.
+ * - Star-height > 1 patterns
+ *
+ * This is a heuristic check, not a full regex analysis.
+ * It catches the most common catastrophic backtracking patterns.
+ */
+export function hasNestedQuantifiers(pattern: string): boolean {
+  invariant(typeof pattern === 'string', 'regex pattern must be a string');
+
+  const groupHasQuantifierStack: boolean[] = [];
+  let inCharacterClass = false;
+
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    invariant(char !== undefined, 'regex pattern character must exist');
+
+    if (char === '\\') {
+      index += 1;
+      continue;
+    }
+
+    if (char === '[') {
+      inCharacterClass = true;
+      continue;
+    }
+
+    if (char === ']' && inCharacterClass) {
+      inCharacterClass = false;
+      continue;
+    }
+
+    if (inCharacterClass) {
+      continue;
+    }
+
+    if (char === '(') {
+      groupHasQuantifierStack.push(false);
+      continue;
+    }
+
+    if (char === ')') {
+      const groupHasQuantifier = groupHasQuantifierStack.pop() ?? false;
+      const groupIsQuantified = isRegexQuantifierAt(pattern, index + 1);
+      if (groupHasQuantifier && groupIsQuantified) {
+        return true;
+      }
+
+      const parentGroupIndex = groupHasQuantifierStack.length - 1;
+      if (parentGroupIndex >= 0 && (groupHasQuantifier || groupIsQuantified)) {
+        groupHasQuantifierStack[parentGroupIndex] = true;
+      }
+
+      continue;
+    }
+
+    const currentGroupIndex = groupHasQuantifierStack.length - 1;
+    if (currentGroupIndex < 0) {
+      continue;
+    }
+
+    if (char === '*' || char === '+' || char === '?') {
+      const previousChar = pattern[index - 1];
+      if (previousChar !== '(') {
+        groupHasQuantifierStack[currentGroupIndex] = true;
+      }
+      continue;
+    }
+
+    if (char === '{' && isRegexQuantifierAt(pattern, index)) {
+      groupHasQuantifierStack[currentGroupIndex] = true;
+    }
+  }
+
+  return false;
+}
+
+export function safeRegexExec(
+  regex: RegExp,
+  text: string,
+): RegExpExecArray | null {
+  const limitedText =
+    text.length > MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH
+      ? text.slice(0, MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH)
+      : text;
+  return regex.exec(limitedText);
 }
 
 export async function runHost(sessionId: string): Promise<void> {
@@ -84,6 +217,18 @@ export async function runHost(sessionId: string): Promise<void> {
   state.setHostPid(process.pid);
 
   const eventLog = await EventLog.open(ePath);
+
+  const rendererManager = new HostRendererManager({
+    sessionId,
+    sessionDir: sessDir,
+    backendFactory: (sid, profile) => new GhosttyWebBackend(sid, profile),
+  });
+
+  const loadReplayInput = () => {
+    const events = [...eventLog.getEvents()];
+    const replayInput = buildReplayInput(sessionId, state.snapshot(), events);
+    return replayInput.targetSeq === -1 ? null : replayInput;
+  };
 
   let eventLogClosed = false;
   let ptyExitHandled = false;
@@ -144,6 +289,12 @@ export async function runHost(sessionId: string): Promise<void> {
             eventLogClosed = true;
           }
 
+          try {
+            await rendererManager.dispose();
+          } catch {
+            // best-effort cleanup
+          }
+
           await rpcServer.close();
         }
       }
@@ -181,6 +332,152 @@ export async function runHost(sessionId: string): Promise<void> {
 
   const handlers: Record<string, MethodHandler> = {
     inspect: () => Promise.resolve({ session: state.snapshot() }),
+    snapshot: async (params: unknown) => {
+      const { format: requestedFormat } = params as SnapshotParams;
+
+      const format = requestedFormat ?? 'structured';
+
+      const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
+      const replayInput = loadReplayInput();
+      const backend = await rendererManager.getBackend(profile, replayInput);
+      const snapshot = await backend.snapshot();
+
+      invariant(
+        snapshot.sessionId === sessionId,
+        'renderer snapshot sessionId must match host sessionId',
+      );
+
+      const snapshotResult =
+        format === 'structured'
+          ? { format: 'structured' as const, ...snapshot }
+          : {
+              format: 'text' as const,
+              sessionId: snapshot.sessionId,
+              capturedAtSeq: snapshot.capturedAtSeq,
+              cols: snapshot.cols,
+              rows: snapshot.rows,
+              cursorRow: snapshot.cursorRow,
+              cursorCol: snapshot.cursorCol,
+              text: snapshot.visibleLines.map((line) => line.text).join('\n'),
+            };
+
+      await ensureArtifactsDir(sessDir);
+      const filename = snapshotFilename(snapshot.capturedAtSeq, format);
+      const snapshotArtifactPath = artifactPath(sessDir, filename);
+
+      await writeTextFileAtomic({
+        path: snapshotArtifactPath,
+        pathLabel: 'snapshot artifact path',
+        contents: `${JSON.stringify(snapshotResult, null, 2)}\n`,
+        writeErrorMessage: `Failed to write snapshot artifact at ${snapshotArtifactPath}.`,
+      });
+
+      await appendArtifact(
+        sessDir,
+        createArtifactEntry({
+          kind: 'snapshot',
+          filename,
+          sessionId: snapshot.sessionId,
+          capturedAtSeq: snapshot.capturedAtSeq,
+          metadata: {
+            format,
+            cols: snapshot.cols,
+            rows: snapshot.rows,
+            cursorRow: snapshot.cursorRow,
+            cursorCol: snapshot.cursorCol,
+          },
+        }),
+      );
+
+      return snapshotResult;
+    },
+    screenshot: async (params: unknown) => {
+      const { profile: requestedProfileName } = params as ScreenshotParams;
+
+      const profile = (() => {
+        try {
+          return resolveProfile(
+            requestedProfileName ?? DEFAULT_RENDER_PROFILE_NAME,
+          );
+        } catch (error) {
+          throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+            message:
+              error instanceof Error
+                ? error.message
+                : 'Invalid render profile.',
+            ...(requestedProfileName === undefined
+              ? {}
+              : { details: { profile: requestedProfileName } }),
+            cause: error,
+          });
+        }
+      })();
+
+      const replayInput = loadReplayInput();
+      const backend = await rendererManager.getBackend(profile, replayInput);
+      await ensureArtifactsDir(sessDir);
+      const temporaryOutputPath = artifactPath(
+        sessDir,
+        `.tmp-screenshot-${ulid()}.png`,
+      );
+
+      try {
+        const result = await backend.screenshot(temporaryOutputPath);
+
+        invariant(
+          result.sessionId === sessionId,
+          'renderer screenshot sessionId must match host sessionId',
+        );
+        invariant(
+          result.profileName === profile.name,
+          'renderer screenshot profileName must match the requested profile',
+        );
+        invariant(
+          result.artifactPath === temporaryOutputPath,
+          'renderer screenshot path must match the requested output path',
+        );
+        invariant(
+          result.pngSizeBytes > 0,
+          'renderer screenshot pngSizeBytes must be positive',
+        );
+
+        const filename = screenshotFilename(
+          result.capturedAtSeq,
+          result.profileName,
+        );
+        const finalArtifactPath = artifactPath(sessDir, filename);
+
+        await rename(temporaryOutputPath, finalArtifactPath);
+        await appendArtifact(
+          sessDir,
+          createArtifactEntry({
+            kind: 'screenshot',
+            filename,
+            sessionId: result.sessionId,
+            capturedAtSeq: result.capturedAtSeq,
+            metadata: {
+              profileName: result.profileName,
+              cols: result.cols,
+              rows: result.rows,
+              pngSizeBytes: result.pngSizeBytes,
+            },
+          }),
+        );
+
+        return {
+          sessionId: result.sessionId,
+          capturedAtSeq: result.capturedAtSeq,
+          profileName: result.profileName,
+          cols: result.cols,
+          rows: result.rows,
+          artifactPath: finalArtifactPath,
+          pngSizeBytes: result.pngSizeBytes,
+        };
+      } catch (error) {
+        await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
+        throw error;
+      }
+    },
     type: async (params: unknown) => {
       const { text } = params as TypeParams;
 
@@ -407,6 +704,186 @@ export async function runHost(sessionId: string): Promise<void> {
         void waitCondition.then((result) => {
           clearTimeout(timeoutHandle);
           clearWaitCondition?.();
+          resolve(result);
+        });
+      });
+    },
+    waitForRender: async (params: unknown) => {
+      const { text, regex, screenStableMs, timeoutMs } =
+        params as WaitForRenderParams;
+
+      invariant(
+        text !== undefined ||
+          regex !== undefined ||
+          screenStableMs !== undefined,
+        'waitForRender requires at least one of text, regex, or screenStableMs',
+      );
+      invariant(
+        !(text !== undefined && regex !== undefined),
+        'waitForRender text and regex filters are mutually exclusive',
+      );
+      if (screenStableMs !== undefined) {
+        invariant(
+          Number.isInteger(screenStableMs) && screenStableMs > 0,
+          'screenStableMs must be a positive integer',
+        );
+      }
+      if (timeoutMs !== undefined) {
+        invariant(
+          Number.isInteger(timeoutMs) && timeoutMs > 0,
+          'timeoutMs must be a positive integer',
+        );
+      }
+
+      let compiledRegex: RegExp | undefined;
+      if (regex !== undefined) {
+        invariant(
+          regex.length <= MAX_WAIT_FOR_RENDER_REGEX_LENGTH,
+          `regex pattern must not exceed ${String(MAX_WAIT_FOR_RENDER_REGEX_LENGTH)} characters`,
+        );
+        if (hasNestedQuantifiers(regex)) {
+          throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+            message:
+              'Regex pattern contains nested quantifiers which may cause catastrophic backtracking. Simplify the pattern.',
+          });
+        }
+        try {
+          compiledRegex = new RegExp(regex);
+        } catch (error) {
+          throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+            message: `Invalid regex pattern: ${error instanceof Error ? error.message : String(error)}`,
+            cause: error,
+          });
+        }
+      }
+
+      const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
+      const pollIntervalMs = 200;
+      let lastVisibleText: string | undefined;
+      let lastTextChangeAt = Date.now();
+      let latestCapturedAtSeq = 0;
+      let clearWaitPoll: (() => void) | null = null;
+
+      const pollCondition = new Promise<WaitForRenderResult>((resolve) => {
+        let pollInFlight = false;
+        let consecutiveFailures = 0;
+
+        const checkInterval = setInterval(() => {
+          if (pollInFlight) {
+            return;
+          }
+
+          pollInFlight = true;
+          void (async () => {
+            try {
+              const replayInput = loadReplayInput();
+              const backend = await rendererManager.getBackend(
+                profile,
+                replayInput,
+              );
+              const visibleText = await backend.getVisibleText();
+              const capturedAtSeq = replayInput?.targetSeq ?? 0;
+              latestCapturedAtSeq = capturedAtSeq;
+              consecutiveFailures = 0;
+
+              const now = Date.now();
+              if (
+                lastVisibleText === undefined ||
+                visibleText !== lastVisibleText
+              ) {
+                lastVisibleText = visibleText;
+                lastTextChangeAt = now;
+              }
+
+              let textMatched = false;
+              let matchedText: string | undefined;
+              if (text !== undefined) {
+                if (visibleText.includes(text)) {
+                  textMatched = true;
+                  matchedText = text;
+                }
+              } else if (compiledRegex !== undefined) {
+                const match = safeRegexExec(compiledRegex, visibleText);
+                if (match !== null) {
+                  textMatched = true;
+                  matchedText = match[0];
+                }
+              } else {
+                textMatched = true;
+              }
+
+              let stableMatched = true;
+              if (screenStableMs !== undefined) {
+                stableMatched = now - lastTextChangeAt >= screenStableMs;
+              }
+
+              if (textMatched && stableMatched) {
+                clearInterval(checkInterval);
+                resolve({
+                  matched: true,
+                  timedOut: false,
+                  ...(matchedText === undefined ? {} : { matchedText }),
+                  capturedAtSeq,
+                });
+              }
+            } catch (pollError) {
+              void pollError;
+              consecutiveFailures += 1;
+              if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+                clearInterval(checkInterval);
+                resolve({
+                  matched: false,
+                  timedOut: true,
+                  capturedAtSeq: latestCapturedAtSeq,
+                });
+                return;
+              }
+              // Transient — retry on next poll.
+            } finally {
+              pollInFlight = false;
+            }
+          })();
+        }, pollIntervalMs);
+
+        clearWaitPoll = (): void => {
+          clearInterval(checkInterval);
+        };
+      });
+
+      if (timeoutMs === undefined) {
+        return await pollCondition;
+      }
+
+      return await new Promise<WaitForRenderResult>((resolve) => {
+        let resolved = false;
+        const timeoutHandle = setTimeout(() => {
+          if (resolved) {
+            return;
+          }
+          resolved = true;
+          clearWaitPoll?.();
+
+          try {
+            const replayInput = loadReplayInput();
+            latestCapturedAtSeq = replayInput?.targetSeq ?? 0;
+          } catch {
+            // Best-effort snapshot for timeout reporting.
+          }
+
+          resolve({
+            matched: false,
+            timedOut: true,
+            capturedAtSeq: latestCapturedAtSeq,
+          });
+        }, timeoutMs);
+
+        void pollCondition.then((result) => {
+          if (resolved) {
+            return;
+          }
+          resolved = true;
+          clearTimeout(timeoutHandle);
+          clearWaitPoll?.();
           resolve(result);
         });
       });

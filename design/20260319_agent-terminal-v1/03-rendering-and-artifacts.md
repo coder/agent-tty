@@ -35,8 +35,25 @@ V1 should support four artifact classes.
 | ----------------- | ---------------------------------------------------- | -------------- |
 | Semantic snapshot | Structured screen state for reasoning and assertions | Yes            |
 | Screenshot PNG    | Visual verification of layout, color, and wrapping   | Yes            |
-| Asciicast         | Portable terminal replay artifact                    | Yes            |
-| Replay video      | Reviewer-friendly visual playback                    | Yes            |
+| Asciicast         | Portable terminal replay artifact                    | Not yet shipped |
+| Replay video      | Reviewer-friendly visual playback                    | Not yet shipped |
+
+## Current implementation status (2026-03-21)
+
+The current Week 2 implementation ships the first two artifact classes from this design:
+
+- semantic snapshots,
+- and screenshot PNGs.
+
+It does **not** yet ship asciicast export or replay video export; those remain deferred and are tracked in `WEEK2-GAPS.md`.
+
+The current renderer path is:
+
+- host-prepared replay input,
+- lazy `ghostty-web` boot in headless Chromium,
+- viewport-scoped semantic extraction,
+- deterministic screenshot capture,
+- and manifest-backed artifact storage under `artifacts/`.
 
 ## 4. Canonical replay model
 
@@ -50,13 +67,7 @@ Everything visual should be reproducible from:
 ### 4.1 Replay input
 
 ```ts
-export interface ReplayInput {
-  sessionId: string;
-  events: ReplayEvent[];
-  rows: number;
-  cols: number;
-  renderProfile: ResolvedRenderProfile;
-}
+const replayInput = ReplayInputSchema.parse(rawReplayInput);
 ```
 
 ### 4.2 Replay rules
@@ -111,6 +122,20 @@ export interface RenderProfile {
   };
 }
 ```
+
+### 5.2.1 Current Week 2 profile shape
+
+The shipped Week 2 profile shape is intentionally smaller than the fully elaborated interface below. Today it pins:
+
+- profile name,
+- light/dark theme mode,
+- font family,
+- font size,
+- cursor style,
+- foreground color,
+- and background color.
+
+That smaller shape was enough to make screenshot output stable for the reference renderer while leaving room to add richer font/padding/palette metadata later.
 
 ### 5.3 Determinism rules
 
@@ -282,6 +307,21 @@ For agent reasoning speed, `snapshot --format text` should return only:
 
 That avoids forcing every reasoning step to parse full cell objects.
 
+### 9.4 Current Week 2 snapshot scope
+
+The shipped Week 2 snapshot shape is intentionally viewport-scoped.
+
+It currently records:
+
+- session ID,
+- capture sequence,
+- rows/cols,
+- cursor row/col,
+- alt-screen state,
+- and visible lines.
+
+It does not yet include per-cell styling or scrollback export. Those remain good future extensions, but the lighter snapshot is already sufficient for agent reasoning and renderer-backed waits.
+
 ## 10. Asciicast export
 
 ### 10.1 Why asciicast is mandatory
@@ -370,6 +410,20 @@ export interface ArtifactEntry {
 - manifest writes are atomic,
 - artifacts missing from disk are flagged during `inspect` and `doctor`,
 - manifests never point at temp files.
+
+### 12.3 Current Week 2 manifest and layout
+
+The shipped Week 2 implementation currently writes artifacts under:
+
+```text
+artifacts/
+  manifest.json
+  snapshot-<seq>-structured.json
+  snapshot-<seq>-text.json
+  screenshot-<seq>-<profile>.png
+```
+
+That is simpler than the broader naming scheme below, but it already preserves the two most important debugging dimensions: capture sequence and render profile.
 
 ## 13. Future native renderer adapter contract
 

@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-20T17:08:23.681Z",
+  "result": {
+    "format": "text",
+    "sessionId": "01KM63G9DJ4DZD5RCXFJG547XG",
+    "capturedAtSeq": 4,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 3,
+    "cursorCol": 18,
+    "text": "Loading\n3 items\nReady\ntyped from dogfood\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  }
+}

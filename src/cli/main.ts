@@ -11,8 +11,10 @@ import { runInspectCommand } from './commands/inspect.js';
 import { runListCommand } from './commands/list.js';
 import { runPasteCommand } from './commands/paste.js';
 import { runResizeCommand } from './commands/resize.js';
+import { runScreenshotCommand } from './commands/screenshot.js';
 import { runSendKeysCommand } from './commands/send-keys.js';
 import { runSignalCommand } from './commands/signal.js';
+import { runSnapshotCommand } from './commands/snapshot.js';
 import { runTypeCommand } from './commands/type.js';
 import { runVersionCommand } from './commands/version.js';
 import { runWaitCommand } from './commands/wait.js';
@@ -266,6 +268,52 @@ async function main(): Promise<void> {
 
   // --- Observation ---
   program
+    .command('snapshot <session-id>')
+    .description('Capture a terminal snapshot')
+    .option(
+      '--format <format>',
+      "Output format: 'structured' or 'text'",
+      'structured',
+    )
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'snapshot',
+        async (
+          sessionId: string,
+          options: { format: string; json: boolean },
+        ) => {
+          await runSnapshotCommand({
+            json: options.json,
+            sessionId,
+            format: options.format,
+          });
+        },
+      ),
+    );
+
+  program
+    .command('screenshot <session-id>')
+    .description('Capture a rendered screenshot')
+    .option('--profile <name>', 'Render profile name', 'reference-dark')
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'screenshot',
+        async (
+          sessionId: string,
+          options: { profile: string; json: boolean },
+        ) => {
+          await runScreenshotCommand({
+            json: options.json,
+            sessionId,
+            profile: options.profile,
+          });
+        },
+      ),
+    );
+
+  program
     .command('wait <session-id>')
     .description('Wait for a session condition')
     .option('--exit', 'Wait for process exit', false)
@@ -276,6 +324,13 @@ async function main(): Promise<void> {
       parseIntegerOption,
     )
     .option('--json', 'Emit a JSON command envelope', false)
+    .option('--text <string>', 'Wait for text to appear in rendered output')
+    .option('--regex <pattern>', 'Wait for regex match in rendered output')
+    .option(
+      '--screen-stable-ms <ms>',
+      'Wait for screen to be stable for given ms',
+      parseIntegerOption,
+    )
     .action(
       wrapAction(
         'wait',
@@ -286,6 +341,9 @@ async function main(): Promise<void> {
             idleMs?: number;
             timeout?: number;
             json: boolean;
+            text?: string;
+            regex?: string;
+            screenStableMs?: number;
           },
         ) => {
           await runWaitCommand({
@@ -294,6 +352,9 @@ async function main(): Promise<void> {
             waitForExit: options.exit,
             idleMs: options.idleMs,
             timeout: options.timeout,
+            text: options.text,
+            regex: options.regex,
+            screenStableMs: options.screenStableMs,
           });
         },
       ),

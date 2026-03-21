@@ -11,9 +11,33 @@ interface NodeError {
   code?: string;
 }
 
-function assertAbsoluteManifestPath(path: string): void {
-  invariant(path.length > 0, 'manifest path must be a non-empty string');
-  invariant(isAbsolute(path), 'manifest path must be absolute');
+export interface ReadValidatedJsonFileOptions<T> {
+  path: string;
+  pathLabel: string;
+  allowMissing: boolean;
+  readErrorMessage: string;
+  invalidJsonMessage: string;
+  validate: (path: string, data: unknown) => T;
+}
+
+export interface WriteValidatedJsonFileOptions<T> {
+  path: string;
+  pathLabel: string;
+  data: T;
+  writeErrorMessage: string;
+  validate: (path: string, data: unknown) => T;
+}
+
+export interface WriteTextFileAtomicOptions {
+  path: string;
+  pathLabel: string;
+  contents: string;
+  writeErrorMessage: string;
+}
+
+function assertAbsoluteStoragePath(path: string, label: string): void {
+  invariant(path.length > 0, `${label} must be a non-empty string`);
+  invariant(isAbsolute(path), `${label} must be absolute`);
 }
 
 function isEnoentError(error: unknown): error is Error & NodeError {
@@ -22,6 +46,90 @@ function isEnoentError(error: unknown): error is Error & NodeError {
     'code' in error &&
     (error as NodeError).code === 'ENOENT'
   );
+}
+
+function parseValidatedJson<T>(
+  path: string,
+  rawContents: string,
+  invalidJsonMessage: string,
+  validate: (path: string, data: unknown) => T,
+): T {
+  try {
+    return validate(path, JSON.parse(rawContents) as unknown);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw makeCliError(ERROR_CODES.MANIFEST_VALIDATION_ERROR, {
+        message: invalidJsonMessage,
+        details: { path },
+        cause: error,
+      });
+    }
+
+    throw error;
+  }
+}
+
+export async function readValidatedJsonFile<T>(
+  options: ReadValidatedJsonFileOptions<T>,
+): Promise<T | null> {
+  assertAbsoluteStoragePath(options.path, options.pathLabel);
+
+  let rawContents: string;
+  try {
+    rawContents = await readFile(options.path, 'utf8');
+  } catch (error) {
+    if (options.allowMissing && isEnoentError(error)) {
+      return null;
+    }
+
+    throw makeCliError(ERROR_CODES.STORAGE_READ_ERROR, {
+      message: options.readErrorMessage,
+      details: { path: options.path },
+      cause: error,
+    });
+  }
+
+  return parseValidatedJson(
+    options.path,
+    rawContents,
+    options.invalidJsonMessage,
+    options.validate,
+  );
+}
+
+export async function writeTextFileAtomic(
+  options: WriteTextFileAtomicOptions,
+): Promise<void> {
+  assertAbsoluteStoragePath(options.path, options.pathLabel);
+
+  const outputDirectory = dirname(options.path);
+  const temporaryPath = `${options.path}.tmp-${randomUUID()}`;
+
+  try {
+    await mkdir(outputDirectory, { recursive: true });
+    await writeFile(temporaryPath, options.contents, 'utf8');
+    await rename(temporaryPath, options.path);
+  } catch (error) {
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+    throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+      message: options.writeErrorMessage,
+      details: { path: options.path },
+      cause: error,
+    });
+  }
+}
+
+export async function writeValidatedJsonFile<T>(
+  options: WriteValidatedJsonFileOptions<T>,
+): Promise<void> {
+  const validatedData = options.validate(options.path, options.data);
+
+  await writeTextFileAtomic({
+    path: options.path,
+    pathLabel: options.pathLabel,
+    contents: `${JSON.stringify(validatedData, null, 2)}\n`,
+    writeErrorMessage: options.writeErrorMessage,
+  });
 }
 
 function validateManifestData(path: string, data: unknown): SessionRecord {
@@ -40,44 +148,18 @@ function validateManifestData(path: string, data: unknown): SessionRecord {
   });
 }
 
-function parseManifestJson(path: string, rawManifest: string): SessionRecord {
-  try {
-    return validateManifestData(path, JSON.parse(rawManifest) as unknown);
-  } catch (error) {
-    if (error instanceof SyntaxError) {
-      throw makeCliError(ERROR_CODES.MANIFEST_VALIDATION_ERROR, {
-        message: `Session manifest contains invalid JSON at ${path}.`,
-        details: { path },
-        cause: error,
-      });
-    }
-
-    throw error;
-  }
-}
-
 async function readManifestInternal(
   path: string,
   allowMissing: boolean,
 ): Promise<SessionRecord | null> {
-  assertAbsoluteManifestPath(path);
-
-  let rawManifest: string;
-  try {
-    rawManifest = await readFile(path, 'utf8');
-  } catch (error) {
-    if (allowMissing && isEnoentError(error)) {
-      return null;
-    }
-
-    throw makeCliError(ERROR_CODES.STORAGE_READ_ERROR, {
-      message: `Failed to read session manifest at ${path}.`,
-      details: { path },
-      cause: error,
-    });
-  }
-
-  return parseManifestJson(path, rawManifest);
+  return readValidatedJsonFile({
+    path,
+    pathLabel: 'manifest path',
+    allowMissing,
+    readErrorMessage: `Failed to read session manifest at ${path}.`,
+    invalidJsonMessage: `Session manifest contains invalid JSON at ${path}.`,
+    validate: validateManifestData,
+  });
 }
 
 export async function readManifest(path: string): Promise<SessionRecord> {
@@ -98,23 +180,11 @@ export async function writeManifest(
   path: string,
   record: SessionRecord,
 ): Promise<void> {
-  assertAbsoluteManifestPath(path);
-
-  const validatedRecord = validateManifestData(path, record);
-  const serializedManifest = `${JSON.stringify(validatedRecord, null, 2)}\n`;
-  const manifestDirectory = dirname(path);
-  const temporaryPath = `${path}.tmp-${randomUUID()}`;
-
-  try {
-    await mkdir(manifestDirectory, { recursive: true });
-    await writeFile(temporaryPath, serializedManifest, 'utf8');
-    await rename(temporaryPath, path);
-  } catch (error) {
-    await rm(temporaryPath, { force: true }).catch(() => undefined);
-    throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
-      message: `Failed to write session manifest at ${path}.`,
-      details: { path },
-      cause: error,
-    });
-  }
+  await writeValidatedJsonFile({
+    path,
+    pathLabel: 'manifest path',
+    data: record,
+    writeErrorMessage: `Failed to write session manifest at ${path}.`,
+    validate: validateManifestData,
+  });
 }
