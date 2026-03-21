@@ -1,15 +1,24 @@
-import type { SnapshotResult } from '../../protocol/messages.js';
+import type { SnapshotParams, SnapshotResult } from '../../protocol/messages.js';
+import type { SemanticSnapshot } from '../../renderer/types.js';
 
+import { CliError } from '../../cli/errors.js';
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
-import {
-  SnapshotParamsSchema,
-  type SnapshotParams,
-} from '../../protocol/messages.js';
+import { SnapshotParamsSchema } from '../../protocol/messages.js';
 import { SnapshotResultSchema } from '../../protocol/schemas.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
-import { readManifestIfExists } from '../../storage/manifests.js';
+import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
+import {
+  appendArtifact,
+  createArtifactEntry,
+} from '../../storage/artifactManifest.js';
 import { resolveHome } from '../../storage/home.js';
+import { readManifestIfExists, writeTextFileAtomic } from '../../storage/manifests.js';
+import {
+  artifactPath,
+  ensureArtifactsDir,
+  snapshotFilename,
+} from '../../storage/artifactPaths.js';
 import {
   manifestPath,
   sessionDir,
@@ -52,6 +61,100 @@ function resolveSnapshotFormat(format: string | undefined): SnapshotFormat {
   }
 
   return formatResult.data.format;
+}
+
+function parseSnapshotResult(rawResult: unknown): SnapshotResult {
+  const parsedResult = SnapshotResultSchema.safeParse(rawResult);
+  if (!parsedResult.success) {
+    throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
+      message: 'Unexpected response from host',
+      details: { issues: parsedResult.error.issues },
+    });
+  }
+
+  return parsedResult.data;
+}
+
+function createSnapshotResult(
+  snapshot: SemanticSnapshot,
+  format: SnapshotFormat,
+): SnapshotResult {
+  const snapshotResult: SnapshotResult =
+    format === 'structured'
+      ? { format: 'structured' as const, ...snapshot }
+      : {
+          format: 'text' as const,
+          sessionId: snapshot.sessionId,
+          capturedAtSeq: snapshot.capturedAtSeq,
+          cols: snapshot.cols,
+          rows: snapshot.rows,
+          cursorRow: snapshot.cursorRow,
+          cursorCol: snapshot.cursorCol,
+          text: snapshot.visibleLines.map((line) => line.text).join('\n'),
+        };
+
+  return parseSnapshotResult(snapshotResult);
+}
+
+async function persistSnapshotArtifact(
+  sessionDirectory: string,
+  format: SnapshotFormat,
+  snapshot: SemanticSnapshot,
+  snapshotResult: SnapshotResult,
+): Promise<void> {
+  await ensureArtifactsDir(sessionDirectory);
+  const filename = snapshotFilename(snapshot.capturedAtSeq, format);
+  const snapshotArtifactPath = artifactPath(sessionDirectory, filename);
+
+  await writeTextFileAtomic({
+    path: snapshotArtifactPath,
+    pathLabel: 'snapshot artifact path',
+    contents: `${JSON.stringify(snapshotResult, null, 2)}\n`,
+    writeErrorMessage: `Failed to write snapshot artifact at ${snapshotArtifactPath}.`,
+  });
+
+  await appendArtifact(
+    sessionDirectory,
+    createArtifactEntry({
+      kind: 'snapshot',
+      filename,
+      sessionId: snapshot.sessionId,
+      capturedAtSeq: snapshot.capturedAtSeq,
+      metadata: {
+        format,
+        cols: snapshot.cols,
+        rows: snapshot.rows,
+        cursorRow: snapshot.cursorRow,
+        cursorCol: snapshot.cursorCol,
+      },
+    }),
+  );
+}
+
+async function runRpcSnapshot(
+  sessionDirectory: string,
+  format: SnapshotFormat,
+): Promise<SnapshotResult> {
+  const rawResult: unknown = await sendRpc(socketPath(sessionDirectory), 'snapshot', {
+    format,
+  });
+
+  return parseSnapshotResult(rawResult);
+}
+
+async function runOfflineSnapshot(
+  sessionDirectory: string,
+  format: SnapshotFormat,
+): Promise<SnapshotResult> {
+  return withOfflineReplayRenderer(
+    { sessionDir: sessionDirectory },
+    async ({ backend }) => {
+      const snapshot: SemanticSnapshot = await backend.snapshot();
+      const snapshotResult = createSnapshotResult(snapshot, format);
+      await persistSnapshotArtifact(sessionDirectory, format, snapshot, snapshotResult);
+      return snapshotResult;
+    },
+  );
 }
 
 function formatSnapshotLines(result: SnapshotResult): string[] {
@@ -116,31 +219,23 @@ export async function runSnapshotCommand(
     });
   }
 
-  if (manifest.status !== 'running') {
-    throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
-      message: `Session "${options.sessionId}" is not running.`,
-      details: {
-        sessionId: options.sessionId,
-        status: manifest.status,
-      },
-    });
+  let result: SnapshotResult;
+  if (manifest.status === 'running') {
+    try {
+      result = await runRpcSnapshot(sessionDirectory, format);
+    } catch (error) {
+      if (
+        error instanceof CliError &&
+        error.code === ERROR_CODES.HOST_UNREACHABLE
+      ) {
+        result = await runOfflineSnapshot(sessionDirectory, format);
+      } else {
+        throw error;
+      }
+    }
+  } else {
+    result = await runOfflineSnapshot(sessionDirectory, format);
   }
-
-  const rawResult: unknown = await sendRpc(
-    socketPath(sessionDirectory),
-    'snapshot',
-    {
-      format,
-    },
-  );
-  const parsedResult = SnapshotResultSchema.safeParse(rawResult);
-  if (!parsedResult.success) {
-    throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
-      message: 'Unexpected response from host',
-      details: { issues: parsedResult.error.issues },
-    });
-  }
-  const result: SnapshotResult = parsedResult.data;
 
   emitSuccess({
     command: 'snapshot',

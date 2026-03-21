@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { CliError } from '../../../src/cli/errors.js';
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
 
 const mocks = vi.hoisted(() => ({
@@ -10,6 +11,13 @@ const mocks = vi.hoisted(() => ({
   sessionDir: vi.fn(),
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
+  withOfflineReplayRenderer: vi.fn(),
+  appendArtifact: vi.fn(),
+  createArtifactEntry: vi.fn(),
+  artifactPath: vi.fn(),
+  ensureArtifactsDir: vi.fn(),
+  snapshotFilename: vi.fn(),
+  writeTextFileAtomic: vi.fn(),
 }));
 
 vi.mock('../../../src/cli/output.js', () => ({
@@ -20,8 +28,24 @@ vi.mock('../../../src/host/rpcClient.js', () => ({
   sendRpc: mocks.sendRpc,
 }));
 
+vi.mock('../../../src/replay/offlineReplay.js', () => ({
+  withOfflineReplayRenderer: mocks.withOfflineReplayRenderer,
+}));
+
+vi.mock('../../../src/storage/artifactManifest.js', () => ({
+  appendArtifact: mocks.appendArtifact,
+  createArtifactEntry: mocks.createArtifactEntry,
+}));
+
+vi.mock('../../../src/storage/artifactPaths.js', () => ({
+  artifactPath: mocks.artifactPath,
+  ensureArtifactsDir: mocks.ensureArtifactsDir,
+  snapshotFilename: mocks.snapshotFilename,
+}));
+
 vi.mock('../../../src/storage/manifests.js', () => ({
   readManifestIfExists: mocks.readManifestIfExists,
+  writeTextFileAtomic: mocks.writeTextFileAtomic,
 }));
 
 vi.mock('../../../src/storage/home.js', () => ({
@@ -54,9 +78,51 @@ function createRunningSessionRecord() {
   };
 }
 
+function createExitedSessionRecord() {
+  return {
+    ...createRunningSessionRecord(),
+    status: 'exited' as const,
+    hostPid: null,
+    childPid: null,
+    exitCode: 0,
+    exitSignal: null,
+  };
+}
+
+function createOfflineSemanticSnapshot() {
+  return {
+    sessionId: 'session-01',
+    capturedAtSeq: 5,
+    cols: 80,
+    rows: 24,
+    cursorRow: 0,
+    cursorCol: 0,
+    isAltScreen: false,
+    visibleLines: [{ row: 0, text: 'offline output' }],
+  };
+}
+
+function installOfflineReplaySuccessMock() {
+  mocks.withOfflineReplayRenderer.mockImplementation(
+    async (_options: unknown, run: (ctx: unknown) => Promise<unknown>) => {
+      const mockBackend = {
+        snapshot() {
+          return Promise.resolve(createOfflineSemanticSnapshot());
+        },
+      };
+
+      return run({
+        manifest: createExitedSessionRecord(),
+        replayInput: {},
+        backend: mockBackend,
+      });
+    },
+  );
+}
+
 describe('snapshot command', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mocks.resolveHome.mockReturnValue('/tmp/agent-terminal');
     mocks.sessionDir.mockImplementation(
       (_home: string, sessionId: string) =>
@@ -69,6 +135,22 @@ describe('snapshot command', () => {
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
     );
     mocks.readManifestIfExists.mockResolvedValue(createRunningSessionRecord());
+    mocks.createArtifactEntry.mockImplementation(
+      (entry: Record<string, unknown>) => ({
+        ...entry,
+        id: 'artifact-01',
+        createdAt: '2026-03-19T12:00:02.000Z',
+      }),
+    );
+    mocks.artifactPath.mockImplementation(
+      (_dir: string, filename: string) => `/artifacts/${filename}`,
+    );
+    mocks.snapshotFilename.mockImplementation(
+      (seq: number, format: string) => `snapshot-${String(seq)}-${format}.json`,
+    );
+    mocks.ensureArtifactsDir.mockResolvedValue('/artifacts');
+    mocks.appendArtifact.mockResolvedValue(undefined);
+    mocks.writeTextFileAtomic.mockResolvedValue(undefined);
   });
 
   it('requests structured snapshots by default and formats human output', async () => {
@@ -154,6 +236,149 @@ describe('snapshot command', () => {
         'hello\nworld',
       ],
     });
+  });
+
+  it('uses offline replay for exited sessions and persists the artifact', async () => {
+    const snapshot = createOfflineSemanticSnapshot();
+    const result = {
+      format: 'structured' as const,
+      ...snapshot,
+    };
+    mocks.readManifestIfExists.mockResolvedValue(createExitedSessionRecord());
+    installOfflineReplaySuccessMock();
+
+    await runSnapshotCommand({
+      json: false,
+      sessionId: 'session-01',
+    });
+
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+    expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
+      { sessionDir: '/tmp/agent-terminal/sessions/session-01' },
+      expect.any(Function),
+    );
+    expect(mocks.ensureArtifactsDir).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01',
+    );
+    expect(mocks.snapshotFilename).toHaveBeenCalledWith(5, 'structured');
+    expect(mocks.writeTextFileAtomic).toHaveBeenCalledWith({
+      path: '/artifacts/snapshot-5-structured.json',
+      pathLabel: 'snapshot artifact path',
+      contents: `${JSON.stringify(result, null, 2)}\n`,
+      writeErrorMessage:
+        'Failed to write snapshot artifact at /artifacts/snapshot-5-structured.json.',
+    });
+    expect(mocks.createArtifactEntry).toHaveBeenCalledWith({
+      kind: 'snapshot',
+      filename: 'snapshot-5-structured.json',
+      sessionId: 'session-01',
+      capturedAtSeq: 5,
+      metadata: {
+        format: 'structured',
+        cols: 80,
+        rows: 24,
+        cursorRow: 0,
+        cursorCol: 0,
+      },
+    });
+    expect(mocks.appendArtifact).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01',
+      {
+        kind: 'snapshot',
+        filename: 'snapshot-5-structured.json',
+        sessionId: 'session-01',
+        capturedAtSeq: 5,
+        metadata: {
+          format: 'structured',
+          cols: 80,
+          rows: 24,
+          cursorRow: 0,
+          cursorCol: 0,
+        },
+        id: 'artifact-01',
+        createdAt: '2026-03-19T12:00:02.000Z',
+      },
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith({
+      command: 'snapshot',
+      json: false,
+      result,
+      lines: [
+        'Session ID: session-01',
+        'Captured At Seq: 5',
+        'Format: structured',
+        'Size: 80x24',
+        'Cursor: row 0, col 0',
+        'Alt Screen: no',
+        'Visible Lines (1):',
+        '  [0] offline output',
+      ],
+    });
+  });
+
+  it('falls back to offline replay when the running session host is unreachable', async () => {
+    const result = {
+      format: 'text' as const,
+      sessionId: 'session-01',
+      capturedAtSeq: 5,
+      cols: 80,
+      rows: 24,
+      cursorRow: 0,
+      cursorCol: 0,
+      text: 'offline output',
+    };
+    mocks.sendRpc.mockRejectedValue(
+      new CliError(ERROR_CODES.HOST_UNREACHABLE, 'host unreachable'),
+    );
+    installOfflineReplaySuccessMock();
+
+    await runSnapshotCommand({
+      json: true,
+      sessionId: 'session-01',
+      format: 'text',
+    });
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'snapshot',
+      { format: 'text' },
+    );
+    expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
+      { sessionDir: '/tmp/agent-terminal/sessions/session-01' },
+      expect.any(Function),
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith({
+      command: 'snapshot',
+      json: true,
+      result,
+      lines: [
+        'Session ID: session-01',
+        'Captured At Seq: 5',
+        'Format: text',
+        'Size: 80x24',
+        'Cursor: row 0, col 0',
+        'Text:',
+        'offline output',
+      ],
+    });
+  });
+
+  it('surfaces non-fallback RPC errors for running sessions', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      new CliError(ERROR_CODES.RPC_ERROR, 'rpc failed'),
+    );
+
+    await expect(
+      runSnapshotCommand({
+        json: false,
+        sessionId: 'session-01',
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.RPC_ERROR,
+      message: 'rpc failed',
+    });
+    expect(mocks.withOfflineReplayRenderer).not.toHaveBeenCalled();
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
   it('rejects malformed snapshot RPC responses', async () => {
