@@ -970,7 +970,10 @@ export class GhosttyWebBackend implements RendererBackend {
         setTimeout(resolvePromise, delayMs);
       });
     };
-    const parseEventTimestampMs = (eventTs: string, eventSeq: number): number => {
+    const parseEventTimestampMs = (
+      eventTs: string,
+      eventSeq: number,
+    ): number => {
       assertString(
         eventTs,
         `replay event ${String(eventSeq)} ts must be an ISO timestamp string`,
@@ -1038,7 +1041,8 @@ export class GhosttyWebBackend implements RendererBackend {
 
       const eventTimestampMs = parseEventTimestampMs(event.ts, event.seq);
       if (previousProcessedEventTimestampMs !== null) {
-        const interEventDelayMs = eventTimestampMs - previousProcessedEventTimestampMs;
+        const interEventDelayMs =
+          eventTimestampMs - previousProcessedEventTimestampMs;
         invariant(
           interEventDelayMs >= 0,
           'replay event timestamps must be ordered non-decreasingly',
@@ -1197,7 +1201,10 @@ export class GhosttyWebBackend implements RendererBackend {
       this.videoOptions !== null,
       'finalizeVideo() requires video recording to be enabled',
     );
-    invariant(outputPath.length > 0, 'video outputPath must be a non-empty string');
+    invariant(
+      outputPath.length > 0,
+      'video outputPath must be a non-empty string',
+    );
     invariant(
       isAbsolute(outputPath),
       'finalizeVideo() outputPath must be an absolute path',
@@ -1222,7 +1229,10 @@ export class GhosttyWebBackend implements RendererBackend {
     );
 
     const video = page.video();
-    invariant(video !== null, 'finalizeVideo() requires an active Playwright video');
+    invariant(
+      video !== null,
+      'finalizeVideo() requires an active Playwright video',
+    );
 
     this.expectedPageClosure = true;
     try {
