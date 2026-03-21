@@ -7,6 +7,7 @@ import { Command } from 'commander';
 import { runCreateCommand } from './commands/create.js';
 import { runDestroyCommand } from './commands/destroy.js';
 import { runDoctorCommand } from './commands/doctor.js';
+import { runGcCommand } from './commands/gc.js';
 import { runInspectCommand } from './commands/inspect.js';
 import { runListCommand } from './commands/list.js';
 import { runPasteCommand } from './commands/paste.js';
@@ -162,6 +163,41 @@ async function main(): Promise<void> {
             json: options.json,
             sessionId,
             force: options.force,
+          });
+        },
+      ),
+    );
+
+  program
+    .command('gc')
+    .description('Clean up stale or exited sessions')
+    .option('--dry-run', 'Report what would be removed without deleting', false)
+    .option(
+      '--stale-only',
+      'Only remove sessions that reconcile from active to exited',
+      false,
+    )
+    .option(
+      '--older-than <duration>',
+      'Only remove sessions older than a duration like 30m, 1h, or 7d',
+    )
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'gc',
+        async (
+          options: {
+            dryRun: boolean;
+            staleOnly: boolean;
+            olderThan?: string;
+            json: boolean;
+          },
+        ) => {
+          await runGcCommand({
+            json: options.json,
+            dryRun: options.dryRun,
+            staleOnly: options.staleOnly,
+            olderThan: options.olderThan,
           });
         },
       ),
