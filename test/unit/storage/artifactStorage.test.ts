@@ -82,6 +82,10 @@ describe('artifact paths', () => {
     await expect(access(artifactsDir)).resolves.toBeUndefined();
   });
 
+  it('generates recording filenames for webm format', () => {
+    expect(recordingFilename(7, 'webm')).toBe('recording-7-webm.webm');
+  });
+
   it('asserts on invalid helper inputs', () => {
     expect(() => screenshotFilename(-1, 'reference-dark')).toThrow(
       /seq must be a non-negative integer/u,

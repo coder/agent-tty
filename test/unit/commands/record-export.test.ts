@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import process from 'node:process';
 
+import type * as FsPromises from 'node:fs/promises';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
@@ -19,6 +21,9 @@ const mocks = vi.hoisted(() => ({
   ensureArtifactsDir: vi.fn(),
   artifactPath: vi.fn(),
   recordingFilename: vi.fn(),
+  generateWebmExport: vi.fn(),
+  readFile: vi.fn(),
+  stat: vi.fn(),
 }));
 
 vi.mock('../../../src/cli/output.js', () => ({
@@ -54,6 +59,19 @@ vi.mock('../../../src/storage/artifactPaths.js', () => ({
   ensureArtifactsDir: mocks.ensureArtifactsDir,
   recordingFilename: mocks.recordingFilename,
 }));
+
+vi.mock('../../../src/export/webm.js', () => ({
+  generateWebmExport: mocks.generateWebmExport,
+}));
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof FsPromises>();
+  return {
+    ...actual,
+    stat: mocks.stat,
+    readFile: mocks.readFile,
+  };
+});
 
 import { runRecordExportCommand } from '../../../src/cli/commands/record-export.js';
 
@@ -216,6 +234,124 @@ describe('record export command', () => {
         'Duration: 1500 ms',
       ],
     });
+    expect(mocks.stat).not.toHaveBeenCalled();
+    expect(mocks.readFile).not.toHaveBeenCalled();
+    expect(mocks.generateWebmExport).not.toHaveBeenCalled();
+  });
+
+  it('exports webm artifacts via generateWebmExport', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+
+    const webmBytes = 12_345;
+    const webmContent = Buffer.alloc(webmBytes, 0x42);
+    const webmSha256 = createHash('sha256').update(webmContent).digest('hex');
+
+    mocks.generateWebmExport.mockResolvedValue({
+      capturedAtSeq: 1,
+      durationMs: 1_500,
+      outputEventCount: 1,
+      resizeEventCount: 1,
+      cols: 80,
+      rows: 24,
+      profileName: 'reference-dark',
+      timingMode: 'accelerated',
+    });
+    mocks.stat.mockResolvedValue({ size: webmBytes });
+    mocks.readFile.mockResolvedValue(webmContent);
+
+    await runRecordExportCommand({
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+    });
+
+    expect(mocks.generateWebmExport).toHaveBeenCalledTimes(1);
+    const generateWebmExportCall = mocks.generateWebmExport.mock.calls[0] as [
+      {
+        sessionId: string;
+        sessionDir: string;
+        manifest: ReturnType<typeof createSessionRecord>;
+        events: unknown[];
+        outputPath: string;
+      },
+    ];
+    const [generateWebmExportArgs] = generateWebmExportCall;
+
+    expect(generateWebmExportArgs.sessionId).toBe('session-01');
+    expect(generateWebmExportArgs.sessionDir).toBe(
+      '/tmp/agent-terminal/sessions/session-01',
+    );
+    expect(generateWebmExportArgs.manifest).toEqual(createSessionRecord());
+    expect(generateWebmExportArgs.events).toEqual([
+      {
+        seq: 0,
+        ts: '2026-03-19T12:00:02.000Z',
+        type: 'output',
+        payload: { data: 'hello\n' },
+      },
+      {
+        seq: 1,
+        ts: '2026-03-19T12:00:03.500Z',
+        type: 'resize',
+        payload: { cols: 100, rows: 30 },
+      },
+    ]);
+    expect(generateWebmExportArgs.outputPath).toBe(
+      '/tmp/agent-terminal/sessions/session-01/artifacts/recording-1-webm.webm',
+    );
+    expect(mocks.writeTextFileAtomic).not.toHaveBeenCalled();
+    expect(mocks.stat).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/artifacts/recording-1-webm.webm',
+    );
+    expect(mocks.readFile).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/artifacts/recording-1-webm.webm',
+    );
+
+    expect(mocks.createArtifactEntry).toHaveBeenCalledTimes(1);
+    const createArtifactEntryCall = mocks.createArtifactEntry.mock.calls[0] as [
+      {
+        kind: string;
+        filename: string;
+        bytes: number;
+        sha256: string;
+        metadata: Record<string, unknown>;
+      },
+    ];
+    const [artifactEntry] = createArtifactEntryCall;
+
+    expect(artifactEntry.kind).toBe('video');
+    expect(artifactEntry.filename).toBe('recording-1-webm.webm');
+    expect(artifactEntry.bytes).toBe(webmBytes);
+    expect(artifactEntry.sha256).toBe(webmSha256);
+    expect(artifactEntry.metadata.format).toBe('webm');
+    expect(artifactEntry.metadata.profileName).toBe('reference-dark');
+    expect(artifactEntry.metadata.timingMode).toBe('accelerated');
+
+    expect(mocks.emitSuccess).toHaveBeenCalledTimes(1);
+    const emitSuccessCall = mocks.emitSuccess.mock.calls[0] as [
+      {
+        command: string;
+        json: boolean;
+        result: {
+          sessionId: string;
+          format: string;
+          bytes: number;
+          sha256: string;
+          capturedAtSeq: number;
+          durationMs?: number;
+        };
+      },
+    ];
+    const [emitSuccessArgs] = emitSuccessCall;
+
+    expect(emitSuccessArgs.command).toBe('record export');
+    expect(emitSuccessArgs.json).toBe(true);
+    expect(emitSuccessArgs.result.sessionId).toBe('session-01');
+    expect(emitSuccessArgs.result.format).toBe('webm');
+    expect(emitSuccessArgs.result.bytes).toBe(webmBytes);
+    expect(emitSuccessArgs.result.sha256).toBe(webmSha256);
+    expect(emitSuccessArgs.result.capturedAtSeq).toBe(1);
+    expect(emitSuccessArgs.result.durationMs).toBe(1_500);
   });
 
   it('writes explicit relative output paths within the current working directory', async () => {
@@ -249,7 +385,7 @@ describe('record export command', () => {
     });
   });
 
-  it('rejects invalid and unimplemented formats', async () => {
+  it('rejects invalid formats', async () => {
     await expect(
       runRecordExportCommand({
         json: false,
@@ -258,16 +394,6 @@ describe('record export command', () => {
       }),
     ).rejects.toMatchObject({
       code: ERROR_CODES.INVALID_INPUT,
-    });
-
-    await expect(
-      runRecordExportCommand({
-        json: false,
-        sessionId: 'session-01',
-        format: 'webm',
-      }),
-    ).rejects.toMatchObject({
-      code: ERROR_CODES.EXPORT_ERROR,
     });
   });
 });

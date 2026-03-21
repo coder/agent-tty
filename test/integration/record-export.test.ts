@@ -79,7 +79,7 @@ function parseAsciicast(contents: string): unknown[] {
     .map((line) => JSON.parse(line) as unknown);
 }
 
-describe('record export integration', { timeout: 60_000 }, () => {
+describe('record export integration', { timeout: 120_000 }, () => {
   let testHome = '';
 
   beforeEach(async () => {
@@ -244,6 +244,120 @@ describe('record export integration', { timeout: 60_000 }, () => {
       }),
     );
     expect(contents).toContain('done');
+  });
+
+  it('exports webm video for running sessions', async () => {
+    const sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      "printf 'ready webm\\n'; exec cat",
+    ]);
+
+    waitForIdle(testHome, sessionId);
+
+    const exportResult = runCli(
+      ['record', 'export', sessionId, '--format', 'webm', '--json'],
+      { AGENT_TERMINAL_HOME: testHome },
+      120_000,
+    );
+    expect(exportResult.status).toBe(0);
+    expect(exportResult.stderr).toBe('');
+
+    const envelope = JSON.parse(
+      exportResult.stdout,
+    ) as SuccessEnvelope<RecordExportResult>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.command).toBe('record export');
+    expect(envelope.result.sessionId).toBe(sessionId);
+    expect(envelope.result.format).toBe('webm');
+    expect(envelope.result.artifactPath.endsWith('.webm')).toBe(true);
+    expect(envelope.result.bytes).toBeGreaterThan(0);
+    expect(envelope.result.capturedAtSeq).toBeGreaterThanOrEqual(0);
+
+    const contents = await readFile(envelope.result.artifactPath);
+    expect(contents.byteLength).toBe(envelope.result.bytes);
+    const sha256 = createHash('sha256').update(contents).digest('hex');
+    expect(envelope.result.sha256).toBe(sha256);
+
+    const artifactManifest = await readJsonFile<{
+      artifacts: Array<{
+        kind: string;
+        filename: string;
+        sha256?: string;
+        bytes?: number;
+        capturedAtSeq: number;
+      }>;
+    }>(join(testHome, 'sessions', sessionId, 'artifacts', 'manifest.json'));
+    const videoEntries = artifactManifest.artifacts.filter(
+      (entry) => entry.kind === 'video',
+    );
+    expect(videoEntries.length).toBeGreaterThanOrEqual(1);
+    expect(videoEntries.at(-1)).toEqual(
+      expect.objectContaining({
+        kind: 'video',
+        filename: basename(envelope.result.artifactPath),
+        sha256: envelope.result.sha256,
+        bytes: envelope.result.bytes,
+      }),
+    );
+
+    destroySession(testHome, sessionId);
+  });
+
+  it('exports webm video for exited sessions', async () => {
+    const sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      "printf 'hello webm\\n'; exit 0",
+    ]);
+
+    waitForExit(testHome, sessionId);
+
+    const exportResult = runCli(
+      ['record', 'export', sessionId, '--format', 'webm', '--json'],
+      { AGENT_TERMINAL_HOME: testHome },
+      120_000,
+    );
+    expect(exportResult.status).toBe(0);
+    expect(exportResult.stderr).toBe('');
+
+    const envelope = JSON.parse(
+      exportResult.stdout,
+    ) as SuccessEnvelope<RecordExportResult>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.command).toBe('record export');
+    expect(envelope.result.sessionId).toBe(sessionId);
+    expect(envelope.result.format).toBe('webm');
+    expect(envelope.result.artifactPath.endsWith('.webm')).toBe(true);
+    expect(envelope.result.bytes).toBeGreaterThan(0);
+    expect(envelope.result.capturedAtSeq).toBeGreaterThanOrEqual(0);
+
+    const contents = await readFile(envelope.result.artifactPath);
+    expect(contents.byteLength).toBe(envelope.result.bytes);
+    const sha256 = createHash('sha256').update(contents).digest('hex');
+    expect(envelope.result.sha256).toBe(sha256);
+
+    const artifactManifest = await readJsonFile<{
+      artifacts: Array<{
+        kind: string;
+        filename: string;
+        sha256?: string;
+        bytes?: number;
+        capturedAtSeq: number;
+      }>;
+    }>(join(testHome, 'sessions', sessionId, 'artifacts', 'manifest.json'));
+    const videoEntries = artifactManifest.artifacts.filter(
+      (entry) => entry.kind === 'video',
+    );
+    expect(videoEntries.length).toBeGreaterThanOrEqual(1);
+    expect(videoEntries.at(-1)).toEqual(
+      expect.objectContaining({
+        kind: 'video',
+        filename: basename(envelope.result.artifactPath),
+        sha256: envelope.result.sha256,
+        bytes: envelope.result.bytes,
+      }),
+    );
   });
 
   it('rejects invalid export formats', () => {

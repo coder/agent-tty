@@ -192,6 +192,8 @@ export async function runRecordExportCommand(
     let durationMs: number | undefined;
     let artifactMetadata: Record<string, unknown>;
     let resultMetadata: Record<string, unknown>;
+    let bytes: number;
+    let sha256: string;
 
     if (format === 'asciicast') {
       const exportArtifact = generateAsciicast(
@@ -237,10 +239,9 @@ export async function runRecordExportCommand(
         writeErrorMessage: `Failed to write record export artifact at ${artifactOutputPath}.`,
       });
 
-      invariant(
-        contentsBuffer.byteLength > 0,
-        'asciicast export artifact must not be empty',
-      );
+      bytes = contentsBuffer.byteLength;
+      invariant(bytes > 0, 'asciicast export artifact must not be empty');
+      sha256 = createHash('sha256').update(contentsBuffer).digest('hex');
     } else {
       invariant(events.length > 0, 'webm export requires at least one event');
       const webmResult: WebmExportResult = await generateWebmExport({
@@ -279,12 +280,12 @@ export async function runRecordExportCommand(
           'default webm artifact path seq must match exported seq',
         );
       }
-    }
 
-    const stats = await stat(artifactOutputPath);
-    const bytes = stats.size;
-    invariant(bytes > 0, 'record export artifact must not be empty');
-    const sha256 = await computeFileHash(artifactOutputPath);
+      const stats = await stat(artifactOutputPath);
+      bytes = stats.size;
+      invariant(bytes > 0, 'webm export artifact must not be empty');
+      sha256 = await computeFileHash(artifactOutputPath);
+    }
 
     await appendArtifact(
       sessionDirectory,
