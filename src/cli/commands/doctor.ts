@@ -1,14 +1,30 @@
 import assert from 'node:assert/strict';
 import { constants as fsConstants } from 'node:fs';
-import { access, mkdtemp, rm, stat } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
+import { createConnection, createServer, type Server, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 
 import { emitSuccess } from '../output.js';
+import { createPty } from '../../pty/createPty.js';
+import { artifactPath, ensureArtifactsDir } from '../../storage/artifactPaths.js';
+import { ensureHome } from '../../storage/home.js';
+import { eventLogPath, sessionDir, socketPath } from '../../storage/sessionPaths.js';
 
 const COMMAND_NAME = 'doctor';
 const CHECK_TIMEOUT_MS = 10_000;
+const QUICK_CHECK_TIMEOUT_MS = 5_000;
 const DOCTOR_GROUP_ORDER = ['environment', 'renderer'] as const;
 const DOCTOR_GROUP_LABELS: Readonly<Record<DoctorCheckGroupName, string>> =
   Object.freeze({
@@ -19,15 +35,27 @@ const DOCTOR_CHECK_LABELS: Readonly<Record<string, string>> = Object.freeze({
   'node-runtime': 'node',
   'cwd-access': 'cwd',
   'temp-dir': 'temp',
+  'home-writable': 'home-write',
+  'pty-spawn': 'pty',
+  'socket-viable': 'socket',
+  'artifact-atomicity': 'artifacts',
+  'event-log-writable': 'event-log',
   playwright_available: 'playwright',
   browser_launch: 'browser',
   ghostty_web_available: 'ghostty-web',
   screenshot_viable: 'screenshot',
 });
 
+let doctorResourceSequence = 0;
+
 type DoctorCheckGroupName = 'environment' | 'renderer';
 type DoctorCheckStatus = 'pass' | 'fail' | 'skip';
 type DoctorCheckOperation = () => Promise<string> | string;
+type DoctorCheckDefinition = readonly [
+  name: string,
+  operation: DoctorCheckOperation,
+  timeoutMs?: number,
+];
 
 interface BrowserPageLike {
   screenshot(options: { path: string; timeout: number }): Promise<Buffer>;
@@ -60,6 +88,42 @@ interface GhosttyWebModuleLike {
   Terminal: unknown;
 }
 
+export interface DoctorDependencies {
+  createPty: typeof createPty;
+  createSocketConnection: typeof createConnection;
+  createSocketServer: typeof createServer;
+  cwd: () => string;
+  ensureArtifactsDir: typeof ensureArtifactsDir;
+  ensureHome: typeof ensureHome;
+  execPath: string;
+  mkdir: typeof mkdir;
+  now: () => number;
+  pid: number;
+  readFile: typeof readFile;
+  rename: typeof rename;
+  rm: typeof rm;
+  unlink: typeof unlink;
+  writeFile: typeof writeFile;
+}
+
+const DEFAULT_DOCTOR_DEPENDENCIES: DoctorDependencies = {
+  createPty,
+  createSocketConnection: createConnection,
+  createSocketServer: createServer,
+  cwd: () => process.cwd(),
+  ensureArtifactsDir,
+  ensureHome,
+  execPath: process.execPath,
+  mkdir,
+  now: Date.now,
+  pid: process.pid,
+  readFile,
+  rename,
+  rm,
+  unlink,
+  writeFile,
+};
+
 export interface DoctorCheck {
   name: string;
   status: DoctorCheckStatus;
@@ -89,6 +153,35 @@ function getCheckDurationMs(startedAtMs: number): number {
   return Math.max(0, Date.now() - startedAtMs);
 }
 
+function getDoctorDependencies(
+  overrides: Partial<DoctorDependencies>,
+): DoctorDependencies {
+  return {
+    ...DEFAULT_DOCTOR_DEPENDENCIES,
+    ...overrides,
+  };
+}
+
+function nextDoctorResourceSuffix(deps: DoctorDependencies): string {
+  doctorResourceSequence += 1;
+  assert(
+    Number.isInteger(doctorResourceSequence) && doctorResourceSequence > 0,
+    'doctor resource sequence must be a positive integer',
+  );
+
+  const timestamp = deps.now();
+  assert(
+    Number.isFinite(timestamp) && timestamp >= 0,
+    'doctor timestamp must be a non-negative finite number',
+  );
+  assert(
+    Number.isInteger(deps.pid) && deps.pid > 0,
+    'doctor pid must be a positive integer',
+  );
+
+  return `${String(deps.pid)}-${Math.trunc(timestamp).toString(36)}-${String(doctorResourceSequence)}`;
+}
+
 async function withTimeout<TResult>(
   operation: Promise<TResult>,
   timeoutMs: number,
@@ -116,9 +209,10 @@ async function withTimeout<TResult>(
   }
 }
 
-async function runDoctorCheck(
+export async function runDoctorCheck(
   name: string,
   operation: DoctorCheckOperation,
+  timeoutMs = CHECK_TIMEOUT_MS,
 ): Promise<DoctorCheck> {
   assert(name.length > 0, 'doctor check name must be a non-empty string');
 
@@ -126,8 +220,8 @@ async function runDoctorCheck(
   try {
     const message = await withTimeout(
       Promise.resolve(operation()),
-      CHECK_TIMEOUT_MS,
-      `${name} timed out after ${String(CHECK_TIMEOUT_MS)}ms`,
+      timeoutMs,
+      `${name} timed out after ${String(timeoutMs)}ms`,
     );
     assert(
       message.length > 0,
@@ -157,11 +251,11 @@ async function runDoctorCheck(
 }
 
 async function runCheckGroup(
-  checks: ReadonlyArray<readonly [string, DoctorCheckOperation]>,
+  checks: ReadonlyArray<DoctorCheckDefinition>,
 ): Promise<DoctorCheck[]> {
   const results: DoctorCheck[] = [];
-  for (const [name, operation] of checks) {
-    results.push(await runDoctorCheck(name, operation));
+  for (const [name, operation, timeoutMs] of checks) {
+    results.push(await runDoctorCheck(name, operation, timeoutMs));
   }
 
   return results;
@@ -190,6 +284,237 @@ async function runTemporaryDirectoryCheck(): Promise<string> {
   const temporaryDirectory = await mkdtemp(directoryPrefix);
   await rm(temporaryDirectory, { recursive: true, force: true });
   return `temp dir ok: ${tmpdir()}`;
+}
+
+export async function runHomeWritableCheck(
+  overrides: Partial<DoctorDependencies> = {},
+): Promise<string> {
+  const deps = getDoctorDependencies(overrides);
+  const home = await deps.ensureHome();
+  assert(home.length > 0, 'doctor home must be a non-empty path');
+
+  const temporaryFile = join(
+    home,
+    `.doctor-home-${nextDoctorResourceSuffix(deps)}.tmp`,
+  );
+
+  try {
+    await deps.writeFile(temporaryFile, 'doctor home check\n', { flag: 'wx' });
+    return `home writable: ${home}`;
+  } finally {
+    await deps.unlink(temporaryFile).catch(() => undefined);
+  }
+}
+
+async function withDoctorSessionDirectory<TResult>(
+  overrides: Partial<DoctorDependencies>,
+  operation: (sessionDirectory: string, deps: DoctorDependencies) => Promise<TResult>,
+): Promise<TResult> {
+  const deps = getDoctorDependencies(overrides);
+  const home = await deps.ensureHome();
+  assert(home.length > 0, 'doctor home must be a non-empty path');
+
+  const sessionDirectory = sessionDir(
+    home,
+    `doctor-${nextDoctorResourceSuffix(deps)}`,
+  );
+  await deps.mkdir(sessionDirectory, { recursive: true });
+
+  try {
+    return await operation(sessionDirectory, deps);
+  } finally {
+    await deps.rm(sessionDirectory, { recursive: true, force: true }).catch(
+      () => undefined,
+    );
+  }
+}
+
+export async function runPtySpawnCheck(
+  overrides: Partial<DoctorDependencies> = {},
+): Promise<string> {
+  const deps = getDoctorDependencies(overrides);
+  const cwd = deps.cwd();
+  assert(cwd.length > 0, 'doctor cwd must be a non-empty path');
+  assert(deps.execPath.length > 0, 'doctor execPath must be a non-empty path');
+
+  const pty = deps.createPty({
+    command: [deps.execPath, '-e', "process.stdout.write('hello\\n')"],
+    cwd,
+    cols: 80,
+    rows: 24,
+  });
+  assert.equal(typeof pty.onData, 'function', 'PTY must support onData');
+  assert.equal(typeof pty.onExit, 'function', 'PTY must support onExit');
+  assert.equal(typeof pty.kill, 'function', 'PTY must support kill');
+
+  let output = '';
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      pty.onData((chunk) => {
+        output += chunk;
+      });
+      pty.onExit(({ exitCode, signal }) => {
+        if (exitCode === 0 && output.includes('hello')) {
+          resolve();
+          return;
+        }
+
+        reject(
+          new Error(
+            `PTY spawn output mismatch (exitCode=${String(exitCode)}, signal=${String(signal)}, output=${JSON.stringify(output)})`,
+          ),
+        );
+      });
+    });
+  } finally {
+    try {
+      pty.kill();
+    } catch {
+      // best-effort cleanup
+    }
+  }
+
+  return `spawned ${deps.execPath}`;
+}
+
+async function closeServer(server: Server): Promise<void> {
+  if (!server.listening) {
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error instanceof Error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
+async function waitForSocketConnect(client: Socket): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    client.once('connect', () => resolve());
+    client.once('error', reject);
+  });
+}
+
+async function waitForSocketClose(client: Socket): Promise<void> {
+  await new Promise<void>((resolve) => {
+    client.once('close', () => resolve());
+    client.end();
+  });
+}
+
+export async function runSocketViabilityCheck(
+  overrides: Partial<DoctorDependencies> = {},
+): Promise<string> {
+  return withDoctorSessionDirectory(overrides, async (sessionDirectory, deps) => {
+    const socketFile = socketPath(sessionDirectory);
+    let server: Server | null = null;
+    let client: Socket | null = null;
+    let acceptedConnection = false;
+
+    try {
+      server = deps.createSocketServer();
+      const serverInstance = server;
+      serverInstance.on('connection', (socket) => {
+        acceptedConnection = true;
+        socket.on('error', () => undefined);
+        socket.end();
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        serverInstance.once('error', reject);
+        serverInstance.listen(socketFile, () => resolve());
+      });
+
+      client = deps.createSocketConnection(socketFile);
+      await waitForSocketConnect(client);
+      await waitForSocketClose(client);
+
+      assert(
+        acceptedConnection,
+        `socket server never accepted a client connection for ${socketFile}`,
+      );
+
+      await closeServer(server);
+      server = null;
+      await deps.rm(socketFile, { force: true });
+      return `socket ok: ${socketFile}`;
+    } finally {
+      client?.destroy();
+      if (server !== null) {
+        await closeServer(server).catch(() => undefined);
+      }
+      await deps.rm(socketFile, { force: true }).catch(() => undefined);
+    }
+  });
+}
+
+export async function runArtifactAtomicityCheck(
+  overrides: Partial<DoctorDependencies> = {},
+): Promise<string> {
+  return withDoctorSessionDirectory(overrides, async (sessionDirectory, deps) => {
+    const artifactsDirectory = await deps.ensureArtifactsDir(sessionDirectory);
+    assert(
+      artifactsDirectory.length > 0,
+      'artifact directory must be a non-empty path',
+    );
+
+    const suffix = nextDoctorResourceSuffix(deps);
+    const temporaryArtifactPath = artifactPath(
+      sessionDirectory,
+      `.tmp-doctor-${suffix}.txt`,
+    );
+    const finalArtifactPath = artifactPath(
+      sessionDirectory,
+      `doctor-${suffix}.txt`,
+    );
+    const expectedContent = 'doctor artifact atomicity check\n';
+
+    try {
+      await deps.writeFile(temporaryArtifactPath, expectedContent, { flag: 'wx' });
+      await deps.rename(temporaryArtifactPath, finalArtifactPath);
+      const content = await deps.readFile(finalArtifactPath, 'utf8');
+      assert.equal(
+        content,
+        expectedContent,
+        `artifact content mismatch for ${finalArtifactPath}`,
+      );
+      return `atomic rename ok: ${artifactsDirectory}`;
+    } finally {
+      await deps.rm(temporaryArtifactPath, { force: true }).catch(() => undefined);
+      await deps.rm(finalArtifactPath, { force: true }).catch(() => undefined);
+    }
+  });
+}
+
+export async function runEventLogWritabilityCheck(
+  overrides: Partial<DoctorDependencies> = {},
+): Promise<string> {
+  return withDoctorSessionDirectory(overrides, async (sessionDirectory, deps) => {
+    const eventLogFile = eventLogPath(sessionDirectory);
+    const firstLine = JSON.stringify({ type: 'doctor', pass: 1 });
+    const secondLine = JSON.stringify({ type: 'doctor', pass: 2 });
+
+    try {
+      await deps.writeFile(eventLogFile, `${firstLine}\n`, { flag: 'a' });
+      await deps.writeFile(eventLogFile, `${secondLine}\n`, { flag: 'a' });
+      const content = await deps.readFile(eventLogFile, 'utf8');
+      assert.equal(
+        content,
+        `${firstLine}\n${secondLine}\n`,
+        `event log append mismatch for ${eventLogFile}`,
+      );
+      return `append ok: ${eventLogFile}`;
+    } finally {
+      await deps.rm(eventLogFile, { force: true }).catch(() => undefined);
+    }
+  });
 }
 
 async function importPlaywrightModule(): Promise<PlaywrightModuleLike> {
@@ -301,6 +626,19 @@ export async function runDoctorChecks(): Promise<DoctorResult> {
     ['node-runtime', runNodeRuntimeCheck],
     ['cwd-access', runWorkingDirectoryCheck],
     ['temp-dir', runTemporaryDirectoryCheck],
+    ['home-writable', runHomeWritableCheck, QUICK_CHECK_TIMEOUT_MS],
+    ['pty-spawn', runPtySpawnCheck, QUICK_CHECK_TIMEOUT_MS],
+    ['socket-viable', runSocketViabilityCheck, QUICK_CHECK_TIMEOUT_MS],
+    [
+      'artifact-atomicity',
+      runArtifactAtomicityCheck,
+      QUICK_CHECK_TIMEOUT_MS,
+    ],
+    [
+      'event-log-writable',
+      runEventLogWritabilityCheck,
+      QUICK_CHECK_TIMEOUT_MS,
+    ],
   ]);
   const renderer = await runCheckGroup([
     ['playwright_available', runPlaywrightAvailableCheck],

@@ -443,12 +443,30 @@ describe('renderer slice e2e', { timeout: 120_000 }, () => {
   });
 
   it('reports renderer checks in doctor --json output', () => {
-    const doctorEnvelope = runCliEnvelope<DoctorResult>(['doctor'], {}, 90_000);
+    const doctorEnvelope = runCliEnvelope<DoctorResult>(
+      ['doctor'],
+      testEnv(testHome),
+      90_000,
+    );
 
     expect(doctorEnvelope.ok).toBe(true);
     expect(doctorEnvelope.command).toBe('doctor');
     expect(doctorEnvelope.result.ok).toBe(true);
-    expect(doctorEnvelope.result.checks.environment.length).toBeGreaterThan(0);
+    expect(doctorEnvelope.result.checks.environment).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'home-writable', status: 'pass' }),
+        expect.objectContaining({ name: 'pty-spawn', status: 'pass' }),
+        expect.objectContaining({ name: 'socket-viable', status: 'pass' }),
+        expect.objectContaining({
+          name: 'artifact-atomicity',
+          status: 'pass',
+        }),
+        expect.objectContaining({
+          name: 'event-log-writable',
+          status: 'pass',
+        }),
+      ]),
+    );
     expect(doctorEnvelope.result.checks.renderer).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
