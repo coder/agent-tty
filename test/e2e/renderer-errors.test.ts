@@ -91,7 +91,7 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
     });
   });
 
-  it('returns an error for snapshot requests after the session has exited', () => {
+  it('succeeds for snapshot requests after the session has exited', () => {
     const sessionId = createSession(testHome, [
       '/bin/sh',
       '-c',
@@ -107,17 +107,28 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
     expect(waitResult.exitCode).toBe(0);
     expect(waitResult.stderr).toBe('');
 
-    const envelope = runCliErrorEnvelope(['snapshot', sessionId], {
+    const result = runCli(['snapshot', sessionId, '--json'], {
       AGENT_TERMINAL_HOME: testHome,
     });
 
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout.length).toBeGreaterThan(0);
+
+    const envelope = JSON.parse(result.stdout) as {
+      ok: boolean;
+      command: string;
+      result: {
+        format: string;
+        sessionId: string;
+        capturedAtSeq: number;
+      };
+    };
+    expect(envelope.ok).toBe(true);
     expect(envelope.command).toBe('snapshot');
-    expect(envelope.error.code).toBe(ERROR_CODES.SESSION_NOT_RUNNING);
-    expect(envelope.error.message).toContain('is not running');
-    expect(envelope.error.details).toMatchObject({
-      sessionId,
-      status: 'exited',
-    });
+    expect(envelope.result.format).toBe('structured');
+    expect(envelope.result.sessionId).toBe(sessionId);
+    expect(typeof envelope.result.capturedAtSeq).toBe('number');
   });
 
   it('returns an error for wait text beyond the schema maximum length', () => {
