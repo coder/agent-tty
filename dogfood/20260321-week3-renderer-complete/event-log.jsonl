@@ -1,0 +1,6 @@
+{"seq":0,"ts":"2026-03-21T21:48:37.894Z","type":"output","payload":{"data":"Loading\r\n"}}
+{"seq":1,"ts":"2026-03-21T21:48:38.896Z","type":"output","payload":{"data":"3 items\r\n"}}
+{"seq":2,"ts":"2026-03-21T21:48:39.897Z","type":"output","payload":{"data":"Ready\r\n"}}
+{"seq":3,"ts":"2026-03-21T21:48:40.846Z","type":"input_text","payload":{"data":"week3 renderer bundle"}}
+{"seq":4,"ts":"2026-03-21T21:48:40.847Z","type":"output","payload":{"data":"week3 renderer bundle"}}
+{"seq":5,"ts":"2026-03-21T21:48:47.618Z","type":"exit","payload":{"exitCode":0,"exitSignal":"1"}}

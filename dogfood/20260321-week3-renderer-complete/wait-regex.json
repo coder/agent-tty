@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-03-21T21:48:41.982Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "week3 renderer bundle",
+    "capturedAtSeq": 4
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "command": "screenshot",
+  "timestamp": "2026-03-21T21:48:45.979Z",
+  "result": {
+    "sessionId": "01KM95Y7RFQZ11N60DR204NK1T",
+    "capturedAtSeq": 4,
+    "profileName": "reference-light",
+    "cols": 80,
+    "rows": 24,
+    "artifactPath": "/tmp/agent-terminal-week3-bundles.Bo0MbU/home.8BRlbs/sessions/01KM95Y7RFQZ11N60DR204NK1T/artifacts/screenshot-4-reference-light.png",
+    "pngSizeBytes": 5906
+  }
+}

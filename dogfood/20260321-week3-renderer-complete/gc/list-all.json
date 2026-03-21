@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "command": "list",
+  "timestamp": "2026-03-21T21:49:03.359Z",
+  "result": {
+    "sessions": []
+  }
+}

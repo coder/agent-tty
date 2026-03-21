@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-21T21:49:16.395Z",
+  "result": {
+    "sessionId": "01KM95Z3QSQKN28SVD03BP28Z2",
+    "format": "asciicast",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent_exec_7c2a453166/dogfood/20260321-week3-crash-retention/artifacts/session-post-crash.cast",
+    "bytes": 161,
+    "sha256": "98f07bd6a90cbe54191687409ec21532d16c5bf0956e00630ccc04f915b5b2b5",
+    "capturedAtSeq": 1,
+    "durationMs": 1,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "title": "01KM95Z3QSQKN28SVD03BP28Z2",
+      "timestamp": 1774129746,
+      "outputEventCount": 1,
+      "resizeEventCount": 0
+    }
+  }
+}

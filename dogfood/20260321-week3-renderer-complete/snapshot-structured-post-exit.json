@@ -1,0 +1,113 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-21T21:48:48.939Z",
+  "result": {
+    "format": "structured",
+    "sessionId": "01KM95Y7RFQZ11N60DR204NK1T",
+    "capturedAtSeq": 5,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 3,
+    "cursorCol": 21,
+    "isAltScreen": false,
+    "visibleLines": [
+      {
+        "row": 0,
+        "text": "Loading"
+      },
+      {
+        "row": 1,
+        "text": "3 items"
+      },
+      {
+        "row": 2,
+        "text": "Ready"
+      },
+      {
+        "row": 3,
+        "text": "week3 renderer bundle"
+      },
+      {
+        "row": 4,
+        "text": ""
+      },
+      {
+        "row": 5,
+        "text": ""
+      },
+      {
+        "row": 6,
+        "text": ""
+      },
+      {
+        "row": 7,
+        "text": ""
+      },
+      {
+        "row": 8,
+        "text": ""
+      },
+      {
+        "row": 9,
+        "text": ""
+      },
+      {
+        "row": 10,
+        "text": ""
+      },
+      {
+        "row": 11,
+        "text": ""
+      },
+      {
+        "row": 12,
+        "text": ""
+      },
+      {
+        "row": 13,
+        "text": ""
+      },
+      {
+        "row": 14,
+        "text": ""
+      },
+      {
+        "row": 15,
+        "text": ""
+      },
+      {
+        "row": 16,
+        "text": ""
+      },
+      {
+        "row": 17,
+        "text": ""
+      },
+      {
+        "row": 18,
+        "text": ""
+      },
+      {
+        "row": 19,
+        "text": ""
+      },
+      {
+        "row": 20,
+        "text": ""
+      },
+      {
+        "row": 21,
+        "text": ""
+      },
+      {
+        "row": 22,
+        "text": ""
+      },
+      {
+        "row": 23,
+        "text": ""
+      }
+    ]
+  }
+}
