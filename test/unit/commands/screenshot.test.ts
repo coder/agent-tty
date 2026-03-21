@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { CliError } from '../../../src/cli/errors.js';
+import type { ScreenshotResult } from '../../../src/protocol/messages.js';
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
 
 const mocks = vi.hoisted(() => ({
@@ -10,6 +12,17 @@ const mocks = vi.hoisted(() => ({
   sessionDir: vi.fn(),
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
+  withOfflineReplayRenderer: vi.fn(),
+  appendArtifact: vi.fn(),
+  createArtifactEntry: vi.fn(),
+  ensureArtifactsDir: vi.fn(),
+  rename: vi.fn(),
+  rm: vi.fn(),
+}));
+
+vi.mock('node:fs/promises', () => ({
+  rename: mocks.rename,
+  rm: mocks.rm,
 }));
 
 vi.mock('../../../src/cli/output.js', () => ({
@@ -34,6 +47,26 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
   socketPath: mocks.socketPath,
 }));
 
+vi.mock('../../../src/replay/offlineReplay.js', () => ({
+  withOfflineReplayRenderer: mocks.withOfflineReplayRenderer,
+}));
+
+vi.mock('../../../src/storage/artifactManifest.js', () => ({
+  appendArtifact: mocks.appendArtifact,
+  createArtifactEntry: mocks.createArtifactEntry,
+}));
+
+vi.mock('../../../src/storage/artifactPaths.js', () => ({
+  artifactPath: vi.fn(
+    (_dir: string, filename: string) => `/artifacts/${filename}`,
+  ),
+  ensureArtifactsDir: mocks.ensureArtifactsDir,
+  screenshotFilename: vi.fn(
+    (seq: number, profileName: string) =>
+      `screenshot-${String(seq)}-${profileName}.png`,
+  ),
+}));
+
 import { runScreenshotCommand } from '../../../src/cli/commands/screenshot.js';
 
 function createRunningSessionRecord() {
@@ -54,6 +87,70 @@ function createRunningSessionRecord() {
   };
 }
 
+function createExitedSessionRecord() {
+  return {
+    ...createRunningSessionRecord(),
+    status: 'exited' as const,
+    hostPid: null,
+    childPid: null,
+    exitCode: 0,
+    exitSignal: null,
+  };
+}
+
+function createScreenshotResult(
+  overrides: Partial<ScreenshotResult> = {},
+): ScreenshotResult {
+  return {
+    sessionId: 'session-01',
+    capturedAtSeq: 5,
+    profileName: 'reference-dark',
+    cols: 80,
+    rows: 24,
+    artifactPath: '/tmp/snapshot.png',
+    pngSizeBytes: 2048,
+    ...overrides,
+  };
+}
+
+type MockSessionRecord =
+  | ReturnType<typeof createRunningSessionRecord>
+  | ReturnType<typeof createExitedSessionRecord>;
+
+function mockOfflineReplayRendererSuccess(
+  screenshotOverrides: Partial<ScreenshotResult> = {},
+): void {
+  mocks.withOfflineReplayRenderer.mockImplementation(
+    async (
+      _options: unknown,
+      run: (context: {
+        manifest: MockSessionRecord;
+        replayInput: Record<string, never>;
+        backend: {
+          screenshot(outputPath: string): Promise<ScreenshotResult>;
+        };
+      }) => Promise<unknown>,
+    ) => {
+      const mockBackend = {
+        screenshot(outputPath: string): Promise<ScreenshotResult> {
+          return Promise.resolve(
+            createScreenshotResult({
+              ...screenshotOverrides,
+              artifactPath: outputPath,
+            }),
+          );
+        },
+      };
+
+      return run({
+        manifest: createExitedSessionRecord(),
+        replayInput: {},
+        backend: mockBackend,
+      });
+    },
+  );
+}
+
 describe('screenshot command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -69,6 +166,17 @@ describe('screenshot command', () => {
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
     );
     mocks.readManifestIfExists.mockResolvedValue(createRunningSessionRecord());
+    mocks.appendArtifact.mockResolvedValue(undefined);
+    mocks.createArtifactEntry.mockImplementation((entry: unknown) => ({
+      id: 'artifact-01',
+      createdAt: '2026-03-19T12:00:02.000Z',
+      ...(entry as Record<string, unknown>),
+    }));
+    mocks.ensureArtifactsDir.mockResolvedValue(
+      '/tmp/agent-terminal/sessions/session-01/artifacts',
+    );
+    mocks.rename.mockResolvedValue(undefined);
+    mocks.rm.mockResolvedValue(undefined);
   });
 
   it('requests screenshots with the default render profile', async () => {
@@ -144,6 +252,153 @@ describe('screenshot command', () => {
         'PNG Size: 1024 bytes',
       ],
     });
+  });
+
+  it('uses offline replay for exited sessions', async () => {
+    const result = createScreenshotResult({
+      artifactPath: '/artifacts/screenshot-5-reference-dark.png',
+    });
+    mocks.readManifestIfExists.mockResolvedValue(createExitedSessionRecord());
+    mockOfflineReplayRendererSuccess();
+
+    await runScreenshotCommand({
+      json: false,
+      sessionId: 'session-01',
+    });
+
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+    expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
+      {
+        sessionDir: '/tmp/agent-terminal/sessions/session-01',
+        profileName: 'reference-dark',
+      },
+      expect.any(Function),
+    );
+    expect(mocks.rename).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/artifacts\/\.tmp-screenshot-.*\.png$/),
+      '/artifacts/screenshot-5-reference-dark.png',
+    );
+    expect(mocks.createArtifactEntry).toHaveBeenCalledWith({
+      kind: 'screenshot',
+      filename: 'screenshot-5-reference-dark.png',
+      sessionId: 'session-01',
+      capturedAtSeq: 5,
+      metadata: {
+        profileName: 'reference-dark',
+        cols: 80,
+        rows: 24,
+        pngSizeBytes: 2048,
+      },
+    });
+    expect(mocks.appendArtifact).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01',
+      expect.objectContaining({
+        kind: 'screenshot',
+        filename: 'screenshot-5-reference-dark.png',
+        sessionId: 'session-01',
+        capturedAtSeq: 5,
+      }),
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith({
+      command: 'screenshot',
+      json: false,
+      result,
+      lines: [
+        'Session ID: session-01',
+        'Captured At Seq: 5',
+        'Profile: reference-dark',
+        'Size: 80x24',
+        'PNG Path: /artifacts/screenshot-5-reference-dark.png',
+        'PNG Size: 2048 bytes',
+      ],
+    });
+  });
+
+  it('falls back to offline replay when the host is unreachable', async () => {
+    const result = createScreenshotResult({
+      artifactPath: '/artifacts/screenshot-5-reference-dark.png',
+    });
+    mocks.sendRpc.mockRejectedValue(
+      new CliError(ERROR_CODES.HOST_UNREACHABLE, 'host unreachable'),
+    );
+    mockOfflineReplayRendererSuccess();
+
+    await runScreenshotCommand({
+      json: false,
+      sessionId: 'session-01',
+    });
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'screenshot',
+      { profile: 'reference-dark' },
+    );
+    expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledTimes(1);
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'screenshot',
+        result,
+      }),
+    );
+  });
+
+  it('surfaces non-fallback RPC errors', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      new CliError(ERROR_CODES.RPC_ERROR, 'rpc error'),
+    );
+
+    await expect(
+      runScreenshotCommand({
+        json: false,
+        sessionId: 'session-01',
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.RPC_ERROR,
+      message: 'rpc error',
+    });
+    expect(mocks.withOfflineReplayRenderer).not.toHaveBeenCalled();
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('cleans up temporary artifacts when offline replay capture fails', async () => {
+    const captureError = new Error('capture failed');
+    mocks.readManifestIfExists.mockResolvedValue(createExitedSessionRecord());
+    mocks.withOfflineReplayRenderer.mockImplementation(
+      async (
+        _options: unknown,
+        run: (context: {
+          manifest: MockSessionRecord;
+          replayInput: Record<string, never>;
+          backend: {
+            screenshot(outputPath: string): Promise<ScreenshotResult>;
+          };
+        }) => Promise<unknown>,
+      ) =>
+        run({
+          manifest: createExitedSessionRecord(),
+          replayInput: {},
+          backend: {
+            screenshot(outputPath: string): Promise<ScreenshotResult> {
+              void outputPath;
+              return Promise.reject(captureError);
+            },
+          },
+        }),
+    );
+
+    await expect(
+      runScreenshotCommand({
+        json: false,
+        sessionId: 'session-01',
+      }),
+    ).rejects.toBe(captureError);
+    expect(mocks.rm).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/artifacts\/\.tmp-screenshot-.*\.png$/),
+      { force: true },
+    );
+    expect(mocks.rename).not.toHaveBeenCalled();
+    expect(mocks.appendArtifact).not.toHaveBeenCalled();
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
   it('rejects malformed screenshot RPC responses', async () => {
