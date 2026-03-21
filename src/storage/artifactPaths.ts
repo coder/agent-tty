@@ -77,6 +77,21 @@ export function snapshotFilename(
   return `snapshot-${String(seq)}-${sanitizedFormat}.json`;
 }
 
+export function recordingFilename(seq: number, format: string): string {
+  assertNonNegativeInteger(seq, 'seq');
+  const sanitizedFormat = sanitizeFilenameComponent(format, 'format');
+  return `recording-${String(seq)}-${sanitizedFormat}.json`;
+}
+
+export function videoFilename(seq: number, profileName: string): string {
+  assertNonNegativeInteger(seq, 'seq');
+  const sanitizedProfileName = sanitizeFilenameComponent(
+    profileName,
+    'profileName',
+  );
+  return `video-${String(seq)}-${sanitizedProfileName}.mp4`;
+}
+
 export function artifactPath(sessionDir: string, filename: string): string {
   const directory = artifactsDir(sessionDir);
   assertNonEmptyString(filename, 'filename');

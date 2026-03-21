@@ -286,4 +286,18 @@ export const WaitForRenderResultSchema = z
     capturedAtSeq: NonNegativeIntSchema,
   })
   .strict();
+export const RecordExportResultSchema = z
+  .object({
+    sessionId: NonEmptyStringSchema,
+    format: NonEmptyStringSchema,
+    artifactPath: NonEmptyStringSchema,
+    bytes: z.number().int().nonnegative(),
+    sha256: NonEmptyStringSchema,
+    capturedAtSeq: NonNegativeIntSchema,
+    durationMs: z.number().int().nonnegative().optional(),
+    metadata: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+export type RecordExportResult = z.infer<typeof RecordExportResultSchema>;
+
 export type WaitForRenderResult = z.infer<typeof WaitForRenderResultSchema>;

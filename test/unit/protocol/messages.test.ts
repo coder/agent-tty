@@ -4,6 +4,7 @@ import {
   DestroyParamsSchema,
   InspectResultSchema,
   PasteParamsSchema,
+  RecordExportResultSchema,
   ResizeResultSchema,
   RpcMethodSchemas,
   RpcRequestSchema,
@@ -301,6 +302,49 @@ describe('RPC message schemas', () => {
         capturedAtSeq: 7,
       }).success,
     ).toBe(true);
+  });
+
+  it('accepts valid record export results', () => {
+    expect(
+      RecordExportResultSchema.safeParse({
+        sessionId: 'session-01',
+        format: 'asciicast-v2',
+        artifactPath: '/tmp/session-01/artifacts/recording-7-asciicast-v2.json',
+        bytes: 4096,
+        sha256: 'abc123',
+        capturedAtSeq: 7,
+        durationMs: 2500,
+        metadata: {
+          rows: 24,
+          cols: 80,
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects invalid record export results', () => {
+    expect(
+      RecordExportResultSchema.safeParse({
+        sessionId: 'session-01',
+        format: 'asciicast-v2',
+        artifactPath: '/tmp/session-01/artifacts/recording-7-asciicast-v2.json',
+        bytes: 4096,
+        capturedAtSeq: 7,
+        metadata: {},
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordExportResultSchema.safeParse({
+        sessionId: 'session-01',
+        format: 'asciicast-v2',
+        artifactPath: '/tmp/session-01/artifacts/recording-7-asciicast-v2.json',
+        bytes: 4096,
+        sha256: 'abc123',
+        capturedAtSeq: 7,
+        metadata: {},
+        extra: true,
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects empty key arrays for sendKeys', () => {

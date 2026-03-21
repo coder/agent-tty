@@ -12,7 +12,12 @@ const ARTIFACT_MANIFEST_FILENAME = 'manifest.json';
 const NonEmptyStringSchema = z.string().min(1);
 const NonNegativeIntSchema = z.number().int().nonnegative();
 const IsoDatetimeSchema = z.iso.datetime();
-const ArtifactKindSchema = z.enum(['screenshot', 'snapshot']);
+const ArtifactKindSchema = z.enum([
+  'screenshot',
+  'snapshot',
+  'recording',
+  'video',
+]);
 
 export const ArtifactEntrySchema = z
   .object({
@@ -25,6 +30,8 @@ export const ArtifactEntrySchema = z
     sessionId: NonEmptyStringSchema,
     capturedAtSeq: NonNegativeIntSchema,
     createdAt: IsoDatetimeSchema,
+    sha256: z.string().optional(),
+    bytes: z.number().int().nonnegative().optional(),
     metadata: z.record(z.string(), z.unknown()),
   })
   .strict();

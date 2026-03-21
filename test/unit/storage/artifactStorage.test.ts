@@ -10,14 +10,17 @@ import type {
 } from '../../../src/storage/artifactManifest.js';
 import {
   appendArtifact,
+  ArtifactEntrySchema,
   readArtifactManifest,
   writeArtifactManifest,
 } from '../../../src/storage/artifactManifest.js';
 import {
   artifactPath,
   ensureArtifactsDir,
+  recordingFilename,
   screenshotFilename,
   snapshotFilename,
+  videoFilename,
 } from '../../../src/storage/artifactPaths.js';
 
 const temporaryDirectories: string[] = [];
@@ -62,9 +65,13 @@ describe('artifact paths', () => {
     const sessionDir = await createSessionDir();
     const screenshot = screenshotFilename(7, 'reference dark / baseline');
     const snapshot = snapshotFilename(7, 'structured');
+    const recording = recordingFilename(7, 'asciicast / v2');
+    const video = videoFilename(7, 'reference dark / baseline');
 
     expect(screenshot).toBe('screenshot-7-reference-dark-baseline.png');
     expect(snapshot).toBe('snapshot-7-structured.json');
+    expect(recording).toBe('recording-7-asciicast-v2.json');
+    expect(video).toBe('video-7-reference-dark-baseline.mp4');
     expect(artifactPath(sessionDir, screenshot)).toBe(
       join(sessionDir, 'artifacts', screenshot),
     );
@@ -82,12 +89,50 @@ describe('artifact paths', () => {
     expect(() => screenshotFilename(0, '')).toThrow(
       /profileName must be a non-empty string/u,
     );
+    expect(() => recordingFilename(0, '')).toThrow(
+      /format must be a non-empty string/u,
+    );
+    expect(() => videoFilename(0, '')).toThrow(
+      /profileName must be a non-empty string/u,
+    );
     expect(() => artifactPath('relative/session', 'capture.png')).toThrow(
       /sessionDir must be an absolute path/u,
     );
     expect(() => artifactPath('/tmp/session-01', 'nested/capture.png')).toThrow(
       /filename must not contain path separators/u,
     );
+  });
+});
+
+describe('artifact entry schema', () => {
+  it('accepts recording and video artifact kinds', () => {
+    expect(
+      ArtifactEntrySchema.safeParse(
+        createArtifactEntry({
+          kind: 'recording',
+          filename: 'recording-4-asciicast-v2.json',
+        }),
+      ).success,
+    ).toBe(true);
+    expect(
+      ArtifactEntrySchema.safeParse(
+        createArtifactEntry({
+          kind: 'video',
+          filename: 'video-4-reference-dark.mp4',
+        }),
+      ).success,
+    ).toBe(true);
+  });
+
+  it('accepts optional sha256 and bytes fields', () => {
+    expect(
+      ArtifactEntrySchema.safeParse(
+        createArtifactEntry({
+          sha256: 'abc123',
+          bytes: 2048,
+        }),
+      ).success,
+    ).toBe(true);
   });
 });
 

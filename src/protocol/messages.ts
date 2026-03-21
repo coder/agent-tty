@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import type { RecordExportResult as RecordExportResultType } from './schemas.js';
+
 import {
   ScreenshotParamsSchema,
   ScreenshotResultSchema,
@@ -12,6 +14,7 @@ import {
 } from './schemas.js';
 
 export {
+  RecordExportResultSchema,
   ScreenshotParamsSchema,
   ScreenshotResultSchema,
   SnapshotParamsSchema,
@@ -83,6 +86,8 @@ export type SnapshotResult = z.infer<typeof SnapshotResultSchema>;
 export type ScreenshotParams = z.infer<typeof ScreenshotParamsSchema>;
 
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;
+
+export type RecordExportResult = RecordExportResultType;
 
 export const TypeParamsSchema = z
   .object({

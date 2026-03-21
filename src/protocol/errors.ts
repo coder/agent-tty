@@ -19,6 +19,8 @@ export const ERROR_CODES = {
   MANIFEST_VALIDATION_ERROR: 'MANIFEST_VALIDATION_ERROR',
   RPC_ERROR: 'RPC_ERROR',
   PROTOCOL_ERROR: 'PROTOCOL_ERROR',
+  EXPORT_ERROR: 'EXPORT_ERROR',
+  REPLAY_ERROR: 'REPLAY_ERROR',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
@@ -41,6 +43,8 @@ export const DEFAULT_ERROR_MESSAGES: Record<ProtocolErrorCode, string> = {
   [ERROR_CODES.MANIFEST_VALIDATION_ERROR]: 'Session manifest is invalid.',
   [ERROR_CODES.RPC_ERROR]: 'RPC request failed.',
   [ERROR_CODES.PROTOCOL_ERROR]: 'Unexpected response from host.',
+  [ERROR_CODES.EXPORT_ERROR]: 'Export failed.',
+  [ERROR_CODES.REPLAY_ERROR]: 'Replay failed.',
   [ERROR_CODES.INTERNAL_ERROR]: 'Internal error.',
 };
 
