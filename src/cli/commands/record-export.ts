@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFile, stat } from 'node:fs/promises';
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import process from 'node:process';
 
@@ -6,6 +7,10 @@ import { z } from 'zod';
 
 import { emitSuccess } from '../output.js';
 import { generateAsciicast } from '../../export/asciicast.js';
+import {
+  generateWebmExport,
+  type WebmExportResult,
+} from '../../export/webm.js';
 import { readEventLogRecords } from '../../host/replay.js';
 import { CliError } from '../errors.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
@@ -37,6 +42,8 @@ import { invariant } from '../../util/assert.js';
 const RecordExportFormatSchema = z.enum(['asciicast', 'webm']);
 
 type RecordExportFormat = z.infer<typeof RecordExportFormatSchema>;
+
+type ArtifactKind = 'recording' | 'video';
 
 interface CommandOptions {
   json: boolean;
@@ -82,13 +89,14 @@ function resolveRecordExportFormat(
 async function resolveOutputPath(
   sessionDirectory: string,
   capturedAtSeq: number,
+  format: RecordExportFormat,
   outputPath: string | undefined,
 ): Promise<string> {
   if (outputPath === undefined) {
     await ensureArtifactsDir(sessionDirectory);
     return artifactPath(
       sessionDirectory,
-      recordingFilename(capturedAtSeq, 'asciicast'),
+      recordingFilename(capturedAtSeq, format),
     );
   }
 
@@ -108,6 +116,17 @@ async function resolveOutputPath(
   return resolvedOutputPath;
 }
 
+async function computeFileHash(filePath: string): Promise<string> {
+  invariant(filePath.length > 0, 'filePath must be a non-empty string');
+  invariant(isAbsolute(filePath), 'filePath must be absolute');
+  const fileContents = await readFile(filePath);
+  return createHash('sha256').update(fileContents).digest('hex');
+}
+
+function resolveCapturedAtSeq(events: ReadonlyArray<{ seq: number }>): number {
+  return events.at(-1)?.seq ?? 0;
+}
+
 function buildResultLines(result: RecordExportResult): string[] {
   return [
     `Session ID: ${result.sessionId}`,
@@ -124,17 +143,6 @@ export async function runRecordExportCommand(
   options: CommandOptions,
 ): Promise<void> {
   const format = resolveRecordExportFormat(options.format);
-
-  if (format !== 'asciicast') {
-    throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
-      message: `Record export format "${format}" is not implemented yet.`,
-      details: {
-        sessionId: options.sessionId,
-        format,
-      },
-    });
-  }
-
   const home = resolveHome();
   let sessionDirectory: string;
 
@@ -166,46 +174,128 @@ export async function runRecordExportCommand(
   try {
     const eventsFile = eventLogPath(sessionDirectory);
     const events = await readEventLogRecords(eventsFile);
-    const exportArtifact = generateAsciicast(
-      options.sessionId,
-      manifest,
-      events,
-    );
+    const defaultCapturedAtSeq = resolveCapturedAtSeq(events);
     const artifactOutputPath = await resolveOutputPath(
       sessionDirectory,
-      exportArtifact.capturedAtSeq,
+      defaultCapturedAtSeq,
+      format,
       options.out,
     );
-    const contentsBuffer = Buffer.from(exportArtifact.contents, 'utf8');
-    const bytes = contentsBuffer.byteLength;
-    const sha256 = createHash('sha256').update(contentsBuffer).digest('hex');
 
-    await writeTextFileAtomic({
-      path: artifactOutputPath,
-      pathLabel: 'record export path',
-      contents: exportArtifact.contents,
-      writeErrorMessage: `Failed to write record export artifact at ${artifactOutputPath}.`,
-    });
+    invariant(
+      isAbsolute(artifactOutputPath),
+      'record export path must be absolute',
+    );
+
+    let artifactKind: ArtifactKind;
+    let capturedAtSeq: number;
+    let durationMs: number | undefined;
+    let artifactMetadata: Record<string, unknown>;
+    let resultMetadata: Record<string, unknown>;
+
+    if (format === 'asciicast') {
+      const exportArtifact = generateAsciicast(
+        options.sessionId,
+        manifest,
+        events,
+      );
+      const contentsBuffer = Buffer.from(exportArtifact.contents, 'utf8');
+
+      capturedAtSeq = exportArtifact.capturedAtSeq;
+      durationMs = exportArtifact.durationMs;
+      artifactKind = 'recording';
+      artifactMetadata = {
+        format,
+        outputPath: artifactOutputPath,
+        width: exportArtifact.header.width,
+        height: exportArtifact.header.height,
+        title: exportArtifact.header.title,
+        timestamp: exportArtifact.header.timestamp,
+        outputEventCount: exportArtifact.outputEventCount,
+        resizeEventCount: exportArtifact.resizeEventCount,
+      };
+      resultMetadata = {
+        width: exportArtifact.header.width,
+        height: exportArtifact.header.height,
+        title: exportArtifact.header.title,
+        timestamp: exportArtifact.header.timestamp,
+        outputEventCount: exportArtifact.outputEventCount,
+        resizeEventCount: exportArtifact.resizeEventCount,
+      };
+
+      if (options.out === undefined) {
+        invariant(
+          capturedAtSeq === defaultCapturedAtSeq,
+          'default asciicast artifact path seq must match exported seq',
+        );
+      }
+
+      await writeTextFileAtomic({
+        path: artifactOutputPath,
+        pathLabel: 'record export path',
+        contents: exportArtifact.contents,
+        writeErrorMessage: `Failed to write record export artifact at ${artifactOutputPath}.`,
+      });
+
+      invariant(
+        contentsBuffer.byteLength > 0,
+        'asciicast export artifact must not be empty',
+      );
+    } else {
+      invariant(events.length > 0, 'webm export requires at least one event');
+      const webmResult: WebmExportResult = await generateWebmExport({
+        sessionId: options.sessionId,
+        sessionDir: sessionDirectory,
+        manifest,
+        events,
+        outputPath: artifactOutputPath,
+      });
+
+      capturedAtSeq = webmResult.capturedAtSeq;
+      durationMs = webmResult.durationMs;
+      artifactKind = 'video';
+      artifactMetadata = {
+        format,
+        outputPath: artifactOutputPath,
+        width: webmResult.cols,
+        height: webmResult.rows,
+        profileName: webmResult.profileName,
+        timingMode: webmResult.timingMode,
+        outputEventCount: webmResult.outputEventCount,
+        resizeEventCount: webmResult.resizeEventCount,
+      };
+      resultMetadata = {
+        width: webmResult.cols,
+        height: webmResult.rows,
+        profileName: webmResult.profileName,
+        timingMode: webmResult.timingMode,
+        outputEventCount: webmResult.outputEventCount,
+        resizeEventCount: webmResult.resizeEventCount,
+      };
+
+      if (options.out === undefined) {
+        invariant(
+          capturedAtSeq === defaultCapturedAtSeq,
+          'default webm artifact path seq must match exported seq',
+        );
+      }
+    }
+
+    const stats = await stat(artifactOutputPath);
+    const bytes = stats.size;
+    invariant(bytes > 0, 'record export artifact must not be empty');
+    const sha256 = await computeFileHash(artifactOutputPath);
 
     await appendArtifact(
       sessionDirectory,
       createArtifactEntry({
-        kind: 'recording',
+        kind: artifactKind,
         filename: basename(artifactOutputPath),
         sessionId: manifest.sessionId,
-        capturedAtSeq: exportArtifact.capturedAtSeq,
+        capturedAtSeq,
         sha256,
         bytes,
-        metadata: {
-          format,
-          outputPath: artifactOutputPath,
-          width: exportArtifact.header.width,
-          height: exportArtifact.header.height,
-          title: exportArtifact.header.title,
-          timestamp: exportArtifact.header.timestamp,
-          outputEventCount: exportArtifact.outputEventCount,
-          resizeEventCount: exportArtifact.resizeEventCount,
-        },
+        metadata: artifactMetadata,
       }),
     );
 
@@ -215,16 +305,9 @@ export async function runRecordExportCommand(
       artifactPath: artifactOutputPath,
       bytes,
       sha256,
-      capturedAtSeq: exportArtifact.capturedAtSeq,
-      durationMs: exportArtifact.durationMs,
-      metadata: {
-        width: exportArtifact.header.width,
-        height: exportArtifact.header.height,
-        title: exportArtifact.header.title,
-        timestamp: exportArtifact.header.timestamp,
-        outputEventCount: exportArtifact.outputEventCount,
-        resizeEventCount: exportArtifact.resizeEventCount,
-      },
+      capturedAtSeq,
+      durationMs,
+      metadata: resultMetadata,
     };
     const parsedResult = RecordExportResultSchema.safeParse(rawResult);
 
@@ -250,7 +333,7 @@ export async function runRecordExportCommand(
     }
 
     throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
-      message: `Failed to export session "${options.sessionId}" as asciicast.`,
+      message: `Failed to export session "${options.sessionId}" as ${format}.`,
       details: {
         sessionId: options.sessionId,
         format,
