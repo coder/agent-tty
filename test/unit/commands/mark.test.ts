@@ -36,6 +36,12 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 
 import { runMarkCommand } from '../../../src/cli/commands/mark.js';
 
+const TEST_CONTEXT = {
+  home: '/tmp/agent-terminal',
+  timeoutMs: undefined,
+  colorEnabled: true,
+} as const;
+
 function createSessionRecord(
   status: 'running' | 'exiting' | 'exited' = 'running',
 ) {
@@ -79,6 +85,7 @@ describe('mark command', () => {
     mocks.sendRpc.mockResolvedValue({ seq: 12 });
 
     await runMarkCommand({
+      context: TEST_CONTEXT,
       json: false,
       sessionId: 'session-01',
       label: 'checkpoint',
@@ -102,6 +109,7 @@ describe('mark command', () => {
 
     await expect(
       runMarkCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
         label: 'checkpoint',
@@ -118,6 +126,7 @@ describe('mark command', () => {
 
     await expect(
       runMarkCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
         label: 'checkpoint',
@@ -133,6 +142,7 @@ describe('mark command', () => {
     mocks.sendRpc.mockResolvedValue({ seq: 7 });
 
     await runMarkCommand({
+      context: TEST_CONTEXT,
       json: false,
       sessionId: 'session-01',
       label: '',
@@ -155,6 +165,7 @@ describe('mark command', () => {
     mocks.sendRpc.mockResolvedValue({ seq: 99 });
 
     await runMarkCommand({
+      context: TEST_CONTEXT,
       json: true,
       sessionId: 'session-01',
       label: 'json-marker',

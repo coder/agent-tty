@@ -2,6 +2,8 @@ import { rm } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { CliError } from '../errors.js';
+import type { CommandContext } from '../context.js';
+
 import { emitSuccess } from '../output.js';
 import {
   allocateSession,
@@ -10,7 +12,6 @@ import {
 } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
-import { resolveHome } from '../../storage/home.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
   manifestPath,
@@ -27,6 +28,7 @@ export interface CreateResult {
 }
 
 interface CommandOptions {
+  context: CommandContext;
   json: boolean;
   command: string[];
   shellCommand: string;
@@ -51,7 +53,7 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
     launchHost(sessionId);
   } catch (error) {
     if (sessionId !== undefined) {
-      const home = resolveHome();
+      const home = options.context.home;
       await rm(sessionDir(home, sessionId), {
         recursive: true,
         force: true,
@@ -69,7 +71,7 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  const home = resolveHome();
+  const home = options.context.home;
   const sessionDirectory = sessionDir(home, sessionId);
   const socketFile = socketPath(sessionDirectory);
   let lastError: CliError | null = null;

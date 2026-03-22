@@ -60,6 +60,12 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 
 import { runSnapshotCommand } from '../../../src/cli/commands/snapshot.js';
 
+const TEST_CONTEXT = {
+  home: '/tmp/agent-terminal',
+  timeoutMs: undefined,
+  colorEnabled: true,
+} as const;
+
 function createRunningSessionRecord() {
   return {
     version: 1,
@@ -171,6 +177,7 @@ describe('snapshot command', () => {
     mocks.sendRpc.mockResolvedValue(result);
 
     await runSnapshotCommand({
+      context: TEST_CONTEXT,
       json: false,
       sessionId: 'session-01',
     });
@@ -212,6 +219,7 @@ describe('snapshot command', () => {
     mocks.sendRpc.mockResolvedValue(result);
 
     await runSnapshotCommand({
+      context: TEST_CONTEXT,
       json: true,
       sessionId: 'session-01',
       format: 'text',
@@ -248,6 +256,7 @@ describe('snapshot command', () => {
     installOfflineReplaySuccessMock();
 
     await runSnapshotCommand({
+      context: TEST_CONTEXT,
       json: false,
       sessionId: 'session-01',
     });
@@ -333,6 +342,7 @@ describe('snapshot command', () => {
     installOfflineReplaySuccessMock();
 
     await runSnapshotCommand({
+      context: TEST_CONTEXT,
       json: true,
       sessionId: 'session-01',
       format: 'text',
@@ -370,6 +380,7 @@ describe('snapshot command', () => {
 
     await expect(
       runSnapshotCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
       }),
@@ -395,6 +406,7 @@ describe('snapshot command', () => {
 
     await expect(
       runSnapshotCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
       }),
@@ -415,6 +427,7 @@ describe('snapshot command', () => {
 
     await expect(
       runSnapshotCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: '../bad-session',
       }),
@@ -430,6 +443,7 @@ describe('snapshot command', () => {
   it('rejects unsupported snapshot formats', async () => {
     await expect(
       runSnapshotCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
         format: 'binary',

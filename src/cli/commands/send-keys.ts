@@ -1,8 +1,9 @@
+import type { CommandContext } from '../context.js';
+
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
-import { resolveHome } from '../../storage/home.js';
 import {
   manifestPath,
   sessionDir,
@@ -14,6 +15,7 @@ export interface SendKeysResult {
 }
 
 interface CommandOptions {
+  context: CommandContext;
   json: boolean;
   sessionId: string;
   keys: string[];
@@ -22,7 +24,7 @@ interface CommandOptions {
 export async function runSendKeysCommand(
   options: CommandOptions,
 ): Promise<void> {
-  const home = resolveHome();
+  const home = options.context.home;
   const sessionDirectory = sessionDir(home, options.sessionId);
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);

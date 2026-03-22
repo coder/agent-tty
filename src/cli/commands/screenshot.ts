@@ -4,6 +4,8 @@ import { ulid } from 'ulid';
 
 import type { ScreenshotResult } from '../../protocol/messages.js';
 
+import type { CommandContext } from '../context.js';
+
 import { emitSuccess } from '../output.js';
 import { CliError } from '../../cli/errors.js';
 import { sendRpc } from '../../host/rpcClient.js';
@@ -20,7 +22,6 @@ import {
   ensureArtifactsDir,
   screenshotFilename,
 } from '../../storage/artifactPaths.js';
-import { resolveHome } from '../../storage/home.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
   manifestPath,
@@ -32,6 +33,7 @@ import { invariant } from '../../util/assert.js';
 const DEFAULT_SCREENSHOT_PROFILE = 'reference-dark';
 
 interface CommandOptions {
+  context: CommandContext;
   json: boolean;
   sessionId: string;
   profile?: string;
@@ -162,7 +164,7 @@ export async function runScreenshotCommand(
   options: CommandOptions,
 ): Promise<void> {
   const profile = resolveScreenshotProfile(options.profile);
-  const home = resolveHome();
+  const home = options.context.home;
   let sessionDirectory: string;
 
   try {

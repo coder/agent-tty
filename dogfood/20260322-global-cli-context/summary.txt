@@ -1,0 +1,5 @@
+version: ok
+create_home_override: /tmp/tmp.i1eOhh8iQ2
+create_env_home: /tmp/tmp.EOiERdKuQW
+session_id: 01KMBDRQZ7V2JSGYSB1HJZHYP0
+missing_session_exit: 3

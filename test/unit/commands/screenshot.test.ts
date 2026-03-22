@@ -69,6 +69,12 @@ vi.mock('../../../src/storage/artifactPaths.js', () => ({
 
 import { runScreenshotCommand } from '../../../src/cli/commands/screenshot.js';
 
+const TEST_CONTEXT = {
+  home: '/tmp/agent-terminal',
+  timeoutMs: undefined,
+  colorEnabled: true,
+} as const;
+
 function createRunningSessionRecord() {
   return {
     version: 1,
@@ -192,6 +198,7 @@ describe('screenshot command', () => {
     mocks.sendRpc.mockResolvedValue(result);
 
     await runScreenshotCommand({
+      context: TEST_CONTEXT,
       json: false,
       sessionId: 'session-01',
     });
@@ -229,6 +236,7 @@ describe('screenshot command', () => {
     mocks.sendRpc.mockResolvedValue(result);
 
     await runScreenshotCommand({
+      context: TEST_CONTEXT,
       json: true,
       sessionId: 'session-01',
       profile: 'reference-light',
@@ -262,6 +270,7 @@ describe('screenshot command', () => {
     mockOfflineReplayRendererSuccess();
 
     await runScreenshotCommand({
+      context: TEST_CONTEXT,
       json: false,
       sessionId: 'session-01',
     });
@@ -324,6 +333,7 @@ describe('screenshot command', () => {
     mockOfflineReplayRendererSuccess();
 
     await runScreenshotCommand({
+      context: TEST_CONTEXT,
       json: false,
       sessionId: 'session-01',
     });
@@ -349,6 +359,7 @@ describe('screenshot command', () => {
 
     await expect(
       runScreenshotCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
       }),
@@ -388,6 +399,7 @@ describe('screenshot command', () => {
 
     await expect(
       runScreenshotCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
       }),
@@ -413,6 +425,7 @@ describe('screenshot command', () => {
 
     await expect(
       runScreenshotCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
       }),
@@ -433,6 +446,7 @@ describe('screenshot command', () => {
 
     await expect(
       runScreenshotCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: '../bad-session',
       }),
@@ -448,6 +462,7 @@ describe('screenshot command', () => {
   it('rejects empty screenshot profile names', async () => {
     await expect(
       runScreenshotCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
         profile: '',

@@ -7,20 +7,21 @@ import { invariant } from '../util/assert.js';
 
 const DEFAULT_HOME_DIRECTORY_NAME = '.agent-terminal';
 
-export function resolveHome(): string {
-  const configuredHome = process.env.AGENT_TERMINAL_HOME;
+function validateConfiguredHome(
+  configuredHome: string,
+  source: string,
+): string {
+  invariant(configuredHome.length > 0, `${source} must not be empty`);
+  invariant(isAbsolute(configuredHome), `${source} must be an absolute path`);
 
+  return normalize(configuredHome);
+}
+
+export function resolveHome(
+  configuredHome = process.env.AGENT_TERMINAL_HOME,
+): string {
   if (configuredHome !== undefined) {
-    invariant(
-      configuredHome.length > 0,
-      'AGENT_TERMINAL_HOME must not be empty',
-    );
-    invariant(
-      isAbsolute(configuredHome),
-      'AGENT_TERMINAL_HOME must be an absolute path',
-    );
-
-    return normalize(configuredHome);
+    return validateConfiguredHome(configuredHome, 'AGENT_TERMINAL_HOME');
   }
 
   const resolvedHome = normalize(join(homedir(), DEFAULT_HOME_DIRECTORY_NAME));
@@ -33,8 +34,10 @@ export function resolveHome(): string {
   return resolvedHome;
 }
 
-export async function ensureHome(): Promise<string> {
-  const home = resolveHome();
+export async function ensureHome(
+  configuredHome = process.env.AGENT_TERMINAL_HOME,
+): Promise<string> {
+  const home = resolveHome(configuredHome);
 
   await mkdir(home, { recursive: true });
 

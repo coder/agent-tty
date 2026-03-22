@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="412" viewBox="0 0 1280 412">
+<rect width="100%" height="100%" fill="#0f172a" rx="16" ry="16"/>
+<rect x="0" y="0" width="100%" height="32" fill="#111827" rx="16" ry="16"/>
+<circle cx="24" cy="16" r="6" fill="#ef4444"/>
+<circle cx="44" cy="16" r="6" fill="#f59e0b"/>
+<circle cx="64" cy="16" r="6" fill="#10b981"/>
+<text x="88" y="21" fill="#cbd5e1" font-family="monospace" font-size="14">agent-terminal smoke test</text>
+<text x="20" y="36" fill="#93c5fd" font-family="monospace" font-size="16">$ AGENT_TERMINAL_HOME=/tmp/tmp.EOiERdKuQW node --import tsx ./src/cli/main.ts inspect missing-session --json; echo EXIT:$?</text>
+<text x="20" y="58" fill="#e2e8f0" font-family="monospace" font-size="16">{</text>
+<text x="20" y="80" fill="#e2e8f0" font-family="monospace" font-size="16">  "ok": false,</text>
+<text x="20" y="102" fill="#e2e8f0" font-family="monospace" font-size="16">  "command": "inspect",</text>
+<text x="20" y="124" fill="#e2e8f0" font-family="monospace" font-size="16">  "timestamp": "2026-03-22T18:43:57.206Z",</text>
+<text x="20" y="146" fill="#e2e8f0" font-family="monospace" font-size="16">  "error": {</text>
+<text x="20" y="168" fill="#e2e8f0" font-family="monospace" font-size="16">    "code": "SESSION_NOT_FOUND",</text>
+<text x="20" y="190" fill="#e2e8f0" font-family="monospace" font-size="16">    "message": "Session \"missing-session\" was not found.",</text>
+<text x="20" y="212" fill="#e2e8f0" font-family="monospace" font-size="16">    "retryable": false,</text>
+<text x="20" y="234" fill="#e2e8f0" font-family="monospace" font-size="16">    "details": {</text>
+<text x="20" y="256" fill="#e2e8f0" font-family="monospace" font-size="16">      "sessionId": "missing-session",</text>
+<text x="20" y="278" fill="#e2e8f0" font-family="monospace" font-size="16">      "manifestPath": "/tmp/tmp.EOiERdKuQW/sessions/missing-session/session.json"</text>
+<text x="20" y="300" fill="#e2e8f0" font-family="monospace" font-size="16">    }</text>
+<text x="20" y="322" fill="#e2e8f0" font-family="monospace" font-size="16">  }</text>
+<text x="20" y="344" fill="#e2e8f0" font-family="monospace" font-size="16">}</text>
+<text x="20" y="366" fill="#e2e8f0" font-family="monospace" font-size="16">EXIT:3</text>
+</svg>

@@ -5,12 +5,13 @@ import {
 import type { SessionRecord } from '../../protocol/schemas.js';
 
 import { CliError } from '../errors.js';
+import type { CommandContext } from '../context.js';
+
 import { emitSuccess } from '../output.js';
 import { reconcileSession } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { readManifest, readManifestIfExists } from '../../storage/manifests.js';
-import { resolveHome } from '../../storage/home.js';
 import {
   manifestPath,
   sessionDir,
@@ -18,6 +19,7 @@ import {
 } from '../../storage/sessionPaths.js';
 
 interface CommandOptions {
+  context: CommandContext;
   json: boolean;
   sessionId: string;
 }
@@ -41,7 +43,7 @@ function formatSessionLines(session: SessionRecord): string[] {
 export async function runInspectCommand(
   options: CommandOptions,
 ): Promise<void> {
-  const home = resolveHome();
+  const home = options.context.home;
   const sessionDirectory = sessionDir(home, options.sessionId);
   const manifestFile = manifestPath(sessionDirectory);
   let session = await readManifestIfExists(manifestFile);

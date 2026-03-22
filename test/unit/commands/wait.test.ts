@@ -36,6 +36,12 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 
 import { runWaitCommand } from '../../../src/cli/commands/wait.js';
 
+const TEST_CONTEXT = {
+  home: '/tmp/agent-terminal',
+  timeoutMs: undefined,
+  colorEnabled: true,
+} as const;
+
 function createSessionRecord(
   status: 'running' | 'exited' = 'running',
   exitCode: number | null = null,
@@ -61,6 +67,7 @@ function createOptions(
   overrides: Partial<Parameters<typeof runWaitCommand>[0]> = {},
 ) {
   return {
+    context: TEST_CONTEXT,
     json: false,
     sessionId: 'session-01',
     waitForExit: false,

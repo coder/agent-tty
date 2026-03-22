@@ -5,6 +5,8 @@ import type {
 import type { SemanticSnapshot } from '../../renderer/types.js';
 
 import { CliError } from '../../cli/errors.js';
+import type { CommandContext } from '../context.js';
+
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { SnapshotParamsSchema } from '../../protocol/messages.js';
@@ -15,7 +17,6 @@ import {
   appendArtifact,
   createArtifactEntry,
 } from '../../storage/artifactManifest.js';
-import { resolveHome } from '../../storage/home.js';
 import {
   readManifestIfExists,
   writeTextFileAtomic,
@@ -36,6 +37,7 @@ const DEFAULT_SNAPSHOT_FORMAT = 'structured';
 type SnapshotFormat = NonNullable<SnapshotParams['format']>;
 
 interface CommandOptions {
+  context: CommandContext;
   json: boolean;
   sessionId: string;
   format?: string;
@@ -206,7 +208,7 @@ export async function runSnapshotCommand(
   options: CommandOptions,
 ): Promise<void> {
   const format = resolveSnapshotFormat(options.format);
-  const home = resolveHome();
+  const home = options.context.home;
   let sessionDirectory: string;
 
   try {

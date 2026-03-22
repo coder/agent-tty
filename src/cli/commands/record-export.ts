@@ -6,6 +6,8 @@ import process from 'node:process';
 
 import { z } from 'zod';
 
+import type { CommandContext } from '../context.js';
+
 import { emitSuccess } from '../output.js';
 import { generateAsciicast } from '../../export/asciicast.js';
 import {
@@ -29,7 +31,6 @@ import {
   ensureArtifactsDir,
   recordingFilename,
 } from '../../storage/artifactPaths.js';
-import { resolveHome } from '../../storage/home.js';
 import {
   readManifestIfExists,
   writeTextFileAtomic,
@@ -48,6 +49,7 @@ type RecordExportFormat = z.infer<typeof RecordExportFormatSchema>;
 type ArtifactKind = 'recording' | 'video';
 
 interface CommandOptions {
+  context: CommandContext;
   json: boolean;
   sessionId: string;
   format?: string;
@@ -141,7 +143,7 @@ export async function runRecordExportCommand(
   options: CommandOptions,
 ): Promise<void> {
   const format = resolveRecordExportFormat(options.format);
-  const home = resolveHome();
+  const home = options.context.home;
   let sessionDirectory: string;
 
   try {

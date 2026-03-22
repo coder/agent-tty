@@ -1,11 +1,12 @@
 import { readdir, rm, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
+import type { CommandContext } from '../context.js';
+
 import { emitSuccess } from '../output.js';
 import { reconcileSession } from '../../host/lifecycle.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import type { SessionRecord } from '../../protocol/schemas.js';
-import { resolveHome } from '../../storage/home.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import { manifestPath, sessionDir } from '../../storage/sessionPaths.js';
 import { invariant } from '../../util/assert.js';
@@ -25,6 +26,7 @@ export interface GcResult {
 }
 
 interface CommandOptions {
+  context: CommandContext;
   json: boolean;
   dryRun: boolean;
   staleOnly: boolean;
@@ -412,7 +414,7 @@ export async function runGcCommand(options: CommandOptions): Promise<void> {
     options.olderThan === undefined
       ? null
       : parseDurationToMs(options.olderThan);
-  const home = resolveHome();
+  const home = options.context.home;
   const result = await gcSessions(home, {
     dryRun: options.dryRun,
     staleOnly: options.staleOnly,

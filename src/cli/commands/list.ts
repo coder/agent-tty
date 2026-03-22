@@ -1,6 +1,7 @@
+import type { CommandContext } from '../context.js';
+
 import { emitSuccess } from '../output.js';
 import { listSessions } from '../../host/lifecycle.js';
-import { resolveHome } from '../../storage/home.js';
 
 export interface ListResult {
   sessions: Array<{
@@ -12,12 +13,13 @@ export interface ListResult {
 }
 
 interface CommandOptions {
+  context: CommandContext;
   json: boolean;
   all: boolean;
 }
 
 export async function runListCommand(options: CommandOptions): Promise<void> {
-  const home = resolveHome();
+  const home = options.context.home;
   const sessions = await listSessions(home, options.all);
   const lines = sessions.map(
     (session) =>

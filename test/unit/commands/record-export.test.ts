@@ -78,6 +78,12 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 
 import { runRecordExportCommand } from '../../../src/cli/commands/record-export.js';
 
+const TEST_CONTEXT = {
+  home: '/tmp/agent-terminal',
+  timeoutMs: undefined,
+  colorEnabled: true,
+} as const;
+
 function createSessionRecord() {
   return {
     version: 1,
@@ -182,6 +188,7 @@ describe('record export command', () => {
     ]);
 
     await runRecordExportCommand({
+      context: TEST_CONTEXT,
       json: true,
       sessionId: 'session-01',
       format: 'asciicast',
@@ -304,6 +311,7 @@ describe('record export command', () => {
     mocks.readFile.mockResolvedValue(webmContent);
 
     await runRecordExportCommand({
+      context: TEST_CONTEXT,
       json: true,
       sessionId: 'session-01',
       format: 'webm',
@@ -403,6 +411,7 @@ describe('record export command', () => {
 
     await expect(
       runRecordExportCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
         format: 'asciicast',
@@ -428,6 +437,7 @@ describe('record export command', () => {
 
     try {
       await runRecordExportCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
         format: 'asciicast',
@@ -464,6 +474,7 @@ describe('record export command', () => {
     await symlink(realExportsDirectory, symlinkExportsDirectory);
 
     await runRecordExportCommand({
+      context: TEST_CONTEXT,
       json: false,
       sessionId: 'session-01',
       format: 'asciicast',
@@ -494,6 +505,7 @@ describe('record export command', () => {
 
     await expect(
       runRecordExportCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
         format: 'asciicast',
@@ -507,6 +519,7 @@ describe('record export command', () => {
   it('rejects invalid formats', async () => {
     await expect(
       runRecordExportCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
         format: 'bogus',
