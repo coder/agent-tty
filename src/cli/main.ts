@@ -10,6 +10,7 @@ import { runDoctorCommand } from './commands/doctor.js';
 import { runGcCommand } from './commands/gc.js';
 import { runInspectCommand } from './commands/inspect.js';
 import { runListCommand } from './commands/list.js';
+import { runMarkCommand } from './commands/mark.js';
 import { runPasteCommand } from './commands/paste.js';
 import { runRecordExportCommand } from './commands/record-export.js';
 import { runResizeCommand } from './commands/resize.js';
@@ -231,6 +232,27 @@ async function main(): Promise<void> {
             json: options.json,
             sessionId,
             text,
+          });
+        },
+      ),
+    );
+
+  program
+    .command('mark <session-id> <label>')
+    .description('Add a marker to a session')
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'mark',
+        async (
+          sessionId: string,
+          label: string,
+          options: { json: boolean },
+        ) => {
+          await runMarkCommand({
+            json: options.json,
+            sessionId,
+            label,
           });
         },
       ),

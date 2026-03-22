@@ -13,6 +13,7 @@ import { encodeKey } from '../pty/keyEncoder.js';
 import { encodePaste } from '../pty/pasteEncoder.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import type {
+  MarkParams,
   PasteParams,
   ResizeParams,
   ScreenshotParams,
@@ -491,6 +492,19 @@ export async function runHost(sessionId: string): Promise<void> {
       pty.write(text);
       await eventLog.append('input_text', { data: text });
       return {};
+    },
+    mark: async (params: unknown) => {
+      const { label } = params as MarkParams;
+
+      if (!isSessionRunning(state)) {
+        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
+          message: 'Session is not running.',
+        });
+      }
+
+      invariant(typeof label === 'string', 'mark label must be a string');
+      const seq = await eventLog.append('marker', { label });
+      return { seq };
     },
     paste: async (params: unknown) => {
       const { text } = params as PasteParams;
