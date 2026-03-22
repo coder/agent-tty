@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-22T20:37:57.531Z",
+  "result": {
+    "format": "text",
+    "sessionId": "01KMBM9FPEBYVSBBFA0QXG8PNW",
+    "capturedAtSeq": 1,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 10,
+    "cursorCol": 0,
+    "text": "UNICODE GRID FIXTURE\n\n| LABEL  | SAMPLE                         |\n| ASCII  | Hello, World! 0123456789       |\n| BOX    | ┌─┐│└┘├┤┬┴┼═║╔╗╚╝              |\n| CJK    | 漢字テスト中文日本                      |\n| EMOJI  | ✓✗★♠♣♥♦⚡☀☁                     |\n| AMBIG  | αβγδ∑∏∫∂√∞                     |\n\nUNICODE GRID COMPLETE\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  }
+}
