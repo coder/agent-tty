@@ -62,7 +62,7 @@ describe('CLI integration', () => {
       testEnv(),
     );
 
-    expect(result.status).toBe(1);
+    expect(result.status).toBe(2);
     expect(result.stderr).toBe('');
 
     const envelope = parseErrorEnvelope(result.stdout);
@@ -74,7 +74,7 @@ describe('CLI integration', () => {
   it('rejects type input when neither positional text nor --file is provided', () => {
     const result = runCli(['type', 'session-01', '--json'], testEnv());
 
-    expect(result.status).toBe(1);
+    expect(result.status).toBe(2);
     expect(result.stderr).toBe('');
 
     const envelope = parseErrorEnvelope(result.stdout);
@@ -93,7 +93,7 @@ describe('CLI integration', () => {
       testEnv(),
     );
 
-    expect(result.status).toBe(1);
+    expect(result.status).toBe(2);
     expect(result.stderr).toBe('');
 
     const envelope = parseErrorEnvelope(result.stdout);
@@ -111,7 +111,7 @@ describe('CLI integration', () => {
       testEnv(),
     );
 
-    expect(result.status).toBe(1);
+    expect(result.status).toBe(2);
     expect(result.stderr).toBe('');
 
     const envelope = parseErrorEnvelope(result.stdout);
@@ -123,7 +123,7 @@ describe('CLI integration', () => {
   it('rejects paste input when neither positional text nor --file is provided', () => {
     const result = runCli(['paste', 'session-01', '--json'], testEnv());
 
-    expect(result.status).toBe(1);
+    expect(result.status).toBe(2);
     expect(result.stderr).toBe('');
 
     const envelope = parseErrorEnvelope(result.stdout);
@@ -143,7 +143,7 @@ describe('CLI integration', () => {
       testEnv(),
     );
 
-    expect(result.status).toBe(1);
+    expect(result.status).toBe(2);
     expect(result.stderr).toBe('');
 
     const envelope = parseErrorEnvelope(result.stdout);
