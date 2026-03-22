@@ -237,7 +237,11 @@ function formatSnapshotLines(result: SnapshotResult): string[] {
     lines.push(`Alt Screen: ${result.isAltScreen ? 'yes' : 'no'}`);
 
     if (result.scrollbackLines !== undefined) {
-      appendSnapshotLineBlock(lines, 'Scrollback Lines', result.scrollbackLines);
+      appendSnapshotLineBlock(
+        lines,
+        'Scrollback Lines',
+        result.scrollbackLines,
+      );
       appendSnapshotLineBlock(lines, 'Visible Lines', result.visibleLines);
       return lines;
     }
@@ -260,9 +264,7 @@ export async function runSnapshotCommand(
   options: CommandOptions,
 ): Promise<void> {
   const format = resolveSnapshotFormat(options.format);
-  const includeScrollback = resolveIncludeScrollback(
-    options.includeScrollback,
-  );
+  const includeScrollback = resolveIncludeScrollback(options.includeScrollback);
   const home = options.context.home;
   let sessionDirectory: string;
 

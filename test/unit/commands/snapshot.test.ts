@@ -124,8 +124,8 @@ function createOfflineSemanticSnapshot(
 function installOfflineReplaySuccessMock(
   snapshotImpl: (
     options?: unknown,
-  ) => MaybePromise<ReturnType<typeof createOfflineSemanticSnapshot>> =
-    () => createOfflineSemanticSnapshot(),
+  ) => MaybePromise<ReturnType<typeof createOfflineSemanticSnapshot>> = () =>
+    createOfflineSemanticSnapshot(),
 ) {
   mocks.withOfflineReplayRenderer.mockImplementation(
     async (_options: unknown, run: (ctx: unknown) => Promise<unknown>) => {
@@ -290,11 +290,10 @@ describe('snapshot command', () => {
       includeScrollback: true,
     });
 
-    expect(mocks.sendRpc).toHaveBeenCalledWith(
-      expect.any(String),
-      'snapshot',
-      { format: 'structured', includeScrollback: true },
-    );
+    expect(mocks.sendRpc).toHaveBeenCalledWith(expect.any(String), 'snapshot', {
+      format: 'structured',
+      includeScrollback: true,
+    });
     const emitted = getLastEmitSuccessPayload() as {
       lines: string[];
     };

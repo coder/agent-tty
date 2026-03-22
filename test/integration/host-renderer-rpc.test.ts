@@ -104,7 +104,10 @@ describe(
       testHome = '';
     });
 
-    async function restartSession(command: string[], marker: string): Promise<void> {
+    async function restartSession(
+      command: string[],
+      marker: string,
+    ): Promise<void> {
       destroySession(testHome, sessionId);
       sessionId = createSession(testHome, command);
       await waitForOutputMarker(testHome, sessionId, marker);
