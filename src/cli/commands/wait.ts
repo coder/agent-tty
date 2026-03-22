@@ -224,7 +224,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  const manifestStatus = String(manifest.status);
+  const manifestStatus = manifest.status;
 
   if (
     options.waitForExit &&

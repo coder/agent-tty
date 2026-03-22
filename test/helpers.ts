@@ -144,10 +144,16 @@ export function destroySession(testHome: string, sessionId: string): void {
 
 export function crashSession(testHome: string, sessionId: string): void {
   const session = inspectSession(testHome, sessionId);
-  expect(session.hostPid).toBeTypeOf('number');
+  const hostPid = session.hostPid;
+  expect(hostPid).toBeTypeOf('number');
+  if (hostPid === null) {
+    throw new Error(
+      'hostPid must not be null (assertion above should have caught this)',
+    );
+  }
 
   try {
-    process.kill(session.hostPid!, 'SIGKILL');
+    process.kill(hostPid, 'SIGKILL');
   } catch {
     // Process may already be dead
   }

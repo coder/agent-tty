@@ -638,7 +638,7 @@ export async function reconcileSession(
       reconciledStatus = 'failed';
       failureReason =
         manifest.hostPid !== null
-          ? `host process died unexpectedly (pid: ${manifest.hostPid})`
+          ? `host process died unexpectedly (pid: ${String(manifest.hostPid)})`
           : 'host process died unexpectedly';
       break;
     case 'exiting':

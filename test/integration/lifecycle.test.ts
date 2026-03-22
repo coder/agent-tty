@@ -303,8 +303,9 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     const afterCrash = inspectSession(testHome, sessionId);
     expect(afterCrash.status).toBe('failed');
     expect(afterCrash.failureReason).toBeTypeOf('string');
-    expect(afterCrash.failureReason!.length).toBeGreaterThan(0);
-    expect(afterCrash.failureReason).toContain('host process died unexpectedly');
+    const failureReason = afterCrash.failureReason as string;
+    expect(failureReason.length).toBeGreaterThan(0);
+    expect(failureReason).toContain('host process died unexpectedly');
     expect(afterCrash.hostPid).toBeNull();
     expect(afterCrash.childPid).toBeNull();
   });
