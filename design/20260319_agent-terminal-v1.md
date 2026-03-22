@@ -19,18 +19,20 @@ It is designed to let an agent:
 
 This design intentionally describes a **general product**, not a Mux-specific implementation. A future Mux integration should consume `agent-terminal` as an external CLI/runtime rather than baking Mux-specific assumptions into the design.
 
-## Current shipped status (2026-03-21)
+## Current shipped status (2026-03-22)
 
-The repository now ships the first renderer-backed vertical slice of this design:
+The repository now ships the first three milestones of this design:
 
 - long-lived session hosts,
 - PTY control and append-only event logs,
 - renderer-backed `snapshot` and `wait`,
 - deterministic `screenshot`,
-- artifact manifests,
+- `record export --format asciicast`,
+- `record export --format webm`,
+- artifact manifests and `gc`,
 - and proof bundles under `dogfood/`.
 
-Replay export artifacts such as asciicast and video remain part of the design direction, but they are still future work rather than shipped functionality.
+The implementation is now beyond the original Week 2 slice, but it is **not** yet fully done against the broader v1 design. The main remaining gaps are CLI-contract parity, richer snapshot / screenshot fidelity, missing fixture scenarios, and a few failure-state / platform hardening items. See [08-week-3-status.md](./20260319_agent-terminal-v1/08-week-3-status.md), [09-week-4-plan.md](./20260319_agent-terminal-v1/09-week-4-plan.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current follow-on work.
 
 ## Executive summary
 
@@ -194,6 +196,8 @@ This design file is the entry point. Detailed supporting docs live in `design/20
 - [05-dogfooding-and-validation.md](./20260319_agent-terminal-v1/05-dogfooding-and-validation.md)
 - [06-roadmap-and-week-1-plan.md](./20260319_agent-terminal-v1/06-roadmap-and-week-1-plan.md)
 - [07-week-2-plan.md](./20260319_agent-terminal-v1/07-week-2-plan.md)
+- [08-week-3-status.md](./20260319_agent-terminal-v1/08-week-3-status.md)
+- [09-week-4-plan.md](./20260319_agent-terminal-v1/09-week-4-plan.md)
 
 ## High-level architecture
 

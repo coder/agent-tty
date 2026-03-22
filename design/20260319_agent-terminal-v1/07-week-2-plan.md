@@ -9,11 +9,11 @@ It is intentionally biased toward:
 - preserving deterministic proof artifacts,
 - and leaving behind evidence that a reviewer can verify offline.
 
-## Status update (2026-03-21)
+## Status update (2026-03-22)
 
-Week 2 has now landed as the first renderer-backed inspection slice.
+Week 2 landed as the first renderer-backed inspection slice.
 
-Implemented:
+Implemented in the Week 2 milestone:
 
 - deterministic event-log replay into a lazy `ghostty-web` renderer,
 - `snapshot` and `snapshot --format text`,
@@ -23,7 +23,7 @@ Implemented:
 - renderer/browser/screenshot checks in `doctor`,
 - and renderer-focused proof bundles under `dogfood/`.
 
-Still intentionally deferred after Week 2:
+At the time Week 2 closed, the following were still intentionally deferred:
 
 - asciicast export,
 - replay video export,
@@ -31,7 +31,14 @@ Still intentionally deferred after Week 2:
 - mouse input,
 - and remote/network session support.
 
-The remaining sections below are preserved as the original implementation plan, but the outcome checklist and notes should be read as describing a **completed** Week 2 milestone rather than a future proposal.
+As of 2026-03-22, later Week 3 work has since landed:
+
+- `record export --format asciicast`,
+- `record export --format webm`,
+- `gc`,
+- and crash-retention / post-exit proof bundles under `dogfood/20260321-week3-*`.
+
+The remaining sections below are preserved as the original implementation plan. Any unchecked export/video items should now be read as historical Week 2 scope boundaries rather than current repository gaps.
 
 ## 1. Baseline entering Week 2
 
