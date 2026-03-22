@@ -95,7 +95,17 @@ function createExitedSessionRecord() {
   };
 }
 
-function createOfflineSemanticSnapshot() {
+type MaybePromise<T> = T | Promise<T>;
+
+function getLastEmitSuccessPayload(): unknown {
+  return mocks.emitSuccess.mock.calls.at(-1)?.[0] as unknown;
+}
+
+function createOfflineSemanticSnapshot(
+  options: {
+    scrollbackLines?: { row: number; text: string }[];
+  } = {},
+) {
   return {
     sessionId: 'session-01',
     capturedAtSeq: 5,
@@ -105,16 +115,25 @@ function createOfflineSemanticSnapshot() {
     cursorCol: 0,
     isAltScreen: false,
     visibleLines: [{ row: 0, text: 'offline output' }],
+    ...(options.scrollbackLines === undefined
+      ? {}
+      : { scrollbackLines: options.scrollbackLines }),
   };
 }
 
-function installOfflineReplaySuccessMock() {
+function installOfflineReplaySuccessMock(
+  snapshotImpl: (
+    options?: unknown,
+  ) => MaybePromise<ReturnType<typeof createOfflineSemanticSnapshot>> =
+    () => createOfflineSemanticSnapshot(),
+) {
   mocks.withOfflineReplayRenderer.mockImplementation(
     async (_options: unknown, run: (ctx: unknown) => Promise<unknown>) => {
       const mockBackend = {
-        snapshot() {
-          return Promise.resolve(createOfflineSemanticSnapshot());
+        snapshot(options?: unknown) {
+          return Promise.resolve(snapshotImpl(options));
         },
+        rendererBackend: 'mock-backend',
       };
 
       return run({
@@ -185,7 +204,7 @@ describe('snapshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01/rpc.sock',
       'snapshot',
-      { format: 'structured' },
+      { format: 'structured', includeScrollback: false },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'snapshot',
@@ -228,7 +247,7 @@ describe('snapshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01/rpc.sock',
       'snapshot',
-      { format: 'text' },
+      { format: 'text', includeScrollback: false },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'snapshot',
@@ -242,6 +261,92 @@ describe('snapshot command', () => {
         'Cursor: row 2, col 3',
         'Text:',
         'hello\nworld',
+      ],
+    });
+  });
+
+  it('includes scrollbackLines in structured RPC snapshots when includeScrollback is true', async () => {
+    const result = {
+      format: 'structured' as const,
+      sessionId: 'session-01',
+      capturedAtSeq: 12,
+      cols: 120,
+      rows: 40,
+      cursorRow: 4,
+      cursorCol: 5,
+      isAltScreen: false,
+      visibleLines: [{ row: 0, text: 'visible' }],
+      scrollbackLines: [
+        { row: 0, text: 'scrolled' },
+        { row: 1, text: 'away' },
+      ],
+    };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runSnapshotCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+      includeScrollback: true,
+    });
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      expect.any(String),
+      'snapshot',
+      { format: 'structured', includeScrollback: true },
+    );
+    const emitted = getLastEmitSuccessPayload() as {
+      lines: string[];
+    };
+    expect(emitted.lines).toEqual(
+      expect.arrayContaining([
+        'Scrollback Lines (2):',
+        '  [0] scrolled',
+        '  [1] away',
+        'Visible Lines (1):',
+        '  [0] visible',
+      ]),
+    );
+  });
+
+  it('preserves host-prepended scrollback text in text RPC snapshots when includeScrollback is true', async () => {
+    const result = {
+      format: 'text' as const,
+      sessionId: 'session-01',
+      capturedAtSeq: 7,
+      cols: 80,
+      rows: 24,
+      cursorRow: 2,
+      cursorCol: 3,
+      text: 'scrolled\naway\nvisible',
+    };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runSnapshotCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+      format: 'text',
+      includeScrollback: true,
+    });
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'snapshot',
+      { format: 'text', includeScrollback: true },
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith({
+      command: 'snapshot',
+      json: false,
+      result,
+      lines: [
+        'Session ID: session-01',
+        'Captured At Seq: 7',
+        'Format: text',
+        'Size: 80x24',
+        'Cursor: row 2, col 3',
+        'Text:',
+        'scrolled\naway\nvisible',
       ],
     });
   });
@@ -288,6 +393,7 @@ describe('snapshot command', () => {
         rows: 24,
         cursorRow: 0,
         cursorCol: 0,
+        rendererBackend: 'mock-backend',
       },
     });
     expect(mocks.appendArtifact).toHaveBeenCalledWith(
@@ -303,6 +409,7 @@ describe('snapshot command', () => {
           rows: 24,
           cursorRow: 0,
           cursorCol: 0,
+          rendererBackend: 'mock-backend',
         },
         id: 'artifact-01',
         createdAt: '2026-03-19T12:00:02.000Z',
@@ -323,6 +430,83 @@ describe('snapshot command', () => {
         '  [0] offline output',
       ],
     });
+  });
+
+  it('uses offline replay for exited sessions and includes scrollback when requested', async () => {
+    const snapshotMock = vi.fn((options?: { includeScrollback?: boolean }) =>
+      createOfflineSemanticSnapshot(
+        options?.includeScrollback
+          ? {
+              scrollbackLines: [
+                { row: 0, text: 'scrolled' },
+                { row: 1, text: 'away' },
+              ],
+            }
+          : {},
+      ),
+    );
+    mocks.readManifestIfExists.mockResolvedValue(createExitedSessionRecord());
+    installOfflineReplaySuccessMock(snapshotMock);
+
+    await runSnapshotCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+      includeScrollback: true,
+    });
+
+    expect(snapshotMock).toHaveBeenCalledWith({ includeScrollback: true });
+    const emitted = getLastEmitSuccessPayload() as {
+      result: {
+        scrollbackLines?: { row: number; text: string }[];
+      };
+      lines: string[];
+    };
+    expect(emitted.result.scrollbackLines).toEqual([
+      { row: 0, text: 'scrolled' },
+      { row: 1, text: 'away' },
+    ]);
+    expect(emitted.lines).toEqual(
+      expect.arrayContaining([
+        'Scrollback Lines (2):',
+        '  [0] scrolled',
+        '  [1] away',
+        'Visible Lines (1):',
+        '  [0] offline output',
+      ]),
+    );
+  });
+
+  it('defaults offline snapshots to omitting scrollbackLines', async () => {
+    const snapshotMock = vi.fn((options?: { includeScrollback?: boolean }) =>
+      createOfflineSemanticSnapshot(
+        options?.includeScrollback
+          ? {
+              scrollbackLines: [{ row: 0, text: 'unexpected scrollback' }],
+            }
+          : {},
+      ),
+    );
+    mocks.readManifestIfExists.mockResolvedValue(createExitedSessionRecord());
+    installOfflineReplaySuccessMock(snapshotMock);
+
+    await runSnapshotCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+    });
+
+    expect(snapshotMock).toHaveBeenCalledWith({ includeScrollback: false });
+    const emitted = getLastEmitSuccessPayload() as {
+      result: {
+        scrollbackLines?: { row: number; text: string }[];
+      };
+      lines: string[];
+    };
+    expect(emitted.result.scrollbackLines).toBeUndefined();
+    expect(emitted.lines).not.toEqual(
+      expect.arrayContaining(['Scrollback Lines (1):']),
+    );
   });
 
   it('falls back to offline replay when the running session host is unreachable', async () => {
@@ -351,7 +535,7 @@ describe('snapshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01/rpc.sock',
       'snapshot',
-      { format: 'text' },
+      { format: 'text', includeScrollback: false },
     );
     expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
       { sessionDir: '/tmp/agent-terminal/sessions/session-01' },

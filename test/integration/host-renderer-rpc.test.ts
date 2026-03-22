@@ -30,6 +30,8 @@ import {
 const SNAPSHOT_TIMEOUT_MS = 60_000;
 const OUTPUT_MARKER = 'hello-structured';
 
+const SCROLLBACK_OUTPUT_MARKER = 'line-50';
+
 async function waitForOutputMarker(
   testHome: string,
   sessionId: string,
@@ -102,6 +104,14 @@ describe(
       testHome = '';
     });
 
+    async function restartSession(command: string[], marker: string): Promise<void> {
+      destroySession(testHome, sessionId);
+      sessionId = createSession(testHome, command);
+      await waitForOutputMarker(testHome, sessionId, marker);
+      sessDir = sessionDir(testHome, sessionId);
+      rpcSocketPath = socketPath(sessDir);
+    }
+
     it('returns structured snapshots over RPC', async () => {
       const result = (await sendRpc(
         rpcSocketPath,
@@ -135,14 +145,17 @@ describe(
         filename,
         sessionId,
         capturedAtSeq: result.capturedAtSeq,
-        metadata: {
+      });
+      expect(manifest.artifacts[0]?.metadata).toEqual(
+        expect.objectContaining({
           format: 'structured',
           cols: result.cols,
           rows: result.rows,
           cursorRow: result.cursorRow,
           cursorCol: result.cursorCol,
-        },
-      });
+          rendererBackend: 'ghostty-web',
+        }),
+      );
     });
 
     it('returns text snapshots over RPC', async () => {
@@ -175,14 +188,17 @@ describe(
         filename,
         sessionId,
         capturedAtSeq: result.capturedAtSeq,
-        metadata: {
+      });
+      expect(manifest.artifacts[0]?.metadata).toEqual(
+        expect.objectContaining({
           format: 'text',
           cols: result.cols,
           rows: result.rows,
           cursorRow: result.cursorRow,
           cursorCol: result.cursorCol,
-        },
-      });
+          rendererBackend: 'ghostty-web',
+        }),
+      );
     });
 
     it('defaults snapshot RPCs to structured format', async () => {
@@ -202,6 +218,108 @@ describe(
       expect(
         result.visibleLines.some((line) => line.text.includes(OUTPUT_MARKER)),
       ).toBe(true);
+    });
+
+    it('supports includeScrollback snapshot RPCs for overflow output', async () => {
+      await restartSession(
+        [
+          '/bin/sh',
+          '-c',
+          'for i in $(seq 1 50); do echo line-$i; done; exec cat',
+        ],
+        SCROLLBACK_OUTPUT_MARKER,
+      );
+
+      const result = (await sendRpc(
+        rpcSocketPath,
+        'snapshot',
+        { format: 'structured', includeScrollback: true },
+        SNAPSHOT_TIMEOUT_MS,
+      )) as SnapshotResult;
+
+      expect(result.format).toBe('structured');
+      if (result.format !== 'structured') {
+        throw new Error('expected structured snapshot result');
+      }
+
+      expect(result.visibleLines).not.toHaveLength(0);
+      expect(
+        result.visibleLines.some((line) => line.text.includes('line-1')),
+      ).toBe(true);
+
+      const filename = snapshotFilename(result.capturedAtSeq, 'structured');
+      const manifest = await readArtifactManifest(sessDir);
+      expect(manifest.artifacts).toHaveLength(1);
+
+      if (result.scrollbackLines !== undefined) {
+        expect(result.scrollbackLines).not.toHaveLength(0);
+        expect(result.scrollbackLines[0]?.row).toBe(0);
+        for (let index = 1; index < result.scrollbackLines.length; index += 1) {
+          expect(result.scrollbackLines[index]?.row).toBeGreaterThan(
+            result.scrollbackLines[index - 1]?.row ?? -1,
+          );
+        }
+        expect(manifest.artifacts[0]).toMatchObject({
+          kind: 'snapshot',
+          filename,
+          sessionId,
+          capturedAtSeq: result.capturedAtSeq,
+        });
+        expect(manifest.artifacts[0]?.metadata).toEqual(
+          expect.objectContaining({
+            format: 'structured',
+            cols: result.cols,
+            rows: result.rows,
+            cursorRow: result.cursorRow,
+            cursorCol: result.cursorCol,
+            rendererBackend: 'ghostty-web',
+            scrollbackLineCount: result.scrollbackLines.length,
+          }),
+        );
+        return;
+      }
+
+      expect(manifest.artifacts[0]).toMatchObject({
+        kind: 'snapshot',
+        filename,
+        sessionId,
+        capturedAtSeq: result.capturedAtSeq,
+      });
+      expect(manifest.artifacts[0]?.metadata).toEqual(
+        expect.objectContaining({
+          format: 'structured',
+          cols: result.cols,
+          rows: result.rows,
+          cursorRow: result.cursorRow,
+          cursorCol: result.cursorCol,
+          rendererBackend: 'ghostty-web',
+        }),
+      );
+      expect(manifest.artifacts[0]?.metadata).not.toHaveProperty(
+        'scrollbackLineCount',
+      );
+    });
+
+    it('omits scrollback from structured snapshot RPCs by default', async () => {
+      const result = (await sendRpc(
+        rpcSocketPath,
+        'snapshot',
+        { format: 'structured' },
+        SNAPSHOT_TIMEOUT_MS,
+      )) as SnapshotResult;
+
+      expect(result.format).toBe('structured');
+      if (result.format !== 'structured') {
+        throw new Error('expected structured snapshot result');
+      }
+
+      expect(result.scrollbackLines).toBeUndefined();
+
+      const manifest = await readArtifactManifest(sessDir);
+      expect(manifest.artifacts).toHaveLength(1);
+      expect(manifest.artifacts[0]?.metadata).not.toHaveProperty(
+        'scrollbackLineCount',
+      );
     });
 
     it('captures screenshots with the default render profile', async () => {
