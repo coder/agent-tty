@@ -1,0 +1,57 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-22T20:37:50.138Z",
+  "result": {
+    "format": "structured",
+    "sessionId": "01KMBM97GGVVAKKQEJ4ZMYV67J",
+    "capturedAtSeq": 1,
+    "cols": 80,
+    "rows": 10,
+    "cursorRow": 9,
+    "cursorCol": 0,
+    "isAltScreen": false,
+    "visibleLines": [
+      {
+        "row": 0,
+        "text": "SCROLLBACK DEMO START"
+      },
+      {
+        "row": 1,
+        "text": "LINE 001 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 2,
+        "text": "LINE 002 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 3,
+        "text": "LINE 003 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 4,
+        "text": "LINE 004 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 5,
+        "text": "LINE 005 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 6,
+        "text": "LINE 006 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 7,
+        "text": "LINE 007 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 8,
+        "text": "LINE 008 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 9,
+        "text": "LINE 009 | abcdefghijklmnopqrstuvwxyz"
+      }
+    ]
+  }
+}

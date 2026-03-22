@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-22T20:37:49.149Z",
+  "result": {
+    "format": "text",
+    "sessionId": "01KMBM97GGVVAKKQEJ4ZMYV67J",
+    "capturedAtSeq": 1,
+    "cols": 80,
+    "rows": 10,
+    "cursorRow": 9,
+    "cursorCol": 0,
+    "text": "SCROLLBACK DEMO START\nLINE 001 | abcdefghijklmnopqrstuvwxyz\nLINE 002 | abcdefghijklmnopqrstuvwxyz\nLINE 003 | abcdefghijklmnopqrstuvwxyz\nLINE 004 | abcdefghijklmnopqrstuvwxyz\nLINE 005 | abcdefghijklmnopqrstuvwxyz\nLINE 006 | abcdefghijklmnopqrstuvwxyz\nLINE 007 | abcdefghijklmnopqrstuvwxyz\nLINE 008 | abcdefghijklmnopqrstuvwxyz\nLINE 009 | abcdefghijklmnopqrstuvwxyz"
+  }
+}
