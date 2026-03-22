@@ -46,6 +46,31 @@ describe('EventLog', () => {
     }
   });
 
+  it('returns committed sequence numbers for marker appends and keeps them monotonic', async () => {
+    const eventLog = await EventLog.open(eventLogPath);
+
+    try {
+      const firstSeq = await eventLog.append('marker', { label: 'test' });
+      const secondSeq = await eventLog.append('output', { data: 'hello' });
+      const thirdSeq = await eventLog.append('marker', { label: '' });
+
+      expect([firstSeq, secondSeq, thirdSeq]).toEqual([0, 1, 2]);
+      expect(eventLog.getEvents().map((event) => event.seq)).toEqual([0, 1, 2]);
+      expect(eventLog.getEvents().map((event) => event.type)).toEqual([
+        'marker',
+        'output',
+        'marker',
+      ]);
+      expect(eventLog.getEvents().map((event) => event.payload)).toEqual([
+        { label: 'test' },
+        { data: 'hello' },
+        { label: '' },
+      ]);
+    } finally {
+      await eventLog.close();
+    }
+  });
+
   it('returns buffered events without rereading the log file', async () => {
     const eventLog = await EventLog.open(eventLogPath);
 

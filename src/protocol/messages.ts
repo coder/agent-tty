@@ -109,6 +109,20 @@ export type PasteParams = z.infer<typeof PasteParamsSchema>;
 export const PasteResultSchema = EmptyObjectSchema;
 export type PasteResult = z.infer<typeof PasteResultSchema>;
 
+export const MarkParamsSchema = z
+  .object({
+    label: z.string(),
+  })
+  .strict();
+export type MarkParams = z.infer<typeof MarkParamsSchema>;
+
+export const MarkResultSchema = z
+  .object({
+    seq: z.number().int().nonnegative(),
+  })
+  .strict();
+export type MarkResult = z.infer<typeof MarkResultSchema>;
+
 export const SendKeysParamsSchema = z
   .object({
     keys: z.array(NonEmptyStringSchema).min(1),
@@ -176,6 +190,7 @@ const RPC_METHODS = [
   'screenshot',
   'type',
   'paste',
+  'mark',
   'sendKeys',
   'resize',
   'signal',
@@ -207,6 +222,10 @@ export const RpcMethodSchemas = {
   paste: {
     params: PasteParamsSchema,
     result: PasteResultSchema,
+  },
+  mark: {
+    params: MarkParamsSchema,
+    result: MarkResultSchema,
   },
   sendKeys: {
     params: SendKeysParamsSchema,

@@ -74,12 +74,18 @@ describe('renderer schemas', () => {
       {
         seq: 5,
         ts: '2026-03-19T12:00:05.000Z',
-        type: 'signal',
-        payload: { signal: 'SIGINT' },
+        type: 'marker',
+        payload: { label: '' },
       },
       {
         seq: 6,
         ts: '2026-03-19T12:00:06.000Z',
+        type: 'signal',
+        payload: { signal: 'SIGINT' },
+      },
+      {
+        seq: 7,
+        ts: '2026-03-19T12:00:07.000Z',
         type: 'exit',
         payload: { exitCode: 0, exitSignal: null },
       },

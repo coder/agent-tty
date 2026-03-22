@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-import { VisibleLineSchema, type VisibleLine } from '../protocol/schemas.js';
+import {
+  MarkerEventPayloadSchema,
+  VisibleLineSchema,
+  type VisibleLine,
+} from '../protocol/schemas.js';
 
 const NonEmptyStringSchema = z.string().min(1);
 const NonNegativeIntSchema = z.number().int().nonnegative();
@@ -78,6 +82,15 @@ const ResizeReplayEventSchema = z
   })
   .strict();
 
+const MarkerReplayEventSchema = z
+  .object({
+    seq: NonNegativeIntSchema,
+    ts: z.iso.datetime(),
+    type: z.literal('marker'),
+    payload: MarkerEventPayloadSchema,
+  })
+  .strict();
+
 const SignalReplayEventSchema = z
   .object({
     seq: NonNegativeIntSchema,
@@ -111,6 +124,7 @@ export const ReplayEventSchema = z.discriminatedUnion('type', [
   InputPasteReplayEventSchema,
   InputKeysReplayEventSchema,
   ResizeReplayEventSchema,
+  MarkerReplayEventSchema,
   SignalReplayEventSchema,
   ExitReplayEventSchema,
 ]);

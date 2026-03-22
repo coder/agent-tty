@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   DestroyParamsSchema,
   InspectResultSchema,
+  MarkParamsSchema,
+  MarkResultSchema,
   PasteParamsSchema,
   RecordExportResultSchema,
   ResizeResultSchema,
@@ -22,6 +24,7 @@ import {
 } from '../../../src/protocol/messages.js';
 import {
   EventRecordSchema,
+  MarkerEventRecordSchema,
   SessionRecordSchema,
 } from '../../../src/protocol/schemas.js';
 
@@ -90,6 +93,35 @@ describe('protocol schemas', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it('accepts marker event records, including empty labels', () => {
+    expect(
+      MarkerEventRecordSchema.parse({
+        seq: 0,
+        ts: '2026-03-19T12:00:02.000Z',
+        type: 'marker',
+        payload: { label: '' },
+      }),
+    ).toEqual({
+      seq: 0,
+      ts: '2026-03-19T12:00:02.000Z',
+      type: 'marker',
+      payload: { label: '' },
+    });
+    expect(
+      MarkerEventRecordSchema.parse({
+        seq: 1,
+        ts: '2026-03-19T12:00:03.000Z',
+        type: 'marker',
+        payload: { label: 'Step 1' },
+      }),
+    ).toEqual({
+      seq: 1,
+      ts: '2026-03-19T12:00:03.000Z',
+      type: 'marker',
+      payload: { label: 'Step 1' },
+    });
   });
 });
 
@@ -386,6 +418,11 @@ describe('RPC message schemas', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts mark params with empty labels and mark results with seq values', () => {
+    expect(MarkParamsSchema.parse({ label: '' })).toEqual({ label: '' });
+    expect(MarkResultSchema.parse({ seq: 42 })).toEqual({ seq: 42 });
+  });
+
   it('rejects empty type text', () => {
     const result = TypeParamsSchema.safeParse({
       text: '',
@@ -447,6 +484,7 @@ describe('RPC message schemas', () => {
       'screenshot',
       'type',
       'paste',
+      'mark',
       'sendKeys',
       'resize',
       'signal',

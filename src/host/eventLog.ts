@@ -3,7 +3,12 @@ import type { FileHandle } from 'node:fs/promises';
 
 import { z } from 'zod';
 
-import { EventRecordSchema, type EventRecord } from '../protocol/schemas.js';
+import {
+  EventRecordSchema,
+  MarkerEventPayloadSchema,
+  type EventRecord,
+  type MarkerEventPayload,
+} from '../protocol/schemas.js';
 import { invariant } from '../util/assert.js';
 
 const OutputEventPayloadSchema = z
@@ -71,7 +76,8 @@ type EventLogEventType =
   | 'input_keys'
   | 'resize'
   | 'signal'
-  | 'exit';
+  | 'exit'
+  | 'marker';
 type EventLogPayload =
   | OutputEventPayload
   | InputTextEventPayload
@@ -79,7 +85,8 @@ type EventLogPayload =
   | InputKeysEventPayload
   | ResizeEventPayload
   | SignalEventPayload
-  | ExitEventPayload;
+  | ExitEventPayload
+  | MarkerEventPayload;
 
 // Keep this in sync with the replay loader's event-log size limit.
 const MAX_EVENT_LOG_SIZE = 50 * 1024 * 1024;
@@ -132,6 +139,11 @@ function validatePayload(
     case 'exit': {
       const result = ExitEventPayloadSchema.safeParse(payload);
       invariant(result.success, 'exit payload must match schema');
+      return result.data;
+    }
+    case 'marker': {
+      const result = MarkerEventPayloadSchema.safeParse(payload);
+      invariant(result.success, 'marker payload must match schema');
       return result.data;
     }
   }
@@ -243,26 +255,27 @@ export class EventLog {
     return new EventLog(filePath, fileHandle, nextSeq, eventBuffer);
   }
 
-  async append(type: 'output', payload: OutputEventPayload): Promise<void>;
+  async append(type: 'output', payload: OutputEventPayload): Promise<number>;
   async append(
     type: 'input_text',
     payload: InputTextEventPayload,
-  ): Promise<void>;
+  ): Promise<number>;
   async append(
     type: 'input_paste',
     payload: InputPasteEventPayload,
-  ): Promise<void>;
+  ): Promise<number>;
   async append(
     type: 'input_keys',
     payload: InputKeysEventPayload,
-  ): Promise<void>;
-  async append(type: 'resize', payload: ResizeEventPayload): Promise<void>;
-  async append(type: 'signal', payload: SignalEventPayload): Promise<void>;
-  async append(type: 'exit', payload: ExitEventPayload): Promise<void>;
+  ): Promise<number>;
+  async append(type: 'resize', payload: ResizeEventPayload): Promise<number>;
+  async append(type: 'signal', payload: SignalEventPayload): Promise<number>;
+  async append(type: 'exit', payload: ExitEventPayload): Promise<number>;
+  async append(type: 'marker', payload: MarkerEventPayload): Promise<number>;
   async append(
     type: EventLogEventType,
     payload: EventLogPayload,
-  ): Promise<void> {
+  ): Promise<number> {
     invariant(!this.isClosed, 'cannot append to a closed event log');
 
     const validatedPayload = validatePayload(type, payload);
@@ -321,6 +334,8 @@ export class EventLog {
       this.rollbackBufferedEventsFrom(seq);
       throw error;
     }
+
+    return seq;
   }
 
   private rollbackBufferedEventsFrom(failedSeq: number): void {

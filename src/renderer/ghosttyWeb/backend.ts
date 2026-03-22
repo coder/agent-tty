@@ -848,6 +848,10 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           this.currentRows = event.payload.rows;
           break;
         }
+        case 'marker': {
+          await flushOutputBatch();
+          break;
+        }
         case 'input_text':
         case 'input_paste':
         case 'input_keys':
@@ -1046,6 +1050,10 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           this.currentRows = event.payload.rows;
           resizeEventCount += 1;
           await waitForDelay(minFrameHoldMs);
+          break;
+        }
+        case 'marker': {
+          await flushOutputBatch();
           break;
         }
         case 'input_text':
