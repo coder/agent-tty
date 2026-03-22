@@ -62,8 +62,18 @@ describe('generateAsciicast', () => {
       },
     ];
 
-    const first = generateAsciicast('session-01', manifest, events, '0.1.0-test');
-    const second = generateAsciicast('session-01', manifest, events, '0.1.0-test');
+    const first = generateAsciicast(
+      'session-01',
+      manifest,
+      events,
+      '0.1.0-test',
+    );
+    const second = generateAsciicast(
+      'session-01',
+      manifest,
+      events,
+      '0.1.0-test',
+    );
     const lines = parseAsciicastLines(first.contents);
 
     expect(first.contents).toBe(second.contents);

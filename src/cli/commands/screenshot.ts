@@ -81,7 +81,9 @@ function formatScreenshotLines(result: ScreenshotResult): string[] {
     lines.push(`Renderer backend: ${result.rendererBackend}`);
   }
   if (result.pixelWidth !== undefined && result.pixelHeight !== undefined) {
-    lines.push(`Pixel dimensions: ${String(result.pixelWidth)}×${String(result.pixelHeight)}`);
+    lines.push(
+      `Pixel dimensions: ${String(result.pixelWidth)}×${String(result.pixelHeight)}`,
+    );
   }
   if (result.sha256 !== undefined) {
     lines.push(`SHA-256: ${result.sha256}`);

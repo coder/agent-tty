@@ -111,9 +111,7 @@ describe('GhosttyWebBackend unit guards', () => {
     );
     const outputPath = join(temporaryDirectory, 'screenshot.png');
     const pngBuffer = createPngBuffer(800, 600);
-    const expectedSha256 = createHash('sha256')
-      .update(pngBuffer)
-      .digest('hex');
+    const expectedSha256 = createHash('sha256').update(pngBuffer).digest('hex');
 
     const evaluate = vi.fn().mockResolvedValue(undefined);
     const screenshot = vi.fn(
