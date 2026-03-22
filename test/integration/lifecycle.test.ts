@@ -6,7 +6,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   cleanupHome,
+  crashSession,
+  createSession,
+  destroySession,
+  inspectSession,
   runCli,
+  sleep,
   type EventRecord,
   type SessionRecord,
   type SuccessEnvelope,
@@ -145,7 +150,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     ).result.sessions;
     expect(allSessions).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ sessionId, status: 'exited' }),
+        expect.objectContaining({ sessionId, status: 'destroyed' }),
       ]),
     );
   });
@@ -284,6 +289,74 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(errorEnvelope.ok).toBe(false);
     expect(errorEnvelope.error.code).toBe('INVALID_INPUT');
     expect(errorEnvelope.error.message).toContain(missingShellPath);
+  });
+
+  it('host crash reconciles to failed with failureReason', async () => {
+    const sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec cat']);
+
+    const beforeCrash = inspectSession(testHome, sessionId);
+    expect(beforeCrash.status).toBe('running');
+
+    crashSession(testHome, sessionId);
+    await sleep(500);
+
+    const afterCrash = inspectSession(testHome, sessionId);
+    expect(afterCrash.status).toBe('failed');
+    expect(afterCrash.failureReason).toBeTypeOf('string');
+    expect(afterCrash.failureReason!.length).toBeGreaterThan(0);
+    expect(afterCrash.failureReason).toContain('host process died unexpectedly');
+    expect(afterCrash.hostPid).toBeNull();
+    expect(afterCrash.childPid).toBeNull();
+  });
+
+  it('destroyed session rejects commands with SESSION_ALREADY_DESTROYED', () => {
+    const sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec cat']);
+
+    destroySession(testHome, sessionId);
+
+    const session = inspectSession(testHome, sessionId);
+    expect(session.status).toBe('destroyed');
+
+    const typeResult = runCli(['type', sessionId, 'hello', '--json'], {
+      AGENT_TERMINAL_HOME: testHome,
+    });
+    expect(typeResult.status).not.toBe(0);
+    expect(typeResult.stderr).toBe('');
+    const envelope = JSON.parse(typeResult.stdout) as ErrorEnvelope;
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('SESSION_ALREADY_DESTROYED');
+  });
+
+  it('failed session supports offline snapshot', async () => {
+    const sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      'echo offline-test-data; exec cat',
+    ]);
+
+    await sleep(1000);
+
+    crashSession(testHome, sessionId);
+    await sleep(500);
+
+    const session = inspectSession(testHome, sessionId);
+    expect(session.status).toBe('failed');
+
+    const snapshotResult = runCli(
+      ['snapshot', sessionId, '--format', 'text', '--json'],
+      {
+        AGENT_TERMINAL_HOME: testHome,
+      },
+    );
+    expect(snapshotResult.status).toBe(0);
+    expect(snapshotResult.stderr).toBe('');
+    const snapshotEnvelope = JSON.parse(snapshotResult.stdout) as SuccessEnvelope<{
+      text: string;
+      format: string;
+    }>;
+    expect(snapshotEnvelope.ok).toBe(true);
+    expect(snapshotEnvelope.result.format).toBe('text');
+    expect(snapshotEnvelope.result.text).toContain('offline-test-data');
   });
 
   it('inspect nonexistent session returns SESSION_NOT_FOUND', () => {
