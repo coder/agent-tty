@@ -113,6 +113,7 @@ function createFakeBackend(
   });
 
   return {
+    rendererBackend: 'fake-renderer',
     boot: bootMock,
     bootMock,
     replayTo: replayToMock,

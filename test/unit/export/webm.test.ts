@@ -105,6 +105,7 @@ function createMockBackend(
     overrides.finalizeVideo ?? vi.fn().mockResolvedValue(undefined);
   const dispose = overrides.dispose ?? vi.fn().mockResolvedValue(undefined);
   const backend: VideoCapableRendererBackend = {
+    rendererBackend: overrides.rendererBackend ?? 'mock-video-backend',
     isBooted: overrides.isBooted ?? false,
     boot,
     replayTo,

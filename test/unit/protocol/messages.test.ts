@@ -274,6 +274,42 @@ describe('RPC message schemas', () => {
     ).toBe(true);
   });
 
+  it('accepts optional scrollback and screenshot metadata fields', () => {
+    expect(
+      SnapshotParamsSchema.safeParse({ includeScrollback: true }).success,
+    ).toBe(true);
+    expect(
+      SnapshotResultSchema.safeParse({
+        format: 'structured',
+        sessionId: 'session-01',
+        capturedAtSeq: 5,
+        cols: 80,
+        rows: 24,
+        cursorRow: 2,
+        cursorCol: 4,
+        isAltScreen: false,
+        visibleLines: [{ row: 0, text: 'visible' }],
+        scrollbackLines: [{ row: 99, text: 'scrollback' }],
+      }).success,
+    ).toBe(true);
+    expect(
+      ScreenshotResultSchema.safeParse({
+        sessionId: 'session-01',
+        capturedAtSeq: 5,
+        profileName: 'reference-dark',
+        cols: 80,
+        rows: 24,
+        artifactPath: '/tmp/screenshot.png',
+        pngSizeBytes: 1024,
+        rendererBackend: 'ghostty-web',
+        pixelWidth: 800,
+        pixelHeight: 600,
+        sha256: 'a'.repeat(64),
+        renderProfileHash: 'b'.repeat(64),
+      }).success,
+    ).toBe(true);
+  });
+
   it('rejects empty screenshot profile names', () => {
     expect(ScreenshotParamsSchema.safeParse({ profile: '' }).success).toBe(
       false,
@@ -322,7 +358,8 @@ describe('RPC message schemas', () => {
       WaitForRenderParamsSchema.safeParse({ screenStableMs: 250 }).success,
     ).toBe(true);
     expect(
-      WaitForRenderParamsSchema.safeParse({ cursorRow: 0, cursorCol: 5 }).success,
+      WaitForRenderParamsSchema.safeParse({ cursorRow: 0, cursorCol: 5 })
+        .success,
     ).toBe(true);
   });
 
@@ -337,12 +374,12 @@ describe('RPC message schemas', () => {
     expect(
       WaitForRenderParamsSchema.safeParse({ screenStableMs: 0 }).success,
     ).toBe(false);
-    expect(
-      WaitForRenderParamsSchema.safeParse({ cursorRow: -1 }).success,
-    ).toBe(false);
-    expect(
-      WaitForRenderParamsSchema.safeParse({ cursorCol: -1 }).success,
-    ).toBe(false);
+    expect(WaitForRenderParamsSchema.safeParse({ cursorRow: -1 }).success).toBe(
+      false,
+    );
+    expect(WaitForRenderParamsSchema.safeParse({ cursorCol: -1 }).success).toBe(
+      false,
+    );
   });
 
   it('accepts waitForRender results with replay metadata', () => {

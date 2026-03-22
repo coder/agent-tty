@@ -9,6 +9,12 @@ const NonNegativeIntSchema = z.number().int().nonnegative();
 const IsoDatetimeSchema = z.iso.datetime();
 const SnapshotFormatSchema = z.enum(['structured', 'text']);
 const SessionEnvSchema = z.record(NonEmptyStringSchema, z.string());
+const Sha256HexSchema = z
+  .string()
+  .regex(
+    /^[a-f0-9]{64}$/u,
+    'must be a 64-character lowercase SHA-256 hex string',
+  );
 
 export const SessionStatusSchema = z.enum([
   'running',
@@ -209,6 +215,7 @@ export type VisibleLine = z.infer<typeof VisibleLineSchema>;
 export const SnapshotParamsSchema = z
   .object({
     format: SnapshotFormatSchema.optional(),
+    includeScrollback: z.boolean().optional(),
   })
   .strict();
 export type SnapshotParams = z.infer<typeof SnapshotParamsSchema>;
@@ -224,6 +231,7 @@ export const StructuredSnapshotResultSchema = z
     cursorCol: NonNegativeIntSchema,
     isAltScreen: z.boolean(),
     visibleLines: z.array(VisibleLineSchema),
+    scrollbackLines: z.array(VisibleLineSchema).optional(),
   })
   .strict();
 export type StructuredSnapshotResult = z.infer<
@@ -266,6 +274,11 @@ export const ScreenshotResultSchema = z
     rows: PositiveIntSchema,
     artifactPath: NonEmptyStringSchema,
     pngSizeBytes: PositiveIntSchema,
+    rendererBackend: z.string().optional(),
+    pixelWidth: PositiveIntSchema.optional(),
+    pixelHeight: PositiveIntSchema.optional(),
+    sha256: Sha256HexSchema.optional(),
+    renderProfileHash: Sha256HexSchema.optional(),
   })
   .strict();
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;

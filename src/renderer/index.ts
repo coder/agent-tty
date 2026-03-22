@@ -1,6 +1,7 @@
 export {
   BUILTIN_PROFILE_NAMES,
   getBuiltinProfile,
+  hashProfile,
   resolveProfile,
 } from './profiles.js';
 export {
@@ -13,7 +14,7 @@ export {
   TextSnapshotSchema,
 } from './types.js';
 export { VisibleLineSchema } from '../protocol/schemas.js';
-export type { RendererBackend } from './backend.js';
+export type { RendererBackend, SnapshotOptions } from './backend.js';
 export { GhosttyWebBackend } from './ghosttyWeb/index.js';
 export type {
   RenderProfileConfig,

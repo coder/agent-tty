@@ -18,6 +18,7 @@ import {
 import { invariant, assertString, unreachable } from '../../util/assert.js';
 import type {
   AcceleratedTimingOptions,
+  SnapshotOptions,
   VideoCapableRendererBackend,
   VideoRecordingOptions,
 } from '../backend.js';
@@ -653,6 +654,7 @@ function validateHarnessSnapshot(snapshot: unknown): GhosttyHarnessSnapshot {
 }
 
 export class GhosttyWebBackend implements VideoCapableRendererBackend {
+  public readonly rendererBackend = 'ghostty-web';
   public isBooted = false;
 
   private readonly profile: RenderProfileConfig;
@@ -1103,7 +1105,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     };
   }
 
-  public async snapshot(): Promise<SemanticSnapshot> {
+  public async snapshot(options?: SnapshotOptions): Promise<SemanticSnapshot> {
+    void options;
+
     const page = this.requireOperationalPage('snapshot()');
     invariant(
       this.lastAppliedSeq >= 0,

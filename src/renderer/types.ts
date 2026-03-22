@@ -15,6 +15,12 @@ const ThemeSchema = z.enum(['dark', 'light']);
 const HexColorSchema = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/u, 'must be a hex color like #1e1e2e');
+const Sha256HexSchema = z
+  .string()
+  .regex(
+    /^[a-f0-9]{64}$/u,
+    'must be a 64-character lowercase SHA-256 hex string',
+  );
 
 const OutputReplayEventSchema = z
   .object({
@@ -180,6 +186,7 @@ export const SemanticSnapshotSchema = z
     cursorCol: NonNegativeIntSchema,
     isAltScreen: z.boolean(),
     visibleLines: z.array(VisibleLineSchema),
+    scrollbackLines: z.array(VisibleLineSchema).optional(),
   })
   .strict();
 export type SemanticSnapshot = z.infer<typeof SemanticSnapshotSchema>;
@@ -206,6 +213,11 @@ export const ScreenshotResultSchema = z
     rows: PositiveIntSchema,
     artifactPath: NonEmptyStringSchema,
     pngSizeBytes: PositiveIntSchema,
+    rendererBackend: z.string().optional(),
+    pixelWidth: PositiveIntSchema.optional(),
+    pixelHeight: PositiveIntSchema.optional(),
+    sha256: Sha256HexSchema.optional(),
+    renderProfileHash: Sha256HexSchema.optional(),
   })
   .strict();
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;
