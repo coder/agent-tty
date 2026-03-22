@@ -40,6 +40,12 @@ npm ci
 
 # Install Playwright Chromium (required for screenshot + WebM)
 npx playwright install chromium
+
+# Verify Chromium installed successfully
+npx playwright install chromium
+npx tsx src/cli/main.ts doctor --json 2>&1 \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); checks={c['name']:c['status'] for c in d['result']['checks']}; assert checks.get('browser-launch')=='pass', 'Chromium not available'" \
+  || { echo "FAIL: Chromium/Playwright not working — screenshot and WebM export will fail"; exit 1; }
 ```
 
 ### Verify the CLI works
@@ -132,6 +138,10 @@ rm -rf ~/.config/nvim/.git
 ls ~/.config/nvim/init.lua
 ```
 
+> **Note:** LazyVim's starter repository evolves over time. Plugin counts,
+> extra names, and UI details may differ from this playbook. The core workflow
+> (install → extras → enable → restart → verify keybindings) remains the same.
+
 ---
 
 ## Step 3: First boot — LazyVim plugin installation
@@ -139,10 +149,14 @@ ls ~/.config/nvim/init.lua
 This is the first `agent-terminal` interaction. We create a session running
 `nvim`, which triggers LazyVim's first-boot plugin installation.
 
+> **Note:** All steps below use `$CLI`, `$BUNDLE`, and `$AGENT_TERMINAL_HOME`
+> variables defined in Step 0. Ensure they are still set in your shell.
+
 ```bash
 # Create a session with generous dimensions for the TUI
 RESULT=$($CLI create --cols 120 --rows 40 --json -- "$NVIM_PATH")
-SID=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['result']['sessionId'])")
+SID=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['result']['sessionId'])") \
+  || { echo "FAIL: Could not parse session ID"; exit 1; }
 echo "Session 1: $SID"
 echo "$RESULT" > "$BUNDLE/create-session1.json"
 ```
@@ -259,7 +273,7 @@ $CLI wait "$SID" --screen-stable-ms 2000 --timeout 15000 --json
 ### Center the cursor on the match
 
 ```bash
-$CLI send-keys "$SID" z z
+$CLI send-keys "$SID" z z  # zz = center cursor line on screen (two 'z' keypresses in Neovim)
 sleep 1
 $CLI wait "$SID" --screen-stable-ms 2000 --timeout 10000 --json
 ```
@@ -268,9 +282,9 @@ $CLI wait "$SID" --screen-stable-ms 2000 --timeout 10000 --json
 
 ```bash
 RESULT=$($CLI screenshot "$SID" --json)
-echo "$RESULT" > "$BUNDLE/04-claude-code-found.json"
+echo "$RESULT" > "$BUNDLE/04-claude-code-extra.json"
 ARTIFACT=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['result']['artifactPath'])")
-cp "$ARTIFACT" "$BUNDLE/artifacts/04-claude-code-found.png"
+cp "$ARTIFACT" "$BUNDLE/artifacts/04-claude-code-extra.png"
 ```
 
 ### Enable the extra
@@ -286,7 +300,7 @@ $CLI wait "$SID" --screen-stable-ms 2000 --timeout 15000 --json
 ### Verify: Scroll to top and check "Enabled Plugins"
 
 ```bash
-$CLI send-keys "$SID" g g
+$CLI send-keys "$SID" g g  # gg = go to first line (two 'g' keypresses in Neovim)
 sleep 1
 $CLI wait "$SID" --screen-stable-ms 2000 --timeout 10000 --json
 
@@ -319,14 +333,17 @@ $CLI wait "$SID" --screen-stable-ms 2000 --timeout 15000 --json
 
 # Screenshot: Back to dashboard
 RESULT=$($CLI screenshot "$SID" --json)
-echo "$RESULT" > "$BUNDLE/06-dashboard-post-extras.json"
+echo "$RESULT" > "$BUNDLE/06-dashboard-after-extras.json"
 ARTIFACT=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['result']['artifactPath'])")
-cp "$ARTIFACT" "$BUNDLE/artifacts/06-dashboard-post-extras.png"
+cp "$ARTIFACT" "$BUNDLE/artifacts/06-dashboard-after-extras.png"
 
 # Quit nvim to trigger restart
 $CLI type "$SID" ":qa!"
 $CLI send-keys "$SID" Enter
 sleep 2
+
+# Wait for nvim to fully exit before exporting
+$CLI wait "$SID" --exit --timeout 30000 --json
 ```
 
 ### Export recordings from session 1 (before it's gone)
@@ -363,7 +380,8 @@ $CLI wait "$SID2" --screen-stable-ms 10000 --timeout 180000 --json
 
 ```bash
 $CLI snapshot "$SID2" --format text --json \
-  | python3 -c "import sys,json; t=json.load(sys.stdin)['result']['text']; print('claudecode.nvim' in t)"
+  | python3 -c "import sys,json; t=json.load(sys.stdin)['result']['text']; print('claudecode.nvim' in t)" \
+  || { echo "FAIL: Could not verify claudecode"; exit 1; }
 # Expected: True
 ```
 
@@ -403,6 +421,17 @@ LazyVim's default leader key is `Space`:
 $CLI send-keys "$SID2" Space
 sleep 2
 $CLI wait "$SID2" --screen-stable-ms 2000 --timeout 10000 --json
+```
+
+### Screenshot: Which-key leader menu (before selecting AI)
+
+This captures the which-key popup showing the new `a → +ai` entry:
+
+```bash
+RESULT=$($CLI screenshot "$SID2" --json)
+echo "$RESULT" > "$BUNDLE/07-leader-which-key.json"
+ARTIFACT=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['result']['artifactPath'])")
+cp "$ARTIFACT" "$BUNDLE/artifacts/07-leader-which-key.png"
 ```
 
 ### Verify: `a` → `+ai` appears in which-key
@@ -670,6 +699,13 @@ install, TreeSitter parser compilation) can take minutes:
 $CLI wait "$SID" --screen-stable-ms 15000 --timeout 300000 --json
 ```
 
+### Sleep values may need adjustment
+
+The `sleep` commands between key presses and waits are conservative estimates.
+On very slow systems or under heavy load, you may need to increase them.
+The `wait --screen-stable-ms` commands are the actual synchronization mechanism;
+the sleeps just give the TUI time to process input before the wait begins.
+
 ### Screenshot is blank or shows wrong content
 
 The renderer needs events to replay. If the screenshot is blank, the session
@@ -701,9 +737,10 @@ A complete run of this playbook produces:
 | 01-lazyvim-installer.png | Screenshot | 100-130 KB |
 | 02-lazyvim-dashboard.png | Screenshot | 20-25 KB |
 | 03-lazy-extras.png | Screenshot | 90-100 KB |
-| 04-claude-code-found.png | Screenshot | 100-120 KB |
+| 04-claude-code-extra.png | Screenshot | 100-120 KB |
 | 05-claude-code-enabled.png | Screenshot | 90-100 KB |
-| 06-dashboard-post-extras.png | Screenshot | 20-25 KB |
+| 06-dashboard-after-extras.png | Screenshot | 20-25 KB |
+| 07-leader-which-key.png | Screenshot | 20-25 KB |
 | 08-claudecode-installed.png | Screenshot | 80-90 KB |
 | 09-leader-a-ai-keys.png | Screenshot (dark) | 20-25 KB |
 | 09-leader-a-ai-keys-light.png | Screenshot (light) | 20-25 KB |
