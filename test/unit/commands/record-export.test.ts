@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   artifactPath: vi.fn(),
   recordingFilename: vi.fn(),
   generateWebmExport: vi.fn(),
+  loadPackageMetadata: vi.fn(),
   readFile: vi.fn(),
   stat: vi.fn(),
 }));
@@ -63,6 +64,10 @@ vi.mock('../../../src/storage/artifactPaths.js', () => ({
   recordingFilename: mocks.recordingFilename,
 }));
 
+vi.mock('../../../src/cli/commands/version.js', () => ({
+  loadPackageMetadata: mocks.loadPackageMetadata,
+}));
+
 vi.mock('../../../src/export/webm.js', () => ({
   generateWebmExport: mocks.generateWebmExport,
 }));
@@ -77,6 +82,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 });
 
 import { runRecordExportCommand } from '../../../src/cli/commands/record-export.js';
+import { hashProfile, resolveProfile } from '../../../src/renderer/profiles.js';
 
 const TEST_CONTEXT = {
   home: '/tmp/agent-terminal',
@@ -150,6 +156,10 @@ describe('record export command', () => {
     mocks.ensureArtifactsDir.mockResolvedValue(
       '/tmp/agent-terminal/sessions/session-01/artifacts',
     );
+    mocks.loadPackageMetadata.mockResolvedValue({
+      name: 'agent-terminal',
+      version: '0.1.0-test',
+    });
     mocks.recordingFilename.mockReturnValue('recording-1-asciicast.cast');
     mocks.artifactPath.mockImplementation(
       (sessionDirectory: string, filename: string) =>
@@ -201,9 +211,11 @@ describe('record export command', () => {
         height: 24,
         timestamp: Date.parse('2026-03-19T12:00:02.000Z') / 1000,
         title: 'session-01',
+        sessionId: 'session-01',
         env: {
           TERM: 'xterm-256color',
         },
+        toolVersion: '0.1.0-test',
       }),
       JSON.stringify([0, 'o', 'hello\n']),
       JSON.stringify([0.75, 'm', 'checkpoint']),
@@ -213,6 +225,8 @@ describe('record export command', () => {
     const expectedSha256 = createHash('sha256')
       .update(Buffer.from(expectedContents, 'utf8'))
       .digest('hex');
+
+    expect(mocks.loadPackageMetadata).toHaveBeenCalledTimes(1);
 
     expect(mocks.ensureArtifactsDir).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01',
@@ -297,6 +311,10 @@ describe('record export command', () => {
     const webmContent = Buffer.alloc(webmBytes, 0x42);
     const webmSha256 = createHash('sha256').update(webmContent).digest('hex');
 
+    const expectedRenderProfileHash = hashProfile(
+      resolveProfile('reference-dark'),
+    );
+
     mocks.generateWebmExport.mockResolvedValue({
       capturedAtSeq: 1,
       durationMs: 1_500,
@@ -376,6 +394,9 @@ describe('record export command', () => {
     expect(artifactEntry.bytes).toBe(webmBytes);
     expect(artifactEntry.sha256).toBe(webmSha256);
     expect(artifactEntry.metadata.format).toBe('webm');
+    expect(artifactEntry.metadata.renderProfileHash).toBe(
+      expectedRenderProfileHash,
+    );
     expect(artifactEntry.metadata.profileName).toBe('reference-dark');
     expect(artifactEntry.metadata.timingMode).toBe('accelerated');
 
@@ -391,6 +412,7 @@ describe('record export command', () => {
           sha256: string;
           capturedAtSeq: number;
           durationMs?: number;
+          metadata: Record<string, unknown>;
         };
       },
     ];
@@ -403,6 +425,9 @@ describe('record export command', () => {
     expect(emitSuccessArgs.result.bytes).toBe(webmBytes);
     expect(emitSuccessArgs.result.sha256).toBe(webmSha256);
     expect(emitSuccessArgs.result.capturedAtSeq).toBe(1);
+    expect(emitSuccessArgs.result.metadata.renderProfileHash).toBe(
+      expectedRenderProfileHash,
+    );
     expect(emitSuccessArgs.result.durationMs).toBe(1_500);
   });
 
