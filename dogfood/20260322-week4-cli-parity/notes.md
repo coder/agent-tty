@@ -32,19 +32,19 @@ Because the feature under test is the explicit `--home` flag, I used `--home <tm
 
 ## Reviewer guide
 
-| File | Proof provided |
-| --- | --- |
-| `00-list-empty.json` | The fresh `--home` directory starts empty (`sessions: []`), proving isolation from any pre-existing default home state. |
-| `01-create.json` | Session creation succeeded while explicitly passing `--name cli-parity-test`, `--term xterm-256color`, `--env FOO=bar`, `--env BAZ=qux`, `--shell /bin/bash`, and `--home <tmpdir>`. |
-| `02-inspect.json` | The live session manifest records the expected fixture command plus `name`, `env`, and `term` values. |
-| `03-list.json` | Listing against the same isolated home returns exactly one live session, matching the created session ID. |
-| `04-wait-idle.json` | `wait --idle-ms 500 --timeout 10000` completed without timing out, showing the `hello-prompt` fixture reached an idle ready state. |
-| `05-type-file.json` | `type --file` accepted file-based input from a temp file containing `hello from file\n`. |
-| `06-send-enter.json` | `send-keys Enter` succeeded against the live session. |
-| `07-wait-echo.json` | `wait --text "hello from file"` matched in rendered output at sequence 5. |
-| `08-snapshot.json` | The text snapshot captures the visible transcript and reports cursor position `row 4`, `col 7`. |
-| `09-wait-cursor.json` | `wait --cursor-row 4 --cursor-col 7` matched successfully, proving cursor-based waits work against rendered output. |
-| `10-destroy.json` | The session was destroyed cleanly after evidence capture. |
+| File                  | Proof provided                                                                                                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `00-list-empty.json`  | The fresh `--home` directory starts empty (`sessions: []`), proving isolation from any pre-existing default home state.                                                              |
+| `01-create.json`      | Session creation succeeded while explicitly passing `--name cli-parity-test`, `--term xterm-256color`, `--env FOO=bar`, `--env BAZ=qux`, `--shell /bin/bash`, and `--home <tmpdir>`. |
+| `02-inspect.json`     | The live session manifest records the expected fixture command plus `name`, `env`, and `term` values.                                                                                |
+| `03-list.json`        | Listing against the same isolated home returns exactly one live session, matching the created session ID.                                                                            |
+| `04-wait-idle.json`   | `wait --idle-ms 500 --timeout 10000` completed without timing out, showing the `hello-prompt` fixture reached an idle ready state.                                                   |
+| `05-type-file.json`   | `type --file` accepted file-based input from a temp file containing `hello from file\n`.                                                                                             |
+| `06-send-enter.json`  | `send-keys Enter` succeeded against the live session.                                                                                                                                |
+| `07-wait-echo.json`   | `wait --text "hello from file"` matched in rendered output at sequence 5.                                                                                                            |
+| `08-snapshot.json`    | The text snapshot captures the visible transcript and reports cursor position `row 4`, `col 7`.                                                                                      |
+| `09-wait-cursor.json` | `wait --cursor-row 4 --cursor-col 7` matched successfully, proving cursor-based waits work against rendered output.                                                                  |
+| `10-destroy.json`     | The session was destroyed cleanly after evidence capture.                                                                                                                            |
 
 ## Verification claims
 
