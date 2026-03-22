@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import {
   createServer,
@@ -30,6 +31,7 @@ import type {
   SemanticSnapshot,
   VisibleLine,
 } from '../types.js';
+import { hashProfile } from '../profiles.js';
 
 interface GhosttyHarnessVisibleLine {
   row: number;
@@ -1171,6 +1173,32 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       'screenshot output PNG must be non-empty',
     );
 
+    const pngBuffer = await readFile(outputPath);
+    const PNG_SIGNATURE = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+    invariant(
+      pngBuffer.length >= 24,
+      'screenshot PNG must contain IHDR bytes',
+    );
+    invariant(
+      pngBuffer.subarray(0, 8).equals(PNG_SIGNATURE),
+      'screenshot output must be a PNG',
+    );
+    invariant(
+      pngBuffer.subarray(12, 16).toString('ascii') === 'IHDR',
+      'first PNG chunk must be IHDR',
+    );
+
+    const pixelWidth = pngBuffer.readUInt32BE(16);
+    const pixelHeight = pngBuffer.readUInt32BE(20);
+    invariant(
+      pixelWidth > 0 && pixelHeight > 0,
+      `invalid PNG dimensions: ${String(pixelWidth)}x${String(pixelHeight)}`,
+    );
+
+    const sha256 = createHash('sha256').update(pngBuffer).digest('hex');
+
     return {
       sessionId: this.sessionId,
       capturedAtSeq: this.lastAppliedSeq,
@@ -1179,6 +1207,11 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       rows: this.currentRows,
       artifactPath: outputPath,
       pngSizeBytes: screenshotFile.size,
+      rendererBackend: this.rendererBackend,
+      pixelWidth,
+      pixelHeight,
+      sha256,
+      renderProfileHash: hashProfile(this.profile),
     };
   }
 
