@@ -86,6 +86,12 @@ describe('artifact paths', () => {
     expect(recordingFilename(7, 'webm')).toBe('recording-7-webm.webm');
   });
 
+  it('asserts on unsupported recording formats', () => {
+    expect(() => recordingFilename(7, 'trace')).toThrow(
+      /unsupported recording format: trace/u,
+    );
+  });
+
   it('asserts on invalid helper inputs', () => {
     expect(() => screenshotFilename(-1, 'reference-dark')).toThrow(
       /seq must be a non-negative integer/u,
@@ -132,11 +138,23 @@ describe('artifact entry schema', () => {
     expect(
       ArtifactEntrySchema.safeParse(
         createArtifactEntry({
-          sha256: 'abc123',
+          sha256: 'a'.repeat(64),
           bytes: 2048,
         }),
       ).success,
     ).toBe(true);
+  });
+
+  it('rejects invalid sha256 values', () => {
+    for (const sha256 of ['abc123', 'A'.repeat(64), 'g'.repeat(64)]) {
+      const parsed = ArtifactEntrySchema.safeParse(
+        createArtifactEntry({
+          sha256,
+        }),
+      );
+
+      expect(parsed.success).toBe(false);
+    }
   });
 });
 

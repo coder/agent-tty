@@ -23,6 +23,7 @@ type MockNode = MockDirectoryNode | MockFileNode;
 
 interface MockSessionState {
   manifest: SessionRecord | null;
+  manifestReads?: Array<SessionRecord | null>;
   reconciledManifest?: SessionRecord | null;
   isDirectory?: boolean;
 }
@@ -68,6 +69,7 @@ function createMockDependencies(
   const sessionsRoot = `${home}/sessions`;
   const nodes = new Map<string, MockNode>();
   const manifestStore = new Map<string, SessionRecord | null>();
+  const manifestReadSequences = new Map<string, Array<SessionRecord | null>>();
   const reconcileStore = new Map<string, SessionRecord | null | undefined>();
   const removedPaths: string[] = [];
   const bytesBySession = new Map<string, number>();
@@ -117,6 +119,9 @@ function createMockDependencies(
       size: 40,
     });
     bytesBySession.set(sessionId, 97);
+    if (sessionState.manifestReads !== undefined) {
+      manifestReadSequences.set(manifestFile, [...sessionState.manifestReads]);
+    }
     manifestStore.set(manifestFile, sessionState.manifest);
     if ('reconciledManifest' in sessionState) {
       reconcileStore.set(sessionDirectory, sessionState.reconciledManifest);
@@ -152,6 +157,11 @@ function createMockDependencies(
       return Promise.resolve();
     },
     readManifestIfExists: (path: string) => {
+      const manifestReadSequence = manifestReadSequences.get(path);
+      if (manifestReadSequence !== undefined && manifestReadSequence.length > 0) {
+        return Promise.resolve(manifestReadSequence.shift() ?? null);
+      }
+
       return Promise.resolve(
         manifestStore.has(path) ? (manifestStore.get(path) ?? null) : null,
       );
@@ -239,6 +249,49 @@ describe('gc command helpers', () => {
       totalBytesFreed: bytesBySession.get('exited-01'),
     });
     expect(removedPaths).toEqual([`${home}/sessions/exited-01`]);
+  });
+
+  it('skips deleting a session that restarts after the exited check', async () => {
+    const home = '/tmp/agent-terminal';
+    const exitedManifest = createSessionRecord({
+      sessionId: 'race-01',
+      status: 'exited',
+      createdAt: '2026-03-20T08:00:00.000Z',
+    });
+    const restartedManifest = createSessionRecord({
+      sessionId: 'race-01',
+      status: 'running',
+      createdAt: '2026-03-20T08:00:00.000Z',
+    });
+    const { dependencies, removedPaths } = createMockDependencies(home, {
+      'race-01': {
+        manifest: exitedManifest,
+        manifestReads: [exitedManifest, exitedManifest, restartedManifest],
+      },
+    });
+
+    const result = await gcSessions(
+      home,
+      {
+        dryRun: false,
+        staleOnly: false,
+        olderThanMs: null,
+      },
+      dependencies,
+    );
+
+    expect(result).toEqual({
+      removedSessions: [],
+      skippedSessions: [
+        {
+          sessionId: 'race-01',
+          reason: 'session restarted between check and delete',
+        },
+      ],
+      dryRun: false,
+      totalBytesFreed: 0,
+    });
+    expect(removedPaths).toEqual([]);
   });
 
   it('reports removals in dry-run mode without deleting anything', async () => {

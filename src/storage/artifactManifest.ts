@@ -30,7 +30,13 @@ export const ArtifactEntrySchema = z
     sessionId: NonEmptyStringSchema,
     capturedAtSeq: NonNegativeIntSchema,
     createdAt: IsoDatetimeSchema,
-    sha256: z.string().optional(),
+    sha256: z
+      .string()
+      .regex(
+        /^[a-f0-9]{64}$/,
+        'sha256 must be a 64-character lowercase hex string',
+      )
+      .optional(),
     bytes: z.number().int().nonnegative().optional(),
     metadata: z.record(z.string(), z.unknown()),
   })

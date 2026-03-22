@@ -77,15 +77,18 @@ export function snapshotFilename(
   return `snapshot-${String(seq)}-${sanitizedFormat}.json`;
 }
 
+function recordingExtension(format: string): string {
+  invariant(
+    format === 'asciicast' || format === 'webm',
+    `unsupported recording format: ${format}`,
+  );
+  return format === 'asciicast' ? 'cast' : 'webm';
+}
+
 export function recordingFilename(seq: number, format: string): string {
   assertNonNegativeInteger(seq, 'seq');
   const sanitizedFormat = sanitizeFilenameComponent(format, 'format');
-  const extension =
-    sanitizedFormat === 'asciicast'
-      ? 'cast'
-      : sanitizedFormat === 'webm'
-        ? 'webm'
-        : 'json';
+  const extension = recordingExtension(sanitizedFormat);
   return `recording-${String(seq)}-${sanitizedFormat}.${extension}`;
 }
 

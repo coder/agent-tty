@@ -342,6 +342,25 @@ export async function gcSessions(
     ).catch(() => 0);
 
     if (!options.dryRun) {
+      let finalManifest: SessionRecord | null;
+      try {
+        finalManifest = await dependencies.readManifestIfExists(manifestFile);
+      } catch (error) {
+        result.skippedSessions.push({
+          sessionId,
+          reason: `failed final manifest safety check: ${getErrorMessage(error)}`,
+        });
+        continue;
+      }
+
+      if (finalManifest !== null && finalManifest.status !== 'exited') {
+        result.skippedSessions.push({
+          sessionId,
+          reason: 'session restarted between check and delete',
+        });
+        continue;
+      }
+
       try {
         await dependencies.rm(sessionDirectory, {
           recursive: true,

@@ -1,9 +1,12 @@
 import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import process from 'node:process';
 
 import type * as FsPromises from 'node:fs/promises';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
 
@@ -91,6 +94,22 @@ function createSessionRecord() {
     exitCode: null,
     exitSignal: null,
   };
+}
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
+
+async function createTemporaryDirectory(prefix: string): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), prefix));
+  temporaryDirectories.push(directory);
+  return directory;
 }
 
 describe('record export command', () => {
@@ -355,7 +374,12 @@ describe('record export command', () => {
   });
 
   it('writes explicit relative output paths within the current working directory', async () => {
-    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/workspace');
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-terminal-record-export-workspace-',
+    );
+    const exportsDirectory = join(workspaceDirectory, 'exports');
+    await mkdir(exportsDirectory, { recursive: true });
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspaceDirectory);
 
     try {
       await runRecordExportCommand({
@@ -371,7 +395,7 @@ describe('record export command', () => {
     expect(mocks.ensureArtifactsDir).not.toHaveBeenCalled();
     expect(mocks.writeTextFileAtomic).toHaveBeenCalledWith(
       expect.objectContaining({
-        path: '/workspace/exports/custom.cast',
+        path: join(exportsDirectory, 'custom.cast'),
       }),
     );
     const createArtifactEntryCall = mocks.createArtifactEntry.mock.calls.at(-1);
@@ -380,8 +404,58 @@ describe('record export command', () => {
     expect(createArtifactEntryCall?.[0]).toMatchObject({
       filename: 'custom.cast',
       metadata: {
-        outputPath: '/workspace/exports/custom.cast',
+        outputPath: join(exportsDirectory, 'custom.cast'),
       },
+    });
+  });
+
+  it('resolves symlinked output directories to their real paths', async () => {
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-terminal-record-export-realpath-',
+    );
+    const realExportsDirectory = join(workspaceDirectory, 'real-exports');
+    const symlinkExportsDirectory = join(workspaceDirectory, 'linked-exports');
+    await mkdir(realExportsDirectory, { recursive: true });
+    await symlink(realExportsDirectory, symlinkExportsDirectory);
+
+    await runRecordExportCommand({
+      json: false,
+      sessionId: 'session-01',
+      format: 'asciicast',
+      out: join(symlinkExportsDirectory, 'custom.cast'),
+    });
+
+    expect(mocks.ensureArtifactsDir).not.toHaveBeenCalled();
+    expect(mocks.writeTextFileAtomic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: join(realExportsDirectory, 'custom.cast'),
+      }),
+    );
+    const createArtifactEntryCall = mocks.createArtifactEntry.mock.calls.at(-1);
+
+    expect(createArtifactEntryCall).toBeDefined();
+    expect(createArtifactEntryCall?.[0]).toMatchObject({
+      filename: 'custom.cast',
+      metadata: {
+        outputPath: join(realExportsDirectory, 'custom.cast'),
+      },
+    });
+  });
+
+  it('rejects output paths whose parent directory does not exist', async () => {
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-terminal-record-export-missing-parent-',
+    );
+
+    await expect(
+      runRecordExportCommand({
+        json: false,
+        sessionId: 'session-01',
+        format: 'asciicast',
+        out: join(workspaceDirectory, 'missing', 'custom.cast'),
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
     });
   });
 

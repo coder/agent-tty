@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildDoctorLines,
@@ -132,6 +132,32 @@ describe('doctor command', () => {
       expect(result.message.length).toBeGreaterThan(0);
     },
   );
+
+  it('kills the PTY when the outer doctor timeout expires', async () => {
+    let onExitHandler: ((event: { exitCode: number; signal?: number }) => void) | undefined;
+    const kill = vi.fn(() => {
+      onExitHandler?.({ exitCode: 130, signal: 15 });
+    });
+
+    const result = await runDoctorCheck(
+      'pty-spawn',
+      () =>
+        runPtySpawnCheck({
+          createPty: ((() => ({
+            onData: () => undefined,
+            onExit: (handler: (event: { exitCode: number; signal?: number }) => void) => {
+              onExitHandler = handler;
+            },
+            kill,
+          })) as unknown) as DoctorDependencies['createPty'],
+        }),
+      10,
+    );
+
+    expect(result.status).toBe('fail');
+    expect(result.message).toContain('pty-spawn timed out after 10ms');
+    expect(kill).toHaveBeenCalled();
+  });
 
   it.each(BROKEN_DOCTOR_CHECKS)(
     'fails $name gracefully when its dependency is broken',

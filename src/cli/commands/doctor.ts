@@ -182,8 +182,22 @@ function nextDoctorResourceSuffix(deps: DoctorDependencies): string {
   return `${String(deps.pid)}-${Math.trunc(timestamp).toString(36)}-${String(doctorResourceSequence)}`;
 }
 
+interface CleanablePromise<TResult> extends Promise<TResult> {
+  cleanup?: () => void | Promise<void>;
+}
+
+async function cleanupOperation<TResult>(
+  operation: CleanablePromise<TResult>,
+): Promise<void> {
+  try {
+    await operation.cleanup?.();
+  } catch {
+    // best-effort cleanup
+  }
+}
+
 async function withTimeout<TResult>(
-  operation: Promise<TResult>,
+  operation: CleanablePromise<TResult>,
   timeoutMs: number,
   timeoutMessage: string,
 ): Promise<TResult> {
@@ -198,7 +212,9 @@ async function withTimeout<TResult>(
       operation,
       new Promise<TResult>((_resolvePromise, rejectPromise) => {
         timeoutHandle = setTimeout(() => {
-          rejectPromise(new Error(timeoutMessage));
+          void cleanupOperation(operation).finally(() => {
+            rejectPromise(new Error(timeoutMessage));
+          });
         }, timeoutMs);
       }),
     ]);
@@ -329,7 +345,7 @@ async function withDoctorSessionDirectory<TResult>(
   }
 }
 
-export async function runPtySpawnCheck(
+export function runPtySpawnCheck(
   overrides: Partial<DoctorDependencies> = {},
 ): Promise<string> {
   const deps = getDoctorDependencies(overrides);
@@ -337,45 +353,56 @@ export async function runPtySpawnCheck(
   assert(cwd.length > 0, 'doctor cwd must be a non-empty path');
   assert(deps.execPath.length > 0, 'doctor execPath must be a non-empty path');
 
-  const pty = deps.createPty({
-    command: [deps.execPath, '-e', "process.stdout.write('hello\\n')"],
-    cwd,
-    cols: 80,
-    rows: 24,
-  });
-  assert.equal(typeof pty.onData, 'function', 'PTY must support onData');
-  assert.equal(typeof pty.onExit, 'function', 'PTY must support onExit');
-  assert.equal(typeof pty.kill, 'function', 'PTY must support kill');
-
+  let pty: ReturnType<DoctorDependencies['createPty']> | null = null;
   let output = '';
 
-  try {
-    await new Promise<void>((resolve, reject) => {
-      pty.onData((chunk) => {
-        output += chunk;
-      });
-      pty.onExit(({ exitCode, signal }) => {
-        if (exitCode === 0 && output.includes('hello')) {
-          resolve();
-          return;
-        }
+  const cleanupPty = () => {
+    if (pty === null) {
+      return;
+    }
 
-        reject(
-          new Error(
-            `PTY spawn output mismatch (exitCode=${String(exitCode)}, signal=${String(signal)}, output=${JSON.stringify(output)})`,
-          ),
-        );
-      });
-    });
-  } finally {
     try {
       pty.kill();
     } catch {
       // best-effort cleanup
     }
-  }
+  };
 
-  return `spawned ${deps.execPath}`;
+  const spawnPromise = new Promise<void>((resolve, reject) => {
+    pty = deps.createPty({
+      command: [deps.execPath, '-e', "process.stdout.write('hello\\n')"],
+      cwd,
+      cols: 80,
+      rows: 24,
+    });
+    assert.equal(typeof pty.onData, 'function', 'PTY must support onData');
+    assert.equal(typeof pty.onExit, 'function', 'PTY must support onExit');
+    assert.equal(typeof pty.kill, 'function', 'PTY must support kill');
+
+    pty.onData((chunk) => {
+      output += chunk;
+    });
+    pty.onExit(({ exitCode, signal }) => {
+      if (exitCode === 0 && output.includes('hello')) {
+        resolve();
+        return;
+      }
+
+      reject(
+        new Error(
+          `PTY spawn output mismatch (exitCode=${String(exitCode)}, signal=${String(signal)}, output=${JSON.stringify(output)})`,
+        ),
+      );
+    });
+  });
+
+  const resultPromise = spawnPromise
+    .then(() => `spawned ${deps.execPath}`)
+    .finally(() => {
+      cleanupPty();
+    }) as CleanablePromise<string>;
+  resultPromise.cleanup = cleanupPty;
+  return resultPromise;
 }
 
 async function closeServer(server: Server): Promise<void> {

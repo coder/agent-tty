@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
-import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
+import { constants as fsConstants } from 'node:fs';
+import { access, lstat, readFile, realpath, stat } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, resolve } from 'node:path';
 import process from 'node:process';
 
 import { z } from 'zod';
@@ -52,22 +53,6 @@ interface CommandOptions {
   out?: string;
 }
 
-function assertPathWithinRoot(
-  pathValue: string,
-  rootDirectory: string,
-  message: string,
-): void {
-  const relativePath = relative(rootDirectory, resolve(pathValue));
-
-  invariant(
-    relativePath === '' ||
-      (!relativePath.startsWith(`..${sep}`) &&
-        relativePath !== '..' &&
-        !isAbsolute(relativePath)),
-    message,
-  );
-}
-
 function resolveRecordExportFormat(
   format: string | undefined,
 ): RecordExportFormat {
@@ -102,18 +87,30 @@ async function resolveOutputPath(
 
   invariant(outputPath.length > 0, 'output path must be a non-empty string');
 
-  if (isAbsolute(outputPath)) {
-    return resolve(outputPath);
-  }
-
   const currentWorkingDirectory = process.cwd();
-  const resolvedOutputPath = resolve(currentWorkingDirectory, outputPath);
-  assertPathWithinRoot(
-    resolvedOutputPath,
-    currentWorkingDirectory,
-    'relative output path must stay within the current working directory',
+  const resolvedOutputPath = isAbsolute(outputPath)
+    ? resolve(outputPath)
+    : resolve(currentWorkingDirectory, outputPath);
+  const parentDirectory = dirname(resolvedOutputPath);
+  const realParentDirectory = await realpath(parentDirectory);
+  const parentStats = await lstat(realParentDirectory);
+
+  invariant(
+    parentStats.isDirectory(),
+    `record export parent directory must be a directory: ${realParentDirectory}`,
   );
-  return resolvedOutputPath;
+
+  await access(realParentDirectory, fsConstants.W_OK);
+
+  const realOutputPath = resolve(
+    realParentDirectory,
+    basename(resolvedOutputPath),
+  );
+  invariant(
+    dirname(realOutputPath) === realParentDirectory,
+    'record export path must remain within the resolved parent directory',
+  );
+  return realOutputPath;
 }
 
 async function computeFileHash(filePath: string): Promise<string> {
