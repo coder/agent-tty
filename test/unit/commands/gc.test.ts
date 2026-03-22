@@ -366,6 +366,60 @@ describe('gc command helpers', () => {
     ]);
   });
 
+  it('handles rm failure gracefully and continues with other sessions', async () => {
+    const home = '/tmp/agent-terminal';
+    const { dependencies, removedPaths, bytesBySession } = createMockDependencies(
+      home,
+      {
+        'failed-01': {
+          manifest: createSessionRecord({
+            sessionId: 'failed-01',
+            status: 'exited',
+            createdAt: '2026-03-20T08:00:00.000Z',
+          }),
+        },
+        'exited-02': {
+          manifest: createSessionRecord({
+            sessionId: 'exited-02',
+            status: 'exited',
+            createdAt: '2026-03-20T09:00:00.000Z',
+          }),
+        },
+      },
+    );
+    const removeError = createNodeError('EACCES', 'permission denied');
+    const originalRm = dependencies.rm;
+    dependencies.rm = (path, options) => {
+      if (path === `${home}/sessions/failed-01`) {
+        return Promise.reject(removeError);
+      }
+      return originalRm(path, options);
+    };
+
+    const result = await gcSessions(
+      home,
+      {
+        dryRun: false,
+        staleOnly: false,
+        olderThanMs: null,
+      },
+      dependencies,
+    );
+
+    expect(result).toEqual({
+      removedSessions: ['exited-02'],
+      skippedSessions: [
+        {
+          sessionId: 'failed-01',
+          reason: 'failed to remove session directory: permission denied',
+        },
+      ],
+      dryRun: false,
+      totalBytesFreed: bytesBySession.get('exited-02'),
+    });
+    expect(removedPaths).toEqual([`${home}/sessions/exited-02`]);
+  });
+
   it('only targets stale sessions when --stale-only is used', async () => {
     const home = '/tmp/agent-terminal';
     const staleBefore = createSessionRecord({

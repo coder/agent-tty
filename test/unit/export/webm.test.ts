@@ -328,7 +328,7 @@ describe('generateWebmExport', () => {
     expect(mockBackend.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('disposes the backend when finalizeVideo fails', async () => {
+  it('disposes the backend when finalizeVideo throws', async () => {
     const finalizeError = new Error('finalize failed');
     const finalizeVideo = vi.fn().mockRejectedValue(finalizeError);
     const mockBackend = createMockBackend({ finalizeVideo });
@@ -346,6 +346,9 @@ describe('generateWebmExport', () => {
       ),
     ).rejects.toThrow(finalizeError);
 
+    expect(mockBackend.finalizeVideo).toHaveBeenCalledWith(
+      '/tmp/exports/recording-1-webm.webm',
+    );
     expect(mockBackend.dispose).toHaveBeenCalledTimes(1);
   });
 });

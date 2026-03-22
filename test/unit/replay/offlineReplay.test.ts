@@ -270,6 +270,25 @@ describe('withOfflineReplayRenderer', () => {
     expect(backend.disposed).toBe(true);
   });
 
+  it('wraps replayTo errors as REPLAY_ERROR and disposes the backend', async () => {
+    const { sessionDir } = await createSessionFixture();
+    const backend = createMockBackend({ replayError: new Error('replay failed') });
+
+    const replayPromise = withOfflineReplayRenderer(
+      { sessionDir },
+      () => Promise.resolve('unreachable'),
+      { backendFactory: () => backend },
+    );
+
+    await expect(replayPromise).rejects.toBeInstanceOf(CliError);
+    await expect(replayPromise).rejects.toMatchObject({
+      code: ERROR_CODES.REPLAY_ERROR,
+    });
+    expect(backend.booted).toBe(true);
+    expect(backend.replayedInput?.targetSeq).toBe(2);
+    expect(backend.disposed).toBe(true);
+  });
+
   it('respects a custom target sequence', async () => {
     const { sessionDir } = await createSessionFixture();
     const backend = createMockBackend();

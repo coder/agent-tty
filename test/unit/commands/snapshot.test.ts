@@ -363,9 +363,9 @@ describe('snapshot command', () => {
     });
   });
 
-  it('surfaces non-fallback RPC errors for running sessions', async () => {
+  it('propagates non-HOST_UNREACHABLE errors from RPC', async () => {
     mocks.sendRpc.mockRejectedValue(
-      new CliError(ERROR_CODES.RPC_ERROR, 'rpc failed'),
+      new CliError(ERROR_CODES.PROTOCOL_ERROR, 'protocol failed'),
     );
 
     await expect(
@@ -374,8 +374,8 @@ describe('snapshot command', () => {
         sessionId: 'session-01',
       }),
     ).rejects.toMatchObject({
-      code: ERROR_CODES.RPC_ERROR,
-      message: 'rpc failed',
+      code: ERROR_CODES.PROTOCOL_ERROR,
+      message: 'protocol failed',
     });
     expect(mocks.withOfflineReplayRenderer).not.toHaveBeenCalled();
     expect(mocks.emitSuccess).not.toHaveBeenCalled();

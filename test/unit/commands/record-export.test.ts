@@ -373,6 +373,26 @@ describe('record export command', () => {
     expect(emitSuccessArgs.result.durationMs).toBe(1_500);
   });
 
+  it('throws SESSION_NOT_FOUND when manifest does not exist', async () => {
+    mocks.readManifestIfExists.mockResolvedValue(null);
+
+    await expect(
+      runRecordExportCommand({
+        json: false,
+        sessionId: 'session-01',
+        format: 'asciicast',
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.SESSION_NOT_FOUND,
+      details: {
+        sessionId: 'session-01',
+        manifestPath: '/tmp/agent-terminal/sessions/session-01/session.json',
+      },
+    });
+    expect(mocks.readEventLogRecords).not.toHaveBeenCalled();
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
   it('writes explicit relative output paths within the current working directory', async () => {
     const workspaceDirectory = await createTemporaryDirectory(
       'agent-terminal-record-export-workspace-',

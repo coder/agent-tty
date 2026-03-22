@@ -342,9 +342,9 @@ describe('screenshot command', () => {
     );
   });
 
-  it('surfaces non-fallback RPC errors', async () => {
+  it('propagates non-HOST_UNREACHABLE errors from RPC', async () => {
     mocks.sendRpc.mockRejectedValue(
-      new CliError(ERROR_CODES.RPC_ERROR, 'rpc error'),
+      new CliError(ERROR_CODES.PROTOCOL_ERROR, 'protocol error'),
     );
 
     await expect(
@@ -353,8 +353,8 @@ describe('screenshot command', () => {
         sessionId: 'session-01',
       }),
     ).rejects.toMatchObject({
-      code: ERROR_CODES.RPC_ERROR,
-      message: 'rpc error',
+      code: ERROR_CODES.PROTOCOL_ERROR,
+      message: 'protocol error',
     });
     expect(mocks.withOfflineReplayRenderer).not.toHaveBeenCalled();
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
