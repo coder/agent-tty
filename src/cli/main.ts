@@ -461,12 +461,17 @@ async function main(): Promise<void> {
       'structured',
     )
     .option('--json', 'Emit a JSON command envelope', false)
+    .option('--include-scrollback', 'Include scrollback buffer lines', false)
     .action(
       wrapAction(
         'snapshot',
         async (
           sessionId: string,
-          options: { format: string; json: boolean },
+          options: {
+            format: string;
+            json: boolean;
+            includeScrollback: boolean;
+          },
           context: CommandContext,
         ) => {
           await runSnapshotCommand({
@@ -474,6 +479,7 @@ async function main(): Promise<void> {
             json: options.json,
             sessionId,
             format: options.format,
+            includeScrollback: options.includeScrollback,
           });
         },
       ),
