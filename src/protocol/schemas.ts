@@ -10,7 +10,14 @@ const IsoDatetimeSchema = z.iso.datetime();
 const SnapshotFormatSchema = z.enum(['structured', 'text']);
 const SessionEnvSchema = z.record(NonEmptyStringSchema, z.string());
 
-export const SessionStatusSchema = z.enum(['running', 'exiting', 'exited']);
+export const SessionStatusSchema = z.enum([
+  'running',
+  'exiting',
+  'exited',
+  'failed',
+  'destroying',
+  'destroyed',
+]);
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 
 export const SessionRecordSchema = z
@@ -20,6 +27,7 @@ export const SessionRecordSchema = z
     createdAt: IsoDatetimeSchema,
     updatedAt: IsoDatetimeSchema,
     status: SessionStatusSchema,
+    failureReason: z.string().min(1).optional(),
     command: z.array(z.string()).min(1),
     cwd: z.string(),
     name: NonEmptyStringSchema.optional(),

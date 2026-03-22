@@ -69,11 +69,44 @@ export class SessionState {
 
   public requestDestroy(): void {
     invariant(
-      this.#record.status === 'running',
-      'Cannot request destroy unless session is running',
+      this.#record.status !== 'destroyed',
+      'Cannot destroy an already destroyed session',
+    );
+    invariant(
+      this.#record.status !== 'destroying',
+      'Session is already being destroyed',
+    );
+    invariant(
+      ['running', 'exited', 'failed'].includes(this.#record.status),
+      `Cannot request destroy in current state: ${this.#record.status}`,
     );
 
-    this.#record.status = 'exiting';
+    this.#record.status = 'destroying';
+    this.touch();
+  }
+
+  public recordFailure(reason: string): void {
+    invariant(
+      this.#record.status === 'running',
+      `Cannot record failure unless session is running, current status: ${this.#record.status}`,
+    );
+    invariant(
+      typeof reason === 'string' && reason.length > 0,
+      'Failure reason must be a non-empty string',
+    );
+
+    this.#record.status = 'failed';
+    this.#record.failureReason = reason;
+    this.touch();
+  }
+
+  public recordDestroyed(): void {
+    invariant(
+      this.#record.status === 'destroying',
+      `Cannot record destroyed unless session is destroying, current status: ${this.#record.status}`,
+    );
+
+    this.#record.status = 'destroyed';
     this.touch();
   }
 
