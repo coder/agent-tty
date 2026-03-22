@@ -1,0 +1,12 @@
+{"seq":0,"ts":"2026-03-22T22:32:30.526Z","type":"output","payload":{"data":"MAIN SCREEN READY\r\n"}}
+{"seq":1,"ts":"2026-03-22T22:32:30.527Z","type":"output","payload":{"data":"Main buffer should be restored after alt-screen exit.\r\n"}}
+{"seq":2,"ts":"2026-03-22T22:32:35.284Z","type":"input_keys","payload":{"keys":["Enter"]}}
+{"seq":3,"ts":"2026-03-22T22:32:35.285Z","type":"output","payload":{"data":"\r\n"}}
+{"seq":4,"ts":"2026-03-22T22:32:35.285Z","type":"output","payload":{"data":"\u001b[?1049h\u001b[2J\u001b[HALT SCREEN ACTIVE\r\nAlternate buffer content should only appear here.\r\n"}}
+{"seq":5,"ts":"2026-03-22T22:32:40.437Z","type":"input_keys","payload":{"keys":["Enter"]}}
+{"seq":6,"ts":"2026-03-22T22:32:40.437Z","type":"output","payload":{"data":"\r\n"}}
+{"seq":7,"ts":"2026-03-22T22:32:40.437Z","type":"output","payload":{"data":"\u001b[?1049lBACK ON MAIN SCREEN\r\nAlt-screen replay complete.\r\n"}}
+{"seq":8,"ts":"2026-03-22T22:32:40.961Z","type":"output","payload":{"data":"\\"}}
+{"seq":9,"ts":"2026-03-22T22:32:40.962Z","type":"output","payload":{"data":"\u001b[1G"}}
+{"seq":10,"ts":"2026-03-22T22:32:40.962Z","type":"output","payload":{"data":"\u001b[0K"}}
+{"seq":11,"ts":"2026-03-22T22:32:40.971Z","type":"exit","payload":{"exitCode":0,"exitSignal":null}}

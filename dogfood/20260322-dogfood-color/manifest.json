@@ -1,0 +1,230 @@
+{
+  "bundle": "20260322-dogfood-color",
+  "artifacts": [
+    {
+      "path": "01-create.json",
+      "sha256": "e5596de5a578ba0bf88f0c6bb903b001eda04492031c81c5c264f2e0a72ea301",
+      "size": 148
+    },
+    {
+      "path": "02-wait-color-grid-complete.json",
+      "sha256": "a35516dbe039c25765250be25733f39eec01e73f05dd8f29d09edc88a4152466",
+      "size": 250
+    },
+    {
+      "path": "03-screenshot-reference-dark.json",
+      "sha256": "6cd93838cbb068f4048e42b542d94b01021e0ff80da8890af6b9ccc1c03d411d",
+      "size": 653
+    },
+    {
+      "path": "04-screenshot-reference-light.json",
+      "sha256": "4114a466ea3f3be9c93a94b9e4a580b683810a7b23a3909c9657e68c501843a2",
+      "size": 655
+    },
+    {
+      "path": "05-snapshot-structured.json",
+      "sha256": "c1a0ba3d282f586a355d9392c8bbc254b1b48fa6a22bf826c14fca72a7058c52",
+      "size": 2212
+    },
+    {
+      "path": "06-snapshot-text.json",
+      "sha256": "4a5f86a050932b204a7c7238882b89b139412008aee035254b61f7ee1f6a2aec",
+      "size": 904
+    },
+    {
+      "path": "07-record-export-asciicast.json",
+      "sha256": "b475450a8672f12fadc2bb5014c27a67f6b0f358f4092676c6a590f75542ef17",
+      "size": 691
+    },
+    {
+      "path": "08-wait-exit.json",
+      "sha256": "1f27e5048a3099a94879d834ff819eea460e99c7d029b5397a69db9d30fb7a41",
+      "size": 141
+    },
+    {
+      "path": "09-inspect.json",
+      "sha256": "76884ab08719904934e9e7e5dbf0a6ae5bd3269e0bd2bfc5c8794ba65665c9be",
+      "size": 662
+    },
+    {
+      "path": "agent-terminal-home.txt",
+      "sha256": "98991e919df847f483cb4416f7a75cd7e6d608d7f48b0af3aaa466fea20bd5b2",
+      "size": 20
+    },
+    {
+      "path": "command-status.tsv",
+      "sha256": "1f6989126da625ab2f70b05f06372ca9483145e9605900be08b3ca99c4cf06ac",
+      "size": 2299
+    },
+    {
+      "path": "commands.sh",
+      "sha256": "9fa79a31a55109011be2897eafd8de67a5662415b476759c93838c2bf6ac1087",
+      "size": 807
+    },
+    {
+      "path": "doctor.json",
+      "sha256": "887a8f420e8263464a103078b5f72b9fc5f171d37788c4a2770d583c6674caf6",
+      "size": 2330
+    },
+    {
+      "path": "events.jsonl",
+      "sha256": "e2ad6af021b8f7e262c8fa202ed9f305cabf1a93ce8d8f3d3760502c067b0abc",
+      "size": 2287
+    },
+    {
+      "path": "index.md",
+      "sha256": "988f5d75c1dde2b5294248ad8321aa0b6cc95e59d6887278e2fa5dbe7ceabbc6",
+      "size": 1551
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "76105dd95ae90a861349bcc503773f2462622661245339c0aa7522553a2447c3",
+      "size": 6556
+    },
+    {
+      "path": "mise-trusted-config-path.txt",
+      "sha256": "d098e267d58ee9ed0d1979405e977fea29a58a39023cc7f3aa36a2353af1669f",
+      "size": 68
+    },
+    {
+      "path": "notes.md",
+      "sha256": "d343e71933700ff542f3c16b42408091fbfb09c59689c33a5fe46b51b9481b8a",
+      "size": 1790
+    },
+    {
+      "path": "run-scenario.sh",
+      "sha256": "0fd1a9aab3bcad3aaa2a25d2b3c4c93c79e71b26f6337ed574e9e2099ebb24f5",
+      "size": 4671
+    },
+    {
+      "path": "session-id.txt",
+      "sha256": "99873c2a19829a533669dd0d36924c0dd19bacc09fcf7f0c8259714632628eb5",
+      "size": 27
+    },
+    {
+      "path": "setup-npm-ci.log",
+      "sha256": "11b6c9930468197401fb86b838bb79b5e3bdc0861e03cea01d25a75d2aed9935",
+      "size": 386
+    },
+    {
+      "path": "setup-playwright-install.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "screenshots/reference-dark.png",
+      "sha256": "adef7f2ba55adbdeae431f9ccb2d9b346e7ef7c5cdee4f520e508d391cee380a",
+      "size": 47574
+    },
+    {
+      "path": "screenshots/reference-light.png",
+      "sha256": "e3440e39ab6d6b4a61bda7257a0b57af5c9eb275aaf9c0cc1702c2379ebc506e",
+      "size": 46947
+    },
+    {
+      "path": "recordings/color-grid.cast",
+      "sha256": "42f7e8c1f628ba9348a740edffafa41c9935740374bd9cdfb708fff36be4733b",
+      "size": 2116
+    },
+    {
+      "path": "logs/01-create.json.exitcode",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "logs/01-create.json.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "logs/02-wait-color-grid-complete.json.exitcode",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "logs/02-wait-color-grid-complete.json.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "logs/03-screenshot-reference-dark.json.exitcode",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "logs/03-screenshot-reference-dark.json.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "logs/04-screenshot-reference-light.json.exitcode",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "logs/04-screenshot-reference-light.json.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "logs/05-snapshot-structured.json.exitcode",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "logs/05-snapshot-structured.json.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "logs/06-snapshot-text.json.exitcode",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "logs/06-snapshot-text.json.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "logs/07-record-export-asciicast.json.exitcode",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "logs/07-record-export-asciicast.json.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "logs/08-wait-exit.json.exitcode",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "logs/08-wait-exit.json.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "logs/09-inspect.json.exitcode",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "logs/09-inspect.json.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "snapshots/structured-envelope.json",
+      "sha256": "c1a0ba3d282f586a355d9392c8bbc254b1b48fa6a22bf826c14fca72a7058c52",
+      "size": 2212
+    },
+    {
+      "path": "snapshots/text-envelope.json",
+      "sha256": "4a5f86a050932b204a7c7238882b89b139412008aee035254b61f7ee1f6a2aec",
+      "size": 904
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-03-22T22:32:36.733Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "ALT SCREEN ACTIVE",
+    "cursorRow": 2,
+    "cursorCol": 0,
+    "capturedAtSeq": 4
+  }
+}

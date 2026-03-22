@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-22T22:31:56.385Z",
+  "result": {
+    "sessionId": "01KMBTSNSRFHX2A7ZYDYVR16D9",
+    "format": "asciicast",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent_exec_bd8e80d26b/dogfood/20260322-dogfood-color/recordings/color-grid.cast",
+    "bytes": 2116,
+    "sha256": "42f7e8c1f628ba9348a740edffafa41c9935740374bd9cdfb708fff36be4733b",
+    "capturedAtSeq": 4,
+    "durationMs": 1233,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "title": "01KMBTSNSRFHX2A7ZYDYVR16D9",
+      "timestamp": 1774218697,
+      "outputEventCount": 4,
+      "resizeEventCount": 0,
+      "markerCount": 0
+    }
+  }
+}

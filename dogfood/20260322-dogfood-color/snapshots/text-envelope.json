@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-22T22:31:55.148Z",
+  "result": {
+    "format": "text",
+    "sessionId": "01KMBTSNSRFHX2A7ZYDYVR16D9",
+    "capturedAtSeq": 4,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 15,
+    "cursorCol": 0,
+    "text": "COLOR GRID FIXTURE\nBasic background colors:\n BG-40      BG-41      BG-42      BG-43      BG-44      BG-45      BG-46      BG\n-47\nBright background colors:\n BG-100     BG-101     BG-102     BG-103     BG-104     BG-105     BG-106     BG\n-107\n256-color sample backgrounds:\n IDX-016    IDX-022    IDX-028    IDX-034    IDX-040    IDX-046    IDX-082    ID\nX-118    IDX-154    IDX-190    IDX-196    IDX-202\nTruecolor sample backgrounds:\n TC-RED     TC-GRN     TC-BLU     TC-GLD\nForeground sample labels:\nFG-31       FG-92       FG5-45      FG5-201     FG2-ORANGE  FG2-CYAN\nCOLOR GRID COMPLETE\n\n\n\n\n\n\n\n\n"
+  }
+}

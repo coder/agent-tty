@@ -1,0 +1,86 @@
+{
+  "ok": true,
+  "command": "doctor",
+  "timestamp": "2026-03-22T22:30:22.989Z",
+  "result": {
+    "ok": true,
+    "checks": {
+      "environment": [
+        {
+          "name": "node-runtime",
+          "status": "pass",
+          "message": "Node 24.14.0 ok",
+          "durationMs": 0
+        },
+        {
+          "name": "cwd-access",
+          "status": "pass",
+          "message": "cwd read/write: /home/coder/.mux/src/agent-terminal/agent_exec_bd8e80d26b",
+          "durationMs": 1
+        },
+        {
+          "name": "temp-dir",
+          "status": "pass",
+          "message": "temp dir ok: /tmp",
+          "durationMs": 3
+        },
+        {
+          "name": "home-writable",
+          "status": "pass",
+          "message": "home writable: /tmp/tmp.5qVKPi5rha",
+          "durationMs": 1
+        },
+        {
+          "name": "pty-spawn",
+          "status": "pass",
+          "message": "spawned /home/coder/.local/share/mise/installs/node/24.14.0/bin/node",
+          "durationMs": 36
+        },
+        {
+          "name": "socket-viable",
+          "status": "pass",
+          "message": "socket ok: /tmp/tmp.5qVKPi5rha/sessions/doctor-1825584-mn2byipv-2/host.sock",
+          "durationMs": 3
+        },
+        {
+          "name": "artifact-atomicity",
+          "status": "pass",
+          "message": "atomic rename ok: /tmp/tmp.5qVKPi5rha/sessions/doctor-1825584-mn2byipy-3/artifacts",
+          "durationMs": 2
+        },
+        {
+          "name": "event-log-writable",
+          "status": "pass",
+          "message": "append ok: /tmp/tmp.5qVKPi5rha/sessions/doctor-1825584-mn2byiq1-5/events.jsonl",
+          "durationMs": 2
+        }
+      ],
+      "renderer": [
+        {
+          "name": "playwright_available",
+          "status": "pass",
+          "message": "available",
+          "durationMs": 0
+        },
+        {
+          "name": "browser_launch",
+          "status": "pass",
+          "message": "chromium launches",
+          "durationMs": 131
+        },
+        {
+          "name": "ghostty_web_available",
+          "status": "pass",
+          "message": "WASM available",
+          "durationMs": 113
+        },
+        {
+          "name": "screenshot_viable",
+          "status": "pass",
+          "message": "viable",
+          "durationMs": 206
+        }
+      ]
+    }
+  }
+}

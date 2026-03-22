@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-03-22T22:31:38.993Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "COLOR GRID COMPLETE",
+    "cursorRow": 15,
+    "cursorCol": 0,
+    "capturedAtSeq": 0
+  }
+}

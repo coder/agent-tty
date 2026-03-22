@@ -1,0 +1,10 @@
+{"version":2,"width":80,"height":24,"timestamp":1774218750,"title":"01KMBTV99F0QQ1VPW74QDXHB72","sessionId":"01KMBTV99F0QQ1VPW74QDXHB72","env":{"TERM":"xterm-256color"},"toolVersion":"0.1.0"}
+[0,"o","MAIN SCREEN READY\r\n"]
+[0.001,"o","Main buffer should be restored after alt-screen exit.\r\n"]
+[4.759,"o","\r\n"]
+[4.759,"o","\u001b[?1049h\u001b[2J\u001b[HALT SCREEN ACTIVE\r\nAlternate buffer content should only appear here.\r\n"]
+[9.911,"o","\r\n"]
+[9.911,"o","\u001b[?1049lBACK ON MAIN SCREEN\r\nAlt-screen replay complete.\r\n"]
+[10.435,"o","\\"]
+[10.436,"o","\u001b[1G"]
+[10.436,"o","\u001b[0K"]
