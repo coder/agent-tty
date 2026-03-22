@@ -213,6 +213,7 @@ export async function runRecordExportCommand(
         timestamp: exportArtifact.header.timestamp,
         outputEventCount: exportArtifact.outputEventCount,
         resizeEventCount: exportArtifact.resizeEventCount,
+        markerCount: exportArtifact.markerCount,
       };
       resultMetadata = {
         width: exportArtifact.header.width,
@@ -221,6 +222,7 @@ export async function runRecordExportCommand(
         timestamp: exportArtifact.header.timestamp,
         outputEventCount: exportArtifact.outputEventCount,
         resizeEventCount: exportArtifact.resizeEventCount,
+        markerCount: exportArtifact.markerCount,
       };
 
       if (options.out === undefined) {

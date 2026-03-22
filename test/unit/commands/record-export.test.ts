@@ -159,6 +159,28 @@ describe('record export command', () => {
   });
 
   it('exports asciicast artifacts and computes bytes and sha256', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-2-asciicast.cast');
+    mocks.readEventLogRecords.mockResolvedValue([
+      {
+        seq: 0,
+        ts: '2026-03-19T12:00:02.000Z',
+        type: 'output',
+        payload: { data: 'hello\n' },
+      },
+      {
+        seq: 1,
+        ts: '2026-03-19T12:00:02.750Z',
+        type: 'marker',
+        payload: { label: 'checkpoint' },
+      },
+      {
+        seq: 2,
+        ts: '2026-03-19T12:00:03.500Z',
+        type: 'resize',
+        payload: { cols: 100, rows: 30 },
+      },
+    ]);
+
     await runRecordExportCommand({
       json: true,
       sessionId: 'session-01',
@@ -177,6 +199,7 @@ describe('record export command', () => {
         },
       }),
       JSON.stringify([0, 'o', 'hello\n']),
+      JSON.stringify([0.75, 'm', 'checkpoint']),
       JSON.stringify([1.5, 'r', '100x30']),
       '',
     ].join('\n');
@@ -188,36 +211,37 @@ describe('record export command', () => {
       '/tmp/agent-terminal/sessions/session-01',
     );
     expect(mocks.writeTextFileAtomic).toHaveBeenCalledWith({
-      path: '/tmp/agent-terminal/sessions/session-01/artifacts/recording-1-asciicast.cast',
+      path: '/tmp/agent-terminal/sessions/session-01/artifacts/recording-2-asciicast.cast',
       pathLabel: 'record export path',
       contents: expectedContents,
       writeErrorMessage:
-        'Failed to write record export artifact at /tmp/agent-terminal/sessions/session-01/artifacts/recording-1-asciicast.cast.',
+        'Failed to write record export artifact at /tmp/agent-terminal/sessions/session-01/artifacts/recording-2-asciicast.cast.',
     });
     expect(mocks.createArtifactEntry).toHaveBeenCalledWith({
       kind: 'recording',
-      filename: 'recording-1-asciicast.cast',
+      filename: 'recording-2-asciicast.cast',
       sessionId: 'session-01',
-      capturedAtSeq: 1,
+      capturedAtSeq: 2,
       sha256: expectedSha256,
       bytes: Buffer.byteLength(expectedContents, 'utf8'),
       metadata: {
         format: 'asciicast',
         outputPath:
-          '/tmp/agent-terminal/sessions/session-01/artifacts/recording-1-asciicast.cast',
+          '/tmp/agent-terminal/sessions/session-01/artifacts/recording-2-asciicast.cast',
         width: 80,
         height: 24,
         title: 'session-01',
         timestamp: Date.parse('2026-03-19T12:00:02.000Z') / 1000,
         outputEventCount: 1,
         resizeEventCount: 1,
+        markerCount: 1,
       },
     });
     expect(mocks.appendArtifact).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01',
       expect.objectContaining({
         kind: 'recording',
-        filename: 'recording-1-asciicast.cast',
+        filename: 'recording-2-asciicast.cast',
         sha256: expectedSha256,
         bytes: Buffer.byteLength(expectedContents, 'utf8'),
       }),
@@ -229,10 +253,10 @@ describe('record export command', () => {
         sessionId: 'session-01',
         format: 'asciicast',
         artifactPath:
-          '/tmp/agent-terminal/sessions/session-01/artifacts/recording-1-asciicast.cast',
+          '/tmp/agent-terminal/sessions/session-01/artifacts/recording-2-asciicast.cast',
         bytes: Buffer.byteLength(expectedContents, 'utf8'),
         sha256: expectedSha256,
-        capturedAtSeq: 1,
+        capturedAtSeq: 2,
         durationMs: 1500,
         metadata: {
           width: 80,
@@ -241,13 +265,14 @@ describe('record export command', () => {
           timestamp: Date.parse('2026-03-19T12:00:02.000Z') / 1000,
           outputEventCount: 1,
           resizeEventCount: 1,
+          markerCount: 1,
         },
       },
       lines: [
         'Session ID: session-01',
         'Format: asciicast',
-        'Captured At Seq: 1',
-        'Artifact Path: /tmp/agent-terminal/sessions/session-01/artifacts/recording-1-asciicast.cast',
+        'Captured At Seq: 2',
+        'Artifact Path: /tmp/agent-terminal/sessions/session-01/artifacts/recording-2-asciicast.cast',
         `Bytes: ${String(Buffer.byteLength(expectedContents, 'utf8'))}`,
         `SHA256: ${expectedSha256}`,
         'Duration: 1500 ms',

@@ -22,6 +22,7 @@ export interface AsciicastExport {
   durationMs: number;
   outputEventCount: number;
   resizeEventCount: number;
+  markerCount: number;
 }
 
 function parseTimestamp(value: string, label: string): number {
@@ -91,6 +92,7 @@ export function generateAsciicast(
   let previousTimestampMs = firstTimestampMs;
   let outputEventCount = 0;
   let resizeEventCount = 0;
+  let markerCount = 0;
   const lines = [JSON.stringify(header)];
 
   for (const event of events) {
@@ -125,6 +127,18 @@ export function generateAsciicast(
           `${String(event.payload.cols)}x${String(event.payload.rows)}`,
         ]),
       );
+      continue;
+    }
+
+    if (event.type === 'marker') {
+      markerCount += 1;
+      lines.push(
+        JSON.stringify([
+          relativeSeconds(eventTimestampMs, firstTimestampMs),
+          'm',
+          event.payload.label,
+        ]),
+      );
     }
   }
 
@@ -135,5 +149,6 @@ export function generateAsciicast(
     durationMs: Math.max(0, lastTimestampMs - firstTimestampMs),
     outputEventCount,
     resizeEventCount,
+    markerCount,
   };
 }

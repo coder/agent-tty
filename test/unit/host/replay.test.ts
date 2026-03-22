@@ -50,6 +50,29 @@ function createEvents(): EventRecord[] {
   ];
 }
 
+function createEventsWithMarker(): EventRecord[] {
+  return [
+    {
+      seq: 0,
+      ts: '2026-03-19T12:00:02.000Z',
+      type: 'output',
+      payload: { data: 'hello' },
+    },
+    {
+      seq: 1,
+      ts: '2026-03-19T12:00:02.500Z',
+      type: 'marker',
+      payload: { label: 'checkpoint' },
+    },
+    {
+      seq: 2,
+      ts: '2026-03-19T12:00:03.000Z',
+      type: 'resize',
+      payload: { cols: 100, rows: 30 },
+    },
+  ];
+}
+
 let tempDir = '';
 let eventLogPath = '';
 
@@ -79,6 +102,24 @@ describe('replay helpers', () => {
       events: createEvents(),
       targetSeq: 1,
     });
+  });
+
+  it('buildReplayInput preserves marker events', () => {
+    const events = createEventsWithMarker();
+    const replayInput = buildReplayInput(
+      'session-01',
+      createManifest(),
+      events,
+    );
+
+    expect(replayInput.events).toEqual(events);
+    expect(replayInput.events[1]).toEqual({
+      seq: 1,
+      ts: '2026-03-19T12:00:02.500Z',
+      type: 'marker',
+      payload: { label: 'checkpoint' },
+    });
+    expect(replayInput.targetSeq).toBe(2);
   });
 
   it('buildReplayInput respects an explicit target sequence', () => {

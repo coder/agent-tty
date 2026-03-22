@@ -85,8 +85,61 @@ describe('generateAsciicast', () => {
     ]);
     expect(first.outputEventCount).toBe(2);
     expect(first.resizeEventCount).toBe(1);
+    expect(first.markerCount).toBe(0);
     expect(first.capturedAtSeq).toBe(3);
     expect(first.durationMs).toBe(2000);
+  });
+
+  it('emits marker events as m lines in chronological order', () => {
+    const manifest = createManifest();
+    const events: EventRecord[] = [
+      {
+        seq: 0,
+        ts: '2026-03-19T12:00:01.000Z',
+        type: 'output',
+        payload: { data: 'booting' },
+      },
+      {
+        seq: 1,
+        ts: '2026-03-19T12:00:01.500Z',
+        type: 'marker',
+        payload: { label: 'checkpoint' },
+      },
+      {
+        seq: 2,
+        ts: '2026-03-19T12:00:02.000Z',
+        type: 'resize',
+        payload: { cols: 100, rows: 30 },
+      },
+      {
+        seq: 3,
+        ts: '2026-03-19T12:00:02.500Z',
+        type: 'marker',
+        payload: { label: '' },
+      },
+      {
+        seq: 4,
+        ts: '2026-03-19T12:00:03.000Z',
+        type: 'output',
+        payload: { data: 'ready\n' },
+      },
+    ];
+
+    const result = generateAsciicast('session-01', manifest, events);
+
+    expect(parseAsciicastLines(result.contents)).toEqual([
+      result.header,
+      [0, 'o', 'booting'],
+      [0.5, 'm', 'checkpoint'],
+      [1, 'r', '100x30'],
+      [1.5, 'm', ''],
+      [2, 'o', 'ready\n'],
+    ]);
+    expect(result.outputEventCount).toBe(2);
+    expect(result.resizeEventCount).toBe(1);
+    expect(result.markerCount).toBe(2);
+    expect(result.capturedAtSeq).toBe(4);
+    expect(result.durationMs).toBe(2000);
   });
 
   it('produces a header-only cast for empty event logs', () => {
@@ -113,6 +166,7 @@ describe('generateAsciicast', () => {
     ]);
     expect(result.outputEventCount).toBe(0);
     expect(result.resizeEventCount).toBe(0);
+    expect(result.markerCount).toBe(0);
     expect(result.capturedAtSeq).toBe(0);
     expect(result.durationMs).toBe(0);
   });
