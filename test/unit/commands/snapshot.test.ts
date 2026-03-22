@@ -432,9 +432,10 @@ describe('snapshot command', () => {
   });
 
   it('uses offline replay for exited sessions and includes scrollback when requested', async () => {
-    const snapshotMock = vi.fn((options?: { includeScrollback?: boolean }) =>
+    const snapshotMock = vi.fn((options?: unknown) =>
       createOfflineSemanticSnapshot(
-        options?.includeScrollback
+        (options as { includeScrollback?: boolean } | undefined)
+          ?.includeScrollback
           ? {
               scrollbackLines: [
                 { row: 0, text: 'scrolled' },
@@ -477,9 +478,10 @@ describe('snapshot command', () => {
   });
 
   it('defaults offline snapshots to omitting scrollbackLines', async () => {
-    const snapshotMock = vi.fn((options?: { includeScrollback?: boolean }) =>
+    const snapshotMock = vi.fn((options?: unknown) =>
       createOfflineSemanticSnapshot(
-        options?.includeScrollback
+        (options as { includeScrollback?: boolean } | undefined)
+          ?.includeScrollback
           ? {
               scrollbackLines: [{ row: 0, text: 'unexpected scrollback' }],
             }
