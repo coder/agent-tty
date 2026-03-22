@@ -66,9 +66,12 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
       const inputPath = join(testHome, 'type-input.txt');
       await writeFile(inputPath, 'hello-from-file');
 
-      const typeResult = runCli(['type', sessionId, '--file', inputPath, '--json'], {
-        AGENT_TERMINAL_HOME: testHome,
-      });
+      const typeResult = runCli(
+        ['type', sessionId, '--file', inputPath, '--json'],
+        {
+          AGENT_TERMINAL_HOME: testHome,
+        },
+      );
       expect(typeResult.status).toBe(0);
       expect(typeResult.stderr).toBe('');
       const envelope = JSON.parse(typeResult.stdout) as SuccessEnvelope<

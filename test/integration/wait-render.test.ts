@@ -372,10 +372,9 @@ describe('wait render integration', { timeout: 120_000 }, () => {
   });
 
   it('rejects negative CLI --cursor-col values', () => {
-    const result = runCli(
-      ['wait', sessionId, '--cursor-col', '-1', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
-    );
+    const result = runCli(['wait', sessionId, '--cursor-col', '-1', '--json'], {
+      AGENT_TERMINAL_HOME: testHome,
+    });
 
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toBe('');

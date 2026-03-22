@@ -33,7 +33,10 @@ function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
 export async function resolveCommandInputText(
   options: ResolveCommandInputTextOptions,
 ): Promise<string> {
-  assert(options.commandName.length > 0, 'commandName must be a non-empty string');
+  assert(
+    options.commandName.length > 0,
+    'commandName must be a non-empty string',
+  );
 
   if (options.text !== undefined && options.file !== undefined) {
     throw createInvalidInputError(
@@ -68,27 +71,41 @@ export async function resolveCommandInputText(
   try {
     await access(filePath, fsConstants.F_OK);
   } catch (error: unknown) {
-    throw createInvalidInputError(`Input file "${filePath}" was not found.`, {
-      file: filePath,
-    }, error);
+    throw createInvalidInputError(
+      `Input file "${filePath}" was not found.`,
+      {
+        file: filePath,
+      },
+      error,
+    );
   }
 
   try {
     await access(filePath, fsConstants.R_OK);
   } catch (error: unknown) {
-    throw createInvalidInputError(`Input file "${filePath}" is not readable.`, {
-      file: filePath,
-    }, error);
+    throw createInvalidInputError(
+      `Input file "${filePath}" is not readable.`,
+      {
+        file: filePath,
+      },
+      error,
+    );
   }
 
   try {
     const content = await readFile(filePath, 'utf8');
-    assert(typeof content === 'string', 'readFile(filePath, utf8) must return a string');
+    assert(
+      typeof content === 'string',
+      'readFile(filePath, utf8) must return a string',
+    );
 
     if (content.length === 0) {
-      throw createInvalidInputError(`Input file "${filePath}" must not be empty.`, {
-        file: filePath,
-      });
+      throw createInvalidInputError(
+        `Input file "${filePath}" must not be empty.`,
+        {
+          file: filePath,
+        },
+      );
     }
 
     return content;
@@ -98,13 +115,21 @@ export async function resolveCommandInputText(
     }
 
     if (isErrnoException(error) && error.code === 'EISDIR') {
-      throw createInvalidInputError(`Input file "${filePath}" must be a file, not a directory.`, {
-        file: filePath,
-      }, error);
+      throw createInvalidInputError(
+        `Input file "${filePath}" must be a file, not a directory.`,
+        {
+          file: filePath,
+        },
+        error,
+      );
     }
 
-    throw createInvalidInputError(`Failed to read input file "${filePath}".`, {
-      file: filePath,
-    }, error);
+    throw createInvalidInputError(
+      `Failed to read input file "${filePath}".`,
+      {
+        file: filePath,
+      },
+      error,
+    );
   }
 }

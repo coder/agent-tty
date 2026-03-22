@@ -53,7 +53,10 @@ describe('resolveCommandInputText', () => {
       file: '/tmp/input.txt',
     });
 
-    await expect(result).rejects.toHaveProperty('code', ERROR_CODES.INVALID_INPUT);
+    await expect(result).rejects.toHaveProperty(
+      'code',
+      ERROR_CODES.INVALID_INPUT,
+    );
     await expect(result).rejects.toThrow(/mutually exclusive/);
   });
 
@@ -64,7 +67,10 @@ describe('resolveCommandInputText', () => {
       file: undefined,
     });
 
-    await expect(result).rejects.toHaveProperty('code', ERROR_CODES.INVALID_INPUT);
+    await expect(result).rejects.toHaveProperty(
+      'code',
+      ERROR_CODES.INVALID_INPUT,
+    );
     await expect(result).rejects.toThrow(
       /Provide either a positional <text> argument or --file <path>/,
     );
