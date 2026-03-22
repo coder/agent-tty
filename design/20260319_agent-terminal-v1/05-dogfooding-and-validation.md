@@ -6,25 +6,40 @@ It is intentionally prescriptive.
 
 A follow-up AI coding agent should treat this file as the minimum review protocol, not optional guidance.
 
-## Current shipped state (2026-03-21)
+## Current shipped state (2026-03-22)
 
-This document still describes the *target* dogfooding protocol, but the current shipped product only supports a subset of the artifact expectations below.
+This document still describes the broader dogfooding target, but the repository now ships the full core artifact set needed for review bundles.
 
 Shipped today:
 
 - JSON command outputs,
-- semantic snapshots,
-- PNG screenshots,
+- semantic snapshots, including optional scrollback capture,
+- PNG screenshots with richer metadata,
+- `.cast` export,
+- replay video export,
 - artifact manifests,
 - and notes / proof bundles under `dogfood/`.
 
-Not yet shipped:
+The remaining gaps are now mostly about scenario coverage rather than missing artifact classes. The biggest open items are the dedicated `unicode-grid` and `scrollback-demo` fixtures, the matching proof bundles, and a local bundle review helper.
 
-- `.cast` export,
-- replay video export,
-- and some of the richer fixture scenarios listed below.
+Read the remainder of this file as the broader validation target and checklist for closing those remaining gaps.
 
-Read the remainder of this file as the broader validation target, not a claim that every artifact class is already implemented.
+## Week 4 coverage
+
+As of 2026-03-22, the repo has four core proof bundles that cover the shipped gap-closing work:
+
+- `dogfood/20260321-post-hardening-smoke/` revalidates live inspect/wait/snapshot/screenshot/doctor flows,
+- `dogfood/20260321-week3-renderer-complete/` proves live and post-exit snapshot/screenshot/export plus GC,
+- `dogfood/20260321-week3-crash-retention/` proves abnormal-exit evidence retention,
+- and `dogfood/20260322-global-cli-context/` proves `--home`, `--no-color`, and exit-code differentiation for missing sessions.
+
+An additional broader smoke bundle, `dogfood/20260322-lazyvim-scenario/`, demonstrates real-world TUI driving plus screenshot / asciicast / WebM review artifacts.
+
+The main remaining validation gaps are:
+
+- the planned `unicode-grid` and `scrollback-demo` fixtures are still not present under `test/fixtures/apps/`,
+- there is still no dedicated Week 4 unicode/width or scrollback proof bundle matching Scenarios E/F,
+- and there is still no local proof-bundle review helper/page.
 
 ## 1. Dogfooding goals
 

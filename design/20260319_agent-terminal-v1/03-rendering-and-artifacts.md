@@ -56,7 +56,7 @@ The current renderer/export path is:
 - deterministic replay export to asciicast and WebM,
 - and manifest-backed artifact storage under `artifacts/`.
 
-Remaining follow-on work is now mostly about fidelity and design parity rather than missing artifact classes. The biggest open items are scrollback snapshots, richer cell/style metadata, bundled deterministic font assets, and fuller screenshot/export metadata; these are tracked in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) and [09-week-4-plan.md](./09-week-4-plan.md).
+Remaining follow-on work is now mostly about fidelity and design parity rather than missing artifact classes. Scrollback snapshots and richer screenshot/export metadata now ship; the biggest open items are per-cell style metadata, bundled deterministic font assets, the fuller `SnapshotCell` surface, and more explicit replay timing controls. These are tracked in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) and [09-week-4-plan.md](./09-week-4-plan.md).
 
 ## 4. Canonical replay model
 
@@ -522,3 +522,19 @@ This area is complete only when:
 - replay video export exists and is reviewable,
 - every artifact is manifest-backed and hash-stamped,
 - and renderer crashes can be repaired from replay without losing the session.
+
+## 18. Week 4 implementation status
+
+As of 2026-03-22, Week 4 materially narrowed the rendering/artifact delta:
+
+- shipped scrollback-aware snapshots through `snapshot --include-scrollback` / `includeScrollback`,
+- shipped screenshot metadata enrichment (`rendererBackend`, `pixelWidth`, `pixelHeight`, `sha256`, and `renderProfileHash`),
+- shipped render-profile hashing via `hashProfile(...)`,
+- and shipped richer asciicast/WebM export metadata for offline review.
+
+The remaining design-level follow-ons are:
+
+- per-cell styling and the fuller `SnapshotCell` contract,
+- a bundled deterministic font asset instead of host `monospace`,
+- the broader snapshot schema sketched earlier in this document,
+- and a fuller replay-timing option surface for reviewer-facing video export.

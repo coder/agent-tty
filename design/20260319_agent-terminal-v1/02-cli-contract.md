@@ -684,3 +684,22 @@ The CLI contract is complete when:
 - key grammar is canonicalized and tested,
 - `doctor` catches missing browser/render dependencies,
 - and the CLI can be driven end-to-end by a non-interactive agent process.
+
+## 24. Week 4 implementation status
+
+As of 2026-03-22, Week 4 closed several of the highest-value CLI contract gaps:
+
+- shipped global root flags `--home`, `--timeout-ms`, and `--no-color` via a shared command context,
+- shipped differentiated process exit codes `0` through `8` via structured error-to-exit-code mapping,
+- shipped `create` options `--env`, `--term`, `--name`, and `--shell`,
+- shipped file-backed input for `type` and `paste` via `--file`,
+- and shipped renderer-backed cursor waits via `wait --cursor-row` / `--cursor-col`.
+
+The following contract items remain future work:
+
+- `--log-level`,
+- a true global `--profile` override surface,
+- `--idle-timeout-ms`,
+- `--append-newline`,
+- config-file loading and the broader config/env precedence story beyond `AGENT_TERMINAL_HOME`,
+- and full JSON envelope/result-shape alignment with every example in this contract.

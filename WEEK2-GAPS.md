@@ -1,55 +1,56 @@
-# Remaining gaps after Week 3
+# Remaining gaps after Week 4
 
-> Historical note: this file keeps its original filename (`WEEK2-GAPS.md`) because earlier design docs and proof bundles already reference it. Its contents now describe the current post-Week-3 gaps rather than the original Week 2-only delta.
+> Historical note: this file keeps its original filename (`WEEK2-GAPS.md`) because earlier design docs and proof bundles already reference it. Its contents now describe the current post-Week-4 delta rather than the original Week 2-only gap list.
 
-The Week 1 control-plane slice, Week 2 renderer slice, and Week 3 export / crash-retention work are now implemented. The remaining work is mostly about design parity, fidelity, and hardening.
+Week 1 control-plane work, Week 2 renderer-backed inspection, Week 3 export / retention, and the core Week 4 CLI / artifact / lifecycle hardening have all landed. The remaining work is now concentrated in the areas below.
 
-## CLI contract and config parity
+## Post-Week-4 remaining gaps
 
-- **Global CLI flags** from `02-cli-contract.md` are not fully implemented yet (`--home`, `--log-level`, `--timeout-ms`, `--no-color`, and broader `--profile` handling).
-- **`create` contract parity** is incomplete; options such as `--env`, `--term`, `--name`, `--shell`, `--idle-timeout-ms`, and initial render-profile selection are not implemented yet.
-- **`type` and `paste` machine-first input forms** are incomplete; the richer `--text` / `--file` shapes from the design doc are not implemented yet.
-- **Cursor-position waits** (`wait --cursor-row` / `--cursor-col`) are not implemented yet.
-- **Recommended exit-code discipline** from the CLI design doc is not implemented yet; most command failures still exit with code `1`.
+### CLI contract and config parity
 
-## Artifact fidelity and metadata
+- **`--log-level`** is still not implemented.
+- **Global render-profile selection** is still partial; `screenshot` exposes a command-local `--profile`, but there is not yet a broader global/profile-default story.
+- **`--idle-timeout-ms`** is still not implemented for `create`.
+- **`--append-newline`** is still not implemented for `type`.
+- **Config-file loading** is still not implemented, and the broader env/config precedence story from `02-cli-contract.md` remains incomplete.
+- **Full envelope/result-shape parity** with every CLI-contract example is still incomplete.
 
-- **Scrollback snapshots** are not implemented yet; snapshots are still viewport-scoped.
-- **Per-cell style metadata** is not implemented yet.
-- **Screenshot metadata** does not yet include the full design-level surface (for example render-profile hash, renderer backend, pixel width/height, and consistently exposed SHA256 on screenshot results).
-- **Bundled deterministic font assets** are not implemented yet; the shipped reference profiles still rely on generic `monospace`.
-- **Full replay timing controls** are not fully exposed yet; video export ships a practical accelerated path, but not the complete timing surface envisioned in the design.
+### Artifact fidelity and metadata
 
-## Failure semantics and recovery
+- **Per-cell style metadata** is still not implemented.
+- **The fuller `SnapshotCell` / expanded snapshot schema** from `03-rendering-and-artifacts.md` is still not implemented.
+- **Bundled deterministic font assets** are still not implemented; built-in profiles still rely on generic `monospace`.
+- **Full replay timing controls** are still not exposed as a complete reviewer-facing CLI surface.
 
-- **Session lifecycle states** do not yet expose the richer `failed`, `destroying`, and `destroyed` states from the architecture doc.
-- **Stale-host reconciliation** currently collapses to `exited`; it does not yet distinguish host crash from normal child exit.
-- **Crash-recovery proof** is stronger for post-exit retention than for explicit host-crash or renderer-crash recovery semantics.
+### Failure semantics and recovery
 
-## Fixture suite and dogfooding
+- **Renderer/host recovery proof** is still lighter than the main event-log/offline-replay story.
+- **Broader failure storytelling** is still incomplete; the repo now records `failed` plus `failureReason`, but the docs still sketch richer future distinctions between abnormal child exit, host failure, and renderer failure.
 
-- **`unicode-grid` fixture** is not implemented yet.
-- **`scrollback-demo` fixture** is not implemented yet.
-- **Full scenario coverage** from `05-dogfooding-and-validation.md` is not yet represented by polished proof bundles.
-- **Local proof-bundle review helper/page** is not implemented yet.
+### Fixture suite and dogfooding
 
-## Platform and future-scope work
+- **`unicode-grid` fixture** is still not present under `test/fixtures/apps/`.
+- **`scrollback-demo` fixture** is still not present under `test/fixtures/apps/`.
+- **Dedicated unicode/width and scrollback proof bundles** matching Scenarios E/F in `05-dogfooding-and-validation.md` are still missing.
+- **Local proof-bundle review helper/page** is still not implemented.
 
-- **Native renderer adapters** are not implemented yet.
-- **Mouse input support** is not implemented yet.
-- **Remote/network sessions** are not implemented yet.
-- **MCP wrapper** is not implemented yet.
-- **Cross-platform rendering parity** is not guaranteed yet, and Windows remains behind the design’s intended tier-2 shape.
+### Platform and future-scope work
+
+- **Native renderer adapters** are still not implemented.
+- **Mouse input support** is still not implemented.
+- **Remote/network sessions** are still not implemented.
+- **MCP wrapper** is still not implemented.
+- **Cross-platform rendering parity** is still not guaranteed, and Windows remains behind the design’s intended tier-2 shape.
 - **Renderer CSP trade-off** still exists; the localhost-only ghostty-web harness still needs `unsafe-inline` / `unsafe-eval` today.
 
 ## Recommended next step
 
-The next milestone should focus on design parity rather than a brand-new feature area:
+The next milestone should focus on the still-open parity and validation work rather than a brand-new feature family:
 
-1. CLI contract alignment,
-2. artifact fidelity and metadata,
-3. failure-state / recovery hardening,
-4. missing fixtures and dogfood bundles,
-5. docs sync.
+1. finish CLI/config parity,
+2. finish snapshot/rendering fidelity,
+3. add the missing fixtures and dedicated proof bundles,
+4. strengthen failure/recovery validation,
+5. then continue broader native/platform future work.
 
-See `design/20260319_agent-terminal-v1/09-week-4-plan.md` for the proposed Week 4 plan.
+See `design/20260319_agent-terminal-v1/10-week-4-status.md` for the detailed Week 4 status record and `design/20260319_agent-terminal-v1/09-week-4-plan.md` for the original Week 4 plan.
