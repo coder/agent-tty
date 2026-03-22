@@ -100,11 +100,26 @@ export class SessionState {
     this.touch();
   }
 
-  public recordDestroyed(): void {
+  public recordDestroyed(exitInfo?: {
+    exitCode: number | null;
+    exitSignal: string | null;
+  }): void {
     invariant(
       this.#record.status === 'destroying',
       `Cannot record destroyed unless session is destroying, current status: ${this.#record.status}`,
     );
+    if (exitInfo !== undefined) {
+      invariant(
+        exitInfo.exitCode === null || Number.isInteger(exitInfo.exitCode),
+        'Exit code must be an integer or null',
+      );
+      invariant(
+        exitInfo.exitSignal === null || typeof exitInfo.exitSignal === 'string',
+        'Exit signal must be a string or null',
+      );
+      this.#record.exitCode = exitInfo.exitCode;
+      this.#record.exitSignal = exitInfo.exitSignal;
+    }
 
     this.#record.status = 'destroyed';
     this.touch();

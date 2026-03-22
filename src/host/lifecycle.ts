@@ -131,11 +131,19 @@ function assertStringRecord(
 }
 
 function isSessionTerminal(record: SessionRecord): boolean {
-  return record.status === 'exited';
+  return (
+    record.status === 'exited' ||
+    record.status === 'failed' ||
+    record.status === 'destroyed'
+  );
 }
 
 function isSessionActive(record: SessionRecord): boolean {
-  return record.status === 'running' || record.status === 'exiting';
+  return (
+    record.status === 'running' ||
+    record.status === 'exiting' ||
+    record.status === 'destroying'
+  );
 }
 
 function isProcessAlive(pid: number | null): boolean {
@@ -448,7 +456,22 @@ export async function destroySession(
     getSessionPaths(sessionId);
   const manifest = await readSessionManifestOrThrow(sessionId, manifestFile);
 
+  if (manifest.status === 'destroyed') {
+    throw makeCliError(ERROR_CODES.SESSION_ALREADY_DESTROYED, {
+      message: `Session "${sessionId}" is already destroyed.`,
+      details: { sessionId },
+    });
+  }
+
   if (isSessionTerminal(manifest)) {
+    const destroyedManifest: SessionRecord = {
+      ...manifest,
+      status: 'destroyed',
+      updatedAt: new Date().toISOString(),
+    };
+
+    await writeManifest(manifestFile, destroyedManifest);
+    await unlinkIfPresent(socketFile);
     return;
   }
 
@@ -573,7 +596,7 @@ export async function listSessions(
       }
     }
 
-    if (all !== true && manifest.status === 'exited') {
+    if (all !== true && isSessionTerminal(manifest)) {
       continue;
     }
 
@@ -607,12 +630,36 @@ export async function reconcileSession(
     killProcessBestEffort(manifest.childPid);
   }
 
+  let reconciledStatus: SessionRecord['status'];
+  let failureReason: string | undefined;
+
+  switch (manifest.status) {
+    case 'running':
+      reconciledStatus = 'failed';
+      failureReason =
+        manifest.hostPid !== null
+          ? `host process died unexpectedly (pid: ${manifest.hostPid})`
+          : 'host process died unexpectedly';
+      break;
+    case 'exiting':
+      reconciledStatus = 'exited';
+      break;
+    case 'destroying':
+      reconciledStatus = 'destroyed';
+      break;
+    default:
+      reconciledStatus = 'failed';
+      failureReason = `unexpected pre-reconcile status: ${manifest.status}`;
+      break;
+  }
+
   const reconciledManifest: SessionRecord = {
     ...manifest,
-    status: 'exited',
+    status: reconciledStatus,
     updatedAt: new Date().toISOString(),
     hostPid: null,
     childPid: null,
+    ...(failureReason !== undefined ? { failureReason } : {}),
   };
 
   await writeManifest(manifestFile, reconciledManifest);

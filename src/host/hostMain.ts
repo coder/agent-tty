@@ -317,7 +317,13 @@ export async function runHost(sessionId: string): Promise<void> {
     ptyExitHandled = true;
 
     const exitSignal = normalizeExitSignal(signal);
-    state.recordExit(exitCode, exitSignal);
+    const currentStatus = state.snapshot().status;
+
+    if (currentStatus === 'destroying') {
+      state.recordDestroyed({ exitCode, exitSignal });
+    } else {
+      state.recordExit(exitCode, exitSignal);
+    }
     markPtyExited();
 
     void (async () => {
