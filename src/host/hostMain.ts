@@ -342,14 +342,29 @@ export async function runHost(sessionId: string): Promise<void> {
   const handlers: Record<string, MethodHandler> = {
     inspect: () => Promise.resolve({ session: state.snapshot() }),
     snapshot: async (params: unknown) => {
-      const { format: requestedFormat } = params as SnapshotParams;
+      const {
+        format: requestedFormat,
+        includeScrollback: requestedIncludeScrollback,
+      } = params as SnapshotParams;
 
       const format = requestedFormat ?? 'structured';
+      const includeScrollback = requestedIncludeScrollback ?? false;
+
+      invariant(
+        typeof includeScrollback === 'boolean',
+        'snapshot includeScrollback must normalize to a boolean',
+      );
 
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
       const replayInput = loadReplayInput();
       const backend = await rendererManager.getBackend(profile, replayInput);
-      const snapshot = await backend.snapshot();
+      const snapshot = await backend.snapshot({ includeScrollback });
+      const snapshotText = [
+        ...(snapshot.scrollbackLines ?? []),
+        ...snapshot.visibleLines,
+      ]
+        .map((line) => line.text)
+        .join('\n');
 
       invariant(
         snapshot.sessionId === sessionId,
@@ -367,7 +382,7 @@ export async function runHost(sessionId: string): Promise<void> {
               rows: snapshot.rows,
               cursorRow: snapshot.cursorRow,
               cursorCol: snapshot.cursorCol,
-              text: snapshot.visibleLines.map((line) => line.text).join('\n'),
+              text: snapshotText,
             };
 
       await ensureArtifactsDir(sessDir);
@@ -390,10 +405,14 @@ export async function runHost(sessionId: string): Promise<void> {
           capturedAtSeq: snapshot.capturedAtSeq,
           metadata: {
             format,
+            rendererBackend: backend.rendererBackend,
             cols: snapshot.cols,
             rows: snapshot.rows,
             cursorRow: snapshot.cursorRow,
             cursorCol: snapshot.cursorCol,
+            ...(snapshot.scrollbackLines === undefined
+              ? {}
+              : { scrollbackLineCount: snapshot.scrollbackLines.length }),
           },
         }),
       );
