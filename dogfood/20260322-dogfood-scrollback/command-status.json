@@ -1,0 +1,45 @@
+[
+  {
+    "command": "npx tsx src/cli/main.ts create --json -- npx tsx test/fixtures/apps/scrollback-demo/main.ts",
+    "exitCode": 0
+  },
+  {
+    "sessionId": "01KMBVE7WQCJRZMWD0T5VT53F7"
+  },
+  {
+    "command": "npx tsx src/cli/main.ts wait 01KMBVE7WQCJRZMWD0T5VT53F7 --text SCROLLBACK\\ COMPLETE --timeout 5000",
+    "exitCode": 0
+  },
+  {
+    "command": "npx tsx src/cli/main.ts snapshot 01KMBVE7WQCJRZMWD0T5VT53F7 --json",
+    "exitCode": 0
+  },
+  {
+    "command": "npx tsx src/cli/main.ts snapshot 01KMBVE7WQCJRZMWD0T5VT53F7 --include-scrollback --json",
+    "exitCode": 0
+  },
+  {
+    "command": "npx tsx src/cli/main.ts snapshot 01KMBVE7WQCJRZMWD0T5VT53F7 --format text --json",
+    "exitCode": 0
+  },
+  {
+    "command": "npx tsx src/cli/main.ts screenshot 01KMBVE7WQCJRZMWD0T5VT53F7 --json",
+    "exitCode": 0
+  },
+  {
+    "command": "npx tsx src/cli/main.ts record export 01KMBVE7WQCJRZMWD0T5VT53F7 --format asciicast --json",
+    "exitCode": 0
+  },
+  {
+    "command": "npx tsx src/cli/main.ts record export 01KMBVE7WQCJRZMWD0T5VT53F7 --format webm --json",
+    "exitCode": 0
+  },
+  {
+    "command": "npx tsx src/cli/main.ts wait 01KMBVE7WQCJRZMWD0T5VT53F7 --exit",
+    "exitCode": 0
+  },
+  {
+    "command": "npx tsx src/cli/main.ts inspect 01KMBVE7WQCJRZMWD0T5VT53F7 --json",
+    "exitCode": 0
+  }
+]

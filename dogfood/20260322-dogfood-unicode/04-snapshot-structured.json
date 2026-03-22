@@ -1,0 +1,113 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-22T22:31:43.778Z",
+  "result": {
+    "format": "structured",
+    "sessionId": "01KMBTSJ36G701X9QPENZ6M4SQ",
+    "capturedAtSeq": 4,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 10,
+    "cursorCol": 0,
+    "isAltScreen": false,
+    "visibleLines": [
+      {
+        "row": 0,
+        "text": "UNICODE GRID FIXTURE"
+      },
+      {
+        "row": 1,
+        "text": ""
+      },
+      {
+        "row": 2,
+        "text": "| LABEL  | SAMPLE                         |"
+      },
+      {
+        "row": 3,
+        "text": "| ASCII  | Hello, World! 0123456789       |"
+      },
+      {
+        "row": 4,
+        "text": "| BOX    | ┌─┐│└┘├┤┬┴┼═║╔╗╚╝              |"
+      },
+      {
+        "row": 5,
+        "text": "| CJK    | 漢字テスト中文日本                      |"
+      },
+      {
+        "row": 6,
+        "text": "| EMOJI  | ✓✗★♠♣♥♦⚡☀☁                     |"
+      },
+      {
+        "row": 7,
+        "text": "| AMBIG  | αβγδ∑∏∫∂√∞                     |"
+      },
+      {
+        "row": 8,
+        "text": ""
+      },
+      {
+        "row": 9,
+        "text": "UNICODE GRID COMPLETE"
+      },
+      {
+        "row": 10,
+        "text": ""
+      },
+      {
+        "row": 11,
+        "text": ""
+      },
+      {
+        "row": 12,
+        "text": ""
+      },
+      {
+        "row": 13,
+        "text": ""
+      },
+      {
+        "row": 14,
+        "text": ""
+      },
+      {
+        "row": 15,
+        "text": ""
+      },
+      {
+        "row": 16,
+        "text": ""
+      },
+      {
+        "row": 17,
+        "text": ""
+      },
+      {
+        "row": 18,
+        "text": ""
+      },
+      {
+        "row": 19,
+        "text": ""
+      },
+      {
+        "row": 20,
+        "text": ""
+      },
+      {
+        "row": 21,
+        "text": ""
+      },
+      {
+        "row": 22,
+        "text": ""
+      },
+      {
+        "row": 23,
+        "text": ""
+      }
+    ]
+  }
+}

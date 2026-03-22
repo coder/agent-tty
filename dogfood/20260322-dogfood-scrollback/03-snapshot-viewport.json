@@ -1,0 +1,113 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-22T22:42:59.116Z",
+  "result": {
+    "format": "structured",
+    "sessionId": "01KMBVE7WQCJRZMWD0T5VT53F7",
+    "capturedAtSeq": 5,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 23,
+    "cursorCol": 0,
+    "isAltScreen": false,
+    "visibleLines": [
+      {
+        "row": 0,
+        "text": "SCROLLBACK DEMO START"
+      },
+      {
+        "row": 1,
+        "text": "LINE 001 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 2,
+        "text": "LINE 002 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 3,
+        "text": "LINE 003 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 4,
+        "text": "LINE 004 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 5,
+        "text": "LINE 005 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 6,
+        "text": "LINE 006 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 7,
+        "text": "LINE 007 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 8,
+        "text": "LINE 008 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 9,
+        "text": "LINE 009 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 10,
+        "text": "LINE 010 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 11,
+        "text": "LINE 011 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 12,
+        "text": "LINE 012 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 13,
+        "text": "LINE 013 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 14,
+        "text": "LINE 014 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 15,
+        "text": "LINE 015 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 16,
+        "text": "LINE 016 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 17,
+        "text": "LINE 017 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 18,
+        "text": "LINE 018 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 19,
+        "text": "LINE 019 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 20,
+        "text": "LINE 020 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 21,
+        "text": "LINE 021 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 22,
+        "text": "LINE 022 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 23,
+        "text": "LINE 023 | abcdefghijklmnopqrstuvwxyz"
+      }
+    ]
+  }
+}
