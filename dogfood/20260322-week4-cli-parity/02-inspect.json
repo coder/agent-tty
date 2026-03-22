@@ -1,0 +1,33 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-22T20:38:26.264Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KMBMAD8A2SVYXCAZR7MW8RT7",
+      "createdAt": "2026-03-22T20:38:24.781Z",
+      "updatedAt": "2026-03-22T20:38:25.545Z",
+      "status": "running",
+      "command": [
+        "node",
+        "--import",
+        "tsx",
+        "test/fixtures/apps/hello-prompt/main.ts"
+      ],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_6ff11409cb",
+      "name": "cli-parity-test",
+      "env": {
+        "FOO": "bar",
+        "BAZ": "qux"
+      },
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "hostPid": 1697349,
+      "childPid": 1697383,
+      "exitCode": null,
+      "exitSignal": null
+    }
+  }
+}
