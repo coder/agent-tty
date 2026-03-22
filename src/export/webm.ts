@@ -61,7 +61,10 @@ function createDefaultBackend(
 
 function parseTimestamp(timestamp: string, label: string): number {
   const parsedTimestamp = Date.parse(timestamp);
-  invariant(Number.isFinite(parsedTimestamp), `${label} must be a valid ISO timestamp`);
+  invariant(
+    Number.isFinite(parsedTimestamp),
+    `${label} must be a valid ISO timestamp`,
+  );
   return parsedTimestamp;
 }
 

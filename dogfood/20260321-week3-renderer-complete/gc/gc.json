@@ -3,9 +3,7 @@
   "command": "gc",
   "timestamp": "2026-03-21T21:49:02.558Z",
   "result": {
-    "removedSessions": [
-      "01KM95YX5WZBJ570QW3AMD1RJT"
-    ],
+    "removedSessions": ["01KM95YX5WZBJ570QW3AMD1RJT"],
     "skippedSessions": [],
     "dryRun": false,
     "totalBytesFreed": 4720

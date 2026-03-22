@@ -10,44 +10,44 @@
 
 ## Artifacts
 
-| File | Description |
-| --- | --- |
-| `commands.sh` | Exact shell commands used to generate the renderer-complete bundle. |
-| `agent-terminal-home.txt` | The isolated home used for the renderer-complete scenario. |
-| `session-id.txt` | Session ID for the main renderer scenario. |
-| `doctor.json` | `doctor --json` output proving all environment and renderer checks passed. |
-| `create-output.json` | Session creation result for the live renderer session. |
-| `wait-text.json` | `wait --text 'Ready'` result proving renderer-visible content appeared. |
-| `type-output.json` | `type` result for the live interaction. |
-| `wait-regex.json` | Renderer regex wait proving the typed text became visible in the live terminal. |
-| `snapshot-structured-live.json` | Live structured snapshot JSON envelope. |
-| `snapshot-text-live.json` | Live text snapshot JSON envelope. |
-| `screenshot-dark-live.json` | Live dark-profile screenshot JSON envelope. |
-| `screenshot-light-live.json` | Live light-profile screenshot JSON envelope. |
-| `record-asciicast-live.json` | Live asciicast export JSON envelope. |
-| `destroy-output.json` | Session destroy result. |
-| `snapshot-structured-post-exit.json` | Post-exit structured snapshot JSON envelope proving offline replay. |
-| `screenshot-dark-post-exit.json` | Post-exit dark screenshot JSON envelope proving offline replay. |
-| `record-webm-post-exit.json` | Post-exit WebM export JSON envelope proving video export on an exited session. |
-| `manifest.json` | Final copied artifact manifest from the session home. |
-| `session-manifest.json` | Final copied session manifest showing the exited session state. |
-| `event-log.jsonl` | Raw event log copied from the isolated session home. |
-| `artifacts/live-snapshot-structured-artifact.json` | Snapshot artifact file copied immediately after the live structured snapshot. |
-| `artifacts/live-snapshot-text-artifact.json` | Snapshot artifact file copied immediately after the live text snapshot. |
-| `artifacts/post-exit-snapshot-structured-artifact.json` | Snapshot artifact file copied after post-exit offline replay. |
-| `artifacts/live-reference-dark.png` | Live screenshot PNG copied from the session artifact path. |
-| `artifacts/live-reference-light.png` | Live light-theme screenshot PNG copied from the session artifact path. |
-| `artifacts/post-exit-reference-dark.png` | Post-exit screenshot PNG copied from the offline replay artifact path. |
-| `artifacts/session-live.cast` | Asciicast exported from the still-running session. |
-| `artifacts/session-post-exit.webm` | WebM exported after the session had already been destroyed. |
-| `gc/commands.sh` | Exact shell commands used for the GC sub-demo. |
-| `gc/agent-terminal-home.txt` | Isolated home used only for the GC demo. |
-| `gc/session-id.txt` | Temporary session ID used for the GC demo. |
-| `gc/create-output.json` | GC demo session creation result. |
-| `gc/destroy-output.json` | GC demo destroy result. |
-| `gc/gc-dry-run.json` | `gc --dry-run --json` output showing what would be removed. |
-| `gc/gc.json` | `gc --json` output showing the session was actually removed. |
-| `gc/list-all.json` | `list --all --json` output proving the removed GC session no longer appears. |
+| File                                                    | Description                                                                     |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `commands.sh`                                           | Exact shell commands used to generate the renderer-complete bundle.             |
+| `agent-terminal-home.txt`                               | The isolated home used for the renderer-complete scenario.                      |
+| `session-id.txt`                                        | Session ID for the main renderer scenario.                                      |
+| `doctor.json`                                           | `doctor --json` output proving all environment and renderer checks passed.      |
+| `create-output.json`                                    | Session creation result for the live renderer session.                          |
+| `wait-text.json`                                        | `wait --text 'Ready'` result proving renderer-visible content appeared.         |
+| `type-output.json`                                      | `type` result for the live interaction.                                         |
+| `wait-regex.json`                                       | Renderer regex wait proving the typed text became visible in the live terminal. |
+| `snapshot-structured-live.json`                         | Live structured snapshot JSON envelope.                                         |
+| `snapshot-text-live.json`                               | Live text snapshot JSON envelope.                                               |
+| `screenshot-dark-live.json`                             | Live dark-profile screenshot JSON envelope.                                     |
+| `screenshot-light-live.json`                            | Live light-profile screenshot JSON envelope.                                    |
+| `record-asciicast-live.json`                            | Live asciicast export JSON envelope.                                            |
+| `destroy-output.json`                                   | Session destroy result.                                                         |
+| `snapshot-structured-post-exit.json`                    | Post-exit structured snapshot JSON envelope proving offline replay.             |
+| `screenshot-dark-post-exit.json`                        | Post-exit dark screenshot JSON envelope proving offline replay.                 |
+| `record-webm-post-exit.json`                            | Post-exit WebM export JSON envelope proving video export on an exited session.  |
+| `manifest.json`                                         | Final copied artifact manifest from the session home.                           |
+| `session-manifest.json`                                 | Final copied session manifest showing the exited session state.                 |
+| `event-log.jsonl`                                       | Raw event log copied from the isolated session home.                            |
+| `artifacts/live-snapshot-structured-artifact.json`      | Snapshot artifact file copied immediately after the live structured snapshot.   |
+| `artifacts/live-snapshot-text-artifact.json`            | Snapshot artifact file copied immediately after the live text snapshot.         |
+| `artifacts/post-exit-snapshot-structured-artifact.json` | Snapshot artifact file copied after post-exit offline replay.                   |
+| `artifacts/live-reference-dark.png`                     | Live screenshot PNG copied from the session artifact path.                      |
+| `artifacts/live-reference-light.png`                    | Live light-theme screenshot PNG copied from the session artifact path.          |
+| `artifacts/post-exit-reference-dark.png`                | Post-exit screenshot PNG copied from the offline replay artifact path.          |
+| `artifacts/session-live.cast`                           | Asciicast exported from the still-running session.                              |
+| `artifacts/session-post-exit.webm`                      | WebM exported after the session had already been destroyed.                     |
+| `gc/commands.sh`                                        | Exact shell commands used for the GC sub-demo.                                  |
+| `gc/agent-terminal-home.txt`                            | Isolated home used only for the GC demo.                                        |
+| `gc/session-id.txt`                                     | Temporary session ID used for the GC demo.                                      |
+| `gc/create-output.json`                                 | GC demo session creation result.                                                |
+| `gc/destroy-output.json`                                | GC demo destroy result.                                                         |
+| `gc/gc-dry-run.json`                                    | `gc --dry-run --json` output showing what would be removed.                     |
+| `gc/gc.json`                                            | `gc --json` output showing the session was actually removed.                    |
+| `gc/list-all.json`                                      | `list --all --json` output proving the removed GC session no longer appears.    |
 
 ## Verification claims
 

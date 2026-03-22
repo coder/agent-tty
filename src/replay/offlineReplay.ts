@@ -36,7 +36,10 @@ function assertAbsoluteSessionDir(sessionDir: string): string {
 
 function getSessionId(sessionDir: string): string {
   const sessionId = basename(sessionDir);
-  invariant(sessionId.length > 0, 'sessionDir must end with a session directory');
+  invariant(
+    sessionId.length > 0,
+    'sessionDir must end with a session directory',
+  );
   return sessionId;
 }
 
@@ -113,7 +116,10 @@ export async function withOfflineReplayRenderer<T>(
 
   const manifestFile = manifestPath(sessionDir);
   const manifest = await readManifestIfExists(manifestFile);
-  invariant(manifest !== null, `Session manifest does not exist at ${manifestFile}.`);
+  invariant(
+    manifest !== null,
+    `Session manifest does not exist at ${manifestFile}.`,
+  );
 
   let profile: RenderProfileConfig;
   try {

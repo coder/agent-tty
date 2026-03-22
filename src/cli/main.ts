@@ -185,14 +185,12 @@ async function main(): Promise<void> {
     .action(
       wrapAction(
         'gc',
-        async (
-          options: {
-            dryRun: boolean;
-            staleOnly: boolean;
-            olderThan?: string;
-            json: boolean;
-          },
-        ) => {
+        async (options: {
+          dryRun: boolean;
+          staleOnly: boolean;
+          olderThan?: string;
+          json: boolean;
+        }) => {
           await runGcCommand({
             json: options.json,
             dryRun: options.dryRun,

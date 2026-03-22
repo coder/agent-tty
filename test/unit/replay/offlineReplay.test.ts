@@ -11,7 +11,10 @@ import { withOfflineReplayRenderer } from '../../../src/replay/offlineReplay.js'
 import type { RendererBackend } from '../../../src/renderer/backend.js';
 import type { ReplayInput } from '../../../src/renderer/types.js';
 import { writeManifest } from '../../../src/storage/manifests.js';
-import { eventLogPath, manifestPath } from '../../../src/storage/sessionPaths.js';
+import {
+  eventLogPath,
+  manifestPath,
+} from '../../../src/storage/sessionPaths.js';
 
 interface OfflineReplayRunContext {
   manifest: SessionRecord;
@@ -143,7 +146,9 @@ async function createSessionFixture(options?: {
   eventsContents?: string;
   includeEventLog?: boolean;
 }): Promise<{ sessionDir: string; sessionId: string }> {
-  const sessionDir = await mkdtemp(join(tmpdir(), 'agent-terminal-offline-replay-'));
+  const sessionDir = await mkdtemp(
+    join(tmpdir(), 'agent-terminal-offline-replay-'),
+  );
   tempDirs.push(sessionDir);
 
   const sessionId = basename(sessionDir);
@@ -163,9 +168,9 @@ async function createSessionFixture(options?: {
 
 afterEach(async () => {
   await Promise.all(
-    tempDirs.splice(0).map((tempDir) =>
-      rm(tempDir, { recursive: true, force: true }),
-    ),
+    tempDirs
+      .splice(0)
+      .map((tempDir) => rm(tempDir, { recursive: true, force: true })),
   );
 });
 
@@ -177,7 +182,11 @@ describe('withOfflineReplayRenderer', () => {
 
     const result = await withOfflineReplayRenderer(
       { sessionDir },
-      ({ manifest, replayInput, backend: providedBackend }: OfflineReplayRunContext) => {
+      ({
+        manifest,
+        replayInput,
+        backend: providedBackend,
+      }: OfflineReplayRunContext) => {
         runCallCount += 1;
         expect(manifest.sessionId).toBe(sessionId);
         expect(replayInput.targetSeq).toBe(2);
@@ -221,7 +230,9 @@ describe('withOfflineReplayRenderer', () => {
   });
 
   it('treats a missing event log file as an empty replay', async () => {
-    const { sessionDir } = await createSessionFixture({ includeEventLog: false });
+    const { sessionDir } = await createSessionFixture({
+      includeEventLog: false,
+    });
     const backend = createMockBackend();
 
     await withOfflineReplayRenderer(
@@ -238,7 +249,9 @@ describe('withOfflineReplayRenderer', () => {
   });
 
   it('wraps corrupted event logs as REPLAY_ERROR and still disposes the backend', async () => {
-    const { sessionDir } = await createSessionFixture({ eventsContents: '{"seq":0' });
+    const { sessionDir } = await createSessionFixture({
+      eventsContents: '{"seq":0',
+    });
     const backend = createMockBackend();
 
     const replayPromise = withOfflineReplayRenderer(
@@ -272,7 +285,9 @@ describe('withOfflineReplayRenderer', () => {
 
   it('wraps replayTo errors as REPLAY_ERROR and disposes the backend', async () => {
     const { sessionDir } = await createSessionFixture();
-    const backend = createMockBackend({ replayError: new Error('replay failed') });
+    const backend = createMockBackend({
+      replayError: new Error('replay failed'),
+    });
 
     const replayPromise = withOfflineReplayRenderer(
       { sessionDir },

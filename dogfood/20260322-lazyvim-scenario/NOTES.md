@@ -26,31 +26,31 @@ entirely through agent-terminal CLI commands:
 
 ### Screenshots (dark theme, reference-dark profile)
 
-| # | File | Description |
-|---|------|-------------|
-| 01 | `01-lazyvim-installer.png` | LazyVim first boot: lazy.nvim installing 32 plugins |
-| 02 | `02-lazyvim-dashboard.png` | LazyVim ASCII art dashboard with menu options |
-| 03 | `03-lazy-extras.png` | Lazy Extras panel showing available extras |
-| 04 | `04-claude-code-extra.png` | Cursor on `ai.claudecode` after `/claude` search |
-| 05 | `05-claude-code-enabled.png` | Enabled Plugins (4) showing `ai.claudecode` active |
-| 06 | `06-dashboard-after-extras.png` | Dashboard after closing Lazy Extras |
-| 07 | `07-leader-which-key.png` | Which-key popup from `<leader>` (before claudecode) |
-| 08 | `08-claudecode-installed.png` | lazy.nvim showing claudecode.nvim + all `<leader>a` keys |
-| 09 | `09-leader-a-ai-keys.png` | `<leader>a` AI sub-menu with Claude Code bindings |
-| 09L | `09-leader-a-ai-keys-light.png` | Same in light theme |
+| #   | File                            | Description                                              |
+| --- | ------------------------------- | -------------------------------------------------------- |
+| 01  | `01-lazyvim-installer.png`      | LazyVim first boot: lazy.nvim installing 32 plugins      |
+| 02  | `02-lazyvim-dashboard.png`      | LazyVim ASCII art dashboard with menu options            |
+| 03  | `03-lazy-extras.png`            | Lazy Extras panel showing available extras               |
+| 04  | `04-claude-code-extra.png`      | Cursor on `ai.claudecode` after `/claude` search         |
+| 05  | `05-claude-code-enabled.png`    | Enabled Plugins (4) showing `ai.claudecode` active       |
+| 06  | `06-dashboard-after-extras.png` | Dashboard after closing Lazy Extras                      |
+| 07  | `07-leader-which-key.png`       | Which-key popup from `<leader>` (before claudecode)      |
+| 08  | `08-claudecode-installed.png`   | lazy.nvim showing claudecode.nvim + all `<leader>a` keys |
+| 09  | `09-leader-a-ai-keys.png`       | `<leader>a` AI sub-menu with Claude Code bindings        |
+| 09L | `09-leader-a-ai-keys-light.png` | Same in light theme                                      |
 
 ### Recordings
 
-| File | Format | Description |
-|------|--------|-------------|
+| File                            | Format       | Description                                       |
+| ------------------------------- | ------------ | ------------------------------------------------- |
 | `session1-lazyvim-install.cast` | asciicast v2 | Full session 1 replay (install + extras + enable) |
-| `session2-claudecode-keys.cast` | asciicast v2 | Full session 2 replay (restart + leader-a) |
-| `session2-claudecode-keys.webm` | WebM video | Accelerated video of session 2 |
+| `session2-claudecode-keys.cast` | asciicast v2 | Full session 2 replay (restart + leader-a)        |
+| `session2-claudecode-keys.webm` | WebM video   | Accelerated video of session 2                    |
 
 ### Event logs
 
-| File | Description |
-|------|-------------|
+| File                    | Description                  |
+| ----------------------- | ---------------------------- |
 | `session1-events.jsonl` | Raw event log from session 1 |
 | `session2-events.jsonl` | Raw event log from session 2 |
 
@@ -68,6 +68,7 @@ entirely through agent-terminal CLI commands:
 ## Commands used
 
 All commands were driven via `agent-terminal` CLI:
+
 - `create --cols 120 --rows 40 -- nvim`
 - `wait --screen-stable-ms <ms>`
 - `snapshot --format text`

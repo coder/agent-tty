@@ -4,11 +4,7 @@
   "createdAt": "2026-03-21T21:49:05.666Z",
   "updatedAt": "2026-03-21T21:49:06.407Z",
   "status": "exited",
-  "command": [
-    "/bin/bash",
-    "-lc",
-    "echo crash-test-output && exit 42"
-  ],
+  "command": ["/bin/bash", "-lc", "echo crash-test-output && exit 42"],
   "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_7c2a453166",
   "cols": 80,
   "rows": 24,

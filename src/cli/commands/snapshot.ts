@@ -1,4 +1,7 @@
-import type { SnapshotParams, SnapshotResult } from '../../protocol/messages.js';
+import type {
+  SnapshotParams,
+  SnapshotResult,
+} from '../../protocol/messages.js';
 import type { SemanticSnapshot } from '../../renderer/types.js';
 
 import { CliError } from '../../cli/errors.js';
@@ -13,7 +16,10 @@ import {
   createArtifactEntry,
 } from '../../storage/artifactManifest.js';
 import { resolveHome } from '../../storage/home.js';
-import { readManifestIfExists, writeTextFileAtomic } from '../../storage/manifests.js';
+import {
+  readManifestIfExists,
+  writeTextFileAtomic,
+} from '../../storage/manifests.js';
 import {
   artifactPath,
   ensureArtifactsDir,
@@ -135,9 +141,13 @@ async function runRpcSnapshot(
   sessionDirectory: string,
   format: SnapshotFormat,
 ): Promise<SnapshotResult> {
-  const rawResult: unknown = await sendRpc(socketPath(sessionDirectory), 'snapshot', {
-    format,
-  });
+  const rawResult: unknown = await sendRpc(
+    socketPath(sessionDirectory),
+    'snapshot',
+    {
+      format,
+    },
+  );
 
   return parseSnapshotResult(rawResult);
 }
@@ -151,7 +161,12 @@ async function runOfflineSnapshot(
     async ({ backend }) => {
       const snapshot: SemanticSnapshot = await backend.snapshot();
       const snapshotResult = createSnapshotResult(snapshot, format);
-      await persistSnapshotArtifact(sessionDirectory, format, snapshot, snapshotResult);
+      await persistSnapshotArtifact(
+        sessionDirectory,
+        format,
+        snapshot,
+        snapshotResult,
+      );
       return snapshotResult;
     },
   );

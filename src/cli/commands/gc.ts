@@ -43,7 +43,10 @@ export interface GcDependencies {
     size: number;
     isDirectory: () => boolean;
   }>;
-  rm: (path: string, options: { recursive: boolean; force: boolean }) => Promise<void>;
+  rm: (
+    path: string,
+    options: { recursive: boolean; force: boolean },
+  ) => Promise<void>;
   readManifestIfExists: (path: string) => Promise<SessionRecord | null>;
   reconcileSession: (sessionDirectory: string) => Promise<void>;
   now: () => Date;
@@ -81,7 +84,10 @@ function makeInvalidDurationError(value: string) {
 }
 
 function getSessionsRoot(home: string): string {
-  invariant(typeof home === 'string' && home.length > 0, 'home must not be empty');
+  invariant(
+    typeof home === 'string' && home.length > 0,
+    'home must not be empty',
+  );
   return resolve(home, 'sessions');
 }
 
@@ -134,7 +140,9 @@ function wasReconciledFromStaleHost(
   manifestBefore: SessionRecord,
   manifestAfter: SessionRecord,
 ): boolean {
-  return manifestBefore.status !== 'exited' && manifestAfter.status === 'exited';
+  return (
+    manifestBefore.status !== 'exited' && manifestAfter.status === 'exited'
+  );
 }
 
 function shouldSkipForAge(
@@ -147,7 +155,10 @@ function shouldSkipForAge(
   }
 
   const createdAtMs = Date.parse(manifest.createdAt);
-  invariant(Number.isFinite(createdAtMs), 'manifest.createdAt must be valid ISO');
+  invariant(
+    Number.isFinite(createdAtMs),
+    'manifest.createdAt must be valid ISO',
+  );
 
   return now.getTime() - createdAtMs < olderThanMs;
 }
@@ -159,7 +170,9 @@ function buildGcLines(result: GcResult): string[] {
     ? 'Estimated bytes reclaimable'
     : 'Estimated bytes freed';
 
-  lines.push(`${actionLabel} ${String(result.removedSessions.length)} session(s).`);
+  lines.push(
+    `${actionLabel} ${String(result.removedSessions.length)} session(s).`,
+  );
   lines.push(`${bytesLabel}: ${String(result.totalBytesFreed)}`);
 
   if (result.removedSessions.length > 0) {
@@ -176,7 +189,10 @@ function buildGcLines(result: GcResult): string[] {
     }
   }
 
-  if (result.removedSessions.length === 0 && result.skippedSessions.length === 0) {
+  if (
+    result.removedSessions.length === 0 &&
+    result.skippedSessions.length === 0
+  ) {
     lines.push('No sessions found.');
   }
 
@@ -216,9 +232,15 @@ export async function gcSessions(
   options: GcExecutionOptions,
   dependencies: GcDependencies = defaultDependencies,
 ): Promise<GcResult> {
-  invariant(typeof home === 'string' && home.length > 0, 'home must not be empty');
+  invariant(
+    typeof home === 'string' && home.length > 0,
+    'home must not be empty',
+  );
   invariant(typeof options.dryRun === 'boolean', 'dryRun must be boolean');
-  invariant(typeof options.staleOnly === 'boolean', 'staleOnly must be boolean');
+  invariant(
+    typeof options.staleOnly === 'boolean',
+    'staleOnly must be boolean',
+  );
   invariant(
     options.olderThanMs === null ||
       (Number.isInteger(options.olderThanMs) && options.olderThanMs > 0),
@@ -319,7 +341,10 @@ export async function gcSessions(
       continue;
     }
 
-    const staleSession = wasReconciledFromStaleHost(manifestBefore, manifestAfter);
+    const staleSession = wasReconciledFromStaleHost(
+      manifestBefore,
+      manifestAfter,
+    );
     if (options.staleOnly && !staleSession) {
       result.skippedSessions.push({
         sessionId,
@@ -384,7 +409,9 @@ export async function gcSessions(
 
 export async function runGcCommand(options: CommandOptions): Promise<void> {
   const olderThanMs =
-    options.olderThan === undefined ? null : parseDurationToMs(options.olderThan);
+    options.olderThan === undefined
+      ? null
+      : parseDurationToMs(options.olderThan);
   const home = resolveHome();
   const result = await gcSessions(home, {
     dryRun: options.dryRun,

@@ -264,6 +264,7 @@ $CLI wait "$SID" --screen-stable-ms 2000 --timeout 15000 --json
 ```
 
 > **Key concept: `type` vs `send-keys`**
+>
 > - `type` sends text as if typed on a keyboard — use for arbitrary strings,
 >   search queries, command-line input.
 > - `send-keys` sends named key sequences — use for special keys like
@@ -533,41 +534,42 @@ This section summarizes the key commands and patterns used in this playbook.
 
 ### Session lifecycle
 
-| Command | Purpose | Example |
-|---------|---------|---------|
-| `create` | Start a new terminal session | `create --cols 120 --rows 40 -- nvim` |
-| `inspect` | Check session status/metadata | `inspect <SID> --json` |
-| `destroy` | Stop a session | `destroy <SID> --force` |
-| `list` | List all sessions | `list --all --json` |
-| `gc` | Clean up exited sessions | `gc --dry-run --json` |
+| Command   | Purpose                       | Example                               |
+| --------- | ----------------------------- | ------------------------------------- |
+| `create`  | Start a new terminal session  | `create --cols 120 --rows 40 -- nvim` |
+| `inspect` | Check session status/metadata | `inspect <SID> --json`                |
+| `destroy` | Stop a session                | `destroy <SID> --force`               |
+| `list`    | List all sessions             | `list --all --json`                   |
+| `gc`      | Clean up exited sessions      | `gc --dry-run --json`                 |
 
 ### Input
 
-| Command | Purpose | When to use |
-|---------|---------|-------------|
-| `type` | Send text as keystrokes | Search queries, command-line input, arbitrary text |
-| `send-keys` | Send named key sequences | `Enter`, `Escape`, `Space`, `Tab`, single chars, combos |
-| `paste` | Send text via paste bracket | Large text blocks, code snippets |
+| Command     | Purpose                     | When to use                                             |
+| ----------- | --------------------------- | ------------------------------------------------------- |
+| `type`      | Send text as keystrokes     | Search queries, command-line input, arbitrary text      |
+| `send-keys` | Send named key sequences    | `Enter`, `Escape`, `Space`, `Tab`, single chars, combos |
+| `paste`     | Send text via paste bracket | Large text blocks, code snippets                        |
 
 ### Observation
 
-| Command | Purpose | Key options |
-|---------|---------|-------------|
-| `snapshot` | Read terminal text content | `--format text` (plain text) or `--format structured` (JSON with per-row data) |
-| `screenshot` | Render terminal as PNG image | `--profile reference-dark` (default) or `--profile reference-light` |
-| `wait` | Block until a condition is met | See "Wait strategies" below |
+| Command      | Purpose                        | Key options                                                                    |
+| ------------ | ------------------------------ | ------------------------------------------------------------------------------ |
+| `snapshot`   | Read terminal text content     | `--format text` (plain text) or `--format structured` (JSON with per-row data) |
+| `screenshot` | Render terminal as PNG image   | `--profile reference-dark` (default) or `--profile reference-light`            |
+| `wait`       | Block until a condition is met | See "Wait strategies" below                                                    |
 
 ### Wait strategies
 
-| Strategy | Flag | When to use |
-|----------|------|-------------|
+| Strategy      | Flag                      | When to use                                       |
+| ------------- | ------------------------- | ------------------------------------------------- |
 | Screen stable | `--screen-stable-ms 3000` | TUI transitions, plugin installs, loading screens |
-| Text match | `--text "Ready"` | Wait for specific text to appear |
-| Regex match | `--regex "\\d+ plugins"` | Wait for pattern-based content |
-| Process exit | `--exit` | Wait for the process to terminate |
-| Output idle | `--idle-ms 500` | Wait for output to stop (non-renderer) |
+| Text match    | `--text "Ready"`          | Wait for specific text to appear                  |
+| Regex match   | `--regex "\\d+ plugins"`  | Wait for pattern-based content                    |
+| Process exit  | `--exit`                  | Wait for the process to terminate                 |
+| Output idle   | `--idle-ms 500`           | Wait for output to stop (non-renderer)            |
 
 > **Choosing the right wait:**
+>
 > - For TUI apps (nvim, htop, etc.): use `--screen-stable-ms` with a generous
 >   value (3000–15000ms depending on expected activity).
 > - For CLI tools that print output: use `--text` or `--regex` to match the
@@ -576,10 +578,10 @@ This section summarizes the key commands and patterns used in this playbook.
 
 ### Export
 
-| Command | Purpose | Key options |
-|---------|---------|-------------|
-| `record export` | Export session recording | `--format asciicast` (text replay) or `--format webm` (video) |
-| `doctor` | Health check the environment | Verify renderer, PTY, filesystem health |
+| Command         | Purpose                      | Key options                                                   |
+| --------------- | ---------------------------- | ------------------------------------------------------------- |
+| `record export` | Export session recording     | `--format asciicast` (text replay) or `--format webm` (video) |
+| `doctor`        | Health check the environment | Verify renderer, PTY, filesystem health                       |
 
 ### Post-exit operations
 
@@ -732,24 +734,24 @@ asciicast export is nearly instant since it's purely text-based.
 
 A complete run of this playbook produces:
 
-| Artifact | Type | Approx. size |
-|----------|------|--------------|
-| 01-lazyvim-installer.png | Screenshot | 100-130 KB |
-| 02-lazyvim-dashboard.png | Screenshot | 20-25 KB |
-| 03-lazy-extras.png | Screenshot | 90-100 KB |
-| 04-claude-code-extra.png | Screenshot | 100-120 KB |
-| 05-claude-code-enabled.png | Screenshot | 90-100 KB |
-| 06-dashboard-after-extras.png | Screenshot | 20-25 KB |
-| 07-leader-which-key.png | Screenshot | 20-25 KB |
-| 08-claudecode-installed.png | Screenshot | 80-90 KB |
-| 09-leader-a-ai-keys.png | Screenshot (dark) | 20-25 KB |
-| 09-leader-a-ai-keys-light.png | Screenshot (light) | 20-25 KB |
-| session1-lazyvim-install.cast | asciicast v2 | 1.5-2.5 MB |
-| session2-claudecode-keys.cast | asciicast v2 | 400-600 KB |
-| session2-claudecode-keys.webm | WebM video | 400-600 KB |
-| session1-events.jsonl | Event log | 1.5-2.5 MB |
-| session2-events.jsonl | Event log | 400-600 KB |
-| *.json | CLI output envelopes | <1 KB each |
+| Artifact                      | Type                 | Approx. size |
+| ----------------------------- | -------------------- | ------------ |
+| 01-lazyvim-installer.png      | Screenshot           | 100-130 KB   |
+| 02-lazyvim-dashboard.png      | Screenshot           | 20-25 KB     |
+| 03-lazy-extras.png            | Screenshot           | 90-100 KB    |
+| 04-claude-code-extra.png      | Screenshot           | 100-120 KB   |
+| 05-claude-code-enabled.png    | Screenshot           | 90-100 KB    |
+| 06-dashboard-after-extras.png | Screenshot           | 20-25 KB     |
+| 07-leader-which-key.png       | Screenshot           | 20-25 KB     |
+| 08-claudecode-installed.png   | Screenshot           | 80-90 KB     |
+| 09-leader-a-ai-keys.png       | Screenshot (dark)    | 20-25 KB     |
+| 09-leader-a-ai-keys-light.png | Screenshot (light)   | 20-25 KB     |
+| session1-lazyvim-install.cast | asciicast v2         | 1.5-2.5 MB   |
+| session2-claudecode-keys.cast | asciicast v2         | 400-600 KB   |
+| session2-claudecode-keys.webm | WebM video           | 400-600 KB   |
+| session1-events.jsonl         | Event log            | 1.5-2.5 MB   |
+| session2-events.jsonl         | Event log            | 400-600 KB   |
+| \*.json                       | CLI output envelopes | <1 KB each   |
 
 ---
 

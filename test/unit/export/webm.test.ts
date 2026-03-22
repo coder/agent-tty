@@ -67,11 +67,15 @@ function createReplayState() {
   };
 }
 
-function createMockBackend(overrides: Partial<VideoCapableRendererBackend> = {}) {
+function createMockBackend(
+  overrides: Partial<VideoCapableRendererBackend> = {},
+) {
   const boot = overrides.boot ?? vi.fn().mockResolvedValue(undefined);
-  const replayTo = overrides.replayTo ?? vi.fn().mockResolvedValue(createReplayState());
+  const replayTo =
+    overrides.replayTo ?? vi.fn().mockResolvedValue(createReplayState());
   const replayWithTiming =
-    overrides.replayWithTiming ?? vi.fn().mockResolvedValue(createReplayState());
+    overrides.replayWithTiming ??
+    vi.fn().mockResolvedValue(createReplayState());
   const snapshot =
     overrides.snapshot ??
     vi.fn().mockResolvedValue({

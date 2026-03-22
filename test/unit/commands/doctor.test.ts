@@ -39,7 +39,9 @@ const BROKEN_DOCTOR_CHECKS = [
     run: () =>
       runHomeWritableCheck({
         writeFile: (() =>
-          Promise.reject(new Error('home not writable'))) as DoctorDependencies['writeFile'],
+          Promise.reject(
+            new Error('home not writable'),
+          )) as DoctorDependencies['writeFile'],
       }),
   },
   {
@@ -68,7 +70,9 @@ const BROKEN_DOCTOR_CHECKS = [
     run: () =>
       runArtifactAtomicityCheck({
         rename: (() =>
-          Promise.reject(new Error('rename unavailable'))) as DoctorDependencies['rename'],
+          Promise.reject(
+            new Error('rename unavailable'),
+          )) as DoctorDependencies['rename'],
       }),
   },
   {
@@ -77,7 +81,9 @@ const BROKEN_DOCTOR_CHECKS = [
     run: () =>
       runEventLogWritabilityCheck({
         writeFile: (() =>
-          Promise.reject(new Error('append unavailable'))) as DoctorDependencies['writeFile'],
+          Promise.reject(
+            new Error('append unavailable'),
+          )) as DoctorDependencies['writeFile'],
       }),
   },
 ] as const;
@@ -134,7 +140,9 @@ describe('doctor command', () => {
   );
 
   it('kills the PTY when the outer doctor timeout expires', async () => {
-    let onExitHandler: ((event: { exitCode: number; signal?: number }) => void) | undefined;
+    let onExitHandler:
+      | ((event: { exitCode: number; signal?: number }) => void)
+      | undefined;
     const kill = vi.fn(() => {
       onExitHandler?.({ exitCode: 130, signal: 15 });
     });
@@ -143,13 +151,15 @@ describe('doctor command', () => {
       'pty-spawn',
       () =>
         runPtySpawnCheck({
-          createPty: ((() => ({
+          createPty: (() => ({
             onData: () => undefined,
-            onExit: (handler: (event: { exitCode: number; signal?: number }) => void) => {
+            onExit: (
+              handler: (event: { exitCode: number; signal?: number }) => void,
+            ) => {
               onExitHandler = handler;
             },
             kill,
-          })) as unknown) as DoctorDependencies['createPty'],
+          })) as unknown as DoctorDependencies['createPty'],
         }),
       10,
     );

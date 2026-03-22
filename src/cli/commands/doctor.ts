@@ -11,16 +11,28 @@ import {
   unlink,
   writeFile,
 } from 'node:fs/promises';
-import { createConnection, createServer, type Server, type Socket } from 'node:net';
+import {
+  createConnection,
+  createServer,
+  type Server,
+  type Socket,
+} from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 
 import { emitSuccess } from '../output.js';
 import { createPty } from '../../pty/createPty.js';
-import { artifactPath, ensureArtifactsDir } from '../../storage/artifactPaths.js';
+import {
+  artifactPath,
+  ensureArtifactsDir,
+} from '../../storage/artifactPaths.js';
 import { ensureHome } from '../../storage/home.js';
-import { eventLogPath, sessionDir, socketPath } from '../../storage/sessionPaths.js';
+import {
+  eventLogPath,
+  sessionDir,
+  socketPath,
+} from '../../storage/sessionPaths.js';
 
 const COMMAND_NAME = 'doctor';
 const CHECK_TIMEOUT_MS = 10_000;
@@ -324,7 +336,10 @@ export async function runHomeWritableCheck(
 
 async function withDoctorSessionDirectory<TResult>(
   overrides: Partial<DoctorDependencies>,
-  operation: (sessionDirectory: string, deps: DoctorDependencies) => Promise<TResult>,
+  operation: (
+    sessionDirectory: string,
+    deps: DoctorDependencies,
+  ) => Promise<TResult>,
 ): Promise<TResult> {
   const deps = getDoctorDependencies(overrides);
   const home = await deps.ensureHome();
@@ -339,9 +354,9 @@ async function withDoctorSessionDirectory<TResult>(
   try {
     return await operation(sessionDirectory, deps);
   } finally {
-    await deps.rm(sessionDirectory, { recursive: true, force: true }).catch(
-      () => undefined,
-    );
+    await deps
+      .rm(sessionDirectory, { recursive: true, force: true })
+      .catch(() => undefined);
   }
 }
 
@@ -439,109 +454,125 @@ async function waitForSocketClose(client: Socket): Promise<void> {
 export async function runSocketViabilityCheck(
   overrides: Partial<DoctorDependencies> = {},
 ): Promise<string> {
-  return withDoctorSessionDirectory(overrides, async (sessionDirectory, deps) => {
-    const socketFile = socketPath(sessionDirectory);
-    let server: Server | null = null;
-    let client: Socket | null = null;
-    let acceptedConnection = false;
+  return withDoctorSessionDirectory(
+    overrides,
+    async (sessionDirectory, deps) => {
+      const socketFile = socketPath(sessionDirectory);
+      let server: Server | null = null;
+      let client: Socket | null = null;
+      let acceptedConnection = false;
 
-    try {
-      server = deps.createSocketServer();
-      const serverInstance = server;
-      serverInstance.on('connection', (socket) => {
-        acceptedConnection = true;
-        socket.on('error', () => undefined);
-        socket.end();
-      });
+      try {
+        server = deps.createSocketServer();
+        const serverInstance = server;
+        serverInstance.on('connection', (socket) => {
+          acceptedConnection = true;
+          socket.on('error', () => undefined);
+          socket.end();
+        });
 
-      await new Promise<void>((resolve, reject) => {
-        serverInstance.once('error', reject);
-        serverInstance.listen(socketFile, () => resolve());
-      });
+        await new Promise<void>((resolve, reject) => {
+          serverInstance.once('error', reject);
+          serverInstance.listen(socketFile, () => resolve());
+        });
 
-      client = deps.createSocketConnection(socketFile);
-      await waitForSocketConnect(client);
-      await waitForSocketClose(client);
+        client = deps.createSocketConnection(socketFile);
+        await waitForSocketConnect(client);
+        await waitForSocketClose(client);
 
-      assert(
-        acceptedConnection,
-        `socket server never accepted a client connection for ${socketFile}`,
-      );
+        assert(
+          acceptedConnection,
+          `socket server never accepted a client connection for ${socketFile}`,
+        );
 
-      await closeServer(server);
-      server = null;
-      await deps.rm(socketFile, { force: true });
-      return `socket ok: ${socketFile}`;
-    } finally {
-      client?.destroy();
-      if (server !== null) {
-        await closeServer(server).catch(() => undefined);
+        await closeServer(server);
+        server = null;
+        await deps.rm(socketFile, { force: true });
+        return `socket ok: ${socketFile}`;
+      } finally {
+        client?.destroy();
+        if (server !== null) {
+          await closeServer(server).catch(() => undefined);
+        }
+        await deps.rm(socketFile, { force: true }).catch(() => undefined);
       }
-      await deps.rm(socketFile, { force: true }).catch(() => undefined);
-    }
-  });
+    },
+  );
 }
 
 export async function runArtifactAtomicityCheck(
   overrides: Partial<DoctorDependencies> = {},
 ): Promise<string> {
-  return withDoctorSessionDirectory(overrides, async (sessionDirectory, deps) => {
-    const artifactsDirectory = await deps.ensureArtifactsDir(sessionDirectory);
-    assert(
-      artifactsDirectory.length > 0,
-      'artifact directory must be a non-empty path',
-    );
-
-    const suffix = nextDoctorResourceSuffix(deps);
-    const temporaryArtifactPath = artifactPath(
-      sessionDirectory,
-      `.tmp-doctor-${suffix}.txt`,
-    );
-    const finalArtifactPath = artifactPath(
-      sessionDirectory,
-      `doctor-${suffix}.txt`,
-    );
-    const expectedContent = 'doctor artifact atomicity check\n';
-
-    try {
-      await deps.writeFile(temporaryArtifactPath, expectedContent, { flag: 'wx' });
-      await deps.rename(temporaryArtifactPath, finalArtifactPath);
-      const content = await deps.readFile(finalArtifactPath, 'utf8');
-      assert.equal(
-        content,
-        expectedContent,
-        `artifact content mismatch for ${finalArtifactPath}`,
+  return withDoctorSessionDirectory(
+    overrides,
+    async (sessionDirectory, deps) => {
+      const artifactsDirectory =
+        await deps.ensureArtifactsDir(sessionDirectory);
+      assert(
+        artifactsDirectory.length > 0,
+        'artifact directory must be a non-empty path',
       );
-      return `atomic rename ok: ${artifactsDirectory}`;
-    } finally {
-      await deps.rm(temporaryArtifactPath, { force: true }).catch(() => undefined);
-      await deps.rm(finalArtifactPath, { force: true }).catch(() => undefined);
-    }
-  });
+
+      const suffix = nextDoctorResourceSuffix(deps);
+      const temporaryArtifactPath = artifactPath(
+        sessionDirectory,
+        `.tmp-doctor-${suffix}.txt`,
+      );
+      const finalArtifactPath = artifactPath(
+        sessionDirectory,
+        `doctor-${suffix}.txt`,
+      );
+      const expectedContent = 'doctor artifact atomicity check\n';
+
+      try {
+        await deps.writeFile(temporaryArtifactPath, expectedContent, {
+          flag: 'wx',
+        });
+        await deps.rename(temporaryArtifactPath, finalArtifactPath);
+        const content = await deps.readFile(finalArtifactPath, 'utf8');
+        assert.equal(
+          content,
+          expectedContent,
+          `artifact content mismatch for ${finalArtifactPath}`,
+        );
+        return `atomic rename ok: ${artifactsDirectory}`;
+      } finally {
+        await deps
+          .rm(temporaryArtifactPath, { force: true })
+          .catch(() => undefined);
+        await deps
+          .rm(finalArtifactPath, { force: true })
+          .catch(() => undefined);
+      }
+    },
+  );
 }
 
 export async function runEventLogWritabilityCheck(
   overrides: Partial<DoctorDependencies> = {},
 ): Promise<string> {
-  return withDoctorSessionDirectory(overrides, async (sessionDirectory, deps) => {
-    const eventLogFile = eventLogPath(sessionDirectory);
-    const firstLine = JSON.stringify({ type: 'doctor', pass: 1 });
-    const secondLine = JSON.stringify({ type: 'doctor', pass: 2 });
+  return withDoctorSessionDirectory(
+    overrides,
+    async (sessionDirectory, deps) => {
+      const eventLogFile = eventLogPath(sessionDirectory);
+      const firstLine = JSON.stringify({ type: 'doctor', pass: 1 });
+      const secondLine = JSON.stringify({ type: 'doctor', pass: 2 });
 
-    try {
-      await deps.writeFile(eventLogFile, `${firstLine}\n`, { flag: 'a' });
-      await deps.writeFile(eventLogFile, `${secondLine}\n`, { flag: 'a' });
-      const content = await deps.readFile(eventLogFile, 'utf8');
-      assert.equal(
-        content,
-        `${firstLine}\n${secondLine}\n`,
-        `event log append mismatch for ${eventLogFile}`,
-      );
-      return `append ok: ${eventLogFile}`;
-    } finally {
-      await deps.rm(eventLogFile, { force: true }).catch(() => undefined);
-    }
-  });
+      try {
+        await deps.writeFile(eventLogFile, `${firstLine}\n`, { flag: 'a' });
+        await deps.writeFile(eventLogFile, `${secondLine}\n`, { flag: 'a' });
+        const content = await deps.readFile(eventLogFile, 'utf8');
+        assert.equal(
+          content,
+          `${firstLine}\n${secondLine}\n`,
+          `event log append mismatch for ${eventLogFile}`,
+        );
+        return `append ok: ${eventLogFile}`;
+      } finally {
+        await deps.rm(eventLogFile, { force: true }).catch(() => undefined);
+      }
+    },
+  );
 }
 
 async function importPlaywrightModule(): Promise<PlaywrightModuleLike> {
@@ -656,16 +687,8 @@ export async function runDoctorChecks(): Promise<DoctorResult> {
     ['home-writable', runHomeWritableCheck, QUICK_CHECK_TIMEOUT_MS],
     ['pty-spawn', runPtySpawnCheck, QUICK_CHECK_TIMEOUT_MS],
     ['socket-viable', runSocketViabilityCheck, QUICK_CHECK_TIMEOUT_MS],
-    [
-      'artifact-atomicity',
-      runArtifactAtomicityCheck,
-      QUICK_CHECK_TIMEOUT_MS,
-    ],
-    [
-      'event-log-writable',
-      runEventLogWritabilityCheck,
-      QUICK_CHECK_TIMEOUT_MS,
-    ],
+    ['artifact-atomicity', runArtifactAtomicityCheck, QUICK_CHECK_TIMEOUT_MS],
+    ['event-log-writable', runEventLogWritabilityCheck, QUICK_CHECK_TIMEOUT_MS],
   ]);
   const renderer = await runCheckGroup([
     ['playwright_available', runPlaywrightAvailableCheck],

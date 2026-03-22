@@ -52,7 +52,10 @@ function createSessionRecord(options: {
   };
 }
 
-function createNodeError(code: string, message: string): Error & { code: string } {
+function createNodeError(
+  code: string,
+  message: string,
+): Error & { code: string } {
   const error = new Error(message) as Error & { code: string };
   error.code = code;
   return error;
@@ -133,7 +136,9 @@ function createMockDependencies(
     readdir: (path: string) => {
       const node = nodes.get(path);
       if (node === undefined) {
-        return Promise.reject(createNodeError('ENOENT', `Missing path: ${path}`));
+        return Promise.reject(
+          createNodeError('ENOENT', `Missing path: ${path}`),
+        );
       }
       if (node.kind !== 'dir') {
         return Promise.reject(
@@ -145,7 +150,9 @@ function createMockDependencies(
     stat: (path: string) => {
       const node = nodes.get(path);
       if (node === undefined) {
-        return Promise.reject(createNodeError('ENOENT', `Missing path: ${path}`));
+        return Promise.reject(
+          createNodeError('ENOENT', `Missing path: ${path}`),
+        );
       }
       return Promise.resolve({
         size: node.size,
@@ -158,7 +165,10 @@ function createMockDependencies(
     },
     readManifestIfExists: (path: string) => {
       const manifestReadSequence = manifestReadSequences.get(path);
-      if (manifestReadSequence !== undefined && manifestReadSequence.length > 0) {
+      if (
+        manifestReadSequence !== undefined &&
+        manifestReadSequence.length > 0
+      ) {
         return Promise.resolve(manifestReadSequence.shift() ?? null);
       }
 
@@ -207,9 +217,8 @@ describe('gc command helpers', () => {
 
   it('removes exited sessions and never deletes running sessions', async () => {
     const home = '/tmp/agent-terminal';
-    const { dependencies, removedPaths, bytesBySession } = createMockDependencies(
-      home,
-      {
+    const { dependencies, removedPaths, bytesBySession } =
+      createMockDependencies(home, {
         'exited-01': {
           manifest: createSessionRecord({
             sessionId: 'exited-01',
@@ -224,8 +233,7 @@ describe('gc command helpers', () => {
             createdAt: '2026-03-20T09:00:00.000Z',
           }),
         },
-      },
-    );
+      });
 
     const result = await gcSessions(
       home,
@@ -296,9 +304,8 @@ describe('gc command helpers', () => {
 
   it('reports removals in dry-run mode without deleting anything', async () => {
     const home = '/tmp/agent-terminal';
-    const { dependencies, removedPaths, bytesBySession } = createMockDependencies(
-      home,
-      {
+    const { dependencies, removedPaths, bytesBySession } =
+      createMockDependencies(home, {
         'exited-01': {
           manifest: createSessionRecord({
             sessionId: 'exited-01',
@@ -306,8 +313,7 @@ describe('gc command helpers', () => {
             createdAt: '2026-03-20T08:00:00.000Z',
           }),
         },
-      },
-    );
+      });
 
     const result = await gcSessions(
       home,
@@ -368,9 +374,8 @@ describe('gc command helpers', () => {
 
   it('handles rm failure gracefully and continues with other sessions', async () => {
     const home = '/tmp/agent-terminal';
-    const { dependencies, removedPaths, bytesBySession } = createMockDependencies(
-      home,
-      {
+    const { dependencies, removedPaths, bytesBySession } =
+      createMockDependencies(home, {
         'failed-01': {
           manifest: createSessionRecord({
             sessionId: 'failed-01',
@@ -385,8 +390,7 @@ describe('gc command helpers', () => {
             createdAt: '2026-03-20T09:00:00.000Z',
           }),
         },
-      },
-    );
+      });
     const removeError = createNodeError('EACCES', 'permission denied');
     const originalRm = dependencies.rm;
     dependencies.rm = (path, options) => {
