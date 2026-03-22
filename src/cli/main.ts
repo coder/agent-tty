@@ -204,34 +204,46 @@ async function main(): Promise<void> {
 
   // --- Session control ---
   program
-    .command('type <session-id> <text>')
+    .command('type <session-id> [text]')
     .description('Type text into a session')
+    .option('--file <path>', 'Read text to type from a file')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
         'type',
-        async (sessionId: string, text: string, options: { json: boolean }) => {
+        async (
+          sessionId: string,
+          text: string | undefined,
+          options: { file?: string; json: boolean },
+        ) => {
           await runTypeCommand({
             json: options.json,
             sessionId,
             text,
+            ...(options.file !== undefined ? { file: options.file } : {}),
           });
         },
       ),
     );
 
   program
-    .command('paste <session-id> <text>')
+    .command('paste <session-id> [text]')
     .description('Paste text into a session')
+    .option('--file <path>', 'Read text to paste from a file')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
         'paste',
-        async (sessionId: string, text: string, options: { json: boolean }) => {
+        async (
+          sessionId: string,
+          text: string | undefined,
+          options: { file?: string; json: boolean },
+        ) => {
           await runPasteCommand({
             json: options.json,
             sessionId,
             text,
+            ...(options.file !== undefined ? { file: options.file } : {}),
           });
         },
       ),

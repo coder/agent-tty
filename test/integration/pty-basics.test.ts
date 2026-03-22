@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -51,6 +51,39 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
       );
       expect(inputTextEvents.length).toBeGreaterThan(0);
       expect(inputTextEvents[0]?.payload.data).toBe('hello');
+    } finally {
+      destroySession(testHome, sessionId);
+    }
+  });
+
+  it('type reads input from --file and records input_text', async () => {
+    let sessionId = '';
+
+    try {
+      sessionId = createSession(testHome);
+      await sleep(500);
+
+      const inputPath = join(testHome, 'type-input.txt');
+      await writeFile(inputPath, 'hello-from-file');
+
+      const typeResult = runCli(['type', sessionId, '--file', inputPath, '--json'], {
+        AGENT_TERMINAL_HOME: testHome,
+      });
+      expect(typeResult.status).toBe(0);
+      expect(typeResult.stderr).toBe('');
+      const envelope = JSON.parse(typeResult.stdout) as SuccessEnvelope<
+        Record<string, never>
+      >;
+      expect(envelope.ok).toBe(true);
+
+      await sleep(300);
+
+      const events = await readEvents(testHome, sessionId);
+      const inputTextEvents = events.filter(
+        (event) => event.type === 'input_text',
+      );
+      expect(inputTextEvents.length).toBeGreaterThan(0);
+      expect(inputTextEvents[0]?.payload.data).toBe('hello-from-file');
     } finally {
       destroySession(testHome, sessionId);
     }
@@ -119,6 +152,47 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
       expect(data).toContain('\u001b[200~');
       expect(data).toContain('test-text');
       expect(data).toContain('\u001b[201~');
+    } finally {
+      destroySession(testHome, sessionId);
+    }
+  });
+
+  it('paste reads input from --file and records input_paste with bracketed paste markers', async () => {
+    let sessionId = '';
+
+    try {
+      sessionId = createSession(testHome);
+      await sleep(500);
+
+      const inputPath = join(testHome, 'paste-input.txt');
+      await writeFile(inputPath, 'paste-from-file');
+
+      const pasteResult = runCli(
+        ['paste', sessionId, '--file', inputPath, '--json'],
+        {
+          AGENT_TERMINAL_HOME: testHome,
+        },
+      );
+      expect(pasteResult.status).toBe(0);
+      expect(pasteResult.stderr).toBe('');
+      const envelope = JSON.parse(pasteResult.stdout) as SuccessEnvelope<
+        Record<string, never>
+      >;
+      expect(envelope.ok).toBe(true);
+
+      await sleep(300);
+
+      const events = await readEvents(testHome, sessionId);
+      const inputPasteEvents = events.filter(
+        (event) => event.type === 'input_paste',
+      );
+      expect(inputPasteEvents.length).toBeGreaterThan(0);
+
+      const data = inputPasteEvents[0]?.payload.data;
+      expect(typeof data).toBe('string');
+      expect(data).toContain('[200~');
+      expect(data).toContain('paste-from-file');
+      expect(data).toContain('[201~');
     } finally {
       destroySession(testHome, sessionId);
     }

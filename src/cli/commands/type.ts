@@ -8,6 +8,7 @@ import {
   sessionDir,
   socketPath,
 } from '../../storage/sessionPaths.js';
+import { resolveCommandInputText } from './inputSource.js';
 
 export interface TypeResult {
   [key: string]: never;
@@ -16,15 +17,22 @@ export interface TypeResult {
 interface CommandOptions {
   json: boolean;
   sessionId: string;
-  text: string;
+  text: string | undefined;
+  file?: string;
 }
 
 export async function runTypeCommand(options: CommandOptions): Promise<void> {
-  if (options.text.length === 0) {
+  const text = await resolveCommandInputText({
+    commandName: 'type',
+    text: options.text,
+    file: options.file,
+  });
+
+  if (text.length === 0) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {
       message: 'Text must not be empty.',
       details: {
-        text: options.text,
+        text,
       },
     });
   }
@@ -55,7 +63,7 @@ export async function runTypeCommand(options: CommandOptions): Promise<void> {
   }
 
   await sendRpc(socketPath(sessionDirectory), 'type', {
-    text: options.text,
+    text,
   });
 
   const result: TypeResult = {};

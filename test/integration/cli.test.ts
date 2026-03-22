@@ -1,15 +1,20 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { runCli, type SuccessEnvelope } from '../helpers.js';
+import type { CommandErrorEnvelope } from '../../src/protocol/envelope.js';
 
 let testHome = '';
 
 function testEnv(): Record<string, string> {
   return { AGENT_TERMINAL_HOME: testHome };
+}
+
+function parseErrorEnvelope(output: string): CommandErrorEnvelope {
+  return JSON.parse(output) as CommandErrorEnvelope;
 }
 
 describe('CLI integration', () => {
@@ -34,6 +39,105 @@ describe('CLI integration', () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.command).toBe('version');
     expect(parsed.result.cliVersion).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it('rejects type input when positional text and --file are both provided', () => {
+    const inputPath = join(testHome, 'type-input.txt');
+    writeFileSync(inputPath, 'from-file');
+
+    const result = runCli(
+      ['type', 'session-01', 'inline-text', '--file', inputPath, '--json'],
+      testEnv(),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe('');
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.message).toContain('mutually exclusive');
+  });
+
+  it('rejects type input when neither positional text nor --file is provided', () => {
+    const result = runCli(['type', 'session-01', '--json'], testEnv());
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe('');
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.message).toContain(
+      'Provide either a positional <text> argument or --file <path>.',
+    );
+  });
+
+  it('rejects a missing type input file', () => {
+    const missingPath = join(testHome, 'missing-type.txt');
+
+    const result = runCli(
+      ['type', 'session-01', '--file', missingPath, '--json'],
+      testEnv(),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe('');
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.message).toContain('was not found');
+  });
+
+  it('rejects paste input when positional text and --file are both provided', () => {
+    const inputPath = join(testHome, 'paste-input.txt');
+    writeFileSync(inputPath, 'from-file');
+
+    const result = runCli(
+      ['paste', 'session-01', 'inline-text', '--file', inputPath, '--json'],
+      testEnv(),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe('');
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.message).toContain('mutually exclusive');
+  });
+
+  it('rejects paste input when neither positional text nor --file is provided', () => {
+    const result = runCli(['paste', 'session-01', '--json'], testEnv());
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe('');
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.message).toContain(
+      'Provide either a positional <text> argument or --file <path>.',
+    );
+  });
+
+  it('rejects an empty paste input file', () => {
+    const inputPath = join(testHome, 'empty-paste.txt');
+    writeFileSync(inputPath, '');
+
+    const result = runCli(
+      ['paste', 'session-01', '--file', inputPath, '--json'],
+      testEnv(),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe('');
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.message).toContain('must not be empty');
   });
 
   it('prints a JSON envelope for doctor including the new health checks', () => {
