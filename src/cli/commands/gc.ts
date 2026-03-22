@@ -142,9 +142,9 @@ function wasReconciledFromStaleHost(
   manifestBefore: SessionRecord,
   manifestAfter: SessionRecord,
 ): boolean {
-  return (
-    manifestBefore.status !== 'exited' && manifestAfter.status === 'exited'
-  );
+  const isTerminal = (s: string): boolean =>
+    s === 'exited' || s === 'failed' || s === 'destroyed';
+  return !isTerminal(manifestBefore.status) && isTerminal(manifestAfter.status);
 }
 
 function shouldSkipForAge(
@@ -335,7 +335,11 @@ export async function gcSessions(
     }
 
     const sessionId = manifestAfter.sessionId;
-    if (manifestAfter.status !== 'exited') {
+    const isTerminalAfter =
+      manifestAfter.status === 'exited' ||
+      manifestAfter.status === 'failed' ||
+      manifestAfter.status === 'destroyed';
+    if (!isTerminalAfter) {
       result.skippedSessions.push({
         sessionId,
         reason: 'session host is still alive',
@@ -380,7 +384,11 @@ export async function gcSessions(
         continue;
       }
 
-      if (finalManifest !== null && finalManifest.status !== 'exited') {
+      const isFinalTerminal =
+        finalManifest?.status === 'exited' ||
+        finalManifest?.status === 'failed' ||
+        finalManifest?.status === 'destroyed';
+      if (finalManifest !== null && !isFinalTerminal) {
         result.skippedSessions.push({
           sessionId,
           reason: 'session restarted between check and delete',

@@ -224,7 +224,19 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  if (!options.waitForExit && manifest.status !== 'running') {
+  if (manifest.status === 'destroyed') {
+    throw makeCliError(ERROR_CODES.SESSION_ALREADY_DESTROYED, {
+      message: `Session "${options.sessionId}" is already destroyed.`,
+      details: {
+        sessionId: options.sessionId,
+        status: manifest.status,
+      },
+    });
+  }
+
+  const manifestStatus = String(manifest.status);
+
+  if (!options.waitForExit && manifestStatus !== 'running') {
     throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
       message: `Session "${options.sessionId}" is not running.`,
       details: {
@@ -234,7 +246,12 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  if (options.waitForExit && manifest.status === 'exited') {
+  if (
+    options.waitForExit &&
+    (manifestStatus === 'exited' ||
+      manifestStatus === 'failed' ||
+      manifestStatus === 'destroyed')
+  ) {
     const result: WaitResult = {
       timedOut: false,
       ...(manifest.exitCode === null ? {} : { exitCode: manifest.exitCode }),

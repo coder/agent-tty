@@ -25,7 +25,7 @@ interface CommandOptions {
 }
 
 function formatSessionLines(session: SessionRecord): string[] {
-  return [
+  const lines = [
     `Session ID: ${session.sessionId}`,
     `Status: ${session.status}`,
     `Command: ${session.command.join(' ')}`,
@@ -38,6 +38,10 @@ function formatSessionLines(session: SessionRecord): string[] {
     `Exit Code: ${String(session.exitCode ?? '-')}`,
     `Exit Signal: ${session.exitSignal ?? '-'}`,
   ];
+  if (session.failureReason !== undefined) {
+    lines.push(`Failure Reason: ${session.failureReason}`);
+  }
+  return lines;
 }
 
 export async function runInspectCommand(
@@ -58,7 +62,11 @@ export async function runInspectCommand(
     });
   }
 
-  if (session.status !== 'exited') {
+  const isOffline =
+    session.status === 'exited' ||
+    session.status === 'failed' ||
+    session.status === 'destroyed';
+  if (!isOffline) {
     try {
       const rawResult: unknown = await sendRpc(
         socketPath(sessionDirectory),
