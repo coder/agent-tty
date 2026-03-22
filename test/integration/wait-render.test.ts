@@ -5,7 +5,10 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { sendRpc } from '../../src/host/rpcClient.js';
-import type { WaitForRenderResult } from '../../src/protocol/messages.js';
+import type {
+  SnapshotResult,
+  WaitForRenderResult,
+} from '../../src/protocol/messages.js';
 import { sessionDir, socketPath } from '../../src/storage/sessionPaths.js';
 import {
   cleanupHome,
@@ -77,6 +80,26 @@ async function waitForOutputMarker(
   throw new Error(`timed out waiting for output marker ${marker}`);
 }
 
+type StructuredSnapshot = Extract<SnapshotResult, { format: 'structured' }>;
+
+async function waitForReadySnapshot(
+  rpcSocketPath: string,
+): Promise<StructuredSnapshot> {
+  await sendRpc(
+    rpcSocketPath,
+    'waitForRender',
+    { text: 'Ready', timeoutMs: 15_000 },
+    20_000,
+  );
+
+  return (await sendRpc(
+    rpcSocketPath,
+    'snapshot',
+    { format: 'structured' },
+    20_000,
+  )) as StructuredSnapshot;
+}
+
 describe('wait render integration', { timeout: 120_000 }, () => {
   let testHome = '';
   let sessionId = '';
@@ -125,6 +148,48 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     expect(result.timedOut).toBe(false);
     expect(result.matchedText).toBe('3 items');
     expect(result.capturedAtSeq).toBeGreaterThanOrEqual(0);
+  });
+
+  it('matches cursor position via waitForRender RPC', async () => {
+    const snapshot = await waitForReadySnapshot(rpcSocketPath);
+
+    const result = (await sendRpc(
+      rpcSocketPath,
+      'waitForRender',
+      {
+        cursorRow: snapshot.cursorRow,
+        cursorCol: snapshot.cursorCol,
+        timeoutMs: 5_000,
+      },
+      10_000,
+    )) as WaitForRenderResult;
+
+    expect(result.matched).toBe(true);
+    expect(result.timedOut).toBe(false);
+    expect(result.cursorRow).toBe(snapshot.cursorRow);
+    expect(result.cursorCol).toBe(snapshot.cursorCol);
+    expect(result.capturedAtSeq).toBeGreaterThanOrEqual(snapshot.capturedAtSeq);
+  });
+
+  it('matches text and cursor row together via waitForRender RPC', async () => {
+    const snapshot = await waitForReadySnapshot(rpcSocketPath);
+
+    const result = (await sendRpc(
+      rpcSocketPath,
+      'waitForRender',
+      {
+        text: 'Ready',
+        cursorRow: snapshot.cursorRow,
+        timeoutMs: 5_000,
+      },
+      10_000,
+    )) as WaitForRenderResult;
+
+    expect(result.matched).toBe(true);
+    expect(result.timedOut).toBe(false);
+    expect(result.matchedText).toBe('Ready');
+    expect(result.cursorRow).toBe(snapshot.cursorRow);
+    expect(result.cursorCol).toBe(snapshot.cursorCol);
   });
 
   it('times out when text is not found', async () => {
@@ -259,6 +324,65 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     expect(envelope.result.timedOut).toBe(false);
     expect(envelope.result.matchedText).toBeUndefined();
     expect(envelope.result.capturedAtSeq).toBeGreaterThanOrEqual(0);
+  });
+
+  it('matches cursor position via CLI --cursor-row/--cursor-col', async () => {
+    const snapshot = await waitForReadySnapshot(rpcSocketPath);
+
+    const result = runCli(
+      [
+        'wait',
+        sessionId,
+        '--cursor-row',
+        String(snapshot.cursorRow),
+        '--cursor-col',
+        String(snapshot.cursorCol),
+        '--timeout',
+        '5000',
+        '--json',
+      ],
+      { AGENT_TERMINAL_HOME: testHome },
+      10_000,
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    const envelope = JSON.parse(
+      result.stdout,
+    ) as SuccessEnvelope<WaitForRenderResult>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.matched).toBe(true);
+    expect(envelope.result.timedOut).toBe(false);
+    expect(envelope.result.cursorRow).toBe(snapshot.cursorRow);
+    expect(envelope.result.cursorCol).toBe(snapshot.cursorCol);
+  });
+
+  it('rejects non-integer CLI --cursor-row values', () => {
+    const result = runCli(
+      ['wait', sessionId, '--cursor-row', '1.5', '--json'],
+      { AGENT_TERMINAL_HOME: testHome },
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toBe('');
+    const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.message).toContain('--cursor-row');
+    expect(envelope.error.message).toContain('non-negative integer');
+  });
+
+  it('rejects negative CLI --cursor-col values', () => {
+    const result = runCli(
+      ['wait', sessionId, '--cursor-col', '-1', '--json'],
+      { AGENT_TERMINAL_HOME: testHome },
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toBe('');
+    const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.message).toContain('--cursor-col');
+    expect(envelope.error.message).toContain('non-negative integer');
   });
 
   it('rejects mixing --exit with --text', () => {

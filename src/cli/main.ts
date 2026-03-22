@@ -28,6 +28,10 @@ function parseIntegerOption(value: string): number {
   return Number.parseInt(value, 10);
 }
 
+function parseNumberOption(value: string): number {
+  return Number(value);
+}
+
 function wrapAction<Args extends unknown[]>(
   commandName: string,
   fn: (...args: Args) => Promise<void>,
@@ -431,6 +435,16 @@ async function main(): Promise<void> {
       'Wait for screen to be stable for given ms',
       parseIntegerOption,
     )
+    .option(
+      '--cursor-row <n>',
+      'Wait for cursor row in rendered output (0-based)',
+      parseNumberOption,
+    )
+    .option(
+      '--cursor-col <n>',
+      'Wait for cursor column in rendered output (0-based)',
+      parseNumberOption,
+    )
     .action(
       wrapAction(
         'wait',
@@ -444,6 +458,8 @@ async function main(): Promise<void> {
             text?: string;
             regex?: string;
             screenStableMs?: number;
+            cursorRow?: number;
+            cursorCol?: number;
           },
         ) => {
           await runWaitCommand({
@@ -455,6 +471,8 @@ async function main(): Promise<void> {
             text: options.text,
             regex: options.regex,
             screenStableMs: options.screenStableMs,
+            cursorRow: options.cursorRow,
+            cursorCol: options.cursorCol,
           });
         },
       ),

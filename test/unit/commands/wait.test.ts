@@ -69,6 +69,8 @@ function createOptions(
     text: undefined,
     regex: undefined,
     screenStableMs: undefined,
+    cursorRow: undefined,
+    cursorCol: undefined,
     ...overrides,
   };
 }
@@ -150,6 +152,46 @@ describe('wait command', () => {
     expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
 
+  it('rejects negative --cursor-row values', async () => {
+    await expect(
+      runWaitCommand(createOptions({ cursorRow: -1 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      details: { cursorRow: -1 },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-integer --cursor-row values', async () => {
+    await expect(
+      runWaitCommand(createOptions({ cursorRow: 1.5 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      details: { cursorRow: 1.5 },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects negative --cursor-col values', async () => {
+    await expect(
+      runWaitCommand(createOptions({ cursorCol: -1 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      details: { cursorCol: -1 },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-integer --cursor-col values', async () => {
+    await expect(
+      runWaitCommand(createOptions({ cursorCol: 1.5 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      details: { cursorCol: 1.5 },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
   it('accepts --timeout 0 for infinite render waits', async () => {
     const result = {
       matched: true,
@@ -168,6 +210,8 @@ describe('wait command', () => {
         text: 'hello',
         regex: undefined,
         screenStableMs: undefined,
+        cursorRow: undefined,
+        cursorCol: undefined,
         timeoutMs: undefined,
       },
       0,
@@ -264,6 +308,8 @@ describe('wait command', () => {
         text: 'hello',
         regex: undefined,
         screenStableMs: undefined,
+        cursorRow: undefined,
+        cursorCol: undefined,
         timeoutMs: 600_000,
       },
       605_000,
@@ -294,6 +340,43 @@ describe('wait command', () => {
         text: undefined,
         regex: '\\d+',
         screenStableMs: undefined,
+        cursorRow: undefined,
+        cursorCol: undefined,
+        timeoutMs: 600_000,
+      },
+      605_000,
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'wait',
+        result,
+      }),
+    );
+  });
+
+  it('routes cursor waits to the render wait RPC', async () => {
+    const result = {
+      matched: true,
+      timedOut: false,
+      cursorRow: 3,
+      cursorCol: 4,
+      capturedAtSeq: 11,
+    };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runWaitCommand(
+      createOptions({ text: 'hello', cursorRow: 3, cursorCol: 4 }),
+    );
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'waitForRender',
+      {
+        text: 'hello',
+        regex: undefined,
+        screenStableMs: undefined,
+        cursorRow: 3,
+        cursorCol: 4,
         timeoutMs: 600_000,
       },
       605_000,

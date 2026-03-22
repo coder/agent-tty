@@ -299,7 +299,7 @@ describe('RPC message schemas', () => {
     ).toBe(false);
   });
 
-  it('accepts waitForRender params for text, regex, and stable-screen waits', () => {
+  it('accepts waitForRender params for text, regex, stable-screen, and cursor waits', () => {
     expect(
       WaitForRenderParamsSchema.safeParse({ text: 'Ready', timeoutMs: 1000 })
         .success,
@@ -309,6 +309,9 @@ describe('RPC message schemas', () => {
     ).toBe(true);
     expect(
       WaitForRenderParamsSchema.safeParse({ screenStableMs: 250 }).success,
+    ).toBe(true);
+    expect(
+      WaitForRenderParamsSchema.safeParse({ cursorRow: 0, cursorCol: 5 }).success,
     ).toBe(true);
   });
 
@@ -323,6 +326,12 @@ describe('RPC message schemas', () => {
     expect(
       WaitForRenderParamsSchema.safeParse({ screenStableMs: 0 }).success,
     ).toBe(false);
+    expect(
+      WaitForRenderParamsSchema.safeParse({ cursorRow: -1 }).success,
+    ).toBe(false);
+    expect(
+      WaitForRenderParamsSchema.safeParse({ cursorCol: -1 }).success,
+    ).toBe(false);
   });
 
   it('accepts waitForRender results with replay metadata', () => {
@@ -331,6 +340,8 @@ describe('RPC message schemas', () => {
         matched: true,
         timedOut: false,
         matchedText: 'Ready',
+        cursorRow: 3,
+        cursorCol: 4,
         capturedAtSeq: 7,
       }).success,
     ).toBe(true);

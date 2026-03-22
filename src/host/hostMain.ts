@@ -723,14 +723,16 @@ export async function runHost(sessionId: string): Promise<void> {
       });
     },
     waitForRender: async (params: unknown) => {
-      const { text, regex, screenStableMs, timeoutMs } =
+      const { text, regex, screenStableMs, cursorRow, cursorCol, timeoutMs } =
         params as WaitForRenderParams;
 
       invariant(
         text !== undefined ||
           regex !== undefined ||
-          screenStableMs !== undefined,
-        'waitForRender requires at least one of text, regex, or screenStableMs',
+          screenStableMs !== undefined ||
+          cursorRow !== undefined ||
+          cursorCol !== undefined,
+        'waitForRender requires at least one of text, regex, screenStableMs, cursorRow, or cursorCol',
       );
       invariant(
         !(text !== undefined && regex !== undefined),
@@ -740,6 +742,18 @@ export async function runHost(sessionId: string): Promise<void> {
         invariant(
           Number.isInteger(screenStableMs) && screenStableMs > 0,
           'screenStableMs must be a positive integer',
+        );
+      }
+      if (cursorRow !== undefined) {
+        invariant(
+          Number.isInteger(cursorRow) && cursorRow >= 0,
+          'cursorRow must be a non-negative integer',
+        );
+      }
+      if (cursorCol !== undefined) {
+        invariant(
+          Number.isInteger(cursorCol) && cursorCol >= 0,
+          'cursorCol must be a non-negative integer',
         );
       }
       if (timeoutMs !== undefined) {
@@ -795,8 +809,11 @@ export async function runHost(sessionId: string): Promise<void> {
                 profile,
                 replayInput,
               );
-              const visibleText = await backend.getVisibleText();
-              const capturedAtSeq = replayInput?.targetSeq ?? 0;
+              const snapshot = await backend.snapshot();
+              const visibleText = snapshot.visibleLines
+                .map((line) => line.text)
+                .join('\n');
+              const capturedAtSeq = snapshot.capturedAtSeq;
               latestCapturedAtSeq = capturedAtSeq;
               consecutiveFailures = 0;
 
@@ -831,12 +848,18 @@ export async function runHost(sessionId: string): Promise<void> {
                 stableMatched = now - lastTextChangeAt >= screenStableMs;
               }
 
-              if (textMatched && stableMatched) {
+              const cursorMatched =
+                (cursorRow === undefined || snapshot.cursorRow === cursorRow) &&
+                (cursorCol === undefined || snapshot.cursorCol === cursorCol);
+
+              if (textMatched && stableMatched && cursorMatched) {
                 clearInterval(checkInterval);
                 resolve({
                   matched: true,
                   timedOut: false,
                   ...(matchedText === undefined ? {} : { matchedText }),
+                  cursorRow: snapshot.cursorRow,
+                  cursorCol: snapshot.cursorCol,
                   capturedAtSeq,
                 });
               }

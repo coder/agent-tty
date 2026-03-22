@@ -263,6 +263,8 @@ export const WaitForRenderParamsSchema = z
     text: TextMatchSchema.optional(),
     regex: RegexPatternSchema.optional(),
     screenStableMs: PositiveIntSchema.optional(),
+    cursorRow: NonNegativeIntSchema.optional(),
+    cursorCol: NonNegativeIntSchema.optional(),
     timeoutMs: PositiveIntSchema.optional(),
   })
   .strict()
@@ -270,12 +272,20 @@ export const WaitForRenderParamsSchema = z
     const hasText = value.text !== undefined;
     const hasRegex = value.regex !== undefined;
     const hasScreenStableMs = value.screenStableMs !== undefined;
+    const hasCursorRow = value.cursorRow !== undefined;
+    const hasCursorCol = value.cursorCol !== undefined;
 
-    if (!hasText && !hasRegex && !hasScreenStableMs) {
+    if (
+      !hasText &&
+      !hasRegex &&
+      !hasScreenStableMs &&
+      !hasCursorRow &&
+      !hasCursorCol
+    ) {
       ctx.addIssue({
         code: 'custom',
         message:
-          'At least one of text, regex, or screenStableMs must be provided.',
+          'At least one of text, regex, screenStableMs, cursorRow, or cursorCol must be provided.',
       });
     }
 
@@ -302,6 +312,8 @@ export const WaitForRenderResultSchema = z
     matched: z.boolean(),
     timedOut: z.boolean(),
     matchedText: z.string().optional(),
+    cursorRow: NonNegativeIntSchema.optional(),
+    cursorCol: NonNegativeIntSchema.optional(),
     capturedAtSeq: NonNegativeIntSchema,
   })
   .strict();

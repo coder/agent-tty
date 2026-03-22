@@ -27,6 +27,8 @@ interface CommandOptions {
   text: string | undefined;
   regex: string | undefined;
   screenStableMs: number | undefined;
+  cursorRow: number | undefined;
+  cursorCol: number | undefined;
 }
 
 const DEFAULT_WAIT_TIMEOUT_MS = 600_000;
@@ -35,11 +37,17 @@ function isPositiveInteger(value: number | undefined): value is number {
   return value !== undefined && Number.isInteger(value) && value > 0;
 }
 
+function isNonNegativeInteger(value: number | undefined): value is number {
+  return value !== undefined && Number.isInteger(value) && value >= 0;
+}
+
 function isRenderWaitMode(options: CommandOptions): boolean {
   return (
     options.text !== undefined ||
     options.regex !== undefined ||
-    options.screenStableMs !== undefined
+    options.screenStableMs !== undefined ||
+    options.cursorRow !== undefined ||
+    options.cursorCol !== undefined
   );
 }
 
@@ -65,6 +73,11 @@ function renderWaitLines(result: WaitForRenderResult): string[] {
     lines.push(`Matched: ${result.matchedText}`);
   } else {
     lines.push('Wait condition met.');
+  }
+  if (result.cursorRow !== undefined && result.cursorCol !== undefined) {
+    lines.push(
+      `Cursor: row ${String(result.cursorRow)}, col ${String(result.cursorCol)}`,
+    );
   }
   lines.push(`capturedAtSeq: ${String(result.capturedAtSeq)}`);
   return lines;
@@ -92,7 +105,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
   if (renderMode && legacyMode) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {
       message:
-        'Cannot mix legacy wait flags (--exit, --idle-ms) with render wait flags (--text, --regex, --screen-stable-ms).',
+        'Cannot mix legacy wait flags (--exit, --idle-ms) with render wait flags (--text, --regex, --screen-stable-ms, --cursor-row, --cursor-col).',
     });
   }
 
@@ -114,6 +127,26 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     }
 
     if (
+      options.cursorRow !== undefined &&
+      !isNonNegativeInteger(options.cursorRow)
+    ) {
+      throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+        message: '--cursor-row must be a non-negative integer.',
+        details: { cursorRow: options.cursorRow },
+      });
+    }
+
+    if (
+      options.cursorCol !== undefined &&
+      !isNonNegativeInteger(options.cursorCol)
+    ) {
+      throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+        message: '--cursor-col must be a non-negative integer.',
+        details: { cursorCol: options.cursorCol },
+      });
+    }
+
+    if (
       options.timeout !== undefined &&
       options.timeout !== 0 &&
       !isPositiveInteger(options.timeout)
@@ -131,6 +164,8 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       text: options.text,
       regex: options.regex,
       screenStableMs: options.screenStableMs,
+      cursorRow: options.cursorRow,
+      cursorCol: options.cursorCol,
       timeoutMs: effectiveTimeout === 0 ? undefined : effectiveTimeout,
     };
     const clientTimeout = effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
