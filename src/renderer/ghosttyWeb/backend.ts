@@ -16,7 +16,11 @@ import {
 } from 'playwright';
 
 import { invariant, assertString, unreachable } from '../../util/assert.js';
-import type { RendererBackend } from '../backend.js';
+import type {
+  AcceleratedTimingOptions,
+  VideoCapableRendererBackend,
+  VideoRecordingOptions,
+} from '../backend.js';
 import type {
   RenderProfileConfig,
   ReplayInput,
@@ -25,24 +29,6 @@ import type {
   SemanticSnapshot,
   VisibleLine,
 } from '../types.js';
-
-/** Options for enabling Playwright video recording during browser context creation. */
-export interface VideoRecordingOptions {
-  /** Temporary directory for Playwright to write the raw video file. Must be absolute. */
-  outputDir: string;
-  /** Video capture dimensions. Defaults to viewport size if omitted. */
-  size?: { width: number; height: number };
-}
-
-/** Timing options for accelerated replay. */
-export interface AcceleratedTimingOptions {
-  /** Maximum inter-event delay in ms (caps long idle gaps). Default: 100 */
-  maxDelayMs?: number;
-  /** Minimum frame hold in ms to ensure at least one paint. Default: 50 */
-  minFrameHoldMs?: number;
-  /** Hold time for the final frame in ms. Default: 1000 */
-  finalHoldMs?: number;
-}
 
 interface GhosttyHarnessVisibleLine {
   row: number;
@@ -111,9 +97,6 @@ const HTML_CONTENT_TYPE = 'text/html; charset=utf-8';
 const WASM_CONTENT_TYPE = 'application/wasm';
 
 const MAX_REPLAY_BATCH_SIZE = 1000;
-const DEFAULT_ACCELERATED_FINAL_HOLD_MS = 1_000;
-const DEFAULT_ACCELERATED_MAX_DELAY_MS = 100;
-const DEFAULT_ACCELERATED_MIN_FRAME_HOLD_MS = 50;
 const RAF_TIMEOUT_MS = 5_000;
 
 const EMBEDDED_HARNESS_HTML = `<!doctype html>
@@ -669,7 +652,7 @@ function validateHarnessSnapshot(snapshot: unknown): GhosttyHarnessSnapshot {
   };
 }
 
-export class GhosttyWebBackend implements RendererBackend {
+export class GhosttyWebBackend implements VideoCapableRendererBackend {
   public isBooted = false;
 
   private readonly profile: RenderProfileConfig;
@@ -730,27 +713,20 @@ export class GhosttyWebBackend implements RendererBackend {
               'videoOptions.outputDir must be an absolute path',
             );
 
-            const size = videoOptions.size;
-            if (size !== undefined) {
-              assertPositiveInteger(
-                size.width,
-                'videoOptions.size.width must be a positive integer',
-              );
-              assertPositiveInteger(
-                size.height,
-                'videoOptions.size.height must be a positive integer',
-              );
-              return Object.freeze({
-                outputDir: videoOptions.outputDir,
-                size: Object.freeze({
-                  width: size.width,
-                  height: size.height,
-                }),
-              });
-            }
-
+            assertPositiveInteger(
+              videoOptions.size.width,
+              'videoOptions.size.width must be a positive integer',
+            );
+            assertPositiveInteger(
+              videoOptions.size.height,
+              'videoOptions.size.height must be a positive integer',
+            );
             return Object.freeze({
               outputDir: videoOptions.outputDir,
+              size: Object.freeze({
+                width: videoOptions.size.width,
+                height: videoOptions.size.height,
+              }),
             });
           })();
 
@@ -911,7 +887,7 @@ export class GhosttyWebBackend implements RendererBackend {
 
   public async replayWithTiming(
     input: ReplayInput,
-    options?: AcceleratedTimingOptions,
+    options: AcceleratedTimingOptions,
   ): Promise<ReplayState> {
     const page = this.requireOperationalPage('replayWithTiming()');
 
@@ -939,22 +915,20 @@ export class GhosttyWebBackend implements RendererBackend {
         String(input.targetSeq),
     );
 
-    const maxDelayMs = options?.maxDelayMs ?? DEFAULT_ACCELERATED_MAX_DELAY_MS;
-    const minFrameHoldMs =
-      options?.minFrameHoldMs ?? DEFAULT_ACCELERATED_MIN_FRAME_HOLD_MS;
-    const finalHoldMs =
-      options?.finalHoldMs ?? DEFAULT_ACCELERATED_FINAL_HOLD_MS;
+    const maxGapMs = options.maxGapMs;
+    const minFrameHoldMs = options.minFrameHoldMs;
+    const finalFrameHoldMs = options.finalFrameHoldMs;
     assertNonNegativeInteger(
-      maxDelayMs,
-      'replayWithTiming maxDelayMs must be a non-negative integer',
+      maxGapMs,
+      'replayWithTiming maxGapMs must be a non-negative integer',
     );
     assertNonNegativeInteger(
       minFrameHoldMs,
       'replayWithTiming minFrameHoldMs must be a non-negative integer',
     );
     assertNonNegativeInteger(
-      finalHoldMs,
-      'replayWithTiming finalHoldMs must be a non-negative integer',
+      finalFrameHoldMs,
+      'replayWithTiming finalFrameHoldMs must be a non-negative integer',
     );
 
     const waitForDelay = async (delayMs: number): Promise<void> => {
@@ -1047,7 +1021,7 @@ export class GhosttyWebBackend implements RendererBackend {
           interEventDelayMs >= 0,
           'replay event timestamps must be ordered non-decreasingly',
         );
-        await waitForDelay(Math.min(interEventDelayMs, maxDelayMs));
+        await waitForDelay(Math.min(interEventDelayMs, maxGapMs));
       }
       previousProcessedEventTimestampMs = eventTimestampMs;
 
@@ -1099,7 +1073,7 @@ export class GhosttyWebBackend implements RendererBackend {
     );
 
     if (highestProcessedSeq !== this.lastAppliedSeq) {
-      await waitForDelay(finalHoldMs);
+      await waitForDelay(finalFrameHoldMs);
     }
 
     if (highestProcessedSeq < 0) {
@@ -1308,9 +1282,7 @@ export class GhosttyWebBackend implements RendererBackend {
           ? {
               recordVideo: {
                 dir: this.videoOptions.outputDir,
-                ...(this.videoOptions.size
-                  ? { size: this.videoOptions.size }
-                  : {}),
+                size: this.videoOptions.size,
               },
             }
           : {}),

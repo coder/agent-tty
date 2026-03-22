@@ -1,16 +1,25 @@
-import assert from 'node:assert';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { chmod, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
 import { buildReplayInput } from '../host/replay.js';
 import type { EventRecord, SessionRecord } from '../protocol/schemas.js';
+import type {
+  AcceleratedTimingOptions,
+  VideoCapableRendererBackend,
+  VideoRecordingOptions,
+} from '../renderer/backend.js';
+import { GhosttyWebBackend } from '../renderer/ghosttyWeb/backend.js';
 import { resolveProfile } from '../renderer/profiles.js';
-import {
-  GhosttyWebBackend,
-  type AcceleratedTimingOptions,
-  type VideoRecordingOptions,
-} from '../renderer/ghosttyWeb/backend.js';
+import type { RenderProfileConfig, ReplayState } from '../renderer/types.js';
+import { invariant } from '../util/assert.js';
+
+const REPLAY_TIMEOUT_MS = 5 * 60 * 1000;
+const DEFAULT_ACCELERATED_TIMING: AcceleratedTimingOptions = Object.freeze({
+  maxGapMs: 100,
+  minFrameHoldMs: 50,
+  finalFrameHoldMs: 1_000,
+});
 
 export interface WebmExportOptions {
   sessionId: string;
@@ -20,6 +29,15 @@ export interface WebmExportOptions {
   outputPath: string;
   targetSeq?: number;
   profileName?: string;
+}
+
+export interface WebmExportDeps {
+  backendFactory?: (
+    sessionId: string,
+    profile: RenderProfileConfig,
+    videoOptions: VideoRecordingOptions,
+  ) => VideoCapableRendererBackend;
+  replayTimeoutMs?: number;
 }
 
 export interface WebmExportResult {
@@ -33,23 +51,53 @@ export interface WebmExportResult {
   timingMode: 'accelerated';
 }
 
+function createDefaultBackend(
+  sessionId: string,
+  profile: RenderProfileConfig,
+  videoOptions: VideoRecordingOptions,
+): VideoCapableRendererBackend {
+  return new GhosttyWebBackend(sessionId, profile, videoOptions);
+}
+
 function parseTimestamp(timestamp: string, label: string): number {
   const parsedTimestamp = Date.parse(timestamp);
-  assert(
-    Number.isFinite(parsedTimestamp),
-    `${label} must be a valid ISO timestamp`,
-  );
+  invariant(Number.isFinite(parsedTimestamp), `${label} must be a valid ISO timestamp`);
   return parsedTimestamp;
+}
+
+async function replayWithTimeout(
+  backend: VideoCapableRendererBackend,
+  replayInput: ReturnType<typeof buildReplayInput>,
+  timingOptions: AcceleratedTimingOptions,
+  timeoutMs: number,
+): Promise<ReplayState> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      backend.replayWithTiming(replayInput, timingOptions),
+      new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error('WebM replay timed out after 5 minutes'));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutHandle !== undefined) {
+      clearTimeout(timeoutHandle);
+    }
+  }
 }
 
 export async function generateWebmExport(
   options: WebmExportOptions,
+  deps?: WebmExportDeps,
 ): Promise<WebmExportResult> {
-  assert(options.sessionId.length > 0, 'sessionId is required');
-  assert(isAbsolute(options.sessionDir), 'sessionDir must be absolute');
-  assert(options.outputPath.length > 0, 'outputPath is required');
-  assert(isAbsolute(options.outputPath), 'outputPath must be absolute');
-  assert(options.events.length > 0, 'events must not be empty');
+  invariant(options.sessionId.length > 0, 'sessionId is required');
+  invariant(isAbsolute(options.sessionDir), 'sessionDir must be absolute');
+  invariant(options.outputPath.length > 0, 'outputPath is required');
+  invariant(isAbsolute(options.outputPath), 'outputPath must be absolute');
+  invariant(options.events.length > 0, 'events must not be empty');
 
   const replayInput = buildReplayInput(
     options.sessionId,
@@ -62,8 +110,8 @@ export async function generateWebmExport(
   const profile = resolveProfile(profileName);
   const cols = replayInput.initialCols;
   const rows = replayInput.initialRows;
-  assert(cols > 0, 'initial cols must be positive');
-  assert(rows > 0, 'initial rows must be positive');
+  invariant(cols > 0, 'initial cols must be positive');
+  invariant(rows > 0, 'initial rows must be positive');
 
   const viewportWidth = Math.max(
     640,
@@ -74,26 +122,35 @@ export async function generateWebmExport(
     Math.ceil(rows * profile.fontSize * 1.5) + 32,
   );
   const videoTmpDir = await mkdtemp(join(tmpdir(), 'agent-terminal-webm-'));
-  const videoOptions: VideoRecordingOptions = {
-    outputDir: videoTmpDir,
-    size: {
-      width: viewportWidth,
-      height: viewportHeight,
-    },
-  };
-  const timingOptions: AcceleratedTimingOptions = {};
-  const backend = new GhosttyWebBackend(
-    options.sessionId,
-    profile,
-    videoOptions,
-  );
+  let backend: VideoCapableRendererBackend | null = null;
 
   try {
+    await chmod(videoTmpDir, 0o700);
+
+    const videoOptions: VideoRecordingOptions = {
+      outputDir: videoTmpDir,
+      size: {
+        width: viewportWidth,
+        height: viewportHeight,
+      },
+    };
+    const timingOptions = DEFAULT_ACCELERATED_TIMING;
+    const backendFactory = deps?.backendFactory ?? createDefaultBackend;
+    const replayTimeoutMs = deps?.replayTimeoutMs ?? REPLAY_TIMEOUT_MS;
+
+    invariant(
+      replayTimeoutMs > 0,
+      'replayTimeoutMs must be a positive number when provided',
+    );
+    backend = backendFactory(options.sessionId, profile, videoOptions);
+
     await backend.boot();
 
-    const replayState = await backend.replayWithTiming(
+    const replayState = await replayWithTimeout(
+      backend,
       replayInput,
       timingOptions,
+      replayTimeoutMs,
     );
     await backend.finalizeVideo(options.outputPath);
 
@@ -102,8 +159,8 @@ export async function generateWebmExport(
     );
     const firstEvent = exportedEvents[0];
     const lastEvent = exportedEvents.at(-1);
-    assert(firstEvent !== undefined, 'expected at least one exported event');
-    assert(lastEvent !== undefined, 'expected at least one exported event');
+    invariant(firstEvent !== undefined, 'expected at least one exported event');
+    invariant(lastEvent !== undefined, 'expected at least one exported event');
 
     const firstTimestamp = parseTimestamp(
       firstEvent.ts,
@@ -113,7 +170,7 @@ export async function generateWebmExport(
       lastEvent.ts,
       'last exported event timestamp',
     );
-    assert(
+    invariant(
       lastTimestamp >= firstTimestamp,
       'last exported event timestamp must not precede the first exported event timestamp',
     );
@@ -141,7 +198,9 @@ export async function generateWebmExport(
       timingMode: 'accelerated',
     };
   } finally {
-    await backend.dispose();
+    if (backend !== null) {
+      await backend.dispose();
+    }
     await rm(videoTmpDir, { recursive: true, force: true }).catch(() => {});
   }
 }

@@ -27,3 +27,25 @@ export interface RendererBackend {
   /** Whether the renderer is currently booted. */
   readonly isBooted: boolean;
 }
+
+export interface VideoRecordingOptions {
+  outputDir: string;
+  size: { width: number; height: number };
+}
+
+export interface AcceleratedTimingOptions {
+  maxGapMs: number;
+  minFrameHoldMs: number;
+  finalFrameHoldMs: number;
+}
+
+export interface VideoCapableRendererBackend extends RendererBackend {
+  /** Replay events with controlled timing for video capture. */
+  replayWithTiming(
+    input: ReplayInput,
+    timing: AcceleratedTimingOptions,
+  ): Promise<ReplayState>;
+
+  /** Finalize and save the video recording to the given path. */
+  finalizeVideo(outputPath: string): Promise<void>;
+}

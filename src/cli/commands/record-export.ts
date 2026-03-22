@@ -13,6 +13,7 @@ import {
   type WebmExportResult,
 } from '../../export/webm.js';
 import { readEventLogRecords } from '../../host/replay.js';
+import { GhosttyWebBackend } from '../../renderer/ghosttyWeb/backend.js';
 import { CliError } from '../errors.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import {
@@ -241,13 +242,19 @@ export async function runRecordExportCommand(
       sha256 = createHash('sha256').update(contentsBuffer).digest('hex');
     } else {
       invariant(events.length > 0, 'webm export requires at least one event');
-      const webmResult: WebmExportResult = await generateWebmExport({
-        sessionId: options.sessionId,
-        sessionDir: sessionDirectory,
-        manifest,
-        events,
-        outputPath: artifactOutputPath,
-      });
+      const webmResult: WebmExportResult = await generateWebmExport(
+        {
+          sessionId: options.sessionId,
+          sessionDir: sessionDirectory,
+          manifest,
+          events,
+          outputPath: artifactOutputPath,
+        },
+        {
+          backendFactory: (sessionId, profile, videoOptions) =>
+            new GhosttyWebBackend(sessionId, profile, videoOptions),
+        },
+      );
 
       capturedAtSeq = webmResult.capturedAtSeq;
       durationMs = webmResult.durationMs;

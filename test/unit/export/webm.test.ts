@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { VideoCapableRendererBackend } from '../../../src/renderer/backend.js';
 import type {
   EventRecord,
   SessionRecord,
@@ -8,7 +9,6 @@ import type {
 const mocks = vi.hoisted(() => ({
   buildReplayInput: vi.fn(),
   resolveProfile: vi.fn(),
-  GhosttyWebBackend: vi.fn(),
 }));
 
 vi.mock('../../../src/host/replay.js', () => ({
@@ -17,10 +17,6 @@ vi.mock('../../../src/host/replay.js', () => ({
 
 vi.mock('../../../src/renderer/profiles.js', () => ({
   resolveProfile: mocks.resolveProfile,
-}));
-
-vi.mock('../../../src/renderer/ghosttyWeb/backend.js', () => ({
-  GhosttyWebBackend: mocks.GhosttyWebBackend,
 }));
 
 import { generateWebmExport } from '../../../src/export/webm.js';
@@ -61,10 +57,82 @@ function createEvents(): EventRecord[] {
   ];
 }
 
+function createReplayState() {
+  return {
+    lastSeq: 1,
+    cols: 80,
+    rows: 24,
+    cursorRow: 0,
+    cursorCol: 0,
+  };
+}
+
+function createMockBackend(overrides: Partial<VideoCapableRendererBackend> = {}) {
+  const boot = overrides.boot ?? vi.fn().mockResolvedValue(undefined);
+  const replayTo = overrides.replayTo ?? vi.fn().mockResolvedValue(createReplayState());
+  const replayWithTiming =
+    overrides.replayWithTiming ?? vi.fn().mockResolvedValue(createReplayState());
+  const snapshot =
+    overrides.snapshot ??
+    vi.fn().mockResolvedValue({
+      sessionId: 'session-01',
+      capturedAtSeq: 1,
+      cols: 80,
+      rows: 24,
+      cursorRow: 0,
+      cursorCol: 0,
+      isAltScreen: false,
+      visibleLines: [],
+    });
+  const screenshot =
+    overrides.screenshot ??
+    vi.fn().mockResolvedValue({
+      sessionId: 'session-01',
+      capturedAtSeq: 1,
+      profileName: 'reference-dark',
+      cols: 80,
+      rows: 24,
+      artifactPath: '/tmp/screenshot.png',
+      pngSizeBytes: 1,
+    });
+  const getVisibleText =
+    overrides.getVisibleText ?? vi.fn().mockResolvedValue('');
+  const finalizeVideo =
+    overrides.finalizeVideo ?? vi.fn().mockResolvedValue(undefined);
+  const dispose = overrides.dispose ?? vi.fn().mockResolvedValue(undefined);
+  const backend: VideoCapableRendererBackend = {
+    isBooted: overrides.isBooted ?? false,
+    boot,
+    replayTo,
+    replayWithTiming,
+    snapshot,
+    screenshot,
+    getVisibleText,
+    finalizeVideo,
+    dispose,
+  };
+
+  return {
+    backend,
+    boot,
+    replayWithTiming,
+    finalizeVideo,
+    dispose,
+  };
+}
+
 describe('generateWebmExport', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.resolveProfile.mockReturnValue({ fontSize: 16 });
+    mocks.resolveProfile.mockReturnValue({
+      name: 'reference-dark',
+      theme: 'dark',
+      fontFamily: 'monospace',
+      fontSize: 16,
+      cursorStyle: 'block',
+      backgroundColor: '#000000',
+      foregroundColor: '#ffffff',
+    });
     mocks.buildReplayInput.mockReturnValue({
       sessionId: 'session-01',
       initialCols: 80,
@@ -74,32 +142,59 @@ describe('generateWebmExport', () => {
     });
   });
 
-  it('orchestrates replay generation through GhosttyWebBackend', async () => {
-    const mockBackend = {
-      boot: vi.fn().mockResolvedValue(undefined),
-      replayWithTiming: vi.fn().mockResolvedValue({
-        lastSeq: 1,
-        cols: 80,
-        rows: 24,
-        cursorRow: 0,
-        cursorCol: 0,
-      }),
-      finalizeVideo: vi.fn().mockResolvedValue(undefined),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
-    mocks.GhosttyWebBackend.mockImplementation(
-      function MockGhosttyWebBackend() {
-        return mockBackend;
+  it('orchestrates replay generation through an injected video backend factory', async () => {
+    const callOrder: string[] = [];
+    const boot = vi.fn().mockImplementation(() => {
+      callOrder.push('boot');
+      return Promise.resolve();
+    });
+    const replayWithTiming = vi.fn().mockImplementation(() => {
+      callOrder.push('replay');
+      return Promise.resolve(createReplayState());
+    });
+    const finalizeVideo = vi.fn().mockImplementation(() => {
+      callOrder.push('finalize');
+      return Promise.resolve();
+    });
+    const dispose = vi.fn().mockImplementation(() => {
+      callOrder.push('dispose');
+      return Promise.resolve();
+    });
+    const mockBackend = createMockBackend({
+      boot,
+      replayWithTiming,
+      finalizeVideo,
+      dispose,
+    });
+    const backendFactory = vi.fn(
+      (
+        sessionId: string,
+        profile: { fontSize: number; name: string },
+        videoOptions: {
+          outputDir: string;
+          size: {
+            width: number;
+            height: number;
+          };
+        },
+      ) => {
+        void sessionId;
+        void profile;
+        void videoOptions;
+        return mockBackend.backend;
       },
     );
 
-    const result = await generateWebmExport({
-      sessionId: 'session-01',
-      sessionDir: '/tmp/agent-terminal/sessions/session-01',
-      manifest: createManifest(),
-      events: createEvents(),
-      outputPath: '/tmp/exports/recording-1-webm.webm',
-    });
+    const result = await generateWebmExport(
+      {
+        sessionId: 'session-01',
+        sessionDir: '/tmp/agent-terminal/sessions/session-01',
+        manifest: createManifest(),
+        events: createEvents(),
+        outputPath: '/tmp/exports/recording-1-webm.webm',
+      },
+      { backendFactory },
+    );
 
     expect(mocks.buildReplayInput).toHaveBeenCalledWith(
       'session-01',
@@ -108,22 +203,21 @@ describe('generateWebmExport', () => {
       undefined,
     );
     expect(mocks.resolveProfile).toHaveBeenCalledWith('reference-dark');
-    expect(mocks.GhosttyWebBackend).toHaveBeenCalledTimes(1);
-    const ghosttyBackendCall = mocks.GhosttyWebBackend.mock.calls[0] as [
-      string,
-      { fontSize: number },
-      {
-        outputDir: string;
-        size: {
-          width: number;
-          height: number;
-        };
-      },
-    ];
-    const [backendSessionId, backendProfile, videoOptions] = ghosttyBackendCall;
+    expect(backendFactory).toHaveBeenCalledTimes(1);
+    const backendCall = backendFactory.mock.calls[0];
+    expect(backendCall).toBeDefined();
+
+    if (backendCall === undefined) {
+      return;
+    }
+
+    const [backendSessionId, backendProfile, videoOptions] = backendCall;
 
     expect(backendSessionId).toBe('session-01');
-    expect(backendProfile).toEqual({ fontSize: 16 });
+    expect(backendProfile).toMatchObject({
+      fontSize: 16,
+      name: 'reference-dark',
+    });
     expect(videoOptions.outputDir).toContain('agent-terminal-webm-');
     expect(videoOptions.size).toEqual({
       width: 864,
@@ -138,35 +232,17 @@ describe('generateWebmExport', () => {
         events: createEvents(),
         targetSeq: 1,
       },
-      {},
+      {
+        maxGapMs: 100,
+        minFrameHoldMs: 50,
+        finalFrameHoldMs: 1_000,
+      },
     );
     expect(mockBackend.finalizeVideo).toHaveBeenCalledWith(
       '/tmp/exports/recording-1-webm.webm',
     );
     expect(mockBackend.dispose).toHaveBeenCalledTimes(1);
-
-    const [bootOrder] = mockBackend.boot.mock.invocationCallOrder;
-    const [replayOrder] = mockBackend.replayWithTiming.mock.invocationCallOrder;
-    const [finalizeOrder] = mockBackend.finalizeVideo.mock.invocationCallOrder;
-    const [disposeOrder] = mockBackend.dispose.mock.invocationCallOrder;
-
-    expect(bootOrder).toBeDefined();
-    expect(replayOrder).toBeDefined();
-    expect(finalizeOrder).toBeDefined();
-    expect(disposeOrder).toBeDefined();
-
-    if (
-      bootOrder === undefined ||
-      replayOrder === undefined ||
-      finalizeOrder === undefined ||
-      disposeOrder === undefined
-    ) {
-      return;
-    }
-
-    expect(bootOrder).toBeLessThan(replayOrder);
-    expect(replayOrder).toBeLessThan(finalizeOrder);
-    expect(finalizeOrder).toBeLessThan(disposeOrder);
+    expect(callOrder).toEqual(['boot', 'replay', 'finalize', 'dispose']);
     expect(result).toEqual({
       capturedAtSeq: 1,
       durationMs: 1_500,
@@ -205,29 +281,71 @@ describe('generateWebmExport', () => {
 
   it('disposes the backend when replay fails', async () => {
     const replayError = new Error('replay failed');
-    const mockBackend = {
-      boot: vi.fn().mockResolvedValue(undefined),
-      replayWithTiming: vi.fn().mockRejectedValue(replayError),
-      finalizeVideo: vi.fn().mockResolvedValue(undefined),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
-    mocks.GhosttyWebBackend.mockImplementation(
-      function MockGhosttyWebBackend() {
-        return mockBackend;
-      },
-    );
+    const replayWithTiming = vi.fn().mockRejectedValue(replayError);
+    const mockBackend = createMockBackend({ replayWithTiming });
 
     await expect(
-      generateWebmExport({
-        sessionId: 'session-01',
-        sessionDir: '/tmp/agent-terminal/sessions/session-01',
-        manifest: createManifest(),
-        events: createEvents(),
-        outputPath: '/tmp/exports/recording-1-webm.webm',
-      }),
+      generateWebmExport(
+        {
+          sessionId: 'session-01',
+          sessionDir: '/tmp/agent-terminal/sessions/session-01',
+          manifest: createManifest(),
+          events: createEvents(),
+          outputPath: '/tmp/exports/recording-1-webm.webm',
+        },
+        { backendFactory: () => mockBackend.backend },
+      ),
     ).rejects.toThrow(replayError);
 
     expect(mockBackend.finalizeVideo).not.toHaveBeenCalled();
+    expect(mockBackend.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('times out replay and still disposes the backend', async () => {
+    const replayWithTiming = vi.fn(
+      (): Promise<ReturnType<typeof createReplayState>> =>
+        new Promise(() => undefined),
+    );
+    const mockBackend = createMockBackend({ replayWithTiming });
+
+    await expect(
+      generateWebmExport(
+        {
+          sessionId: 'session-01',
+          sessionDir: '/tmp/agent-terminal/sessions/session-01',
+          manifest: createManifest(),
+          events: createEvents(),
+          outputPath: '/tmp/exports/recording-1-webm.webm',
+        },
+        {
+          backendFactory: () => mockBackend.backend,
+          replayTimeoutMs: 1,
+        },
+      ),
+    ).rejects.toThrow('WebM replay timed out after 5 minutes');
+
+    expect(mockBackend.finalizeVideo).not.toHaveBeenCalled();
+    expect(mockBackend.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('disposes the backend when finalizeVideo fails', async () => {
+    const finalizeError = new Error('finalize failed');
+    const finalizeVideo = vi.fn().mockRejectedValue(finalizeError);
+    const mockBackend = createMockBackend({ finalizeVideo });
+
+    await expect(
+      generateWebmExport(
+        {
+          sessionId: 'session-01',
+          sessionDir: '/tmp/agent-terminal/sessions/session-01',
+          manifest: createManifest(),
+          events: createEvents(),
+          outputPath: '/tmp/exports/recording-1-webm.webm',
+        },
+        { backendFactory: () => mockBackend.backend },
+      ),
+    ).rejects.toThrow(finalizeError);
+
     expect(mockBackend.dispose).toHaveBeenCalledTimes(1);
   });
 });
