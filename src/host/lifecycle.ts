@@ -122,11 +122,17 @@ function assertStringRecord(
   value: unknown,
   label: string,
 ): asserts value is Record<string, string> {
-  invariant(value !== null && typeof value === 'object', `${label} must be an object`);
+  invariant(
+    value !== null && typeof value === 'object',
+    `${label} must be an object`,
+  );
 
   for (const [entryKey, entryValue] of Object.entries(value)) {
     invariant(entryKey.length > 0, `${label} keys must not be empty`);
-    invariant(typeof entryValue === 'string', `${label} values must be strings`);
+    invariant(
+      typeof entryValue === 'string',
+      `${label} values must be strings`,
+    );
   }
 }
 

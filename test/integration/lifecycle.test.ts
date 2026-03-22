@@ -232,10 +232,9 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     );
     await chmod(shellPath, 0o755);
 
-    const createResult = runCli(
-      ['create', '--shell', shellPath, '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
-    );
+    const createResult = runCli(['create', '--shell', shellPath, '--json'], {
+      AGENT_TERMINAL_HOME: testHome,
+    });
     expect(createResult.status).toBe(0);
     expect(createResult.stderr).toBe('');
     const sessionId = (
@@ -264,7 +263,16 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
   it('rejects malformed --env entries', () => {
     const createResult = runCli(
-      ['create', '--env', 'MALFORMED', '--json', '--', '/bin/sh', '-c', 'exit 0'],
+      [
+        'create',
+        '--env',
+        'MALFORMED',
+        '--json',
+        '--',
+        '/bin/sh',
+        '-c',
+        'exit 0',
+      ],
       { AGENT_TERMINAL_HOME: testHome },
     );
     expect(createResult.status).toBe(2);
@@ -351,7 +359,9 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     );
     expect(snapshotResult.status).toBe(0);
     expect(snapshotResult.stderr).toBe('');
-    const snapshotEnvelope = JSON.parse(snapshotResult.stdout) as SuccessEnvelope<{
+    const snapshotEnvelope = JSON.parse(
+      snapshotResult.stdout,
+    ) as SuccessEnvelope<{
       text: string;
       format: string;
     }>;

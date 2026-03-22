@@ -49,10 +49,7 @@ function parseNumberOption(value: string): number {
   return Number(value);
 }
 
-function collectStringOption(
-  value: string,
-  previous: string[] = [],
-): string[] {
+function collectStringOption(value: string, previous: string[] = []): string[] {
   return [...previous, value];
 }
 
