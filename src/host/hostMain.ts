@@ -257,6 +257,8 @@ export async function runHost(sessionId: string): Promise<void> {
     cwd: manifest.cwd,
     cols: manifest.cols,
     rows: manifest.rows,
+    env: manifest.env ?? {},
+    term: manifest.term ?? 'xterm-256color',
   });
 
   invariant(

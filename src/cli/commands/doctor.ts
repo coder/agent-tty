@@ -389,6 +389,8 @@ export function runPtySpawnCheck(
       cwd,
       cols: 80,
       rows: 24,
+      env: {},
+      term: 'xterm-256color',
     });
     assert.equal(typeof pty.onData, 'function', 'PTY must support onData');
     assert.equal(typeof pty.onExit, 'function', 'PTY must support onExit');

@@ -53,6 +53,17 @@ describe('protocol schemas', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts a session record with optional create metadata', () => {
+    const result = SessionRecordSchema.safeParse({
+      ...createSessionRecord(),
+      name: 'demo-session',
+      env: { FOO: 'bar' },
+      term: 'xterm-256color',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it('rejects a session record with invalid dimensions', () => {
     const result = SessionRecordSchema.safeParse({
       ...createSessionRecord(),

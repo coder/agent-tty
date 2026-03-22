@@ -29,6 +29,9 @@ export interface SessionRecord {
   status: string;
   command: string[];
   cwd: string;
+  name?: string;
+  env?: Record<string, string>;
+  term?: string;
   cols: number;
   rows: number;
   hostPid: number | null;

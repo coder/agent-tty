@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -148,6 +148,142 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         expect.objectContaining({ sessionId, status: 'exited' }),
       ]),
     );
+  });
+
+  it('stores name/env/term in the manifest and passes env to the PTY', async () => {
+    const createResult = runCli(
+      [
+        'create',
+        '--name',
+        'my-session',
+        '--env',
+        'FOO=bar',
+        '--env',
+        'BAZ=qux',
+        '--term',
+        'vt100',
+        '--json',
+        '--',
+        '/bin/sh',
+        '-c',
+        'printf "%s|%s|%s" "$FOO" "$BAZ" "$TERM"; exit 0',
+      ],
+      { AGENT_TERMINAL_HOME: testHome },
+    );
+    expect(createResult.status).toBe(0);
+    expect(createResult.stderr).toBe('');
+    const sessionId = (
+      JSON.parse(createResult.stdout) as SuccessEnvelope<{ sessionId: string }>
+    ).result.sessionId;
+
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 2000);
+    });
+
+    const manifest = JSON.parse(
+      await readFile(
+        join(testHome, 'sessions', sessionId, 'session.json'),
+        'utf8',
+      ),
+    ) as SessionRecord & {
+      name?: string;
+      env?: Record<string, string>;
+      term?: string;
+    };
+    expect(manifest.name).toBe('my-session');
+    expect(manifest.env).toEqual({ FOO: 'bar', BAZ: 'qux' });
+    expect(manifest.term).toBe('vt100');
+
+    const eventContent = await readFile(
+      join(testHome, 'sessions', sessionId, 'events.jsonl'),
+      'utf8',
+    );
+    const events = eventContent
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as EventRecord);
+    const allOutput = events
+      .filter((event) => event.type === 'output')
+      .map((event) => {
+        const data = event.payload.data;
+        return typeof data === 'string' ? data : '';
+      })
+      .join('');
+    expect(allOutput).toContain('bar|qux|vt100');
+  });
+
+  it('uses the provided shell path for shell-only sessions', async () => {
+    const shellPath = join(testHome, 'custom-shell.sh');
+    const shellMarkerPath = join(testHome, 'custom-shell.log');
+    await writeFile(
+      shellPath,
+      [
+        '#!/bin/sh',
+        `printf "custom-shell\\n" >> "${shellMarkerPath}"`,
+        'exec /bin/sh "$@"',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    await chmod(shellPath, 0o755);
+
+    const createResult = runCli(
+      ['create', '--shell', shellPath, '--json'],
+      { AGENT_TERMINAL_HOME: testHome },
+    );
+    expect(createResult.status).toBe(0);
+    expect(createResult.stderr).toBe('');
+    const sessionId = (
+      JSON.parse(createResult.stdout) as SuccessEnvelope<{ sessionId: string }>
+    ).result.sessionId;
+
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 500);
+    });
+
+    const manifest = JSON.parse(
+      await readFile(
+        join(testHome, 'sessions', sessionId, 'session.json'),
+        'utf8',
+      ),
+    ) as SessionRecord;
+    expect(manifest.command).toEqual([shellPath]);
+    expect(await readFile(shellMarkerPath, 'utf8')).toContain('custom-shell');
+
+    const typeResult = runCli(['type', sessionId, 'exit\n', '--json'], {
+      AGENT_TERMINAL_HOME: testHome,
+    });
+    expect(typeResult.status).toBe(0);
+    expect(typeResult.stderr).toBe('');
+  });
+
+  it('rejects malformed --env entries', () => {
+    const createResult = runCli(
+      ['create', '--env', 'MALFORMED', '--json', '--', '/bin/sh', '-c', 'exit 0'],
+      { AGENT_TERMINAL_HOME: testHome },
+    );
+    expect(createResult.status).toBe(2);
+    expect(createResult.stderr).toBe('');
+
+    const errorEnvelope = JSON.parse(createResult.stdout) as ErrorEnvelope;
+    expect(errorEnvelope.ok).toBe(false);
+    expect(errorEnvelope.error.code).toBe('INVALID_INPUT');
+    expect(errorEnvelope.error.message).toContain('KEY=VALUE');
+  });
+
+  it('rejects a missing shell path override', () => {
+    const missingShellPath = join(testHome, 'missing-shell.sh');
+    const createResult = runCli(
+      ['create', '--shell', missingShellPath, '--json'],
+      { AGENT_TERMINAL_HOME: testHome },
+    );
+    expect(createResult.status).toBe(2);
+    expect(createResult.stderr).toBe('');
+
+    const errorEnvelope = JSON.parse(createResult.stdout) as ErrorEnvelope;
+    expect(errorEnvelope.ok).toBe(false);
+    expect(errorEnvelope.error.code).toBe('INVALID_INPUT');
+    expect(errorEnvelope.error.message).toContain(missingShellPath);
   });
 
   it('inspect nonexistent session returns SESSION_NOT_FOUND', () => {

@@ -33,6 +33,12 @@ import {
 import { CliError } from './errors.js';
 import { exitCodeForError } from './exitCodes.js';
 import { emitFailure, setColorEnabled } from './output.js';
+import {
+  DEFAULT_COLS,
+  DEFAULT_ROWS,
+  DEFAULT_SHELL,
+  DEFAULT_TERM,
+} from '../config/defaults.js';
 import { invariant } from '../util/assert.js';
 
 function parseIntegerOption(value: string): number {
@@ -41,6 +47,13 @@ function parseIntegerOption(value: string): number {
 
 function parseNumberOption(value: string): number {
   return Number(value);
+}
+
+function collectStringOption(
+  value: string,
+  previous: string[] = [],
+): string[] {
+  return [...previous, value];
 }
 
 function emitCliError(commandName: string, error: CliError): void {
@@ -147,14 +160,19 @@ async function main(): Promise<void> {
   program
     .command('create [command...]')
     .description('Create a session')
-    .option(
-      '--command <cmd>',
-      'Shell executable (defaults to $SHELL or sh)',
-      process.env.SHELL ?? process.env.ComSpec ?? 'sh',
-    )
+    .option('--command <path>', 'Legacy alias for --shell')
+    .option('--shell <path>', 'Shell executable path', DEFAULT_SHELL)
     .option('--cwd <dir>', 'Working directory', process.cwd())
-    .option('--cols <n>', 'Initial columns', parseIntegerOption, 80)
-    .option('--rows <n>', 'Initial rows', parseIntegerOption, 24)
+    .option('--cols <n>', 'Initial columns', parseIntegerOption, DEFAULT_COLS)
+    .option('--rows <n>', 'Initial rows', parseIntegerOption, DEFAULT_ROWS)
+    .option(
+      '--env <key=value>',
+      'Additional environment variable in KEY=VALUE format',
+      collectStringOption,
+      [],
+    )
+    .option('--term <value>', 'Terminal type', DEFAULT_TERM)
+    .option('--name <name>', 'Human-readable session name')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
@@ -162,10 +180,14 @@ async function main(): Promise<void> {
         async (
           command: string[],
           options: {
-            command: string;
+            command?: string;
+            shell: string;
             cwd: string;
             cols: number;
             rows: number;
+            env: string[];
+            term: string;
+            name?: string;
             json: boolean;
           },
           context: CommandContext,
@@ -174,10 +196,13 @@ async function main(): Promise<void> {
             context,
             json: options.json,
             command,
-            shellCommand: options.command,
+            shellPath: options.command ?? options.shell,
             cwd: options.cwd,
             cols: options.cols,
             rows: options.rows,
+            envEntries: options.env,
+            term: options.term,
+            ...(options.name !== undefined ? { name: options.name } : {}),
           });
         },
       ),

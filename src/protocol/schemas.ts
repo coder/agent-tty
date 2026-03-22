@@ -8,6 +8,7 @@ const PositiveIntSchema = z.number().int().positive();
 const NonNegativeIntSchema = z.number().int().nonnegative();
 const IsoDatetimeSchema = z.iso.datetime();
 const SnapshotFormatSchema = z.enum(['structured', 'text']);
+const SessionEnvSchema = z.record(NonEmptyStringSchema, z.string());
 
 export const SessionStatusSchema = z.enum(['running', 'exiting', 'exited']);
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
@@ -21,6 +22,9 @@ export const SessionRecordSchema = z
     status: SessionStatusSchema,
     command: z.array(z.string()).min(1),
     cwd: z.string(),
+    name: NonEmptyStringSchema.optional(),
+    env: SessionEnvSchema.optional(),
+    term: NonEmptyStringSchema.optional(),
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
     hostPid: PositiveIntSchema.nullable(),

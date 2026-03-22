@@ -23,6 +23,8 @@ const READINESS_POLL_INTERVAL_MS = 100;
 const READINESS_MAX_ATTEMPTS = 50;
 const READINESS_RPC_TIMEOUT_MS = 100;
 
+type SessionEnvironment = Record<string, string>;
+
 export interface CreateResult {
   sessionId: string;
 }
@@ -31,26 +33,61 @@ interface CommandOptions {
   context: CommandContext;
   json: boolean;
   command: string[];
-  shellCommand: string;
+  shellPath: string;
   cwd: string;
   cols: number;
   rows: number;
+  envEntries: string[];
+  term: string;
+  name?: string;
+}
+
+function normalizeCreateEnvironment(envEntries: string[]): SessionEnvironment {
+  const environment: SessionEnvironment = {};
+
+  for (const entry of envEntries) {
+    const separatorIndex = entry.indexOf('=');
+    if (separatorIndex <= 0) {
+      throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+        message: `--env must use KEY=VALUE format, got: ${entry}`,
+        details: {
+          env: entry,
+        },
+      });
+    }
+
+    const key = entry.slice(0, separatorIndex);
+    const value = entry.slice(separatorIndex + 1);
+    environment[key] = value;
+  }
+
+  return environment;
 }
 
 export async function runCreateCommand(options: CommandOptions): Promise<void> {
+  const environment = normalizeCreateEnvironment(options.envEntries);
   let sessionId: string | undefined;
 
   try {
     const allocatedSession = await allocateSession({
+      home: options.context.home,
       command: options.command,
-      shellCommand: options.shellCommand,
+      shellPath: options.shellPath,
       cwd: options.cwd,
       cols: options.cols,
       rows: options.rows,
+      env: environment,
+      term: options.term,
+      ...(options.name !== undefined ? { name: options.name } : {}),
     });
     sessionId = allocatedSession.sessionId;
 
-    launchHost(sessionId);
+    launchHost({
+      sessionId,
+      home: options.context.home,
+      env: environment,
+      term: options.term,
+    });
   } catch (error) {
     if (sessionId !== undefined) {
       const home = options.context.home;
