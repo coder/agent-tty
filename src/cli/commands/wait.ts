@@ -224,27 +224,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  if (manifest.status === 'destroyed') {
-    throw makeCliError(ERROR_CODES.SESSION_ALREADY_DESTROYED, {
-      message: `Session "${options.sessionId}" is already destroyed.`,
-      details: {
-        sessionId: options.sessionId,
-        status: manifest.status,
-      },
-    });
-  }
-
   const manifestStatus = String(manifest.status);
-
-  if (!options.waitForExit && manifestStatus !== 'running') {
-    throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
-      message: `Session "${options.sessionId}" is not running.`,
-      details: {
-        sessionId: options.sessionId,
-        status: manifest.status,
-      },
-    });
-  }
 
   if (
     options.waitForExit &&
@@ -264,6 +244,26 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       lines: waitLines(result),
     });
     return;
+  }
+
+  if (manifest.status === 'destroyed') {
+    throw makeCliError(ERROR_CODES.SESSION_ALREADY_DESTROYED, {
+      message: `Session "${options.sessionId}" is already destroyed.`,
+      details: {
+        sessionId: options.sessionId,
+        status: manifest.status,
+      },
+    });
+  }
+
+  if (!options.waitForExit && manifestStatus !== 'running') {
+    throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
+      message: `Session "${options.sessionId}" is not running.`,
+      details: {
+        sessionId: options.sessionId,
+        status: manifest.status,
+      },
+    });
   }
 
   const effectiveTimeout = options.timeout ?? DEFAULT_WAIT_TIMEOUT_MS;
