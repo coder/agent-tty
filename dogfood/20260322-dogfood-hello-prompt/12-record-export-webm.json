@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-22T22:33:03.542Z",
+  "result": {
+    "sessionId": "01KMBTVTGGDAP71DH9RBSR4HBM",
+    "format": "webm",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent_exec_3a3efb7ac5/dogfood/20260322-dogfood-hello-prompt/videos/hello-prompt.webm",
+    "bytes": 17520,
+    "sha256": "57700a559dad993e7d22b9d95158ee865ac50b2e561781e2a8ad8f9a7fadf817",
+    "capturedAtSeq": 15,
+    "durationMs": 9455,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8d0a5a88a43edf8d21f890f688fa1d09d2c553f34cc1d55141ba973471f95091",
+      "timingMode": "accelerated",
+      "outputEventCount": 11,
+      "resizeEventCount": 0
+    }
+  }
+}

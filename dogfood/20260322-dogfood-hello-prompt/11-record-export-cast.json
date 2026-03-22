@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-22T22:33:00.067Z",
+  "result": {
+    "sessionId": "01KMBTVTGGDAP71DH9RBSR4HBM",
+    "format": "asciicast",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent_exec_3a3efb7ac5/dogfood/20260322-dogfood-hello-prompt/recordings/hello-prompt.cast",
+    "bytes": 436,
+    "sha256": "a7f12f30ae5ea249aa1aeac571ff3bae95a94365b75d33389734f23c64ab5b0d",
+    "capturedAtSeq": 15,
+    "durationMs": 9455,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "title": "01KMBTVTGGDAP71DH9RBSR4HBM",
+      "timestamp": 1774218768,
+      "outputEventCount": 11,
+      "resizeEventCount": 0,
+      "markerCount": 0
+    }
+  }
+}

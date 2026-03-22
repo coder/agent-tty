@@ -1,0 +1,12 @@
+{"version":2,"width":80,"height":24,"timestamp":1774218768,"title":"01KMBTVTGGDAP71DH9RBSR4HBM","sessionId":"01KMBTVTGGDAP71DH9RBSR4HBM","env":{"TERM":"xterm-256color"},"toolVersion":"0.1.0"}
+[0,"o","READY> "]
+[3.439,"o","hello world"]
+[4.519,"o","\r\n"]
+[4.52,"o","ECHO: hello world\r\n"]
+[4.52,"o","READY> "]
+[8.313,"o","exit"]
+[9.417,"o","\r\n"]
+[9.417,"o","BYE\r\n"]
+[9.441,"o","\\"]
+[9.443,"o","\u001b[1G"]
+[9.443,"o","\u001b[0K"]
