@@ -291,6 +291,13 @@ describe('export fixture e2e', { timeout: 180_000 }, () => {
       'ALT SCREEN ACTIVE',
     );
 
+    const enterAltScreenEnvelope = runCliEnvelope<Record<string, never>>(
+      ['send-keys', sessionId, 'Enter'],
+      env,
+    );
+    expect(enterAltScreenEnvelope.ok).toBe(true);
+    expect(enterAltScreenEnvelope.command).toBe('send-keys');
+
     waitForVisibleText(sessionId, env, 'ALT SCREEN ACTIVE');
     const altSnapshotEnvelope = runCliEnvelope<SnapshotResult>(
       ['snapshot', sessionId, '--format', 'text'],
@@ -306,6 +313,13 @@ describe('export fixture e2e', { timeout: 180_000 }, () => {
     expect(altSnapshotEnvelope.result.text).not.toContain(
       'BACK ON MAIN SCREEN',
     );
+
+    const exitAltScreenEnvelope = runCliEnvelope<Record<string, never>>(
+      ['send-keys', sessionId, 'Enter'],
+      env,
+    );
+    expect(exitAltScreenEnvelope.ok).toBe(true);
+    expect(exitAltScreenEnvelope.command).toBe('send-keys');
 
     const exitEnvelope = waitForExit(sessionId, env, 10_000);
     expect(exitEnvelope.result.exitCode).toBe(0);

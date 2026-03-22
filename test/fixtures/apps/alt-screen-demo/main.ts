@@ -4,35 +4,50 @@ import process from 'node:process';
 const ENTER_ALT_SCREEN = '\u001b[?1049h';
 const EXIT_ALT_SCREEN = '\u001b[?1049l';
 const CLEAR_SCREEN_AND_HOME = '\u001b[2J\u001b[H';
-const ENTER_ALT_MS = 2_000;
-const LEAVE_ALT_MS = 8_000;
-const EXIT_MS = 9_000;
+const EXIT_DELAY_MS = 500;
 
 assert(
   process.stdout.writable,
   'stdout must be writable for the alt-screen fixture',
+);
+assert(
+  process.stdin.readable,
+  'stdin must be readable for the alt-screen fixture',
 );
 
 function writeStdout(text: string): void {
   process.stdout.write(text);
 }
 
-writeStdout('MAIN SCREEN READY\n');
-writeStdout('Main buffer should be restored after alt-screen exit.\n');
+function waitForInput(): Promise<void> {
+  return new Promise((resolve) => {
+    process.stdin.resume();
+    process.stdin.once('data', () => {
+      resolve();
+    });
+  });
+}
 
-setTimeout(() => {
+async function main(): Promise<void> {
+  writeStdout('MAIN SCREEN READY\n');
+  writeStdout('Main buffer should be restored after alt-screen exit.\n');
+
+  await waitForInput();
+
   writeStdout(ENTER_ALT_SCREEN);
   writeStdout(CLEAR_SCREEN_AND_HOME);
   writeStdout('ALT SCREEN ACTIVE\n');
   writeStdout('Alternate buffer content should only appear here.\n');
-}, ENTER_ALT_MS);
 
-setTimeout(() => {
+  await waitForInput();
+
   writeStdout(EXIT_ALT_SCREEN);
   writeStdout('BACK ON MAIN SCREEN\n');
   writeStdout('Alt-screen replay complete.\n');
-}, LEAVE_ALT_MS);
 
-setTimeout(() => {
-  process.exit(0);
-}, EXIT_MS);
+  setTimeout(() => {
+    process.exit(0);
+  }, EXIT_DELAY_MS);
+}
+
+void main();
