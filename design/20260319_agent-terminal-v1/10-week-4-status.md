@@ -2,7 +2,7 @@
 
 This document records the repository's actual Week 4 outcome after the plan in [09-week-4-plan.md](./09-week-4-plan.md).
 
-Week 4 materially closed the CLI-contract, artifact-metadata, and lifecycle gaps that were still open after Week 3. Fixture/dogfood completion was only partial, so this file separates what shipped from what remains follow-up work.
+Week 4 materially closed the CLI-contract, artifact-metadata, and lifecycle gaps that were still open after Week 3. Fixture/dogfood coverage also moved forward materially, so this file separates what shipped from what remains follow-up work.
 
 ## Status update (2026-03-22)
 
@@ -21,9 +21,8 @@ What landed on top of Week 3:
 
 What did **not** fully land in Week 4:
 
-- the planned `unicode-grid` and `scrollback-demo` fixtures,
-- dedicated Week 4 unicode/scrollback proof bundles,
 - config-file and log-level parity,
+- a local bundle-review helper/page,
 - bundled deterministic font assets,
 - and the fuller snapshot styling/timing contract sketched in the design docs.
 
@@ -91,14 +90,14 @@ Shipped:
 - `dogfood/20260321-week3-renderer-complete/`,
 - `dogfood/20260321-week3-crash-retention/`,
 - `dogfood/20260322-global-cli-context/`,
+- `test/fixtures/apps/unicode-grid/` plus `test/e2e/unicode-grid.test.ts`,
+- `test/fixtures/apps/scrollback-demo/` plus `test/e2e/scrollback-demo.test.ts`,
+- `dogfood/20260322-week4-cli-parity/`, `dogfood/20260322-week4-failure-recovery/`, `dogfood/20260322-week4-scrollback-review/`, and `dogfood/20260322-week4-unicode-review/`,
 - and the broader real-world smoke bundle `dogfood/20260322-lazyvim-scenario/`.
 
 Still open:
 
-- `test/fixtures/apps/unicode-grid/`,
-- `test/fixtures/apps/scrollback-demo/`,
-- dedicated Scenario E/F proof bundles,
-- and a local bundle-review helper/page.
+- a local bundle-review helper/page.
 
 ### WS5 — Documentation sync
 
@@ -139,8 +138,10 @@ Week 4 landed with targeted test coverage across unit, integration, and e2e laye
 ### E2E/regression coverage highlights
 
 - `test/e2e/export-fixtures.test.ts`
+- `test/e2e/unicode-grid.test.ts`
+- `test/e2e/scrollback-demo.test.ts`
 
-Together, those tests cover the newly added CLI context plumbing, file input validation, cursor waits, create-option parity, snapshot scrollback behavior, enriched screenshot/export metadata, lifecycle-state transitions, destroyed-session guards, and GC behavior for the expanded terminal-state set.
+Together, those tests cover the newly added CLI context plumbing, file input validation, cursor waits, create-option parity, snapshot scrollback behavior, enriched screenshot/export metadata, lifecycle-state transitions, destroyed-session guards, GC behavior for the expanded terminal-state set, and deterministic unicode/scrollback fixture coverage.
 
 ## Architecture decisions made in Week 4
 
@@ -159,7 +160,7 @@ The post-Week-4 delta is now smaller, but it is still meaningful:
 
 - finish CLI/config parity (`--log-level`, global `--profile`, config files, `--idle-timeout-ms`, `--append-newline`),
 - finish rendering fidelity (per-cell styling, bundled font assets, fuller snapshot schema, richer replay timing controls),
-- finish validation parity (`unicode-grid`, `scrollback-demo`, dedicated unicode/scrollback bundles, bundle-review tooling),
+- finish validation/tooling follow-through (bundle-review tooling),
 - strengthen failure/recovery proof around renderer restart or host rebuild scenarios,
 - and continue broader future-scope items such as native renderers, remote sessions, MCP wrapping, and cross-platform parity.
 

@@ -29,9 +29,6 @@ Week 1 control-plane work, Week 2 renderer-backed inspection, Week 3 export / re
 
 ### Fixture suite and dogfooding
 
-- **`unicode-grid` fixture** is still not present under `test/fixtures/apps/`.
-- **`scrollback-demo` fixture** is still not present under `test/fixtures/apps/`.
-- **Dedicated unicode/width and scrollback proof bundles** matching Scenarios E/F in `05-dogfooding-and-validation.md` are still missing.
 - **Local proof-bundle review helper/page** is still not implemented.
 
 ### Platform and future-scope work
@@ -49,7 +46,7 @@ The next milestone should focus on the still-open parity and validation work rat
 
 1. finish CLI/config parity,
 2. finish snapshot/rendering fidelity,
-3. add the missing fixtures and dedicated proof bundles,
+3. finish the remaining validation/tooling work around local proof-bundle review,
 4. strengthen failure/recovery validation,
 5. then continue broader native/platform future work.
 
