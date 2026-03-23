@@ -244,25 +244,26 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
 
     expect(snapshot.visibleLines.length).toBeGreaterThan(0);
     expect(
-      snapshot.visibleLines.some((line) => line.text.includes('line-0')),
+      snapshot.visibleLines.some((line) => line.text.includes('line-49')),
     ).toBe(true);
 
-    if (snapshot.scrollbackLines !== undefined) {
-      expect(snapshot.scrollbackLines).not.toHaveLength(0);
-      expect(snapshot.scrollbackLines[0]?.row).toBe(0);
-      for (let index = 1; index < snapshot.scrollbackLines.length; index += 1) {
-        expect(snapshot.scrollbackLines[index]?.row).toBeGreaterThan(
-          snapshot.scrollbackLines[index - 1]?.row ?? -1,
-        );
-      }
-      expect(
-        snapshot.scrollbackLines.length + snapshot.visibleLines.length,
-      ).toBeGreaterThanOrEqual(50);
-      const allScrollbackText = snapshot.scrollbackLines
-        .map((line) => line.text)
-        .join('\n');
-      expect(allScrollbackText).toContain('line-0');
+    expect(snapshot.scrollbackLines).toBeDefined();
+    const scrollbackLines = snapshot.scrollbackLines;
+    if (scrollbackLines === undefined) {
+      throw new Error('expected scrollback lines');
     }
+    expect(scrollbackLines).not.toHaveLength(0);
+    expect(scrollbackLines[0]?.row).toBe(0);
+    for (let index = 1; index < scrollbackLines.length; index += 1) {
+      expect(scrollbackLines[index]?.row).toBeGreaterThan(
+        scrollbackLines[index - 1]?.row ?? -1,
+      );
+    }
+    expect(scrollbackLines.length + snapshot.visibleLines.length).toBeGreaterThanOrEqual(
+      50,
+    );
+    const allScrollbackText = scrollbackLines.map((line) => line.text).join('\n');
+    expect(allScrollbackText).toContain('line-0');
   });
 
   it('captures screenshots to disk', async () => {

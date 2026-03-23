@@ -247,19 +247,21 @@ describe(
 
       expect(result.visibleLines).not.toHaveLength(0);
       expect(
-        result.visibleLines.some((line) => line.text.includes('line-1')),
+        result.visibleLines.some((line) => line.text.includes('line-50')),
       ).toBe(true);
 
       const filename = snapshotFilename(result.capturedAtSeq, 'structured');
       const manifest = await readArtifactManifest(sessDir);
       expect(manifest.artifacts).toHaveLength(1);
 
-      if (result.scrollbackLines !== undefined) {
-        expect(result.scrollbackLines).not.toHaveLength(0);
-        expect(result.scrollbackLines[0]?.row).toBe(0);
-        for (let index = 1; index < result.scrollbackLines.length; index += 1) {
-          expect(result.scrollbackLines[index]?.row).toBeGreaterThan(
-            result.scrollbackLines[index - 1]?.row ?? -1,
+      expect(result.scrollbackLines).toBeDefined();
+      const scrollbackLines = result.scrollbackLines;
+      if (scrollbackLines !== undefined) {
+        expect(scrollbackLines).not.toHaveLength(0);
+        expect(scrollbackLines[0]?.row).toBe(0);
+        for (let index = 1; index < scrollbackLines.length; index += 1) {
+          expect(scrollbackLines[index]?.row).toBeGreaterThan(
+            scrollbackLines[index - 1]?.row ?? -1,
           );
         }
         expect(manifest.artifacts[0]).toMatchObject({
@@ -276,7 +278,7 @@ describe(
             cursorRow: result.cursorRow,
             cursorCol: result.cursorCol,
             rendererBackend: 'ghostty-web',
-            scrollbackLineCount: result.scrollbackLines.length,
+            scrollbackLineCount: scrollbackLines.length,
           }),
         );
         return;
