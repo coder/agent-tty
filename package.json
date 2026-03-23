@@ -22,6 +22,7 @@
     "cli": "tsx src/cli/main.ts",
     "doctor": "tsx src/cli/main.ts doctor",
     "format": "prettier . --write",
+    "review-bundle": "tsx src/tools/review-bundle.ts",
     "format:check": "prettier . --check",
     "lint": "eslint src test vitest.config.ts --max-warnings=0",
     "lint:fix": "eslint src test vitest.config.ts --fix",
