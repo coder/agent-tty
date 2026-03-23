@@ -80,7 +80,7 @@ export function parseTimeoutMsOption(value: string): number {
   return parsedValue;
 }
 
-export function resolveLogLevelOption(raw?: string): LogLevel {
+export function resolveLogLevel(raw?: string): LogLevel {
   try {
     return resolveLoggerLevel(raw);
   } catch (error) {
@@ -93,8 +93,6 @@ export function resolveLogLevelOption(raw?: string): LogLevel {
     });
   }
 }
-
-export { resolveLogLevelOption as resolveLogLevel };
 
 export async function resolveCommandContext(
   options: GlobalCliOptions,
@@ -109,7 +107,7 @@ export async function resolveCommandContext(
           options.home !== undefined ? '--home' : 'AGENT_TERMINAL_HOME',
         );
   const configFile = await loadConfigFile(home);
-  const logLevel = resolveLogLevelOption(
+  const logLevel = resolveLogLevel(
     options.logLevel ?? env.AGENT_TERMINAL_LOG_LEVEL ?? configFile?.logLevel,
   );
   const logger = createLogger(logLevel);

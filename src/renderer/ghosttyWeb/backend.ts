@@ -1936,6 +1936,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
               this.logger.error(message, ...details);
               break;
             }
+            default: {
+              unreachable(level, 'unsupported harness log level');
+            }
           }
         },
       );

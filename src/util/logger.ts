@@ -1,7 +1,6 @@
 import process from 'node:process';
 
-import { DEFAULT_LOG_LEVEL } from '../config/defaults.js';
-import { assertString, invariant } from './assert.js';
+import { invariant } from './assert.js';
 
 export const LOG_LEVEL_VALUES = ['debug', 'info', 'warn', 'error'] as const;
 
@@ -15,6 +14,8 @@ const LOG_LEVEL_RANK: Readonly<Record<LogLevel, number>> = Object.freeze({
   warn: 30,
   error: 40,
 });
+
+export const DEFAULT_LOG_LEVEL: LogLevel = 'info';
 
 function defaultLogSink(chunk: string): void {
   process.stderr.write(chunk);
@@ -104,10 +105,6 @@ export class Logger {
   }
 
   public shouldLog(level: LogLevel): boolean {
-    assertLogLevel(
-      level,
-      'log level must be one of debug, info, warn, or error',
-    );
     return LOG_LEVEL_RANK[level] >= LOG_LEVEL_RANK[this.level];
   }
 
@@ -120,7 +117,6 @@ export class Logger {
     message: string,
     details: readonly unknown[],
   ): void {
-    assertString(message, 'logger message must be a string');
     if (!this.shouldLog(level)) {
       return;
     }
