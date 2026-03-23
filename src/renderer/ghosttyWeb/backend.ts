@@ -509,7 +509,7 @@ async function closeServer(server: Server): Promise<void> {
   });
 }
 
-async function loadHarnessHtml(): Promise<string> {
+function loadHarnessHtml(): string {
   // The embedded harness is the canonical runtime copy. Serving it directly keeps
   // snapshot extraction behavior in sync with the bridge implementation even when
   // the standalone source template drifts.
@@ -560,7 +560,7 @@ async function loadServedAssets(): Promise<
     browserExternalEntry,
   );
 
-  const harnessHtml = await loadHarnessHtml();
+  const harnessHtml = loadHarnessHtml();
   const assetEntries = new Map<string, GhosttyServedAsset>();
 
   const htmlAsset: GhosttyServedAsset = {
