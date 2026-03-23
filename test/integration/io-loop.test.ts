@@ -157,7 +157,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
         [
           'create',
           '--idle-timeout-ms',
-          '500',
+          '2000',
           '--json',
           '--',
           '/bin/sh',
@@ -175,7 +175,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       ).result.sessionId;
 
       const waitResult = runCli(
-        ['wait', sessionId, '--exit', '--timeout', '5000', '--json'],
+        ['wait', sessionId, '--exit', '--timeout', '10000', '--json'],
         { AGENT_TERMINAL_HOME: testHome },
         30000,
       );
@@ -187,7 +187,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       expect(waitEnvelope.ok).toBe(true);
       expect(waitEnvelope.result.timedOut).toBe(false);
 
-      await sleep(300);
+      await sleep(1000);
 
       const session = inspectSession(testHome, sessionId);
       expect(session.status).toBe('exited');

@@ -64,6 +64,7 @@ const DEFAULT_RENDER_PROFILE_NAME = 'reference-dark';
 const MAX_WAIT_FOR_RENDER_REGEX_LENGTH = 200;
 export const MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH = 50_000;
 export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
+const IDLE_CHECK_CAP_MS = 5_000;
 const BRACED_QUANTIFIER_PATTERN = /^\{(?:\d+|\d+,\d*)\}/;
 
 type WaitOutcome = {
@@ -241,7 +242,7 @@ export async function runHost(sessionId: string): Promise<void> {
   let ptyHasExited = false;
   let lastOutputAt = Date.now();
   let lastActivityAt = lastOutputAt;
-  let idleTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  let idleTimeoutHandle: ReturnType<typeof setInterval> | null = null;
   let rpcListenPromise: Promise<void> | null = null;
   let shutdownPromise: Promise<void> | null = null;
   let markPtyExited: () => void = () => {
@@ -275,41 +276,37 @@ export async function runHost(sessionId: string): Promise<void> {
   state.setChildPid(pty.pid);
 
   const clearIdleTimeout = (): void => {
+    // Idempotent: safe to call multiple times during shutdown and PTY exit.
     if (idleTimeoutHandle === null) {
       return;
     }
 
-    clearTimeout(idleTimeoutHandle);
+    clearInterval(idleTimeoutHandle);
     idleTimeoutHandle = null;
   };
 
-  const scheduleIdleTimeout = (): void => {
-    if (idleTimeoutMs <= 0 || !isSessionRunning(state)) {
-      clearIdleTimeout();
+  const startIdlePolling = (): void => {
+    if (
+      idleTimeoutMs <= 0 ||
+      !isSessionRunning(state) ||
+      idleTimeoutHandle !== null
+    ) {
       return;
     }
 
-    clearIdleTimeout();
-    idleTimeoutHandle = setTimeout(() => {
-      idleTimeoutHandle = null;
-
+    const checkIntervalMs = Math.min(idleTimeoutMs, IDLE_CHECK_CAP_MS);
+    idleTimeoutHandle = setInterval(() => {
       if (!isSessionRunning(state)) {
+        clearIdleTimeout();
         return;
       }
 
       const elapsedIdleMs = Date.now() - lastActivityAt;
-      if (elapsedIdleMs < idleTimeoutMs) {
-        scheduleIdleTimeout();
-        return;
+      if (elapsedIdleMs >= idleTimeoutMs) {
+        clearIdleTimeout();
+        pty.kill();
       }
-
-      pty.kill();
-    }, idleTimeoutMs);
-  };
-
-  const noteActivity = (): void => {
-    lastActivityAt = Date.now();
-    scheduleIdleTimeout();
+    }, checkIntervalMs);
   };
 
   const initiateShutdown = (): Promise<void> => {
@@ -589,7 +586,7 @@ export async function runHost(sessionId: string): Promise<void> {
 
       invariant(typeof text === 'string', 'type text must be a string');
       pty.write(text);
-      noteActivity();
+      lastActivityAt = Date.now();
       await eventLog.append('input_text', { data: text });
       return {};
     },
@@ -621,7 +618,7 @@ export async function runHost(sessionId: string): Promise<void> {
       );
       const encoded = encodePaste(text);
       pty.write(encoded);
-      noteActivity();
+      lastActivityAt = Date.now();
       await eventLog.append('input_paste', { data: encoded });
       return {};
     },
@@ -651,7 +648,7 @@ export async function runHost(sessionId: string): Promise<void> {
       }
 
       pty.write(encoded);
-      noteActivity();
+      lastActivityAt = Date.now();
       await eventLog.append('input_keys', { keys });
       return {};
     },
@@ -1037,7 +1034,6 @@ export async function runHost(sessionId: string): Promise<void> {
   pty.onData((data: string) => {
     lastOutputAt = Date.now();
     lastActivityAt = lastOutputAt;
-    scheduleIdleTimeout();
     void eventLog.append('output', { data }).catch(() => {
       // Best-effort logging; shutdown should not fail on transient append errors.
     });
@@ -1047,7 +1043,7 @@ export async function runHost(sessionId: string): Promise<void> {
     handlePtyExit(exitCode, signal ?? null);
   });
 
-  scheduleIdleTimeout();
+  startIdlePolling();
 
   process.on('SIGTERM', () => {
     startShutdown();
