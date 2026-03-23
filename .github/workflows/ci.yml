@@ -50,3 +50,35 @@ jobs:
 
       - name: Build
         run: mise run build
+
+  # macOS tier-1 validation counterpart to the Ubuntu quality gates above.
+  quality-gates-macos:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up mise
+        uses: jdx/mise-action@v3
+
+      - name: Install CI dependencies
+        run: mise run bootstrap-ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Check formatting
+        run: mise run format-check
+
+      - name: Lint
+        run: mise run lint
+
+      - name: Typecheck
+        run: mise run typecheck
+
+      - name: Test
+        run: mise run test
+
+      - name: Build
+        run: mise run build
