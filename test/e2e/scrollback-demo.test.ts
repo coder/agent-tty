@@ -114,12 +114,8 @@ describe('scrollback-demo e2e', { timeout: 60_000 }, () => {
     expect(textSnapshotEnvelope.command).toBe('snapshot');
     expectTextSnapshot(textSnapshotEnvelope.result);
     expect(textSnapshotEnvelope.result.sessionId).toBe(sessionId);
-    expect(textSnapshotEnvelope.result.text).toContain('LINE 001');
-    expect(textSnapshotEnvelope.result.text).not.toContain('LINE 040');
-    expect(textSnapshotEnvelope.result.text).not.toContain('LINE 080');
-    expect(textSnapshotEnvelope.result.text).not.toContain(
-      'SCROLLBACK COMPLETE',
-    );
+    expect(textSnapshotEnvelope.result.text).toContain('SCROLLBACK COMPLETE');
+    expect(textSnapshotEnvelope.result.text).not.toContain('LINE 001');
 
     const structuredSnapshotEnvelope = runCliJson<
       SuccessEnvelope<SnapshotResult>
@@ -128,16 +124,15 @@ describe('scrollback-demo e2e', { timeout: 60_000 }, () => {
     expect(structuredSnapshotEnvelope.command).toBe('snapshot');
     expectStructuredSnapshot(structuredSnapshotEnvelope.result);
     expect(structuredSnapshotEnvelope.result.sessionId).toBe(sessionId);
-    expect(structuredSnapshotEnvelope.result.scrollbackLines).toBeUndefined();
+    expect(structuredSnapshotEnvelope.result.scrollbackLines).toBeDefined();
+    expect(structuredSnapshotEnvelope.result.scrollbackLines!.length).toBeGreaterThan(0);
 
     const visibleText = structuredSnapshotEnvelope.result.visibleLines
       .map((line) => line.text)
       .join('\n');
 
-    expect(visibleText).toContain('LINE 001');
-    expect(visibleText).not.toContain('LINE 040');
-    expect(visibleText).not.toContain('LINE 080');
-    expect(visibleText).not.toContain('SCROLLBACK COMPLETE');
+    expect(visibleText).toContain('SCROLLBACK COMPLETE');
+    expect(visibleText).not.toContain('LINE 001');
 
     const screenshotEnvelope = runCliJson<SuccessEnvelope<ScreenshotResult>>(
       ['screenshot', sessionId],

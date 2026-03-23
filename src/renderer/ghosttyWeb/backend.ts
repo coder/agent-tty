@@ -267,12 +267,31 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         return dimensions;
       }
 
-      function decodeVisibleLines(terminal) {
+      function getNormalizedViewportState(terminal) {
         const { cols, rows } = getDimensions(terminal);
         const activeBuffer = terminal.buffer.active;
         const viewportY = activeBuffer.viewportY;
+        const bufferLength = activeBuffer.length;
         assertPositiveInteger(rows, 'visible row count must be positive');
         invariant(Number.isInteger(viewportY) && viewportY >= 0, 'viewportY must be a non-negative integer');
+        invariant(
+          Number.isInteger(bufferLength) && bufferLength >= rows,
+          'active buffer length must cover the visible viewport',
+        );
+
+        const bottomViewportY = bufferLength - rows;
+        invariant(bottomViewportY >= 0, 'bottom viewportY must be non-negative');
+        invariant(
+          viewportY <= bottomViewportY,
+          'viewportY must not exceed the bottom viewport position',
+        );
+
+        return { cols, rows, activeBuffer, viewportY: bottomViewportY };
+      }
+
+      function decodeVisibleLines(terminal) {
+        terminal.scrollToBottom();
+        const { cols, rows, activeBuffer, viewportY } = getNormalizedViewportState(terminal);
 
         const visibleLines = [];
         for (let row = 0; row < rows; row += 1) {
@@ -287,10 +306,7 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
       }
 
       function decodeScrollbackLines(terminal) {
-        const { cols } = getDimensions(terminal);
-        const activeBuffer = terminal.buffer.active;
-        const viewportY = activeBuffer.viewportY;
-        invariant(Number.isInteger(viewportY) && viewportY >= 0, 'viewportY must be a non-negative integer');
+        const { cols, activeBuffer, viewportY } = getNormalizedViewportState(terminal);
 
         if (viewportY === 0) {
           return [];
@@ -494,13 +510,10 @@ async function closeServer(server: Server): Promise<void> {
 }
 
 async function loadHarnessHtml(): Promise<string> {
-  try {
-    return await readFile(new URL('./harness.html', import.meta.url), 'utf8');
-  } catch {
-    // The build emits TypeScript output only, so dist/ does not include harness.html.
-    // Fall back to the embedded copy so compiled builds can still serve the harness.
-    return EMBEDDED_HARNESS_HTML;
-  }
+  // The embedded harness is the canonical runtime copy. Serving it directly keeps
+  // snapshot extraction behavior in sync with the bridge implementation even when
+  // the standalone source template drifts.
+  return EMBEDDED_HARNESS_HTML;
 }
 
 async function loadServedAssets(): Promise<
