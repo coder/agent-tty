@@ -209,6 +209,11 @@ export async function runHost(sessionId: string): Promise<void> {
     manifest.sessionId === sessionId,
     'session manifest sessionId must match the requested session',
   );
+  const idleTimeoutMs = manifest.idleTimeoutMs ?? 0;
+  invariant(
+    Number.isInteger(idleTimeoutMs) && idleTimeoutMs >= 0,
+    'session manifest idleTimeoutMs must be a non-negative integer',
+  );
 
   const state = new SessionState(manifest);
   invariant(
@@ -235,6 +240,8 @@ export async function runHost(sessionId: string): Promise<void> {
   let ptyExitHandled = false;
   let ptyHasExited = false;
   let lastOutputAt = Date.now();
+  let lastActivityAt = lastOutputAt;
+  let idleTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
   let rpcListenPromise: Promise<void> | null = null;
   let shutdownPromise: Promise<void> | null = null;
   let markPtyExited: () => void = () => {
@@ -267,6 +274,44 @@ export async function runHost(sessionId: string): Promise<void> {
   );
   state.setChildPid(pty.pid);
 
+  const clearIdleTimeout = (): void => {
+    if (idleTimeoutHandle === null) {
+      return;
+    }
+
+    clearTimeout(idleTimeoutHandle);
+    idleTimeoutHandle = null;
+  };
+
+  const scheduleIdleTimeout = (): void => {
+    if (idleTimeoutMs <= 0 || !isSessionRunning(state)) {
+      clearIdleTimeout();
+      return;
+    }
+
+    clearIdleTimeout();
+    idleTimeoutHandle = setTimeout(() => {
+      idleTimeoutHandle = null;
+
+      if (!isSessionRunning(state)) {
+        return;
+      }
+
+      const elapsedIdleMs = Date.now() - lastActivityAt;
+      if (elapsedIdleMs < idleTimeoutMs) {
+        scheduleIdleTimeout();
+        return;
+      }
+
+      pty.kill();
+    }, idleTimeoutMs);
+  };
+
+  const noteActivity = (): void => {
+    lastActivityAt = Date.now();
+    scheduleIdleTimeout();
+  };
+
   const initiateShutdown = (): Promise<void> => {
     if (shutdownPromise !== null) {
       return shutdownPromise;
@@ -274,6 +319,7 @@ export async function runHost(sessionId: string): Promise<void> {
 
     shutdownPromise = (async () => {
       try {
+        clearIdleTimeout();
         if (isSessionRunning(state)) {
           pty.kill();
           state.requestDestroy();
@@ -315,6 +361,7 @@ export async function runHost(sessionId: string): Promise<void> {
     invariant(Number.isInteger(exitCode), 'PTY exit code must be an integer');
 
     ptyExitHandled = true;
+    clearIdleTimeout();
 
     const exitSignal = normalizeExitSignal(signal);
     const currentStatus = state.snapshot().status;
@@ -542,6 +589,7 @@ export async function runHost(sessionId: string): Promise<void> {
 
       invariant(typeof text === 'string', 'type text must be a string');
       pty.write(text);
+      noteActivity();
       await eventLog.append('input_text', { data: text });
       return {};
     },
@@ -573,6 +621,7 @@ export async function runHost(sessionId: string): Promise<void> {
       );
       const encoded = encodePaste(text);
       pty.write(encoded);
+      noteActivity();
       await eventLog.append('input_paste', { data: encoded });
       return {};
     },
@@ -602,6 +651,7 @@ export async function runHost(sessionId: string): Promise<void> {
       }
 
       pty.write(encoded);
+      noteActivity();
       await eventLog.append('input_keys', { keys });
       return {};
     },
@@ -986,6 +1036,8 @@ export async function runHost(sessionId: string): Promise<void> {
 
   pty.onData((data: string) => {
     lastOutputAt = Date.now();
+    lastActivityAt = lastOutputAt;
+    scheduleIdleTimeout();
     void eventLog.append('output', { data }).catch(() => {
       // Best-effort logging; shutdown should not fail on transient append errors.
     });
@@ -994,6 +1046,8 @@ export async function runHost(sessionId: string): Promise<void> {
   pty.onExit(({ exitCode, signal }) => {
     handlePtyExit(exitCode, signal ?? null);
   });
+
+  scheduleIdleTimeout();
 
   process.on('SIGTERM', () => {
     startShutdown();
