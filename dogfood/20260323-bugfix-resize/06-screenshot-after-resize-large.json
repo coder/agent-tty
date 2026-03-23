@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "command": "screenshot",
+  "timestamp": "2026-03-23T09:02:45.367Z",
+  "result": {
+    "sessionId": "01KMCYX32BMKX4F48WRMRSDC12",
+    "capturedAtSeq": 4,
+    "profileName": "reference-dark",
+    "cols": 140,
+    "rows": 50,
+    "artifactPath": "/tmp/tmp.WGRdjY4C34/sessions/01KMCYX32BMKX4F48WRMRSDC12/artifacts/screenshot-4-reference-dark.png",
+    "pngSizeBytes": 7769
+  }
+}

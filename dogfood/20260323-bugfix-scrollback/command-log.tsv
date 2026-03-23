@@ -1,0 +1,7 @@
+01-create	0	npx tsx src/cli/main.ts create --cols 80 --rows 24 --json -- npx tsx test/fixtures/apps/scrollback-demo/main.ts 
+02-wait-text	0	npx tsx src/cli/main.ts wait 01KMCYYK6GSKR6ZF3NAW7GFE5N --text SCROLLBACK\ COMPLETE --timeout 10000 --json 
+03-snapshot-viewport	0	npx tsx src/cli/main.ts snapshot 01KMCYYK6GSKR6ZF3NAW7GFE5N --json 
+04-snapshot-scrollback	0	npx tsx src/cli/main.ts snapshot 01KMCYYK6GSKR6ZF3NAW7GFE5N --include-scrollback --json 
+05-screenshot	0	npx tsx src/cli/main.ts screenshot 01KMCYYK6GSKR6ZF3NAW7GFE5N --json 
+06-wait-exit	0	npx tsx src/cli/main.ts wait 01KMCYYK6GSKR6ZF3NAW7GFE5N --exit 
+07-destroy	0	npx tsx src/cli/main.ts destroy 01KMCYYK6GSKR6ZF3NAW7GFE5N --json 

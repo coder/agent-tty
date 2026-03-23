@@ -1,0 +1,12 @@
+01-create	0	npx tsx src/cli/main.ts create --cols 120 --rows 40 --json -- npx tsx test/fixtures/apps/resize-demo/main.ts 
+02-wait-size	0	npx tsx src/cli/main.ts wait 01KMCYX32BMKX4F48WRMRSDC12 --text SIZE: --json 
+03-screenshot-before-resize	0	npx tsx src/cli/main.ts screenshot 01KMCYX32BMKX4F48WRMRSDC12 --json 
+04-resize-large	0	npx tsx src/cli/main.ts resize 01KMCYX32BMKX4F48WRMRSDC12 --cols 140 --rows 50 --json 
+05-wait-stable-large	0	npx tsx src/cli/main.ts wait 01KMCYX32BMKX4F48WRMRSDC12 --screen-stable-ms 500 --json 
+06-screenshot-after-resize-large	0	npx tsx src/cli/main.ts screenshot 01KMCYX32BMKX4F48WRMRSDC12 --json 
+07-snapshot-after-resize-large	0	npx tsx src/cli/main.ts snapshot 01KMCYX32BMKX4F48WRMRSDC12 --json 
+08-resize-small	0	npx tsx src/cli/main.ts resize 01KMCYX32BMKX4F48WRMRSDC12 --cols 80 --rows 24 --json 
+09-wait-stable-small	0	npx tsx src/cli/main.ts wait 01KMCYX32BMKX4F48WRMRSDC12 --screen-stable-ms 500 --json 
+10-screenshot-after-resize-small	0	npx tsx src/cli/main.ts screenshot 01KMCYX32BMKX4F48WRMRSDC12 --json 
+11-snapshot-after-resize-small	0	npx tsx src/cli/main.ts snapshot 01KMCYX32BMKX4F48WRMRSDC12 --json 
+12-destroy	0	npx tsx src/cli/main.ts destroy 01KMCYX32BMKX4F48WRMRSDC12 --json 
