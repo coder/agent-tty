@@ -34,6 +34,8 @@ interface SessionSummary {
   status: string;
   command: string[];
   createdAt: string;
+  name?: string;
+  pid: number | null;
 }
 
 interface GcResult {
@@ -81,11 +83,16 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       sessions: SessionSummary[];
     }>;
     expect(listEnvelope.ok).toBe(true);
-    expect(listEnvelope.result.sessions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ sessionId, status: 'running' }),
-      ]),
+    const listedSession = listEnvelope.result.sessions.find(
+      (session) => session.sessionId === sessionId,
     );
+    expect(listedSession).toBeDefined();
+    expect(listedSession).toMatchObject({
+      sessionId,
+      status: 'running',
+    });
+    expect(listedSession?.name).toBeUndefined();
+    expect(listedSession?.pid).toBeTypeOf('number');
 
     const inspectResult = runCli(['inspect', sessionId, '--json'], {
       AGENT_TERMINAL_HOME: testHome,
@@ -102,6 +109,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(inspectEnvelope.result.session.status).toBe('running');
     expect(inspectEnvelope.result.session.hostPid).toBeTypeOf('number');
     expect(inspectEnvelope.result.session.childPid).toBeTypeOf('number');
+    expect(listedSession?.pid).toBe(inspectEnvelope.result.session.childPid);
 
     const destroyResult = runCli(['destroy', sessionId, '--json'], {
       AGENT_TERMINAL_HOME: testHome,
@@ -159,11 +167,18 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         sessions: SessionSummary[];
       }>
     ).result.sessions;
-    expect(allSessions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ sessionId, status: 'destroyed' }),
-      ]),
+    const destroyedSession = allSessions.find(
+      (session) => session.sessionId === sessionId,
     );
+    expect(destroyedSession).toBeDefined();
+    expect(destroyedSession).toMatchObject({
+      sessionId,
+      status: 'destroyed',
+    });
+    expect(destroyedSession?.name).toBeUndefined();
+
+    const destroyedManifest = inspectSession(testHome, sessionId);
+    expect(destroyedSession?.pid).toBe(destroyedManifest.childPid ?? null);
   });
 
   it('stores name/env/term in the manifest and passes env to the PTY', async () => {
@@ -209,6 +224,25 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(manifest.name).toBe('my-session');
     expect(manifest.env).toEqual({ FOO: 'bar', BAZ: 'qux' });
     expect(manifest.term).toBe('vt100');
+
+    const listResult = runCli(['list', '--all', '--json'], {
+      AGENT_TERMINAL_HOME: testHome,
+    });
+    expect(listResult.status).toBe(0);
+    expect(listResult.stderr).toBe('');
+    const listEnvelope = JSON.parse(listResult.stdout) as SuccessEnvelope<{
+      sessions: SessionSummary[];
+    }>;
+    const listedSession = listEnvelope.result.sessions.find(
+      (session) => session.sessionId === sessionId,
+    );
+    expect(listedSession).toBeDefined();
+    expect(listedSession).toMatchObject({
+      sessionId,
+      status: 'exited',
+      name: 'my-session',
+    });
+    expect(listedSession?.pid).toBe(manifest.childPid ?? null);
 
     const eventContent = await readFile(
       join(testHome, 'sessions', sessionId, 'events.jsonl'),

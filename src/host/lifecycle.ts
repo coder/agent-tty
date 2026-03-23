@@ -60,6 +60,8 @@ export interface SessionSummary {
   status: string;
   command: string[];
   createdAt: string;
+  name?: string;
+  pid: number | null;
 }
 
 function isNodeError(error: unknown): error is NodeError {
@@ -624,6 +626,8 @@ export async function listSessions(
       status: manifest.status,
       command: [...manifest.command],
       createdAt: manifest.createdAt,
+      ...(manifest.name !== undefined ? { name: manifest.name } : {}),
+      pid: manifest.childPid ?? null,
     });
   }
 
