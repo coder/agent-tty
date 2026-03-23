@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "sessionId": "01W5CURSR1774283429",
+  "createdAt": "2026-03-23T16:00:00.000Z",
+  "updatedAt": "2026-03-23T16:00:05.000Z",
+  "status": "exited",
+  "command": [
+    "echo",
+    "week5-cursor"
+  ],
+  "cwd": "/tmp",
+  "cols": 80,
+  "rows": 24,
+  "hostPid": null,
+  "childPid": null,
+  "exitCode": 0,
+  "exitSignal": null
+}

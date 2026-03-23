@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-23T16:30:55.288Z",
+  "result": {
+    "sessionId": "01W5TIMNG1774283448",
+    "format": "webm",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent_exec_1fd95a244c/dogfood/20260323-week5-render-timing/recordings/accelerated.webm",
+    "bytes": 112431,
+    "sha256": "9ee75f278e14c3b22a30c50b1be95c0f582f831a1d8721e857301e5d29fafe63",
+    "capturedAtSeq": 4,
+    "durationMs": 1233,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "profileName": "reference-dark",
+      "renderProfileHash": "908ba0076143741bddebfffd75b4eca8397f320131ef8173a77302a39b2376f8",
+      "timingMode": "accelerated",
+      "outputEventCount": 4,
+      "resizeEventCount": 0
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "bundle": "20260323-week5-render-fonts",
+  "artifacts": [
+    {
+      "path": "01-screenshot-reference-dark.json",
+      "sha256": "51af1332da8838e27e248f40a868c1a19ea22f5265bc6d2079d40d4eb66f4731",
+      "size": 667
+    },
+    {
+      "path": "02-screenshot-reference-light.json",
+      "sha256": "b24753969c2a89c4e679b1555d23b334bfe045517fae99b338588bc82cecda12",
+      "size": 669
+    },
+    {
+      "path": "command-status.tsv",
+      "sha256": "75dfd042eded2af131e3bee2a7beca66a9cf59e7c6f1a6e85c1183359ce809a8",
+      "size": 607
+    },
+    {
+      "path": "commands.sh",
+      "sha256": "b22f7a6f70f9afcff3daa7bcbc2b9802fa238bd7e8c26500f79f0c15e0137fdf",
+      "size": 246
+    },
+    {
+      "path": "events.jsonl",
+      "sha256": "e2ad6af021b8f7e262c8fa202ed9f305cabf1a93ce8d8f3d3760502c067b0abc",
+      "size": 2287
+    },
+    {
+      "path": "logs/01-screenshot-reference-dark.json.exitcode",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "logs/01-screenshot-reference-dark.json.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "logs/02-screenshot-reference-light.json.exitcode",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "logs/02-screenshot-reference-light.json.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "notes.md",
+      "sha256": "367916eab84c2df8e112e70d17655e5822c7959a4d0ec1776bb8ce8af10acccb",
+      "size": 1892
+    },
+    {
+      "path": "run-scenario.sh",
+      "sha256": "52a4143028f4ed18736c01ad183972167db3b85dabd79aec5bd4e281a14b5fd2",
+      "size": 7384
+    },
+    {
+      "path": "screenshots/reference-dark.png",
+      "sha256": "55c7d357604a5c7bd200680d61b98d3e4dfd27a139a4c0dad6ee1df800a51c87",
+      "size": 48882
+    },
+    {
+      "path": "screenshots/reference-light.png",
+      "sha256": "f48f2bf87f4bbc5b051caa4b70585e3d44ba632263a11938b19df9b65b1de74d",
+      "size": 48153
+    },
+    {
+      "path": "session.json",
+      "sha256": "e237598783b20d0125518428d835b77cca0fe457e16cd4ea2b5331b5551b6776",
+      "size": 338
+    }
+  ]
+}

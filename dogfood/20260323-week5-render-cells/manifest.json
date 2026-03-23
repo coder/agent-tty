@@ -1,0 +1,70 @@
+{
+  "bundle": "20260323-week5-render-cells",
+  "artifacts": [
+    {
+      "path": "01-snapshot-include-cells.json",
+      "sha256": "a47958a835be69e75ebc950df4ad28adf21e1eddd990578dce0123cd56f54da6",
+      "size": 208028
+    },
+    {
+      "path": "02-snapshot-default.json",
+      "sha256": "d2d20853ec8feceefd43a1ccd134a58ff833204b605a08596a63f749e251a4dc",
+      "size": 2205
+    },
+    {
+      "path": "cells-sample.json",
+      "sha256": "2411c6802e7464762340ce2d934c043885d7f0f34129170d30ffe601b0be50c0",
+      "size": 652
+    },
+    {
+      "path": "command-status.tsv",
+      "sha256": "eb43d5b13fcebbdde9a141ccb49fef0a820c0217967f74b285abadd799c10636",
+      "size": 529
+    },
+    {
+      "path": "commands.sh",
+      "sha256": "955dddbaaf5cbc9bbb84e87c68d597a0a454a5465a74ec806de56390b7c732b1",
+      "size": 207
+    },
+    {
+      "path": "events.jsonl",
+      "sha256": "e2ad6af021b8f7e262c8fa202ed9f305cabf1a93ce8d8f3d3760502c067b0abc",
+      "size": 2287
+    },
+    {
+      "path": "logs/01-snapshot-include-cells.json.exitcode",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "logs/01-snapshot-include-cells.json.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "logs/02-snapshot-default.json.exitcode",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "logs/02-snapshot-default.json.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "notes.md",
+      "sha256": "8e2a271b18f17545f3d0225fffdf936262cb9d99c72496efcc53bee413646fa2",
+      "size": 2211
+    },
+    {
+      "path": "run-scenario.sh",
+      "sha256": "db4e6ce650683c128f95bce085d740de4a1cb2d360557be9af30b4d2a78a2dda",
+      "size": 6157
+    },
+    {
+      "path": "session.json",
+      "sha256": "d3b771a160cdb9da80066298891c92bcaaa00748f42b2bddb3ab055f90a55a9c",
+      "size": 338
+    }
+  ]
+}

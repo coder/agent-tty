@@ -1,0 +1,113 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-23T16:31:58.430Z",
+  "result": {
+    "format": "structured",
+    "sessionId": "01W5CELLS1774283515",
+    "capturedAtSeq": 4,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 15,
+    "cursorCol": 0,
+    "isAltScreen": false,
+    "visibleLines": [
+      {
+        "row": 0,
+        "text": "COLOR GRID FIXTURE"
+      },
+      {
+        "row": 1,
+        "text": "Basic background colors:"
+      },
+      {
+        "row": 2,
+        "text": " BG-40      BG-41      BG-42      BG-43      BG-44      BG-45      BG-46      BG"
+      },
+      {
+        "row": 3,
+        "text": "-47"
+      },
+      {
+        "row": 4,
+        "text": "Bright background colors:"
+      },
+      {
+        "row": 5,
+        "text": " BG-100     BG-101     BG-102     BG-103     BG-104     BG-105     BG-106     BG"
+      },
+      {
+        "row": 6,
+        "text": "-107"
+      },
+      {
+        "row": 7,
+        "text": "256-color sample backgrounds:"
+      },
+      {
+        "row": 8,
+        "text": " IDX-016    IDX-022    IDX-028    IDX-034    IDX-040    IDX-046    IDX-082    ID"
+      },
+      {
+        "row": 9,
+        "text": "X-118    IDX-154    IDX-190    IDX-196    IDX-202"
+      },
+      {
+        "row": 10,
+        "text": "Truecolor sample backgrounds:"
+      },
+      {
+        "row": 11,
+        "text": " TC-RED     TC-GRN     TC-BLU     TC-GLD"
+      },
+      {
+        "row": 12,
+        "text": "Foreground sample labels:"
+      },
+      {
+        "row": 13,
+        "text": "FG-31       FG-92       FG5-45      FG5-201     FG2-ORANGE  FG2-CYAN"
+      },
+      {
+        "row": 14,
+        "text": "COLOR GRID COMPLETE"
+      },
+      {
+        "row": 15,
+        "text": ""
+      },
+      {
+        "row": 16,
+        "text": ""
+      },
+      {
+        "row": 17,
+        "text": ""
+      },
+      {
+        "row": 18,
+        "text": ""
+      },
+      {
+        "row": 19,
+        "text": ""
+      },
+      {
+        "row": 20,
+        "text": ""
+      },
+      {
+        "row": 21,
+        "text": ""
+      },
+      {
+        "row": 22,
+        "text": ""
+      },
+      {
+        "row": 23,
+        "text": ""
+      }
+    ]
+  }
+}
