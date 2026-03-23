@@ -288,7 +288,10 @@ describe('CLI integration', () => {
       testEnv(),
     );
     expect(result.status).toBe(0);
-    expect(result.stderr).toBe('');
+    expect(result.stderr).not.toBe('');
+    expect(result.stderr).toContain(
+      '[agent-terminal] debug: resolved command context',
+    );
 
     const parsed = JSON.parse(result.stdout) as SuccessEnvelope<{
       cliVersion: string;
