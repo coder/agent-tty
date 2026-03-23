@@ -28,6 +28,10 @@ import {
   createArtifactEntry,
 } from '../../storage/artifactManifest.js';
 import {
+  ReplayTimingModeSchema,
+  type ReplayTimingMode,
+} from '../../protocol/schemas.js';
+import {
   artifactPath,
   ensureArtifactsDir,
   recordingFilename,
@@ -56,6 +60,7 @@ interface CommandOptions {
   sessionId: string;
   format?: string;
   out?: string;
+  timing?: string;
 }
 
 function resolveRecordExportFormat(
@@ -74,6 +79,29 @@ function resolveRecordExportFormat(
   }
 
   return formatResult.data;
+}
+
+function resolveReplayTimingMode(
+  timing: string | undefined,
+): ReplayTimingMode | undefined {
+  if (timing === undefined) {
+    return undefined;
+  }
+
+  const timingResult = ReplayTimingModeSchema.safeParse(timing);
+
+  if (!timingResult.success) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message:
+        'Replay timing mode must be one of: recorded, accelerated, max-speed.',
+      details: {
+        timing,
+      },
+      cause: timingResult.error,
+    });
+  }
+
+  return timingResult.data;
 }
 
 async function resolveOutputPath(
@@ -145,6 +173,7 @@ export async function runRecordExportCommand(
   options: CommandOptions,
 ): Promise<void> {
   const format = resolveRecordExportFormat(options.format);
+  const timingMode = resolveReplayTimingMode(options.timing);
   const home = options.context.home;
   let sessionDirectory: string;
 
@@ -257,6 +286,7 @@ export async function runRecordExportCommand(
           manifest,
           events,
           outputPath: artifactOutputPath,
+          ...(timingMode !== undefined ? { timingMode } : {}),
         },
         {
           backendFactory: (sessionId, profile, videoOptions) =>

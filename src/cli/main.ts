@@ -514,6 +514,10 @@ async function main(): Promise<void> {
     .description('Export a recorded session artifact')
     .requiredOption('--format <format>', "Export format: 'asciicast' or 'webm'")
     .option('--out <path>', 'Explicit output path')
+    .option(
+      '--timing <mode>',
+      'Replay timing mode for WebM: recorded, accelerated, max-speed',
+    )
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
@@ -523,6 +527,7 @@ async function main(): Promise<void> {
           options: {
             format: string;
             out?: string;
+            timing?: string;
             json: boolean;
           },
           context: CommandContext,
@@ -533,6 +538,7 @@ async function main(): Promise<void> {
             sessionId,
             format: options.format,
             ...(options.out !== undefined ? { out: options.out } : {}),
+            ...(options.timing !== undefined ? { timing: options.timing } : {}),
           });
         },
       ),
