@@ -9,11 +9,7 @@
       "createdAt": "2026-03-22T22:32:29.236Z",
       "updatedAt": "2026-03-22T22:32:40.971Z",
       "status": "exited",
-      "command": [
-        "npx",
-        "tsx",
-        "test/fixtures/apps/alt-screen-demo/main.ts"
-      ],
+      "command": ["npx", "tsx", "test/fixtures/apps/alt-screen-demo/main.ts"],
       "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_bd8e80d26b",
       "term": "xterm-256color",
       "cols": 80,

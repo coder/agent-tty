@@ -9,11 +9,7 @@
       "createdAt": "2026-03-22T22:31:36.508Z",
       "updatedAt": "2026-03-22T22:31:39.032Z",
       "status": "exited",
-      "command": [
-        "npx",
-        "tsx",
-        "test/fixtures/apps/color-grid/main.ts"
-      ],
+      "command": ["npx", "tsx", "test/fixtures/apps/color-grid/main.ts"],
       "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_bd8e80d26b",
       "term": "xterm-256color",
       "cols": 80,

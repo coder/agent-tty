@@ -9,11 +9,7 @@
       "createdAt": "2026-03-22T22:32:06.877Z",
       "updatedAt": "2026-03-22T22:32:09.045Z",
       "status": "exited",
-      "command": [
-        "npx",
-        "tsx",
-        "test/fixtures/apps/crash-demo/main.ts"
-      ],
+      "command": ["npx", "tsx", "test/fixtures/apps/crash-demo/main.ts"],
       "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_06577c86a1",
       "term": "xterm-256color",
       "cols": 80,

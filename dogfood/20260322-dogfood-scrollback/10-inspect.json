@@ -9,11 +9,7 @@
       "createdAt": "2026-03-22T22:42:50.397Z",
       "updatedAt": "2026-03-22T22:42:52.956Z",
       "status": "exited",
-      "command": [
-        "npx",
-        "tsx",
-        "test/fixtures/apps/scrollback-demo/main.ts"
-      ],
+      "command": ["npx", "tsx", "test/fixtures/apps/scrollback-demo/main.ts"],
       "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_48a09094d0",
       "term": "xterm-256color",
       "cols": 80,
