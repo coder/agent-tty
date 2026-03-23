@@ -9,11 +9,7 @@
       "createdAt": "2026-03-23T16:19:48.304Z",
       "updatedAt": "2026-03-23T16:19:49.035Z",
       "status": "running",
-      "command": [
-        "bash",
-        "--noprofile",
-        "--norc"
-      ],
+      "command": ["bash", "--noprofile", "--norc"],
       "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_e761f210b2",
       "env": {
         "PS1": "READY> "

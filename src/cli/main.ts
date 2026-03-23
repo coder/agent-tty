@@ -540,7 +540,9 @@ async function main(): Promise<void> {
             context,
             json: options.json,
             sessionId,
-            ...(options.profile === undefined ? {} : { profile: options.profile }),
+            ...(options.profile === undefined
+              ? {}
+              : { profile: options.profile }),
             ...(cursorVisible === undefined
               ? {}
               : { showCursor: cursorVisible }),

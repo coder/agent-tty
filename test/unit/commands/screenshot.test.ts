@@ -454,16 +454,19 @@ describe('screenshot command', () => {
       expect.stringMatching(/^\/artifacts\/\.tmp-screenshot-.*\.png$/),
       { showCursor: true },
     );
-    expect(mocks.createArtifactEntry).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: expect.objectContaining({ cursorVisible: true }),
-      }),
-    );
-    expect(mocks.emitSuccess).toHaveBeenCalledWith(
-      expect.objectContaining({
-        result: expect.objectContaining({ cursorVisible: true }),
-      }),
-    );
+    expect(mocks.createArtifactEntry).toHaveBeenCalled();
+    const artifactEntryArg = mocks.createArtifactEntry.mock.calls.at(
+      -1,
+    )?.[0] as {
+      metadata?: { cursorVisible?: boolean };
+    };
+    expect(artifactEntryArg.metadata?.cursorVisible).toBe(true);
+
+    expect(mocks.emitSuccess).toHaveBeenCalled();
+    const emitSuccessArg = mocks.emitSuccess.mock.calls.at(-1)?.[0] as {
+      result?: { cursorVisible?: boolean };
+    };
+    expect(emitSuccessArg.result?.cursorVisible).toBe(true);
   });
 
   it('falls back to offline replay when the host is unreachable', async () => {

@@ -9,9 +9,7 @@
       "createdAt": "2026-03-23T17:01:49.541Z",
       "updatedAt": "2026-03-23T17:01:50.123Z",
       "status": "running",
-      "command": [
-        "/bin/sh"
-      ],
+      "command": ["/bin/sh"],
       "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_fd4b81c179",
       "name": "dogfood-session",
       "shell": "/bin/sh",

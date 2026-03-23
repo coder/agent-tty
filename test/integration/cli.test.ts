@@ -169,13 +169,7 @@ describe('CLI integration', () => {
 
   it('rejects screenshot requests when --show-cursor and --hide-cursor are both provided', () => {
     const result = runCli(
-      [
-        'screenshot',
-        'session-01',
-        '--show-cursor',
-        '--hide-cursor',
-        '--json',
-      ],
+      ['screenshot', 'session-01', '--show-cursor', '--hide-cursor', '--json'],
       testEnv(),
     );
 
