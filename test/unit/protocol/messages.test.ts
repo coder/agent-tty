@@ -7,13 +7,16 @@ import {
   MarkResultSchema,
   PasteParamsSchema,
   RecordExportResultSchema,
+  ReplayTimingModeSchema,
   ResizeResultSchema,
+  RichSnapshotLineSchema,
   RpcMethodSchemas,
   RpcRequestSchema,
   RpcResponseSchema,
   ScreenshotParamsSchema,
   ScreenshotResultSchema,
   SendKeysParamsSchema,
+  SnapshotCellSchema,
   SnapshotParamsSchema,
   SnapshotResultSchema,
   TypeParamsSchema,
@@ -270,6 +273,59 @@ describe('RPC message schemas', () => {
         rows: 24,
         artifactPath: '/tmp/screenshot.png',
         pngSizeBytes: 1024,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts replay timing modes and rich snapshot cell payloads', () => {
+    expect(ReplayTimingModeSchema.safeParse('recorded').success).toBe(true);
+    expect(ReplayTimingModeSchema.safeParse('accelerated').success).toBe(true);
+    expect(ReplayTimingModeSchema.safeParse('max-speed').success).toBe(true);
+    expect(ReplayTimingModeSchema.safeParse('slow').success).toBe(false);
+
+    expect(
+      SnapshotCellSchema.safeParse({
+        char: 'A',
+        fg: '#ffffff',
+        bg: '#000000',
+        bold: true,
+        italic: true,
+        underline: true,
+        strikethrough: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      SnapshotCellSchema.safeParse({
+        char: 'A',
+        extra: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      RichSnapshotLineSchema.safeParse({
+        lineNumber: 0,
+        cells: [
+          { char: 'h', fg: '#ffffff' },
+          { char: 'i', bold: true },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      SnapshotResultSchema.safeParse({
+        format: 'structured',
+        sessionId: 'session-01',
+        capturedAtSeq: 5,
+        cols: 80,
+        rows: 24,
+        cursorRow: 2,
+        cursorCol: 4,
+        isAltScreen: false,
+        visibleLines: [{ row: 0, text: 'hi' }],
+        cells: [
+          {
+            lineNumber: 0,
+            cells: [{ char: 'h' }, { char: 'i', underline: true }],
+          },
+        ],
       }).success,
     ).toBe(true);
   });

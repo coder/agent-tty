@@ -3,22 +3,31 @@ import process from 'node:process';
 
 import type { Command } from 'commander';
 
+import { DEFAULT_LOG_LEVEL } from '../config/defaults.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { resolveHome } from '../storage/home.js';
 import { invariant } from '../util/assert.js';
 
 const COMMAND_CONTEXT_SYMBOL = Symbol('commandContext');
 
+const LOG_LEVEL_VALUES = ['debug', 'info', 'warn', 'error'] as const;
+
+export type LogLevel = (typeof LOG_LEVEL_VALUES)[number];
+
 export interface GlobalCliOptions {
   home?: string;
   timeoutMs?: number;
   color?: boolean;
+  logLevel?: string;
+  profileDefault?: string;
 }
 
 export interface CommandContext {
   readonly home: string;
   readonly timeoutMs: number | undefined;
   readonly colorEnabled: boolean;
+  readonly logLevel: LogLevel;
+  readonly profileDefault: string | undefined;
 }
 
 interface CommandWithContext extends Command {
@@ -67,6 +76,24 @@ export function parseTimeoutMsOption(value: string): number {
   return parsedValue;
 }
 
+export function resolveLogLevel(raw?: string): LogLevel {
+  if (raw === undefined) {
+    return DEFAULT_LOG_LEVEL;
+  }
+
+  if ((LOG_LEVEL_VALUES as readonly string[]).includes(raw)) {
+    return raw as LogLevel;
+  }
+
+  throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+    message: 'Log level must be one of debug, info, warn, or error.',
+    details: {
+      logLevel: raw,
+      allowedValues: LOG_LEVEL_VALUES,
+    },
+  });
+}
+
 export function resolveCommandContext(
   options: GlobalCliOptions,
   env: NodeJS.ProcessEnv = process.env,
@@ -79,11 +106,17 @@ export function resolveCommandContext(
           configuredHome,
           options.home !== undefined ? '--home' : 'AGENT_TERMINAL_HOME',
         );
+  const logLevel = resolveLogLevel(
+    options.logLevel ?? env.AGENT_TERMINAL_LOG_LEVEL,
+  );
+  const profileDefault = options.profileDefault ?? env.AGENT_TERMINAL_PROFILE;
 
   return Object.freeze({
     home,
     timeoutMs: options.timeoutMs,
     colorEnabled: options.color ?? true,
+    logLevel,
+    profileDefault,
   });
 }
 

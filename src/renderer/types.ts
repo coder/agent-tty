@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import {
   MarkerEventPayloadSchema,
+  RichSnapshotLineSchema,
   VisibleLineSchema,
   type VisibleLine,
 } from '../protocol/schemas.js';
@@ -187,6 +188,7 @@ export const SemanticSnapshotSchema = z
     isAltScreen: z.boolean(),
     visibleLines: z.array(VisibleLineSchema),
     scrollbackLines: z.array(VisibleLineSchema).optional(),
+    cells: z.array(RichSnapshotLineSchema).optional(),
   })
   .strict();
 export type SemanticSnapshot = z.infer<typeof SemanticSnapshotSchema>;

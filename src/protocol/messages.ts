@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import type { RecordExportResult as RecordExportResultType } from './schemas.js';
+import type {
+  RecordExportResult as RecordExportResultType,
+  ReplayTimingMode as ReplayTimingModeType,
+  RichSnapshotLine as RichSnapshotLineType,
+  SnapshotCell as SnapshotCellType,
+} from './schemas.js';
 
 import {
   ScreenshotParamsSchema,
@@ -15,8 +20,11 @@ import {
 
 export {
   RecordExportResultSchema,
+  ReplayTimingModeSchema,
+  RichSnapshotLineSchema,
   ScreenshotParamsSchema,
   ScreenshotResultSchema,
+  SnapshotCellSchema,
   SnapshotParamsSchema,
   SnapshotResultSchema,
   WaitForRenderParamsSchema,
@@ -78,6 +86,12 @@ export const InspectResultSchema = z
   })
   .strict();
 export type InspectResult = z.infer<typeof InspectResultSchema>;
+
+export type ReplayTimingMode = ReplayTimingModeType;
+
+export type SnapshotCell = SnapshotCellType;
+
+export type RichSnapshotLine = RichSnapshotLineType;
 
 export type SnapshotParams = z.infer<typeof SnapshotParamsSchema>;
 

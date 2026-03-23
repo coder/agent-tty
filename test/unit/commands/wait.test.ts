@@ -45,6 +45,8 @@ const TEST_CONTEXT = {
   home: '/tmp/agent-terminal',
   timeoutMs: undefined,
   colorEnabled: true,
+  logLevel: 'info',
+  profileDefault: undefined,
 } as const;
 
 function createSessionRecord(

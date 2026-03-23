@@ -43,6 +43,8 @@ describe('create command', () => {
     home: '/tmp/agent-terminal-home',
     timeoutMs: undefined,
     colorEnabled: true,
+    logLevel: 'info',
+    profileDefault: undefined,
   } as const;
 
   beforeEach(() => {

@@ -73,6 +73,8 @@ const TEST_CONTEXT = {
   home: '/tmp/agent-terminal',
   timeoutMs: undefined,
   colorEnabled: true,
+  logLevel: 'info',
+  profileDefault: undefined,
 } as const;
 const TEST_SCREENSHOT_SHA256 = 'a'.repeat(64);
 const TEST_RENDER_PROFILE_HASH = 'b'.repeat(64);
