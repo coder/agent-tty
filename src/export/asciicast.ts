@@ -1,8 +1,7 @@
 import type { EventRecord, SessionRecord } from '../protocol/schemas.js';
 
+import { DEFAULT_TERM } from '../config/defaults.js';
 import { invariant } from '../util/assert.js';
-
-const DEFAULT_TERM = 'xterm-256color';
 
 export interface AsciicastHeader {
   version: 2;

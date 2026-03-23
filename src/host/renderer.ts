@@ -163,8 +163,17 @@ export class HostRendererManager {
   ): Promise<RendererBackend> {
     if (this.bootPromise === null) {
       this.bootPromise = (async () => {
-        await backend.boot();
-        return backend;
+        try {
+          await backend.boot();
+          return backend;
+        } catch (error: unknown) {
+          try {
+            await this.disposeCurrentBackend();
+          } catch {
+            // Preserve the original boot error; dispose is best effort here.
+          }
+          throw error;
+        }
       })().finally(() => {
         this.bootPromise = null;
       });

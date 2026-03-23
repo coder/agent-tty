@@ -311,6 +311,33 @@ describe('HostRendererManager', () => {
     expect(crashedBackend.disposeMock).toHaveBeenCalledTimes(1);
   });
 
+  it('disposes the current backend when boot fails so the next attempt can recover', async () => {
+    const manager = new HostRendererManager({
+      sessionId: 'session-01',
+      sessionDir,
+      backendFactory,
+    });
+    const bootError = new Error('boot failed');
+
+    backendFactory.mockImplementationOnce(() => {
+      const backend = createFakeBackend({
+        bootImplementation: () => Promise.reject(bootError),
+      });
+      backends.push(backend);
+      return backend;
+    });
+
+    await expect(manager.getBackend(createProfile(), null)).rejects.toThrow(
+      'boot failed',
+    );
+    expect(getCreatedBackend(backends, 0).disposeMock).toHaveBeenCalledTimes(1);
+
+    const recoveredBackend = await manager.getBackend(createProfile(), null);
+
+    expect(recoveredBackend).toBe(getCreatedBackend(backends, 1));
+    expect(backendFactory).toHaveBeenCalledTimes(2);
+  });
+
   it('makes dispose idempotent after a backend has been created', async () => {
     const manager = new HostRendererManager({
       sessionId: 'session-01',

@@ -18,6 +18,7 @@ const Sha256HexSchema = z
 
 export const SessionStatusSchema = z.enum([
   'running',
+  // Transitional state kept for reconcileSession()/recordExit() compatibility.
   'exiting',
   'exited',
   'failed',

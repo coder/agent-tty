@@ -3,21 +3,34 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
 
 const mocks = vi.hoisted(() => ({
-  access: vi.fn(),
+  lstat: vi.fn(),
+  stat: vi.fn(),
   readFile: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', () => ({
-  access: mocks.access,
+  lstat: mocks.lstat,
+  stat: mocks.stat,
   readFile: mocks.readFile,
 }));
 
-import { resolveCommandInputText } from '../../../src/cli/commands/inputSource.js';
+import {
+  MAX_INPUT_FILE_SIZE,
+  resolveCommandInputText,
+} from '../../../src/cli/commands/inputSource.js';
+
+function createMockStats(options: { isFile?: boolean; size?: number } = {}) {
+  return {
+    isFile: vi.fn(() => options.isFile ?? true),
+    size: options.size ?? 128,
+  };
+}
 
 describe('resolveCommandInputText', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.access.mockResolvedValue(undefined);
+    mocks.lstat.mockResolvedValue(createMockStats());
+    mocks.stat.mockResolvedValue(createMockStats());
     mocks.readFile.mockResolvedValue('from-file');
   });
 
@@ -29,7 +42,8 @@ describe('resolveCommandInputText', () => {
         file: undefined,
       }),
     ).resolves.toBe('inline-text');
-    expect(mocks.access).not.toHaveBeenCalled();
+    expect(mocks.lstat).not.toHaveBeenCalled();
+    expect(mocks.stat).not.toHaveBeenCalled();
     expect(mocks.readFile).not.toHaveBeenCalled();
   });
 
@@ -41,8 +55,8 @@ describe('resolveCommandInputText', () => {
         file: '/tmp/input.txt',
       }),
     ).resolves.toBe('from-file');
-    expect(mocks.access).toHaveBeenNthCalledWith(1, '/tmp/input.txt', 0);
-    expect(mocks.access).toHaveBeenNthCalledWith(2, '/tmp/input.txt', 4);
+    expect(mocks.lstat).toHaveBeenCalledWith('/tmp/input.txt');
+    expect(mocks.stat).toHaveBeenCalledWith('/tmp/input.txt');
     expect(mocks.readFile).toHaveBeenCalledWith('/tmp/input.txt', 'utf8');
   });
 
@@ -78,7 +92,7 @@ describe('resolveCommandInputText', () => {
 
   it('rejects a missing input file', async () => {
     const error = Object.assign(new Error('missing'), { code: 'ENOENT' });
-    mocks.access.mockRejectedValueOnce(error);
+    mocks.lstat.mockRejectedValueOnce(error);
 
     await expect(
       resolveCommandInputText({
@@ -94,7 +108,7 @@ describe('resolveCommandInputText', () => {
 
   it('rejects an unreadable input file', async () => {
     const error = Object.assign(new Error('unreadable'), { code: 'EACCES' });
-    mocks.access.mockResolvedValueOnce(undefined).mockRejectedValueOnce(error);
+    mocks.readFile.mockRejectedValueOnce(error);
 
     await expect(
       resolveCommandInputText({
@@ -106,6 +120,48 @@ describe('resolveCommandInputText', () => {
       code: ERROR_CODES.INVALID_INPUT,
       message: 'Input file "/tmp/protected.txt" is not readable.',
     });
+  });
+
+  it('rejects non-regular input paths', async () => {
+    mocks.lstat.mockResolvedValueOnce(createMockStats({ isFile: false }));
+
+    await expect(
+      resolveCommandInputText({
+        commandName: 'type',
+        text: undefined,
+        file: '/tmp/link.txt',
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      message:
+        'Input file "/tmp/link.txt" must be a regular file. Directories, symlinks, and device files are not supported.',
+    });
+    expect(mocks.stat).not.toHaveBeenCalled();
+    expect(mocks.readFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects oversized input files before reading them', async () => {
+    mocks.stat.mockResolvedValueOnce(
+      createMockStats({ size: MAX_INPUT_FILE_SIZE + 1 }),
+    );
+
+    await expect(
+      resolveCommandInputText({
+        commandName: 'paste',
+        text: undefined,
+        file: '/tmp/huge.txt',
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      message:
+        'Input file "/tmp/huge.txt" exceeds the 10 MB limit for --file input.',
+      details: {
+        file: '/tmp/huge.txt',
+        sizeBytes: MAX_INPUT_FILE_SIZE + 1,
+        maxSizeBytes: MAX_INPUT_FILE_SIZE,
+      },
+    });
+    expect(mocks.readFile).not.toHaveBeenCalled();
   });
 
   it('rejects an empty input file', async () => {

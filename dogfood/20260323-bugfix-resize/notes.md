@@ -13,20 +13,20 @@ Scenario B-redux completed successfully. The previously failing post-resize `scr
 
 ## Command log
 
-| User step | Stored file | Exit code | Command |
-| --- | --- | ---: | --- |
-| 2 | `01-create.json` | 0 | `npx tsx src/cli/main.ts create --cols 120 --rows 40 --json -- npx tsx test/fixtures/apps/resize-demo/main.ts` |
-| 3 | `02-wait-size.json` | 0 | `npx tsx src/cli/main.ts wait 01KMCYX32BMKX4F48WRMRSDC12 --text "SIZE:" --json` |
-| 4 | `03-screenshot-before-resize.json` | 0 | `npx tsx src/cli/main.ts screenshot 01KMCYX32BMKX4F48WRMRSDC12 --json` |
-| 5 | `04-resize-large.json` | 0 | `npx tsx src/cli/main.ts resize 01KMCYX32BMKX4F48WRMRSDC12 --cols 140 --rows 50 --json` |
-| 6 | `05-wait-stable-large.json` | 0 | `npx tsx src/cli/main.ts wait 01KMCYX32BMKX4F48WRMRSDC12 --screen-stable-ms 500 --json` |
-| 7 | `06-screenshot-after-resize-large.json` | 0 | `npx tsx src/cli/main.ts screenshot 01KMCYX32BMKX4F48WRMRSDC12 --json` |
-| 8 | `07-snapshot-after-resize-large.json` | 0 | `npx tsx src/cli/main.ts snapshot 01KMCYX32BMKX4F48WRMRSDC12 --json` |
-| 9 | `08-resize-small.json` | 0 | `npx tsx src/cli/main.ts resize 01KMCYX32BMKX4F48WRMRSDC12 --cols 80 --rows 24 --json` |
-| 10 | `09-wait-stable-small.json` | 0 | `npx tsx src/cli/main.ts wait 01KMCYX32BMKX4F48WRMRSDC12 --screen-stable-ms 500 --json` |
-| 11 | `10-screenshot-after-resize-small.json` | 0 | `npx tsx src/cli/main.ts screenshot 01KMCYX32BMKX4F48WRMRSDC12 --json` |
-| 12 | `11-snapshot-after-resize-small.json` | 0 | `npx tsx src/cli/main.ts snapshot 01KMCYX32BMKX4F48WRMRSDC12 --json` |
-| 13 | `12-destroy.json` | 0 | `npx tsx src/cli/main.ts destroy 01KMCYX32BMKX4F48WRMRSDC12 --json` |
+| User step | Stored file                             | Exit code | Command                                                                                                        |
+| --------- | --------------------------------------- | --------: | -------------------------------------------------------------------------------------------------------------- |
+| 2         | `01-create.json`                        |         0 | `npx tsx src/cli/main.ts create --cols 120 --rows 40 --json -- npx tsx test/fixtures/apps/resize-demo/main.ts` |
+| 3         | `02-wait-size.json`                     |         0 | `npx tsx src/cli/main.ts wait 01KMCYX32BMKX4F48WRMRSDC12 --text "SIZE:" --json`                                |
+| 4         | `03-screenshot-before-resize.json`      |         0 | `npx tsx src/cli/main.ts screenshot 01KMCYX32BMKX4F48WRMRSDC12 --json`                                         |
+| 5         | `04-resize-large.json`                  |         0 | `npx tsx src/cli/main.ts resize 01KMCYX32BMKX4F48WRMRSDC12 --cols 140 --rows 50 --json`                        |
+| 6         | `05-wait-stable-large.json`             |         0 | `npx tsx src/cli/main.ts wait 01KMCYX32BMKX4F48WRMRSDC12 --screen-stable-ms 500 --json`                        |
+| 7         | `06-screenshot-after-resize-large.json` |         0 | `npx tsx src/cli/main.ts screenshot 01KMCYX32BMKX4F48WRMRSDC12 --json`                                         |
+| 8         | `07-snapshot-after-resize-large.json`   |         0 | `npx tsx src/cli/main.ts snapshot 01KMCYX32BMKX4F48WRMRSDC12 --json`                                           |
+| 9         | `08-resize-small.json`                  |         0 | `npx tsx src/cli/main.ts resize 01KMCYX32BMKX4F48WRMRSDC12 --cols 80 --rows 24 --json`                         |
+| 10        | `09-wait-stable-small.json`             |         0 | `npx tsx src/cli/main.ts wait 01KMCYX32BMKX4F48WRMRSDC12 --screen-stable-ms 500 --json`                        |
+| 11        | `10-screenshot-after-resize-small.json` |         0 | `npx tsx src/cli/main.ts screenshot 01KMCYX32BMKX4F48WRMRSDC12 --json`                                         |
+| 12        | `11-snapshot-after-resize-small.json`   |         0 | `npx tsx src/cli/main.ts snapshot 01KMCYX32BMKX4F48WRMRSDC12 --json`                                           |
+| 13        | `12-destroy.json`                       |         0 | `npx tsx src/cli/main.ts destroy 01KMCYX32BMKX4F48WRMRSDC12 --json`                                            |
 
 ## Previously failing steps
 

@@ -35,6 +35,11 @@ The repo also now has four Week 4 proof bundles that cover the shipped gap-closi
 - `dogfood/20260322-week4-scrollback-review/` proves scrollback capture and replay review,
 - and `dogfood/20260322-week4-unicode-review/` proves unicode/width review coverage.
 
+Bugfix verification bundles also ship alongside that Week 4 coverage:
+
+- `dogfood/20260323-bugfix-resize/` proves post-resize snapshot/screenshot recovery,
+- and `dogfood/20260323-bugfix-scrollback/` proves scrollback viewport normalization.
+
 Earlier proof bundles remain relevant context:
 
 - `dogfood/20260321-post-hardening-smoke/` revalidates live inspect/wait/snapshot/screenshot/doctor flows,

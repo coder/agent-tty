@@ -13,15 +13,15 @@ Scenario F-redux completed successfully. The wait matched `SCROLLBACK COMPLETE`,
 
 ## Command log
 
-| User step | Stored file | Exit code | Command |
-| --- | --- | ---: | --- |
-| 2 | `01-create.json` | 0 | `npx tsx src/cli/main.ts create --cols 80 --rows 24 --json -- npx tsx test/fixtures/apps/scrollback-demo/main.ts` |
-| 3 | `02-wait-text.json` | 0 | `npx tsx src/cli/main.ts wait 01KMCYYK6GSKR6ZF3NAW7GFE5N --text "SCROLLBACK COMPLETE" --timeout 10000 --json` |
-| 4 | `03-snapshot-viewport.json` | 0 | `npx tsx src/cli/main.ts snapshot 01KMCYYK6GSKR6ZF3NAW7GFE5N --json` |
-| 5 | `04-snapshot-scrollback.json` | 0 | `npx tsx src/cli/main.ts snapshot 01KMCYYK6GSKR6ZF3NAW7GFE5N --include-scrollback --json` |
-| 6 | `05-screenshot.json` | 0 | `npx tsx src/cli/main.ts screenshot 01KMCYYK6GSKR6ZF3NAW7GFE5N --json` |
-| 7 | `06-wait-exit.txt` | 0 | `npx tsx src/cli/main.ts wait 01KMCYYK6GSKR6ZF3NAW7GFE5N --exit` |
-| 8 | `07-destroy.json` | 0 | `npx tsx src/cli/main.ts destroy 01KMCYYK6GSKR6ZF3NAW7GFE5N --json` |
+| User step | Stored file                   | Exit code | Command                                                                                                           |
+| --------- | ----------------------------- | --------: | ----------------------------------------------------------------------------------------------------------------- |
+| 2         | `01-create.json`              |         0 | `npx tsx src/cli/main.ts create --cols 80 --rows 24 --json -- npx tsx test/fixtures/apps/scrollback-demo/main.ts` |
+| 3         | `02-wait-text.json`           |         0 | `npx tsx src/cli/main.ts wait 01KMCYYK6GSKR6ZF3NAW7GFE5N --text "SCROLLBACK COMPLETE" --timeout 10000 --json`     |
+| 4         | `03-snapshot-viewport.json`   |         0 | `npx tsx src/cli/main.ts snapshot 01KMCYYK6GSKR6ZF3NAW7GFE5N --json`                                              |
+| 5         | `04-snapshot-scrollback.json` |         0 | `npx tsx src/cli/main.ts snapshot 01KMCYYK6GSKR6ZF3NAW7GFE5N --include-scrollback --json`                         |
+| 6         | `05-screenshot.json`          |         0 | `npx tsx src/cli/main.ts screenshot 01KMCYYK6GSKR6ZF3NAW7GFE5N --json`                                            |
+| 7         | `06-wait-exit.txt`            |         0 | `npx tsx src/cli/main.ts wait 01KMCYYK6GSKR6ZF3NAW7GFE5N --exit`                                                  |
+| 8         | `07-destroy.json`             |         0 | `npx tsx src/cli/main.ts destroy 01KMCYYK6GSKR6ZF3NAW7GFE5N --json`                                               |
 
 ## Previously failing checks
 

@@ -23,16 +23,23 @@ describe('CLI exit codes', () => {
     expect(exitCodeForError(ERROR_CODES.SESSION_ALREADY_DESTROYED)).toBe(4);
   });
 
-  it('maps transport and storage failures to differentiated exit codes', () => {
+  it('maps transport, protocol, and storage failures to differentiated exit codes', () => {
     expect(exitCodeForError(ERROR_CODES.HOST_TIMEOUT)).toBe(5);
     expect(exitCodeForError(ERROR_CODES.HOST_UNREACHABLE)).toBe(6);
     expect(exitCodeForError(ERROR_CODES.EXPORT_ERROR)).toBe(7);
     expect(exitCodeForError(ERROR_CODES.STORAGE_READ_ERROR)).toBe(8);
     expect(exitCodeForError(ERROR_CODES.STORAGE_WRITE_ERROR)).toBe(8);
+    expect(exitCodeForError(ERROR_CODES.MANIFEST_VALIDATION_ERROR)).toBe(8);
+    expect(exitCodeForError(ERROR_CODES.PROTOCOL_ERROR)).toBe(9);
+    expect(exitCodeForError(ERROR_CODES.RPC_ERROR)).toBe(9);
+    expect(exitCodeForError(ERROR_CODES.REPLAY_ERROR)).toBe(10);
   });
 
-  it('falls back to exit code 1 for unmapped errors', () => {
+  it('maps internal errors to the generic exit code 1', () => {
     expect(exitCodeForError(ERROR_CODES.INTERNAL_ERROR)).toBe(1);
+  });
+
+  it('falls back to exit code 1 for unknown errors', () => {
     expect(exitCodeForError('UNKNOWN_ERROR')).toBe(1);
   });
 });

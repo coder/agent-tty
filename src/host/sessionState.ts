@@ -85,21 +85,9 @@ export class SessionState {
     this.touch();
   }
 
-  public recordFailure(reason: string): void {
-    invariant(
-      this.#record.status === 'running',
-      `Cannot record failure unless session is running, current status: ${this.#record.status}`,
-    );
-    invariant(
-      typeof reason === 'string' && reason.length > 0,
-      'Failure reason must be a non-empty string',
-    );
-
-    this.#record.status = 'failed';
-    this.#record.failureReason = reason;
-    this.touch();
-  }
-
+  // There are two valid paths to the terminal `destroyed` state:
+  // 1. recordDestroyed() for the graceful host-managed destroy flow.
+  // 2. reconcileSession() writing `destroyed` directly if the host dies mid-destroy.
   public recordDestroyed(exitInfo?: {
     exitCode: number | null;
     exitSignal: string | null;
@@ -126,6 +114,8 @@ export class SessionState {
   }
 
   public recordExit(exitCode: number | null, exitSignal: string | null): void {
+    // `exiting` remains part of the state machine for compatibility with
+    // reconcileSession(), which upgrades stranded `exiting` manifests to `exited`.
     invariant(
       this.#record.status === 'running' || this.#record.status === 'exiting',
       'Cannot record exit after session has exited',
