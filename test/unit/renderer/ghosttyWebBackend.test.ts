@@ -31,6 +31,18 @@ function createPngBuffer(width: number, height: number): Buffer {
   return Buffer.concat([pngSignature, ihdrChunk]);
 }
 
+function createHarnessSnapshotPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    cols: 3,
+    rows: 1,
+    cursorRow: 0,
+    cursorCol: 2,
+    isAltScreen: false,
+    visibleLines: [{ row: 0, text: 'hey' }],
+    ...overrides,
+  };
+}
+
 describe('GhosttyWebBackend unit guards', () => {
   it('splits large output batches before bridging them into the page', async () => {
     const backend = createBackend();
@@ -82,6 +94,122 @@ describe('GhosttyWebBackend unit guards', () => {
       'writeBatchBridge batch size must not exceed MAX_REPLAY_BATCH_SIZE',
     );
     expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('includes structured cell data only when snapshot includeCells is requested', async () => {
+    const backend = createBackend();
+    const evaluate = vi.fn().mockResolvedValue(
+      createHarnessSnapshotPayload({
+        cells: [
+          {
+            lineNumber: 0,
+            cells: [
+              { char: 'h', fg: '#ffffff', bg: '#000000' },
+              { char: 'e', fg: '#ffeeaa', bg: '#000000', italic: true },
+              { char: 'y', fg: '#00ff00', bg: '#000000', bold: true },
+            ],
+          },
+        ],
+      }),
+    );
+
+    Object.assign(backend as object, {
+      isBooted: true,
+      lastAppliedSeq: 42,
+      page: {
+        evaluate,
+        isClosed: () => false,
+      },
+    });
+
+    await expect(backend.snapshot({ includeCells: true })).resolves.toEqual({
+      sessionId: 'renderer-unit-session',
+      capturedAtSeq: 42,
+      cols: 3,
+      rows: 1,
+      cursorRow: 0,
+      cursorCol: 2,
+      isAltScreen: false,
+      visibleLines: [{ row: 0, text: 'hey' }],
+      cells: [
+        {
+          lineNumber: 0,
+          cells: [
+            { char: 'h', fg: '#ffffff', bg: '#000000' },
+            { char: 'e', fg: '#ffeeaa', bg: '#000000', italic: true },
+            { char: 'y', fg: '#00ff00', bg: '#000000', bold: true },
+          ],
+        },
+      ],
+    });
+    expect(evaluate).toHaveBeenCalledTimes(1);
+    expect(evaluate.mock.calls[0]?.[1]).toEqual({ includeCells: true });
+  });
+
+  it('omits structured cell data from default snapshots', async () => {
+    const backend = createBackend();
+    const evaluate = vi.fn().mockResolvedValue(createHarnessSnapshotPayload());
+
+    Object.assign(backend as object, {
+      isBooted: true,
+      lastAppliedSeq: 7,
+      page: {
+        evaluate,
+        isClosed: () => false,
+      },
+    });
+
+    const snapshot = await backend.snapshot();
+    expect(snapshot.cells).toBeUndefined();
+    expect(evaluate).toHaveBeenCalledTimes(1);
+    expect(evaluate.mock.calls[0]?.[1]).toBeUndefined();
+  });
+
+  it('rejects structured snapshots whose cell lines do not map 1:1 to visible lines', async () => {
+    const backend = createBackend();
+    const evaluate = vi
+      .fn()
+      .mockResolvedValue(createHarnessSnapshotPayload({ cells: [] }));
+
+    Object.assign(backend as object, {
+      isBooted: true,
+      lastAppliedSeq: 8,
+      page: {
+        evaluate,
+        isClosed: () => false,
+      },
+    });
+
+    await expect(backend.snapshot({ includeCells: true })).rejects.toThrow(
+      'snapshot cell line count must match visible line count',
+    );
+  });
+
+  it('rejects structured snapshots whose cell widths exceed terminal columns', async () => {
+    const backend = createBackend();
+    const evaluate = vi.fn().mockResolvedValue(
+      createHarnessSnapshotPayload({
+        cells: [
+          {
+            lineNumber: 0,
+            cells: [{ char: 'h' }, { char: 'e' }, { char: 'y' }, { char: '!' }],
+          },
+        ],
+      }),
+    );
+
+    Object.assign(backend as object, {
+      isBooted: true,
+      lastAppliedSeq: 9,
+      page: {
+        evaluate,
+        isClosed: () => false,
+      },
+    });
+
+    await expect(backend.snapshot({ includeCells: true })).rejects.toThrow(
+      'snapshot cell line 0 cell count must not exceed the terminal width',
+    );
   });
 
   it('serves the bundled font asset over the backend HTTP server', async () => {

@@ -7,6 +7,7 @@ import type {
 
 export interface SnapshotOptions {
   includeScrollback?: boolean;
+  includeCells?: boolean;
 }
 
 export interface RendererBackend {

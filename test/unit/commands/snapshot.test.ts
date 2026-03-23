@@ -106,6 +106,18 @@ function getLastEmitSuccessPayload(): unknown {
 function createOfflineSemanticSnapshot(
   options: {
     scrollbackLines?: { row: number; text: string }[];
+    cells?: {
+      lineNumber: number;
+      cells: {
+        char: string;
+        fg?: string;
+        bg?: string;
+        bold?: boolean;
+        italic?: boolean;
+        underline?: boolean;
+        strikethrough?: boolean;
+      }[];
+    }[];
   } = {},
 ) {
   return {
@@ -120,6 +132,7 @@ function createOfflineSemanticSnapshot(
     ...(options.scrollbackLines === undefined
       ? {}
       : { scrollbackLines: options.scrollbackLines }),
+    ...(options.cells === undefined ? {} : { cells: options.cells }),
   };
 }
 
@@ -206,7 +219,7 @@ describe('snapshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01/rpc.sock',
       'snapshot',
-      { format: 'structured', includeScrollback: false },
+      { format: 'structured', includeScrollback: false, includeCells: false },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'snapshot',
@@ -249,7 +262,7 @@ describe('snapshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01/rpc.sock',
       'snapshot',
-      { format: 'text', includeScrollback: false },
+      { format: 'text', includeScrollback: false, includeCells: false },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'snapshot',
@@ -295,6 +308,7 @@ describe('snapshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(expect.any(String), 'snapshot', {
       format: 'structured',
       includeScrollback: true,
+      includeCells: false,
     });
     const emitted = getLastEmitSuccessPayload() as {
       lines: string[];
@@ -308,6 +322,63 @@ describe('snapshot command', () => {
         '  [0] visible',
       ]),
     );
+  });
+
+  it('requests structured cell data in RPC snapshots only when includeCells is true', async () => {
+    const result = {
+      format: 'structured' as const,
+      sessionId: 'session-01',
+      capturedAtSeq: 12,
+      cols: 3,
+      rows: 1,
+      cursorRow: 0,
+      cursorCol: 2,
+      isAltScreen: false,
+      visibleLines: [{ row: 0, text: 'hey' }],
+      cells: [
+        {
+          lineNumber: 0,
+          cells: [
+            { char: 'h', fg: '#ffffff', bg: '#000000' },
+            { char: 'e', fg: '#ffeeaa', bg: '#000000', italic: true },
+            { char: 'y', fg: '#00ff00', bg: '#000000', bold: true },
+          ],
+        },
+      ],
+    };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runSnapshotCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      includeCells: true,
+    });
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'snapshot',
+      {
+        format: 'structured',
+        includeScrollback: false,
+        includeCells: true,
+      },
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith({
+      command: 'snapshot',
+      json: true,
+      result,
+      lines: [
+        'Session ID: session-01',
+        'Captured At Seq: 12',
+        'Format: structured',
+        'Size: 3x1',
+        'Cursor: row 0, col 2',
+        'Alt Screen: no',
+        'Visible Lines (1):',
+        '  [0] hey',
+      ],
+    });
   });
 
   it('preserves host-prepended scrollback text in text RPC snapshots when includeScrollback is true', async () => {
@@ -334,7 +405,7 @@ describe('snapshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01/rpc.sock',
       'snapshot',
-      { format: 'text', includeScrollback: true },
+      { format: 'text', includeScrollback: true, includeCells: false },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'snapshot',
@@ -457,7 +528,10 @@ describe('snapshot command', () => {
       includeScrollback: true,
     });
 
-    expect(snapshotMock).toHaveBeenCalledWith({ includeScrollback: true });
+    expect(snapshotMock).toHaveBeenCalledWith({
+      includeScrollback: true,
+      includeCells: false,
+    });
     const emitted = getLastEmitSuccessPayload() as {
       result: {
         scrollbackLines?: { row: number; text: string }[];
@@ -477,6 +551,57 @@ describe('snapshot command', () => {
         '  [0] offline output',
       ]),
     );
+  });
+
+  it('threads includeCells through offline replay snapshots and persists cells', async () => {
+    const snapshotMock = vi.fn((options?: unknown) =>
+      createOfflineSemanticSnapshot(
+        (options as { includeCells?: boolean } | undefined)?.includeCells
+          ? {
+              cells: [
+                {
+                  lineNumber: 0,
+                  cells: [
+                    { char: 'o', fg: '#ffffff', bg: '#000000' },
+                    { char: 'k', fg: '#00ff00', bg: '#000000', bold: true },
+                  ],
+                },
+              ],
+            }
+          : {},
+      ),
+    );
+    mocks.readManifestIfExists.mockResolvedValue(createExitedSessionRecord());
+    installOfflineReplaySuccessMock(snapshotMock);
+
+    await runSnapshotCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      includeCells: true,
+    });
+
+    expect(snapshotMock).toHaveBeenCalledWith({
+      includeScrollback: false,
+      includeCells: true,
+    });
+    const emitted = getLastEmitSuccessPayload() as {
+      result: {
+        cells?: {
+          lineNumber: number;
+          cells: { char: string; bold?: boolean }[];
+        }[];
+      };
+    };
+    expect(emitted.result.cells).toEqual([
+      {
+        lineNumber: 0,
+        cells: [
+          { char: 'o', fg: '#ffffff', bg: '#000000' },
+          { char: 'k', fg: '#00ff00', bg: '#000000', bold: true },
+        ],
+      },
+    ]);
   });
 
   it('defaults offline snapshots to omitting scrollbackLines', async () => {
@@ -499,7 +624,10 @@ describe('snapshot command', () => {
       sessionId: 'session-01',
     });
 
-    expect(snapshotMock).toHaveBeenCalledWith({ includeScrollback: false });
+    expect(snapshotMock).toHaveBeenCalledWith({
+      includeScrollback: false,
+      includeCells: false,
+    });
     const emitted = getLastEmitSuccessPayload() as {
       result: {
         scrollbackLines?: { row: number; text: string }[];
@@ -538,7 +666,7 @@ describe('snapshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01/rpc.sock',
       'snapshot',
-      { format: 'text', includeScrollback: false },
+      { format: 'text', includeScrollback: false, includeCells: false },
     );
     expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
       { sessionDir: '/tmp/agent-terminal/sessions/session-01' },

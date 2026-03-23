@@ -287,6 +287,75 @@
         return scrollbackLines;
       }
 
+      function toHexColor(colorValue) {
+        invariant(
+          Number.isInteger(colorValue) &&
+            colorValue >= 0 &&
+            colorValue <= 0xffffff,
+          'cell color must be a 24-bit integer',
+        );
+        return `#${colorValue.toString(16).padStart(6, '0')}`;
+      }
+
+      function decodeSnapshotCell(cell) {
+        invariant(cell !== undefined, 'snapshot cell must be defined');
+        const char = cell.getChars();
+        assertStringValue(char, 'snapshot cell char must be a string');
+
+        const isInverse = cell.isInverse() === 1;
+        const fgColor = cell.getFgColor();
+        const bgColor = cell.getBgColor();
+
+        return {
+          char,
+          fg: toHexColor(isInverse ? bgColor : fgColor),
+          bg: toHexColor(isInverse ? fgColor : bgColor),
+          ...(cell.isBold() === 1 && { bold: true }),
+          ...(cell.isItalic() === 1 && { italic: true }),
+          ...(cell.isUnderline() === 1 && { underline: true }),
+          ...(cell.isStrikethrough() === 1 && { strikethrough: true }),
+        };
+      }
+
+      function decodeVisibleCells(terminal, visibleLines) {
+        terminal.scrollToBottom();
+        const { cols, rows, activeBuffer, viewportY } =
+          getNormalizedViewportState(terminal);
+        const nullCell = activeBuffer.getNullCell();
+        const cells = [];
+
+        invariant(
+          visibleLines.length === rows,
+          'rich snapshot line count must be seeded from visible lines',
+        );
+
+        for (let row = 0; row < rows; row += 1) {
+          const lineNumber = visibleLines[row]?.row;
+          invariant(
+            Number.isInteger(lineNumber) && lineNumber >= 0,
+            `visible line ${row} row must be a non-negative integer`,
+          );
+
+          const line = activeBuffer.getLine(viewportY + row);
+          const rowCells = [];
+          for (let col = 0; col < cols; col += 1) {
+            rowCells.push(decodeSnapshotCell(line?.getCell(col) ?? nullCell));
+          }
+
+          invariant(
+            rowCells.length <= cols,
+            `decoded cell count for row ${row} must not exceed terminal width`,
+          );
+          cells.push({ lineNumber, cells: rowCells });
+        }
+
+        invariant(
+          cells.length === rows,
+          'rich snapshot line count must match terminal rows',
+        );
+        return cells;
+      }
+
       function getSnapshotPayload(options) {
         invariant(
           options === undefined ||
@@ -298,6 +367,11 @@
             typeof options.includeScrollback === 'boolean',
           'snapshot includeScrollback option must be a boolean when provided',
         );
+        invariant(
+          options?.includeCells === undefined ||
+            typeof options.includeCells === 'boolean',
+          'snapshot includeCells option must be a boolean when provided',
+        );
 
         const terminal = getReadyTerminal();
         const wasmTerm = terminal.wasmTerm;
@@ -308,6 +382,10 @@
         const scrollbackLines =
           options?.includeScrollback === true
             ? decodeScrollbackLines(terminal)
+            : undefined;
+        const cells =
+          options?.includeCells === true
+            ? decodeVisibleCells(terminal, visibleLines)
             : undefined;
 
         invariant(
@@ -335,6 +413,7 @@
           isAltScreen: wasmTerm.isAlternateScreen(),
           visibleLines,
           ...(scrollbackLines !== undefined && { scrollbackLines }),
+          ...(cells !== undefined && { cells }),
         };
       }
 

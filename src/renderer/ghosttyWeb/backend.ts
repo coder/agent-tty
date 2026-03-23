@@ -42,6 +42,21 @@ interface GhosttyHarnessVisibleLine {
   text: string;
 }
 
+interface GhosttyHarnessSnapshotCell {
+  char: string;
+  fg?: string;
+  bg?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
+}
+
+interface GhosttyHarnessRichLine {
+  lineNumber: number;
+  cells: GhosttyHarnessSnapshotCell[];
+}
+
 interface GhosttyHarnessSnapshot {
   cols: number;
   rows: number;
@@ -50,6 +65,7 @@ interface GhosttyHarnessSnapshot {
   isAltScreen: boolean;
   visibleLines: GhosttyHarnessVisibleLine[];
   scrollbackLines?: GhosttyHarnessVisibleLine[];
+  cells?: GhosttyHarnessRichLine[];
 }
 
 interface GhosttyRequestAsset {
@@ -184,7 +200,10 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
       }
 
       function assertPositiveNumber(value, message) {
-        invariant(typeof value === 'number' && Number.isFinite(value) && value > 0, message);
+        invariant(
+          typeof value === 'number' && Number.isFinite(value) && value > 0,
+          message,
+        );
       }
 
       function assertPositiveInteger(value, message) {
@@ -205,13 +224,28 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
           );
         }
 
-        invariant(parsedProfile !== null && typeof parsedProfile === 'object', 'profile must be an object');
+        invariant(
+          parsedProfile !== null && typeof parsedProfile === 'object',
+          'profile must be an object',
+        );
 
         const profile = parsedProfile;
-        assertNonEmptyString(profile.name, 'profile.name must be a non-empty string');
-        invariant(profile.theme === 'dark' || profile.theme === 'light', 'profile.theme must be dark or light');
-        assertNonEmptyString(profile.fontFamily, 'profile.fontFamily must be a non-empty string');
-        assertPositiveNumber(profile.fontSize, 'profile.fontSize must be a positive number');
+        assertNonEmptyString(
+          profile.name,
+          'profile.name must be a non-empty string',
+        );
+        invariant(
+          profile.theme === 'dark' || profile.theme === 'light',
+          'profile.theme must be dark or light',
+        );
+        assertNonEmptyString(
+          profile.fontFamily,
+          'profile.fontFamily must be a non-empty string',
+        );
+        assertPositiveNumber(
+          profile.fontSize,
+          'profile.fontSize must be a positive number',
+        );
         invariant(
           profile.cursorStyle === 'block' ||
             profile.cursorStyle === 'bar' ||
@@ -219,14 +253,19 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
           'profile.cursorStyle must be block, bar, or underline',
         );
         invariant(
-          typeof profile.backgroundColor === 'string' && /^#[0-9a-fA-F]{6}$/u.test(profile.backgroundColor),
+          typeof profile.backgroundColor === 'string' &&
+            /^#[0-9a-fA-F]{6}$/u.test(profile.backgroundColor),
           'profile.backgroundColor must be a hex color',
         );
         invariant(
-          typeof profile.foregroundColor === 'string' && /^#[0-9a-fA-F]{6}$/u.test(profile.foregroundColor),
+          typeof profile.foregroundColor === 'string' &&
+            /^#[0-9a-fA-F]{6}$/u.test(profile.foregroundColor),
           'profile.foregroundColor must be a hex color',
         );
-        if (profile.fontAssetIdentity !== undefined && profile.fontAssetIdentity !== null) {
+        if (
+          profile.fontAssetIdentity !== undefined &&
+          profile.fontAssetIdentity !== null
+        ) {
           invariant(
             typeof profile.fontAssetIdentity === 'string' &&
               /^[a-f0-9]{64}$/u.test(profile.fontAssetIdentity),
@@ -263,7 +302,10 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
 
         invariant(state.ready, 'ghostty-web harness is not ready');
         invariant(state.terminal !== null, 'terminal instance is unavailable');
-        invariant(state.terminal.wasmTerm, 'terminal WASM instance is unavailable');
+        invariant(
+          state.terminal.wasmTerm,
+          'terminal WASM instance is unavailable',
+        );
         return state.terminal;
       }
 
@@ -272,10 +314,22 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         invariant(wasmTerm, 'terminal WASM instance is unavailable');
 
         const dimensions = wasmTerm.getDimensions();
-        assertPositiveInteger(dimensions.cols, 'terminal cols must be a positive integer');
-        assertPositiveInteger(dimensions.rows, 'terminal rows must be a positive integer');
-        invariant(dimensions.cols === terminal.cols, 'terminal cols drifted from WASM dimensions');
-        invariant(dimensions.rows === terminal.rows, 'terminal rows drifted from WASM dimensions');
+        assertPositiveInteger(
+          dimensions.cols,
+          'terminal cols must be a positive integer',
+        );
+        assertPositiveInteger(
+          dimensions.rows,
+          'terminal rows must be a positive integer',
+        );
+        invariant(
+          dimensions.cols === terminal.cols,
+          'terminal cols drifted from WASM dimensions',
+        );
+        invariant(
+          dimensions.rows === terminal.rows,
+          'terminal rows drifted from WASM dimensions',
+        );
         return dimensions;
       }
 
@@ -285,14 +339,20 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         const viewportY = activeBuffer.viewportY;
         const bufferLength = activeBuffer.length;
         assertPositiveInteger(rows, 'visible row count must be positive');
-        invariant(Number.isInteger(viewportY) && viewportY >= 0, 'viewportY must be a non-negative integer');
+        invariant(
+          Number.isInteger(viewportY) && viewportY >= 0,
+          'viewportY must be a non-negative integer',
+        );
         invariant(
           Number.isInteger(bufferLength) && bufferLength >= rows,
           'active buffer length must cover the visible viewport',
         );
 
         const bottomViewportY = bufferLength - rows;
-        invariant(bottomViewportY >= 0, 'bottom viewportY must be non-negative');
+        invariant(
+          bottomViewportY >= 0,
+          'bottom viewportY must be non-negative',
+        );
         invariant(
           viewportY <= bottomViewportY,
           'viewportY must not exceed the bottom viewport position',
@@ -303,22 +363,31 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
 
       function decodeVisibleLines(terminal) {
         terminal.scrollToBottom();
-        const { cols, rows, activeBuffer, viewportY } = getNormalizedViewportState(terminal);
+        const { cols, rows, activeBuffer, viewportY } =
+          getNormalizedViewportState(terminal);
 
         const visibleLines = [];
         for (let row = 0; row < rows; row += 1) {
           const line = activeBuffer.getLine(viewportY + row);
-          const text = line === undefined ? '' : line.translateToString(true, 0, cols);
-          invariant(typeof text === 'string', \`decoded line \${row} must be a string\`);
+          const text =
+            line === undefined ? '' : line.translateToString(true, 0, cols);
+          invariant(
+            typeof text === 'string',
+            \`decoded line \${row} must be a string\`,
+          );
           visibleLines.push({ row, text });
         }
 
-        invariant(visibleLines.length === rows, 'visible line count must match terminal rows');
+        invariant(
+          visibleLines.length === rows,
+          'visible line count must match terminal rows',
+        );
         return { cols, rows, visibleLines };
       }
 
       function decodeScrollbackLines(terminal) {
-        const { cols, activeBuffer, viewportY } = getNormalizedViewportState(terminal);
+        const { cols, activeBuffer, viewportY } =
+          getNormalizedViewportState(terminal);
 
         if (viewportY === 0) {
           return [];
@@ -327,23 +396,106 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         const scrollbackLines = [];
         for (let row = 0; row < viewportY; row += 1) {
           const line = activeBuffer.getLine(row);
-          const text = line === undefined ? '' : line.translateToString(true, 0, cols);
-          invariant(typeof text === 'string', \`decoded scrollback line \${row} must be a string\`);
+          const text =
+            line === undefined ? '' : line.translateToString(true, 0, cols);
+          invariant(
+            typeof text === 'string',
+            \`decoded scrollback line \${row} must be a string\`,
+          );
           scrollbackLines.push({ row, text });
         }
 
-        invariant(scrollbackLines.length === viewportY, 'scrollback line count must match viewportY');
+        invariant(
+          scrollbackLines.length === viewportY,
+          'scrollback line count must match viewportY',
+        );
         return scrollbackLines;
+      }
+
+      function toHexColor(colorValue) {
+        invariant(
+          Number.isInteger(colorValue) &&
+            colorValue >= 0 &&
+            colorValue <= 0xffffff,
+          'cell color must be a 24-bit integer',
+        );
+        return \`#\${colorValue.toString(16).padStart(6, '0')}\`;
+      }
+
+      function decodeSnapshotCell(cell) {
+        invariant(cell !== undefined, 'snapshot cell must be defined');
+        const char = cell.getChars();
+        assertStringValue(char, 'snapshot cell char must be a string');
+
+        const isInverse = cell.isInverse() === 1;
+        const fgColor = cell.getFgColor();
+        const bgColor = cell.getBgColor();
+
+        return {
+          char,
+          fg: toHexColor(isInverse ? bgColor : fgColor),
+          bg: toHexColor(isInverse ? fgColor : bgColor),
+          ...(cell.isBold() === 1 && { bold: true }),
+          ...(cell.isItalic() === 1 && { italic: true }),
+          ...(cell.isUnderline() === 1 && { underline: true }),
+          ...(cell.isStrikethrough() === 1 && { strikethrough: true }),
+        };
+      }
+
+      function decodeVisibleCells(terminal, visibleLines) {
+        terminal.scrollToBottom();
+        const { cols, rows, activeBuffer, viewportY } =
+          getNormalizedViewportState(terminal);
+        const nullCell = activeBuffer.getNullCell();
+        const cells = [];
+
+        invariant(
+          visibleLines.length === rows,
+          'rich snapshot line count must be seeded from visible lines',
+        );
+
+        for (let row = 0; row < rows; row += 1) {
+          const lineNumber = visibleLines[row]?.row;
+          invariant(
+            Number.isInteger(lineNumber) && lineNumber >= 0,
+            \`visible line \${row} row must be a non-negative integer\`,
+          );
+
+          const line = activeBuffer.getLine(viewportY + row);
+          const rowCells = [];
+          for (let col = 0; col < cols; col += 1) {
+            rowCells.push(decodeSnapshotCell(line?.getCell(col) ?? nullCell));
+          }
+
+          invariant(
+            rowCells.length <= cols,
+            \`decoded cell count for row \${row} must not exceed terminal width\`,
+          );
+          cells.push({ lineNumber, cells: rowCells });
+        }
+
+        invariant(
+          cells.length === rows,
+          'rich snapshot line count must match terminal rows',
+        );
+        return cells;
       }
 
       function getSnapshotPayload(options) {
         invariant(
-          options === undefined || (options !== null && typeof options === 'object'),
+          options === undefined ||
+            (options !== null && typeof options === 'object'),
           'snapshot options must be an object when provided',
         );
         invariant(
-          options?.includeScrollback === undefined || typeof options.includeScrollback === 'boolean',
+          options?.includeScrollback === undefined ||
+            typeof options.includeScrollback === 'boolean',
           'snapshot includeScrollback option must be a boolean when provided',
+        );
+        invariant(
+          options?.includeCells === undefined ||
+            typeof options.includeCells === 'boolean',
+          'snapshot includeCells option must be a boolean when provided',
         );
 
         const terminal = getReadyTerminal();
@@ -356,11 +508,27 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
           options?.includeScrollback === true
             ? decodeScrollbackLines(terminal)
             : undefined;
+        const cells =
+          options?.includeCells === true
+            ? decodeVisibleCells(terminal, visibleLines)
+            : undefined;
 
-        invariant(Number.isInteger(cursor.x) && cursor.x >= 0, 'cursor.x must be a non-negative integer');
-        invariant(Number.isInteger(cursor.y) && cursor.y >= 0, 'cursor.y must be a non-negative integer');
-        invariant(cursor.x < cols, 'cursor.x must be within the terminal width');
-        invariant(cursor.y < rows, 'cursor.y must be within the terminal height');
+        invariant(
+          Number.isInteger(cursor.x) && cursor.x >= 0,
+          'cursor.x must be a non-negative integer',
+        );
+        invariant(
+          Number.isInteger(cursor.y) && cursor.y >= 0,
+          'cursor.y must be a non-negative integer',
+        );
+        invariant(
+          cursor.x < cols,
+          'cursor.x must be within the terminal width',
+        );
+        invariant(
+          cursor.y < rows,
+          'cursor.y must be within the terminal height',
+        );
 
         return {
           cols,
@@ -370,6 +538,7 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
           isAltScreen: wasmTerm.isAlternateScreen(),
           visibleLines,
           ...(scrollbackLines !== undefined && { scrollbackLines }),
+          ...(cells !== undefined && { cells }),
         };
       }
 
@@ -397,15 +566,23 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
           return getSnapshotPayload(options);
         },
         getVisibleText() {
-          return decodeVisibleLines(getReadyTerminal()).visibleLines.map((line) => line.text).join('\\n');
+          return decodeVisibleLines(getReadyTerminal())
+            .visibleLines.map((line) => line.text)
+            .join('\\n');
         },
         isReady() {
           return state.ready;
         },
         resize(cols, rows) {
           const terminal = getReadyTerminal();
-          assertPositiveInteger(cols, 'resize() cols must be a positive integer');
-          assertPositiveInteger(rows, 'resize() rows must be a positive integer');
+          assertPositiveInteger(
+            cols,
+            'resize() cols must be a positive integer',
+          );
+          assertPositiveInteger(
+            rows,
+            'resize() rows must be a positive integer',
+          );
           terminal.resize(cols, rows);
           updateDocumentState();
         },
@@ -470,7 +647,6 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
   </body>
 </html>
 `;
-
 let servedAssetsPromise: Promise<
   ReadonlyMap<string, GhosttyServedAsset>
 > | null = null;
@@ -692,6 +868,126 @@ function validateHarnessLines(
   return validatedLines;
 }
 
+function validateHarnessSnapshotCells(
+  cells: unknown,
+  visibleLines: readonly GhosttyHarnessVisibleLine[],
+  cols: number,
+): GhosttyHarnessRichLine[] {
+  invariant(Array.isArray(cells), 'snapshot cells must be an array');
+
+  const validatedRichLines: GhosttyHarnessRichLine[] = [];
+  for (const [lineIndex, lineValue] of cells.entries()) {
+    invariant(
+      lineValue !== null && typeof lineValue === 'object',
+      `snapshot cell line ${String(lineIndex)} must be an object`,
+    );
+
+    const lineCandidate = lineValue as {
+      lineNumber?: unknown;
+      cells?: unknown;
+    };
+    assertNonNegativeInteger(
+      lineCandidate.lineNumber,
+      `snapshot cell line ${String(lineIndex)} lineNumber must be a non-negative integer`,
+    );
+    invariant(
+      Array.isArray(lineCandidate.cells),
+      `snapshot cell line ${String(lineIndex)} cells must be an array`,
+    );
+    invariant(
+      lineIndex < visibleLines.length,
+      `snapshot cell line ${String(lineIndex)} must map to a visible line`,
+    );
+    invariant(
+      lineCandidate.lineNumber === visibleLines[lineIndex]?.row,
+      `snapshot cell line ${String(lineIndex)} lineNumber must match visible line row`,
+    );
+
+    const validatedCells: GhosttyHarnessSnapshotCell[] = [];
+    for (const [cellIndex, cellValue] of lineCandidate.cells.entries()) {
+      invariant(
+        cellValue !== null && typeof cellValue === 'object',
+        `snapshot cell ${String(lineIndex)}:${String(cellIndex)} must be an object`,
+      );
+
+      const cellCandidate = cellValue as {
+        char?: unknown;
+        fg?: unknown;
+        bg?: unknown;
+        bold?: unknown;
+        italic?: unknown;
+        underline?: unknown;
+        strikethrough?: unknown;
+      };
+      assertString(
+        cellCandidate.char,
+        `snapshot cell ${String(lineIndex)}:${String(cellIndex)} char must be a string`,
+      );
+      if (cellCandidate.fg !== undefined) {
+        assertHexColor(
+          cellCandidate.fg,
+          `snapshot cell ${String(lineIndex)}:${String(cellIndex)} fg must be a hex color`,
+        );
+      }
+      if (cellCandidate.bg !== undefined) {
+        assertHexColor(
+          cellCandidate.bg,
+          `snapshot cell ${String(lineIndex)}:${String(cellIndex)} bg must be a hex color`,
+        );
+      }
+      for (const [fieldName, fieldValue] of Object.entries({
+        bold: cellCandidate.bold,
+        italic: cellCandidate.italic,
+        underline: cellCandidate.underline,
+        strikethrough: cellCandidate.strikethrough,
+      })) {
+        invariant(
+          fieldValue === undefined || typeof fieldValue === 'boolean',
+          `snapshot cell ${String(lineIndex)}:${String(cellIndex)} ${fieldName} must be a boolean when provided`,
+        );
+      }
+
+      const validatedCell: GhosttyHarnessSnapshotCell = {
+        char: cellCandidate.char,
+      };
+      if (cellCandidate.fg !== undefined) {
+        validatedCell.fg = cellCandidate.fg;
+      }
+      if (cellCandidate.bg !== undefined) {
+        validatedCell.bg = cellCandidate.bg;
+      }
+      if (typeof cellCandidate.bold === 'boolean') {
+        validatedCell.bold = cellCandidate.bold;
+      }
+      if (typeof cellCandidate.italic === 'boolean') {
+        validatedCell.italic = cellCandidate.italic;
+      }
+      if (typeof cellCandidate.underline === 'boolean') {
+        validatedCell.underline = cellCandidate.underline;
+      }
+      if (typeof cellCandidate.strikethrough === 'boolean') {
+        validatedCell.strikethrough = cellCandidate.strikethrough;
+      }
+      validatedCells.push(validatedCell);
+    }
+
+    invariant(
+      validatedCells.length <= cols,
+      `snapshot cell line ${String(lineIndex)} cell count must not exceed the terminal width`,
+    );
+    validatedRichLines.push({
+      lineNumber: lineCandidate.lineNumber,
+      cells: validatedCells,
+    });
+  }
+
+  invariant(
+    validatedRichLines.length === visibleLines.length,
+    'snapshot cell line count must match visible line count',
+  );
+  return validatedRichLines;
+}
+
 function validateHarnessSnapshot(snapshot: unknown): GhosttyHarnessSnapshot {
   invariant(
     snapshot !== null && typeof snapshot === 'object',
@@ -706,6 +1002,7 @@ function validateHarnessSnapshot(snapshot: unknown): GhosttyHarnessSnapshot {
     isAltScreen?: unknown;
     visibleLines?: unknown;
     scrollbackLines?: unknown;
+    cells?: unknown;
   };
 
   assertPositiveInteger(
@@ -754,6 +1051,14 @@ function validateHarnessSnapshot(snapshot: unknown): GhosttyHarnessSnapshot {
           candidate.scrollbackLines,
           'snapshot scrollback line',
         );
+  const cells =
+    candidate.cells === undefined
+      ? undefined
+      : validateHarnessSnapshotCells(
+          candidate.cells,
+          visibleLines,
+          candidate.cols,
+        );
 
   return {
     cols: candidate.cols,
@@ -763,6 +1068,7 @@ function validateHarnessSnapshot(snapshot: unknown): GhosttyHarnessSnapshot {
     isAltScreen: candidate.isAltScreen,
     visibleLines,
     ...(scrollbackLines !== undefined && { scrollbackLines }),
+    ...(cells !== undefined && { cells }),
   };
 }
 
@@ -1294,6 +1600,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       ...(snapshot.scrollbackLines !== undefined && {
         scrollbackLines: snapshot.scrollbackLines,
       }),
+      ...(snapshot.cells !== undefined && {
+        cells: snapshot.cells,
+      }),
     };
   }
 
@@ -1669,6 +1978,14 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     page: Page,
     options?: SnapshotOptions,
   ): Promise<GhosttyHarnessSnapshot> {
+    const bridgeOptions: SnapshotOptions = {};
+    if (options?.includeScrollback !== undefined) {
+      bridgeOptions.includeScrollback = options.includeScrollback;
+    }
+    if (options?.includeCells !== undefined) {
+      bridgeOptions.includeCells = options.includeCells;
+    }
+
     const snapshot = await page.evaluate(
       (opts) => {
         const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
@@ -1678,11 +1995,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
 
         return bridge.getSnapshot(opts);
       },
-      options === undefined
-        ? undefined
-        : options.includeScrollback === undefined
-          ? {}
-          : { includeScrollback: options.includeScrollback },
+      Object.keys(bridgeOptions).length === 0 ? undefined : bridgeOptions,
     );
 
     const validatedSnapshot = validateHarnessSnapshot(snapshot);
@@ -1698,6 +2011,19 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       validatedSnapshot.cursorCol < validatedSnapshot.cols,
       'snapshot cursorCol must be within the viewport width',
     );
+    if (validatedSnapshot.cells !== undefined) {
+      invariant(
+        validatedSnapshot.cells.length ===
+          validatedSnapshot.visibleLines.length,
+        'snapshot cell line count must match visible line count after validation',
+      );
+      for (const richLine of validatedSnapshot.cells) {
+        invariant(
+          richLine.cells.length <= validatedSnapshot.cols,
+          'snapshot cell count must not exceed the viewport width',
+        );
+      }
+    }
 
     return validatedSnapshot;
   }

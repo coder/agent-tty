@@ -459,6 +459,11 @@ async function main(): Promise<void> {
     )
     .option('--json', 'Emit a JSON command envelope', false)
     .option('--include-scrollback', 'Include scrollback buffer lines', false)
+    .option(
+      '--include-cells',
+      'Include per-cell style data in structured snapshots',
+      false,
+    )
     .action(
       wrapAction(
         'snapshot',
@@ -468,6 +473,7 @@ async function main(): Promise<void> {
             format: string;
             json: boolean;
             includeScrollback: boolean;
+            includeCells: boolean;
           },
           context: CommandContext,
         ) => {
@@ -477,6 +483,7 @@ async function main(): Promise<void> {
             sessionId,
             format: options.format,
             includeScrollback: options.includeScrollback,
+            includeCells: options.includeCells,
           });
         },
       ),

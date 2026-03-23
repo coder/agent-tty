@@ -330,9 +330,12 @@ describe('RPC message schemas', () => {
     ).toBe(true);
   });
 
-  it('accepts optional scrollback and screenshot metadata fields', () => {
+  it('accepts optional snapshot flags and screenshot metadata fields', () => {
     expect(
-      SnapshotParamsSchema.safeParse({ includeScrollback: true }).success,
+      SnapshotParamsSchema.safeParse({
+        includeScrollback: true,
+        includeCells: true,
+      }).success,
     ).toBe(true);
     expect(
       SnapshotResultSchema.safeParse({

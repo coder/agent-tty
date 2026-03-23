@@ -345,20 +345,29 @@ export async function runHost(sessionId: string): Promise<void> {
       const {
         format: requestedFormat,
         includeScrollback: requestedIncludeScrollback,
+        includeCells: requestedIncludeCells,
       } = params as SnapshotParams;
 
       const format = requestedFormat ?? 'structured';
       const includeScrollback = requestedIncludeScrollback ?? false;
+      const includeCells = requestedIncludeCells ?? false;
 
       invariant(
         typeof includeScrollback === 'boolean',
         'snapshot includeScrollback must normalize to a boolean',
       );
+      invariant(
+        typeof includeCells === 'boolean',
+        'snapshot includeCells must normalize to a boolean',
+      );
 
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
       const replayInput = loadReplayInput();
       const backend = await rendererManager.getBackend(profile, replayInput);
-      const snapshot = await backend.snapshot({ includeScrollback });
+      const snapshot = await backend.snapshot({
+        includeScrollback,
+        includeCells,
+      });
       const snapshotText = [
         ...(snapshot.scrollbackLines ?? []),
         ...snapshot.visibleLines,

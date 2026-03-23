@@ -247,6 +247,7 @@ export const SnapshotParamsSchema = z
   .object({
     format: SnapshotFormatSchema.optional(),
     includeScrollback: z.boolean().optional(),
+    includeCells: z.boolean().optional(),
   })
   .strict();
 export type SnapshotParams = z.infer<typeof SnapshotParamsSchema>;
