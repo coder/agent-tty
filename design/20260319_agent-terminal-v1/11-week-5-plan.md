@@ -13,7 +13,7 @@ Week 5 is about closing the most important remaining gap between the **broader v
 
 ## Status update (2026-03-23)
 
-Week 5 has not landed yet.
+Week 5 landed foundational scaffolding (configuration infrastructure, CLI context extensions, protocol schema additions) and completed the platform/documentation closeout (Workstream D). The remaining workstreams (A end-to-end wiring, B rendering fidelity, C review tooling) remain future scope. See [12-week-5-status.md](./12-week-5-status.md) for the detailed outcome.
 
 This document is the follow-on execution plan created from the current post-Week-4 gap list in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md), the Week 4 status record, and the broader v1 design docs.
 

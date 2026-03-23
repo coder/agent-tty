@@ -19,9 +19,9 @@ It is designed to let an agent:
 
 This design intentionally describes a **general product**, not a Mux-specific implementation. A future Mux integration should consume `agent-terminal` as an external CLI/runtime rather than baking Mux-specific assumptions into the design.
 
-## Current shipped status (2026-03-22)
+## Current shipped status (2026-03-23)
 
-The repository now ships the first three milestones of this design:
+The repository now ships the first three milestones of this design plus Week 4 CLI/artifact/lifecycle hardening and Week 5 foundational scaffolding:
 
 - long-lived session hosts,
 - PTY control and append-only event logs,
@@ -30,9 +30,12 @@ The repository now ships the first three milestones of this design:
 - `record export --format asciicast`,
 - `record export --format webm`,
 - artifact manifests and `gc`,
+- shared global CLI context and differentiated exit codes,
+- configuration infrastructure scaffolding (schema, loader, context plumbing),
+- macOS CI validation,
 - and proof bundles under `dogfood/`.
 
-The implementation is now beyond the original Week 2 slice, but it is **not** yet fully done against the broader v1 design. The main remaining gaps are CLI-contract parity, richer snapshot / screenshot fidelity, local review tooling, and a few failure-state / platform hardening items. See [10-week-4-status.md](./20260319_agent-terminal-v1/10-week-4-status.md), [11-week-5-plan.md](./20260319_agent-terminal-v1/11-week-5-plan.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current follow-on work.
+The implementation is now beyond the Week 4 slice, with Week 5 adding foundational infrastructure for the remaining CLI/config parity work. The main remaining gaps are end-to-end CLI feature wiring, richer snapshot/screenshot fidelity, local review tooling, and platform hardening. See [10-week-4-status.md](./20260319_agent-terminal-v1/10-week-4-status.md), [12-week-5-status.md](./20260319_agent-terminal-v1/12-week-5-status.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current state.
 
 ## Executive summary
 
@@ -200,6 +203,7 @@ This design file is the entry point. Detailed supporting docs live in `design/20
 - [09-week-4-plan.md](./20260319_agent-terminal-v1/09-week-4-plan.md)
 - [10-week-4-status.md](./20260319_agent-terminal-v1/10-week-4-status.md)
 - [11-week-5-plan.md](./20260319_agent-terminal-v1/11-week-5-plan.md)
+- [12-week-5-status.md](./20260319_agent-terminal-v1/12-week-5-status.md)
 
 ## High-level architecture
 
