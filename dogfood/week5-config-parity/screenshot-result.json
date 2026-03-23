@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "command": "screenshot",
+  "timestamp": "2026-03-23T16:19:56.008Z",
+  "result": {
+    "sessionId": "01KMDQXKEEFNYQTBQX7W87GQQQ",
+    "capturedAtSeq": 4,
+    "profileName": "reference-light",
+    "cols": 80,
+    "rows": 24,
+    "artifactPath": "/tmp/agent-terminal-week5-config-parity.rDdjw2/sessions/01KMDQXKEEFNYQTBQX7W87GQQQ/artifacts/screenshot-4-reference-light.png",
+    "pngSizeBytes": 5943
+  }
+}

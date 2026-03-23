@@ -1,0 +1,4 @@
+{"version":2,"width":80,"height":24,"timestamp":1774282789,"title":"01KMDQXKEEFNYQTBQX7W87GQQQ","sessionId":"01KMDQXKEEFNYQTBQX7W87GQQQ","env":{"TERM":"xterm-256color"},"toolVersion":"0.1.0"}
+[0,"o","\u001b[?2004hREADY> "]
+[3.04,"o","echo hello && "]
+[3.892,"o","echo world\r\n\u001b[?2004l\rhello\r\nworld\r\n\u001b[?2004hREADY> "]
