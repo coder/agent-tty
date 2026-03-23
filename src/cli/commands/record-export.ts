@@ -21,6 +21,7 @@ import { CliError } from '../errors.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import {
   RecordExportResultSchema,
+  ScreenshotParamsSchema,
   type RecordExportResult,
 } from '../../protocol/messages.js';
 import {
@@ -60,6 +61,7 @@ interface CommandOptions {
   sessionId: string;
   format?: string;
   out?: string;
+  profile?: string;
   timing?: string;
 }
 
@@ -102,6 +104,33 @@ function resolveReplayTimingMode(
   }
 
   return timingResult.data;
+}
+
+function resolveWebmProfileName(
+  commandProfile: string | undefined,
+  contextProfileDefault: string | undefined,
+): string | undefined {
+  const effectiveProfile = commandProfile ?? contextProfileDefault;
+
+  if (effectiveProfile === undefined) {
+    return undefined;
+  }
+
+  const requestResult = ScreenshotParamsSchema.safeParse({
+    profile: effectiveProfile,
+  });
+
+  if (!requestResult.success || requestResult.data.profile === undefined) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: 'Record export profile is invalid.',
+      details: {
+        profile: effectiveProfile,
+      },
+      ...(requestResult.success ? {} : { cause: requestResult.error }),
+    });
+  }
+
+  return requestResult.data.profile;
 }
 
 async function resolveOutputPath(
@@ -278,6 +307,11 @@ export async function runRecordExportCommand(
       invariant(bytes > 0, 'asciicast export artifact must not be empty');
       sha256 = createHash('sha256').update(contentsBuffer).digest('hex');
     } else {
+      const webmProfileName = resolveWebmProfileName(
+        options.profile,
+        options.context.profileDefault,
+      );
+
       invariant(events.length > 0, 'webm export requires at least one event');
       const webmResult: WebmExportResult = await generateWebmExport(
         {
@@ -286,6 +320,9 @@ export async function runRecordExportCommand(
           manifest,
           events,
           outputPath: artifactOutputPath,
+          ...(webmProfileName !== undefined
+            ? { profileName: webmProfileName }
+            : {}),
           ...(timingMode !== undefined ? { timingMode } : {}),
         },
         {

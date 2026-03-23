@@ -436,6 +436,65 @@ describe('record export command', () => {
     expect(emitSuccessArgs.result.durationMs).toBe(1_500);
   });
 
+  it('resolves WebM profile from command option, context default, and builtin fallback', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+    mocks.generateWebmExport.mockResolvedValue({
+      capturedAtSeq: 1,
+      durationMs: 1_500,
+      outputEventCount: 1,
+      resizeEventCount: 1,
+      cols: 80,
+      rows: 24,
+      profileName: 'reference-light',
+      timingMode: 'accelerated',
+    });
+    const webmBytes = 12_345;
+    const webmContent = Buffer.alloc(webmBytes, 0x42);
+    mocks.stat.mockResolvedValue({ size: webmBytes });
+    mocks.readFile.mockResolvedValue(webmContent);
+
+    await runRecordExportCommand({
+      context: { ...TEST_CONTEXT, profileDefault: 'reference-light' },
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+    });
+
+    const contextDefaultCall = mocks.generateWebmExport.mock.calls.at(-1) as [
+      { profileName?: string },
+    ];
+    expect(contextDefaultCall[0].profileName).toBe('reference-light');
+
+    mocks.generateWebmExport.mockClear();
+
+    await runRecordExportCommand({
+      context: { ...TEST_CONTEXT, profileDefault: 'reference-light' },
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+      profile: 'reference-dark',
+    });
+
+    const commandProfileCall = mocks.generateWebmExport.mock.calls.at(-1) as [
+      { profileName?: string },
+    ];
+    expect(commandProfileCall[0].profileName).toBe('reference-dark');
+
+    mocks.generateWebmExport.mockClear();
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+    });
+
+    const builtinFallbackCall = mocks.generateWebmExport.mock.calls.at(-1) as [
+      { profileName?: string },
+    ];
+    expect(builtinFallbackCall[0]).not.toHaveProperty('profileName');
+  });
+
   it('passes timing mode to generateWebmExport for webm export', async () => {
     mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
     mocks.generateWebmExport.mockResolvedValue({
