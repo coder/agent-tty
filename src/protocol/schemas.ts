@@ -294,6 +294,7 @@ export type SnapshotResult = z.infer<typeof SnapshotResultSchema>;
 export const ScreenshotParamsSchema = z
   .object({
     profile: ProfileNameSchema.optional(),
+    showCursor: z.boolean().optional(),
   })
   .strict();
 export type ScreenshotParams = z.infer<typeof ScreenshotParamsSchema>;
@@ -307,6 +308,7 @@ export const ScreenshotResultSchema = z
     rows: PositiveIntSchema,
     artifactPath: NonEmptyStringSchema,
     pngSizeBytes: PositiveIntSchema,
+    cursorVisible: z.boolean().optional(),
     rendererBackend: z.string().optional(),
     pixelWidth: PositiveIntSchema.optional(),
     pixelHeight: PositiveIntSchema.optional(),

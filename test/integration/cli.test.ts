@@ -152,6 +152,27 @@ describe('CLI integration', () => {
     expect(envelope.error.message).toContain('must not be empty');
   });
 
+  it('rejects screenshot requests when --show-cursor and --hide-cursor are both provided', () => {
+    const result = runCli(
+      [
+        'screenshot',
+        'session-01',
+        '--show-cursor',
+        '--hide-cursor',
+        '--json',
+      ],
+      testEnv(),
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe('');
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.message).toContain('mutually exclusive');
+  });
+
   it('prints a JSON envelope for doctor including the new health checks', () => {
     const result = runCli(['doctor', '--json'], testEnv());
     expect(result.status).toBe(0);

@@ -10,6 +10,10 @@ export interface SnapshotOptions {
   includeCells?: boolean;
 }
 
+export interface ScreenshotOptions {
+  showCursor?: boolean;
+}
+
 export interface RendererBackend {
   /** Boot the renderer (lazy, idempotent). */
   boot(): Promise<void>;
@@ -21,7 +25,10 @@ export interface RendererBackend {
   snapshot(options?: SnapshotOptions): Promise<SemanticSnapshot>;
 
   /** Capture a screenshot as PNG. */
-  screenshot(outputPath: string): Promise<ScreenshotResult>;
+  screenshot(
+    outputPath: string,
+    options?: ScreenshotOptions,
+  ): Promise<ScreenshotResult>;
 
   /** Get current visible text (for wait operations). */
   getVisibleText(): Promise<string>;

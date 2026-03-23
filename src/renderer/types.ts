@@ -215,6 +215,7 @@ export const ScreenshotResultSchema = z
     rows: PositiveIntSchema,
     artifactPath: NonEmptyStringSchema,
     pngSizeBytes: PositiveIntSchema,
+    cursorVisible: z.boolean().optional(),
     rendererBackend: z.string().optional(),
     pixelWidth: PositiveIntSchema.optional(),
     pixelHeight: PositiveIntSchema.optional(),

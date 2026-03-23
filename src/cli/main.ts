@@ -39,6 +39,7 @@ import {
   DEFAULT_SHELL,
   DEFAULT_TERM,
 } from '../config/defaults.js';
+import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
 
 function parseIntegerOption(value: string): number {
@@ -493,20 +494,42 @@ async function main(): Promise<void> {
     .command('screenshot <session-id>')
     .description('Capture a rendered screenshot')
     .option('--profile <name>', 'Render profile name', 'reference-dark')
+    .option('--show-cursor', 'Show the terminal cursor in the screenshot')
+    .option('--hide-cursor', 'Hide the terminal cursor in the screenshot')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
         'screenshot',
         async (
           sessionId: string,
-          options: { profile: string; json: boolean },
+          options: {
+            profile: string;
+            showCursor: boolean;
+            hideCursor: boolean;
+            json: boolean;
+          },
           context: CommandContext,
         ) => {
+          if (options.showCursor && options.hideCursor) {
+            throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+              message: '--show-cursor and --hide-cursor are mutually exclusive.',
+            });
+          }
+
+          const cursorVisible = options.showCursor
+            ? true
+            : options.hideCursor
+              ? false
+              : undefined;
+
           await runScreenshotCommand({
             context,
             json: options.json,
             sessionId,
             profile: options.profile,
+            ...(cursorVisible === undefined
+              ? {}
+              : { showCursor: cursorVisible }),
           });
         },
       ),

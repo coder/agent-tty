@@ -19,6 +19,7 @@ import {
 import { invariant, assertString, unreachable } from '../../util/assert.js';
 import type {
   ReplayTimingOptions,
+  ScreenshotOptions,
   SnapshotOptions,
   VideoCapableRendererBackend,
   VideoRecordingOptions,
@@ -81,6 +82,7 @@ interface GhosttyBrowserBridge {
   isReady?: () => boolean;
   write?: (data: string) => Promise<void> | void;
   resize?: (cols: number, rows: number) => Promise<void> | void;
+  setCursorVisible?: (visible: boolean) => Promise<void> | void;
   getSnapshot?: (options?: SnapshotOptions) => GhosttyHarnessSnapshot;
   getVisibleText?: () => string;
 }
@@ -156,6 +158,26 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         overflow: hidden;
       }
 
+      body[data-screenshot-cursor-visible='false'] textarea {
+        caret-color: transparent !important;
+      }
+
+      body[data-screenshot-cursor-visible='false'] .xterm-cursor,
+      body[data-screenshot-cursor-visible='false'] [data-cursor='true'] {
+        opacity: 0 !important;
+        visibility: hidden !important;
+      }
+
+      body[data-screenshot-cursor-visible='true'] textarea {
+        caret-color: auto !important;
+      }
+
+      body[data-screenshot-cursor-visible='true'] .xterm-cursor,
+      body[data-screenshot-cursor-visible='true'] [data-cursor='true'] {
+        opacity: 1 !important;
+        visibility: visible !important;
+      }
+
       #terminal-shell {
         display: inline-block;
         overflow: hidden;
@@ -171,7 +193,7 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
       }
     </style>
   </head>
-  <body data-ready="false">
+  <body data-ready="false" data-screenshot-cursor-visible="false">
     <div id="terminal-shell">
       <div id="terminal"></div>
     </div>
@@ -208,6 +230,10 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
 
       function assertPositiveInteger(value, message) {
         invariant(Number.isInteger(value) && value > 0, message);
+      }
+
+      function assertBoolean(value, message) {
+        invariant(typeof value === 'boolean', message);
       }
 
       function parseProfileFromLocation() {
@@ -585,6 +611,18 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
           );
           terminal.resize(cols, rows);
           updateDocumentState();
+        },
+        setCursorVisible(visible) {
+          const terminal = getReadyTerminal();
+          assertBoolean(visible, 'setCursorVisible() visible must be a boolean');
+          invariant(terminal.renderer !== undefined, 'terminal renderer is unavailable');
+          invariant(
+            typeof terminal.requestRender === 'function',
+            'terminal requestRender() is unavailable',
+          );
+          document.body.dataset.screenshotCursorVisible = visible ? 'true' : 'false';
+          terminal.renderer.cursorVisible = visible;
+          terminal.requestRender();
         },
       };
 
@@ -1606,7 +1644,10 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     };
   }
 
-  public async screenshot(outputPath: string): Promise<ScreenshotResult> {
+  public async screenshot(
+    outputPath: string,
+    options?: ScreenshotOptions,
+  ): Promise<ScreenshotResult> {
     const page = this.requireOperationalPage('screenshot()');
     invariant(
       this.lastAppliedSeq >= 0,
@@ -1616,6 +1657,17 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       outputPath.length > 0,
       'screenshot outputPath must be a non-empty string',
     );
+    invariant(
+      options === undefined || typeof options === 'object',
+      'screenshot options must be an object when provided',
+    );
+    invariant(
+      options?.showCursor === undefined || typeof options.showCursor === 'boolean',
+      'screenshot showCursor option must be a boolean when provided',
+    );
+
+    const showCursor = options?.showCursor === true;
+
     invariant(
       isAbsolute(outputPath),
       'screenshot outputPath must be an absolute path',
@@ -1632,11 +1684,12 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       'screenshot() requires known terminal dimensions',
     );
 
+    await this.setScreenshotCursorVisibility(page, showCursor);
     await this.waitForScreenshotPaint(page);
 
     await page.locator('#terminal').screenshot({
       animations: 'disabled',
-      caret: 'hide',
+      caret: showCursor ? 'initial' : 'hide',
       path: outputPath,
       type: 'png',
     });
@@ -1678,6 +1731,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       rows: this.currentRows,
       artifactPath: outputPath,
       pngSizeBytes: screenshotFile.size,
+      cursorVisible: showCursor,
       rendererBackend: this.rendererBackend,
       pixelWidth,
       pixelHeight,
@@ -2087,6 +2141,21 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       },
       [cols, rows] as const,
     );
+  }
+
+  private async setScreenshotCursorVisibility(
+    page: Page,
+    visible: boolean,
+  ): Promise<void> {
+    await page.evaluate((showCursorInScreenshot: boolean) => {
+      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
+      if (bridge === undefined || typeof bridge.setCursorVisible !== 'function') {
+        throw new Error(
+          'ghostty-web harness setCursorVisible() bridge is unavailable',
+        );
+      }
+      return bridge.setCursorVisible(showCursorInScreenshot);
+    }, visible);
   }
 
   private async waitForScreenshotPaint(page: Page): Promise<void> {

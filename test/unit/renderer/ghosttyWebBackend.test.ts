@@ -319,13 +319,85 @@ describe('GhosttyWebBackend unit guards', () => {
         rows: 24,
         artifactPath: outputPath,
         pngSizeBytes: pngBuffer.byteLength,
+        cursorVisible: false,
         rendererBackend: 'ghostty-web',
         pixelWidth: 800,
         pixelHeight: 600,
         sha256: expectedSha256,
         renderProfileHash: hashProfile(PROFILE),
       });
-      expect(evaluate).toHaveBeenCalledTimes(1);
+      expect(evaluate).toHaveBeenCalledTimes(2);
+      expect(evaluate.mock.calls[0]?.[1]).toBe(false);
+      expect(locator).toHaveBeenCalledWith('#terminal');
+      expect(screenshot).toHaveBeenCalledTimes(1);
+    } finally {
+      await rm(temporaryDirectory, { force: true, recursive: true });
+    }
+  });
+
+  it('uses initial caret capture when showCursor is enabled', async () => {
+    const backend = createBackend();
+    const temporaryDirectory = await mkdtemp(
+      join(tmpdir(), 'ghostty-web-backend-cursor-'),
+    );
+    const outputPath = join(temporaryDirectory, 'screenshot.png');
+    const pngBuffer = createPngBuffer(640, 480);
+    const expectedSha256 = createHash('sha256').update(pngBuffer).digest('hex');
+
+    const evaluate = vi.fn().mockResolvedValue(undefined);
+    const screenshot = vi.fn(
+      async (options: {
+        animations: 'disabled';
+        caret: 'initial';
+        path: string;
+        type: 'png';
+      }) => {
+        expect(options).toEqual({
+          animations: 'disabled',
+          caret: 'initial',
+          path: outputPath,
+          type: 'png',
+        });
+        await writeFile(outputPath, pngBuffer);
+      },
+    );
+    const locator = vi.fn((selector: string) => {
+      expect(selector).toBe('#terminal');
+      return { screenshot };
+    });
+
+    Object.assign(backend as object, {
+      isBooted: true,
+      currentCols: 100,
+      currentRows: 30,
+      lastAppliedSeq: 7,
+      page: {
+        evaluate,
+        isClosed: () => false,
+        locator,
+      },
+    });
+
+    try {
+      await expect(
+        backend.screenshot(outputPath, { showCursor: true }),
+      ).resolves.toEqual({
+        sessionId: 'renderer-unit-session',
+        capturedAtSeq: 7,
+        profileName: 'reference-dark',
+        cols: 100,
+        rows: 30,
+        artifactPath: outputPath,
+        pngSizeBytes: pngBuffer.byteLength,
+        cursorVisible: true,
+        rendererBackend: 'ghostty-web',
+        pixelWidth: 640,
+        pixelHeight: 480,
+        sha256: expectedSha256,
+        renderProfileHash: hashProfile(PROFILE),
+      });
+      expect(evaluate).toHaveBeenCalledTimes(2);
+      expect(evaluate.mock.calls[0]?.[1]).toBe(true);
       expect(locator).toHaveBeenCalledWith('#terminal');
       expect(screenshot).toHaveBeenCalledTimes(1);
     } finally {

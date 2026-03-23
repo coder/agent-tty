@@ -119,6 +119,7 @@ function createScreenshotResult(
     rows: 24,
     artifactPath: '/tmp/snapshot.png',
     pngSizeBytes: 2048,
+    cursorVisible: false,
     rendererBackend: 'ghostty-web',
     pixelWidth: 800,
     pixelHeight: 600,
@@ -142,14 +143,21 @@ function mockOfflineReplayRendererSuccess(
         manifest: MockSessionRecord;
         replayInput: Record<string, never>;
         backend: {
-          screenshot(outputPath: string): Promise<ScreenshotResult>;
+          screenshot(
+            outputPath: string,
+            options?: { showCursor?: boolean },
+          ): Promise<ScreenshotResult>;
         };
       }) => Promise<unknown>,
     ) => {
       const mockBackend = {
-        screenshot(outputPath: string): Promise<ScreenshotResult> {
+        screenshot(
+          outputPath: string,
+          options?: { showCursor?: boolean },
+        ): Promise<ScreenshotResult> {
           return Promise.resolve(
             createScreenshotResult({
+              cursorVisible: options?.showCursor === true,
               ...screenshotOverrides,
               artifactPath: outputPath,
             }),
@@ -232,6 +240,32 @@ describe('screenshot command', () => {
     });
   });
 
+  it('threads showCursor to running-session screenshot RPC requests', async () => {
+    const result = createScreenshotResult({
+      artifactPath: '/tmp/show-cursor.png',
+      cursorVisible: true,
+    });
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runScreenshotCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+      showCursor: true,
+    });
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'screenshot',
+      { profile: 'reference-dark', showCursor: true },
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result,
+      }),
+    );
+  });
+
   it('uses an explicit render profile and preserves JSON mode', async () => {
     const result = createScreenshotResult({
       capturedAtSeq: 22,
@@ -308,6 +342,7 @@ describe('screenshot command', () => {
         cols: 80,
         rows: 24,
         pngSizeBytes: 2048,
+        cursorVisible: false,
         rendererBackend: 'ghostty-web',
         pixelWidth: 800,
         pixelHeight: 600,
@@ -341,6 +376,66 @@ describe('screenshot command', () => {
         `Render profile hash: ${TEST_RENDER_PROFILE_HASH}`,
       ],
     });
+  });
+
+  it('threads showCursor to offline replay screenshots', async () => {
+    const backendScreenshot = vi.fn(
+      (
+        outputPath: string,
+        options?: { showCursor?: boolean },
+      ): Promise<ScreenshotResult> =>
+        Promise.resolve(
+          createScreenshotResult({
+            artifactPath: outputPath,
+            cursorVisible: options?.showCursor === true,
+          }),
+        ),
+    );
+    mocks.readManifestIfExists.mockResolvedValue(createExitedSessionRecord());
+    mocks.withOfflineReplayRenderer.mockImplementation(
+      async (
+        _options: unknown,
+        run: (context: {
+          manifest: MockSessionRecord;
+          replayInput: Record<string, never>;
+          backend: {
+            screenshot(
+              outputPath: string,
+              options?: { showCursor?: boolean },
+            ): Promise<ScreenshotResult>;
+          };
+        }) => Promise<unknown>,
+      ) =>
+        run({
+          manifest: createExitedSessionRecord(),
+          replayInput: {},
+          backend: {
+            screenshot: backendScreenshot,
+          },
+        }),
+    );
+
+    await runScreenshotCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+      showCursor: true,
+    });
+
+    expect(backendScreenshot).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/artifacts\/\.tmp-screenshot-.*\.png$/),
+      { showCursor: true },
+    );
+    expect(mocks.createArtifactEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ cursorVisible: true }),
+      }),
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: expect.objectContaining({ cursorVisible: true }),
+      }),
+    );
   });
 
   it('falls back to offline replay when the host is unreachable', async () => {
@@ -401,7 +496,10 @@ describe('screenshot command', () => {
           manifest: MockSessionRecord;
           replayInput: Record<string, never>;
           backend: {
-            screenshot(outputPath: string): Promise<ScreenshotResult>;
+            screenshot(
+              outputPath: string,
+              options?: { showCursor?: boolean },
+            ): Promise<ScreenshotResult>;
           };
         }) => Promise<unknown>,
       ) =>
@@ -409,8 +507,12 @@ describe('screenshot command', () => {
           manifest: createExitedSessionRecord(),
           replayInput: {},
           backend: {
-            screenshot(outputPath: string): Promise<ScreenshotResult> {
+            screenshot(
+              outputPath: string,
+              options?: { showCursor?: boolean },
+            ): Promise<ScreenshotResult> {
               void outputPath;
+              void options;
               return Promise.reject(captureError);
             },
           },

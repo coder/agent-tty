@@ -37,25 +37,36 @@ interface CommandOptions {
   json: boolean;
   sessionId: string;
   profile?: string;
+  showCursor?: boolean;
 }
 
-function resolveScreenshotProfile(profile: string | undefined): string {
+interface ResolvedScreenshotRequest {
+  profile: string;
+  showCursor?: boolean;
+}
+
+function resolveScreenshotRequest(
+  profile: string | undefined,
+  showCursor: boolean | undefined,
+): ResolvedScreenshotRequest {
   const effectiveProfile = profile ?? DEFAULT_SCREENSHOT_PROFILE;
-  const profileResult = ScreenshotParamsSchema.safeParse({
+  const requestResult = ScreenshotParamsSchema.safeParse({
     profile: effectiveProfile,
+    ...(showCursor === undefined ? {} : { showCursor }),
   });
 
-  if (!profileResult.success) {
+  if (!requestResult.success) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-      message: 'Screenshot profile must be a non-empty string.',
+      message: 'Screenshot request is invalid.',
       details: {
         profile: effectiveProfile,
+        ...(showCursor === undefined ? {} : { showCursor }),
       },
-      cause: profileResult.error,
+      cause: requestResult.error,
     });
   }
 
-  if (profileResult.data.profile === undefined) {
+  if (requestResult.data.profile === undefined) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {
       message: 'Screenshot profile is required.',
       details: {
@@ -64,7 +75,12 @@ function resolveScreenshotProfile(profile: string | undefined): string {
     });
   }
 
-  return profileResult.data.profile;
+  return {
+    profile: requestResult.data.profile,
+    ...(requestResult.data.showCursor === undefined
+      ? {}
+      : { showCursor: requestResult.data.showCursor }),
+  };
 }
 
 function formatScreenshotLines(result: ScreenshotResult): string[] {
@@ -113,6 +129,7 @@ function parseScreenshotResult(
 async function runOfflineScreenshot(
   sessionDirectory: string,
   profile: string,
+  showCursor: boolean | undefined,
 ): Promise<ScreenshotResult> {
   return withOfflineReplayRenderer(
     { sessionDir: sessionDirectory, profileName: profile },
@@ -124,7 +141,10 @@ async function runOfflineScreenshot(
       );
 
       try {
-        const result = await backend.screenshot(temporaryOutputPath);
+        const result = await backend.screenshot(
+          temporaryOutputPath,
+          showCursor === undefined ? undefined : { showCursor },
+        );
         invariant(
           result.sessionId === manifest.sessionId,
           'offline screenshot sessionId must match the manifest sessionId',
@@ -161,6 +181,7 @@ async function runOfflineScreenshot(
               cols: result.cols,
               rows: result.rows,
               pngSizeBytes: result.pngSizeBytes,
+              cursorVisible: result.cursorVisible,
               rendererBackend: result.rendererBackend,
               pixelWidth: result.pixelWidth,
               pixelHeight: result.pixelHeight,
@@ -177,6 +198,7 @@ async function runOfflineScreenshot(
           rows: result.rows,
           artifactPath: finalArtifactPath,
           pngSizeBytes: result.pngSizeBytes,
+          cursorVisible: result.cursorVisible,
           rendererBackend: result.rendererBackend,
           pixelWidth: result.pixelWidth,
           pixelHeight: result.pixelHeight,
@@ -194,7 +216,10 @@ async function runOfflineScreenshot(
 export async function runScreenshotCommand(
   options: CommandOptions,
 ): Promise<void> {
-  const profile = resolveScreenshotProfile(options.profile);
+  const { profile, showCursor } = resolveScreenshotRequest(
+    options.profile,
+    options.showCursor,
+  );
   const home = options.context.home;
   let sessionDirectory: string;
 
@@ -230,6 +255,7 @@ export async function runScreenshotCommand(
     try {
       rawResult = await sendRpc(socketPath(sessionDirectory), 'screenshot', {
         profile,
+        ...(showCursor === undefined ? {} : { showCursor }),
       });
     } catch (error) {
       if (
@@ -239,11 +265,19 @@ export async function runScreenshotCommand(
         throw error;
       }
 
-      rawResult = await runOfflineScreenshot(sessionDirectory, profile);
+      rawResult = await runOfflineScreenshot(
+        sessionDirectory,
+        profile,
+        showCursor,
+      );
       invalidResultMessage = 'Unexpected screenshot result from offline replay';
     }
   } else {
-    rawResult = await runOfflineScreenshot(sessionDirectory, profile);
+    rawResult = await runOfflineScreenshot(
+      sessionDirectory,
+      profile,
+      showCursor,
+    );
     invalidResultMessage = 'Unexpected screenshot result from offline replay';
   }
 

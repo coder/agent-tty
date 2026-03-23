@@ -429,7 +429,8 @@ export async function runHost(sessionId: string): Promise<void> {
       return snapshotResult;
     },
     screenshot: async (params: unknown) => {
-      const { profile: requestedProfileName } = params as ScreenshotParams;
+      const { profile: requestedProfileName, showCursor } =
+        params as ScreenshotParams;
 
       const profile = (() => {
         try {
@@ -459,7 +460,10 @@ export async function runHost(sessionId: string): Promise<void> {
       );
 
       try {
-        const result = await backend.screenshot(temporaryOutputPath);
+        const result = await backend.screenshot(
+          temporaryOutputPath,
+          showCursor === undefined ? undefined : { showCursor },
+        );
 
         invariant(
           result.sessionId === sessionId,
@@ -492,11 +496,17 @@ export async function runHost(sessionId: string): Promise<void> {
             filename,
             sessionId: result.sessionId,
             capturedAtSeq: result.capturedAtSeq,
+            sha256: result.sha256,
             metadata: {
               profileName: result.profileName,
               cols: result.cols,
               rows: result.rows,
               pngSizeBytes: result.pngSizeBytes,
+              cursorVisible: result.cursorVisible,
+              rendererBackend: result.rendererBackend,
+              pixelWidth: result.pixelWidth,
+              pixelHeight: result.pixelHeight,
+              renderProfileHash: result.renderProfileHash,
             },
           }),
         );
@@ -509,6 +519,12 @@ export async function runHost(sessionId: string): Promise<void> {
           rows: result.rows,
           artifactPath: finalArtifactPath,
           pngSizeBytes: result.pngSizeBytes,
+          cursorVisible: result.cursorVisible,
+          rendererBackend: result.rendererBackend,
+          pixelWidth: result.pixelWidth,
+          pixelHeight: result.pixelHeight,
+          sha256: result.sha256,
+          renderProfileHash: result.renderProfileHash,
         };
       } catch (error) {
         await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
