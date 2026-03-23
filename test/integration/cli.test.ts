@@ -53,6 +53,21 @@ describe('CLI integration', () => {
     expect(parsed.result.cliVersion).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
+  it('accepts --append-newline for type', () => {
+    const result = runCli(
+      ['type', 'session-01', 'hello', '--append-newline', '--json'],
+      testEnv(),
+    );
+
+    expect(result.status).toBe(3);
+    expect(result.stderr).toBe('');
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('SESSION_NOT_FOUND');
+    expect(envelope.error.message).toContain('session-01');
+  });
+
   it('rejects type input when positional text and --file are both provided', () => {
     const inputPath = join(testHome, 'type-input.txt');
     writeFileSync(inputPath, 'from-file');

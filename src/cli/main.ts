@@ -320,6 +320,7 @@ async function main(): Promise<void> {
     .command('type <session-id> [text]')
     .description('Type text into a session')
     .option('--file <path>', 'Read text to type from a file')
+    .option('--append-newline', 'Append a newline after the typed text', false)
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
@@ -327,7 +328,7 @@ async function main(): Promise<void> {
         async (
           sessionId: string,
           text: string | undefined,
-          options: { file?: string; json: boolean },
+          options: { file?: string; appendNewline: boolean; json: boolean },
           context: CommandContext,
         ) => {
           await runTypeCommand({
@@ -335,6 +336,7 @@ async function main(): Promise<void> {
             json: options.json,
             sessionId,
             text,
+            appendNewline: options.appendNewline,
             ...(options.file !== undefined ? { file: options.file } : {}),
           });
         },
