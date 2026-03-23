@@ -423,6 +423,7 @@ export async function allocateSession(
       : {}),
     ...(config.name !== undefined ? { name: config.name } : {}),
     ...(Object.keys(config.env).length > 0 ? { env: { ...config.env } } : {}),
+    shell: resolvedShellPath,
     term: config.term,
   });
 

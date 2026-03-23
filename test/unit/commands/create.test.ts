@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
+import type { SessionRecord } from '../../../src/protocol/schemas.js';
+
 const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
   allocateSession: vi.fn(),
@@ -58,6 +61,29 @@ describe('create command', () => {
     term: 'vt100',
   };
 
+  function makeManifest(overrides: Partial<SessionRecord> = {}): SessionRecord {
+    return {
+      version: 1,
+      sessionId: 'session-01',
+      createdAt: '2026-03-23T12:00:00.000Z',
+      updatedAt: '2026-03-23T12:00:00.000Z',
+      status: 'running',
+      command: ['/bin/sh', '-c', 'echo ready'],
+      cwd: '/tmp/workspace',
+      cols: 120,
+      rows: 40,
+      creationCols: 120,
+      creationRows: 40,
+      hostPid: null,
+      childPid: null,
+      exitCode: null,
+      exitSignal: null,
+      term: 'vt100',
+      shell: '/bin/bash',
+      ...overrides,
+    };
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.allocateSession.mockResolvedValue({
@@ -66,7 +92,7 @@ describe('create command', () => {
     });
     mocks.launchHost.mockReturnValue(12345);
     mocks.sendRpc.mockResolvedValue({ session: { sessionId: 'session-01' } });
-    mocks.readManifestIfExists.mockResolvedValue(null);
+    mocks.readManifestIfExists.mockResolvedValue(makeManifest());
     mocks.sessionDir.mockImplementation(
       (_home: string, sessionId: string) =>
         `/tmp/agent-terminal-home/sessions/${sessionId}`,
@@ -80,10 +106,18 @@ describe('create command', () => {
   });
 
   it('passes home, env, term, name, and shell through session creation', async () => {
+    mocks.readManifestIfExists.mockResolvedValue(
+      makeManifest({
+        env: { FOO: 'bar', BAZ: 'qux' },
+        idleTimeoutMs: 5000,
+      }),
+    );
+
     await runCreateCommand({
       ...baseOptions,
       context,
       envEntries: ['FOO=bar', 'BAZ=qux'],
+      idleTimeoutMs: 5000,
       name: 'demo-session',
     });
 
@@ -96,6 +130,7 @@ describe('create command', () => {
       rows: 40,
       env: { FOO: 'bar', BAZ: 'qux' },
       term: 'vt100',
+      idleTimeoutMs: 5000,
       name: 'demo-session',
     });
     expect(mocks.launchHost).toHaveBeenCalledWith({
@@ -108,7 +143,74 @@ describe('create command', () => {
       expect.objectContaining({
         command: 'create',
         json: true,
-        result: { sessionId: 'session-01' },
+        result: {
+          sessionId: 'session-01',
+          createdAt: '2026-03-23T12:00:00.000Z',
+          cols: 120,
+          rows: 40,
+          shell: '/bin/bash',
+          env: { FOO: 'bar', BAZ: 'qux' },
+          idleTimeoutMs: 5000,
+        },
+      }),
+    );
+  });
+
+  it('falls back to command[0] when the manifest shell is missing', async () => {
+    mocks.readManifestIfExists.mockResolvedValue(
+      makeManifest({
+        shell: undefined,
+      }),
+    );
+
+    await runCreateCommand({
+      ...baseOptions,
+      context,
+    });
+
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: {
+          sessionId: 'session-01',
+          createdAt: '2026-03-23T12:00:00.000Z',
+          cols: 120,
+          rows: 40,
+          shell: '/bin/sh',
+        },
+      }),
+    );
+  });
+
+  it('emits the enriched result when the session exits before inspect becomes ready', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'host unreachable',
+      }),
+    );
+    mocks.readManifestIfExists.mockResolvedValue(
+      makeManifest({
+        status: 'exited',
+        env: { FOO: 'bar' },
+        idleTimeoutMs: 2500,
+      }),
+    );
+
+    await runCreateCommand({
+      ...baseOptions,
+      context,
+    });
+
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: {
+          sessionId: 'session-01',
+          createdAt: '2026-03-23T12:00:00.000Z',
+          cols: 120,
+          rows: 40,
+          shell: '/bin/bash',
+          env: { FOO: 'bar' },
+          idleTimeoutMs: 2500,
+        },
       }),
     );
   });

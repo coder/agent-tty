@@ -46,6 +46,7 @@ export const SessionRecordSchema = z
     cwd: z.string(),
     name: NonEmptyStringSchema.optional(),
     env: SessionEnvSchema.optional(),
+    shell: NonEmptyStringSchema.optional(),
     term: NonEmptyStringSchema.optional(),
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
