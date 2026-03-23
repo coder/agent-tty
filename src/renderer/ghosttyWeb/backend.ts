@@ -1173,6 +1173,10 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     sessionId: string,
     profile: RenderProfileConfig,
     videoOptions?: VideoRecordingOptions,
+    // The default logger reads AGENT_TERMINAL_LOG_LEVEL from process.env at
+    // construction time. In CLI flows, main.ts sets this env var in preAction
+    // before any command handler runs, so the effective level is correct.
+    // Callers may pass an explicit Logger for testing or non-CLI contexts.
     logger: Logger = createProcessLogger(),
   ) {
     invariant(sessionId.length > 0, 'sessionId must be a non-empty string');

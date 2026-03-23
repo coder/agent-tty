@@ -128,6 +128,12 @@ async function main(): Promise<void> {
       actionCommand.optsWithGlobals<GlobalCliOptions>(),
     );
     process.env.AGENT_TERMINAL_HOME = context.home;
+    // Propagate the resolved log level to the process environment so that
+    // subsystems instantiated outside the CLI context (e.g., renderer backends,
+    // host processes) inherit the correct level via createProcessLogger().
+    // This is intentional: threading a Logger instance through every factory
+    // and constructor is a larger refactor with no user-visible benefit, since
+    // the env var is set before any command handler runs.
     process.env.AGENT_TERMINAL_LOG_LEVEL = context.logLevel;
     setColorEnabled(context.colorEnabled);
     setCommandContext(actionCommand, context);
