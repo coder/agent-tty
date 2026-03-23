@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -33,6 +33,16 @@ interface SessionSummary {
   status: string;
   command: string[];
   createdAt: string;
+}
+
+interface GcResult {
+  removedSessions: string[];
+  skippedSessions: Array<{
+    sessionId: string;
+    reason: string;
+  }>;
+  dryRun: boolean;
+  totalBytesFreed: number;
 }
 
 let testHome = '';
@@ -316,6 +326,192 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(failureReason).toContain('host process died unexpectedly');
     expect(afterCrash.hostPid).toBeNull();
     expect(afterCrash.childPid).toBeNull();
+  });
+
+  it('stale host recovery: create → crash → reconcile → gc', async () => {
+    const sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      'echo stale-host-proof; exec cat',
+    ]);
+    const sessionDirectory = join(testHome, 'sessions', sessionId);
+
+    const runningSession = inspectSession(testHome, sessionId);
+    expect(
+      runningSession.status,
+      'newly created session should be running before the host crash',
+    ).toBe('running');
+    expect(
+      runningSession.hostPid,
+      'inspect should record the live host PID before the host crash',
+    ).toBeTypeOf('number');
+    const hostPid = runningSession.hostPid;
+    if (hostPid === null) {
+      throw new Error(
+        'hostPid must not be null after asserting that inspect returned a number',
+      );
+    }
+    await expect(
+      stat(sessionDirectory),
+      'session directory should exist on disk before stale-host reconciliation',
+    ).resolves.toBeDefined();
+
+    crashSession(testHome, sessionId);
+    await sleep(1000);
+
+    const listResult = runCli(['list', '--json'], {
+      AGENT_TERMINAL_HOME: testHome,
+    });
+    expect(
+      listResult.status,
+      'list should succeed while reconciling a stale host session',
+    ).toBe(0);
+    expect(
+      listResult.stderr,
+      'list should not write stderr while reconciling a stale host session',
+    ).toBe('');
+    const listEnvelope = JSON.parse(listResult.stdout) as SuccessEnvelope<{
+      sessions: SessionSummary[];
+    }>;
+    expect(
+      listEnvelope.ok,
+      'list should emit a success envelope while reconciling a stale host session',
+    ).toBe(true);
+    expect(
+      listEnvelope.result.sessions.find(
+        (session) => session.sessionId === sessionId,
+      ),
+      'default list should hide the reconciled terminal session after stale-host recovery',
+    ).toBeUndefined();
+
+    const listAllResult = runCli(['list', '--all', '--json'], {
+      AGENT_TERMINAL_HOME: testHome,
+    });
+    expect(
+      listAllResult.status,
+      'list --all should succeed after stale-host reconciliation',
+    ).toBe(0);
+    expect(
+      listAllResult.stderr,
+      'list --all should not write stderr after stale-host reconciliation',
+    ).toBe('');
+    const listAllEnvelope = JSON.parse(
+      listAllResult.stdout,
+    ) as SuccessEnvelope<{
+      sessions: SessionSummary[];
+    }>;
+    expect(
+      listAllEnvelope.ok,
+      'list --all should emit a success envelope after stale-host reconciliation',
+    ).toBe(true);
+    expect(
+      listAllEnvelope.result.sessions,
+      'list --all should surface the reconciled stale session as failed',
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sessionId, status: 'failed' }),
+      ]),
+    );
+
+    const reconciledSession = inspectSession(testHome, sessionId);
+    expect(
+      reconciledSession.status,
+      'inspect should report the stale host session as failed after reconciliation',
+    ).toBe('failed');
+    expect(
+      reconciledSession.hostPid,
+      'reconciled session should clear the stale host PID',
+    ).toBeNull();
+    expect(
+      reconciledSession.childPid,
+      'reconciled session should clear the orphaned child PID',
+    ).toBeNull();
+    expect(
+      reconciledSession.failureReason,
+      'reconciled session should keep a descriptive failureReason',
+    ).toBeTypeOf('string');
+    const failureReason = reconciledSession.failureReason;
+    if (typeof failureReason !== 'string') {
+      throw new Error(
+        'failureReason must be a string after asserting its runtime type',
+      );
+    }
+    expect(
+      failureReason.length,
+      'failureReason should not be empty after stale-host reconciliation',
+    ).toBeGreaterThan(0);
+    expect(
+      failureReason,
+      'failureReason should explain that the host died unexpectedly',
+    ).toContain('host process died unexpectedly');
+    expect(
+      failureReason,
+      'failureReason should preserve the stale host PID that was reconciled',
+    ).toContain(String(hostPid));
+
+    const gcResult = runCli(['gc', '--json'], {
+      AGENT_TERMINAL_HOME: testHome,
+    });
+    expect(
+      gcResult.status,
+      'gc should succeed after stale-host reconciliation produces a terminal session',
+    ).toBe(0);
+    expect(
+      gcResult.stderr,
+      'gc should not write stderr when collecting a reconciled stale session',
+    ).toBe('');
+    const gcEnvelope = JSON.parse(gcResult.stdout) as SuccessEnvelope<GcResult>;
+    expect(
+      gcEnvelope.ok,
+      'gc should emit a success envelope after collecting a stale session',
+    ).toBe(true);
+    expect(
+      gcEnvelope.command,
+      'gc envelope should identify the gc command',
+    ).toBe('gc');
+    expect(
+      gcEnvelope.result.removedSessions,
+      'gc should remove the reconciled stale session directory',
+    ).toEqual([sessionId]);
+    expect(
+      gcEnvelope.result.skippedSessions,
+      'gc should not skip the reconciled stale session',
+    ).toEqual([]);
+    expect(
+      gcEnvelope.result.totalBytesFreed,
+      'gc should report reclaimed bytes for the removed session directory',
+    ).toBeGreaterThan(0);
+
+    const listAfterGcResult = runCli(['list', '--all', '--json'], {
+      AGENT_TERMINAL_HOME: testHome,
+    });
+    expect(
+      listAfterGcResult.status,
+      'list --all should succeed after gc removes the stale session',
+    ).toBe(0);
+    expect(
+      listAfterGcResult.stderr,
+      'list --all should stay silent after gc removes the stale session',
+    ).toBe('');
+    const listAfterGcEnvelope = JSON.parse(
+      listAfterGcResult.stdout,
+    ) as SuccessEnvelope<{
+      sessions: SessionSummary[];
+    }>;
+    expect(
+      listAfterGcEnvelope.ok,
+      'list --all should emit a success envelope after gc removes the stale session',
+    ).toBe(true);
+    expect(
+      listAfterGcEnvelope.result.sessions.find(
+        (session) => session.sessionId === sessionId,
+      ),
+      'list --all should no longer include the gc-collected stale session',
+    ).toBeUndefined();
+    await expect(
+      stat(sessionDirectory),
+      'gc should remove the stale session directory from disk',
+    ).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('destroyed session rejects commands with SESSION_ALREADY_DESTROYED', () => {
