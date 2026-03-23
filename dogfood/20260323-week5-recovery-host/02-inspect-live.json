@@ -9,11 +9,7 @@
       "createdAt": "2026-03-23T16:08:58.850Z",
       "updatedAt": "2026-03-23T16:08:59.681Z",
       "status": "running",
-      "command": [
-        "/bin/sh",
-        "-c",
-        "echo stale-host-proof; exec cat"
-      ],
+      "command": ["/bin/sh", "-c", "echo stale-host-proof; exec cat"],
       "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_c09f45103d",
       "term": "xterm-256color",
       "cols": 80,

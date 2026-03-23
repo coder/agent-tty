@@ -25,19 +25,19 @@ The authoritative proof is `07-snapshot-offline.json`. Its JSON envelope contain
 
 ## Artifact guide
 
-| File | Role |
-| --- | --- |
-| `01-create.json` | Session creation envelope for the /bin/sh offline replay scenario. |
-| `02-wait-ready.json` | Wait proof that the live terminal emitted `offline-test-data`. |
-| `03-snapshot-live.json` | Live text snapshot before killing the host. |
-| `04-screenshot-live.json` | Live screenshot envelope before the crash (optional capture). |
-| `05-kill-host.json` | Recorded `kill -9` action against host PID `1065779`. |
-| `06-inspect-failed.json` | Post-crash inspect envelope showing the reconciled failed session. |
-| `07-snapshot-offline.json` | Offline replay text snapshot after the crash; the key proof artifact. |
-| `08-screenshot-offline.json` | Offline screenshot envelope after host failure (optional capture). |
-| `09-export-asciicast.json` | Optional asciicast export envelope from the failed session. |
-| `logs/10-vitest-offline-replay.log` | Unit-test proof for offline replay reconstruction. |
-| `logs/11-vitest-offline-snapshot.log` | Integration-test proof for failed-session offline snapshot support. |
+| File                                  | Role                                                                  |
+| ------------------------------------- | --------------------------------------------------------------------- |
+| `01-create.json`                      | Session creation envelope for the /bin/sh offline replay scenario.    |
+| `02-wait-ready.json`                  | Wait proof that the live terminal emitted `offline-test-data`.        |
+| `03-snapshot-live.json`               | Live text snapshot before killing the host.                           |
+| `04-screenshot-live.json`             | Live screenshot envelope before the crash (optional capture).         |
+| `05-kill-host.json`                   | Recorded `kill -9` action against host PID `1065779`.                 |
+| `06-inspect-failed.json`              | Post-crash inspect envelope showing the reconciled failed session.    |
+| `07-snapshot-offline.json`            | Offline replay text snapshot after the crash; the key proof artifact. |
+| `08-screenshot-offline.json`          | Offline screenshot envelope after host failure (optional capture).    |
+| `09-export-asciicast.json`            | Optional asciicast export envelope from the failed session.           |
+| `logs/10-vitest-offline-replay.log`   | Unit-test proof for offline replay reconstruction.                    |
+| `logs/11-vitest-offline-snapshot.log` | Integration-test proof for failed-session offline snapshot support.   |
 
 ## Screenshot and recording notes
 

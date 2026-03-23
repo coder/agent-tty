@@ -10,11 +10,7 @@
       "updatedAt": "2026-03-23T16:10:48.033Z",
       "status": "failed",
       "failureReason": "host process died unexpectedly (pid: 1065779)",
-      "command": [
-        "/bin/sh",
-        "-c",
-        "echo offline-test-data; exec cat"
-      ],
+      "command": ["/bin/sh", "-c", "echo offline-test-data; exec cat"],
       "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_caffe79636",
       "term": "xterm-256color",
       "cols": 80,

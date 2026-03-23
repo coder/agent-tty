@@ -10,11 +10,7 @@
       "updatedAt": "2026-03-23T16:09:05.107Z",
       "status": "failed",
       "failureReason": "host process died unexpectedly (pid: 1047819)",
-      "command": [
-        "/bin/sh",
-        "-c",
-        "echo stale-host-proof; exec cat"
-      ],
+      "command": ["/bin/sh", "-c", "echo stale-host-proof; exec cat"],
       "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_c09f45103d",
       "term": "xterm-256color",
       "cols": 80,

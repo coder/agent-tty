@@ -6,7 +6,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { CliError } from '../../../src/cli/errors.js';
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
-import type { EventRecord, SessionRecord } from '../../../src/protocol/schemas.js';
+import type {
+  EventRecord,
+  SessionRecord,
+} from '../../../src/protocol/schemas.js';
 import { withOfflineReplayRenderer } from '../../../src/replay/offlineReplay.js';
 import type { RendererBackend } from '../../../src/renderer/backend.js';
 import type { ReplayInput, ReplayState } from '../../../src/renderer/types.js';
@@ -150,7 +153,9 @@ function createDefaultEvents(): EventRecord[] {
   ];
 }
 
-function createEventsJsonl(events: readonly EventRecord[] = createDefaultEvents()): string {
+function createEventsJsonl(
+  events: readonly EventRecord[] = createDefaultEvents(),
+): string {
   return events.map((event) => JSON.stringify(event)).join('\n');
 }
 
@@ -268,7 +273,11 @@ describe('withOfflineReplayRenderer', () => {
 
     await withOfflineReplayRenderer(
       { sessionDir },
-      ({ manifest, replayInput, backend: providedBackend }: OfflineReplayRunContext) => {
+      ({
+        manifest,
+        replayInput,
+        backend: providedBackend,
+      }: OfflineReplayRunContext) => {
         expect(
           manifest.sessionId,
           'offline replay should read the manifest for the same session directory',
@@ -386,7 +395,9 @@ describe('withOfflineReplayRenderer', () => {
         payload: { exitCode: 0, exitSignal: null },
       },
     ];
-    const { sessionDir } = await createSessionFixture({ events: expectedEvents });
+    const { sessionDir } = await createSessionFixture({
+      events: expectedEvents,
+    });
     const backend = createMockBackend();
 
     await withOfflineReplayRenderer(
@@ -603,13 +614,18 @@ describe('withOfflineReplayRenderer', () => {
   });
 
   it('defaults replay state to the last event seq when no custom target is provided', async () => {
-    const expectedEvents: EventRecord[] = Array.from({ length: 6 }, (_, seq) => ({
-      seq,
-      ts: `2026-03-20T12:00:0${String(seq)}.000Z`,
-      type: 'output',
-      payload: { data: `chunk-${String(seq)}` },
-    }));
-    const { sessionDir } = await createSessionFixture({ events: expectedEvents });
+    const expectedEvents: EventRecord[] = Array.from(
+      { length: 6 },
+      (_, seq) => ({
+        seq,
+        ts: `2026-03-20T12:00:0${String(seq)}.000Z`,
+        type: 'output',
+        payload: { data: `chunk-${String(seq)}` },
+      }),
+    );
+    const { sessionDir } = await createSessionFixture({
+      events: expectedEvents,
+    });
     const backend = createMockBackend();
 
     await withOfflineReplayRenderer(

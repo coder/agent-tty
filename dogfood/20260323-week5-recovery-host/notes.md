@@ -3,7 +3,7 @@
 ## Bundle metadata
 
 - **Created at:** 2026-03-23T16:09:17Z
-- **Bundle path:**   `dogfood/20260323-week5-recovery-host/`
+- **Bundle path:** `dogfood/20260323-week5-recovery-host/`
 - **Session ID:** `01KMDQ9S6XFPBFZSKPGJCGN2KX`
 - **Killed host PID:** `1047819`
 - **Isolated AGENT_TERMINAL_HOME:** `/tmp/tmp.ANY5QrINkU`

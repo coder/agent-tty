@@ -6,10 +6,25 @@
   "week": 5,
   "lane": "C",
   "artifacts": [
-    { "path": "screenshots/01-renderer-session-a.png", "description": "Screenshot from first session (before)" },
-    { "path": "screenshots/02-renderer-session-b.png", "description": "Screenshot from second session (after)" },
-    { "path": "snapshots/01-renderer-session-a.json", "description": "Snapshot from first session" },
-    { "path": "snapshots/02-renderer-session-b.json", "description": "Snapshot from second session" },
-    { "path": "logs/01-vitest-renderer-recovery.log", "description": "Vitest run proving dispose/re-boot test passes" }
+    {
+      "path": "screenshots/01-renderer-session-a.png",
+      "description": "Screenshot from first session (before)"
+    },
+    {
+      "path": "screenshots/02-renderer-session-b.png",
+      "description": "Screenshot from second session (after)"
+    },
+    {
+      "path": "snapshots/01-renderer-session-a.json",
+      "description": "Snapshot from first session"
+    },
+    {
+      "path": "snapshots/02-renderer-session-b.json",
+      "description": "Snapshot from second session"
+    },
+    {
+      "path": "logs/01-vitest-renderer-recovery.log",
+      "description": "Vitest run proving dispose/re-boot test passes"
+    }
   ]
 }
