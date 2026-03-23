@@ -1,0 +1,4 @@
+Font: JetBrains Mono by JetBrains s.r.o.
+License: SIL Open Font License 1.1
+Source: https://github.com/JetBrains/JetBrainsMono
+Subset: Latin (from Google Fonts CDN)

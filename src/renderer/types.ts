@@ -229,6 +229,7 @@ export const RenderProfileConfigSchema = z
     name: NonEmptyStringSchema,
     theme: ThemeSchema,
     fontFamily: NonEmptyStringSchema,
+    fontAssetIdentity: Sha256HexSchema.optional(),
     fontSize: PositiveNumberSchema,
     cursorStyle: CursorStyleSchema,
     backgroundColor: HexColorSchema,
