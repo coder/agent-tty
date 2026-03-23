@@ -69,15 +69,53 @@ export class SessionState {
 
   public requestDestroy(): void {
     invariant(
-      this.#record.status === 'running',
-      'Cannot request destroy unless session is running',
+      this.#record.status !== 'destroyed',
+      'Cannot destroy an already destroyed session',
+    );
+    invariant(
+      this.#record.status !== 'destroying',
+      'Session is already being destroyed',
+    );
+    invariant(
+      ['running', 'exited', 'failed'].includes(this.#record.status),
+      `Cannot request destroy in current state: ${this.#record.status}`,
     );
 
-    this.#record.status = 'exiting';
+    this.#record.status = 'destroying';
+    this.touch();
+  }
+
+  // There are two valid paths to the terminal `destroyed` state:
+  // 1. recordDestroyed() for the graceful host-managed destroy flow.
+  // 2. reconcileSession() writing `destroyed` directly if the host dies mid-destroy.
+  public recordDestroyed(exitInfo?: {
+    exitCode: number | null;
+    exitSignal: string | null;
+  }): void {
+    invariant(
+      this.#record.status === 'destroying',
+      `Cannot record destroyed unless session is destroying, current status: ${this.#record.status}`,
+    );
+    if (exitInfo !== undefined) {
+      invariant(
+        exitInfo.exitCode === null || Number.isInteger(exitInfo.exitCode),
+        'Exit code must be an integer or null',
+      );
+      invariant(
+        exitInfo.exitSignal === null || typeof exitInfo.exitSignal === 'string',
+        'Exit signal must be a string or null',
+      );
+      this.#record.exitCode = exitInfo.exitCode;
+      this.#record.exitSignal = exitInfo.exitSignal;
+    }
+
+    this.#record.status = 'destroyed';
     this.touch();
   }
 
   public recordExit(exitCode: number | null, exitSignal: string | null): void {
+    // `exiting` remains part of the state machine for compatibility with
+    // reconcileSession(), which upgrades stranded `exiting` manifests to `exited`.
     invariant(
       this.#record.status === 'running' || this.#record.status === 'exiting',
       'Cannot record exit after session has exited',

@@ -78,7 +78,9 @@ export function fixtureCommand(
     | 'resize-demo'
     | 'color-grid'
     | 'alt-screen-demo'
-    | 'crash-demo',
+    | 'crash-demo'
+    | 'unicode-grid'
+    | 'scrollback-demo',
 ): string[] {
   return ['node', '--import', 'tsx', `test/fixtures/apps/${appName}/main.ts`];
 }

@@ -1,0 +1,51 @@
+{
+  "scenario": "scrollback-f-redux",
+  "bundle": "dogfood/20260323-bugfix-scrollback",
+  "sessionId": "01KMCYYK6GSKR6ZF3NAW7GFE5N",
+  "viewportContainsLine001": false,
+  "viewportFirstLine": "LINE 059 | abcdefghijklmnopqrstuvwxyz",
+  "viewportLastLine": "",
+  "viewportLateLines": [
+    "LINE 059 | abcdefghijklmnopqrstuvwxyz",
+    "LINE 060 | abcdefghijklmnopqrstuvwxyz",
+    "LINE 061 | abcdefghijklmnopqrstuvwxyz",
+    "LINE 062 | abcdefghijklmnopqrstuvwxyz",
+    "LINE 063 | abcdefghijklmnopqrstuvwxyz",
+    "LINE 064 | abcdefghijklmnopqrstuvwxyz",
+    "LINE 065 | abcdefghijklmnopqrstuvwxyz",
+    "LINE 066 | abcdefghijklmnopqrstuvwxyz",
+    "LINE 067 | abcdefghijklmnopqrstuvwxyz",
+    "LINE 068 | abcdefghijklmnopqrstuvwxyz",
+    "LINE 069 | abcdefghijklmnopqrstuvwxyz"
+  ],
+  "scrollbackLinesCount": 59,
+  "scrollbackSampleStart": [
+    {
+      "row": 0,
+      "text": "SCROLLBACK DEMO START"
+    },
+    {
+      "row": 1,
+      "text": "LINE 001 | abcdefghijklmnopqrstuvwxyz"
+    },
+    {
+      "row": 2,
+      "text": "LINE 002 | abcdefghijklmnopqrstuvwxyz"
+    }
+  ],
+  "scrollbackSampleEnd": [
+    {
+      "row": 56,
+      "text": "LINE 056 | abcdefghijklmnopqrstuvwxyz"
+    },
+    {
+      "row": 57,
+      "text": "LINE 057 | abcdefghijklmnopqrstuvwxyz"
+    },
+    {
+      "row": 58,
+      "text": "LINE 058 | abcdefghijklmnopqrstuvwxyz"
+    }
+  ],
+  "screenshot": "05-screenshot.png"
+}

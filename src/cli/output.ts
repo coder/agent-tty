@@ -6,6 +6,25 @@ import {
   createSuccessEnvelope,
 } from '../protocol/envelope.js';
 
+const ANSI_ESCAPE_PATTERN = new RegExp(
+  String.raw`[\u001B\u009B][[\]()#;?]*(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]|(?:[\dA-PR-TZcf-nq-uy=><~]))`,
+  'g',
+);
+
+let colorEnabled = true;
+
+function stripAnsi(value: string): string {
+  return value.replaceAll(ANSI_ESCAPE_PATTERN, '');
+}
+
+function formatHumanText(value: string): string {
+  return colorEnabled ? value : stripAnsi(value);
+}
+
+export function setColorEnabled(enabled: boolean): void {
+  colorEnabled = enabled;
+}
+
 export function writeJsonEnvelope<TResult>(
   envelope: CommandEnvelope<TResult>,
 ): void {
@@ -13,7 +32,7 @@ export function writeJsonEnvelope<TResult>(
 }
 
 export function writeHumanLines(lines: readonly string[]): void {
-  process.stdout.write(`${lines.join('\n')}\n`);
+  process.stdout.write(`${formatHumanText(lines.join('\n'))}\n`);
 }
 
 export function emitSuccess(options: {
@@ -40,5 +59,7 @@ export function emitFailure(options: {
     return;
   }
 
-  process.stderr.write(`${options.error.code}: ${options.error.message}\n`);
+  process.stderr.write(
+    `${formatHumanText(`${options.error.code}: ${options.error.message}`)}\n`,
+  );
 }

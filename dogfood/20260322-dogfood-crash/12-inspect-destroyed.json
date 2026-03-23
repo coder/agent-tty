@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-22T22:32:34.519Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KMBTTKERFNKCZBKESJPTKY4N",
+      "createdAt": "2026-03-22T22:32:06.877Z",
+      "updatedAt": "2026-03-22T22:32:33.311Z",
+      "status": "destroyed",
+      "command": ["npx", "tsx", "test/fixtures/apps/crash-demo/main.ts"],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_06577c86a1",
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "hostPid": 1841350,
+      "childPid": 1841837,
+      "exitCode": 1,
+      "exitSignal": null
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-22T22:32:56.287Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KMBTV99F0QQ1VPW74QDXHB72",
+      "createdAt": "2026-03-22T22:32:29.236Z",
+      "updatedAt": "2026-03-22T22:32:40.971Z",
+      "status": "exited",
+      "command": ["npx", "tsx", "test/fixtures/apps/alt-screen-demo/main.ts"],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_bd8e80d26b",
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "hostPid": 1847453,
+      "childPid": 1847624,
+      "exitCode": 0,
+      "exitSignal": null
+    }
+  }
+}

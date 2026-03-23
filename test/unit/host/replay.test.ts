@@ -122,6 +122,33 @@ describe('replay helpers', () => {
     expect(replayInput.targetSeq).toBe(2);
   });
 
+  it('buildReplayInput prefers creation-time dimensions when present', () => {
+    const replayInput = buildReplayInput(
+      'session-01',
+      createManifest({
+        cols: 100,
+        rows: 30,
+        creationCols: 80,
+        creationRows: 24,
+      }),
+      createEvents(),
+    );
+
+    expect(replayInput.initialCols).toBe(80);
+    expect(replayInput.initialRows).toBe(24);
+  });
+
+  it('buildReplayInput falls back to current dimensions for legacy manifests', () => {
+    const replayInput = buildReplayInput(
+      'session-01',
+      createManifest({ cols: 100, rows: 30 }),
+      createEvents(),
+    );
+
+    expect(replayInput.initialCols).toBe(100);
+    expect(replayInput.initialRows).toBe(30);
+  });
+
   it('buildReplayInput respects an explicit target sequence', () => {
     const replayInput = buildReplayInput(
       'session-01',

@@ -5,6 +5,10 @@ import type {
   SemanticSnapshot,
 } from './types.js';
 
+export interface SnapshotOptions {
+  includeScrollback?: boolean;
+}
+
 export interface RendererBackend {
   /** Boot the renderer (lazy, idempotent). */
   boot(): Promise<void>;
@@ -13,7 +17,7 @@ export interface RendererBackend {
   replayTo(input: ReplayInput): Promise<ReplayState>;
 
   /** Extract semantic snapshot of current visible state. */
-  snapshot(): Promise<SemanticSnapshot>;
+  snapshot(options?: SnapshotOptions): Promise<SemanticSnapshot>;
 
   /** Capture a screenshot as PNG. */
   screenshot(outputPath: string): Promise<ScreenshotResult>;
@@ -23,6 +27,9 @@ export interface RendererBackend {
 
   /** Dispose the renderer and release resources. */
   dispose(): Promise<void>;
+
+  /** Backend identifier for artifact metadata and debugging. */
+  readonly rendererBackend: string;
 
   /** Whether the renderer is currently booted. */
   readonly isBooted: boolean;

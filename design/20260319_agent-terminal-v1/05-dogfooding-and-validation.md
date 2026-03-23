@@ -6,25 +6,51 @@ It is intentionally prescriptive.
 
 A follow-up AI coding agent should treat this file as the minimum review protocol, not optional guidance.
 
-## Current shipped state (2026-03-21)
+## Current shipped state (2026-03-22)
 
-This document still describes the *target* dogfooding protocol, but the current shipped product only supports a subset of the artifact expectations below.
+This document still describes the broader dogfooding target, but the repository now ships the full core artifact set needed for review bundles.
 
 Shipped today:
 
 - JSON command outputs,
-- semantic snapshots,
-- PNG screenshots,
+- semantic snapshots, including optional scrollback capture,
+- PNG screenshots with richer metadata,
+- `.cast` export,
+- replay video export,
 - artifact manifests,
 - and notes / proof bundles under `dogfood/`.
 
-Not yet shipped:
+The remaining gaps are now mostly about local review ergonomics rather than missing artifact classes. The dedicated `unicode-grid` and `scrollback-demo` fixtures, their matching E2E coverage, and the Week 4 proof bundles are now shipped; the biggest open item is a local bundle review helper.
 
-- `.cast` export,
-- replay video export,
-- and some of the richer fixture scenarios listed below.
+Read the remainder of this file as the broader validation target and checklist for closing those remaining gaps.
 
-Read the remainder of this file as the broader validation target, not a claim that every artifact class is already implemented.
+## Week 4 coverage
+
+As of 2026-03-22, the repo ships the deterministic `unicode-grid` and `scrollback-demo` fixtures plus dedicated E2E coverage in `test/e2e/unicode-grid.test.ts` and `test/e2e/scrollback-demo.test.ts`.
+
+The repo also now has four Week 4 proof bundles that cover the shipped gap-closing work:
+
+- `dogfood/20260322-week4-cli-parity/` proves CLI-contract parity and result-shape behavior,
+- `dogfood/20260322-week4-failure-recovery/` proves failure retention and recovery evidence,
+- `dogfood/20260322-week4-scrollback-review/` proves scrollback capture and replay review,
+- and `dogfood/20260322-week4-unicode-review/` proves unicode/width review coverage.
+
+Bugfix verification bundles also ship alongside that Week 4 coverage:
+
+- `dogfood/20260323-bugfix-resize/` proves post-resize snapshot/screenshot recovery,
+- and `dogfood/20260323-bugfix-scrollback/` proves scrollback viewport normalization.
+
+Earlier proof bundles remain relevant context:
+
+- `dogfood/20260321-post-hardening-smoke/` revalidates live inspect/wait/snapshot/screenshot/doctor flows,
+- `dogfood/20260321-week3-renderer-complete/` proves live and post-exit snapshot/screenshot/export plus GC,
+- `dogfood/20260321-week3-crash-retention/` proves abnormal-exit evidence retention,
+- `dogfood/20260322-global-cli-context/` proves `--home`, `--no-color`, and exit-code differentiation for missing sessions,
+- and `dogfood/20260322-lazyvim-scenario/` demonstrates real-world TUI driving plus screenshot / asciicast / WebM review artifacts.
+
+The main remaining validation gap is:
+
+- there is still no local proof-bundle review helper/page.
 
 ## 1. Dogfooding goals
 

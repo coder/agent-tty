@@ -257,6 +257,8 @@ export async function runHost(sessionId: string): Promise<void> {
     cwd: manifest.cwd,
     cols: manifest.cols,
     rows: manifest.rows,
+    env: manifest.env ?? {},
+    term: manifest.term ?? 'xterm-256color',
   });
 
   invariant(
@@ -315,7 +317,13 @@ export async function runHost(sessionId: string): Promise<void> {
     ptyExitHandled = true;
 
     const exitSignal = normalizeExitSignal(signal);
-    state.recordExit(exitCode, exitSignal);
+    const currentStatus = state.snapshot().status;
+
+    if (currentStatus === 'destroying') {
+      state.recordDestroyed({ exitCode, exitSignal });
+    } else {
+      state.recordExit(exitCode, exitSignal);
+    }
     markPtyExited();
 
     void (async () => {
@@ -334,14 +342,29 @@ export async function runHost(sessionId: string): Promise<void> {
   const handlers: Record<string, MethodHandler> = {
     inspect: () => Promise.resolve({ session: state.snapshot() }),
     snapshot: async (params: unknown) => {
-      const { format: requestedFormat } = params as SnapshotParams;
+      const {
+        format: requestedFormat,
+        includeScrollback: requestedIncludeScrollback,
+      } = params as SnapshotParams;
 
       const format = requestedFormat ?? 'structured';
+      const includeScrollback = requestedIncludeScrollback ?? false;
+
+      invariant(
+        typeof includeScrollback === 'boolean',
+        'snapshot includeScrollback must normalize to a boolean',
+      );
 
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
       const replayInput = loadReplayInput();
       const backend = await rendererManager.getBackend(profile, replayInput);
-      const snapshot = await backend.snapshot();
+      const snapshot = await backend.snapshot({ includeScrollback });
+      const snapshotText = [
+        ...(snapshot.scrollbackLines ?? []),
+        ...snapshot.visibleLines,
+      ]
+        .map((line) => line.text)
+        .join('\n');
 
       invariant(
         snapshot.sessionId === sessionId,
@@ -359,7 +382,7 @@ export async function runHost(sessionId: string): Promise<void> {
               rows: snapshot.rows,
               cursorRow: snapshot.cursorRow,
               cursorCol: snapshot.cursorCol,
-              text: snapshot.visibleLines.map((line) => line.text).join('\n'),
+              text: snapshotText,
             };
 
       await ensureArtifactsDir(sessDir);
@@ -382,10 +405,14 @@ export async function runHost(sessionId: string): Promise<void> {
           capturedAtSeq: snapshot.capturedAtSeq,
           metadata: {
             format,
+            rendererBackend: backend.rendererBackend,
             cols: snapshot.cols,
             rows: snapshot.rows,
             cursorRow: snapshot.cursorRow,
             cursorCol: snapshot.cursorCol,
+            ...(snapshot.scrollbackLines === undefined
+              ? {}
+              : { scrollbackLineCount: snapshot.scrollbackLines.length }),
           },
         }),
       );
@@ -723,14 +750,16 @@ export async function runHost(sessionId: string): Promise<void> {
       });
     },
     waitForRender: async (params: unknown) => {
-      const { text, regex, screenStableMs, timeoutMs } =
+      const { text, regex, screenStableMs, cursorRow, cursorCol, timeoutMs } =
         params as WaitForRenderParams;
 
       invariant(
         text !== undefined ||
           regex !== undefined ||
-          screenStableMs !== undefined,
-        'waitForRender requires at least one of text, regex, or screenStableMs',
+          screenStableMs !== undefined ||
+          cursorRow !== undefined ||
+          cursorCol !== undefined,
+        'waitForRender requires at least one of text, regex, screenStableMs, cursorRow, or cursorCol',
       );
       invariant(
         !(text !== undefined && regex !== undefined),
@@ -740,6 +769,18 @@ export async function runHost(sessionId: string): Promise<void> {
         invariant(
           Number.isInteger(screenStableMs) && screenStableMs > 0,
           'screenStableMs must be a positive integer',
+        );
+      }
+      if (cursorRow !== undefined) {
+        invariant(
+          Number.isInteger(cursorRow) && cursorRow >= 0,
+          'cursorRow must be a non-negative integer',
+        );
+      }
+      if (cursorCol !== undefined) {
+        invariant(
+          Number.isInteger(cursorCol) && cursorCol >= 0,
+          'cursorCol must be a non-negative integer',
         );
       }
       if (timeoutMs !== undefined) {
@@ -795,8 +836,11 @@ export async function runHost(sessionId: string): Promise<void> {
                 profile,
                 replayInput,
               );
-              const visibleText = await backend.getVisibleText();
-              const capturedAtSeq = replayInput?.targetSeq ?? 0;
+              const snapshot = await backend.snapshot();
+              const visibleText = snapshot.visibleLines
+                .map((line) => line.text)
+                .join('\n');
+              const capturedAtSeq = snapshot.capturedAtSeq;
               latestCapturedAtSeq = capturedAtSeq;
               consecutiveFailures = 0;
 
@@ -831,12 +875,18 @@ export async function runHost(sessionId: string): Promise<void> {
                 stableMatched = now - lastTextChangeAt >= screenStableMs;
               }
 
-              if (textMatched && stableMatched) {
+              const cursorMatched =
+                (cursorRow === undefined || snapshot.cursorRow === cursorRow) &&
+                (cursorCol === undefined || snapshot.cursorCol === cursorCol);
+
+              if (textMatched && stableMatched && cursorMatched) {
                 clearInterval(checkInterval);
                 resolve({
                   matched: true,
                   timedOut: false,
                   ...(matchedText === undefined ? {} : { matchedText }),
+                  cursorRow: snapshot.cursorRow,
+                  cursorCol: snapshot.cursorCol,
                   capturedAtSeq,
                 });
               }

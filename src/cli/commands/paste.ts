@@ -1,35 +1,45 @@
+import type { CommandContext } from '../context.js';
+
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
-import { resolveHome } from '../../storage/home.js';
 import {
   manifestPath,
   sessionDir,
   socketPath,
 } from '../../storage/sessionPaths.js';
+import { resolveCommandInputText } from './inputSource.js';
 
 export interface PasteResult {
   [key: string]: never;
 }
 
 interface CommandOptions {
+  context: CommandContext;
   json: boolean;
   sessionId: string;
-  text: string;
+  text: string | undefined;
+  file?: string;
 }
 
 export async function runPasteCommand(options: CommandOptions): Promise<void> {
-  if (options.text.length === 0) {
+  const text = await resolveCommandInputText({
+    commandName: 'paste',
+    text: options.text,
+    file: options.file,
+  });
+
+  if (text.length === 0) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {
       message: 'Text must not be empty.',
       details: {
-        text: options.text,
+        text,
       },
     });
   }
 
-  const home = resolveHome();
+  const home = options.context.home;
   const sessionDirectory = sessionDir(home, options.sessionId);
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
@@ -40,6 +50,16 @@ export async function runPasteCommand(options: CommandOptions): Promise<void> {
       details: {
         sessionId: options.sessionId,
         manifestPath: manifestFile,
+      },
+    });
+  }
+
+  if (manifest.status === 'destroyed') {
+    throw makeCliError(ERROR_CODES.SESSION_ALREADY_DESTROYED, {
+      message: `Session "${options.sessionId}" is already destroyed.`,
+      details: {
+        sessionId: options.sessionId,
+        status: manifest.status,
       },
     });
   }
@@ -55,7 +75,7 @@ export async function runPasteCommand(options: CommandOptions): Promise<void> {
   }
 
   await sendRpc(socketPath(sessionDirectory), 'paste', {
-    text: options.text,
+    text,
   });
 
   const result: PasteResult = {};

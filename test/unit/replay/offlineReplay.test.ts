@@ -38,6 +38,7 @@ type MockBackend = RendererBackend & MockBackendState;
 
 function createMockBackend(options: MockBackendOptions = {}): MockBackend {
   return {
+    rendererBackend: 'mock-backend',
     isBooted: false,
     booted: false,
     disposed: false,

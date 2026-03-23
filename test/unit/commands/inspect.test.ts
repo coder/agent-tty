@@ -43,6 +43,12 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 
 import { runInspectCommand } from '../../../src/cli/commands/inspect.js';
 
+const TEST_CONTEXT = {
+  home: '/tmp/agent-terminal',
+  timeoutMs: undefined,
+  colorEnabled: true,
+} as const;
+
 function createSessionRecord(
   status: 'running' | 'exiting' | 'exited' = 'running',
 ) {
@@ -88,7 +94,11 @@ describe('inspect command', () => {
     const liveSession = createSessionRecord('running');
     mocks.sendRpc.mockResolvedValue({ session: liveSession });
 
-    await runInspectCommand({ json: false, sessionId: 'session-01' });
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+    });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01/rpc.sock',
@@ -107,7 +117,11 @@ describe('inspect command', () => {
     mocks.sendRpc.mockResolvedValue({ session: { sessionId: 'session-01' } });
 
     await expect(
-      runInspectCommand({ json: false, sessionId: 'session-01' }),
+      runInspectCommand({
+        context: TEST_CONTEXT,
+        json: false,
+        sessionId: 'session-01',
+      }),
     ).rejects.toMatchObject({
       code: ERROR_CODES.PROTOCOL_ERROR,
       message: 'Unexpected response from host',
@@ -125,7 +139,11 @@ describe('inspect command', () => {
       }),
     );
 
-    await runInspectCommand({ json: true, sessionId: 'session-01' });
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
 
     expect(mocks.reconcileSession).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01',

@@ -1,0 +1,351 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-23T09:03:31.605Z",
+  "result": {
+    "format": "structured",
+    "sessionId": "01KMCYYK6GSKR6ZF3NAW7GFE5N",
+    "capturedAtSeq": 5,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 23,
+    "cursorCol": 0,
+    "isAltScreen": false,
+    "visibleLines": [
+      {
+        "row": 0,
+        "text": "LINE 059 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 1,
+        "text": "LINE 060 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 2,
+        "text": "LINE 061 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 3,
+        "text": "LINE 062 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 4,
+        "text": "LINE 063 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 5,
+        "text": "LINE 064 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 6,
+        "text": "LINE 065 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 7,
+        "text": "LINE 066 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 8,
+        "text": "LINE 067 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 9,
+        "text": "LINE 068 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 10,
+        "text": "LINE 069 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 11,
+        "text": "LINE 070 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 12,
+        "text": "LINE 071 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 13,
+        "text": "LINE 072 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 14,
+        "text": "LINE 073 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 15,
+        "text": "LINE 074 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 16,
+        "text": "LINE 075 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 17,
+        "text": "LINE 076 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 18,
+        "text": "LINE 077 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 19,
+        "text": "LINE 078 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 20,
+        "text": "LINE 079 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 21,
+        "text": "LINE 080 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 22,
+        "text": "SCROLLBACK COMPLETE"
+      },
+      {
+        "row": 23,
+        "text": ""
+      }
+    ],
+    "scrollbackLines": [
+      {
+        "row": 0,
+        "text": "SCROLLBACK DEMO START"
+      },
+      {
+        "row": 1,
+        "text": "LINE 001 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 2,
+        "text": "LINE 002 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 3,
+        "text": "LINE 003 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 4,
+        "text": "LINE 004 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 5,
+        "text": "LINE 005 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 6,
+        "text": "LINE 006 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 7,
+        "text": "LINE 007 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 8,
+        "text": "LINE 008 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 9,
+        "text": "LINE 009 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 10,
+        "text": "LINE 010 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 11,
+        "text": "LINE 011 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 12,
+        "text": "LINE 012 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 13,
+        "text": "LINE 013 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 14,
+        "text": "LINE 014 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 15,
+        "text": "LINE 015 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 16,
+        "text": "LINE 016 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 17,
+        "text": "LINE 017 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 18,
+        "text": "LINE 018 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 19,
+        "text": "LINE 019 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 20,
+        "text": "LINE 020 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 21,
+        "text": "LINE 021 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 22,
+        "text": "LINE 022 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 23,
+        "text": "LINE 023 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 24,
+        "text": "LINE 024 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 25,
+        "text": "LINE 025 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 26,
+        "text": "LINE 026 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 27,
+        "text": "LINE 027 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 28,
+        "text": "LINE 028 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 29,
+        "text": "LINE 029 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 30,
+        "text": "LINE 030 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 31,
+        "text": "LINE 031 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 32,
+        "text": "LINE 032 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 33,
+        "text": "LINE 033 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 34,
+        "text": "LINE 034 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 35,
+        "text": "LINE 035 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 36,
+        "text": "LINE 036 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 37,
+        "text": "LINE 037 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 38,
+        "text": "LINE 038 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 39,
+        "text": "LINE 039 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 40,
+        "text": "LINE 040 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 41,
+        "text": "LINE 041 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 42,
+        "text": "LINE 042 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 43,
+        "text": "LINE 043 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 44,
+        "text": "LINE 044 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 45,
+        "text": "LINE 045 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 46,
+        "text": "LINE 046 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 47,
+        "text": "LINE 047 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 48,
+        "text": "LINE 048 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 49,
+        "text": "LINE 049 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 50,
+        "text": "LINE 050 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 51,
+        "text": "LINE 051 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 52,
+        "text": "LINE 052 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 53,
+        "text": "LINE 053 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 54,
+        "text": "LINE 054 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 55,
+        "text": "LINE 055 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 56,
+        "text": "LINE 056 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 57,
+        "text": "LINE 057 | abcdefghijklmnopqrstuvwxyz"
+      },
+      {
+        "row": 58,
+        "text": "LINE 058 | abcdefghijklmnopqrstuvwxyz"
+      }
+    ]
+  }
+}

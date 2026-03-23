@@ -36,6 +36,8 @@ export class HostRendererManager {
 
   private currentBackend: RendererBackend | null = null;
   private currentProfileName: string | null = null;
+  private cachedInitialCols: number | null = null;
+  private cachedInitialRows: number | null = null;
   private bootPromise: Promise<RendererBackend> | null = null;
   private lifecyclePromise: Promise<void> = Promise.resolve();
   private screenshotsDirectoryCreated = false;
@@ -67,10 +69,23 @@ export class HostRendererManager {
     }
 
     return this.runExclusive(async () => {
+      if (
+        replayInput !== null &&
+        this.currentBackend !== null &&
+        this.cachedInitialCols !== null &&
+        this.cachedInitialRows !== null &&
+        (this.cachedInitialCols !== replayInput.initialCols ||
+          this.cachedInitialRows !== replayInput.initialRows)
+      ) {
+        await this.disposeCurrentBackend();
+      }
+
       const backend = await this.ensureBackend(profile);
 
       if (replayInput !== null && replayInput.targetSeq >= 0) {
         await backend.replayTo(replayInput);
+        this.cachedInitialCols = replayInput.initialCols;
+        this.cachedInitialRows = replayInput.initialRows;
       }
 
       return backend;
@@ -148,8 +163,17 @@ export class HostRendererManager {
   ): Promise<RendererBackend> {
     if (this.bootPromise === null) {
       this.bootPromise = (async () => {
-        await backend.boot();
-        return backend;
+        try {
+          await backend.boot();
+          return backend;
+        } catch (error: unknown) {
+          try {
+            await this.disposeCurrentBackend();
+          } catch {
+            // Preserve the original boot error; dispose is best effort here.
+          }
+          throw error;
+        }
       })().finally(() => {
         this.bootPromise = null;
       });
@@ -168,6 +192,8 @@ export class HostRendererManager {
 
     this.currentBackend = null;
     this.currentProfileName = null;
+    this.cachedInitialCols = null;
+    this.cachedInitialRows = null;
     this.bootPromise = null;
 
     if (backend === null) {

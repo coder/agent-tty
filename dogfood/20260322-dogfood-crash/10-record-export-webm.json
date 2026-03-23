@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-22T22:32:32.175Z",
+  "result": {
+    "sessionId": "01KMBTTKERFNKCZBKESJPTKY4N",
+    "format": "webm",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent_exec_06577c86a1/dogfood/20260322-dogfood-crash/artifacts/post-crash.webm",
+    "bytes": 24787,
+    "sha256": "422a6250fe54680a32465a6de3e3190d7ee03718968e990269054aff7575b4cf",
+    "capturedAtSeq": 6,
+    "durationMs": 831,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8d0a5a88a43edf8d21f890f688fa1d09d2c553f34cc1d55141ba973471f95091",
+      "timingMode": "accelerated",
+      "outputEventCount": 6,
+      "resizeEventCount": 0
+    }
+  }
+}

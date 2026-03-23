@@ -69,6 +69,14 @@ vi.mock('../../../src/storage/artifactPaths.js', () => ({
 
 import { runScreenshotCommand } from '../../../src/cli/commands/screenshot.js';
 
+const TEST_CONTEXT = {
+  home: '/tmp/agent-terminal',
+  timeoutMs: undefined,
+  colorEnabled: true,
+} as const;
+const TEST_SCREENSHOT_SHA256 = 'a'.repeat(64);
+const TEST_RENDER_PROFILE_HASH = 'b'.repeat(64);
+
 function createRunningSessionRecord() {
   return {
     version: 1,
@@ -109,6 +117,11 @@ function createScreenshotResult(
     rows: 24,
     artifactPath: '/tmp/snapshot.png',
     pngSizeBytes: 2048,
+    rendererBackend: 'ghostty-web',
+    pixelWidth: 800,
+    pixelHeight: 600,
+    sha256: TEST_SCREENSHOT_SHA256,
+    renderProfileHash: TEST_RENDER_PROFILE_HASH,
     ...overrides,
   };
 }
@@ -180,18 +193,15 @@ describe('screenshot command', () => {
   });
 
   it('requests screenshots with the default render profile', async () => {
-    const result = {
-      sessionId: 'session-01',
+    const result = createScreenshotResult({
       capturedAtSeq: 12,
-      profileName: 'reference-dark',
       cols: 120,
       rows: 40,
-      artifactPath: '/tmp/snapshot.png',
-      pngSizeBytes: 2048,
-    };
+    });
     mocks.sendRpc.mockResolvedValue(result);
 
     await runScreenshotCommand({
+      context: TEST_CONTEXT,
       json: false,
       sessionId: 'session-01',
     });
@@ -212,23 +222,25 @@ describe('screenshot command', () => {
         'Size: 120x40',
         'PNG Path: /tmp/snapshot.png',
         'PNG Size: 2048 bytes',
+        'Renderer backend: ghostty-web',
+        'Pixel dimensions: 800×600',
+        `SHA-256: ${TEST_SCREENSHOT_SHA256}`,
+        `Render profile hash: ${TEST_RENDER_PROFILE_HASH}`,
       ],
     });
   });
 
   it('uses an explicit render profile and preserves JSON mode', async () => {
-    const result = {
-      sessionId: 'session-01',
+    const result = createScreenshotResult({
       capturedAtSeq: 22,
       profileName: 'reference-light',
-      cols: 80,
-      rows: 24,
       artifactPath: '/tmp/light.png',
       pngSizeBytes: 1024,
-    };
+    });
     mocks.sendRpc.mockResolvedValue(result);
 
     await runScreenshotCommand({
+      context: TEST_CONTEXT,
       json: true,
       sessionId: 'session-01',
       profile: 'reference-light',
@@ -250,6 +262,10 @@ describe('screenshot command', () => {
         'Size: 80x24',
         'PNG Path: /tmp/light.png',
         'PNG Size: 1024 bytes',
+        'Renderer backend: ghostty-web',
+        'Pixel dimensions: 800×600',
+        `SHA-256: ${TEST_SCREENSHOT_SHA256}`,
+        `Render profile hash: ${TEST_RENDER_PROFILE_HASH}`,
       ],
     });
   });
@@ -262,6 +278,7 @@ describe('screenshot command', () => {
     mockOfflineReplayRendererSuccess();
 
     await runScreenshotCommand({
+      context: TEST_CONTEXT,
       json: false,
       sessionId: 'session-01',
     });
@@ -283,11 +300,16 @@ describe('screenshot command', () => {
       filename: 'screenshot-5-reference-dark.png',
       sessionId: 'session-01',
       capturedAtSeq: 5,
+      sha256: TEST_SCREENSHOT_SHA256,
       metadata: {
         profileName: 'reference-dark',
         cols: 80,
         rows: 24,
         pngSizeBytes: 2048,
+        rendererBackend: 'ghostty-web',
+        pixelWidth: 800,
+        pixelHeight: 600,
+        renderProfileHash: TEST_RENDER_PROFILE_HASH,
       },
     });
     expect(mocks.appendArtifact).toHaveBeenCalledWith(
@@ -297,6 +319,7 @@ describe('screenshot command', () => {
         filename: 'screenshot-5-reference-dark.png',
         sessionId: 'session-01',
         capturedAtSeq: 5,
+        sha256: TEST_SCREENSHOT_SHA256,
       }),
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
@@ -310,6 +333,10 @@ describe('screenshot command', () => {
         'Size: 80x24',
         'PNG Path: /artifacts/screenshot-5-reference-dark.png',
         'PNG Size: 2048 bytes',
+        'Renderer backend: ghostty-web',
+        'Pixel dimensions: 800×600',
+        `SHA-256: ${TEST_SCREENSHOT_SHA256}`,
+        `Render profile hash: ${TEST_RENDER_PROFILE_HASH}`,
       ],
     });
   });
@@ -324,6 +351,7 @@ describe('screenshot command', () => {
     mockOfflineReplayRendererSuccess();
 
     await runScreenshotCommand({
+      context: TEST_CONTEXT,
       json: false,
       sessionId: 'session-01',
     });
@@ -349,6 +377,7 @@ describe('screenshot command', () => {
 
     await expect(
       runScreenshotCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
       }),
@@ -388,6 +417,7 @@ describe('screenshot command', () => {
 
     await expect(
       runScreenshotCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
       }),
@@ -413,6 +443,7 @@ describe('screenshot command', () => {
 
     await expect(
       runScreenshotCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
       }),
@@ -433,6 +464,7 @@ describe('screenshot command', () => {
 
     await expect(
       runScreenshotCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: '../bad-session',
       }),
@@ -448,6 +480,7 @@ describe('screenshot command', () => {
   it('rejects empty screenshot profile names', async () => {
     await expect(
       runScreenshotCommand({
+        context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
         profile: '',

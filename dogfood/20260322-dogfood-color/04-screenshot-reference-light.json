@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "command": "screenshot",
+  "timestamp": "2026-03-22T22:31:47.293Z",
+  "result": {
+    "sessionId": "01KMBTSNSRFHX2A7ZYDYVR16D9",
+    "capturedAtSeq": 4,
+    "profileName": "reference-light",
+    "cols": 80,
+    "rows": 24,
+    "artifactPath": "/tmp/tmp.5qVKPi5rha/sessions/01KMBTSNSRFHX2A7ZYDYVR16D9/artifacts/screenshot-4-reference-light.png",
+    "pngSizeBytes": 46947,
+    "rendererBackend": "ghostty-web",
+    "pixelWidth": 720,
+    "pixelHeight": 360,
+    "sha256": "e3440e39ab6d6b4a61bda7257a0b57af5c9eb275aaf9c0cc1702c2379ebc506e",
+    "renderProfileHash": "d83315ce4917f319d163a1234d05bf5e9ad2004dc40880bdb225bfad3347d884"
+  }
+}

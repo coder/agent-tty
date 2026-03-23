@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import {
   createServer,
@@ -18,6 +19,7 @@ import {
 import { invariant, assertString, unreachable } from '../../util/assert.js';
 import type {
   AcceleratedTimingOptions,
+  SnapshotOptions,
   VideoCapableRendererBackend,
   VideoRecordingOptions,
 } from '../backend.js';
@@ -27,8 +29,8 @@ import type {
   ReplayState,
   ScreenshotResult,
   SemanticSnapshot,
-  VisibleLine,
 } from '../types.js';
+import { hashProfile } from '../profiles.js';
 
 interface GhosttyHarnessVisibleLine {
   row: number;
@@ -42,6 +44,7 @@ interface GhosttyHarnessSnapshot {
   cursorCol: number;
   isAltScreen: boolean;
   visibleLines: GhosttyHarnessVisibleLine[];
+  scrollbackLines?: GhosttyHarnessVisibleLine[];
 }
 
 interface GhosttyRequestAsset {
@@ -57,7 +60,7 @@ interface GhosttyBrowserBridge {
   isReady?: () => boolean;
   write?: (data: string) => Promise<void> | void;
   resize?: (cols: number, rows: number) => Promise<void> | void;
-  getSnapshot?: () => GhosttyHarnessSnapshot;
+  getSnapshot?: (options?: SnapshotOptions) => GhosttyHarnessSnapshot;
   getVisibleText?: () => string;
 }
 
@@ -264,12 +267,31 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         return dimensions;
       }
 
-      function decodeVisibleLines(terminal) {
+      function getNormalizedViewportState(terminal) {
         const { cols, rows } = getDimensions(terminal);
         const activeBuffer = terminal.buffer.active;
         const viewportY = activeBuffer.viewportY;
+        const bufferLength = activeBuffer.length;
         assertPositiveInteger(rows, 'visible row count must be positive');
         invariant(Number.isInteger(viewportY) && viewportY >= 0, 'viewportY must be a non-negative integer');
+        invariant(
+          Number.isInteger(bufferLength) && bufferLength >= rows,
+          'active buffer length must cover the visible viewport',
+        );
+
+        const bottomViewportY = bufferLength - rows;
+        invariant(bottomViewportY >= 0, 'bottom viewportY must be non-negative');
+        invariant(
+          viewportY <= bottomViewportY,
+          'viewportY must not exceed the bottom viewport position',
+        );
+
+        return { cols, rows, activeBuffer, viewportY: bottomViewportY };
+      }
+
+      function decodeVisibleLines(terminal) {
+        terminal.scrollToBottom();
+        const { cols, rows, activeBuffer, viewportY } = getNormalizedViewportState(terminal);
 
         const visibleLines = [];
         for (let row = 0; row < rows; row += 1) {
@@ -283,13 +305,45 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         return { cols, rows, visibleLines };
       }
 
-      function getSnapshotPayload() {
+      function decodeScrollbackLines(terminal) {
+        const { cols, activeBuffer, viewportY } = getNormalizedViewportState(terminal);
+
+        if (viewportY === 0) {
+          return [];
+        }
+
+        const scrollbackLines = [];
+        for (let row = 0; row < viewportY; row += 1) {
+          const line = activeBuffer.getLine(row);
+          const text = line === undefined ? '' : line.translateToString(true, 0, cols);
+          invariant(typeof text === 'string', \`decoded scrollback line \${row} must be a string\`);
+          scrollbackLines.push({ row, text });
+        }
+
+        invariant(scrollbackLines.length === viewportY, 'scrollback line count must match viewportY');
+        return scrollbackLines;
+      }
+
+      function getSnapshotPayload(options) {
+        invariant(
+          options === undefined || (options !== null && typeof options === 'object'),
+          'snapshot options must be an object when provided',
+        );
+        invariant(
+          options?.includeScrollback === undefined || typeof options.includeScrollback === 'boolean',
+          'snapshot includeScrollback option must be a boolean when provided',
+        );
+
         const terminal = getReadyTerminal();
         const wasmTerm = terminal.wasmTerm;
         invariant(wasmTerm, 'terminal WASM instance is unavailable');
 
         const cursor = wasmTerm.getCursor();
         const { cols, rows, visibleLines } = decodeVisibleLines(terminal);
+        const scrollbackLines =
+          options?.includeScrollback === true
+            ? decodeScrollbackLines(terminal)
+            : undefined;
 
         invariant(Number.isInteger(cursor.x) && cursor.x >= 0, 'cursor.x must be a non-negative integer');
         invariant(Number.isInteger(cursor.y) && cursor.y >= 0, 'cursor.y must be a non-negative integer');
@@ -303,6 +357,7 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
           cursorRow: cursor.y,
           isAltScreen: wasmTerm.isAlternateScreen(),
           visibleLines,
+          ...(scrollbackLines !== undefined && { scrollbackLines }),
         };
       }
 
@@ -326,8 +381,8 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
           });
           updateDocumentState();
         },
-        getSnapshot() {
-          return getSnapshotPayload();
+        getSnapshot(options) {
+          return getSnapshotPayload(options);
         },
         getVisibleText() {
           return decodeVisibleLines(getReadyTerminal()).visibleLines.map((line) => line.text).join('\\n');
@@ -454,14 +509,11 @@ async function closeServer(server: Server): Promise<void> {
   });
 }
 
-async function loadHarnessHtml(): Promise<string> {
-  try {
-    return await readFile(new URL('./harness.html', import.meta.url), 'utf8');
-  } catch {
-    // The build emits TypeScript output only, so dist/ does not include harness.html.
-    // Fall back to the embedded copy so compiled builds can still serve the harness.
-    return EMBEDDED_HARNESS_HTML;
-  }
+function loadHarnessHtml(): string {
+  // The embedded harness is the canonical runtime copy. Serving it directly keeps
+  // snapshot extraction behavior in sync with the bridge implementation even when
+  // the standalone source template drifts.
+  return EMBEDDED_HARNESS_HTML;
 }
 
 async function loadServedAssets(): Promise<
@@ -508,7 +560,7 @@ async function loadServedAssets(): Promise<
     browserExternalEntry,
   );
 
-  const harnessHtml = await loadHarnessHtml();
+  const harnessHtml = loadHarnessHtml();
   const assetEntries = new Map<string, GhosttyServedAsset>();
 
   const htmlAsset: GhosttyServedAsset = {
@@ -554,6 +606,54 @@ async function getServedAssets(): Promise<
   return servedAssetsPromise;
 }
 
+function validateHarnessLines(
+  lines: unknown,
+  label: string,
+  rowUpperBoundExclusive?: number,
+): GhosttyHarnessVisibleLine[] {
+  invariant(Array.isArray(lines), `${label}s must be an array`);
+
+  const validatedLines: GhosttyHarnessVisibleLine[] = [];
+  let previousRow = -1;
+  for (const [index, lineValue] of lines.entries()) {
+    const lineIndex = String(index);
+    invariant(
+      lineValue !== null && typeof lineValue === 'object',
+      `${label} ${lineIndex} must be an object`,
+    );
+
+    const lineCandidate = lineValue as {
+      row?: unknown;
+      text?: unknown;
+    };
+    assertNonNegativeInteger(
+      lineCandidate.row,
+      `${label} ${lineIndex} row must be a non-negative integer`,
+    );
+    assertString(
+      lineCandidate.text,
+      `${label} ${lineIndex} text must be a string`,
+    );
+    if (rowUpperBoundExclusive !== undefined) {
+      invariant(
+        lineCandidate.row < rowUpperBoundExclusive,
+        `${label} ${lineIndex} row must be within bounds`,
+      );
+    }
+    invariant(
+      lineCandidate.row > previousRow,
+      `${label} ${lineIndex} rows must be strictly increasing`,
+    );
+    previousRow = lineCandidate.row;
+    validatedLines.push({
+      row: lineCandidate.row,
+      text: lineCandidate.text,
+    });
+  }
+
+  return validatedLines;
+}
+
 function validateHarnessSnapshot(snapshot: unknown): GhosttyHarnessSnapshot {
   invariant(
     snapshot !== null && typeof snapshot === 'object',
@@ -567,6 +667,7 @@ function validateHarnessSnapshot(snapshot: unknown): GhosttyHarnessSnapshot {
     cursorCol?: unknown;
     isAltScreen?: unknown;
     visibleLines?: unknown;
+    scrollbackLines?: unknown;
   };
 
   assertPositiveInteger(
@@ -597,50 +698,24 @@ function validateHarnessSnapshot(snapshot: unknown): GhosttyHarnessSnapshot {
     typeof candidate.isAltScreen === 'boolean',
     'snapshot isAltScreen must be a boolean',
   );
-  invariant(
-    Array.isArray(candidate.visibleLines),
-    'snapshot visibleLines must be an array',
+
+  const visibleLines = validateHarnessLines(
+    candidate.visibleLines,
+    'snapshot visible line',
+    candidate.rows,
   );
   invariant(
-    candidate.visibleLines.length <= candidate.rows,
+    visibleLines.length <= candidate.rows,
     'snapshot visibleLines length must not exceed the viewport height',
   );
 
-  const visibleLines: VisibleLine[] = [];
-  let previousRow = -1;
-  for (const [index, lineValue] of candidate.visibleLines.entries()) {
-    const visibleLineIndex = String(index);
-    invariant(
-      lineValue !== null && typeof lineValue === 'object',
-      `snapshot visible line ${visibleLineIndex} must be an object`,
-    );
-
-    const lineCandidate = lineValue as {
-      row?: unknown;
-      text?: unknown;
-    };
-    assertNonNegativeInteger(
-      lineCandidate.row,
-      `snapshot visible line ${visibleLineIndex} row must be a non-negative integer`,
-    );
-    assertString(
-      lineCandidate.text,
-      `snapshot visible line ${visibleLineIndex} text must be a string`,
-    );
-    invariant(
-      lineCandidate.row < candidate.rows,
-      `snapshot visible line ${visibleLineIndex} row must be within the viewport`,
-    );
-    invariant(
-      lineCandidate.row > previousRow,
-      `snapshot visible line ${visibleLineIndex} rows must be strictly increasing`,
-    );
-    previousRow = lineCandidate.row;
-    visibleLines.push({
-      row: lineCandidate.row,
-      text: lineCandidate.text,
-    });
-  }
+  const scrollbackLines =
+    candidate.scrollbackLines === undefined
+      ? undefined
+      : validateHarnessLines(
+          candidate.scrollbackLines,
+          'snapshot scrollback line',
+        );
 
   return {
     cols: candidate.cols,
@@ -649,10 +724,12 @@ function validateHarnessSnapshot(snapshot: unknown): GhosttyHarnessSnapshot {
     cursorCol: candidate.cursorCol,
     isAltScreen: candidate.isAltScreen,
     visibleLines,
+    ...(scrollbackLines !== undefined && { scrollbackLines }),
   };
 }
 
 export class GhosttyWebBackend implements VideoCapableRendererBackend {
+  public readonly rendererBackend = 'ghostty-web';
   public isBooted = false;
 
   private readonly profile: RenderProfileConfig;
@@ -1103,14 +1180,14 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     };
   }
 
-  public async snapshot(): Promise<SemanticSnapshot> {
+  public async snapshot(options?: SnapshotOptions): Promise<SemanticSnapshot> {
     const page = this.requireOperationalPage('snapshot()');
     invariant(
       this.lastAppliedSeq >= 0,
       'snapshot() requires replayTo() to advance to a non-negative sequence first',
     );
 
-    const snapshot = await this.readHarnessSnapshot(page);
+    const snapshot = await this.readHarnessSnapshot(page, options);
     this.currentCols = snapshot.cols;
     this.currentRows = snapshot.rows;
 
@@ -1123,6 +1200,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       cursorCol: snapshot.cursorCol,
       isAltScreen: snapshot.isAltScreen,
       visibleLines: snapshot.visibleLines,
+      ...(snapshot.scrollbackLines !== undefined && {
+        scrollbackLines: snapshot.scrollbackLines,
+      }),
     };
   }
 
@@ -1167,6 +1247,29 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       'screenshot output PNG must be non-empty',
     );
 
+    const pngBuffer = await readFile(outputPath);
+    const PNG_SIGNATURE = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+    invariant(pngBuffer.length >= 24, 'screenshot PNG must contain IHDR bytes');
+    invariant(
+      pngBuffer.subarray(0, 8).equals(PNG_SIGNATURE),
+      'screenshot output must be a PNG',
+    );
+    invariant(
+      pngBuffer.subarray(12, 16).toString('ascii') === 'IHDR',
+      'first PNG chunk must be IHDR',
+    );
+
+    const pixelWidth = pngBuffer.readUInt32BE(16);
+    const pixelHeight = pngBuffer.readUInt32BE(20);
+    invariant(
+      pixelWidth > 0 && pixelHeight > 0,
+      `invalid PNG dimensions: ${String(pixelWidth)}x${String(pixelHeight)}`,
+    );
+
+    const sha256 = createHash('sha256').update(pngBuffer).digest('hex');
+
     return {
       sessionId: this.sessionId,
       capturedAtSeq: this.lastAppliedSeq,
@@ -1175,6 +1278,11 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       rows: this.currentRows,
       artifactPath: outputPath,
       pngSizeBytes: screenshotFile.size,
+      rendererBackend: this.rendererBackend,
+      pixelWidth,
+      pixelHeight,
+      sha256,
+      renderProfileHash: hashProfile(this.profile),
     };
   }
 
@@ -1468,15 +1576,23 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
 
   private async readHarnessSnapshot(
     page: Page,
+    options?: SnapshotOptions,
   ): Promise<GhosttyHarnessSnapshot> {
-    const snapshot = await page.evaluate(() => {
-      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
-      if (bridge === undefined || typeof bridge.getSnapshot !== 'function') {
-        throw new Error('ghostty-web bridge getSnapshot() is unavailable');
-      }
+    const snapshot = await page.evaluate(
+      (opts) => {
+        const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
+        if (bridge === undefined || typeof bridge.getSnapshot !== 'function') {
+          throw new Error('ghostty-web bridge getSnapshot() is unavailable');
+        }
 
-      return bridge.getSnapshot();
-    });
+        return bridge.getSnapshot(opts);
+      },
+      options === undefined
+        ? undefined
+        : options.includeScrollback === undefined
+          ? {}
+          : { includeScrollback: options.includeScrollback },
+    );
 
     const validatedSnapshot = validateHarnessSnapshot(snapshot);
     invariant(

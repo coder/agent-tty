@@ -1,0 +1,83 @@
+{
+  "scenario": "hello-prompt",
+  "bundle": "dogfood/20260322-dogfood-hello-prompt",
+  "notes": "notes.md",
+  "commands": [
+    {
+      "step": "01-create",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts create --json -- npx tsx test/fixtures/apps/hello-prompt/main.ts "
+    },
+    {
+      "step": "02-wait-ready",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts wait 01KMBTVTGGDAP71DH9RBSR4HBM --text READY\\> --json "
+    },
+    {
+      "step": "03-snapshot-initial",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts snapshot 01KMBTVTGGDAP71DH9RBSR4HBM --json "
+    },
+    {
+      "step": "04-type-hello",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts type 01KMBTVTGGDAP71DH9RBSR4HBM hello\\ world --json "
+    },
+    {
+      "step": "05-send-enter",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts send-keys 01KMBTVTGGDAP71DH9RBSR4HBM Enter --json "
+    },
+    {
+      "step": "06-wait-echo",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts wait 01KMBTVTGGDAP71DH9RBSR4HBM --text ECHO:\\ hello\\ world --json "
+    },
+    {
+      "step": "07-screenshot-echo",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts screenshot 01KMBTVTGGDAP71DH9RBSR4HBM --json "
+    },
+    {
+      "step": "08-type-exit",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts type 01KMBTVTGGDAP71DH9RBSR4HBM exit --json "
+    },
+    {
+      "step": "09-send-enter-exit",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts send-keys 01KMBTVTGGDAP71DH9RBSR4HBM Enter --json "
+    },
+    {
+      "step": "10-wait-exit",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts wait 01KMBTVTGGDAP71DH9RBSR4HBM --exit --json "
+    },
+    {
+      "step": "11-record-export-cast",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts record export 01KMBTVTGGDAP71DH9RBSR4HBM --format asciicast --out /home/coder/.mux/src/agent-terminal/agent_exec_3a3efb7ac5/dogfood/20260322-dogfood-hello-prompt/recordings/hello-prompt.cast --json "
+    },
+    {
+      "step": "12-record-export-webm",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts record export 01KMBTVTGGDAP71DH9RBSR4HBM --format webm --out /home/coder/.mux/src/agent-terminal/agent_exec_3a3efb7ac5/dogfood/20260322-dogfood-hello-prompt/videos/hello-prompt.webm --json "
+    },
+    {
+      "step": "13-inspect-final",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts inspect 01KMBTVTGGDAP71DH9RBSR4HBM --json "
+    }
+  ],
+  "artifacts": {
+    "snapshotJson": "03-snapshot-initial.json",
+    "screenshotJson": "07-screenshot-echo.json",
+    "screenshotPng": "screenshots/01-echoed-result.png",
+    "castJson": "11-record-export-cast.json",
+    "cast": "recordings/hello-prompt.cast",
+    "webmJson": "12-record-export-webm.json",
+    "webm": "videos/hello-prompt.webm",
+    "inspectJson": "13-inspect-final.json",
+    "notes": "notes.md"
+  }
+}

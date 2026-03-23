@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { ZodError } from 'zod';
 
 import { invariant } from '../util/assert.js';
@@ -95,6 +97,30 @@ export function getBuiltinProfile(
     ? BUILTIN_PROFILES[name]
     : undefined;
   return profile === undefined ? undefined : cloneProfile(profile);
+}
+
+export function hashProfile(config: RenderProfileConfig): string {
+  assertRenderProfileConfig(config);
+
+  const canonicalConfig = {
+    name: config.name,
+    theme: config.theme,
+    fontFamily: config.fontFamily,
+    fontSize: config.fontSize,
+    cursorStyle: config.cursorStyle,
+    backgroundColor: config.backgroundColor,
+    foregroundColor: config.foregroundColor,
+  };
+  const hash = createHash('sha256')
+    .update(JSON.stringify(canonicalConfig))
+    .digest('hex');
+
+  invariant(
+    /^[a-f0-9]{64}$/u.test(hash),
+    'render profile hash must be a 64-character lowercase SHA-256 hex string',
+  );
+
+  return hash;
 }
 
 export function resolveProfile(

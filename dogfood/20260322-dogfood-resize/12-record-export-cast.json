@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-22T22:34:52.067Z",
+  "result": {
+    "sessionId": "01KMBTZ1159XHVV1FX7WJ4YC4X",
+    "format": "asciicast",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent_exec_3a3efb7ac5/dogfood/20260322-dogfood-resize/recordings/resize-demo.cast",
+    "bytes": 321,
+    "sha256": "9865e6dc6cc562ee1f849722f61ec02563f3464bc3495c891f8197d67451d228",
+    "capturedAtSeq": 4,
+    "durationMs": 9344,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "title": "01KMBTZ1159XHVV1FX7WJ4YC4X",
+      "timestamp": 1774218873,
+      "outputEventCount": 3,
+      "resizeEventCount": 2,
+      "markerCount": 0
+    }
+  }
+}

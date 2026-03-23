@@ -4,6 +4,8 @@ import { ulid } from 'ulid';
 
 import type { ScreenshotResult } from '../../protocol/messages.js';
 
+import type { CommandContext } from '../context.js';
+
 import { emitSuccess } from '../output.js';
 import { CliError } from '../../cli/errors.js';
 import { sendRpc } from '../../host/rpcClient.js';
@@ -20,7 +22,6 @@ import {
   ensureArtifactsDir,
   screenshotFilename,
 } from '../../storage/artifactPaths.js';
-import { resolveHome } from '../../storage/home.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
   manifestPath,
@@ -32,6 +33,7 @@ import { invariant } from '../../util/assert.js';
 const DEFAULT_SCREENSHOT_PROFILE = 'reference-dark';
 
 interface CommandOptions {
+  context: CommandContext;
   json: boolean;
   sessionId: string;
   profile?: string;
@@ -66,7 +68,7 @@ function resolveScreenshotProfile(profile: string | undefined): string {
 }
 
 function formatScreenshotLines(result: ScreenshotResult): string[] {
-  return [
+  const lines = [
     `Session ID: ${result.sessionId}`,
     `Captured At Seq: ${String(result.capturedAtSeq)}`,
     `Profile: ${result.profileName}`,
@@ -74,6 +76,23 @@ function formatScreenshotLines(result: ScreenshotResult): string[] {
     `PNG Path: ${result.artifactPath}`,
     `PNG Size: ${String(result.pngSizeBytes)} bytes`,
   ];
+
+  if (result.rendererBackend !== undefined) {
+    lines.push(`Renderer backend: ${result.rendererBackend}`);
+  }
+  if (result.pixelWidth !== undefined && result.pixelHeight !== undefined) {
+    lines.push(
+      `Pixel dimensions: ${String(result.pixelWidth)}×${String(result.pixelHeight)}`,
+    );
+  }
+  if (result.sha256 !== undefined) {
+    lines.push(`SHA-256: ${result.sha256}`);
+  }
+  if (result.renderProfileHash !== undefined) {
+    lines.push(`Render profile hash: ${result.renderProfileHash}`);
+  }
+
+  return lines;
 }
 
 function parseScreenshotResult(
@@ -118,6 +137,10 @@ async function runOfflineScreenshot(
           result.pngSizeBytes > 0,
           'offline screenshot pngSizeBytes must be positive',
         );
+        invariant(
+          result.sha256 !== undefined,
+          'offline screenshot must produce sha256',
+        );
 
         const filename = screenshotFilename(
           result.capturedAtSeq,
@@ -132,11 +155,16 @@ async function runOfflineScreenshot(
             filename,
             sessionId: result.sessionId,
             capturedAtSeq: result.capturedAtSeq,
+            sha256: result.sha256,
             metadata: {
               profileName: result.profileName,
               cols: result.cols,
               rows: result.rows,
               pngSizeBytes: result.pngSizeBytes,
+              rendererBackend: result.rendererBackend,
+              pixelWidth: result.pixelWidth,
+              pixelHeight: result.pixelHeight,
+              renderProfileHash: result.renderProfileHash,
             },
           }),
         );
@@ -149,6 +177,11 @@ async function runOfflineScreenshot(
           rows: result.rows,
           artifactPath: finalArtifactPath,
           pngSizeBytes: result.pngSizeBytes,
+          rendererBackend: result.rendererBackend,
+          pixelWidth: result.pixelWidth,
+          pixelHeight: result.pixelHeight,
+          sha256: result.sha256,
+          renderProfileHash: result.renderProfileHash,
         };
       } catch (error) {
         await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
@@ -162,7 +195,7 @@ export async function runScreenshotCommand(
   options: CommandOptions,
 ): Promise<void> {
   const profile = resolveScreenshotProfile(options.profile);
-  const home = resolveHome();
+  const home = options.context.home;
   let sessionDirectory: string;
 
   try {

@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-22T22:34:50.918Z",
+  "result": {
+    "sessionId": "01KMBTZ1159XHVV1FX7WJ4YC4X",
+    "format": "webm",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent_exec_3a3efb7ac5/dogfood/20260322-dogfood-resize/videos/resize-demo.webm",
+    "bytes": 14101,
+    "sha256": "7d08840df50a4829349ef5894d54ebb29f93559d693d1da831f48310f86d6fcc",
+    "capturedAtSeq": 4,
+    "durationMs": 9344,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8d0a5a88a43edf8d21f890f688fa1d09d2c553f34cc1d55141ba973471f95091",
+      "timingMode": "accelerated",
+      "outputEventCount": 3,
+      "resizeEventCount": 2
+    }
+  }
+}

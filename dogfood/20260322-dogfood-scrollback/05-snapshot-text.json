@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-22T22:43:02.210Z",
+  "result": {
+    "format": "text",
+    "sessionId": "01KMBVE7WQCJRZMWD0T5VT53F7",
+    "capturedAtSeq": 5,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 23,
+    "cursorCol": 0,
+    "text": "SCROLLBACK DEMO START\nLINE 001 | abcdefghijklmnopqrstuvwxyz\nLINE 002 | abcdefghijklmnopqrstuvwxyz\nLINE 003 | abcdefghijklmnopqrstuvwxyz\nLINE 004 | abcdefghijklmnopqrstuvwxyz\nLINE 005 | abcdefghijklmnopqrstuvwxyz\nLINE 006 | abcdefghijklmnopqrstuvwxyz\nLINE 007 | abcdefghijklmnopqrstuvwxyz\nLINE 008 | abcdefghijklmnopqrstuvwxyz\nLINE 009 | abcdefghijklmnopqrstuvwxyz\nLINE 010 | abcdefghijklmnopqrstuvwxyz\nLINE 011 | abcdefghijklmnopqrstuvwxyz\nLINE 012 | abcdefghijklmnopqrstuvwxyz\nLINE 013 | abcdefghijklmnopqrstuvwxyz\nLINE 014 | abcdefghijklmnopqrstuvwxyz\nLINE 015 | abcdefghijklmnopqrstuvwxyz\nLINE 016 | abcdefghijklmnopqrstuvwxyz\nLINE 017 | abcdefghijklmnopqrstuvwxyz\nLINE 018 | abcdefghijklmnopqrstuvwxyz\nLINE 019 | abcdefghijklmnopqrstuvwxyz\nLINE 020 | abcdefghijklmnopqrstuvwxyz\nLINE 021 | abcdefghijklmnopqrstuvwxyz\nLINE 022 | abcdefghijklmnopqrstuvwxyz\nLINE 023 | abcdefghijklmnopqrstuvwxyz"
+  }
+}

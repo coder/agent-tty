@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   sessionDir: vi.fn(),
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
+  withOfflineReplayRenderer: vi.fn(),
 }));
 
 vi.mock('../../../src/cli/output.js', () => ({
@@ -18,6 +19,10 @@ vi.mock('../../../src/cli/output.js', () => ({
 
 vi.mock('../../../src/host/rpcClient.js', () => ({
   sendRpc: mocks.sendRpc,
+}));
+
+vi.mock('../../../src/replay/offlineReplay.js', () => ({
+  withOfflineReplayRenderer: mocks.withOfflineReplayRenderer,
 }));
 
 vi.mock('../../../src/storage/manifests.js', () => ({
@@ -35,6 +40,12 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 }));
 
 import { runWaitCommand } from '../../../src/cli/commands/wait.js';
+
+const TEST_CONTEXT = {
+  home: '/tmp/agent-terminal',
+  timeoutMs: undefined,
+  colorEnabled: true,
+} as const;
 
 function createSessionRecord(
   status: 'running' | 'exited' = 'running',
@@ -61,6 +72,7 @@ function createOptions(
   overrides: Partial<Parameters<typeof runWaitCommand>[0]> = {},
 ) {
   return {
+    context: TEST_CONTEXT,
     json: false,
     sessionId: 'session-01',
     waitForExit: false,
@@ -69,8 +81,60 @@ function createOptions(
     text: undefined,
     regex: undefined,
     screenStableMs: undefined,
+    cursorRow: undefined,
+    cursorCol: undefined,
     ...overrides,
   };
+}
+
+function createOfflineSemanticSnapshot(
+  overrides: Partial<{
+    capturedAtSeq: number;
+    cursorRow: number;
+    cursorCol: number;
+    visibleLines: { row: number; text: string }[];
+  }> = {},
+) {
+  return {
+    sessionId: 'session-01',
+    capturedAtSeq: 5,
+    cols: 80,
+    rows: 24,
+    cursorRow: 0,
+    cursorCol: 0,
+    isAltScreen: false,
+    visibleLines: [{ row: 0, text: 'offline output' }],
+    ...overrides,
+  };
+}
+
+function mockOfflineReplaySnapshot(
+  snapshotOverrides: Parameters<typeof createOfflineSemanticSnapshot>[0] = {},
+): void {
+  mocks.withOfflineReplayRenderer.mockImplementation(
+    async (
+      _options: unknown,
+      run: (context: {
+        manifest: ReturnType<typeof createSessionRecord>;
+        replayInput: Record<string, never>;
+        backend: {
+          snapshot: (options?: unknown) => Promise<unknown>;
+        };
+      }) => Promise<unknown>,
+    ) => {
+      const mockBackend = {
+        snapshot: vi.fn(() =>
+          Promise.resolve(createOfflineSemanticSnapshot(snapshotOverrides)),
+        ),
+      };
+
+      return run({
+        manifest: createSessionRecord('exited', 0),
+        replayInput: {},
+        backend: mockBackend,
+      });
+    },
+  );
 }
 
 describe('wait command', () => {
@@ -150,6 +214,46 @@ describe('wait command', () => {
     expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
 
+  it('rejects negative --cursor-row values', async () => {
+    await expect(
+      runWaitCommand(createOptions({ cursorRow: -1 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      details: { cursorRow: -1 },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-integer --cursor-row values', async () => {
+    await expect(
+      runWaitCommand(createOptions({ cursorRow: 1.5 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      details: { cursorRow: 1.5 },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects negative --cursor-col values', async () => {
+    await expect(
+      runWaitCommand(createOptions({ cursorCol: -1 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      details: { cursorCol: -1 },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-integer --cursor-col values', async () => {
+    await expect(
+      runWaitCommand(createOptions({ cursorCol: 1.5 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      details: { cursorCol: 1.5 },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
   it('accepts --timeout 0 for infinite render waits', async () => {
     const result = {
       matched: true,
@@ -168,6 +272,8 @@ describe('wait command', () => {
         text: 'hello',
         regex: undefined,
         screenStableMs: undefined,
+        cursorRow: undefined,
+        cursorCol: undefined,
         timeoutMs: undefined,
       },
       0,
@@ -264,6 +370,8 @@ describe('wait command', () => {
         text: 'hello',
         regex: undefined,
         screenStableMs: undefined,
+        cursorRow: undefined,
+        cursorCol: undefined,
         timeoutMs: 600_000,
       },
       605_000,
@@ -294,6 +402,8 @@ describe('wait command', () => {
         text: undefined,
         regex: '\\d+',
         screenStableMs: undefined,
+        cursorRow: undefined,
+        cursorCol: undefined,
         timeoutMs: 600_000,
       },
       605_000,
@@ -304,6 +414,114 @@ describe('wait command', () => {
         result,
       }),
     );
+  });
+
+  it('routes cursor waits to the render wait RPC', async () => {
+    const result = {
+      matched: true,
+      timedOut: false,
+      cursorRow: 3,
+      cursorCol: 4,
+      capturedAtSeq: 11,
+    };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runWaitCommand(
+      createOptions({ text: 'hello', cursorRow: 3, cursorCol: 4 }),
+    );
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'waitForRender',
+      {
+        text: 'hello',
+        regex: undefined,
+        screenStableMs: undefined,
+        cursorRow: 3,
+        cursorCol: 4,
+        timeoutMs: 600_000,
+      },
+      605_000,
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'wait',
+        result,
+      }),
+    );
+  });
+
+  it('falls back to offline replay when render wait host becomes unreachable and the snapshot matches', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'Session host is unreachable.',
+      }),
+    );
+    mockOfflineReplaySnapshot({
+      capturedAtSeq: 15,
+      visibleLines: [{ row: 0, text: 'offline hello output' }],
+    });
+
+    await runWaitCommand(createOptions({ text: 'hello' }));
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'waitForRender',
+      {
+        text: 'hello',
+        regex: undefined,
+        screenStableMs: undefined,
+        cursorRow: undefined,
+        cursorCol: undefined,
+        timeoutMs: 600_000,
+      },
+      605_000,
+    );
+    expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
+      { sessionDir: '/tmp/agent-terminal/sessions/session-01' },
+      expect.any(Function),
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith({
+      command: 'wait',
+      json: false,
+      result: {
+        matched: true,
+        timedOut: false,
+        matchedText: 'hello',
+        cursorRow: 0,
+        cursorCol: 0,
+        capturedAtSeq: 15,
+      },
+      lines: ['Matched: hello', 'Cursor: row 0, col 0', 'capturedAtSeq: 15'],
+    });
+  });
+
+  it('returns a descriptive error when the offline snapshot does not satisfy the wait condition', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'Session host is unreachable.',
+      }),
+    );
+    mockOfflineReplaySnapshot({
+      capturedAtSeq: 21,
+      visibleLines: [{ row: 0, text: 'offline output' }],
+    });
+
+    const promise = runWaitCommand(createOptions({ text: 'hello' }));
+
+    await expect(promise).rejects.toMatchObject({
+      code: ERROR_CODES.REPLAY_ERROR,
+      details: {
+        text: 'hello',
+        capturedAtSeq: 21,
+        visibleLines: ['offline output'],
+      },
+    });
+    await expect(promise).rejects.toHaveProperty(
+      'message',
+      expect.stringContaining('latest offline snapshot did not satisfy'),
+    );
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
   it('surfaces RPC timeout errors for render waits', async () => {

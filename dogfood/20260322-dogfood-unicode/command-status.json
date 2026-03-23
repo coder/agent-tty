@@ -1,0 +1,37 @@
+[
+  {
+    "command": "npx tsx src/cli/main.ts create --json -- npx tsx test/fixtures/apps/unicode-grid/main.ts",
+    "exitCode": 0
+  },
+  {
+    "sessionId": "01KMBTSJ36G701X9QPENZ6M4SQ"
+  },
+  {
+    "command": "npx tsx src/cli/main.ts wait 01KMBTSJ36G701X9QPENZ6M4SQ --text UNICODE\\ GRID\\ COMPLETE",
+    "exitCode": 0
+  },
+  {
+    "command": "npx tsx src/cli/main.ts screenshot 01KMBTSJ36G701X9QPENZ6M4SQ --json",
+    "exitCode": 0
+  },
+  {
+    "command": "npx tsx src/cli/main.ts snapshot 01KMBTSJ36G701X9QPENZ6M4SQ --json",
+    "exitCode": 0
+  },
+  {
+    "command": "npx tsx src/cli/main.ts snapshot 01KMBTSJ36G701X9QPENZ6M4SQ --format text --json",
+    "exitCode": 0
+  },
+  {
+    "command": "npx tsx src/cli/main.ts record export 01KMBTSJ36G701X9QPENZ6M4SQ --format asciicast --json",
+    "exitCode": 0
+  },
+  {
+    "command": "npx tsx src/cli/main.ts wait 01KMBTSJ36G701X9QPENZ6M4SQ --exit",
+    "exitCode": 0
+  },
+  {
+    "command": "npx tsx src/cli/main.ts inspect 01KMBTSJ36G701X9QPENZ6M4SQ --json",
+    "exitCode": 0
+  }
+]

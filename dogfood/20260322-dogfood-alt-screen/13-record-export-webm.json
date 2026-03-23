@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-22T22:32:52.855Z",
+  "result": {
+    "sessionId": "01KMBTV99F0QQ1VPW74QDXHB72",
+    "format": "webm",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent_exec_bd8e80d26b/dogfood/20260322-dogfood-alt-screen/videos/alt-screen.webm",
+    "bytes": 32226,
+    "sha256": "7d9e761f2cfd2b28db449fb5d3ffef4cb0442d5f2b3766aaee38df8583bd2447",
+    "capturedAtSeq": 11,
+    "durationMs": 10445,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8d0a5a88a43edf8d21f890f688fa1d09d2c553f34cc1d55141ba973471f95091",
+      "timingMode": "accelerated",
+      "outputEventCount": 9,
+      "resizeEventCount": 0
+    }
+  }
+}

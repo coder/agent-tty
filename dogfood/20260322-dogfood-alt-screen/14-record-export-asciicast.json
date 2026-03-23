@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-22T22:32:53.955Z",
+  "result": {
+    "sessionId": "01KMBTV99F0QQ1VPW74QDXHB72",
+    "format": "asciicast",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent_exec_bd8e80d26b/dogfood/20260322-dogfood-alt-screen/recordings/alt-screen.cast",
+    "bytes": 603,
+    "sha256": "29a81130eefe41242d9d27a9fffe697be68a69d046f73df377f7172e2be96d3f",
+    "capturedAtSeq": 11,
+    "durationMs": 10445,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "title": "01KMBTV99F0QQ1VPW74QDXHB72",
+      "timestamp": 1774218750,
+      "outputEventCount": 9,
+      "resizeEventCount": 0,
+      "markerCount": 0
+    }
+  }
+}

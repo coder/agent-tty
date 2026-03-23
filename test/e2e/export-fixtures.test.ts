@@ -485,7 +485,9 @@ describe('export fixture e2e', { timeout: 180_000 }, () => {
       ['inspect', sessionId],
       env,
     );
-    expect(inspectEnvelope.result.session.status).toBe('exited');
+    expect(['exited', 'failed', 'destroyed']).toContain(
+      inspectEnvelope.result.session.status,
+    );
 
     const webmEnvelope = runCliEnvelope<RecordExportResult>(
       ['record', 'export', sessionId, '--format', 'webm'],

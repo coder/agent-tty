@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-22T22:31:58.680Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KMBTSNSRFHX2A7ZYDYVR16D9",
+      "createdAt": "2026-03-22T22:31:36.508Z",
+      "updatedAt": "2026-03-22T22:31:39.032Z",
+      "status": "exited",
+      "command": ["npx", "tsx", "test/fixtures/apps/color-grid/main.ts"],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_bd8e80d26b",
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "hostPid": 1836998,
+      "childPid": 1837138,
+      "exitCode": 0,
+      "exitSignal": null
+    }
+  }
+}

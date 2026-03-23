@@ -1,8 +1,7 @@
 import type { EventRecord, SessionRecord } from '../protocol/schemas.js';
 
+import { DEFAULT_TERM } from '../config/defaults.js';
 import { invariant } from '../util/assert.js';
-
-const DEFAULT_TERM = 'xterm-256color';
 
 export interface AsciicastHeader {
   version: 2;
@@ -10,6 +9,8 @@ export interface AsciicastHeader {
   height: number;
   timestamp: number;
   title: string;
+  sessionId?: string;
+  toolVersion?: string;
   env: {
     TERM: string;
   };
@@ -49,6 +50,7 @@ export function generateAsciicast(
   sessionId: string,
   manifest: SessionRecord,
   events: EventRecord[],
+  toolVersion?: string,
 ): AsciicastExport {
   invariant(sessionId.length > 0, 'sessionId must be a non-empty string');
   invariant(
@@ -84,10 +86,19 @@ export function generateAsciicast(
     height: manifest.rows,
     timestamp: Math.floor(firstTimestampMs / 1000),
     title: sessionId,
+    sessionId,
     env: {
       TERM: DEFAULT_TERM,
     },
   };
+
+  if (toolVersion !== undefined) {
+    invariant(
+      toolVersion.length > 0,
+      'toolVersion must be a non-empty string when provided',
+    );
+    header.toolVersion = toolVersion;
+  }
 
   let previousTimestampMs = firstTimestampMs;
   let outputEventCount = 0;

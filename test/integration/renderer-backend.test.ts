@@ -205,6 +205,69 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     expect(visibleText).toContain('second line');
   });
 
+  it('returns no scrollbackLines by default', async () => {
+    await backend.boot();
+    await backend.replayTo(
+      createReplayInput([
+        {
+          seq: 0,
+          ts: timestampFor(0),
+          type: 'output',
+          payload: { data: 'hello\r\n' },
+        },
+      ]),
+    );
+
+    const snapshot = await backend.snapshot();
+
+    expect(snapshot.scrollbackLines).toBeUndefined();
+  });
+
+  it('supports includeScrollback snapshots for overflow output', async () => {
+    await backend.boot();
+    const lines = Array.from(
+      { length: 50 },
+      (_, index) => `line-${String(index)}\r\n`,
+    ).join('');
+    await backend.replayTo(
+      createReplayInput([
+        {
+          seq: 0,
+          ts: timestampFor(0),
+          type: 'output',
+          payload: { data: lines },
+        },
+      ]),
+    );
+
+    const snapshot = await backend.snapshot({ includeScrollback: true });
+
+    expect(snapshot.visibleLines.length).toBeGreaterThan(0);
+    expect(
+      snapshot.visibleLines.some((line) => line.text.includes('line-49')),
+    ).toBe(true);
+
+    expect(snapshot.scrollbackLines).toBeDefined();
+    const scrollbackLines = snapshot.scrollbackLines;
+    if (scrollbackLines === undefined) {
+      throw new Error('expected scrollback lines');
+    }
+    expect(scrollbackLines).not.toHaveLength(0);
+    expect(scrollbackLines[0]?.row).toBe(0);
+    for (let index = 1; index < scrollbackLines.length; index += 1) {
+      expect(scrollbackLines[index]?.row).toBeGreaterThan(
+        scrollbackLines[index - 1]?.row ?? -1,
+      );
+    }
+    expect(
+      scrollbackLines.length + snapshot.visibleLines.length,
+    ).toBeGreaterThanOrEqual(50);
+    const allScrollbackText = scrollbackLines
+      .map((line) => line.text)
+      .join('\n');
+    expect(allScrollbackText).toContain('line-0');
+  });
+
   it('captures screenshots to disk', async () => {
     await backend.boot();
     await backend.replayTo(

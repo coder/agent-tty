@@ -2,7 +2,9 @@
 
 import process from 'node:process';
 
-import { Command } from 'commander';
+import { Command, CommanderError } from 'commander';
+
+import type { CommandContext } from './context.js';
 
 import { runCreateCommand } from './commands/create.js';
 import { runDestroyCommand } from './commands/destroy.js';
@@ -21,34 +23,75 @@ import { runSnapshotCommand } from './commands/snapshot.js';
 import { runTypeCommand } from './commands/type.js';
 import { runVersionCommand } from './commands/version.js';
 import { runWaitCommand } from './commands/wait.js';
+import {
+  getCommandContext,
+  parseTimeoutMsOption,
+  resolveCommandContext,
+  setCommandContext,
+  type GlobalCliOptions,
+} from './context.js';
 import { CliError } from './errors.js';
-import { emitFailure } from './output.js';
+import { exitCodeForError } from './exitCodes.js';
+import { emitFailure, setColorEnabled } from './output.js';
+import {
+  DEFAULT_COLS,
+  DEFAULT_ROWS,
+  DEFAULT_SHELL,
+  DEFAULT_TERM,
+} from '../config/defaults.js';
+import { invariant } from '../util/assert.js';
 
 function parseIntegerOption(value: string): number {
   return Number.parseInt(value, 10);
 }
 
+function parseNumberOption(value: string): number {
+  return Number(value);
+}
+
+function collectStringOption(value: string, previous: string[] = []): string[] {
+  return [...previous, value];
+}
+
+function emitCliError(commandName: string, error: CliError): void {
+  const json = process.argv.includes('--json');
+  emitFailure({
+    command: commandName,
+    json,
+    error: {
+      code: error.code,
+      message: error.message,
+      retryable: error.retryable,
+      details: error.details,
+    },
+  });
+  process.exitCode = exitCodeForError(error.code);
+}
+
+function getActionCommand(rawArgs: readonly unknown[]): Command {
+  const maybeCommand = rawArgs.at(-1);
+  invariant(
+    maybeCommand instanceof Command,
+    'Commander action expected command',
+  );
+  return maybeCommand;
+}
+
 function wrapAction<Args extends unknown[]>(
   commandName: string,
-  fn: (...args: Args) => Promise<void>,
-): (...args: Args) => Promise<void> {
-  return async (...args: Args) => {
+  fn: (...args: [...Args, CommandContext]) => Promise<void>,
+): (...rawArgs: [...Args, Command]) => Promise<void> {
+  return async (...rawArgs: [...Args, Command]) => {
+    const command = getActionCommand(rawArgs);
+
     try {
-      await fn(...args);
+      const context = getCommandContext(command);
+      setColorEnabled(context.colorEnabled);
+      const args = rawArgs.slice(0, -1) as Args;
+      await fn(...([...args, context] as [...Args, CommandContext]));
     } catch (error: unknown) {
       if (error instanceof CliError) {
-        const json = process.argv.includes('--json');
-        emitFailure({
-          command: commandName,
-          json,
-          error: {
-            code: error.code,
-            message: error.message,
-            retryable: error.retryable,
-            details: error.details,
-          },
-        });
-        process.exitCode = 1;
+        emitCliError(commandName, error);
         return;
       }
 
@@ -61,16 +104,39 @@ async function main(): Promise<void> {
   const program = new Command()
     .name('agent-terminal')
     .description('CLI for managing and controlling terminal sessions')
-    .showHelpAfterError();
+    .showHelpAfterError()
+    .exitOverride();
+
+  program
+    .option('--home <path>', 'Override the agent-terminal home directory')
+    .option(
+      '--timeout-ms <n>',
+      'Set a shared CLI timeout in milliseconds',
+      parseTimeoutMsOption,
+    )
+    .option('--no-color', 'Disable ANSI color in human-readable output');
+
+  program.hook('preAction', (_thisCommand, actionCommand) => {
+    const context = resolveCommandContext(
+      actionCommand.optsWithGlobals<GlobalCliOptions>(),
+    );
+    process.env.AGENT_TERMINAL_HOME = context.home;
+    setColorEnabled(context.colorEnabled);
+    setCommandContext(actionCommand, context);
+  });
 
   program
     .command('version')
     .description('Print version')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
-      wrapAction('version', async (options: { json: boolean }) => {
-        await runVersionCommand(options);
-      }),
+      wrapAction(
+        'version',
+        async (options: { json: boolean }, context: CommandContext) => {
+          void context;
+          await runVersionCommand(options);
+        },
+      ),
     );
 
   program
@@ -78,23 +144,32 @@ async function main(): Promise<void> {
     .description('Check env')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
-      wrapAction('doctor', async (options: { json: boolean }) => {
-        await runDoctorCommand(options);
-      }),
+      wrapAction(
+        'doctor',
+        async (options: { json: boolean }, context: CommandContext) => {
+          void context;
+          await runDoctorCommand(options);
+        },
+      ),
     );
 
   // --- Session lifecycle ---
   program
     .command('create [command...]')
     .description('Create a session')
-    .option(
-      '--command <cmd>',
-      'Shell executable (defaults to $SHELL or sh)',
-      process.env.SHELL ?? process.env.ComSpec ?? 'sh',
-    )
+    .option('--command <path>', 'Legacy alias for --shell')
+    .option('--shell <path>', 'Shell executable path', DEFAULT_SHELL)
     .option('--cwd <dir>', 'Working directory', process.cwd())
-    .option('--cols <n>', 'Initial columns', parseIntegerOption, 80)
-    .option('--rows <n>', 'Initial rows', parseIntegerOption, 24)
+    .option('--cols <n>', 'Initial columns', parseIntegerOption, DEFAULT_COLS)
+    .option('--rows <n>', 'Initial rows', parseIntegerOption, DEFAULT_ROWS)
+    .option(
+      '--env <key=value>',
+      'Additional environment variable in KEY=VALUE format',
+      collectStringOption,
+      [],
+    )
+    .option('--term <value>', 'Terminal type', DEFAULT_TERM)
+    .option('--name <name>', 'Human-readable session name')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
@@ -102,20 +177,29 @@ async function main(): Promise<void> {
         async (
           command: string[],
           options: {
-            command: string;
+            command?: string;
+            shell: string;
             cwd: string;
             cols: number;
             rows: number;
+            env: string[];
+            term: string;
+            name?: string;
             json: boolean;
           },
+          context: CommandContext,
         ) => {
           await runCreateCommand({
+            context,
             json: options.json,
             command,
-            shellCommand: options.command,
+            shellPath: options.command ?? options.shell,
             cwd: options.cwd,
             cols: options.cols,
             rows: options.rows,
+            envEntries: options.env,
+            term: options.term,
+            ...(options.name !== undefined ? { name: options.name } : {}),
           });
         },
       ),
@@ -127,9 +211,15 @@ async function main(): Promise<void> {
     .option('--all', 'Include exited sessions', false)
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
-      wrapAction('list', async (options: { all: boolean; json: boolean }) => {
-        await runListCommand(options);
-      }),
+      wrapAction(
+        'list',
+        async (
+          options: { all: boolean; json: boolean },
+          context: CommandContext,
+        ) => {
+          await runListCommand({ ...options, context });
+        },
+      ),
     );
 
   program
@@ -139,8 +229,13 @@ async function main(): Promise<void> {
     .action(
       wrapAction(
         'inspect',
-        async (sessionId: string, options: { json: boolean }) => {
+        async (
+          sessionId: string,
+          options: { json: boolean },
+          context: CommandContext,
+        ) => {
           await runInspectCommand({
+            context,
             json: options.json,
             sessionId,
           });
@@ -159,7 +254,9 @@ async function main(): Promise<void> {
         async (
           sessionId: string,
           options: { force: boolean; json: boolean },
+          context: CommandContext,
         ) => {
+          void context;
           await runDestroyCommand({
             json: options.json,
             sessionId,
@@ -186,13 +283,17 @@ async function main(): Promise<void> {
     .action(
       wrapAction(
         'gc',
-        async (options: {
-          dryRun: boolean;
-          staleOnly: boolean;
-          olderThan?: string;
-          json: boolean;
-        }) => {
+        async (
+          options: {
+            dryRun: boolean;
+            staleOnly: boolean;
+            olderThan?: string;
+            json: boolean;
+          },
+          context: CommandContext,
+        ) => {
           await runGcCommand({
+            context,
             json: options.json,
             dryRun: options.dryRun,
             staleOnly: options.staleOnly,
@@ -204,34 +305,50 @@ async function main(): Promise<void> {
 
   // --- Session control ---
   program
-    .command('type <session-id> <text>')
+    .command('type <session-id> [text]')
     .description('Type text into a session')
+    .option('--file <path>', 'Read text to type from a file')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
         'type',
-        async (sessionId: string, text: string, options: { json: boolean }) => {
+        async (
+          sessionId: string,
+          text: string | undefined,
+          options: { file?: string; json: boolean },
+          context: CommandContext,
+        ) => {
           await runTypeCommand({
+            context,
             json: options.json,
             sessionId,
             text,
+            ...(options.file !== undefined ? { file: options.file } : {}),
           });
         },
       ),
     );
 
   program
-    .command('paste <session-id> <text>')
+    .command('paste <session-id> [text]')
     .description('Paste text into a session')
+    .option('--file <path>', 'Read text to paste from a file')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
         'paste',
-        async (sessionId: string, text: string, options: { json: boolean }) => {
+        async (
+          sessionId: string,
+          text: string | undefined,
+          options: { file?: string; json: boolean },
+          context: CommandContext,
+        ) => {
           await runPasteCommand({
+            context,
             json: options.json,
             sessionId,
             text,
+            ...(options.file !== undefined ? { file: options.file } : {}),
           });
         },
       ),
@@ -248,8 +365,10 @@ async function main(): Promise<void> {
           sessionId: string,
           label: string,
           options: { json: boolean },
+          context: CommandContext,
         ) => {
           await runMarkCommand({
+            context,
             json: options.json,
             sessionId,
             label,
@@ -269,8 +388,10 @@ async function main(): Promise<void> {
           sessionId: string,
           keys: string[],
           options: { json: boolean },
+          context: CommandContext,
         ) => {
           await runSendKeysCommand({
+            context,
             json: options.json,
             sessionId,
             keys,
@@ -291,8 +412,10 @@ async function main(): Promise<void> {
         async (
           sessionId: string,
           options: { cols: number; rows: number; json: boolean },
+          context: CommandContext,
         ) => {
           await runResizeCommand({
+            context,
             json: options.json,
             sessionId,
             cols: options.cols,
@@ -313,8 +436,10 @@ async function main(): Promise<void> {
           sessionId: string,
           signal: string,
           options: { json: boolean },
+          context: CommandContext,
         ) => {
           await runSignalCommand({
+            context,
             json: options.json,
             sessionId,
             signal,
@@ -333,17 +458,25 @@ async function main(): Promise<void> {
       'structured',
     )
     .option('--json', 'Emit a JSON command envelope', false)
+    .option('--include-scrollback', 'Include scrollback buffer lines', false)
     .action(
       wrapAction(
         'snapshot',
         async (
           sessionId: string,
-          options: { format: string; json: boolean },
+          options: {
+            format: string;
+            json: boolean;
+            includeScrollback: boolean;
+          },
+          context: CommandContext,
         ) => {
           await runSnapshotCommand({
+            context,
             json: options.json,
             sessionId,
             format: options.format,
+            includeScrollback: options.includeScrollback,
           });
         },
       ),
@@ -360,8 +493,10 @@ async function main(): Promise<void> {
         async (
           sessionId: string,
           options: { profile: string; json: boolean },
+          context: CommandContext,
         ) => {
           await runScreenshotCommand({
+            context,
             json: options.json,
             sessionId,
             profile: options.profile,
@@ -390,8 +525,10 @@ async function main(): Promise<void> {
             out?: string;
             json: boolean;
           },
+          context: CommandContext,
         ) => {
           await runRecordExportCommand({
+            context,
             json: options.json,
             sessionId,
             format: options.format,
@@ -419,6 +556,16 @@ async function main(): Promise<void> {
       'Wait for screen to be stable for given ms',
       parseIntegerOption,
     )
+    .option(
+      '--cursor-row <n>',
+      'Wait for cursor row in rendered output (0-based)',
+      parseNumberOption,
+    )
+    .option(
+      '--cursor-col <n>',
+      'Wait for cursor column in rendered output (0-based)',
+      parseNumberOption,
+    )
     .action(
       wrapAction(
         'wait',
@@ -432,9 +579,13 @@ async function main(): Promise<void> {
             text?: string;
             regex?: string;
             screenStableMs?: number;
+            cursorRow?: number;
+            cursorCol?: number;
           },
+          context: CommandContext,
         ) => {
           await runWaitCommand({
+            context,
             json: options.json,
             sessionId,
             waitForExit: options.exit,
@@ -443,6 +594,8 @@ async function main(): Promise<void> {
             text: options.text,
             regex: options.regex,
             screenStableMs: options.screenStableMs,
+            cursorRow: options.cursorRow,
+            cursorCol: options.cursorCol,
           });
         },
       ),
@@ -462,19 +615,11 @@ async function main(): Promise<void> {
 try {
   await main();
 } catch (error: unknown) {
-  if (error instanceof CliError) {
-    const json = process.argv.includes('--json');
-    emitFailure({
-      command: 'agent-terminal',
-      json,
-      error: {
-        code: error.code,
-        message: error.message,
-        retryable: error.retryable,
-        details: error.details,
-      },
-    });
-    process.exitCode = 1;
+  if (error instanceof CommanderError) {
+    process.exitCode = error.code === 'commander.helpDisplayed' ? 0 : 2;
+  } else if (error instanceof CliError) {
+    setColorEnabled(!process.argv.includes('--no-color'));
+    emitCliError('agent-terminal', error);
   } else {
     throw error;
   }

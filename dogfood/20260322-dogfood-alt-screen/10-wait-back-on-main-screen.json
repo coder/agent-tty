@@ -1,0 +1,15 @@
+{
+  "ok": false,
+  "command": "wait",
+  "timestamp": "2026-03-22T22:32:41.582Z",
+  "error": {
+    "code": "HOST_UNREACHABLE",
+    "message": "Failed to reach RPC host at /tmp/tmp.5qVKPi5rha/sessions/01KMBTV99F0QQ1VPW74QDXHB72/host.sock.",
+    "retryable": true,
+    "details": {
+      "method": "waitForRender",
+      "socketPath": "/tmp/tmp.5qVKPi5rha/sessions/01KMBTV99F0QQ1VPW74QDXHB72/host.sock",
+      "errno": "ENOENT"
+    }
+  }
+}

@@ -94,8 +94,14 @@ export function buildReplayInput(
     parsedManifest.data.sessionId === sessionId,
     'sessionId must match manifest sessionId',
   );
-  invariant(parsedManifest.data.cols > 0, 'initial cols must be positive');
-  invariant(parsedManifest.data.rows > 0, 'initial rows must be positive');
+
+  const initialCols =
+    parsedManifest.data.creationCols ?? parsedManifest.data.cols;
+  const initialRows =
+    parsedManifest.data.creationRows ?? parsedManifest.data.rows;
+
+  invariant(initialCols > 0, 'initial cols must be positive');
+  invariant(initialRows > 0, 'initial rows must be positive');
 
   const validatedEvents = events.map((event, index) =>
     parseEventRecord(event, index),
@@ -131,8 +137,8 @@ export function buildReplayInput(
 
   return {
     sessionId,
-    initialCols: parsedManifest.data.cols,
-    initialRows: parsedManifest.data.rows,
+    initialCols,
+    initialRows,
     events: validatedEvents,
     targetSeq: resolvedTargetSeq,
   };

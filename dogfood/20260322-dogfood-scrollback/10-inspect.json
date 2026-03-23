@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-22T22:43:15.333Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KMBVE7WQCJRZMWD0T5VT53F7",
+      "createdAt": "2026-03-22T22:42:50.397Z",
+      "updatedAt": "2026-03-22T22:42:52.956Z",
+      "status": "exited",
+      "command": ["npx", "tsx", "test/fixtures/apps/scrollback-demo/main.ts"],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_48a09094d0",
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "hostPid": 1872597,
+      "childPid": 1872610,
+      "exitCode": 0,
+      "exitSignal": null
+    }
+  }
+}

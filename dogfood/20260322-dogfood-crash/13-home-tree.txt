@@ -1,0 +1,9 @@
+/tmp/tmp.BMAS1ZBaGW
+/tmp/tmp.BMAS1ZBaGW/sessions
+/tmp/tmp.BMAS1ZBaGW/sessions/01KMBTTKERFNKCZBKESJPTKY4N
+/tmp/tmp.BMAS1ZBaGW/sessions/01KMBTTKERFNKCZBKESJPTKY4N/events.jsonl
+/tmp/tmp.BMAS1ZBaGW/sessions/01KMBTTKERFNKCZBKESJPTKY4N/session.json
+/tmp/tmp.BMAS1ZBaGW/sessions/01KMBTTKERFNKCZBKESJPTKY4N/artifacts
+/tmp/tmp.BMAS1ZBaGW/sessions/01KMBTTKERFNKCZBKESJPTKY4N/artifacts/snapshot-6-structured.json
+/tmp/tmp.BMAS1ZBaGW/sessions/01KMBTTKERFNKCZBKESJPTKY4N/artifacts/screenshot-6-reference-dark.png
+/tmp/tmp.BMAS1ZBaGW/sessions/01KMBTTKERFNKCZBKESJPTKY4N/artifacts/manifest.json

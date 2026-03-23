@@ -1,0 +1,58 @@
+{
+  "scenario": "resize-b-redux",
+  "bundle": "dogfood/20260323-bugfix-resize",
+  "sessionId": "01KMCYX32BMKX4F48WRMRSDC12",
+  "successChecks": {
+    "screenshotAfterResizeLarge": true,
+    "snapshotAfterResizeLarge": true,
+    "screenshotAfterResizeSmall": true,
+    "snapshotAfterResizeSmall": true
+  },
+  "screenshotArtifacts": {
+    "beforeResize": "screenshots/03-before-resize.png",
+    "afterResizeLarge": "screenshots/06-after-resize-large.png",
+    "afterResizeSmall": "screenshots/10-after-resize-small.png"
+  },
+  "dimensions": {
+    "before": {
+      "cols": 120,
+      "rows": 40
+    },
+    "afterLarge": {
+      "cols": 140,
+      "rows": 50
+    },
+    "afterSmall": {
+      "cols": 80,
+      "rows": 24
+    }
+  },
+  "snapshotLargeVisibleTail": [
+    {
+      "row": 47,
+      "text": ""
+    },
+    {
+      "row": 48,
+      "text": ""
+    },
+    {
+      "row": 49,
+      "text": ""
+    }
+  ],
+  "snapshotSmallVisibleTail": [
+    {
+      "row": 21,
+      "text": ""
+    },
+    {
+      "row": 22,
+      "text": ""
+    },
+    {
+      "row": 23,
+      "text": ""
+    }
+  ]
+}

@@ -2,6 +2,8 @@ import { rm } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { CliError } from '../errors.js';
+import type { CommandContext } from '../context.js';
+
 import { emitSuccess } from '../output.js';
 import {
   allocateSession,
@@ -10,7 +12,6 @@ import {
 } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
-import { resolveHome } from '../../storage/home.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
   manifestPath,
@@ -22,36 +23,74 @@ const READINESS_POLL_INTERVAL_MS = 100;
 const READINESS_MAX_ATTEMPTS = 50;
 const READINESS_RPC_TIMEOUT_MS = 100;
 
+type SessionEnvironment = Record<string, string>;
+
 export interface CreateResult {
   sessionId: string;
 }
 
 interface CommandOptions {
+  context: CommandContext;
   json: boolean;
   command: string[];
-  shellCommand: string;
+  shellPath: string;
   cwd: string;
   cols: number;
   rows: number;
+  envEntries: string[];
+  term: string;
+  name?: string;
+}
+
+function normalizeCreateEnvironment(envEntries: string[]): SessionEnvironment {
+  const environment: SessionEnvironment = {};
+
+  for (const entry of envEntries) {
+    const separatorIndex = entry.indexOf('=');
+    if (separatorIndex <= 0) {
+      throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+        message: `--env must use KEY=VALUE format, got: ${entry}`,
+        details: {
+          env: entry,
+        },
+      });
+    }
+
+    const key = entry.slice(0, separatorIndex);
+    const value = entry.slice(separatorIndex + 1);
+    environment[key] = value;
+  }
+
+  return environment;
 }
 
 export async function runCreateCommand(options: CommandOptions): Promise<void> {
+  const environment = normalizeCreateEnvironment(options.envEntries);
   let sessionId: string | undefined;
 
   try {
     const allocatedSession = await allocateSession({
+      home: options.context.home,
       command: options.command,
-      shellCommand: options.shellCommand,
+      shellPath: options.shellPath,
       cwd: options.cwd,
       cols: options.cols,
       rows: options.rows,
+      env: environment,
+      term: options.term,
+      ...(options.name !== undefined ? { name: options.name } : {}),
     });
     sessionId = allocatedSession.sessionId;
 
-    launchHost(sessionId);
+    launchHost({
+      sessionId,
+      home: options.context.home,
+      env: environment,
+      term: options.term,
+    });
   } catch (error) {
     if (sessionId !== undefined) {
-      const home = resolveHome();
+      const home = options.context.home;
       await rm(sessionDir(home, sessionId), {
         recursive: true,
         force: true,
@@ -69,7 +108,7 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  const home = resolveHome();
+  const home = options.context.home;
   const sessionDirectory = sessionDir(home, sessionId);
   const socketFile = socketPath(sessionDirectory);
   let lastError: CliError | null = null;

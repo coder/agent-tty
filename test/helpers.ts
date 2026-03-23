@@ -29,12 +29,16 @@ export interface SessionRecord {
   status: string;
   command: string[];
   cwd: string;
+  name?: string;
+  env?: Record<string, string>;
+  term?: string;
   cols: number;
   rows: number;
   hostPid: number | null;
   childPid: number | null;
   exitCode: number | null;
   exitSignal: string | null;
+  failureReason?: string;
 }
 
 export interface EventRecord {
@@ -133,9 +137,26 @@ export function destroySession(testHome: string, sessionId: string): void {
     return;
   }
 
-  runCli(['destroy', sessionId, '--force', '--json'], {
+  runCli(['destroy', sessionId, '--json'], {
     AGENT_TERMINAL_HOME: testHome,
   });
+}
+
+export function crashSession(testHome: string, sessionId: string): void {
+  const session = inspectSession(testHome, sessionId);
+  const hostPid = session.hostPid;
+  expect(hostPid).toBeTypeOf('number');
+  if (hostPid === null) {
+    throw new Error(
+      'hostPid must not be null (assertion above should have caught this)',
+    );
+  }
+
+  try {
+    process.kill(hostPid, 'SIGKILL');
+  } catch {
+    // Process may already be dead
+  }
 }
 
 export function inspectSession(

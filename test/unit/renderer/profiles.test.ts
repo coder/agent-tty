@@ -1,8 +1,11 @@
+import { AssertionError } from 'node:assert';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   BUILTIN_PROFILE_NAMES,
   getBuiltinProfile,
+  hashProfile,
   resolveProfile,
 } from '../../../src/renderer/profiles.js';
 
@@ -71,6 +74,37 @@ describe('renderer profiles', () => {
       backgroundColor: '#ffffff',
       foregroundColor: '#000000',
     });
+  });
+
+  it('hashes profiles deterministically as lowercase SHA-256 hex', () => {
+    const profile = resolveProfile('reference-dark');
+    const firstHash = hashProfile(profile);
+    const secondHash = hashProfile(profile);
+
+    expect(firstHash).toBe(secondHash);
+    expect(firstHash).toMatch(/^[a-f0-9]{64}$/u);
+  });
+
+  it('produces distinct hashes for different built-in profiles', () => {
+    const darkProfile = resolveProfile('reference-dark');
+    const lightProfile = resolveProfile('reference-light');
+
+    expect(hashProfile(darkProfile)).not.toBe(hashProfile(lightProfile));
+  });
+
+  it('throws assertion errors for invalid profile configs', () => {
+    const invalidProfile = {
+      name: 'broken',
+      theme: 'dark',
+      fontFamily: 'monospace',
+      fontSize: 0,
+      cursorStyle: 'block',
+      backgroundColor: '#1e1e2e',
+      foregroundColor: '#cdd6f4',
+    } as Parameters<typeof hashProfile>[0];
+
+    expect(() => hashProfile(invalidProfile)).toThrow(AssertionError);
+    expect(() => hashProfile(invalidProfile)).toThrow(/Too small/u);
   });
 
   it('throws clearly for unknown or invalid profiles', () => {

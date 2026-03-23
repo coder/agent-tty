@@ -6,6 +6,8 @@ import process from 'node:process';
 
 import { z } from 'zod';
 
+import type { CommandContext } from '../context.js';
+
 import { emitSuccess } from '../output.js';
 import { generateAsciicast } from '../../export/asciicast.js';
 import {
@@ -14,6 +16,7 @@ import {
 } from '../../export/webm.js';
 import { readEventLogRecords } from '../../host/replay.js';
 import { GhosttyWebBackend } from '../../renderer/ghosttyWeb/backend.js';
+import { hashProfile, resolveProfile } from '../../renderer/profiles.js';
 import { CliError } from '../errors.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import {
@@ -29,7 +32,6 @@ import {
   ensureArtifactsDir,
   recordingFilename,
 } from '../../storage/artifactPaths.js';
-import { resolveHome } from '../../storage/home.js';
 import {
   readManifestIfExists,
   writeTextFileAtomic,
@@ -40,6 +42,7 @@ import {
   sessionDir,
 } from '../../storage/sessionPaths.js';
 import { invariant } from '../../util/assert.js';
+import { loadPackageMetadata } from './version.js';
 
 const RecordExportFormatSchema = z.enum(['asciicast', 'webm']);
 
@@ -48,6 +51,7 @@ type RecordExportFormat = z.infer<typeof RecordExportFormatSchema>;
 type ArtifactKind = 'recording' | 'video';
 
 interface CommandOptions {
+  context: CommandContext;
   json: boolean;
   sessionId: string;
   format?: string;
@@ -141,7 +145,7 @@ export async function runRecordExportCommand(
   options: CommandOptions,
 ): Promise<void> {
   const format = resolveRecordExportFormat(options.format);
-  const home = resolveHome();
+  const home = options.context.home;
   let sessionDirectory: string;
 
   try {
@@ -194,10 +198,12 @@ export async function runRecordExportCommand(
     let sha256: string;
 
     if (format === 'asciicast') {
+      const packageMetadata = await loadPackageMetadata();
       const exportArtifact = generateAsciicast(
         options.sessionId,
         manifest,
         events,
+        packageMetadata.version,
       );
       const contentsBuffer = Buffer.from(exportArtifact.contents, 'utf8');
 
@@ -258,6 +264,13 @@ export async function runRecordExportCommand(
         },
       );
 
+      const resolvedProfile = resolveProfile(webmResult.profileName);
+      invariant(
+        resolvedProfile.name === webmResult.profileName,
+        'resolved render profile name must match the exported profile name',
+      );
+      const renderProfileHash = hashProfile(resolvedProfile);
+
       capturedAtSeq = webmResult.capturedAtSeq;
       durationMs = webmResult.durationMs;
       artifactKind = 'video';
@@ -267,6 +280,7 @@ export async function runRecordExportCommand(
         width: webmResult.cols,
         height: webmResult.rows,
         profileName: webmResult.profileName,
+        renderProfileHash,
         timingMode: webmResult.timingMode,
         outputEventCount: webmResult.outputEventCount,
         resizeEventCount: webmResult.resizeEventCount,
@@ -275,6 +289,7 @@ export async function runRecordExportCommand(
         width: webmResult.cols,
         height: webmResult.rows,
         profileName: webmResult.profileName,
+        renderProfileHash,
         timingMode: webmResult.timingMode,
         outputEventCount: webmResult.outputEventCount,
         resizeEventCount: webmResult.resizeEventCount,

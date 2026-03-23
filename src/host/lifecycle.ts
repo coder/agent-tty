@@ -31,11 +31,22 @@ interface NodeError extends Error {
 }
 
 export interface AllocateConfig {
+  home: string;
   command: string[];
-  shellCommand: string;
+  shellPath: string;
   cwd: string;
   cols: number;
   rows: number;
+  env: Record<string, string>;
+  term: string;
+  name?: string;
+}
+
+export interface LaunchHostConfig {
+  sessionId: string;
+  home: string;
+  env: Record<string, string>;
+  term: string;
 }
 
 export interface AllocateResult {
@@ -81,6 +92,17 @@ function makeInvalidCwdError(cwd: unknown, cause?: unknown): CliError {
   });
 }
 
+function makeInvalidShellError(shellPath: unknown, cause?: unknown): CliError {
+  return makeCliError(ERROR_CODES.INVALID_INPUT, {
+    message:
+      typeof shellPath === 'string' && shellPath.length > 0
+        ? `Shell path does not exist or is not accessible: ${shellPath}`
+        : 'Shell path must be a non-empty string.',
+    details: { shellPath },
+    cause,
+  });
+}
+
 function assertPositiveInteger(value: number, label: string): void {
   invariant(
     Number.isInteger(value) && value > 0,
@@ -96,12 +118,38 @@ function assertNonEmptyString(
   invariant(value.length > 0, `${label} must not be empty`);
 }
 
+function assertStringRecord(
+  value: unknown,
+  label: string,
+): asserts value is Record<string, string> {
+  invariant(
+    value !== null && typeof value === 'object',
+    `${label} must be an object`,
+  );
+
+  for (const [entryKey, entryValue] of Object.entries(value)) {
+    invariant(entryKey.length > 0, `${label} keys must not be empty`);
+    invariant(
+      typeof entryValue === 'string',
+      `${label} values must be strings`,
+    );
+  }
+}
+
 function isSessionTerminal(record: SessionRecord): boolean {
-  return record.status === 'exited';
+  return (
+    record.status === 'exited' ||
+    record.status === 'failed' ||
+    record.status === 'destroyed'
+  );
 }
 
 function isSessionActive(record: SessionRecord): boolean {
-  return record.status === 'running' || record.status === 'exiting';
+  return (
+    record.status === 'running' ||
+    record.status === 'exiting' ||
+    record.status === 'destroying'
+  );
 }
 
 function isProcessAlive(pid: number | null): boolean {
@@ -272,7 +320,14 @@ export async function allocateSession(
     rawConfig !== null && typeof rawConfig === 'object',
     'config must be an object',
   );
+  assertNonEmptyString(config.home, 'home');
   invariant(Array.isArray(config.command), 'command must be an array');
+  assertNonEmptyString(config.shellPath, 'shellPath');
+  assertStringRecord(config.env, 'env');
+  assertNonEmptyString(config.term, 'term');
+  if (config.name !== undefined) {
+    assertNonEmptyString(config.name.trim(), 'name');
+  }
   if (
     typeof config.cols !== 'number' ||
     !Number.isInteger(config.cols) ||
@@ -294,7 +349,7 @@ export async function allocateSession(
   const sessionId = ulid();
   assertNonEmptyString(sessionId, 'sessionId');
 
-  const home = await ensureHome();
+  const home = await ensureHome(config.home);
   const sessionDirectory = sessionDir(home, sessionId);
   await mkdir(sessionDirectory, { recursive: true });
 
@@ -317,8 +372,23 @@ export async function allocateSession(
     });
   }
 
+  const resolvedShellPath = resolve(config.shellPath);
+  try {
+    const shellStats = await stat(resolvedShellPath);
+    invariant(
+      shellStats.isFile(),
+      'shell path must resolve to an existing file',
+    );
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+
+    throw makeInvalidShellError(resolvedShellPath, error);
+  }
+
   const effectiveCommand =
-    config.command.length > 0 ? [...config.command] : [config.shellCommand];
+    config.command.length > 0 ? [...config.command] : [resolvedShellPath];
   invariant(effectiveCommand.length > 0, 'effective command must not be empty');
   for (const commandPart of effectiveCommand) {
     assertNonEmptyString(commandPart, 'command segment');
@@ -335,17 +405,25 @@ export async function allocateSession(
     cwd: resolvedCwd,
     cols: config.cols,
     rows: config.rows,
+    creationCols: config.cols,
+    creationRows: config.rows,
     hostPid: null,
     childPid: null,
     exitCode: null,
     exitSignal: null,
+    ...(config.name !== undefined ? { name: config.name } : {}),
+    ...(Object.keys(config.env).length > 0 ? { env: { ...config.env } } : {}),
+    term: config.term,
   });
 
   return { sessionId, sessionDirectory };
 }
 
-export function launchHost(sessionId: string): number {
-  assertNonEmptyString(sessionId, 'sessionId');
+export function launchHost(config: LaunchHostConfig): number {
+  assertNonEmptyString(config.sessionId, 'sessionId');
+  assertNonEmptyString(config.home, 'home');
+  assertStringRecord(config.env, 'env');
+  assertNonEmptyString(config.term, 'term');
   invariant(process.execPath.length > 0, 'process.execPath must not be empty');
 
   const entrypoint = process.argv[1];
@@ -356,10 +434,16 @@ export function launchHost(sessionId: string): number {
 
   const child = spawn(
     process.execPath,
-    [...process.execArgv, entrypoint, '_host', sessionId],
+    [...process.execArgv, entrypoint, '_host', config.sessionId],
     {
       detached: true,
       stdio: 'ignore',
+      env: {
+        ...process.env,
+        ...config.env,
+        AGENT_TERMINAL_HOME: config.home,
+        TERM: config.term,
+      },
     },
   );
   child.unref();
@@ -380,7 +464,22 @@ export async function destroySession(
     getSessionPaths(sessionId);
   const manifest = await readSessionManifestOrThrow(sessionId, manifestFile);
 
+  if (manifest.status === 'destroyed') {
+    throw makeCliError(ERROR_CODES.SESSION_ALREADY_DESTROYED, {
+      message: `Session "${sessionId}" is already destroyed.`,
+      details: { sessionId },
+    });
+  }
+
   if (isSessionTerminal(manifest)) {
+    const destroyedManifest: SessionRecord = {
+      ...manifest,
+      status: 'destroyed',
+      updatedAt: new Date().toISOString(),
+    };
+
+    await writeManifest(manifestFile, destroyedManifest);
+    await unlinkIfPresent(socketFile);
     return;
   }
 
@@ -505,7 +604,7 @@ export async function listSessions(
       }
     }
 
-    if (all !== true && manifest.status === 'exited') {
+    if (all !== true && isSessionTerminal(manifest)) {
       continue;
     }
 
@@ -539,12 +638,36 @@ export async function reconcileSession(
     killProcessBestEffort(manifest.childPid);
   }
 
+  let reconciledStatus: SessionRecord['status'];
+  let failureReason: string | undefined;
+
+  switch (manifest.status) {
+    case 'running':
+      reconciledStatus = 'failed';
+      failureReason =
+        manifest.hostPid !== null
+          ? `host process died unexpectedly (pid: ${String(manifest.hostPid)})`
+          : 'host process died unexpectedly';
+      break;
+    case 'exiting':
+      reconciledStatus = 'exited';
+      break;
+    case 'destroying':
+      reconciledStatus = 'destroyed';
+      break;
+    default:
+      reconciledStatus = 'failed';
+      failureReason = `unexpected pre-reconcile status: ${manifest.status}`;
+      break;
+  }
+
   const reconciledManifest: SessionRecord = {
     ...manifest,
-    status: 'exited',
+    status: reconciledStatus,
     updatedAt: new Date().toISOString(),
     hostPid: null,
     childPid: null,
+    ...(failureReason !== undefined ? { failureReason } : {}),
   };
 
   await writeManifest(manifestFile, reconciledManifest);

@@ -8,8 +8,23 @@ const PositiveIntSchema = z.number().int().positive();
 const NonNegativeIntSchema = z.number().int().nonnegative();
 const IsoDatetimeSchema = z.iso.datetime();
 const SnapshotFormatSchema = z.enum(['structured', 'text']);
+const SessionEnvSchema = z.record(NonEmptyStringSchema, z.string());
+const Sha256HexSchema = z
+  .string()
+  .regex(
+    /^[a-f0-9]{64}$/u,
+    'must be a 64-character lowercase SHA-256 hex string',
+  );
 
-export const SessionStatusSchema = z.enum(['running', 'exiting', 'exited']);
+export const SessionStatusSchema = z.enum([
+  'running',
+  // Transitional state kept for reconcileSession()/recordExit() compatibility.
+  'exiting',
+  'exited',
+  'failed',
+  'destroying',
+  'destroyed',
+]);
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 
 export const SessionRecordSchema = z
@@ -19,10 +34,16 @@ export const SessionRecordSchema = z
     createdAt: IsoDatetimeSchema,
     updatedAt: IsoDatetimeSchema,
     status: SessionStatusSchema,
+    failureReason: z.string().min(1).optional(),
     command: z.array(z.string()).min(1),
     cwd: z.string(),
+    name: NonEmptyStringSchema.optional(),
+    env: SessionEnvSchema.optional(),
+    term: NonEmptyStringSchema.optional(),
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
+    creationCols: PositiveIntSchema.optional(),
+    creationRows: PositiveIntSchema.optional(),
     hostPid: PositiveIntSchema.nullable(),
     childPid: PositiveIntSchema.nullable(),
     exitCode: z.number().int().nullable(),
@@ -197,6 +218,7 @@ export type VisibleLine = z.infer<typeof VisibleLineSchema>;
 export const SnapshotParamsSchema = z
   .object({
     format: SnapshotFormatSchema.optional(),
+    includeScrollback: z.boolean().optional(),
   })
   .strict();
 export type SnapshotParams = z.infer<typeof SnapshotParamsSchema>;
@@ -212,6 +234,7 @@ export const StructuredSnapshotResultSchema = z
     cursorCol: NonNegativeIntSchema,
     isAltScreen: z.boolean(),
     visibleLines: z.array(VisibleLineSchema),
+    scrollbackLines: z.array(VisibleLineSchema).optional(),
   })
   .strict();
 export type StructuredSnapshotResult = z.infer<
@@ -254,6 +277,11 @@ export const ScreenshotResultSchema = z
     rows: PositiveIntSchema,
     artifactPath: NonEmptyStringSchema,
     pngSizeBytes: PositiveIntSchema,
+    rendererBackend: z.string().optional(),
+    pixelWidth: PositiveIntSchema.optional(),
+    pixelHeight: PositiveIntSchema.optional(),
+    sha256: Sha256HexSchema.optional(),
+    renderProfileHash: Sha256HexSchema.optional(),
   })
   .strict();
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;
@@ -263,6 +291,8 @@ export const WaitForRenderParamsSchema = z
     text: TextMatchSchema.optional(),
     regex: RegexPatternSchema.optional(),
     screenStableMs: PositiveIntSchema.optional(),
+    cursorRow: NonNegativeIntSchema.optional(),
+    cursorCol: NonNegativeIntSchema.optional(),
     timeoutMs: PositiveIntSchema.optional(),
   })
   .strict()
@@ -270,12 +300,20 @@ export const WaitForRenderParamsSchema = z
     const hasText = value.text !== undefined;
     const hasRegex = value.regex !== undefined;
     const hasScreenStableMs = value.screenStableMs !== undefined;
+    const hasCursorRow = value.cursorRow !== undefined;
+    const hasCursorCol = value.cursorCol !== undefined;
 
-    if (!hasText && !hasRegex && !hasScreenStableMs) {
+    if (
+      !hasText &&
+      !hasRegex &&
+      !hasScreenStableMs &&
+      !hasCursorRow &&
+      !hasCursorCol
+    ) {
       ctx.addIssue({
         code: 'custom',
         message:
-          'At least one of text, regex, or screenStableMs must be provided.',
+          'At least one of text, regex, screenStableMs, cursorRow, or cursorCol must be provided.',
       });
     }
 
@@ -302,6 +340,8 @@ export const WaitForRenderResultSchema = z
     matched: z.boolean(),
     timedOut: z.boolean(),
     matchedText: z.string().optional(),
+    cursorRow: NonNegativeIntSchema.optional(),
+    cursorCol: NonNegativeIntSchema.optional(),
     capturedAtSeq: NonNegativeIntSchema,
   })
   .strict();

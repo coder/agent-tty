@@ -1,0 +1,94 @@
+{
+  "scenario": "resize",
+  "bundle": "dogfood/20260322-dogfood-resize",
+  "notes": "notes.md",
+  "commands": [
+    {
+      "step": "01-create",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts create --cols 120 --rows 40 --json -- npx tsx test/fixtures/apps/resize-demo/main.ts"
+    },
+    {
+      "step": "02-wait-size",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts wait 01KMBTZ1159XHVV1FX7WJ4YC4X --text SIZE: --json"
+    },
+    {
+      "step": "03-screenshot-before-resize",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts screenshot 01KMBTZ1159XHVV1FX7WJ4YC4X --json"
+    },
+    {
+      "step": "04-resize-large",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts resize 01KMBTZ1159XHVV1FX7WJ4YC4X --cols 140 --rows 50 --json"
+    },
+    {
+      "step": "05-wait-stable-large",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts wait 01KMBTZ1159XHVV1FX7WJ4YC4X --screen-stable-ms 500 --json"
+    },
+    {
+      "step": "06-screenshot-after-resize-large",
+      "exitCode": 1,
+      "command": "npx tsx src/cli/main.ts screenshot 01KMBTZ1159XHVV1FX7WJ4YC4X --json"
+    },
+    {
+      "step": "07-resize-small",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts resize 01KMBTZ1159XHVV1FX7WJ4YC4X --cols 80 --rows 24 --json"
+    },
+    {
+      "step": "08-wait-stable-small",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts wait 01KMBTZ1159XHVV1FX7WJ4YC4X --screen-stable-ms 500 --json"
+    },
+    {
+      "step": "09-screenshot-after-resize-small",
+      "exitCode": 1,
+      "command": "npx tsx src/cli/main.ts screenshot 01KMBTZ1159XHVV1FX7WJ4YC4X --json"
+    },
+    {
+      "step": "10-snapshot-final",
+      "exitCode": 1,
+      "command": "npx tsx src/cli/main.ts snapshot 01KMBTZ1159XHVV1FX7WJ4YC4X --json"
+    },
+    {
+      "step": "11-record-export-webm",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts record export 01KMBTZ1159XHVV1FX7WJ4YC4X --format webm --out /home/coder/.mux/src/agent-terminal/agent_exec_3a3efb7ac5/dogfood/20260322-dogfood-resize/videos/resize-demo.webm --json"
+    },
+    {
+      "step": "12-record-export-cast",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts record export 01KMBTZ1159XHVV1FX7WJ4YC4X --format asciicast --out /home/coder/.mux/src/agent-terminal/agent_exec_3a3efb7ac5/dogfood/20260322-dogfood-resize/recordings/resize-demo.cast --json"
+    },
+    {
+      "step": "13-destroy",
+      "exitCode": 0,
+      "command": "npx tsx src/cli/main.ts destroy 01KMBTZ1159XHVV1FX7WJ4YC4X --json"
+    }
+  ],
+  "artifacts": {
+    "beforeResizeJson": "03-screenshot-before-resize.json",
+    "beforeResizePng": "screenshots/01-before-resize.png",
+    "afterResizeLargeJsonError": "06-screenshot-after-resize-large.json",
+    "afterResizeSmallJsonError": "09-screenshot-after-resize-small.json",
+    "snapshotJsonError": "10-snapshot-final.json",
+    "webmJson": "11-record-export-webm.json",
+    "webm": "videos/resize-demo.webm",
+    "castJson": "12-record-export-cast.json",
+    "cast": "recordings/resize-demo.cast",
+    "destroyJson": "13-destroy.json",
+    "notes": "notes.md"
+  },
+  "reviewEvidence": {
+    "castSizeLines": [
+      "[0,\"o\",\"SIZE: 120x40\\r\\n\"]",
+      "[3.765,\"o\",\"SIZE: 140x50\\r\\n\"]",
+      "[9.343,\"o\",\"SIZE: 80x24\\r\\n\"]"
+    ],
+    "postResizeRenderStatus": "failed",
+    "failureMessage": "replay input initial dimensions changed after the first replay"
+  }
+}

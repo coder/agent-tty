@@ -62,8 +62,18 @@ describe('generateAsciicast', () => {
       },
     ];
 
-    const first = generateAsciicast('session-01', manifest, events);
-    const second = generateAsciicast('session-01', manifest, events);
+    const first = generateAsciicast(
+      'session-01',
+      manifest,
+      events,
+      '0.1.0-test',
+    );
+    const second = generateAsciicast(
+      'session-01',
+      manifest,
+      events,
+      '0.1.0-test',
+    );
     const lines = parseAsciicastLines(first.contents);
 
     expect(first.contents).toBe(second.contents);
@@ -73,6 +83,8 @@ describe('generateAsciicast', () => {
       height: 24,
       timestamp: Date.parse('2026-03-19T12:00:01.000Z') / 1000,
       title: 'session-01',
+      sessionId: 'session-01',
+      toolVersion: '0.1.0-test',
       env: {
         TERM: 'xterm-256color',
       },
@@ -88,6 +100,22 @@ describe('generateAsciicast', () => {
     expect(first.markerCount).toBe(0);
     expect(first.capturedAtSeq).toBe(3);
     expect(first.durationMs).toBe(2000);
+  });
+
+  it('includes sessionId and omits toolVersion when not provided', () => {
+    const manifest = createManifest();
+
+    const result = generateAsciicast('session-01', manifest, []);
+    const [headerLine] = parseAsciicastLines(result.contents) as [
+      Record<string, unknown>,
+    ];
+
+    expect(headerLine).toMatchObject({
+      version: 2,
+      title: 'session-01',
+      sessionId: 'session-01',
+    });
+    expect(headerLine).not.toHaveProperty('toolVersion');
   });
 
   it('emits marker events as m lines in chronological order', () => {
@@ -159,6 +187,7 @@ describe('generateAsciicast', () => {
         height: 40,
         timestamp: Date.parse('2026-03-19T12:34:56.000Z') / 1000,
         title: 'session-01',
+        sessionId: 'session-01',
         env: {
           TERM: 'xterm-256color',
         },

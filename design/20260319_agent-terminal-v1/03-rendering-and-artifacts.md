@@ -31,29 +31,32 @@ That distinction must remain explicit in both code and documentation.
 
 V1 should support four artifact classes.
 
-| Artifact          | Purpose                                              | Required in v1 |
-| ----------------- | ---------------------------------------------------- | -------------- |
-| Semantic snapshot | Structured screen state for reasoning and assertions | Yes            |
-| Screenshot PNG    | Visual verification of layout, color, and wrapping   | Yes            |
-| Asciicast         | Portable terminal replay artifact                    | Not yet shipped |
-| Replay video      | Reviewer-friendly visual playback                    | Not yet shipped |
+| Artifact          | Purpose                                              | Required in v1 | Shipped as of 2026-03-22 |
+| ----------------- | ---------------------------------------------------- | -------------- | ------------------------ |
+| Semantic snapshot | Structured screen state for reasoning and assertions | Yes            | Yes                      |
+| Screenshot PNG    | Visual verification of layout, color, and wrapping   | Yes            | Yes                      |
+| Asciicast         | Portable terminal replay artifact                    | Yes            | Yes                      |
+| Replay video      | Reviewer-friendly visual playback                    | Yes            | Yes                      |
 
-## Current implementation status (2026-03-21)
+## Current implementation status (2026-03-22)
 
-The current Week 2 implementation ships the first two artifact classes from this design:
+The current implementation now ships all four artifact classes from this design:
 
 - semantic snapshots,
-- and screenshot PNGs.
+- screenshot PNGs,
+- asciicast export,
+- and replay-video export.
 
-It does **not** yet ship asciicast export or replay video export; those remain deferred and are tracked in `WEEK2-GAPS.md`.
-
-The current renderer path is:
+The current renderer/export path is:
 
 - host-prepared replay input,
 - lazy `ghostty-web` boot in headless Chromium,
 - viewport-scoped semantic extraction,
 - deterministic screenshot capture,
+- deterministic replay export to asciicast and WebM,
 - and manifest-backed artifact storage under `artifacts/`.
+
+Remaining follow-on work is now mostly about fidelity and design parity rather than missing artifact classes. Scrollback snapshots and richer screenshot/export metadata now ship; the biggest open items are per-cell style metadata, bundled deterministic font assets, the fuller `SnapshotCell` surface, and more explicit replay timing controls. These are tracked in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) and [09-week-4-plan.md](./09-week-4-plan.md).
 
 ## 4. Canonical replay model
 
@@ -519,3 +522,19 @@ This area is complete only when:
 - replay video export exists and is reviewable,
 - every artifact is manifest-backed and hash-stamped,
 - and renderer crashes can be repaired from replay without losing the session.
+
+## 18. Week 4 implementation status
+
+As of 2026-03-22, Week 4 materially narrowed the rendering/artifact delta:
+
+- shipped scrollback-aware snapshots through `snapshot --include-scrollback` / `includeScrollback`,
+- shipped screenshot metadata enrichment (`rendererBackend`, `pixelWidth`, `pixelHeight`, `sha256`, and `renderProfileHash`),
+- shipped render-profile hashing via `hashProfile(...)`,
+- and shipped richer asciicast/WebM export metadata for offline review.
+
+The remaining design-level follow-ons are:
+
+- per-cell styling and the fuller `SnapshotCell` contract,
+- a bundled deterministic font asset instead of host `monospace`,
+- the broader snapshot schema sketched earlier in this document,
+- and a fuller replay-timing option surface for reviewer-facing video export.

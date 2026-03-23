@@ -209,6 +209,38 @@ describe('renderer schemas', () => {
     ).toBe(true);
   });
 
+  it('accepts optional scrollback and screenshot metadata fields', () => {
+    expect(
+      SemanticSnapshotSchema.safeParse({
+        sessionId: 'session-01',
+        capturedAtSeq: 3,
+        cols: 80,
+        rows: 24,
+        cursorRow: 2,
+        cursorCol: 4,
+        isAltScreen: false,
+        visibleLines: [{ row: 0, text: 'visible' }],
+        scrollbackLines: [{ row: 99, text: 'scrollback' }],
+      }).success,
+    ).toBe(true);
+    expect(
+      ScreenshotResultSchema.safeParse({
+        sessionId: 'session-01',
+        capturedAtSeq: 3,
+        profileName: 'reference-dark',
+        cols: 80,
+        rows: 24,
+        artifactPath: '/tmp/screenshot.png',
+        pngSizeBytes: 1024,
+        rendererBackend: 'ghostty-web',
+        pixelWidth: 800,
+        pixelHeight: 600,
+        sha256: 'a'.repeat(64),
+        renderProfileHash: 'b'.repeat(64),
+      }).success,
+    ).toBe(true);
+  });
+
   it('rejects invalid render profile colors', () => {
     const result = RenderProfileConfigSchema.safeParse({
       name: 'broken-profile',

@@ -1,0 +1,113 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-22T22:32:21.510Z",
+  "result": {
+    "format": "structured",
+    "sessionId": "01KMBTTKERFNKCZBKESJPTKY4N",
+    "capturedAtSeq": 6,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 4,
+    "cursorCol": 0,
+    "isAltScreen": false,
+    "visibleLines": [
+      {
+        "row": 0,
+        "text": "CRASH DEMO START"
+      },
+      {
+        "row": 1,
+        "text": "Persist this line for post-mortem replay."
+      },
+      {
+        "row": 2,
+        "text": "Crash demo will exit with code 1."
+      },
+      {
+        "row": 3,
+        "text": "CRASH DEMO EXITING"
+      },
+      {
+        "row": 4,
+        "text": ""
+      },
+      {
+        "row": 5,
+        "text": ""
+      },
+      {
+        "row": 6,
+        "text": ""
+      },
+      {
+        "row": 7,
+        "text": ""
+      },
+      {
+        "row": 8,
+        "text": ""
+      },
+      {
+        "row": 9,
+        "text": ""
+      },
+      {
+        "row": 10,
+        "text": ""
+      },
+      {
+        "row": 11,
+        "text": ""
+      },
+      {
+        "row": 12,
+        "text": ""
+      },
+      {
+        "row": 13,
+        "text": ""
+      },
+      {
+        "row": 14,
+        "text": ""
+      },
+      {
+        "row": 15,
+        "text": ""
+      },
+      {
+        "row": 16,
+        "text": ""
+      },
+      {
+        "row": 17,
+        "text": ""
+      },
+      {
+        "row": 18,
+        "text": ""
+      },
+      {
+        "row": 19,
+        "text": ""
+      },
+      {
+        "row": 20,
+        "text": ""
+      },
+      {
+        "row": 21,
+        "text": ""
+      },
+      {
+        "row": 22,
+        "text": ""
+      },
+      {
+        "row": 23,
+        "text": ""
+      }
+    ]
+  }
+}

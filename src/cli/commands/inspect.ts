@@ -5,12 +5,13 @@ import {
 import type { SessionRecord } from '../../protocol/schemas.js';
 
 import { CliError } from '../errors.js';
+import type { CommandContext } from '../context.js';
+
 import { emitSuccess } from '../output.js';
 import { reconcileSession } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { readManifest, readManifestIfExists } from '../../storage/manifests.js';
-import { resolveHome } from '../../storage/home.js';
 import {
   manifestPath,
   sessionDir,
@@ -18,12 +19,13 @@ import {
 } from '../../storage/sessionPaths.js';
 
 interface CommandOptions {
+  context: CommandContext;
   json: boolean;
   sessionId: string;
 }
 
 function formatSessionLines(session: SessionRecord): string[] {
-  return [
+  const lines = [
     `Session ID: ${session.sessionId}`,
     `Status: ${session.status}`,
     `Command: ${session.command.join(' ')}`,
@@ -36,12 +38,16 @@ function formatSessionLines(session: SessionRecord): string[] {
     `Exit Code: ${String(session.exitCode ?? '-')}`,
     `Exit Signal: ${session.exitSignal ?? '-'}`,
   ];
+  if (session.failureReason !== undefined) {
+    lines.push(`Failure Reason: ${session.failureReason}`);
+  }
+  return lines;
 }
 
 export async function runInspectCommand(
   options: CommandOptions,
 ): Promise<void> {
-  const home = resolveHome();
+  const home = options.context.home;
   const sessionDirectory = sessionDir(home, options.sessionId);
   const manifestFile = manifestPath(sessionDirectory);
   let session = await readManifestIfExists(manifestFile);
@@ -56,7 +62,11 @@ export async function runInspectCommand(
     });
   }
 
-  if (session.status !== 'exited') {
+  const isOffline =
+    session.status === 'exited' ||
+    session.status === 'failed' ||
+    session.status === 'destroyed';
+  if (!isOffline) {
     try {
       const rawResult: unknown = await sendRpc(
         socketPath(sessionDirectory),
