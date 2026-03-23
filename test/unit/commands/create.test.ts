@@ -45,6 +45,7 @@ describe('create command', () => {
     colorEnabled: true,
     logLevel: 'info',
     profileDefault: undefined,
+    configFile: null,
   } as const;
 
   beforeEach(() => {

@@ -4,6 +4,7 @@ import process from 'node:process';
 import type { Command } from 'commander';
 
 import { DEFAULT_LOG_LEVEL } from '../config/defaults.js';
+import { loadConfigFile, type ConfigFile } from '../config/resolveConfig.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { resolveHome } from '../storage/home.js';
 import { invariant } from '../util/assert.js';
@@ -19,6 +20,7 @@ export interface GlobalCliOptions {
   timeoutMs?: number;
   color?: boolean;
   logLevel?: string;
+  profile?: string;
   profileDefault?: string;
 }
 
@@ -28,6 +30,7 @@ export interface CommandContext {
   readonly colorEnabled: boolean;
   readonly logLevel: LogLevel;
   readonly profileDefault: string | undefined;
+  readonly configFile: ConfigFile | null;
 }
 
 interface CommandWithContext extends Command {
@@ -94,10 +97,10 @@ export function resolveLogLevel(raw?: string): LogLevel {
   });
 }
 
-export function resolveCommandContext(
+export async function resolveCommandContext(
   options: GlobalCliOptions,
   env: NodeJS.ProcessEnv = process.env,
-): CommandContext {
+): Promise<CommandContext> {
   const configuredHome = options.home ?? env.AGENT_TERMINAL_HOME;
   const home =
     configuredHome === undefined
@@ -106,10 +109,15 @@ export function resolveCommandContext(
           configuredHome,
           options.home !== undefined ? '--home' : 'AGENT_TERMINAL_HOME',
         );
+  const configFile = await loadConfigFile(home);
   const logLevel = resolveLogLevel(
-    options.logLevel ?? env.AGENT_TERMINAL_LOG_LEVEL,
+    options.logLevel ?? env.AGENT_TERMINAL_LOG_LEVEL ?? configFile?.logLevel,
   );
-  const profileDefault = options.profileDefault ?? env.AGENT_TERMINAL_PROFILE;
+  const profileDefault =
+    options.profileDefault ??
+    options.profile ??
+    env.AGENT_TERMINAL_PROFILE ??
+    configFile?.defaultProfile;
 
   return Object.freeze({
     home,
@@ -117,6 +125,7 @@ export function resolveCommandContext(
     colorEnabled: options.color ?? true,
     logLevel,
     profileDefault,
+    configFile,
   });
 }
 
@@ -138,14 +147,16 @@ export function setCommandContext(
   return context;
 }
 
-export function getCommandContext(command: Command): CommandContext {
+export async function getCommandContext(
+  command: Command,
+): Promise<CommandContext> {
   const rootCommand = getRootCommand(command);
   const cachedContext = rootCommand[COMMAND_CONTEXT_SYMBOL];
   if (cachedContext !== undefined) {
     return cachedContext;
   }
 
-  const context = resolveCommandContext(
+  const context = await resolveCommandContext(
     command.optsWithGlobals<GlobalCliOptions>(),
   );
   return setCommandContext(command, context);

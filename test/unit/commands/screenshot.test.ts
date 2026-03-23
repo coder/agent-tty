@@ -75,6 +75,7 @@ const TEST_CONTEXT = {
   colorEnabled: true,
   logLevel: 'info',
   profileDefault: undefined,
+  configFile: null,
 } as const;
 const TEST_SCREENSHOT_SHA256 = 'a'.repeat(64);
 const TEST_RENDER_PROFILE_HASH = 'b'.repeat(64);
@@ -202,7 +203,7 @@ describe('screenshot command', () => {
     mocks.rm.mockResolvedValue(undefined);
   });
 
-  it('requests screenshots with the default render profile', async () => {
+  it('falls back to the default render profile when no profile is configured', async () => {
     const result = createScreenshotResult({
       capturedAtSeq: 12,
       cols: 120,
@@ -266,7 +267,31 @@ describe('screenshot command', () => {
     );
   });
 
-  it('uses an explicit render profile and preserves JSON mode', async () => {
+  it('uses the context default profile when the command omits --profile', async () => {
+    const result = createScreenshotResult({
+      capturedAtSeq: 18,
+      profileName: 'configured-profile',
+      artifactPath: '/tmp/configured.png',
+    });
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runScreenshotCommand({
+      context: {
+        ...TEST_CONTEXT,
+        profileDefault: 'configured-profile',
+      },
+      json: false,
+      sessionId: 'session-01',
+    });
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'screenshot',
+      { profile: 'configured-profile' },
+    );
+  });
+
+  it('uses an explicit render profile over the context default and preserves JSON mode', async () => {
     const result = createScreenshotResult({
       capturedAtSeq: 22,
       profileName: 'reference-light',
@@ -276,7 +301,10 @@ describe('screenshot command', () => {
     mocks.sendRpc.mockResolvedValue(result);
 
     await runScreenshotCommand({
-      context: TEST_CONTEXT,
+      context: {
+        ...TEST_CONTEXT,
+        profileDefault: 'configured-profile',
+      },
       json: true,
       sessionId: 'session-01',
       profile: 'reference-light',

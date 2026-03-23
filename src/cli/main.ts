@@ -86,7 +86,7 @@ function wrapAction<Args extends unknown[]>(
     const command = getActionCommand(rawArgs);
 
     try {
-      const context = getCommandContext(command);
+      const context = await getCommandContext(command);
       setColorEnabled(context.colorEnabled);
       const args = rawArgs.slice(0, -1) as Args;
       await fn(...([...args, context] as [...Args, CommandContext]));
@@ -115,10 +115,12 @@ async function main(): Promise<void> {
       'Set a shared CLI timeout in milliseconds',
       parseTimeoutMsOption,
     )
-    .option('--no-color', 'Disable ANSI color in human-readable output');
+    .option('--no-color', 'Disable ANSI color in human-readable output')
+    .option('--log-level <level>', 'Set log level (debug, info, warn, error)')
+    .option('--profile <name>', 'Default render profile name');
 
-  program.hook('preAction', (_thisCommand, actionCommand) => {
-    const context = resolveCommandContext(
+  program.hook('preAction', async (_thisCommand, actionCommand) => {
+    const context = await resolveCommandContext(
       actionCommand.optsWithGlobals<GlobalCliOptions>(),
     );
     process.env.AGENT_TERMINAL_HOME = context.home;
@@ -493,7 +495,7 @@ async function main(): Promise<void> {
   program
     .command('screenshot <session-id>')
     .description('Capture a rendered screenshot')
-    .option('--profile <name>', 'Render profile name', 'reference-dark')
+    .option('--profile <name>', 'Render profile name')
     .option('--show-cursor', 'Show the terminal cursor in the screenshot')
     .option('--hide-cursor', 'Hide the terminal cursor in the screenshot')
     .option('--json', 'Emit a JSON command envelope', false)
@@ -503,7 +505,7 @@ async function main(): Promise<void> {
         async (
           sessionId: string,
           options: {
-            profile: string;
+            profile?: string;
             showCursor: boolean;
             hideCursor: boolean;
             json: boolean;
@@ -527,7 +529,7 @@ async function main(): Promise<void> {
             context,
             json: options.json,
             sessionId,
-            profile: options.profile,
+            ...(options.profile === undefined ? {} : { profile: options.profile }),
             ...(cursorVisible === undefined
               ? {}
               : { showCursor: cursorVisible }),

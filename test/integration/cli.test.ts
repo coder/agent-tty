@@ -273,6 +273,56 @@ describe('CLI integration', () => {
     expect(parsed.error.message).toContain('missing-session');
   });
 
+  it('accepts --log-level as a root flag', () => {
+    const result = runCli(
+      ['--log-level', 'debug', 'version', '--json'],
+      testEnv(),
+    );
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+
+    const parsed = JSON.parse(result.stdout) as SuccessEnvelope<{
+      cliVersion: string;
+    }>;
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.command).toBe('version');
+  });
+
+  it('accepts --profile as a root flag', () => {
+    const result = runCli(
+      ['--profile', 'my-profile', 'version', '--json'],
+      testEnv(),
+    );
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+
+    const parsed = JSON.parse(result.stdout) as SuccessEnvelope<{
+      cliVersion: string;
+    }>;
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.command).toBe('version');
+  });
+
+  it('rejects invalid --log-level values', () => {
+    const result = runCli(
+      ['--log-level', 'bogus', 'version', '--json'],
+      testEnv(),
+    );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe('');
+
+    const parsed = JSON.parse(result.stdout) as ErrorEnvelope;
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.command).toBe('agent-terminal');
+    expect(parsed.error.code).toBe('INVALID_INPUT');
+    expect(parsed.error.message).toBe(
+      'Log level must be one of debug, info, warn, or error.',
+    );
+  });
+
   it('maps invalid root options to exit code 2', () => {
     const result = runCli(
       ['--home', 'relative/path', 'version', '--json'],

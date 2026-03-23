@@ -90,6 +90,7 @@ const TEST_CONTEXT = {
   colorEnabled: true,
   logLevel: 'info',
   profileDefault: undefined,
+  configFile: null,
 } as const;
 
 function createSessionRecord() {

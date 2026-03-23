@@ -46,10 +46,12 @@ interface ResolvedScreenshotRequest {
 }
 
 function resolveScreenshotRequest(
-  profile: string | undefined,
+  commandProfile: string | undefined,
+  contextProfileDefault: string | undefined,
   showCursor: boolean | undefined,
 ): ResolvedScreenshotRequest {
-  const effectiveProfile = profile ?? DEFAULT_SCREENSHOT_PROFILE;
+  const effectiveProfile =
+    commandProfile ?? contextProfileDefault ?? DEFAULT_SCREENSHOT_PROFILE;
   const requestResult = ScreenshotParamsSchema.safeParse({
     profile: effectiveProfile,
     ...(showCursor === undefined ? {} : { showCursor }),
@@ -218,6 +220,7 @@ export async function runScreenshotCommand(
 ): Promise<void> {
   const { profile, showCursor } = resolveScreenshotRequest(
     options.profile,
+    options.context.profileDefault,
     options.showCursor,
   );
   const home = options.context.home;
