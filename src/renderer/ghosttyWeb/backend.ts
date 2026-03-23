@@ -18,7 +18,7 @@ import {
 
 import { invariant, assertString, unreachable } from '../../util/assert.js';
 import type {
-  AcceleratedTimingOptions,
+  ReplayTimingOptions,
   SnapshotOptions,
   VideoCapableRendererBackend,
   VideoRecordingOptions,
@@ -1006,7 +1006,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
 
   public async replayWithTiming(
     input: ReplayInput,
-    options: AcceleratedTimingOptions,
+    timing: ReplayTimingOptions,
   ): Promise<ReplayState> {
     const page = this.requireOperationalPage('replayWithTiming()');
 
@@ -1033,22 +1033,75 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         ' to ' +
         String(input.targetSeq),
     );
+    const timingValue: unknown = timing;
+    invariant(
+      typeof timingValue === 'object' && timingValue !== null,
+      'replayWithTiming timing must be an object',
+    );
+    assertString(
+      (timingValue as { mode?: unknown }).mode,
+      'replayWithTiming timing.mode must be a string',
+    );
 
-    const maxGapMs = options.maxGapMs;
-    const minFrameHoldMs = options.minFrameHoldMs;
-    const finalFrameHoldMs = options.finalFrameHoldMs;
-    assertNonNegativeInteger(
-      maxGapMs,
-      'replayWithTiming maxGapMs must be a non-negative integer',
-    );
-    assertNonNegativeInteger(
-      minFrameHoldMs,
-      'replayWithTiming minFrameHoldMs must be a non-negative integer',
-    );
-    assertNonNegativeInteger(
-      finalFrameHoldMs,
-      'replayWithTiming finalFrameHoldMs must be a non-negative integer',
-    );
+    let resolvedMinFrameHoldMs: number;
+    let finalFrameHoldMs: number;
+    switch (timing.mode) {
+      case 'accelerated': {
+        assertNonNegativeInteger(
+          timing.maxGapMs,
+          'replayWithTiming maxGapMs must be a non-negative integer',
+        );
+        assertNonNegativeInteger(
+          timing.minFrameHoldMs,
+          'replayWithTiming minFrameHoldMs must be a non-negative integer',
+        );
+        assertNonNegativeInteger(
+          timing.finalFrameHoldMs,
+          'replayWithTiming finalFrameHoldMs must be a non-negative integer',
+        );
+        resolvedMinFrameHoldMs = timing.minFrameHoldMs;
+        finalFrameHoldMs = timing.finalFrameHoldMs;
+        break;
+      }
+      case 'recorded': {
+        assertNonNegativeInteger(
+          timing.finalFrameHoldMs,
+          'replayWithTiming finalFrameHoldMs must be a non-negative integer',
+        );
+        resolvedMinFrameHoldMs = 16;
+        finalFrameHoldMs = timing.finalFrameHoldMs;
+        break;
+      }
+      case 'max-speed': {
+        assertNonNegativeInteger(
+          timing.minFrameHoldMs,
+          'replayWithTiming minFrameHoldMs must be a non-negative integer',
+        );
+        assertNonNegativeInteger(
+          timing.finalFrameHoldMs,
+          'replayWithTiming finalFrameHoldMs must be a non-negative integer',
+        );
+        resolvedMinFrameHoldMs = timing.minFrameHoldMs;
+        finalFrameHoldMs = timing.finalFrameHoldMs;
+        break;
+      }
+      default: {
+        unreachable(timing, 'unsupported replay timing mode');
+      }
+    }
+
+    const computeInterEventDelay = (interEventDelayMs: number): number => {
+      switch (timing.mode) {
+        case 'accelerated':
+          return Math.min(interEventDelayMs, timing.maxGapMs);
+        case 'recorded':
+          return interEventDelayMs;
+        case 'max-speed':
+          return 0;
+        default:
+          return unreachable(timing, 'unsupported replay timing mode');
+      }
+    };
 
     const waitForDelay = async (delayMs: number): Promise<void> => {
       assertNonNegativeInteger(
@@ -1085,7 +1138,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       this.initialReplayRows = input.initialRows;
       this.currentCols = input.initialCols;
       this.currentRows = input.initialRows;
-      await waitForDelay(minFrameHoldMs);
+      await waitForDelay(resolvedMinFrameHoldMs);
     } else {
       invariant(
         this.initialReplayCols === input.initialCols &&
@@ -1109,7 +1162,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
 
       await this.flushOutputBatch(page, pendingOutputChunks);
       pendingOutputChunks = [];
-      await waitForDelay(minFrameHoldMs);
+      await waitForDelay(resolvedMinFrameHoldMs);
     };
 
     for (const event of input.events) {
@@ -1140,7 +1193,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           interEventDelayMs >= 0,
           'replay event timestamps must be ordered non-decreasingly',
         );
-        await waitForDelay(Math.min(interEventDelayMs, maxGapMs));
+        await waitForDelay(computeInterEventDelay(interEventDelayMs));
       }
       previousProcessedEventTimestampMs = eventTimestampMs;
 
@@ -1164,7 +1217,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           this.currentCols = event.payload.cols;
           this.currentRows = event.payload.rows;
           resizeEventCount += 1;
-          await waitForDelay(minFrameHoldMs);
+          await waitForDelay(resolvedMinFrameHoldMs);
           break;
         }
         case 'marker': {

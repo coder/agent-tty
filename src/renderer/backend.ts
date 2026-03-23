@@ -41,16 +41,33 @@ export interface VideoRecordingOptions {
 }
 
 export interface AcceleratedTimingOptions {
+  mode: 'accelerated';
   maxGapMs: number;
   minFrameHoldMs: number;
   finalFrameHoldMs: number;
 }
 
+export interface RecordedTimingOptions {
+  mode: 'recorded';
+  finalFrameHoldMs: number;
+}
+
+export interface MaxSpeedTimingOptions {
+  mode: 'max-speed';
+  minFrameHoldMs: number;
+  finalFrameHoldMs: number;
+}
+
+export type ReplayTimingOptions =
+  | AcceleratedTimingOptions
+  | RecordedTimingOptions
+  | MaxSpeedTimingOptions;
+
 export interface VideoCapableRendererBackend extends RendererBackend {
   /** Replay events with controlled timing for video capture. */
   replayWithTiming(
     input: ReplayInput,
-    timing: AcceleratedTimingOptions,
+    timing: ReplayTimingOptions,
   ): Promise<ReplayState>;
 
   /** Finalize and save the video recording to the given path. */
