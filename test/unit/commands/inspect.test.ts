@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 
 const mocks = vi.hoisted(() => ({
+  countEventLogEntries: vi.fn(),
   emitSuccess: vi.fn(),
   reconcileSession: vi.fn(),
   sendRpc: vi.fn(),
@@ -10,12 +11,17 @@ const mocks = vi.hoisted(() => ({
   readManifestIfExists: vi.fn(),
   resolveHome: vi.fn(),
   sessionDir: vi.fn(),
+  eventLogPath: vi.fn(),
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
 }));
 
 vi.mock('../../../src/cli/output.js', () => ({
   emitSuccess: mocks.emitSuccess,
+}));
+
+vi.mock('../../../src/host/eventLog.js', () => ({
+  countEventLogEntries: mocks.countEventLogEntries,
 }));
 
 vi.mock('../../../src/host/lifecycle.js', () => ({
@@ -37,6 +43,7 @@ vi.mock('../../../src/storage/home.js', () => ({
 
 vi.mock('../../../src/storage/sessionPaths.js', () => ({
   sessionDir: mocks.sessionDir,
+  eventLogPath: mocks.eventLogPath,
   manifestPath: mocks.manifestPath,
   socketPath: mocks.socketPath,
 }));
@@ -72,6 +79,10 @@ function createSessionRecord(
   };
 }
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('inspect command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -83,9 +94,13 @@ describe('inspect command', () => {
     mocks.manifestPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/session.json`,
     );
+    mocks.eventLogPath.mockImplementation(
+      (sessionDirectory: string) => `${sessionDirectory}/events.jsonl`,
+    );
     mocks.socketPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
     );
+    mocks.countEventLogEntries.mockResolvedValue(2);
     mocks.readManifestIfExists.mockResolvedValue(
       createSessionRecord('running'),
     );
@@ -95,6 +110,9 @@ describe('inspect command', () => {
 
   it('uses live RPC inspect data when the session is active', async () => {
     const liveSession = createSessionRecord('running');
+    vi.spyOn(Date, 'now').mockReturnValue(
+      Date.parse('2026-03-19T12:00:05.000Z'),
+    );
     mocks.sendRpc.mockResolvedValue({ session: liveSession });
 
     await runInspectCommand({
@@ -107,11 +125,19 @@ describe('inspect command', () => {
       '/tmp/agent-terminal/sessions/session-01/rpc.sock',
       'inspect',
     );
+    expect(mocks.countEventLogEntries).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/events.jsonl',
+    );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
         command: 'inspect',
         json: false,
-        result: { session: liveSession },
+        result: {
+          session: liveSession,
+          eventCount: 2,
+          uptime: 5000,
+        },
+        lines: expect.arrayContaining(['Event Count: 2', 'Uptime: 5000ms']),
       }),
     );
   });
@@ -154,11 +180,18 @@ describe('inspect command', () => {
     expect(mocks.readManifest).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01/session.json',
     );
+    expect(mocks.countEventLogEntries).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/events.jsonl',
+    );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
         command: 'inspect',
         json: true,
-        result: { session: createSessionRecord('exited') },
+        result: {
+          session: createSessionRecord('exited'),
+          eventCount: 2,
+          uptime: 1000,
+        },
       }),
     );
   });

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  countEventLogEntries,
   EventLog,
   MAX_EVENT_BUFFER_ENTRIES,
 } from '../../../src/host/eventLog.js';
@@ -12,6 +13,44 @@ import { MAX_EVENT_LOG_SIZE } from '../../../src/host/replay.js';
 
 let tempDir = '';
 let eventLogPath = '';
+
+describe('countEventLogEntries', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'agent-terminal-event-log-'));
+    eventLogPath = join(tempDir, 'events.jsonl');
+  });
+
+  afterEach(async () => {
+    if (tempDir.length > 0) {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns 0 when the event log file is missing', async () => {
+    await expect(countEventLogEntries(eventLogPath)).resolves.toBe(0);
+  });
+
+  it('returns 0 for an empty event log file', async () => {
+    await writeFile(eventLogPath, '', 'utf8');
+
+    await expect(countEventLogEntries(eventLogPath)).resolves.toBe(0);
+  });
+
+  it('counts non-empty lines in a JSONL event log', async () => {
+    await writeFile(
+      eventLogPath,
+      [
+        JSON.stringify({ seq: 0, type: 'output' }),
+        '',
+        '   ',
+        JSON.stringify({ seq: 1, type: 'resize' }),
+      ].join('\n'),
+      'utf8',
+    );
+
+    await expect(countEventLogEntries(eventLogPath)).resolves.toBe(2);
+  });
+});
 
 describe('EventLog', () => {
   beforeEach(async () => {

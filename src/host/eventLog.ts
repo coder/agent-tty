@@ -1,5 +1,7 @@
+import { createReadStream } from 'node:fs';
 import { open, readFile } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
+import { createInterface } from 'node:readline';
 
 import { z } from 'zod';
 
@@ -209,6 +211,38 @@ function deriveNextSeq(records: readonly EventRecord[]): number {
   invariant(lastRecord.seq >= 0, 'event log seq must be non-negative');
 
   return lastRecord.seq + 1;
+}
+
+export async function countEventLogEntries(filePath: string): Promise<number> {
+  assertFilePath(filePath);
+
+  let count = 0;
+
+  try {
+    const lineReader = createInterface({
+      input: createReadStream(filePath, { encoding: 'utf8' }),
+      crlfDelay: Infinity,
+    });
+
+    for await (const line of lineReader) {
+      if (line.trim().length > 0) {
+        count += 1;
+      }
+    }
+  } catch (error: unknown) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return 0;
+    }
+
+    throw error;
+  }
+
+  return count;
 }
 
 export class EventLog {

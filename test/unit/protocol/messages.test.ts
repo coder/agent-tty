@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DestroyParamsSchema,
+  HostInspectResultSchema,
   InspectResultSchema,
   MarkParamsSchema,
   MarkResultSchema,
@@ -194,6 +195,16 @@ describe('RPC message schemas', () => {
 
   it('validates inspect results against the session schema', () => {
     const result = InspectResultSchema.safeParse({
+      session: createSessionRecord(),
+      eventCount: 2,
+      uptime: 1000,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('keeps inspect RPC results limited to the session payload', () => {
+    const result = HostInspectResultSchema.safeParse({
       session: createSessionRecord(),
     });
 

@@ -1,5 +1,5 @@
 import {
-  InspectResultSchema,
+  HostInspectResultSchema,
   type InspectResult,
 } from '../../protocol/messages.js';
 import type { SessionRecord } from '../../protocol/schemas.js';
@@ -8,11 +8,13 @@ import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
 
 import { emitSuccess } from '../output.js';
+import { countEventLogEntries } from '../../host/eventLog.js';
 import { reconcileSession } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { readManifest, readManifestIfExists } from '../../storage/manifests.js';
 import {
+  eventLogPath,
   manifestPath,
   sessionDir,
   socketPath,
@@ -24,7 +26,16 @@ interface CommandOptions {
   sessionId: string;
 }
 
-function formatSessionLines(session: SessionRecord): string[] {
+function computeUptime(session: SessionRecord): number {
+  const createdAt = Date.parse(session.createdAt);
+  const endAt =
+    session.status === 'running' ? Date.now() : Date.parse(session.updatedAt);
+
+  return Math.max(0, endAt - createdAt);
+}
+
+function formatSessionLines(result: InspectResult): string[] {
+  const { session, eventCount, uptime } = result;
   const lines = [
     `Session ID: ${session.sessionId}`,
     `Status: ${session.status}`,
@@ -33,6 +44,8 @@ function formatSessionLines(session: SessionRecord): string[] {
     `Size: ${String(session.cols)}x${String(session.rows)}`,
     `Created At: ${session.createdAt}`,
     `Updated At: ${session.updatedAt}`,
+    `Event Count: ${String(eventCount)}`,
+    `Uptime: ${String(uptime)}ms`,
     `Host PID: ${String(session.hostPid ?? '-')}`,
     `Child PID: ${String(session.childPid ?? '-')}`,
     `Exit Code: ${String(session.exitCode ?? '-')}`,
@@ -72,15 +85,14 @@ export async function runInspectCommand(
         socketPath(sessionDirectory),
         'inspect',
       );
-      const parsedResult = InspectResultSchema.safeParse(rawResult);
+      const parsedResult = HostInspectResultSchema.safeParse(rawResult);
       if (!parsedResult.success) {
         throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
           message: 'Unexpected response from host',
           details: { issues: parsedResult.error.issues },
         });
       }
-      const liveResult: InspectResult = parsedResult.data;
-      session = liveResult.session;
+      session = parsedResult.data.session;
     } catch (error) {
       if (
         error instanceof CliError &&
@@ -94,10 +106,18 @@ export async function runInspectCommand(
     }
   }
 
+  const eventCount = await countEventLogEntries(eventLogPath(sessionDirectory));
+  const uptime = computeUptime(session);
+  const result: InspectResult = {
+    session,
+    eventCount,
+    uptime,
+  };
+
   emitSuccess({
     command: 'inspect',
     json: options.json,
-    result: { session },
-    lines: formatSessionLines(session),
+    result,
+    lines: formatSessionLines(result),
   });
 }
