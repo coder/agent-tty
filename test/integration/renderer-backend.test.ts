@@ -259,10 +259,12 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
         scrollbackLines[index - 1]?.row ?? -1,
       );
     }
-    expect(scrollbackLines.length + snapshot.visibleLines.length).toBeGreaterThanOrEqual(
-      50,
-    );
-    const allScrollbackText = scrollbackLines.map((line) => line.text).join('\n');
+    expect(
+      scrollbackLines.length + snapshot.visibleLines.length,
+    ).toBeGreaterThanOrEqual(50);
+    const allScrollbackText = scrollbackLines
+      .map((line) => line.text)
+      .join('\n');
     expect(allScrollbackText).toContain('line-0');
   });
 

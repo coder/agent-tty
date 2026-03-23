@@ -137,8 +137,10 @@ function buildOfflineRenderWaitResult(
   }
 
   const cursorMatched =
-    (options.cursorRow === undefined || snapshot.cursorRow === options.cursorRow) &&
-    (options.cursorCol === undefined || snapshot.cursorCol === options.cursorCol);
+    (options.cursorRow === undefined ||
+      snapshot.cursorRow === options.cursorRow) &&
+    (options.cursorCol === undefined ||
+      snapshot.cursorCol === options.cursorCol);
 
   if (textMatched && cursorMatched) {
     return {
