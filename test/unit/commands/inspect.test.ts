@@ -59,6 +59,10 @@ const TEST_CONTEXT = {
   configFile: null,
 } as const;
 
+function getLastEmitSuccessPayload(): unknown {
+  return mocks.emitSuccess.mock.calls.at(-1)?.[0] as unknown;
+}
+
 function createSessionRecord(
   status: 'running' | 'exiting' | 'exited' = 'running',
 ) {
@@ -128,7 +132,18 @@ describe('inspect command', () => {
     expect(mocks.countEventLogEntries).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01/events.jsonl',
     );
-    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+    const emitted = getLastEmitSuccessPayload() as {
+      command: string;
+      json: boolean;
+      result: {
+        session: ReturnType<typeof createSessionRecord>;
+        eventCount: number;
+        uptime: number;
+      };
+      lines: string[];
+    };
+
+    expect(emitted).toEqual(
       expect.objectContaining({
         command: 'inspect',
         json: false,
@@ -137,8 +152,10 @@ describe('inspect command', () => {
           eventCount: 2,
           uptime: 5000,
         },
-        lines: expect.arrayContaining(['Event Count: 2', 'Uptime: 5000ms']),
       }),
+    );
+    expect(emitted.lines).toEqual(
+      expect.arrayContaining(['Event Count: 2', 'Uptime: 5000ms']),
     );
   });
 
