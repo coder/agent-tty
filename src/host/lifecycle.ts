@@ -405,6 +405,8 @@ export async function allocateSession(
     cwd: resolvedCwd,
     cols: config.cols,
     rows: config.rows,
+    creationCols: config.cols,
+    creationRows: config.rows,
     hostPid: null,
     childPid: null,
     exitCode: null,
