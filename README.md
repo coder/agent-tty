@@ -26,6 +26,12 @@ node dist/cli/main.js destroy "$SESSION_ID"
 - Recording export to asciicast (`.cast`) or WebM for artifact bundles.
 - Failure recovery via reconciliation, stale-session cleanup, and retained manifests/artifacts.
 
+## Platform Support
+
+- **Linux** — Tier-1. CI-tested on `ubuntu-latest`. Primary development and testing platform.
+- **macOS** — Tier-1. CI-tested on `macos-latest`. Supported for local development and agent workflows.
+- **Windows** — Tier-2. Not CI-tested. PTY uses ConPTY when available; rendering and PTY behavior differences are possible. Community contributions welcome.
+
 ## CLI-wide flags
 
 - `--home <path>`: override the agent-terminal home directory.
@@ -76,10 +82,11 @@ That runs formatting, linting, typechecking, unit/e2e tests, and the production 
 
 ## Design docs
 
-Design and implementation notes live under `design/`, especially `design/20260319_agent-terminal-v1/`.
+Design and implementation notes live under `design/`, especially `design/20260319_agent-terminal-v1/`. See `design/20260319_agent-terminal-v1/` for architecture, weekly plans, and status docs through Week 5.
 
 ## Repository notes
 
 - CI uses `mise` for tool provisioning and quality-gate entrypoints.
 - Chromium is required locally for screenshot and replay export coverage.
+- Platform support tiers are documented in this README; see also the design docs for detailed status.
 - Dogfood proof bundles and validation notes live under `dogfood/` and `design/`.
