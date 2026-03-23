@@ -314,7 +314,10 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     ).result.sessionId;
 
     const manifest = JSON.parse(
-      await readFile(join(testHome, 'sessions', sessionId, 'session.json'), 'utf8'),
+      await readFile(
+        join(testHome, 'sessions', sessionId, 'session.json'),
+        'utf8',
+      ),
     ) as Record<string, unknown>;
     expect(manifest).not.toHaveProperty('idleTimeoutMs');
     expect(SessionRecordSchema.parse(manifest)).not.toHaveProperty(
