@@ -1,0 +1,26 @@
+{
+  "bundle": "20260323-week5-review-helper",
+  "title": "Week 5 — Review Helper Proof",
+  "description": "Proves review-bundle generates usable static review pages for dogfood bundles",
+  "createdAt": "2026-03-23T16:10:02Z",
+  "week": 5,
+  "lane": "C",
+  "artifacts": [
+    {
+      "path": "screenshots/01-review-page-header.png",
+      "description": "Top of generated review page showing header and manifest summary"
+    },
+    {
+      "path": "screenshots/02-review-page-artifacts.png",
+      "description": "Review page scrolled to show artifact inventory and embedded screenshots"
+    },
+    {
+      "path": "01-generate-single.json",
+      "description": "Single-bundle generation result"
+    },
+    {
+      "path": "02-generate-all.json",
+      "description": "All-bundles generation result"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "bundle": "20260323-week5-recovery-replay",
+  "title": "Week 5 — Offline Replay Proof",
+  "description": "Proves offline replay reconstructs terminal state from the event log after session failure",
+  "createdAt": "2026-03-23T16:11:04Z",
+  "week": 5,
+  "lane": "C",
+  "artifacts": [
+    { "path": "03-snapshot-live.json", "description": "Live snapshot before crash" },
+    { "path": "07-snapshot-offline.json", "description": "Offline snapshot after crash - key proof" },
+    { "path": "snapshots/01-snapshot-live.json", "description": "Copy of live snapshot" },
+    { "path": "snapshots/02-snapshot-offline.json", "description": "Copy of offline snapshot" },
+    { "path": "logs/events.jsonl", "description": "Raw event log - canonical replay source" },
+    { "path": "logs/10-vitest-offline-replay.log", "description": "Unit test proof for offline replay" },
+    { "path": "logs/11-vitest-offline-snapshot.log", "description": "Integration test proof for offline snapshot" }
+  ]
+}

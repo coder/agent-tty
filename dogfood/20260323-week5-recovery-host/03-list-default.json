@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "command": "list",
+  "timestamp": "2026-03-23T16:09:01.994Z",
+  "result": {
+    "sessions": [
+      {
+        "sessionId": "01KMDQ9S6XFPBFZSKPGJCGN2KX",
+        "status": "running",
+        "command": [
+          "/bin/sh",
+          "-c",
+          "echo stale-host-proof; exec cat"
+        ],
+        "createdAt": "2026-03-23T16:08:58.850Z"
+      }
+    ]
+  }
+}

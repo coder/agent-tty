@@ -1,0 +1,38 @@
+{
+  "bundle": "20260323-week5-recovery-host",
+  "title": "Week 5 — Host Recovery Proof",
+  "description": "Proves stale-host detection, reconciliation, and garbage collection via CLI and targeted integration test",
+  "createdAt": "2026-03-23T16:09:17Z",
+  "week": 5,
+  "lane": "C",
+  "artifacts": [
+    {
+      "path": "01-create.json",
+      "description": "Session creation with running host"
+    },
+    {
+      "path": "02-inspect-live.json",
+      "description": "Live session inspection showing running status"
+    },
+    {
+      "path": "04-kill-host.json",
+      "description": "Forced host kill record"
+    },
+    {
+      "path": "05-inspect-post-crash.json",
+      "description": "Post-crash inspection showing reconciled failure"
+    },
+    {
+      "path": "07-gc.json",
+      "description": "GC removal of stale session"
+    },
+    {
+      "path": "08-list-final.json",
+      "description": "Final list confirming session removed"
+    },
+    {
+      "path": "logs/09-vitest-stale-host.log",
+      "description": "Vitest run of stale host recovery test"
+    }
+  ]
+}

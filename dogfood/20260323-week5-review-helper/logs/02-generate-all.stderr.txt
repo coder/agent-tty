@@ -1,0 +1,50 @@
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260319-lifecycle
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260319-nvim-demo
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260319-resize-demo
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260320-renderer-complete
+warning: manifest.json was not found; using filesystem scan only.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260321-post-hardening-smoke
+warning: manifest.json was not found; using filesystem scan only.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260321-week3-crash-retention
+warning: Manifest artifact was not found on disk: artifacts/snapshot-1-structured.json
+warning: Manifest artifact was not found on disk: artifacts/screenshot-1-reference-dark.png
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260321-week3-renderer-complete
+warning: Manifest artifact was not found on disk: artifacts/snapshot-4-structured.json
+warning: Manifest artifact was not found on disk: artifacts/snapshot-4-text.json
+warning: Manifest artifact was not found on disk: artifacts/screenshot-4-reference-dark.png
+warning: Manifest artifact was not found on disk: artifacts/screenshot-4-reference-light.png
+warning: Manifest artifact was not found on disk: artifacts/snapshot-5-structured.json
+warning: Manifest artifact was not found on disk: artifacts/screenshot-5-reference-dark.png
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260322-dogfood-alt-screen
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260322-dogfood-color
+warning: Manifest artifact was not found on disk: setup-npm-ci.log
+warning: Manifest artifact was not found on disk: setup-playwright-install.log
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260322-dogfood-crash
+warning: manifest.json was not found; using filesystem scan only.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260322-dogfood-hello-prompt
+warning: manifest.json did not match the preferred schema; using legacy normalization.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260322-dogfood-resize
+warning: manifest.json did not match the preferred schema; using legacy normalization.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260322-dogfood-scrollback
+warning: manifest.json was not found; using filesystem scan only.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260322-dogfood-unicode
+warning: manifest.json was not found; using filesystem scan only.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260322-dogfood-week4-features
+warning: manifest.json was not found; using filesystem scan only.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260322-global-cli-context
+warning: manifest.json was not found; using filesystem scan only.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260322-lazyvim-scenario
+warning: manifest.json was not found; using filesystem scan only.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260322-week4-cli-parity
+warning: manifest.json was not found; using filesystem scan only.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260322-week4-failure-recovery
+warning: manifest.json was not found; using filesystem scan only.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260322-week4-scrollback-review
+warning: manifest.json was not found; using filesystem scan only.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260322-week4-unicode-review
+warning: manifest.json was not found; using filesystem scan only.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260323-bugfix-resize
+warning: manifest.json was not found; using filesystem scan only.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260323-bugfix-scrollback
+warning: manifest.json was not found; using filesystem scan only.
+Building /home/coder/.mux/src/agent-terminal/agent_exec_883e6029e6/dogfood/20260323-week5-review-helper

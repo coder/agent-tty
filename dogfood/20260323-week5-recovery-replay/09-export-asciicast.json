@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-23T16:10:56.849Z",
+  "result": {
+    "sessionId": "01KMDQCW908P2QQNZC9066VEGX",
+    "format": "asciicast",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent_exec_caffe79636/dogfood/20260323-week5-recovery-replay/recordings/offline-replay.cast",
+    "bytes": 224,
+    "sha256": "c4dfb698a96ca6279316e6f136c371fdf223e54641a86c902f69bc49f7a34867",
+    "capturedAtSeq": 0,
+    "durationMs": 0,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "title": "01KMDQCW908P2QQNZC9066VEGX",
+      "timestamp": 1774282241,
+      "outputEventCount": 1,
+      "resizeEventCount": 0,
+      "markerCount": 0
+    }
+  }
+}

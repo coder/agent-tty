@@ -1,0 +1,29 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-23T16:09:00.910Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KMDQ9S6XFPBFZSKPGJCGN2KX",
+      "createdAt": "2026-03-23T16:08:58.850Z",
+      "updatedAt": "2026-03-23T16:08:59.681Z",
+      "status": "running",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "echo stale-host-proof; exec cat"
+      ],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_c09f45103d",
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "creationCols": 80,
+      "creationRows": 24,
+      "hostPid": 1047819,
+      "childPid": 1047886,
+      "exitCode": null,
+      "exitSignal": null
+    }
+  }
+}

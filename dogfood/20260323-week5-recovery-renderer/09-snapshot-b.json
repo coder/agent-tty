@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-23T16:08:50.397Z",
+  "result": {
+    "format": "text",
+    "sessionId": "01KMDQ9C59CHZ4KWA9B7K0DDT3",
+    "capturedAtSeq": 0,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 1,
+    "cursorCol": 0,
+    "text": "hello from renderer\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  }
+}
