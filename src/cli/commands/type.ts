@@ -30,7 +30,8 @@ export async function runTypeCommand(options: CommandOptions): Promise<void> {
     text: options.text,
     file: options.file,
   });
-  const text = options.appendNewline === true ? resolvedText + '\n' : resolvedText;
+  const text =
+    options.appendNewline === true ? resolvedText + '\n' : resolvedText;
 
   if (text.length === 0) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {
