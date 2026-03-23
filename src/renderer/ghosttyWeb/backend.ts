@@ -615,14 +615,28 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         setCursorVisible(visible) {
           const terminal = getReadyTerminal();
           assertBoolean(visible, 'setCursorVisible() visible must be a boolean');
-          invariant(terminal.renderer !== undefined, 'terminal renderer is unavailable');
-          invariant(
-            typeof terminal.requestRender === 'function',
-            'terminal requestRender() is unavailable',
-          );
           document.body.dataset.screenshotCursorVisible = visible ? 'true' : 'false';
-          terminal.renderer.cursorVisible = visible;
-          terminal.requestRender();
+
+          if (terminal.renderer === undefined) {
+            console.warn(
+              'ghostty-web terminal renderer is unavailable; screenshot cursor visibility may be stale until the next natural render',
+            );
+            return;
+          }
+
+          try {
+            terminal.renderer.cursorVisible = visible;
+          } catch (error) {
+            console.warn(
+              'ghostty-web terminal cursor visibility toggle is unavailable; screenshot cursor visibility may be stale until the next natural render',
+              error,
+            );
+            return;
+          }
+
+          if (typeof terminal.requestRender === 'function') {
+            terminal.requestRender();
+          }
         },
       };
 
