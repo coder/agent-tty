@@ -2,9 +2,11 @@
 set -euo pipefail
 
 # Exact commands used to create dogfood/week5-config-parity/.
-# Note: `npx tsx src/cli/main.ts ...` was blocked in this workspace by tsx's
-# interaction with an untrusted local `mise.toml`, so the run used the
-# equivalent local loader invocation below instead.
+# Phase 1+2 note: plain `npx tsx src/cli/main.ts ...` was blocked in this
+# workspace by tsx's interaction with an untrusted local `mise.toml`, so those
+# earlier captures used the equivalent local loader invocation below instead.
+# Phase 3 used `env -i ... npx tsx src/cli/main.ts ...` with a clean PATH so the
+# commands still run through `npx tsx` without surfacing `mise` trust checks.
 
 export AGENT_TERMINAL_HOME=/tmp/agent-terminal-week5-config-parity.rDdjw2
 CLI=(/usr/local/nvm/versions/node/v22.19.0/bin/node --import tsx src/cli/main.ts)
@@ -59,3 +61,26 @@ cp /tmp/agent-terminal-week5-config-parity.rDdjw2/sessions/01KMDQXKEEFNYQTBQX7W8
 "${CLI[@]}" destroy 01KMDQXCZ4FHJABA249CE7F55Z --force --json > dogfood/week5-config-parity/destroy-flag-session.json
 "${CLI[@]}" destroy 01KMDQXFGAC34GJF5BW3D2TM8G --force --json > dogfood/week5-config-parity/destroy-disabled-session.json
 "${CLI[@]}" destroy 01KMDQXKEEFNYQTBQX7W87GQQQ --force --json > dogfood/week5-config-parity/destroy-type-session.json
+
+# Phase 3 — Enriched result shapes.
+CLEAN_PATH=/usr/local/nvm/versions/node/v22.19.0/bin:/usr/bin:/bin
+export AGENT_TERMINAL_HOME=/tmp/agent-terminal-week5-phase3.zMhaPa
+printf '%s\n' "$AGENT_TERMINAL_HOME" > dogfood/week5-config-parity/phase3-isolated-home.txt
+
+env -i HOME="$HOME" PATH="$CLEAN_PATH" AGENT_TERMINAL_HOME="$AGENT_TERMINAL_HOME" \
+  npx tsx src/cli/main.ts create --json --idle-timeout-ms 3000 --name 'dogfood-session' -- /bin/sh \
+  > dogfood/week5-config-parity/create-enriched.json
+PHASE3_SESSION_ID=$(node --input-type=module -e "import fs from 'node:fs'; const data = JSON.parse(fs.readFileSync('dogfood/week5-config-parity/create-enriched.json', 'utf8')); process.stdout.write(data.result.sessionId);")
+env -i HOME="$HOME" PATH="$CLEAN_PATH" AGENT_TERMINAL_HOME="$AGENT_TERMINAL_HOME" \
+  npx tsx src/cli/main.ts list --json > dogfood/week5-config-parity/list-enriched.json
+env -i HOME="$HOME" PATH="$CLEAN_PATH" AGENT_TERMINAL_HOME="$AGENT_TERMINAL_HOME" \
+  npx tsx src/cli/main.ts type "$PHASE3_SESSION_ID" 'echo hello' --append-newline --json > /tmp/week5_phase3_type.json
+sleep 1
+env -i HOME="$HOME" PATH="$CLEAN_PATH" AGENT_TERMINAL_HOME="$AGENT_TERMINAL_HOME" \
+  npx tsx src/cli/main.ts inspect --json "$PHASE3_SESSION_ID" > dogfood/week5-config-parity/inspect-enriched.json
+env -i HOME="$HOME" PATH="$CLEAN_PATH" AGENT_TERMINAL_HOME="$AGENT_TERMINAL_HOME" \
+  npx tsx src/cli/main.ts destroy "$PHASE3_SESSION_ID" --json > /tmp/week5_phase3_destroy.json
+env -i HOME="$HOME" PATH="$CLEAN_PATH" AGENT_TERMINAL_HOME="$AGENT_TERMINAL_HOME" \
+  npx tsx src/cli/main.ts list --all --json > dogfood/week5-config-parity/list-all-enriched.json
+rm -f /tmp/week5_phase3_type.json /tmp/week5_phase3_destroy.json
+rm -rf "$AGENT_TERMINAL_HOME"

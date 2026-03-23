@@ -1,0 +1,32 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-23T17:01:53.911Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KMDTAHK3ND75R2HQ9KQ34BTB",
+      "createdAt": "2026-03-23T17:01:49.541Z",
+      "updatedAt": "2026-03-23T17:01:50.123Z",
+      "status": "running",
+      "command": [
+        "/bin/sh"
+      ],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_fd4b81c179",
+      "name": "dogfood-session",
+      "shell": "/bin/sh",
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "creationCols": 80,
+      "creationRows": 24,
+      "idleTimeoutMs": 3000,
+      "hostPid": 1314868,
+      "childPid": 1314880,
+      "exitCode": null,
+      "exitSignal": null
+    },
+    "eventCount": 3,
+    "uptime": 4370
+  }
+}
