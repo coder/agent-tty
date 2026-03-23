@@ -32,7 +32,7 @@ The repository now ships the first three milestones of this design:
 - artifact manifests and `gc`,
 - and proof bundles under `dogfood/`.
 
-The implementation is now beyond the original Week 2 slice, but it is **not** yet fully done against the broader v1 design. The main remaining gaps are CLI-contract parity, richer snapshot / screenshot fidelity, missing fixture scenarios, and a few failure-state / platform hardening items. See [08-week-3-status.md](./20260319_agent-terminal-v1/08-week-3-status.md), [09-week-4-plan.md](./20260319_agent-terminal-v1/09-week-4-plan.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current follow-on work.
+The implementation is now beyond the original Week 2 slice, but it is **not** yet fully done against the broader v1 design. The main remaining gaps are CLI-contract parity, richer snapshot / screenshot fidelity, local review tooling, and a few failure-state / platform hardening items. See [10-week-4-status.md](./20260319_agent-terminal-v1/10-week-4-status.md), [11-week-5-plan.md](./20260319_agent-terminal-v1/11-week-5-plan.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current follow-on work.
 
 ## Executive summary
 
@@ -198,6 +198,8 @@ This design file is the entry point. Detailed supporting docs live in `design/20
 - [07-week-2-plan.md](./20260319_agent-terminal-v1/07-week-2-plan.md)
 - [08-week-3-status.md](./20260319_agent-terminal-v1/08-week-3-status.md)
 - [09-week-4-plan.md](./20260319_agent-terminal-v1/09-week-4-plan.md)
+- [10-week-4-status.md](./20260319_agent-terminal-v1/10-week-4-status.md)
+- [11-week-5-plan.md](./20260319_agent-terminal-v1/11-week-5-plan.md)
 
 ## High-level architecture
 

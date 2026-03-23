@@ -50,4 +50,4 @@ The next milestone should focus on the still-open parity and validation work rat
 4. strengthen failure/recovery validation,
 5. then continue broader native/platform future work.
 
-See `design/20260319_agent-terminal-v1/10-week-4-status.md` for the detailed Week 4 status record and `design/20260319_agent-terminal-v1/09-week-4-plan.md` for the original Week 4 plan.
+See `design/20260319_agent-terminal-v1/10-week-4-status.md` for the detailed Week 4 status record, `design/20260319_agent-terminal-v1/09-week-4-plan.md` for the original Week 4 plan, and `design/20260319_agent-terminal-v1/11-week-5-plan.md` for the current follow-on execution plan.
