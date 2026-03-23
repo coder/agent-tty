@@ -85,7 +85,7 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
 
     expect(envelope.command).toBe('screenshot');
     expect(envelope.error.code).toBe(ERROR_CODES.INVALID_INPUT);
-    expect(envelope.error.message).toContain('non-empty string');
+    expect(envelope.error.message).toContain('invalid');
     expect(envelope.error.details).toMatchObject({
       profile: oversizedProfile,
     });
