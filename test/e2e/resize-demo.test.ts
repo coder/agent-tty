@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type {
+  ScreenshotResult,
+  SnapshotResult,
+} from '../../src/protocol/messages.js';
 import {
   cleanupHome,
   createIsolatedHome,
@@ -166,5 +170,44 @@ describe('resize-demo e2e', { timeout: 30_000 }, () => {
     expect(inspectEnvelope.result.session.status).toBe('running');
     expect(inspectEnvelope.result.session.cols).toBe(100);
     expect(inspectEnvelope.result.session.rows).toBe(50);
+  });
+
+  it('snapshot and screenshot succeed after resize', () => {
+    const env = testEnv(testHome);
+    const createEnvelope = runCliJson<SuccessEnvelope<CreateResult>>(
+      ['create', '--', ...fixtureCommand('resize-demo')],
+      env,
+    );
+    const sessionId = createEnvelope.result.sessionId;
+    createdSessionIds.push(sessionId);
+
+    const resizeEnvelope = runCliJson<
+      SuccessEnvelope<{ cols: number; rows: number }>
+    >(['resize', sessionId, '--cols', '120', '--rows', '40'], env);
+    expect(resizeEnvelope.ok).toBe(true);
+    expect(resizeEnvelope.result.cols).toBe(120);
+    expect(resizeEnvelope.result.rows).toBe(40);
+
+    const snapshotEnvelope = runCliJson<SuccessEnvelope<SnapshotResult>>(
+      ['snapshot', sessionId],
+      env,
+    );
+    expect(snapshotEnvelope.ok).toBe(true);
+    expect(snapshotEnvelope.command).toBe('snapshot');
+
+    if (snapshotEnvelope.result.format === 'structured') {
+      expect(snapshotEnvelope.result.cols).toBe(120);
+      expect(snapshotEnvelope.result.rows).toBe(40);
+    }
+
+    const screenshotEnvelope = runCliJson<SuccessEnvelope<ScreenshotResult>>(
+      ['screenshot', sessionId],
+      env,
+    );
+    expect(screenshotEnvelope.ok).toBe(true);
+    expect(screenshotEnvelope.command).toBe('screenshot');
+    expect(screenshotEnvelope.result.sessionId).toBe(sessionId);
+    expect(screenshotEnvelope.result.artifactPath).toMatch(/\.png$/);
+    expect(screenshotEnvelope.result.pngSizeBytes).toBeGreaterThan(0);
   });
 });

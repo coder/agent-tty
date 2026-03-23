@@ -125,7 +125,9 @@ describe('scrollback-demo e2e', { timeout: 60_000 }, () => {
     expectStructuredSnapshot(structuredSnapshotEnvelope.result);
     expect(structuredSnapshotEnvelope.result.sessionId).toBe(sessionId);
     expect(structuredSnapshotEnvelope.result.scrollbackLines).toBeDefined();
-    expect(structuredSnapshotEnvelope.result.scrollbackLines!.length).toBeGreaterThan(0);
+    expect(
+      structuredSnapshotEnvelope.result.scrollbackLines!.length,
+    ).toBeGreaterThan(0);
 
     const visibleText = structuredSnapshotEnvelope.result.visibleLines
       .map((line) => line.text)
