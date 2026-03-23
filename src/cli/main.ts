@@ -88,8 +88,12 @@ function wrapAction<Args extends unknown[]>(
     try {
       const context = await getCommandContext(command);
       setColorEnabled(context.colorEnabled);
+      context.logger.debug(`starting ${commandName} command`, {
+        logLevel: context.logLevel,
+      });
       const args = rawArgs.slice(0, -1) as Args;
       await fn(...([...args, context] as [...Args, CommandContext]));
+      context.logger.debug(`completed ${commandName} command`);
     } catch (error: unknown) {
       if (error instanceof CliError) {
         emitCliError(commandName, error);
@@ -124,8 +128,14 @@ async function main(): Promise<void> {
       actionCommand.optsWithGlobals<GlobalCliOptions>(),
     );
     process.env.AGENT_TERMINAL_HOME = context.home;
+    process.env.AGENT_TERMINAL_LOG_LEVEL = context.logLevel;
     setColorEnabled(context.colorEnabled);
     setCommandContext(actionCommand, context);
+    context.logger.debug('resolved command context', {
+      command: actionCommand.name(),
+      home: context.home,
+      logLevel: context.logLevel,
+    });
   });
 
   program
@@ -150,8 +160,7 @@ async function main(): Promise<void> {
       wrapAction(
         'doctor',
         async (options: { json: boolean }, context: CommandContext) => {
-          void context;
-          await runDoctorCommand(options);
+          await runDoctorCommand({ ...options, context });
         },
       ),
     );

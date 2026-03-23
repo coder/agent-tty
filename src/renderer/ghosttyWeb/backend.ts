@@ -17,6 +17,12 @@ import {
 } from 'playwright';
 
 import { invariant, assertString, unreachable } from '../../util/assert.js';
+import {
+  Logger,
+  assertLogLevel,
+  createProcessLogger,
+  type LogLevel,
+} from '../../util/logger.js';
 import type {
   ReplayTimingOptions,
   ScreenshotOptions,
@@ -89,6 +95,11 @@ interface GhosttyBrowserBridge {
 
 interface GhosttyBrowserGlobal {
   __agentTerminal?: GhosttyBrowserBridge;
+  __agentTerminalLog?: (
+    level: LogLevel,
+    message: string,
+    detail?: string,
+  ) => Promise<void> | void;
   document?: {
     body?: {
       dataset?: Record<string, string | undefined>;
@@ -205,6 +216,14 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
       const PROFILE_PARAM = 'profile';
       const terminalMount = document.getElementById('terminal');
       const terminalShell = document.getElementById('terminal-shell');
+
+      function log(level, message, detail) {
+        if (typeof globalThis.__agentTerminalLog !== 'function') {
+          return;
+        }
+
+        void globalThis.__agentTerminalLog(level, message, detail);
+      }
 
       function invariant(condition, message) {
         if (!condition) {
@@ -618,7 +637,8 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
           document.body.dataset.screenshotCursorVisible = visible ? 'true' : 'false';
 
           if (terminal.renderer === undefined) {
-            console.warn(
+            log(
+              'warn',
               'ghostty-web terminal renderer is unavailable; screenshot cursor visibility may be stale until the next natural render',
             );
             return;
@@ -627,9 +647,11 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
           try {
             terminal.renderer.cursorVisible = visible;
           } catch (error) {
-            console.warn(
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            log(
+              'warn',
               'ghostty-web terminal cursor visibility toggle is unavailable; screenshot cursor visibility may be stale until the next natural render',
-              error,
+              errorMessage,
             );
             return;
           }
@@ -693,7 +715,7 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         document.body.dataset.error = state.errorMessage;
         document.body.dataset.ready = 'false';
         terminalShell.textContent = state.errorMessage;
-        console.error(error);
+        log('error', state.errorMessage, message);
       });
     </script>
   </body>
@@ -1128,6 +1150,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   public readonly rendererBackend = 'ghostty-web';
   public isBooted = false;
 
+  private readonly logger: Logger;
   private readonly profile: RenderProfileConfig;
   private readonly sessionId: string;
   private readonly videoOptions: Readonly<VideoRecordingOptions> | null;
@@ -1150,6 +1173,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     sessionId: string,
     profile: RenderProfileConfig,
     videoOptions?: VideoRecordingOptions,
+    logger: Logger = createProcessLogger(),
   ) {
     invariant(sessionId.length > 0, 'sessionId must be a non-empty string');
     invariant(
@@ -1203,7 +1227,10 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
             });
           })();
 
+    invariant(logger instanceof Logger, 'logger must be a Logger instance');
+
     this.sessionId = sessionId;
+    this.logger = logger;
     this.profile = Object.freeze({ ...profile });
     this.videoOptions = normalizedVideoOptions;
   }
@@ -1882,6 +1909,36 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       });
 
       this.page = await this.browserContext.newPage();
+      await this.page.exposeFunction(
+        '__agentTerminalLog',
+        (level: unknown, message: unknown, detail?: unknown) => {
+          assertLogLevel(level, 'ghostty-web harness log level must be valid');
+          assertString(
+            message,
+            'ghostty-web harness log message must be a string',
+          );
+          const details = detail === undefined ? [] : [detail];
+
+          switch (level) {
+            case 'debug': {
+              this.logger.debug(message, ...details);
+              break;
+            }
+            case 'info': {
+              this.logger.info(message, ...details);
+              break;
+            }
+            case 'warn': {
+              this.logger.warn(message, ...details);
+              break;
+            }
+            case 'error': {
+              this.logger.error(message, ...details);
+              break;
+            }
+          }
+        },
+      );
       this.page.on('close', () => {
         if (this.disposePromise !== null || this.expectedPageClosure) {
           return;

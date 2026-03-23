@@ -21,6 +21,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 
+import type { CommandContext } from '../context.js';
+
 import { emitSuccess } from '../output.js';
 import { createPty } from '../../pty/createPty.js';
 import {
@@ -742,8 +744,10 @@ export function buildDoctorLines(result: DoctorResult): string[] {
 }
 
 export async function runDoctorCommand(options: {
+  context: CommandContext;
   json: boolean;
 }): Promise<void> {
+  options.context.logger.debug('running doctor checks');
   const result = await runDoctorChecks();
   const lines = buildDoctorLines(result);
 

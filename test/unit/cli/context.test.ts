@@ -24,6 +24,7 @@ import {
   setCommandContext,
 } from '../../../src/cli/context.js';
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
+import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_ENV_HOME = '/tmp/from-env';
 const TEST_FLAG_HOME = '/tmp/from-flag';
@@ -147,6 +148,8 @@ describe('CLI context resolution', () => {
       { AGENT_TERMINAL_LOG_LEVEL: 'debug' },
     );
 
+    expect(context.logger.getLevel()).toBe('debug');
+    expect(context.logger.shouldLog('debug')).toBe(true);
     expect(context.logLevel).toBe('debug');
     expect(context.configFile).toBeNull();
   });
@@ -168,6 +171,7 @@ describe('CLI context resolution', () => {
       timeoutMs: undefined,
       colorEnabled: true,
       logLevel: 'info' as const,
+      logger: createLogger('info', () => undefined),
       profileDefault: 'default-profile',
       configFile: null,
     });

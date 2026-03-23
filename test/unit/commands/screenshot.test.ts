@@ -68,12 +68,14 @@ vi.mock('../../../src/storage/artifactPaths.js', () => ({
 }));
 
 import { runScreenshotCommand } from '../../../src/cli/commands/screenshot.js';
+import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
   home: '/tmp/agent-terminal',
   timeoutMs: undefined,
   colorEnabled: true,
   logLevel: 'info',
+  logger: createLogger('info', () => undefined),
   profileDefault: undefined,
   configFile: null,
 } as const;

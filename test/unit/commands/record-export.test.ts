@@ -83,12 +83,14 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 
 import { runRecordExportCommand } from '../../../src/cli/commands/record-export.js';
 import { hashProfile, resolveProfile } from '../../../src/renderer/profiles.js';
+import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
   home: '/tmp/agent-terminal',
   timeoutMs: undefined,
   colorEnabled: true,
   logLevel: 'info',
+  logger: createLogger('info', () => undefined),
   profileDefault: undefined,
   configFile: null,
 } as const;

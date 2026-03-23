@@ -40,6 +40,7 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 }));
 
 import { runCreateCommand } from '../../../src/cli/commands/create.js';
+import { createLogger } from '../../../src/util/logger.js';
 
 describe('create command', () => {
   const context = {
@@ -47,6 +48,7 @@ describe('create command', () => {
     timeoutMs: undefined,
     colorEnabled: true,
     logLevel: 'info',
+    logger: createLogger('info', () => undefined),
     profileDefault: undefined,
     configFile: null,
   } as const;

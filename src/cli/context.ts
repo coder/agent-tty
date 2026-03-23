@@ -3,17 +3,17 @@ import process from 'node:process';
 
 import type { Command } from 'commander';
 
-import { DEFAULT_LOG_LEVEL } from '../config/defaults.js';
 import { loadConfigFile, type ConfigFile } from '../config/resolveConfig.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { resolveHome } from '../storage/home.js';
 import { invariant } from '../util/assert.js';
+import {
+  createLogger,
+  resolveLogLevel as resolveLoggerLevel,
+  type LogLevel,
+} from '../util/logger.js';
 
 const COMMAND_CONTEXT_SYMBOL = Symbol('commandContext');
-
-const LOG_LEVEL_VALUES = ['debug', 'info', 'warn', 'error'] as const;
-
-export type LogLevel = (typeof LOG_LEVEL_VALUES)[number];
 
 export interface GlobalCliOptions {
   home?: string;
@@ -29,6 +29,7 @@ export interface CommandContext {
   readonly timeoutMs: number | undefined;
   readonly colorEnabled: boolean;
   readonly logLevel: LogLevel;
+  readonly logger: ReturnType<typeof createLogger>;
   readonly profileDefault: string | undefined;
   readonly configFile: ConfigFile | null;
 }
@@ -79,23 +80,21 @@ export function parseTimeoutMsOption(value: string): number {
   return parsedValue;
 }
 
-export function resolveLogLevel(raw?: string): LogLevel {
-  if (raw === undefined) {
-    return DEFAULT_LOG_LEVEL;
+export function resolveLogLevelOption(raw?: string): LogLevel {
+  try {
+    return resolveLoggerLevel(raw);
+  } catch (error) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: 'Log level must be one of debug, info, warn, or error.',
+      details: {
+        logLevel: raw,
+      },
+      cause: error,
+    });
   }
-
-  if ((LOG_LEVEL_VALUES as readonly string[]).includes(raw)) {
-    return raw as LogLevel;
-  }
-
-  throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-    message: 'Log level must be one of debug, info, warn, or error.',
-    details: {
-      logLevel: raw,
-      allowedValues: LOG_LEVEL_VALUES,
-    },
-  });
 }
+
+export { resolveLogLevelOption as resolveLogLevel };
 
 export async function resolveCommandContext(
   options: GlobalCliOptions,
@@ -110,9 +109,10 @@ export async function resolveCommandContext(
           options.home !== undefined ? '--home' : 'AGENT_TERMINAL_HOME',
         );
   const configFile = await loadConfigFile(home);
-  const logLevel = resolveLogLevel(
+  const logLevel = resolveLogLevelOption(
     options.logLevel ?? env.AGENT_TERMINAL_LOG_LEVEL ?? configFile?.logLevel,
   );
+  const logger = createLogger(logLevel);
   const profileDefault =
     options.profileDefault ??
     options.profile ??
@@ -124,6 +124,7 @@ export async function resolveCommandContext(
     timeoutMs: options.timeoutMs,
     colorEnabled: options.color ?? true,
     logLevel,
+    logger,
     profileDefault,
     configFile,
   });
