@@ -39,6 +39,7 @@ export interface AllocateConfig {
   rows: number;
   env: Record<string, string>;
   term: string;
+  idleTimeoutMs?: number;
   name?: string;
 }
 
@@ -342,6 +343,12 @@ export async function allocateSession(
   ) {
     throw makeInvalidDimensionError('rows', config.rows);
   }
+  if (config.idleTimeoutMs !== undefined) {
+    invariant(
+      Number.isInteger(config.idleTimeoutMs) && config.idleTimeoutMs >= 0,
+      'idleTimeoutMs must be a non-negative integer',
+    );
+  }
   if (typeof config.cwd !== 'string' || config.cwd.length === 0) {
     throw makeInvalidCwdError(config.cwd);
   }
@@ -411,6 +418,9 @@ export async function allocateSession(
     childPid: null,
     exitCode: null,
     exitSignal: null,
+    ...(config.idleTimeoutMs !== undefined && config.idleTimeoutMs > 0
+      ? { idleTimeoutMs: config.idleTimeoutMs }
+      : {}),
     ...(config.name !== undefined ? { name: config.name } : {}),
     ...(Object.keys(config.env).length > 0 ? { env: { ...config.env } } : {}),
     term: config.term,

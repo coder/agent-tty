@@ -51,6 +51,7 @@ export const SessionRecordSchema = z
     rows: PositiveIntSchema,
     creationCols: PositiveIntSchema.optional(),
     creationRows: PositiveIntSchema.optional(),
+    idleTimeoutMs: NonNegativeIntSchema.optional(),
     hostPid: PositiveIntSchema.nullable(),
     childPid: PositiveIntSchema.nullable(),
     exitCode: z.number().int().nullable(),

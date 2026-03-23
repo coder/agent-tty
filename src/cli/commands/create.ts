@@ -5,6 +5,7 @@ import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
 
 import { emitSuccess } from '../output.js';
+import { DEFAULT_IDLE_TIMEOUT_MS } from '../../config/defaults.js';
 import {
   allocateSession,
   launchHost,
@@ -39,6 +40,7 @@ interface CommandOptions {
   rows: number;
   envEntries: string[];
   term: string;
+  idleTimeoutMs?: number;
   name?: string;
 }
 
@@ -66,6 +68,18 @@ function normalizeCreateEnvironment(envEntries: string[]): SessionEnvironment {
 
 export async function runCreateCommand(options: CommandOptions): Promise<void> {
   const environment = normalizeCreateEnvironment(options.envEntries);
+  const idleTimeoutMs =
+    options.idleTimeoutMs ??
+    options.context.configFile?.idleTimeoutMs ??
+    DEFAULT_IDLE_TIMEOUT_MS;
+
+  if (idleTimeoutMs < 0 || !Number.isInteger(idleTimeoutMs)) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: '--idle-timeout-ms must be a non-negative integer.',
+      details: { idleTimeoutMs },
+    });
+  }
+
   let sessionId: string | undefined;
 
   try {
@@ -78,6 +92,7 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
       rows: options.rows,
       env: environment,
       term: options.term,
+      ...(idleTimeoutMs > 0 ? { idleTimeoutMs } : {}),
       ...(options.name !== undefined ? { name: options.name } : {}),
     });
     sessionId = allocatedSession.sessionId;

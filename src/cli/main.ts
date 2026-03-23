@@ -173,6 +173,11 @@ async function main(): Promise<void> {
     )
     .option('--term <value>', 'Terminal type', DEFAULT_TERM)
     .option('--name <name>', 'Human-readable session name')
+    .option(
+      '--idle-timeout-ms <ms>',
+      'Idle timeout in milliseconds (0 = disabled)',
+      parseIntegerOption,
+    )
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
@@ -188,6 +193,7 @@ async function main(): Promise<void> {
             env: string[];
             term: string;
             name?: string;
+            idleTimeoutMs?: number;
             json: boolean;
           },
           context: CommandContext,
@@ -203,6 +209,9 @@ async function main(): Promise<void> {
             envEntries: options.env,
             term: options.term,
             ...(options.name !== undefined ? { name: options.name } : {}),
+            ...(options.idleTimeoutMs !== undefined
+              ? { idleTimeoutMs: options.idleTimeoutMs }
+              : {}),
           });
         },
       ),

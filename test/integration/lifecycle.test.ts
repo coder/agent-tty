@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { SessionRecordSchema } from '../../src/protocol/schemas.js';
 import {
   cleanupHome,
   crashSession,
@@ -225,6 +226,66 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       })
       .join('');
     expect(allOutput).toContain('bar|qux|vt100');
+  });
+
+  it('persists a provided idle timeout in the session manifest', async () => {
+    const createResult = runCli(
+      [
+        'create',
+        '--idle-timeout-ms',
+        '5000',
+        '--json',
+        '--',
+        '/bin/sh',
+        '-c',
+        'sleep 30',
+      ],
+      { AGENT_TERMINAL_HOME: testHome },
+    );
+    expect(createResult.status).toBe(0);
+    expect(createResult.stderr).toBe('');
+    const sessionId = (
+      JSON.parse(createResult.stdout) as SuccessEnvelope<{ sessionId: string }>
+    ).result.sessionId;
+
+    const manifest = SessionRecordSchema.parse(
+      JSON.parse(
+        await readFile(
+          join(testHome, 'sessions', sessionId, 'session.json'),
+          'utf8',
+        ),
+      ) as unknown,
+    );
+    expect(manifest.idleTimeoutMs).toBe(5000);
+  });
+
+  it('accepts an idle timeout of 0 without persisting it in the manifest', async () => {
+    const createResult = runCli(
+      [
+        'create',
+        '--idle-timeout-ms',
+        '0',
+        '--json',
+        '--',
+        '/bin/sh',
+        '-c',
+        'sleep 30',
+      ],
+      { AGENT_TERMINAL_HOME: testHome },
+    );
+    expect(createResult.status).toBe(0);
+    expect(createResult.stderr).toBe('');
+    const sessionId = (
+      JSON.parse(createResult.stdout) as SuccessEnvelope<{ sessionId: string }>
+    ).result.sessionId;
+
+    const manifest = JSON.parse(
+      await readFile(join(testHome, 'sessions', sessionId, 'session.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    expect(manifest).not.toHaveProperty('idleTimeoutMs');
+    expect(SessionRecordSchema.parse(manifest)).not.toHaveProperty(
+      'idleTimeoutMs',
+    );
   });
 
   it('uses the provided shell path for shell-only sessions', async () => {
