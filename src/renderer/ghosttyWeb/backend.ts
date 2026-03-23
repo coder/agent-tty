@@ -1662,7 +1662,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       'screenshot options must be an object when provided',
     );
     invariant(
-      options?.showCursor === undefined || typeof options.showCursor === 'boolean',
+      options?.showCursor === undefined ||
+        typeof options.showCursor === 'boolean',
       'screenshot showCursor option must be a boolean when provided',
     );
 
@@ -2149,7 +2150,10 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   ): Promise<void> {
     await page.evaluate((showCursorInScreenshot: boolean) => {
       const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
-      if (bridge === undefined || typeof bridge.setCursorVisible !== 'function') {
+      if (
+        bridge === undefined ||
+        typeof bridge.setCursorVisible !== 'function'
+      ) {
         throw new Error(
           'ghostty-web harness setCursorVisible() bridge is unavailable',
         );

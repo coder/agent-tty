@@ -512,7 +512,8 @@ async function main(): Promise<void> {
         ) => {
           if (options.showCursor && options.hideCursor) {
             throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-              message: '--show-cursor and --hide-cursor are mutually exclusive.',
+              message:
+                '--show-cursor and --hide-cursor are mutually exclusive.',
             });
           }
 
