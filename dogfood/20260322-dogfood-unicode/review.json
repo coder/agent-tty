@@ -3,36 +3,12 @@
   "cjkRow": "| CJK    | 漢字テスト中文日本                      |",
   "emojiRow": "| EMOJI  | ✓✗★♠♣♥♦⚡☀☁                     |",
   "pipeColumns": {
-    "LABEL": [
-      0,
-      9,
-      42
-    ],
-    "ASCII": [
-      0,
-      9,
-      42
-    ],
-    "BOX": [
-      0,
-      9,
-      42
-    ],
-    "CJK": [
-      0,
-      9,
-      42
-    ],
-    "EMOJI": [
-      0,
-      9,
-      42
-    ],
-    "AMBIG": [
-      0,
-      9,
-      42
-    ]
+    "LABEL": [0, 9, 42],
+    "ASCII": [0, 9, 42],
+    "BOX": [0, 9, 42],
+    "CJK": [0, 9, 42],
+    "EMOJI": [0, 9, 42],
+    "AMBIG": [0, 9, 42]
   },
   "review": {
     "boxDrawingContinuous": true,
