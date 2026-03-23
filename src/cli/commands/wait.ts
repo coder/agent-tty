@@ -2,7 +2,9 @@ import type {
   WaitForRenderResult,
   WaitResult,
 } from '../../protocol/messages.js';
+import type { SemanticSnapshot } from '../../renderer/types.js';
 
+import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
 
 import { emitSuccess } from '../output.js';
@@ -12,6 +14,7 @@ import {
   WaitForRenderResultSchema,
   WaitResultSchema,
 } from '../../protocol/schemas.js';
+import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
   manifestPath,
@@ -71,7 +74,11 @@ function renderWaitLines(result: WaitForRenderResult): string[] {
   }
 
   const lines: string[] = [];
-  if (result.matchedText !== undefined) {
+  if (!result.matched) {
+    lines.push(
+      'Host became unreachable before the wait condition could be fully verified; returning the latest offline snapshot state.',
+    );
+  } else if (result.matchedText !== undefined) {
     lines.push(`Matched: ${result.matchedText}`);
   } else {
     lines.push('Wait condition met.');
@@ -83,6 +90,98 @@ function renderWaitLines(result: WaitForRenderResult): string[] {
   }
   lines.push(`capturedAtSeq: ${String(result.capturedAtSeq)}`);
   return lines;
+}
+
+const MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH = 50_000;
+
+function compileOfflineWaitRegex(pattern: string): RegExp {
+  try {
+    return new RegExp(pattern);
+  } catch (error) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: `Invalid regex pattern: ${error instanceof Error ? error.message : String(error)}`,
+      cause: error,
+    });
+  }
+}
+
+function buildOfflineRenderWaitResult(
+  snapshot: SemanticSnapshot,
+  options: Pick<
+    CommandOptions,
+    'text' | 'regex' | 'screenStableMs' | 'cursorRow' | 'cursorCol'
+  >,
+): WaitForRenderResult {
+  const visibleText = snapshot.visibleLines.map((line) => line.text).join('\n');
+  const limitedVisibleText =
+    visibleText.length > MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH
+      ? visibleText.slice(0, MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH)
+      : visibleText;
+
+  let matchedText: string | undefined;
+  let textMatched = false;
+  if (options.text !== undefined) {
+    if (visibleText.includes(options.text)) {
+      textMatched = true;
+      matchedText = options.text;
+    }
+  } else if (options.regex !== undefined) {
+    const regex = compileOfflineWaitRegex(options.regex);
+    const match = regex.exec(limitedVisibleText);
+    if (match !== null) {
+      textMatched = true;
+      matchedText = match[0];
+    }
+  } else {
+    textMatched = true;
+  }
+
+  const cursorMatched =
+    (options.cursorRow === undefined || snapshot.cursorRow === options.cursorRow) &&
+    (options.cursorCol === undefined || snapshot.cursorCol === options.cursorCol);
+
+  if (textMatched && cursorMatched) {
+    return {
+      matched: options.screenStableMs === undefined,
+      timedOut: false,
+      ...(matchedText === undefined ? {} : { matchedText }),
+      cursorRow: snapshot.cursorRow,
+      cursorCol: snapshot.cursorCol,
+      capturedAtSeq: snapshot.capturedAtSeq,
+    };
+  }
+
+  throw makeCliError(ERROR_CODES.REPLAY_ERROR, {
+    message:
+      'Session host became unreachable during render wait, and the latest offline snapshot did not satisfy the requested wait condition.',
+    details: {
+      text: options.text,
+      regex: options.regex,
+      screenStableMs: options.screenStableMs,
+      expectedCursorRow: options.cursorRow,
+      expectedCursorCol: options.cursorCol,
+      capturedAtSeq: snapshot.capturedAtSeq,
+      cursorRow: snapshot.cursorRow,
+      cursorCol: snapshot.cursorCol,
+      visibleLines: snapshot.visibleLines.map((line) => line.text),
+    },
+  });
+}
+
+async function runOfflineRenderWait(
+  sessionDirectory: string,
+  options: Pick<
+    CommandOptions,
+    'text' | 'regex' | 'screenStableMs' | 'cursorRow' | 'cursorCol'
+  >,
+): Promise<WaitForRenderResult> {
+  return await withOfflineReplayRenderer(
+    { sessionDir: sessionDirectory },
+    async ({ backend }) => {
+      const snapshot = await backend.snapshot({ includeScrollback: false });
+      return buildOfflineRenderWaitResult(snapshot, options);
+    },
+  );
 }
 
 export async function runWaitCommand(options: CommandOptions): Promise<void> {
@@ -171,12 +270,24 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       timeoutMs: effectiveTimeout === 0 ? undefined : effectiveTimeout,
     };
     const clientTimeout = effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
-    const rawResult: unknown = await sendRpc(
-      socketPath(sessionDirectory),
-      'waitForRender',
-      params,
-      clientTimeout,
-    );
+    let rawResult: unknown;
+    try {
+      rawResult = await sendRpc(
+        socketPath(sessionDirectory),
+        'waitForRender',
+        params,
+        clientTimeout,
+      );
+    } catch (error) {
+      if (
+        error instanceof CliError &&
+        error.code === ERROR_CODES.HOST_UNREACHABLE
+      ) {
+        rawResult = await runOfflineRenderWait(sessionDirectory, options);
+      } else {
+        throw error;
+      }
+    }
     const parsedResult = WaitForRenderResultSchema.safeParse(rawResult);
     if (!parsedResult.success) {
       throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
