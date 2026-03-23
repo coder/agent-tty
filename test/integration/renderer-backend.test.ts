@@ -91,6 +91,25 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     expect(backend.isBooted).toBe(false);
   });
 
+  it('boots custom profiles without a bundled font identity', async () => {
+    const customBackend = new GhosttyWebBackend(`${SESSION_ID}-custom`, {
+      name: 'custom-no-font-identity',
+      theme: 'dark',
+      fontFamily: 'monospace',
+      fontSize: 14,
+      cursorStyle: 'block',
+      backgroundColor: '#000000',
+      foregroundColor: '#ffffff',
+    });
+
+    try {
+      await customBackend.boot();
+      expect(customBackend.isBooted).toBe(true);
+    } finally {
+      await customBackend.dispose();
+    }
+  });
+
   it('replays consecutive output events and flushes batches before target breaks', async () => {
     await backend.boot();
 
@@ -394,6 +413,7 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       expect(screenshot.artifactPath).toBe(outputPath);
       expect(screenshot.pngSizeBytes).toBeGreaterThan(0);
       expect(fileStats.size).toBe(screenshot.pngSizeBytes);
+      expect(screenshot.renderProfileHash).toMatch(/^[a-f0-9]{64}$/u);
     } finally {
       await rm(outputDir, { recursive: true, force: true });
     }

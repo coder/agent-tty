@@ -5,6 +5,11 @@ import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import {
+  BUNDLED_FONT_BUFFER,
+  BUNDLED_FONT_CONTENT_TYPE,
+  BUNDLED_FONT_ROUTE,
+} from '../../../src/renderer/bundledFont.js';
 import { hashProfile, resolveProfile } from '../../../src/renderer/profiles.js';
 import { GhosttyWebBackend } from '../../../src/renderer/ghosttyWeb/index.js';
 
@@ -77,6 +82,36 @@ describe('GhosttyWebBackend unit guards', () => {
       'writeBatchBridge batch size must not exceed MAX_REPLAY_BATCH_SIZE',
     );
     expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('serves the bundled font asset over the backend HTTP server', async () => {
+    const backend = createBackend();
+
+    try {
+      await backend.boot();
+
+      const serverOrigin = (
+        backend as unknown as { serverOrigin: string | null }
+      ).serverOrigin;
+      expect(serverOrigin).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
+      if (serverOrigin === null) {
+        throw new Error('expected ghostty-web backend server origin');
+      }
+
+      const response = await fetch(
+        new URL(BUNDLED_FONT_ROUTE, serverOrigin).toString(),
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain(
+        BUNDLED_FONT_CONTENT_TYPE,
+      );
+
+      const fontBody = Buffer.from(await response.arrayBuffer());
+      expect(fontBody.byteLength).toBeGreaterThan(0);
+      expect(fontBody.equals(BUNDLED_FONT_BUFFER)).toBe(true);
+    } finally {
+      await backend.dispose();
+    }
   });
 
   it('times out screenshot paint waits after 5 seconds', async () => {

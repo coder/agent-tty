@@ -30,6 +30,11 @@ import type {
   ScreenshotResult,
   SemanticSnapshot,
 } from '../types.js';
+import {
+  BUNDLED_FONT_BUFFER,
+  BUNDLED_FONT_CONTENT_TYPE,
+  BUNDLED_FONT_ROUTE,
+} from '../bundledFont.js';
 import { hashProfile } from '../profiles.js';
 
 interface GhosttyHarnessVisibleLine {
@@ -221,6 +226,13 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
           typeof profile.foregroundColor === 'string' && /^#[0-9a-fA-F]{6}$/u.test(profile.foregroundColor),
           'profile.foregroundColor must be a hex color',
         );
+        if (profile.fontAssetIdentity !== undefined && profile.fontAssetIdentity !== null) {
+          invariant(
+            typeof profile.fontAssetIdentity === 'string' &&
+              /^[a-f0-9]{64}$/u.test(profile.fontAssetIdentity),
+            'profile.fontAssetIdentity must be a 64-character lowercase SHA-256 hex string',
+          );
+        }
 
         return Object.freeze({ ...profile });
       }
@@ -399,7 +411,24 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         },
       };
 
+      async function loadBundledFont() {
+        if (!profile.fontAssetIdentity) {
+          return;
+        }
+
+        const fontFaceRule = new FontFace(
+          profile.fontFamily,
+          'url(/assets/fonts/JetBrainsMono-Regular-latin.woff2)',
+          { style: 'normal', weight: '400' },
+        );
+
+        const loadedFace = await fontFaceRule.load();
+        document.fonts.add(loadedFace);
+        await document.fonts.ready;
+      }
+
       async function boot() {
+        await loadBundledFont();
         await init();
 
         const terminal = new Terminal({
@@ -595,6 +624,15 @@ async function loadServedAssets(): Promise<
       contentType,
     });
   }
+
+  invariant(
+    BUNDLED_FONT_BUFFER.byteLength > 0,
+    'bundled font buffer must not be empty',
+  );
+  assetEntries.set(BUNDLED_FONT_ROUTE, {
+    body: BUNDLED_FONT_BUFFER,
+    contentType: BUNDLED_FONT_CONTENT_TYPE,
+  });
 
   return assetEntries;
 }
