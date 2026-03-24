@@ -64,6 +64,8 @@ const DEFAULT_RENDER_PROFILE_NAME = 'reference-dark';
 const MAX_WAIT_FOR_RENDER_REGEX_LENGTH = 200;
 export const MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH = 50_000;
 export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
+// Idle-timeout enforcement is polling-based: actual idle duration before kill
+// may exceed idleTimeoutMs by up to checkIntervalMs (bounded by this cap).
 const IDLE_CHECK_CAP_MS = 5_000;
 const BRACED_QUANTIFIER_PATTERN = /^\{(?:\d+|\d+,\d*)\}/;
 
@@ -600,6 +602,7 @@ export async function runHost(sessionId: string): Promise<void> {
       }
 
       invariant(typeof label === 'string', 'mark label must be a string');
+      lastActivityAt = Date.now();
       const seq = await eventLog.append('marker', { label });
       return { seq };
     },
@@ -671,6 +674,7 @@ export async function runHost(sessionId: string): Promise<void> {
       );
 
       pty.resize(cols, rows);
+      lastActivityAt = Date.now();
       state.setDimensions(cols, rows);
       await writeManifest(mPath, state.snapshot());
       await eventLog.append('resize', { cols, rows });
