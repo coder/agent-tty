@@ -196,6 +196,40 @@ describe('io-loop integration', { timeout: 30000 }, () => {
     }
   });
 
+  it('session with idle-timeout-ms 0 does not exit on idle', async () => {
+    let sessionId = '';
+
+    try {
+      const createResult = runCli(
+        [
+          'create',
+          '--idle-timeout-ms',
+          '0',
+          '--json',
+          '--',
+          '/bin/sh',
+          '-c',
+          'exec cat',
+        ],
+        { AGENT_TERMINAL_HOME: testHome },
+      );
+      expect(createResult.status).toBe(0);
+      expect(createResult.stderr).toBe('');
+      sessionId = (
+        JSON.parse(createResult.stdout) as SuccessEnvelope<{
+          sessionId: string;
+        }>
+      ).result.sessionId;
+
+      await sleep(3000);
+
+      const session = inspectSession(testHome, sessionId);
+      expect(session.status).toBe('running');
+    } finally {
+      destroySession(testHome, sessionId);
+    }
+  });
+
   it('signal SIGTERM terminates session', async () => {
     let sessionId = '';
 
