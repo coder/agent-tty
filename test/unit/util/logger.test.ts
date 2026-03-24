@@ -127,7 +127,7 @@ describe('Logger', () => {
       '[agent-terminal] debug: msg 42\n',
       '[agent-terminal] debug: msg true\n',
       '[agent-terminal] debug: msg [object Object]\n',
-      '[agent-terminal] debug: msg undefined\n',
+      '[agent-terminal] debug: msg Symbol(test)\n',
       '[agent-terminal] debug: msg 42\n',
     ]);
   });

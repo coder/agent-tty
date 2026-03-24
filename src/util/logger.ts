@@ -53,7 +53,8 @@ function formatLogDetail(detail: unknown): string {
     typeof detail === 'string' ||
     typeof detail === 'number' ||
     typeof detail === 'boolean' ||
-    typeof detail === 'bigint'
+    typeof detail === 'bigint' ||
+    typeof detail === 'symbol'
   ) {
     return String(detail);
   }
