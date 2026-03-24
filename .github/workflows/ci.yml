@@ -51,15 +51,14 @@ jobs:
       - name: Build
         run: mise run build
 
-  # macOS tier-1 validation counterpart to the Ubuntu quality gates above.
-  # Currently advisory (continue-on-error) because the macOS GitHub Actions
-  # runner has pre-existing issues with PTY spawning and Unix domain sockets
-  # that cause pty-spawn and socket-viable doctor checks to fail, cascading
-  # to 90+ integration/e2e test failures. Tracked for separate investigation.
+  # macOS compilation and static-analysis counterpart to the Ubuntu quality
+  # gates above.  Tests are excluded because the macOS GitHub Actions runner
+  # has pre-existing issues with PTY spawning and Unix domain sockets that
+  # cause integration/e2e test failures.  The full test suite runs on Linux;
+  # macOS validates that the code compiles and passes static checks.
   quality-gates-macos:
     runs-on: macos-latest
     timeout-minutes: 20
-    continue-on-error: true
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -70,9 +69,6 @@ jobs:
       - name: Install CI dependencies
         run: mise run bootstrap-ci
 
-      - name: Install Playwright Chromium
-        run: npx playwright install chromium
-
       - name: Check formatting
         run: mise run format-check
 
@@ -81,9 +77,6 @@ jobs:
 
       - name: Typecheck
         run: mise run typecheck
-
-      - name: Test
-        run: mise run test
 
       - name: Build
         run: mise run build
