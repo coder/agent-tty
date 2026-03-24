@@ -93,6 +93,8 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
         'Oversized screenshot profile should fail schema validation',
       );
     }
+    // This assertion is tied to Zod's current error format (v4.x). If Zod is
+    // upgraded and the issue shape or message text changes, update this test.
     expect(profileValidation.error.issues).toContainEqual(
       expect.objectContaining({
         code: 'too_big',

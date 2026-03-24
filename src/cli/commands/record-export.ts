@@ -120,13 +120,13 @@ function resolveWebmProfileName(
     profile: effectiveProfile,
   });
 
-  if (!requestResult.success || requestResult.data.profile === undefined) {
+  if (!requestResult.success) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {
       message: 'Record export profile is invalid.',
       details: {
         profile: effectiveProfile,
       },
-      ...(requestResult.success ? {} : { cause: requestResult.error }),
+      cause: requestResult.error,
     });
   }
 
