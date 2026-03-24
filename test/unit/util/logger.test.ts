@@ -118,6 +118,8 @@ describe('Logger', () => {
     logger.debug('msg', 42);
     logger.debug('msg', true);
     expect(() => logger.debug('msg', circular)).not.toThrow();
+    expect(() => logger.debug('msg', Symbol('test'))).not.toThrow();
+    expect(() => logger.debug('msg', BigInt(42))).not.toThrow();
 
     expect(writes).toEqual([
       '[agent-terminal] debug: msg null\n',
@@ -125,6 +127,8 @@ describe('Logger', () => {
       '[agent-terminal] debug: msg 42\n',
       '[agent-terminal] debug: msg true\n',
       '[agent-terminal] debug: msg [object Object]\n',
+      '[agent-terminal] debug: msg undefined\n',
+      '[agent-terminal] debug: msg 42\n',
     ]);
   });
 

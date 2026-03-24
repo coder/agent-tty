@@ -1037,6 +1037,9 @@ export async function runHost(sessionId: string): Promise<void> {
 
   pty.onData((data: string) => {
     lastOutputAt = Date.now();
+    // PTY output counts as session activity for idle-timeout purposes.
+    // A session actively producing output (e.g., a running build, log tail)
+    // is "in use" and should not be killed for inactivity.
     lastActivityAt = lastOutputAt;
     void eventLog.append('output', { data }).catch(() => {
       // Best-effort logging; shutdown should not fail on transient append errors.
