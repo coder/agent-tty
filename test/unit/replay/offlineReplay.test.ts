@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
@@ -167,9 +167,8 @@ async function createSessionFixture(options?: {
   includeEventLog?: boolean;
   manifestOverrides?: Partial<SessionRecord>;
 }): Promise<{ sessionDir: string; sessionId: string }> {
-  const sessionDir = await mkdtemp(
-    join(tmpdir(), 'agent-terminal-offline-replay-'),
-  );
+  // prettier-ignore
+  const sessionDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-offline-replay-')));
   tempDirs.push(sessionDir);
 
   const sessionId = basename(sessionDir);

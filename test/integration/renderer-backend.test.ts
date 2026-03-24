@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -330,9 +330,8 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
         payload: { data: `${expectedText}\r\n` },
       },
     ]);
-    const outputDir = await mkdtemp(
-      join(tmpdir(), 'agent-terminal-renderer-restart-'),
-    );
+    // prettier-ignore
+    const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-renderer-restart-')));
     const screenshotAPath = join(outputDir, 'renderer-a.png');
     const screenshotBPath = join(outputDir, 'renderer-b.png');
 
@@ -401,9 +400,8 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       ]),
     );
 
-    const outputDir = await mkdtemp(
-      join(tmpdir(), 'agent-terminal-renderer-shot-'),
-    );
+    // prettier-ignore
+    const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-renderer-shot-')));
     const outputPath = join(outputDir, 'renderer.png');
 
     try {

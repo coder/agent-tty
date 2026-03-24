@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -12,7 +12,8 @@ import {
 const temporaryHomes: string[] = [];
 
 async function createTemporaryHome(): Promise<string> {
-  const home = await mkdtemp(join(tmpdir(), 'agent-terminal-config-'));
+  // prettier-ignore
+  const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-config-')));
   temporaryHomes.push(home);
   return home;
 }

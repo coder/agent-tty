@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -269,9 +269,8 @@ describe('GhosttyWebBackend unit guards', () => {
 
   it('returns screenshot metadata including png dimensions and hashes', async () => {
     const backend = createBackend();
-    const temporaryDirectory = await mkdtemp(
-      join(tmpdir(), 'ghostty-web-backend-'),
-    );
+    // prettier-ignore
+    const temporaryDirectory = await realpath(await mkdtemp(join(tmpdir(), 'ghostty-web-backend-')));
     const outputPath = join(temporaryDirectory, 'screenshot.png');
     const pngBuffer = createPngBuffer(800, 600);
     const expectedSha256 = createHash('sha256').update(pngBuffer).digest('hex');
@@ -337,9 +336,8 @@ describe('GhosttyWebBackend unit guards', () => {
 
   it('uses initial caret capture when showCursor is enabled', async () => {
     const backend = createBackend();
-    const temporaryDirectory = await mkdtemp(
-      join(tmpdir(), 'ghostty-web-backend-cursor-'),
-    );
+    // prettier-ignore
+    const temporaryDirectory = await realpath(await mkdtemp(join(tmpdir(), 'ghostty-web-backend-cursor-')));
     const outputPath = join(temporaryDirectory, 'screenshot.png');
     const pngBuffer = createPngBuffer(640, 480);
     const expectedSha256 = createHash('sha256').update(pngBuffer).digest('hex');

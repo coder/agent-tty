@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -19,7 +19,8 @@ let testHome = '';
 
 describe('pty-basics integration', { timeout: 30000 }, () => {
   beforeEach(async () => {
-    testHome = await mkdtemp(join(tmpdir(), 'agent-terminal-home-'));
+    // prettier-ignore
+    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-home-')));
   });
 
   afterEach(async () => {

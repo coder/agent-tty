@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, rm, truncate, writeFile } from 'node:fs/promises';
+import {
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  truncate,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -16,7 +23,8 @@ let eventLogPath = '';
 
 describe('countEventLogEntries', () => {
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'agent-terminal-event-log-'));
+    // prettier-ignore
+    tempDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-event-log-')));
     eventLogPath = join(tempDir, 'events.jsonl');
   });
 
@@ -54,7 +62,8 @@ describe('countEventLogEntries', () => {
 
 describe('EventLog', () => {
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'agent-terminal-event-log-'));
+    // prettier-ignore
+    tempDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-event-log-')));
     eventLogPath = join(tempDir, 'events.jsonl');
     await writeFile(eventLogPath, '', 'utf8');
   });

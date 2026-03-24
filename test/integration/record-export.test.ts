@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
@@ -83,7 +83,8 @@ describe('record export integration', { timeout: 120_000 }, () => {
   let testHome = '';
 
   beforeEach(async () => {
-    testHome = await mkdtemp(join(tmpdir(), 'agent-terminal-record-export-'));
+    // prettier-ignore
+    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-record-export-')));
   });
 
   afterEach(async () => {

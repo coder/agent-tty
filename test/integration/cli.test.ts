@@ -1,4 +1,10 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -31,7 +37,8 @@ function parseErrorEnvelope(output: string): CommandErrorEnvelope {
 
 describe('CLI integration', () => {
   beforeEach(() => {
-    testHome = mkdtempSync(join(tmpdir(), 'agent-terminal-cli-home-'));
+    // prettier-ignore
+    testHome = realpathSync(mkdtempSync(join(tmpdir(), 'agent-terminal-cli-home-')));
   });
 
   afterEach(() => {
@@ -223,9 +230,8 @@ describe('CLI integration', () => {
   });
 
   it('uses --home instead of AGENT_TERMINAL_HOME', () => {
-    const overrideHome = mkdtempSync(
-      join(tmpdir(), 'agent-terminal-cli-override-'),
-    );
+    // prettier-ignore
+    const overrideHome = realpathSync(mkdtempSync(join(tmpdir(), 'agent-terminal-cli-override-')));
 
     try {
       const result = runCli(

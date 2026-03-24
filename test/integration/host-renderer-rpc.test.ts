@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -82,7 +82,8 @@ describe(
     let sessDir = '';
 
     beforeEach(async () => {
-      testHome = await mkdtemp(join(tmpdir(), 'agent-terminal-host-renderer-'));
+      // prettier-ignore
+      testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-host-renderer-')));
       sessionId = createSession(testHome, [
         '/bin/sh',
         '-c',
