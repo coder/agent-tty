@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import { isAbsolute, normalize } from 'node:path';
 import process from 'node:process';
 
@@ -58,7 +59,12 @@ function validateHomePath(home: string, source: string): string {
     });
   }
 
-  return normalize(home);
+  const normalized = normalize(home);
+  try {
+    return realpathSync(normalized);
+  } catch {
+    return normalized;
+  }
 }
 
 export function parseTimeoutMsOption(value: string): number {

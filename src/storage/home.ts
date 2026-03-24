@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, normalize } from 'node:path';
@@ -14,7 +15,12 @@ function validateConfiguredHome(
   invariant(configuredHome.length > 0, `${source} must not be empty`);
   invariant(isAbsolute(configuredHome), `${source} must be an absolute path`);
 
-  return normalize(configuredHome);
+  const normalized = normalize(configuredHome);
+  try {
+    return realpathSync(normalized);
+  } catch {
+    return normalized;
+  }
 }
 
 export function resolveHome(
@@ -24,14 +30,18 @@ export function resolveHome(
     return validateConfiguredHome(configuredHome, 'AGENT_TERMINAL_HOME');
   }
 
-  const resolvedHome = normalize(join(homedir(), DEFAULT_HOME_DIRECTORY_NAME));
+  const normalized = normalize(join(homedir(), DEFAULT_HOME_DIRECTORY_NAME));
 
   invariant(
-    isAbsolute(resolvedHome),
+    isAbsolute(normalized),
     'resolved agent-terminal home must be absolute',
   );
 
-  return resolvedHome;
+  try {
+    return realpathSync(normalized);
+  } catch {
+    return normalized;
+  }
 }
 
 export async function ensureHome(
