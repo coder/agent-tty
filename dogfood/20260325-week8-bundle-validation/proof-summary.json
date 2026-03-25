@@ -1,0 +1,42 @@
+{
+  "bundle": "20260325-week8-bundle-validation",
+  "generatedAt": "2026-03-25T23:44:33.329Z",
+  "summary": "Week 8 validate-bundle proof summary for valid, invalid, existing-bundle, and self-validation scenarios.",
+  "cases": [
+    {
+      "step": "01-valid-pass",
+      "expectation": "pass",
+      "artifact": "logs/01-valid-pass.json"
+    },
+    {
+      "step": "02-invalid-fail",
+      "expectation": "expected-fail",
+      "artifact": "logs/02-invalid-fail.json"
+    },
+    {
+      "step": "03-brief-reference-week7-a-fail",
+      "expectation": "expected-fail",
+      "artifact": "logs/03-brief-reference-week7-a-fail.json"
+    },
+    {
+      "step": "04-existing-legacy-pass",
+      "expectation": "pass",
+      "artifact": "logs/04-existing-legacy-pass.json"
+    },
+    {
+      "step": "05-review-page-screenshot",
+      "expectation": "pass",
+      "artifact": "logs/05-review-page-screenshot.json"
+    },
+    {
+      "step": "06-self-pass",
+      "expectation": "pass",
+      "artifact": "logs/06-self-pass.json"
+    },
+    {
+      "step": "07-review-self",
+      "expectation": "pass",
+      "artifact": "logs/07-review-self.txt"
+    }
+  ]
+}

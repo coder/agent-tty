@@ -1,0 +1,8 @@
+step	command	exit_code	status
+01-valid-pass	npm run --silent validate-bundle -- "/tmp/agent-terminal-week8-valid.xMfv7X/valid-sample" --profile contract-reporting	0	pass
+02-invalid-fail	npm run --silent validate-bundle -- "/tmp/agent-terminal-week8-invalid.SVE1TL/invalid-sample" --profile contract-reporting	1	expected-fail
+03-brief-reference-week7-a-fail	npm run --silent validate-bundle -- dogfood/20260325-week7-a-cli-parity --profile contract-reporting	1	expected-fail
+04-existing-legacy-pass	npm run --silent validate-bundle -- "/tmp/agent-terminal-week8-existing.xiuJkr/20260319-lifecycle" --profile contract-reporting	0	pass
+05-review-page-screenshot	node --input-type=module <embedded playwright screenshot>	0	pass
+06-self-pass	npm run --silent validate-bundle -- "dogfood/20260325-week8-bundle-validation" --profile contract-reporting	0	pass
+07-review-self	npm run --silent review-bundle -- "dogfood/20260325-week8-bundle-validation"	0	pass

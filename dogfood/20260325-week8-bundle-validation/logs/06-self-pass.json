@@ -1,0 +1,32 @@
+{
+  "bundleDir": "/home/coder/.mux/src/agent-terminal/agent_exec_20a332c5c3/dogfood/20260325-week8-bundle-validation",
+  "profile": "contract-reporting",
+  "ok": true,
+  "checks": [
+    {
+      "name": "bundle-exists",
+      "ok": true,
+      "message": "Bundle directory is readable: /home/coder/.mux/src/agent-terminal/agent_exec_20a332c5c3/dogfood/20260325-week8-bundle-validation"
+    },
+    {
+      "name": "has-json-output",
+      "ok": true,
+      "message": "Found 1 JSON output file(s)."
+    },
+    {
+      "name": "has-review-page",
+      "ok": true,
+      "message": "Found review page index.html."
+    },
+    {
+      "name": "has-notes",
+      "ok": true,
+      "message": "Found 1 note file(s)."
+    },
+    {
+      "name": "json-readable",
+      "ok": true,
+      "message": "Parsed 1 JSON output file(s)."
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+validate-bundle FAIL contract-reporting: /home/coder/.mux/src/agent-terminal/agent_exec_20a332c5c3/dogfood/20260325-week7-a-cli-parity
+✓ bundle-exists: Bundle directory is readable: /home/coder/.mux/src/agent-terminal/agent_exec_20a332c5c3/dogfood/20260325-week7-a-cli-parity
+✗ has-json-output: Expected at least one JSON output file.
+✓ has-review-page: Found review page index.html.
+✓ has-notes: Found 1 note file(s).
+✗ json-readable: No JSON output files were found to parse.

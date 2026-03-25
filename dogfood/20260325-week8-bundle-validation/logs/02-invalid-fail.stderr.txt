@@ -1,0 +1,6 @@
+validate-bundle FAIL contract-reporting: /tmp/agent-terminal-week8-invalid.SVE1TL/invalid-sample
+✓ bundle-exists: Bundle directory is readable: /tmp/agent-terminal-week8-invalid.SVE1TL/invalid-sample
+✗ has-json-output: Expected at least one JSON output file.
+✗ has-review-page: Expected index.html review page in the bundle root.
+✗ has-notes: Expected at least one notes markdown file.
+✗ json-readable: No JSON output files were found to parse.

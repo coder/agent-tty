@@ -1,0 +1,6 @@
+validate-bundle PASS contract-reporting: /tmp/agent-terminal-week8-existing.xiuJkr/20260319-lifecycle
+✓ bundle-exists: Bundle directory is readable: /tmp/agent-terminal-week8-existing.xiuJkr/20260319-lifecycle
+✓ has-json-output: Found 15 JSON output file(s).
+✓ has-review-page: Found review page index.html.
+✓ has-notes: Found 1 note file(s).
+✓ json-readable: Parsed 15 JSON output file(s).
