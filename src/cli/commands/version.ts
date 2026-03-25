@@ -2,6 +2,9 @@ import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 
 import { emitSuccess } from '../output.js';
+import type { CapabilityEntry } from '../../renderer/capabilities.js';
+
+import { discoverCapabilities } from '../../renderer/capabilities.js';
 import { assertString } from '../../util/assert.js';
 
 const COMMAND_NAME = 'version';
@@ -21,6 +24,7 @@ export interface VersionResult {
     platform: NodeJS.Platform;
     arch: string;
   };
+  capabilities?: CapabilityEntry[];
 }
 
 export async function loadPackageMetadata(): Promise<PackageMetadata> {
@@ -42,8 +46,13 @@ export async function loadPackageMetadata(): Promise<PackageMetadata> {
   };
 }
 
-export async function buildVersionResult(): Promise<VersionResult> {
+export async function buildVersionResult(options?: {
+  includeCapabilities?: boolean;
+}): Promise<VersionResult> {
   const packageMetadata = await loadPackageMetadata();
+  const capabilities = options?.includeCapabilities
+    ? await discoverCapabilities('quick')
+    : undefined;
 
   return {
     cliVersion: packageMetadata.version,
@@ -54,13 +63,16 @@ export async function buildVersionResult(): Promise<VersionResult> {
       platform: process.platform,
       arch: process.arch,
     },
+    ...(capabilities === undefined ? {} : { capabilities }),
   };
 }
 
 export async function runVersionCommand(options: {
   json: boolean;
 }): Promise<void> {
-  const result = await buildVersionResult();
+  const result = await buildVersionResult({
+    includeCapabilities: options.json,
+  });
 
   emitSuccess({
     command: COMMAND_NAME,

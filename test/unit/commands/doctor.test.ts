@@ -111,6 +111,27 @@ describe('doctor command', () => {
     expect(result.ok).toBe(true);
     expect(result.checks.environment.length).toBeGreaterThan(0);
     expect(result.checks.renderer.length).toBeGreaterThan(0);
+    expect(result.capabilities).toHaveLength(5);
+    expect(result.capabilities.map((capability) => capability.name)).toEqual([
+      'snapshot',
+      'wait',
+      'screenshot',
+      'record-export-asciicast',
+      'record-export-webm',
+    ]);
+    expect(result.capabilities.find(({ name }) => name === 'snapshot')).toEqual({
+      name: 'snapshot',
+      status: 'available',
+      reason: 'built-in capability',
+      detail: 'available without external renderer dependencies',
+    });
+    expect(
+      result.capabilities.find(({ name }) => name === 'screenshot'),
+    ).toMatchObject({
+      name: 'screenshot',
+      status: 'available',
+      reason: 'renderer smoke checks passed',
+    });
     expect(checkNames).toEqual(
       expect.arrayContaining([
         'home-writable',
@@ -186,6 +207,7 @@ describe('doctor command', () => {
   it('formats grouped human-readable output', () => {
     const lines = buildDoctorLines({
       ok: false,
+      capabilities: [],
       checks: {
         environment: [
           {

@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+
 import { z } from 'zod';
 
 // --- Capability vocabulary ---
@@ -53,21 +55,333 @@ export type RendererRuntimeSummary = z.infer<typeof RendererRuntimeSummarySchema
 
 // --- Discovery modes ---
 
+const CAPABILITY_NAMES: ReadonlyArray<CapabilityName> = Object.freeze([
+  'snapshot',
+  'wait',
+  'screenshot',
+  'record-export-asciicast',
+  'record-export-webm',
+]);
+const BUILTIN_CAPABILITY_NAMES: ReadonlyArray<CapabilityName> = Object.freeze([
+  'snapshot',
+  'wait',
+  'record-export-asciicast',
+]);
+
+type DiscoveryCheckStatus = 'pass' | 'fail' | 'skip';
+
+interface DiscoveryCheck {
+  name: string;
+  status: DiscoveryCheckStatus;
+  message: string;
+}
+
+interface PlaywrightProbeResult {
+  available: boolean;
+  reason?: string;
+  detail?: string;
+}
+
+export interface CapabilityDiscoveryDependencies {
+  probePlaywright?: (mode: DiscoveryMode) => Promise<PlaywrightProbeResult>;
+  rendererChecks?: ReadonlyArray<DiscoveryCheck>;
+}
+
 export type DiscoveryMode = 'quick' | 'full';
+
+function formatCapabilityError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
+async function probePlaywrightAvailability(
+  mode: DiscoveryMode,
+): Promise<PlaywrightProbeResult> {
+  try {
+    const playwrightModule = (await import('playwright')) as {
+      chromium?: {
+        launch?: unknown;
+      };
+    };
+
+    if (mode === 'full') {
+      assert.equal(
+        typeof playwrightModule.chromium?.launch,
+        'function',
+        'playwright chromium.launch must be a function',
+      );
+      return {
+        available: true,
+        reason: 'playwright import succeeded',
+        detail: 'chromium launcher is available for browser-backed rendering',
+      };
+    }
+
+    return { available: true };
+  } catch (error) {
+    const detail = formatCapabilityError(error);
+    return mode === 'full'
+      ? {
+          available: false,
+          reason: 'playwright import failed',
+          detail,
+        }
+      : {
+          available: false,
+          reason: 'playwright not installed',
+          detail,
+        };
+  }
+}
+
+function buildBuiltinCapability(
+  name: CapabilityName,
+  mode: DiscoveryMode,
+): CapabilityEntry {
+  return mode === 'full'
+    ? {
+        name,
+        status: 'available',
+        reason: 'built-in capability',
+        detail: 'available without external renderer dependencies',
+      }
+    : {
+        name,
+        status: 'available',
+      };
+}
+
+function findRendererCheck(
+  checks: ReadonlyArray<DiscoveryCheck>,
+  name: string,
+): DiscoveryCheck | undefined {
+  return checks.find((check) => check.name === name);
+}
+
+function buildAvailableDetail(
+  checks: ReadonlyArray<DiscoveryCheck>,
+): string | undefined {
+  if (checks.length === 0) {
+    return undefined;
+  }
+
+  return checks.map((check) => `${check.name}: ${check.message}`).join('; ');
+}
+
+function buildUnknownCapability(name: CapabilityName): CapabilityEntry {
+  return {
+    name,
+    status: 'unknown',
+    reason: 'renderer checks incomplete',
+    detail: 'doctor did not provide the full renderer check set',
+  };
+}
+
+function buildFullScreenshotCapabilityFromChecks(
+  checks: ReadonlyArray<DiscoveryCheck>,
+): CapabilityEntry {
+  const playwrightCheck = findRendererCheck(checks, 'playwright_available');
+  const browserLaunchCheck = findRendererCheck(checks, 'browser_launch');
+  const ghosttyWebCheck = findRendererCheck(checks, 'ghostty_web_available');
+  const screenshotCheck = findRendererCheck(checks, 'screenshot_viable');
+
+  if (
+    playwrightCheck === undefined ||
+    browserLaunchCheck === undefined ||
+    ghosttyWebCheck === undefined ||
+    screenshotCheck === undefined
+  ) {
+    return buildUnknownCapability('screenshot');
+  }
+
+  if (playwrightCheck.status === 'fail') {
+    return {
+      name: 'screenshot',
+      status: 'unavailable',
+      reason: 'playwright unavailable',
+      detail: playwrightCheck.message,
+    };
+  }
+
+  if (ghosttyWebCheck.status === 'fail') {
+    return {
+      name: 'screenshot',
+      status: 'unavailable',
+      reason: 'ghostty-web unavailable',
+      detail: ghosttyWebCheck.message,
+    };
+  }
+
+  if (browserLaunchCheck.status === 'fail') {
+    return {
+      name: 'screenshot',
+      status: 'degraded',
+      reason: 'browser launch failed',
+      detail: browserLaunchCheck.message,
+    };
+  }
+
+  if (screenshotCheck.status === 'fail') {
+    return {
+      name: 'screenshot',
+      status: 'degraded',
+      reason: 'screenshot smoke test failed',
+      detail: screenshotCheck.message,
+    };
+  }
+
+  return {
+    name: 'screenshot',
+    status: 'available',
+    reason: 'renderer smoke checks passed',
+    detail: buildAvailableDetail([
+      playwrightCheck,
+      browserLaunchCheck,
+      ghosttyWebCheck,
+      screenshotCheck,
+    ]),
+  };
+}
+
+function buildFullWebmCapabilityFromChecks(
+  checks: ReadonlyArray<DiscoveryCheck>,
+): CapabilityEntry {
+  const playwrightCheck = findRendererCheck(checks, 'playwright_available');
+  const browserLaunchCheck = findRendererCheck(checks, 'browser_launch');
+  const ghosttyWebCheck = findRendererCheck(checks, 'ghostty_web_available');
+
+  if (
+    playwrightCheck === undefined ||
+    browserLaunchCheck === undefined ||
+    ghosttyWebCheck === undefined
+  ) {
+    return buildUnknownCapability('record-export-webm');
+  }
+
+  if (playwrightCheck.status === 'fail') {
+    return {
+      name: 'record-export-webm',
+      status: 'unavailable',
+      reason: 'playwright unavailable',
+      detail: playwrightCheck.message,
+    };
+  }
+
+  if (ghosttyWebCheck.status === 'fail') {
+    return {
+      name: 'record-export-webm',
+      status: 'unavailable',
+      reason: 'ghostty-web unavailable',
+      detail: ghosttyWebCheck.message,
+    };
+  }
+
+  if (browserLaunchCheck.status === 'fail') {
+    return {
+      name: 'record-export-webm',
+      status: 'degraded',
+      reason: 'browser launch failed',
+      detail: browserLaunchCheck.message,
+    };
+  }
+
+  return {
+    name: 'record-export-webm',
+    status: 'available',
+    reason: 'browser-backed export dependencies available',
+    detail: buildAvailableDetail([
+      playwrightCheck,
+      browserLaunchCheck,
+      ghosttyWebCheck,
+    ]),
+  };
+}
+
+async function buildPlaywrightCapability(
+  name: 'screenshot' | 'record-export-webm',
+  mode: DiscoveryMode,
+  deps: CapabilityDiscoveryDependencies,
+): Promise<CapabilityEntry> {
+  if (mode === 'full' && deps.rendererChecks !== undefined) {
+    return name === 'screenshot'
+      ? buildFullScreenshotCapabilityFromChecks(deps.rendererChecks)
+      : buildFullWebmCapabilityFromChecks(deps.rendererChecks);
+  }
+
+  const probePlaywright = deps.probePlaywright ?? probePlaywrightAvailability;
+  const probe = await probePlaywright(mode);
+
+  return probe.available
+    ? mode === 'full'
+      ? {
+          name,
+          status: 'available',
+          reason: probe.reason,
+          detail: probe.detail,
+        }
+      : {
+          name,
+          status: 'available',
+        }
+    : {
+        name,
+        status: 'unavailable',
+        reason: probe.reason,
+        detail: probe.detail,
+      };
+}
+
+function validateDiscoveredCapabilities(
+  capabilities: ReadonlyArray<CapabilityEntry>,
+): CapabilityEntry[] {
+  assert.equal(
+    capabilities.length,
+    CAPABILITY_NAMES.length,
+    'discovered capabilities must include every known capability exactly once',
+  );
+
+  const capabilityNames = capabilities.map((capability) => capability.name);
+  assert.equal(
+    new Set(capabilityNames).size,
+    CAPABILITY_NAMES.length,
+    'discovered capabilities must not contain duplicates',
+  );
+
+  return capabilities.map((capability) => CapabilityEntrySchema.parse(capability));
+}
 
 /**
  * Discover runtime capabilities.
  *
  * - 'quick' mode: fast checks suitable for `version --json` (no browser launch).
- * - 'full' mode: thorough probing suitable for `doctor --json` (may launch browser).
- *
- * Stub — actual implementation lands in Phase A.
+ * - 'full' mode: deeper probing suitable for `doctor --json`.
  */
 export async function discoverCapabilities(
-  _mode: DiscoveryMode,
+  mode: DiscoveryMode,
+  deps: CapabilityDiscoveryDependencies = {},
 ): Promise<CapabilityEntry[]> {
-  void _mode;
-  await Promise.resolve();
-  // Phase A will implement actual discovery logic.
-  throw new Error('discoverCapabilities is not yet implemented');
+  const capabilities: CapabilityEntry[] = [];
+
+  for (const name of BUILTIN_CAPABILITY_NAMES) {
+    capabilities.push(buildBuiltinCapability(name, mode));
+  }
+
+  capabilities.push(await buildPlaywrightCapability('screenshot', mode, deps));
+  capabilities.push(
+    await buildPlaywrightCapability('record-export-webm', mode, deps),
+  );
+
+  const sortedCapabilities: CapabilityEntry[] = [];
+  for (const name of CAPABILITY_NAMES) {
+    const capability = capabilities.find((entry) => entry.name === name);
+    if (capability === undefined) {
+      throw new Error(`missing discovered capability entry for ${name}`);
+    }
+    sortedCapabilities.push(capability);
+  }
+
+  return validateDiscoveredCapabilities(sortedCapabilities);
 }
