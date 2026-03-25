@@ -33,7 +33,10 @@ export type CapabilityEntry = z.infer<typeof CapabilityEntrySchema>;
 
 // --- Renderer runtime summary (for inspect) ---
 
-export const RendererRuntimeModeSchema = z.enum(['live-host', 'offline-replay']);
+export const RendererRuntimeModeSchema = z.enum([
+  'live-host',
+  'offline-replay',
+]);
 export type RendererRuntimeMode = z.infer<typeof RendererRuntimeModeSchema>;
 
 export const RendererRuntimeStatusSchema = z.enum([
@@ -51,7 +54,9 @@ export const RendererRuntimeSummarySchema = z
     reason: z.string().optional(),
   })
   .strict();
-export type RendererRuntimeSummary = z.infer<typeof RendererRuntimeSummarySchema>;
+export type RendererRuntimeSummary = z.infer<
+  typeof RendererRuntimeSummarySchema
+>;
 
 // --- Discovery modes ---
 
@@ -350,7 +355,9 @@ function validateDiscoveredCapabilities(
     'discovered capabilities must not contain duplicates',
   );
 
-  return capabilities.map((capability) => CapabilityEntrySchema.parse(capability));
+  return capabilities.map((capability) =>
+    CapabilityEntrySchema.parse(capability),
+  );
 }
 
 /**

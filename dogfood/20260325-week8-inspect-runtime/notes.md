@@ -14,10 +14,10 @@ This bundle proves the Week 8 `inspect --json` renderer runtime summary against 
 
 ## `rendererRuntime` proof
 
-| Capture | Evidence | `session.status` | `rendererRuntime.mode` | `rendererRuntime.status` | `rendererRuntime.reason` | `usedOfflineReplay` |
-| --- | --- | --- | --- | --- | --- | --- |
-| Live inspect | `logs/02-inspect-live.json` | `running` | `live-host` | `healthy` | _omitted_ | `false` |
-| Post-destroy inspect | `logs/04-inspect-offline.json` | `destroyed` | `offline-replay` | `fallback` | `session-not-running` | `false` |
+| Capture              | Evidence                       | `session.status` | `rendererRuntime.mode` | `rendererRuntime.status` | `rendererRuntime.reason` | `usedOfflineReplay` |
+| -------------------- | ------------------------------ | ---------------- | ---------------------- | ------------------------ | ------------------------ | ------------------- |
+| Live inspect         | `logs/02-inspect-live.json`    | `running`        | `live-host`            | `healthy`                | _omitted_                | `false`             |
+| Post-destroy inspect | `logs/04-inspect-offline.json` | `destroyed`      | `offline-replay`       | `fallback`               | `session-not-running`    | `false`             |
 
 Key observations from the captured JSON envelopes:
 

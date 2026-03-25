@@ -15,10 +15,19 @@
         --accent: #93c5fd;
         --border: #334155;
       }
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
         background: linear-gradient(180deg, #020617 0%, var(--bg) 100%);
         color: var(--text);
         line-height: 1.5;
@@ -28,22 +37,38 @@
         margin: 0 auto;
         padding: 32px 20px 48px;
       }
-      a { color: var(--accent); }
-      header, section, .card {
+      a {
+        color: var(--accent);
+      }
+      header,
+      section,
+      .card {
         background: rgb(15 23 42 / 0.88);
         border: 1px solid var(--border);
         border-radius: 16px;
         box-shadow: 0 18px 40px rgb(2 6 23 / 0.25);
       }
-      header, section {
+      header,
+      section {
         padding: 24px;
         margin-bottom: 20px;
       }
-      h1, h2, h3, h4, h5, h6 {
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
         margin-top: 0;
         color: #f8fafc;
       }
-      p, li, dd, td, th, summary, figcaption {
+      p,
+      li,
+      dd,
+      td,
+      th,
+      summary,
+      figcaption {
         overflow-wrap: anywhere;
       }
       .subtle {
@@ -80,7 +105,8 @@
       .note-card > *:last-child {
         margin-bottom: 0;
       }
-      img, video {
+      img,
+      video {
         width: 100%;
         border-radius: 12px;
         background: #020617;
@@ -105,7 +131,8 @@
         white-space: pre-wrap;
       }
       code {
-        font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family:
+          'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       details > summary {
         cursor: pointer;
@@ -115,7 +142,8 @@
         width: 100%;
         border-collapse: collapse;
       }
-      th, td {
+      th,
+      td {
         text-align: left;
         padding: 10px 12px;
         border-bottom: 1px solid var(--border);
@@ -138,35 +166,96 @@
         <p class="subtle">Portable review bundle</p>
         <h1>Week 8 — Inspect Runtime</h1>
         <p class="subtle">Bundle directory: 20260325-week8-inspect-runtime</p>
-        <p>Proves inspect --json reports live-host vs offline-replay renderer runtime summaries for the same retained session.</p>
+        <p>
+          Proves inspect --json reports live-host vs offline-replay renderer
+          runtime summaries for the same retained session.
+        </p>
       </header>
-      
+
       <section>
-  <h2>Manifest summary</h2>
-  <dl class="facts"><div><dt>Bundle</dt><dd>20260325-week8-inspect-runtime</dd></div><div><dt>Date</dt><dd>2026-03-25T23:41:40Z</dd></div><div><dt>Session ID</dt><dd>01KMKNZXNWZKGCXTCKGTVHC9T7</dd></div><div><dt>Result</dt><dd>pass</dd></div><div><dt>Fixture</dt><dd>node --import tsx test/fixtures/apps/hello-prompt/main.ts</dd></div><div><dt>Week</dt><dd>8</dd></div><div><dt>Commands</dt><dd>4</dd></div><div><dt>Manifest artifacts</dt><dd>10</dd></div><div><dt>Discovered files</dt><dd>21</dd></div></dl>
-  <div class="card"><h3>Commands</h3><ul><li>npx tsx src/cli/main.ts create --json -- node --import tsx test/fixtures/apps/hello-prompt/main.ts</li><li>npx tsx src/cli/main.ts inspect 01KMKNZXNWZKGCXTCKGTVHC9T7 --json</li><li>npx tsx src/cli/main.ts destroy 01KMKNZXNWZKGCXTCKGTVHC9T7 --json</li><li>npx tsx src/cli/main.ts inspect 01KMKNZXNWZKGCXTCKGTVHC9T7 --json</li></ul></div>
-</section>
+        <h2>Manifest summary</h2>
+        <dl class="facts">
+          <div>
+            <dt>Bundle</dt>
+            <dd>20260325-week8-inspect-runtime</dd>
+          </div>
+          <div>
+            <dt>Date</dt>
+            <dd>2026-03-25T23:41:40Z</dd>
+          </div>
+          <div>
+            <dt>Session ID</dt>
+            <dd>01KMKNZXNWZKGCXTCKGTVHC9T7</dd>
+          </div>
+          <div>
+            <dt>Result</dt>
+            <dd>pass</dd>
+          </div>
+          <div>
+            <dt>Fixture</dt>
+            <dd>node --import tsx test/fixtures/apps/hello-prompt/main.ts</dd>
+          </div>
+          <div>
+            <dt>Week</dt>
+            <dd>8</dd>
+          </div>
+          <div>
+            <dt>Commands</dt>
+            <dd>4</dd>
+          </div>
+          <div>
+            <dt>Manifest artifacts</dt>
+            <dd>10</dd>
+          </div>
+          <div>
+            <dt>Discovered files</dt>
+            <dd>21</dd>
+          </div>
+        </dl>
+        <div class="card">
+          <h3>Commands</h3>
+          <ul>
+            <li>
+              npx tsx src/cli/main.ts create --json -- node --import tsx
+              test/fixtures/apps/hello-prompt/main.ts
+            </li>
+            <li>
+              npx tsx src/cli/main.ts inspect 01KMKNZXNWZKGCXTCKGTVHC9T7 --json
+            </li>
+            <li>
+              npx tsx src/cli/main.ts destroy 01KMKNZXNWZKGCXTCKGTVHC9T7 --json
+            </li>
+            <li>
+              npx tsx src/cli/main.ts inspect 01KMKNZXNWZKGCXTCKGTVHC9T7 --json
+            </li>
+          </ul>
+        </div>
+      </section>
       <section>
-  <h2>Screenshot gallery</h2>
-  <div class="gallery">
-    
-      <figure class="card">
-        <img src="screenshots/01-review-page.png" alt="01-review-page.png" loading="lazy" />
-        <figcaption>
-          <a href="screenshots/01-review-page.png">screenshots/01-review-page.png</a>
-          <span>1.4 MB</span>
-        </figcaption>
-      </figure>
-  </div>
-</section>
-      
-      
+        <h2>Screenshot gallery</h2>
+        <div class="gallery">
+          <figure class="card">
+            <img
+              src="screenshots/01-review-page.png"
+              alt="01-review-page.png"
+              loading="lazy"
+            />
+            <figcaption>
+              <a href="screenshots/01-review-page.png"
+                >screenshots/01-review-page.png</a
+              >
+              <span>1.4 MB</span>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
       <section>
-  <h2>JSON outputs</h2>
-  
-  <details class="card">
-    <summary>json/inspect-live.json</summary>
-    <pre><code>{
+        <h2>JSON outputs</h2>
+
+        <details class="card">
+          <summary>json/inspect-live.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;inspect&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T23:41:37.715Z&quot;,
@@ -213,10 +302,10 @@
     }
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>json/inspect-offline.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>json/inspect-offline.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;inspect&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T23:41:39.958Z&quot;,
@@ -264,10 +353,10 @@
     }
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/01-create.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/01-create.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;create&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T23:41:34.585Z&quot;,
@@ -279,10 +368,10 @@
     &quot;shell&quot;: &quot;/bin/bash&quot;
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/02-inspect-live.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/02-inspect-live.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;inspect&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T23:41:37.715Z&quot;,
@@ -329,10 +418,10 @@
     }
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/03-destroy.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/03-destroy.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;destroy&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T23:41:38.896Z&quot;,
@@ -341,10 +430,10 @@
     &quot;destroyed&quot;: true
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/04-inspect-offline.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/04-inspect-offline.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;inspect&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T23:41:39.958Z&quot;,
@@ -392,39 +481,212 @@
     }
   }
 }</code></pre>
-  </details>
-</section>
+        </details>
+      </section>
       <section>
-  <h2>Notes</h2>
-  
-  <article class="card note-card">
-    <h3><a href="notes.md">notes.md</a></h3>
-    <h1>2026-03-25 dogfood — Week 8 inspect runtime proof</h1>
-<h2>Bundle metadata</h2>
-<ul><li><strong>Bundle path:</strong> <code>dogfood/20260325-week8-inspect-runtime/</code></li><li><strong>Session ID:</strong> <code>01KMKNZXNWZKGCXTCKGTVHC9T7</code></li><li><strong>Isolated AGENT_TERMINAL_HOME:</strong> <code>/tmp/tmp.s3O1Nrg0On</code></li><li><strong>CLI entrypoint:</strong> <code>npx tsx src/cli/main.ts</code></li><li><strong>Fixture app:</strong> <code>node --import tsx test/fixtures/apps/hello-prompt/main.ts</code></li></ul>
-<h2>Scenario summary</h2>
-<p>This bundle proves the Week 8 <code>inspect --json</code> renderer runtime summary against a real isolated PTY-backed <code>hello-prompt</code> session. The same session was inspected twice: once while it was still running and once after <code>destroy --json</code> had transitioned it into retained offline state.</p>
-<h2><code>rendererRuntime</code> proof</h2>
-<p>| Capture | Evidence | <code>session.status</code> | <code>rendererRuntime.mode</code> | <code>rendererRuntime.status</code> | <code>rendererRuntime.reason</code> | <code>usedOfflineReplay</code> | | --- | --- | --- | --- | --- | --- | --- | | Live inspect | <code>logs/02-inspect-live.json</code> | <code>running</code> | <code>live-host</code> | <code>healthy</code> | _omitted_ | <code>false</code> | | Post-destroy inspect | <code>logs/04-inspect-offline.json</code> | <code>destroyed</code> | <code>offline-replay</code> | <code>fallback</code> | <code>session-not-running</code> | <code>false</code> |</p>
-<p>Key observations from the captured JSON envelopes:</p>
-<ul><li><code>rendererRuntime.backend</code> stayed <code>ghostty-web</code> in both states; only the runtime mode changed.</li><li>While the host was still alive, <code>inspect --json</code> reported <code>rendererRuntime.mode = &quot;live-host&quot;</code> and <code>status = &quot;healthy&quot;</code>.</li><li>After <code>destroy --json</code>, the retained session metadata still inspected successfully, but <code>rendererRuntime.mode</code> switched to <code>&quot;offline-replay&quot;</code> with fallback reason <code>&quot;session-not-running&quot;</code>.</li><li><code>usedOfflineReplay</code> stayed <code>false</code> in both captures. This is an important nuance: an offline renderer mode does <strong>not</strong> automatically mean the command had to fall back from a failed live RPC call.</li></ul>
-<h2>Fallback reason interpretation</h2>
-<p>The Week 8 surface distinguishes two fallback reasons:</p>
-<ul><li><strong><code>session-not-running</code></strong> — captured directly in this bundle via <code>logs/04-inspect-offline.json</code> after the session was destroyed.</li><li><strong><code>host-unreachable</code></strong> — the alternate path used when a session still appears live but its host cannot answer RPC. The real PTY run here stayed healthy, so this bundle does not force that failure mode. The repo&#39;s inspect unit test (<code>test/unit/commands/inspect.test.ts</code>) explicitly covers it and asserts <code>rendererRuntime.mode = &quot;offline-replay&quot;</code>, <code>rendererRuntime.reason = &quot;host-unreachable&quot;</code>, and <code>usedOfflineReplay = true</code> for that case.</li></ul>
-<p>That distinction matches the implementation in <code>src/cli/commands/inspect.ts</code>: <code>usedOfflineReplay</code> only flips to <code>true</code> when the command expected to use the live host but had to reconcile from retained state after a host-unreachable failure.</p>
-<h2>Review answers</h2>
-<ul><li><strong>Did live inspect report the new live-host runtime summary?</strong> Yes. <code>logs/02-inspect-live.json</code> shows <code>rendererRuntime.backend = &quot;ghostty-web&quot;</code>, <code>mode = &quot;live-host&quot;</code>, <code>status = &quot;healthy&quot;</code>, and <code>usedOfflineReplay = false</code> while the session status is <code>running</code>.</li><li><strong>Did offline inspect report the new offline-replay runtime summary?</strong> Yes. <code>logs/04-inspect-offline.json</code> shows <code>rendererRuntime.mode = &quot;offline-replay&quot;</code>, <code>status = &quot;fallback&quot;</code>, <code>reason = &quot;session-not-running&quot;</code>, and <code>usedOfflineReplay = false</code> after the same session was destroyed.</li><li><strong>Did destroy preserve enough retained state for post-destroy inspect?</strong> Yes. <code>logs/03-destroy.json</code> reports <code>destroyed: true</code>, and the subsequent <code>logs/04-inspect-offline.json</code> still reports the original command, retained size metadata, event count, and termination category.</li><li><strong>Did the JSON envelopes show any artifact-health side effects?</strong> Yes. Both inspect captures report <code>artifacts.health = &quot;no-artifacts&quot;</code>, which is expected because this proof only exercised <code>create</code>, <code>inspect</code>, and <code>destroy</code> without generating snapshots or screenshots.</li><li><strong>Where is the command ledger?</strong> <code>command-status.tsv</code> records the exact create / live inspect / destroy / offline inspect sequence, commands, exit codes, and pass/fail status. Each step also has a matching <code>logs/*.stderr.txt</code> sidecar.</li></ul>
-<h2>Browser verification</h2>
-<p>The generated review page was opened from the local bundle <code>index.html</code> and captured with Playwright. Reviewer-facing proof lives at <code>screenshots/01-review-page.png</code>.</p>
-<h2>Issues / limitations</h2>
-<ul><li>This bundle directly proves the <code>session-not-running</code> fallback path with a real PTY session. It does not intentionally simulate a broken live host, so <code>host-unreachable</code> remains code-and-unit-test-backed rather than PTY-captured evidence here.</li><li>The post-destroy inspect result reports <code>exitSignal = &quot;1&quot;</code> alongside <code>terminationCategory = &quot;destroyed&quot;</code>. That is consistent with the teardown path used by <code>destroy --json</code> and does not indicate a bundle failure.</li><li>No renderer artifacts were generated in this proof bundle by design, so <code>artifacts.total = 0</code> and <code>health = &quot;no-artifacts&quot;</code> are expected in both inspect captures.</li></ul>
-  </article>
-</section>
+        <h2>Notes</h2>
+
+        <article class="card note-card">
+          <h3><a href="notes.md">notes.md</a></h3>
+          <h1>2026-03-25 dogfood — Week 8 inspect runtime proof</h1>
+          <h2>Bundle metadata</h2>
+          <ul>
+            <li>
+              <strong>Bundle path:</strong>
+              <code>dogfood/20260325-week8-inspect-runtime/</code>
+            </li>
+            <li>
+              <strong>Session ID:</strong>
+              <code>01KMKNZXNWZKGCXTCKGTVHC9T7</code>
+            </li>
+            <li>
+              <strong>Isolated AGENT_TERMINAL_HOME:</strong>
+              <code>/tmp/tmp.s3O1Nrg0On</code>
+            </li>
+            <li>
+              <strong>CLI entrypoint:</strong>
+              <code>npx tsx src/cli/main.ts</code>
+            </li>
+            <li>
+              <strong>Fixture app:</strong>
+              <code
+                >node --import tsx test/fixtures/apps/hello-prompt/main.ts</code
+              >
+            </li>
+          </ul>
+          <h2>Scenario summary</h2>
+          <p>
+            This bundle proves the Week 8 <code>inspect --json</code> renderer
+            runtime summary against a real isolated PTY-backed
+            <code>hello-prompt</code> session. The same session was inspected
+            twice: once while it was still running and once after
+            <code>destroy --json</code> had transitioned it into retained
+            offline state.
+          </p>
+          <h2><code>rendererRuntime</code> proof</h2>
+          <p>
+            | Capture | Evidence | <code>session.status</code> |
+            <code>rendererRuntime.mode</code> |
+            <code>rendererRuntime.status</code> |
+            <code>rendererRuntime.reason</code> |
+            <code>usedOfflineReplay</code> | | --- | --- | --- | --- | --- | ---
+            | --- | | Live inspect | <code>logs/02-inspect-live.json</code> |
+            <code>running</code> | <code>live-host</code> |
+            <code>healthy</code> | _omitted_ | <code>false</code> | |
+            Post-destroy inspect | <code>logs/04-inspect-offline.json</code> |
+            <code>destroyed</code> | <code>offline-replay</code> |
+            <code>fallback</code> | <code>session-not-running</code> |
+            <code>false</code> |
+          </p>
+          <p>Key observations from the captured JSON envelopes:</p>
+          <ul>
+            <li>
+              <code>rendererRuntime.backend</code> stayed
+              <code>ghostty-web</code> in both states; only the runtime mode
+              changed.
+            </li>
+            <li>
+              While the host was still alive,
+              <code>inspect --json</code> reported
+              <code>rendererRuntime.mode = &quot;live-host&quot;</code> and
+              <code>status = &quot;healthy&quot;</code>.
+            </li>
+            <li>
+              After <code>destroy --json</code>, the retained session metadata
+              still inspected successfully, but
+              <code>rendererRuntime.mode</code> switched to
+              <code>&quot;offline-replay&quot;</code> with fallback reason
+              <code>&quot;session-not-running&quot;</code>.
+            </li>
+            <li>
+              <code>usedOfflineReplay</code> stayed <code>false</code> in both
+              captures. This is an important nuance: an offline renderer mode
+              does <strong>not</strong> automatically mean the command had to
+              fall back from a failed live RPC call.
+            </li>
+          </ul>
+          <h2>Fallback reason interpretation</h2>
+          <p>The Week 8 surface distinguishes two fallback reasons:</p>
+          <ul>
+            <li>
+              <strong><code>session-not-running</code></strong> — captured
+              directly in this bundle via
+              <code>logs/04-inspect-offline.json</code> after the session was
+              destroyed.
+            </li>
+            <li>
+              <strong><code>host-unreachable</code></strong> — the alternate
+              path used when a session still appears live but its host cannot
+              answer RPC. The real PTY run here stayed healthy, so this bundle
+              does not force that failure mode. The repo&#39;s inspect unit test
+              (<code>test/unit/commands/inspect.test.ts</code>) explicitly
+              covers it and asserts
+              <code>rendererRuntime.mode = &quot;offline-replay&quot;</code>,
+              <code>rendererRuntime.reason = &quot;host-unreachable&quot;</code
+              >, and <code>usedOfflineReplay = true</code> for that case.
+            </li>
+          </ul>
+          <p>
+            That distinction matches the implementation in
+            <code>src/cli/commands/inspect.ts</code>:
+            <code>usedOfflineReplay</code> only flips to <code>true</code> when
+            the command expected to use the live host but had to reconcile from
+            retained state after a host-unreachable failure.
+          </p>
+          <h2>Review answers</h2>
+          <ul>
+            <li>
+              <strong
+                >Did live inspect report the new live-host runtime
+                summary?</strong
+              >
+              Yes. <code>logs/02-inspect-live.json</code> shows
+              <code>rendererRuntime.backend = &quot;ghostty-web&quot;</code>,
+              <code>mode = &quot;live-host&quot;</code>,
+              <code>status = &quot;healthy&quot;</code>, and
+              <code>usedOfflineReplay = false</code> while the session status is
+              <code>running</code>.
+            </li>
+            <li>
+              <strong
+                >Did offline inspect report the new offline-replay runtime
+                summary?</strong
+              >
+              Yes. <code>logs/04-inspect-offline.json</code> shows
+              <code>rendererRuntime.mode = &quot;offline-replay&quot;</code>,
+              <code>status = &quot;fallback&quot;</code>,
+              <code>reason = &quot;session-not-running&quot;</code>, and
+              <code>usedOfflineReplay = false</code> after the same session was
+              destroyed.
+            </li>
+            <li>
+              <strong
+                >Did destroy preserve enough retained state for post-destroy
+                inspect?</strong
+              >
+              Yes. <code>logs/03-destroy.json</code> reports
+              <code>destroyed: true</code>, and the subsequent
+              <code>logs/04-inspect-offline.json</code> still reports the
+              original command, retained size metadata, event count, and
+              termination category.
+            </li>
+            <li>
+              <strong
+                >Did the JSON envelopes show any artifact-health side
+                effects?</strong
+              >
+              Yes. Both inspect captures report
+              <code>artifacts.health = &quot;no-artifacts&quot;</code>, which is
+              expected because this proof only exercised <code>create</code>,
+              <code>inspect</code>, and <code>destroy</code> without generating
+              snapshots or screenshots.
+            </li>
+            <li>
+              <strong>Where is the command ledger?</strong>
+              <code>command-status.tsv</code> records the exact create / live
+              inspect / destroy / offline inspect sequence, commands, exit
+              codes, and pass/fail status. Each step also has a matching
+              <code>logs/*.stderr.txt</code> sidecar.
+            </li>
+          </ul>
+          <h2>Browser verification</h2>
+          <p>
+            The generated review page was opened from the local bundle
+            <code>index.html</code> and captured with Playwright.
+            Reviewer-facing proof lives at
+            <code>screenshots/01-review-page.png</code>.
+          </p>
+          <h2>Issues / limitations</h2>
+          <ul>
+            <li>
+              This bundle directly proves the
+              <code>session-not-running</code> fallback path with a real PTY
+              session. It does not intentionally simulate a broken live host, so
+              <code>host-unreachable</code> remains code-and-unit-test-backed
+              rather than PTY-captured evidence here.
+            </li>
+            <li>
+              The post-destroy inspect result reports
+              <code>exitSignal = &quot;1&quot;</code> alongside
+              <code>terminationCategory = &quot;destroyed&quot;</code>. That is
+              consistent with the teardown path used by
+              <code>destroy --json</code> and does not indicate a bundle
+              failure.
+            </li>
+            <li>
+              No renderer artifacts were generated in this proof bundle by
+              design, so <code>artifacts.total = 0</code> and
+              <code>health = &quot;no-artifacts&quot;</code> are expected in
+              both inspect captures.
+            </li>
+          </ul>
+        </article>
+      </section>
       <section>
-  <h2>Commands</h2>
-  <div class="card">
-    <h3><a href="commands.sh">commands.sh</a></h3>
-    <pre><code>#!/usr/bin/env bash
+        <h2>Commands</h2>
+        <div class="card">
+          <h3><a href="commands.sh">commands.sh</a></h3>
+          <pre><code>#!/usr/bin/env bash
 set -euo pipefail
 
 export PATH=&quot;$HOME/.local/share/mise/shims:$HOME/.local/bin:$PATH&quot;
@@ -527,139 +789,218 @@ run_json_step &#39;03-destroy&#39; &quot;npx tsx src/cli/main.ts destroy $SESSIO
 run_json_step &#39;04-inspect-offline&#39; &quot;npx tsx src/cli/main.ts inspect $SESSION_ID --json&quot;
 publish_json_output &quot;$LOG_DIR/04-inspect-offline.json&quot; &quot;$JSON_DIR/inspect-offline.json&quot;
 </code></pre>
-  </div>
-</section>
+        </div>
+      </section>
       <section>
-  <h2>Command status</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>step</th><th>command</th><th>exit_code</th><th>status</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>01-create</td><td>npx tsx src/cli/main.ts create --json -- node --import tsx test/fixtures/apps/hello-prompt/main.ts</td><td>0</td><td>pass</td></tr><tr><td>02-inspect-live</td><td>npx tsx src/cli/main.ts inspect 01KMKNZXNWZKGCXTCKGTVHC9T7 --json</td><td>0</td><td>pass</td></tr><tr><td>03-destroy</td><td>npx tsx src/cli/main.ts destroy 01KMKNZXNWZKGCXTCKGTVHC9T7 --json</td><td>0</td><td>pass</td></tr><tr><td>04-inspect-offline</td><td>npx tsx src/cli/main.ts inspect 01KMKNZXNWZKGCXTCKGTVHC9T7 --json</td><td>0</td><td>pass</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <h2>Command status</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>step</th>
+                <th>command</th>
+                <th>exit_code</th>
+                <th>status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>01-create</td>
+                <td>
+                  npx tsx src/cli/main.ts create --json -- node --import tsx
+                  test/fixtures/apps/hello-prompt/main.ts
+                </td>
+                <td>0</td>
+                <td>pass</td>
+              </tr>
+              <tr>
+                <td>02-inspect-live</td>
+                <td>
+                  npx tsx src/cli/main.ts inspect 01KMKNZXNWZKGCXTCKGTVHC9T7
+                  --json
+                </td>
+                <td>0</td>
+                <td>pass</td>
+              </tr>
+              <tr>
+                <td>03-destroy</td>
+                <td>
+                  npx tsx src/cli/main.ts destroy 01KMKNZXNWZKGCXTCKGTVHC9T7
+                  --json
+                </td>
+                <td>0</td>
+                <td>pass</td>
+              </tr>
+              <tr>
+                <td>04-inspect-offline</td>
+                <td>
+                  npx tsx src/cli/main.ts inspect 01KMKNZXNWZKGCXTCKGTVHC9T7
+                  --json
+                </td>
+                <td>0</td>
+                <td>pass</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
       <section>
-  <h2>Artifact inventory</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>Path</th><th>Type</th><th>Size</th></tr>
-      </thead>
-      <tbody>
-        
-        <tr>
-          <td><a href="agent-terminal-home.txt">agent-terminal-home.txt</a></td>
-          <td>support</td>
-          <td>20 B</td>
-        </tr>
-        <tr>
-          <td><a href="command-status.tsv">command-status.tsv</a></td>
-          <td>support</td>
-          <td>411 B</td>
-        </tr>
-        <tr>
-          <td><a href="commands.sh">commands.sh</a></td>
-          <td>script</td>
-          <td>3.7 KB</td>
-        </tr>
-        <tr>
-          <td><a href="json/inspect-live.json">json/inspect-live.json</a></td>
-          <td>json</td>
-          <td>1.1 KB</td>
-        </tr>
-        <tr>
-          <td><a href="json/inspect-offline.json">json/inspect-offline.json</a></td>
-          <td>json</td>
-          <td>1.2 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/01-create.json">logs/01-create.json</a></td>
-          <td>support</td>
-          <td>251 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/01-create.stderr.txt">logs/01-create.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/02-inspect-live.json">logs/02-inspect-live.json</a></td>
-          <td>support</td>
-          <td>1.1 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/02-inspect-live.stderr.txt">logs/02-inspect-live.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/03-destroy.json">logs/03-destroy.json</a></td>
-          <td>support</td>
-          <td>172 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/03-destroy.stderr.txt">logs/03-destroy.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/04-inspect-offline.json">logs/04-inspect-offline.json</a></td>
-          <td>support</td>
-          <td>1.2 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/04-inspect-offline.stderr.txt">logs/04-inspect-offline.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="manifest.json">manifest.json</a></td>
-          <td>support</td>
-          <td>2.3 KB</td>
-        </tr>
-        <tr>
-          <td><a href="notes.md">notes.md</a></td>
-          <td>notes</td>
-          <td>4.8 KB</td>
-        </tr>
-        <tr>
-          <td><a href="recordings/.gitkeep">recordings/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="screenshots/01-review-page.png">screenshots/01-review-page.png</a></td>
-          <td>screenshot</td>
-          <td>1.4 MB</td>
-        </tr>
-        <tr>
-          <td><a href="session-id.txt">session-id.txt</a></td>
-          <td>support</td>
-          <td>27 B</td>
-        </tr>
-        <tr>
-          <td><a href="snapshots/.gitkeep">snapshots/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="videos/.gitkeep">videos/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <h2>Artifact inventory</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Type</th>
+                <th>Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <a href="agent-terminal-home.txt">agent-terminal-home.txt</a>
+                </td>
+                <td>support</td>
+                <td>20 B</td>
+              </tr>
+              <tr>
+                <td><a href="command-status.tsv">command-status.tsv</a></td>
+                <td>support</td>
+                <td>411 B</td>
+              </tr>
+              <tr>
+                <td><a href="commands.sh">commands.sh</a></td>
+                <td>script</td>
+                <td>3.7 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="json/inspect-live.json">json/inspect-live.json</a>
+                </td>
+                <td>json</td>
+                <td>1.1 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="json/inspect-offline.json"
+                    >json/inspect-offline.json</a
+                  >
+                </td>
+                <td>json</td>
+                <td>1.2 KB</td>
+              </tr>
+              <tr>
+                <td><a href="logs/01-create.json">logs/01-create.json</a></td>
+                <td>support</td>
+                <td>251 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/01-create.stderr.txt"
+                    >logs/01-create.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/02-inspect-live.json"
+                    >logs/02-inspect-live.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>1.1 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/02-inspect-live.stderr.txt"
+                    >logs/02-inspect-live.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="logs/03-destroy.json">logs/03-destroy.json</a></td>
+                <td>support</td>
+                <td>172 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/03-destroy.stderr.txt"
+                    >logs/03-destroy.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/04-inspect-offline.json"
+                    >logs/04-inspect-offline.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>1.2 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/04-inspect-offline.stderr.txt"
+                    >logs/04-inspect-offline.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="manifest.json">manifest.json</a></td>
+                <td>support</td>
+                <td>2.3 KB</td>
+              </tr>
+              <tr>
+                <td><a href="notes.md">notes.md</a></td>
+                <td>notes</td>
+                <td>4.8 KB</td>
+              </tr>
+              <tr>
+                <td><a href="recordings/.gitkeep">recordings/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="screenshots/01-review-page.png"
+                    >screenshots/01-review-page.png</a
+                  >
+                </td>
+                <td>screenshot</td>
+                <td>1.4 MB</td>
+              </tr>
+              <tr>
+                <td><a href="session-id.txt">session-id.txt</a></td>
+                <td>support</td>
+                <td>27 B</td>
+              </tr>
+              <tr>
+                <td><a href="snapshots/.gitkeep">snapshots/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="videos/.gitkeep">videos/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
   </body>
 </html>

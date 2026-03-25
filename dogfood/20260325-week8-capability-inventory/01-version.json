@@ -5,9 +5,7 @@
   "result": {
     "cliVersion": "0.1.0",
     "protocolVersion": "0.1.0",
-    "rendererBackends": [
-      "ghostty-web"
-    ],
+    "rendererBackends": ["ghostty-web"],
     "runtime": {
       "node": "v24.14.0",
       "platform": "linux",

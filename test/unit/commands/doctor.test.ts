@@ -119,12 +119,14 @@ describe('doctor command', () => {
       'record-export-asciicast',
       'record-export-webm',
     ]);
-    expect(result.capabilities.find(({ name }) => name === 'snapshot')).toEqual({
-      name: 'snapshot',
-      status: 'available',
-      reason: 'built-in capability',
-      detail: 'available without external renderer dependencies',
-    });
+    expect(result.capabilities.find(({ name }) => name === 'snapshot')).toEqual(
+      {
+        name: 'snapshot',
+        status: 'available',
+        reason: 'built-in capability',
+        detail: 'available without external renderer dependencies',
+      },
+    );
     expect(
       result.capabilities.find(({ name }) => name === 'screenshot'),
     ).toMatchObject({

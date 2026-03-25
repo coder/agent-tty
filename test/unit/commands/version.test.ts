@@ -34,7 +34,9 @@ describe('version command', () => {
       'record-export-asciicast',
       'record-export-webm',
     ]);
-    expect(result.capabilities?.find(({ name }) => name === 'snapshot')).toEqual({
+    expect(
+      result.capabilities?.find(({ name }) => name === 'snapshot'),
+    ).toEqual({
       name: 'snapshot',
       status: 'available',
     });

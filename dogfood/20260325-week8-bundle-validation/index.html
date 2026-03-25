@@ -15,10 +15,19 @@
         --accent: #93c5fd;
         --border: #334155;
       }
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
         background: linear-gradient(180deg, #020617 0%, var(--bg) 100%);
         color: var(--text);
         line-height: 1.5;
@@ -28,22 +37,38 @@
         margin: 0 auto;
         padding: 32px 20px 48px;
       }
-      a { color: var(--accent); }
-      header, section, .card {
+      a {
+        color: var(--accent);
+      }
+      header,
+      section,
+      .card {
         background: rgb(15 23 42 / 0.88);
         border: 1px solid var(--border);
         border-radius: 16px;
         box-shadow: 0 18px 40px rgb(2 6 23 / 0.25);
       }
-      header, section {
+      header,
+      section {
         padding: 24px;
         margin-bottom: 20px;
       }
-      h1, h2, h3, h4, h5, h6 {
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
         margin-top: 0;
         color: #f8fafc;
       }
-      p, li, dd, td, th, summary, figcaption {
+      p,
+      li,
+      dd,
+      td,
+      th,
+      summary,
+      figcaption {
         overflow-wrap: anywhere;
       }
       .subtle {
@@ -80,7 +105,8 @@
       .note-card > *:last-child {
         margin-bottom: 0;
       }
-      img, video {
+      img,
+      video {
         width: 100%;
         border-radius: 12px;
         background: #020617;
@@ -105,7 +131,8 @@
         white-space: pre-wrap;
       }
       code {
-        font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family:
+          'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       details > summary {
         cursor: pointer;
@@ -115,7 +142,8 @@
         width: 100%;
         border-collapse: collapse;
       }
-      th, td {
+      th,
+      td {
         text-align: left;
         padding: 10px 12px;
         border-bottom: 1px solid var(--border);
@@ -138,35 +166,107 @@
         <p class="subtle">Portable review bundle</p>
         <h1>Week 8 — Bundle Validation</h1>
         <p class="subtle">Bundle directory: 20260325-week8-bundle-validation</p>
-        <p>Demonstrates validate-bundle across valid, invalid, existing-bundle, and self-validation contract-reporting cases.</p>
+        <p>
+          Demonstrates validate-bundle across valid, invalid, existing-bundle,
+          and self-validation contract-reporting cases.
+        </p>
       </header>
-      
+
       <section>
-  <h2>Manifest summary</h2>
-  <dl class="facts"><div><dt>Bundle</dt><dd>20260325-week8-bundle-validation</dd></div><div><dt>Date</dt><dd>2026-03-25T23:43:45Z</dd></div><div><dt>Result</dt><dd>pass</dd></div><div><dt>Week</dt><dd>8</dd></div><div><dt>Commands</dt><dd>9</dd></div><div><dt>Manifest artifacts</dt><dd>10</dd></div><div><dt>Discovered files</dt><dd>23</dd></div></dl>
-  <div class="card"><h3>Commands</h3><ul><li>bash dogfood/20260325-week8-bundle-validation/commands.sh</li><li>npm run --silent validate-bundle -- /tmp/.../valid-sample --profile contract-reporting</li><li>npm run --silent validate-bundle -- /tmp/.../invalid-sample --profile contract-reporting</li><li>npm run --silent validate-bundle -- dogfood/20260325-week7-a-cli-parity --profile contract-reporting</li><li>npm run --silent review-bundle -- /tmp/.../20260319-lifecycle</li><li>npm run --silent validate-bundle -- /tmp/.../20260319-lifecycle --profile contract-reporting</li><li>npm run --silent review-bundle -- dogfood/20260325-week8-bundle-validation</li><li>node --input-type=module &lt;playwright review-page screenshot&gt;</li><li>npm run --silent validate-bundle -- dogfood/20260325-week8-bundle-validation --profile contract-reporting</li></ul></div>
-</section>
+        <h2>Manifest summary</h2>
+        <dl class="facts">
+          <div>
+            <dt>Bundle</dt>
+            <dd>20260325-week8-bundle-validation</dd>
+          </div>
+          <div>
+            <dt>Date</dt>
+            <dd>2026-03-25T23:43:45Z</dd>
+          </div>
+          <div>
+            <dt>Result</dt>
+            <dd>pass</dd>
+          </div>
+          <div>
+            <dt>Week</dt>
+            <dd>8</dd>
+          </div>
+          <div>
+            <dt>Commands</dt>
+            <dd>9</dd>
+          </div>
+          <div>
+            <dt>Manifest artifacts</dt>
+            <dd>10</dd>
+          </div>
+          <div>
+            <dt>Discovered files</dt>
+            <dd>23</dd>
+          </div>
+        </dl>
+        <div class="card">
+          <h3>Commands</h3>
+          <ul>
+            <li>bash dogfood/20260325-week8-bundle-validation/commands.sh</li>
+            <li>
+              npm run --silent validate-bundle -- /tmp/.../valid-sample
+              --profile contract-reporting
+            </li>
+            <li>
+              npm run --silent validate-bundle -- /tmp/.../invalid-sample
+              --profile contract-reporting
+            </li>
+            <li>
+              npm run --silent validate-bundle --
+              dogfood/20260325-week7-a-cli-parity --profile contract-reporting
+            </li>
+            <li>
+              npm run --silent review-bundle -- /tmp/.../20260319-lifecycle
+            </li>
+            <li>
+              npm run --silent validate-bundle -- /tmp/.../20260319-lifecycle
+              --profile contract-reporting
+            </li>
+            <li>
+              npm run --silent review-bundle --
+              dogfood/20260325-week8-bundle-validation
+            </li>
+            <li>
+              node --input-type=module &lt;playwright review-page screenshot&gt;
+            </li>
+            <li>
+              npm run --silent validate-bundle --
+              dogfood/20260325-week8-bundle-validation --profile
+              contract-reporting
+            </li>
+          </ul>
+        </div>
+      </section>
       <section>
-  <h2>Screenshot gallery</h2>
-  <div class="gallery">
-    
-      <figure class="card">
-        <img src="screenshots/01-review-page.png" alt="01-review-page.png" loading="lazy" />
-        <figcaption>
-          <a href="screenshots/01-review-page.png">screenshots/01-review-page.png</a>
-          <span>2.1 MB</span>
-        </figcaption>
-      </figure>
-  </div>
-</section>
-      
-      
+        <h2>Screenshot gallery</h2>
+        <div class="gallery">
+          <figure class="card">
+            <img
+              src="screenshots/01-review-page.png"
+              alt="01-review-page.png"
+              loading="lazy"
+            />
+            <figcaption>
+              <a href="screenshots/01-review-page.png"
+                >screenshots/01-review-page.png</a
+              >
+              <span>2.1 MB</span>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
       <section>
-  <h2>JSON outputs</h2>
-  
-  <details class="card">
-    <summary>logs/01-valid-pass.json</summary>
-    <pre><code>{
+        <h2>JSON outputs</h2>
+
+        <details class="card">
+          <summary>logs/01-valid-pass.json</summary>
+          <pre><code>{
   &quot;bundleDir&quot;: &quot;/tmp/agent-terminal-week8-valid.xMfv7X/valid-sample&quot;,
   &quot;profile&quot;: &quot;contract-reporting&quot;,
   &quot;ok&quot;: true,
@@ -198,10 +298,10 @@
     }
   ]
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/02-invalid-fail.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/02-invalid-fail.json</summary>
+          <pre><code>{
   &quot;bundleDir&quot;: &quot;/tmp/agent-terminal-week8-invalid.SVE1TL/invalid-sample&quot;,
   &quot;profile&quot;: &quot;contract-reporting&quot;,
   &quot;ok&quot;: false,
@@ -233,10 +333,10 @@
     }
   ]
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/03-brief-reference-week7-a-fail.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/03-brief-reference-week7-a-fail.json</summary>
+          <pre><code>{
   &quot;bundleDir&quot;: &quot;/home/coder/.mux/src/agent-terminal/agent_exec_20a332c5c3/dogfood/20260325-week7-a-cli-parity&quot;,
   &quot;profile&quot;: &quot;contract-reporting&quot;,
   &quot;ok&quot;: false,
@@ -268,10 +368,10 @@
     }
   ]
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/04-existing-legacy-pass.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/04-existing-legacy-pass.json</summary>
+          <pre><code>{
   &quot;bundleDir&quot;: &quot;/tmp/agent-terminal-week8-existing.xiuJkr/20260319-lifecycle&quot;,
   &quot;profile&quot;: &quot;contract-reporting&quot;,
   &quot;ok&quot;: true,
@@ -303,19 +403,19 @@
     }
   ]
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/05-review-page-screenshot.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/05-review-page-screenshot.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;bundleDir&quot;: &quot;/home/coder/.mux/src/agent-terminal/agent_exec_20a332c5c3/dogfood/20260325-week8-bundle-validation&quot;,
   &quot;pageUrl&quot;: &quot;file:///home/coder/.mux/src/agent-terminal/agent_exec_20a332c5c3/dogfood/20260325-week8-bundle-validation/index.html&quot;,
   &quot;screenshotPath&quot;: &quot;/home/coder/.mux/src/agent-terminal/agent_exec_20a332c5c3/dogfood/20260325-week8-bundle-validation/screenshots/01-review-page.png&quot;
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/06-self-pass.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/06-self-pass.json</summary>
+          <pre><code>{
   &quot;bundleDir&quot;: &quot;/home/coder/.mux/src/agent-terminal/agent_exec_20a332c5c3/dogfood/20260325-week8-bundle-validation&quot;,
   &quot;profile&quot;: &quot;contract-reporting&quot;,
   &quot;ok&quot;: true,
@@ -347,10 +447,10 @@
     }
   ]
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>proof-summary.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>proof-summary.json</summary>
+          <pre><code>{
   &quot;bundle&quot;: &quot;20260325-week8-bundle-validation&quot;,
   &quot;generatedAt&quot;: &quot;2026-03-25T23:44:33.329Z&quot;,
   &quot;summary&quot;: &quot;Week 8 validate-bundle proof summary for valid, invalid, existing-bundle, and self-validation scenarios.&quot;,
@@ -392,35 +492,234 @@
     }
   ]
 }</code></pre>
-  </details>
-</section>
+        </details>
+      </section>
       <section>
-  <h2>Notes</h2>
-  
-  <article class="card note-card">
-    <h3><a href="notes.md">notes.md</a></h3>
-    <h1>2026-03-25 dogfood — Week 8 bundle validation proof</h1>
-<h2>Bundle metadata</h2>
-<ul><li><strong>Bundle path:</strong> <code>dogfood/20260325-week8-bundle-validation/</code></li><li><strong>Validation helper:</strong> <code>npm run validate-bundle -- &lt;bundle-dir&gt; [--profile &lt;profile&gt;]</code></li><li><strong>Reference review helper:</strong> <code>npm run review-bundle -- &lt;bundle-dir&gt;</code></li><li><strong>Proof date:</strong> <code>2026-03-25</code></li><li><strong>Profiles covered:</strong> <code>contract-reporting</code> directly, with <code>interactive-renderer</code> requirements documented for comparison</li></ul>
-<h2>Scenario summary</h2>
-<p>This bundle proves the Week 8 <code>validate-bundle</code> helper against four scenarios: a minimal valid sample bundle created under <code>/tmp</code>, an intentionally invalid sample bundle created under <code>/tmp</code>, the task brief&#39;s suggested <code>dogfood/20260325-week7-a-cli-parity/</code> reference bundle, and a reviewed temp copy of the existing <code>dogfood/20260319-lifecycle/</code> bundle. It also validates this Week 8 proof bundle itself after generating its review page and reviewer screenshot.</p>
-<h2>Validation profile summary</h2>
-<ul><li><strong><code>contract-reporting</code>:</strong> requires the bundle directory to exist, at least one JSON output file, at least one notes markdown file, a generated <code>index.html</code> review page, and JSON that parses successfully.</li><li><strong><code>interactive-renderer</code>:</strong> includes every <code>contract-reporting</code> check plus at least one screenshot artifact and at least one <code>.cast</code> recording artifact.</li><li><strong>Important implementation detail:</strong> the current validator classifies everything under <code>logs/</code> as support files before it checks for <code>.json</code>, so <code>logs/*.json</code> do <strong>not</strong> satisfy the <code>has-json-output</code> requirement by themselves.</li></ul>
-<h2>Proof results</h2>
-<ul><li><strong>Valid sample passes:</strong> <code>logs/01-valid-pass.json</code> shows a temporary sample bundle that contains a root-level <code>01-sample.json</code>, <code>notes.md</code>, and a generated <code>index.html</code>, so every contract-reporting check passes.</li><li><strong>Invalid sample fails as expected:</strong> <code>logs/02-invalid-fail.json</code> shows the intentionally empty sample bundle fails <code>has-json-output</code>, <code>has-review-page</code>, <code>has-notes</code>, and <code>json-readable</code>. <code>command-status.tsv</code> records the non-zero exit code as <code>expected-fail</code>.</li><li><strong>Brief reference bundle currently fails:</strong> <code>logs/03-brief-reference-week7-a-fail.json</code> shows <code>dogfood/20260325-week7-a-cli-parity/</code> does <strong>not</strong> currently satisfy <code>contract-reporting</code>, because its JSON evidence lives under <code>logs/</code>, which the validator treats as support files instead of JSON output.</li><li><strong>Existing reviewed legacy bundle passes:</strong> <code>logs/04-existing-legacy-pass.json</code> proves a temporary reviewed copy of the existing <code>dogfood/20260319-lifecycle/</code> bundle passes contract-reporting once it has an <code>index.html</code> review page.</li><li><strong>This Week 8 bundle passes contract-reporting:</strong> <code>logs/06-self-pass.json</code> proves the proof bundle itself has valid JSON evidence (<code>proof-summary.json</code>), notes, and a generated review page.</li></ul>
-<h2>Why each case behaves correctly</h2>
-<ul><li><strong>Why the valid sample passes:</strong> it has a parseable root JSON file (<code>01-sample.json</code>), a notes file (<code>notes.md</code>), and a generated review page (<code>index.html</code>).</li><li><strong>Why the invalid sample fails:</strong> it intentionally omits notes, JSON output, and the review page, so the validator reports multiple failed checks instead of silently passing an incomplete bundle.</li><li><strong>Why the Week 7-A reference fails today:</strong> its numbered JSON evidence is stored under <code>logs/</code>, but the validator&#39;s classifier marks <code>logs/</code> artifacts as support files before it checks <code>.json</code>, so no JSON output is counted for contract-reporting.</li><li><strong>Why the reviewed legacy copy passes:</strong> the existing <code>20260319-lifecycle</code> bundle already contains root-level JSON output and notes, so adding a generated <code>index.html</code> in <code>/tmp</code> satisfies the remaining contract-reporting requirement without mutating the repository copy.</li><li><strong>Why this proof bundle targets <code>contract-reporting</code>:</strong> it includes a review-page screenshot (<code>screenshots/01-review-page.png</code>) as extra reviewer evidence, but it intentionally does not include a <code>.cast</code> recording artifact, so <code>interactive-renderer</code> would still be stricter than necessary for this documentation-focused proof.</li></ul>
-<h2>Review answers</h2>
-<ul><li><strong>Did the valid sample pass?</strong> Yes. Step 01 exited successfully and the JSON result reports <code>ok: true</code>.</li><li><strong>Did the invalid sample fail?</strong> Yes. Step 02 exited non-zero and the JSON result reports <code>ok: false</code> with the expected missing-artifact checks.</li><li><strong>Did the task brief&#39;s Week 7-A reference pass?</strong> No. Step 03 documents the current-tool mismatch directly instead of hiding it.</li><li><strong>Did any existing bundle pass?</strong> Yes. Step 04 validated a reviewed temp copy of the existing <code>dogfood/20260319-lifecycle/</code> bundle successfully.</li><li><strong>Did this bundle generate its own review page?</strong> Yes. <code>logs/07-review-self.txt</code> records the final <code>review-bundle</code> run and <code>index.html</code> is present in the bundle root.</li><li><strong>Was a reviewer screenshot captured?</strong> Yes. <code>logs/05-review-page-screenshot.json</code> records the Playwright capture and <code>screenshots/01-review-page.png</code> is the resulting image.</li><li><strong>Where is the JSON artifact that makes this bundle contract-reporting compliant?</strong> <code>proof-summary.json</code> sits at the bundle root specifically because the current validator does not count <code>logs/*.json</code> as JSON output.</li><li><strong>Where are the exit codes?</strong> <code>command-status.tsv</code> records every step, including the expected failures.</li></ul>
-<h2>Issues / limitations</h2>
-<ul><li>The temporary sample bundles live under <code>/tmp</code> and are cleaned up at the end of each <code>commands.sh</code> run, so the durable proof is the captured validator output rather than the sample directories themselves.</li><li>The task brief suggested <code>dogfood/20260325-week7-a-cli-parity/</code> as an existing passing reference, but the current validator rejects it for the concrete path-classification reason documented above.</li><li>This bundle intentionally focuses on contract-reporting behavior. It documents the stricter interactive-renderer profile, but it does not try to manufacture a recording artifact solely to satisfy that higher bar.</li></ul>
-  </article>
-</section>
+        <h2>Notes</h2>
+
+        <article class="card note-card">
+          <h3><a href="notes.md">notes.md</a></h3>
+          <h1>2026-03-25 dogfood — Week 8 bundle validation proof</h1>
+          <h2>Bundle metadata</h2>
+          <ul>
+            <li>
+              <strong>Bundle path:</strong>
+              <code>dogfood/20260325-week8-bundle-validation/</code>
+            </li>
+            <li>
+              <strong>Validation helper:</strong>
+              <code
+                >npm run validate-bundle -- &lt;bundle-dir&gt; [--profile
+                &lt;profile&gt;]</code
+              >
+            </li>
+            <li>
+              <strong>Reference review helper:</strong>
+              <code>npm run review-bundle -- &lt;bundle-dir&gt;</code>
+            </li>
+            <li><strong>Proof date:</strong> <code>2026-03-25</code></li>
+            <li>
+              <strong>Profiles covered:</strong>
+              <code>contract-reporting</code> directly, with
+              <code>interactive-renderer</code> requirements documented for
+              comparison
+            </li>
+          </ul>
+          <h2>Scenario summary</h2>
+          <p>
+            This bundle proves the Week 8 <code>validate-bundle</code> helper
+            against four scenarios: a minimal valid sample bundle created under
+            <code>/tmp</code>, an intentionally invalid sample bundle created
+            under <code>/tmp</code>, the task brief&#39;s suggested
+            <code>dogfood/20260325-week7-a-cli-parity/</code> reference bundle,
+            and a reviewed temp copy of the existing
+            <code>dogfood/20260319-lifecycle/</code> bundle. It also validates
+            this Week 8 proof bundle itself after generating its review page and
+            reviewer screenshot.
+          </p>
+          <h2>Validation profile summary</h2>
+          <ul>
+            <li>
+              <strong><code>contract-reporting</code>:</strong> requires the
+              bundle directory to exist, at least one JSON output file, at least
+              one notes markdown file, a generated
+              <code>index.html</code> review page, and JSON that parses
+              successfully.
+            </li>
+            <li>
+              <strong><code>interactive-renderer</code>:</strong> includes every
+              <code>contract-reporting</code> check plus at least one screenshot
+              artifact and at least one <code>.cast</code> recording artifact.
+            </li>
+            <li>
+              <strong>Important implementation detail:</strong> the current
+              validator classifies everything under <code>logs/</code> as
+              support files before it checks for <code>.json</code>, so
+              <code>logs/*.json</code> do <strong>not</strong> satisfy the
+              <code>has-json-output</code> requirement by themselves.
+            </li>
+          </ul>
+          <h2>Proof results</h2>
+          <ul>
+            <li>
+              <strong>Valid sample passes:</strong>
+              <code>logs/01-valid-pass.json</code> shows a temporary sample
+              bundle that contains a root-level <code>01-sample.json</code>,
+              <code>notes.md</code>, and a generated <code>index.html</code>, so
+              every contract-reporting check passes.
+            </li>
+            <li>
+              <strong>Invalid sample fails as expected:</strong>
+              <code>logs/02-invalid-fail.json</code> shows the intentionally
+              empty sample bundle fails <code>has-json-output</code>,
+              <code>has-review-page</code>, <code>has-notes</code>, and
+              <code>json-readable</code>.
+              <code>command-status.tsv</code> records the non-zero exit code as
+              <code>expected-fail</code>.
+            </li>
+            <li>
+              <strong>Brief reference bundle currently fails:</strong>
+              <code>logs/03-brief-reference-week7-a-fail.json</code> shows
+              <code>dogfood/20260325-week7-a-cli-parity/</code> does
+              <strong>not</strong> currently satisfy
+              <code>contract-reporting</code>, because its JSON evidence lives
+              under <code>logs/</code>, which the validator treats as support
+              files instead of JSON output.
+            </li>
+            <li>
+              <strong>Existing reviewed legacy bundle passes:</strong>
+              <code>logs/04-existing-legacy-pass.json</code> proves a temporary
+              reviewed copy of the existing
+              <code>dogfood/20260319-lifecycle/</code> bundle passes
+              contract-reporting once it has an <code>index.html</code> review
+              page.
+            </li>
+            <li>
+              <strong>This Week 8 bundle passes contract-reporting:</strong>
+              <code>logs/06-self-pass.json</code> proves the proof bundle itself
+              has valid JSON evidence (<code>proof-summary.json</code>), notes,
+              and a generated review page.
+            </li>
+          </ul>
+          <h2>Why each case behaves correctly</h2>
+          <ul>
+            <li>
+              <strong>Why the valid sample passes:</strong> it has a parseable
+              root JSON file (<code>01-sample.json</code>), a notes file
+              (<code>notes.md</code>), and a generated review page
+              (<code>index.html</code>).
+            </li>
+            <li>
+              <strong>Why the invalid sample fails:</strong> it intentionally
+              omits notes, JSON output, and the review page, so the validator
+              reports multiple failed checks instead of silently passing an
+              incomplete bundle.
+            </li>
+            <li>
+              <strong>Why the Week 7-A reference fails today:</strong> its
+              numbered JSON evidence is stored under <code>logs/</code>, but the
+              validator&#39;s classifier marks <code>logs/</code> artifacts as
+              support files before it checks <code>.json</code>, so no JSON
+              output is counted for contract-reporting.
+            </li>
+            <li>
+              <strong>Why the reviewed legacy copy passes:</strong> the existing
+              <code>20260319-lifecycle</code> bundle already contains root-level
+              JSON output and notes, so adding a generated
+              <code>index.html</code> in <code>/tmp</code> satisfies the
+              remaining contract-reporting requirement without mutating the
+              repository copy.
+            </li>
+            <li>
+              <strong
+                >Why this proof bundle targets
+                <code>contract-reporting</code>:</strong
+              >
+              it includes a review-page screenshot
+              (<code>screenshots/01-review-page.png</code>) as extra reviewer
+              evidence, but it intentionally does not include a
+              <code>.cast</code> recording artifact, so
+              <code>interactive-renderer</code> would still be stricter than
+              necessary for this documentation-focused proof.
+            </li>
+          </ul>
+          <h2>Review answers</h2>
+          <ul>
+            <li>
+              <strong>Did the valid sample pass?</strong> Yes. Step 01 exited
+              successfully and the JSON result reports <code>ok: true</code>.
+            </li>
+            <li>
+              <strong>Did the invalid sample fail?</strong> Yes. Step 02 exited
+              non-zero and the JSON result reports <code>ok: false</code> with
+              the expected missing-artifact checks.
+            </li>
+            <li>
+              <strong>Did the task brief&#39;s Week 7-A reference pass?</strong>
+              No. Step 03 documents the current-tool mismatch directly instead
+              of hiding it.
+            </li>
+            <li>
+              <strong>Did any existing bundle pass?</strong> Yes. Step 04
+              validated a reviewed temp copy of the existing
+              <code>dogfood/20260319-lifecycle/</code> bundle successfully.
+            </li>
+            <li>
+              <strong>Did this bundle generate its own review page?</strong>
+              Yes. <code>logs/07-review-self.txt</code> records the final
+              <code>review-bundle</code> run and <code>index.html</code> is
+              present in the bundle root.
+            </li>
+            <li>
+              <strong>Was a reviewer screenshot captured?</strong> Yes.
+              <code>logs/05-review-page-screenshot.json</code> records the
+              Playwright capture and
+              <code>screenshots/01-review-page.png</code> is the resulting
+              image.
+            </li>
+            <li>
+              <strong
+                >Where is the JSON artifact that makes this bundle
+                contract-reporting compliant?</strong
+              >
+              <code>proof-summary.json</code> sits at the bundle root
+              specifically because the current validator does not count
+              <code>logs/*.json</code> as JSON output.
+            </li>
+            <li>
+              <strong>Where are the exit codes?</strong>
+              <code>command-status.tsv</code> records every step, including the
+              expected failures.
+            </li>
+          </ul>
+          <h2>Issues / limitations</h2>
+          <ul>
+            <li>
+              The temporary sample bundles live under <code>/tmp</code> and are
+              cleaned up at the end of each <code>commands.sh</code> run, so the
+              durable proof is the captured validator output rather than the
+              sample directories themselves.
+            </li>
+            <li>
+              The task brief suggested
+              <code>dogfood/20260325-week7-a-cli-parity/</code> as an existing
+              passing reference, but the current validator rejects it for the
+              concrete path-classification reason documented above.
+            </li>
+            <li>
+              This bundle intentionally focuses on contract-reporting behavior.
+              It documents the stricter interactive-renderer profile, but it
+              does not try to manufacture a recording artifact solely to satisfy
+              that higher bar.
+            </li>
+          </ul>
+        </article>
+      </section>
       <section>
-  <h2>Commands</h2>
-  <div class="card">
-    <h3><a href="commands.sh">commands.sh</a></h3>
-    <pre><code>#!/usr/bin/env bash
+        <h2>Commands</h2>
+        <div class="card">
+          <h3><a href="commands.sh">commands.sh</a></h3>
+          <pre><code>#!/usr/bin/env bash
 set -euo pipefail
 
 export PATH=&quot;$HOME/.local/share/mise/shims:$HOME/.local/bin:$PATH&quot;
@@ -647,149 +946,278 @@ capture_review_screenshot
 run_json_step &#39;06-self-pass&#39; &quot;npm run --silent validate-bundle -- \&quot;$BUNDLE_DIR\&quot; --profile contract-reporting&quot; &#39;pass&#39;
 run_text_step &#39;07-review-self&#39; &quot;npm run --silent review-bundle -- \&quot;$BUNDLE_DIR\&quot;&quot; &#39;pass&#39;
 </code></pre>
-  </div>
-</section>
+        </div>
+      </section>
       <section>
-  <h2>Command status</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>step</th><th>command</th><th>exit_code</th><th>status</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>01-valid-pass</td><td>npm run --silent validate-bundle -- &quot;/tmp/agent-terminal-week8-valid.xMfv7X/valid-sample&quot; --profile contract-reporting</td><td>0</td><td>pass</td></tr><tr><td>02-invalid-fail</td><td>npm run --silent validate-bundle -- &quot;/tmp/agent-terminal-week8-invalid.SVE1TL/invalid-sample&quot; --profile contract-reporting</td><td>1</td><td>expected-fail</td></tr><tr><td>03-brief-reference-week7-a-fail</td><td>npm run --silent validate-bundle -- dogfood/20260325-week7-a-cli-parity --profile contract-reporting</td><td>1</td><td>expected-fail</td></tr><tr><td>04-existing-legacy-pass</td><td>npm run --silent validate-bundle -- &quot;/tmp/agent-terminal-week8-existing.xiuJkr/20260319-lifecycle&quot; --profile contract-reporting</td><td>0</td><td>pass</td></tr><tr><td>05-review-page-screenshot</td><td>node --input-type=module &lt;embedded playwright screenshot&gt;</td><td>0</td><td>pass</td></tr><tr><td>06-self-pass</td><td>npm run --silent validate-bundle -- &quot;dogfood/20260325-week8-bundle-validation&quot; --profile contract-reporting</td><td>0</td><td>pass</td></tr><tr><td>07-review-self</td><td>npm run --silent review-bundle -- &quot;dogfood/20260325-week8-bundle-validation&quot;</td><td>0</td><td>pass</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <h2>Command status</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>step</th>
+                <th>command</th>
+                <th>exit_code</th>
+                <th>status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>01-valid-pass</td>
+                <td>
+                  npm run --silent validate-bundle --
+                  &quot;/tmp/agent-terminal-week8-valid.xMfv7X/valid-sample&quot;
+                  --profile contract-reporting
+                </td>
+                <td>0</td>
+                <td>pass</td>
+              </tr>
+              <tr>
+                <td>02-invalid-fail</td>
+                <td>
+                  npm run --silent validate-bundle --
+                  &quot;/tmp/agent-terminal-week8-invalid.SVE1TL/invalid-sample&quot;
+                  --profile contract-reporting
+                </td>
+                <td>1</td>
+                <td>expected-fail</td>
+              </tr>
+              <tr>
+                <td>03-brief-reference-week7-a-fail</td>
+                <td>
+                  npm run --silent validate-bundle --
+                  dogfood/20260325-week7-a-cli-parity --profile
+                  contract-reporting
+                </td>
+                <td>1</td>
+                <td>expected-fail</td>
+              </tr>
+              <tr>
+                <td>04-existing-legacy-pass</td>
+                <td>
+                  npm run --silent validate-bundle --
+                  &quot;/tmp/agent-terminal-week8-existing.xiuJkr/20260319-lifecycle&quot;
+                  --profile contract-reporting
+                </td>
+                <td>0</td>
+                <td>pass</td>
+              </tr>
+              <tr>
+                <td>05-review-page-screenshot</td>
+                <td>
+                  node --input-type=module &lt;embedded playwright
+                  screenshot&gt;
+                </td>
+                <td>0</td>
+                <td>pass</td>
+              </tr>
+              <tr>
+                <td>06-self-pass</td>
+                <td>
+                  npm run --silent validate-bundle --
+                  &quot;dogfood/20260325-week8-bundle-validation&quot; --profile
+                  contract-reporting
+                </td>
+                <td>0</td>
+                <td>pass</td>
+              </tr>
+              <tr>
+                <td>07-review-self</td>
+                <td>
+                  npm run --silent review-bundle --
+                  &quot;dogfood/20260325-week8-bundle-validation&quot;
+                </td>
+                <td>0</td>
+                <td>pass</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
       <section>
-  <h2>Artifact inventory</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>Path</th><th>Type</th><th>Size</th></tr>
-      </thead>
-      <tbody>
-        
-        <tr>
-          <td><a href="command-status.tsv">command-status.tsv</a></td>
-          <td>support</td>
-          <td>951 B</td>
-        </tr>
-        <tr>
-          <td><a href="commands.sh">commands.sh</a></td>
-          <td>script</td>
-          <td>7.6 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/01-valid-pass.json">logs/01-valid-pass.json</a></td>
-          <td>support</td>
-          <td>738 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/01-valid-pass.stderr.txt">logs/01-valid-pass.stderr.txt</a></td>
-          <td>support</td>
-          <td>381 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/02-invalid-fail.json">logs/02-invalid-fail.json</a></td>
-          <td>support</td>
-          <td>817 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/02-invalid-fail.stderr.txt">logs/02-invalid-fail.stderr.txt</a></td>
-          <td>support</td>
-          <td>455 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/03-brief-reference-week7-a-fail.json">logs/03-brief-reference-week7-a-fail.json</a></td>
-          <td>support</td>
-          <td>848 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/03-brief-reference-week7-a-fail.stderr.txt">logs/03-brief-reference-week7-a-fail.stderr.txt</a></td>
-          <td>support</td>
-          <td>488 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/04-existing-legacy-pass.json">logs/04-existing-legacy-pass.json</a></td>
-          <td>support</td>
-          <td>758 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/04-existing-legacy-pass.stderr.txt">logs/04-existing-legacy-pass.stderr.txt</a></td>
-          <td>support</td>
-          <td>401 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/05-review-page-screenshot.json">logs/05-review-page-screenshot.json</a></td>
-          <td>support</td>
-          <td>420 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/05-review-page-screenshot.stderr.txt">logs/05-review-page-screenshot.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/06-self-pass.json">logs/06-self-pass.json</a></td>
-          <td>support</td>
-          <td>832 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/06-self-pass.stderr.txt">logs/06-self-pass.stderr.txt</a></td>
-          <td>support</td>
-          <td>475 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/07-review-self.stderr.txt">logs/07-review-self.stderr.txt</a></td>
-          <td>support</td>
-          <td>50 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/07-review-self.txt">logs/07-review-self.txt</a></td>
-          <td>support</td>
-          <td>110 B</td>
-        </tr>
-        <tr>
-          <td><a href="manifest.json">manifest.json</a></td>
-          <td>support</td>
-          <td>2.7 KB</td>
-        </tr>
-        <tr>
-          <td><a href="notes.md">notes.md</a></td>
-          <td>notes</td>
-          <td>5.8 KB</td>
-        </tr>
-        <tr>
-          <td><a href="proof-summary.json">proof-summary.json</a></td>
-          <td>json</td>
-          <td>1.1 KB</td>
-        </tr>
-        <tr>
-          <td><a href="recordings/.gitkeep">recordings/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="screenshots/01-review-page.png">screenshots/01-review-page.png</a></td>
-          <td>screenshot</td>
-          <td>2.1 MB</td>
-        </tr>
-        <tr>
-          <td><a href="snapshots/.gitkeep">snapshots/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="videos/.gitkeep">videos/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <h2>Artifact inventory</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Type</th>
+                <th>Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="command-status.tsv">command-status.tsv</a></td>
+                <td>support</td>
+                <td>951 B</td>
+              </tr>
+              <tr>
+                <td><a href="commands.sh">commands.sh</a></td>
+                <td>script</td>
+                <td>7.6 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/01-valid-pass.json">logs/01-valid-pass.json</a>
+                </td>
+                <td>support</td>
+                <td>738 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/01-valid-pass.stderr.txt"
+                    >logs/01-valid-pass.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>381 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/02-invalid-fail.json"
+                    >logs/02-invalid-fail.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>817 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/02-invalid-fail.stderr.txt"
+                    >logs/02-invalid-fail.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>455 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/03-brief-reference-week7-a-fail.json"
+                    >logs/03-brief-reference-week7-a-fail.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>848 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/03-brief-reference-week7-a-fail.stderr.txt"
+                    >logs/03-brief-reference-week7-a-fail.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>488 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/04-existing-legacy-pass.json"
+                    >logs/04-existing-legacy-pass.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>758 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/04-existing-legacy-pass.stderr.txt"
+                    >logs/04-existing-legacy-pass.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>401 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/05-review-page-screenshot.json"
+                    >logs/05-review-page-screenshot.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>420 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/05-review-page-screenshot.stderr.txt"
+                    >logs/05-review-page-screenshot.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/06-self-pass.json">logs/06-self-pass.json</a>
+                </td>
+                <td>support</td>
+                <td>832 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/06-self-pass.stderr.txt"
+                    >logs/06-self-pass.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>475 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/07-review-self.stderr.txt"
+                    >logs/07-review-self.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>50 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/07-review-self.txt">logs/07-review-self.txt</a>
+                </td>
+                <td>support</td>
+                <td>110 B</td>
+              </tr>
+              <tr>
+                <td><a href="manifest.json">manifest.json</a></td>
+                <td>support</td>
+                <td>2.7 KB</td>
+              </tr>
+              <tr>
+                <td><a href="notes.md">notes.md</a></td>
+                <td>notes</td>
+                <td>5.8 KB</td>
+              </tr>
+              <tr>
+                <td><a href="proof-summary.json">proof-summary.json</a></td>
+                <td>json</td>
+                <td>1.1 KB</td>
+              </tr>
+              <tr>
+                <td><a href="recordings/.gitkeep">recordings/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="screenshots/01-review-page.png"
+                    >screenshots/01-review-page.png</a
+                  >
+                </td>
+                <td>screenshot</td>
+                <td>2.1 MB</td>
+              </tr>
+              <tr>
+                <td><a href="snapshots/.gitkeep">snapshots/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="videos/.gitkeep">videos/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
   </body>
 </html>

@@ -15,10 +15,19 @@
         --accent: #93c5fd;
         --border: #334155;
       }
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
         background: linear-gradient(180deg, #020617 0%, var(--bg) 100%);
         color: var(--text);
         line-height: 1.5;
@@ -28,22 +37,38 @@
         margin: 0 auto;
         padding: 32px 20px 48px;
       }
-      a { color: var(--accent); }
-      header, section, .card {
+      a {
+        color: var(--accent);
+      }
+      header,
+      section,
+      .card {
         background: rgb(15 23 42 / 0.88);
         border: 1px solid var(--border);
         border-radius: 16px;
         box-shadow: 0 18px 40px rgb(2 6 23 / 0.25);
       }
-      header, section {
+      header,
+      section {
         padding: 24px;
         margin-bottom: 20px;
       }
-      h1, h2, h3, h4, h5, h6 {
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
         margin-top: 0;
         color: #f8fafc;
       }
-      p, li, dd, td, th, summary, figcaption {
+      p,
+      li,
+      dd,
+      td,
+      th,
+      summary,
+      figcaption {
         overflow-wrap: anywhere;
       }
       .subtle {
@@ -80,7 +105,8 @@
       .note-card > *:last-child {
         margin-bottom: 0;
       }
-      img, video {
+      img,
+      video {
         width: 100%;
         border-radius: 12px;
         background: #020617;
@@ -105,7 +131,8 @@
         white-space: pre-wrap;
       }
       code {
-        font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family:
+          'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       details > summary {
         cursor: pointer;
@@ -115,7 +142,8 @@
         width: 100%;
         border-collapse: collapse;
       }
-      th, td {
+      th,
+      td {
         text-align: left;
         padding: 10px 12px;
         border-bottom: 1px solid var(--border);
@@ -137,36 +165,80 @@
       <header>
         <p class="subtle">Portable review bundle</p>
         <h1>Week 8 — Capability Inventory</h1>
-        <p class="subtle">Bundle directory: 20260325-week8-capability-inventory</p>
-        <p>Captures version --json and doctor --json capability inventories from an isolated temp home for reviewer inspection.</p>
+        <p class="subtle">
+          Bundle directory: 20260325-week8-capability-inventory
+        </p>
+        <p>
+          Captures version --json and doctor --json capability inventories from
+          an isolated temp home for reviewer inspection.
+        </p>
       </header>
-      
+
       <section>
-  <h2>Manifest summary</h2>
-  <dl class="facts"><div><dt>Bundle</dt><dd>20260325-week8-capability-inventory</dd></div><div><dt>Date</dt><dd>2026-03-25T23:38:36Z</dd></div><div><dt>Result</dt><dd>pass</dd></div><div><dt>Week</dt><dd>8</dd></div><div><dt>Commands</dt><dd>2</dd></div><div><dt>Manifest artifacts</dt><dd>7</dd></div><div><dt>Discovered files</dt><dd>16</dd></div></dl>
-  <div class="card"><h3>Commands</h3><ul><li>npx tsx src/cli/main.ts version --json</li><li>npx tsx src/cli/main.ts doctor --json</li></ul></div>
-</section>
+        <h2>Manifest summary</h2>
+        <dl class="facts">
+          <div>
+            <dt>Bundle</dt>
+            <dd>20260325-week8-capability-inventory</dd>
+          </div>
+          <div>
+            <dt>Date</dt>
+            <dd>2026-03-25T23:38:36Z</dd>
+          </div>
+          <div>
+            <dt>Result</dt>
+            <dd>pass</dd>
+          </div>
+          <div>
+            <dt>Week</dt>
+            <dd>8</dd>
+          </div>
+          <div>
+            <dt>Commands</dt>
+            <dd>2</dd>
+          </div>
+          <div>
+            <dt>Manifest artifacts</dt>
+            <dd>7</dd>
+          </div>
+          <div>
+            <dt>Discovered files</dt>
+            <dd>16</dd>
+          </div>
+        </dl>
+        <div class="card">
+          <h3>Commands</h3>
+          <ul>
+            <li>npx tsx src/cli/main.ts version --json</li>
+            <li>npx tsx src/cli/main.ts doctor --json</li>
+          </ul>
+        </div>
+      </section>
       <section>
-  <h2>Screenshot gallery</h2>
-  <div class="gallery">
-    
-      <figure class="card">
-        <img src="screenshots/01-review-page.png" alt="01-review-page.png" loading="lazy" />
-        <figcaption>
-          <a href="screenshots/01-review-page.png">screenshots/01-review-page.png</a>
-          <span>2.2 MB</span>
-        </figcaption>
-      </figure>
-  </div>
-</section>
-      
-      
+        <h2>Screenshot gallery</h2>
+        <div class="gallery">
+          <figure class="card">
+            <img
+              src="screenshots/01-review-page.png"
+              alt="01-review-page.png"
+              loading="lazy"
+            />
+            <figcaption>
+              <a href="screenshots/01-review-page.png"
+                >screenshots/01-review-page.png</a
+              >
+              <span>2.2 MB</span>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
       <section>
-  <h2>JSON outputs</h2>
-  
-  <details class="card">
-    <summary>01-version.json</summary>
-    <pre><code>{
+        <h2>JSON outputs</h2>
+
+        <details class="card">
+          <summary>01-version.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;version&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T23:39:47.547Z&quot;,
@@ -205,10 +277,10 @@
     ]
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>02-doctor.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>02-doctor.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;doctor&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T23:39:49.126Z&quot;,
@@ -326,10 +398,10 @@
     ]
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/01-version.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/01-version.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;version&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T23:39:47.547Z&quot;,
@@ -368,10 +440,10 @@
     ]
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/02-doctor.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/02-doctor.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;doctor&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T23:39:49.126Z&quot;,
@@ -489,32 +561,175 @@
     ]
   }
 }</code></pre>
-  </details>
-</section>
+        </details>
+      </section>
       <section>
-  <h2>Notes</h2>
-  
-  <article class="card note-card">
-    <h3><a href="notes.md">notes.md</a></h3>
-    <h1>2026-03-25 dogfood — Week 8 capability inventory proof</h1>
-<h2>Bundle metadata</h2>
-<ul><li><strong>Bundle path:</strong> <code>dogfood/20260325-week8-capability-inventory/</code></li><li><strong>Isolated AGENT_TERMINAL_HOME:</strong> <code>/tmp/tmp.XlYvQNqMgF</code></li><li><strong>CLI entrypoint:</strong> <code>npx tsx src/cli/main.ts</code></li><li><strong>Captured commands:</strong> <code>version --json</code>, <code>doctor --json</code></li></ul>
-<h2>Scenario summary</h2>
-<p>This bundle proves the Week 8 capability-inventory surface by capturing the ratified JSON envelopes from <code>version --json</code> and <code>doctor --json</code> in a fresh isolated temp home.</p>
-<ul><li><code>01-version.json</code> and <code>02-doctor.json</code> are reviewer-facing top-level JSON copies so the contract-reporting validator and generated review page can parse the captured outputs directly.</li><li><code>logs/01-version.json</code> captures the direct <code>version --json</code> command output, and <code>logs/02-doctor.json</code> captures the direct <code>doctor --json</code> command output plus matching <code>logs/*.stderr.txt</code> sidecars.</li><li><code>command-status.tsv</code> records both JSON capture steps with their exact commands and exit codes.</li><li><code>agent-terminal-home.txt</code> records the isolated temp home path used during capture.</li></ul>
-<h2>Capability inventory summary</h2>
-<ul><li><code>version --json</code> reports five capability entries: <code>snapshot</code>, <code>wait</code>, <code>screenshot</code>, <code>record-export-asciicast</code>, and <code>record-export-webm</code>. Each entry includes <code>name</code> and <code>status</code>, and this run reported all five as <code>available</code>.</li><li><code>doctor --json</code> reports the same five capability names, but each entry also includes <code>reason</code> and <code>detail</code> so reviewers can see whether availability comes from built-in behavior or from renderer/browser smoke checks.</li><li>In this capture, <code>snapshot</code>, <code>wait</code>, and <code>record-export-asciicast</code> are available as built-in capabilities, while <code>screenshot</code> and <code>record-export-webm</code> are available because the Playwright / Chromium / Ghostty Web checks passed.</li></ul>
-<h2>Review answers</h2>
-<ul><li><strong>Did the bundle use an isolated temp home?</strong> Yes. <code>agent-terminal-home.txt</code> records <code>/tmp/tmp.XlYvQNqMgF</code>, and <code>logs/02-doctor.json</code> also references that temp home in its <code>home-writable</code>, <code>socket-viable</code>, <code>artifact-atomicity</code>, and <code>event-log-writable</code> checks.</li><li><strong>Did <code>version --json</code> expose the Week 8 capability inventory surface?</strong> Yes. <code>01-version.json</code> and <code>logs/01-version.json</code> both report <code>result.capabilities</code> with five structured entries covering snapshot, wait, screenshot, asciicast export, and WebM export.</li><li><strong>Did <code>doctor --json</code> expose the richer capability diagnostics?</strong> Yes. <code>02-doctor.json</code> and <code>logs/02-doctor.json</code> both report the same capability names plus <code>reason</code> and <code>detail</code>, tying screenshot and WebM availability to passing renderer/browser checks.</li><li><strong>Did the underlying doctor checks pass?</strong> Yes. <code>logs/02-doctor.json</code> reports <code>result.ok: true</code>, all environment checks as <code>pass</code>, and all renderer checks as <code>pass</code>.</li><li><strong>Where is the step ledger for the capture run?</strong> <code>command-status.tsv</code> records both commands, their exit codes, and <code>pass</code> status, and each step has a matching <code>logs/*.stderr.txt</code> sidecar.</li><li><strong>Is there reviewer-facing visual proof of the generated review page?</strong> Yes. <code>screenshots/01-review-page.png</code> was captured from the generated <code>index.html</code> review page after running <code>npm run review-bundle -- dogfood/20260325-week8-capability-inventory</code>.</li></ul>
-<h2>Issues / limitations</h2>
-<ul><li>This bundle intentionally exercises only the Week 8 capability-inventory reporting surface. It does not create a live session or produce snapshot / recording / video artifacts of its own.</li><li><code>01-version.json</code> and <code>02-doctor.json</code> are bundle-root copies of the direct command captures from <code>logs/</code>; they exist so the generated review page and <code>contract-reporting</code> validator can discover machine-readable JSON outputs.</li><li>The screenshot artifact is for the generated bundle review page, not for a terminal session. The <code>recordings/</code>, <code>videos/</code>, and <code>snapshots/</code> directories are present to match the reviewer bundle structure used in Week 7.</li></ul>
-  </article>
-</section>
+        <h2>Notes</h2>
+
+        <article class="card note-card">
+          <h3><a href="notes.md">notes.md</a></h3>
+          <h1>2026-03-25 dogfood — Week 8 capability inventory proof</h1>
+          <h2>Bundle metadata</h2>
+          <ul>
+            <li>
+              <strong>Bundle path:</strong>
+              <code>dogfood/20260325-week8-capability-inventory/</code>
+            </li>
+            <li>
+              <strong>Isolated AGENT_TERMINAL_HOME:</strong>
+              <code>/tmp/tmp.XlYvQNqMgF</code>
+            </li>
+            <li>
+              <strong>CLI entrypoint:</strong>
+              <code>npx tsx src/cli/main.ts</code>
+            </li>
+            <li>
+              <strong>Captured commands:</strong> <code>version --json</code>,
+              <code>doctor --json</code>
+            </li>
+          </ul>
+          <h2>Scenario summary</h2>
+          <p>
+            This bundle proves the Week 8 capability-inventory surface by
+            capturing the ratified JSON envelopes from
+            <code>version --json</code> and <code>doctor --json</code> in a
+            fresh isolated temp home.
+          </p>
+          <ul>
+            <li>
+              <code>01-version.json</code> and <code>02-doctor.json</code> are
+              reviewer-facing top-level JSON copies so the contract-reporting
+              validator and generated review page can parse the captured outputs
+              directly.
+            </li>
+            <li>
+              <code>logs/01-version.json</code> captures the direct
+              <code>version --json</code> command output, and
+              <code>logs/02-doctor.json</code> captures the direct
+              <code>doctor --json</code> command output plus matching
+              <code>logs/*.stderr.txt</code> sidecars.
+            </li>
+            <li>
+              <code>command-status.tsv</code> records both JSON capture steps
+              with their exact commands and exit codes.
+            </li>
+            <li>
+              <code>agent-terminal-home.txt</code> records the isolated temp
+              home path used during capture.
+            </li>
+          </ul>
+          <h2>Capability inventory summary</h2>
+          <ul>
+            <li>
+              <code>version --json</code> reports five capability entries:
+              <code>snapshot</code>, <code>wait</code>, <code>screenshot</code>,
+              <code>record-export-asciicast</code>, and
+              <code>record-export-webm</code>. Each entry includes
+              <code>name</code> and <code>status</code>, and this run reported
+              all five as <code>available</code>.
+            </li>
+            <li>
+              <code>doctor --json</code> reports the same five capability names,
+              but each entry also includes <code>reason</code> and
+              <code>detail</code> so reviewers can see whether availability
+              comes from built-in behavior or from renderer/browser smoke
+              checks.
+            </li>
+            <li>
+              In this capture, <code>snapshot</code>, <code>wait</code>, and
+              <code>record-export-asciicast</code> are available as built-in
+              capabilities, while <code>screenshot</code> and
+              <code>record-export-webm</code> are available because the
+              Playwright / Chromium / Ghostty Web checks passed.
+            </li>
+          </ul>
+          <h2>Review answers</h2>
+          <ul>
+            <li>
+              <strong>Did the bundle use an isolated temp home?</strong> Yes.
+              <code>agent-terminal-home.txt</code> records
+              <code>/tmp/tmp.XlYvQNqMgF</code>, and
+              <code>logs/02-doctor.json</code> also references that temp home in
+              its <code>home-writable</code>, <code>socket-viable</code>,
+              <code>artifact-atomicity</code>, and
+              <code>event-log-writable</code> checks.
+            </li>
+            <li>
+              <strong
+                >Did <code>version --json</code> expose the Week 8 capability
+                inventory surface?</strong
+              >
+              Yes. <code>01-version.json</code> and
+              <code>logs/01-version.json</code> both report
+              <code>result.capabilities</code> with five structured entries
+              covering snapshot, wait, screenshot, asciicast export, and WebM
+              export.
+            </li>
+            <li>
+              <strong
+                >Did <code>doctor --json</code> expose the richer capability
+                diagnostics?</strong
+              >
+              Yes. <code>02-doctor.json</code> and
+              <code>logs/02-doctor.json</code> both report the same capability
+              names plus <code>reason</code> and <code>detail</code>, tying
+              screenshot and WebM availability to passing renderer/browser
+              checks.
+            </li>
+            <li>
+              <strong>Did the underlying doctor checks pass?</strong> Yes.
+              <code>logs/02-doctor.json</code> reports
+              <code>result.ok: true</code>, all environment checks as
+              <code>pass</code>, and all renderer checks as <code>pass</code>.
+            </li>
+            <li>
+              <strong>Where is the step ledger for the capture run?</strong>
+              <code>command-status.tsv</code> records both commands, their exit
+              codes, and <code>pass</code> status, and each step has a matching
+              <code>logs/*.stderr.txt</code> sidecar.
+            </li>
+            <li>
+              <strong
+                >Is there reviewer-facing visual proof of the generated review
+                page?</strong
+              >
+              Yes. <code>screenshots/01-review-page.png</code> was captured from
+              the generated <code>index.html</code> review page after running
+              <code
+                >npm run review-bundle --
+                dogfood/20260325-week8-capability-inventory</code
+              >.
+            </li>
+          </ul>
+          <h2>Issues / limitations</h2>
+          <ul>
+            <li>
+              This bundle intentionally exercises only the Week 8
+              capability-inventory reporting surface. It does not create a live
+              session or produce snapshot / recording / video artifacts of its
+              own.
+            </li>
+            <li>
+              <code>01-version.json</code> and <code>02-doctor.json</code> are
+              bundle-root copies of the direct command captures from
+              <code>logs/</code>; they exist so the generated review page and
+              <code>contract-reporting</code> validator can discover
+              machine-readable JSON outputs.
+            </li>
+            <li>
+              The screenshot artifact is for the generated bundle review page,
+              not for a terminal session. The <code>recordings/</code>,
+              <code>videos/</code>, and <code>snapshots/</code> directories are
+              present to match the reviewer bundle structure used in Week 7.
+            </li>
+          </ul>
+        </article>
+      </section>
       <section>
-  <h2>Commands</h2>
-  <div class="card">
-    <h3><a href="commands.sh">commands.sh</a></h3>
-    <pre><code>#!/usr/bin/env bash
+        <h2>Commands</h2>
+        <div class="card">
+          <h3><a href="commands.sh">commands.sh</a></h3>
+          <pre><code>#!/usr/bin/env bash
 set -euo pipefail
 
 export PATH=&quot;$HOME/.local/share/mise/shims:$HOME/.local/bin:$PATH&quot;
@@ -597,114 +812,147 @@ cp &quot;$LOG_DIR/01-version.json&quot; &quot;$BUNDLE_DIR/01-version.json&quot;
 run_json_step &#39;02-doctor&#39; &#39;npx tsx src/cli/main.ts doctor --json&#39; &#39;false&#39;
 cp &quot;$LOG_DIR/02-doctor.json&quot; &quot;$BUNDLE_DIR/02-doctor.json&quot;
 </code></pre>
-  </div>
-</section>
+        </div>
+      </section>
       <section>
-  <h2>Command status</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>step</th><th>command</th><th>exit_code</th><th>status</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>01-version</td><td>npx tsx src/cli/main.ts version --json</td><td>0</td><td>pass</td></tr><tr><td>02-doctor</td><td>npx tsx src/cli/main.ts doctor --json</td><td>0</td><td>pass</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <h2>Command status</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>step</th>
+                <th>command</th>
+                <th>exit_code</th>
+                <th>status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>01-version</td>
+                <td>npx tsx src/cli/main.ts version --json</td>
+                <td>0</td>
+                <td>pass</td>
+              </tr>
+              <tr>
+                <td>02-doctor</td>
+                <td>npx tsx src/cli/main.ts doctor --json</td>
+                <td>0</td>
+                <td>pass</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
       <section>
-  <h2>Artifact inventory</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>Path</th><th>Type</th><th>Size</th></tr>
-      </thead>
-      <tbody>
-        
-        <tr>
-          <td><a href="01-version.json">01-version.json</a></td>
-          <td>json</td>
-          <td>737 B</td>
-        </tr>
-        <tr>
-          <td><a href="02-doctor.json">02-doctor.json</a></td>
-          <td>json</td>
-          <td>3.4 KB</td>
-        </tr>
-        <tr>
-          <td><a href="agent-terminal-home.txt">agent-terminal-home.txt</a></td>
-          <td>support</td>
-          <td>20 B</td>
-        </tr>
-        <tr>
-          <td><a href="command-status.tsv">command-status.tsv</a></td>
-          <td>support</td>
-          <td>142 B</td>
-        </tr>
-        <tr>
-          <td><a href="commands.sh">commands.sh</a></td>
-          <td>script</td>
-          <td>2.4 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/01-version.json">logs/01-version.json</a></td>
-          <td>support</td>
-          <td>737 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/01-version.stderr.txt">logs/01-version.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/02-doctor.json">logs/02-doctor.json</a></td>
-          <td>support</td>
-          <td>3.4 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/02-doctor.stderr.txt">logs/02-doctor.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="manifest.json">manifest.json</a></td>
-          <td>support</td>
-          <td>1.4 KB</td>
-        </tr>
-        <tr>
-          <td><a href="notes.md">notes.md</a></td>
-          <td>notes</td>
-          <td>3.8 KB</td>
-        </tr>
-        <tr>
-          <td><a href="recordings/.gitkeep">recordings/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="screenshots/01-review-page.png">screenshots/01-review-page.png</a></td>
-          <td>screenshot</td>
-          <td>2.2 MB</td>
-        </tr>
-        <tr>
-          <td><a href="snapshots/.gitkeep">snapshots/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="videos/.gitkeep">videos/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <h2>Artifact inventory</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Type</th>
+                <th>Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="01-version.json">01-version.json</a></td>
+                <td>json</td>
+                <td>737 B</td>
+              </tr>
+              <tr>
+                <td><a href="02-doctor.json">02-doctor.json</a></td>
+                <td>json</td>
+                <td>3.4 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="agent-terminal-home.txt">agent-terminal-home.txt</a>
+                </td>
+                <td>support</td>
+                <td>20 B</td>
+              </tr>
+              <tr>
+                <td><a href="command-status.tsv">command-status.tsv</a></td>
+                <td>support</td>
+                <td>142 B</td>
+              </tr>
+              <tr>
+                <td><a href="commands.sh">commands.sh</a></td>
+                <td>script</td>
+                <td>2.4 KB</td>
+              </tr>
+              <tr>
+                <td><a href="logs/01-version.json">logs/01-version.json</a></td>
+                <td>support</td>
+                <td>737 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/01-version.stderr.txt"
+                    >logs/01-version.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="logs/02-doctor.json">logs/02-doctor.json</a></td>
+                <td>support</td>
+                <td>3.4 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/02-doctor.stderr.txt"
+                    >logs/02-doctor.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="manifest.json">manifest.json</a></td>
+                <td>support</td>
+                <td>1.4 KB</td>
+              </tr>
+              <tr>
+                <td><a href="notes.md">notes.md</a></td>
+                <td>notes</td>
+                <td>3.8 KB</td>
+              </tr>
+              <tr>
+                <td><a href="recordings/.gitkeep">recordings/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="screenshots/01-review-page.png"
+                    >screenshots/01-review-page.png</a
+                  >
+                </td>
+                <td>screenshot</td>
+                <td>2.2 MB</td>
+              </tr>
+              <tr>
+                <td><a href="snapshots/.gitkeep">snapshots/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="videos/.gitkeep">videos/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
   </body>
 </html>

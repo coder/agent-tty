@@ -81,7 +81,6 @@ const ListResultSchema = z
   })
   .strict();
 
-
 const DoctorCheckStatusSchema = z.enum(['pass', 'fail', 'skip']);
 
 const DoctorCheckSchema = z

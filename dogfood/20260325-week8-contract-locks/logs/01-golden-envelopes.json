@@ -30,9 +30,7 @@
     {
       "assertionResults": [
         {
-          "ancestorTitles": [
-            "JSON envelope contracts"
-          ],
+          "ancestorTitles": ["JSON envelope contracts"],
           "fullName": "JSON envelope contracts locks the inspect success envelope shape with live renderer runtime",
           "status": "passed",
           "title": "locks the inspect success envelope shape with live renderer runtime",
@@ -42,9 +40,7 @@
           "tags": []
         },
         {
-          "ancestorTitles": [
-            "JSON envelope contracts"
-          ],
+          "ancestorTitles": ["JSON envelope contracts"],
           "fullName": "JSON envelope contracts accepts inspect result with offline renderer runtime",
           "status": "passed",
           "title": "accepts inspect result with offline renderer runtime",
@@ -54,9 +50,7 @@
           "tags": []
         },
         {
-          "ancestorTitles": [
-            "JSON envelope contracts"
-          ],
+          "ancestorTitles": ["JSON envelope contracts"],
           "fullName": "JSON envelope contracts locks the version success envelope shape",
           "status": "passed",
           "title": "locks the version success envelope shape",
@@ -66,9 +60,7 @@
           "tags": []
         },
         {
-          "ancestorTitles": [
-            "JSON envelope contracts"
-          ],
+          "ancestorTitles": ["JSON envelope contracts"],
           "fullName": "JSON envelope contracts accepts version result with capabilities",
           "status": "passed",
           "title": "accepts version result with capabilities",
@@ -195,10 +187,7 @@
           "tags": []
         },
         {
-          "ancestorTitles": [
-            "JSON envelope contracts",
-            "'gc' result contract"
-          ],
+          "ancestorTitles": ["JSON envelope contracts", "'gc' result contract"],
           "fullName": "JSON envelope contracts 'gc' result contract accepts a valid result in the success envelope",
           "status": "passed",
           "title": "accepts a valid result in the success envelope",
@@ -208,10 +197,7 @@
           "tags": []
         },
         {
-          "ancestorTitles": [
-            "JSON envelope contracts",
-            "'gc' result contract"
-          ],
+          "ancestorTitles": ["JSON envelope contracts", "'gc' result contract"],
           "fullName": "JSON envelope contracts 'gc' result contract rejects an invalid result",
           "status": "passed",
           "title": "rejects an invalid result",
@@ -221,10 +207,7 @@
           "tags": []
         },
         {
-          "ancestorTitles": [
-            "JSON envelope contracts",
-            "'gc' result contract"
-          ],
+          "ancestorTitles": ["JSON envelope contracts", "'gc' result contract"],
           "fullName": "JSON envelope contracts 'gc' result contract rejects extra fields to enforce strict mode",
           "status": "passed",
           "title": "rejects extra fields to enforce strict mode",
@@ -585,9 +568,7 @@
           "tags": []
         },
         {
-          "ancestorTitles": [
-            "JSON envelope contracts"
-          ],
+          "ancestorTitles": ["JSON envelope contracts"],
           "fullName": "JSON envelope contracts locks the SESSION_NOT_FOUND error envelope shape",
           "status": "passed",
           "title": "locks the SESSION_NOT_FOUND error envelope shape",
@@ -597,9 +578,7 @@
           "tags": []
         },
         {
-          "ancestorTitles": [
-            "JSON envelope contracts"
-          ],
+          "ancestorTitles": ["JSON envelope contracts"],
           "fullName": "JSON envelope contracts locks a retryable transport-style error envelope shape",
           "status": "passed",
           "title": "locks a retryable transport-style error envelope shape",
