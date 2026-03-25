@@ -142,7 +142,7 @@ export interface DoctorCheck {
   name: string;
   status: DoctorCheckStatus;
   message: string;
-  durationMs?: number;
+  durationMs: number;
 }
 
 export interface DoctorCheckGroups {
