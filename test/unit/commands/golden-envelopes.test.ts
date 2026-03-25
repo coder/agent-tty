@@ -7,7 +7,20 @@ import {
   createSuccessEnvelope,
 } from '../../../src/protocol/envelope.js';
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
-import { InspectResultSchema } from '../../../src/protocol/messages.js';
+import {
+  DestroyResultSchema,
+  InspectResultSchema,
+  ScreenshotResultSchema,
+  SendKeysResultSchema,
+  SnapshotResultSchema,
+  WaitForRenderResultSchema,
+  WaitResultSchema,
+} from '../../../src/protocol/messages.js';
+
+const LOCKED_TIMESTAMP = '2026-03-25T15:00:00.000Z';
+const NonEmptyStringSchema = z.string().min(1);
+const IsoDatetimeSchema = z.iso.datetime();
+const PositiveIntSchema = z.number().int().positive();
 
 const VersionResultSchema = z
   .object({
@@ -23,6 +36,44 @@ const VersionResultSchema = z
       .strict(),
   })
   .strict();
+
+const CreateResultSchema = z
+  .object({
+    sessionId: NonEmptyStringSchema,
+    createdAt: IsoDatetimeSchema,
+    cols: PositiveIntSchema,
+    rows: PositiveIntSchema,
+    shell: NonEmptyStringSchema,
+    env: z.record(NonEmptyStringSchema, z.string()).optional(),
+    idleTimeoutMs: PositiveIntSchema.optional(),
+  })
+  .strict();
+
+const SessionSummarySchema = z
+  .object({
+    sessionId: NonEmptyStringSchema,
+    status: NonEmptyStringSchema,
+    command: z.array(NonEmptyStringSchema).min(1),
+    createdAt: IsoDatetimeSchema,
+    name: NonEmptyStringSchema.optional(),
+    pid: z.number().int().nullable(),
+  })
+  .strict();
+
+const ListResultSchema = z
+  .object({
+    sessions: z.array(SessionSummarySchema),
+  })
+  .strict();
+
+interface GoldenResultContractCase {
+  name: string;
+  command: string;
+  schema: z.ZodType;
+  validResult: unknown;
+  invalidResult: unknown;
+  extraFieldResult: unknown;
+}
 
 function createSessionRecord() {
   return {
@@ -42,10 +93,268 @@ function createSessionRecord() {
   };
 }
 
+function expectLockedSuccessEnvelope(command: string, result: unknown): void {
+  expect(createSuccessEnvelope(command, result)).toEqual({
+    ok: true,
+    command,
+    timestamp: LOCKED_TIMESTAMP,
+    result,
+  });
+}
+
+const goldenResultContracts: readonly GoldenResultContractCase[] = [
+  {
+    name: 'create',
+    command: 'create',
+    schema: CreateResultSchema,
+    validResult: {
+      sessionId: 'session-01',
+      createdAt: '2026-03-19T12:00:00.000Z',
+      cols: 80,
+      rows: 24,
+      shell: '/bin/bash',
+      env: {
+        TERM: 'xterm-256color',
+        LANG: 'en_US.UTF-8',
+      },
+      idleTimeoutMs: 600000,
+    },
+    invalidResult: {},
+    extraFieldResult: {
+      sessionId: 'session-01',
+      createdAt: '2026-03-19T12:00:00.000Z',
+      cols: 80,
+      rows: 24,
+      shell: '/bin/bash',
+      started: true,
+    },
+  },
+  {
+    name: 'list',
+    command: 'list',
+    schema: ListResultSchema,
+    validResult: {
+      sessions: [
+        {
+          sessionId: 'session-01',
+          status: 'running',
+          command: ['/bin/sh', '-lc', 'echo hello'],
+          createdAt: '2026-03-19T12:00:00.000Z',
+          name: 'hello-session',
+          pid: 1234,
+        },
+        {
+          sessionId: 'session-02',
+          status: 'exited',
+          command: ['/bin/sh', '-lc', 'exit 0'],
+          createdAt: '2026-03-19T12:05:00.000Z',
+          pid: null,
+        },
+      ],
+    },
+    invalidResult: {
+      sessions: [{}],
+    },
+    extraFieldResult: {
+      sessions: [
+        {
+          sessionId: 'session-01',
+          status: 'running',
+          command: ['/bin/sh', '-lc', 'echo hello'],
+          createdAt: '2026-03-19T12:00:00.000Z',
+          pid: 1234,
+          term: 'xterm-256color',
+        },
+      ],
+    },
+  },
+  {
+    name: 'send-keys',
+    command: 'send-keys',
+    schema: SendKeysResultSchema,
+    validResult: {
+      accepted: ['Enter', 'Ctrl+C'],
+      bytesWritten: 2,
+      seq: 7,
+    },
+    invalidResult: {
+      accepted: [],
+      bytesWritten: -1,
+      seq: -1,
+    },
+    extraFieldResult: {
+      accepted: ['Enter'],
+      bytesWritten: 1,
+      seq: 7,
+      keyCount: 1,
+    },
+  },
+  {
+    name: 'snapshot',
+    command: 'snapshot',
+    schema: SnapshotResultSchema,
+    validResult: {
+      format: 'structured',
+      sessionId: 'session-01',
+      capturedAtSeq: 7,
+      cols: 80,
+      rows: 24,
+      cursorRow: 1,
+      cursorCol: 5,
+      isAltScreen: false,
+      visibleLines: [
+        {
+          row: 0,
+          text: '$ echo hello',
+        },
+        {
+          row: 1,
+          text: 'hello',
+        },
+      ],
+      scrollbackLines: [
+        {
+          row: 0,
+          text: 'prior output',
+        },
+      ],
+      cells: [
+        {
+          lineNumber: 0,
+          cells: [
+            {
+              char: '$',
+              fg: '#ffffff',
+              bold: true,
+            },
+            {
+              char: ' ',
+            },
+          ],
+        },
+      ],
+    },
+    invalidResult: {},
+    extraFieldResult: {
+      format: 'structured',
+      sessionId: 'session-01',
+      capturedAtSeq: 7,
+      cols: 80,
+      rows: 24,
+      cursorRow: 1,
+      cursorCol: 5,
+      isAltScreen: false,
+      visibleLines: [
+        {
+          row: 0,
+          text: '$ echo hello',
+        },
+      ],
+      renderTimeMs: 12,
+    },
+  },
+  {
+    name: 'screenshot',
+    command: 'screenshot',
+    schema: ScreenshotResultSchema,
+    validResult: {
+      sessionId: 'session-01',
+      capturedAtSeq: 8,
+      profileName: 'reference-dark',
+      cols: 80,
+      rows: 24,
+      artifactPath:
+        '/tmp/agent-terminal/sessions/session-01/artifacts/screenshot-8-reference-dark.png',
+      pngSizeBytes: 4096,
+      cursorVisible: true,
+      rendererBackend: 'ghostty-web',
+      pixelWidth: 640,
+      pixelHeight: 384,
+      sha256: 'a'.repeat(64),
+      renderProfileHash: 'b'.repeat(64),
+    },
+    invalidResult: {
+      sessionId: 'session-01',
+      capturedAtSeq: 8,
+      profileName: 'reference-dark',
+      cols: 80,
+      rows: 24,
+      artifactPath: '/tmp/screenshot.png',
+      pngSizeBytes: 0,
+    },
+    extraFieldResult: {
+      sessionId: 'session-01',
+      capturedAtSeq: 8,
+      profileName: 'reference-dark',
+      cols: 80,
+      rows: 24,
+      artifactPath: '/tmp/screenshot.png',
+      pngSizeBytes: 4096,
+      dpi: 96,
+    },
+  },
+  {
+    name: 'destroy',
+    command: 'destroy',
+    schema: DestroyResultSchema,
+    validResult: {
+      sessionId: 'session-01',
+      destroyed: true,
+    },
+    invalidResult: {},
+    extraFieldResult: {
+      sessionId: 'session-01',
+      destroyed: true,
+      status: 'destroyed',
+    },
+  },
+  {
+    name: 'wait (legacy)',
+    command: 'wait',
+    schema: WaitResultSchema,
+    validResult: {
+      exitCode: 0,
+      timedOut: false,
+    },
+    invalidResult: {
+      exitCode: 2.5,
+      timedOut: false,
+    },
+    extraFieldResult: {
+      exitCode: 0,
+      timedOut: false,
+      idleMs: 100,
+    },
+  },
+  {
+    name: 'wait (render)',
+    command: 'wait',
+    schema: WaitForRenderResultSchema,
+    validResult: {
+      matched: true,
+      timedOut: false,
+      matchedText: 'READY',
+      cursorRow: 4,
+      cursorCol: 0,
+      capturedAtSeq: 9,
+    },
+    invalidResult: {
+      matched: true,
+      timedOut: false,
+    },
+    extraFieldResult: {
+      matched: true,
+      timedOut: false,
+      capturedAtSeq: 9,
+      matchCount: 1,
+    },
+  },
+];
+
 describe('JSON envelope contracts', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-03-25T15:00:00.000Z'));
+    vi.setSystemTime(new Date(LOCKED_TIMESTAMP));
   });
 
   afterEach(() => {
@@ -71,25 +380,36 @@ describe('JSON envelope contracts', () => {
       usedOfflineReplay: true,
     });
 
-    expect(createSuccessEnvelope('inspect', result)).toEqual({
-      ok: true,
-      command: 'inspect',
-      timestamp: '2026-03-25T15:00:00.000Z',
-      result,
-    });
+    expectLockedSuccessEnvelope('inspect', result);
     expect(InspectResultSchema.safeParse(result).success).toBe(true);
   });
 
   it('locks the version success envelope shape', async () => {
     const result = await buildVersionResult();
 
-    expect(createSuccessEnvelope('version', result)).toEqual({
-      ok: true,
-      command: 'version',
-      timestamp: '2026-03-25T15:00:00.000Z',
-      result,
-    });
+    expectLockedSuccessEnvelope('version', result);
     expect(VersionResultSchema.safeParse(result).success).toBe(true);
+  });
+
+  describe.each(goldenResultContracts)('$name result contract', (contract) => {
+    it('accepts a valid result in the success envelope', () => {
+      const result = contract.schema.parse(contract.validResult);
+
+      expectLockedSuccessEnvelope(contract.command, result);
+      expect(contract.schema.safeParse(result).success).toBe(true);
+    });
+
+    it('rejects an invalid result', () => {
+      expect(contract.schema.safeParse(contract.invalidResult).success).toBe(
+        false,
+      );
+    });
+
+    it('rejects extra fields to enforce strict mode', () => {
+      expect(contract.schema.safeParse(contract.extraFieldResult).success).toBe(
+        false,
+      );
+    });
   });
 
   it('locks the SESSION_NOT_FOUND error envelope shape', () => {
@@ -112,7 +432,7 @@ describe('JSON envelope contracts', () => {
     ).toEqual({
       ok: false,
       command: 'inspect',
-      timestamp: '2026-03-25T15:00:00.000Z',
+      timestamp: LOCKED_TIMESTAMP,
       error: {
         code: 'SESSION_NOT_FOUND',
         message: 'Session "missing-session" was not found.',
@@ -143,7 +463,7 @@ describe('JSON envelope contracts', () => {
     ).toEqual({
       ok: false,
       command: 'inspect',
-      timestamp: '2026-03-25T15:00:00.000Z',
+      timestamp: LOCKED_TIMESTAMP,
       error: {
         code: 'HOST_UNREACHABLE',
         message: 'Session host is unreachable.',
