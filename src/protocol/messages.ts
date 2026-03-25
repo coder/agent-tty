@@ -197,7 +197,13 @@ export const SendKeysParamsSchema = z
   .strict();
 export type SendKeysParams = z.infer<typeof SendKeysParamsSchema>;
 
-export const SendKeysResultSchema = EmptyObjectSchema;
+export const SendKeysResultSchema = z
+  .object({
+    accepted: z.array(NonEmptyStringSchema).min(1),
+    bytesWritten: z.number().int().nonnegative(),
+    seq: z.number().int().nonnegative(),
+  })
+  .strict();
 export type SendKeysResult = z.infer<typeof SendKeysResultSchema>;
 
 export const ResizeParamsSchema = z

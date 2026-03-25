@@ -652,8 +652,12 @@ export async function runHost(sessionId: string): Promise<void> {
 
       pty.write(encoded);
       lastActivityAt = Date.now();
-      await eventLog.append('input_keys', { keys });
-      return {};
+      const seq = await eventLog.append('input_keys', { keys });
+      return {
+        accepted: keys,
+        bytesWritten: Buffer.byteLength(encoded),
+        seq,
+      };
     },
     resize: async (params: unknown) => {
       const { cols, rows } = params as ResizeParams;

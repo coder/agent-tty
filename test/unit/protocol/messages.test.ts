@@ -7,6 +7,7 @@ import {
   MarkParamsSchema,
   MarkResultSchema,
   PasteParamsSchema,
+  SendKeysResultSchema,
   RecordExportResultSchema,
   ReplayTimingModeSchema,
   ResizeResultSchema,
@@ -550,6 +551,20 @@ describe('RPC message schemas', () => {
   it('accepts mark params with empty labels and mark results with seq values', () => {
     expect(MarkParamsSchema.parse({ label: '' })).toEqual({ label: '' });
     expect(MarkResultSchema.parse({ seq: 42 })).toEqual({ seq: 42 });
+  });
+
+  it('accepts sendKeys results with accepted keys, bytes written, and seq', () => {
+    expect(
+      SendKeysResultSchema.parse({
+        accepted: ['Enter'],
+        bytesWritten: 1,
+        seq: 42,
+      }),
+    ).toEqual({
+      accepted: ['Enter'],
+      bytesWritten: 1,
+      seq: 42,
+    });
   });
 
   it('rejects empty type text', () => {

@@ -23,6 +23,12 @@ interface InspectResult {
   session: SessionRecord;
 }
 
+interface SendKeysResult {
+  accepted: string[];
+  bytesWritten: number;
+  seq: number;
+}
+
 function testEnv(home: string): Record<string, string> {
   return { AGENT_TERMINAL_HOME: home };
 }
@@ -87,13 +93,17 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
     expect(typeEnvelope.command).toBe('type');
     expect(typeEnvelope.result).toEqual({});
 
-    const sendKeysEnvelope = runCliJson<SuccessEnvelope<Record<string, never>>>(
+    const sendKeysEnvelope = runCliJson<SuccessEnvelope<SendKeysResult>>(
       ['send-keys', sessionId, 'Enter'],
       env,
     );
     expect(sendKeysEnvelope.ok).toBe(true);
     expect(sendKeysEnvelope.command).toBe('send-keys');
-    expect(sendKeysEnvelope.result).toEqual({});
+    expect(sendKeysEnvelope.result).toMatchObject({
+      accepted: ['Enter'],
+      bytesWritten: 1,
+    });
+    expect(sendKeysEnvelope.result.seq).toBeGreaterThanOrEqual(0);
 
     const waitForEcho = runCliJson<SuccessEnvelope<WaitResult>>(
       [
@@ -130,12 +140,17 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
     expect(typeExitEnvelope.command).toBe('type');
     expect(typeExitEnvelope.result).toEqual({});
 
-    const sendExitEnterEnvelope = runCliJson<
-      SuccessEnvelope<Record<string, never>>
-    >(['send-keys', sessionId, 'Enter'], env);
+    const sendExitEnterEnvelope = runCliJson<SuccessEnvelope<SendKeysResult>>(
+      ['send-keys', sessionId, 'Enter'],
+      env,
+    );
     expect(sendExitEnterEnvelope.ok).toBe(true);
     expect(sendExitEnterEnvelope.command).toBe('send-keys');
-    expect(sendExitEnterEnvelope.result).toEqual({});
+    expect(sendExitEnterEnvelope.result).toMatchObject({
+      accepted: ['Enter'],
+      bytesWritten: 1,
+    });
+    expect(sendExitEnterEnvelope.result.seq).toBeGreaterThanOrEqual(0);
 
     const waitForExit = runCliJson<SuccessEnvelope<WaitResult>>(
       [
@@ -206,13 +221,17 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
     expect(pasteEnvelope.command).toBe('paste');
     expect(pasteEnvelope.result).toEqual({});
 
-    const sendKeysEnvelope = runCliJson<SuccessEnvelope<Record<string, never>>>(
+    const sendKeysEnvelope = runCliJson<SuccessEnvelope<SendKeysResult>>(
       ['send-keys', sessionId, 'Enter'],
       env,
     );
     expect(sendKeysEnvelope.ok).toBe(true);
     expect(sendKeysEnvelope.command).toBe('send-keys');
-    expect(sendKeysEnvelope.result).toEqual({});
+    expect(sendKeysEnvelope.result).toMatchObject({
+      accepted: ['Enter'],
+      bytesWritten: 1,
+    });
+    expect(sendKeysEnvelope.result.seq).toBeGreaterThanOrEqual(0);
 
     const waitForExit = runCliJson<SuccessEnvelope<WaitResult>>(
       [
