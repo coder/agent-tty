@@ -1,1 +1,4 @@
-{"command":"rm -f /tmp/agent-terminal-week6.N8X5Dz/sessions/01KMJ2RDHRZPYTZQW4WJH2717B/artifacts/screenshot-1-reference-dark.png","removed":true}
+{
+  "command": "rm -f /tmp/agent-terminal-week6.N8X5Dz/sessions/01KMJ2RDHRZPYTZQW4WJH2717B/artifacts/screenshot-1-reference-dark.png",
+  "removed": true
+}

@@ -11,11 +11,7 @@
       "status": "failed",
       "failureReason": "host process died unexpectedly (pid: 831241)",
       "failureOrigin": "host-death",
-      "command": [
-        "/bin/sh",
-        "-c",
-        "echo host-death-proof; exec cat"
-      ],
+      "command": ["/bin/sh", "-c", "echo host-death-proof; exec cat"],
       "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_43b108bc65",
       "shell": "/bin/bash",
       "term": "xterm-256color",

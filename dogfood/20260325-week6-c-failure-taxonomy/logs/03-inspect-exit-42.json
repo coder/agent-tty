@@ -9,11 +9,7 @@
       "createdAt": "2026-03-25T08:46:22.628Z",
       "updatedAt": "2026-03-25T08:46:23.397Z",
       "status": "exited",
-      "command": [
-        "/bin/sh",
-        "-c",
-        "exit 42"
-      ],
+      "command": ["/bin/sh", "-c", "exit 42"],
       "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_43b108bc65",
       "shell": "/bin/bash",
       "term": "xterm-256color",

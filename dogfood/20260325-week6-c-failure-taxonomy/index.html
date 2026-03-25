@@ -15,10 +15,19 @@
         --accent: #93c5fd;
         --border: #334155;
       }
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
         background: linear-gradient(180deg, #020617 0%, var(--bg) 100%);
         color: var(--text);
         line-height: 1.5;
@@ -28,22 +37,38 @@
         margin: 0 auto;
         padding: 32px 20px 48px;
       }
-      a { color: var(--accent); }
-      header, section, .card {
+      a {
+        color: var(--accent);
+      }
+      header,
+      section,
+      .card {
         background: rgb(15 23 42 / 0.88);
         border: 1px solid var(--border);
         border-radius: 16px;
         box-shadow: 0 18px 40px rgb(2 6 23 / 0.25);
       }
-      header, section {
+      header,
+      section {
         padding: 24px;
         margin-bottom: 20px;
       }
-      h1, h2, h3, h4, h5, h6 {
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
         margin-top: 0;
         color: #f8fafc;
       }
-      p, li, dd, td, th, summary, figcaption {
+      p,
+      li,
+      dd,
+      td,
+      th,
+      summary,
+      figcaption {
         overflow-wrap: anywhere;
       }
       .subtle {
@@ -80,7 +105,8 @@
       .note-card > *:last-child {
         margin-bottom: 0;
       }
-      img, video {
+      img,
+      video {
         width: 100%;
         border-radius: 12px;
         background: #020617;
@@ -105,7 +131,8 @@
         white-space: pre-wrap;
       }
       code {
-        font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family:
+          'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       details > summary {
         cursor: pointer;
@@ -115,7 +142,8 @@
         width: 100%;
         border-collapse: collapse;
       }
-      th, td {
+      th,
+      td {
         text-align: left;
         padding: 10px 12px;
         border-bottom: 1px solid var(--border);
@@ -137,24 +165,51 @@
       <header>
         <p class="subtle">Portable review bundle</p>
         <h1>Week 6 — Failure Taxonomy Proof</h1>
-        <p class="subtle">Bundle directory: 20260325-week6-c-failure-taxonomy</p>
-        <p>Proves derived termination categories and persisted failureOrigin across clean exit, non-zero exit, and host death</p>
+        <p class="subtle">
+          Bundle directory: 20260325-week6-c-failure-taxonomy
+        </p>
+        <p>
+          Proves derived termination categories and persisted failureOrigin
+          across clean exit, non-zero exit, and host death
+        </p>
       </header>
-      
+
       <section>
-  <h2>Manifest summary</h2>
-  <dl class="facts"><div><dt>Bundle</dt><dd>20260325-week6-c-failure-taxonomy</dd></div><div><dt>Date</dt><dd>2026-03-25T08:48:27Z</dd></div><div><dt>Lane</dt><dd>C</dd></div><div><dt>Week</dt><dd>6</dd></div><div><dt>Manifest artifacts</dt><dd>6</dd></div><div><dt>Discovered files</dt><dd>33</dd></div></dl>
-  
-</section>
-      
-      
-      
+        <h2>Manifest summary</h2>
+        <dl class="facts">
+          <div>
+            <dt>Bundle</dt>
+            <dd>20260325-week6-c-failure-taxonomy</dd>
+          </div>
+          <div>
+            <dt>Date</dt>
+            <dd>2026-03-25T08:48:27Z</dd>
+          </div>
+          <div>
+            <dt>Lane</dt>
+            <dd>C</dd>
+          </div>
+          <div>
+            <dt>Week</dt>
+            <dd>6</dd>
+          </div>
+          <div>
+            <dt>Manifest artifacts</dt>
+            <dd>6</dd>
+          </div>
+          <div>
+            <dt>Discovered files</dt>
+            <dd>33</dd>
+          </div>
+        </dl>
+      </section>
+
       <section>
-  <h2>JSON outputs</h2>
-  
-  <details class="card">
-    <summary>logs/01-create-exit-42.json</summary>
-    <pre><code>{
+        <h2>JSON outputs</h2>
+
+        <details class="card">
+          <summary>logs/01-create-exit-42.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;create&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T08:46:23.448Z&quot;,
@@ -166,10 +221,10 @@
     &quot;shell&quot;: &quot;/bin/bash&quot;
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/02-wait-exit-42.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/02-wait-exit-42.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;wait&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T08:46:24.816Z&quot;,
@@ -178,10 +233,10 @@
     &quot;exitCode&quot;: 42
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/03-inspect-exit-42.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/03-inspect-exit-42.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;inspect&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T08:46:25.892Z&quot;,
@@ -222,10 +277,10 @@
     &quot;usedOfflineReplay&quot;: false
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/04-create-exit-0.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/04-create-exit-0.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;create&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T08:46:27.809Z&quot;,
@@ -237,10 +292,10 @@
     &quot;shell&quot;: &quot;/bin/bash&quot;
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/05-wait-exit-0.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/05-wait-exit-0.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;wait&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T08:46:29.014Z&quot;,
@@ -249,10 +304,10 @@
     &quot;exitCode&quot;: 0
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/06-inspect-exit-0.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/06-inspect-exit-0.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;inspect&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T08:46:30.294Z&quot;,
@@ -293,10 +348,10 @@
     &quot;usedOfflineReplay&quot;: false
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/07-create-host-death.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/07-create-host-death.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;create&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T08:46:32.258Z&quot;,
@@ -308,10 +363,10 @@
     &quot;shell&quot;: &quot;/bin/bash&quot;
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/08-wait-text-host.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/08-wait-text-host.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;wait&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T08:46:33.864Z&quot;,
@@ -324,10 +379,10 @@
     &quot;capturedAtSeq&quot;: 0
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/09-inspect-live.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/09-inspect-live.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;inspect&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T08:46:35.073Z&quot;,
@@ -368,18 +423,18 @@
     &quot;usedOfflineReplay&quot;: false
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/10-kill-host.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/10-kill-host.json</summary>
+          <pre><code>{
   &quot;command&quot;: &quot;kill -9 831241&quot;,
   &quot;hostPid&quot;: 831241,
   &quot;exitCode&quot;: 0
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/11-inspect-host-death.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/11-inspect-host-death.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;inspect&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T08:46:38.287Z&quot;,
@@ -422,10 +477,10 @@
     &quot;usedOfflineReplay&quot;: true
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/12-host-death-session.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/12-host-death-session.json</summary>
+          <pre><code>{
   &quot;version&quot;: 1,
   &quot;sessionId&quot;: &quot;01KMJ2S238K002KNYQWZGCCT3N&quot;,
   &quot;createdAt&quot;: &quot;2026-03-25T08:46:31.531Z&quot;,
@@ -450,30 +505,126 @@
   &quot;exitCode&quot;: null,
   &quot;exitSignal&quot;: null
 }</code></pre>
-  </details>
-</section>
+        </details>
+      </section>
       <section>
-  <h2>Notes</h2>
-  
-  <article class="card note-card">
-    <h3><a href="notes.md">notes.md</a></h3>
-    <h1>2026-03-25 dogfood — Week 6 bundle C failure taxonomy proof</h1>
-<h2>Bundle metadata</h2>
-<ul><li><strong>Bundle path:</strong> <code>dogfood/20260325-week6-c-failure-taxonomy/</code></li><li><strong>Non-zero exit session:</strong> <code>01KMJ2RSD2NWQKAN6NH3TGMSRC</code></li><li><strong>Clean exit session:</strong> <code>01KMJ2RXN9F3K4H9366FNZZJ79</code></li><li><strong>Host-death session:</strong> <code>01KMJ2S238K002KNYQWZGCCT3N</code></li><li><strong>Killed host PID:</strong> <code>831241</code></li><li><strong>Isolated AGENT_TERMINAL_HOME:</strong> <code>/tmp/agent-terminal-week6.N8X5Dz</code></li></ul>
-<h2>Scenario summary</h2>
-<p>This bundle exercises the new failure taxonomy surface across three cases:</p>
-<ol><li>a shell command that exits with code 42</li><li>a shell command that exits cleanly with code 0</li><li>a live host process that is force-killed so reconciliation persists <code>failureOrigin</code> and derives <code>terminationCategory: &quot;host-death&quot;</code></li></ol>
-<h2>Review answers</h2>
-<ul><li><strong>Did a non-zero exit map to the expected termination category?</strong> Yes. <code>logs/03-inspect-exit-42.json</code> shows <code>exitCode: 42</code> with <code>terminationCategory: &quot;nonzero-exit&quot;</code>.</li><li><strong>Did a clean exit map to the expected termination category?</strong> Yes. <code>logs/06-inspect-exit-0.json</code> shows <code>exitCode: 0</code> with <code>terminationCategory: &quot;clean-exit&quot;</code>.</li><li><strong>Was the host-death scenario captured from a live session?</strong> Yes. <code>logs/09-inspect-live.json</code> captured the running session and the live <code>hostPid</code> before the forced kill recorded in <code>logs/10-kill-host.json</code>.</li><li><strong>Did reconciliation persist <code>failureOrigin</code> for host death?</strong> Yes. <code>logs/11-inspect-host-death.json</code> shows <code>status: &quot;failed&quot;</code>, <code>failureOrigin: &quot;host-death&quot;</code>, and <code>failureReason: &quot;host process died unexpectedly (pid: 831241)&quot;</code>.</li><li><strong>Was <code>terminationCategory</code> derived correctly after the host died?</strong> Yes. The same inspect output reports <code>terminationCategory: &quot;host-death&quot;</code> and <code>usedOfflineReplay: true</code>, proving the CLI recovered through offline reconciliation.</li><li><strong>Is the reconciled session record included?</strong> Yes. <code>logs/12-host-death-session.json</code> is the persisted failed session record copied directly from the isolated session directory.</li></ul>
-<h2>Issues / limitations</h2>
-<ul><li>None during capture. The host-death branch intentionally force-kills the host process with <code>kill -9</code> to exercise reconciliation.</li></ul>
-  </article>
-</section>
+        <h2>Notes</h2>
+
+        <article class="card note-card">
+          <h3><a href="notes.md">notes.md</a></h3>
+          <h1>2026-03-25 dogfood — Week 6 bundle C failure taxonomy proof</h1>
+          <h2>Bundle metadata</h2>
+          <ul>
+            <li>
+              <strong>Bundle path:</strong>
+              <code>dogfood/20260325-week6-c-failure-taxonomy/</code>
+            </li>
+            <li>
+              <strong>Non-zero exit session:</strong>
+              <code>01KMJ2RSD2NWQKAN6NH3TGMSRC</code>
+            </li>
+            <li>
+              <strong>Clean exit session:</strong>
+              <code>01KMJ2RXN9F3K4H9366FNZZJ79</code>
+            </li>
+            <li>
+              <strong>Host-death session:</strong>
+              <code>01KMJ2S238K002KNYQWZGCCT3N</code>
+            </li>
+            <li><strong>Killed host PID:</strong> <code>831241</code></li>
+            <li>
+              <strong>Isolated AGENT_TERMINAL_HOME:</strong>
+              <code>/tmp/agent-terminal-week6.N8X5Dz</code>
+            </li>
+          </ul>
+          <h2>Scenario summary</h2>
+          <p>
+            This bundle exercises the new failure taxonomy surface across three
+            cases:
+          </p>
+          <ol>
+            <li>a shell command that exits with code 42</li>
+            <li>a shell command that exits cleanly with code 0</li>
+            <li>
+              a live host process that is force-killed so reconciliation
+              persists <code>failureOrigin</code> and derives
+              <code>terminationCategory: &quot;host-death&quot;</code>
+            </li>
+          </ol>
+          <h2>Review answers</h2>
+          <ul>
+            <li>
+              <strong
+                >Did a non-zero exit map to the expected termination
+                category?</strong
+              >
+              Yes. <code>logs/03-inspect-exit-42.json</code> shows
+              <code>exitCode: 42</code> with
+              <code>terminationCategory: &quot;nonzero-exit&quot;</code>.
+            </li>
+            <li>
+              <strong
+                >Did a clean exit map to the expected termination
+                category?</strong
+              >
+              Yes. <code>logs/06-inspect-exit-0.json</code> shows
+              <code>exitCode: 0</code> with
+              <code>terminationCategory: &quot;clean-exit&quot;</code>.
+            </li>
+            <li>
+              <strong
+                >Was the host-death scenario captured from a live
+                session?</strong
+              >
+              Yes. <code>logs/09-inspect-live.json</code> captured the running
+              session and the live <code>hostPid</code> before the forced kill
+              recorded in <code>logs/10-kill-host.json</code>.
+            </li>
+            <li>
+              <strong
+                >Did reconciliation persist <code>failureOrigin</code> for host
+                death?</strong
+              >
+              Yes. <code>logs/11-inspect-host-death.json</code> shows
+              <code>status: &quot;failed&quot;</code>,
+              <code>failureOrigin: &quot;host-death&quot;</code>, and
+              <code
+                >failureReason: &quot;host process died unexpectedly (pid:
+                831241)&quot;</code
+              >.
+            </li>
+            <li>
+              <strong
+                >Was <code>terminationCategory</code> derived correctly after
+                the host died?</strong
+              >
+              Yes. The same inspect output reports
+              <code>terminationCategory: &quot;host-death&quot;</code> and
+              <code>usedOfflineReplay: true</code>, proving the CLI recovered
+              through offline reconciliation.
+            </li>
+            <li>
+              <strong>Is the reconciled session record included?</strong> Yes.
+              <code>logs/12-host-death-session.json</code> is the persisted
+              failed session record copied directly from the isolated session
+              directory.
+            </li>
+          </ul>
+          <h2>Issues / limitations</h2>
+          <ul>
+            <li>
+              None during capture. The host-death branch intentionally
+              force-kills the host process with <code>kill -9</code> to exercise
+              reconciliation.
+            </li>
+          </ul>
+        </article>
+      </section>
       <section>
-  <h2>Commands</h2>
-  <div class="card">
-    <h3><a href="commands.sh">commands.sh</a></h3>
-    <pre><code>#!/usr/bin/env bash
+        <h2>Commands</h2>
+        <div class="card">
+          <h3><a href="commands.sh">commands.sh</a></h3>
+          <pre><code>#!/usr/bin/env bash
 set -euo pipefail
 export PATH=&quot;$HOME/.local/bin:$PATH&quot;
 export AGENT_TERMINAL_HOME=&quot;/tmp/agent-terminal-week6.N8X5Dz&quot;
@@ -490,199 +641,467 @@ npx tsx src/cli/main.ts inspect 01KMJ2S238K002KNYQWZGCCT3N --json
 kill -9 831241; sleep 2; printf &#39;{&quot;command&quot;:&quot;kill -9 %s&quot;,&quot;hostPid&quot;:%s,&quot;exitCode&quot;:0}\n&#39; &#39;831241&#39; &#39;831241&#39;
 npx tsx src/cli/main.ts inspect 01KMJ2S238K002KNYQWZGCCT3N --json
 </code></pre>
-  </div>
-</section>
+        </div>
+      </section>
       <section>
-  <h2>Command status</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>step</th><th>exit_code</th><th>duration_ms</th><th>stdout</th><th>stderr</th><th>command</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>01-create-exit-42.json</td><td>0</td><td>1971</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/01-create-exit-42.json</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/01-create-exit-42.stderr.txt</td><td>npx tsx src/cli/main.ts create --json -- /bin/sh -c &#39;exit 42&#39;</td></tr><tr><td>02-wait-exit-42.json</td><td>0</td><td>1297</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/02-wait-exit-42.json</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/02-wait-exit-42.stderr.txt</td><td>npx tsx src/cli/main.ts wait 01KMJ2RSD2NWQKAN6NH3TGMSRC --exit --timeout 10000 --json</td></tr><tr><td>03-inspect-exit-42.json</td><td>0</td><td>1073</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/03-inspect-exit-42.json</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/03-inspect-exit-42.stderr.txt</td><td>npx tsx src/cli/main.ts inspect 01KMJ2RSD2NWQKAN6NH3TGMSRC --json</td></tr><tr><td>04-create-exit-0.json</td><td>0</td><td>1936</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/04-create-exit-0.json</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/04-create-exit-0.stderr.txt</td><td>npx tsx src/cli/main.ts create --json -- /bin/sh -c &#39;exit 0&#39;</td></tr><tr><td>05-wait-exit-0.json</td><td>0</td><td>1153</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/05-wait-exit-0.json</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/05-wait-exit-0.stderr.txt</td><td>npx tsx src/cli/main.ts wait 01KMJ2RXN9F3K4H9366FNZZJ79 --exit --timeout 10000 --json</td></tr><tr><td>06-inspect-exit-0.json</td><td>0</td><td>1278</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/06-inspect-exit-0.json</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/06-inspect-exit-0.stderr.txt</td><td>npx tsx src/cli/main.ts inspect 01KMJ2RXN9F3K4H9366FNZZJ79 --json</td></tr><tr><td>07-create-host-death.json</td><td>0</td><td>1975</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/07-create-host-death.json</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/07-create-host-death.stderr.txt</td><td>npx tsx src/cli/main.ts create --json -- /bin/sh -c &#39;echo host-death-proof; exec cat&#39;</td></tr><tr><td>08-wait-text-host.json</td><td>0</td><td>1554</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/08-wait-text-host.json</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/08-wait-text-host.stderr.txt</td><td>npx tsx src/cli/main.ts wait 01KMJ2S238K002KNYQWZGCCT3N --text host-death-proof --timeout 10000 --json</td></tr><tr><td>09-inspect-live.json</td><td>0</td><td>1206</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/09-inspect-live.json</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/09-inspect-live.stderr.txt</td><td>npx tsx src/cli/main.ts inspect 01KMJ2S238K002KNYQWZGCCT3N --json</td></tr><tr><td>10-kill-host.json</td><td>0</td><td>2053</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/10-kill-host.json</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/10-kill-host.stderr.txt</td><td>kill -9 831241; sleep 2; printf &#39;{&quot;command&quot;:&quot;kill -9 %s&quot;,&quot;hostPid&quot;:%s,&quot;exitCode&quot;:0}\n&#39; &#39;831241&#39; &#39;831241&#39;</td></tr><tr><td>11-inspect-host-death.json</td><td>0</td><td>1114</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/11-inspect-host-death.json</td><td>dogfood/20260325-week6-c-failure-taxonomy/logs/11-inspect-host-death.stderr.txt</td><td>npx tsx src/cli/main.ts inspect 01KMJ2S238K002KNYQWZGCCT3N --json</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <h2>Command status</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>step</th>
+                <th>exit_code</th>
+                <th>duration_ms</th>
+                <th>stdout</th>
+                <th>stderr</th>
+                <th>command</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>01-create-exit-42.json</td>
+                <td>0</td>
+                <td>1971</td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/01-create-exit-42.json
+                </td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/01-create-exit-42.stderr.txt
+                </td>
+                <td>
+                  npx tsx src/cli/main.ts create --json -- /bin/sh -c &#39;exit
+                  42&#39;
+                </td>
+              </tr>
+              <tr>
+                <td>02-wait-exit-42.json</td>
+                <td>0</td>
+                <td>1297</td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/02-wait-exit-42.json
+                </td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/02-wait-exit-42.stderr.txt
+                </td>
+                <td>
+                  npx tsx src/cli/main.ts wait 01KMJ2RSD2NWQKAN6NH3TGMSRC --exit
+                  --timeout 10000 --json
+                </td>
+              </tr>
+              <tr>
+                <td>03-inspect-exit-42.json</td>
+                <td>0</td>
+                <td>1073</td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/03-inspect-exit-42.json
+                </td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/03-inspect-exit-42.stderr.txt
+                </td>
+                <td>
+                  npx tsx src/cli/main.ts inspect 01KMJ2RSD2NWQKAN6NH3TGMSRC
+                  --json
+                </td>
+              </tr>
+              <tr>
+                <td>04-create-exit-0.json</td>
+                <td>0</td>
+                <td>1936</td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/04-create-exit-0.json
+                </td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/04-create-exit-0.stderr.txt
+                </td>
+                <td>
+                  npx tsx src/cli/main.ts create --json -- /bin/sh -c &#39;exit
+                  0&#39;
+                </td>
+              </tr>
+              <tr>
+                <td>05-wait-exit-0.json</td>
+                <td>0</td>
+                <td>1153</td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/05-wait-exit-0.json
+                </td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/05-wait-exit-0.stderr.txt
+                </td>
+                <td>
+                  npx tsx src/cli/main.ts wait 01KMJ2RXN9F3K4H9366FNZZJ79 --exit
+                  --timeout 10000 --json
+                </td>
+              </tr>
+              <tr>
+                <td>06-inspect-exit-0.json</td>
+                <td>0</td>
+                <td>1278</td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/06-inspect-exit-0.json
+                </td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/06-inspect-exit-0.stderr.txt
+                </td>
+                <td>
+                  npx tsx src/cli/main.ts inspect 01KMJ2RXN9F3K4H9366FNZZJ79
+                  --json
+                </td>
+              </tr>
+              <tr>
+                <td>07-create-host-death.json</td>
+                <td>0</td>
+                <td>1975</td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/07-create-host-death.json
+                </td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/07-create-host-death.stderr.txt
+                </td>
+                <td>
+                  npx tsx src/cli/main.ts create --json -- /bin/sh -c &#39;echo
+                  host-death-proof; exec cat&#39;
+                </td>
+              </tr>
+              <tr>
+                <td>08-wait-text-host.json</td>
+                <td>0</td>
+                <td>1554</td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/08-wait-text-host.json
+                </td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/08-wait-text-host.stderr.txt
+                </td>
+                <td>
+                  npx tsx src/cli/main.ts wait 01KMJ2S238K002KNYQWZGCCT3N --text
+                  host-death-proof --timeout 10000 --json
+                </td>
+              </tr>
+              <tr>
+                <td>09-inspect-live.json</td>
+                <td>0</td>
+                <td>1206</td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/09-inspect-live.json
+                </td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/09-inspect-live.stderr.txt
+                </td>
+                <td>
+                  npx tsx src/cli/main.ts inspect 01KMJ2S238K002KNYQWZGCCT3N
+                  --json
+                </td>
+              </tr>
+              <tr>
+                <td>10-kill-host.json</td>
+                <td>0</td>
+                <td>2053</td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/10-kill-host.json
+                </td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/10-kill-host.stderr.txt
+                </td>
+                <td>
+                  kill -9 831241; sleep 2; printf
+                  &#39;{&quot;command&quot;:&quot;kill -9
+                  %s&quot;,&quot;hostPid&quot;:%s,&quot;exitCode&quot;:0}\n&#39;
+                  &#39;831241&#39; &#39;831241&#39;
+                </td>
+              </tr>
+              <tr>
+                <td>11-inspect-host-death.json</td>
+                <td>0</td>
+                <td>1114</td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/11-inspect-host-death.json
+                </td>
+                <td>
+                  dogfood/20260325-week6-c-failure-taxonomy/logs/11-inspect-host-death.stderr.txt
+                </td>
+                <td>
+                  npx tsx src/cli/main.ts inspect 01KMJ2S238K002KNYQWZGCCT3N
+                  --json
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
       <section>
-  <h2>Artifact inventory</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>Path</th><th>Type</th><th>Size</th></tr>
-      </thead>
-      <tbody>
-        
-        <tr>
-          <td><a href="agent-terminal-home.txt">agent-terminal-home.txt</a></td>
-          <td>support</td>
-          <td>33 B</td>
-        </tr>
-        <tr>
-          <td><a href="command-status.tsv">command-status.tsv</a></td>
-          <td>support</td>
-          <td>2.8 KB</td>
-        </tr>
-        <tr>
-          <td><a href="commands.sh">commands.sh</a></td>
-          <td>script</td>
-          <td>991 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/01-create-exit-42.json">logs/01-create-exit-42.json</a></td>
-          <td>support</td>
-          <td>251 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/01-create-exit-42.stderr.txt">logs/01-create-exit-42.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/02-wait-exit-42.json">logs/02-wait-exit-42.json</a></td>
-          <td>support</td>
-          <td>142 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/02-wait-exit-42.stderr.txt">logs/02-wait-exit-42.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/03-inspect-exit-42.json">logs/03-inspect-exit-42.json</a></td>
-          <td>support</td>
-          <td>972 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/03-inspect-exit-42.stderr.txt">logs/03-inspect-exit-42.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/04-create-exit-0.json">logs/04-create-exit-0.json</a></td>
-          <td>support</td>
-          <td>251 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/04-create-exit-0.stderr.txt">logs/04-create-exit-0.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/05-wait-exit-0.json">logs/05-wait-exit-0.json</a></td>
-          <td>support</td>
-          <td>141 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/05-wait-exit-0.stderr.txt">logs/05-wait-exit-0.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/06-inspect-exit-0.json">logs/06-inspect-exit-0.json</a></td>
-          <td>support</td>
-          <td>968 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/06-inspect-exit-0.stderr.txt">logs/06-inspect-exit-0.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/07-create-host-death.json">logs/07-create-host-death.json</a></td>
-          <td>support</td>
-          <td>251 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/07-create-host-death.stderr.txt">logs/07-create-host-death.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/08-wait-text-host.json">logs/08-wait-text-host.json</a></td>
-          <td>support</td>
-          <td>246 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/08-wait-text-host.stderr.txt">logs/08-wait-text-host.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/09-inspect-live.json">logs/09-inspect-live.json</a></td>
-          <td>support</td>
-          <td>995 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/09-inspect-live.stderr.txt">logs/09-inspect-live.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/10-kill-host.json">logs/10-kill-host.json</a></td>
-          <td>support</td>
-          <td>59 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/10-kill-host.stderr.txt">logs/10-kill-host.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/11-inspect-host-death.json">logs/11-inspect-host-death.json</a></td>
-          <td>support</td>
-          <td>1.1 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/11-inspect-host-death.stderr.txt">logs/11-inspect-host-death.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/12-host-death-session.json">logs/12-host-death-session.json</a></td>
-          <td>support</td>
-          <td>630 B</td>
-        </tr>
-        <tr>
-          <td><a href="manifest.json">manifest.json</a></td>
-          <td>support</td>
-          <td>1.2 KB</td>
-        </tr>
-        <tr>
-          <td><a href="notes.md">notes.md</a></td>
-          <td>notes</td>
-          <td>2.1 KB</td>
-        </tr>
-        <tr>
-          <td><a href="recordings/.gitkeep">recordings/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="session-ids.txt">session-ids.txt</a></td>
-          <td>other</td>
-          <td>147 B</td>
-        </tr>
-        <tr>
-          <td><a href="snapshots/.gitkeep">snapshots/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="videos/.gitkeep">videos/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <h2>Artifact inventory</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Type</th>
+                <th>Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <a href="agent-terminal-home.txt">agent-terminal-home.txt</a>
+                </td>
+                <td>support</td>
+                <td>33 B</td>
+              </tr>
+              <tr>
+                <td><a href="command-status.tsv">command-status.tsv</a></td>
+                <td>support</td>
+                <td>2.8 KB</td>
+              </tr>
+              <tr>
+                <td><a href="commands.sh">commands.sh</a></td>
+                <td>script</td>
+                <td>991 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/01-create-exit-42.json"
+                    >logs/01-create-exit-42.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>251 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/01-create-exit-42.stderr.txt"
+                    >logs/01-create-exit-42.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/02-wait-exit-42.json"
+                    >logs/02-wait-exit-42.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>142 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/02-wait-exit-42.stderr.txt"
+                    >logs/02-wait-exit-42.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/03-inspect-exit-42.json"
+                    >logs/03-inspect-exit-42.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>972 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/03-inspect-exit-42.stderr.txt"
+                    >logs/03-inspect-exit-42.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/04-create-exit-0.json"
+                    >logs/04-create-exit-0.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>251 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/04-create-exit-0.stderr.txt"
+                    >logs/04-create-exit-0.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/05-wait-exit-0.json"
+                    >logs/05-wait-exit-0.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>141 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/05-wait-exit-0.stderr.txt"
+                    >logs/05-wait-exit-0.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/06-inspect-exit-0.json"
+                    >logs/06-inspect-exit-0.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>968 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/06-inspect-exit-0.stderr.txt"
+                    >logs/06-inspect-exit-0.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/07-create-host-death.json"
+                    >logs/07-create-host-death.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>251 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/07-create-host-death.stderr.txt"
+                    >logs/07-create-host-death.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/08-wait-text-host.json"
+                    >logs/08-wait-text-host.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>246 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/08-wait-text-host.stderr.txt"
+                    >logs/08-wait-text-host.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/09-inspect-live.json"
+                    >logs/09-inspect-live.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>995 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/09-inspect-live.stderr.txt"
+                    >logs/09-inspect-live.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/10-kill-host.json">logs/10-kill-host.json</a>
+                </td>
+                <td>support</td>
+                <td>59 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/10-kill-host.stderr.txt"
+                    >logs/10-kill-host.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/11-inspect-host-death.json"
+                    >logs/11-inspect-host-death.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>1.1 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/11-inspect-host-death.stderr.txt"
+                    >logs/11-inspect-host-death.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/12-host-death-session.json"
+                    >logs/12-host-death-session.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>630 B</td>
+              </tr>
+              <tr>
+                <td><a href="manifest.json">manifest.json</a></td>
+                <td>support</td>
+                <td>1.2 KB</td>
+              </tr>
+              <tr>
+                <td><a href="notes.md">notes.md</a></td>
+                <td>notes</td>
+                <td>2.1 KB</td>
+              </tr>
+              <tr>
+                <td><a href="recordings/.gitkeep">recordings/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="session-ids.txt">session-ids.txt</a></td>
+                <td>other</td>
+                <td>147 B</td>
+              </tr>
+              <tr>
+                <td><a href="snapshots/.gitkeep">snapshots/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="videos/.gitkeep">videos/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
   </body>
 </html>
