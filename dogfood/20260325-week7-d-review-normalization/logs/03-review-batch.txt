@@ -1,0 +1,18 @@
+temporary mirror: /tmp/agent-terminal-week7-review.9yyqy2
+copied bundles:
+  dogfood/20260325-week6-a-cli-contract
+  dogfood/20260325-week6-d-review-surface
+  dogfood/20260325-week7-a-cli-parity
+  dogfood/20260325-week7-b-envelope-locks
+
+$ ./node_modules/.bin/tsx src/tools/review-bundle.ts --all /tmp/agent-terminal-week7-review.9yyqy2
+/tmp/agent-terminal-week7-review.9yyqy2/20260325-week6-a-cli-contract/index.html
+/tmp/agent-terminal-week7-review.9yyqy2/20260325-week6-d-review-surface/index.html
+/tmp/agent-terminal-week7-review.9yyqy2/20260325-week7-a-cli-parity/index.html
+/tmp/agent-terminal-week7-review.9yyqy2/20260325-week7-b-envelope-locks/index.html
+
+mirror index files after --all:
+/tmp/agent-terminal-week7-review.9yyqy2/20260325-week6-a-cli-contract/index.html
+/tmp/agent-terminal-week7-review.9yyqy2/20260325-week6-d-review-surface/index.html
+/tmp/agent-terminal-week7-review.9yyqy2/20260325-week7-a-cli-parity/index.html
+/tmp/agent-terminal-week7-review.9yyqy2/20260325-week7-b-envelope-locks/index.html
