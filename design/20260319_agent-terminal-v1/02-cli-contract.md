@@ -42,14 +42,13 @@ Human-readable output is allowed, but it is not the primary contract.
 
 ### 1.3 Stable envelope
 
-Every JSON response should use a stable envelope.
+Every JSON response uses the same top-level envelope fields in the shipped implementation: `ok`, `command`, `timestamp`, and either `result` or `error`. Session-specific identifiers currently live inside `result.session` or `error.details` rather than as a top-level `sessionId` field.
 
 ```json
 {
   "ok": true,
   "command": "inspect",
-  "sessionId": "sess_01JQ...",
-  "timestamp": "2026-03-19T10:00:00.000Z",
+  "timestamp": "2026-03-25T15:00:00.000Z",
   "result": {}
 }
 ```
@@ -59,14 +58,16 @@ Failure envelope:
 ```json
 {
   "ok": false,
-  "command": "snapshot",
-  "sessionId": "sess_01JQ...",
-  "timestamp": "2026-03-19T10:00:01.000Z",
+  "command": "inspect",
+  "timestamp": "2026-03-25T15:00:00.000Z",
   "error": {
-    "code": "SESSION_NOT_RUNNING",
-    "message": "Cannot capture a live snapshot because the session was already destroyed.",
+    "code": "SESSION_NOT_FOUND",
+    "message": "Session \"missing-session\" was not found.",
     "retryable": false,
-    "details": {}
+    "details": {
+      "sessionId": "missing-session",
+      "manifestPath": "/tmp/agent-terminal/sessions/missing-session/session.json"
+    }
   }
 }
 ```
@@ -235,31 +236,83 @@ Each item should include:
 
 ## 7. Command: `inspect`
 
-Return full session metadata.
+Return the shipped merged session summary for one session.
 
 ### 7.1 Syntax
 
 ```bash
 agent-terminal inspect <session-id>
+agent-terminal inspect <session-id> --json
 ```
 
 ### 7.2 Behavior
 
-- Read persisted metadata.
-- If the host is alive, ask it for the latest in-memory state.
-- Return a merged view.
+- Read persisted metadata from the session manifest.
+- If the host is alive, ask it for the latest in-memory session record.
+- If the host is unreachable for a non-terminal session, reconcile the session directory, re-read the manifest, and mark `usedOfflineReplay: true` in the result.
+- Count event-log entries and compute artifact health from the artifact manifest plus on-disk files.
+- Derive a read-time `terminationCategory` from the session status, exit fields, and any persisted `failureOrigin`.
 
-### 7.3 Result shape highlights
+### 7.3 Shipped `inspect --json` result shape (2026-03-25)
 
-The result should include:
+The current `result` object includes:
 
-- session metadata,
-- current size,
-- last event sequence,
-- exit info if present,
-- renderer state summary,
-- artifact counts,
-- and last known timing data.
+- `session`: the persisted `SessionRecord`, including `status`, size, command, `hostPid`, `childPid`, `exitCode`, `exitSignal`, and optional `failureReason` / `failureOrigin`,
+- `eventCount`: total number of persisted event-log entries,
+- `uptime`: milliseconds from `createdAt` to now for running sessions, or to `updatedAt` for terminal sessions,
+- `lastEventSeq`: the last contiguous event sequence number when the event log is non-empty,
+- `terminationCategory`: a derived category such as `running`, `clean-exit`, `nonzero-exit`, `signal-exit`, `host-death`, `renderer-failure`, `destroyed`, or `unknown`,
+- `artifacts`: artifact-health summary with `total`, `byKind`, `missingCount`, `health`, and optional `missing` details,
+- and `usedOfflineReplay`: `true` only when `inspect` had to fall back to reconciled on-disk state after a host-unreachable path.
+
+Example `inspect --json` success envelope:
+
+```json
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-25T15:00:00.000Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "session-01",
+      "createdAt": "2026-03-19T12:00:00.000Z",
+      "updatedAt": "2026-03-19T12:00:01.000Z",
+      "status": "exited",
+      "command": ["/bin/sh", "-lc", "echo hello"],
+      "cwd": "/tmp/workspace",
+      "cols": 80,
+      "rows": 24,
+      "hostPid": null,
+      "childPid": null,
+      "exitCode": 0,
+      "exitSignal": null
+    },
+    "eventCount": 2,
+    "uptime": 1000,
+    "lastEventSeq": 1,
+    "terminationCategory": "clean-exit",
+    "artifacts": {
+      "total": 2,
+      "byKind": {
+        "screenshot": 1,
+        "snapshot": 1
+      },
+      "missingCount": 0,
+      "health": "healthy"
+    },
+    "usedOfflineReplay": true
+  }
+}
+```
+
+### 7.4 Persisted failure origin vs derived termination category
+
+`session.failureOrigin` is persisted manifest state and only appears when a `failed` session has a known structured origin such as `host-death` or `renderer-failure`.
+
+`result.terminationCategory` is derived every time `inspect` runs. It is broader than `failureOrigin`: it also covers non-failure terminal states such as `clean-exit`, `nonzero-exit`, `signal-exit`, and `destroyed`. Automation should therefore treat `failureOrigin` as low-level persisted evidence and `terminationCategory` as the stable high-level summary.
+
+The current `inspect` surface does **not** yet expose runtime renderer capability discovery or a richer live renderer-state block. Those remain future scope.
 
 ## 8. Command: `type`
 
@@ -633,33 +686,60 @@ The product depends on native pieces and browser automation.
 
 ## 20. Command: `version`
 
-Should report:
+The shipped `version --json` surface reports:
 
-- CLI version,
-- protocol version,
-- renderer backends compiled in,
-- and runtime environment summary when `--json` is used.
+- `cliVersion`,
+- `protocolVersion`,
+- `rendererBackends`,
+- and `runtime` with `node`, `platform`, and `arch`.
+
+Example `version --json` success envelope:
+
+```json
+{
+  "ok": true,
+  "command": "version",
+  "timestamp": "2026-03-25T15:00:00.000Z",
+  "result": {
+    "cliVersion": "0.1.0",
+    "protocolVersion": "0.1.0",
+    "rendererBackends": ["ghostty-web"],
+    "runtime": {
+      "node": "v24.0.0",
+      "platform": "linux",
+      "arch": "x64"
+    }
+  }
+}
+```
+
+As of 2026-03-25, `rendererBackends` is a static compiled-in list containing only `ghostty-web`. Runtime capability discovery beyond that static list remains future scope and should not be inferred from the current output.
 
 ## 21. Error catalog
 
-Recommended structured error codes:
+Current shipped structured error codes (`src/protocol/errors.ts`) are:
 
-- `USAGE_ERROR`
 - `SESSION_NOT_FOUND`
 - `SESSION_NOT_RUNNING`
 - `SESSION_ALREADY_DESTROYED`
-- `HOST_START_FAILED`
-- `PTY_SPAWN_FAILED`
-- `RENDERER_START_FAILED`
-- `RENDERER_REPLAY_FAILED`
-- `WAIT_TIMEOUT`
-- `ARTIFACT_WRITE_FAILED`
-- `DEPENDENCY_MISSING`
-- `UNSUPPORTED_PLATFORM`
-- `UNSUPPORTED_KEY_CHORD`
+- `HOST_UNREACHABLE`
+- `HOST_TIMEOUT`
+- `INVALID_SESSION_ID`
+- `INVALID_DIMENSIONS`
 - `INVALID_SIGNAL`
-- `INVALID_RENDER_PROFILE`
-- `INVALID_STATE_TRANSITION`
+- `INVALID_KEYS`
+- `INVALID_DURATION`
+- `INVALID_INPUT`
+- `STORAGE_READ_ERROR`
+- `STORAGE_WRITE_ERROR`
+- `MANIFEST_VALIDATION_ERROR`
+- `RPC_ERROR`
+- `PROTOCOL_ERROR`
+- `EXPORT_ERROR`
+- `REPLAY_ERROR`
+- `INTERNAL_ERROR`
+
+That shipped catalog is intentionally narrower and more implementation-shaped than some earlier design-language examples. Additional taxonomy such as explicit unsupported-platform or invalid-render-profile codes should be treated as future scope until they exist in `src/protocol/errors.ts`.
 
 ## 22. Human-readable output guidance
 
@@ -685,21 +765,20 @@ The CLI contract is complete when:
 - `doctor` catches missing browser/render dependencies,
 - and the CLI can be driven end-to-end by a non-interactive agent process.
 
-## 24. Week 4 implementation status
+## 24. Week 6 implementation status
 
-As of 2026-03-22, Week 4 closed several of the highest-value CLI contract gaps:
+As of 2026-03-25, the repository has closed the highest-value Week 4–6 CLI-contract gaps that were still affecting automation and review flows:
 
-- shipped global root flags `--home`, `--timeout-ms`, and `--no-color` via a shared command context,
-- shipped differentiated process exit codes `0` through `8` via structured error-to-exit-code mapping,
-- shipped `create` options `--env`, `--term`, `--name`, and `--shell`,
-- shipped file-backed input for `type` and `paste` via `--file`,
-- and shipped renderer-backed cursor waits via `wait --cursor-row` / `--cursor-col`.
+- global root flags `--home`, `--timeout-ms`, `--no-color`, `--log-level`, and `--profile` are wired through shared CLI context handling,
+- `create` supports `--env`, `--term`, `--name`, `--shell`, and `--idle-timeout-ms`,
+- `type` supports file-backed input plus `--append-newline`, and `paste` supports file-backed input,
+- renderer-backed cursor waits ship via `wait --cursor-row` / `--cursor-col`,
+- `inspect --json` now exposes `lastEventSeq`, `terminationCategory`, artifact health, and `usedOfflineReplay`,
+- `version --json` now reports the compiled-in renderer backend list as `['ghostty-web']`,
+- and golden-envelope tests now lock the shipped `inspect`, `version`, and representative error envelopes.
 
-The following contract items remain future work:
+The remaining contract work is now narrower:
 
-- `--log-level`,
-- a true global `--profile` override surface,
-- `--idle-timeout-ms`,
-- `--append-newline`,
-- config-file loading and the broader config/env precedence story beyond `AGENT_TERMINAL_HOME`,
-- and full JSON envelope/result-shape alignment with every example in this contract.
+- full result-shape parity with every design example in this document is still not complete,
+- runtime renderer capability discovery beyond the static `rendererBackends` list remains future scope,
+- and richer live renderer-state reporting in `inspect` remains future scope.

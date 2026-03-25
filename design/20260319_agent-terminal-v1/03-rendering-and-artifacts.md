@@ -38,7 +38,7 @@ V1 should support four artifact classes.
 | Asciicast         | Portable terminal replay artifact                    | Yes            | Yes                      |
 | Replay video      | Reviewer-friendly visual playback                    | Yes            | Yes                      |
 
-## Current implementation status (2026-03-22)
+## Current implementation status (2026-03-25)
 
 The current implementation now ships all four artifact classes from this design:
 
@@ -51,12 +51,14 @@ The current renderer/export path is:
 
 - host-prepared replay input,
 - lazy `ghostty-web` boot in headless Chromium,
-- viewport-scoped semantic extraction,
+- structured semantic extraction from replayed terminal state,
 - deterministic screenshot capture,
 - deterministic replay export to asciicast and WebM,
 - and manifest-backed artifact storage under `artifacts/`.
 
-Remaining follow-on work is now mostly about fidelity and design parity rather than missing artifact classes. Scrollback snapshots and richer screenshot/export metadata now ship; the biggest open items are per-cell style metadata, bundled deterministic font assets, the fuller `SnapshotCell` surface, and more explicit replay timing controls. These are tracked in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) and [09-week-4-plan.md](./09-week-4-plan.md).
+`inspect` now also exposes shipped artifact-health reporting derived from the artifact manifest plus on-disk files. That summary reports artifact totals, `byKind` counts, `missingCount`, an overall `health` value (`healthy`, `missing-artifacts`, `manifest-invalid`, `no-artifacts`, or `unknown`), and optional per-artifact `missing` details when files referenced by the manifest are absent on disk.
+
+Remaining follow-on work is now mostly about design parity and broader future-scope renderer/runtime expansion rather than missing artifact classes. The repo already ships scrollback snapshots, optional per-cell snapshot data, bundled deterministic fonts, and replay timing modes. The main still-open design items are the fuller event-log and snapshot-schema redesigns plus later native/parity work tracked in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md).
 
 ## 4. Canonical replay model
 
@@ -310,20 +312,22 @@ For agent reasoning speed, `snapshot --format text` should return only:
 
 That avoids forcing every reasoning step to parse full cell objects.
 
-### 9.4 Current Week 2 snapshot scope
+### 9.4 Current shipped snapshot scope (2026-03-25)
 
-The shipped Week 2 snapshot shape is intentionally viewport-scoped.
+The shipped structured snapshot shape is still intentionally simpler than the fuller design schema above, but it is no longer viewport-text-only.
 
-It currently records:
+Today `snapshot --format structured` records:
 
 - session ID,
 - capture sequence,
 - rows/cols,
 - cursor row/col,
 - alt-screen state,
-- and visible lines.
+- visible lines,
+- optional scrollback lines when requested,
+- and optional per-line `cells` data when `--include-cells` is requested.
 
-It does not yet include per-cell styling or scrollback export. Those remain good future extensions, but the lighter snapshot is already sufficient for agent reasoning and renderer-backed waits.
+That is enough for the current renderer-backed waits, scrollback inspection, and review flows. The still-future work is not "add any cells at all," but rather whether to adopt the fuller terminal/snapshot wrapper model described earlier in this design and how far to expand per-cell metadata beyond the currently shipped fields.
 
 ## 10. Asciicast export
 

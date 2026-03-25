@@ -215,6 +215,10 @@ However, it **does** guarantee:
 - preserved artifacts already written,
 - and a visible terminal state transition to `failed` on the next inspection.
 
+In the shipped implementation, stale-host reconciliation is the canonical bridge between those persisted facts and the read-time CLI surface. If a host dies while a session manifest still says `running`, the next reconciliation writes `failureOrigin: 'host-death'` into the persisted session record before `inspect` re-reads it.
+
+That split is intentional: the manifest persists a narrow `failureOrigin` only when the failed state has a known source, while `inspect` derives a broader `terminationCategory` from the current session status, exit fields, and any persisted `failureOrigin`. That derived category is what powers the machine-facing `clean-exit`, `nonzero-exit`, `signal-exit`, `host-death`, `renderer-failure`, `destroyed`, and `unknown` summaries.
+
 ## 6. Core components
 
 ### 6.1 CLI
