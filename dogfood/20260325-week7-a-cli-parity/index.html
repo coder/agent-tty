@@ -15,19 +15,10 @@
         --accent: #93c5fd;
         --border: #334155;
       }
-      * {
-        box-sizing: border-box;
-      }
+      * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family:
-          Inter,
-          ui-sans-serif,
-          system-ui,
-          -apple-system,
-          BlinkMacSystemFont,
-          'Segoe UI',
-          sans-serif;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         background: linear-gradient(180deg, #020617 0%, var(--bg) 100%);
         color: var(--text);
         line-height: 1.5;
@@ -37,38 +28,22 @@
         margin: 0 auto;
         padding: 32px 20px 48px;
       }
-      a {
-        color: var(--accent);
-      }
-      header,
-      section,
-      .card {
+      a { color: var(--accent); }
+      header, section, .card {
         background: rgb(15 23 42 / 0.88);
         border: 1px solid var(--border);
         border-radius: 16px;
         box-shadow: 0 18px 40px rgb(2 6 23 / 0.25);
       }
-      header,
-      section {
+      header, section {
         padding: 24px;
         margin-bottom: 20px;
       }
-      h1,
-      h2,
-      h3,
-      h4,
-      h5,
-      h6 {
+      h1, h2, h3, h4, h5, h6 {
         margin-top: 0;
         color: #f8fafc;
       }
-      p,
-      li,
-      dd,
-      td,
-      th,
-      summary,
-      figcaption {
+      p, li, dd, td, th, summary, figcaption {
         overflow-wrap: anywhere;
       }
       .subtle {
@@ -105,8 +80,7 @@
       .note-card > *:last-child {
         margin-bottom: 0;
       }
-      img,
-      video {
+      img, video {
         width: 100%;
         border-radius: 12px;
         background: #020617;
@@ -131,8 +105,7 @@
         white-space: pre-wrap;
       }
       code {
-        font-family:
-          'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       details > summary {
         cursor: pointer;
@@ -142,8 +115,7 @@
         width: 100%;
         border-collapse: collapse;
       }
-      th,
-      td {
+      th, td {
         text-align: left;
         padding: 10px 12px;
         border-bottom: 1px solid var(--border);
@@ -166,157 +138,50 @@
         <p class="subtle">Portable review bundle</p>
         <h1>Week 7 — CLI Parity Proof</h1>
         <p class="subtle">Bundle directory: 20260325-week7-a-cli-parity</p>
-        <p>
-          Exercises ratified CLI commands against a real hello-prompt session
-          and captures every JSON envelope.
-        </p>
+        <p>Exercises ratified CLI commands against a real hello-prompt session and captures every JSON envelope.</p>
       </header>
-
+      
       <section>
-        <h2>Manifest summary</h2>
-        <dl class="facts">
-          <div>
-            <dt>Bundle</dt>
-            <dd>20260325-week7-a-cli-parity</dd>
-          </div>
-          <div>
-            <dt>Date</dt>
-            <dd>2026-03-25T19:48:08Z</dd>
-          </div>
-          <div>
-            <dt>Session ID</dt>
-            <dd>01KMK8J0XB9THNASXVNPF697ZD</dd>
-          </div>
-          <div>
-            <dt>Result</dt>
-            <dd>pass</dd>
-          </div>
-          <div>
-            <dt>Fixture</dt>
-            <dd>node --import tsx test/fixtures/apps/hello-prompt/main.ts</dd>
-          </div>
-          <div>
-            <dt>Lane</dt>
-            <dd>A</dd>
-          </div>
-          <div>
-            <dt>Week</dt>
-            <dd>7</dd>
-          </div>
-          <div>
-            <dt>Commands</dt>
-            <dd>14</dd>
-          </div>
-          <div>
-            <dt>Manifest artifacts</dt>
-            <dd>21</dd>
-          </div>
-          <div>
-            <dt>Discovered files</dt>
-            <dd>42</dd>
-          </div>
-        </dl>
-        <div class="card">
-          <h3>Commands</h3>
-          <ul>
-            <li>npx tsx src/cli/main.ts doctor --json</li>
-            <li>npx tsx src/cli/main.ts version --json</li>
-            <li>
-              npx tsx src/cli/main.ts create --json -- node --import tsx
-              test/fixtures/apps/hello-prompt/main.ts
-            </li>
-            <li>
-              npx tsx src/cli/main.ts send-keys 01KMK8J0XB9THNASXVNPF697ZD
-              --json Enter
-            </li>
-            <li>
-              npx tsx src/cli/main.ts type 01KMK8J0XB9THNASXVNPF697ZD --json
-              &quot;hello world&quot;
-            </li>
-            <li>
-              npx tsx src/cli/main.ts paste 01KMK8J0XB9THNASXVNPF697ZD --json
-              &quot;pasted text&quot;
-            </li>
-            <li>
-              npx tsx src/cli/main.ts snapshot 01KMK8J0XB9THNASXVNPF697ZD --json
-              --format text
-            </li>
-            <li>
-              npx tsx src/cli/main.ts screenshot 01KMK8J0XB9THNASXVNPF697ZD
-              --json
-            </li>
-            <li>npx tsx src/cli/main.ts list --json</li>
-            <li>
-              npx tsx src/cli/main.ts inspect 01KMK8J0XB9THNASXVNPF697ZD --json
-            </li>
-            <li>
-              npx tsx src/cli/main.ts record export 01KMK8J0XB9THNASXVNPF697ZD
-              --format asciicast --json --out
-              dogfood/20260325-week7-a-cli-parity/recordings/recording-01.cast
-            </li>
-            <li>
-              npx tsx src/cli/main.ts record export 01KMK8J0XB9THNASXVNPF697ZD
-              --format webm --json --out
-              dogfood/20260325-week7-a-cli-parity/videos/video-01.webm
-            </li>
-            <li>
-              npx tsx src/cli/main.ts destroy 01KMK8J0XB9THNASXVNPF697ZD --json
-            </li>
-            <li>npx tsx src/cli/main.ts list --json</li>
-          </ul>
-        </div>
-      </section>
+  <h2>Manifest summary</h2>
+  <dl class="facts"><div><dt>Bundle</dt><dd>20260325-week7-a-cli-parity</dd></div><div><dt>Date</dt><dd>2026-03-25T19:48:08Z</dd></div><div><dt>Session ID</dt><dd>01KMK8J0XB9THNASXVNPF697ZD</dd></div><div><dt>Result</dt><dd>pass</dd></div><div><dt>Fixture</dt><dd>node --import tsx test/fixtures/apps/hello-prompt/main.ts</dd></div><div><dt>Lane</dt><dd>A</dd></div><div><dt>Week</dt><dd>7</dd></div><div><dt>Commands</dt><dd>14</dd></div><div><dt>Manifest artifacts</dt><dd>21</dd></div><div><dt>Discovered files</dt><dd>42</dd></div></dl>
+  <div class="card"><h3>Commands</h3><ul><li>npx tsx src/cli/main.ts doctor --json</li><li>npx tsx src/cli/main.ts version --json</li><li>npx tsx src/cli/main.ts create --json -- node --import tsx test/fixtures/apps/hello-prompt/main.ts</li><li>npx tsx src/cli/main.ts send-keys 01KMK8J0XB9THNASXVNPF697ZD --json Enter</li><li>npx tsx src/cli/main.ts type 01KMK8J0XB9THNASXVNPF697ZD --json &quot;hello world&quot;</li><li>npx tsx src/cli/main.ts paste 01KMK8J0XB9THNASXVNPF697ZD --json &quot;pasted text&quot;</li><li>npx tsx src/cli/main.ts snapshot 01KMK8J0XB9THNASXVNPF697ZD --json --format text</li><li>npx tsx src/cli/main.ts screenshot 01KMK8J0XB9THNASXVNPF697ZD --json</li><li>npx tsx src/cli/main.ts list --json</li><li>npx tsx src/cli/main.ts inspect 01KMK8J0XB9THNASXVNPF697ZD --json</li><li>npx tsx src/cli/main.ts record export 01KMK8J0XB9THNASXVNPF697ZD --format asciicast --json --out dogfood/20260325-week7-a-cli-parity/recordings/recording-01.cast</li><li>npx tsx src/cli/main.ts record export 01KMK8J0XB9THNASXVNPF697ZD --format webm --json --out dogfood/20260325-week7-a-cli-parity/videos/video-01.webm</li><li>npx tsx src/cli/main.ts destroy 01KMK8J0XB9THNASXVNPF697ZD --json</li><li>npx tsx src/cli/main.ts list --json</li></ul></div>
+</section>
       <section>
-        <h2>Screenshot gallery</h2>
-        <div class="gallery">
-          <figure class="card">
-            <img
-              src="screenshots/screenshot-01.png"
-              alt="screenshot-01.png"
-              loading="lazy"
-            />
-            <figcaption>
-              <a href="screenshots/screenshot-01.png"
-                >screenshots/screenshot-01.png</a
-              >
-              <span>7.0 KB</span>
-            </figcaption>
-          </figure>
-        </div>
-      </section>
+  <h2>Screenshot gallery</h2>
+  <div class="gallery">
+    
+      <figure class="card">
+        <img src="screenshots/screenshot-01.png" alt="screenshot-01.png" loading="lazy" />
+        <figcaption>
+          <a href="screenshots/screenshot-01.png">screenshots/screenshot-01.png</a>
+          <span>7.0 KB</span>
+        </figcaption>
+      </figure>
+  </div>
+</section>
       <section>
-        <h2>Video gallery</h2>
-        <div class="gallery">
-          <figure class="card">
-            <video
-              controls
-              preload="metadata"
-              src="videos/video-01.webm"
-            ></video>
-            <figcaption>
-              <a href="videos/video-01.webm">videos/video-01.webm</a>
-              <span>15.1 KB</span>
-            </figcaption>
-          </figure>
-        </div>
-      </section>
+  <h2>Video gallery</h2>
+  <div class="gallery">
+    
+      <figure class="card">
+        <video controls preload="metadata" src="videos/video-01.webm"></video>
+        <figcaption>
+          <a href="videos/video-01.webm">videos/video-01.webm</a>
+          <span>15.1 KB</span>
+        </figcaption>
+      </figure>
+  </div>
+</section>
       <section>
-        <h2>Recordings</h2>
-        <ul>
-          <li>
-            <a href="recordings/recording-01.cast"
-              >recordings/recording-01.cast</a
-            >
-            <span class="subtle">(326 B)</span>
-          </li>
-        </ul>
-      </section>
+  <h2>Recordings</h2>
+  <ul><li><a href="recordings/recording-01.cast">recordings/recording-01.cast</a> <span class="subtle">(326 B)</span></li></ul>
+</section>
       <section>
-        <h2>JSON outputs</h2>
-
-        <details class="card">
-          <summary>logs/01-doctor.json</summary>
-          <pre><code>{
+  <h2>JSON outputs</h2>
+  
+  <details class="card">
+    <summary>logs/01-doctor.json</summary>
+    <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;doctor&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T19:46:44.696Z&quot;,
@@ -402,10 +267,10 @@
     }
   }
 }</code></pre>
-        </details>
-        <details class="card">
-          <summary>logs/02-version.json</summary>
-          <pre><code>{
+  </details>
+  <details class="card">
+    <summary>logs/02-version.json</summary>
+    <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;version&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T19:46:45.721Z&quot;,
@@ -422,10 +287,10 @@
     }
   }
 }</code></pre>
-        </details>
-        <details class="card">
-          <summary>logs/03-create.json</summary>
-          <pre><code>{
+  </details>
+  <details class="card">
+    <summary>logs/03-create.json</summary>
+    <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;create&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T19:46:47.550Z&quot;,
@@ -437,10 +302,10 @@
     &quot;shell&quot;: &quot;/bin/bash&quot;
   }
 }</code></pre>
-        </details>
-        <details class="card">
-          <summary>logs/04-send-keys.json</summary>
-          <pre><code>{
+  </details>
+  <details class="card">
+    <summary>logs/04-send-keys.json</summary>
+    <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;send-keys&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T19:46:49.776Z&quot;,
@@ -452,28 +317,28 @@
     &quot;seq&quot;: 1
   }
 }</code></pre>
-        </details>
-        <details class="card">
-          <summary>logs/05-type.json</summary>
-          <pre><code>{
+  </details>
+  <details class="card">
+    <summary>logs/05-type.json</summary>
+    <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;type&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T19:46:50.826Z&quot;,
   &quot;result&quot;: {}
 }</code></pre>
-        </details>
-        <details class="card">
-          <summary>logs/06-paste.json</summary>
-          <pre><code>{
+  </details>
+  <details class="card">
+    <summary>logs/06-paste.json</summary>
+    <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;paste&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T19:46:51.893Z&quot;,
   &quot;result&quot;: {}
 }</code></pre>
-        </details>
-        <details class="card">
-          <summary>logs/07-snapshot.json</summary>
-          <pre><code>{
+  </details>
+  <details class="card">
+    <summary>logs/07-snapshot.json</summary>
+    <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;snapshot&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T19:46:53.420Z&quot;,
@@ -488,10 +353,10 @@
     &quot;text&quot;: &quot;READY&gt;\nECHO:\nREADY&gt; hello world^[[200~pasted text^[[201~\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n&quot;
   }
 }</code></pre>
-        </details>
-        <details class="card">
-          <summary>logs/08-screenshot.json</summary>
-          <pre><code>{
+  </details>
+  <details class="card">
+    <summary>logs/08-screenshot.json</summary>
+    <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;screenshot&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T19:46:54.727Z&quot;,
@@ -511,10 +376,10 @@
     &quot;renderProfileHash&quot;: &quot;908ba0076143741bddebfffd75b4eca8397f320131ef8173a77302a39b2376f8&quot;
   }
 }</code></pre>
-        </details>
-        <details class="card">
-          <summary>logs/09-list.json</summary>
-          <pre><code>{
+  </details>
+  <details class="card">
+    <summary>logs/09-list.json</summary>
+    <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;list&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T19:46:55.923Z&quot;,
@@ -535,10 +400,10 @@
     ]
   }
 }</code></pre>
-        </details>
-        <details class="card">
-          <summary>logs/10-inspect.json</summary>
-          <pre><code>{
+  </details>
+  <details class="card">
+    <summary>logs/10-inspect.json</summary>
+    <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;inspect&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T19:46:57.058Z&quot;,
@@ -583,10 +448,10 @@
     &quot;usedOfflineReplay&quot;: false
   }
 }</code></pre>
-        </details>
-        <details class="card">
-          <summary>logs/11-record-export-cast.json</summary>
-          <pre><code>{
+  </details>
+  <details class="card">
+    <summary>logs/11-record-export-cast.json</summary>
+    <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;record export&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T19:46:58.112Z&quot;,
@@ -609,10 +474,10 @@
     }
   }
 }</code></pre>
-        </details>
-        <details class="card">
-          <summary>logs/12-record-export-webm.json</summary>
-          <pre><code>{
+  </details>
+  <details class="card">
+    <summary>logs/12-record-export-webm.json</summary>
+    <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;record export&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T19:47:01.080Z&quot;,
@@ -635,10 +500,10 @@
     }
   }
 }</code></pre>
-        </details>
-        <details class="card">
-          <summary>logs/13-destroy.json</summary>
-          <pre><code>{
+  </details>
+  <details class="card">
+    <summary>logs/13-destroy.json</summary>
+    <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;destroy&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T19:47:02.863Z&quot;,
@@ -647,10 +512,10 @@
     &quot;destroyed&quot;: true
   }
 }</code></pre>
-        </details>
-        <details class="card">
-          <summary>logs/14-list-after-destroy.json</summary>
-          <pre><code>{
+  </details>
+  <details class="card">
+    <summary>logs/14-list-after-destroy.json</summary>
+    <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;list&quot;,
   &quot;timestamp&quot;: &quot;2026-03-25T19:47:04.472Z&quot;,
@@ -658,199 +523,30 @@
     &quot;sessions&quot;: []
   }
 }</code></pre>
-        </details>
-      </section>
+  </details>
+</section>
       <section>
-        <h2>Notes</h2>
-
-        <article class="card note-card">
-          <h3><a href="notes.md">notes.md</a></h3>
-          <h1>2026-03-25 dogfood — Week 7 bundle A CLI parity proof</h1>
-          <h2>Bundle metadata</h2>
-          <ul>
-            <li>
-              <strong>Bundle path:</strong>
-              <code>dogfood/20260325-week7-a-cli-parity/</code>
-            </li>
-            <li>
-              <strong>Session ID:</strong>
-              <code>01KMK8J0XB9THNASXVNPF697ZD</code>
-            </li>
-            <li>
-              <strong>Isolated AGENT_TERMINAL_HOME:</strong>
-              <code>/tmp/tmp.avp2NwNn0m</code>
-            </li>
-            <li>
-              <strong>CLI entrypoint:</strong>
-              <code>npx tsx src/cli/main.ts</code>
-            </li>
-            <li>
-              <strong>Fixture app:</strong>
-              <code
-                >node --import tsx test/fixtures/apps/hello-prompt/main.ts</code
-              >
-            </li>
-          </ul>
-          <h2>Scenario summary</h2>
-          <p>
-            This bundle proves the ratified Week 7 CLI parity surface against a
-            real isolated interactive session and captures a JSON envelope for
-            every exercised command.
-          </p>
-          <ul>
-            <li>
-              <code>doctor --json</code> and
-              <code>version --json</code> verified the runtime, PTY, renderer,
-              and CLI metadata before exercising session control.
-            </li>
-            <li>
-              <code>create --json</code> launched the
-              <code>hello-prompt</code> fixture as a live session, then
-              <code>send-keys</code>, <code>type</code>, and
-              <code>paste</code> drove the prompt without leaving the isolated
-              temp home behind.
-            </li>
-            <li>
-              <code>snapshot --json --format text</code> and
-              <code>screenshot --json</code> captured the live terminal state;
-              their bundle-local reviewer copies are
-              <code>snapshots/snapshot-01.txt</code> and
-              <code>screenshots/screenshot-01.png</code>.
-            </li>
-            <li>
-              <code>record export</code> produced both an asciicast and a WebM,
-              and <code>destroy --json</code> followed by
-              <code>list --json</code> proved cleanup.
-            </li>
-          </ul>
-          <h2>Review answers</h2>
-          <ul>
-            <li>
-              <strong
-                >Did <code>doctor --json</code> verify the environment and
-                renderer path?</strong
-              >
-              Yes. <code>logs/01-doctor.json</code> reports successful Node,
-              PTY, Playwright, Ghostty Web, and screenshot viability checks.
-            </li>
-            <li>
-              <strong
-                >Did <code>version --json</code> report the ratified CLI/runtime
-                facts?</strong
-              >
-              Yes. <code>logs/02-version.json</code> reports
-              <code>cliVersion</code>, <code>protocolVersion</code>,
-              <code>rendererBackends</code>, and runtime platform details.
-            </li>
-            <li>
-              <strong
-                >Did <code>create --json</code> start a real isolated prompt
-                session?</strong
-              >
-              Yes. <code>logs/03-create.json</code> created session
-              <code>01KMK8J0XB9THNASXVNPF697ZD</code>, and
-              <code>logs/09-list.json</code> shows the same session still
-              running with the fixture command.
-            </li>
-            <li>
-              <strong
-                >Did <code>send-keys</code>, <code>type</code>, and
-                <code>paste</code> all succeed on the running session?</strong
-              >
-              Yes. <code>logs/04-send-keys.json</code>,
-              <code>logs/05-type.json</code>, and
-              <code>logs/06-paste.json</code> all returned
-              <code>ok: true</code>, and the resulting prompt buffer is visible
-              in <code>snapshots/snapshot-01.txt</code>.
-            </li>
-            <li>
-              <strong>Did snapshot capture the live terminal text?</strong> Yes.
-              <code>logs/07-snapshot.json</code> captured the text snapshot at
-              <code>capturedAtSeq: 7</code>, and
-              <code>snapshots/snapshot-01.txt</code> preserves the
-              reviewer-facing copy.
-            </li>
-            <li>
-              <strong
-                >Did screenshot capture the rendered terminal state?</strong
-              >
-              Yes. <code>logs/08-screenshot.json</code> reports a ghostty-web
-              screenshot with SHA-256 metadata, and
-              <code>screenshots/screenshot-01.png</code> is the copied reviewer
-              artifact.
-            </li>
-            <li>
-              <strong
-                >Did list and inspect expose the live session state before
-                teardown?</strong
-              >
-              Yes. <code>logs/09-list.json</code> shows the running session, and
-              <code>logs/10-inspect.json</code> shows
-              <code>status: &quot;running&quot;</code>,
-              <code>lastEventSeq: 7</code>,
-              <code>artifacts.byKind.snapshot: 1</code>,
-              <code>artifacts.byKind.screenshot: 1</code>, and
-              <code>usedOfflineReplay: false</code>.
-            </li>
-            <li>
-              <strong>Did record export produce both ratified formats?</strong>
-              Yes. <code>logs/11-record-export-cast.json</code> +
-              <code>recordings/recording-01.cast</code> prove asciicast export,
-              and <code>logs/12-record-export-webm.json</code> +
-              <code>videos/video-01.webm</code> prove WebM export.
-            </li>
-            <li>
-              <strong
-                >Did destroy remove the session and leave the home
-                empty?</strong
-              >
-              Yes. <code>logs/13-destroy.json</code> reports
-              <code>destroyed: true</code>, and
-              <code>logs/14-list-after-destroy.json</code> reports
-              <code>sessions: []</code>.
-            </li>
-            <li>
-              <strong>Where are the stderr sidecars and command ledger?</strong>
-              Each numbered step has a matching
-              <code>logs/*.stderr.txt</code> file, and
-              <code>command-status.tsv</code> records every command, exit code,
-              and pass/fail status.
-            </li>
-          </ul>
-          <h2>Issues / limitations</h2>
-          <ul>
-            <li>
-              The task brief sketched <code>--out</code> flags for
-              <code>snapshot</code> and <code>screenshot</code>, but the current
-              ratified CLI persists those artifacts inside the isolated session
-              directory instead. This proof captured the JSON envelopes from
-              <code>snapshot --json --format text</code> and
-              <code>screenshot --json</code>, then copied the resulting reviewer
-              artifacts into <code>snapshots/</code> and
-              <code>screenshots/</code>.
-            </li>
-            <li>
-              The live prompt buffer in
-              <code>snapshots/snapshot-01.txt</code> shows bracketed-paste
-              control sequences around the pasted text. That is expected here
-              because the proof captured the session before pressing Enter after
-              <code>paste</code>; the <code>hello-prompt</code> fixture only
-              normalizes pasted content once it receives a completed input line.
-            </li>
-            <li>
-              <code>logs/08-screenshot.json</code> points at a PNG path inside
-              <code>/tmp/tmp.avp2NwNn0m</code>, which was cleaned up at the end
-              of the run. The durable reviewer copy is
-              <code>screenshots/screenshot-01.png</code>.
-            </li>
-          </ul>
-        </article>
-      </section>
+  <h2>Notes</h2>
+  
+  <article class="card note-card">
+    <h3><a href="notes.md">notes.md</a></h3>
+    <h1>2026-03-25 dogfood — Week 7 bundle A CLI parity proof</h1>
+<h2>Bundle metadata</h2>
+<ul><li><strong>Bundle path:</strong> <code>dogfood/20260325-week7-a-cli-parity/</code></li><li><strong>Session ID:</strong> <code>01KMK8J0XB9THNASXVNPF697ZD</code></li><li><strong>Isolated AGENT_TERMINAL_HOME:</strong> <code>/tmp/tmp.avp2NwNn0m</code></li><li><strong>CLI entrypoint:</strong> <code>npx tsx src/cli/main.ts</code></li><li><strong>Fixture app:</strong> <code>node --import tsx test/fixtures/apps/hello-prompt/main.ts</code></li></ul>
+<h2>Scenario summary</h2>
+<p>This bundle proves the ratified Week 7 CLI parity surface against a real isolated interactive session and captures a JSON envelope for every exercised command.</p>
+<ul><li><code>doctor --json</code> and <code>version --json</code> verified the runtime, PTY, renderer, and CLI metadata before exercising session control.</li><li><code>create --json</code> launched the <code>hello-prompt</code> fixture as a live session, then <code>send-keys</code>, <code>type</code>, and <code>paste</code> drove the prompt without leaving the isolated temp home behind.</li><li><code>snapshot --json --format text</code> and <code>screenshot --json</code> captured the live terminal state; their bundle-local reviewer copies are <code>snapshots/snapshot-01.txt</code> and <code>screenshots/screenshot-01.png</code>.</li><li><code>record export</code> produced both an asciicast and a WebM, and <code>destroy --json</code> followed by <code>list --json</code> proved cleanup.</li></ul>
+<h2>Review answers</h2>
+<ul><li><strong>Did <code>doctor --json</code> verify the environment and renderer path?</strong> Yes. <code>logs/01-doctor.json</code> reports successful Node, PTY, Playwright, Ghostty Web, and screenshot viability checks.</li><li><strong>Did <code>version --json</code> report the ratified CLI/runtime facts?</strong> Yes. <code>logs/02-version.json</code> reports <code>cliVersion</code>, <code>protocolVersion</code>, <code>rendererBackends</code>, and runtime platform details.</li><li><strong>Did <code>create --json</code> start a real isolated prompt session?</strong> Yes. <code>logs/03-create.json</code> created session <code>01KMK8J0XB9THNASXVNPF697ZD</code>, and <code>logs/09-list.json</code> shows the same session still running with the fixture command.</li><li><strong>Did <code>send-keys</code>, <code>type</code>, and <code>paste</code> all succeed on the running session?</strong> Yes. <code>logs/04-send-keys.json</code>, <code>logs/05-type.json</code>, and <code>logs/06-paste.json</code> all returned <code>ok: true</code>, and the resulting prompt buffer is visible in <code>snapshots/snapshot-01.txt</code>.</li><li><strong>Did snapshot capture the live terminal text?</strong> Yes. <code>logs/07-snapshot.json</code> captured the text snapshot at <code>capturedAtSeq: 7</code>, and <code>snapshots/snapshot-01.txt</code> preserves the reviewer-facing copy.</li><li><strong>Did screenshot capture the rendered terminal state?</strong> Yes. <code>logs/08-screenshot.json</code> reports a ghostty-web screenshot with SHA-256 metadata, and <code>screenshots/screenshot-01.png</code> is the copied reviewer artifact.</li><li><strong>Did list and inspect expose the live session state before teardown?</strong> Yes. <code>logs/09-list.json</code> shows the running session, and <code>logs/10-inspect.json</code> shows <code>status: &quot;running&quot;</code>, <code>lastEventSeq: 7</code>, <code>artifacts.byKind.snapshot: 1</code>, <code>artifacts.byKind.screenshot: 1</code>, and <code>usedOfflineReplay: false</code>.</li><li><strong>Did record export produce both ratified formats?</strong> Yes. <code>logs/11-record-export-cast.json</code> + <code>recordings/recording-01.cast</code> prove asciicast export, and <code>logs/12-record-export-webm.json</code> + <code>videos/video-01.webm</code> prove WebM export.</li><li><strong>Did destroy remove the session and leave the home empty?</strong> Yes. <code>logs/13-destroy.json</code> reports <code>destroyed: true</code>, and <code>logs/14-list-after-destroy.json</code> reports <code>sessions: []</code>.</li><li><strong>Where are the stderr sidecars and command ledger?</strong> Each numbered step has a matching <code>logs/*.stderr.txt</code> file, and <code>command-status.tsv</code> records every command, exit code, and pass/fail status.</li></ul>
+<h2>Issues / limitations</h2>
+<ul><li>The task brief sketched <code>--out</code> flags for <code>snapshot</code> and <code>screenshot</code>, but the current ratified CLI persists those artifacts inside the isolated session directory instead. This proof captured the JSON envelopes from <code>snapshot --json --format text</code> and <code>screenshot --json</code>, then copied the resulting reviewer artifacts into <code>snapshots/</code> and <code>screenshots/</code>.</li><li>The live prompt buffer in <code>snapshots/snapshot-01.txt</code> shows bracketed-paste control sequences around the pasted text. That is expected here because the proof captured the session before pressing Enter after <code>paste</code>; the <code>hello-prompt</code> fixture only normalizes pasted content once it receives a completed input line.</li><li><code>logs/08-screenshot.json</code> points at a PNG path inside <code>/tmp/tmp.avp2NwNn0m</code>, which was cleaned up at the end of the run. The durable reviewer copy is <code>screenshots/screenshot-01.png</code>.</li></ul>
+  </article>
+</section>
       <section>
-        <h2>Commands</h2>
-        <div class="card">
-          <h3><a href="commands.sh">commands.sh</a></h3>
-          <pre><code>#!/usr/bin/env bash
+  <h2>Commands</h2>
+  <div class="card">
+    <h3><a href="commands.sh">commands.sh</a></h3>
+    <pre><code>#!/usr/bin/env bash
 set -euo pipefail
 
 export PATH=&quot;$HOME/.local/share/mise/shims:$HOME/.local/bin:$PATH&quot;
@@ -962,451 +658,244 @@ run_json_step &#39;12-record-export-webm&#39; &quot;npx tsx src/cli/main.ts reco
 run_json_step &#39;13-destroy&#39; &quot;npx tsx src/cli/main.ts destroy $SESSION_ID --json&quot; &#39;false&#39;
 run_json_step &#39;14-list-after-destroy&#39; &#39;npx tsx src/cli/main.ts list --json&#39; &#39;false&#39;
 </code></pre>
-        </div>
-      </section>
+  </div>
+</section>
       <section>
-        <h2>Command status</h2>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>step</th>
-                <th>command</th>
-                <th>exit_code</th>
-                <th>status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>01-doctor</td>
-                <td>npx tsx src/cli/main.ts doctor --json</td>
-                <td>0</td>
-                <td>pass</td>
-              </tr>
-              <tr>
-                <td>02-version</td>
-                <td>npx tsx src/cli/main.ts version --json</td>
-                <td>0</td>
-                <td>pass</td>
-              </tr>
-              <tr>
-                <td>03-create</td>
-                <td>
-                  npx tsx src/cli/main.ts create --json -- node --import tsx
-                  test/fixtures/apps/hello-prompt/main.ts
-                </td>
-                <td>0</td>
-                <td>pass</td>
-              </tr>
-              <tr>
-                <td>04-send-keys</td>
-                <td>
-                  npx tsx src/cli/main.ts send-keys 01KMK8J0XB9THNASXVNPF697ZD
-                  --json Enter
-                </td>
-                <td>0</td>
-                <td>pass</td>
-              </tr>
-              <tr>
-                <td>05-type</td>
-                <td>
-                  npx tsx src/cli/main.ts type 01KMK8J0XB9THNASXVNPF697ZD --json
-                  &quot;hello world&quot;
-                </td>
-                <td>0</td>
-                <td>pass</td>
-              </tr>
-              <tr>
-                <td>06-paste</td>
-                <td>
-                  npx tsx src/cli/main.ts paste 01KMK8J0XB9THNASXVNPF697ZD
-                  --json &quot;pasted text&quot;
-                </td>
-                <td>0</td>
-                <td>pass</td>
-              </tr>
-              <tr>
-                <td>07-snapshot</td>
-                <td>
-                  npx tsx src/cli/main.ts snapshot 01KMK8J0XB9THNASXVNPF697ZD
-                  --json --format text
-                </td>
-                <td>0</td>
-                <td>pass</td>
-              </tr>
-              <tr>
-                <td>08-screenshot</td>
-                <td>
-                  npx tsx src/cli/main.ts screenshot 01KMK8J0XB9THNASXVNPF697ZD
-                  --json
-                </td>
-                <td>0</td>
-                <td>pass</td>
-              </tr>
-              <tr>
-                <td>09-list</td>
-                <td>npx tsx src/cli/main.ts list --json</td>
-                <td>0</td>
-                <td>pass</td>
-              </tr>
-              <tr>
-                <td>10-inspect</td>
-                <td>
-                  npx tsx src/cli/main.ts inspect 01KMK8J0XB9THNASXVNPF697ZD
-                  --json
-                </td>
-                <td>0</td>
-                <td>pass</td>
-              </tr>
-              <tr>
-                <td>11-record-export-cast</td>
-                <td>
-                  npx tsx src/cli/main.ts record export
-                  01KMK8J0XB9THNASXVNPF697ZD --format asciicast --json --out
-                  dogfood/20260325-week7-a-cli-parity/recordings/recording-01.cast
-                </td>
-                <td>0</td>
-                <td>pass</td>
-              </tr>
-              <tr>
-                <td>12-record-export-webm</td>
-                <td>
-                  npx tsx src/cli/main.ts record export
-                  01KMK8J0XB9THNASXVNPF697ZD --format webm --json --out
-                  dogfood/20260325-week7-a-cli-parity/videos/video-01.webm
-                </td>
-                <td>0</td>
-                <td>pass</td>
-              </tr>
-              <tr>
-                <td>13-destroy</td>
-                <td>
-                  npx tsx src/cli/main.ts destroy 01KMK8J0XB9THNASXVNPF697ZD
-                  --json
-                </td>
-                <td>0</td>
-                <td>pass</td>
-              </tr>
-              <tr>
-                <td>14-list-after-destroy</td>
-                <td>npx tsx src/cli/main.ts list --json</td>
-                <td>0</td>
-                <td>pass</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+  <h2>Command status</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>step</th><th>command</th><th>exit_code</th><th>status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>01-doctor</td><td>npx tsx src/cli/main.ts doctor --json</td><td>0</td><td>pass</td></tr><tr><td>02-version</td><td>npx tsx src/cli/main.ts version --json</td><td>0</td><td>pass</td></tr><tr><td>03-create</td><td>npx tsx src/cli/main.ts create --json -- node --import tsx test/fixtures/apps/hello-prompt/main.ts</td><td>0</td><td>pass</td></tr><tr><td>04-send-keys</td><td>npx tsx src/cli/main.ts send-keys 01KMK8J0XB9THNASXVNPF697ZD --json Enter</td><td>0</td><td>pass</td></tr><tr><td>05-type</td><td>npx tsx src/cli/main.ts type 01KMK8J0XB9THNASXVNPF697ZD --json &quot;hello world&quot;</td><td>0</td><td>pass</td></tr><tr><td>06-paste</td><td>npx tsx src/cli/main.ts paste 01KMK8J0XB9THNASXVNPF697ZD --json &quot;pasted text&quot;</td><td>0</td><td>pass</td></tr><tr><td>07-snapshot</td><td>npx tsx src/cli/main.ts snapshot 01KMK8J0XB9THNASXVNPF697ZD --json --format text</td><td>0</td><td>pass</td></tr><tr><td>08-screenshot</td><td>npx tsx src/cli/main.ts screenshot 01KMK8J0XB9THNASXVNPF697ZD --json</td><td>0</td><td>pass</td></tr><tr><td>09-list</td><td>npx tsx src/cli/main.ts list --json</td><td>0</td><td>pass</td></tr><tr><td>10-inspect</td><td>npx tsx src/cli/main.ts inspect 01KMK8J0XB9THNASXVNPF697ZD --json</td><td>0</td><td>pass</td></tr><tr><td>11-record-export-cast</td><td>npx tsx src/cli/main.ts record export 01KMK8J0XB9THNASXVNPF697ZD --format asciicast --json --out dogfood/20260325-week7-a-cli-parity/recordings/recording-01.cast</td><td>0</td><td>pass</td></tr><tr><td>12-record-export-webm</td><td>npx tsx src/cli/main.ts record export 01KMK8J0XB9THNASXVNPF697ZD --format webm --json --out dogfood/20260325-week7-a-cli-parity/videos/video-01.webm</td><td>0</td><td>pass</td></tr><tr><td>13-destroy</td><td>npx tsx src/cli/main.ts destroy 01KMK8J0XB9THNASXVNPF697ZD --json</td><td>0</td><td>pass</td></tr><tr><td>14-list-after-destroy</td><td>npx tsx src/cli/main.ts list --json</td><td>0</td><td>pass</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
       <section>
-        <h2>Artifact inventory</h2>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Path</th>
-                <th>Type</th>
-                <th>Size</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>
-                  <a href="agent-terminal-home.txt">agent-terminal-home.txt</a>
-                </td>
-                <td>support</td>
-                <td>20 B</td>
-              </tr>
-              <tr>
-                <td><a href="command-status.tsv">command-status.tsv</a></td>
-                <td>support</td>
-                <td>1.3 KB</td>
-              </tr>
-              <tr>
-                <td><a href="commands.sh">commands.sh</a></td>
-                <td>script</td>
-                <td>5.1 KB</td>
-              </tr>
-              <tr>
-                <td><a href="logs/01-doctor.json">logs/01-doctor.json</a></td>
-                <td>support</td>
-                <td>2.3 KB</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/01-doctor.stderr.txt"
-                    >logs/01-doctor.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td><a href="logs/02-version.json">logs/02-version.json</a></td>
-                <td>support</td>
-                <td>299 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/02-version.stderr.txt"
-                    >logs/02-version.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td><a href="logs/03-create.json">logs/03-create.json</a></td>
-                <td>support</td>
-                <td>251 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/03-create.stderr.txt"
-                    >logs/03-create.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/04-send-keys.json">logs/04-send-keys.json</a>
-                </td>
-                <td>support</td>
-                <td>168 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/04-send-keys.stderr.txt"
-                    >logs/04-send-keys.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td><a href="logs/05-type.json">logs/05-type.json</a></td>
-                <td>support</td>
-                <td>97 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/05-type.stderr.txt">logs/05-type.stderr.txt</a>
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td><a href="logs/06-paste.json">logs/06-paste.json</a></td>
-                <td>support</td>
-                <td>98 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/06-paste.stderr.txt"
-                    >logs/06-paste.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/07-snapshot.json">logs/07-snapshot.json</a>
-                </td>
-                <td>support</td>
-                <td>385 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/07-snapshot.stderr.txt"
-                    >logs/07-snapshot.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/08-screenshot.json">logs/08-screenshot.json</a>
-                </td>
-                <td>support</td>
-                <td>680 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/08-screenshot.stderr.txt"
-                    >logs/08-screenshot.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td><a href="logs/09-list.json">logs/09-list.json</a></td>
-                <td>support</td>
-                <td>433 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/09-list.stderr.txt">logs/09-list.stderr.txt</a>
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td><a href="logs/10-inspect.json">logs/10-inspect.json</a></td>
-                <td>support</td>
-                <td>1.0 KB</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/10-inspect.stderr.txt"
-                    >logs/10-inspect.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/11-record-export-cast.json"
-                    >logs/11-record-export-cast.json</a
-                  >
-                </td>
-                <td>support</td>
-                <td>697 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/11-record-export-cast.stderr.txt"
-                    >logs/11-record-export-cast.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/12-record-export-webm.json"
-                    >logs/12-record-export-webm.json</a
-                  >
-                </td>
-                <td>support</td>
-                <td>755 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/12-record-export-webm.stderr.txt"
-                    >logs/12-record-export-webm.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td><a href="logs/13-destroy.json">logs/13-destroy.json</a></td>
-                <td>support</td>
-                <td>172 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/13-destroy.stderr.txt"
-                    >logs/13-destroy.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/14-list-after-destroy.json"
-                    >logs/14-list-after-destroy.json</a
-                  >
-                </td>
-                <td>support</td>
-                <td>119 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/14-list-after-destroy.stderr.txt"
-                    >logs/14-list-after-destroy.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td><a href="manifest.json">manifest.json</a></td>
-                <td>support</td>
-                <td>4.2 KB</td>
-              </tr>
-              <tr>
-                <td><a href="notes.md">notes.md</a></td>
-                <td>notes</td>
-                <td>4.1 KB</td>
-              </tr>
-              <tr>
-                <td><a href="recordings/.gitkeep">recordings/.gitkeep</a></td>
-                <td>other</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="recordings/recording-01.cast"
-                    >recordings/recording-01.cast</a
-                  >
-                </td>
-                <td>recording</td>
-                <td>326 B</td>
-              </tr>
-              <tr>
-                <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
-                <td>other</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="screenshots/screenshot-01.png"
-                    >screenshots/screenshot-01.png</a
-                  >
-                </td>
-                <td>screenshot</td>
-                <td>7.0 KB</td>
-              </tr>
-              <tr>
-                <td><a href="session-id.txt">session-id.txt</a></td>
-                <td>support</td>
-                <td>27 B</td>
-              </tr>
-              <tr>
-                <td><a href="snapshots/.gitkeep">snapshots/.gitkeep</a></td>
-                <td>other</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="snapshots/snapshot-01.txt"
-                    >snapshots/snapshot-01.txt</a
-                  >
-                </td>
-                <td>other</td>
-                <td>78 B</td>
-              </tr>
-              <tr>
-                <td><a href="videos/.gitkeep">videos/.gitkeep</a></td>
-                <td>other</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td><a href="videos/video-01.webm">videos/video-01.webm</a></td>
-                <td>video</td>
-                <td>15.1 KB</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+  <h2>Artifact inventory</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Path</th><th>Type</th><th>Size</th></tr>
+      </thead>
+      <tbody>
+        
+        <tr>
+          <td><a href="agent-terminal-home.txt">agent-terminal-home.txt</a></td>
+          <td>support</td>
+          <td>20 B</td>
+        </tr>
+        <tr>
+          <td><a href="command-status.tsv">command-status.tsv</a></td>
+          <td>support</td>
+          <td>1.3 KB</td>
+        </tr>
+        <tr>
+          <td><a href="commands.sh">commands.sh</a></td>
+          <td>script</td>
+          <td>5.1 KB</td>
+        </tr>
+        <tr>
+          <td><a href="logs/01-doctor.json">logs/01-doctor.json</a></td>
+          <td>support</td>
+          <td>2.3 KB</td>
+        </tr>
+        <tr>
+          <td><a href="logs/01-doctor.stderr.txt">logs/01-doctor.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/02-version.json">logs/02-version.json</a></td>
+          <td>support</td>
+          <td>299 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/02-version.stderr.txt">logs/02-version.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/03-create.json">logs/03-create.json</a></td>
+          <td>support</td>
+          <td>251 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/03-create.stderr.txt">logs/03-create.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/04-send-keys.json">logs/04-send-keys.json</a></td>
+          <td>support</td>
+          <td>168 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/04-send-keys.stderr.txt">logs/04-send-keys.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/05-type.json">logs/05-type.json</a></td>
+          <td>support</td>
+          <td>97 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/05-type.stderr.txt">logs/05-type.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/06-paste.json">logs/06-paste.json</a></td>
+          <td>support</td>
+          <td>98 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/06-paste.stderr.txt">logs/06-paste.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/07-snapshot.json">logs/07-snapshot.json</a></td>
+          <td>support</td>
+          <td>385 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/07-snapshot.stderr.txt">logs/07-snapshot.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/08-screenshot.json">logs/08-screenshot.json</a></td>
+          <td>support</td>
+          <td>680 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/08-screenshot.stderr.txt">logs/08-screenshot.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/09-list.json">logs/09-list.json</a></td>
+          <td>support</td>
+          <td>433 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/09-list.stderr.txt">logs/09-list.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/10-inspect.json">logs/10-inspect.json</a></td>
+          <td>support</td>
+          <td>1.0 KB</td>
+        </tr>
+        <tr>
+          <td><a href="logs/10-inspect.stderr.txt">logs/10-inspect.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/11-record-export-cast.json">logs/11-record-export-cast.json</a></td>
+          <td>support</td>
+          <td>697 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/11-record-export-cast.stderr.txt">logs/11-record-export-cast.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/12-record-export-webm.json">logs/12-record-export-webm.json</a></td>
+          <td>support</td>
+          <td>755 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/12-record-export-webm.stderr.txt">logs/12-record-export-webm.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/13-destroy.json">logs/13-destroy.json</a></td>
+          <td>support</td>
+          <td>172 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/13-destroy.stderr.txt">logs/13-destroy.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/14-list-after-destroy.json">logs/14-list-after-destroy.json</a></td>
+          <td>support</td>
+          <td>119 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/14-list-after-destroy.stderr.txt">logs/14-list-after-destroy.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="manifest.json">manifest.json</a></td>
+          <td>support</td>
+          <td>4.2 KB</td>
+        </tr>
+        <tr>
+          <td><a href="notes.md">notes.md</a></td>
+          <td>notes</td>
+          <td>4.1 KB</td>
+        </tr>
+        <tr>
+          <td><a href="recordings/.gitkeep">recordings/.gitkeep</a></td>
+          <td>other</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="recordings/recording-01.cast">recordings/recording-01.cast</a></td>
+          <td>recording</td>
+          <td>326 B</td>
+        </tr>
+        <tr>
+          <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
+          <td>other</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="screenshots/screenshot-01.png">screenshots/screenshot-01.png</a></td>
+          <td>screenshot</td>
+          <td>7.0 KB</td>
+        </tr>
+        <tr>
+          <td><a href="session-id.txt">session-id.txt</a></td>
+          <td>support</td>
+          <td>27 B</td>
+        </tr>
+        <tr>
+          <td><a href="snapshots/.gitkeep">snapshots/.gitkeep</a></td>
+          <td>other</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="snapshots/snapshot-01.txt">snapshots/snapshot-01.txt</a></td>
+          <td>other</td>
+          <td>78 B</td>
+        </tr>
+        <tr>
+          <td><a href="videos/.gitkeep">videos/.gitkeep</a></td>
+          <td>other</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="videos/video-01.webm">videos/video-01.webm</a></td>
+          <td>video</td>
+          <td>15.1 KB</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
     </main>
   </body>
 </html>

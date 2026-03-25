@@ -15,19 +15,10 @@
         --accent: #93c5fd;
         --border: #334155;
       }
-      * {
-        box-sizing: border-box;
-      }
+      * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family:
-          Inter,
-          ui-sans-serif,
-          system-ui,
-          -apple-system,
-          BlinkMacSystemFont,
-          'Segoe UI',
-          sans-serif;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         background: linear-gradient(180deg, #020617 0%, var(--bg) 100%);
         color: var(--text);
         line-height: 1.5;
@@ -37,38 +28,22 @@
         margin: 0 auto;
         padding: 32px 20px 48px;
       }
-      a {
-        color: var(--accent);
-      }
-      header,
-      section,
-      .card {
+      a { color: var(--accent); }
+      header, section, .card {
         background: rgb(15 23 42 / 0.88);
         border: 1px solid var(--border);
         border-radius: 16px;
         box-shadow: 0 18px 40px rgb(2 6 23 / 0.25);
       }
-      header,
-      section {
+      header, section {
         padding: 24px;
         margin-bottom: 20px;
       }
-      h1,
-      h2,
-      h3,
-      h4,
-      h5,
-      h6 {
+      h1, h2, h3, h4, h5, h6 {
         margin-top: 0;
         color: #f8fafc;
       }
-      p,
-      li,
-      dd,
-      td,
-      th,
-      summary,
-      figcaption {
+      p, li, dd, td, th, summary, figcaption {
         overflow-wrap: anywhere;
       }
       .subtle {
@@ -105,8 +80,7 @@
       .note-card > *:last-child {
         margin-bottom: 0;
       }
-      img,
-      video {
+      img, video {
         width: 100%;
         border-radius: 12px;
         background: #020617;
@@ -131,8 +105,7 @@
         white-space: pre-wrap;
       }
       code {
-        font-family:
-          'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       details > summary {
         cursor: pointer;
@@ -142,8 +115,7 @@
         width: 100%;
         border-collapse: collapse;
       }
-      th,
-      td {
+      th, td {
         text-align: left;
         padding: 10px 12px;
         border-bottom: 1px solid var(--border);
@@ -166,48 +138,23 @@
         <p class="subtle">Portable review bundle</p>
         <h1>Week 7 — Envelope Locks Proof</h1>
         <p class="subtle">Bundle directory: 20260325-week7-b-envelope-locks</p>
-        <p>
-          Captures golden-envelope test suite output and documents which public
-          JSON surfaces are locked
-        </p>
+        <p>Captures golden-envelope test suite output and documents which public JSON surfaces are locked</p>
       </header>
-
+      
       <section>
-        <h2>Manifest summary</h2>
-        <dl class="facts">
-          <div>
-            <dt>Bundle</dt>
-            <dd>20260325-week7-b-envelope-locks</dd>
-          </div>
-          <div>
-            <dt>Date</dt>
-            <dd>2026-03-25T19:41:16Z</dd>
-          </div>
-          <div>
-            <dt>Lane</dt>
-            <dd>B</dd>
-          </div>
-          <div>
-            <dt>Week</dt>
-            <dd>7</dd>
-          </div>
-          <div>
-            <dt>Manifest artifacts</dt>
-            <dd>6</dd>
-          </div>
-          <div>
-            <dt>Discovered files</dt>
-            <dd>11</dd>
-          </div>
-        </dl>
-      </section>
-
+  <h2>Manifest summary</h2>
+  <dl class="facts"><div><dt>Bundle</dt><dd>20260325-week7-b-envelope-locks</dd></div><div><dt>Date</dt><dd>2026-03-25T19:41:16Z</dd></div><div><dt>Lane</dt><dd>B</dd></div><div><dt>Week</dt><dd>7</dd></div><div><dt>Manifest artifacts</dt><dd>6</dd></div><div><dt>Discovered files</dt><dd>11</dd></div></dl>
+  
+</section>
+      
+      
+      
       <section>
-        <h2>JSON outputs</h2>
-
-        <details class="card">
-          <summary>logs/02-vitest-json.json</summary>
-          <pre><code>{
+  <h2>JSON outputs</h2>
+  
+  <details class="card">
+    <summary>logs/02-vitest-json.json</summary>
+    <pre><code>{
   &quot;numTotalTestSuites&quot;: 2,
   &quot;numPassedTestSuites&quot;: 2,
   &quot;numFailedTestSuites&quot;: 0,
@@ -295,248 +242,42 @@
     }
   ]
 }</code></pre>
-        </details>
-      </section>
+  </details>
+</section>
       <section>
-        <h2>Notes</h2>
-
-        <article class="card note-card">
-          <h3><a href="notes.md">notes.md</a></h3>
-          <h1>2026-03-25 dogfood — Week 7 bundle B envelope locks proof</h1>
-          <h2>Bundle metadata</h2>
-          <ul>
-            <li>
-              <strong>Bundle path:</strong>
-              <code>dogfood/20260325-week7-b-envelope-locks/</code>
-            </li>
-            <li>
-              <strong>Test file:</strong>
-              <code>test/unit/commands/golden-envelopes.test.ts</code>
-            </li>
-            <li>
-              <strong>CLI entrypoint:</strong> <code>src/cli/main.ts</code>
-            </li>
-            <li>
-              <strong>Captured logs:</strong>
-              <code>logs/01-vitest-verbose.txt</code>,
-              <code>logs/02-vitest-json.json</code>, and
-              <code>logs/03-test-source.txt</code>
-            </li>
-            <li>
-              <strong>Screenshots directory:</strong>
-              <code>screenshots/</code> is present for parity with other proof
-              bundles and is intentionally empty for this non-visual capture.
-            </li>
-          </ul>
-          <h2>Scenario summary</h2>
-          <p>
-            This bundle proves the current golden-envelope coverage by running
-            <code>test/unit/commands/golden-envelopes.test.ts</code> with
-            verbose and JSON Vitest reporters, then preserving the test source
-            that defines the assertions. The suite currently locks one success
-            envelope for <code>inspect</code>, one success envelope for
-            <code>version</code>, and two representative
-            <code>inspect</code> error envelopes: a non-retryable
-            <code>SESSION_NOT_FOUND</code> case and a retryable transport-style
-            <code>HOST_UNREACHABLE</code> case.
-          </p>
-          <h2>Locked surfaces inventory</h2>
-          <h3>1. <code>locks the inspect success envelope shape</code></h3>
-          <ul>
-            <li>
-              <strong>Schema / envelope locked:</strong>
-              <code>InspectResultSchema</code> from
-              <code>src/protocol/messages.ts</code> plus
-              <code>createSuccessEnvelope(&#39;inspect&#39;, result)</code> from
-              <code>src/protocol/envelope.ts</code>.
-            </li>
-            <li>
-              <strong>Fields asserted:</strong> envelope <code>ok</code>,
-              <code>command</code>, <code>timestamp</code>, and
-              <code>result</code>; result <code>session.version</code>,
-              <code>session.sessionId</code>, <code>session.createdAt</code>,
-              <code>session.updatedAt</code>, <code>session.status</code>,
-              <code>session.command</code>, <code>session.cwd</code>,
-              <code>session.cols</code>, <code>session.rows</code>,
-              <code>session.hostPid</code>, <code>session.childPid</code>,
-              <code>session.exitCode</code>, <code>session.exitSignal</code>,
-              <code>eventCount</code>, <code>uptime</code>,
-              <code>lastEventSeq</code>, <code>terminationCategory</code>,
-              <code>artifacts.total</code>,
-              <code>artifacts.byKind.screenshot</code>,
-              <code>artifacts.byKind.snapshot</code>,
-              <code>artifacts.missingCount</code>,
-              <code>artifacts.health</code>, and <code>usedOfflineReplay</code>.
-            </li>
-            <li>
-              <strong>Coverage shape:</strong> subset of the ratified
-              <code>inspect</code> surface. It exercises a healthy artifact
-              summary and a clean-exit session, but it does not cover alternate
-              <code>terminationCategory</code> values, the optional
-              <code>artifacts.missing</code> list, or cases where optional
-              inspect fields are absent.
-            </li>
-          </ul>
-          <h3>2. <code>locks the version success envelope shape</code></h3>
-          <ul>
-            <li>
-              <strong>Schema / envelope locked:</strong> the local strict
-              <code>VersionResultSchema</code> declared in the test file plus
-              <code>createSuccessEnvelope(&#39;version&#39;, result)</code>,
-              where <code>result</code> is produced by
-              <code>buildVersionResult()</code> from
-              <code>src/cli/commands/version.ts</code>.
-            </li>
-            <li>
-              <strong>Fields asserted:</strong> envelope <code>ok</code>,
-              <code>command</code>, <code>timestamp</code>, and
-              <code>result</code>; result <code>cliVersion</code>,
-              <code>protocolVersion</code>, <code>rendererBackends</code>, and
-              <code>runtime.node</code>, <code>runtime.platform</code>,
-              <code>runtime.arch</code>.
-            </li>
-            <li>
-              <strong>Coverage shape:</strong> effectively the full current
-              <code>version</code> JSON success surface, because the test
-              validates the emitted result against a strict schema and locks the
-              success-envelope wrapper around that emitted object. The exact
-              runtime values stay dynamic rather than being hard-coded literals.
-            </li>
-          </ul>
-          <h3>
-            3. <code>locks the SESSION_NOT_FOUND error envelope shape</code>
-          </h3>
-          <ul>
-            <li>
-              <strong>Schema / envelope locked:</strong>
-              <code>createErrorEnvelope(&#39;inspect&#39;, error)</code> with a
-              <code>SESSION_NOT_FOUND</code> CLI error.
-            </li>
-            <li>
-              <strong>Fields asserted:</strong> envelope <code>ok</code>,
-              <code>command</code>, and <code>timestamp</code>; error
-              <code>code</code>, <code>message</code>, <code>retryable</code>,
-              <code>details.sessionId</code>, and
-              <code>details.manifestPath</code>.
-            </li>
-            <li>
-              <strong>Coverage shape:</strong> subset of the shared error
-              surface. It locks one concrete non-retryable error example for
-              <code>inspect</code>, not the entire set of command-specific error
-              payloads.
-            </li>
-          </ul>
-          <h3>
-            4.
-            <code>locks a retryable transport-style error envelope shape</code>
-          </h3>
-          <ul>
-            <li>
-              <strong>Schema / envelope locked:</strong>
-              <code>createErrorEnvelope(&#39;inspect&#39;, error)</code> with a
-              <code>HOST_UNREACHABLE</code> CLI error.
-            </li>
-            <li>
-              <strong>Fields asserted:</strong> envelope <code>ok</code>,
-              <code>command</code>, and <code>timestamp</code>; error
-              <code>code</code>, <code>message</code>, <code>retryable</code>,
-              and <code>details.sessionId</code>.
-            </li>
-            <li>
-              <strong>Coverage shape:</strong> subset of the shared error
-              surface. It proves one retryable transport-style example, but it
-              does not lock every retryable code or every command context.
-            </li>
-          </ul>
-          <h2>Coverage assessment</h2>
-          <p>
-            The requested ratified surface list is <code>create</code>,
-            <code>send-keys</code>, <code>type</code>, <code>paste</code>,
-            <code>snapshot</code>, <code>screenshot</code>, <code>list</code>,
-            <code>inspect</code>, <code>destroy</code>, <code>version</code>,
-            and <code>doctor</code>. Against that list, the current golden suite
-            coverage is:
-          </p>
-          <p>
-            | Surface | Golden-envelope status | Notes | | ------------ |
-            ---------------------- |
-            --------------------------------------------------------------------------------------------------------------------------------
-            | | <code>create</code> | Unlocked | No golden success or error test
-            targets the create envelope. | | <code>send-keys</code> | Unlocked |
-            No golden test covers the send-keys result schema or wrapper. | |
-            <code>type</code> | Unlocked | No golden test covers the type
-            envelope. | | <code>paste</code> | Unlocked | No golden test covers
-            the paste envelope. | | <code>snapshot</code> | Unlocked | No golden
-            test covers snapshot success or error envelopes. | |
-            <code>screenshot</code> | Unlocked | No golden test covers
-            screenshot success or error envelopes. | | <code>list</code> |
-            Unlocked | No golden test covers list envelopes. | |
-            <code>inspect</code> | Partially locked | One success-envelope
-            golden plus two representative error-envelope goldens exist, but
-            they do not exhaust every inspect variant. | |
-            <code>destroy</code> | Unlocked | No golden test covers destroy
-            envelopes. | | <code>version</code> | Locked | The current version
-            success envelope is covered by the golden suite. | |
-            <code>doctor</code> | Unlocked | No golden test covers doctor
-            envelopes. |
-          </p>
-          <p>
-            So the suite currently locks 2 of the 11 listed public success
-            surfaces at all (<code>inspect</code> partially and
-            <code>version</code> fully), while 9 remain entirely unlocked by
-            golden-envelope tests.
-          </p>
-          <h2>Review answers</h2>
-          <ul>
-            <li>
-              <strong>Did all tests pass?</strong> Yes.
-              <code>logs/01-vitest-verbose.txt</code> reports 1 passed test file
-              and 4 passed tests, and
-              <code>logs/02-vitest-json.json</code> reports
-              <code>success: true</code>.
-            </li>
-            <li>
-              <strong
-                >What is the exact test count (passed/failed/skipped)?</strong
-              >
-              4 passed, 0 failed, 0 skipped/pending/todo, out of 4 total tests.
-            </li>
-            <li>
-              <strong>What surfaces remain unlocked?</strong>
-              <code>create</code>, <code>send-keys</code>, <code>type</code>,
-              <code>paste</code>, <code>snapshot</code>,
-              <code>screenshot</code>, <code>list</code>, <code>destroy</code>,
-              and <code>doctor</code> remain fully unlocked.
-              <code>inspect</code> also has unlocked branches beyond the one
-              success case and two representative errors preserved here.
-            </li>
-          </ul>
-          <h2>Issues / limitations</h2>
-          <ul>
-            <li>
-              The golden suite currently locks only <code>inspect</code>,
-              <code>version</code>, and shared error-envelope examples. It does
-              <strong>not</strong> lock the entire ratified public JSON surface
-              list.
-            </li>
-            <li>
-              The bundle is intentionally descriptive rather than expansive: it
-              documents the current suite exactly as-is and does not add or
-              broaden any golden coverage.
-            </li>
-            <li>
-              No screenshots were required for this proof, so
-              <code>screenshots/</code> is intentionally empty apart from a
-              placeholder file to keep the directory in git.
-            </li>
-          </ul>
-        </article>
-      </section>
+  <h2>Notes</h2>
+  
+  <article class="card note-card">
+    <h3><a href="notes.md">notes.md</a></h3>
+    <h1>2026-03-25 dogfood — Week 7 bundle B envelope locks proof</h1>
+<h2>Bundle metadata</h2>
+<ul><li><strong>Bundle path:</strong> <code>dogfood/20260325-week7-b-envelope-locks/</code></li><li><strong>Test file:</strong> <code>test/unit/commands/golden-envelopes.test.ts</code></li><li><strong>CLI entrypoint:</strong> <code>src/cli/main.ts</code></li><li><strong>Captured logs:</strong> <code>logs/01-vitest-verbose.txt</code>, <code>logs/02-vitest-json.json</code>, and <code>logs/03-test-source.txt</code></li><li><strong>Screenshots directory:</strong> <code>screenshots/</code> is present for parity with other proof bundles and is intentionally empty for this non-visual capture.</li></ul>
+<h2>Scenario summary</h2>
+<p>This bundle proves the current golden-envelope coverage by running <code>test/unit/commands/golden-envelopes.test.ts</code> with verbose and JSON Vitest reporters, then preserving the test source that defines the assertions. The suite currently locks one success envelope for <code>inspect</code>, one success envelope for <code>version</code>, and two representative <code>inspect</code> error envelopes: a non-retryable <code>SESSION_NOT_FOUND</code> case and a retryable transport-style <code>HOST_UNREACHABLE</code> case.</p>
+<h2>Locked surfaces inventory</h2>
+<h3>1. <code>locks the inspect success envelope shape</code></h3>
+<ul><li><strong>Schema / envelope locked:</strong> <code>InspectResultSchema</code> from <code>src/protocol/messages.ts</code> plus <code>createSuccessEnvelope(&#39;inspect&#39;, result)</code> from <code>src/protocol/envelope.ts</code>.</li><li><strong>Fields asserted:</strong> envelope <code>ok</code>, <code>command</code>, <code>timestamp</code>, and <code>result</code>; result <code>session.version</code>, <code>session.sessionId</code>, <code>session.createdAt</code>, <code>session.updatedAt</code>, <code>session.status</code>, <code>session.command</code>, <code>session.cwd</code>, <code>session.cols</code>, <code>session.rows</code>, <code>session.hostPid</code>, <code>session.childPid</code>, <code>session.exitCode</code>, <code>session.exitSignal</code>, <code>eventCount</code>, <code>uptime</code>, <code>lastEventSeq</code>, <code>terminationCategory</code>, <code>artifacts.total</code>, <code>artifacts.byKind.screenshot</code>, <code>artifacts.byKind.snapshot</code>, <code>artifacts.missingCount</code>, <code>artifacts.health</code>, and <code>usedOfflineReplay</code>.</li><li><strong>Coverage shape:</strong> subset of the ratified <code>inspect</code> surface. It exercises a healthy artifact summary and a clean-exit session, but it does not cover alternate <code>terminationCategory</code> values, the optional <code>artifacts.missing</code> list, or cases where optional inspect fields are absent.</li></ul>
+<h3>2. <code>locks the version success envelope shape</code></h3>
+<ul><li><strong>Schema / envelope locked:</strong> the local strict <code>VersionResultSchema</code> declared in the test file plus <code>createSuccessEnvelope(&#39;version&#39;, result)</code>, where <code>result</code> is produced by <code>buildVersionResult()</code> from <code>src/cli/commands/version.ts</code>.</li><li><strong>Fields asserted:</strong> envelope <code>ok</code>, <code>command</code>, <code>timestamp</code>, and <code>result</code>; result <code>cliVersion</code>, <code>protocolVersion</code>, <code>rendererBackends</code>, and <code>runtime.node</code>, <code>runtime.platform</code>, <code>runtime.arch</code>.</li><li><strong>Coverage shape:</strong> effectively the full current <code>version</code> JSON success surface, because the test validates the emitted result against a strict schema and locks the success-envelope wrapper around that emitted object. The exact runtime values stay dynamic rather than being hard-coded literals.</li></ul>
+<h3>3. <code>locks the SESSION_NOT_FOUND error envelope shape</code></h3>
+<ul><li><strong>Schema / envelope locked:</strong> <code>createErrorEnvelope(&#39;inspect&#39;, error)</code> with a <code>SESSION_NOT_FOUND</code> CLI error.</li><li><strong>Fields asserted:</strong> envelope <code>ok</code>, <code>command</code>, and <code>timestamp</code>; error <code>code</code>, <code>message</code>, <code>retryable</code>, <code>details.sessionId</code>, and <code>details.manifestPath</code>.</li><li><strong>Coverage shape:</strong> subset of the shared error surface. It locks one concrete non-retryable error example for <code>inspect</code>, not the entire set of command-specific error payloads.</li></ul>
+<h3>4. <code>locks a retryable transport-style error envelope shape</code></h3>
+<ul><li><strong>Schema / envelope locked:</strong> <code>createErrorEnvelope(&#39;inspect&#39;, error)</code> with a <code>HOST_UNREACHABLE</code> CLI error.</li><li><strong>Fields asserted:</strong> envelope <code>ok</code>, <code>command</code>, and <code>timestamp</code>; error <code>code</code>, <code>message</code>, <code>retryable</code>, and <code>details.sessionId</code>.</li><li><strong>Coverage shape:</strong> subset of the shared error surface. It proves one retryable transport-style example, but it does not lock every retryable code or every command context.</li></ul>
+<h2>Coverage assessment</h2>
+<p>The requested ratified surface list is <code>create</code>, <code>send-keys</code>, <code>type</code>, <code>paste</code>, <code>snapshot</code>, <code>screenshot</code>, <code>list</code>, <code>inspect</code>, <code>destroy</code>, <code>version</code>, and <code>doctor</code>. Against that list, the current golden suite coverage is:</p>
+<p>| Surface      | Golden-envelope status | Notes                                                                                                                            | | ------------ | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------- | | <code>create</code>     | Unlocked               | No golden success or error test targets the create envelope.                                                                     | | <code>send-keys</code>  | Unlocked               | No golden test covers the send-keys result schema or wrapper.                                                                    | | <code>type</code>       | Unlocked               | No golden test covers the type envelope.                                                                                         | | <code>paste</code>      | Unlocked               | No golden test covers the paste envelope.                                                                                        | | <code>snapshot</code>   | Unlocked               | No golden test covers snapshot success or error envelopes.                                                                       | | <code>screenshot</code> | Unlocked               | No golden test covers screenshot success or error envelopes.                                                                     | | <code>list</code>       | Unlocked               | No golden test covers list envelopes.                                                                                            | | <code>inspect</code>    | Partially locked       | One success-envelope golden plus two representative error-envelope goldens exist, but they do not exhaust every inspect variant. | | <code>destroy</code>    | Unlocked               | No golden test covers destroy envelopes.                                                                                         | | <code>version</code>    | Locked                 | The current version success envelope is covered by the golden suite.                                                             | | <code>doctor</code>     | Unlocked               | No golden test covers doctor envelopes.                                                                                          |</p>
+<p>So the suite currently locks 2 of the 11 listed public success surfaces at all (<code>inspect</code> partially and <code>version</code> fully), while 9 remain entirely unlocked by golden-envelope tests.</p>
+<h2>Review answers</h2>
+<ul><li><strong>Did all tests pass?</strong> Yes. <code>logs/01-vitest-verbose.txt</code> reports 1 passed test file and 4 passed tests, and <code>logs/02-vitest-json.json</code> reports <code>success: true</code>.</li><li><strong>What is the exact test count (passed/failed/skipped)?</strong> 4 passed, 0 failed, 0 skipped/pending/todo, out of 4 total tests.</li><li><strong>What surfaces remain unlocked?</strong> <code>create</code>, <code>send-keys</code>, <code>type</code>, <code>paste</code>, <code>snapshot</code>, <code>screenshot</code>, <code>list</code>, <code>destroy</code>, and <code>doctor</code> remain fully unlocked. <code>inspect</code> also has unlocked branches beyond the one success case and two representative errors preserved here.</li></ul>
+<h2>Issues / limitations</h2>
+<ul><li>The golden suite currently locks only <code>inspect</code>, <code>version</code>, and shared error-envelope examples. It does <strong>not</strong> lock the entire ratified public JSON surface list.</li><li>The bundle is intentionally descriptive rather than expansive: it documents the current suite exactly as-is and does not add or broaden any golden coverage.</li><li>No screenshots were required for this proof, so <code>screenshots/</code> is intentionally empty apart from a placeholder file to keep the directory in git.</li></ul>
+  </article>
+</section>
       <section>
-        <h2>Commands</h2>
-        <div class="card">
-          <h3><a href="commands.sh">commands.sh</a></h3>
-          <pre><code>#!/usr/bin/env bash
+  <h2>Commands</h2>
+  <div class="card">
+    <h3><a href="commands.sh">commands.sh</a></h3>
+    <pre><code>#!/usr/bin/env bash
 set -euo pipefail
 export PATH=&quot;$HOME/.local/bin:$PATH&quot;
 
@@ -588,142 +329,89 @@ run_and_record   &#39;03&#39;   &quot;$LOGS/03-test-source.txt&quot;   &quot;$LO
 npx prettier --write &quot;$BUNDLE&quot;
 npx prettier --check &quot;$BUNDLE&quot;
 </code></pre>
-        </div>
-      </section>
+  </div>
+</section>
       <section>
-        <h2>Command status</h2>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>step</th>
-                <th>command</th>
-                <th>exit_code</th>
-                <th>status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>01</td>
-                <td>
-                  npx vitest run test/unit/commands/golden-envelopes.test.ts
-                  --reporter=verbose
-                </td>
-                <td>0</td>
-                <td>ok</td>
-              </tr>
-              <tr>
-                <td>02</td>
-                <td>
-                  npx vitest run test/unit/commands/golden-envelopes.test.ts
-                  --reporter=json
-                </td>
-                <td>0</td>
-                <td>ok</td>
-              </tr>
-              <tr>
-                <td>03</td>
-                <td>cat test/unit/commands/golden-envelopes.test.ts</td>
-                <td>0</td>
-                <td>ok</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+  <h2>Command status</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>step</th><th>command</th><th>exit_code</th><th>status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>01</td><td>npx vitest run test/unit/commands/golden-envelopes.test.ts --reporter=verbose</td><td>0</td><td>ok</td></tr><tr><td>02</td><td>npx vitest run test/unit/commands/golden-envelopes.test.ts --reporter=json</td><td>0</td><td>ok</td></tr><tr><td>03</td><td>cat test/unit/commands/golden-envelopes.test.ts</td><td>0</td><td>ok</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
       <section>
-        <h2>Artifact inventory</h2>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Path</th>
-                <th>Type</th>
-                <th>Size</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><a href="command-status.tsv">command-status.tsv</a></td>
-                <td>support</td>
-                <td>255 B</td>
-              </tr>
-              <tr>
-                <td><a href="commands.sh">commands.sh</a></td>
-                <td>script</td>
-                <td>1.4 KB</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/01-vitest-verbose.stderr.txt"
-                    >logs/01-vitest-verbose.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/01-vitest-verbose.txt"
-                    >logs/01-vitest-verbose.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>1.1 KB</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/02-vitest-json.json"
-                    >logs/02-vitest-json.json</a
-                  >
-                </td>
-                <td>support</td>
-                <td>2.4 KB</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/02-vitest-json.stderr.txt"
-                    >logs/02-vitest-json.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/03-test-source.stderr.txt"
-                    >logs/03-test-source.stderr.txt</a
-                  >
-                </td>
-                <td>support</td>
-                <td>0 B</td>
-              </tr>
-              <tr>
-                <td>
-                  <a href="logs/03-test-source.txt">logs/03-test-source.txt</a>
-                </td>
-                <td>support</td>
-                <td>4.0 KB</td>
-              </tr>
-              <tr>
-                <td><a href="manifest.json">manifest.json</a></td>
-                <td>support</td>
-                <td>1.2 KB</td>
-              </tr>
-              <tr>
-                <td><a href="notes.md">notes.md</a></td>
-                <td>notes</td>
-                <td>7.4 KB</td>
-              </tr>
-              <tr>
-                <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
-                <td>other</td>
-                <td>0 B</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+  <h2>Artifact inventory</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Path</th><th>Type</th><th>Size</th></tr>
+      </thead>
+      <tbody>
+        
+        <tr>
+          <td><a href="command-status.tsv">command-status.tsv</a></td>
+          <td>support</td>
+          <td>255 B</td>
+        </tr>
+        <tr>
+          <td><a href="commands.sh">commands.sh</a></td>
+          <td>script</td>
+          <td>1.4 KB</td>
+        </tr>
+        <tr>
+          <td><a href="logs/01-vitest-verbose.stderr.txt">logs/01-vitest-verbose.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/01-vitest-verbose.txt">logs/01-vitest-verbose.txt</a></td>
+          <td>support</td>
+          <td>1.1 KB</td>
+        </tr>
+        <tr>
+          <td><a href="logs/02-vitest-json.json">logs/02-vitest-json.json</a></td>
+          <td>support</td>
+          <td>2.4 KB</td>
+        </tr>
+        <tr>
+          <td><a href="logs/02-vitest-json.stderr.txt">logs/02-vitest-json.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/03-test-source.stderr.txt">logs/03-test-source.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/03-test-source.txt">logs/03-test-source.txt</a></td>
+          <td>support</td>
+          <td>4.0 KB</td>
+        </tr>
+        <tr>
+          <td><a href="manifest.json">manifest.json</a></td>
+          <td>support</td>
+          <td>1.2 KB</td>
+        </tr>
+        <tr>
+          <td><a href="notes.md">notes.md</a></td>
+          <td>notes</td>
+          <td>7.4 KB</td>
+        </tr>
+        <tr>
+          <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
+          <td>other</td>
+          <td>0 B</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
     </main>
   </body>
 </html>
