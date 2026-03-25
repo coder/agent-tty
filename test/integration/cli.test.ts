@@ -53,11 +53,13 @@ describe('CLI integration', () => {
 
     const parsed = JSON.parse(result.stdout) as SuccessEnvelope<{
       cliVersion: string;
+      rendererBackends: string[];
     }>;
 
     expect(parsed.ok).toBe(true);
     expect(parsed.command).toBe('version');
     expect(parsed.result.cliVersion).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(parsed.result.rendererBackends).toEqual(['ghostty-web']);
   });
 
   it('accepts --append-newline for type', () => {

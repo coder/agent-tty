@@ -48,7 +48,7 @@ export async function buildVersionResult(): Promise<VersionResult> {
   return {
     cliVersion: packageMetadata.version,
     protocolVersion: PROTOCOL_VERSION,
-    rendererBackends: [],
+    rendererBackends: ['ghostty-web'],
     runtime: {
       node: process.version,
       platform: process.platform,

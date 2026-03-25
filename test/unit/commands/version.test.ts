@@ -18,6 +18,7 @@ describe('version command', () => {
 
     expect(result.cliVersion).toMatch(/^\d+\.\d+\.\d+$/);
     expect(result.protocolVersion).toBe('0.1.0');
+    expect(result.rendererBackends).toEqual(['ghostty-web']);
     expect(result.runtime.node).toMatch(/^v\d+\.\d+\.\d+$/);
   });
 });
