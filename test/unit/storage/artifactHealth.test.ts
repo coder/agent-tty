@@ -2,7 +2,7 @@ import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   ArtifactEntry,
@@ -197,6 +197,68 @@ describe('computeArtifactHealth', () => {
       ],
     });
     expect(ArtifactHealthSummarySchema.safeParse(summary).success).toBe(true);
+  });
+
+  it('treats permission-denied artifacts as missing', async () => {
+    const sessionDir = await createSessionDir();
+    const artifact = createArtifactEntry({
+      kind: 'screenshot',
+      filename: 'screenshot-5-reference-dark.png',
+      metadata: {
+        profileName: 'reference-dark',
+        cols: 80,
+        rows: 24,
+      },
+    });
+
+    await writeManifestAndFiles(sessionDir, [artifact], [artifact.filename]);
+
+    const filePath = artifactPath(sessionDir, artifact.filename);
+    vi.resetModules();
+    vi.doMock('node:fs/promises', async (importOriginal) => {
+      const actual = await importOriginal<{
+        access: (path: string) => Promise<void>;
+      }>();
+
+      return {
+        ...actual,
+        access: async (path: string) => {
+          if (path === filePath) {
+            throw Object.assign(new Error('EACCES: permission denied'), {
+              code: 'EACCES',
+            });
+          }
+
+          return actual.access(path);
+        },
+      };
+    });
+
+    try {
+      const { computeArtifactHealth: computeArtifactHealthWithMock } =
+        await import('../../../src/storage/artifactHealth.js');
+      const summary = await computeArtifactHealthWithMock(sessionDir);
+
+      expect(summary).toEqual({
+        total: 1,
+        byKind: {
+          screenshot: 1,
+        },
+        missingCount: 1,
+        health: 'missing-artifacts',
+        missing: [
+          {
+            id: artifact.id,
+            kind: 'screenshot',
+            filename: artifact.filename,
+          },
+        ],
+      });
+      expect(ArtifactHealthSummarySchema.safeParse(summary).success).toBe(true);
+    } finally {
+      vi.doUnmock('node:fs/promises');
+      vi.resetModules();
+    }
   });
 
   it('counts mixed artifact kinds correctly', async () => {

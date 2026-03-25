@@ -33,7 +33,7 @@ vi.mock('../../../src/host/rpcClient.js', () => ({
   sendRpc: mocks.sendRpc,
 }));
 
-vi.mock('../../../src/host/terminationCategory.js', () => ({
+vi.mock('../../../src/protocol/terminationCategory.js', () => ({
   deriveTerminationCategory: mocks.deriveTerminationCategory,
 }));
 
@@ -201,6 +201,47 @@ describe('inspect command', () => {
     );
     expect(emitted.lines).not.toContain('Offline Replay: yes');
     expect(emitted.lines).not.toContain('Termination: running');
+  });
+
+  it('degrades gracefully when artifact health computation fails', async () => {
+    const liveSession = createSessionRecord('running');
+    mocks.computeArtifactHealth.mockRejectedValueOnce(
+      new Error('EACCES: permission denied'),
+    );
+    mocks.sendRpc.mockResolvedValueOnce({ session: liveSession });
+    mocks.countEventLogEntries.mockResolvedValueOnce(5);
+    mocks.deriveTerminationCategory.mockReturnValueOnce('running');
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    const emitted = getLastEmitSuccessPayload() as {
+      result: {
+        session: ReturnType<typeof createSessionRecord>;
+        eventCount: number;
+        lastEventSeq?: number;
+        terminationCategory?: string;
+        artifacts?: typeof DEFAULT_ARTIFACT_HEALTH;
+      };
+      lines: string[];
+    };
+
+    expect(emitted).toBeDefined();
+    expect(emitted.result).toEqual(
+      expect.objectContaining({
+        session: liveSession,
+        eventCount: 5,
+        lastEventSeq: 4,
+        terminationCategory: 'running',
+      }),
+    );
+    expect(emitted.result.artifacts).toBeUndefined();
+    expect(emitted.lines).not.toContain(
+      expect.stringMatching(/^Artifacts:/),
+    );
   });
 
   it('rejects malformed inspect RPC responses', async () => {

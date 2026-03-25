@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { buildVersionResult } from '../../../src/cli/commands/version.js';
 import {
@@ -7,6 +8,21 @@ import {
 } from '../../../src/protocol/envelope.js';
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 import { InspectResultSchema } from '../../../src/protocol/messages.js';
+
+const VersionResultSchema = z
+  .object({
+    cliVersion: z.string().min(1),
+    protocolVersion: z.string().min(1),
+    rendererBackends: z.array(z.string().min(1)),
+    runtime: z
+      .object({
+        node: z.string().min(1),
+        platform: z.string().min(1),
+        arch: z.string().min(1),
+      })
+      .strict(),
+  })
+  .strict();
 
 function createSessionRecord() {
   return {
@@ -61,6 +77,7 @@ describe('JSON envelope contracts', () => {
       timestamp: '2026-03-25T15:00:00.000Z',
       result,
     });
+    expect(InspectResultSchema.safeParse(result).success).toBe(true);
   });
 
   it('locks the version success envelope shape', async () => {
@@ -72,6 +89,7 @@ describe('JSON envelope contracts', () => {
       timestamp: '2026-03-25T15:00:00.000Z',
       result,
     });
+    expect(VersionResultSchema.safeParse(result).success).toBe(true);
   });
 
   it('locks the SESSION_NOT_FOUND error envelope shape', () => {

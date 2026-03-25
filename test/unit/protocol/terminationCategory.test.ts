@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { deriveTerminationCategory } from '../../../src/host/terminationCategory.js';
+import { deriveTerminationCategory } from '../../../src/protocol/terminationCategory.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 
 function createSessionRecord(
@@ -75,12 +75,36 @@ describe('deriveTerminationCategory', () => {
     ).toBe('unknown');
   });
 
-  it('maps failed sessions with other origins to unknown', () => {
+  it('maps failed sessions with storage-corruption origin to storage-corruption', () => {
     expect(
       deriveTerminationCategory(
         createSessionRecord({
           status: 'failed',
           failureOrigin: 'storage-corruption',
+        }),
+      ),
+    ).toBe('storage-corruption');
+  });
+
+  it('maps failed sessions with storage-corruption failure details to storage-corruption', () => {
+    expect(
+      deriveTerminationCategory(
+        createSessionRecord({
+          status: 'failed',
+          failureReason: 'manifest corrupted',
+          failureOrigin: 'storage-corruption',
+        }),
+      ),
+    ).toBe('storage-corruption');
+  });
+
+  it('maps failed sessions with explicit unknown origin to unknown', () => {
+    expect(
+      deriveTerminationCategory(
+        createSessionRecord({
+          status: 'failed',
+          failureReason: 'something unexpected',
+          failureOrigin: 'unknown',
         }),
       ),
     ).toBe('unknown');
