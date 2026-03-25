@@ -15,10 +15,19 @@
         --accent: #93c5fd;
         --border: #334155;
       }
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
         background: linear-gradient(180deg, #020617 0%, var(--bg) 100%);
         color: var(--text);
         line-height: 1.5;
@@ -28,22 +37,38 @@
         margin: 0 auto;
         padding: 32px 20px 48px;
       }
-      a { color: var(--accent); }
-      header, section, .card {
+      a {
+        color: var(--accent);
+      }
+      header,
+      section,
+      .card {
         background: rgb(15 23 42 / 0.88);
         border: 1px solid var(--border);
         border-radius: 16px;
         box-shadow: 0 18px 40px rgb(2 6 23 / 0.25);
       }
-      header, section {
+      header,
+      section {
         padding: 24px;
         margin-bottom: 20px;
       }
-      h1, h2, h3, h4, h5, h6 {
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
         margin-top: 0;
         color: #f8fafc;
       }
-      p, li, dd, td, th, summary, figcaption {
+      p,
+      li,
+      dd,
+      td,
+      th,
+      summary,
+      figcaption {
         overflow-wrap: anywhere;
       }
       .subtle {
@@ -80,7 +105,8 @@
       .note-card > *:last-child {
         margin-bottom: 0;
       }
-      img, video {
+      img,
+      video {
         width: 100%;
         border-radius: 12px;
         background: #020617;
@@ -105,7 +131,8 @@
         white-space: pre-wrap;
       }
       code {
-        font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family:
+          'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       details > summary {
         cursor: pointer;
@@ -115,7 +142,8 @@
         width: 100%;
         border-collapse: collapse;
       }
-      th, td {
+      th,
+      td {
         text-align: left;
         padding: 10px 12px;
         border-bottom: 1px solid var(--border);
@@ -137,24 +165,51 @@
       <header>
         <p class="subtle">Portable review bundle</p>
         <h1>Week 7 — Proof Completeness Inventory</h1>
-        <p class="subtle">Bundle directory: 20260325-week7-c-proof-completeness</p>
-        <p>Inventories all dogfood proof bundles and their artifacts to verify ecosystem completeness</p>
+        <p class="subtle">
+          Bundle directory: 20260325-week7-c-proof-completeness
+        </p>
+        <p>
+          Inventories all dogfood proof bundles and their artifacts to verify
+          ecosystem completeness
+        </p>
       </header>
-      
+
       <section>
-  <h2>Manifest summary</h2>
-  <dl class="facts"><div><dt>Bundle</dt><dd>20260325-week7-c-proof-completeness</dd></div><div><dt>Date</dt><dd>2026-03-25T19:56:37.094Z</dd></div><div><dt>Lane</dt><dd>C</dd></div><div><dt>Week</dt><dd>7</dd></div><div><dt>Manifest artifacts</dt><dd>4</dd></div><div><dt>Discovered files</dt><dd>12</dd></div></dl>
-  
-</section>
-      
-      
-      
+        <h2>Manifest summary</h2>
+        <dl class="facts">
+          <div>
+            <dt>Bundle</dt>
+            <dd>20260325-week7-c-proof-completeness</dd>
+          </div>
+          <div>
+            <dt>Date</dt>
+            <dd>2026-03-25T19:56:37.094Z</dd>
+          </div>
+          <div>
+            <dt>Lane</dt>
+            <dd>C</dd>
+          </div>
+          <div>
+            <dt>Week</dt>
+            <dd>7</dd>
+          </div>
+          <div>
+            <dt>Manifest artifacts</dt>
+            <dd>4</dd>
+          </div>
+          <div>
+            <dt>Discovered files</dt>
+            <dd>12</dd>
+          </div>
+        </dl>
+      </section>
+
       <section>
-  <h2>JSON outputs</h2>
-  
-  <details class="card">
-    <summary>logs/04-summary.json</summary>
-    <pre><code>{
+        <h2>JSON outputs</h2>
+
+        <details class="card">
+          <summary>logs/04-summary.json</summary>
+          <pre><code>{
   &quot;generatedAt&quot;: &quot;2026-03-25T19:56:37.094Z&quot;,
   &quot;bundleCount&quot;: 40,
   &quot;reviewPageCount&quot;: 6,
@@ -961,37 +1016,280 @@
     }
   ]
 }</code></pre>
-  </details>
-</section>
+        </details>
+      </section>
       <section>
-  <h2>Notes</h2>
-  
-  <article class="card note-card">
-    <h3><a href="notes.md">notes.md</a></h3>
-    <h1>2026-03-25 dogfood — Week 7 bundle C proof completeness inventory</h1>
-<h2>Bundle metadata</h2>
-<ul><li><strong>Bundle path:</strong> <code>dogfood/20260325-week7-c-proof-completeness/</code></li><li><strong>Inventory date:</strong> <code>2026-03-25T19:56:37.094Z</code></li><li><strong>Total bundle count:</strong> 40</li><li><strong>Review pages present:</strong> 6</li></ul>
-<h2>Scenario summary</h2>
-<p>This inventory proves that the dogfood proof-bundle ecosystem can be reviewed from the live filesystem: every immediate subdirectory under <code>dogfood/</code> is enumerated, core reviewer-facing files are checked for presence, and reviewer artifacts (screenshots, recordings, videos, snapshots) are counted with totals derived directly from the current bundle directories.</p>
-<h2>Inventory table</h2>
-<p>| Bundle                              | commands.sh | notes.md | index.html | log count | screenshot count | videos/recordings | | ----------------------------------- | ----------- | -------- | ---------- | --------: | ---------------: | ----------------- | | 20260319-lifecycle                  | no          | yes      | no         |         0 |                6 | 0/0               | | 20260319-nvim-demo                  | no          | yes      | no         |         0 |                6 | 0/0               | | 20260319-resize-demo                | no          | yes      | no         |         0 |                0 | 0/0               | | 20260320-renderer-complete          | yes         | yes      | no         |         0 |                0 | 0/0               | | 20260321-post-hardening-smoke       | yes         | yes      | no         |         0 |                0 | 0/0               | | 20260321-week3-crash-retention      | yes         | no       | no         |         0 |                0 | 0/0               | | 20260321-week3-renderer-complete    | yes         | no       | no         |         0 |                0 | 0/0               | | 20260322-dogfood-alt-screen         | yes         | yes      | no         |        32 |                3 | 1/1               | | 20260322-dogfood-color              | yes         | yes      | no         |        18 |                2 | 0/1               | | 20260322-dogfood-crash              | no          | yes      | no         |         0 |                0 | 0/0               | | 20260322-dogfood-hello-prompt       | no          | yes      | no         |         0 |                1 | 1/1               | | 20260322-dogfood-resize             | no          | yes      | no         |         0 |                1 | 1/1               | | 20260322-dogfood-scrollback         | no          | yes      | no         |         0 |                0 | 0/0               | | 20260322-dogfood-unicode            | no          | yes      | no         |         0 |                0 | 0/0               | | 20260322-dogfood-week4-features     | no          | yes      | no         |         0 |                0 | 0/0               | | 20260322-global-cli-context         | no          | yes      | no         |         0 |                0 | 0/0               | | 20260322-lazyvim-scenario           | no          | no       | no         |         0 |                0 | 0/0               | | 20260322-week4-cli-parity           | no          | yes      | no         |         0 |                0 | 0/0               | | 20260322-week4-failure-recovery     | no          | yes      | no         |         0 |                0 | 0/0               | | 20260322-week4-scrollback-review    | no          | yes      | no         |         0 |                0 | 0/0               | | 20260322-week4-unicode-review       | no          | yes      | no         |         0 |                0 | 0/0               | | 20260323-bugfix-resize              | no          | yes      | no         |         0 |                3 | 0/0               | | 20260323-bugfix-scrollback          | no          | yes      | no         |         0 |                0 | 0/0               | | 20260323-week5-platform-closure     | no          | yes      | no         |         0 |                0 | 0/0               | | 20260323-week5-recovery-host        | yes         | yes      | no         |         8 |                0 | 0/0               | | 20260323-week5-recovery-renderer    | yes         | yes      | no         |        19 |                2 | 0/0               | | 20260323-week5-recovery-replay      | yes         | yes      | no         |        11 |                2 | 0/1               | | 20260323-week5-render-cells         | yes         | yes      | no         |         4 |                0 | 0/0               | | 20260323-week5-render-cursor        | yes         | yes      | no         |         6 |                3 | 0/0               | | 20260323-week5-render-fonts         | yes         | yes      | no         |         4 |                2 | 0/0               | | 20260323-week5-render-timing        | yes         | yes      | no         |         6 |                0 | 0/3               | | 20260323-week5-review-helper        | yes         | yes      | no         |         9 |                2 | 0/0               | | 20260325-week6-a-cli-contract       | yes         | yes      | yes        |        14 |                0 | 0/0               | | 20260325-week6-b-artifact-health    | yes         | yes      | yes        |        13 |                1 | 0/0               | | 20260325-week6-c-failure-taxonomy   | yes         | yes      | yes        |        23 |                0 | 0/0               | | 20260325-week6-d-review-surface     | yes         | yes      | yes        |        26 |                1 | 0/0               | | 20260325-week7-a-cli-parity         | yes         | yes      | yes        |        28 |                1 | 1/1               | | 20260325-week7-b-envelope-locks     | yes         | yes      | no         |         6 |                0 | 0/0               | | 20260325-week7-c-proof-completeness | yes         | yes      | yes        |         7 |                0 | 0/0               | | week5-config-parity                 | yes         | no       | no         |         0 |                0 | 0/0               |</p>
-<h2>Week 7 completeness</h2>
-<p>The minimum completeness bar for a review-ready Week 7 proof bundle is: <code>commands.sh</code>, <code>notes.md</code>, <code>manifest.json</code>, <code>command-status.tsv</code>, <code>index.html</code>.</p>
-<ul><li><strong>20260325-week7-a-cli-parity:</strong> Meets the minimum completeness bar (<code>commands.sh</code>, <code>notes.md</code>, <code>manifest.json</code>, <code>command-status.tsv</code>, <code>index.html</code>). Missing today: none.</li><li><strong>20260325-week7-b-envelope-locks:</strong> Does not yet meet the minimum completeness bar (<code>commands.sh</code>, <code>notes.md</code>, <code>manifest.json</code>, <code>command-status.tsv</code>, <code>index.html</code>). Missing today: <code>index.html</code>.</li><li><strong>20260325-week7-c-proof-completeness:</strong> Meets the minimum completeness bar (<code>commands.sh</code>, <code>notes.md</code>, <code>manifest.json</code>, <code>command-status.tsv</code>, <code>index.html</code>). Missing today: none.</li><li><strong>20260325-week7-d-review-surface-audit:</strong> Not present in the live inventory captured on 2026-03-25T19:56:37.094Z. The lane is still in-flight outside this task, so there is no filesystem proof bundle to assess yet.</li></ul>
-<h2>Review surface coverage</h2>
-<p>Bundles with a generated review page today (6/40):</p>
-<ul><li><code>20260325-week6-a-cli-contract</code></li><li><code>20260325-week6-b-artifact-health</code></li><li><code>20260325-week6-c-failure-taxonomy</code></li><li><code>20260325-week6-d-review-surface</code></li><li><code>20260325-week7-a-cli-parity</code></li><li><code>20260325-week7-c-proof-completeness</code></li></ul>
-<h2>Gaps found</h2>
-<ul><li><strong>Missing review pages (<code>index.html</code>):</strong> <code>20260319-lifecycle</code>, <code>20260319-nvim-demo</code>, <code>20260319-resize-demo</code>, <code>20260320-renderer-complete</code>, <code>20260321-post-hardening-smoke</code>, <code>20260321-week3-crash-retention</code>, <code>20260321-week3-renderer-complete</code>, <code>20260322-dogfood-alt-screen</code>, <code>20260322-dogfood-color</code>, <code>20260322-dogfood-crash</code>, <code>20260322-dogfood-hello-prompt</code>, <code>20260322-dogfood-resize</code>, <code>20260322-dogfood-scrollback</code>, <code>20260322-dogfood-unicode</code>, <code>20260322-dogfood-week4-features</code>, <code>20260322-global-cli-context</code>, <code>20260322-lazyvim-scenario</code>, <code>20260322-week4-cli-parity</code>, <code>20260322-week4-failure-recovery</code>, <code>20260322-week4-scrollback-review</code>, <code>20260322-week4-unicode-review</code>, <code>20260323-bugfix-resize</code>, <code>20260323-bugfix-scrollback</code>, <code>20260323-week5-platform-closure</code>, <code>20260323-week5-recovery-host</code>, <code>20260323-week5-recovery-renderer</code>, <code>20260323-week5-recovery-replay</code>, <code>20260323-week5-render-cells</code>, <code>20260323-week5-render-cursor</code>, <code>20260323-week5-render-fonts</code>, <code>20260323-week5-render-timing</code>, <code>20260323-week5-review-helper</code>, <code>20260325-week7-b-envelope-locks</code>, <code>week5-config-parity</code>.</li><li><strong>Missing notes (<code>notes.md</code>):</strong> <code>20260321-week3-crash-retention</code>, <code>20260321-week3-renderer-complete</code>, <code>20260322-lazyvim-scenario</code>, <code>week5-config-parity</code>.</li><li><strong>Missing command transcripts (<code>commands.sh</code>):</strong> <code>20260319-lifecycle</code>, <code>20260319-nvim-demo</code>, <code>20260319-resize-demo</code>, <code>20260322-dogfood-crash</code>, <code>20260322-dogfood-hello-prompt</code>, <code>20260322-dogfood-resize</code>, <code>20260322-dogfood-scrollback</code>, <code>20260322-dogfood-unicode</code>, <code>20260322-dogfood-week4-features</code>, <code>20260322-global-cli-context</code>, <code>20260322-lazyvim-scenario</code>, <code>20260322-week4-cli-parity</code>, <code>20260322-week4-failure-recovery</code>, <code>20260322-week4-scrollback-review</code>, <code>20260322-week4-unicode-review</code>, <code>20260323-bugfix-resize</code>, <code>20260323-bugfix-scrollback</code>, <code>20260323-week5-platform-closure</code>.</li><li><strong>Missing manifests (<code>manifest.json</code>):</strong> <code>20260320-renderer-complete</code>, <code>20260321-post-hardening-smoke</code>, <code>20260322-dogfood-crash</code>, <code>20260322-dogfood-scrollback</code>, <code>20260322-dogfood-unicode</code>, <code>20260322-dogfood-week4-features</code>, <code>20260322-global-cli-context</code>, <code>20260322-lazyvim-scenario</code>, <code>20260322-week4-cli-parity</code>, <code>20260322-week4-failure-recovery</code>, <code>20260322-week4-scrollback-review</code>, <code>20260322-week4-unicode-review</code>, <code>20260323-bugfix-resize</code>, <code>20260323-bugfix-scrollback</code>, <code>20260323-week5-platform-closure</code>, <code>week5-config-parity</code>.</li><li><strong>Missing command ledgers (<code>command-status.tsv</code>):</strong> <code>20260319-lifecycle</code>, <code>20260319-nvim-demo</code>, <code>20260319-resize-demo</code>, <code>20260320-renderer-complete</code>, <code>20260321-post-hardening-smoke</code>, <code>20260321-week3-crash-retention</code>, <code>20260321-week3-renderer-complete</code>, <code>20260322-dogfood-crash</code>, <code>20260322-dogfood-hello-prompt</code>, <code>20260322-dogfood-resize</code>, <code>20260322-dogfood-scrollback</code>, <code>20260322-dogfood-unicode</code>, <code>20260322-dogfood-week4-features</code>, <code>20260322-global-cli-context</code>, <code>20260322-lazyvim-scenario</code>, <code>20260322-week4-cli-parity</code>, <code>20260322-week4-failure-recovery</code>, <code>20260322-week4-scrollback-review</code>, <code>20260322-week4-unicode-review</code>, <code>20260323-bugfix-resize</code>, <code>20260323-bugfix-scrollback</code>, <code>20260323-week5-platform-closure</code>, <code>week5-config-parity</code>.</li></ul>
-<h2>Evidence pointers</h2>
-<ul><li><strong>Bundle discovery:</strong> <code>logs/01-bundle-list.txt</code></li><li><strong>Per-bundle file presence and inventory counts:</strong> <code>logs/02-file-counts.tsv</code></li><li><strong>Reviewer artifact counts and screenshot byte totals:</strong> <code>logs/03-artifact-counts.tsv</code></li><li><strong>Machine-readable rollup for totals, review coverage, and gap lists:</strong> <code>logs/04-summary.json</code></li><li><strong>Generated review page for this bundle:</strong> <code>logs/05-review-bundle.txt</code></li></ul>
-  </article>
-</section>
+        <h2>Notes</h2>
+
+        <article class="card note-card">
+          <h3><a href="notes.md">notes.md</a></h3>
+          <h1>
+            2026-03-25 dogfood — Week 7 bundle C proof completeness inventory
+          </h1>
+          <h2>Bundle metadata</h2>
+          <ul>
+            <li>
+              <strong>Bundle path:</strong>
+              <code>dogfood/20260325-week7-c-proof-completeness/</code>
+            </li>
+            <li>
+              <strong>Inventory date:</strong>
+              <code>2026-03-25T19:56:37.094Z</code>
+            </li>
+            <li><strong>Total bundle count:</strong> 40</li>
+            <li><strong>Review pages present:</strong> 6</li>
+          </ul>
+          <h2>Scenario summary</h2>
+          <p>
+            This inventory proves that the dogfood proof-bundle ecosystem can be
+            reviewed from the live filesystem: every immediate subdirectory
+            under <code>dogfood/</code> is enumerated, core reviewer-facing
+            files are checked for presence, and reviewer artifacts (screenshots,
+            recordings, videos, snapshots) are counted with totals derived
+            directly from the current bundle directories.
+          </p>
+          <h2>Inventory table</h2>
+          <p>
+            | Bundle | commands.sh | notes.md | index.html | log count |
+            screenshot count | videos/recordings | |
+            ----------------------------------- | ----------- | -------- |
+            ---------- | --------: | ---------------: | ----------------- | |
+            20260319-lifecycle | no | yes | no | 0 | 6 | 0/0 | |
+            20260319-nvim-demo | no | yes | no | 0 | 6 | 0/0 | |
+            20260319-resize-demo | no | yes | no | 0 | 0 | 0/0 | |
+            20260320-renderer-complete | yes | yes | no | 0 | 0 | 0/0 | |
+            20260321-post-hardening-smoke | yes | yes | no | 0 | 0 | 0/0 | |
+            20260321-week3-crash-retention | yes | no | no | 0 | 0 | 0/0 | |
+            20260321-week3-renderer-complete | yes | no | no | 0 | 0 | 0/0 | |
+            20260322-dogfood-alt-screen | yes | yes | no | 32 | 3 | 1/1 | |
+            20260322-dogfood-color | yes | yes | no | 18 | 2 | 0/1 | |
+            20260322-dogfood-crash | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-dogfood-hello-prompt | no | yes | no | 0 | 1 | 1/1 | |
+            20260322-dogfood-resize | no | yes | no | 0 | 1 | 1/1 | |
+            20260322-dogfood-scrollback | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-dogfood-unicode | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-dogfood-week4-features | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-global-cli-context | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-lazyvim-scenario | no | no | no | 0 | 0 | 0/0 | |
+            20260322-week4-cli-parity | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-week4-failure-recovery | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-week4-scrollback-review | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-week4-unicode-review | no | yes | no | 0 | 0 | 0/0 | |
+            20260323-bugfix-resize | no | yes | no | 0 | 3 | 0/0 | |
+            20260323-bugfix-scrollback | no | yes | no | 0 | 0 | 0/0 | |
+            20260323-week5-platform-closure | no | yes | no | 0 | 0 | 0/0 | |
+            20260323-week5-recovery-host | yes | yes | no | 8 | 0 | 0/0 | |
+            20260323-week5-recovery-renderer | yes | yes | no | 19 | 2 | 0/0 | |
+            20260323-week5-recovery-replay | yes | yes | no | 11 | 2 | 0/1 | |
+            20260323-week5-render-cells | yes | yes | no | 4 | 0 | 0/0 | |
+            20260323-week5-render-cursor | yes | yes | no | 6 | 3 | 0/0 | |
+            20260323-week5-render-fonts | yes | yes | no | 4 | 2 | 0/0 | |
+            20260323-week5-render-timing | yes | yes | no | 6 | 0 | 0/3 | |
+            20260323-week5-review-helper | yes | yes | no | 9 | 2 | 0/0 | |
+            20260325-week6-a-cli-contract | yes | yes | yes | 14 | 0 | 0/0 | |
+            20260325-week6-b-artifact-health | yes | yes | yes | 13 | 1 | 0/0 |
+            | 20260325-week6-c-failure-taxonomy | yes | yes | yes | 23 | 0 | 0/0
+            | | 20260325-week6-d-review-surface | yes | yes | yes | 26 | 1 | 0/0
+            | | 20260325-week7-a-cli-parity | yes | yes | yes | 28 | 1 | 1/1 | |
+            20260325-week7-b-envelope-locks | yes | yes | no | 6 | 0 | 0/0 | |
+            20260325-week7-c-proof-completeness | yes | yes | yes | 7 | 0 | 0/0
+            | | week5-config-parity | yes | no | no | 0 | 0 | 0/0 |
+          </p>
+          <h2>Week 7 completeness</h2>
+          <p>
+            The minimum completeness bar for a review-ready Week 7 proof bundle
+            is: <code>commands.sh</code>, <code>notes.md</code>,
+            <code>manifest.json</code>, <code>command-status.tsv</code>,
+            <code>index.html</code>.
+          </p>
+          <ul>
+            <li>
+              <strong>20260325-week7-a-cli-parity:</strong> Meets the minimum
+              completeness bar (<code>commands.sh</code>, <code>notes.md</code>,
+              <code>manifest.json</code>, <code>command-status.tsv</code>,
+              <code>index.html</code>). Missing today: none.
+            </li>
+            <li>
+              <strong>20260325-week7-b-envelope-locks:</strong> Does not yet
+              meet the minimum completeness bar (<code>commands.sh</code>,
+              <code>notes.md</code>, <code>manifest.json</code>,
+              <code>command-status.tsv</code>, <code>index.html</code>). Missing
+              today: <code>index.html</code>.
+            </li>
+            <li>
+              <strong>20260325-week7-c-proof-completeness:</strong> Meets the
+              minimum completeness bar (<code>commands.sh</code>,
+              <code>notes.md</code>, <code>manifest.json</code>,
+              <code>command-status.tsv</code>, <code>index.html</code>). Missing
+              today: none.
+            </li>
+            <li>
+              <strong>20260325-week7-d-review-surface-audit:</strong> Not
+              present in the live inventory captured on
+              2026-03-25T19:56:37.094Z. The lane is still in-flight outside this
+              task, so there is no filesystem proof bundle to assess yet.
+            </li>
+          </ul>
+          <h2>Review surface coverage</h2>
+          <p>Bundles with a generated review page today (6/40):</p>
+          <ul>
+            <li><code>20260325-week6-a-cli-contract</code></li>
+            <li><code>20260325-week6-b-artifact-health</code></li>
+            <li><code>20260325-week6-c-failure-taxonomy</code></li>
+            <li><code>20260325-week6-d-review-surface</code></li>
+            <li><code>20260325-week7-a-cli-parity</code></li>
+            <li><code>20260325-week7-c-proof-completeness</code></li>
+          </ul>
+          <h2>Gaps found</h2>
+          <ul>
+            <li>
+              <strong>Missing review pages (<code>index.html</code>):</strong>
+              <code>20260319-lifecycle</code>, <code>20260319-nvim-demo</code>,
+              <code>20260319-resize-demo</code>,
+              <code>20260320-renderer-complete</code>,
+              <code>20260321-post-hardening-smoke</code>,
+              <code>20260321-week3-crash-retention</code>,
+              <code>20260321-week3-renderer-complete</code>,
+              <code>20260322-dogfood-alt-screen</code>,
+              <code>20260322-dogfood-color</code>,
+              <code>20260322-dogfood-crash</code>,
+              <code>20260322-dogfood-hello-prompt</code>,
+              <code>20260322-dogfood-resize</code>,
+              <code>20260322-dogfood-scrollback</code>,
+              <code>20260322-dogfood-unicode</code>,
+              <code>20260322-dogfood-week4-features</code>,
+              <code>20260322-global-cli-context</code>,
+              <code>20260322-lazyvim-scenario</code>,
+              <code>20260322-week4-cli-parity</code>,
+              <code>20260322-week4-failure-recovery</code>,
+              <code>20260322-week4-scrollback-review</code>,
+              <code>20260322-week4-unicode-review</code>,
+              <code>20260323-bugfix-resize</code>,
+              <code>20260323-bugfix-scrollback</code>,
+              <code>20260323-week5-platform-closure</code>,
+              <code>20260323-week5-recovery-host</code>,
+              <code>20260323-week5-recovery-renderer</code>,
+              <code>20260323-week5-recovery-replay</code>,
+              <code>20260323-week5-render-cells</code>,
+              <code>20260323-week5-render-cursor</code>,
+              <code>20260323-week5-render-fonts</code>,
+              <code>20260323-week5-render-timing</code>,
+              <code>20260323-week5-review-helper</code>,
+              <code>20260325-week7-b-envelope-locks</code>,
+              <code>week5-config-parity</code>.
+            </li>
+            <li>
+              <strong>Missing notes (<code>notes.md</code>):</strong>
+              <code>20260321-week3-crash-retention</code>,
+              <code>20260321-week3-renderer-complete</code>,
+              <code>20260322-lazyvim-scenario</code>,
+              <code>week5-config-parity</code>.
+            </li>
+            <li>
+              <strong
+                >Missing command transcripts (<code>commands.sh</code>):</strong
+              >
+              <code>20260319-lifecycle</code>, <code>20260319-nvim-demo</code>,
+              <code>20260319-resize-demo</code>,
+              <code>20260322-dogfood-crash</code>,
+              <code>20260322-dogfood-hello-prompt</code>,
+              <code>20260322-dogfood-resize</code>,
+              <code>20260322-dogfood-scrollback</code>,
+              <code>20260322-dogfood-unicode</code>,
+              <code>20260322-dogfood-week4-features</code>,
+              <code>20260322-global-cli-context</code>,
+              <code>20260322-lazyvim-scenario</code>,
+              <code>20260322-week4-cli-parity</code>,
+              <code>20260322-week4-failure-recovery</code>,
+              <code>20260322-week4-scrollback-review</code>,
+              <code>20260322-week4-unicode-review</code>,
+              <code>20260323-bugfix-resize</code>,
+              <code>20260323-bugfix-scrollback</code>,
+              <code>20260323-week5-platform-closure</code>.
+            </li>
+            <li>
+              <strong>Missing manifests (<code>manifest.json</code>):</strong>
+              <code>20260320-renderer-complete</code>,
+              <code>20260321-post-hardening-smoke</code>,
+              <code>20260322-dogfood-crash</code>,
+              <code>20260322-dogfood-scrollback</code>,
+              <code>20260322-dogfood-unicode</code>,
+              <code>20260322-dogfood-week4-features</code>,
+              <code>20260322-global-cli-context</code>,
+              <code>20260322-lazyvim-scenario</code>,
+              <code>20260322-week4-cli-parity</code>,
+              <code>20260322-week4-failure-recovery</code>,
+              <code>20260322-week4-scrollback-review</code>,
+              <code>20260322-week4-unicode-review</code>,
+              <code>20260323-bugfix-resize</code>,
+              <code>20260323-bugfix-scrollback</code>,
+              <code>20260323-week5-platform-closure</code>,
+              <code>week5-config-parity</code>.
+            </li>
+            <li>
+              <strong
+                >Missing command ledgers
+                (<code>command-status.tsv</code>):</strong
+              >
+              <code>20260319-lifecycle</code>, <code>20260319-nvim-demo</code>,
+              <code>20260319-resize-demo</code>,
+              <code>20260320-renderer-complete</code>,
+              <code>20260321-post-hardening-smoke</code>,
+              <code>20260321-week3-crash-retention</code>,
+              <code>20260321-week3-renderer-complete</code>,
+              <code>20260322-dogfood-crash</code>,
+              <code>20260322-dogfood-hello-prompt</code>,
+              <code>20260322-dogfood-resize</code>,
+              <code>20260322-dogfood-scrollback</code>,
+              <code>20260322-dogfood-unicode</code>,
+              <code>20260322-dogfood-week4-features</code>,
+              <code>20260322-global-cli-context</code>,
+              <code>20260322-lazyvim-scenario</code>,
+              <code>20260322-week4-cli-parity</code>,
+              <code>20260322-week4-failure-recovery</code>,
+              <code>20260322-week4-scrollback-review</code>,
+              <code>20260322-week4-unicode-review</code>,
+              <code>20260323-bugfix-resize</code>,
+              <code>20260323-bugfix-scrollback</code>,
+              <code>20260323-week5-platform-closure</code>,
+              <code>week5-config-parity</code>.
+            </li>
+          </ul>
+          <h2>Evidence pointers</h2>
+          <ul>
+            <li>
+              <strong>Bundle discovery:</strong>
+              <code>logs/01-bundle-list.txt</code>
+            </li>
+            <li>
+              <strong>Per-bundle file presence and inventory counts:</strong>
+              <code>logs/02-file-counts.tsv</code>
+            </li>
+            <li>
+              <strong
+                >Reviewer artifact counts and screenshot byte totals:</strong
+              >
+              <code>logs/03-artifact-counts.tsv</code>
+            </li>
+            <li>
+              <strong
+                >Machine-readable rollup for totals, review coverage, and gap
+                lists:</strong
+              >
+              <code>logs/04-summary.json</code>
+            </li>
+            <li>
+              <strong>Generated review page for this bundle:</strong>
+              <code>logs/05-review-bundle.txt</code>
+            </li>
+          </ul>
+        </article>
+      </section>
       <section>
-  <h2>Commands</h2>
-  <div class="card">
-    <h3><a href="commands.sh">commands.sh</a></h3>
-    <pre><code>#!/usr/bin/env bash
+        <h2>Commands</h2>
+        <div class="card">
+          <h3><a href="commands.sh">commands.sh</a></h3>
+          <pre><code>#!/usr/bin/env bash
 set -euo pipefail
 export PATH=&quot;$HOME/.local/bin:$PATH&quot;
 BUNDLE_DIR=&quot;dogfood/20260325-week7-c-proof-completeness&quot;
@@ -1009,94 +1307,232 @@ npx tsx src/tools/review-bundle.ts &quot;$BUNDLE_DIR&quot; &gt; &quot;$BUNDLE_DI
 npx prettier --write &quot;$BUNDLE_DIR/&quot; &gt; &quot;$BUNDLE_DIR/logs/06-prettier-write.txt&quot;
 npx prettier --check &quot;$BUNDLE_DIR/&quot; &gt; &quot;$BUNDLE_DIR/logs/07-prettier-check.txt&quot;
 </code></pre>
-  </div>
-</section>
+        </div>
+      </section>
       <section>
-  <h2>Command status</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>step</th><th>command</th><th>exit_code</th><th>status</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>00</td><td>bootstrap bundle files</td><td>0</td><td>ok</td></tr><tr><td>01</td><td>find dogfood -maxdepth 1 -mindepth 1 -type d | sort &gt; logs/01-bundle-list.txt</td><td>0</td><td>ok</td></tr><tr><td>02</td><td>node --input-type=module # initial inventory write</td><td>0</td><td>ok</td></tr><tr><td>03</td><td>node --input-type=module # initial notes.md, manifest.json, commands.sh write</td><td>0</td><td>ok</td></tr><tr><td>04</td><td>npx tsx src/tools/review-bundle.ts dogfood/20260325-week7-c-proof-completeness</td><td>0</td><td>ok</td></tr><tr><td>05</td><td>npx prettier --write dogfood/20260325-week7-c-proof-completeness/</td><td>0</td><td>ok</td></tr><tr><td>06</td><td>npx prettier --check dogfood/20260325-week7-c-proof-completeness/</td><td>0</td><td>ok</td></tr><tr><td>07</td><td>find dogfood -maxdepth 1 -mindepth 1 -type d | sort &gt; logs/01-bundle-list.txt</td><td>0</td><td>ok</td></tr><tr><td>08</td><td>node --input-type=module # refreshed inventory write after final logs existed</td><td>0</td><td>ok</td></tr><tr><td>09</td><td>node --input-type=module # refreshed notes.md, manifest.json, commands.sh write</td><td>0</td><td>ok</td></tr><tr><td>10</td><td>npx tsx src/tools/review-bundle.ts dogfood/20260325-week7-c-proof-completeness</td><td>0</td><td>ok</td></tr><tr><td>11</td><td>npx prettier --write dogfood/20260325-week7-c-proof-completeness/</td><td>0</td><td>ok</td></tr><tr><td>12</td><td>npx prettier --check dogfood/20260325-week7-c-proof-completeness/</td><td>0</td><td>ok</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <h2>Command status</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>step</th>
+                <th>command</th>
+                <th>exit_code</th>
+                <th>status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>00</td>
+                <td>bootstrap bundle files</td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>01</td>
+                <td>
+                  find dogfood -maxdepth 1 -mindepth 1 -type d | sort &gt;
+                  logs/01-bundle-list.txt
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>02</td>
+                <td>node --input-type=module # initial inventory write</td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>03</td>
+                <td>
+                  node --input-type=module # initial notes.md, manifest.json,
+                  commands.sh write
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>04</td>
+                <td>
+                  npx tsx src/tools/review-bundle.ts
+                  dogfood/20260325-week7-c-proof-completeness
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>05</td>
+                <td>
+                  npx prettier --write
+                  dogfood/20260325-week7-c-proof-completeness/
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>06</td>
+                <td>
+                  npx prettier --check
+                  dogfood/20260325-week7-c-proof-completeness/
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>07</td>
+                <td>
+                  find dogfood -maxdepth 1 -mindepth 1 -type d | sort &gt;
+                  logs/01-bundle-list.txt
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>08</td>
+                <td>
+                  node --input-type=module # refreshed inventory write after
+                  final logs existed
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>09</td>
+                <td>
+                  node --input-type=module # refreshed notes.md, manifest.json,
+                  commands.sh write
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>10</td>
+                <td>
+                  npx tsx src/tools/review-bundle.ts
+                  dogfood/20260325-week7-c-proof-completeness
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>11</td>
+                <td>
+                  npx prettier --write
+                  dogfood/20260325-week7-c-proof-completeness/
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>12</td>
+                <td>
+                  npx prettier --check
+                  dogfood/20260325-week7-c-proof-completeness/
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
       <section>
-  <h2>Artifact inventory</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>Path</th><th>Type</th><th>Size</th></tr>
-      </thead>
-      <tbody>
-        
-        <tr>
-          <td><a href="command-status.tsv">command-status.tsv</a></td>
-          <td>support</td>
-          <td>1022 B</td>
-        </tr>
-        <tr>
-          <td><a href="commands.sh">commands.sh</a></td>
-          <td>script</td>
-          <td>848 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/01-bundle-list.txt">logs/01-bundle-list.txt</a></td>
-          <td>support</td>
-          <td>1.4 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/02-file-counts.tsv">logs/02-file-counts.tsv</a></td>
-          <td>support</td>
-          <td>2.4 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/03-artifact-counts.tsv">logs/03-artifact-counts.tsv</a></td>
-          <td>support</td>
-          <td>1.6 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/04-summary.json">logs/04-summary.json</a></td>
-          <td>support</td>
-          <td>22.6 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/05-review-bundle.txt">logs/05-review-bundle.txt</a></td>
-          <td>support</td>
-          <td>113 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/06-prettier-write.txt">logs/06-prettier-write.txt</a></td>
-          <td>support</td>
-          <td>275 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/07-prettier-check.txt">logs/07-prettier-check.txt</a></td>
-          <td>support</td>
-          <td>66 B</td>
-        </tr>
-        <tr>
-          <td><a href="manifest.json">manifest.json</a></td>
-          <td>support</td>
-          <td>769 B</td>
-        </tr>
-        <tr>
-          <td><a href="notes.md">notes.md</a></td>
-          <td>notes</td>
-          <td>10.6 KB</td>
-        </tr>
-        <tr>
-          <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
-          <td>other</td>
-          <td>0 B</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <h2>Artifact inventory</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Type</th>
+                <th>Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="command-status.tsv">command-status.tsv</a></td>
+                <td>support</td>
+                <td>1022 B</td>
+              </tr>
+              <tr>
+                <td><a href="commands.sh">commands.sh</a></td>
+                <td>script</td>
+                <td>848 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/01-bundle-list.txt">logs/01-bundle-list.txt</a>
+                </td>
+                <td>support</td>
+                <td>1.4 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/02-file-counts.tsv">logs/02-file-counts.tsv</a>
+                </td>
+                <td>support</td>
+                <td>2.4 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/03-artifact-counts.tsv"
+                    >logs/03-artifact-counts.tsv</a
+                  >
+                </td>
+                <td>support</td>
+                <td>1.6 KB</td>
+              </tr>
+              <tr>
+                <td><a href="logs/04-summary.json">logs/04-summary.json</a></td>
+                <td>support</td>
+                <td>22.6 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/05-review-bundle.txt"
+                    >logs/05-review-bundle.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>113 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/06-prettier-write.txt"
+                    >logs/06-prettier-write.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>275 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/07-prettier-check.txt"
+                    >logs/07-prettier-check.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>66 B</td>
+              </tr>
+              <tr>
+                <td><a href="manifest.json">manifest.json</a></td>
+                <td>support</td>
+                <td>769 B</td>
+              </tr>
+              <tr>
+                <td><a href="notes.md">notes.md</a></td>
+                <td>notes</td>
+                <td>10.6 KB</td>
+              </tr>
+              <tr>
+                <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
   </body>
 </html>

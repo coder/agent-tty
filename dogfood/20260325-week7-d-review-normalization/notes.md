@@ -42,3 +42,7 @@ This bundle proves that the review-bundle helper works in both single-bundle mod
 - The requested `npx tsx ...` entrypoint hit an environment-specific `mise` trust check in this child worktree, so the captured proof used the equivalent local binary `./node_modules/.bin/tsx` after installing dependencies.
 - The initial self-review pass necessarily ran before every Week 7-D artifact existed, so its stderr sidecar documents expected missing-artifact warnings. A later refresh updates the final `index.html` after the bundle contents are in place.
 - Batch proof intentionally used only a representative mirror subset (two Week 6 bundles plus the two Week 7 bundles) because the goal was to prove normalization and Week 6 safety, not to rewrite the entire real `dogfood/` tree.
+
+## Browser Verification (Week 7 remediation)
+
+Review page verified via `agent-browser` — see `screenshots/03-review-page-verified.png`.

@@ -6,7 +6,7 @@
 - **Test file:** `test/unit/commands/golden-envelopes.test.ts`
 - **CLI entrypoint:** `src/cli/main.ts`
 - **Captured logs:** `logs/01-vitest-verbose.txt`, `logs/02-vitest-json.json`, and `logs/03-test-source.txt`
-- **Screenshots directory:** `screenshots/` is present for parity with other proof bundles and is intentionally empty for this non-visual capture.
+- **Screenshots directory:** `screenshots/` now includes `01-review-page-verified.png` from the Week 7 remediation browser-verification pass.
 
 ## Scenario summary
 
@@ -68,4 +68,8 @@ So the suite currently locks 2 of the 11 listed public success surfaces at all (
 
 - The golden suite currently locks only `inspect`, `version`, and shared error-envelope examples. It does **not** lock the entire ratified public JSON surface list.
 - The bundle is intentionally descriptive rather than expansive: it documents the current suite exactly as-is and does not add or broaden any golden coverage.
-- No screenshots were required for this proof, so `screenshots/` is intentionally empty apart from a placeholder file to keep the directory in git.
+- The original proof did not require screenshots, but Week 7 remediation added `screenshots/01-review-page-verified.png` so the bundle now includes reviewer-visible browser evidence.
+
+## Browser Verification (Week 7 remediation)
+
+Review page verified via `agent-browser` — see `screenshots/01-review-page-verified.png`.

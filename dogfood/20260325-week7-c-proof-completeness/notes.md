@@ -91,3 +91,7 @@ Bundles with a generated review page today (6/40):
 - **Reviewer artifact counts and screenshot byte totals:** `logs/03-artifact-counts.tsv`
 - **Machine-readable rollup for totals, review coverage, and gap lists:** `logs/04-summary.json`
 - **Generated review page for this bundle:** `logs/05-review-bundle.txt`
+
+## Browser Verification (Week 7 remediation)
+
+Review page verified via `agent-browser` — see `screenshots/01-review-page-verified.png`.

@@ -35,3 +35,11 @@ This bundle proves the ratified Week 7 CLI parity surface against a real isolate
 - The task brief sketched `--out` flags for `snapshot` and `screenshot`, but the current ratified CLI persists those artifacts inside the isolated session directory instead. This proof captured the JSON envelopes from `snapshot --json --format text` and `screenshot --json`, then copied the resulting reviewer artifacts into `snapshots/` and `screenshots/`.
 - The live prompt buffer in `snapshots/snapshot-01.txt` shows bracketed-paste control sequences around the pasted text. That is expected here because the proof captured the session before pressing Enter after `paste`; the `hello-prompt` fixture only normalizes pasted content once it receives a completed input line.
 - `logs/08-screenshot.json` points at a PNG path inside `/tmp/tmp.avp2NwNn0m`, which was cleaned up at the end of the run. The durable reviewer copy is `screenshots/screenshot-01.png`.
+
+## Browser Verification (Week 7 remediation)
+
+Review page verified via `agent-browser` — see `screenshots/02-review-page-verified.png`.
+
+## CLI Dogfooding Visual Evidence (Week 7 remediation)
+
+A fresh isolated CLI session was dogfooded on 2026-03-25 and captured as visual proof. See `screenshots/03-cli-session-screenshot-artifact.png` for the CLI-produced terminal screenshot artifact, `screenshots/04-cli-json-evidence.png` for the end-to-end JSON command evidence, and `screenshots/05-cli-result-shapes-evidence.png` for the focused `send-keys` / `destroy` result-shape proof.
