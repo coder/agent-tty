@@ -1,0 +1,4 @@
+dogfood/20260325-week7-c-proof-completeness/index.html 112ms
+dogfood/20260325-week7-c-proof-completeness/logs/04-summary.json 43ms (unchanged)
+dogfood/20260325-week7-c-proof-completeness/manifest.json 1ms (unchanged)
+dogfood/20260325-week7-c-proof-completeness/notes.md 48ms

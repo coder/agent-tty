@@ -1,0 +1,26 @@
+{
+  "bundle": "20260325-week7-c-proof-completeness",
+  "title": "Week 7 — Proof Completeness Inventory",
+  "description": "Inventories all dogfood proof bundles and their artifacts to verify ecosystem completeness",
+  "createdAt": "2026-03-25T19:56:37.094Z",
+  "week": 7,
+  "lane": "C",
+  "artifacts": [
+    {
+      "path": "logs/01-bundle-list.txt",
+      "description": "Sorted list of all dogfood bundle directories"
+    },
+    {
+      "path": "logs/02-file-counts.tsv",
+      "description": "Per-bundle file count inventory"
+    },
+    {
+      "path": "logs/03-artifact-counts.tsv",
+      "description": "Per-bundle reviewer artifact counts"
+    },
+    {
+      "path": "logs/04-summary.json",
+      "description": "Machine-readable inventory summary"
+    }
+  ]
+}
