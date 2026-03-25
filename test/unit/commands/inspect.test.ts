@@ -239,9 +239,7 @@ describe('inspect command', () => {
       }),
     );
     expect(emitted.result.artifacts).toBeUndefined();
-    expect(emitted.lines).not.toContain(
-      expect.stringMatching(/^Artifacts:/),
-    );
+    expect(emitted.lines).not.toContain(expect.stringMatching(/^Artifacts:/));
   });
 
   it('rejects malformed inspect RPC responses', async () => {
