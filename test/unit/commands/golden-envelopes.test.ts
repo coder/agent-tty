@@ -8,8 +8,10 @@ import {
 } from '../../../src/protocol/envelope.js';
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 import {
+  CapabilityEntrySchema,
   DestroyResultSchema,
   InspectResultSchema,
+  RecordExportResultSchema,
   ScreenshotResultSchema,
   SendKeysResultSchema,
   SnapshotResultSchema,
@@ -34,6 +36,7 @@ const VersionResultSchema = z
         arch: z.string().min(1),
       })
       .strict(),
+    capabilities: z.array(CapabilityEntrySchema).optional(),
   })
   .strict();
 
@@ -75,6 +78,47 @@ const SessionSummarySchema = z
 const ListResultSchema = z
   .object({
     sessions: z.array(SessionSummarySchema),
+  })
+  .strict();
+
+
+const DoctorCheckStatusSchema = z.enum(['pass', 'fail', 'skip']);
+
+const DoctorCheckSchema = z
+  .object({
+    name: z.string().min(1),
+    status: DoctorCheckStatusSchema,
+    message: z.string(),
+    durationMs: z.number().nonnegative(),
+  })
+  .strict();
+
+const DoctorResultSchema = z
+  .object({
+    ok: z.boolean(),
+    checks: z
+      .object({
+        environment: z.array(DoctorCheckSchema),
+        renderer: z.array(DoctorCheckSchema),
+      })
+      .strict(),
+    capabilities: z.array(CapabilityEntrySchema),
+  })
+  .strict();
+
+const GcSkippedSessionSchema = z
+  .object({
+    sessionId: NonEmptyStringSchema,
+    reason: z.string(),
+  })
+  .strict();
+
+const GcResultSchema = z
+  .object({
+    removedSessions: z.array(NonEmptyStringSchema),
+    skippedSessions: z.array(GcSkippedSessionSchema),
+    dryRun: z.boolean(),
+    totalBytesFreed: z.number().nonnegative(),
   })
   .strict();
 
@@ -178,6 +222,126 @@ const goldenResultContracts: readonly GoldenResultContractCase[] = [
           term: 'xterm-256color',
         },
       ],
+    },
+  },
+  {
+    name: 'doctor',
+    command: 'doctor',
+    schema: DoctorResultSchema,
+    validResult: {
+      ok: true,
+      checks: {
+        environment: [
+          {
+            name: 'node-runtime',
+            status: 'pass',
+            message: 'ok',
+            durationMs: 1,
+          },
+        ],
+        renderer: [
+          {
+            name: 'playwright_available',
+            status: 'pass',
+            message: 'ok',
+            durationMs: 2,
+          },
+        ],
+      },
+      capabilities: [
+        {
+          name: 'snapshot',
+          status: 'available',
+        },
+      ],
+    },
+    invalidResult: {
+      ok: true,
+      checks: {
+        environment: [
+          {
+            name: 'node-runtime',
+            status: 'pass',
+            message: 'ok',
+            durationMs: -1,
+          },
+        ],
+        renderer: [],
+      },
+      capabilities: [],
+    },
+    extraFieldResult: {
+      ok: true,
+      checks: {
+        environment: [
+          {
+            name: 'node-runtime',
+            status: 'pass',
+            message: 'ok',
+            durationMs: 1,
+            ok: true,
+          },
+        ],
+        renderer: [],
+      },
+      capabilities: [],
+    },
+  },
+  {
+    name: 'gc',
+    command: 'gc',
+    schema: GcResultSchema,
+    validResult: {
+      removedSessions: ['01J0000000TEST000000000000'],
+      skippedSessions: [
+        {
+          sessionId: '01J0000000SKIP000000000000',
+          reason: 'running',
+        },
+      ],
+      dryRun: false,
+      totalBytesFreed: 4096,
+    },
+    invalidResult: {
+      removedSessions: ['01J0000000TEST000000000000'],
+      skippedSessions: [],
+      dryRun: false,
+      totalBytesFreed: -1,
+    },
+    extraFieldResult: {
+      removedSessions: ['01J0000000TEST000000000000'],
+      skippedSessions: [],
+      dryRun: false,
+      totalBytesFreed: 4096,
+      removedCount: 1,
+    },
+  },
+  {
+    name: 'gc (dry-run)',
+    command: 'gc',
+    schema: GcResultSchema,
+    validResult: {
+      removedSessions: [],
+      skippedSessions: [],
+      dryRun: true,
+      totalBytesFreed: 0,
+    },
+    invalidResult: {
+      removedSessions: [],
+      skippedSessions: [
+        {
+          sessionId: '01J0000000SKIP000000000000',
+        },
+      ],
+      dryRun: true,
+      totalBytesFreed: 0,
+    },
+    extraFieldResult: {
+      removedSessions: [],
+      skippedSessions: [],
+      dryRun: true,
+      totalBytesFreed: 0,
+      wouldRemoveSessions: [],
     },
   },
   {
@@ -306,6 +470,80 @@ const goldenResultContracts: readonly GoldenResultContractCase[] = [
     },
   },
   {
+    name: 'record export (asciicast)',
+    command: 'record export',
+    schema: RecordExportResultSchema,
+    validResult: {
+      sessionId: '01J0000000TEST000000000000',
+      format: 'asciicast',
+      artifactPath: '/tmp/test.cast',
+      bytes: 1024,
+      sha256: 'abc123',
+      capturedAtSeq: 42,
+      durationMs: 5000,
+      metadata: {
+        width: 80,
+        height: 24,
+      },
+    },
+    invalidResult: {
+      sessionId: '01J0000000TEST000000000000',
+      format: 'asciicast',
+      artifactPath: '/tmp/test.cast',
+      bytes: 0,
+      sha256: 'abc123',
+      capturedAtSeq: 42,
+      metadata: {},
+    },
+    extraFieldResult: {
+      sessionId: '01J0000000TEST000000000000',
+      format: 'asciicast',
+      artifactPath: '/tmp/test.cast',
+      bytes: 1024,
+      sha256: 'abc123',
+      capturedAtSeq: 42,
+      metadata: {},
+      exportedBy: 'cli',
+    },
+  },
+  {
+    name: 'record export (webm)',
+    command: 'record export',
+    schema: RecordExportResultSchema,
+    validResult: {
+      sessionId: '01J0000000TEST000000000000',
+      format: 'webm',
+      artifactPath: '/tmp/test.webm',
+      bytes: 2048,
+      sha256: 'def456',
+      capturedAtSeq: 42,
+      metadata: {
+        width: 80,
+        height: 24,
+        profileName: 'default',
+      },
+    },
+    invalidResult: {
+      sessionId: '01J0000000TEST000000000000',
+      format: 'webm',
+      artifactPath: '/tmp/test.webm',
+      bytes: 2048,
+      sha256: 'def456',
+      capturedAtSeq: -1,
+      metadata: {},
+    },
+    extraFieldResult: {
+      sessionId: '01J0000000TEST000000000000',
+      format: 'webm',
+      artifactPath: '/tmp/test.webm',
+      bytes: 2048,
+      sha256: 'def456',
+      capturedAtSeq: 42,
+      metadata: {},
+      profile: 'default',
+    },
+  },
+  {
     name: 'destroy',
     command: 'destroy',
     schema: DestroyResultSchema,
@@ -373,7 +611,7 @@ describe('JSON envelope contracts', () => {
     vi.useRealTimers();
   });
 
-  it('locks the inspect success envelope shape', () => {
+  it('locks the inspect success envelope shape with live renderer runtime', () => {
     const result = InspectResultSchema.parse({
       session: createSessionRecord(),
       eventCount: 2,
@@ -389,10 +627,43 @@ describe('JSON envelope contracts', () => {
         missingCount: 0,
         health: 'healthy',
       },
-      usedOfflineReplay: true,
+      usedOfflineReplay: false,
+      rendererRuntime: {
+        backend: 'ghostty-web',
+        mode: 'live-host',
+        status: 'healthy',
+      },
     });
 
     expectLockedSuccessEnvelope('inspect', result);
+    expect(InspectResultSchema.safeParse(result).success).toBe(true);
+  });
+
+  it('accepts inspect result with offline renderer runtime', () => {
+    const result = {
+      session: createSessionRecord(),
+      eventCount: 2,
+      uptime: 1_000,
+      lastEventSeq: 1,
+      terminationCategory: 'clean-exit',
+      artifacts: {
+        total: 2,
+        byKind: {
+          screenshot: 1,
+          snapshot: 1,
+        },
+        missingCount: 0,
+        health: 'healthy',
+      },
+      usedOfflineReplay: true,
+      rendererRuntime: {
+        backend: 'ghostty-web',
+        mode: 'offline-replay',
+        status: 'fallback',
+        reason: 'host-unreachable',
+      },
+    };
+
     expect(InspectResultSchema.safeParse(result).success).toBe(true);
   });
 
@@ -400,6 +671,25 @@ describe('JSON envelope contracts', () => {
     const result = await buildVersionResult();
 
     expectLockedSuccessEnvelope('version', result);
+    expect(VersionResultSchema.safeParse(result).success).toBe(true);
+  });
+
+  it('accepts version result with capabilities', async () => {
+    const result = {
+      ...(await buildVersionResult()),
+      capabilities: [
+        {
+          name: 'snapshot',
+          status: 'available',
+        },
+        {
+          name: 'screenshot',
+          status: 'unavailable',
+          reason: 'playwright not installed',
+        },
+      ],
+    };
+
     expect(VersionResultSchema.safeParse(result).success).toBe(true);
   });
 
