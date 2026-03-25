@@ -34,6 +34,25 @@ As work lands, this file should be updated in place the same way the earlier wee
 - add a short status note near the top when a workstream materially lands,
 - and keep proof-bundle paths current as evidence is generated.
 
+## Completion — 2026-03-25
+
+Week 8 is complete at `fe06bb6`. All Week 8 acceptance criteria in this plan are now met.
+
+Week 8 proof evidence is tracked at these bundle paths:
+
+- `dogfood/20260325-week8-capability-inventory/`
+- `dogfood/20260325-week8-contract-locks/`
+- `dogfood/20260325-week8-bundle-validation/`
+- `dogfood/20260325-week8-inspect-runtime/`
+
+Validation for the completed Week 8 surface includes:
+
+- golden-envelope coverage for the ratified JSON/reporting surfaces,
+- `npm run validate-bundle -- <bundle-dir>` for the accepted proof-bundle minimums,
+- and `npm run review-bundle -- <bundle-dir>` for the generated reviewer pages.
+
+The remaining post-Week-8 roadmap is now clearly future-scope feature work — native backends, mouse input, remote/network sessions, MCP wrapping, and broader data-model redesigns — rather than missing runtime introspection or proof-surface basics.
+
 ## Week 8 goal
 
 Make the runtime self-describing and the review bar enforceable so the remaining post-Week-8 delta is clearly new feature families — native renderers, mouse input, remote/MCP transport, and larger data-model redesigns — rather than missing capability introspection or proof-discipline basics.
@@ -50,12 +69,12 @@ That means Week 8 should focus on:
 
 Week 8 is done only when every required checkbox below is complete.
 
-- [ ] `version --json` reports runtime-discovered renderer capability and availability data, not only a static backend list.
-- [ ] `inspect --json` exposes a stable renderer/runtime summary that distinguishes live rendering, offline replay fallback, and renderer unavailability/recovery.
-- [ ] Golden-envelope or equivalent contract locks exist for `doctor`, `gc`, and `record export`, plus the new Week 8 capability/introspection fields.
-- [ ] A bundle validator/checker or equivalent repo-enforced rule exists for the accepted proof-bundle minimum.
-- [ ] The required Week 8 proof bundles exist with JSON outputs, screenshots, generated review pages, notes, and recordings/videos where relevant.
-- [ ] The remaining post-Week-8 gap is clearly new feature families (native backends, mouse input, remote/network sessions, MCP wrapper, broader data-model redesigns) rather than missing runtime introspection or proof-surface basics.
+- [x] `version --json` reports runtime-discovered renderer capability and availability data, not only a static backend list.
+- [x] `inspect --json` exposes a stable renderer/runtime summary that distinguishes live rendering, offline replay fallback, and renderer unavailability/recovery.
+- [x] Golden-envelope or equivalent contract locks exist for `doctor`, `gc`, and `record export`, plus the new Week 8 capability/introspection fields.
+- [x] A bundle validator/checker or equivalent repo-enforced rule exists for the accepted proof-bundle minimum.
+- [x] The required Week 8 proof bundles exist with JSON outputs, screenshots, generated review pages, notes, and recordings/videos where relevant.
+- [x] The remaining post-Week-8 gap is clearly new feature families (native backends, mouse input, remote/network sessions, MCP wrapper, broader data-model redesigns) rather than missing runtime introspection or proof-surface basics.
 
 ## Scope boundaries
 
@@ -196,22 +215,27 @@ When a proof bundle is generated, also run:
 
 ```sh
 npm run review-bundle -- <bundle-dir>
+npm run validate-bundle -- <bundle-dir>
 ```
 
-If Week 8 adds a bundle validator/checker, run that as part of the proof workflow too.
+For renderer/replay-heavy bundles, also run:
+
+```sh
+npm run validate-bundle -- <bundle-dir> --profile interactive-renderer
+```
 
 ### Required Week 8 proof bundles
 
 At a minimum, Week 8 should leave behind bundles covering:
 
 1. **Capability inventory scenario**
-   - prove `version --json` plus `doctor --json` capability reporting on a healthy environment and show the generated review surface.
+   - bundle path `dogfood/20260325-week8-capability-inventory/`; proves `version --json` plus `doctor --json` capability reporting on a healthy environment and shows the generated review surface.
 2. **Live-vs-offline inspect scenario**
-   - prove running-session inspection, exited/offline inspection, and at least one fallback/recovery path where the renderer or host is unavailable.
+   - bundle path `dogfood/20260325-week8-inspect-runtime/`; proves running-session inspection, exited/offline inspection, and fallback/recovery paths where the renderer or host is unavailable.
 3. **Contract-lock scenario**
-   - prove the `doctor`, `gc`, and `record export` envelope locks and show the resulting reviewer surface.
+   - bundle path `dogfood/20260325-week8-contract-locks/`; proves the `doctor`, `gc`, and `record export` envelope locks and shows the resulting reviewer surface.
 4. **Bundle-validation scenario**
-   - prove the validator/checker accepts a conforming bundle and rejects an intentionally incomplete target.
+   - bundle path `dogfood/20260325-week8-bundle-validation/`; proves the validator/checker accepts a conforming bundle and rejects an intentionally incomplete target.
 
 ### Screenshot and video requirements
 
