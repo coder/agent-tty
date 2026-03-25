@@ -3,13 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 
 const mocks = vi.hoisted(() => ({
+  computeArtifactHealth: vi.fn(),
   countEventLogEntries: vi.fn(),
+  deriveTerminationCategory: vi.fn(),
   emitSuccess: vi.fn(),
   reconcileSession: vi.fn(),
   sendRpc: vi.fn(),
   readManifest: vi.fn(),
   readManifestIfExists: vi.fn(),
-  resolveHome: vi.fn(),
   sessionDir: vi.fn(),
   eventLogPath: vi.fn(),
   manifestPath: vi.fn(),
@@ -32,13 +33,17 @@ vi.mock('../../../src/host/rpcClient.js', () => ({
   sendRpc: mocks.sendRpc,
 }));
 
+vi.mock('../../../src/host/terminationCategory.js', () => ({
+  deriveTerminationCategory: mocks.deriveTerminationCategory,
+}));
+
+vi.mock('../../../src/storage/artifactHealth.js', () => ({
+  computeArtifactHealth: mocks.computeArtifactHealth,
+}));
+
 vi.mock('../../../src/storage/manifests.js', () => ({
   readManifest: mocks.readManifest,
   readManifestIfExists: mocks.readManifestIfExists,
-}));
-
-vi.mock('../../../src/storage/home.js', () => ({
-  resolveHome: mocks.resolveHome,
 }));
 
 vi.mock('../../../src/storage/sessionPaths.js', () => ({
@@ -61,12 +66,22 @@ const TEST_CONTEXT = {
   configFile: null,
 } as const;
 
+const DEFAULT_ARTIFACT_HEALTH = {
+  total: 2,
+  byKind: {
+    snapshot: 1,
+    screenshot: 1,
+  },
+  missingCount: 0,
+  health: 'healthy' as const,
+};
+
 function getLastEmitSuccessPayload(): unknown {
   return mocks.emitSuccess.mock.calls.at(-1)?.[0] as unknown;
 }
 
 function createSessionRecord(
-  status: 'running' | 'exiting' | 'exited' = 'running',
+  status: 'running' | 'exiting' | 'exited' | 'failed' = 'running',
 ) {
   return {
     version: 1,
@@ -74,12 +89,18 @@ function createSessionRecord(
     createdAt: '2026-03-19T12:00:00.000Z',
     updatedAt: '2026-03-19T12:00:01.000Z',
     status,
+    ...(status === 'failed'
+      ? {
+          failureOrigin: 'host-death' as const,
+          failureReason: 'host exited unexpectedly',
+        }
+      : {}),
     command: ['/bin/sh'],
     cwd: '/tmp/workspace',
     cols: 80,
     rows: 24,
-    hostPid: status === 'exited' ? null : 123,
-    childPid: status === 'exited' ? null : 456,
+    hostPid: status === 'running' || status === 'exiting' ? 123 : null,
+    childPid: status === 'running' || status === 'exiting' ? 456 : null,
     exitCode: status === 'exited' ? 0 : null,
     exitSignal: null,
   };
@@ -92,7 +113,6 @@ afterEach(() => {
 describe('inspect command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.resolveHome.mockReturnValue('/tmp/agent-terminal');
     mocks.sessionDir.mockImplementation(
       (_home: string, sessionId: string) =>
         `/tmp/agent-terminal/sessions/${sessionId}`,
@@ -106,7 +126,9 @@ describe('inspect command', () => {
     mocks.socketPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
     );
+    mocks.computeArtifactHealth.mockResolvedValue(DEFAULT_ARTIFACT_HEALTH);
     mocks.countEventLogEntries.mockResolvedValue(2);
+    mocks.deriveTerminationCategory.mockReturnValue('running');
     mocks.readManifestIfExists.mockResolvedValue(
       createSessionRecord('running'),
     );
@@ -120,6 +142,7 @@ describe('inspect command', () => {
       Date.parse('2026-03-19T12:00:05.000Z'),
     );
     mocks.sendRpc.mockResolvedValue({ session: liveSession });
+    mocks.deriveTerminationCategory.mockReturnValue('running');
 
     await runInspectCommand({
       context: TEST_CONTEXT,
@@ -134,6 +157,10 @@ describe('inspect command', () => {
     expect(mocks.countEventLogEntries).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01/events.jsonl',
     );
+    expect(mocks.computeArtifactHealth).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01',
+    );
+    expect(mocks.deriveTerminationCategory).toHaveBeenCalledWith(liveSession);
     const emitted = getLastEmitSuccessPayload() as {
       command: string;
       json: boolean;
@@ -141,6 +168,10 @@ describe('inspect command', () => {
         session: ReturnType<typeof createSessionRecord>;
         eventCount: number;
         uptime: number;
+        lastEventSeq?: number;
+        terminationCategory?: string;
+        artifacts?: typeof DEFAULT_ARTIFACT_HEALTH;
+        usedOfflineReplay?: boolean;
       };
       lines: string[];
     };
@@ -153,12 +184,23 @@ describe('inspect command', () => {
           session: liveSession,
           eventCount: 2,
           uptime: 5000,
+          lastEventSeq: 1,
+          terminationCategory: 'running',
+          artifacts: DEFAULT_ARTIFACT_HEALTH,
+          usedOfflineReplay: false,
         },
       }),
     );
     expect(emitted.lines).toEqual(
-      expect.arrayContaining(['Event Count: 2', 'Uptime: 5000ms']),
+      expect.arrayContaining([
+        'Event Count: 2',
+        'Last Event Seq: 1',
+        'Uptime: 5000ms',
+        'Artifacts: 2 total (screenshot: 1, snapshot: 1), health: healthy',
+      ]),
     );
+    expect(emitted.lines).not.toContain('Offline Replay: yes');
+    expect(emitted.lines).not.toContain('Termination: running');
   });
 
   it('rejects malformed inspect RPC responses', async () => {
@@ -181,11 +223,14 @@ describe('inspect command', () => {
   });
 
   it('falls back to reconciled manifest data when the host is unreachable', async () => {
+    const reconciledSession = createSessionRecord('exited');
     mocks.sendRpc.mockRejectedValue(
       makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
         message: 'Session host is unreachable.',
       }),
     );
+    mocks.readManifest.mockResolvedValue(reconciledSession);
+    mocks.deriveTerminationCategory.mockReturnValue('clean-exit');
 
     await runInspectCommand({
       context: TEST_CONTEXT,
@@ -202,16 +247,73 @@ describe('inspect command', () => {
     expect(mocks.countEventLogEntries).toHaveBeenCalledWith(
       '/tmp/agent-terminal/sessions/session-01/events.jsonl',
     );
-    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+    expect(mocks.computeArtifactHealth).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01',
+    );
+    expect(mocks.deriveTerminationCategory).toHaveBeenCalledWith(
+      reconciledSession,
+    );
+
+    const emitted = getLastEmitSuccessPayload() as {
+      command: string;
+      json: boolean;
+      result: {
+        session: ReturnType<typeof createSessionRecord>;
+        eventCount: number;
+        uptime: number;
+        lastEventSeq?: number;
+        terminationCategory?: string;
+        artifacts?: typeof DEFAULT_ARTIFACT_HEALTH;
+        usedOfflineReplay?: boolean;
+      };
+      lines: string[];
+    };
+
+    expect(emitted).toEqual(
       expect.objectContaining({
         command: 'inspect',
         json: true,
         result: {
-          session: createSessionRecord('exited'),
+          session: reconciledSession,
           eventCount: 2,
           uptime: 1000,
+          lastEventSeq: 1,
+          terminationCategory: 'clean-exit',
+          artifacts: DEFAULT_ARTIFACT_HEALTH,
+          usedOfflineReplay: true,
         },
       }),
+    );
+    expect(emitted.lines).toEqual(
+      expect.arrayContaining([
+        'Offline Replay: yes',
+        'Termination: clean-exit',
+      ]),
+    );
+  });
+
+  it('omits last event sequence from human output when the event log is empty', async () => {
+    const liveSession = createSessionRecord('running');
+    mocks.countEventLogEntries.mockResolvedValue(0);
+    mocks.sendRpc.mockResolvedValue({ session: liveSession });
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+    });
+
+    const emitted = getLastEmitSuccessPayload() as {
+      result: {
+        lastEventSeq?: number;
+      };
+      lines: string[];
+    };
+
+    expect(emitted.result.lastEventSeq).toBeUndefined();
+    expect(emitted.lines).toContain('Event Count: 0');
+    expect(emitted.lines).not.toContain(
+      expect.stringMatching(/^Last Event Seq:/),
     );
   });
 });
