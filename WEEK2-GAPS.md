@@ -54,11 +54,12 @@ Week 1 control-plane work, Week 2 renderer-backed inspection, Week 3 export / re
 
 ## Recommended next step
 
-The next milestone can now treat the contract/doc ratification work as closed and focus on the intentionally deferred roadmap:
+The next planned milestone is Week 8. It should treat the Week 1–7 contract/doc ratification work as closed and first close the remaining runtime-capability/reporting discipline gaps before moving further down the broader deferred roadmap:
 
-1. native renderers and broader platform parity,
-2. mouse input and richer live renderer state,
-3. remote/network sessions and an MCP wrapper,
-4. and larger model/data redesigns such as dynamic renderer-capability discovery, fuller failure taxonomy, event-log redesign, snapshot-schema expansion, and renderer CSP hardening.
+1. runtime renderer capability discovery plus richer live renderer state/reporting,
+2. the remaining lower-priority public-envelope locks and proof-bundle validation,
+3. native renderers and broader platform parity,
+4. mouse input, remote/network sessions, and an MCP wrapper,
+5. and larger model/data redesigns such as fuller failure taxonomy, event-log redesign, snapshot-schema expansion, and renderer CSP hardening.
 
-See `design/20260319_agent-terminal-v1/15-week-7-plan.md` for the current Week 7 proof-bundle status and the design docs under `design/20260319_agent-terminal-v1/` for the broader roadmap context.
+See `design/20260319_agent-terminal-v1/16-week-8-plan.md` for the current next-step plan, `design/20260319_agent-terminal-v1/15-week-7-plan.md` for the completed Week 7 ratification context, and the design docs under `design/20260319_agent-terminal-v1/` for the broader roadmap context.

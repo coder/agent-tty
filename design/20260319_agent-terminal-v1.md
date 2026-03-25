@@ -38,7 +38,7 @@ The repository now ships the first three milestones of this design plus Weeks 4â
 - macOS CI validation,
 - and proof bundles under `dogfood/`.
 
-Week 7 is the current design-synchronization milestone. The high-value CLI examples now match shipped behavior, the `send-keys` / `destroy` result-shape alignment has landed, and the main remaining Week 7 work is proof-bundle completeness/reviewability. The intentionally deferred platform/runtime work is tracked separately in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md). See [14-week-6-status.md](./20260319_agent-terminal-v1/14-week-6-status.md), [15-week-7-plan.md](./20260319_agent-terminal-v1/15-week-7-plan.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current state.
+Week 7 closed the design-synchronization pass for the shipped v1 surface. The next planned milestone is Week 8, which focuses on runtime capability discovery, richer renderer/session introspection, the remaining lower-priority public-envelope locks, and proof-bundle normalization/validation before broader native-renderer/platform expansion. The intentionally deferred platform/runtime work is tracked separately in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md). See [14-week-6-status.md](./20260319_agent-terminal-v1/14-week-6-status.md), [15-week-7-plan.md](./20260319_agent-terminal-v1/15-week-7-plan.md), [16-week-8-plan.md](./20260319_agent-terminal-v1/16-week-8-plan.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current state.
 
 ## Executive summary
 
@@ -210,6 +210,7 @@ This design file is the entry point. Detailed supporting docs live in `design/20
 - [13-week-6-plan.md](./20260319_agent-terminal-v1/13-week-6-plan.md)
 - [14-week-6-status.md](./20260319_agent-terminal-v1/14-week-6-status.md)
 - [15-week-7-plan.md](./20260319_agent-terminal-v1/15-week-7-plan.md)
+- [16-week-8-plan.md](./20260319_agent-terminal-v1/16-week-8-plan.md)
 
 ## High-level architecture
 
