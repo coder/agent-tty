@@ -527,18 +527,21 @@ This area is complete only when:
 - every artifact is manifest-backed and hash-stamped,
 - and renderer crashes can be repaired from replay without losing the session.
 
-## 18. Week 4 implementation status
+## 18. Current gap summary (2026-03-25)
 
-As of 2026-03-22, Week 4 materially narrowed the rendering/artifact delta:
+As of 2026-03-25, the repository has shipped the Week 4–6 rendering/artifact closeout that this document previously tracked as open:
 
-- shipped scrollback-aware snapshots through `snapshot --include-scrollback` / `includeScrollback`,
-- shipped screenshot metadata enrichment (`rendererBackend`, `pixelWidth`, `pixelHeight`, `sha256`, and `renderProfileHash`),
-- shipped render-profile hashing via `hashProfile(...)`,
-- and shipped richer asciicast/WebM export metadata for offline review.
+- scrollback-aware snapshots through `snapshot --include-scrollback` / `includeScrollback`,
+- optional per-cell snapshot data through `snapshot --include-cells`, including shipped `fg`, `bg`, `bold`, `italic`, `underline`, and `strikethrough` fields,
+- screenshot metadata enrichment (`rendererBackend`, `pixelWidth`, `pixelHeight`, `sha256`, and `renderProfileHash`),
+- render-profile hashing via `hashProfile(...)`,
+- bundled deterministic JetBrains Mono assets for the reference renderer,
+- and replay timing modes for WebM export (`recorded`, `accelerated`, and `max-speed`).
 
-The remaining design-level follow-ons are:
+The remaining design-level follow-ons are now narrower:
 
-- per-cell styling and the fuller `SnapshotCell` contract,
-- a bundled deterministic font asset instead of host `monospace`,
-- the broader snapshot schema sketched earlier in this document,
-- and a fuller replay-timing option surface for reviewer-facing video export.
+- whether to adopt the fuller terminal/snapshot wrapper model sketched earlier in this document,
+- whether to expand per-cell metadata beyond the currently shipped fields (for example `width`, `inverse`, `blink`, `dim`, or richer cursor metadata),
+- runtime renderer capability discovery beyond the current static backend list,
+- larger event-log and snapshot-schema redesign questions,
+- and later native renderer/parity work tracked in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md).

@@ -21,7 +21,7 @@ This design intentionally describes a **general product**, not a Mux-specific im
 
 ## Current shipped status (2026-03-25)
 
-The repository now ships the first three milestones of this design plus Week 4 CLI/artifact/lifecycle hardening and the planned Week 5 parity/review/platform closeout:
+The repository now ships the first three milestones of this design plus Weeks 4–6 of CLI/artifact/lifecycle hardening, config/rendering/platform closeout, and contract/introspection reconciliation:
 
 - long-lived session hosts,
 - PTY control and append-only event logs,
@@ -32,11 +32,13 @@ The repository now ships the first three milestones of this design plus Week 4 C
 - artifact manifests and `gc`,
 - shared global CLI context and differentiated exit codes,
 - end-to-end CLI/config wiring for `--log-level`, `--profile`, `--idle-timeout-ms`, and `--append-newline`,
-- replay timing modes, bundled fonts, per-cell snapshots, and local proof-bundle review tooling,
+- replay timing modes, bundled fonts, and optional per-cell snapshots,
+- richer `inspect --json` artifact-health and termination reporting,
+- golden-envelope coverage for the most important shipped public surfaces,
 - macOS CI validation,
 - and proof bundles under `dogfood/`.
 
-The remaining delta is now concentrated in full CLI contract/result-shape parity, richer `inspect`/artifact-health surfaces, broader failure taxonomy/reporting, and design/code reconciliation before the repo moves on to intentionally future-scope platform/runtime expansion. See [12-week-5-status.md](./20260319_agent-terminal-v1/12-week-5-status.md), [13-week-6-plan.md](./20260319_agent-terminal-v1/13-week-6-plan.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current state.
+The remaining delta is no longer the high-value Week 6 code gaps, but it is also not yet purely future-scope platform/runtime expansion. What remains is concentrated in full CLI/example parity and contract ratification, consistent proof-bundle completeness/reviewability, and the intentionally deferred platform/runtime work tracked in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md). See [14-week-6-status.md](./20260319_agent-terminal-v1/14-week-6-status.md), [15-week-7-plan.md](./20260319_agent-terminal-v1/15-week-7-plan.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current state.
 
 ## Executive summary
 
@@ -205,6 +207,9 @@ This design file is the entry point. Detailed supporting docs live in `design/20
 - [10-week-4-status.md](./20260319_agent-terminal-v1/10-week-4-status.md)
 - [11-week-5-plan.md](./20260319_agent-terminal-v1/11-week-5-plan.md)
 - [12-week-5-status.md](./20260319_agent-terminal-v1/12-week-5-status.md)
+- [13-week-6-plan.md](./20260319_agent-terminal-v1/13-week-6-plan.md)
+- [14-week-6-status.md](./20260319_agent-terminal-v1/14-week-6-status.md)
+- [15-week-7-plan.md](./20260319_agent-terminal-v1/15-week-7-plan.md)
 
 ## High-level architecture
 

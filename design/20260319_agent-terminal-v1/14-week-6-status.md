@@ -59,16 +59,24 @@ The Week 6 landing validation reported:
 
 ## Proof bundles
 
-No new dedicated checked-in `dogfood/*week6*` directory landed in the repository. That is an important limit of the Week 6 closeout and should not be glossed over as if fresh Week 6 bundles existed.
+Four dedicated Week 6 bundle directories are now checked in:
 
-The nearest checked-in supporting evidence for the recovery/review parts of Week 6 remains:
+- `dogfood/20260325-week6-a-cli-contract/` — contract/introspection proof for `version --json` plus running/exited `inspect --json`
+- `dogfood/20260325-week6-b-artifact-health/` — artifact-health summary and missing-artifact detection proof
+- `dogfood/20260325-week6-c-failure-taxonomy/` — non-zero-exit / clean-exit / host-death reporting proof
+- `dogfood/20260325-week6-d-review-surface/` — `review-bundle` generation and review-page capture for the Week 6 bundles
 
-- `dogfood/20260323-week5-recovery-host/`, `dogfood/20260323-week5-recovery-renderer/`, and `dogfood/20260323-week5-recovery-replay/` — recovery and fallback context for the failure-reporting work
-- `dogfood/20260323-week5-review-helper/` — reviewer-surface context for the inspection/reporting work
+Those bundles matter, but they are lighter than the Week 6 plan asked for:
 
-For the Week 6 contract-closeout itself, the strongest checked-in evidence is the landed test coverage plus the updated design/status docs rather than a new repo bundle directory.
+- bundles A and C rely mostly on JSON/log evidence and do not include committed screenshots or recordings,
+- bundle B includes a committed screenshot but no committed recording/video export,
+- bundle D includes a committed review-page screenshot but no committed recording/video export,
+- and none of the Week 6 bundles currently check in `.cast` or `.webm` artifacts.
+
+So the Week 6 functional/contract work shipped, but proof-bundle completeness remained partially unfinished and should be treated as real carry-over rather than quietly assumed done.
 
 ## What remains for future work
 
-- The remaining delta is now concentrated in future-scope platform/runtime expansion and larger data-model redesign questions rather than the high-value `inspect` / `version` / artifact-health / failure-reporting gaps that Week 6 set out to close.
-- See `WEEK2-GAPS.md` for the detailed current future-scope list.
+- The high-value `inspect` / `version` / artifact-health / failure-reporting code gaps that Week 6 set out to close are done, but full CLI/example ratification and proof-bundle completeness still remain as Week 7 carry-over work.
+- Beyond that carry-over work, the remaining larger delta is future-scope platform/runtime expansion and data-model redesign questions.
+- See `WEEK2-GAPS.md` and [15-week-7-plan.md](./15-week-7-plan.md) for the current detailed gap list and next-step plan.
