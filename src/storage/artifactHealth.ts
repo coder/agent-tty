@@ -100,7 +100,9 @@ export async function computeArtifactHealth(
         }
       }),
     )
-  ).filter((artifact): artifact is NonNullable<typeof artifact> => artifact !== null);
+  ).filter(
+    (artifact): artifact is NonNullable<typeof artifact> => artifact !== null,
+  );
 
   const missingCount = missingArtifacts.length;
 

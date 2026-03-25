@@ -259,7 +259,11 @@ describe('computeArtifactHealth', () => {
     const sessionDir = await createSessionDir();
 
     await ensureArtifactsDir(sessionDir);
-    await writeFile(artifactPath(sessionDir, 'manifest.json'), '{invalid', 'utf8');
+    await writeFile(
+      artifactPath(sessionDir, 'manifest.json'),
+      '{invalid',
+      'utf8',
+    );
 
     await expect(computeArtifactHealth(sessionDir)).resolves.toEqual({
       total: 0,
