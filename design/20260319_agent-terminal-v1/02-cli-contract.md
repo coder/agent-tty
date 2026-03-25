@@ -42,7 +42,7 @@ Human-readable output is allowed, but it is not the primary contract.
 
 ### 1.3 Stable envelope
 
-Every JSON response uses the same top-level envelope fields in the shipped implementation: `ok`, `command`, `timestamp`, and either `result` or `error`. Session-specific identifiers currently live inside `result.session` or `error.details` rather than as a top-level `sessionId` field.
+Every JSON response uses the same top-level envelope fields in the shipped implementation: `ok`, `command`, `timestamp`, and either `result` or `error`. Session-specific identifiers currently live inside command-specific `result` payloads or `error.details` rather than as a top-level envelope `sessionId` field.
 
 ```json
 {
@@ -148,8 +148,9 @@ Create a new session host and spawn a PTY child.
 ### 5.1 Syntax
 
 ```bash
-agent-terminal create [options] -- <command> [args...]
-agent-terminal create [options] --shell -- '<shell command>'
+agent-terminal create [options] [command...]
+agent-terminal create [options]
+agent-terminal create [options] --shell /bin/zsh
 ```
 
 ### 5.2 Required behavior
@@ -170,38 +171,36 @@ agent-terminal create [options] --shell -- '<shell command>'
 | `--env KEY=VALUE`       | No, repeatable | Additional environment variables            |
 | `--term <value>`        | No             | Terminal type; default `xterm-256color`     |
 | `--name <name>`         | No             | Human-friendly label                        |
-| `--profile <name>`      | No             | Initial render profile                      |
-| `--shell`               | No             | Interpret trailing argument through a shell |
+| `--shell <path>`        | No             | Shell executable path; default system shell |
 | `--idle-timeout-ms <n>` | No             | Optional inactivity timeout                 |
+
+The shipped CLI also keeps `--command <path>` as a legacy alias for `--shell`.
 
 ### 5.4 JSON result shape
 
 ```json
 {
-  "session": {
-    "id": "sess_01JQ...",
-    "name": "demo",
-    "status": "running",
-    "cwd": "/repo",
-    "command": ["bun", "run", "dev:tui"],
-    "shell": false,
-    "rows": 40,
-    "cols": 120,
-    "term": "xterm-256color",
-    "renderProfile": "reference-dark",
-    "createdAt": "2026-03-19T10:00:00.000Z",
-    "hostPid": 12345,
-    "childPid": 12346
-  }
+  "sessionId": "session-01",
+  "createdAt": "2026-03-23T12:00:00.000Z",
+  "cols": 120,
+  "rows": 40,
+  "shell": "/bin/bash",
+  "env": {
+    "FOO": "bar",
+    "BAZ": "qux"
+  },
+  "idleTimeoutMs": 5000
 }
 ```
 
+For the full merged session record, use `inspect <session-id> --json`. `create` currently returns only the minimal creation summary above.
+
 ### 5.5 Validation rules
 
-- Direct exec mode requires at least one trailing argument after `--`.
-- `--shell` requires exactly one shell string after `--`.
 - rows/cols must be positive integers.
 - `--env` must reject malformed entries without `=`.
+- `--shell` and legacy `--command` must resolve to a non-empty shell executable path.
+- when no positional `command...` is provided, `create` launches the resolved shell path directly.
 
 ## 6. Command: `list`
 
@@ -216,23 +215,20 @@ agent-terminal list [--all] [--json]
 ### 6.2 Behavior
 
 - Enumerate session directories.
-- Reconcile stale metadata where possible.
-- Return summaries sorted by creation time descending.
+- Reconcile stale active-session metadata where possible.
+- Return running sessions by default; include terminal sessions only when `--all` is set.
+- Preserve the current directory-enumeration order; the shipped CLI does not promise an explicit sort.
 
 ### 6.3 Fields
 
-Each item should include:
+Each item currently includes:
 
-- `id`
-- `name`
+- `sessionId`
 - `status`
-- `commandPreview`
-- `cwd`
+- `command`
 - `createdAt`
-- `updatedAt`
-- `childPid`
-- `lastOutputAt`
-- `artifacts`
+- optional `name`
+- `pid`
 
 ## 7. Command: `inspect`
 
@@ -321,20 +317,22 @@ Write raw UTF-8 text bytes into the PTY.
 ### 8.1 Syntax
 
 ```bash
-agent-terminal type <session-id> --text 'hello world'
+agent-terminal type <session-id> 'hello world'
 agent-terminal type <session-id> --file ./payload.txt
+agent-terminal type <session-id> 'hello world' --append-newline
 ```
 
 ### 8.2 Flags
 
-| Flag               | Required                 | Meaning                |
-| ------------------ | ------------------------ | ---------------------- |
-| `--text <value>`   | Exactly one of text/file | Literal text to write  |
-| `--file <path>`    | Exactly one of text/file | Read payload from file |
-| `--append-newline` | No                       | Append `\n`            |
+| Flag / arg          | Required                         | Meaning                |
+| ------------------- | -------------------------------- | ---------------------- |
+| Positional `[text]` | Exactly one of `[text]` / `--file` | Literal text to write  |
+| `--file <path>`     | Exactly one of `[text]` / `--file` | Read payload from file |
+| `--append-newline`  | No                               | Append `\n`            |
 
 ### 8.3 Semantics
 
+- The shipped CLI takes literal text as the optional positional `[text]` argument; the earlier `--text` example in this doc was historical and is not a supported flag.
 - `type` is not bracketed paste.
 - The exact byte payload written should be represented in the event log.
 - Large payloads should be supported.
@@ -346,16 +344,15 @@ Write text as a paste operation.
 ### 9.1 Syntax
 
 ```bash
-agent-terminal paste <session-id> --text 'multiline\ninput'
+agent-terminal paste <session-id> 'multiline\ninput'
 agent-terminal paste <session-id> --file ./payload.txt
 ```
 
 ### 9.2 Semantics
 
-- If bracketed paste mode is active, send bracketed paste sequences.
-- If bracketed paste mode is not active, either:
-  - fall back to raw text and mark `bracketed: false`, or
-  - allow `--force-bracketed` to emit bracketed sequences anyway.
+- The shipped CLI takes literal text as the optional positional `[text]` argument or `--file <path>`; there is no separate `--text` flag.
+- The shipped implementation always encodes `paste` as bracketed paste sequences.
+- There is no `--force-bracketed` flag in the shipped CLI.
 
 ### 9.3 Why separate `paste` from `type`
 
@@ -396,15 +393,15 @@ Supported forms:
 ### 10.3 Required behavior
 
 - key names are case-insensitive,
-- output JSON should echo canonicalized keys,
+- output JSON currently echoes the accepted keys as supplied,
 - unsupported chords should return a structured validation error,
 - the event log should record both symbolic keys and emitted byte sequences when known.
 
-### 10.4 Suggested result shape
+### 10.4 Shipped result shape
 
 ```json
 {
-  "accepted": ["Ctrl+L", "g", "g"],
+  "accepted": ["ctrl+l", "g", "g"],
   "bytesWritten": 5,
   "seq": 42
 }
@@ -427,16 +424,12 @@ agent-terminal resize <session-id> --rows 50 --cols 140
 - notify live render workers,
 - and update persisted session metadata.
 
-### 11.3 Result fields
+### 11.3 Shipped result fields
 
 - `rows`
 - `cols`
-- `seq`
-- `settled` optional when `--wait-for-settle-ms` is used
 
-### 11.4 Optional quality-of-life flag
-
-`--wait-for-settle-ms <n>` may be supported to block until no new PTY output is observed for the given duration after the resize.
+The shipped CLI does not currently expose `seq`, `settled`, or `--wait-for-settle-ms`; those remain future scope.
 
 ## 12. Command: `signal`
 
@@ -497,20 +490,21 @@ agent-terminal wait <session-id> --exit
 
 ### 13.5 Result shape
 
+The shipped CLI currently has two wait result shapes:
+
+- legacy `--exit` / `--idle-ms` waits return `{ timedOut, exitCode? }`,
+- render waits such as `--text`, `--regex`, `--screen-stable-ms`, and cursor waits return `{ matched, timedOut, matchedText?, cursorRow?, cursorCol?, capturedAtSeq }`.
+
+Example render-wait result:
+
 ```json
 {
-  "condition": {
-    "type": "text",
-    "value": "Ready"
-  },
-  "matchedAtSeq": 84,
-  "elapsedMs": 913,
-  "screenSummary": {
-    "rows": 40,
-    "cols": 120,
-    "cursor": { "row": 12, "col": 3 },
-    "textPreview": "..."
-  }
+  "matched": true,
+  "timedOut": false,
+  "matchedText": "Ready",
+  "cursorRow": 12,
+  "cursorCol": 3,
+  "capturedAtSeq": 84
 }
 ```
 
@@ -523,39 +517,39 @@ Capture semantic terminal state.
 ```bash
 agent-terminal snapshot <session-id>
 agent-terminal snapshot <session-id> --format text
-agent-terminal snapshot <session-id> --scope viewport
-agent-terminal snapshot <session-id> --scope scrollback --lines 500
-agent-terminal snapshot <session-id> --out ./snapshot.json
+agent-terminal snapshot <session-id> --include-scrollback
+agent-terminal snapshot <session-id> --include-scrollback --include-cells --json
 ```
 
 ### 14.2 Formats
 
-Required output modes:
+Shipped output modes:
 
-- `json` (default when `--json` is present)
+- `structured` (default)
 - `text`
-- `cells`
 
-### 14.3 Scopes
+`--json` controls whether the command emits the standard JSON envelope. Per-cell data is controlled by `--include-cells` on structured snapshots rather than by a separate `cells` format.
 
-- `viewport`
-- `scrollback`
-- `all`
+### 14.3 Included data
+
+- default: visible viewport only
+- `--include-scrollback`: add `scrollbackLines`
+- `--include-cells`: add per-cell style data in `cells`
 
 ### 14.4 Required metadata
 
-Every structured snapshot must include:
+Every structured snapshot currently includes:
 
-- session ID,
-- renderer backend,
-- renderer profile,
-- rows/cols,
-- cursor state,
-- alt-screen flag,
-- visible lines,
-- optional cells,
-- last replayed sequence,
-- and capture timestamp.
+- `sessionId`,
+- `capturedAtSeq`,
+- `rows` / `cols`,
+- cursor position,
+- `isAltScreen`,
+- `visibleLines`,
+- optional `scrollbackLines`,
+- and optional `cells`.
+
+The shipped snapshot result does not currently include renderer-backend/profile fields or a separate capture timestamp.
 
 ## 15. Command: `screenshot`
 
@@ -565,9 +559,9 @@ Capture a PNG screenshot from the selected renderer backend.
 
 ```bash
 agent-terminal screenshot <session-id>
-agent-terminal screenshot <session-id> --out ./screen.png
 agent-terminal screenshot <session-id> --profile reference-light
-agent-terminal screenshot <session-id> --cursor off
+agent-terminal screenshot <session-id> --show-cursor
+agent-terminal screenshot <session-id> --hide-cursor
 ```
 
 ### 15.2 Required behavior
@@ -582,17 +576,19 @@ agent-terminal screenshot <session-id> --cursor off
 
 ```json
 {
-  "artifact": {
-    "id": "shot_01JQ...",
-    "kind": "screenshot",
-    "backend": "ghostty-web",
-    "profile": "reference-dark",
-    "path": "/home/user/.agent-terminal/sessions/.../screenshots/shot.png",
-    "sha256": "...",
-    "width": 1920,
-    "height": 1280,
-    "capturedAtSeq": 85
-  }
+  "sessionId": "session-01",
+  "capturedAtSeq": 85,
+  "profileName": "reference-dark",
+  "cols": 120,
+  "rows": 40,
+  "artifactPath": "/home/user/.agent-terminal/sessions/.../artifacts/screenshot-85-reference-dark.png",
+  "pngSizeBytes": 123456,
+  "cursorVisible": false,
+  "rendererBackend": "ghostty-web",
+  "pixelWidth": 1920,
+  "pixelHeight": 1280,
+  "sha256": "...",
+  "renderProfileHash": "..."
 }
 ```
 
@@ -626,14 +622,24 @@ Terminate session control.
 
 ```bash
 agent-terminal destroy <session-id>
-agent-terminal destroy <session-id> --purge
+agent-terminal destroy <session-id> --force
 ```
 
 ### 17.2 Semantics
 
-- default behavior terminates the session host and child process but keeps artifacts.
-- `--purge` additionally removes the session directory.
-- if the PTY child already exited, `destroy` still cleans host resources.
+- default behavior asks the session host to shut down gracefully and keeps the session directory/artifacts.
+- `--force` skips graceful shutdown and force-kills the host/child processes before reconciliation.
+- if the PTY child already exited, `destroy` still reconciles the session to `destroyed`.
+- artifact/session-directory purge is future scope; the shipped CLI does not support `--purge`.
+
+### 17.3 Shipped result shape
+
+```json
+{
+  "sessionId": "session-01",
+  "destroyed": true
+}
+```
 
 ## 18. Command: `gc`
 
