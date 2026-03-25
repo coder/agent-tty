@@ -1,0 +1,24 @@
+READY>
+ECHO:
+READY> hello world^[[200~pasted text^[[201~
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

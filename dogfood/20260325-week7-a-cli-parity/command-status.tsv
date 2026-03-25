@@ -1,0 +1,15 @@
+step	command	exit_code	status
+01-doctor	npx tsx src/cli/main.ts doctor --json	0	pass
+02-version	npx tsx src/cli/main.ts version --json	0	pass
+03-create	npx tsx src/cli/main.ts create --json -- node --import tsx test/fixtures/apps/hello-prompt/main.ts	0	pass
+04-send-keys	npx tsx src/cli/main.ts send-keys 01KMK8J0XB9THNASXVNPF697ZD --json Enter	0	pass
+05-type	npx tsx src/cli/main.ts type 01KMK8J0XB9THNASXVNPF697ZD --json "hello world"	0	pass
+06-paste	npx tsx src/cli/main.ts paste 01KMK8J0XB9THNASXVNPF697ZD --json "pasted text"	0	pass
+07-snapshot	npx tsx src/cli/main.ts snapshot 01KMK8J0XB9THNASXVNPF697ZD --json --format text	0	pass
+08-screenshot	npx tsx src/cli/main.ts screenshot 01KMK8J0XB9THNASXVNPF697ZD --json	0	pass
+09-list	npx tsx src/cli/main.ts list --json	0	pass
+10-inspect	npx tsx src/cli/main.ts inspect 01KMK8J0XB9THNASXVNPF697ZD --json	0	pass
+11-record-export-cast	npx tsx src/cli/main.ts record export 01KMK8J0XB9THNASXVNPF697ZD --format asciicast --json --out dogfood/20260325-week7-a-cli-parity/recordings/recording-01.cast	0	pass
+12-record-export-webm	npx tsx src/cli/main.ts record export 01KMK8J0XB9THNASXVNPF697ZD --format webm --json --out dogfood/20260325-week7-a-cli-parity/videos/video-01.webm	0	pass
+13-destroy	npx tsx src/cli/main.ts destroy 01KMK8J0XB9THNASXVNPF697ZD --json	0	pass
+14-list-after-destroy	npx tsx src/cli/main.ts list --json	0	pass
