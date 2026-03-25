@@ -1,8 +1,8 @@
-# Remaining gaps after Week 6
+# Remaining future-scope gaps after Week 7
 
-> Historical note: this file keeps its original filename (`WEEK2-GAPS.md`) because earlier design docs and proof bundles already reference it. Its contents now describe the current post-Week-6 delta rather than the original Week 2-only gap list.
+> Historical note: this file keeps its original filename (`WEEK2-GAPS.md`) because earlier design docs and proof bundles already reference it. Its contents now describe the current post-Week-7 delta rather than the original Week 2-only gap list.
 
-Week 1 control-plane work, Week 2 renderer-backed inspection, Week 3 export / retention, Week 4 CLI / artifact / lifecycle hardening, Week 5 config/rendering/platform closeout, and the Week 6 contract/introspection/failure-taxonomy reconciliation have all landed. The remaining work is now concentrated in intentionally deferred future scope rather than the high-value Week 6 contract gaps.
+Week 1 control-plane work, Week 2 renderer-backed inspection, Week 3 export / retention, Week 4 CLI / artifact / lifecycle hardening, Week 5 config/rendering/platform closeout, Week 6 contract/introspection/failure-taxonomy reconciliation, and the Week 7 contract/doc synchronization pass have all landed. This file now tracks only intentionally deferred future scope.
 
 ## Week 6 closures (now shipped)
 
@@ -26,14 +26,16 @@ Week 1 control-plane work, Week 2 renderer-backed inspection, Week 3 export / re
 - **Doctor result-shape cleanup** — **Shipped / closed:** `DoctorCheck` now requires `durationMs`, removing an avoidable contract inconsistency (`56276de`).
 - **Week 6 design/code reconciliation** — **Shipped / closed:** the Week 6 docs now record the contract/introspection/failure work as shipped status rather than leaving it in the open-gap bucket.
 
-## Remaining future scope after Week 6
+## Week 7 closures (now shipped)
 
-The items below remain intentionally unfinished and should not be described as shipped:
+- **`send-keys` result enrichment** — **Shipped / closed:** the shipped result now exposes `accepted`, `bytesWritten`, and `seq` via `src/cli/commands/send-keys.ts` and `SendKeysResultSchema`, with coverage in `test/unit/protocol/messages.test.ts`, `test/integration/pty-basics.test.ts`, and the relevant e2e flows.
+- **`destroy` result-schema alignment** — **Shipped / closed:** the shipped result now exposes `{ sessionId, destroyed }` via `src/cli/commands/destroy.ts` and `DestroyResultSchema`, with coverage in `test/unit/protocol/messages.test.ts`, `test/integration/lifecycle.test.ts`, and the relevant e2e flows.
+- **High-value CLI contract/doc ratification** — **Shipped / closed:** `design/20260319_agent-terminal-v1/02-cli-contract.md` and the top-level design entrypoint now match the shipped `create`, `list`, `type`, `paste`, `send-keys`, `snapshot`, `screenshot`, `resize`, and `destroy` behavior instead of leaving Week 7 doc drift in the open-gap bucket.
 
-### Remaining contract/design parity work
+## Remaining future-scope gaps
 
-- **Full result-shape parity with every CLI-contract example** — **Future scope:** the highest-value public envelopes are now covered, but this design document still contains broader examples than the exact shipped JSON for every command.
 - **Runtime renderer capability discovery** — **Future scope:** `version --json` currently reports the static compiled-in backend list `['ghostty-web']`; it does not yet discover capabilities dynamically at runtime.
+- **Richer live renderer-state reporting in `inspect`** — **Future scope:** the shipped `inspect` surface now reports artifact health and termination categories, but it does not expose a larger live renderer-state block.
 - **Broader failure taxonomy beyond the current shipped categories** — **Future scope:** Week 6 made the current categories explicit, but it did not introduce a larger redesign of every possible host/renderer/storage failure class.
 
 ### Renderer/runtime expansion
@@ -52,11 +54,11 @@ The items below remain intentionally unfinished and should not be described as s
 
 ## Recommended next step
 
-The next milestone should treat Week 6 contract closure as done and focus on the genuinely deferred roadmap items instead of reopening shipped inspection/reporting work:
+The next milestone can now treat the contract/doc ratification work as closed and focus on the intentionally deferred roadmap:
 
-1. decide whether to pursue full doc/example parity for every remaining command surface or explicitly keep the broader examples as aspirational design,
-2. choose which larger future-scope data-model changes (event-log redesign, fuller snapshot schema, broader failure taxonomy) are worth doing before native/runtime expansion,
-3. then continue broader platform/runtime work (native renderers, mouse input, remote sessions, MCP),
-4. and in parallel harden cross-platform parity and renderer CSP constraints where that work becomes actionable.
+1. native renderers and broader platform parity,
+2. mouse input and richer live renderer state,
+3. remote/network sessions and an MCP wrapper,
+4. and larger model/data redesigns such as dynamic renderer-capability discovery, fuller failure taxonomy, event-log redesign, snapshot-schema expansion, and renderer CSP hardening.
 
-See `design/20260319_agent-terminal-v1/12-week-5-status.md` for the Week 5 status record, `design/20260319_agent-terminal-v1/13-week-6-plan.md` for the Week 6 execution plan, and `design/20260319_agent-terminal-v1/14-week-6-status.md` for the Week 6 shipped-status record.
+See `design/20260319_agent-terminal-v1/15-week-7-plan.md` for the current Week 7 proof-bundle status and the design docs under `design/20260319_agent-terminal-v1/` for the broader roadmap context.

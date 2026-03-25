@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DestroyParamsSchema,
+  DestroyResultSchema,
   HostInspectResultSchema,
   InspectResultSchema,
   MarkParamsSchema,
   MarkResultSchema,
   PasteParamsSchema,
+  SendKeysResultSchema,
   RecordExportResultSchema,
   ReplayTimingModeSchema,
   ResizeResultSchema,
@@ -539,6 +541,14 @@ describe('RPC message schemas', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts sendKeys params with multiple keys', () => {
+    const result = SendKeysParamsSchema.safeParse({
+      keys: ['Ctrl+L', 'g', 'g'],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it('rejects empty paste text', () => {
     const result = PasteParamsSchema.safeParse({
       text: '',
@@ -550,6 +560,20 @@ describe('RPC message schemas', () => {
   it('accepts mark params with empty labels and mark results with seq values', () => {
     expect(MarkParamsSchema.parse({ label: '' })).toEqual({ label: '' });
     expect(MarkResultSchema.parse({ seq: 42 })).toEqual({ seq: 42 });
+  });
+
+  it('accepts sendKeys results with accepted keys, bytes written, and seq', () => {
+    expect(
+      SendKeysResultSchema.parse({
+        accepted: ['Enter'],
+        bytesWritten: 1,
+        seq: 42,
+      }),
+    ).toEqual({
+      accepted: ['Enter'],
+      bytesWritten: 1,
+      seq: 42,
+    });
   });
 
   it('rejects empty type text', () => {
@@ -604,6 +628,19 @@ describe('RPC message schemas', () => {
   it('accepts destroy params with an optional force flag', () => {
     expect(DestroyParamsSchema.safeParse({}).success).toBe(true);
     expect(DestroyParamsSchema.safeParse({ force: true }).success).toBe(true);
+  });
+
+  it('accepts destroy results that match the shipped CLI envelope shape', () => {
+    expect(
+      DestroyResultSchema.safeParse({
+        sessionId: 'session-01',
+        destroyed: true,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects destroy results that omit the session metadata', () => {
+    expect(DestroyResultSchema.safeParse({}).success).toBe(false);
   });
 
   it('exposes method schemas for every RPC method', () => {

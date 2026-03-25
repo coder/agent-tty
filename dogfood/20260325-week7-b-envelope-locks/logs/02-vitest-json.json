@@ -1,0 +1,392 @@
+{
+  "numTotalTestSuites": 10,
+  "numPassedTestSuites": 10,
+  "numFailedTestSuites": 0,
+  "numPendingTestSuites": 0,
+  "numTotalTests": 28,
+  "numPassedTests": 28,
+  "numFailedTests": 0,
+  "numPendingTests": 0,
+  "numTodoTests": 0,
+  "snapshot": {
+    "added": 0,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0,
+    "didUpdate": false
+  },
+  "startTime": 1774475993512,
+  "success": true,
+  "testResults": [
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["JSON envelope contracts"],
+          "fullName": "JSON envelope contracts locks the inspect success envelope shape",
+          "status": "passed",
+          "title": "locks the inspect success envelope shape",
+          "duration": 7.469828000000007,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["JSON envelope contracts"],
+          "fullName": "JSON envelope contracts locks the version success envelope shape",
+          "status": "passed",
+          "title": "locks the version success envelope shape",
+          "duration": 3.518349999999998,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'create' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'create' result contract accepts a valid result in the success envelope",
+          "status": "passed",
+          "title": "accepts a valid result in the success envelope",
+          "duration": 0.866277000000025,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'create' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'create' result contract rejects an invalid result",
+          "status": "passed",
+          "title": "rejects an invalid result",
+          "duration": 0.7033790000000408,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'create' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'create' result contract rejects extra fields to enforce strict mode",
+          "status": "passed",
+          "title": "rejects extra fields to enforce strict mode",
+          "duration": 0.4448489999999765,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'list' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'list' result contract accepts a valid result in the success envelope",
+          "status": "passed",
+          "title": "accepts a valid result in the success envelope",
+          "duration": 0.9294080000000235,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'list' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'list' result contract rejects an invalid result",
+          "status": "passed",
+          "title": "rejects an invalid result",
+          "duration": 0.5142379999999775,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'list' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'list' result contract rejects extra fields to enforce strict mode",
+          "status": "passed",
+          "title": "rejects extra fields to enforce strict mode",
+          "duration": 0.34448900000001004,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'send-keys' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'send-keys' result contract accepts a valid result in the success envelope",
+          "status": "passed",
+          "title": "accepts a valid result in the success envelope",
+          "duration": 1.149707000000035,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'send-keys' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'send-keys' result contract rejects an invalid result",
+          "status": "passed",
+          "title": "rejects an invalid result",
+          "duration": 0.517169000000024,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'send-keys' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'send-keys' result contract rejects extra fields to enforce strict mode",
+          "status": "passed",
+          "title": "rejects extra fields to enforce strict mode",
+          "duration": 0.3920089999999732,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'snapshot' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'snapshot' result contract accepts a valid result in the success envelope",
+          "status": "passed",
+          "title": "accepts a valid result in the success envelope",
+          "duration": 1.316976000000011,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'snapshot' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'snapshot' result contract rejects an invalid result",
+          "status": "passed",
+          "title": "rejects an invalid result",
+          "duration": 0.34207900000001246,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'snapshot' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'snapshot' result contract rejects extra fields to enforce strict mode",
+          "status": "passed",
+          "title": "rejects extra fields to enforce strict mode",
+          "duration": 0.3364689999999655,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'screenshot' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'screenshot' result contract accepts a valid result in the success envelope",
+          "status": "passed",
+          "title": "accepts a valid result in the success envelope",
+          "duration": 0.7703579999999874,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'screenshot' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'screenshot' result contract rejects an invalid result",
+          "status": "passed",
+          "title": "rejects an invalid result",
+          "duration": 0.405648000000042,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'screenshot' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'screenshot' result contract rejects extra fields to enforce strict mode",
+          "status": "passed",
+          "title": "rejects extra fields to enforce strict mode",
+          "duration": 0.30023900000003323,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'destroy' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'destroy' result contract accepts a valid result in the success envelope",
+          "status": "passed",
+          "title": "accepts a valid result in the success envelope",
+          "duration": 0.4130089999999882,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'destroy' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'destroy' result contract rejects an invalid result",
+          "status": "passed",
+          "title": "rejects an invalid result",
+          "duration": 0.30049900000000207,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'destroy' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'destroy' result contract rejects extra fields to enforce strict mode",
+          "status": "passed",
+          "title": "rejects extra fields to enforce strict mode",
+          "duration": 0.24709000000001424,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'wait (legacy)' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'wait (legacy)' result contract accepts a valid result in the success envelope",
+          "status": "passed",
+          "title": "accepts a valid result in the success envelope",
+          "duration": 0.4477489999999875,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'wait (legacy)' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'wait (legacy)' result contract rejects an invalid result",
+          "status": "passed",
+          "title": "rejects an invalid result",
+          "duration": 0.30191899999999805,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'wait (legacy)' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'wait (legacy)' result contract rejects extra fields to enforce strict mode",
+          "status": "passed",
+          "title": "rejects extra fields to enforce strict mode",
+          "duration": 0.2497889999999643,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'wait (render)' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'wait (render)' result contract accepts a valid result in the success envelope",
+          "status": "passed",
+          "title": "accepts a valid result in the success envelope",
+          "duration": 0.5462389999999573,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'wait (render)' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'wait (render)' result contract rejects an invalid result",
+          "status": "passed",
+          "title": "rejects an invalid result",
+          "duration": 0.2906889999999862,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "JSON envelope contracts",
+            "'wait (render)' result contract"
+          ],
+          "fullName": "JSON envelope contracts 'wait (render)' result contract rejects extra fields to enforce strict mode",
+          "status": "passed",
+          "title": "rejects extra fields to enforce strict mode",
+          "duration": 0.2561190000000124,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["JSON envelope contracts"],
+          "fullName": "JSON envelope contracts locks the SESSION_NOT_FOUND error envelope shape",
+          "status": "passed",
+          "title": "locks the SESSION_NOT_FOUND error envelope shape",
+          "duration": 0.4316689999999994,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["JSON envelope contracts"],
+          "fullName": "JSON envelope contracts locks a retryable transport-style error envelope shape",
+          "status": "passed",
+          "title": "locks a retryable transport-style error envelope shape",
+          "duration": 0.33213899999998375,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1774475993844,
+      "endTime": 1774475993869.332,
+      "status": "passed",
+      "message": "",
+      "name": "/home/coder/.mux/src/agent-terminal/agent_exec_1004f71ee0/test/unit/commands/golden-envelopes.test.ts"
+    }
+  ]
+}

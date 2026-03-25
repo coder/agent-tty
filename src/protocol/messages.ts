@@ -197,7 +197,13 @@ export const SendKeysParamsSchema = z
   .strict();
 export type SendKeysParams = z.infer<typeof SendKeysParamsSchema>;
 
-export const SendKeysResultSchema = EmptyObjectSchema;
+export const SendKeysResultSchema = z
+  .object({
+    accepted: z.array(NonEmptyStringSchema).min(1),
+    bytesWritten: z.number().int().nonnegative(),
+    seq: z.number().int().nonnegative(),
+  })
+  .strict();
 export type SendKeysResult = z.infer<typeof SendKeysResultSchema>;
 
 export const ResizeParamsSchema = z
@@ -248,7 +254,12 @@ export const DestroyParamsSchema = z
   .strict();
 export type DestroyParams = z.infer<typeof DestroyParamsSchema>;
 
-export const DestroyResultSchema = EmptyObjectSchema;
+export const DestroyResultSchema = z
+  .object({
+    sessionId: z.string().min(1),
+    destroyed: z.boolean(),
+  })
+  .strict();
 export type DestroyResult = z.infer<typeof DestroyResultSchema>;
 
 const RPC_METHODS = [

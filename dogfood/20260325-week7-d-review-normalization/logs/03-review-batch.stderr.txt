@@ -1,0 +1,4 @@
+Building /tmp/agent-terminal-week7-review.9yyqy2/20260325-week6-a-cli-contract
+Building /tmp/agent-terminal-week7-review.9yyqy2/20260325-week6-d-review-surface
+Building /tmp/agent-terminal-week7-review.9yyqy2/20260325-week7-a-cli-parity
+Building /tmp/agent-terminal-week7-review.9yyqy2/20260325-week7-b-envelope-locks

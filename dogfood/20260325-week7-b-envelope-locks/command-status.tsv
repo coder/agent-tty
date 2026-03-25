@@ -1,0 +1,8 @@
+step	command	exit_code	status
+01	./node_modules/.bin/vitest run test/unit/commands/golden-envelopes.test.ts --reporter=verbose	0	ok
+02	./node_modules/.bin/vitest run test/unit/commands/golden-envelopes.test.ts --reporter=json	0	ok
+03	./node_modules/.bin/prettier --write dogfood/20260325-week7-b-envelope-locks/logs/02-vitest-json.json	0	ok
+04	cp test/unit/commands/golden-envelopes.test.ts dogfood/20260325-week7-b-envelope-locks/logs/03-test-source.txt	0	ok
+05	./node_modules/.bin/tsx src/tools/review-bundle.ts dogfood/20260325-week7-b-envelope-locks	0	ok
+06	./node_modules/.bin/prettier --write dogfood/20260325-week7-b-envelope-locks/notes.md dogfood/20260325-week7-b-envelope-locks/index.html	0	ok
+07	PATH=/usr/local/nvm/versions/node/v22.19.0/bin:$PATH npm run format:check	0	ok

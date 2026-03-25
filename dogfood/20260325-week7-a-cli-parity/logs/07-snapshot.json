@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-25T19:46:53.420Z",
+  "result": {
+    "format": "text",
+    "sessionId": "01KMK8J0XB9THNASXVNPF697ZD",
+    "capturedAtSeq": 7,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 2,
+    "cursorCol": 43,
+    "text": "READY>\nECHO:\nREADY> hello world^[[200~pasted text^[[201~\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  }
+}

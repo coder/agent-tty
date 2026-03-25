@@ -650,10 +650,31 @@ export async function runHost(sessionId: string): Promise<void> {
         });
       }
 
+      // pty.write() queues bytes into the kernel buffer synchronously.
+      // We record the event log entry after the write so that seq reflects
+      // a committed write. If eventLog.append() rejects, the event is
+      // rolled back and the RPC returns an error — the PTY received the
+      // bytes but the client can retry or inspect the session state.
       pty.write(encoded);
       lastActivityAt = Date.now();
-      await eventLog.append('input_keys', { keys });
-      return {};
+
+      let seq: number;
+      try {
+        seq = await eventLog.append('input_keys', { keys: [...keys] });
+      } catch (error) {
+        // PTY received input but event log write failed — client gets RPC error.
+        // Log for debugging since the partial-write state is non-obvious.
+        console.debug(
+          'sendKeys: eventLog.append failed after pty.write:',
+          error,
+        );
+        throw error;
+      }
+      return {
+        accepted: [...keys],
+        bytesWritten: Buffer.byteLength(encoded),
+        seq,
+      };
     },
     resize: async (params: unknown) => {
       const { cols, rows } = params as ResizeParams;
@@ -1030,7 +1051,10 @@ export async function runHost(sessionId: string): Promise<void> {
     },
     destroy: () => {
       startShutdown();
-      return Promise.resolve({});
+      return Promise.resolve({
+        sessionId,
+        destroyed: true,
+      });
     },
   };
   const rpcServer = new RpcServer(sPath, handlers);

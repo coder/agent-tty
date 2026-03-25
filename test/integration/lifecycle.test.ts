@@ -689,6 +689,28 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(envelope.error.code).toBe('SESSION_NOT_FOUND');
   });
 
+  it('send-keys to non-existent session returns SESSION_NOT_FOUND', () => {
+    const result = runCli(['send-keys', 'NONEXISTENT', 'Enter', '--json'], {
+      AGENT_TERMINAL_HOME: testHome,
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toBe('');
+    const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('SESSION_NOT_FOUND');
+  });
+
+  it('destroy non-existent session returns SESSION_NOT_FOUND', () => {
+    const result = runCli(['destroy', 'NONEXISTENT', '--json'], {
+      AGENT_TERMINAL_HOME: testHome,
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toBe('');
+    const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('SESSION_NOT_FOUND');
+  });
+
   it('event log contains output and exit records', async () => {
     const createResult = runCli(
       [

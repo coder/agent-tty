@@ -1,4 +1,5 @@
 import type { CommandContext } from '../context.js';
+import type { MarkResult } from '../../protocol/messages.js';
 
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
@@ -11,9 +12,7 @@ import {
   socketPath,
 } from '../../storage/sessionPaths.js';
 
-export interface MarkResult {
-  seq: number;
-}
+export type { MarkResult } from '../../protocol/messages.js';
 
 interface CommandOptions {
   context: CommandContext;

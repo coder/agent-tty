@@ -27,6 +27,12 @@ interface InspectResult {
   session: SessionRecord;
 }
 
+interface SendKeysResult {
+  accepted: string[];
+  bytesWritten: number;
+  seq: number;
+}
+
 function testEnv(home: string): Record<string, string> {
   return { AGENT_TERMINAL_HOME: home };
 }
@@ -122,13 +128,18 @@ describe('resize-demo e2e', { timeout: 30_000 }, () => {
     expect(typeQuitEnvelope.command).toBe('type');
     expect(typeQuitEnvelope.result).toEqual({});
 
-    const sendKeysEnvelope = runCliJson<SuccessEnvelope<Record<string, never>>>(
+    const sendKeysEnvelope = runCliJson<SuccessEnvelope<SendKeysResult>>(
       ['send-keys', sessionId, 'Enter'],
       env,
     );
     expect(sendKeysEnvelope.ok).toBe(true);
     expect(sendKeysEnvelope.command).toBe('send-keys');
-    expect(sendKeysEnvelope.result).toEqual({});
+    expect(sendKeysEnvelope.result).toEqual({
+      accepted: ['Enter'],
+      bytesWritten: 1,
+      seq: expect.any(Number) as number,
+    });
+    expect(sendKeysEnvelope.result.seq).toBeGreaterThanOrEqual(0);
 
     const waitForExit = runCliJson<SuccessEnvelope<WaitResult>>(
       [

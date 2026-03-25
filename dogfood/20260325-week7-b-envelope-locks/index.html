@@ -1,0 +1,993 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Week 7 — Envelope Locks Proof review bundle</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0f172a;
+        --surface: #111827;
+        --surface-raised: #1f2937;
+        --text: #e5e7eb;
+        --muted: #94a3b8;
+        --accent: #93c5fd;
+        --border: #334155;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+        background: linear-gradient(180deg, #020617 0%, var(--bg) 100%);
+        color: var(--text);
+        line-height: 1.5;
+      }
+      main {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+      }
+      a {
+        color: var(--accent);
+      }
+      header,
+      section,
+      .card {
+        background: rgb(15 23 42 / 0.88);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        box-shadow: 0 18px 40px rgb(2 6 23 / 0.25);
+      }
+      header,
+      section {
+        padding: 24px;
+        margin-bottom: 20px;
+      }
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        margin-top: 0;
+        color: #f8fafc;
+      }
+      p,
+      li,
+      dd,
+      td,
+      th,
+      summary,
+      figcaption {
+        overflow-wrap: anywhere;
+      }
+      .subtle {
+        color: var(--muted);
+      }
+      .facts {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        margin: 0;
+      }
+      .facts div {
+        padding: 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+      }
+      .facts dt {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      .facts dd {
+        margin: 6px 0 0;
+        font-weight: 600;
+      }
+      .gallery {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      }
+      .card {
+        padding: 16px;
+      }
+      .note-card > *:last-child {
+        margin-bottom: 0;
+      }
+      img,
+      video {
+        width: 100%;
+        border-radius: 12px;
+        background: #020617;
+        border: 1px solid var(--border);
+      }
+      figure {
+        margin: 0;
+      }
+      figcaption {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 12px;
+        color: var(--muted);
+      }
+      pre {
+        padding: 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+      }
+      code {
+        font-family:
+          'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      details > summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      th {
+        color: #f8fafc;
+      }
+      .table-scroll {
+        overflow-x: auto;
+      }
+      .empty-state {
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="subtle">Portable review bundle</p>
+        <h1>Week 7 — Envelope Locks Proof</h1>
+        <p class="subtle">Bundle directory: 20260325-week7-b-envelope-locks</p>
+        <p>
+          Captures current golden-envelope test suite output and documents which
+          public JSON surfaces are locked
+        </p>
+      </header>
+
+      <section>
+        <h2>Manifest summary</h2>
+        <dl class="facts">
+          <div>
+            <dt>Bundle</dt>
+            <dd>20260325-week7-b-envelope-locks</dd>
+          </div>
+          <div>
+            <dt>Date</dt>
+            <dd>2026-03-25T22:04:59Z</dd>
+          </div>
+          <div>
+            <dt>Lane</dt>
+            <dd>B</dd>
+          </div>
+          <div>
+            <dt>Week</dt>
+            <dd>7</dd>
+          </div>
+          <div>
+            <dt>Manifest artifacts</dt>
+            <dd>6</dd>
+          </div>
+          <div>
+            <dt>Discovered files</dt>
+            <dd>12</dd>
+          </div>
+        </dl>
+      </section>
+      <section>
+        <h2>Screenshot gallery</h2>
+        <div class="gallery">
+          <figure class="card">
+            <img
+              src="screenshots/01-review-page-verified.png"
+              alt="01-review-page-verified.png"
+              loading="lazy"
+            />
+            <figcaption>
+              <a href="screenshots/01-review-page-verified.png"
+                >screenshots/01-review-page-verified.png</a
+              >
+              <span>78.6 KB</span>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section>
+        <h2>JSON outputs</h2>
+
+        <details class="card">
+          <summary>logs/02-vitest-json.json</summary>
+          <pre><code>{
+  &quot;numTotalTestSuites&quot;: 10,
+  &quot;numPassedTestSuites&quot;: 10,
+  &quot;numFailedTestSuites&quot;: 0,
+  &quot;numPendingTestSuites&quot;: 0,
+  &quot;numTotalTests&quot;: 28,
+  &quot;numPassedTests&quot;: 28,
+  &quot;numFailedTests&quot;: 0,
+  &quot;numPendingTests&quot;: 0,
+  &quot;numTodoTests&quot;: 0,
+  &quot;snapshot&quot;: {
+    &quot;added&quot;: 0,
+    &quot;failure&quot;: false,
+    &quot;filesAdded&quot;: 0,
+    &quot;filesRemoved&quot;: 0,
+    &quot;filesRemovedList&quot;: [],
+    &quot;filesUnmatched&quot;: 0,
+    &quot;filesUpdated&quot;: 0,
+    &quot;matched&quot;: 0,
+    &quot;total&quot;: 0,
+    &quot;unchecked&quot;: 0,
+    &quot;uncheckedKeysByFile&quot;: [],
+    &quot;unmatched&quot;: 0,
+    &quot;updated&quot;: 0,
+    &quot;didUpdate&quot;: false
+  },
+  &quot;startTime&quot;: 1774475993512,
+  &quot;success&quot;: true,
+  &quot;testResults&quot;: [
+    {
+      &quot;assertionResults&quot;: [
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts locks the inspect success envelope shape&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;locks the inspect success envelope shape&quot;,
+          &quot;duration&quot;: 7.469828000000007,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts locks the version success envelope shape&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;locks the version success envelope shape&quot;,
+          &quot;duration&quot;: 3.518349999999998,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;create&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;create&#39; result contract accepts a valid result in the success envelope&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;accepts a valid result in the success envelope&quot;,
+          &quot;duration&quot;: 0.866277000000025,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;create&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;create&#39; result contract rejects an invalid result&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects an invalid result&quot;,
+          &quot;duration&quot;: 0.7033790000000408,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;create&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;create&#39; result contract rejects extra fields to enforce strict mode&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects extra fields to enforce strict mode&quot;,
+          &quot;duration&quot;: 0.4448489999999765,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;list&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;list&#39; result contract accepts a valid result in the success envelope&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;accepts a valid result in the success envelope&quot;,
+          &quot;duration&quot;: 0.9294080000000235,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;list&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;list&#39; result contract rejects an invalid result&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects an invalid result&quot;,
+          &quot;duration&quot;: 0.5142379999999775,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;list&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;list&#39; result contract rejects extra fields to enforce strict mode&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects extra fields to enforce strict mode&quot;,
+          &quot;duration&quot;: 0.34448900000001004,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;send-keys&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;send-keys&#39; result contract accepts a valid result in the success envelope&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;accepts a valid result in the success envelope&quot;,
+          &quot;duration&quot;: 1.149707000000035,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;send-keys&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;send-keys&#39; result contract rejects an invalid result&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects an invalid result&quot;,
+          &quot;duration&quot;: 0.517169000000024,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;send-keys&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;send-keys&#39; result contract rejects extra fields to enforce strict mode&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects extra fields to enforce strict mode&quot;,
+          &quot;duration&quot;: 0.3920089999999732,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;snapshot&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;snapshot&#39; result contract accepts a valid result in the success envelope&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;accepts a valid result in the success envelope&quot;,
+          &quot;duration&quot;: 1.316976000000011,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;snapshot&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;snapshot&#39; result contract rejects an invalid result&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects an invalid result&quot;,
+          &quot;duration&quot;: 0.34207900000001246,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;snapshot&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;snapshot&#39; result contract rejects extra fields to enforce strict mode&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects extra fields to enforce strict mode&quot;,
+          &quot;duration&quot;: 0.3364689999999655,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;screenshot&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;screenshot&#39; result contract accepts a valid result in the success envelope&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;accepts a valid result in the success envelope&quot;,
+          &quot;duration&quot;: 0.7703579999999874,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;screenshot&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;screenshot&#39; result contract rejects an invalid result&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects an invalid result&quot;,
+          &quot;duration&quot;: 0.405648000000042,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;screenshot&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;screenshot&#39; result contract rejects extra fields to enforce strict mode&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects extra fields to enforce strict mode&quot;,
+          &quot;duration&quot;: 0.30023900000003323,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;destroy&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;destroy&#39; result contract accepts a valid result in the success envelope&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;accepts a valid result in the success envelope&quot;,
+          &quot;duration&quot;: 0.4130089999999882,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;destroy&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;destroy&#39; result contract rejects an invalid result&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects an invalid result&quot;,
+          &quot;duration&quot;: 0.30049900000000207,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;destroy&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;destroy&#39; result contract rejects extra fields to enforce strict mode&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects extra fields to enforce strict mode&quot;,
+          &quot;duration&quot;: 0.24709000000001424,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;wait (legacy)&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;wait (legacy)&#39; result contract accepts a valid result in the success envelope&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;accepts a valid result in the success envelope&quot;,
+          &quot;duration&quot;: 0.4477489999999875,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;wait (legacy)&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;wait (legacy)&#39; result contract rejects an invalid result&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects an invalid result&quot;,
+          &quot;duration&quot;: 0.30191899999999805,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;wait (legacy)&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;wait (legacy)&#39; result contract rejects extra fields to enforce strict mode&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects extra fields to enforce strict mode&quot;,
+          &quot;duration&quot;: 0.2497889999999643,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;wait (render)&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;wait (render)&#39; result contract accepts a valid result in the success envelope&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;accepts a valid result in the success envelope&quot;,
+          &quot;duration&quot;: 0.5462389999999573,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;wait (render)&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;wait (render)&#39; result contract rejects an invalid result&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects an invalid result&quot;,
+          &quot;duration&quot;: 0.2906889999999862,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;,
+            &quot;&#39;wait (render)&#39; result contract&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts &#39;wait (render)&#39; result contract rejects extra fields to enforce strict mode&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;rejects extra fields to enforce strict mode&quot;,
+          &quot;duration&quot;: 0.2561190000000124,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts locks the SESSION_NOT_FOUND error envelope shape&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;locks the SESSION_NOT_FOUND error envelope shape&quot;,
+          &quot;duration&quot;: 0.4316689999999994,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        },
+        {
+          &quot;ancestorTitles&quot;: [
+            &quot;JSON envelope contracts&quot;
+          ],
+          &quot;fullName&quot;: &quot;JSON envelope contracts locks a retryable transport-style error envelope shape&quot;,
+          &quot;status&quot;: &quot;passed&quot;,
+          &quot;title&quot;: &quot;locks a retryable transport-style error envelope shape&quot;,
+          &quot;duration&quot;: 0.33213899999998375,
+          &quot;failureMessages&quot;: [],
+          &quot;meta&quot;: {},
+          &quot;tags&quot;: []
+        }
+      ],
+      &quot;startTime&quot;: 1774475993844,
+      &quot;endTime&quot;: 1774475993869.332,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;message&quot;: &quot;&quot;,
+      &quot;name&quot;: &quot;/home/coder/.mux/src/agent-terminal/agent_exec_1004f71ee0/test/unit/commands/golden-envelopes.test.ts&quot;
+    }
+  ]
+}</code></pre>
+        </details>
+      </section>
+      <section>
+        <h2>Notes</h2>
+
+        <article class="card note-card">
+          <h3><a href="notes.md">notes.md</a></h3>
+          <h1>2026-03-25 dogfood — Week 7 bundle B envelope locks proof</h1>
+          <h2>Bundle metadata</h2>
+          <ul>
+            <li>
+              <strong>Bundle path:</strong>
+              <code>dogfood/20260325-week7-b-envelope-locks/</code>
+            </li>
+            <li>
+              <strong>Test file:</strong>
+              <code>test/unit/commands/golden-envelopes.test.ts</code>
+            </li>
+            <li>
+              <strong>CLI entrypoint:</strong> <code>src/cli/main.ts</code>
+            </li>
+            <li>
+              <strong>Captured logs:</strong>
+              <code>logs/01-vitest-verbose.txt</code>,
+              <code>logs/02-vitest-json.json</code>, and
+              <code>logs/03-test-source.txt</code>
+            </li>
+            <li>
+              <strong>Screenshots directory:</strong>
+              <code>screenshots/</code> now includes
+              <code>01-review-page-verified.png</code> from the Week 7
+              remediation browser-verification pass.
+            </li>
+          </ul>
+          <h2>Scenario summary</h2>
+          <p>
+            This refreshed bundle reran
+            <code>test/unit/commands/golden-envelopes.test.ts</code> and
+            preserved both Vitest reporters plus the current test source. The
+            current suite reports <strong>28 passing tests</strong> across
+            <strong>10 command surfaces</strong> locked by success-envelope and
+            strict-schema assertions, plus two representative
+            <code>inspect</code> error envelopes. The expanded suite now covers
+            <code>create</code>, <code>list</code>, <code>send-keys</code>,
+            <code>snapshot</code>, <code>screenshot</code>,
+            <code>destroy</code>, <code>wait</code> (legacy),
+            <code>wait</code> (render), <code>inspect</code>, and
+            <code>version</code>.
+          </p>
+          <h2>Coverage assessment</h2>
+          <p>
+            | Surface | Golden-envelope status | Notes | | --------------- |
+            ---------------------- |
+            ----------------------------------------------------------------------------------------------------------------------------------
+            | | <code>create</code> | Locked | Valid/invalid/extra-field tests
+            via the local strict <code>CreateResultSchema</code>. | |
+            <code>list</code> | Locked | Valid/invalid/extra-field tests via the
+            local strict <code>ListResultSchema</code>. | |
+            <code>send-keys</code> | Locked | Valid/invalid/extra-field tests
+            via protocol <code>SendKeysResultSchema</code>. | |
+            <code>snapshot</code> | Locked | Valid/invalid/extra-field tests via
+            protocol <code>SnapshotResultSchema</code>. | |
+            <code>screenshot</code> | Locked | Valid/invalid/extra-field tests
+            via protocol <code>ScreenshotResultSchema</code>. | |
+            <code>destroy</code> | Locked | Valid/invalid/extra-field tests via
+            protocol <code>DestroyResultSchema</code>. | |
+            <code>wait</code> (legacy) | Locked | Valid/invalid/extra-field
+            tests via protocol <code>WaitResultSchema</code>. | |
+            <code>wait</code> (render) | Locked | Valid/invalid/extra-field
+            tests via protocol <code>WaitForRenderResultSchema</code>. | |
+            <code>inspect</code> | Locked | One success-envelope golden plus two
+            representative error-envelope goldens (<code
+              >SESSION_NOT_FOUND</code
+            >
+            and retryable <code>HOST_UNREACHABLE</code>). | |
+            <code>version</code> | Locked | Success envelope validated via the
+            local strict <code>VersionResultSchema</code> around
+            <code>buildVersionResult()</code>. | | <code>type</code> | Unlocked
+            | No golden test covers the <code>type</code> success or error
+            envelopes. | | <code>paste</code> | Unlocked | No golden test covers
+            the <code>paste</code> success or error envelopes. | |
+            <code>gc</code> | Unlocked | No golden test covers the
+            <code>gc</code> success or error envelopes. | |
+            <code>record export</code> | Unlocked | No golden test covers the
+            <code>record export</code> success or error envelopes. | |
+            <code>doctor</code> | Unlocked | No golden test covers the
+            <code>doctor</code> success or error envelopes. |
+          </p>
+          <h2>Locked-suite breakdown</h2>
+          <ul>
+            <li>
+              <strong>24 tests</strong> come from the eight strict
+              result-contract surfaces with valid, invalid, and extra-field
+              cases: <code>create</code>, <code>list</code>,
+              <code>send-keys</code>, <code>snapshot</code>,
+              <code>screenshot</code>, <code>destroy</code>,
+              <code>wait</code> (legacy), and <code>wait</code> (render).
+            </li>
+            <li>
+              <strong>1 test</strong> locks the <code>inspect</code> success
+              envelope shape.
+            </li>
+            <li>
+              <strong>1 test</strong> locks the <code>version</code> success
+              envelope shape.
+            </li>
+            <li>
+              <strong>2 tests</strong> lock representative
+              <code>inspect</code> error envelopes.
+            </li>
+          </ul>
+          <h2>Review answers</h2>
+          <ul>
+            <li>
+              <strong>Did all tests pass?</strong> Yes.
+              <code>logs/01-vitest-verbose.txt</code> reports 1 passed test file
+              and 28 passed tests, and
+              <code>logs/02-vitest-json.json</code> reports
+              <code>success: true</code>.
+            </li>
+            <li>
+              <strong
+                >What is the exact test count (passed/failed/skipped)?</strong
+              >
+              28 passed, 0 failed, 0 skipped/pending/todo, out of 28 total
+              tests.
+            </li>
+            <li>
+              <strong>What surfaces remain unlocked?</strong> <code>type</code>,
+              <code>paste</code>, <code>gc</code>, <code>record export</code>,
+              and <code>doctor</code> remain outside the current golden-envelope
+              suite.
+            </li>
+          </ul>
+          <h2>Issues / limitations</h2>
+          <ul>
+            <li>
+              The suite now locks the representative Week 7 contract surfaces,
+              but it still leaves the lower-priority <code>type</code>,
+              <code>paste</code>, <code>gc</code>, <code>record export</code>,
+              and <code>doctor</code> surfaces unlocked.
+            </li>
+            <li>
+              The <code>inspect</code> surface is locked at the success envelope
+              plus two representative error envelopes preserved here; other
+              <code>inspect</code> branches are not separately golden-locked.
+            </li>
+            <li>
+              In this child worktree, <code>npx</code> routed through an
+              untrusted <code>mise.toml</code>, so the refreshed capture used
+              the equivalent local binaries after
+              <code>npm ci --ignore-scripts</code>; the checked-in logs in this
+              bundle are the current source of truth.
+            </li>
+          </ul>
+          <h2>Browser Verification (Week 7 remediation)</h2>
+          <p>
+            Review page verified via <code>agent-browser</code> — see
+            <code>screenshots/01-review-page-verified.png</code>.
+          </p>
+        </article>
+      </section>
+      <section>
+        <h2>Commands</h2>
+        <div class="card">
+          <h3><a href="commands.sh">commands.sh</a></h3>
+          <pre><code>#!/usr/bin/env bash
+set -euo pipefail
+export PATH=&quot;$HOME/.local/bin:$PATH&quot;
+
+BUNDLE=&quot;dogfood/20260325-week7-b-envelope-locks&quot;
+LOGS=&quot;$BUNDLE/logs&quot;
+STATUS=&quot;$BUNDLE/command-status.tsv&quot;
+
+mkdir -p &quot;$LOGS&quot; &quot;$BUNDLE/screenshots&quot;
+: &gt; &quot;$BUNDLE/screenshots/.gitkeep&quot;
+printf &#39;step	command	exit_code	status
+&#39; &gt; &quot;$STATUS&quot;
+
+run_and_record() {
+  local step=&quot;$1&quot;
+  local stdout_path=&quot;$2&quot;
+  local stderr_path=&quot;$3&quot;
+  local optional=&quot;$4&quot;
+  shift 4
+
+  local exit_code=0
+  if &quot;$@&quot; &gt;&quot;$stdout_path&quot; 2&gt;&quot;$stderr_path&quot;; then
+    exit_code=0
+  else
+    exit_code=$?
+  fi
+
+  local status=&quot;ok&quot;
+  if [[ $exit_code -ne 0 ]]; then
+    if [[ &quot;$optional&quot; == &quot;optional&quot; ]]; then
+      status=&quot;optional-failed&quot;
+    else
+      status=&quot;failed&quot;
+    fi
+  fi
+
+  printf &#39;%s	%s	%s	%s
+&#39; &quot;$step&quot; &quot;$*&quot; &quot;$exit_code&quot; &quot;$status&quot; &gt;&gt; &quot;$STATUS&quot;
+}
+
+mise trust mise.toml
+npm ci
+
+run_and_record   &#39;01&#39;   &quot;$LOGS/01-vitest-verbose.txt&quot;   &quot;$LOGS/01-vitest-verbose.stderr.txt&quot;   required   npx vitest run test/unit/commands/golden-envelopes.test.ts --reporter=verbose
+
+run_and_record   &#39;02&#39;   &quot;$LOGS/02-vitest-json.json&quot;   &quot;$LOGS/02-vitest-json.stderr.txt&quot;   optional   npx vitest run test/unit/commands/golden-envelopes.test.ts --reporter=json
+
+run_and_record   &#39;03&#39;   &quot;$LOGS/03-test-source.txt&quot;   &quot;$LOGS/03-test-source.stderr.txt&quot;   required   cat test/unit/commands/golden-envelopes.test.ts
+
+npx prettier --write &quot;$BUNDLE&quot;
+npx prettier --check &quot;$BUNDLE&quot;
+</code></pre>
+        </div>
+      </section>
+      <section>
+        <h2>Command status</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>step</th>
+                <th>command</th>
+                <th>exit_code</th>
+                <th>status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>01</td>
+                <td>
+                  npx vitest run test/unit/commands/golden-envelopes.test.ts
+                  --reporter=verbose
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>02</td>
+                <td>
+                  npx vitest run test/unit/commands/golden-envelopes.test.ts
+                  --reporter=json
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>03</td>
+                <td>cat test/unit/commands/golden-envelopes.test.ts</td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section>
+        <h2>Artifact inventory</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Type</th>
+                <th>Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="command-status.tsv">command-status.tsv</a></td>
+                <td>support</td>
+                <td>255 B</td>
+              </tr>
+              <tr>
+                <td><a href="commands.sh">commands.sh</a></td>
+                <td>script</td>
+                <td>1.4 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/01-vitest-verbose.stderr.txt"
+                    >logs/01-vitest-verbose.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/01-vitest-verbose.txt"
+                    >logs/01-vitest-verbose.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>5.9 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/02-vitest-json.json"
+                    >logs/02-vitest-json.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>13.4 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/02-vitest-json.stderr.txt"
+                    >logs/02-vitest-json.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/03-test-source.stderr.txt"
+                    >logs/03-test-source.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/03-test-source.txt">logs/03-test-source.txt</a>
+                </td>
+                <td>support</td>
+                <td>11.9 KB</td>
+              </tr>
+              <tr>
+                <td><a href="manifest.json">manifest.json</a></td>
+                <td>support</td>
+                <td>1.3 KB</td>
+              </tr>
+              <tr>
+                <td><a href="notes.md">notes.md</a></td>
+                <td>notes</td>
+                <td>5.5 KB</td>
+              </tr>
+              <tr>
+                <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="screenshots/01-review-page-verified.png"
+                    >screenshots/01-review-page-verified.png</a
+                  >
+                </td>
+                <td>screenshot</td>
+                <td>78.6 KB</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

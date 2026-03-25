@@ -1,0 +1,1538 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Week 7 — Proof Completeness Inventory review bundle</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0f172a;
+        --surface: #111827;
+        --surface-raised: #1f2937;
+        --text: #e5e7eb;
+        --muted: #94a3b8;
+        --accent: #93c5fd;
+        --border: #334155;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+        background: linear-gradient(180deg, #020617 0%, var(--bg) 100%);
+        color: var(--text);
+        line-height: 1.5;
+      }
+      main {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+      }
+      a {
+        color: var(--accent);
+      }
+      header,
+      section,
+      .card {
+        background: rgb(15 23 42 / 0.88);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        box-shadow: 0 18px 40px rgb(2 6 23 / 0.25);
+      }
+      header,
+      section {
+        padding: 24px;
+        margin-bottom: 20px;
+      }
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        margin-top: 0;
+        color: #f8fafc;
+      }
+      p,
+      li,
+      dd,
+      td,
+      th,
+      summary,
+      figcaption {
+        overflow-wrap: anywhere;
+      }
+      .subtle {
+        color: var(--muted);
+      }
+      .facts {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        margin: 0;
+      }
+      .facts div {
+        padding: 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+      }
+      .facts dt {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      .facts dd {
+        margin: 6px 0 0;
+        font-weight: 600;
+      }
+      .gallery {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      }
+      .card {
+        padding: 16px;
+      }
+      .note-card > *:last-child {
+        margin-bottom: 0;
+      }
+      img,
+      video {
+        width: 100%;
+        border-radius: 12px;
+        background: #020617;
+        border: 1px solid var(--border);
+      }
+      figure {
+        margin: 0;
+      }
+      figcaption {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 12px;
+        color: var(--muted);
+      }
+      pre {
+        padding: 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+      }
+      code {
+        font-family:
+          'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      details > summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      th {
+        color: #f8fafc;
+      }
+      .table-scroll {
+        overflow-x: auto;
+      }
+      .empty-state {
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="subtle">Portable review bundle</p>
+        <h1>Week 7 — Proof Completeness Inventory</h1>
+        <p class="subtle">
+          Bundle directory: 20260325-week7-c-proof-completeness
+        </p>
+        <p>
+          Inventories all dogfood proof bundles and their artifacts to verify
+          ecosystem completeness
+        </p>
+      </header>
+
+      <section>
+        <h2>Manifest summary</h2>
+        <dl class="facts">
+          <div>
+            <dt>Bundle</dt>
+            <dd>20260325-week7-c-proof-completeness</dd>
+          </div>
+          <div>
+            <dt>Date</dt>
+            <dd>2026-03-25T19:56:37.094Z</dd>
+          </div>
+          <div>
+            <dt>Lane</dt>
+            <dd>C</dd>
+          </div>
+          <div>
+            <dt>Week</dt>
+            <dd>7</dd>
+          </div>
+          <div>
+            <dt>Manifest artifacts</dt>
+            <dd>4</dd>
+          </div>
+          <div>
+            <dt>Discovered files</dt>
+            <dd>12</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section>
+        <h2>JSON outputs</h2>
+
+        <details class="card">
+          <summary>logs/04-summary.json</summary>
+          <pre><code>{
+  &quot;generatedAt&quot;: &quot;2026-03-25T19:56:37.094Z&quot;,
+  &quot;bundleCount&quot;: 40,
+  &quot;reviewPageCount&quot;: 6,
+  &quot;reviewPageBundles&quot;: [
+    &quot;20260325-week6-a-cli-contract&quot;,
+    &quot;20260325-week6-b-artifact-health&quot;,
+    &quot;20260325-week6-c-failure-taxonomy&quot;,
+    &quot;20260325-week6-d-review-surface&quot;,
+    &quot;20260325-week7-a-cli-parity&quot;,
+    &quot;20260325-week7-c-proof-completeness&quot;
+  ],
+  &quot;bundlesMissingCommandsSh&quot;: [
+    &quot;20260319-lifecycle&quot;,
+    &quot;20260319-nvim-demo&quot;,
+    &quot;20260319-resize-demo&quot;,
+    &quot;20260322-dogfood-crash&quot;,
+    &quot;20260322-dogfood-hello-prompt&quot;,
+    &quot;20260322-dogfood-resize&quot;,
+    &quot;20260322-dogfood-scrollback&quot;,
+    &quot;20260322-dogfood-unicode&quot;,
+    &quot;20260322-dogfood-week4-features&quot;,
+    &quot;20260322-global-cli-context&quot;,
+    &quot;20260322-lazyvim-scenario&quot;,
+    &quot;20260322-week4-cli-parity&quot;,
+    &quot;20260322-week4-failure-recovery&quot;,
+    &quot;20260322-week4-scrollback-review&quot;,
+    &quot;20260322-week4-unicode-review&quot;,
+    &quot;20260323-bugfix-resize&quot;,
+    &quot;20260323-bugfix-scrollback&quot;,
+    &quot;20260323-week5-platform-closure&quot;
+  ],
+  &quot;bundlesMissingNotesMd&quot;: [
+    &quot;20260321-week3-crash-retention&quot;,
+    &quot;20260321-week3-renderer-complete&quot;,
+    &quot;20260322-lazyvim-scenario&quot;,
+    &quot;week5-config-parity&quot;
+  ],
+  &quot;bundlesMissingIndexHtml&quot;: [
+    &quot;20260319-lifecycle&quot;,
+    &quot;20260319-nvim-demo&quot;,
+    &quot;20260319-resize-demo&quot;,
+    &quot;20260320-renderer-complete&quot;,
+    &quot;20260321-post-hardening-smoke&quot;,
+    &quot;20260321-week3-crash-retention&quot;,
+    &quot;20260321-week3-renderer-complete&quot;,
+    &quot;20260322-dogfood-alt-screen&quot;,
+    &quot;20260322-dogfood-color&quot;,
+    &quot;20260322-dogfood-crash&quot;,
+    &quot;20260322-dogfood-hello-prompt&quot;,
+    &quot;20260322-dogfood-resize&quot;,
+    &quot;20260322-dogfood-scrollback&quot;,
+    &quot;20260322-dogfood-unicode&quot;,
+    &quot;20260322-dogfood-week4-features&quot;,
+    &quot;20260322-global-cli-context&quot;,
+    &quot;20260322-lazyvim-scenario&quot;,
+    &quot;20260322-week4-cli-parity&quot;,
+    &quot;20260322-week4-failure-recovery&quot;,
+    &quot;20260322-week4-scrollback-review&quot;,
+    &quot;20260322-week4-unicode-review&quot;,
+    &quot;20260323-bugfix-resize&quot;,
+    &quot;20260323-bugfix-scrollback&quot;,
+    &quot;20260323-week5-platform-closure&quot;,
+    &quot;20260323-week5-recovery-host&quot;,
+    &quot;20260323-week5-recovery-renderer&quot;,
+    &quot;20260323-week5-recovery-replay&quot;,
+    &quot;20260323-week5-render-cells&quot;,
+    &quot;20260323-week5-render-cursor&quot;,
+    &quot;20260323-week5-render-fonts&quot;,
+    &quot;20260323-week5-render-timing&quot;,
+    &quot;20260323-week5-review-helper&quot;,
+    &quot;20260325-week7-b-envelope-locks&quot;,
+    &quot;week5-config-parity&quot;
+  ],
+  &quot;bundlesMissingManifestJson&quot;: [
+    &quot;20260320-renderer-complete&quot;,
+    &quot;20260321-post-hardening-smoke&quot;,
+    &quot;20260322-dogfood-crash&quot;,
+    &quot;20260322-dogfood-scrollback&quot;,
+    &quot;20260322-dogfood-unicode&quot;,
+    &quot;20260322-dogfood-week4-features&quot;,
+    &quot;20260322-global-cli-context&quot;,
+    &quot;20260322-lazyvim-scenario&quot;,
+    &quot;20260322-week4-cli-parity&quot;,
+    &quot;20260322-week4-failure-recovery&quot;,
+    &quot;20260322-week4-scrollback-review&quot;,
+    &quot;20260322-week4-unicode-review&quot;,
+    &quot;20260323-bugfix-resize&quot;,
+    &quot;20260323-bugfix-scrollback&quot;,
+    &quot;20260323-week5-platform-closure&quot;,
+    &quot;week5-config-parity&quot;
+  ],
+  &quot;bundlesMissingCommandStatusTsv&quot;: [
+    &quot;20260319-lifecycle&quot;,
+    &quot;20260319-nvim-demo&quot;,
+    &quot;20260319-resize-demo&quot;,
+    &quot;20260320-renderer-complete&quot;,
+    &quot;20260321-post-hardening-smoke&quot;,
+    &quot;20260321-week3-crash-retention&quot;,
+    &quot;20260321-week3-renderer-complete&quot;,
+    &quot;20260322-dogfood-crash&quot;,
+    &quot;20260322-dogfood-hello-prompt&quot;,
+    &quot;20260322-dogfood-resize&quot;,
+    &quot;20260322-dogfood-scrollback&quot;,
+    &quot;20260322-dogfood-unicode&quot;,
+    &quot;20260322-dogfood-week4-features&quot;,
+    &quot;20260322-global-cli-context&quot;,
+    &quot;20260322-lazyvim-scenario&quot;,
+    &quot;20260322-week4-cli-parity&quot;,
+    &quot;20260322-week4-failure-recovery&quot;,
+    &quot;20260322-week4-scrollback-review&quot;,
+    &quot;20260322-week4-unicode-review&quot;,
+    &quot;20260323-bugfix-resize&quot;,
+    &quot;20260323-bugfix-scrollback&quot;,
+    &quot;20260323-week5-platform-closure&quot;,
+    &quot;week5-config-parity&quot;
+  ],
+  &quot;totals&quot;: {
+    &quot;screenshotsCount&quot;: 36,
+    &quot;screenshotsTotalBytes&quot;: 1476577,
+    &quot;recordingsCount&quot;: 9,
+    &quot;videosCount&quot;: 4,
+    &quot;snapshotsCount&quot;: 10
+  },
+  &quot;bundles&quot;: [
+    {
+      &quot;bundle&quot;: &quot;20260319-lifecycle&quot;,
+      &quot;path&quot;: &quot;dogfood/20260319-lifecycle&quot;,
+      &quot;totalFiles&quot;: 24,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 6,
+      &quot;screenshotsTotalBytes&quot;: 7540,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260319-nvim-demo&quot;,
+      &quot;path&quot;: &quot;dogfood/20260319-nvim-demo&quot;,
+      &quot;totalFiles&quot;: 11,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 6,
+      &quot;screenshotsTotalBytes&quot;: 8148,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260319-resize-demo&quot;,
+      &quot;path&quot;: &quot;dogfood/20260319-resize-demo&quot;,
+      &quot;totalFiles&quot;: 9,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260320-renderer-complete&quot;,
+      &quot;path&quot;: &quot;dogfood/20260320-renderer-complete&quot;,
+      &quot;totalFiles&quot;: 16,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260321-post-hardening-smoke&quot;,
+      &quot;path&quot;: &quot;dogfood/20260321-post-hardening-smoke&quot;,
+      &quot;totalFiles&quot;: 19,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260321-week3-crash-retention&quot;,
+      &quot;path&quot;: &quot;dogfood/20260321-week3-crash-retention&quot;,
+      &quot;totalFiles&quot;: 20,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: false,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260321-week3-renderer-complete&quot;,
+      &quot;path&quot;: &quot;dogfood/20260321-week3-renderer-complete&quot;,
+      &quot;totalFiles&quot;: 38,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: false,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260322-dogfood-alt-screen&quot;,
+      &quot;path&quot;: &quot;dogfood/20260322-dogfood-alt-screen&quot;,
+      &quot;totalFiles&quot;: 67,
+      &quot;logsCount&quot;: 32,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 3,
+      &quot;screenshotsTotalBytes&quot;: 22470,
+      &quot;videosCount&quot;: 1,
+      &quot;recordingsCount&quot;: 1,
+      &quot;snapshotsCount&quot;: 3,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260322-dogfood-color&quot;,
+      &quot;path&quot;: &quot;dogfood/20260322-dogfood-color&quot;,
+      &quot;totalFiles&quot;: 43,
+      &quot;logsCount&quot;: 18,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 2,
+      &quot;screenshotsTotalBytes&quot;: 94521,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 1,
+      &quot;snapshotsCount&quot;: 2,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260322-dogfood-crash&quot;,
+      &quot;path&quot;: &quot;dogfood/20260322-dogfood-crash&quot;,
+      &quot;totalFiles&quot;: 20,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260322-dogfood-hello-prompt&quot;,
+      &quot;path&quot;: &quot;dogfood/20260322-dogfood-hello-prompt&quot;,
+      &quot;totalFiles&quot;: 19,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 1,
+      &quot;screenshotsTotalBytes&quot;: 5475,
+      &quot;videosCount&quot;: 1,
+      &quot;recordingsCount&quot;: 1,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260322-dogfood-resize&quot;,
+      &quot;path&quot;: &quot;dogfood/20260322-dogfood-resize&quot;,
+      &quot;totalFiles&quot;: 19,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 1,
+      &quot;screenshotsTotalBytes&quot;: 5067,
+      &quot;videosCount&quot;: 1,
+      &quot;recordingsCount&quot;: 1,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260322-dogfood-scrollback&quot;,
+      &quot;path&quot;: &quot;dogfood/20260322-dogfood-scrollback&quot;,
+      &quot;totalFiles&quot;: 19,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260322-dogfood-unicode&quot;,
+      &quot;path&quot;: &quot;dogfood/20260322-dogfood-unicode&quot;,
+      &quot;totalFiles&quot;: 15,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260322-dogfood-week4-features&quot;,
+      &quot;path&quot;: &quot;dogfood/20260322-dogfood-week4-features&quot;,
+      &quot;totalFiles&quot;: 44,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260322-global-cli-context&quot;,
+      &quot;path&quot;: &quot;dogfood/20260322-global-cli-context&quot;,
+      &quot;totalFiles&quot;: 7,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260322-lazyvim-scenario&quot;,
+      &quot;path&quot;: &quot;dogfood/20260322-lazyvim-scenario&quot;,
+      &quot;totalFiles&quot;: 31,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: false,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260322-week4-cli-parity&quot;,
+      &quot;path&quot;: &quot;dogfood/20260322-week4-cli-parity&quot;,
+      &quot;totalFiles&quot;: 13,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260322-week4-failure-recovery&quot;,
+      &quot;path&quot;: &quot;dogfood/20260322-week4-failure-recovery&quot;,
+      &quot;totalFiles&quot;: 9,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260322-week4-scrollback-review&quot;,
+      &quot;path&quot;: &quot;dogfood/20260322-week4-scrollback-review&quot;,
+      &quot;totalFiles&quot;: 11,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260322-week4-unicode-review&quot;,
+      &quot;path&quot;: &quot;dogfood/20260322-week4-unicode-review&quot;,
+      &quot;totalFiles&quot;: 8,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260323-bugfix-resize&quot;,
+      &quot;path&quot;: &quot;dogfood/20260323-bugfix-resize&quot;,
+      &quot;totalFiles&quot;: 20,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 3,
+      &quot;screenshotsTotalBytes&quot;: 17192,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260323-bugfix-scrollback&quot;,
+      &quot;path&quot;: &quot;dogfood/20260323-bugfix-scrollback&quot;,
+      &quot;totalFiles&quot;: 13,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260323-week5-platform-closure&quot;,
+      &quot;path&quot;: &quot;dogfood/20260323-week5-platform-closure&quot;,
+      &quot;totalFiles&quot;: 6,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: false,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    },
+    {
+      &quot;bundle&quot;: &quot;20260323-week5-recovery-host&quot;,
+      &quot;path&quot;: &quot;dogfood/20260323-week5-recovery-host&quot;,
+      &quot;totalFiles&quot;: 24,
+      &quot;logsCount&quot;: 8,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260323-week5-recovery-renderer&quot;,
+      &quot;path&quot;: &quot;dogfood/20260323-week5-recovery-renderer&quot;,
+      &quot;totalFiles&quot;: 39,
+      &quot;logsCount&quot;: 19,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 2,
+      &quot;screenshotsTotalBytes&quot;: 5940,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 2,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260323-week5-recovery-replay&quot;,
+      &quot;path&quot;: &quot;dogfood/20260323-week5-recovery-replay&quot;,
+      &quot;totalFiles&quot;: 29,
+      &quot;logsCount&quot;: 11,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 2,
+      &quot;screenshotsTotalBytes&quot;: 6462,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 1,
+      &quot;snapshotsCount&quot;: 2,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260323-week5-render-cells&quot;,
+      &quot;path&quot;: &quot;dogfood/20260323-week5-render-cells&quot;,
+      &quot;totalFiles&quot;: 14,
+      &quot;logsCount&quot;: 4,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260323-week5-render-cursor&quot;,
+      &quot;path&quot;: &quot;dogfood/20260323-week5-render-cursor&quot;,
+      &quot;totalFiles&quot;: 19,
+      &quot;logsCount&quot;: 6,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 3,
+      &quot;screenshotsTotalBytes&quot;: 146659,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260323-week5-render-fonts&quot;,
+      &quot;path&quot;: &quot;dogfood/20260323-week5-render-fonts&quot;,
+      &quot;totalFiles&quot;: 15,
+      &quot;logsCount&quot;: 4,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 2,
+      &quot;screenshotsTotalBytes&quot;: 97035,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260323-week5-render-timing&quot;,
+      &quot;path&quot;: &quot;dogfood/20260323-week5-render-timing&quot;,
+      &quot;totalFiles&quot;: 19,
+      &quot;logsCount&quot;: 6,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 3,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260323-week5-review-helper&quot;,
+      &quot;path&quot;: &quot;dogfood/20260323-week5-review-helper&quot;,
+      &quot;totalFiles&quot;: 17,
+      &quot;logsCount&quot;: 9,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 2,
+      &quot;screenshotsTotalBytes&quot;: 153083,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260325-week6-a-cli-contract&quot;,
+      &quot;path&quot;: &quot;dogfood/20260325-week6-a-cli-contract&quot;,
+      &quot;totalFiles&quot;: 25,
+      &quot;logsCount&quot;: 14,
+      &quot;logsJsonCount&quot;: 7,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: true,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260325-week6-b-artifact-health&quot;,
+      &quot;path&quot;: &quot;dogfood/20260325-week6-b-artifact-health&quot;,
+      &quot;totalFiles&quot;: 25,
+      &quot;logsCount&quot;: 13,
+      &quot;logsJsonCount&quot;: 8,
+      &quot;screenshotsCount&quot;: 1,
+      &quot;screenshotsTotalBytes&quot;: 48895,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: true,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260325-week6-c-failure-taxonomy&quot;,
+      &quot;path&quot;: &quot;dogfood/20260325-week6-c-failure-taxonomy&quot;,
+      &quot;totalFiles&quot;: 34,
+      &quot;logsCount&quot;: 23,
+      &quot;logsJsonCount&quot;: 12,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: true,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260325-week6-d-review-surface&quot;,
+      &quot;path&quot;: &quot;dogfood/20260325-week6-d-review-surface&quot;,
+      &quot;totalFiles&quot;: 36,
+      &quot;logsCount&quot;: 26,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 1,
+      &quot;screenshotsTotalBytes&quot;: 850891,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: true,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260325-week7-a-cli-parity&quot;,
+      &quot;path&quot;: &quot;dogfood/20260325-week7-a-cli-parity&quot;,
+      &quot;totalFiles&quot;: 43,
+      &quot;logsCount&quot;: 28,
+      &quot;logsJsonCount&quot;: 14,
+      &quot;screenshotsCount&quot;: 1,
+      &quot;screenshotsTotalBytes&quot;: 7199,
+      &quot;videosCount&quot;: 1,
+      &quot;recordingsCount&quot;: 1,
+      &quot;snapshotsCount&quot;: 1,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: true,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260325-week7-b-envelope-locks&quot;,
+      &quot;path&quot;: &quot;dogfood/20260325-week7-b-envelope-locks&quot;,
+      &quot;totalFiles&quot;: 11,
+      &quot;logsCount&quot;: 6,
+      &quot;logsJsonCount&quot;: 1,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;20260325-week7-c-proof-completeness&quot;,
+      &quot;path&quot;: &quot;dogfood/20260325-week7-c-proof-completeness&quot;,
+      &quot;totalFiles&quot;: 13,
+      &quot;logsCount&quot;: 7,
+      &quot;logsJsonCount&quot;: 1,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: true,
+      &quot;hasIndexHtml&quot;: true,
+      &quot;hasManifestJson&quot;: true,
+      &quot;hasCommandStatusTsv&quot;: true
+    },
+    {
+      &quot;bundle&quot;: &quot;week5-config-parity&quot;,
+      &quot;path&quot;: &quot;dogfood/week5-config-parity&quot;,
+      &quot;totalFiles&quot;: 34,
+      &quot;logsCount&quot;: 0,
+      &quot;logsJsonCount&quot;: 0,
+      &quot;screenshotsCount&quot;: 0,
+      &quot;screenshotsTotalBytes&quot;: 0,
+      &quot;videosCount&quot;: 0,
+      &quot;recordingsCount&quot;: 0,
+      &quot;snapshotsCount&quot;: 0,
+      &quot;hasCommandsSh&quot;: true,
+      &quot;hasNotesMd&quot;: false,
+      &quot;hasIndexHtml&quot;: false,
+      &quot;hasManifestJson&quot;: false,
+      &quot;hasCommandStatusTsv&quot;: false
+    }
+  ]
+}</code></pre>
+        </details>
+      </section>
+      <section>
+        <h2>Notes</h2>
+
+        <article class="card note-card">
+          <h3><a href="notes.md">notes.md</a></h3>
+          <h1>
+            2026-03-25 dogfood — Week 7 bundle C proof completeness inventory
+          </h1>
+          <h2>Bundle metadata</h2>
+          <ul>
+            <li>
+              <strong>Bundle path:</strong>
+              <code>dogfood/20260325-week7-c-proof-completeness/</code>
+            </li>
+            <li>
+              <strong>Inventory date:</strong>
+              <code>2026-03-25T19:56:37.094Z</code>
+            </li>
+            <li><strong>Total bundle count:</strong> 40</li>
+            <li><strong>Review pages present:</strong> 6</li>
+          </ul>
+          <h2>Scenario summary</h2>
+          <p>
+            This inventory proves that the dogfood proof-bundle ecosystem can be
+            reviewed from the live filesystem: every immediate subdirectory
+            under <code>dogfood/</code> is enumerated, core reviewer-facing
+            files are checked for presence, and reviewer artifacts (screenshots,
+            recordings, videos, snapshots) are counted with totals derived
+            directly from the current bundle directories.
+          </p>
+          <h2>Inventory table</h2>
+          <p>
+            | Bundle | commands.sh | notes.md | index.html | log count |
+            screenshot count | videos/recordings | |
+            ----------------------------------- | ----------- | -------- |
+            ---------- | --------: | ---------------: | ----------------- | |
+            20260319-lifecycle | no | yes | no | 0 | 6 | 0/0 | |
+            20260319-nvim-demo | no | yes | no | 0 | 6 | 0/0 | |
+            20260319-resize-demo | no | yes | no | 0 | 0 | 0/0 | |
+            20260320-renderer-complete | yes | yes | no | 0 | 0 | 0/0 | |
+            20260321-post-hardening-smoke | yes | yes | no | 0 | 0 | 0/0 | |
+            20260321-week3-crash-retention | yes | no | no | 0 | 0 | 0/0 | |
+            20260321-week3-renderer-complete | yes | no | no | 0 | 0 | 0/0 | |
+            20260322-dogfood-alt-screen | yes | yes | no | 32 | 3 | 1/1 | |
+            20260322-dogfood-color | yes | yes | no | 18 | 2 | 0/1 | |
+            20260322-dogfood-crash | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-dogfood-hello-prompt | no | yes | no | 0 | 1 | 1/1 | |
+            20260322-dogfood-resize | no | yes | no | 0 | 1 | 1/1 | |
+            20260322-dogfood-scrollback | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-dogfood-unicode | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-dogfood-week4-features | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-global-cli-context | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-lazyvim-scenario | no | no | no | 0 | 0 | 0/0 | |
+            20260322-week4-cli-parity | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-week4-failure-recovery | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-week4-scrollback-review | no | yes | no | 0 | 0 | 0/0 | |
+            20260322-week4-unicode-review | no | yes | no | 0 | 0 | 0/0 | |
+            20260323-bugfix-resize | no | yes | no | 0 | 3 | 0/0 | |
+            20260323-bugfix-scrollback | no | yes | no | 0 | 0 | 0/0 | |
+            20260323-week5-platform-closure | no | yes | no | 0 | 0 | 0/0 | |
+            20260323-week5-recovery-host | yes | yes | no | 8 | 0 | 0/0 | |
+            20260323-week5-recovery-renderer | yes | yes | no | 19 | 2 | 0/0 | |
+            20260323-week5-recovery-replay | yes | yes | no | 11 | 2 | 0/1 | |
+            20260323-week5-render-cells | yes | yes | no | 4 | 0 | 0/0 | |
+            20260323-week5-render-cursor | yes | yes | no | 6 | 3 | 0/0 | |
+            20260323-week5-render-fonts | yes | yes | no | 4 | 2 | 0/0 | |
+            20260323-week5-render-timing | yes | yes | no | 6 | 0 | 0/3 | |
+            20260323-week5-review-helper | yes | yes | no | 9 | 2 | 0/0 | |
+            20260325-week6-a-cli-contract | yes | yes | yes | 14 | 0 | 0/0 | |
+            20260325-week6-b-artifact-health | yes | yes | yes | 13 | 1 | 0/0 |
+            | 20260325-week6-c-failure-taxonomy | yes | yes | yes | 23 | 0 | 0/0
+            | | 20260325-week6-d-review-surface | yes | yes | yes | 26 | 1 | 0/0
+            | | 20260325-week7-a-cli-parity | yes | yes | yes | 28 | 1 | 1/1 | |
+            20260325-week7-b-envelope-locks | yes | yes | no | 6 | 0 | 0/0 | |
+            20260325-week7-c-proof-completeness | yes | yes | yes | 7 | 0 | 0/0
+            | | week5-config-parity | yes | no | no | 0 | 0 | 0/0 |
+          </p>
+          <h2>Week 7 completeness</h2>
+          <p>
+            The minimum completeness bar for a review-ready Week 7 proof bundle
+            is: <code>commands.sh</code>, <code>notes.md</code>,
+            <code>manifest.json</code>, <code>command-status.tsv</code>,
+            <code>index.html</code>.
+          </p>
+          <ul>
+            <li>
+              <strong>20260325-week7-a-cli-parity:</strong> Meets the minimum
+              completeness bar (<code>commands.sh</code>, <code>notes.md</code>,
+              <code>manifest.json</code>, <code>command-status.tsv</code>,
+              <code>index.html</code>). Missing today: none.
+            </li>
+            <li>
+              <strong>20260325-week7-b-envelope-locks:</strong> Does not yet
+              meet the minimum completeness bar (<code>commands.sh</code>,
+              <code>notes.md</code>, <code>manifest.json</code>,
+              <code>command-status.tsv</code>, <code>index.html</code>). Missing
+              today: <code>index.html</code>.
+            </li>
+            <li>
+              <strong>20260325-week7-c-proof-completeness:</strong> Meets the
+              minimum completeness bar (<code>commands.sh</code>,
+              <code>notes.md</code>, <code>manifest.json</code>,
+              <code>command-status.tsv</code>, <code>index.html</code>). Missing
+              today: none.
+            </li>
+            <li>
+              <strong>20260325-week7-d-review-surface-audit:</strong> Not
+              present in the live inventory captured on
+              2026-03-25T19:56:37.094Z. The lane is still in-flight outside this
+              task, so there is no filesystem proof bundle to assess yet.
+            </li>
+          </ul>
+          <h2>Review surface coverage</h2>
+          <p>Bundles with a generated review page today (6/40):</p>
+          <ul>
+            <li><code>20260325-week6-a-cli-contract</code></li>
+            <li><code>20260325-week6-b-artifact-health</code></li>
+            <li><code>20260325-week6-c-failure-taxonomy</code></li>
+            <li><code>20260325-week6-d-review-surface</code></li>
+            <li><code>20260325-week7-a-cli-parity</code></li>
+            <li><code>20260325-week7-c-proof-completeness</code></li>
+          </ul>
+          <h2>Gaps found</h2>
+          <ul>
+            <li>
+              <strong>Missing review pages (<code>index.html</code>):</strong>
+              <code>20260319-lifecycle</code>, <code>20260319-nvim-demo</code>,
+              <code>20260319-resize-demo</code>,
+              <code>20260320-renderer-complete</code>,
+              <code>20260321-post-hardening-smoke</code>,
+              <code>20260321-week3-crash-retention</code>,
+              <code>20260321-week3-renderer-complete</code>,
+              <code>20260322-dogfood-alt-screen</code>,
+              <code>20260322-dogfood-color</code>,
+              <code>20260322-dogfood-crash</code>,
+              <code>20260322-dogfood-hello-prompt</code>,
+              <code>20260322-dogfood-resize</code>,
+              <code>20260322-dogfood-scrollback</code>,
+              <code>20260322-dogfood-unicode</code>,
+              <code>20260322-dogfood-week4-features</code>,
+              <code>20260322-global-cli-context</code>,
+              <code>20260322-lazyvim-scenario</code>,
+              <code>20260322-week4-cli-parity</code>,
+              <code>20260322-week4-failure-recovery</code>,
+              <code>20260322-week4-scrollback-review</code>,
+              <code>20260322-week4-unicode-review</code>,
+              <code>20260323-bugfix-resize</code>,
+              <code>20260323-bugfix-scrollback</code>,
+              <code>20260323-week5-platform-closure</code>,
+              <code>20260323-week5-recovery-host</code>,
+              <code>20260323-week5-recovery-renderer</code>,
+              <code>20260323-week5-recovery-replay</code>,
+              <code>20260323-week5-render-cells</code>,
+              <code>20260323-week5-render-cursor</code>,
+              <code>20260323-week5-render-fonts</code>,
+              <code>20260323-week5-render-timing</code>,
+              <code>20260323-week5-review-helper</code>,
+              <code>20260325-week7-b-envelope-locks</code>,
+              <code>week5-config-parity</code>.
+            </li>
+            <li>
+              <strong>Missing notes (<code>notes.md</code>):</strong>
+              <code>20260321-week3-crash-retention</code>,
+              <code>20260321-week3-renderer-complete</code>,
+              <code>20260322-lazyvim-scenario</code>,
+              <code>week5-config-parity</code>.
+            </li>
+            <li>
+              <strong
+                >Missing command transcripts (<code>commands.sh</code>):</strong
+              >
+              <code>20260319-lifecycle</code>, <code>20260319-nvim-demo</code>,
+              <code>20260319-resize-demo</code>,
+              <code>20260322-dogfood-crash</code>,
+              <code>20260322-dogfood-hello-prompt</code>,
+              <code>20260322-dogfood-resize</code>,
+              <code>20260322-dogfood-scrollback</code>,
+              <code>20260322-dogfood-unicode</code>,
+              <code>20260322-dogfood-week4-features</code>,
+              <code>20260322-global-cli-context</code>,
+              <code>20260322-lazyvim-scenario</code>,
+              <code>20260322-week4-cli-parity</code>,
+              <code>20260322-week4-failure-recovery</code>,
+              <code>20260322-week4-scrollback-review</code>,
+              <code>20260322-week4-unicode-review</code>,
+              <code>20260323-bugfix-resize</code>,
+              <code>20260323-bugfix-scrollback</code>,
+              <code>20260323-week5-platform-closure</code>.
+            </li>
+            <li>
+              <strong>Missing manifests (<code>manifest.json</code>):</strong>
+              <code>20260320-renderer-complete</code>,
+              <code>20260321-post-hardening-smoke</code>,
+              <code>20260322-dogfood-crash</code>,
+              <code>20260322-dogfood-scrollback</code>,
+              <code>20260322-dogfood-unicode</code>,
+              <code>20260322-dogfood-week4-features</code>,
+              <code>20260322-global-cli-context</code>,
+              <code>20260322-lazyvim-scenario</code>,
+              <code>20260322-week4-cli-parity</code>,
+              <code>20260322-week4-failure-recovery</code>,
+              <code>20260322-week4-scrollback-review</code>,
+              <code>20260322-week4-unicode-review</code>,
+              <code>20260323-bugfix-resize</code>,
+              <code>20260323-bugfix-scrollback</code>,
+              <code>20260323-week5-platform-closure</code>,
+              <code>week5-config-parity</code>.
+            </li>
+            <li>
+              <strong
+                >Missing command ledgers
+                (<code>command-status.tsv</code>):</strong
+              >
+              <code>20260319-lifecycle</code>, <code>20260319-nvim-demo</code>,
+              <code>20260319-resize-demo</code>,
+              <code>20260320-renderer-complete</code>,
+              <code>20260321-post-hardening-smoke</code>,
+              <code>20260321-week3-crash-retention</code>,
+              <code>20260321-week3-renderer-complete</code>,
+              <code>20260322-dogfood-crash</code>,
+              <code>20260322-dogfood-hello-prompt</code>,
+              <code>20260322-dogfood-resize</code>,
+              <code>20260322-dogfood-scrollback</code>,
+              <code>20260322-dogfood-unicode</code>,
+              <code>20260322-dogfood-week4-features</code>,
+              <code>20260322-global-cli-context</code>,
+              <code>20260322-lazyvim-scenario</code>,
+              <code>20260322-week4-cli-parity</code>,
+              <code>20260322-week4-failure-recovery</code>,
+              <code>20260322-week4-scrollback-review</code>,
+              <code>20260322-week4-unicode-review</code>,
+              <code>20260323-bugfix-resize</code>,
+              <code>20260323-bugfix-scrollback</code>,
+              <code>20260323-week5-platform-closure</code>,
+              <code>week5-config-parity</code>.
+            </li>
+          </ul>
+          <h2>Evidence pointers</h2>
+          <ul>
+            <li>
+              <strong>Bundle discovery:</strong>
+              <code>logs/01-bundle-list.txt</code>
+            </li>
+            <li>
+              <strong>Per-bundle file presence and inventory counts:</strong>
+              <code>logs/02-file-counts.tsv</code>
+            </li>
+            <li>
+              <strong
+                >Reviewer artifact counts and screenshot byte totals:</strong
+              >
+              <code>logs/03-artifact-counts.tsv</code>
+            </li>
+            <li>
+              <strong
+                >Machine-readable rollup for totals, review coverage, and gap
+                lists:</strong
+              >
+              <code>logs/04-summary.json</code>
+            </li>
+            <li>
+              <strong>Generated review page for this bundle:</strong>
+              <code>logs/05-review-bundle.txt</code>
+            </li>
+          </ul>
+        </article>
+      </section>
+      <section>
+        <h2>Commands</h2>
+        <div class="card">
+          <h3><a href="commands.sh">commands.sh</a></h3>
+          <pre><code>#!/usr/bin/env bash
+set -euo pipefail
+export PATH=&quot;$HOME/.local/bin:$PATH&quot;
+BUNDLE_DIR=&quot;dogfood/20260325-week7-c-proof-completeness&quot;
+mkdir -p &quot;$BUNDLE_DIR/logs&quot; &quot;$BUNDLE_DIR/screenshots&quot;
+
+touch &quot;$BUNDLE_DIR/screenshots/.gitkeep&quot;
+find dogfood -maxdepth 1 -mindepth 1 -type d | sort &gt; &quot;$BUNDLE_DIR/logs/01-bundle-list.txt&quot;
+node --input-type=module &lt;&lt;&#39;NODE&#39;
+// scan live dogfood bundles and write logs/02-file-counts.tsv, logs/03-artifact-counts.tsv, and logs/04-summary.json
+NODE
+node --input-type=module &lt;&lt;&#39;NODE&#39;
+// render final notes.md, manifest.json, and commands.sh from logs/04-summary.json
+NODE
+npx tsx src/tools/review-bundle.ts &quot;$BUNDLE_DIR&quot; &gt; &quot;$BUNDLE_DIR/logs/05-review-bundle.txt&quot;
+npx prettier --write &quot;$BUNDLE_DIR/&quot; &gt; &quot;$BUNDLE_DIR/logs/06-prettier-write.txt&quot;
+npx prettier --check &quot;$BUNDLE_DIR/&quot; &gt; &quot;$BUNDLE_DIR/logs/07-prettier-check.txt&quot;
+</code></pre>
+        </div>
+      </section>
+      <section>
+        <h2>Command status</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>step</th>
+                <th>command</th>
+                <th>exit_code</th>
+                <th>status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>00</td>
+                <td>bootstrap bundle files</td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>01</td>
+                <td>
+                  find dogfood -maxdepth 1 -mindepth 1 -type d | sort &gt;
+                  logs/01-bundle-list.txt
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>02</td>
+                <td>node --input-type=module # initial inventory write</td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>03</td>
+                <td>
+                  node --input-type=module # initial notes.md, manifest.json,
+                  commands.sh write
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>04</td>
+                <td>
+                  npx tsx src/tools/review-bundle.ts
+                  dogfood/20260325-week7-c-proof-completeness
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>05</td>
+                <td>
+                  npx prettier --write
+                  dogfood/20260325-week7-c-proof-completeness/
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>06</td>
+                <td>
+                  npx prettier --check
+                  dogfood/20260325-week7-c-proof-completeness/
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>07</td>
+                <td>
+                  find dogfood -maxdepth 1 -mindepth 1 -type d | sort &gt;
+                  logs/01-bundle-list.txt
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>08</td>
+                <td>
+                  node --input-type=module # refreshed inventory write after
+                  final logs existed
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>09</td>
+                <td>
+                  node --input-type=module # refreshed notes.md, manifest.json,
+                  commands.sh write
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>10</td>
+                <td>
+                  npx tsx src/tools/review-bundle.ts
+                  dogfood/20260325-week7-c-proof-completeness
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>11</td>
+                <td>
+                  npx prettier --write
+                  dogfood/20260325-week7-c-proof-completeness/
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>12</td>
+                <td>
+                  npx prettier --check
+                  dogfood/20260325-week7-c-proof-completeness/
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section>
+        <h2>Artifact inventory</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Type</th>
+                <th>Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="command-status.tsv">command-status.tsv</a></td>
+                <td>support</td>
+                <td>1022 B</td>
+              </tr>
+              <tr>
+                <td><a href="commands.sh">commands.sh</a></td>
+                <td>script</td>
+                <td>848 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/01-bundle-list.txt">logs/01-bundle-list.txt</a>
+                </td>
+                <td>support</td>
+                <td>1.4 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/02-file-counts.tsv">logs/02-file-counts.tsv</a>
+                </td>
+                <td>support</td>
+                <td>2.4 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/03-artifact-counts.tsv"
+                    >logs/03-artifact-counts.tsv</a
+                  >
+                </td>
+                <td>support</td>
+                <td>1.6 KB</td>
+              </tr>
+              <tr>
+                <td><a href="logs/04-summary.json">logs/04-summary.json</a></td>
+                <td>support</td>
+                <td>22.6 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/05-review-bundle.txt"
+                    >logs/05-review-bundle.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>113 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/06-prettier-write.txt"
+                    >logs/06-prettier-write.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>275 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/07-prettier-check.txt"
+                    >logs/07-prettier-check.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>66 B</td>
+              </tr>
+              <tr>
+                <td><a href="manifest.json">manifest.json</a></td>
+                <td>support</td>
+                <td>769 B</td>
+              </tr>
+              <tr>
+                <td><a href="notes.md">notes.md</a></td>
+                <td>notes</td>
+                <td>10.6 KB</td>
+              </tr>
+              <tr>
+                <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
+                <td>other</td>
+                <td>0 B</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

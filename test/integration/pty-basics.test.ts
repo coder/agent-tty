@@ -15,6 +15,12 @@ import {
   type SuccessEnvelope,
 } from '../helpers.js';
 
+interface SendKeysResult {
+  accepted: string[];
+  bytesWritten: number;
+  seq: number;
+}
+
 let testHome = '';
 
 describe('pty-basics integration', { timeout: 30000 }, () => {
@@ -108,10 +114,14 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
       );
       expect(sendKeysResult.status).toBe(0);
       expect(sendKeysResult.stderr).toBe('');
-      const envelope = JSON.parse(sendKeysResult.stdout) as SuccessEnvelope<
-        Record<string, never>
-      >;
+      const envelope = JSON.parse(
+        sendKeysResult.stdout,
+      ) as SuccessEnvelope<SendKeysResult>;
       expect(envelope.ok).toBe(true);
+      expect(envelope.result).toMatchObject({
+        accepted: ['Enter'],
+        bytesWritten: 1,
+      });
 
       await sleep(300);
 
@@ -121,6 +131,7 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
       );
       expect(inputKeyEvents.length).toBeGreaterThan(0);
       expect(inputKeyEvents[0]?.payload.keys).toEqual(['Enter']);
+      expect(envelope.result.seq).toBe(inputKeyEvents[0]?.seq);
     } finally {
       destroySession(testHome, sessionId);
     }

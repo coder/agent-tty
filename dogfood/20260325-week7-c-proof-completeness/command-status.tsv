@@ -1,0 +1,14 @@
+step	command	exit_code	status
+00	bootstrap bundle files	0	ok
+01	find dogfood -maxdepth 1 -mindepth 1 -type d | sort > logs/01-bundle-list.txt	0	ok
+02	node --input-type=module # initial inventory write	0	ok
+03	node --input-type=module # initial notes.md, manifest.json, commands.sh write	0	ok
+04	npx tsx src/tools/review-bundle.ts dogfood/20260325-week7-c-proof-completeness	0	ok
+05	npx prettier --write dogfood/20260325-week7-c-proof-completeness/	0	ok
+06	npx prettier --check dogfood/20260325-week7-c-proof-completeness/	0	ok
+07	find dogfood -maxdepth 1 -mindepth 1 -type d | sort > logs/01-bundle-list.txt	0	ok
+08	node --input-type=module # refreshed inventory write after final logs existed	0	ok
+09	node --input-type=module # refreshed notes.md, manifest.json, commands.sh write	0	ok
+10	npx tsx src/tools/review-bundle.ts dogfood/20260325-week7-c-proof-completeness	0	ok
+11	npx prettier --write dogfood/20260325-week7-c-proof-completeness/	0	ok
+12	npx prettier --check dogfood/20260325-week7-c-proof-completeness/	0	ok

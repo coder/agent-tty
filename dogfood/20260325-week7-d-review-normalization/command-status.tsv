@@ -1,0 +1,14 @@
+step	command	exit_code	status
+00	npm ci --ignore-scripts	0	passed
+01	./node_modules/.bin/tsx src/tools/review-bundle.ts dogfood/20260325-week7-a-cli-parity	0	passed
+02	./node_modules/.bin/tsx src/tools/review-bundle.ts dogfood/20260325-week7-b-envelope-locks	0	passed
+03	./node_modules/.bin/tsx src/tools/review-bundle.ts --all /tmp/agent-terminal-week7-review.9yyqy2	0	passed
+04	./node_modules/.bin/tsx --eval "playwright screenshot week7-a review page"	0	passed
+05	git diff --name-only	0	passed
+06	./node_modules/.bin/tsx src/tools/review-bundle.ts dogfood/20260325-week7-d-review-normalization	0	passed
+07	./node_modules/.bin/tsx --eval "playwright screenshot week7-d review page"	0	passed
+08	git status --short	0	passed
+09	./node_modules/.bin/prettier --write dogfood/20260325-week7-d-review-normalization/	0	passed
+10	./node_modules/.bin/prettier --check dogfood/20260325-week7-d-review-normalization/	0	passed
+11	./node_modules/.bin/tsx src/tools/review-bundle.ts dogfood/20260325-week7-d-review-normalization	0	passed
+12	git diff --name-only	0	passed

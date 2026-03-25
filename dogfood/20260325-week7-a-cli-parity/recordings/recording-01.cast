@@ -1,0 +1,6 @@
+{"version":2,"width":80,"height":24,"timestamp":1774468007,"title":"01KMK8J0XB9THNASXVNPF697ZD","sessionId":"01KMK8J0XB9THNASXVNPF697ZD","env":{"TERM":"xterm-256color"},"toolVersion":"0.1.0"}
+[0,"o","READY> "]
+[2.123,"o","\r\n"]
+[2.124,"o","ECHO: \r\nREADY> "]
+[3.173,"o","hello world"]
+[4.24,"o","^[[200~pasted text^[[201~"]

@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-25T19:46:58.112Z",
+  "result": {
+    "sessionId": "01KMK8J0XB9THNASXVNPF697ZD",
+    "format": "asciicast",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent_exec_f12f292f10/dogfood/20260325-week7-a-cli-parity/recordings/recording-01.cast",
+    "bytes": 326,
+    "sha256": "3e7b4fd128f41a1275cdbec48143a76d9e7801f6e84fcb1923687776548a4a0b",
+    "capturedAtSeq": 7,
+    "durationMs": 4240,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "title": "01KMK8J0XB9THNASXVNPF697ZD",
+      "timestamp": 1774468007,
+      "outputEventCount": 5,
+      "resizeEventCount": 0,
+      "markerCount": 0
+    }
+  }
+}
