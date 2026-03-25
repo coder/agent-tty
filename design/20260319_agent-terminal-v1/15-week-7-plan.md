@@ -15,12 +15,16 @@ Week 7 is about ratifying the shipped v1 surface so the docs, examples, JSON env
 
 ## Status update (2026-03-25)
 
-This Week 7 plan now reflects two landed phases of the contract-closeout work:
+This Week 7 plan now reflects the full landed Phase 1–5 contract-closeout sequence plus the follow-up review-hardening pass:
 
 - **Phase 1 — contract audit and doc ratification:** the high-value examples in `02-cli-contract.md` now match the shipped CLI syntax/result shapes for `create`, `list`, `type`, `paste`, `send-keys`, `snapshot`, `screenshot`, `resize`, and `destroy`.
 - **Phase 2 — targeted code/schema alignment:** the shipped `send-keys` result now exposes `accepted`, `bytesWritten`, and `seq`, and the shipped `destroy` result now exposes `{ sessionId, destroyed }`.
+- **Phase 3 — golden-envelope expansion:** `test/unit/commands/golden-envelopes.test.ts` now covers 10 command surfaces with valid/invalid/extra-field locks for the representative public JSON contracts.
+- **Phase 4 — proof bundles and review normalization:** four Week 7 proof bundles now exist with generated review pages, and the browser-verification pass added reviewer screenshots for those pages.
+- **Phase 5 — design/doc synchronization:** the CLI contract doc is ratified, the Week 7 proof/docs set is in sync, and the gap-tracker/status docs now describe the same shipped surface.
+- **Review hardening:** defensive copies, type import alignment, error-path tests, and tightened assertions landed in follow-up commits, bringing the suite to 510 tests total.
 
-The main open Week 7 carry-over is now proof-bundle completeness/review normalization. Broader platform/runtime work remains intentionally future scope and is tracked separately in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md).
+The main open Week 7 carry-over is now only the lower-priority "should lock if time permits" surfaces (`gc`, `record export`, and `doctor`) plus broader platform/runtime work tracked separately in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md).
 
 See [14-week-6-status.md](./14-week-6-status.md), [02-cli-contract.md](./02-cli-contract.md), [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md), and this file for the current execution focus.
 
@@ -49,9 +53,9 @@ Week 7 is done only when every required checkbox below is complete.
 
 - [x] Every high-value example in `02-cli-contract.md` is either implemented as written or explicitly annotated as historical / aspirational / future scope.
 - [x] The remaining syntax/result-shape mismatches for `create`, `list`, `type`, `paste`, `send-keys`, `snapshot`, `screenshot`, and `destroy` are closed or explicitly ratified.
-- [ ] Golden-envelope or equivalent contract tests cover the representative public JSON surfaces most likely to drift.
-- [ ] The Week 6 proof bundles, and any critical carried-forward Week 4/5 proof gaps, meet the documented review-bundle minimum or the docs are explicitly updated to describe the lighter accepted standard.
-- [ ] The top-level design entrypoint, validation docs, Week 6 status record, and gap tracker all describe the same current reality.
+- [x] Golden-envelope or equivalent contract tests cover the representative public JSON surfaces most likely to drift.
+- [x] The Week 6 proof bundles, and any critical carried-forward Week 4/5 proof gaps, meet the documented review-bundle minimum or the docs are explicitly updated to describe the lighter accepted standard.
+- [x] The top-level design entrypoint, validation docs, Week 6 status record, and gap tracker all describe the same current reality.
 - [ ] The remaining post-Week-7 gap is clearly future-scope platform/runtime work rather than unfinished contract or proof closure.
 
 ## Scope boundaries
@@ -112,7 +116,7 @@ Make the public CLI examples and the shipped command surface tell the same truth
 
 ## Workstream B — contract locks and representative JSON coverage
 
-**Status (2026-03-25): Partially complete.** Phase 2 targeted code/schema changes landed for `send-keys` result enrichment and `destroy` result-shape alignment, but the broader representative-envelope lock work remains open.
+**Status (2026-03-25): Complete.** `19a7223` expanded the golden-envelope suite across 10 representative command surfaces, and follow-up hardening in `652f657` and `061df44` aligned result-type imports, hardened send-keys handling with defensive copies, and tightened the contract/error-path assertions.
 
 ### Goal
 
@@ -133,7 +137,7 @@ Prevent the ratified contract from drifting again.
 
 ## Workstream C — proof-bundle completeness and review normalization
 
-**Status (2026-03-25): Open.** The Week 6 bundles still need the remaining review-surface normalization and screenshot/video completeness work described below.
+**Status (2026-03-25): Complete.** The four Week 7 proof bundles are checked in, their review pages have been regenerated, and the browser-verification pass in `4fe94b3` added reviewer screenshots for the generated review surfaces.
 
 ### Goal
 
@@ -158,7 +162,7 @@ Bring the checked-in proof bundles back in line with the validation doc's stated
 
 ## Workstream D — design and gap-tracker synchronization
 
-**Status (2026-03-25): Mostly complete.** The top-level design entrypoint and `WEEK2-GAPS.md` now reflect Week 7 reality; validation-doc/proof-bundle follow-through still depends on Workstream C.
+**Status (2026-03-25): Complete.** The top-level design entrypoint, CLI contract doc, validation/proof docs, and Week 7 status sync now describe the same shipped reality, and Workstream C's bundle/browser pass closed the last proof-tracking dependency.
 
 ### Goal
 

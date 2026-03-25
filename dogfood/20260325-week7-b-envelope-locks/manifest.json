@@ -1,14 +1,14 @@
 {
   "bundle": "20260325-week7-b-envelope-locks",
   "title": "Week 7 — Envelope Locks Proof",
-  "description": "Captures golden-envelope test suite output and documents which public JSON surfaces are locked",
-  "createdAt": "2026-03-25T19:41:16Z",
+  "description": "Captures current golden-envelope test suite output and documents which public JSON surfaces are locked",
+  "createdAt": "2026-03-25T22:04:59Z",
   "week": 7,
   "lane": "B",
   "artifacts": [
     {
       "path": "logs/01-vitest-verbose.txt",
-      "description": "Verbose Vitest output showing all four golden-envelope tests passing"
+      "description": "Verbose Vitest output showing all 28 golden-envelope tests passing across the expanded 10-surface suite"
     },
     {
       "path": "logs/01-vitest-verbose.stderr.txt",
@@ -16,7 +16,7 @@
     },
     {
       "path": "logs/02-vitest-json.json",
-      "description": "JSON Vitest summary with exact suite and test counts for the golden-envelope run"
+      "description": "JSON Vitest summary with 28 passing tests across 10 suites for the golden-envelope run"
     },
     {
       "path": "logs/02-vitest-json.stderr.txt",
@@ -24,11 +24,11 @@
     },
     {
       "path": "logs/03-test-source.txt",
-      "description": "Snapshot of the golden-envelope test source used to document the locked surfaces inventory"
+      "description": "Snapshot of the current golden-envelope test source covering the 10 locked command surfaces"
     },
     {
       "path": "command-status.tsv",
-      "description": "Per-step exit codes and status values for the captured commands"
+      "description": "Per-step exit-code ledger for the refreshed capture, review-page regeneration, and formatting checks"
     }
   ]
 }
