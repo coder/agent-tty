@@ -200,6 +200,11 @@ describe('RPC message schemas', () => {
       session: createSessionRecord(),
       eventCount: 2,
       uptime: 1000,
+      rendererRuntime: {
+        backend: 'ghostty-web',
+        mode: 'live-host',
+        status: 'healthy',
+      },
     });
 
     expect(result.success).toBe(true);

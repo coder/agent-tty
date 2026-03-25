@@ -8,6 +8,7 @@ import type {
 } from './schemas.js';
 
 import {
+  RendererRuntimeSummarySchema,
   ScreenshotParamsSchema,
   ScreenshotResultSchema,
   SessionRecordSchema,
@@ -155,6 +156,7 @@ export const InspectResultSchema = z
     terminationCategory: TerminationCategorySchema.optional(),
     artifacts: ArtifactHealthSummarySchema.optional(),
     usedOfflineReplay: z.boolean().optional(),
+    rendererRuntime: RendererRuntimeSummarySchema.optional(),
   })
   .strict();
 export type InspectResult = z.infer<typeof InspectResultSchema>;
