@@ -38,6 +38,7 @@ export interface SessionRecord {
   childPid: number | null;
   exitCode: number | null;
   exitSignal: string | null;
+  failureOrigin?: string;
   failureReason?: string;
 }
 

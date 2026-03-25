@@ -8,7 +8,7 @@ import { ulid } from 'ulid';
 
 import { CliError } from '../cli/errors.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
-import type { SessionRecord } from '../protocol/schemas.js';
+import type { FailureOrigin, SessionRecord } from '../protocol/schemas.js';
 import { ensureHome, resolveHome } from '../storage/home.js';
 import {
   readManifest,
@@ -655,6 +655,7 @@ export async function reconcileSession(
 
   let reconciledStatus: SessionRecord['status'];
   let failureReason: string | undefined;
+  let failureOrigin: FailureOrigin | undefined;
 
   switch (manifest.status) {
     case 'running':
@@ -663,6 +664,7 @@ export async function reconcileSession(
         manifest.hostPid !== null
           ? `host process died unexpectedly (pid: ${String(manifest.hostPid)})`
           : 'host process died unexpectedly';
+      failureOrigin = 'host-death';
       break;
     case 'exiting':
       reconciledStatus = 'exited';
@@ -673,6 +675,7 @@ export async function reconcileSession(
     default:
       reconciledStatus = 'failed';
       failureReason = `unexpected pre-reconcile status: ${manifest.status}`;
+      failureOrigin = 'unknown';
       break;
   }
 
@@ -683,6 +686,7 @@ export async function reconcileSession(
     hostPid: null,
     childPid: null,
     ...(failureReason !== undefined ? { failureReason } : {}),
+    ...(failureOrigin !== undefined ? { failureOrigin } : {}),
   };
 
   await writeManifest(manifestFile, reconciledManifest);

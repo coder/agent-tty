@@ -1,4 +1,4 @@
-import type { SessionRecord } from '../protocol/schemas.js';
+import type { FailureOrigin, SessionRecord } from '../protocol/schemas.js';
 import { invariant } from '../util/assert.js';
 
 export class SessionState {
@@ -64,6 +64,16 @@ export class SessionState {
 
     this.#record.cols = cols;
     this.#record.rows = rows;
+    this.touch();
+  }
+
+  public setFailureOrigin(origin: FailureOrigin): void {
+    invariant(
+      this.#record.status === 'failed',
+      `Cannot set failureOrigin on ${this.#record.status} session`,
+    );
+
+    this.#record.failureOrigin = origin;
     this.touch();
   }
 

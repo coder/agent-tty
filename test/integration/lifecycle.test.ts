@@ -415,7 +415,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(errorEnvelope.error.message).toContain(missingShellPath);
   });
 
-  it('host crash reconciles to failed with failureReason', async () => {
+  it('host crash reconciles to failed with failureReason and failureOrigin', async () => {
     const sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec cat']);
 
     const beforeCrash = inspectSession(testHome, sessionId);
@@ -430,6 +430,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     const failureReason = afterCrash.failureReason as string;
     expect(failureReason.length).toBeGreaterThan(0);
     expect(failureReason).toContain('host process died unexpectedly');
+    expect(afterCrash.failureOrigin).toBe('host-death');
     expect(afterCrash.hostPid).toBeNull();
     expect(afterCrash.childPid).toBeNull();
   });
@@ -550,6 +551,11 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       failureReason,
       'failureReason should explain that the host died unexpectedly',
     ).toContain('host process died unexpectedly');
+    expect(
+      reconciledSession.failureOrigin,
+      'reconciled session should keep a structured failureOrigin',
+    ).toBe('host-death');
+
     expect(
       failureReason,
       'failureReason should preserve the stale host PID that was reconciled',
