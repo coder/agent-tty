@@ -1,0 +1,43 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-25T08:46:38.287Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KMJ2S238K002KNYQWZGCCT3N",
+      "createdAt": "2026-03-25T08:46:31.531Z",
+      "updatedAt": "2026-03-25T08:46:38.283Z",
+      "status": "failed",
+      "failureReason": "host process died unexpectedly (pid: 831241)",
+      "failureOrigin": "host-death",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "echo host-death-proof; exec cat"
+      ],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_43b108bc65",
+      "shell": "/bin/bash",
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "creationCols": 80,
+      "creationRows": 24,
+      "hostPid": null,
+      "childPid": null,
+      "exitCode": null,
+      "exitSignal": null
+    },
+    "eventCount": 1,
+    "uptime": 6752,
+    "lastEventSeq": 0,
+    "terminationCategory": "host-death",
+    "artifacts": {
+      "total": 0,
+      "byKind": {},
+      "missingCount": 0,
+      "health": "no-artifacts"
+    },
+    "usedOfflineReplay": true
+  }
+}

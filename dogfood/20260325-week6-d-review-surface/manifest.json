@@ -1,0 +1,38 @@
+{
+  "bundle": "20260325-week6-d-review-surface",
+  "title": "Week 6 — Review Surface Proof",
+  "description": "Proves review-bundle generation and reviewer-facing index pages for the Week 6 dogfood bundles",
+  "createdAt": "2026-03-25T08:49:36Z",
+  "week": 6,
+  "lane": "D",
+  "artifacts": [
+    {
+      "path": "logs/01-review-single.txt",
+      "description": "Single-bundle review generation output for the Week 6 CLI contract bundle"
+    },
+    {
+      "path": "logs/02-review-all.txt",
+      "description": "Initial all-bundles review generation output across the dogfood tree"
+    },
+    {
+      "path": "logs/10-review-all-post-edit.txt",
+      "description": "Final all-bundles review generation output after the Week 6 bundle notes and manifests were settled"
+    },
+    {
+      "path": "logs/11-week6-index-files-post-edit.txt",
+      "description": "Verification listing showing the final four Week 6 review pages"
+    },
+    {
+      "path": "screenshots/01-week6-a-review-page.png",
+      "description": "Full-page screenshot of the generated Week 6 bundle A review page"
+    },
+    {
+      "path": "logs/05-cleanup-home.txt",
+      "description": "Proof that the isolated AGENT_TERMINAL_HOME was removed after capture"
+    },
+    {
+      "path": "logs/06-cleanup-extra-indexes.txt",
+      "description": "List of non-Week-6 generated review pages removed after validation to keep the diff scoped"
+    }
+  ]
+}

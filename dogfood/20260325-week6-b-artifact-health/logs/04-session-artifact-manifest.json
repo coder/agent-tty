@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "sessionId": "01KMJ2RDHRZPYTZQW4WJH2717B",
+  "artifacts": [
+    {
+      "id": "01KMJ2RH4H4ZDTYJ5SZQD785SB",
+      "kind": "screenshot",
+      "filename": "screenshot-1-reference-dark.png",
+      "sessionId": "01KMJ2RDHRZPYTZQW4WJH2717B",
+      "capturedAtSeq": 1,
+      "createdAt": "2026-03-25T08:46:14.161Z",
+      "sha256": "8d62ca0c2ce4c8b4b3c99c7374db8ef5b5896f5751b4e24758c9a1c8ddf410c9",
+      "metadata": {
+        "profileName": "reference-dark",
+        "cols": 80,
+        "rows": 24,
+        "pngSizeBytes": 48895,
+        "cursorVisible": false,
+        "rendererBackend": "ghostty-web",
+        "pixelWidth": 640,
+        "pixelHeight": 384,
+        "renderProfileHash": "908ba0076143741bddebfffd75b4eca8397f320131ef8173a77302a39b2376f8"
+      }
+    }
+  ]
+}

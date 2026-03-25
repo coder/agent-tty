@@ -1,0 +1,7 @@
+step	exit_code	duration_ms	stdout	stderr	command
+01-version.json	0	1137	dogfood/20260325-week6-a-cli-contract/logs/01-version.json	dogfood/20260325-week6-a-cli-contract/logs/01-version.stderr.txt	npx tsx src/cli/main.ts version --json
+02-create.json	0	1898	dogfood/20260325-week6-a-cli-contract/logs/02-create.json	dogfood/20260325-week6-a-cli-contract/logs/02-create.stderr.txt	npx tsx src/cli/main.ts create --json -- /bin/sh -c 'echo hello; sleep 5'
+03-wait-text.json	0	1738	dogfood/20260325-week6-a-cli-contract/logs/03-wait-text.json	dogfood/20260325-week6-a-cli-contract/logs/03-wait-text.stderr.txt	npx tsx src/cli/main.ts wait 01KMJ2R5VRY4GS10VZ3VNG52Z1 --text hello --timeout 10000 --json
+04-inspect-running.json	0	1301	dogfood/20260325-week6-a-cli-contract/logs/04-inspect-running.json	dogfood/20260325-week6-a-cli-contract/logs/04-inspect-running.stderr.txt	npx tsx src/cli/main.ts inspect 01KMJ2R5VRY4GS10VZ3VNG52Z1 --json
+05-wait-exit.json	0	1816	dogfood/20260325-week6-a-cli-contract/logs/05-wait-exit.json	dogfood/20260325-week6-a-cli-contract/logs/05-wait-exit.stderr.txt	npx tsx src/cli/main.ts wait 01KMJ2R5VRY4GS10VZ3VNG52Z1 --exit --timeout 10000 --json
+06-inspect-exited.json	0	1166	dogfood/20260325-week6-a-cli-contract/logs/06-inspect-exited.json	dogfood/20260325-week6-a-cli-contract/logs/06-inspect-exited.stderr.txt	npx tsx src/cli/main.ts inspect 01KMJ2R5VRY4GS10VZ3VNG52Z1 --json

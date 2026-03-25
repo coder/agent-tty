@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-25T08:46:09.432Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KMJ2R5VRY4GS10VZ3VNG52Z1",
+      "createdAt": "2026-03-25T08:46:02.619Z",
+      "updatedAt": "2026-03-25T08:46:08.259Z",
+      "status": "exited",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "echo hello; sleep 5"
+      ],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_43b108bc65",
+      "shell": "/bin/bash",
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "creationCols": 80,
+      "creationRows": 24,
+      "hostPid": 827964,
+      "childPid": 827977,
+      "exitCode": 0,
+      "exitSignal": null
+    },
+    "eventCount": 2,
+    "uptime": 5640,
+    "lastEventSeq": 1,
+    "terminationCategory": "clean-exit",
+    "artifacts": {
+      "total": 0,
+      "byKind": {},
+      "missingCount": 0,
+      "health": "no-artifacts"
+    },
+    "usedOfflineReplay": false
+  }
+}

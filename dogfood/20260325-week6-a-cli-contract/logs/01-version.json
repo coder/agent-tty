@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "command": "version",
+  "timestamp": "2026-03-25T08:46:01.457Z",
+  "result": {
+    "cliVersion": "0.1.0",
+    "protocolVersion": "0.1.0",
+    "rendererBackends": [
+      "ghostty-web"
+    ],
+    "runtime": {
+      "node": "v24.14.0",
+      "platform": "linux",
+      "arch": "x64"
+    }
+  }
+}

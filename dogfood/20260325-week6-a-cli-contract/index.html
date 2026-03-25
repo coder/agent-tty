@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Week 6 — CLI Contract Proof review bundle</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0f172a;
+        --surface: #111827;
+        --surface-raised: #1f2937;
+        --text: #e5e7eb;
+        --muted: #94a3b8;
+        --accent: #93c5fd;
+        --border: #334155;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: linear-gradient(180deg, #020617 0%, var(--bg) 100%);
+        color: var(--text);
+        line-height: 1.5;
+      }
+      main {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+      }
+      a { color: var(--accent); }
+      header, section, .card {
+        background: rgb(15 23 42 / 0.88);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        box-shadow: 0 18px 40px rgb(2 6 23 / 0.25);
+      }
+      header, section {
+        padding: 24px;
+        margin-bottom: 20px;
+      }
+      h1, h2, h3, h4, h5, h6 {
+        margin-top: 0;
+        color: #f8fafc;
+      }
+      p, li, dd, td, th, summary, figcaption {
+        overflow-wrap: anywhere;
+      }
+      .subtle {
+        color: var(--muted);
+      }
+      .facts {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        margin: 0;
+      }
+      .facts div {
+        padding: 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+      }
+      .facts dt {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      .facts dd {
+        margin: 6px 0 0;
+        font-weight: 600;
+      }
+      .gallery {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      }
+      .card {
+        padding: 16px;
+      }
+      .note-card > *:last-child {
+        margin-bottom: 0;
+      }
+      img, video {
+        width: 100%;
+        border-radius: 12px;
+        background: #020617;
+        border: 1px solid var(--border);
+      }
+      figure {
+        margin: 0;
+      }
+      figcaption {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 12px;
+        color: var(--muted);
+      }
+      pre {
+        padding: 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+      }
+      code {
+        font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      details > summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      th {
+        color: #f8fafc;
+      }
+      .table-scroll {
+        overflow-x: auto;
+      }
+      .empty-state {
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="subtle">Portable review bundle</p>
+        <h1>Week 6 — CLI Contract Proof</h1>
+        <p class="subtle">Bundle directory: 20260325-week6-a-cli-contract</p>
+        <p>Proves enriched inspect JSON fields and version renderer backend reporting</p>
+      </header>
+      
+      <section>
+  <h2>Manifest summary</h2>
+  <dl class="facts"><div><dt>Bundle</dt><dd>20260325-week6-a-cli-contract</dd></div><div><dt>Date</dt><dd>2026-03-25T08:48:27Z</dd></div><div><dt>Lane</dt><dd>A</dd></div><div><dt>Week</dt><dd>6</dd></div><div><dt>Manifest artifacts</dt><dd>5</dd></div><div><dt>Discovered files</dt><dd>24</dd></div></dl>
+  
+</section>
+      
+      
+      
+      <section>
+  <h2>JSON outputs</h2>
+  
+  <details class="card">
+    <summary>logs/01-version.json</summary>
+    <pre><code>{
+  &quot;ok&quot;: true,
+  &quot;command&quot;: &quot;version&quot;,
+  &quot;timestamp&quot;: &quot;2026-03-25T08:46:01.457Z&quot;,
+  &quot;result&quot;: {
+    &quot;cliVersion&quot;: &quot;0.1.0&quot;,
+    &quot;protocolVersion&quot;: &quot;0.1.0&quot;,
+    &quot;rendererBackends&quot;: [
+      &quot;ghostty-web&quot;
+    ],
+    &quot;runtime&quot;: {
+      &quot;node&quot;: &quot;v24.14.0&quot;,
+      &quot;platform&quot;: &quot;linux&quot;,
+      &quot;arch&quot;: &quot;x64&quot;
+    }
+  }
+}</code></pre>
+  </details>
+  <details class="card">
+    <summary>logs/02-create.json</summary>
+    <pre><code>{
+  &quot;ok&quot;: true,
+  &quot;command&quot;: &quot;create&quot;,
+  &quot;timestamp&quot;: &quot;2026-03-25T08:46:03.342Z&quot;,
+  &quot;result&quot;: {
+    &quot;sessionId&quot;: &quot;01KMJ2R5VRY4GS10VZ3VNG52Z1&quot;,
+    &quot;createdAt&quot;: &quot;2026-03-25T08:46:02.619Z&quot;,
+    &quot;cols&quot;: 80,
+    &quot;rows&quot;: 24,
+    &quot;shell&quot;: &quot;/bin/bash&quot;
+  }
+}</code></pre>
+  </details>
+  <details class="card">
+    <summary>logs/03-wait-text.json</summary>
+    <pre><code>{
+  &quot;ok&quot;: true,
+  &quot;command&quot;: &quot;wait&quot;,
+  &quot;timestamp&quot;: &quot;2026-03-25T08:46:05.145Z&quot;,
+  &quot;result&quot;: {
+    &quot;matched&quot;: true,
+    &quot;timedOut&quot;: false,
+    &quot;matchedText&quot;: &quot;hello&quot;,
+    &quot;cursorRow&quot;: 1,
+    &quot;cursorCol&quot;: 0,
+    &quot;capturedAtSeq&quot;: 0
+  }
+}</code></pre>
+  </details>
+  <details class="card">
+    <summary>logs/04-inspect-running.json</summary>
+    <pre><code>{
+  &quot;ok&quot;: true,
+  &quot;command&quot;: &quot;inspect&quot;,
+  &quot;timestamp&quot;: &quot;2026-03-25T08:46:06.444Z&quot;,
+  &quot;result&quot;: {
+    &quot;session&quot;: {
+      &quot;version&quot;: 1,
+      &quot;sessionId&quot;: &quot;01KMJ2R5VRY4GS10VZ3VNG52Z1&quot;,
+      &quot;createdAt&quot;: &quot;2026-03-25T08:46:02.619Z&quot;,
+      &quot;updatedAt&quot;: &quot;2026-03-25T08:46:03.255Z&quot;,
+      &quot;status&quot;: &quot;running&quot;,
+      &quot;command&quot;: [
+        &quot;/bin/sh&quot;,
+        &quot;-c&quot;,
+        &quot;echo hello; sleep 5&quot;
+      ],
+      &quot;cwd&quot;: &quot;/home/coder/.mux/src/agent-terminal/agent_exec_43b108bc65&quot;,
+      &quot;shell&quot;: &quot;/bin/bash&quot;,
+      &quot;term&quot;: &quot;xterm-256color&quot;,
+      &quot;cols&quot;: 80,
+      &quot;rows&quot;: 24,
+      &quot;creationCols&quot;: 80,
+      &quot;creationRows&quot;: 24,
+      &quot;hostPid&quot;: 827964,
+      &quot;childPid&quot;: 827977,
+      &quot;exitCode&quot;: null,
+      &quot;exitSignal&quot;: null
+    },
+    &quot;eventCount&quot;: 1,
+    &quot;uptime&quot;: 3824,
+    &quot;lastEventSeq&quot;: 0,
+    &quot;terminationCategory&quot;: &quot;running&quot;,
+    &quot;artifacts&quot;: {
+      &quot;total&quot;: 0,
+      &quot;byKind&quot;: {},
+      &quot;missingCount&quot;: 0,
+      &quot;health&quot;: &quot;no-artifacts&quot;
+    },
+    &quot;usedOfflineReplay&quot;: false
+  }
+}</code></pre>
+  </details>
+  <details class="card">
+    <summary>logs/05-wait-exit.json</summary>
+    <pre><code>{
+  &quot;ok&quot;: true,
+  &quot;command&quot;: &quot;wait&quot;,
+  &quot;timestamp&quot;: &quot;2026-03-25T08:46:08.262Z&quot;,
+  &quot;result&quot;: {
+    &quot;exitCode&quot;: 0,
+    &quot;timedOut&quot;: false
+  }
+}</code></pre>
+  </details>
+  <details class="card">
+    <summary>logs/06-inspect-exited.json</summary>
+    <pre><code>{
+  &quot;ok&quot;: true,
+  &quot;command&quot;: &quot;inspect&quot;,
+  &quot;timestamp&quot;: &quot;2026-03-25T08:46:09.432Z&quot;,
+  &quot;result&quot;: {
+    &quot;session&quot;: {
+      &quot;version&quot;: 1,
+      &quot;sessionId&quot;: &quot;01KMJ2R5VRY4GS10VZ3VNG52Z1&quot;,
+      &quot;createdAt&quot;: &quot;2026-03-25T08:46:02.619Z&quot;,
+      &quot;updatedAt&quot;: &quot;2026-03-25T08:46:08.259Z&quot;,
+      &quot;status&quot;: &quot;exited&quot;,
+      &quot;command&quot;: [
+        &quot;/bin/sh&quot;,
+        &quot;-c&quot;,
+        &quot;echo hello; sleep 5&quot;
+      ],
+      &quot;cwd&quot;: &quot;/home/coder/.mux/src/agent-terminal/agent_exec_43b108bc65&quot;,
+      &quot;shell&quot;: &quot;/bin/bash&quot;,
+      &quot;term&quot;: &quot;xterm-256color&quot;,
+      &quot;cols&quot;: 80,
+      &quot;rows&quot;: 24,
+      &quot;creationCols&quot;: 80,
+      &quot;creationRows&quot;: 24,
+      &quot;hostPid&quot;: 827964,
+      &quot;childPid&quot;: 827977,
+      &quot;exitCode&quot;: 0,
+      &quot;exitSignal&quot;: null
+    },
+    &quot;eventCount&quot;: 2,
+    &quot;uptime&quot;: 5640,
+    &quot;lastEventSeq&quot;: 1,
+    &quot;terminationCategory&quot;: &quot;clean-exit&quot;,
+    &quot;artifacts&quot;: {
+      &quot;total&quot;: 0,
+      &quot;byKind&quot;: {},
+      &quot;missingCount&quot;: 0,
+      &quot;health&quot;: &quot;no-artifacts&quot;
+    },
+    &quot;usedOfflineReplay&quot;: false
+  }
+}</code></pre>
+  </details>
+  <details class="card">
+    <summary>logs/07-session.json</summary>
+    <pre><code>{
+  &quot;version&quot;: 1,
+  &quot;sessionId&quot;: &quot;01KMJ2R5VRY4GS10VZ3VNG52Z1&quot;,
+  &quot;createdAt&quot;: &quot;2026-03-25T08:46:02.619Z&quot;,
+  &quot;updatedAt&quot;: &quot;2026-03-25T08:46:08.259Z&quot;,
+  &quot;status&quot;: &quot;exited&quot;,
+  &quot;command&quot;: [
+    &quot;/bin/sh&quot;,
+    &quot;-c&quot;,
+    &quot;echo hello; sleep 5&quot;
+  ],
+  &quot;cwd&quot;: &quot;/home/coder/.mux/src/agent-terminal/agent_exec_43b108bc65&quot;,
+  &quot;shell&quot;: &quot;/bin/bash&quot;,
+  &quot;term&quot;: &quot;xterm-256color&quot;,
+  &quot;cols&quot;: 80,
+  &quot;rows&quot;: 24,
+  &quot;creationCols&quot;: 80,
+  &quot;creationRows&quot;: 24,
+  &quot;hostPid&quot;: 827964,
+  &quot;childPid&quot;: 827977,
+  &quot;exitCode&quot;: 0,
+  &quot;exitSignal&quot;: null
+}</code></pre>
+  </details>
+</section>
+      <section>
+  <h2>Notes</h2>
+  
+  <article class="card note-card">
+    <h3><a href="notes.md">notes.md</a></h3>
+    <h1>2026-03-25 dogfood — Week 6 bundle A CLI contract proof</h1>
+<h2>Bundle metadata</h2>
+<ul><li><strong>Bundle path:</strong> <code>dogfood/20260325-week6-a-cli-contract/</code></li><li><strong>Session ID:</strong> <code>01KMJ2R5VRY4GS10VZ3VNG52Z1</code></li><li><strong>Isolated AGENT_TERMINAL_HOME:</strong> <code>/tmp/agent-terminal-week6.N8X5Dz</code></li><li><strong>CLI entrypoint:</strong> <code>npx tsx src/cli/main.ts</code></li></ul>
+<h2>Scenario summary</h2>
+<p>This bundle proves the Week 6 CLI contract additions on the stable JSON surface:</p>
+<ul><li><code>version --json</code> reports <code>rendererBackends: [&quot;ghostty-web&quot;]</code></li><li><code>inspect --json</code> includes <code>artifacts</code>, <code>terminationCategory</code>, <code>lastEventSeq</code>, and <code>usedOfflineReplay</code></li><li>the same session shows the enriched inspect payload both while running and after a clean exit</li></ul>
+<h2>Review answers</h2>
+<ul><li><strong>Did <code>version --json</code> advertise the renderer backend list?</strong> Yes. <code>logs/01-version.json</code> reports <code>rendererBackends: [&quot;ghostty-web&quot;]</code> alongside CLI, protocol, and runtime facts.</li><li><strong>Did the running inspect include the new Week 6 fields?</strong> Yes. <code>logs/04-inspect-running.json</code> shows <code>lastEventSeq: 0</code>, <code>terminationCategory: &quot;running&quot;</code>, <code>artifacts.health: &quot;no-artifacts&quot;</code>, and <code>usedOfflineReplay: false</code> while the shell command was still sleeping.</li><li><strong>Did the exited inspect keep the same enriched shape?</strong> Yes. <code>logs/06-inspect-exited.json</code> shows <code>lastEventSeq: 1</code>, <code>terminationCategory: &quot;clean-exit&quot;</code>, the same <code>artifacts</code> object, and <code>usedOfflineReplay: false</code> after exit.</li><li><strong>Did the proof exercise real output and exit waits?</strong> Yes. <code>logs/03-wait-text.json</code> matched the rendered text <code>hello</code>, and <code>logs/05-wait-exit.json</code> observed the clean exit.</li><li><strong>What supporting raw session files are included?</strong> <code>logs/07-session.json</code> and <code>logs/08-events.jsonl</code> were copied from the isolated session directory so reviewers can correlate the inspect output with the persisted session record and append-only event log.</li></ul>
+<h2>Issues / limitations</h2>
+<ul><li>None during capture. This scenario intentionally produced no artifacts, so both inspect calls report <code>artifacts.health: &quot;no-artifacts&quot;</code>.</li></ul>
+  </article>
+</section>
+      <section>
+  <h2>Commands</h2>
+  <div class="card">
+    <h3><a href="commands.sh">commands.sh</a></h3>
+    <pre><code>#!/usr/bin/env bash
+set -euo pipefail
+export PATH=&quot;$HOME/.local/bin:$PATH&quot;
+export AGENT_TERMINAL_HOME=&quot;/tmp/agent-terminal-week6.N8X5Dz&quot;
+
+npx tsx src/cli/main.ts version --json
+npx tsx src/cli/main.ts create --json -- /bin/sh -c &#39;echo hello; sleep 5&#39;
+npx tsx src/cli/main.ts wait 01KMJ2R5VRY4GS10VZ3VNG52Z1 --text hello --timeout 10000 --json
+npx tsx src/cli/main.ts inspect 01KMJ2R5VRY4GS10VZ3VNG52Z1 --json
+npx tsx src/cli/main.ts wait 01KMJ2R5VRY4GS10VZ3VNG52Z1 --exit --timeout 10000 --json
+npx tsx src/cli/main.ts inspect 01KMJ2R5VRY4GS10VZ3VNG52Z1 --json
+</code></pre>
+  </div>
+</section>
+      <section>
+  <h2>Command status</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>step</th><th>exit_code</th><th>duration_ms</th><th>stdout</th><th>stderr</th><th>command</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>01-version.json</td><td>0</td><td>1137</td><td>dogfood/20260325-week6-a-cli-contract/logs/01-version.json</td><td>dogfood/20260325-week6-a-cli-contract/logs/01-version.stderr.txt</td><td>npx tsx src/cli/main.ts version --json</td></tr><tr><td>02-create.json</td><td>0</td><td>1898</td><td>dogfood/20260325-week6-a-cli-contract/logs/02-create.json</td><td>dogfood/20260325-week6-a-cli-contract/logs/02-create.stderr.txt</td><td>npx tsx src/cli/main.ts create --json -- /bin/sh -c &#39;echo hello; sleep 5&#39;</td></tr><tr><td>03-wait-text.json</td><td>0</td><td>1738</td><td>dogfood/20260325-week6-a-cli-contract/logs/03-wait-text.json</td><td>dogfood/20260325-week6-a-cli-contract/logs/03-wait-text.stderr.txt</td><td>npx tsx src/cli/main.ts wait 01KMJ2R5VRY4GS10VZ3VNG52Z1 --text hello --timeout 10000 --json</td></tr><tr><td>04-inspect-running.json</td><td>0</td><td>1301</td><td>dogfood/20260325-week6-a-cli-contract/logs/04-inspect-running.json</td><td>dogfood/20260325-week6-a-cli-contract/logs/04-inspect-running.stderr.txt</td><td>npx tsx src/cli/main.ts inspect 01KMJ2R5VRY4GS10VZ3VNG52Z1 --json</td></tr><tr><td>05-wait-exit.json</td><td>0</td><td>1816</td><td>dogfood/20260325-week6-a-cli-contract/logs/05-wait-exit.json</td><td>dogfood/20260325-week6-a-cli-contract/logs/05-wait-exit.stderr.txt</td><td>npx tsx src/cli/main.ts wait 01KMJ2R5VRY4GS10VZ3VNG52Z1 --exit --timeout 10000 --json</td></tr><tr><td>06-inspect-exited.json</td><td>0</td><td>1166</td><td>dogfood/20260325-week6-a-cli-contract/logs/06-inspect-exited.json</td><td>dogfood/20260325-week6-a-cli-contract/logs/06-inspect-exited.stderr.txt</td><td>npx tsx src/cli/main.ts inspect 01KMJ2R5VRY4GS10VZ3VNG52Z1 --json</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+      <section>
+  <h2>Artifact inventory</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Path</th><th>Type</th><th>Size</th></tr>
+      </thead>
+      <tbody>
+        
+        <tr>
+          <td><a href="agent-terminal-home.txt">agent-terminal-home.txt</a></td>
+          <td>support</td>
+          <td>33 B</td>
+        </tr>
+        <tr>
+          <td><a href="command-status.tsv">command-status.tsv</a></td>
+          <td>support</td>
+          <td>1.4 KB</td>
+        </tr>
+        <tr>
+          <td><a href="commands.sh">commands.sh</a></td>
+          <td>script</td>
+          <td>561 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/01-version.json">logs/01-version.json</a></td>
+          <td>support</td>
+          <td>311 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/01-version.stderr.txt">logs/01-version.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/02-create.json">logs/02-create.json</a></td>
+          <td>support</td>
+          <td>251 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/02-create.stderr.txt">logs/02-create.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/03-wait-text.json">logs/03-wait-text.json</a></td>
+          <td>support</td>
+          <td>235 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/03-wait-text.stderr.txt">logs/03-wait-text.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/04-inspect-running.json">logs/04-inspect-running.json</a></td>
+          <td>support</td>
+          <td>983 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/04-inspect-running.stderr.txt">logs/04-inspect-running.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/05-wait-exit.json">logs/05-wait-exit.json</a></td>
+          <td>support</td>
+          <td>141 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/05-wait-exit.stderr.txt">logs/05-wait-exit.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/06-inspect-exited.json">logs/06-inspect-exited.json</a></td>
+          <td>support</td>
+          <td>982 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/06-inspect-exited.stderr.txt">logs/06-inspect-exited.stderr.txt</a></td>
+          <td>support</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/07-session.json">logs/07-session.json</a></td>
+          <td>support</td>
+          <td>519 B</td>
+        </tr>
+        <tr>
+          <td><a href="logs/08-events.jsonl">logs/08-events.jsonl</a></td>
+          <td>support</td>
+          <td>188 B</td>
+        </tr>
+        <tr>
+          <td><a href="manifest.json">manifest.json</a></td>
+          <td>support</td>
+          <td>1.0 KB</td>
+        </tr>
+        <tr>
+          <td><a href="notes.md">notes.md</a></td>
+          <td>notes</td>
+          <td>1.9 KB</td>
+        </tr>
+        <tr>
+          <td><a href="recordings/.gitkeep">recordings/.gitkeep</a></td>
+          <td>other</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="screenshots/.gitkeep">screenshots/.gitkeep</a></td>
+          <td>other</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="session-id.txt">session-id.txt</a></td>
+          <td>support</td>
+          <td>27 B</td>
+        </tr>
+        <tr>
+          <td><a href="snapshots/.gitkeep">snapshots/.gitkeep</a></td>
+          <td>other</td>
+          <td>0 B</td>
+        </tr>
+        <tr>
+          <td><a href="videos/.gitkeep">videos/.gitkeep</a></td>
+          <td>other</td>
+          <td>0 B</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+    </main>
+  </body>
+</html>
