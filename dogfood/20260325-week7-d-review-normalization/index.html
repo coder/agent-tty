@@ -15,10 +15,19 @@
         --accent: #93c5fd;
         --border: #334155;
       }
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
         background: linear-gradient(180deg, #020617 0%, var(--bg) 100%);
         color: var(--text);
         line-height: 1.5;
@@ -28,22 +37,38 @@
         margin: 0 auto;
         padding: 32px 20px 48px;
       }
-      a { color: var(--accent); }
-      header, section, .card {
+      a {
+        color: var(--accent);
+      }
+      header,
+      section,
+      .card {
         background: rgb(15 23 42 / 0.88);
         border: 1px solid var(--border);
         border-radius: 16px;
         box-shadow: 0 18px 40px rgb(2 6 23 / 0.25);
       }
-      header, section {
+      header,
+      section {
         padding: 24px;
         margin-bottom: 20px;
       }
-      h1, h2, h3, h4, h5, h6 {
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
         margin-top: 0;
         color: #f8fafc;
       }
-      p, li, dd, td, th, summary, figcaption {
+      p,
+      li,
+      dd,
+      td,
+      th,
+      summary,
+      figcaption {
         overflow-wrap: anywhere;
       }
       .subtle {
@@ -80,7 +105,8 @@
       .note-card > *:last-child {
         margin-bottom: 0;
       }
-      img, video {
+      img,
+      video {
         width: 100%;
         border-radius: 12px;
         background: #020617;
@@ -105,7 +131,8 @@
         white-space: pre-wrap;
       }
       code {
-        font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family:
+          'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       details > summary {
         cursor: pointer;
@@ -115,7 +142,8 @@
         width: 100%;
         border-collapse: collapse;
       }
-      th, td {
+      th,
+      td {
         text-align: left;
         padding: 10px 12px;
         border-bottom: 1px solid var(--border);
@@ -137,65 +165,249 @@
       <header>
         <p class="subtle">Portable review bundle</p>
         <h1>Week 7 — Review Normalization Proof</h1>
-        <p class="subtle">Bundle directory: 20260325-week7-d-review-normalization</p>
-        <p>Proves review-bundle tool works in single-bundle and batch modes without modifying existing Week 6 bundles</p>
+        <p class="subtle">
+          Bundle directory: 20260325-week7-d-review-normalization
+        </p>
+        <p>
+          Proves review-bundle tool works in single-bundle and batch modes
+          without modifying existing Week 6 bundles
+        </p>
       </header>
-      
+
       <section>
-  <h2>Manifest summary</h2>
-  <dl class="facts"><div><dt>Bundle</dt><dd>20260325-week7-d-review-normalization</dd></div><div><dt>Date</dt><dd>2026-03-25T19:54:58Z</dd></div><div><dt>Lane</dt><dd>D</dd></div><div><dt>Week</dt><dd>7</dd></div><div><dt>Manifest artifacts</dt><dd>9</dd></div><div><dt>Discovered files</dt><dd>26</dd></div></dl>
-  
-</section>
+        <h2>Manifest summary</h2>
+        <dl class="facts">
+          <div>
+            <dt>Bundle</dt>
+            <dd>20260325-week7-d-review-normalization</dd>
+          </div>
+          <div>
+            <dt>Date</dt>
+            <dd>2026-03-25T19:54:58Z</dd>
+          </div>
+          <div>
+            <dt>Lane</dt>
+            <dd>D</dd>
+          </div>
+          <div>
+            <dt>Week</dt>
+            <dd>7</dd>
+          </div>
+          <div>
+            <dt>Manifest artifacts</dt>
+            <dd>9</dd>
+          </div>
+          <div>
+            <dt>Discovered files</dt>
+            <dd>26</dd>
+          </div>
+        </dl>
+      </section>
       <section>
-  <h2>Screenshot gallery</h2>
-  <div class="gallery">
-    
-      <figure class="card">
-        <img src="screenshots/01-week7-a-review-page.png" alt="01-week7-a-review-page.png" loading="lazy" />
-        <figcaption>
-          <a href="screenshots/01-week7-a-review-page.png">screenshots/01-week7-a-review-page.png</a>
-          <span>2.0 MB</span>
-        </figcaption>
-      </figure>
-      <figure class="card">
-        <img src="screenshots/02-week7-d-review-page.png" alt="02-week7-d-review-page.png" loading="lazy" />
-        <figcaption>
-          <a href="screenshots/02-week7-d-review-page.png">screenshots/02-week7-d-review-page.png</a>
-          <span>2.7 MB</span>
-        </figcaption>
-      </figure>
-  </div>
-</section>
-      
-      
-      
+        <h2>Screenshot gallery</h2>
+        <div class="gallery">
+          <figure class="card">
+            <img
+              src="screenshots/01-week7-a-review-page.png"
+              alt="01-week7-a-review-page.png"
+              loading="lazy"
+            />
+            <figcaption>
+              <a href="screenshots/01-week7-a-review-page.png"
+                >screenshots/01-week7-a-review-page.png</a
+              >
+              <span>2.0 MB</span>
+            </figcaption>
+          </figure>
+          <figure class="card">
+            <img
+              src="screenshots/02-week7-d-review-page.png"
+              alt="02-week7-d-review-page.png"
+              loading="lazy"
+            />
+            <figcaption>
+              <a href="screenshots/02-week7-d-review-page.png"
+                >screenshots/02-week7-d-review-page.png</a
+              >
+              <span>2.7 MB</span>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
       <section>
-  <h2>Notes</h2>
-  
-  <article class="card note-card">
-    <h3><a href="notes.md">notes.md</a></h3>
-    <h1>2026-03-25 dogfood — Week 7 bundle D review normalization proof</h1>
-<h2>Bundle metadata</h2>
-<ul><li><strong>Bundle path:</strong> <code>dogfood/20260325-week7-d-review-normalization/</code></li><li><strong>Review helper:</strong> <code>src/tools/review-bundle.ts</code></li><li><strong>Package version context:</strong> <code>agent-terminal@0.1.0</code> from <code>package.json</code></li><li><strong>Single-bundle targets:</strong> <code>20260325-week7-a-cli-parity</code> and <code>20260325-week7-b-envelope-locks</code></li><li><strong>Batch mirror contents:</strong> <code>20260325-week6-a-cli-contract</code>, <code>20260325-week6-d-review-surface</code>, <code>20260325-week7-a-cli-parity</code>, and <code>20260325-week7-b-envelope-locks</code></li></ul>
-<h2>Scenario summary</h2>
-<p>This bundle proves that the review-bundle helper works in both single-bundle mode and batch <code>--all</code> mode while keeping the real repository&#39;s Week 6 bundles untouched. Single-bundle runs refreshed the two Week 7 target bundles in place, batch mode ran only against a temporary mirror under <code>/tmp</code>, and the safety check confirmed that no real <code>dogfood/20260325-week6-*</code> path was modified.</p>
-<h2>Single-bundle proof</h2>
-<ul><li><strong>Step 01:</strong> <code>logs/01-review-single-a.txt</code> captured a successful single-bundle render for <code>dogfood/20260325-week7-a-cli-parity/</code>, and <code>screenshots/01-week7-a-review-page.png</code> is the browser proof of the generated review page.</li><li><strong>Step 02:</strong> <code>logs/02-review-single-b.txt</code> captured a successful single-bundle render for <code>dogfood/20260325-week7-b-envelope-locks/</code>, creating <code>dogfood/20260325-week7-b-envelope-locks/index.html</code> in the real repo as expected.</li><li><strong>Warnings:</strong> <code>logs/01-review-single-a.stderr.txt</code> and <code>logs/02-review-single-b.stderr.txt</code> are empty, so neither single-bundle run emitted warnings.</li></ul>
-<h2>Batch-mode proof</h2>
-<ul><li><strong>Mirror strategy:</strong> <code>logs/03-review-batch.txt</code> records the temporary mirror path <code>/tmp/agent-terminal-week7-review.9yyqy2</code> plus the four copied bundles processed there.</li><li><strong>Result:</strong> The <code>--all</code> run generated one <code>index.html</code> file per mirrored bundle, including the mirrored Week 6 bundles, without touching the real repository tree.</li><li><strong>Warnings:</strong> <code>logs/03-review-batch.stderr.txt</code> contains only the expected <code>Building ...</code> progress lines and no warnings or failures.</li></ul>
-<h2>Week 6 safety verification</h2>
-<ul><li><code>logs/06-week6-safety-diff.txt</code> captured <code>git diff --name-only</code> immediately after the real-repo review commands. The only tracked change at that checkpoint was <code>dogfood/20260325-week7-a-cli-parity/index.html</code>.</li><li><code>logs/08-git-status-final.txt</code> confirms the final dirty paths stay inside Week 7: modified <code>dogfood/20260325-week7-a-cli-parity/index.html</code>, untracked <code>dogfood/20260325-week7-b-envelope-locks/index.html</code>, and the new <code>dogfood/20260325-week7-d-review-normalization/</code> bundle.</li><li>No <code>dogfood/20260325-week6-*</code> file appeared in either verification step, so no restore step was needed.</li></ul>
-<h2>Review answers</h2>
-<ul><li><strong>Did single-bundle mode succeed for each Week 7 bundle?</strong> Yes. Steps 01 and 02 both exited successfully and wrote the expected <code>index.html</code> paths into their stdout logs.</li><li><strong>Did batch mode succeed?</strong> Yes. Step 03 rendered review pages for all four mirrored bundles inside the temporary mirror.</li><li><strong>Were any warnings emitted?</strong> Not for the Week 7 single-bundle runs or the batch mirror run. The first self-review run in <code>logs/04-review-self.stderr.txt</code> emitted expected missing-artifact warnings because <code>logs/08-git-status-final.txt</code>, <code>screenshots/02-week7-d-review-page.png</code>, and <code>command-status.tsv</code> had not been created yet when that first render occurred.</li><li><strong>Were Week 6 files left untouched?</strong> Yes. The Week 6 proof relies on the temp mirror for <code>--all</code>, and the real-repo diff/status checks never showed a Week 6 path.</li></ul>
-<h2>Issues / limitations</h2>
-<ul><li>The requested <code>npx tsx ...</code> entrypoint hit an environment-specific <code>mise</code> trust check in this child worktree, so the captured proof used the equivalent local binary <code>./node_modules/.bin/tsx</code> after installing dependencies.</li><li>The initial self-review pass necessarily ran before every Week 7-D artifact existed, so its stderr sidecar documents expected missing-artifact warnings. A later refresh updates the final <code>index.html</code> after the bundle contents are in place.</li><li>Batch proof intentionally used only a representative mirror subset (two Week 6 bundles plus the two Week 7 bundles) because the goal was to prove normalization and Week 6 safety, not to rewrite the entire real <code>dogfood/</code> tree.</li></ul>
-  </article>
-</section>
+        <h2>Notes</h2>
+
+        <article class="card note-card">
+          <h3><a href="notes.md">notes.md</a></h3>
+          <h1>
+            2026-03-25 dogfood — Week 7 bundle D review normalization proof
+          </h1>
+          <h2>Bundle metadata</h2>
+          <ul>
+            <li>
+              <strong>Bundle path:</strong>
+              <code>dogfood/20260325-week7-d-review-normalization/</code>
+            </li>
+            <li>
+              <strong>Review helper:</strong>
+              <code>src/tools/review-bundle.ts</code>
+            </li>
+            <li>
+              <strong>Package version context:</strong>
+              <code>agent-terminal@0.1.0</code> from <code>package.json</code>
+            </li>
+            <li>
+              <strong>Single-bundle targets:</strong>
+              <code>20260325-week7-a-cli-parity</code> and
+              <code>20260325-week7-b-envelope-locks</code>
+            </li>
+            <li>
+              <strong>Batch mirror contents:</strong>
+              <code>20260325-week6-a-cli-contract</code>,
+              <code>20260325-week6-d-review-surface</code>,
+              <code>20260325-week7-a-cli-parity</code>, and
+              <code>20260325-week7-b-envelope-locks</code>
+            </li>
+          </ul>
+          <h2>Scenario summary</h2>
+          <p>
+            This bundle proves that the review-bundle helper works in both
+            single-bundle mode and batch <code>--all</code> mode while keeping
+            the real repository&#39;s Week 6 bundles untouched. Single-bundle
+            runs refreshed the two Week 7 target bundles in place, batch mode
+            ran only against a temporary mirror under <code>/tmp</code>, and the
+            safety check confirmed that no real
+            <code>dogfood/20260325-week6-*</code> path was modified.
+          </p>
+          <h2>Single-bundle proof</h2>
+          <ul>
+            <li>
+              <strong>Step 01:</strong>
+              <code>logs/01-review-single-a.txt</code> captured a successful
+              single-bundle render for
+              <code>dogfood/20260325-week7-a-cli-parity/</code>, and
+              <code>screenshots/01-week7-a-review-page.png</code> is the browser
+              proof of the generated review page.
+            </li>
+            <li>
+              <strong>Step 02:</strong>
+              <code>logs/02-review-single-b.txt</code> captured a successful
+              single-bundle render for
+              <code>dogfood/20260325-week7-b-envelope-locks/</code>, creating
+              <code>dogfood/20260325-week7-b-envelope-locks/index.html</code> in
+              the real repo as expected.
+            </li>
+            <li>
+              <strong>Warnings:</strong>
+              <code>logs/01-review-single-a.stderr.txt</code> and
+              <code>logs/02-review-single-b.stderr.txt</code> are empty, so
+              neither single-bundle run emitted warnings.
+            </li>
+          </ul>
+          <h2>Batch-mode proof</h2>
+          <ul>
+            <li>
+              <strong>Mirror strategy:</strong>
+              <code>logs/03-review-batch.txt</code> records the temporary mirror
+              path <code>/tmp/agent-terminal-week7-review.9yyqy2</code> plus the
+              four copied bundles processed there.
+            </li>
+            <li>
+              <strong>Result:</strong> The <code>--all</code> run generated one
+              <code>index.html</code> file per mirrored bundle, including the
+              mirrored Week 6 bundles, without touching the real repository
+              tree.
+            </li>
+            <li>
+              <strong>Warnings:</strong>
+              <code>logs/03-review-batch.stderr.txt</code> contains only the
+              expected <code>Building ...</code> progress lines and no warnings
+              or failures.
+            </li>
+          </ul>
+          <h2>Week 6 safety verification</h2>
+          <ul>
+            <li>
+              <code>logs/06-week6-safety-diff.txt</code> captured
+              <code>git diff --name-only</code> immediately after the real-repo
+              review commands. The only tracked change at that checkpoint was
+              <code>dogfood/20260325-week7-a-cli-parity/index.html</code>.
+            </li>
+            <li>
+              <code>logs/08-git-status-final.txt</code> confirms the final dirty
+              paths stay inside Week 7: modified
+              <code>dogfood/20260325-week7-a-cli-parity/index.html</code>,
+              untracked
+              <code>dogfood/20260325-week7-b-envelope-locks/index.html</code>,
+              and the new
+              <code>dogfood/20260325-week7-d-review-normalization/</code>
+              bundle.
+            </li>
+            <li>
+              No <code>dogfood/20260325-week6-*</code> file appeared in either
+              verification step, so no restore step was needed.
+            </li>
+          </ul>
+          <h2>Review answers</h2>
+          <ul>
+            <li>
+              <strong
+                >Did single-bundle mode succeed for each Week 7 bundle?</strong
+              >
+              Yes. Steps 01 and 02 both exited successfully and wrote the
+              expected <code>index.html</code> paths into their stdout logs.
+            </li>
+            <li>
+              <strong>Did batch mode succeed?</strong> Yes. Step 03 rendered
+              review pages for all four mirrored bundles inside the temporary
+              mirror.
+            </li>
+            <li>
+              <strong>Were any warnings emitted?</strong> Not for the Week 7
+              single-bundle runs or the batch mirror run. The first self-review
+              run in <code>logs/04-review-self.stderr.txt</code> emitted
+              expected missing-artifact warnings because
+              <code>logs/08-git-status-final.txt</code>,
+              <code>screenshots/02-week7-d-review-page.png</code>, and
+              <code>command-status.tsv</code> had not been created yet when that
+              first render occurred.
+            </li>
+            <li>
+              <strong>Were Week 6 files left untouched?</strong> Yes. The Week 6
+              proof relies on the temp mirror for <code>--all</code>, and the
+              real-repo diff/status checks never showed a Week 6 path.
+            </li>
+          </ul>
+          <h2>Issues / limitations</h2>
+          <ul>
+            <li>
+              The requested <code>npx tsx ...</code> entrypoint hit an
+              environment-specific <code>mise</code> trust check in this child
+              worktree, so the captured proof used the equivalent local binary
+              <code>./node_modules/.bin/tsx</code> after installing
+              dependencies.
+            </li>
+            <li>
+              The initial self-review pass necessarily ran before every Week 7-D
+              artifact existed, so its stderr sidecar documents expected
+              missing-artifact warnings. A later refresh updates the final
+              <code>index.html</code> after the bundle contents are in place.
+            </li>
+            <li>
+              Batch proof intentionally used only a representative mirror subset
+              (two Week 6 bundles plus the two Week 7 bundles) because the goal
+              was to prove normalization and Week 6 safety, not to rewrite the
+              entire real <code>dogfood/</code> tree.
+            </li>
+          </ul>
+        </article>
+      </section>
       <section>
-  <h2>Commands</h2>
-  <div class="card">
-    <h3><a href="commands.sh">commands.sh</a></h3>
-    <pre><code>#!/usr/bin/env bash
+        <h2>Commands</h2>
+        <div class="card">
+          <h3><a href="commands.sh">commands.sh</a></h3>
+          <pre><code>#!/usr/bin/env bash
 set -euo pipefail
 
 bundle_dir=&#39;dogfood/20260325-week7-d-review-normalization&#39;
@@ -229,164 +441,362 @@ git status --short
 ./node_modules/.bin/tsx src/tools/review-bundle.ts dogfood/20260325-week7-d-review-normalization
 git diff --name-only
 </code></pre>
-  </div>
-</section>
+        </div>
+      </section>
       <section>
-  <h2>Command status</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>step</th><th>command</th><th>exit_code</th><th>status</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>00</td><td>npm ci --ignore-scripts</td><td>0</td><td>passed</td></tr><tr><td>01</td><td>./node_modules/.bin/tsx src/tools/review-bundle.ts dogfood/20260325-week7-a-cli-parity</td><td>0</td><td>passed</td></tr><tr><td>02</td><td>./node_modules/.bin/tsx src/tools/review-bundle.ts dogfood/20260325-week7-b-envelope-locks</td><td>0</td><td>passed</td></tr><tr><td>03</td><td>./node_modules/.bin/tsx src/tools/review-bundle.ts --all /tmp/agent-terminal-week7-review.9yyqy2</td><td>0</td><td>passed</td></tr><tr><td>04</td><td>./node_modules/.bin/tsx --eval &quot;playwright screenshot week7-a review page&quot;</td><td>0</td><td>passed</td></tr><tr><td>05</td><td>git diff --name-only</td><td>0</td><td>passed</td></tr><tr><td>06</td><td>./node_modules/.bin/tsx src/tools/review-bundle.ts dogfood/20260325-week7-d-review-normalization</td><td>0</td><td>passed</td></tr><tr><td>07</td><td>./node_modules/.bin/tsx --eval &quot;playwright screenshot week7-d review page&quot;</td><td>0</td><td>passed</td></tr><tr><td>08</td><td>git status --short</td><td>0</td><td>passed</td></tr><tr><td>09</td><td>./node_modules/.bin/prettier --write dogfood/20260325-week7-d-review-normalization/</td><td>TBD</td><td>pending</td></tr><tr><td>10</td><td>./node_modules/.bin/prettier --check dogfood/20260325-week7-d-review-normalization/</td><td>TBD</td><td>pending</td></tr><tr><td>11</td><td>./node_modules/.bin/tsx src/tools/review-bundle.ts dogfood/20260325-week7-d-review-normalization</td><td>TBD</td><td>pending</td></tr><tr><td>12</td><td>git diff --name-only</td><td>TBD</td><td>pending</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <h2>Command status</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>step</th>
+                <th>command</th>
+                <th>exit_code</th>
+                <th>status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>00</td>
+                <td>npm ci --ignore-scripts</td>
+                <td>0</td>
+                <td>passed</td>
+              </tr>
+              <tr>
+                <td>01</td>
+                <td>
+                  ./node_modules/.bin/tsx src/tools/review-bundle.ts
+                  dogfood/20260325-week7-a-cli-parity
+                </td>
+                <td>0</td>
+                <td>passed</td>
+              </tr>
+              <tr>
+                <td>02</td>
+                <td>
+                  ./node_modules/.bin/tsx src/tools/review-bundle.ts
+                  dogfood/20260325-week7-b-envelope-locks
+                </td>
+                <td>0</td>
+                <td>passed</td>
+              </tr>
+              <tr>
+                <td>03</td>
+                <td>
+                  ./node_modules/.bin/tsx src/tools/review-bundle.ts --all
+                  /tmp/agent-terminal-week7-review.9yyqy2
+                </td>
+                <td>0</td>
+                <td>passed</td>
+              </tr>
+              <tr>
+                <td>04</td>
+                <td>
+                  ./node_modules/.bin/tsx --eval &quot;playwright screenshot
+                  week7-a review page&quot;
+                </td>
+                <td>0</td>
+                <td>passed</td>
+              </tr>
+              <tr>
+                <td>05</td>
+                <td>git diff --name-only</td>
+                <td>0</td>
+                <td>passed</td>
+              </tr>
+              <tr>
+                <td>06</td>
+                <td>
+                  ./node_modules/.bin/tsx src/tools/review-bundle.ts
+                  dogfood/20260325-week7-d-review-normalization
+                </td>
+                <td>0</td>
+                <td>passed</td>
+              </tr>
+              <tr>
+                <td>07</td>
+                <td>
+                  ./node_modules/.bin/tsx --eval &quot;playwright screenshot
+                  week7-d review page&quot;
+                </td>
+                <td>0</td>
+                <td>passed</td>
+              </tr>
+              <tr>
+                <td>08</td>
+                <td>git status --short</td>
+                <td>0</td>
+                <td>passed</td>
+              </tr>
+              <tr>
+                <td>09</td>
+                <td>
+                  ./node_modules/.bin/prettier --write
+                  dogfood/20260325-week7-d-review-normalization/
+                </td>
+                <td>TBD</td>
+                <td>pending</td>
+              </tr>
+              <tr>
+                <td>10</td>
+                <td>
+                  ./node_modules/.bin/prettier --check
+                  dogfood/20260325-week7-d-review-normalization/
+                </td>
+                <td>TBD</td>
+                <td>pending</td>
+              </tr>
+              <tr>
+                <td>11</td>
+                <td>
+                  ./node_modules/.bin/tsx src/tools/review-bundle.ts
+                  dogfood/20260325-week7-d-review-normalization
+                </td>
+                <td>TBD</td>
+                <td>pending</td>
+              </tr>
+              <tr>
+                <td>12</td>
+                <td>git diff --name-only</td>
+                <td>TBD</td>
+                <td>pending</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
       <section>
-  <h2>Artifact inventory</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>Path</th><th>Type</th><th>Size</th></tr>
-      </thead>
-      <tbody>
-        
-        <tr>
-          <td><a href="command-status.tsv">command-status.tsv</a></td>
-          <td>support</td>
-          <td>1.0 KB</td>
-        </tr>
-        <tr>
-          <td><a href="commands.sh">commands.sh</a></td>
-          <td>script</td>
-          <td>2.6 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/01-review-single-a.stderr.txt">logs/01-review-single-a.stderr.txt</a></td>
-          <td>support</td>
-          <td>45 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/01-review-single-a.txt">logs/01-review-single-a.txt</a></td>
-          <td>support</td>
-          <td>105 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/02-review-single-b.stderr.txt">logs/02-review-single-b.stderr.txt</a></td>
-          <td>support</td>
-          <td>49 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/02-review-single-b.txt">logs/02-review-single-b.txt</a></td>
-          <td>support</td>
-          <td>109 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/03-review-batch.stderr.txt">logs/03-review-batch.stderr.txt</a></td>
-          <td>support</td>
-          <td>318 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/03-review-batch.txt">logs/03-review-batch.txt</a></td>
-          <td>support</td>
-          <td>1021 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/04-review-self.stderr.txt">logs/04-review-self.stderr.txt</a></td>
-          <td>support</td>
-          <td>292 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/04-review-self.txt">logs/04-review-self.txt</a></td>
-          <td>support</td>
-          <td>115 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/05-screenshot-week7-a.stderr.txt">logs/05-screenshot-week7-a.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/05-screenshot-week7-a.txt">logs/05-screenshot-week7-a.txt</a></td>
-          <td>support</td>
-          <td>112 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/06-week6-safety-diff.txt">logs/06-week6-safety-diff.txt</a></td>
-          <td>support</td>
-          <td>47 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/07-screenshot-week7-d.stderr.txt">logs/07-screenshot-week7-d.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/07-screenshot-week7-d.txt">logs/07-screenshot-week7-d.txt</a></td>
-          <td>support</td>
-          <td>122 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/08-git-status-final.txt">logs/08-git-status-final.txt</a></td>
-          <td>support</td>
-          <td>154 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/09-prettier-write.stderr.txt">logs/09-prettier-write.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/09-prettier-write.txt">logs/09-prettier-write.txt</a></td>
-          <td>support</td>
-          <td>211 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/10-prettier-check.stderr.txt">logs/10-prettier-check.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/10-prettier-check.txt">logs/10-prettier-check.txt</a></td>
-          <td>support</td>
-          <td>66 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/11-review-self-refresh.stderr.txt">logs/11-review-self-refresh.stderr.txt</a></td>
-          <td>support</td>
-          <td>55 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/11-review-self-refresh.txt">logs/11-review-self-refresh.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="manifest.json">manifest.json</a></td>
-          <td>support</td>
-          <td>1.5 KB</td>
-        </tr>
-        <tr>
-          <td><a href="notes.md">notes.md</a></td>
-          <td>notes</td>
-          <td>4.2 KB</td>
-        </tr>
-        <tr>
-          <td><a href="screenshots/01-week7-a-review-page.png">screenshots/01-week7-a-review-page.png</a></td>
-          <td>screenshot</td>
-          <td>2.0 MB</td>
-        </tr>
-        <tr>
-          <td><a href="screenshots/02-week7-d-review-page.png">screenshots/02-week7-d-review-page.png</a></td>
-          <td>screenshot</td>
-          <td>2.7 MB</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <h2>Artifact inventory</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Type</th>
+                <th>Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="command-status.tsv">command-status.tsv</a></td>
+                <td>support</td>
+                <td>1.0 KB</td>
+              </tr>
+              <tr>
+                <td><a href="commands.sh">commands.sh</a></td>
+                <td>script</td>
+                <td>2.6 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/01-review-single-a.stderr.txt"
+                    >logs/01-review-single-a.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>45 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/01-review-single-a.txt"
+                    >logs/01-review-single-a.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>105 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/02-review-single-b.stderr.txt"
+                    >logs/02-review-single-b.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>49 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/02-review-single-b.txt"
+                    >logs/02-review-single-b.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>109 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/03-review-batch.stderr.txt"
+                    >logs/03-review-batch.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>318 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/03-review-batch.txt"
+                    >logs/03-review-batch.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>1021 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/04-review-self.stderr.txt"
+                    >logs/04-review-self.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>292 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/04-review-self.txt">logs/04-review-self.txt</a>
+                </td>
+                <td>support</td>
+                <td>115 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/05-screenshot-week7-a.stderr.txt"
+                    >logs/05-screenshot-week7-a.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/05-screenshot-week7-a.txt"
+                    >logs/05-screenshot-week7-a.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>112 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/06-week6-safety-diff.txt"
+                    >logs/06-week6-safety-diff.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>47 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/07-screenshot-week7-d.stderr.txt"
+                    >logs/07-screenshot-week7-d.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/07-screenshot-week7-d.txt"
+                    >logs/07-screenshot-week7-d.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>122 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/08-git-status-final.txt"
+                    >logs/08-git-status-final.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>154 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/09-prettier-write.stderr.txt"
+                    >logs/09-prettier-write.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/09-prettier-write.txt"
+                    >logs/09-prettier-write.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>211 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/10-prettier-check.stderr.txt"
+                    >logs/10-prettier-check.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/10-prettier-check.txt"
+                    >logs/10-prettier-check.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>66 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/11-review-self-refresh.stderr.txt"
+                    >logs/11-review-self-refresh.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>55 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/11-review-self-refresh.txt"
+                    >logs/11-review-self-refresh.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="manifest.json">manifest.json</a></td>
+                <td>support</td>
+                <td>1.5 KB</td>
+              </tr>
+              <tr>
+                <td><a href="notes.md">notes.md</a></td>
+                <td>notes</td>
+                <td>4.2 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="screenshots/01-week7-a-review-page.png"
+                    >screenshots/01-week7-a-review-page.png</a
+                  >
+                </td>
+                <td>screenshot</td>
+                <td>2.0 MB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="screenshots/02-week7-d-review-page.png"
+                    >screenshots/02-week7-d-review-page.png</a
+                  >
+                </td>
+                <td>screenshot</td>
+                <td>2.7 MB</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
   </body>
 </html>
