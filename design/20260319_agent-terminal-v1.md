@@ -19,9 +19,9 @@ It is designed to let an agent:
 
 This design intentionally describes a **general product**, not a Mux-specific implementation. A future Mux integration should consume `agent-terminal` as an external CLI/runtime rather than baking Mux-specific assumptions into the design.
 
-## Current shipped status (2026-03-23)
+## Current shipped status (2026-03-25)
 
-The repository now ships the first three milestones of this design plus Week 4 CLI/artifact/lifecycle hardening and Week 5 foundational scaffolding:
+The repository now ships the first three milestones of this design plus Week 4 CLI/artifact/lifecycle hardening and the planned Week 5 parity/review/platform closeout:
 
 - long-lived session hosts,
 - PTY control and append-only event logs,
@@ -31,11 +31,12 @@ The repository now ships the first three milestones of this design plus Week 4 C
 - `record export --format webm`,
 - artifact manifests and `gc`,
 - shared global CLI context and differentiated exit codes,
-- configuration infrastructure scaffolding (schema, loader, context plumbing),
+- end-to-end CLI/config wiring for `--log-level`, `--profile`, `--idle-timeout-ms`, and `--append-newline`,
+- replay timing modes, bundled fonts, per-cell snapshots, and local proof-bundle review tooling,
 - macOS CI validation,
 - and proof bundles under `dogfood/`.
 
-The implementation is now beyond the Week 4 slice, with Week 5 adding foundational infrastructure for the remaining CLI/config parity work. The main remaining gaps are end-to-end CLI feature wiring, richer snapshot/screenshot fidelity, local review tooling, and platform hardening. See [10-week-4-status.md](./20260319_agent-terminal-v1/10-week-4-status.md), [12-week-5-status.md](./20260319_agent-terminal-v1/12-week-5-status.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current state.
+The remaining delta is now concentrated in full CLI contract/result-shape parity, richer `inspect`/artifact-health surfaces, broader failure taxonomy/reporting, and design/code reconciliation before the repo moves on to intentionally future-scope platform/runtime expansion. See [12-week-5-status.md](./20260319_agent-terminal-v1/12-week-5-status.md), [13-week-6-plan.md](./20260319_agent-terminal-v1/13-week-6-plan.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current state.
 
 ## Executive summary
 
