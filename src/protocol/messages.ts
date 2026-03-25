@@ -254,7 +254,12 @@ export const DestroyParamsSchema = z
   .strict();
 export type DestroyParams = z.infer<typeof DestroyParamsSchema>;
 
-export const DestroyResultSchema = EmptyObjectSchema;
+export const DestroyResultSchema = z
+  .object({
+    sessionId: z.string().min(1),
+    destroyed: z.boolean(),
+  })
+  .strict();
 export type DestroyResult = z.infer<typeof DestroyResultSchema>;
 
 const RPC_METHODS = [

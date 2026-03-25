@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DestroyParamsSchema,
+  DestroyResultSchema,
   HostInspectResultSchema,
   InspectResultSchema,
   MarkParamsSchema,
@@ -619,6 +620,19 @@ describe('RPC message schemas', () => {
   it('accepts destroy params with an optional force flag', () => {
     expect(DestroyParamsSchema.safeParse({}).success).toBe(true);
     expect(DestroyParamsSchema.safeParse({ force: true }).success).toBe(true);
+  });
+
+  it('accepts destroy results that match the shipped CLI envelope shape', () => {
+    expect(
+      DestroyResultSchema.safeParse({
+        sessionId: 'session-01',
+        destroyed: true,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects destroy results that omit the session metadata', () => {
+    expect(DestroyResultSchema.safeParse({}).success).toBe(false);
   });
 
   it('exposes method schemas for every RPC method', () => {

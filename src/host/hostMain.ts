@@ -1034,7 +1034,10 @@ export async function runHost(sessionId: string): Promise<void> {
     },
     destroy: () => {
       startShutdown();
-      return Promise.resolve({});
+      return Promise.resolve({
+        sessionId,
+        destroyed: true,
+      });
     },
   };
   const rpcServer = new RpcServer(sPath, handlers);
