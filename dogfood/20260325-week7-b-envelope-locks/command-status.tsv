@@ -1,0 +1,4 @@
+step	command	exit_code	status
+01	npx vitest run test/unit/commands/golden-envelopes.test.ts --reporter=verbose	0	ok
+02	npx vitest run test/unit/commands/golden-envelopes.test.ts --reporter=json	0	ok
+03	cat test/unit/commands/golden-envelopes.test.ts	0	ok

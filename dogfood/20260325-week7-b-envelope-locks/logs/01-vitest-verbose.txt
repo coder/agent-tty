@@ -1,0 +1,13 @@
+
+[1m[46m RUN [49m[22m [36mv4.1.0 [39m[90m/home/coder/.mux/src/agent-terminal/agent_exec_546bad4d70[39m
+
+ [32m✓[39m test/unit/commands/golden-envelopes.test.ts[2m > [22mJSON envelope contracts[2m > [22mlocks the inspect success envelope shape[32m 12[2mms[22m[39m
+ [32m✓[39m test/unit/commands/golden-envelopes.test.ts[2m > [22mJSON envelope contracts[2m > [22mlocks the version success envelope shape[32m 6[2mms[22m[39m
+ [32m✓[39m test/unit/commands/golden-envelopes.test.ts[2m > [22mJSON envelope contracts[2m > [22mlocks the SESSION_NOT_FOUND error envelope shape[32m 1[2mms[22m[39m
+ [32m✓[39m test/unit/commands/golden-envelopes.test.ts[2m > [22mJSON envelope contracts[2m > [22mlocks a retryable transport-style error envelope shape[32m 1[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m   Start at [22m 19:39:36
+[2m   Duration [22m 485ms[2m (transform 279ms, setup 0ms, import 355ms, tests 22ms, environment 0ms)[22m
+

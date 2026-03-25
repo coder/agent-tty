@@ -1,0 +1,34 @@
+{
+  "bundle": "20260325-week7-b-envelope-locks",
+  "title": "Week 7 — Envelope Locks Proof",
+  "description": "Captures golden-envelope test suite output and documents which public JSON surfaces are locked",
+  "createdAt": "2026-03-25T19:41:16Z",
+  "week": 7,
+  "lane": "B",
+  "artifacts": [
+    {
+      "path": "logs/01-vitest-verbose.txt",
+      "description": "Verbose Vitest output showing all four golden-envelope tests passing"
+    },
+    {
+      "path": "logs/01-vitest-verbose.stderr.txt",
+      "description": "Captured stderr stream for the verbose Vitest run (empty on this successful capture)"
+    },
+    {
+      "path": "logs/02-vitest-json.json",
+      "description": "JSON Vitest summary with exact suite and test counts for the golden-envelope run"
+    },
+    {
+      "path": "logs/02-vitest-json.stderr.txt",
+      "description": "Captured stderr stream for the JSON Vitest run (empty on this successful capture)"
+    },
+    {
+      "path": "logs/03-test-source.txt",
+      "description": "Snapshot of the golden-envelope test source used to document the locked surfaces inventory"
+    },
+    {
+      "path": "command-status.tsv",
+      "description": "Per-step exit codes and status values for the captured commands"
+    }
+  ]
+}

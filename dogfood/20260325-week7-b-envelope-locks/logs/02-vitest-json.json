@@ -1,0 +1,80 @@
+{
+  "numTotalTestSuites": 2,
+  "numPassedTestSuites": 2,
+  "numFailedTestSuites": 0,
+  "numPendingTestSuites": 0,
+  "numTotalTests": 4,
+  "numPassedTests": 4,
+  "numFailedTests": 0,
+  "numPendingTests": 0,
+  "numTodoTests": 0,
+  "snapshot": {
+    "added": 0,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0,
+    "didUpdate": false
+  },
+  "startTime": 1774467578056,
+  "success": true,
+  "testResults": [
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["JSON envelope contracts"],
+          "fullName": "JSON envelope contracts locks the inspect success envelope shape",
+          "status": "passed",
+          "title": "locks the inspect success envelope shape",
+          "duration": 6.484623999999997,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["JSON envelope contracts"],
+          "fullName": "JSON envelope contracts locks the version success envelope shape",
+          "status": "passed",
+          "title": "locks the version success envelope shape",
+          "duration": 4.2702600000000075,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["JSON envelope contracts"],
+          "fullName": "JSON envelope contracts locks the SESSION_NOT_FOUND error envelope shape",
+          "status": "passed",
+          "title": "locks the SESSION_NOT_FOUND error envelope shape",
+          "duration": 0.5520589999999856,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["JSON envelope contracts"],
+          "fullName": "JSON envelope contracts locks a retryable transport-style error envelope shape",
+          "status": "passed",
+          "title": "locks a retryable transport-style error envelope shape",
+          "duration": 0.340108999999984,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1774467578277,
+      "endTime": 1774467578288.552,
+      "status": "passed",
+      "message": "",
+      "name": "/home/coder/.mux/src/agent-terminal/agent_exec_546bad4d70/test/unit/commands/golden-envelopes.test.ts"
+    }
+  ]
+}
