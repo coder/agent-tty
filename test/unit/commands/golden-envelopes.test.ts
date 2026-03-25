@@ -37,6 +37,10 @@ const VersionResultSchema = z
   })
   .strict();
 
+// CreateResultSchema is defined locally because create does not go through
+// the RPC layer — it constructs the result from the session manifest.
+// This schema acts as the golden contract lock for the create result shape.
+// If a protocol-level CreateResultSchema is added later, replace this.
 const CreateResultSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
@@ -49,6 +53,10 @@ const CreateResultSchema = z
   })
   .strict();
 
+// SessionSummarySchema is defined locally because list returns session summaries
+// assembled from manifests rather than a shared protocol export. This schema
+// locks the expected per-session list payload used by the local ListResultSchema.
+// If a protocol-level SessionSummarySchema is added later, replace this.
 const SessionSummarySchema = z
   .object({
     sessionId: NonEmptyStringSchema,
@@ -60,6 +68,10 @@ const SessionSummarySchema = z
   })
   .strict();
 
+// ListResultSchema is defined locally because list does not go through the
+// RPC layer — it constructs the result from session manifests and summaries.
+// This schema acts as the golden contract lock for the list result shape.
+// If a protocol-level ListResultSchema is added later, replace this.
 const ListResultSchema = z
   .object({
     sessions: z.array(SessionSummarySchema),

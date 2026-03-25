@@ -541,6 +541,14 @@ describe('RPC message schemas', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts sendKeys params with multiple keys', () => {
+    const result = SendKeysParamsSchema.safeParse({
+      keys: ['Ctrl+L', 'g', 'g'],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it('rejects empty paste text', () => {
     const result = PasteParamsSchema.safeParse({
       text: '',

@@ -134,9 +134,10 @@ describe('resize-demo e2e', { timeout: 30_000 }, () => {
     );
     expect(sendKeysEnvelope.ok).toBe(true);
     expect(sendKeysEnvelope.command).toBe('send-keys');
-    expect(sendKeysEnvelope.result).toMatchObject({
+    expect(sendKeysEnvelope.result).toEqual({
       accepted: ['Enter'],
       bytesWritten: 1,
+      seq: expect.any(Number) as number,
     });
     expect(sendKeysEnvelope.result.seq).toBeGreaterThanOrEqual(0);
 
