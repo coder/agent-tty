@@ -1,0 +1,3 @@
+step	command	exit_code	status
+01-version	npx tsx src/cli/main.ts version --json	0	pass
+02-doctor	npx tsx src/cli/main.ts doctor --json	0	pass
