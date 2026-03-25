@@ -1,5 +1,5 @@
-import type { TerminationCategory } from '../protocol/messages.js';
-import type { SessionRecord } from '../protocol/schemas.js';
+import type { TerminationCategory } from './messages.js';
+import type { SessionRecord } from './schemas.js';
 
 export function deriveTerminationCategory(
   session: SessionRecord,
@@ -17,6 +17,9 @@ export function deriveTerminationCategory(
           return 'host-death';
         case 'renderer-failure':
           return 'renderer-failure';
+        case 'storage-corruption':
+          return 'storage-corruption';
+        case 'unknown':
         default:
           return 'unknown';
       }

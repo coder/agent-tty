@@ -72,6 +72,10 @@ export class SessionState {
       this.#record.status === 'failed',
       `Cannot set failureOrigin on ${this.#record.status} session`,
     );
+    invariant(
+      this.#record.failureReason !== undefined,
+      'Cannot set failureOrigin without failureReason',
+    );
 
     this.#record.failureOrigin = origin;
     this.touch();

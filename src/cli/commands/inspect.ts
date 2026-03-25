@@ -1,5 +1,6 @@
 import {
   HostInspectResultSchema,
+  type ArtifactHealthSummary,
   type InspectResult,
 } from '../../protocol/messages.js';
 import type { SessionRecord } from '../../protocol/schemas.js';
@@ -10,7 +11,7 @@ import type { CommandContext } from '../context.js';
 import { countEventLogEntries } from '../../host/eventLog.js';
 import { reconcileSession } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
-import { deriveTerminationCategory } from '../../host/terminationCategory.js';
+import { deriveTerminationCategory } from '../../protocol/terminationCategory.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { emitSuccess } from '../output.js';
 import { computeArtifactHealth } from '../../storage/artifactHealth.js';
@@ -97,6 +98,9 @@ function formatSessionLines(result: InspectResult): string[] {
   if (session.failureReason !== undefined) {
     lines.push(`Failure Reason: ${session.failureReason}`);
   }
+  if (session.failureOrigin !== undefined) {
+    lines.push(`Failure Origin: ${session.failureOrigin}`);
+  }
   return lines;
 }
 
@@ -153,7 +157,14 @@ export async function runInspectCommand(
 
   const eventCount = await countEventLogEntries(eventLogPath(sessionDirectory));
   const uptime = computeUptime(session);
-  const artifacts = await computeArtifactHealth(sessionDirectory);
+  let artifacts: ArtifactHealthSummary | undefined;
+  try {
+    artifacts = await computeArtifactHealth(sessionDirectory);
+  } catch {
+    // Artifact health is best-effort; do not fail the entire inspect
+    // command if the artifact manifest or files are inaccessible.
+    artifacts = undefined;
+  }
   const terminationCategory = deriveTerminationCategory(session);
   const result: InspectResult = {
     session,

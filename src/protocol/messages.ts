@@ -94,6 +94,7 @@ export const TerminationCategorySchema = z.enum([
   'signal-exit',
   'host-death',
   'renderer-failure',
+  'storage-corruption',
   'destroyed',
   'unknown',
 ]);
@@ -135,7 +136,6 @@ export const InspectResultSchema = z
     terminationCategory: TerminationCategorySchema.optional(),
     artifacts: ArtifactHealthSummarySchema.optional(),
     usedOfflineReplay: z.boolean().optional(),
-    rendererBackend: z.string().optional(),
   })
   .strict();
 export type InspectResult = z.infer<typeof InspectResultSchema>;

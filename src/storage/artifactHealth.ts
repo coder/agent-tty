@@ -22,14 +22,6 @@ function isManifestValidationError(error: unknown): error is Error & NodeError {
   );
 }
 
-function isEnoentError(error: unknown): error is Error & NodeError {
-  return (
-    error instanceof Error &&
-    'code' in error &&
-    (error as NodeError).code === 'ENOENT'
-  );
-}
-
 function validateArtifactHealthSummary(
   summary: ArtifactHealthSummary,
 ): ArtifactHealthSummary {
@@ -87,16 +79,15 @@ export async function computeArtifactHealth(
         try {
           await access(artifactPath(normalizedSessionDir, artifact.filename));
           return null;
-        } catch (error) {
-          if (isEnoentError(error)) {
-            return {
-              id: artifact.id,
-              kind: artifact.kind,
-              filename: artifact.filename,
-            };
-          }
-
-          throw error;
+        } catch {
+          // Treat all access errors (ENOENT, EACCES, EIO, etc.) as
+          // missing/inaccessible. Artifact health is diagnostic, not
+          // a reason to crash the caller.
+          return {
+            id: artifact.id,
+            kind: artifact.kind,
+            filename: artifact.filename,
+          };
         }
       }),
     )
