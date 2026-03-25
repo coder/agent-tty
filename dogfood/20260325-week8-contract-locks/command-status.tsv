@@ -1,0 +1,12 @@
+step	command	exit_code	status
+01	npx vitest run test/unit/commands/golden-envelopes.test.ts --reporter=json	0	ok
+02	node --input-type=module -e <pretty-print-vitest-json> dogfood/20260325-week8-contract-locks/logs/.01-golden-envelopes.raw.json dogfood/20260325-week8-contract-locks/logs/01-golden-envelopes.json	0	ok
+03	cp dogfood/20260325-week8-contract-locks/logs/01-golden-envelopes.json dogfood/20260325-week8-contract-locks/snapshots/01-golden-envelopes.json	0	ok
+04	npx vitest run test/unit/commands/golden-envelopes.test.ts	0	ok
+05	npm run review-bundle -- dogfood/20260325-week8-contract-locks	0	ok
+06	npm run validate-bundle -- dogfood/20260325-week8-contract-locks --profile contract-reporting	0	ok
+07	node --input-type=commonjs <playwright-review-screenshot>	0	ok
+08	npm run validate-bundle -- dogfood/20260325-week8-contract-locks --profile contract-reporting	0	ok
+09	npx prettier --write dogfood/20260325-week8-contract-locks/manifest.json dogfood/20260325-week8-contract-locks/notes.md	0	ok
+10	npx prettier --check dogfood/20260325-week8-contract-locks/manifest.json dogfood/20260325-week8-contract-locks/notes.md	0	ok
+11	npm run review-bundle -- dogfood/20260325-week8-contract-locks && npm run validate-bundle -- dogfood/20260325-week8-contract-locks --profile contract-reporting && node --input-type=commonjs <playwright-review-screenshot>	0	ok
