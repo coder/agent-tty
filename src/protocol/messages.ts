@@ -87,11 +87,55 @@ export const HostInspectResultSchema = z
   .strict();
 export type HostInspectResult = z.infer<typeof HostInspectResultSchema>;
 
+export const TerminationCategorySchema = z.enum([
+  'running',
+  'clean-exit',
+  'nonzero-exit',
+  'signal-exit',
+  'host-death',
+  'renderer-failure',
+  'destroyed',
+  'unknown',
+]);
+export type TerminationCategory = z.infer<typeof TerminationCategorySchema>;
+
+export const ArtifactHealthSummarySchema = z
+  .object({
+    total: z.number().int().nonnegative(),
+    byKind: z.record(z.string(), z.number().int().nonnegative()),
+    missingCount: z.number().int().nonnegative(),
+    health: z.enum([
+      'healthy',
+      'missing-artifacts',
+      'manifest-invalid',
+      'no-artifacts',
+      'unknown',
+    ]),
+    missing: z
+      .array(
+        z
+          .object({
+            id: z.string(),
+            kind: z.string(),
+            filename: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
+  })
+  .strict();
+export type ArtifactHealthSummary = z.infer<typeof ArtifactHealthSummarySchema>;
+
 export const InspectResultSchema = z
   .object({
     session: SessionRecordSchema,
     eventCount: z.number().int().nonnegative(),
     uptime: z.number().int().nonnegative(),
+    lastEventSeq: z.number().int().nonnegative().optional(),
+    terminationCategory: TerminationCategorySchema.optional(),
+    artifacts: ArtifactHealthSummarySchema.optional(),
+    usedOfflineReplay: z.boolean().optional(),
+    rendererBackend: z.string().optional(),
   })
   .strict();
 export type InspectResult = z.infer<typeof InspectResultSchema>;

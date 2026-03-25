@@ -34,6 +34,14 @@ export const SessionStatusSchema = z.enum([
 ]);
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 
+export const FailureOriginSchema = z.enum([
+  'host-death',
+  'renderer-failure',
+  'storage-corruption',
+  'unknown',
+]);
+export type FailureOrigin = z.infer<typeof FailureOriginSchema>;
+
 export const SessionRecordSchema = z
   .object({
     version: z.literal(1),
@@ -42,6 +50,7 @@ export const SessionRecordSchema = z
     updatedAt: IsoDatetimeSchema,
     status: SessionStatusSchema,
     failureReason: z.string().min(1).optional(),
+    failureOrigin: FailureOriginSchema.optional(),
     command: z.array(z.string()).min(1),
     cwd: z.string(),
     name: NonEmptyStringSchema.optional(),
