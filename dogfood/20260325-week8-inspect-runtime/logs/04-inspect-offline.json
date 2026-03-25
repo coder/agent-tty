@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-25T23:41:39.958Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KMKNZXNWZKGCXTCKGTVHC9T7",
+      "createdAt": "2026-03-25T23:41:33.759Z",
+      "updatedAt": "2026-03-25T23:41:38.798Z",
+      "status": "destroyed",
+      "command": [
+        "node",
+        "--import",
+        "tsx",
+        "test/fixtures/apps/hello-prompt/main.ts"
+      ],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_6300059848",
+      "shell": "/bin/bash",
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "creationCols": 80,
+      "creationRows": 24,
+      "hostPid": 2429891,
+      "childPid": 2430004,
+      "exitCode": 0,
+      "exitSignal": "1"
+    },
+    "eventCount": 2,
+    "uptime": 5039,
+    "lastEventSeq": 1,
+    "terminationCategory": "destroyed",
+    "artifacts": {
+      "total": 0,
+      "byKind": {},
+      "missingCount": 0,
+      "health": "no-artifacts"
+    },
+    "usedOfflineReplay": false,
+    "rendererRuntime": {
+      "backend": "ghostty-web",
+      "mode": "offline-replay",
+      "status": "fallback",
+      "reason": "session-not-running"
+    }
+  }
+}

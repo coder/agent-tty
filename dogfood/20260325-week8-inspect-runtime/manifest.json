@@ -1,0 +1,58 @@
+{
+  "bundle": "20260325-week8-inspect-runtime",
+  "title": "Week 8 — Inspect Runtime",
+  "description": "Proves inspect --json reports live-host vs offline-replay renderer runtime summaries for the same retained session.",
+  "createdAt": "2026-03-25T23:41:40Z",
+  "week": 8,
+  "sessionId": "01KMKNZXNWZKGCXTCKGTVHC9T7",
+  "fixture": "node --import tsx test/fixtures/apps/hello-prompt/main.ts",
+  "result": "pass",
+  "commands": [
+    "npx tsx src/cli/main.ts create --json -- node --import tsx test/fixtures/apps/hello-prompt/main.ts",
+    "npx tsx src/cli/main.ts inspect 01KMKNZXNWZKGCXTCKGTVHC9T7 --json",
+    "npx tsx src/cli/main.ts destroy 01KMKNZXNWZKGCXTCKGTVHC9T7 --json",
+    "npx tsx src/cli/main.ts inspect 01KMKNZXNWZKGCXTCKGTVHC9T7 --json"
+  ],
+  "artifacts": [
+    {
+      "path": "logs/01-create.json",
+      "description": "create --json output capturing the session ID for the hello-prompt fixture"
+    },
+    {
+      "path": "logs/02-inspect-live.json",
+      "description": "inspect --json output for the running session showing rendererRuntime.mode = live-host"
+    },
+    {
+      "path": "logs/03-destroy.json",
+      "description": "destroy --json output confirming session teardown"
+    },
+    {
+      "path": "logs/04-inspect-offline.json",
+      "description": "inspect --json output after destroy showing rendererRuntime.mode = offline-replay with fallback reason session-not-running"
+    },
+    {
+      "path": "json/inspect-live.json",
+      "description": "Canonical reviewer copy of the live inspect JSON envelope outside logs/ for contract-reporting validation"
+    },
+    {
+      "path": "json/inspect-offline.json",
+      "description": "Canonical reviewer copy of the offline inspect JSON envelope outside logs/ for contract-reporting validation"
+    },
+    {
+      "path": "screenshots/01-review-page.png",
+      "description": "Playwright screenshot of the generated review page for this Week 8 bundle"
+    },
+    {
+      "path": "command-status.tsv",
+      "description": "Step-by-step exit-code ledger for the inspect runtime proof run"
+    },
+    {
+      "path": "agent-terminal-home.txt",
+      "description": "Temp AGENT_TERMINAL_HOME path used during capture"
+    },
+    {
+      "path": "session-id.txt",
+      "description": "Captured session ID used across all session-scoped commands"
+    }
+  ]
+}

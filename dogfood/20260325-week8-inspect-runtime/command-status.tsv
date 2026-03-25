@@ -1,0 +1,5 @@
+step	command	exit_code	status
+01-create	npx tsx src/cli/main.ts create --json -- node --import tsx test/fixtures/apps/hello-prompt/main.ts	0	pass
+02-inspect-live	npx tsx src/cli/main.ts inspect 01KMKNZXNWZKGCXTCKGTVHC9T7 --json	0	pass
+03-destroy	npx tsx src/cli/main.ts destroy 01KMKNZXNWZKGCXTCKGTVHC9T7 --json	0	pass
+04-inspect-offline	npx tsx src/cli/main.ts inspect 01KMKNZXNWZKGCXTCKGTVHC9T7 --json	0	pass
