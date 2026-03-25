@@ -21,7 +21,7 @@ This design intentionally describes a **general product**, not a Mux-specific im
 
 ## Current shipped status (2026-03-25)
 
-The repository now ships the first three milestones of this design plus Weeks 4–6 of CLI/artifact/lifecycle hardening, config/rendering/platform closeout, and contract/introspection reconciliation:
+The repository now ships the first three milestones of this design plus Weeks 4–7 of CLI/artifact/lifecycle hardening, config/rendering/platform closeout, contract/introspection reconciliation, and Week 7 contract/doc ratification:
 
 - long-lived session hosts,
 - PTY control and append-only event logs,
@@ -38,7 +38,7 @@ The repository now ships the first three milestones of this design plus Weeks 4�
 - macOS CI validation,
 - and proof bundles under `dogfood/`.
 
-The remaining delta is no longer the high-value Week 6 code gaps, but it is also not yet purely future-scope platform/runtime expansion. What remains is concentrated in full CLI/example parity and contract ratification, consistent proof-bundle completeness/reviewability, and the intentionally deferred platform/runtime work tracked in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md). See [14-week-6-status.md](./20260319_agent-terminal-v1/14-week-6-status.md), [15-week-7-plan.md](./20260319_agent-terminal-v1/15-week-7-plan.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current state.
+Week 7 is the current design-synchronization milestone. The high-value CLI examples now match shipped behavior, the `send-keys` / `destroy` result-shape alignment has landed, and the main remaining Week 7 work is proof-bundle completeness/reviewability. The intentionally deferred platform/runtime work is tracked separately in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md). See [14-week-6-status.md](./20260319_agent-terminal-v1/14-week-6-status.md), [15-week-7-plan.md](./20260319_agent-terminal-v1/15-week-7-plan.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current state.
 
 ## Executive summary
 

@@ -15,22 +15,12 @@ Week 7 is about ratifying the shipped v1 surface so the docs, examples, JSON env
 
 ## Status update (2026-03-25)
 
-This Week 7 plan was created after a repo/design audit on 2026-03-25.
+This Week 7 plan now reflects two landed phases of the contract-closeout work:
 
-That audit found that Weeks 1–6 are materially implemented in code and tests, but it also found two real carry-over gaps:
+- **Phase 1 — contract audit and doc ratification:** the high-value examples in `02-cli-contract.md` now match the shipped CLI syntax/result shapes for `create`, `list`, `type`, `paste`, `send-keys`, `snapshot`, `screenshot`, `resize`, and `destroy`.
+- **Phase 2 — targeted code/schema alignment:** the shipped `send-keys` result now exposes `accepted`, `bytesWritten`, and `seq`, and the shipped `destroy` result now exposes `{ sessionId, destroyed }`.
 
-- full CLI-example parity is still not closed: several examples in `02-cli-contract.md` still describe syntax or result shapes that do not exactly match the shipped CLI,
-- and proof-bundle completeness is inconsistent: the Week 6 bundles exist and prove the underlying features, but some still rely mainly on JSON/log outputs rather than the screenshot/video/review-page standard described in `05-dogfooding-and-validation.md`.
-
-The main examples currently needing ratification or closure include:
-
-- `create` syntax / result-shape examples,
-- `list` field set and ordering expectations,
-- `type` / `paste` `--text` examples versus the shipped positional-text CLI,
-- `send-keys` echoed-result expectations,
-- `snapshot` `--scope` / `--lines` / `--out` examples,
-- `screenshot` `--out` / cursor-flag examples,
-- and `destroy --purge` versus the shipped `--force` surface.
+The main open Week 7 carry-over is now proof-bundle completeness/review normalization. Broader platform/runtime work remains intentionally future scope and is tracked separately in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md).
 
 See [14-week-6-status.md](./14-week-6-status.md), [02-cli-contract.md](./02-cli-contract.md), [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md), and this file for the current execution focus.
 
@@ -57,8 +47,8 @@ That means Week 7 should focus on:
 
 Week 7 is done only when every required checkbox below is complete.
 
-- [ ] Every high-value example in `02-cli-contract.md` is either implemented as written or explicitly annotated as historical / aspirational / future scope.
-- [ ] The remaining syntax/result-shape mismatches for `create`, `list`, `type`, `paste`, `send-keys`, `snapshot`, `screenshot`, and `destroy` are closed or explicitly ratified.
+- [x] Every high-value example in `02-cli-contract.md` is either implemented as written or explicitly annotated as historical / aspirational / future scope.
+- [x] The remaining syntax/result-shape mismatches for `create`, `list`, `type`, `paste`, `send-keys`, `snapshot`, `screenshot`, and `destroy` are closed or explicitly ratified.
 - [ ] Golden-envelope or equivalent contract tests cover the representative public JSON surfaces most likely to drift.
 - [ ] The Week 6 proof bundles, and any critical carried-forward Week 4/5 proof gaps, meet the documented review-bundle minimum or the docs are explicitly updated to describe the lighter accepted standard.
 - [ ] The top-level design entrypoint, validation docs, Week 6 status record, and gap tracker all describe the same current reality.
@@ -92,6 +82,8 @@ These remain valid future work items, but they should not dilute Week 7:
 
 ## Workstream A — public CLI contract audit and ratification
 
+**Status (2026-03-25): Completed for the high-value shipped examples.** The contract audit is done, and the Week 7 doc pass now ratifies the shipped `create`, `list`, `type`, `paste`, `send-keys`, `snapshot`, `screenshot`, `resize`, and `destroy` surfaces instead of leaving silent mismatches in the docs.
+
 ### Goal
 
 Make the public CLI examples and the shipped command surface tell the same truth.
@@ -120,6 +112,8 @@ Make the public CLI examples and the shipped command surface tell the same truth
 
 ## Workstream B — contract locks and representative JSON coverage
 
+**Status (2026-03-25): Partially complete.** Phase 2 targeted code/schema changes landed for `send-keys` result enrichment and `destroy` result-shape alignment, but the broader representative-envelope lock work remains open.
+
 ### Goal
 
 Prevent the ratified contract from drifting again.
@@ -138,6 +132,8 @@ Prevent the ratified contract from drifting again.
 - and reviewers can tell whether a change is a real contract change or just an internal refactor.
 
 ## Workstream C — proof-bundle completeness and review normalization
+
+**Status (2026-03-25): Open.** The Week 6 bundles still need the remaining review-surface normalization and screenshot/video completeness work described below.
 
 ### Goal
 
@@ -161,6 +157,8 @@ Bring the checked-in proof bundles back in line with the validation doc's stated
 - and the docs stop overstating proof completeness where the repo does not actually ship the artifacts.
 
 ## Workstream D — design and gap-tracker synchronization
+
+**Status (2026-03-25): Mostly complete.** The top-level design entrypoint and `WEEK2-GAPS.md` now reflect Week 7 reality; validation-doc/proof-bundle follow-through still depends on Workstream C.
 
 ### Goal
 
