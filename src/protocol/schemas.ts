@@ -403,3 +403,22 @@ export const RecordExportResultSchema = z
 export type RecordExportResult = z.infer<typeof RecordExportResultSchema>;
 
 export type WaitForRenderResult = z.infer<typeof WaitForRenderResultSchema>;
+
+// --- Week 8: Capability and renderer-runtime schemas ---
+export {
+  CapabilityEntrySchema,
+  CapabilityNameSchema,
+  CapabilityStatusSchema,
+  RendererRuntimeModeSchema,
+  RendererRuntimeStatusSchema,
+  RendererRuntimeSummarySchema,
+} from '../renderer/capabilities.js';
+
+export type {
+  CapabilityEntry,
+  CapabilityName,
+  CapabilityStatus,
+  RendererRuntimeMode,
+  RendererRuntimeStatus,
+  RendererRuntimeSummary,
+} from '../renderer/capabilities.js';

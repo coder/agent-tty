@@ -32,6 +32,25 @@ export {
   WaitResultSchema,
 } from './schemas.js';
 
+// --- Week 8: Capability and renderer-runtime schemas ---
+export {
+  CapabilityEntrySchema,
+  CapabilityNameSchema,
+  CapabilityStatusSchema,
+  RendererRuntimeModeSchema,
+  RendererRuntimeStatusSchema,
+  RendererRuntimeSummarySchema,
+} from './schemas.js';
+
+export type {
+  CapabilityEntry,
+  CapabilityName,
+  CapabilityStatus,
+  RendererRuntimeMode,
+  RendererRuntimeStatus,
+  RendererRuntimeSummary,
+} from './schemas.js';
+
 const EmptyObjectSchema = z.object({}).strict();
 const NonEmptyStringSchema = z.string().min(1);
 const DurationSchema = z.number().int().positive();
