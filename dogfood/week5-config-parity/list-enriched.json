@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "command": "list",
+  "timestamp": "2026-03-23T17:01:51.097Z",
+  "result": {
+    "sessions": [
+      {
+        "sessionId": "01KMDTAHK3ND75R2HQ9KQ34BTB",
+        "status": "running",
+        "command": ["/bin/sh"],
+        "createdAt": "2026-03-23T17:01:49.541Z",
+        "name": "dogfood-session",
+        "pid": 1314880
+      }
+    ]
+  }
+}

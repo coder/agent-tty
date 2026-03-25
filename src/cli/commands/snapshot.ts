@@ -43,6 +43,7 @@ interface CommandOptions {
   sessionId: string;
   format?: string;
   includeScrollback?: boolean;
+  includeCells?: boolean;
 }
 
 function resolveSnapshotFormat(format: string | undefined): SnapshotFormat {
@@ -82,6 +83,15 @@ function resolveIncludeScrollback(
     'includeScrollback must be boolean',
   );
   return effectiveIncludeScrollback;
+}
+
+function resolveIncludeCells(includeCells: boolean | undefined): boolean {
+  const effectiveIncludeCells = includeCells ?? false;
+  invariant(
+    typeof effectiveIncludeCells === 'boolean',
+    'includeCells must be boolean',
+  );
+  return effectiveIncludeCells;
 }
 
 function parseSnapshotResult(rawResult: unknown): SnapshotResult {
@@ -171,6 +181,7 @@ async function runRpcSnapshot(
   sessionDirectory: string,
   format: SnapshotFormat,
   includeScrollback: boolean,
+  includeCells: boolean,
 ): Promise<SnapshotResult> {
   const rawResult: unknown = await sendRpc(
     socketPath(sessionDirectory),
@@ -178,6 +189,7 @@ async function runRpcSnapshot(
     {
       format,
       includeScrollback,
+      includeCells,
     },
   );
 
@@ -188,12 +200,14 @@ async function runOfflineSnapshot(
   sessionDirectory: string,
   format: SnapshotFormat,
   includeScrollback: boolean,
+  includeCells: boolean,
 ): Promise<SnapshotResult> {
   return withOfflineReplayRenderer(
     { sessionDir: sessionDirectory },
     async ({ backend }) => {
       const snapshot: SemanticSnapshot = await backend.snapshot({
         includeScrollback,
+        includeCells,
       });
       const snapshotResult = createSnapshotResult(snapshot, format);
       await persistSnapshotArtifact(
@@ -265,6 +279,7 @@ export async function runSnapshotCommand(
 ): Promise<void> {
   const format = resolveSnapshotFormat(options.format);
   const includeScrollback = resolveIncludeScrollback(options.includeScrollback);
+  const includeCells = resolveIncludeCells(options.includeCells);
   const home = options.context.home;
   let sessionDirectory: string;
 
@@ -300,6 +315,7 @@ export async function runSnapshotCommand(
         sessionDirectory,
         format,
         includeScrollback,
+        includeCells,
       );
     } catch (error) {
       if (
@@ -310,6 +326,7 @@ export async function runSnapshotCommand(
           sessionDirectory,
           format,
           includeScrollback,
+          includeCells,
         );
       } else {
         throw error;
@@ -320,6 +337,7 @@ export async function runSnapshotCommand(
       sessionDirectory,
       format,
       includeScrollback,
+      includeCells,
     );
   }
 

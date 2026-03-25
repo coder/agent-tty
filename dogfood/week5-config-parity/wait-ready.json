@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-03-23T16:19:51.231Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "READY>",
+    "cursorRow": 0,
+    "cursorCol": 7,
+    "capturedAtSeq": 0
+  }
+}

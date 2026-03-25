@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-03-23T16:10:42.555Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "offline-test-data",
+    "cursorRow": 1,
+    "cursorCol": 0,
+    "capturedAtSeq": 0
+  }
+}

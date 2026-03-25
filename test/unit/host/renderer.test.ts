@@ -1,4 +1,4 @@
-import { access, mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative } from 'node:path';
 import { setImmediate as setImmediatePromise } from 'node:timers/promises';
@@ -178,7 +178,8 @@ describe('HostRendererManager', () => {
   let backendFactory: ReturnType<typeof vi.fn<BackendFactory>>;
 
   beforeEach(async () => {
-    sessionDir = await mkdtemp(join(tmpdir(), 'agent-terminal-renderer-'));
+    // prettier-ignore
+    sessionDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-renderer-')));
     backends = [];
     backendFactory = vi.fn(() => {
       const backend = createFakeBackend();

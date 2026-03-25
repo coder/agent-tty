@@ -64,6 +64,9 @@ const DEFAULT_RENDER_PROFILE_NAME = 'reference-dark';
 const MAX_WAIT_FOR_RENDER_REGEX_LENGTH = 200;
 export const MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH = 50_000;
 export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
+// Idle-timeout enforcement is polling-based: actual idle duration before kill
+// may exceed idleTimeoutMs by up to checkIntervalMs (bounded by this cap).
+const IDLE_CHECK_CAP_MS = 5_000;
 const BRACED_QUANTIFIER_PATTERN = /^\{(?:\d+|\d+,\d*)\}/;
 
 type WaitOutcome = {
@@ -209,6 +212,11 @@ export async function runHost(sessionId: string): Promise<void> {
     manifest.sessionId === sessionId,
     'session manifest sessionId must match the requested session',
   );
+  const idleTimeoutMs = manifest.idleTimeoutMs ?? 0;
+  invariant(
+    Number.isInteger(idleTimeoutMs) && idleTimeoutMs >= 0,
+    'session manifest idleTimeoutMs must be a non-negative integer',
+  );
 
   const state = new SessionState(manifest);
   invariant(
@@ -235,6 +243,8 @@ export async function runHost(sessionId: string): Promise<void> {
   let ptyExitHandled = false;
   let ptyHasExited = false;
   let lastOutputAt = Date.now();
+  let lastActivityAt = lastOutputAt;
+  let idleTimeoutHandle: ReturnType<typeof setInterval> | null = null;
   let rpcListenPromise: Promise<void> | null = null;
   let shutdownPromise: Promise<void> | null = null;
   let markPtyExited: () => void = () => {
@@ -267,6 +277,40 @@ export async function runHost(sessionId: string): Promise<void> {
   );
   state.setChildPid(pty.pid);
 
+  const clearIdleTimeout = (): void => {
+    // Idempotent: safe to call multiple times during shutdown and PTY exit.
+    if (idleTimeoutHandle === null) {
+      return;
+    }
+
+    clearInterval(idleTimeoutHandle);
+    idleTimeoutHandle = null;
+  };
+
+  const startIdlePolling = (): void => {
+    if (
+      idleTimeoutMs <= 0 ||
+      !isSessionRunning(state) ||
+      idleTimeoutHandle !== null
+    ) {
+      return;
+    }
+
+    const checkIntervalMs = Math.min(idleTimeoutMs, IDLE_CHECK_CAP_MS);
+    idleTimeoutHandle = setInterval(() => {
+      if (!isSessionRunning(state)) {
+        clearIdleTimeout();
+        return;
+      }
+
+      const elapsedIdleMs = Date.now() - lastActivityAt;
+      if (elapsedIdleMs >= idleTimeoutMs) {
+        clearIdleTimeout();
+        pty.kill();
+      }
+    }, checkIntervalMs);
+  };
+
   const initiateShutdown = (): Promise<void> => {
     if (shutdownPromise !== null) {
       return shutdownPromise;
@@ -274,6 +318,7 @@ export async function runHost(sessionId: string): Promise<void> {
 
     shutdownPromise = (async () => {
       try {
+        clearIdleTimeout();
         if (isSessionRunning(state)) {
           pty.kill();
           state.requestDestroy();
@@ -315,6 +360,7 @@ export async function runHost(sessionId: string): Promise<void> {
     invariant(Number.isInteger(exitCode), 'PTY exit code must be an integer');
 
     ptyExitHandled = true;
+    clearIdleTimeout();
 
     const exitSignal = normalizeExitSignal(signal);
     const currentStatus = state.snapshot().status;
@@ -345,20 +391,29 @@ export async function runHost(sessionId: string): Promise<void> {
       const {
         format: requestedFormat,
         includeScrollback: requestedIncludeScrollback,
+        includeCells: requestedIncludeCells,
       } = params as SnapshotParams;
 
       const format = requestedFormat ?? 'structured';
       const includeScrollback = requestedIncludeScrollback ?? false;
+      const includeCells = requestedIncludeCells ?? false;
 
       invariant(
         typeof includeScrollback === 'boolean',
         'snapshot includeScrollback must normalize to a boolean',
       );
+      invariant(
+        typeof includeCells === 'boolean',
+        'snapshot includeCells must normalize to a boolean',
+      );
 
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
       const replayInput = loadReplayInput();
       const backend = await rendererManager.getBackend(profile, replayInput);
-      const snapshot = await backend.snapshot({ includeScrollback });
+      const snapshot = await backend.snapshot({
+        includeScrollback,
+        includeCells,
+      });
       const snapshotText = [
         ...(snapshot.scrollbackLines ?? []),
         ...snapshot.visibleLines,
@@ -420,7 +475,8 @@ export async function runHost(sessionId: string): Promise<void> {
       return snapshotResult;
     },
     screenshot: async (params: unknown) => {
-      const { profile: requestedProfileName } = params as ScreenshotParams;
+      const { profile: requestedProfileName, showCursor } =
+        params as ScreenshotParams;
 
       const profile = (() => {
         try {
@@ -450,7 +506,10 @@ export async function runHost(sessionId: string): Promise<void> {
       );
 
       try {
-        const result = await backend.screenshot(temporaryOutputPath);
+        const result = await backend.screenshot(
+          temporaryOutputPath,
+          showCursor === undefined ? undefined : { showCursor },
+        );
 
         invariant(
           result.sessionId === sessionId,
@@ -483,11 +542,17 @@ export async function runHost(sessionId: string): Promise<void> {
             filename,
             sessionId: result.sessionId,
             capturedAtSeq: result.capturedAtSeq,
+            sha256: result.sha256,
             metadata: {
               profileName: result.profileName,
               cols: result.cols,
               rows: result.rows,
               pngSizeBytes: result.pngSizeBytes,
+              cursorVisible: result.cursorVisible,
+              rendererBackend: result.rendererBackend,
+              pixelWidth: result.pixelWidth,
+              pixelHeight: result.pixelHeight,
+              renderProfileHash: result.renderProfileHash,
             },
           }),
         );
@@ -500,6 +565,12 @@ export async function runHost(sessionId: string): Promise<void> {
           rows: result.rows,
           artifactPath: finalArtifactPath,
           pngSizeBytes: result.pngSizeBytes,
+          cursorVisible: result.cursorVisible,
+          rendererBackend: result.rendererBackend,
+          pixelWidth: result.pixelWidth,
+          pixelHeight: result.pixelHeight,
+          sha256: result.sha256,
+          renderProfileHash: result.renderProfileHash,
         };
       } catch (error) {
         await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
@@ -517,6 +588,7 @@ export async function runHost(sessionId: string): Promise<void> {
 
       invariant(typeof text === 'string', 'type text must be a string');
       pty.write(text);
+      lastActivityAt = Date.now();
       await eventLog.append('input_text', { data: text });
       return {};
     },
@@ -530,6 +602,7 @@ export async function runHost(sessionId: string): Promise<void> {
       }
 
       invariant(typeof label === 'string', 'mark label must be a string');
+      lastActivityAt = Date.now();
       const seq = await eventLog.append('marker', { label });
       return { seq };
     },
@@ -548,6 +621,7 @@ export async function runHost(sessionId: string): Promise<void> {
       );
       const encoded = encodePaste(text);
       pty.write(encoded);
+      lastActivityAt = Date.now();
       await eventLog.append('input_paste', { data: encoded });
       return {};
     },
@@ -577,6 +651,7 @@ export async function runHost(sessionId: string): Promise<void> {
       }
 
       pty.write(encoded);
+      lastActivityAt = Date.now();
       await eventLog.append('input_keys', { keys });
       return {};
     },
@@ -599,6 +674,7 @@ export async function runHost(sessionId: string): Promise<void> {
       );
 
       pty.resize(cols, rows);
+      lastActivityAt = Date.now();
       state.setDimensions(cols, rows);
       await writeManifest(mPath, state.snapshot());
       await eventLog.append('resize', { cols, rows });
@@ -961,6 +1037,10 @@ export async function runHost(sessionId: string): Promise<void> {
 
   pty.onData((data: string) => {
     lastOutputAt = Date.now();
+    // PTY output counts as session activity for idle-timeout purposes.
+    // A session actively producing output (e.g., a running build, log tail)
+    // is "in use" and should not be killed for inactivity.
+    lastActivityAt = lastOutputAt;
     void eventLog.append('output', { data }).catch(() => {
       // Best-effort logging; shutdown should not fail on transient append errors.
     });
@@ -969,6 +1049,8 @@ export async function runHost(sessionId: string): Promise<void> {
   pty.onExit(({ exitCode, signal }) => {
     handlePtyExit(exitCode, signal ?? null);
   });
+
+  startIdlePolling();
 
   process.on('SIGTERM', () => {
     startShutdown();

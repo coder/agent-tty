@@ -3,23 +3,44 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
 import { buildReplayInput } from '../host/replay.js';
-import type { EventRecord, SessionRecord } from '../protocol/schemas.js';
+import {
+  ReplayTimingModeSchema,
+  type EventRecord,
+  type ReplayTimingMode,
+  type SessionRecord,
+} from '../protocol/schemas.js';
 import type {
-  AcceleratedTimingOptions,
+  ReplayTimingOptions,
   VideoCapableRendererBackend,
   VideoRecordingOptions,
 } from '../renderer/backend.js';
 import { GhosttyWebBackend } from '../renderer/ghosttyWeb/backend.js';
 import { resolveProfile } from '../renderer/profiles.js';
 import type { RenderProfileConfig, ReplayState } from '../renderer/types.js';
-import { invariant } from '../util/assert.js';
+import { invariant, unreachable } from '../util/assert.js';
 
 const REPLAY_TIMEOUT_MS = 5 * 60 * 1000;
-const DEFAULT_ACCELERATED_TIMING: AcceleratedTimingOptions = Object.freeze({
+const DEFAULT_ACCELERATED_TIMING: ReplayTimingOptions = Object.freeze({
+  mode: 'accelerated' as const,
   maxGapMs: 100,
   minFrameHoldMs: 50,
   finalFrameHoldMs: 1_000,
 });
+
+function buildReplayTimingOptions(mode: ReplayTimingMode): ReplayTimingOptions {
+  const validatedMode = ReplayTimingModeSchema.parse(mode);
+
+  switch (validatedMode) {
+    case 'accelerated':
+      return DEFAULT_ACCELERATED_TIMING;
+    case 'recorded':
+      return { mode: 'recorded', finalFrameHoldMs: 1_000 };
+    case 'max-speed':
+      return { mode: 'max-speed', minFrameHoldMs: 16, finalFrameHoldMs: 500 };
+    default:
+      unreachable(validatedMode, 'unsupported replay timing mode');
+  }
+}
 
 export interface WebmExportOptions {
   sessionId: string;
@@ -29,6 +50,7 @@ export interface WebmExportOptions {
   outputPath: string;
   targetSeq?: number;
   profileName?: string;
+  timingMode?: ReplayTimingMode;
 }
 
 export interface WebmExportDeps {
@@ -48,7 +70,7 @@ export interface WebmExportResult {
   cols: number;
   rows: number;
   profileName: string;
-  timingMode: 'accelerated';
+  timingMode: ReplayTimingMode;
 }
 
 function createDefaultBackend(
@@ -71,7 +93,7 @@ function parseTimestamp(timestamp: string, label: string): number {
 async function replayWithTimeout(
   backend: VideoCapableRendererBackend,
   replayInput: ReturnType<typeof buildReplayInput>,
-  timingOptions: AcceleratedTimingOptions,
+  timingOptions: ReplayTimingOptions,
   timeoutMs: number,
 ): Promise<ReplayState> {
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
@@ -137,7 +159,9 @@ export async function generateWebmExport(
         height: viewportHeight,
       },
     };
-    const timingOptions = DEFAULT_ACCELERATED_TIMING;
+    const resolvedTimingMode: ReplayTimingMode =
+      options.timingMode ?? 'accelerated';
+    const timingOptions = buildReplayTimingOptions(resolvedTimingMode);
     const backendFactory = deps?.backendFactory ?? createDefaultBackend;
     const replayTimeoutMs = deps?.replayTimeoutMs ?? REPLAY_TIMEOUT_MS;
 
@@ -198,7 +222,7 @@ export async function generateWebmExport(
       cols: replayState.cols,
       rows: replayState.rows,
       profileName,
-      timingMode: 'accelerated',
+      timingMode: resolvedTimingMode,
     };
   } finally {
     if (backend !== null) {

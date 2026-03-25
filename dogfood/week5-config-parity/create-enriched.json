@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "create",
+  "timestamp": "2026-03-23T17:01:50.164Z",
+  "result": {
+    "sessionId": "01KMDTAHK3ND75R2HQ9KQ34BTB",
+    "createdAt": "2026-03-23T17:01:49.541Z",
+    "cols": 80,
+    "rows": 24,
+    "shell": "/bin/sh",
+    "idleTimeoutMs": 3000
+  }
+}

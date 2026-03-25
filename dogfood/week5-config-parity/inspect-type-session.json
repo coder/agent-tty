@@ -1,0 +1,29 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-23T16:19:49.907Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KMDQXKEEFNYQTBQX7W87GQQQ",
+      "createdAt": "2026-03-23T16:19:48.304Z",
+      "updatedAt": "2026-03-23T16:19:49.035Z",
+      "status": "running",
+      "command": ["bash", "--noprofile", "--norc"],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_e761f210b2",
+      "env": {
+        "PS1": "READY> "
+      },
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "creationCols": 80,
+      "creationRows": 24,
+      "idleTimeoutMs": 5000,
+      "hostPid": 1126511,
+      "childPid": 1126523,
+      "exitCode": null,
+      "exitSignal": null
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -54,7 +54,9 @@ export function normalizeTerminalOutput(output: string): string {
 }
 
 export async function createIsolatedHome(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'agent-terminal-e2e-home-'));
+  // prettier-ignore
+  const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-e2e-home-')));
+  return home;
 }
 
 export async function readOutput(

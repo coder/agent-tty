@@ -4,6 +4,10 @@ import type { ZodError } from 'zod';
 
 import { invariant } from '../util/assert.js';
 import {
+  BUNDLED_FONT_ASSET_IDENTITY,
+  BUNDLED_FONT_FAMILY,
+} from './bundledFont.js';
+import {
   RenderProfileConfigSchema,
   type RenderProfileConfig,
 } from './types.js';
@@ -19,7 +23,8 @@ const BUILTIN_PROFILES: Record<BuiltinProfileName, RenderProfileConfig> = {
   'reference-dark': {
     name: 'reference-dark',
     theme: 'dark',
-    fontFamily: 'monospace',
+    fontFamily: BUNDLED_FONT_FAMILY,
+    fontAssetIdentity: BUNDLED_FONT_ASSET_IDENTITY,
     fontSize: 14,
     cursorStyle: 'block',
     backgroundColor: '#1e1e2e',
@@ -28,7 +33,8 @@ const BUILTIN_PROFILES: Record<BuiltinProfileName, RenderProfileConfig> = {
   'reference-light': {
     name: 'reference-light',
     theme: 'light',
-    fontFamily: 'monospace',
+    fontFamily: BUNDLED_FONT_FAMILY,
+    fontAssetIdentity: BUNDLED_FONT_ASSET_IDENTITY,
     fontSize: 14,
     cursorStyle: 'block',
     backgroundColor: '#eff1f5',
@@ -106,6 +112,7 @@ export function hashProfile(config: RenderProfileConfig): string {
     name: config.name,
     theme: config.theme,
     fontFamily: config.fontFamily,
+    fontAssetIdentity: config.fontAssetIdentity ?? null,
     fontSize: config.fontSize,
     cursorStyle: config.cursorStyle,
     backgroundColor: config.backgroundColor,

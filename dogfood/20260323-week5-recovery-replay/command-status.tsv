@@ -1,0 +1,13 @@
+step	exit_code	stdout	stderr	command
+01-create.json	0	dogfood/20260323-week5-recovery-replay/01-create.json	dogfood/20260323-week5-recovery-replay/logs/01-create.stderr.txt	npx tsx src/cli/main.ts create --json -- /bin/sh -c 'echo offline-test-data; exec cat'
+02-wait-ready.json	0	dogfood/20260323-week5-recovery-replay/02-wait-ready.json	dogfood/20260323-week5-recovery-replay/logs/02-wait-ready.stderr.txt	npx tsx src/cli/main.ts wait 01KMDQCW908P2QQNZC9066VEGX --text 'offline-test-data' --json
+03-snapshot-live.json	0	dogfood/20260323-week5-recovery-replay/03-snapshot-live.json	dogfood/20260323-week5-recovery-replay/logs/03-snapshot-live.stderr.txt	npx tsx src/cli/main.ts snapshot 01KMDQCW908P2QQNZC9066VEGX --format text --json
+04-screenshot-live.json	0	dogfood/20260323-week5-recovery-replay/04-screenshot-live.json	dogfood/20260323-week5-recovery-replay/logs/04-screenshot-live.stderr.txt	npx tsx src/cli/main.ts screenshot 01KMDQCW908P2QQNZC9066VEGX --json
+05-kill-host.json	0	dogfood/20260323-week5-recovery-replay/05-kill-host.json	-	kill -9 1065779
+06-inspect-failed.json	0	dogfood/20260323-week5-recovery-replay/06-inspect-failed.json	dogfood/20260323-week5-recovery-replay/logs/06-inspect-failed.stderr.txt	npx tsx src/cli/main.ts inspect 01KMDQCW908P2QQNZC9066VEGX --json
+07-snapshot-offline.json	0	dogfood/20260323-week5-recovery-replay/07-snapshot-offline.json	dogfood/20260323-week5-recovery-replay/logs/07-snapshot-offline.stderr.txt	npx tsx src/cli/main.ts snapshot 01KMDQCW908P2QQNZC9066VEGX --format text --json
+08-screenshot-offline.json	0	dogfood/20260323-week5-recovery-replay/08-screenshot-offline.json	dogfood/20260323-week5-recovery-replay/logs/08-screenshot-offline.stderr.txt	npx tsx src/cli/main.ts screenshot 01KMDQCW908P2QQNZC9066VEGX --json
+logs/events.jsonl	0	dogfood/20260323-week5-recovery-replay/logs/events.jsonl	-	cp "$AGENT_TERMINAL_HOME/sessions/01KMDQCW908P2QQNZC9066VEGX/events.jsonl" "dogfood/20260323-week5-recovery-replay/logs/events.jsonl" 2>/dev/null || true
+09-export-asciicast.json	0	dogfood/20260323-week5-recovery-replay/09-export-asciicast.json	dogfood/20260323-week5-recovery-replay/logs/09-export-asciicast.stderr.txt	npx tsx src/cli/main.ts record export 01KMDQCW908P2QQNZC9066VEGX --format asciicast --out dogfood/20260323-week5-recovery-replay/recordings/offline-replay.cast --json
+10-vitest-offline-replay.log	0	dogfood/20260323-week5-recovery-replay/logs/10-vitest-offline-replay.log	-	npx vitest run test/unit/replay/offlineReplay.test.ts
+11-vitest-offline-snapshot.log	0	dogfood/20260323-week5-recovery-replay/logs/11-vitest-offline-snapshot.log	-	npx vitest run test/integration/lifecycle.test.ts -t 'failed session supports offline snapshot'

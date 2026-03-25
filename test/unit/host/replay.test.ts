@@ -1,4 +1,4 @@
-import { mkdtemp, open, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, open, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -78,7 +78,8 @@ let eventLogPath = '';
 
 describe('replay helpers', () => {
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'agent-terminal-replay-'));
+    // prettier-ignore
+    tempDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-replay-')));
     eventLogPath = join(tempDir, 'events.jsonl');
   });
 

@@ -8,6 +8,13 @@ const PositiveIntSchema = z.number().int().positive();
 const NonNegativeIntSchema = z.number().int().nonnegative();
 const IsoDatetimeSchema = z.iso.datetime();
 const SnapshotFormatSchema = z.enum(['structured', 'text']);
+
+export const ReplayTimingModeSchema = z.enum([
+  'recorded',
+  'accelerated',
+  'max-speed',
+]);
+export type ReplayTimingMode = z.infer<typeof ReplayTimingModeSchema>;
 const SessionEnvSchema = z.record(NonEmptyStringSchema, z.string());
 const Sha256HexSchema = z
   .string()
@@ -39,11 +46,13 @@ export const SessionRecordSchema = z
     cwd: z.string(),
     name: NonEmptyStringSchema.optional(),
     env: SessionEnvSchema.optional(),
+    shell: NonEmptyStringSchema.optional(),
     term: NonEmptyStringSchema.optional(),
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
     creationCols: PositiveIntSchema.optional(),
     creationRows: PositiveIntSchema.optional(),
+    idleTimeoutMs: NonNegativeIntSchema.optional(),
     hostPid: PositiveIntSchema.nullable(),
     childPid: PositiveIntSchema.nullable(),
     exitCode: z.number().int().nullable(),
@@ -215,10 +224,32 @@ export const VisibleLineSchema = z
   .strict();
 export type VisibleLine = z.infer<typeof VisibleLineSchema>;
 
+export const SnapshotCellSchema = z
+  .object({
+    char: z.string(),
+    fg: z.string().optional(),
+    bg: z.string().optional(),
+    bold: z.boolean().optional(),
+    italic: z.boolean().optional(),
+    underline: z.boolean().optional(),
+    strikethrough: z.boolean().optional(),
+  })
+  .strict();
+export type SnapshotCell = z.infer<typeof SnapshotCellSchema>;
+
+export const RichSnapshotLineSchema = z
+  .object({
+    lineNumber: z.number().int().nonnegative(),
+    cells: z.array(SnapshotCellSchema),
+  })
+  .strict();
+export type RichSnapshotLine = z.infer<typeof RichSnapshotLineSchema>;
+
 export const SnapshotParamsSchema = z
   .object({
     format: SnapshotFormatSchema.optional(),
     includeScrollback: z.boolean().optional(),
+    includeCells: z.boolean().optional(),
   })
   .strict();
 export type SnapshotParams = z.infer<typeof SnapshotParamsSchema>;
@@ -235,6 +266,7 @@ export const StructuredSnapshotResultSchema = z
     isAltScreen: z.boolean(),
     visibleLines: z.array(VisibleLineSchema),
     scrollbackLines: z.array(VisibleLineSchema).optional(),
+    cells: z.array(RichSnapshotLineSchema).optional(),
   })
   .strict();
 export type StructuredSnapshotResult = z.infer<
@@ -264,6 +296,7 @@ export type SnapshotResult = z.infer<typeof SnapshotResultSchema>;
 export const ScreenshotParamsSchema = z
   .object({
     profile: ProfileNameSchema.optional(),
+    showCursor: z.boolean().optional(),
   })
   .strict();
 export type ScreenshotParams = z.infer<typeof ScreenshotParamsSchema>;
@@ -277,6 +310,7 @@ export const ScreenshotResultSchema = z
     rows: PositiveIntSchema,
     artifactPath: NonEmptyStringSchema,
     pngSizeBytes: PositiveIntSchema,
+    cursorVisible: z.boolean().optional(),
     rendererBackend: z.string().optional(),
     pixelWidth: PositiveIntSchema.optional(),
     pixelHeight: PositiveIntSchema.optional(),

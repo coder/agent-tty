@@ -1,0 +1,86 @@
+{
+  "ok": true,
+  "command": "doctor",
+  "timestamp": "2026-03-23T16:19:47.500Z",
+  "result": {
+    "ok": false,
+    "checks": {
+      "environment": [
+        {
+          "name": "node-runtime",
+          "status": "fail",
+          "message": "Node 22.19.0 requires 24+",
+          "durationMs": 5
+        },
+        {
+          "name": "cwd-access",
+          "status": "pass",
+          "message": "cwd read/write: /home/coder/.mux/src/agent-terminal/agent_exec_e761f210b2",
+          "durationMs": 0
+        },
+        {
+          "name": "temp-dir",
+          "status": "pass",
+          "message": "temp dir ok: /tmp",
+          "durationMs": 1
+        },
+        {
+          "name": "home-writable",
+          "status": "pass",
+          "message": "home writable: /tmp/agent-terminal-week5-config-parity.rDdjw2",
+          "durationMs": 1
+        },
+        {
+          "name": "pty-spawn",
+          "status": "pass",
+          "message": "spawned /usr/local/nvm/versions/node/v22.19.0/bin/node",
+          "durationMs": 42
+        },
+        {
+          "name": "socket-viable",
+          "status": "pass",
+          "message": "socket ok: /tmp/agent-terminal-week5-config-parity.rDdjw2/sessions/doctor-1125968-mn3e5s98-2/host.sock",
+          "durationMs": 8
+        },
+        {
+          "name": "artifact-atomicity",
+          "status": "pass",
+          "message": "atomic rename ok: /tmp/agent-terminal-week5-config-parity.rDdjw2/sessions/doctor-1125968-mn3e5s9f-3/artifacts",
+          "durationMs": 3
+        },
+        {
+          "name": "event-log-writable",
+          "status": "pass",
+          "message": "append ok: /tmp/agent-terminal-week5-config-parity.rDdjw2/sessions/doctor-1125968-mn3e5s9i-5/events.jsonl",
+          "durationMs": 2
+        }
+      ],
+      "renderer": [
+        {
+          "name": "playwright_available",
+          "status": "pass",
+          "message": "available",
+          "durationMs": 1
+        },
+        {
+          "name": "browser_launch",
+          "status": "pass",
+          "message": "chromium launches",
+          "durationMs": 195
+        },
+        {
+          "name": "ghostty_web_available",
+          "status": "pass",
+          "message": "WASM available",
+          "durationMs": 95
+        },
+        {
+          "name": "screenshot_viable",
+          "status": "pass",
+          "message": "viable",
+          "durationMs": 304
+        }
+      ]
+    }
+  }
+}

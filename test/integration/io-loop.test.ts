@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -20,7 +20,8 @@ let testHome = '';
 
 describe('io-loop integration', { timeout: 30000 }, () => {
   beforeEach(async () => {
-    testHome = await mkdtemp(join(tmpdir(), 'agent-terminal-home-'));
+    // prettier-ignore
+    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-home-')));
   });
 
   afterEach(async () => {
@@ -144,6 +145,87 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       ) as SuccessEnvelope<WaitResult>;
       expect(envelope.ok).toBe(true);
       expect(envelope.result.timedOut).toBe(true);
+    } finally {
+      destroySession(testHome, sessionId);
+    }
+  });
+
+  it('session idle timeout exits an otherwise idle session', async () => {
+    let sessionId = '';
+
+    try {
+      const createResult = runCli(
+        [
+          'create',
+          '--idle-timeout-ms',
+          '2000',
+          '--json',
+          '--',
+          '/bin/sh',
+          '-c',
+          'exec cat',
+        ],
+        { AGENT_TERMINAL_HOME: testHome },
+      );
+      expect(createResult.status).toBe(0);
+      expect(createResult.stderr).toBe('');
+      sessionId = (
+        JSON.parse(createResult.stdout) as SuccessEnvelope<{
+          sessionId: string;
+        }>
+      ).result.sessionId;
+
+      const waitResult = runCli(
+        ['wait', sessionId, '--exit', '--timeout', '10000', '--json'],
+        { AGENT_TERMINAL_HOME: testHome },
+        30000,
+      );
+      expect(waitResult.status).toBe(0);
+      expect(waitResult.stderr).toBe('');
+      const waitEnvelope = JSON.parse(
+        waitResult.stdout,
+      ) as SuccessEnvelope<WaitResult>;
+      expect(waitEnvelope.ok).toBe(true);
+      expect(waitEnvelope.result.timedOut).toBe(false);
+
+      await sleep(1000);
+
+      const session = inspectSession(testHome, sessionId);
+      expect(session.status).toBe('exited');
+    } finally {
+      destroySession(testHome, sessionId);
+    }
+  });
+
+  it('session with idle-timeout-ms 0 does not exit on idle', async () => {
+    let sessionId = '';
+
+    try {
+      const createResult = runCli(
+        [
+          'create',
+          '--idle-timeout-ms',
+          '0',
+          '--json',
+          '--',
+          '/bin/sh',
+          '-c',
+          'exec cat',
+        ],
+        { AGENT_TERMINAL_HOME: testHome },
+      );
+      expect(createResult.status).toBe(0);
+      expect(createResult.stderr).toBe('');
+      sessionId = (
+        JSON.parse(createResult.stdout) as SuccessEnvelope<{
+          sessionId: string;
+        }>
+      ).result.sessionId;
+
+      await sleep(3000);
+
+      const session = inspectSession(testHome, sessionId);
+      expect(session.status).toBe('running');
     } finally {
       destroySession(testHome, sessionId);
     }

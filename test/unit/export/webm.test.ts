@@ -238,6 +238,7 @@ describe('generateWebmExport', () => {
         targetSeq: 1,
       },
       {
+        mode: 'accelerated',
         maxGapMs: 100,
         minFrameHoldMs: 50,
         finalFrameHoldMs: 1_000,
@@ -258,6 +259,76 @@ describe('generateWebmExport', () => {
       profileName: 'reference-dark',
       timingMode: 'accelerated',
     });
+  });
+
+  it('passes recorded timing options when timingMode is recorded', async () => {
+    const mockBackend = createMockBackend();
+
+    const result = await generateWebmExport(
+      {
+        sessionId: 'session-01',
+        sessionDir: '/tmp/agent-terminal/sessions/session-01',
+        manifest: createManifest(),
+        events: createEvents(),
+        outputPath: '/tmp/exports/recording-1-webm.webm',
+        timingMode: 'recorded',
+      },
+      { backendFactory: () => mockBackend.backend },
+    );
+
+    expect(mockBackend.replayWithTiming).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'session-01' }),
+      { mode: 'recorded', finalFrameHoldMs: 1_000 },
+    );
+    expect(result.timingMode).toBe('recorded');
+  });
+
+  it('passes max-speed timing options when timingMode is max-speed', async () => {
+    const mockBackend = createMockBackend();
+
+    const result = await generateWebmExport(
+      {
+        sessionId: 'session-01',
+        sessionDir: '/tmp/agent-terminal/sessions/session-01',
+        manifest: createManifest(),
+        events: createEvents(),
+        outputPath: '/tmp/exports/recording-1-webm.webm',
+        timingMode: 'max-speed',
+      },
+      { backendFactory: () => mockBackend.backend },
+    );
+
+    expect(mockBackend.replayWithTiming).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'session-01' }),
+      { mode: 'max-speed', minFrameHoldMs: 16, finalFrameHoldMs: 500 },
+    );
+    expect(result.timingMode).toBe('max-speed');
+  });
+
+  it('defaults to accelerated timing when timingMode is omitted', async () => {
+    const mockBackend = createMockBackend();
+
+    const result = await generateWebmExport(
+      {
+        sessionId: 'session-01',
+        sessionDir: '/tmp/agent-terminal/sessions/session-01',
+        manifest: createManifest(),
+        events: createEvents(),
+        outputPath: '/tmp/exports/recording-1-webm.webm',
+      },
+      { backendFactory: () => mockBackend.backend },
+    );
+
+    expect(mockBackend.replayWithTiming).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'session-01' }),
+      {
+        mode: 'accelerated',
+        maxGapMs: 100,
+        minFrameHoldMs: 50,
+        finalFrameHoldMs: 1_000,
+      },
+    );
+    expect(result.timingMode).toBe('accelerated');
   });
 
   it('rejects empty events', async () => {

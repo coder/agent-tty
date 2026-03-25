@@ -1,0 +1,11 @@
+
+[1m[46m RUN [49m[22m [36mv4.1.0 [39m[90m/home/coder/.mux/src/agent-terminal/agent_exec_83d9458395[39m
+
+ [32m✓[39m test/integration/lifecycle.test.ts [2m([22m[2m12 tests[22m[2m | [22m[33m11 skipped[39m[2m)[22m[33m 8749[2mms[22m[39m
+     [33m[2m✓[22m[39m stale host recovery: create → crash → reconcile → gc [33m 8748[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[2m | [22m[33m11 skipped[39m[90m (12)[39m
+[2m   Start at [22m 16:16:12
+[2m   Duration [22m 8.90s[2m (transform 32ms, setup 0ms, import 43ms, tests 8.75s, environment 0ms)[22m
+

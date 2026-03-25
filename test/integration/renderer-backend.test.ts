@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -35,6 +35,39 @@ function createReplayInput(
   };
 }
 
+const PNG_SIGNATURE = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+]);
+
+function visibleTextFromSnapshot(
+  snapshot: Awaited<ReturnType<GhosttyWebBackend['snapshot']>>,
+): string {
+  const visibleText = snapshot.visibleLines.map((line) => line.text).join('\n');
+  if (visibleText.length === 0) {
+    throw new Error('snapshot visible text must be non-empty');
+  }
+
+  return visibleText;
+}
+
+async function readValidPngFile(
+  outputPath: string,
+  label: string,
+): Promise<Buffer> {
+  const pngBuffer = await readFile(outputPath);
+  if (pngBuffer.length === 0) {
+    throw new Error(`${label} must be non-empty`);
+  }
+  if (pngBuffer.length < PNG_SIGNATURE.length) {
+    throw new Error(`${label} must include the PNG signature bytes`);
+  }
+  if (!pngBuffer.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
+    throw new Error(`${label} must start with the PNG signature`);
+  }
+
+  return pngBuffer;
+}
+
 describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
   let backend: GhosttyWebBackend;
 
@@ -56,6 +89,25 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     await backend.dispose();
 
     expect(backend.isBooted).toBe(false);
+  });
+
+  it('boots custom profiles without a bundled font identity', async () => {
+    const customBackend = new GhosttyWebBackend(`${SESSION_ID}-custom`, {
+      name: 'custom-no-font-identity',
+      theme: 'dark',
+      fontFamily: 'monospace',
+      fontSize: 14,
+      cursorStyle: 'block',
+      backgroundColor: '#000000',
+      foregroundColor: '#ffffff',
+    });
+
+    try {
+      await customBackend.boot();
+      expect(customBackend.isBooted).toBe(true);
+    } finally {
+      await customBackend.dispose();
+    }
   });
 
   it('replays consecutive output events and flushes batches before target breaks', async () => {
@@ -268,6 +320,73 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     expect(allScrollbackText).toContain('line-0');
   });
 
+  it('recovers state after dispose and re-boot', async () => {
+    const expectedText = 'hello from renderer';
+    const replayInput = createReplayInput([
+      {
+        seq: 0,
+        ts: timestampFor(0),
+        type: 'output',
+        payload: { data: `${expectedText}\r\n` },
+      },
+    ]);
+    // prettier-ignore
+    const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-renderer-restart-')));
+    const screenshotAPath = join(outputDir, 'renderer-a.png');
+    const screenshotBPath = join(outputDir, 'renderer-b.png');
+
+    try {
+      expect(backend.isBooted).toBe(false);
+      await backend.boot();
+      expect(backend.isBooted).toBe(true);
+
+      const replayStateA = await backend.replayTo(replayInput);
+      expect(replayStateA.lastSeq).toBe(replayInput.targetSeq);
+
+      const screenshotA = await backend.screenshot(screenshotAPath);
+      expect(screenshotA.artifactPath).toBe(screenshotAPath);
+      expect(screenshotA.capturedAtSeq).toBe(replayInput.targetSeq);
+      expect(screenshotA.pngSizeBytes).toBeGreaterThan(0);
+      const screenshotABuffer = await readValidPngFile(
+        screenshotAPath,
+        'screenshotA PNG',
+      );
+      expect(screenshotABuffer.length).toBe(screenshotA.pngSizeBytes);
+
+      const snapshotA = await backend.snapshot();
+      const visibleTextA = visibleTextFromSnapshot(snapshotA);
+      expect(snapshotA.capturedAtSeq).toBe(replayInput.targetSeq);
+      expect(visibleTextA).toContain(expectedText);
+
+      await backend.dispose();
+      expect(backend.isBooted).toBe(false);
+
+      await backend.boot();
+      expect(backend.isBooted).toBe(true);
+
+      const replayStateB = await backend.replayTo(replayInput);
+      expect(replayStateB.lastSeq).toBe(replayInput.targetSeq);
+
+      const screenshotB = await backend.screenshot(screenshotBPath);
+      expect(screenshotB.artifactPath).toBe(screenshotBPath);
+      expect(screenshotB.capturedAtSeq).toBe(replayInput.targetSeq);
+      expect(screenshotB.pngSizeBytes).toBeGreaterThan(0);
+      const screenshotBBuffer = await readValidPngFile(
+        screenshotBPath,
+        'screenshotB PNG',
+      );
+      expect(screenshotBBuffer.length).toBe(screenshotB.pngSizeBytes);
+
+      const snapshotB = await backend.snapshot();
+      const visibleTextB = visibleTextFromSnapshot(snapshotB);
+      expect(snapshotB.capturedAtSeq).toBe(replayInput.targetSeq);
+      expect(visibleTextB).toContain(expectedText);
+      expect(visibleTextB).toBe(visibleTextA);
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
   it('captures screenshots to disk', async () => {
     await backend.boot();
     await backend.replayTo(
@@ -281,9 +400,8 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       ]),
     );
 
-    const outputDir = await mkdtemp(
-      join(tmpdir(), 'agent-terminal-renderer-shot-'),
-    );
+    // prettier-ignore
+    const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-renderer-shot-')));
     const outputPath = join(outputDir, 'renderer.png');
 
     try {
@@ -293,6 +411,7 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       expect(screenshot.artifactPath).toBe(outputPath);
       expect(screenshot.pngSizeBytes).toBeGreaterThan(0);
       expect(fileStats.size).toBe(screenshot.pngSizeBytes);
+      expect(screenshot.renderProfileHash).toMatch(/^[a-f0-9]{64}$/u);
     } finally {
       await rm(outputDir, { recursive: true, force: true });
     }

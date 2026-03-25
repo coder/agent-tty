@@ -137,6 +137,16 @@
             /^#[0-9a-fA-F]{6}$/u.test(profile.foregroundColor),
           'profile.foregroundColor must be a hex color',
         );
+        if (
+          profile.fontAssetIdentity !== undefined &&
+          profile.fontAssetIdentity !== null
+        ) {
+          invariant(
+            typeof profile.fontAssetIdentity === 'string' &&
+              /^[a-f0-9]{64}$/u.test(profile.fontAssetIdentity),
+            'profile.fontAssetIdentity must be a 64-character lowercase SHA-256 hex string',
+          );
+        }
 
         return Object.freeze({ ...profile });
       }
@@ -198,15 +208,38 @@
         return dimensions;
       }
 
-      function decodeVisibleLines(terminal) {
+      function getNormalizedViewportState(terminal) {
         const { cols, rows } = getDimensions(terminal);
         const activeBuffer = terminal.buffer.active;
         const viewportY = activeBuffer.viewportY;
+        const bufferLength = activeBuffer.length;
         assertPositiveInteger(rows, 'visible row count must be positive');
         invariant(
           Number.isInteger(viewportY) && viewportY >= 0,
           'viewportY must be a non-negative integer',
         );
+        invariant(
+          Number.isInteger(bufferLength) && bufferLength >= rows,
+          'active buffer length must cover the visible viewport',
+        );
+
+        const bottomViewportY = bufferLength - rows;
+        invariant(
+          bottomViewportY >= 0,
+          'bottom viewportY must be non-negative',
+        );
+        invariant(
+          viewportY <= bottomViewportY,
+          'viewportY must not exceed the bottom viewport position',
+        );
+
+        return { cols, rows, activeBuffer, viewportY: bottomViewportY };
+      }
+
+      function decodeVisibleLines(terminal) {
+        terminal.scrollToBottom();
+        const { cols, rows, activeBuffer, viewportY } =
+          getNormalizedViewportState(terminal);
 
         const visibleLines = [];
         for (let row = 0; row < rows; row += 1) {
@@ -227,13 +260,133 @@
         return { cols, rows, visibleLines };
       }
 
-      function getSnapshotPayload() {
+      function decodeScrollbackLines(terminal) {
+        const { cols, activeBuffer, viewportY } =
+          getNormalizedViewportState(terminal);
+
+        if (viewportY === 0) {
+          return [];
+        }
+
+        const scrollbackLines = [];
+        for (let row = 0; row < viewportY; row += 1) {
+          const line = activeBuffer.getLine(row);
+          const text =
+            line === undefined ? '' : line.translateToString(true, 0, cols);
+          invariant(
+            typeof text === 'string',
+            `decoded scrollback line ${row} must be a string`,
+          );
+          scrollbackLines.push({ row, text });
+        }
+
+        invariant(
+          scrollbackLines.length === viewportY,
+          'scrollback line count must match viewportY',
+        );
+        return scrollbackLines;
+      }
+
+      function toHexColor(colorValue) {
+        invariant(
+          Number.isInteger(colorValue) &&
+            colorValue >= 0 &&
+            colorValue <= 0xffffff,
+          'cell color must be a 24-bit integer',
+        );
+        return `#${colorValue.toString(16).padStart(6, '0')}`;
+      }
+
+      function decodeSnapshotCell(cell) {
+        invariant(cell !== undefined, 'snapshot cell must be defined');
+        const char = cell.getChars();
+        assertStringValue(char, 'snapshot cell char must be a string');
+
+        const isInverse = cell.isInverse() === 1;
+        const fgColor = cell.getFgColor();
+        const bgColor = cell.getBgColor();
+
+        return {
+          char,
+          fg: toHexColor(isInverse ? bgColor : fgColor),
+          bg: toHexColor(isInverse ? fgColor : bgColor),
+          ...(cell.isBold() === 1 && { bold: true }),
+          ...(cell.isItalic() === 1 && { italic: true }),
+          ...(cell.isUnderline() === 1 && { underline: true }),
+          ...(cell.isStrikethrough() === 1 && { strikethrough: true }),
+        };
+      }
+
+      function decodeVisibleCells(terminal, visibleLines) {
+        terminal.scrollToBottom();
+        const { cols, rows, activeBuffer, viewportY } =
+          getNormalizedViewportState(terminal);
+        const nullCell = activeBuffer.getNullCell();
+        const cells = [];
+
+        invariant(
+          visibleLines.length === rows,
+          'rich snapshot line count must be seeded from visible lines',
+        );
+
+        for (let row = 0; row < rows; row += 1) {
+          const lineNumber = visibleLines[row]?.row;
+          invariant(
+            Number.isInteger(lineNumber) && lineNumber >= 0,
+            `visible line ${row} row must be a non-negative integer`,
+          );
+
+          const line = activeBuffer.getLine(viewportY + row);
+          const rowCells = [];
+          for (let col = 0; col < cols; col += 1) {
+            rowCells.push(decodeSnapshotCell(line?.getCell(col) ?? nullCell));
+          }
+
+          invariant(
+            rowCells.length <= cols,
+            `decoded cell count for row ${row} must not exceed terminal width`,
+          );
+          cells.push({ lineNumber, cells: rowCells });
+        }
+
+        invariant(
+          cells.length === rows,
+          'rich snapshot line count must match terminal rows',
+        );
+        return cells;
+      }
+
+      function getSnapshotPayload(options) {
+        invariant(
+          options === undefined ||
+            (options !== null && typeof options === 'object'),
+          'snapshot options must be an object when provided',
+        );
+        invariant(
+          options?.includeScrollback === undefined ||
+            typeof options.includeScrollback === 'boolean',
+          'snapshot includeScrollback option must be a boolean when provided',
+        );
+        invariant(
+          options?.includeCells === undefined ||
+            typeof options.includeCells === 'boolean',
+          'snapshot includeCells option must be a boolean when provided',
+        );
+
         const terminal = getReadyTerminal();
         const wasmTerm = terminal.wasmTerm;
         invariant(wasmTerm, 'terminal WASM instance is unavailable');
 
         const cursor = wasmTerm.getCursor();
         const { cols, rows, visibleLines } = decodeVisibleLines(terminal);
+        const scrollbackLines =
+          options?.includeScrollback === true
+            ? decodeScrollbackLines(terminal)
+            : undefined;
+        const cells =
+          options?.includeCells === true
+            ? decodeVisibleCells(terminal, visibleLines)
+            : undefined;
 
         invariant(
           Number.isInteger(cursor.x) && cursor.x >= 0,
@@ -259,6 +412,8 @@
           cursorRow: cursor.y,
           isAltScreen: wasmTerm.isAlternateScreen(),
           visibleLines,
+          ...(scrollbackLines !== undefined && { scrollbackLines }),
+          ...(cells !== undefined && { cells }),
         };
       }
 
@@ -282,8 +437,8 @@
           });
           updateDocumentState();
         },
-        getSnapshot() {
-          return getSnapshotPayload();
+        getSnapshot(options) {
+          return getSnapshotPayload(options);
         },
         getVisibleText() {
           return decodeVisibleLines(getReadyTerminal())
@@ -308,7 +463,24 @@
         },
       };
 
+      async function loadBundledFont() {
+        if (!profile.fontAssetIdentity) {
+          return;
+        }
+
+        const fontFaceRule = new FontFace(
+          profile.fontFamily,
+          'url(/assets/fonts/JetBrainsMono-Regular-latin.woff2)',
+          { style: 'normal', weight: '400' },
+        );
+
+        const loadedFace = await fontFaceRule.load();
+        document.fonts.add(loadedFace);
+        await document.fonts.ready;
+      }
+
       async function boot() {
+        await loadBundledFont();
         await init();
 
         const terminal = new Terminal({

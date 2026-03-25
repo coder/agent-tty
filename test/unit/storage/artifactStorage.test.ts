@@ -1,4 +1,11 @@
-import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  access,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -34,7 +41,8 @@ afterEach(async () => {
 });
 
 async function createSessionDir(sessionId = 'session-01'): Promise<string> {
-  const home = await mkdtemp(join(tmpdir(), 'agent-terminal-artifacts-'));
+  // prettier-ignore
+  const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-artifacts-')));
   temporaryDirectories.push(home);
   return join(home, sessionId);
 }

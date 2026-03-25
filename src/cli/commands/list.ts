@@ -1,15 +1,10 @@
 import type { CommandContext } from '../context.js';
 
 import { emitSuccess } from '../output.js';
-import { listSessions } from '../../host/lifecycle.js';
+import { listSessions, type SessionSummary } from '../../host/lifecycle.js';
 
 export interface ListResult {
-  sessions: Array<{
-    sessionId: string;
-    status: string;
-    command: string[];
-    createdAt: string;
-  }>;
+  sessions: SessionSummary[];
 }
 
 interface CommandOptions {

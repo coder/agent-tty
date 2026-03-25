@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import {
   MarkerEventPayloadSchema,
+  RichSnapshotLineSchema,
   VisibleLineSchema,
   type VisibleLine,
 } from '../protocol/schemas.js';
@@ -187,6 +188,7 @@ export const SemanticSnapshotSchema = z
     isAltScreen: z.boolean(),
     visibleLines: z.array(VisibleLineSchema),
     scrollbackLines: z.array(VisibleLineSchema).optional(),
+    cells: z.array(RichSnapshotLineSchema).optional(),
   })
   .strict();
 export type SemanticSnapshot = z.infer<typeof SemanticSnapshotSchema>;
@@ -213,6 +215,7 @@ export const ScreenshotResultSchema = z
     rows: PositiveIntSchema,
     artifactPath: NonEmptyStringSchema,
     pngSizeBytes: PositiveIntSchema,
+    cursorVisible: z.boolean().optional(),
     rendererBackend: z.string().optional(),
     pixelWidth: PositiveIntSchema.optional(),
     pixelHeight: PositiveIntSchema.optional(),
@@ -227,6 +230,7 @@ export const RenderProfileConfigSchema = z
     name: NonEmptyStringSchema,
     theme: ThemeSchema,
     fontFamily: NonEmptyStringSchema,
+    fontAssetIdentity: Sha256HexSchema.optional(),
     fontSize: PositiveNumberSchema,
     cursorStyle: CursorStyleSchema,
     backgroundColor: HexColorSchema,

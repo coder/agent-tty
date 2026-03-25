@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "command": "gc",
+  "timestamp": "2026-03-23T16:09:07.458Z",
+  "result": {
+    "removedSessions": ["01KMDQ9S6XFPBFZSKPGJCGN2KX"],
+    "skippedSessions": [],
+    "dryRun": false,
+    "totalBytesFreed": 4770
+  }
+}

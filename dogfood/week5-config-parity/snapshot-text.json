@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-23T16:19:54.689Z",
+  "result": {
+    "format": "text",
+    "sessionId": "01KMDQXKEEFNYQTBQX7W87GQQQ",
+    "capturedAtSeq": 4,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 3,
+    "cursorCol": 7,
+    "text": "READY> echo hello && echo world\nhello\nworld\nREADY>\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  }
+}

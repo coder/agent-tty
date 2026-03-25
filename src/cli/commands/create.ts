@@ -5,6 +5,7 @@ import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
 
 import { emitSuccess } from '../output.js';
+import { DEFAULT_IDLE_TIMEOUT_MS } from '../../config/defaults.js';
 import {
   allocateSession,
   launchHost,
@@ -12,12 +13,14 @@ import {
 } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
+import type { SessionRecord } from '../../protocol/schemas.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
   manifestPath,
   sessionDir,
   socketPath,
 } from '../../storage/sessionPaths.js';
+import { invariant } from '../../util/assert.js';
 
 const READINESS_POLL_INTERVAL_MS = 100;
 const READINESS_MAX_ATTEMPTS = 50;
@@ -27,6 +30,12 @@ type SessionEnvironment = Record<string, string>;
 
 export interface CreateResult {
   sessionId: string;
+  createdAt: string;
+  cols: number;
+  rows: number;
+  shell: string;
+  env?: Record<string, string>;
+  idleTimeoutMs?: number;
 }
 
 interface CommandOptions {
@@ -39,6 +48,7 @@ interface CommandOptions {
   rows: number;
   envEntries: string[];
   term: string;
+  idleTimeoutMs?: number;
   name?: string;
 }
 
@@ -64,8 +74,66 @@ function normalizeCreateEnvironment(envEntries: string[]): SessionEnvironment {
   return environment;
 }
 
+function toCreateResult(manifest: SessionRecord): CreateResult {
+  invariant(
+    manifest.command.length > 0,
+    'session manifest command must include at least one segment',
+  );
+
+  const shell = manifest.shell ?? manifest.command[0];
+  invariant(shell !== undefined, 'session manifest shell must resolve');
+
+  const result: CreateResult = {
+    sessionId: manifest.sessionId,
+    createdAt: manifest.createdAt,
+    cols: manifest.cols,
+    rows: manifest.rows,
+    shell,
+  };
+
+  if (manifest.env !== undefined && Object.keys(manifest.env).length > 0) {
+    result.env = manifest.env;
+  }
+
+  if (manifest.idleTimeoutMs !== undefined && manifest.idleTimeoutMs > 0) {
+    result.idleTimeoutMs = manifest.idleTimeoutMs;
+  }
+
+  return result;
+}
+
+async function readCreateResult(
+  sessionDirectory: string,
+  sessionId: string,
+): Promise<CreateResult> {
+  const manifest = await readManifestIfExists(manifestPath(sessionDirectory));
+  if (manifest === null) {
+    throw makeCliError(ERROR_CODES.INTERNAL_ERROR, {
+      message: `Session manifest missing for "${sessionId}" after creation.`,
+      details: {
+        sessionId,
+        sessionDirectory,
+      },
+    });
+  }
+
+  return toCreateResult(manifest);
+}
+
 export async function runCreateCommand(options: CommandOptions): Promise<void> {
   const environment = normalizeCreateEnvironment(options.envEntries);
+  const idleTimeoutMs =
+    options.idleTimeoutMs ??
+    options.context.configFile?.idleTimeoutMs ??
+    DEFAULT_IDLE_TIMEOUT_MS;
+
+  if (idleTimeoutMs < 0 || !Number.isInteger(idleTimeoutMs)) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: '--idle-timeout-ms must be a non-negative integer.',
+      details: { idleTimeoutMs },
+    });
+  }
+
   let sessionId: string | undefined;
 
   try {
@@ -78,6 +146,7 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
       rows: options.rows,
       env: environment,
       term: options.term,
+      ...(idleTimeoutMs > 0 ? { idleTimeoutMs } : {}),
       ...(options.name !== undefined ? { name: options.name } : {}),
     });
     sessionId = allocatedSession.sessionId;
@@ -116,10 +185,11 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
   for (let attempt = 0; attempt < READINESS_MAX_ATTEMPTS; attempt += 1) {
     try {
       await sendRpc(socketFile, 'inspect', undefined, READINESS_RPC_TIMEOUT_MS);
+      const result = await readCreateResult(sessionDirectory, sessionId);
       emitSuccess({
         command: 'create',
         json: options.json,
-        result: { sessionId },
+        result,
         lines: [`Session created: ${sessionId}`],
       });
       return;
@@ -136,7 +206,7 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
           emitSuccess({
             command: 'create',
             json: options.json,
-            result: { sessionId },
+            result: toCreateResult(manifest),
             lines: [`Session created: ${sessionId}`],
           });
           return;

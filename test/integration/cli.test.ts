@@ -1,4 +1,10 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -31,7 +37,8 @@ function parseErrorEnvelope(output: string): CommandErrorEnvelope {
 
 describe('CLI integration', () => {
   beforeEach(() => {
-    testHome = mkdtempSync(join(tmpdir(), 'agent-terminal-cli-home-'));
+    // prettier-ignore
+    testHome = realpathSync(mkdtempSync(join(tmpdir(), 'agent-terminal-cli-home-')));
   });
 
   afterEach(() => {
@@ -51,6 +58,21 @@ describe('CLI integration', () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.command).toBe('version');
     expect(parsed.result.cliVersion).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it('accepts --append-newline for type', () => {
+    const result = runCli(
+      ['type', 'session-01', 'hello', '--append-newline', '--json'],
+      testEnv(),
+    );
+
+    expect(result.status).toBe(3);
+    expect(result.stderr).toBe('');
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('SESSION_NOT_FOUND');
+    expect(envelope.error.message).toContain('session-01');
   });
 
   it('rejects type input when positional text and --file are both provided', () => {
@@ -152,6 +174,21 @@ describe('CLI integration', () => {
     expect(envelope.error.message).toContain('must not be empty');
   });
 
+  it('rejects screenshot requests when --show-cursor and --hide-cursor are both provided', () => {
+    const result = runCli(
+      ['screenshot', 'session-01', '--show-cursor', '--hide-cursor', '--json'],
+      testEnv(),
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe('');
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.message).toContain('mutually exclusive');
+  });
+
   it('prints a JSON envelope for doctor including the new health checks', () => {
     const result = runCli(['doctor', '--json'], testEnv());
     expect(result.status).toBe(0);
@@ -193,9 +230,8 @@ describe('CLI integration', () => {
   });
 
   it('uses --home instead of AGENT_TERMINAL_HOME', () => {
-    const overrideHome = mkdtempSync(
-      join(tmpdir(), 'agent-terminal-cli-override-'),
-    );
+    // prettier-ignore
+    const overrideHome = realpathSync(mkdtempSync(join(tmpdir(), 'agent-terminal-cli-override-')));
 
     try {
       const result = runCli(
@@ -250,6 +286,59 @@ describe('CLI integration', () => {
     expect(parsed.command).toBe('inspect');
     expect(parsed.error.code).toBe('SESSION_NOT_FOUND');
     expect(parsed.error.message).toContain('missing-session');
+  });
+
+  it('accepts --log-level as a root flag', () => {
+    const result = runCli(
+      ['--log-level', 'debug', 'version', '--json'],
+      testEnv(),
+    );
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toBe('');
+    expect(result.stderr).toContain(
+      '[agent-terminal] debug: resolved command context',
+    );
+
+    const parsed = JSON.parse(result.stdout) as SuccessEnvelope<{
+      cliVersion: string;
+    }>;
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.command).toBe('version');
+  });
+
+  it('accepts --profile as a root flag', () => {
+    const result = runCli(
+      ['--profile', 'my-profile', 'version', '--json'],
+      testEnv(),
+    );
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+
+    const parsed = JSON.parse(result.stdout) as SuccessEnvelope<{
+      cliVersion: string;
+    }>;
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.command).toBe('version');
+  });
+
+  it('rejects invalid --log-level values', () => {
+    const result = runCli(
+      ['--log-level', 'bogus', 'version', '--json'],
+      testEnv(),
+    );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe('');
+
+    const parsed = JSON.parse(result.stdout) as ErrorEnvelope;
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.command).toBe('agent-terminal');
+    expect(parsed.error.code).toBe('INVALID_INPUT');
+    expect(parsed.error.message).toBe(
+      'Log level must be one of debug, info, warn, or error.',
+    );
   });
 
   it('maps invalid root options to exit code 2', () => {

@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -106,7 +106,8 @@ describe('wait render integration', { timeout: 120_000 }, () => {
   let rpcSocketPath = '';
 
   beforeEach(async () => {
-    testHome = await mkdtemp(join(tmpdir(), 'agent-terminal-wait-render-'));
+    // prettier-ignore
+    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-wait-render-')));
     sessionId = createSession(testHome, [...SESSION_COMMAND]);
     await waitForOutputMarker(testHome, sessionId, 'booting');
 

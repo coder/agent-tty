@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import type { RecordExportResult as RecordExportResultType } from './schemas.js';
+import type {
+  RecordExportResult as RecordExportResultType,
+  ReplayTimingMode as ReplayTimingModeType,
+  RichSnapshotLine as RichSnapshotLineType,
+  SnapshotCell as SnapshotCellType,
+} from './schemas.js';
 
 import {
   ScreenshotParamsSchema,
@@ -15,8 +20,11 @@ import {
 
 export {
   RecordExportResultSchema,
+  ReplayTimingModeSchema,
+  RichSnapshotLineSchema,
   ScreenshotParamsSchema,
   ScreenshotResultSchema,
+  SnapshotCellSchema,
   SnapshotParamsSchema,
   SnapshotResultSchema,
   WaitForRenderParamsSchema,
@@ -72,12 +80,27 @@ export type RpcResponse = z.infer<typeof RpcResponseSchema>;
 export const InspectParamsSchema = EmptyObjectSchema;
 export type InspectParams = z.infer<typeof InspectParamsSchema>;
 
-export const InspectResultSchema = z
+export const HostInspectResultSchema = z
   .object({
     session: SessionRecordSchema,
   })
   .strict();
+export type HostInspectResult = z.infer<typeof HostInspectResultSchema>;
+
+export const InspectResultSchema = z
+  .object({
+    session: SessionRecordSchema,
+    eventCount: z.number().int().nonnegative(),
+    uptime: z.number().int().nonnegative(),
+  })
+  .strict();
 export type InspectResult = z.infer<typeof InspectResultSchema>;
+
+export type ReplayTimingMode = ReplayTimingModeType;
+
+export type SnapshotCell = SnapshotCellType;
+
+export type RichSnapshotLine = RichSnapshotLineType;
 
 export type SnapshotParams = z.infer<typeof SnapshotParamsSchema>;
 
@@ -205,7 +228,7 @@ export type RpcMethod = z.infer<typeof RpcMethodSchema>;
 export const RpcMethodSchemas = {
   inspect: {
     params: InspectParamsSchema,
-    result: InspectResultSchema,
+    result: HostInspectResultSchema,
   },
   snapshot: {
     params: SnapshotParamsSchema,

@@ -2,6 +2,7 @@ import { AssertionError } from 'node:assert';
 
 import { describe, expect, it } from 'vitest';
 
+import { BUNDLED_FONT_FAMILY } from '../../../src/renderer/bundledFont.js';
 import {
   BUILTIN_PROFILE_NAMES,
   getBuiltinProfile,
@@ -20,15 +21,16 @@ describe('renderer profiles', () => {
   it('returns cloned built-in profiles by name', () => {
     const profile = getBuiltinProfile('reference-dark');
 
-    expect(profile).toEqual({
+    expect(profile).toMatchObject({
       name: 'reference-dark',
       theme: 'dark',
-      fontFamily: 'monospace',
+      fontFamily: BUNDLED_FONT_FAMILY,
       fontSize: 14,
       cursorStyle: 'block',
       backgroundColor: '#1e1e2e',
       foregroundColor: '#cdd6f4',
     });
+    expect(profile?.fontAssetIdentity).toMatch(/^[a-f0-9]{64}$/u);
 
     expect(profile).not.toBeUndefined();
 
@@ -40,32 +42,37 @@ describe('renderer profiles', () => {
     }
 
     profile.fontFamily = 'mutated';
+    profile.fontAssetIdentity = 'a'.repeat(64);
 
-    expect(secondRead.fontFamily).toBe('monospace');
+    expect(secondRead.fontFamily).toBe(BUNDLED_FONT_FAMILY);
+    expect(secondRead.fontAssetIdentity).toMatch(/^[a-f0-9]{64}$/u);
+    expect(secondRead.fontAssetIdentity).not.toBe('a'.repeat(64));
   });
 
-  it('resolves built-in and custom profiles', () => {
-    expect(resolveProfile('reference-dark')).toEqual({
+  it('uses the bundled JetBrains Mono font for built-in profiles', () => {
+    for (const profileName of BUILTIN_PROFILE_NAMES) {
+      const profile = resolveProfile(profileName);
+
+      expect(profile.fontFamily).toBe(BUNDLED_FONT_FAMILY);
+      expect(profile.fontAssetIdentity).toMatch(/^[a-f0-9]{64}$/u);
+    }
+  });
+
+  it('resolves built-in and custom profiles without a font asset identity', () => {
+    expect(resolveProfile('reference-dark')).toMatchObject({
       name: 'reference-dark',
       theme: 'dark',
-      fontFamily: 'monospace',
+      fontFamily: BUNDLED_FONT_FAMILY,
       fontSize: 14,
       cursorStyle: 'block',
       backgroundColor: '#1e1e2e',
       foregroundColor: '#cdd6f4',
     });
+    expect(resolveProfile('reference-dark').fontAssetIdentity).toMatch(
+      /^[a-f0-9]{64}$/u,
+    );
 
-    expect(
-      resolveProfile({
-        name: 'custom',
-        theme: 'light',
-        fontFamily: 'monospace',
-        fontSize: 16,
-        cursorStyle: 'underline',
-        backgroundColor: '#ffffff',
-        foregroundColor: '#000000',
-      }),
-    ).toEqual({
+    const customProfile = resolveProfile({
       name: 'custom',
       theme: 'light',
       fontFamily: 'monospace',
@@ -74,6 +81,17 @@ describe('renderer profiles', () => {
       backgroundColor: '#ffffff',
       foregroundColor: '#000000',
     });
+
+    expect(customProfile).toEqual({
+      name: 'custom',
+      theme: 'light',
+      fontFamily: 'monospace',
+      fontSize: 16,
+      cursorStyle: 'underline',
+      backgroundColor: '#ffffff',
+      foregroundColor: '#000000',
+    });
+    expect(customProfile).not.toHaveProperty('fontAssetIdentity');
   });
 
   it('hashes profiles deterministically as lowercase SHA-256 hex', () => {
@@ -83,6 +101,41 @@ describe('renderer profiles', () => {
 
     expect(firstHash).toBe(secondHash);
     expect(firstHash).toMatch(/^[a-f0-9]{64}$/u);
+  });
+
+  it('changes the hash when only fontAssetIdentity changes', () => {
+    const baseProfile = {
+      name: 'custom',
+      theme: 'dark',
+      fontFamily: BUNDLED_FONT_FAMILY,
+      fontAssetIdentity: '1'.repeat(64),
+      fontSize: 14,
+      cursorStyle: 'block',
+      backgroundColor: '#1e1e2e',
+      foregroundColor: '#cdd6f4',
+    } as const;
+
+    expect(hashProfile(baseProfile)).not.toBe(
+      hashProfile({
+        ...baseProfile,
+        fontAssetIdentity: '2'.repeat(64),
+      }),
+    );
+  });
+
+  it('keeps the hash stable when fontAssetIdentity is unchanged', () => {
+    const profile = {
+      name: 'custom',
+      theme: 'dark',
+      fontFamily: BUNDLED_FONT_FAMILY,
+      fontAssetIdentity: '3'.repeat(64),
+      fontSize: 14,
+      cursorStyle: 'block',
+      backgroundColor: '#1e1e2e',
+      foregroundColor: '#cdd6f4',
+    } as const;
+
+    expect(hashProfile(profile)).toBe(hashProfile({ ...profile }));
   });
 
   it('produces distinct hashes for different built-in profiles', () => {

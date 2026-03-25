@@ -2,18 +2,22 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DestroyParamsSchema,
+  HostInspectResultSchema,
   InspectResultSchema,
   MarkParamsSchema,
   MarkResultSchema,
   PasteParamsSchema,
   RecordExportResultSchema,
+  ReplayTimingModeSchema,
   ResizeResultSchema,
+  RichSnapshotLineSchema,
   RpcMethodSchemas,
   RpcRequestSchema,
   RpcResponseSchema,
   ScreenshotParamsSchema,
   ScreenshotResultSchema,
   SendKeysParamsSchema,
+  SnapshotCellSchema,
   SnapshotParamsSchema,
   SnapshotResultSchema,
   TypeParamsSchema,
@@ -192,6 +196,16 @@ describe('RPC message schemas', () => {
   it('validates inspect results against the session schema', () => {
     const result = InspectResultSchema.safeParse({
       session: createSessionRecord(),
+      eventCount: 2,
+      uptime: 1000,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('keeps inspect RPC results limited to the session payload', () => {
+    const result = HostInspectResultSchema.safeParse({
+      session: createSessionRecord(),
     });
 
     expect(result.success).toBe(true);
@@ -274,9 +288,65 @@ describe('RPC message schemas', () => {
     ).toBe(true);
   });
 
-  it('accepts optional scrollback and screenshot metadata fields', () => {
+  it('accepts replay timing modes and rich snapshot cell payloads', () => {
+    expect(ReplayTimingModeSchema.safeParse('recorded').success).toBe(true);
+    expect(ReplayTimingModeSchema.safeParse('accelerated').success).toBe(true);
+    expect(ReplayTimingModeSchema.safeParse('max-speed').success).toBe(true);
+    expect(ReplayTimingModeSchema.safeParse('slow').success).toBe(false);
+
     expect(
-      SnapshotParamsSchema.safeParse({ includeScrollback: true }).success,
+      SnapshotCellSchema.safeParse({
+        char: 'A',
+        fg: '#ffffff',
+        bg: '#000000',
+        bold: true,
+        italic: true,
+        underline: true,
+        strikethrough: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      SnapshotCellSchema.safeParse({
+        char: 'A',
+        extra: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      RichSnapshotLineSchema.safeParse({
+        lineNumber: 0,
+        cells: [
+          { char: 'h', fg: '#ffffff' },
+          { char: 'i', bold: true },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      SnapshotResultSchema.safeParse({
+        format: 'structured',
+        sessionId: 'session-01',
+        capturedAtSeq: 5,
+        cols: 80,
+        rows: 24,
+        cursorRow: 2,
+        cursorCol: 4,
+        isAltScreen: false,
+        visibleLines: [{ row: 0, text: 'hi' }],
+        cells: [
+          {
+            lineNumber: 0,
+            cells: [{ char: 'h' }, { char: 'i', underline: true }],
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts optional snapshot flags and screenshot metadata fields', () => {
+    expect(
+      SnapshotParamsSchema.safeParse({
+        includeScrollback: true,
+        includeCells: true,
+      }).success,
     ).toBe(true);
     expect(
       SnapshotResultSchema.safeParse({

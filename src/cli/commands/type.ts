@@ -21,14 +21,17 @@ interface CommandOptions {
   sessionId: string;
   text: string | undefined;
   file?: string;
+  appendNewline?: boolean;
 }
 
 export async function runTypeCommand(options: CommandOptions): Promise<void> {
-  const text = await resolveCommandInputText({
+  const resolvedText = await resolveCommandInputText({
     commandName: 'type',
     text: options.text,
     file: options.file,
   });
+  const text =
+    options.appendNewline === true ? resolvedText + '\n' : resolvedText;
 
   if (text.length === 0) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {

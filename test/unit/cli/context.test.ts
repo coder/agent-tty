@@ -1,49 +1,186 @@
-import { describe, expect, it } from 'vitest';
+import { Command } from 'commander';
+import type * as ResolveConfigModule from '../../../src/config/resolveConfig.js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  loadConfigFile: vi.fn(),
+}));
+
+vi.mock('../../../src/config/resolveConfig.js', async () => {
+  const actual = await vi.importActual<typeof ResolveConfigModule>(
+    '../../../src/config/resolveConfig.js',
+  );
+  return {
+    ...actual,
+    loadConfigFile: mocks.loadConfigFile,
+  };
+});
 
 import {
+  getCommandContext,
   parseTimeoutMsOption,
   resolveCommandContext,
+  resolveLogLevel,
+  setCommandContext,
 } from '../../../src/cli/context.js';
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
+import { createLogger } from '../../../src/util/logger.js';
+
+const TEST_ENV_HOME = '/tmp/from-env';
+const TEST_FLAG_HOME = '/tmp/from-flag';
 
 describe('CLI context resolution', () => {
-  it('prefers --home over AGENT_TERMINAL_HOME', () => {
-    const context = resolveCommandContext(
-      { home: '/tmp/from-flag' },
-      { AGENT_TERMINAL_HOME: '/tmp/from-env' },
-    );
-
-    expect(context.home).toBe('/tmp/from-flag');
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.loadConfigFile.mockResolvedValue(null);
   });
 
-  it('falls back to AGENT_TERMINAL_HOME when --home is absent', () => {
-    const context = resolveCommandContext(
+  it('prefers --home over AGENT_TERMINAL_HOME', async () => {
+    const context = await resolveCommandContext(
+      { home: TEST_FLAG_HOME },
+      { AGENT_TERMINAL_HOME: TEST_ENV_HOME },
+    );
+
+    expect(context.home).toBe(TEST_FLAG_HOME);
+  });
+
+  it('falls back to AGENT_TERMINAL_HOME when --home is absent', async () => {
+    const context = await resolveCommandContext(
       {},
-      { AGENT_TERMINAL_HOME: '/tmp/from-env' },
+      { AGENT_TERMINAL_HOME: TEST_ENV_HOME },
     );
 
-    expect(context.home).toBe('/tmp/from-env');
+    expect(context.home).toBe(TEST_ENV_HOME);
   });
 
-  it('defaults color-enabled output and respects --no-color', () => {
-    expect(resolveCommandContext({}, {}).colorEnabled).toBe(true);
-    expect(resolveCommandContext({ color: false }, {}).colorEnabled).toBe(
-      false,
+  it('loads config files during context resolution', async () => {
+    const configFile = {
+      logLevel: 'warn',
+      defaultProfile: 'config-profile',
+      idleTimeoutMs: 1234,
+    } as const;
+    mocks.loadConfigFile.mockResolvedValue(configFile);
+
+    const context = await resolveCommandContext({ home: TEST_FLAG_HOME }, {});
+
+    expect(mocks.loadConfigFile).toHaveBeenCalledWith(TEST_FLAG_HOME);
+    expect(context.configFile).toEqual(configFile);
+  });
+
+  it('defaults color-enabled output and respects --no-color', async () => {
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME }, {}),
+    ).resolves.toMatchObject({ colorEnabled: true });
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME, color: false }, {}),
+    ).resolves.toMatchObject({ colorEnabled: false });
+  });
+
+  it('preserves an explicit shared timeout', async () => {
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME, timeoutMs: 2500 }, {}),
+    ).resolves.toMatchObject({ timeoutMs: 2500 });
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME }, {}),
+    ).resolves.toMatchObject({ timeoutMs: undefined });
+  });
+
+  it('resolves logLevel from flag, env, config, and default precedence', async () => {
+    mocks.loadConfigFile.mockResolvedValue({ logLevel: 'warn' });
+
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME, logLevel: 'error' }, {}),
+    ).resolves.toMatchObject({ logLevel: 'error' });
+    await expect(
+      resolveCommandContext(
+        { home: TEST_FLAG_HOME },
+        {
+          AGENT_TERMINAL_HOME: TEST_ENV_HOME,
+          AGENT_TERMINAL_LOG_LEVEL: 'debug',
+        },
+      ),
+    ).resolves.toMatchObject({ logLevel: 'debug' });
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME }, {}),
+    ).resolves.toMatchObject({ logLevel: 'warn' });
+
+    mocks.loadConfigFile.mockResolvedValue(null);
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME }, {}),
+    ).resolves.toMatchObject({ logLevel: 'info' });
+  });
+
+  it('resolves profileDefault from flag, env, config, and default precedence', async () => {
+    mocks.loadConfigFile.mockResolvedValue({
+      defaultProfile: 'config-profile',
+    });
+
+    await expect(
+      resolveCommandContext(
+        { home: TEST_FLAG_HOME, profileDefault: 'flag-profile' },
+        {},
+      ),
+    ).resolves.toMatchObject({ profileDefault: 'flag-profile' });
+    await expect(
+      resolveCommandContext(
+        { home: TEST_FLAG_HOME },
+        {
+          AGENT_TERMINAL_HOME: TEST_ENV_HOME,
+          AGENT_TERMINAL_PROFILE: 'env-profile',
+        },
+      ),
+    ).resolves.toMatchObject({ profileDefault: 'env-profile' });
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME }, {}),
+    ).resolves.toMatchObject({ profileDefault: 'config-profile' });
+
+    mocks.loadConfigFile.mockResolvedValue(null);
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME }, {}),
+    ).resolves.toMatchObject({ profileDefault: undefined });
+  });
+
+  it('keeps resolving when the config file is missing', async () => {
+    mocks.loadConfigFile.mockResolvedValue(null);
+
+    const context = await resolveCommandContext(
+      { home: TEST_FLAG_HOME },
+      { AGENT_TERMINAL_LOG_LEVEL: 'debug' },
     );
+
+    expect(context.logger.getLevel()).toBe('debug');
+    expect(context.logger.shouldLog('debug')).toBe(true);
+    expect(context.logLevel).toBe('debug');
+    expect(context.configFile).toBeNull();
   });
 
-  it('preserves an explicit shared timeout', () => {
-    expect(resolveCommandContext({ timeoutMs: 2500 }, {}).timeoutMs).toBe(2500);
-    expect(resolveCommandContext({}, {}).timeoutMs).toBeUndefined();
+  it('rejects a relative --home path', async () => {
+    await expect(
+      resolveCommandContext({ home: './relative' }, {}),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      message: '--home must be an absolute path.',
+    });
   });
 
-  it('rejects a relative --home path', () => {
-    expect(() => resolveCommandContext({ home: './relative' }, {})).toThrow(
-      expect.objectContaining({
-        code: ERROR_CODES.INVALID_INPUT,
-        message: '--home must be an absolute path.',
-      }),
-    );
+  it('returns a promise from getCommandContext', async () => {
+    const program = new Command();
+    const command = program.command('version');
+    const cachedContext = Object.freeze({
+      home: TEST_FLAG_HOME,
+      timeoutMs: undefined,
+      colorEnabled: true,
+      logLevel: 'info' as const,
+      logger: createLogger('info', () => undefined),
+      profileDefault: 'default-profile',
+      configFile: null,
+    });
+    setCommandContext(command, cachedContext);
+
+    const contextPromise = getCommandContext(command);
+
+    expect(contextPromise).toBeInstanceOf(Promise);
+    await expect(contextPromise).resolves.toBe(cachedContext);
   });
 
   it('parses timeout-ms as a non-negative integer', () => {
@@ -61,6 +198,17 @@ describe('CLI context resolution', () => {
     expect(() => parseTimeoutMsOption('12.5')).toThrow(
       expect.objectContaining({
         code: ERROR_CODES.INVALID_DURATION,
+      }),
+    );
+  });
+
+  it('resolves and validates log levels', () => {
+    expect(resolveLogLevel()).toBe('info');
+    expect(resolveLogLevel('error')).toBe('error');
+    expect(() => resolveLogLevel('trace')).toThrow(
+      expect.objectContaining({
+        code: ERROR_CODES.INVALID_INPUT,
+        message: 'Log level must be one of debug, info, warn, or error.',
       }),
     );
   });

@@ -1,4 +1,4 @@
-import { mkdtemp, stat } from 'node:fs/promises';
+import { mkdtemp, realpath, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -38,7 +38,8 @@ let testHome = '';
 
 describe('gc integration', { timeout: 30000 }, () => {
   beforeEach(async () => {
-    testHome = await mkdtemp(join(tmpdir(), 'agent-terminal-gc-'));
+    // prettier-ignore
+    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-gc-')));
   });
 
   afterEach(async () => {

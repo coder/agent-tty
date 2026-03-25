@@ -39,6 +39,7 @@ import {
   DEFAULT_SHELL,
   DEFAULT_TERM,
 } from '../config/defaults.js';
+import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
 
 function parseIntegerOption(value: string): number {
@@ -85,10 +86,14 @@ function wrapAction<Args extends unknown[]>(
     const command = getActionCommand(rawArgs);
 
     try {
-      const context = getCommandContext(command);
+      const context = await getCommandContext(command);
       setColorEnabled(context.colorEnabled);
+      context.logger.debug(`starting ${commandName} command`, {
+        logLevel: context.logLevel,
+      });
       const args = rawArgs.slice(0, -1) as Args;
       await fn(...([...args, context] as [...Args, CommandContext]));
+      context.logger.debug(`completed ${commandName} command`);
     } catch (error: unknown) {
       if (error instanceof CliError) {
         emitCliError(commandName, error);
@@ -114,15 +119,29 @@ async function main(): Promise<void> {
       'Set a shared CLI timeout in milliseconds',
       parseTimeoutMsOption,
     )
-    .option('--no-color', 'Disable ANSI color in human-readable output');
+    .option('--no-color', 'Disable ANSI color in human-readable output')
+    .option('--log-level <level>', 'Set log level (debug, info, warn, error)')
+    .option('--profile <name>', 'Default render profile name');
 
-  program.hook('preAction', (_thisCommand, actionCommand) => {
-    const context = resolveCommandContext(
+  program.hook('preAction', async (_thisCommand, actionCommand) => {
+    const context = await resolveCommandContext(
       actionCommand.optsWithGlobals<GlobalCliOptions>(),
     );
     process.env.AGENT_TERMINAL_HOME = context.home;
+    // Propagate the resolved log level to the process environment so that
+    // subsystems instantiated outside the CLI context (e.g., renderer backends,
+    // host processes) inherit the correct level via createProcessLogger().
+    // This is intentional: threading a Logger instance through every factory
+    // and constructor is a larger refactor with no user-visible benefit, since
+    // the env var is set before any command handler runs.
+    process.env.AGENT_TERMINAL_LOG_LEVEL = context.logLevel;
     setColorEnabled(context.colorEnabled);
     setCommandContext(actionCommand, context);
+    context.logger.debug('resolved command context', {
+      command: actionCommand.name(),
+      home: context.home,
+      logLevel: context.logLevel,
+    });
   });
 
   program
@@ -147,8 +166,7 @@ async function main(): Promise<void> {
       wrapAction(
         'doctor',
         async (options: { json: boolean }, context: CommandContext) => {
-          void context;
-          await runDoctorCommand(options);
+          await runDoctorCommand({ ...options, context });
         },
       ),
     );
@@ -170,6 +188,11 @@ async function main(): Promise<void> {
     )
     .option('--term <value>', 'Terminal type', DEFAULT_TERM)
     .option('--name <name>', 'Human-readable session name')
+    .option(
+      '--idle-timeout-ms <ms>',
+      'Idle timeout in milliseconds (0 = disabled)',
+      parseIntegerOption,
+    )
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
@@ -185,6 +208,7 @@ async function main(): Promise<void> {
             env: string[];
             term: string;
             name?: string;
+            idleTimeoutMs?: number;
             json: boolean;
           },
           context: CommandContext,
@@ -200,6 +224,9 @@ async function main(): Promise<void> {
             envEntries: options.env,
             term: options.term,
             ...(options.name !== undefined ? { name: options.name } : {}),
+            ...(options.idleTimeoutMs !== undefined
+              ? { idleTimeoutMs: options.idleTimeoutMs }
+              : {}),
           });
         },
       ),
@@ -308,6 +335,7 @@ async function main(): Promise<void> {
     .command('type <session-id> [text]')
     .description('Type text into a session')
     .option('--file <path>', 'Read text to type from a file')
+    .option('--append-newline', 'Append a newline after the typed text', false)
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
@@ -315,7 +343,7 @@ async function main(): Promise<void> {
         async (
           sessionId: string,
           text: string | undefined,
-          options: { file?: string; json: boolean },
+          options: { file?: string; appendNewline: boolean; json: boolean },
           context: CommandContext,
         ) => {
           await runTypeCommand({
@@ -323,6 +351,7 @@ async function main(): Promise<void> {
             json: options.json,
             sessionId,
             text,
+            appendNewline: options.appendNewline,
             ...(options.file !== undefined ? { file: options.file } : {}),
           });
         },
@@ -459,6 +488,11 @@ async function main(): Promise<void> {
     )
     .option('--json', 'Emit a JSON command envelope', false)
     .option('--include-scrollback', 'Include scrollback buffer lines', false)
+    .option(
+      '--include-cells',
+      'Include per-cell style data in structured snapshots',
+      false,
+    )
     .action(
       wrapAction(
         'snapshot',
@@ -468,6 +502,7 @@ async function main(): Promise<void> {
             format: string;
             json: boolean;
             includeScrollback: boolean;
+            includeCells: boolean;
           },
           context: CommandContext,
         ) => {
@@ -477,6 +512,7 @@ async function main(): Promise<void> {
             sessionId,
             format: options.format,
             includeScrollback: options.includeScrollback,
+            includeCells: options.includeCells,
           });
         },
       ),
@@ -485,21 +521,46 @@ async function main(): Promise<void> {
   program
     .command('screenshot <session-id>')
     .description('Capture a rendered screenshot')
-    .option('--profile <name>', 'Render profile name', 'reference-dark')
+    .option('--profile <name>', 'Render profile name')
+    .option('--show-cursor', 'Show the terminal cursor in the screenshot')
+    .option('--hide-cursor', 'Hide the terminal cursor in the screenshot')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
         'screenshot',
         async (
           sessionId: string,
-          options: { profile: string; json: boolean },
+          options: {
+            profile?: string;
+            showCursor: boolean;
+            hideCursor: boolean;
+            json: boolean;
+          },
           context: CommandContext,
         ) => {
+          if (options.showCursor && options.hideCursor) {
+            throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+              message:
+                '--show-cursor and --hide-cursor are mutually exclusive.',
+            });
+          }
+
+          const cursorVisible = options.showCursor
+            ? true
+            : options.hideCursor
+              ? false
+              : undefined;
+
           await runScreenshotCommand({
             context,
             json: options.json,
             sessionId,
-            profile: options.profile,
+            ...(options.profile === undefined
+              ? {}
+              : { profile: options.profile }),
+            ...(cursorVisible === undefined
+              ? {}
+              : { showCursor: cursorVisible }),
           });
         },
       ),
@@ -514,6 +575,11 @@ async function main(): Promise<void> {
     .description('Export a recorded session artifact')
     .requiredOption('--format <format>', "Export format: 'asciicast' or 'webm'")
     .option('--out <path>', 'Explicit output path')
+    .option('--profile <name>', 'Render profile name')
+    .option(
+      '--timing <mode>',
+      'Replay timing mode for WebM: recorded, accelerated, max-speed',
+    )
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
@@ -523,6 +589,8 @@ async function main(): Promise<void> {
           options: {
             format: string;
             out?: string;
+            profile?: string;
+            timing?: string;
             json: boolean;
           },
           context: CommandContext,
@@ -533,6 +601,10 @@ async function main(): Promise<void> {
             sessionId,
             format: options.format,
             ...(options.out !== undefined ? { out: options.out } : {}),
+            ...(options.profile !== undefined
+              ? { profile: options.profile }
+              : {}),
+            ...(options.timing !== undefined ? { timing: options.timing } : {}),
           });
         },
       ),

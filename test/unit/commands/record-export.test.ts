@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -83,11 +83,16 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 
 import { runRecordExportCommand } from '../../../src/cli/commands/record-export.js';
 import { hashProfile, resolveProfile } from '../../../src/renderer/profiles.js';
+import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
   home: '/tmp/agent-terminal',
   timeoutMs: undefined,
   colorEnabled: true,
+  logLevel: 'info',
+  logger: createLogger('info', () => undefined),
+  profileDefault: undefined,
+  configFile: null,
 } as const;
 
 function createSessionRecord() {
@@ -119,7 +124,7 @@ afterEach(async () => {
 });
 
 async function createTemporaryDirectory(prefix: string): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), prefix));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), prefix)));
   temporaryDirectories.push(directory);
   return directory;
 }
@@ -429,6 +434,210 @@ describe('record export command', () => {
       expectedRenderProfileHash,
     );
     expect(emitSuccessArgs.result.durationMs).toBe(1_500);
+  });
+
+  it('resolves WebM profile from command option, context default, and builtin fallback', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+    mocks.generateWebmExport.mockResolvedValue({
+      capturedAtSeq: 1,
+      durationMs: 1_500,
+      outputEventCount: 1,
+      resizeEventCount: 1,
+      cols: 80,
+      rows: 24,
+      profileName: 'reference-light',
+      timingMode: 'accelerated',
+    });
+    const webmBytes = 12_345;
+    const webmContent = Buffer.alloc(webmBytes, 0x42);
+    mocks.stat.mockResolvedValue({ size: webmBytes });
+    mocks.readFile.mockResolvedValue(webmContent);
+
+    await runRecordExportCommand({
+      context: { ...TEST_CONTEXT, profileDefault: 'reference-light' },
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+    });
+
+    const contextDefaultCall = mocks.generateWebmExport.mock.calls.at(-1) as [
+      { profileName?: string },
+    ];
+    expect(contextDefaultCall[0].profileName).toBe('reference-light');
+
+    mocks.generateWebmExport.mockClear();
+
+    await runRecordExportCommand({
+      context: { ...TEST_CONTEXT, profileDefault: 'reference-light' },
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+      profile: 'reference-dark',
+    });
+
+    const commandProfileCall = mocks.generateWebmExport.mock.calls.at(-1) as [
+      { profileName?: string },
+    ];
+    expect(commandProfileCall[0].profileName).toBe('reference-dark');
+
+    mocks.generateWebmExport.mockClear();
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+    });
+
+    const builtinFallbackCall = mocks.generateWebmExport.mock.calls.at(-1) as [
+      { profileName?: string },
+    ];
+    expect(builtinFallbackCall[0]).not.toHaveProperty('profileName');
+  });
+
+  it('passes timing mode to generateWebmExport for webm export', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+    mocks.generateWebmExport.mockResolvedValue({
+      capturedAtSeq: 1,
+      durationMs: 1_500,
+      outputEventCount: 1,
+      resizeEventCount: 1,
+      cols: 80,
+      rows: 24,
+      profileName: 'reference-dark',
+      timingMode: 'recorded',
+    });
+    const webmBytes = 12_345;
+    const webmContent = Buffer.alloc(webmBytes, 0x42);
+    mocks.stat.mockResolvedValue({ size: webmBytes });
+    mocks.readFile.mockResolvedValue(webmContent);
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+      timing: 'recorded',
+    });
+
+    expect(mocks.generateWebmExport).toHaveBeenCalledTimes(1);
+    const callArgs = mocks.generateWebmExport.mock.calls[0] as [
+      { timingMode?: string },
+    ];
+    expect(callArgs[0].timingMode).toBe('recorded');
+  });
+
+  it('passes max-speed timing mode through to generateWebmExport', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+    mocks.generateWebmExport.mockResolvedValue({
+      capturedAtSeq: 1,
+      durationMs: 1_500,
+      outputEventCount: 1,
+      resizeEventCount: 1,
+      cols: 80,
+      rows: 24,
+      profileName: 'reference-dark',
+      timingMode: 'max-speed',
+    });
+    const webmBytes = 12_345;
+    const webmContent = Buffer.alloc(webmBytes, 0x42);
+    mocks.stat.mockResolvedValue({ size: webmBytes });
+    mocks.readFile.mockResolvedValue(webmContent);
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+      timing: 'max-speed',
+    });
+
+    expect(mocks.generateWebmExport).toHaveBeenCalledTimes(1);
+    const callArgs = mocks.generateWebmExport.mock.calls[0] as [
+      { timingMode?: string },
+    ];
+    expect(callArgs[0].timingMode).toBe('max-speed');
+  });
+
+  it('omits timingMode from generateWebmExport when timing is not specified', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+    mocks.generateWebmExport.mockResolvedValue({
+      capturedAtSeq: 1,
+      durationMs: 1_500,
+      outputEventCount: 1,
+      resizeEventCount: 1,
+      cols: 80,
+      rows: 24,
+      profileName: 'reference-dark',
+      timingMode: 'accelerated',
+    });
+    const webmBytes = 12_345;
+    const webmContent = Buffer.alloc(webmBytes, 0x42);
+    mocks.stat.mockResolvedValue({ size: webmBytes });
+    mocks.readFile.mockResolvedValue(webmContent);
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+    });
+
+    const callArgs = mocks.generateWebmExport.mock.calls[0] as [
+      { timingMode?: string },
+    ];
+    expect(callArgs[0]).not.toHaveProperty('timingMode');
+  });
+
+  it('rejects invalid timing mode', async () => {
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: false,
+        sessionId: 'session-01',
+        format: 'webm',
+        timing: 'turbo',
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+    });
+    expect(mocks.generateWebmExport).not.toHaveBeenCalled();
+  });
+
+  it('reports timing mode in artifact and result metadata for webm export', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+    mocks.generateWebmExport.mockResolvedValue({
+      capturedAtSeq: 1,
+      durationMs: 1_500,
+      outputEventCount: 1,
+      resizeEventCount: 1,
+      cols: 80,
+      rows: 24,
+      profileName: 'reference-dark',
+      timingMode: 'max-speed',
+    });
+    const webmBytes = 12_345;
+    const webmContent = Buffer.alloc(webmBytes, 0x42);
+    mocks.stat.mockResolvedValue({ size: webmBytes });
+    mocks.readFile.mockResolvedValue(webmContent);
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+      timing: 'max-speed',
+    });
+
+    const artifactCall = mocks.createArtifactEntry.mock.calls[0] as [
+      { metadata: Record<string, unknown> },
+    ];
+    expect(artifactCall[0].metadata.timingMode).toBe('max-speed');
+
+    const emitCall = mocks.emitSuccess.mock.calls[0] as [
+      { result: { metadata: Record<string, unknown> } },
+    ];
+    expect(emitCall[0].result.metadata.timingMode).toBe('max-speed');
   });
 
   it('throws SESSION_NOT_FOUND when manifest does not exist', async () => {

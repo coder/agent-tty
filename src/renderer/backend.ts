@@ -7,6 +7,11 @@ import type {
 
 export interface SnapshotOptions {
   includeScrollback?: boolean;
+  includeCells?: boolean;
+}
+
+export interface ScreenshotOptions {
+  showCursor?: boolean;
 }
 
 export interface RendererBackend {
@@ -20,7 +25,10 @@ export interface RendererBackend {
   snapshot(options?: SnapshotOptions): Promise<SemanticSnapshot>;
 
   /** Capture a screenshot as PNG. */
-  screenshot(outputPath: string): Promise<ScreenshotResult>;
+  screenshot(
+    outputPath: string,
+    options?: ScreenshotOptions,
+  ): Promise<ScreenshotResult>;
 
   /** Get current visible text (for wait operations). */
   getVisibleText(): Promise<string>;
@@ -41,16 +49,33 @@ export interface VideoRecordingOptions {
 }
 
 export interface AcceleratedTimingOptions {
+  mode: 'accelerated';
   maxGapMs: number;
   minFrameHoldMs: number;
   finalFrameHoldMs: number;
 }
 
+export interface RecordedTimingOptions {
+  mode: 'recorded';
+  finalFrameHoldMs: number;
+}
+
+export interface MaxSpeedTimingOptions {
+  mode: 'max-speed';
+  minFrameHoldMs: number;
+  finalFrameHoldMs: number;
+}
+
+export type ReplayTimingOptions =
+  | AcceleratedTimingOptions
+  | RecordedTimingOptions
+  | MaxSpeedTimingOptions;
+
 export interface VideoCapableRendererBackend extends RendererBackend {
   /** Replay events with controlled timing for video capture. */
   replayWithTiming(
     input: ReplayInput,
-    timing: AcceleratedTimingOptions,
+    timing: ReplayTimingOptions,
   ): Promise<ReplayState>;
 
   /** Finalize and save the video recording to the given path. */

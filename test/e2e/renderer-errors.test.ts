@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ERROR_CODES } from '../../src/protocol/errors.js';
+import { ScreenshotParamsSchema } from '../../src/protocol/messages.js';
 import {
   DEFAULT_CLI_TIMEOUT_MS,
   cleanupHome,
@@ -77,15 +78,34 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
     const sessionId = createSession(testHome);
     createdSessionIds.push(sessionId);
     const oversizedProfile = repeatCharacter(101);
+    const profileValidation = ScreenshotParamsSchema.safeParse({
+      profile: oversizedProfile,
+    });
 
     const envelope = runCliErrorEnvelope(
       ['screenshot', sessionId, '--profile', oversizedProfile],
       { AGENT_TERMINAL_HOME: testHome },
     );
 
+    expect(profileValidation.success).toBe(false);
+    if (profileValidation.success) {
+      throw new Error(
+        'Oversized screenshot profile should fail schema validation',
+      );
+    }
+    // This assertion is tied to Zod's current error format (v4.x). If Zod is
+    // upgraded and the issue shape or message text changes, update this test.
+    expect(profileValidation.error.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'too_big',
+        maximum: 100,
+        path: ['profile'],
+        message: 'Too big: expected string to have <=100 characters',
+      }),
+    );
     expect(envelope.command).toBe('screenshot');
     expect(envelope.error.code).toBe(ERROR_CODES.INVALID_INPUT);
-    expect(envelope.error.message).toContain('non-empty string');
+    expect(envelope.error.message).toBe('Screenshot request is invalid.');
     expect(envelope.error.details).toMatchObject({
       profile: oversizedProfile,
     });

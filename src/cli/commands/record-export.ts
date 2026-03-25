@@ -21,12 +21,17 @@ import { CliError } from '../errors.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import {
   RecordExportResultSchema,
+  ScreenshotParamsSchema,
   type RecordExportResult,
 } from '../../protocol/messages.js';
 import {
   appendArtifact,
   createArtifactEntry,
 } from '../../storage/artifactManifest.js';
+import {
+  ReplayTimingModeSchema,
+  type ReplayTimingMode,
+} from '../../protocol/schemas.js';
 import {
   artifactPath,
   ensureArtifactsDir,
@@ -56,6 +61,8 @@ interface CommandOptions {
   sessionId: string;
   format?: string;
   out?: string;
+  profile?: string;
+  timing?: string;
 }
 
 function resolveRecordExportFormat(
@@ -74,6 +81,56 @@ function resolveRecordExportFormat(
   }
 
   return formatResult.data;
+}
+
+function resolveReplayTimingMode(
+  timing: string | undefined,
+): ReplayTimingMode | undefined {
+  if (timing === undefined) {
+    return undefined;
+  }
+
+  const timingResult = ReplayTimingModeSchema.safeParse(timing);
+
+  if (!timingResult.success) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message:
+        'Replay timing mode must be one of: recorded, accelerated, max-speed.',
+      details: {
+        timing,
+      },
+      cause: timingResult.error,
+    });
+  }
+
+  return timingResult.data;
+}
+
+function resolveWebmProfileName(
+  commandProfile: string | undefined,
+  contextProfileDefault: string | undefined,
+): string | undefined {
+  const effectiveProfile = commandProfile ?? contextProfileDefault;
+
+  if (effectiveProfile === undefined) {
+    return undefined;
+  }
+
+  const requestResult = ScreenshotParamsSchema.safeParse({
+    profile: effectiveProfile,
+  });
+
+  if (!requestResult.success) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: 'Record export profile is invalid.',
+      details: {
+        profile: effectiveProfile,
+      },
+      cause: requestResult.error,
+    });
+  }
+
+  return requestResult.data.profile;
 }
 
 async function resolveOutputPath(
@@ -145,6 +202,7 @@ export async function runRecordExportCommand(
   options: CommandOptions,
 ): Promise<void> {
   const format = resolveRecordExportFormat(options.format);
+  const timingMode = resolveReplayTimingMode(options.timing);
   const home = options.context.home;
   let sessionDirectory: string;
 
@@ -249,6 +307,11 @@ export async function runRecordExportCommand(
       invariant(bytes > 0, 'asciicast export artifact must not be empty');
       sha256 = createHash('sha256').update(contentsBuffer).digest('hex');
     } else {
+      const webmProfileName = resolveWebmProfileName(
+        options.profile,
+        options.context.profileDefault,
+      );
+
       invariant(events.length > 0, 'webm export requires at least one event');
       const webmResult: WebmExportResult = await generateWebmExport(
         {
@@ -257,6 +320,10 @@ export async function runRecordExportCommand(
           manifest,
           events,
           outputPath: artifactOutputPath,
+          ...(webmProfileName !== undefined
+            ? { profileName: webmProfileName }
+            : {}),
+          ...(timingMode !== undefined ? { timingMode } : {}),
         },
         {
           backendFactory: (sessionId, profile, videoOptions) =>

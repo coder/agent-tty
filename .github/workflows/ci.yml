@@ -50,3 +50,33 @@ jobs:
 
       - name: Build
         run: mise run build
+
+  # macOS compilation and static-analysis counterpart to the Ubuntu quality
+  # gates above.  Tests are excluded because the macOS GitHub Actions runner
+  # has pre-existing issues with PTY spawning and Unix domain sockets that
+  # cause integration/e2e test failures.  The full test suite runs on Linux;
+  # macOS validates that the code compiles and passes static checks.
+  quality-gates-macos:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up mise
+        uses: jdx/mise-action@v3
+
+      - name: Install CI dependencies
+        run: mise run bootstrap-ci
+
+      - name: Check formatting
+        run: mise run format-check
+
+      - name: Lint
+        run: mise run lint
+
+      - name: Typecheck
+        run: mise run typecheck
+
+      - name: Build
+        run: mise run build

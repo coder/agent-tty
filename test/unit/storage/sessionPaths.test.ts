@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -83,7 +83,8 @@ describe('session paths', () => {
 
 describe('manifest storage', () => {
   it('writes and reads manifests with validation', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'agent-terminal-home-'));
+    // prettier-ignore
+    const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-home-')));
     temporaryDirectories.push(home);
     const path = manifestPath(sessionDir(home, 'session-01'));
     const record = createSessionRecord();
@@ -96,7 +97,8 @@ describe('manifest storage', () => {
   });
 
   it('returns null when a manifest does not exist', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'agent-terminal-home-'));
+    // prettier-ignore
+    const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-home-')));
     temporaryDirectories.push(home);
     const path = manifestPath(sessionDir(home, 'missing-session'));
 
@@ -104,7 +106,8 @@ describe('manifest storage', () => {
   });
 
   it('rejects invalid manifest contents during reads', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'agent-terminal-home-'));
+    // prettier-ignore
+    const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-home-')));
     temporaryDirectories.push(home);
     const path = manifestPath(sessionDir(home, 'session-01'));
 

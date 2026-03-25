@@ -1,0 +1,5 @@
+{
+  "logLevel": "debug",
+  "defaultProfile": "my-config-profile",
+  "idleTimeoutMs": 3000
+}
