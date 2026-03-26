@@ -386,7 +386,9 @@ async function main(): Promise<void> {
 
   program
     .command('run <session-id> [command]')
-    .description('Run a command in a session and optionally wait for completion')
+    .description(
+      'Run a command in a session and optionally wait for completion',
+    )
     .option('--file <path>', 'Read command text from a file')
     .option('--timeout <ms>', 'Wait timeout in milliseconds', '30000')
     .option('--no-wait', 'Do not wait for completion')
