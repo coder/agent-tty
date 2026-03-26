@@ -658,7 +658,7 @@ export async function runHost(sessionId: string): Promise<void> {
         invariant(marker !== undefined, 'run marker must exist when waiting');
       }
       const injectedText = shouldWait
-        ? `${command}\necho ${marker as string}\n`
+        ? `${command}\necho "${marker as string}"\n`
         : `${command}\n`;
       const encoded = encodePaste(injectedText);
       pty.write(encoded);
@@ -685,7 +685,10 @@ export async function runHost(sessionId: string): Promise<void> {
       invariant(waitMarker !== undefined, 'run wait marker must be defined');
       let clearWaitPoll: (() => void) | null = null;
 
-      const pollCondition = new Promise<{ matched: boolean }>((resolve) => {
+      const pollCondition = new Promise<{
+        matched: boolean;
+        exited: boolean;
+      }>((resolve) => {
         let pollInFlight = false;
         let consecutiveFailures = 0;
 
@@ -710,14 +713,29 @@ export async function runHost(sessionId: string): Promise<void> {
 
               if (visibleText.includes(waitMarker)) {
                 clearInterval(checkInterval);
-                resolve({ matched: true });
+                resolve({ matched: true, exited: false });
+                return;
+              }
+
+              if (!isSessionRunning(state)) {
+                clearInterval(checkInterval);
+                resolve({ matched: false, exited: true });
+                return;
               }
             } catch (pollError) {
               void pollError;
               consecutiveFailures += 1;
+
+              if (!isSessionRunning(state)) {
+                clearInterval(checkInterval);
+                resolve({ matched: false, exited: true });
+                return;
+              }
+
               if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
                 clearInterval(checkInterval);
-                resolve({ matched: false });
+                resolve({ matched: false, exited: false });
+                return;
               }
             } finally {
               pollInFlight = false;
@@ -730,7 +748,10 @@ export async function runHost(sessionId: string): Promise<void> {
         };
       });
 
-      const pollResult = await new Promise<{ matched: boolean }>((resolve) => {
+      const pollResult = await new Promise<{
+        matched: boolean;
+        exited: boolean;
+      }>((resolve) => {
         let resolved = false;
         const timeoutHandle = setTimeout(() => {
           if (resolved) {
@@ -738,7 +759,7 @@ export async function runHost(sessionId: string): Promise<void> {
           }
           resolved = true;
           clearWaitPoll?.();
-          resolve({ matched: false });
+          resolve({ matched: false, exited: false });
         }, effectiveTimeoutMs);
 
         void pollCondition.then((result) => {
@@ -757,7 +778,7 @@ export async function runHost(sessionId: string): Promise<void> {
       return {
         accepted: true as const,
         completed: pollResult.matched,
-        timedOut: !pollResult.matched,
+        timedOut: !pollResult.matched && !pollResult.exited,
         seq,
         durationMs,
         marker: waitMarker,

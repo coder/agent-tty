@@ -106,7 +106,24 @@ export const InputRunEventPayloadSchema = z
     marker: z.string().optional(),
     noWait: z.boolean(),
   })
-  .strict();
+  .strict()
+  .superRefine((obj, ctx) => {
+    if (!obj.noWait && obj.marker === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'marker is required when noWait is false',
+        path: ['marker'],
+      });
+    }
+
+    if (obj.noWait && obj.marker !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'marker must not be set when noWait is true',
+        path: ['marker'],
+      });
+    }
+  });
 export type InputRunEventPayload = z.infer<typeof InputRunEventPayloadSchema>;
 
 export const ResizeEventPayloadSchema = z

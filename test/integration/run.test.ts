@@ -98,6 +98,33 @@ describe('run command integration', { timeout: 45_000 }, () => {
     expect(envelope.result.accepted).toBe(true);
   });
 
+  it('handles multiline command input', async () => {
+    sessionId = createSession(testHome, ['/bin/bash']);
+    await sleep(1000);
+
+    const result = runCli(
+      ['run', sessionId, 'echo line1\necho line2', '--json'],
+      testEnv(),
+      30_000,
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+
+    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+      accepted: true;
+      completed: boolean;
+      timedOut: boolean;
+      seq: number;
+      durationMs: number;
+      marker: string;
+    }>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.accepted).toBe(true);
+    expect(envelope.result.completed).toBe(true);
+    expect(envelope.result.timedOut).toBe(false);
+  });
+
   it('rejects inline text and --file together', () => {
     const scriptPath = join(testHome, 'test-input.txt');
     writeFileSync(scriptPath, 'echo hello');
@@ -172,6 +199,38 @@ describe('run command integration', { timeout: 45_000 }, () => {
     expect(envelope.result.completed).toBe(false);
     expect(envelope.result.durationMs).toBeGreaterThanOrEqual(1500);
     expect(envelope.result.marker).toMatch(/^__AT_MARKER_/);
+  });
+
+  it('detects session exit during wait before timing out', async () => {
+    sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      'stty -echo; exec sleep 2',
+    ]);
+    await sleep(500);
+
+    const result = runCli(
+      ['run', sessionId, 'echo never-runs', '--timeout', '10000', '--json'],
+      testEnv(),
+      30_000,
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+
+    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+      accepted: true;
+      completed: boolean;
+      timedOut: boolean;
+      seq: number;
+      durationMs: number;
+      marker: string;
+    }>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.accepted).toBe(true);
+    expect(envelope.result.completed).toBe(false);
+    expect(envelope.result.timedOut).toBe(false);
+    expect(envelope.result.durationMs).toBeLessThan(10_000);
   });
 
   it('completes when marker is found in rendered output', async () => {

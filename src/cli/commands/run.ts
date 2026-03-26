@@ -2,6 +2,7 @@ import type { CommandContext } from '../context.js';
 
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
+import type { RunResult } from '../../protocol/messages.js';
 import { RunResultSchema } from '../../protocol/messages.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
@@ -11,15 +12,6 @@ import {
   socketPath,
 } from '../../storage/sessionPaths.js';
 import { resolveCommandInputText } from './inputSource.js';
-
-export interface RunResult {
-  accepted: true;
-  completed?: boolean | undefined;
-  timedOut?: boolean | undefined;
-  seq: number;
-  durationMs?: number | undefined;
-  marker?: string | undefined;
-}
 
 interface CommandOptions {
   context: CommandContext;
@@ -43,6 +35,15 @@ export async function runRunCommand(options: CommandOptions): Promise<void> {
       message: 'Command text must not be empty.',
       details: {
         command,
+      },
+    });
+  }
+
+  if (!Number.isFinite(options.timeout) || options.timeout <= 0) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: 'Timeout must be a positive integer in milliseconds',
+      details: {
+        timeout: options.timeout,
       },
     });
   }

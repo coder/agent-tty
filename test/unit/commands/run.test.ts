@@ -180,6 +180,18 @@ describe('run command', () => {
     );
   });
 
+  it.each([0, -5])('rejects invalid timeout values (%s)', async (timeout) => {
+    await expect(
+      runRunCommand(createOptions({ timeout })),
+    ).rejects.toMatchObject({
+      name: 'CliError',
+      code: ERROR_CODES.INVALID_INPUT,
+      message: 'Timeout must be a positive integer in milliseconds',
+    });
+    expect(mocks.readManifestIfExists).not.toHaveBeenCalled();
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
   it('throws SESSION_NOT_FOUND when the session does not exist', async () => {
     mocks.readManifestIfExists.mockResolvedValueOnce(null);
 
