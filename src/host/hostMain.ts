@@ -641,10 +641,6 @@ export async function runHost(sessionId: string): Promise<void> {
         typeof command === 'string' && command.length > 0,
         'run command must be a non-empty string',
       );
-      invariant(
-        noWait === undefined || typeof noWait === 'boolean',
-        'run noWait must be a boolean when provided',
-      );
       if (timeoutMs !== undefined) {
         invariant(
           Number.isInteger(timeoutMs) && timeoutMs > 0,
@@ -652,14 +648,17 @@ export async function runHost(sessionId: string): Promise<void> {
         );
       }
 
-      const shouldWait = noWait !== true;
+      const shouldWait = !noWait;
       let marker: string | undefined;
       if (shouldWait) {
         marker = `__AT_MARKER_${crypto.randomUUID().replace(/-/g, '')}__`;
       }
 
+      if (shouldWait) {
+        invariant(marker !== undefined, 'run marker must exist when waiting');
+      }
       const injectedText = shouldWait
-        ? `${command}\necho ${marker}\n`
+        ? `${command}\necho ${marker as string}\n`
         : `${command}\n`;
       const encoded = encodePaste(injectedText);
       pty.write(encoded);
@@ -668,7 +667,7 @@ export async function runHost(sessionId: string): Promise<void> {
       const seq = await eventLog.append('input_run', {
         command,
         ...(marker === undefined ? {} : { marker }),
-        noWait: noWait === true,
+        noWait,
       });
 
       if (!shouldWait) {
