@@ -14,6 +14,7 @@ import { runInspectCommand } from './commands/inspect.js';
 import { runListCommand } from './commands/list.js';
 import { runMarkCommand } from './commands/mark.js';
 import { runPasteCommand } from './commands/paste.js';
+import { runRunCommand } from './commands/run.js';
 import { runRecordExportCommand } from './commands/record-export.js';
 import { runResizeCommand } from './commands/resize.js';
 import { runScreenshotCommand } from './commands/screenshot.js';
@@ -378,6 +379,40 @@ async function main(): Promise<void> {
             sessionId,
             text,
             ...(options.file !== undefined ? { file: options.file } : {}),
+          });
+        },
+      ),
+    );
+
+  program
+    .command('run <session-id> [command]')
+    .description('Run a command in a session and optionally wait for completion')
+    .option('--file <path>', 'Read command text from a file')
+    .option('--timeout <ms>', 'Wait timeout in milliseconds', '30000')
+    .option('--no-wait', 'Do not wait for completion')
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'run',
+        async (
+          sessionId: string,
+          text: string | undefined,
+          options: {
+            file?: string;
+            timeout: string;
+            wait: boolean;
+            json: boolean;
+          },
+          context: CommandContext,
+        ) => {
+          await runRunCommand({
+            context,
+            json: options.json,
+            sessionId,
+            text,
+            ...(options.file !== undefined ? { file: options.file } : {}),
+            timeout: Number.parseInt(options.timeout, 10),
+            wait: options.wait,
           });
         },
       ),
