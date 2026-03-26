@@ -15,10 +15,19 @@
         --accent: #93c5fd;
         --border: #334155;
       }
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
         background: linear-gradient(180deg, #020617 0%, var(--bg) 100%);
         color: var(--text);
         line-height: 1.5;
@@ -28,22 +37,38 @@
         margin: 0 auto;
         padding: 32px 20px 48px;
       }
-      a { color: var(--accent); }
-      header, section, .card {
+      a {
+        color: var(--accent);
+      }
+      header,
+      section,
+      .card {
         background: rgb(15 23 42 / 0.88);
         border: 1px solid var(--border);
         border-radius: 16px;
         box-shadow: 0 18px 40px rgb(2 6 23 / 0.25);
       }
-      header, section {
+      header,
+      section {
         padding: 24px;
         margin-bottom: 20px;
       }
-      h1, h2, h3, h4, h5, h6 {
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
         margin-top: 0;
         color: #f8fafc;
       }
-      p, li, dd, td, th, summary, figcaption {
+      p,
+      li,
+      dd,
+      td,
+      th,
+      summary,
+      figcaption {
         overflow-wrap: anywhere;
       }
       .subtle {
@@ -80,7 +105,8 @@
       .note-card > *:last-child {
         margin-bottom: 0;
       }
-      img, video {
+      img,
+      video {
         width: 100%;
         border-radius: 12px;
         background: #020617;
@@ -105,7 +131,8 @@
         white-space: pre-wrap;
       }
       code {
-        font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family:
+          'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       details > summary {
         cursor: pointer;
@@ -115,7 +142,8 @@
         width: 100%;
         border-collapse: collapse;
       }
-      th, td {
+      th,
+      td {
         text-align: left;
         padding: 10px 12px;
         border-bottom: 1px solid var(--border);
@@ -138,53 +166,162 @@
         <p class="subtle">Portable review bundle</p>
         <h1>Week 9 Release Readiness — 0.1.0 Proof</h1>
         <p class="subtle">Bundle directory: 20260326-week9-release-readiness</p>
-        <p>End-to-end proof of Week 9 capabilities: isolated sessions, run command, isolation-aware doctor diagnostics, and renderer/export artifacts.</p>
+        <p>
+          End-to-end proof of Week 9 capabilities: isolated sessions, run
+          command, isolation-aware doctor diagnostics, and renderer/export
+          artifacts.
+        </p>
       </header>
       <section>
-  <h2>Warnings</h2>
-  <ul><li>Manifest artifact was not found on disk: logs/14-validate-bundle.txt</li><li>Manifest artifact was not found on disk: index.html</li></ul>
-</section>
+        <h2>Warnings</h2>
+        <ul>
+          <li>
+            Manifest artifact was not found on disk: logs/14-validate-bundle.txt
+          </li>
+          <li>Manifest artifact was not found on disk: index.html</li>
+        </ul>
+      </section>
       <section>
-  <h2>Manifest summary</h2>
-  <dl class="facts"><div><dt>Bundle</dt><dd>20260326-week9-release-readiness</dd></div><div><dt>Date</dt><dd>2026-03-26T21:18:20Z</dd></div><div><dt>Result</dt><dd>pass</dd></div><div><dt>Week</dt><dd>9</dd></div><div><dt>Commands</dt><dd>13</dd></div><div><dt>Manifest artifacts</dt><dd>23</dd></div><div><dt>Discovered files</dt><dd>38</dd></div></dl>
-  <div class="card"><h3>Commands</h3><ul><li>./node_modules/.bin/tsx src/cli/main.ts doctor --json --home &lt;isolated-home&gt;</li><li>./node_modules/.bin/tsx src/cli/main.ts create --json --home &lt;isolated-home&gt; -- /bin/bash</li><li>./node_modules/.bin/tsx src/cli/main.ts inspect &lt;session-id&gt; --json --home &lt;isolated-home&gt;</li><li>./node_modules/.bin/tsx src/cli/main.ts run &lt;session-id&gt; &#39;echo &quot;Week 9 release readiness proof&quot;&#39; --json --home &lt;isolated-home&gt;</li><li>./node_modules/.bin/tsx src/cli/main.ts run &lt;session-id&gt; &#39;uname -a &amp;&amp; node --version&#39; --json --home &lt;isolated-home&gt;</li><li>./node_modules/.bin/tsx src/cli/main.ts wait &lt;session-id&gt; --screen-stable-ms 1000 --timeout 5000 --json --home &lt;isolated-home&gt;</li><li>./node_modules/.bin/tsx src/cli/main.ts screenshot &lt;session-id&gt; --json --home &lt;isolated-home&gt;</li><li>./node_modules/.bin/tsx src/cli/main.ts snapshot &lt;session-id&gt; --json --home &lt;isolated-home&gt;</li><li>./node_modules/.bin/tsx src/cli/main.ts record export &lt;session-id&gt; --format asciicast --json --home &lt;isolated-home&gt;</li><li>./node_modules/.bin/tsx src/cli/main.ts record export &lt;session-id&gt; --format webm --json --home &lt;isolated-home&gt;</li><li>./node_modules/.bin/tsx src/cli/main.ts destroy &lt;session-id&gt; --json --home &lt;isolated-home&gt;</li><li>./node_modules/.bin/tsx src/tools/review-bundle.ts dogfood/20260326-week9-release-readiness</li><li>./node_modules/.bin/tsx src/tools/validate-bundle.ts dogfood/20260326-week9-release-readiness --profile interactive-renderer</li></ul></div>
-</section>
+        <h2>Manifest summary</h2>
+        <dl class="facts">
+          <div>
+            <dt>Bundle</dt>
+            <dd>20260326-week9-release-readiness</dd>
+          </div>
+          <div>
+            <dt>Date</dt>
+            <dd>2026-03-26T21:18:20Z</dd>
+          </div>
+          <div>
+            <dt>Result</dt>
+            <dd>pass</dd>
+          </div>
+          <div>
+            <dt>Week</dt>
+            <dd>9</dd>
+          </div>
+          <div>
+            <dt>Commands</dt>
+            <dd>13</dd>
+          </div>
+          <div>
+            <dt>Manifest artifacts</dt>
+            <dd>23</dd>
+          </div>
+          <div>
+            <dt>Discovered files</dt>
+            <dd>38</dd>
+          </div>
+        </dl>
+        <div class="card">
+          <h3>Commands</h3>
+          <ul>
+            <li>
+              ./node_modules/.bin/tsx src/cli/main.ts doctor --json --home
+              &lt;isolated-home&gt;
+            </li>
+            <li>
+              ./node_modules/.bin/tsx src/cli/main.ts create --json --home
+              &lt;isolated-home&gt; -- /bin/bash
+            </li>
+            <li>
+              ./node_modules/.bin/tsx src/cli/main.ts inspect &lt;session-id&gt;
+              --json --home &lt;isolated-home&gt;
+            </li>
+            <li>
+              ./node_modules/.bin/tsx src/cli/main.ts run &lt;session-id&gt;
+              &#39;echo &quot;Week 9 release readiness proof&quot;&#39; --json
+              --home &lt;isolated-home&gt;
+            </li>
+            <li>
+              ./node_modules/.bin/tsx src/cli/main.ts run &lt;session-id&gt;
+              &#39;uname -a &amp;&amp; node --version&#39; --json --home
+              &lt;isolated-home&gt;
+            </li>
+            <li>
+              ./node_modules/.bin/tsx src/cli/main.ts wait &lt;session-id&gt;
+              --screen-stable-ms 1000 --timeout 5000 --json --home
+              &lt;isolated-home&gt;
+            </li>
+            <li>
+              ./node_modules/.bin/tsx src/cli/main.ts screenshot
+              &lt;session-id&gt; --json --home &lt;isolated-home&gt;
+            </li>
+            <li>
+              ./node_modules/.bin/tsx src/cli/main.ts snapshot
+              &lt;session-id&gt; --json --home &lt;isolated-home&gt;
+            </li>
+            <li>
+              ./node_modules/.bin/tsx src/cli/main.ts record export
+              &lt;session-id&gt; --format asciicast --json --home
+              &lt;isolated-home&gt;
+            </li>
+            <li>
+              ./node_modules/.bin/tsx src/cli/main.ts record export
+              &lt;session-id&gt; --format webm --json --home
+              &lt;isolated-home&gt;
+            </li>
+            <li>
+              ./node_modules/.bin/tsx src/cli/main.ts destroy &lt;session-id&gt;
+              --json --home &lt;isolated-home&gt;
+            </li>
+            <li>
+              ./node_modules/.bin/tsx src/tools/review-bundle.ts
+              dogfood/20260326-week9-release-readiness
+            </li>
+            <li>
+              ./node_modules/.bin/tsx src/tools/validate-bundle.ts
+              dogfood/20260326-week9-release-readiness --profile
+              interactive-renderer
+            </li>
+          </ul>
+        </div>
+      </section>
       <section>
-  <h2>Screenshot gallery</h2>
-  <div class="gallery">
-    
-      <figure class="card">
-        <img src="screenshots/01-after-run.png" alt="01-after-run.png" loading="lazy" />
-        <figcaption>
-          <a href="screenshots/01-after-run.png">screenshots/01-after-run.png</a>
-          <span>21.9 KB</span>
-        </figcaption>
-      </figure>
-  </div>
-</section>
+        <h2>Screenshot gallery</h2>
+        <div class="gallery">
+          <figure class="card">
+            <img
+              src="screenshots/01-after-run.png"
+              alt="01-after-run.png"
+              loading="lazy"
+            />
+            <figcaption>
+              <a href="screenshots/01-after-run.png"
+                >screenshots/01-after-run.png</a
+              >
+              <span>21.9 KB</span>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
       <section>
-  <h2>Video gallery</h2>
-  <div class="gallery">
-    
-      <figure class="card">
-        <video controls preload="metadata" src="videos/week9.webm"></video>
-        <figcaption>
-          <a href="videos/week9.webm">videos/week9.webm</a>
-          <span>52.9 KB</span>
-        </figcaption>
-      </figure>
-  </div>
-</section>
+        <h2>Video gallery</h2>
+        <div class="gallery">
+          <figure class="card">
+            <video controls preload="metadata" src="videos/week9.webm"></video>
+            <figcaption>
+              <a href="videos/week9.webm">videos/week9.webm</a>
+              <span>52.9 KB</span>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
       <section>
-  <h2>Recordings</h2>
-  <ul><li><a href="recordings/week9.cast">recordings/week9.cast</a> <span class="subtle">(1.2 KB)</span></li></ul>
-</section>
+        <h2>Recordings</h2>
+        <ul>
+          <li>
+            <a href="recordings/week9.cast">recordings/week9.cast</a>
+            <span class="subtle">(1.2 KB)</span>
+          </li>
+        </ul>
+      </section>
       <section>
-  <h2>JSON outputs</h2>
-  
-  <details class="card">
-    <summary>logs/01-doctor.json</summary>
-    <pre><code>{
+        <h2>JSON outputs</h2>
+
+        <details class="card">
+          <summary>logs/01-doctor.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;doctor&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:16.307Z&quot;,
@@ -314,10 +451,10 @@
     ]
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/02-create.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/02-create.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;create&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:17.866Z&quot;,
@@ -329,10 +466,10 @@
     &quot;shell&quot;: &quot;/bin/bash&quot;
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/03-create-inspect.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/03-create-inspect.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;inspect&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:18.643Z&quot;,
@@ -376,10 +513,10 @@
     }
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/04-run-echo.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/04-run-echo.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;run&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:19.930Z&quot;,
@@ -392,10 +529,10 @@
     &quot;marker&quot;: &quot;__AT_MARKER_36ecdc23dce2469cad11f6ac1dd08989__&quot;
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/05-run-sysinfo.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/05-run-sysinfo.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;run&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:20.921Z&quot;,
@@ -408,10 +545,10 @@
     &quot;marker&quot;: &quot;__AT_MARKER_b9817c92a128446fa9ed0f159f7ee9ab__&quot;
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/06-wait-stable.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/06-wait-stable.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;wait&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:22.877Z&quot;,
@@ -423,10 +560,10 @@
     &quot;capturedAtSeq&quot;: 7
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/07-screenshot.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/07-screenshot.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;screenshot&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:23.783Z&quot;,
@@ -446,10 +583,10 @@
     &quot;renderProfileHash&quot;: &quot;8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d&quot;
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/08-snapshot.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/08-snapshot.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;snapshot&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:24.585Z&quot;,
@@ -562,10 +699,10 @@
     ]
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/09-export-asciicast.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/09-export-asciicast.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;record export&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:25.360Z&quot;,
@@ -588,10 +725,10 @@
     }
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/10-export-webm.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/10-export-webm.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;record export&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:28.244Z&quot;,
@@ -614,10 +751,10 @@
     }
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/11-final-inspect.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/11-final-inspect.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;inspect&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:29.021Z&quot;,
@@ -666,10 +803,10 @@
     }
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>logs/12-destroy.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>logs/12-destroy.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;destroy&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:29.897Z&quot;,
@@ -678,10 +815,10 @@
     &quot;destroyed&quot;: true
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>snapshots/01-doctor.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>snapshots/01-doctor.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;doctor&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:16.307Z&quot;,
@@ -811,10 +948,10 @@
     ]
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>snapshots/02-post-run-structured.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>snapshots/02-post-run-structured.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;snapshot&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:24.585Z&quot;,
@@ -927,10 +1064,10 @@
     ]
   }
 }</code></pre>
-  </details>
-  <details class="card">
-    <summary>snapshots/03-final-inspect.json</summary>
-    <pre><code>{
+        </details>
+        <details class="card">
+          <summary>snapshots/03-final-inspect.json</summary>
+          <pre><code>{
   &quot;ok&quot;: true,
   &quot;command&quot;: &quot;inspect&quot;,
   &quot;timestamp&quot;: &quot;2026-03-26T21:22:29.021Z&quot;,
@@ -979,35 +1116,230 @@
     }
   }
 }</code></pre>
-  </details>
-</section>
+        </details>
+      </section>
       <section>
-  <h2>Notes</h2>
-  
-  <article class="card note-card">
-    <h3><a href="notes.md">notes.md</a></h3>
-    <h1>2026-03-26 dogfood — Week 9 release-readiness proof</h1>
-<h2>Bundle metadata</h2>
-<ul><li><strong>Bundle path:</strong> <code>dogfood/20260326-week9-release-readiness/</code></li><li><strong>CLI entrypoint:</strong> <code>src/cli/main.ts</code></li><li><strong>Lower-level run proof:</strong> <code>dogfood/run-command/</code></li><li><strong>Isolated home record:</strong> <code>isolated-home.txt</code></li><li><strong>Session ID record:</strong> <code>session-id.txt</code></li><li><strong>Primary evidence:</strong> <code>logs/01-doctor.json</code>, <code>logs/03-create-inspect.json</code>, <code>logs/04-run-echo.json</code>, <code>logs/05-run-sysinfo.json</code>, <code>logs/07-screenshot.json</code>, <code>logs/08-snapshot.json</code>, <code>logs/09-export-asciicast.json</code>, <code>logs/10-export-webm.json</code>, <code>logs/11-final-inspect.json</code>, <code>logs/12-destroy.json</code></li><li><strong>Bundle-local JSON mirrors for validation/review tooling:</strong> <code>snapshots/01-doctor.json</code>, <code>snapshots/02-post-run-structured.json</code>, <code>snapshots/03-final-inspect.json</code></li></ul>
-<h2>What this bundle proves</h2>
-<p>This bundle captures a full Week 9 release-readiness path against an isolated <code>--home</code> directory. It exercises the new isolation-aware <code>doctor</code> checks, creates a fresh PTY-backed session, runs two in-session commands through the new <code>run</code> command, waits for renderer stability, and exports screenshot, snapshot, asciicast, and WebM artifacts from the same session.</p>
-<p>The strongest Week 9-specific proof points are:</p>
-<ul><li><code>logs/01-doctor.json</code> shows the new <code>home_isolation</code> environment check passing for the temp home recorded in <code>isolated-home.txt</code>.</li><li><code>logs/01-doctor.json</code> also shows <code>browser_cache_accessible</code> passing against <code>/home/coder/.cache/ms-playwright</code>, proving the renderer browser-path isolation work still finds the original Playwright cache while the agent-terminal home is isolated.</li><li><code>logs/04-run-echo.json</code> and <code>logs/05-run-sysinfo.json</code> show <code>run</code> accepting and completing both in-session commands with completion markers.</li><li><code>logs/06-wait-stable.json</code> confirms <code>wait --screen-stable-ms 1000</code> matched before visual capture.</li><li><code>logs/07-screenshot.json</code>, <code>screenshots/01-after-run.png</code>, <code>logs/09-export-asciicast.json</code>, <code>recordings/week9.cast</code>, <code>logs/10-export-webm.json</code>, and <code>videos/week9.webm</code> prove the renderer/export stack can still capture evidence from that isolated session.</li><li><code>logs/11-final-inspect.json</code> reports a healthy live renderer runtime with <code>usedOfflineReplay: false</code> plus exactly one screenshot, one snapshot, one recording, and one video artifact.</li></ul>
-<h2>Screenshot and recording notes</h2>
-<ul><li><strong>Screenshot:</strong> <code>screenshots/01-after-run.png</code> is the copied renderer screenshot from <code>logs/07-screenshot.json</code>. It shows the bash session after the two <code>run</code> invocations and their completion-marker lines.</li><li><strong>Snapshot:</strong> <code>logs/08-snapshot.json</code> is the structured renderer snapshot captured from the same frame sequence (<code>capturedAtSeq: 5</code>), and <code>snapshots/02-post-run-structured.json</code> mirrors it in a validator-visible JSON location.</li><li><strong>Asciicast:</strong> <code>recordings/week9.cast</code> is the exported terminal event-log recording (<code>1177</code> bytes).</li><li><strong>WebM:</strong> <code>videos/week9.webm</code> is the browser-rendered replay video (<code>52509</code> bytes).</li></ul>
-<h2>Environment details</h2>
-<ul><li><strong>Node:</strong> <code>v22.19.0</code></li><li><strong>OS:</strong> <code>Linux aaaaaaa 6.8.0-94-generic #96-Ubuntu SMP PREEMPT_DYNAMIC Fri Jan 9 20:36:55 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux</code></li><li><strong>Neovim:</strong> <code>NVIM v0.7.2</code></li><li><strong>Renderer browser cache used by doctor:</strong> <code>/home/coder/.cache/ms-playwright</code></li></ul>
-<h2>Known limitations / acceptable failures</h2>
-<ul><li><code>doctor</code> intentionally reported <code>result.ok: false</code> in <code>logs/01-doctor.json</code> because the workspace is running Node <code>v22.19.0</code> while the project requires Node <code>24+</code>. That is a real environment mismatch, not a Week 9 regression. The new Week 9 isolation-aware checks (<code>home_isolation</code> and <code>browser_cache_accessible</code>) still passed, which is the behavior this bundle needed to prove.</li><li>The bundle includes JSON mirrors under <code>snapshots/</code> because the review/validation tooling classifies <code>logs/</code> entries as support files rather than JSON artifacts.</li><li>The renderer snapshot shows the echoed <code>run</code> command lines and completion markers rather than the full stdout payload for the <code>run</code> commands. That matches the existing lower-level <code>dogfood/run-command/</code> proof and still demonstrates the end-to-end <code>run -&gt; wait -&gt; renderer capture -&gt; export</code> flow.</li><li>The future Neovim/LazyVim review scenario remains out of scope for this bundle. This environment only has Neovim <code>0.7.2</code>, while the target scenario calls for Neovim <code>0.8+</code> plus Nerd Fonts.</li></ul>
-<h2>Suggested review order</h2>
-<ol><li>Read this file for the narrative and known limitations.</li><li>Open <code>logs/01-doctor.json</code> and confirm <code>home_isolation</code> plus <code>browser_cache_accessible</code> passed.</li><li>Review <code>logs/02-create.json</code> and <code>logs/03-create-inspect.json</code> to confirm the isolated session was created and is running.</li><li>Review <code>logs/04-run-echo.json</code>, <code>logs/05-run-sysinfo.json</code>, and <code>logs/06-wait-stable.json</code> for the <code>run</code> and stability-wait evidence.</li><li>Open <code>screenshots/01-after-run.png</code> and <code>logs/08-snapshot.json</code> for the visual renderer state.</li><li>Play <code>recordings/week9.cast</code> and <code>videos/week9.webm</code> for replay/export proof.</li><li>Finish with <code>logs/11-final-inspect.json</code> and <code>logs/12-destroy.json</code> to confirm artifact health and cleanup.</li><li>If you want deeper <code>run</code>-specific context, compare this bundle with <code>dogfood/run-command/</code>.</li></ol>
-  </article>
-</section>
+        <h2>Notes</h2>
+
+        <article class="card note-card">
+          <h3><a href="notes.md">notes.md</a></h3>
+          <h1>2026-03-26 dogfood — Week 9 release-readiness proof</h1>
+          <h2>Bundle metadata</h2>
+          <ul>
+            <li>
+              <strong>Bundle path:</strong>
+              <code>dogfood/20260326-week9-release-readiness/</code>
+            </li>
+            <li>
+              <strong>CLI entrypoint:</strong> <code>src/cli/main.ts</code>
+            </li>
+            <li>
+              <strong>Lower-level run proof:</strong>
+              <code>dogfood/run-command/</code>
+            </li>
+            <li>
+              <strong>Isolated home record:</strong>
+              <code>isolated-home.txt</code>
+            </li>
+            <li>
+              <strong>Session ID record:</strong> <code>session-id.txt</code>
+            </li>
+            <li>
+              <strong>Primary evidence:</strong>
+              <code>logs/01-doctor.json</code>,
+              <code>logs/03-create-inspect.json</code>,
+              <code>logs/04-run-echo.json</code>,
+              <code>logs/05-run-sysinfo.json</code>,
+              <code>logs/07-screenshot.json</code>,
+              <code>logs/08-snapshot.json</code>,
+              <code>logs/09-export-asciicast.json</code>,
+              <code>logs/10-export-webm.json</code>,
+              <code>logs/11-final-inspect.json</code>,
+              <code>logs/12-destroy.json</code>
+            </li>
+            <li>
+              <strong
+                >Bundle-local JSON mirrors for validation/review
+                tooling:</strong
+              >
+              <code>snapshots/01-doctor.json</code>,
+              <code>snapshots/02-post-run-structured.json</code>,
+              <code>snapshots/03-final-inspect.json</code>
+            </li>
+          </ul>
+          <h2>What this bundle proves</h2>
+          <p>
+            This bundle captures a full Week 9 release-readiness path against an
+            isolated <code>--home</code> directory. It exercises the new
+            isolation-aware <code>doctor</code> checks, creates a fresh
+            PTY-backed session, runs two in-session commands through the new
+            <code>run</code> command, waits for renderer stability, and exports
+            screenshot, snapshot, asciicast, and WebM artifacts from the same
+            session.
+          </p>
+          <p>The strongest Week 9-specific proof points are:</p>
+          <ul>
+            <li>
+              <code>logs/01-doctor.json</code> shows the new
+              <code>home_isolation</code> environment check passing for the temp
+              home recorded in <code>isolated-home.txt</code>.
+            </li>
+            <li>
+              <code>logs/01-doctor.json</code> also shows
+              <code>browser_cache_accessible</code> passing against
+              <code>/home/coder/.cache/ms-playwright</code>, proving the
+              renderer browser-path isolation work still finds the original
+              Playwright cache while the agent-terminal home is isolated.
+            </li>
+            <li>
+              <code>logs/04-run-echo.json</code> and
+              <code>logs/05-run-sysinfo.json</code> show
+              <code>run</code> accepting and completing both in-session commands
+              with completion markers.
+            </li>
+            <li>
+              <code>logs/06-wait-stable.json</code> confirms
+              <code>wait --screen-stable-ms 1000</code> matched before visual
+              capture.
+            </li>
+            <li>
+              <code>logs/07-screenshot.json</code>,
+              <code>screenshots/01-after-run.png</code>,
+              <code>logs/09-export-asciicast.json</code>,
+              <code>recordings/week9.cast</code>,
+              <code>logs/10-export-webm.json</code>, and
+              <code>videos/week9.webm</code> prove the renderer/export stack can
+              still capture evidence from that isolated session.
+            </li>
+            <li>
+              <code>logs/11-final-inspect.json</code> reports a healthy live
+              renderer runtime with <code>usedOfflineReplay: false</code> plus
+              exactly one screenshot, one snapshot, one recording, and one video
+              artifact.
+            </li>
+          </ul>
+          <h2>Screenshot and recording notes</h2>
+          <ul>
+            <li>
+              <strong>Screenshot:</strong>
+              <code>screenshots/01-after-run.png</code> is the copied renderer
+              screenshot from <code>logs/07-screenshot.json</code>. It shows the
+              bash session after the two <code>run</code> invocations and their
+              completion-marker lines.
+            </li>
+            <li>
+              <strong>Snapshot:</strong> <code>logs/08-snapshot.json</code> is
+              the structured renderer snapshot captured from the same frame
+              sequence (<code>capturedAtSeq: 5</code>), and
+              <code>snapshots/02-post-run-structured.json</code> mirrors it in a
+              validator-visible JSON location.
+            </li>
+            <li>
+              <strong>Asciicast:</strong> <code>recordings/week9.cast</code> is
+              the exported terminal event-log recording (<code>1177</code>
+              bytes).
+            </li>
+            <li>
+              <strong>WebM:</strong> <code>videos/week9.webm</code> is the
+              browser-rendered replay video (<code>52509</code> bytes).
+            </li>
+          </ul>
+          <h2>Environment details</h2>
+          <ul>
+            <li><strong>Node:</strong> <code>v22.19.0</code></li>
+            <li>
+              <strong>OS:</strong>
+              <code
+                >Linux aaaaaaa 6.8.0-94-generic #96-Ubuntu SMP PREEMPT_DYNAMIC
+                Fri Jan 9 20:36:55 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux</code
+              >
+            </li>
+            <li><strong>Neovim:</strong> <code>NVIM v0.7.2</code></li>
+            <li>
+              <strong>Renderer browser cache used by doctor:</strong>
+              <code>/home/coder/.cache/ms-playwright</code>
+            </li>
+          </ul>
+          <h2>Known limitations / acceptable failures</h2>
+          <ul>
+            <li>
+              <code>doctor</code> intentionally reported
+              <code>result.ok: false</code> in
+              <code>logs/01-doctor.json</code> because the workspace is running
+              Node <code>v22.19.0</code> while the project requires Node
+              <code>24+</code>. That is a real environment mismatch, not a Week
+              9 regression. The new Week 9 isolation-aware checks (<code
+                >home_isolation</code
+              >
+              and <code>browser_cache_accessible</code>) still passed, which is
+              the behavior this bundle needed to prove.
+            </li>
+            <li>
+              The bundle includes JSON mirrors under
+              <code>snapshots/</code> because the review/validation tooling
+              classifies <code>logs/</code> entries as support files rather than
+              JSON artifacts.
+            </li>
+            <li>
+              The renderer snapshot shows the echoed <code>run</code> command
+              lines and completion markers rather than the full stdout payload
+              for the <code>run</code> commands. That matches the existing
+              lower-level <code>dogfood/run-command/</code> proof and still
+              demonstrates the end-to-end
+              <code>run -&gt; wait -&gt; renderer capture -&gt; export</code>
+              flow.
+            </li>
+            <li>
+              The future Neovim/LazyVim review scenario remains out of scope for
+              this bundle. This environment only has Neovim <code>0.7.2</code>,
+              while the target scenario calls for Neovim <code>0.8+</code> plus
+              Nerd Fonts.
+            </li>
+          </ul>
+          <h2>Suggested review order</h2>
+          <ol>
+            <li>Read this file for the narrative and known limitations.</li>
+            <li>
+              Open <code>logs/01-doctor.json</code> and confirm
+              <code>home_isolation</code> plus
+              <code>browser_cache_accessible</code> passed.
+            </li>
+            <li>
+              Review <code>logs/02-create.json</code> and
+              <code>logs/03-create-inspect.json</code> to confirm the isolated
+              session was created and is running.
+            </li>
+            <li>
+              Review <code>logs/04-run-echo.json</code>,
+              <code>logs/05-run-sysinfo.json</code>, and
+              <code>logs/06-wait-stable.json</code> for the <code>run</code> and
+              stability-wait evidence.
+            </li>
+            <li>
+              Open <code>screenshots/01-after-run.png</code> and
+              <code>logs/08-snapshot.json</code> for the visual renderer state.
+            </li>
+            <li>
+              Play <code>recordings/week9.cast</code> and
+              <code>videos/week9.webm</code> for replay/export proof.
+            </li>
+            <li>
+              Finish with <code>logs/11-final-inspect.json</code> and
+              <code>logs/12-destroy.json</code> to confirm artifact health and
+              cleanup.
+            </li>
+            <li>
+              If you want deeper <code>run</code>-specific context, compare this
+              bundle with <code>dogfood/run-command/</code>.
+            </li>
+          </ol>
+        </article>
+      </section>
       <section>
-  <h2>Commands</h2>
-  <div class="card">
-    <h3><a href="commands.sh">commands.sh</a></h3>
-    <pre><code>#!/usr/bin/env bash
+        <h2>Commands</h2>
+        <div class="card">
+          <h3><a href="commands.sh">commands.sh</a></h3>
+          <pre><code>#!/usr/bin/env bash
 set -u -o pipefail
 
 ROOT_DIR=&quot;$(git rev-parse --show-toplevel)&quot;
@@ -1223,224 +1555,520 @@ run_capture &#39;15&#39; 60 &quot;$LOG_DIR/15-reviewer-checks.txt&quot; &quot;$L
   &quot;./node_modules/.bin/prettier --check dogfood/20260326-week9-release-readiness/manifest.json dogfood/20260326-week9-release-readiness/notes.md &amp;&amp; bash -n dogfood/20260326-week9-release-readiness/commands.sh&quot; \
   env PRETTIER=&quot;$ROOT_DIR/node_modules/.bin/prettier&quot; MANIFEST=&quot;$BUNDLE_DIR/manifest.json&quot; NOTES=&quot;$BUNDLE_DIR/notes.md&quot; SCRIPT=&quot;$BUNDLE_DIR/commands.sh&quot; bash -lc &#39;$PRETTIER --check &quot;$MANIFEST&quot; &quot;$NOTES&quot; &amp;&amp; bash -n &quot;$SCRIPT&quot;&#39;
 </code></pre>
-  </div>
-</section>
+        </div>
+      </section>
       <section>
-  <h2>Command status</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>step</th><th>command</th><th>exit_code</th><th>status</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>01</td><td>./node_modules/.bin/tsx src/cli/main.ts doctor --json --home &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;</td><td>1</td><td>warning</td></tr><tr><td>01a</td><td>cp dogfood/20260326-week9-release-readiness/logs/01-doctor.json dogfood/20260326-week9-release-readiness/snapshots/01-doctor.json</td><td>0</td><td>ok</td></tr><tr><td>02</td><td>./node_modules/.bin/tsx src/cli/main.ts create --json --home &quot;/tmp/agent-terminal-week9-home.59Il6W&quot; -- /bin/bash</td><td>0</td><td>ok</td></tr><tr><td>03</td><td>./node_modules/.bin/tsx src/cli/main.ts inspect &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --json --home &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;</td><td>0</td><td>ok</td></tr><tr><td>04</td><td>./node_modules/.bin/tsx src/cli/main.ts run &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; &#39;echo &quot;Week 9 release readiness proof&quot;&#39; --json --home &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;</td><td>0</td><td>ok</td></tr><tr><td>05</td><td>./node_modules/.bin/tsx src/cli/main.ts run &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; &#39;uname -a &amp;&amp; node --version&#39; --json --home &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;</td><td>0</td><td>ok</td></tr><tr><td>06</td><td>./node_modules/.bin/tsx src/cli/main.ts wait &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --screen-stable-ms 1000 --timeout 5000 --json --home &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;</td><td>0</td><td>ok</td></tr><tr><td>07</td><td>./node_modules/.bin/tsx src/cli/main.ts screenshot &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --json --home &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;</td><td>0</td><td>ok</td></tr><tr><td>07a</td><td>cp &lt;screenshot artifact&gt; dogfood/20260326-week9-release-readiness/screenshots/01-after-run.png</td><td>0</td><td>ok</td></tr><tr><td>08</td><td>./node_modules/.bin/tsx src/cli/main.ts snapshot &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --json --home &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;</td><td>0</td><td>ok</td></tr><tr><td>08a</td><td>cp dogfood/20260326-week9-release-readiness/logs/08-snapshot.json dogfood/20260326-week9-release-readiness/snapshots/02-post-run-structured.json</td><td>0</td><td>ok</td></tr><tr><td>09</td><td>./node_modules/.bin/tsx src/cli/main.ts record export &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --format asciicast --json --home &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;</td><td>0</td><td>ok</td></tr><tr><td>09a</td><td>cp &lt;asciicast artifact&gt; dogfood/20260326-week9-release-readiness/recordings/week9.cast</td><td>0</td><td>ok</td></tr><tr><td>10</td><td>./node_modules/.bin/tsx src/cli/main.ts record export &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --format webm --json --home &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;</td><td>0</td><td>ok</td></tr><tr><td>10a</td><td>cp &lt;webm artifact&gt; dogfood/20260326-week9-release-readiness/videos/week9.webm</td><td>0</td><td>ok</td></tr><tr><td>11</td><td>./node_modules/.bin/tsx src/cli/main.ts inspect &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --json --home &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;</td><td>0</td><td>ok</td></tr><tr><td>11a</td><td>cp dogfood/20260326-week9-release-readiness/logs/11-final-inspect.json dogfood/20260326-week9-release-readiness/snapshots/03-final-inspect.json</td><td>0</td><td>ok</td></tr><tr><td>12</td><td>./node_modules/.bin/tsx src/cli/main.ts destroy &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --json --home &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;</td><td>0</td><td>ok</td></tr><tr><td>12a</td><td>rm -rf &lt;isolated home&gt;</td><td>0</td><td>ok</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <h2>Command status</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>step</th>
+                <th>command</th>
+                <th>exit_code</th>
+                <th>status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>01</td>
+                <td>
+                  ./node_modules/.bin/tsx src/cli/main.ts doctor --json --home
+                  &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;
+                </td>
+                <td>1</td>
+                <td>warning</td>
+              </tr>
+              <tr>
+                <td>01a</td>
+                <td>
+                  cp
+                  dogfood/20260326-week9-release-readiness/logs/01-doctor.json
+                  dogfood/20260326-week9-release-readiness/snapshots/01-doctor.json
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>02</td>
+                <td>
+                  ./node_modules/.bin/tsx src/cli/main.ts create --json --home
+                  &quot;/tmp/agent-terminal-week9-home.59Il6W&quot; -- /bin/bash
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>03</td>
+                <td>
+                  ./node_modules/.bin/tsx src/cli/main.ts inspect
+                  &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --json --home
+                  &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>04</td>
+                <td>
+                  ./node_modules/.bin/tsx src/cli/main.ts run
+                  &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; &#39;echo &quot;Week 9
+                  release readiness proof&quot;&#39; --json --home
+                  &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>05</td>
+                <td>
+                  ./node_modules/.bin/tsx src/cli/main.ts run
+                  &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; &#39;uname -a
+                  &amp;&amp; node --version&#39; --json --home
+                  &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>06</td>
+                <td>
+                  ./node_modules/.bin/tsx src/cli/main.ts wait
+                  &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --screen-stable-ms 1000
+                  --timeout 5000 --json --home
+                  &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>07</td>
+                <td>
+                  ./node_modules/.bin/tsx src/cli/main.ts screenshot
+                  &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --json --home
+                  &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>07a</td>
+                <td>
+                  cp &lt;screenshot artifact&gt;
+                  dogfood/20260326-week9-release-readiness/screenshots/01-after-run.png
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>08</td>
+                <td>
+                  ./node_modules/.bin/tsx src/cli/main.ts snapshot
+                  &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --json --home
+                  &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>08a</td>
+                <td>
+                  cp
+                  dogfood/20260326-week9-release-readiness/logs/08-snapshot.json
+                  dogfood/20260326-week9-release-readiness/snapshots/02-post-run-structured.json
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>09</td>
+                <td>
+                  ./node_modules/.bin/tsx src/cli/main.ts record export
+                  &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --format asciicast
+                  --json --home
+                  &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>09a</td>
+                <td>
+                  cp &lt;asciicast artifact&gt;
+                  dogfood/20260326-week9-release-readiness/recordings/week9.cast
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>10</td>
+                <td>
+                  ./node_modules/.bin/tsx src/cli/main.ts record export
+                  &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --format webm --json
+                  --home &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>10a</td>
+                <td>
+                  cp &lt;webm artifact&gt;
+                  dogfood/20260326-week9-release-readiness/videos/week9.webm
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>11</td>
+                <td>
+                  ./node_modules/.bin/tsx src/cli/main.ts inspect
+                  &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --json --home
+                  &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>11a</td>
+                <td>
+                  cp
+                  dogfood/20260326-week9-release-readiness/logs/11-final-inspect.json
+                  dogfood/20260326-week9-release-readiness/snapshots/03-final-inspect.json
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>12</td>
+                <td>
+                  ./node_modules/.bin/tsx src/cli/main.ts destroy
+                  &quot;01KMP0DKXG9DPDKJJ3F1223PQV&quot; --json --home
+                  &quot;/tmp/agent-terminal-week9-home.59Il6W&quot;
+                </td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+              <tr>
+                <td>12a</td>
+                <td>rm -rf &lt;isolated home&gt;</td>
+                <td>0</td>
+                <td>ok</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
       <section>
-  <h2>Artifact inventory</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>Path</th><th>Type</th><th>Size</th></tr>
-      </thead>
-      <tbody>
-        
-        <tr>
-          <td><a href="command-status.tsv">command-status.tsv</a></td>
-          <td>support</td>
-          <td>2.5 KB</td>
-        </tr>
-        <tr>
-          <td><a href="commands.sh">commands.sh</a></td>
-          <td>script</td>
-          <td>10.8 KB</td>
-        </tr>
-        <tr>
-          <td><a href="isolated-home.txt">isolated-home.txt</a></td>
-          <td>other</td>
-          <td>38 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/01-doctor.json">logs/01-doctor.json</a></td>
-          <td>support</td>
-          <td>3.9 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/01-doctor.stderr.txt">logs/01-doctor.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/02-create.json">logs/02-create.json</a></td>
-          <td>support</td>
-          <td>251 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/02-create.stderr.txt">logs/02-create.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/03-create-inspect.json">logs/03-create-inspect.json</a></td>
-          <td>support</td>
-          <td>1.0 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/03-create-inspect.stderr.txt">logs/03-create-inspect.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/04-run-echo.json">logs/04-run-echo.json</a></td>
-          <td>support</td>
-          <td>267 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/04-run-echo.stderr.txt">logs/04-run-echo.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/05-run-sysinfo.json">logs/05-run-sysinfo.json</a></td>
-          <td>support</td>
-          <td>267 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/05-run-sysinfo.stderr.txt">logs/05-run-sysinfo.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/06-wait-stable.json">logs/06-wait-stable.json</a></td>
-          <td>support</td>
-          <td>207 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/06-wait-stable.stderr.txt">logs/06-wait-stable.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/07-screenshot.json">logs/07-screenshot.json</a></td>
-          <td>support</td>
-          <td>699 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/07-screenshot.stderr.txt">logs/07-screenshot.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/08-snapshot.json">logs/08-snapshot.json</a></td>
-          <td>support</td>
-          <td>1.9 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/08-snapshot.stderr.txt">logs/08-snapshot.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/09-export-asciicast.json">logs/09-export-asciicast.json</a></td>
-          <td>support</td>
-          <td>686 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/09-export-asciicast.stderr.txt">logs/09-export-asciicast.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/10-export-webm.json">logs/10-export-webm.json</a></td>
-          <td>support</td>
-          <td>746 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/10-export-webm.stderr.txt">logs/10-export-webm.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/11-final-inspect.json">logs/11-final-inspect.json</a></td>
-          <td>support</td>
-          <td>1.1 KB</td>
-        </tr>
-        <tr>
-          <td><a href="logs/11-final-inspect.stderr.txt">logs/11-final-inspect.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/12-destroy.json">logs/12-destroy.json</a></td>
-          <td>support</td>
-          <td>172 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/12-destroy.stderr.txt">logs/12-destroy.stderr.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/13-review-bundle.stderr.txt">logs/13-review-bundle.stderr.txt</a></td>
-          <td>support</td>
-          <td>108 B</td>
-        </tr>
-        <tr>
-          <td><a href="logs/13-review-bundle.txt">logs/13-review-bundle.txt</a></td>
-          <td>support</td>
-          <td>0 B</td>
-        </tr>
-        <tr>
-          <td><a href="manifest.json">manifest.json</a></td>
-          <td>support</td>
-          <td>5.1 KB</td>
-        </tr>
-        <tr>
-          <td><a href="notes.md">notes.md</a></td>
-          <td>notes</td>
-          <td>5.0 KB</td>
-        </tr>
-        <tr>
-          <td><a href="recordings/week9.cast">recordings/week9.cast</a></td>
-          <td>recording</td>
-          <td>1.2 KB</td>
-        </tr>
-        <tr>
-          <td><a href="screenshots/01-after-run.png">screenshots/01-after-run.png</a></td>
-          <td>screenshot</td>
-          <td>21.9 KB</td>
-        </tr>
-        <tr>
-          <td><a href="session-id.txt">session-id.txt</a></td>
-          <td>support</td>
-          <td>27 B</td>
-        </tr>
-        <tr>
-          <td><a href="snapshots/01-doctor.json">snapshots/01-doctor.json</a></td>
-          <td>json</td>
-          <td>3.9 KB</td>
-        </tr>
-        <tr>
-          <td><a href="snapshots/02-post-run-structured.json">snapshots/02-post-run-structured.json</a></td>
-          <td>json</td>
-          <td>1.9 KB</td>
-        </tr>
-        <tr>
-          <td><a href="snapshots/03-final-inspect.json">snapshots/03-final-inspect.json</a></td>
-          <td>json</td>
-          <td>1.1 KB</td>
-        </tr>
-        <tr>
-          <td><a href="videos/week9.webm">videos/week9.webm</a></td>
-          <td>video</td>
-          <td>52.9 KB</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <h2>Artifact inventory</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Type</th>
+                <th>Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="command-status.tsv">command-status.tsv</a></td>
+                <td>support</td>
+                <td>2.5 KB</td>
+              </tr>
+              <tr>
+                <td><a href="commands.sh">commands.sh</a></td>
+                <td>script</td>
+                <td>10.8 KB</td>
+              </tr>
+              <tr>
+                <td><a href="isolated-home.txt">isolated-home.txt</a></td>
+                <td>other</td>
+                <td>38 B</td>
+              </tr>
+              <tr>
+                <td><a href="logs/01-doctor.json">logs/01-doctor.json</a></td>
+                <td>support</td>
+                <td>3.9 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/01-doctor.stderr.txt"
+                    >logs/01-doctor.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="logs/02-create.json">logs/02-create.json</a></td>
+                <td>support</td>
+                <td>251 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/02-create.stderr.txt"
+                    >logs/02-create.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/03-create-inspect.json"
+                    >logs/03-create-inspect.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>1.0 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/03-create-inspect.stderr.txt"
+                    >logs/03-create-inspect.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/04-run-echo.json">logs/04-run-echo.json</a>
+                </td>
+                <td>support</td>
+                <td>267 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/04-run-echo.stderr.txt"
+                    >logs/04-run-echo.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/05-run-sysinfo.json"
+                    >logs/05-run-sysinfo.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>267 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/05-run-sysinfo.stderr.txt"
+                    >logs/05-run-sysinfo.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/06-wait-stable.json"
+                    >logs/06-wait-stable.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>207 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/06-wait-stable.stderr.txt"
+                    >logs/06-wait-stable.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/07-screenshot.json">logs/07-screenshot.json</a>
+                </td>
+                <td>support</td>
+                <td>699 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/07-screenshot.stderr.txt"
+                    >logs/07-screenshot.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/08-snapshot.json">logs/08-snapshot.json</a>
+                </td>
+                <td>support</td>
+                <td>1.9 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/08-snapshot.stderr.txt"
+                    >logs/08-snapshot.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/09-export-asciicast.json"
+                    >logs/09-export-asciicast.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>686 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/09-export-asciicast.stderr.txt"
+                    >logs/09-export-asciicast.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/10-export-webm.json"
+                    >logs/10-export-webm.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>746 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/10-export-webm.stderr.txt"
+                    >logs/10-export-webm.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/11-final-inspect.json"
+                    >logs/11-final-inspect.json</a
+                  >
+                </td>
+                <td>support</td>
+                <td>1.1 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/11-final-inspect.stderr.txt"
+                    >logs/11-final-inspect.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="logs/12-destroy.json">logs/12-destroy.json</a></td>
+                <td>support</td>
+                <td>172 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/12-destroy.stderr.txt"
+                    >logs/12-destroy.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/13-review-bundle.stderr.txt"
+                    >logs/13-review-bundle.stderr.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>108 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="logs/13-review-bundle.txt"
+                    >logs/13-review-bundle.txt</a
+                  >
+                </td>
+                <td>support</td>
+                <td>0 B</td>
+              </tr>
+              <tr>
+                <td><a href="manifest.json">manifest.json</a></td>
+                <td>support</td>
+                <td>5.1 KB</td>
+              </tr>
+              <tr>
+                <td><a href="notes.md">notes.md</a></td>
+                <td>notes</td>
+                <td>5.0 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="recordings/week9.cast">recordings/week9.cast</a>
+                </td>
+                <td>recording</td>
+                <td>1.2 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="screenshots/01-after-run.png"
+                    >screenshots/01-after-run.png</a
+                  >
+                </td>
+                <td>screenshot</td>
+                <td>21.9 KB</td>
+              </tr>
+              <tr>
+                <td><a href="session-id.txt">session-id.txt</a></td>
+                <td>support</td>
+                <td>27 B</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="snapshots/01-doctor.json"
+                    >snapshots/01-doctor.json</a
+                  >
+                </td>
+                <td>json</td>
+                <td>3.9 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="snapshots/02-post-run-structured.json"
+                    >snapshots/02-post-run-structured.json</a
+                  >
+                </td>
+                <td>json</td>
+                <td>1.9 KB</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="snapshots/03-final-inspect.json"
+                    >snapshots/03-final-inspect.json</a
+                  >
+                </td>
+                <td>json</td>
+                <td>1.1 KB</td>
+              </tr>
+              <tr>
+                <td><a href="videos/week9.webm">videos/week9.webm</a></td>
+                <td>video</td>
+                <td>52.9 KB</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
   </body>
 </html>

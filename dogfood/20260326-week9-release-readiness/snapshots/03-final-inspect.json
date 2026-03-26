@@ -9,9 +9,7 @@
       "createdAt": "2026-03-26T21:22:17.138Z",
       "updatedAt": "2026-03-26T21:22:17.818Z",
       "status": "running",
-      "command": [
-        "/bin/bash"
-      ],
+      "command": ["/bin/bash"],
       "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_b625c85e1b",
       "shell": "/bin/bash",
       "term": "xterm-256color",
