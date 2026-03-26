@@ -1,0 +1,23 @@
+step	command	exit_code	status
+01	./node_modules/.bin/tsx src/cli/main.ts doctor --json --home "/tmp/agent-terminal-week9-home.59Il6W"	1	warning
+01a	cp dogfood/20260326-week9-release-readiness/logs/01-doctor.json dogfood/20260326-week9-release-readiness/snapshots/01-doctor.json	0	ok
+02	./node_modules/.bin/tsx src/cli/main.ts create --json --home "/tmp/agent-terminal-week9-home.59Il6W" -- /bin/bash	0	ok
+03	./node_modules/.bin/tsx src/cli/main.ts inspect "01KMP0DKXG9DPDKJJ3F1223PQV" --json --home "/tmp/agent-terminal-week9-home.59Il6W"	0	ok
+04	./node_modules/.bin/tsx src/cli/main.ts run "01KMP0DKXG9DPDKJJ3F1223PQV" 'echo "Week 9 release readiness proof"' --json --home "/tmp/agent-terminal-week9-home.59Il6W"	0	ok
+05	./node_modules/.bin/tsx src/cli/main.ts run "01KMP0DKXG9DPDKJJ3F1223PQV" 'uname -a && node --version' --json --home "/tmp/agent-terminal-week9-home.59Il6W"	0	ok
+06	./node_modules/.bin/tsx src/cli/main.ts wait "01KMP0DKXG9DPDKJJ3F1223PQV" --screen-stable-ms 1000 --timeout 5000 --json --home "/tmp/agent-terminal-week9-home.59Il6W"	0	ok
+07	./node_modules/.bin/tsx src/cli/main.ts screenshot "01KMP0DKXG9DPDKJJ3F1223PQV" --json --home "/tmp/agent-terminal-week9-home.59Il6W"	0	ok
+07a	cp <screenshot artifact> dogfood/20260326-week9-release-readiness/screenshots/01-after-run.png	0	ok
+08	./node_modules/.bin/tsx src/cli/main.ts snapshot "01KMP0DKXG9DPDKJJ3F1223PQV" --json --home "/tmp/agent-terminal-week9-home.59Il6W"	0	ok
+08a	cp dogfood/20260326-week9-release-readiness/logs/08-snapshot.json dogfood/20260326-week9-release-readiness/snapshots/02-post-run-structured.json	0	ok
+09	./node_modules/.bin/tsx src/cli/main.ts record export "01KMP0DKXG9DPDKJJ3F1223PQV" --format asciicast --json --home "/tmp/agent-terminal-week9-home.59Il6W"	0	ok
+09a	cp <asciicast artifact> dogfood/20260326-week9-release-readiness/recordings/week9.cast	0	ok
+10	./node_modules/.bin/tsx src/cli/main.ts record export "01KMP0DKXG9DPDKJJ3F1223PQV" --format webm --json --home "/tmp/agent-terminal-week9-home.59Il6W"	0	ok
+10a	cp <webm artifact> dogfood/20260326-week9-release-readiness/videos/week9.webm	0	ok
+11	./node_modules/.bin/tsx src/cli/main.ts inspect "01KMP0DKXG9DPDKJJ3F1223PQV" --json --home "/tmp/agent-terminal-week9-home.59Il6W"	0	ok
+11a	cp dogfood/20260326-week9-release-readiness/logs/11-final-inspect.json dogfood/20260326-week9-release-readiness/snapshots/03-final-inspect.json	0	ok
+12	./node_modules/.bin/tsx src/cli/main.ts destroy "01KMP0DKXG9DPDKJJ3F1223PQV" --json --home "/tmp/agent-terminal-week9-home.59Il6W"	0	ok
+12a	rm -rf <isolated home>	0	ok
+13	./node_modules/.bin/tsx src/tools/review-bundle.ts dogfood/20260326-week9-release-readiness	0	ok
+14	./node_modules/.bin/tsx src/tools/validate-bundle.ts dogfood/20260326-week9-release-readiness --profile interactive-renderer	0	ok
+15	./node_modules/.bin/prettier --check dogfood/20260326-week9-release-readiness/manifest.json dogfood/20260326-week9-release-readiness/notes.md && bash -n dogfood/20260326-week9-release-readiness/commands.sh	0	ok

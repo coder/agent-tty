@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-26T21:22:25.360Z",
+  "result": {
+    "sessionId": "01KMP0DKXG9DPDKJJ3F1223PQV",
+    "format": "asciicast",
+    "artifactPath": "/tmp/agent-terminal-week9-home.59Il6W/sessions/01KMP0DKXG9DPDKJJ3F1223PQV/artifacts/recording-7-asciicast.cast",
+    "bytes": 1207,
+    "sha256": "073533533b48cddf4ca7c4b97de1da8e116fd0d54157c1492ea90bf9df2f1f79",
+    "capturedAtSeq": 7,
+    "durationMs": 2741,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "title": "01KMP0DKXG9DPDKJJ3F1223PQV",
+      "timestamp": 1774560137,
+      "outputEventCount": 6,
+      "resizeEventCount": 0,
+      "markerCount": 0
+    }
+  }
+}

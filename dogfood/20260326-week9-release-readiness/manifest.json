@@ -1,0 +1,117 @@
+{
+  "bundle": "20260326-week9-release-readiness",
+  "title": "Week 9 Release Readiness — 0.1.0 Proof",
+  "description": "End-to-end proof of Week 9 capabilities: isolated sessions, run command, isolation-aware doctor diagnostics, and renderer/export artifacts.",
+  "createdAt": "2026-03-26T21:18:20Z",
+  "week": 9,
+  "result": "pass",
+  "commands": [
+    "./node_modules/.bin/tsx src/cli/main.ts doctor --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts create --json --home <isolated-home> -- /bin/bash",
+    "./node_modules/.bin/tsx src/cli/main.ts inspect <session-id> --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts run <session-id> 'echo \"Week 9 release readiness proof\"' --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts run <session-id> 'uname -a && node --version' --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts wait <session-id> --screen-stable-ms 1000 --timeout 5000 --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts screenshot <session-id> --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts snapshot <session-id> --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts record export <session-id> --format asciicast --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts record export <session-id> --format webm --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts destroy <session-id> --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/tools/review-bundle.ts dogfood/20260326-week9-release-readiness",
+    "./node_modules/.bin/tsx src/tools/validate-bundle.ts dogfood/20260326-week9-release-readiness --profile interactive-renderer"
+  ],
+  "artifacts": [
+    {
+      "path": "notes.md",
+      "description": "Reviewer-facing narrative explaining what Week 9 functionality was proven and what limitations were observed"
+    },
+    {
+      "path": "commands.sh",
+      "description": "Reproducible capture script for recreating the Week 9 release-readiness bundle"
+    },
+    {
+      "path": "command-status.tsv",
+      "description": "Step-by-step exit-code ledger for capture, artifact copies, review-page generation, validation, and formatting checks"
+    },
+    {
+      "path": "logs/01-doctor.json",
+      "description": "Doctor JSON envelope showing home isolation and browser cache accessibility checks under an isolated home"
+    },
+    {
+      "path": "snapshots/01-doctor.json",
+      "description": "Bundle-local JSON mirror of the doctor output used by validator/review tooling"
+    },
+    {
+      "path": "logs/03-create-inspect.json",
+      "description": "Initial inspect output for the isolated session immediately after creation"
+    },
+    {
+      "path": "logs/04-run-echo.json",
+      "description": "Run-command JSON envelope for the Week 9 proof banner command"
+    },
+    {
+      "path": "logs/05-run-sysinfo.json",
+      "description": "Run-command JSON envelope for the in-session system-information command"
+    },
+    {
+      "path": "logs/06-wait-stable.json",
+      "description": "Renderer wait result proving the terminal frame was stable before capture"
+    },
+    {
+      "path": "logs/07-screenshot.json",
+      "description": "Screenshot JSON envelope for the copied PNG artifact"
+    },
+    {
+      "path": "screenshots/01-after-run.png",
+      "description": "Renderer screenshot captured after the two run commands completed"
+    },
+    {
+      "path": "logs/08-snapshot.json",
+      "description": "Structured snapshot JSON envelope for the same post-run terminal frame"
+    },
+    {
+      "path": "snapshots/02-post-run-structured.json",
+      "description": "Bundle-local JSON mirror of the structured post-run snapshot"
+    },
+    {
+      "path": "logs/09-export-asciicast.json",
+      "description": "Asciicast export JSON envelope"
+    },
+    {
+      "path": "recordings/week9.cast",
+      "description": "Exported asciicast recording for the isolated Week 9 proof session"
+    },
+    {
+      "path": "logs/10-export-webm.json",
+      "description": "WebM export JSON envelope"
+    },
+    {
+      "path": "videos/week9.webm",
+      "description": "Exported WebM replay for the isolated Week 9 proof session"
+    },
+    {
+      "path": "logs/11-final-inspect.json",
+      "description": "Final inspect output confirming healthy artifacts and live renderer runtime before teardown"
+    },
+    {
+      "path": "snapshots/03-final-inspect.json",
+      "description": "Bundle-local JSON mirror of the final inspect output"
+    },
+    {
+      "path": "logs/12-destroy.json",
+      "description": "Destroy output confirming the isolated session was cleaned up"
+    },
+    {
+      "path": "logs/13-review-bundle.txt",
+      "description": "Review-bundle output showing the static reviewer page generation path"
+    },
+    {
+      "path": "logs/14-validate-bundle.txt",
+      "description": "Bundle validation stdout for the interactive-renderer profile"
+    },
+    {
+      "path": "index.html",
+      "description": "Generated static review page for the complete Week 9 proof bundle"
+    }
+  ]
+}

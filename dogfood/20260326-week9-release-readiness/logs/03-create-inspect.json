@@ -1,0 +1,44 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-26T21:22:18.643Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KMP0DKXG9DPDKJJ3F1223PQV",
+      "createdAt": "2026-03-26T21:22:17.138Z",
+      "updatedAt": "2026-03-26T21:22:17.818Z",
+      "status": "running",
+      "command": [
+        "/bin/bash"
+      ],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_b625c85e1b",
+      "shell": "/bin/bash",
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "creationCols": 80,
+      "creationRows": 24,
+      "hostPid": 497475,
+      "childPid": 497487,
+      "exitCode": null,
+      "exitSignal": null
+    },
+    "eventCount": 3,
+    "uptime": 1504,
+    "lastEventSeq": 2,
+    "terminationCategory": "running",
+    "artifacts": {
+      "total": 0,
+      "byKind": {},
+      "missingCount": 0,
+      "health": "no-artifacts"
+    },
+    "usedOfflineReplay": false,
+    "rendererRuntime": {
+      "backend": "ghostty-web",
+      "mode": "live-host",
+      "status": "healthy"
+    }
+  }
+}

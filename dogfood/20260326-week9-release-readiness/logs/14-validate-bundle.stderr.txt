@@ -1,0 +1,8 @@
+validate-bundle PASS interactive-renderer: /home/coder/.mux/src/agent-terminal/agent_exec_b625c85e1b/dogfood/20260326-week9-release-readiness
+✓ bundle-exists: Bundle directory is readable: /home/coder/.mux/src/agent-terminal/agent_exec_b625c85e1b/dogfood/20260326-week9-release-readiness
+✓ has-json-output: Found 3 JSON output file(s).
+✓ has-review-page: Found review page index.html.
+✓ has-notes: Found 1 note file(s).
+✓ json-readable: Parsed 3 JSON output file(s).
+✓ has-screenshot: Found 1 screenshot file(s).
+✓ has-recording: Found 1 recording file(s).

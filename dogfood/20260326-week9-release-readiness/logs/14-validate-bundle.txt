@@ -1,0 +1,42 @@
+{
+  "bundleDir": "/home/coder/.mux/src/agent-terminal/agent_exec_b625c85e1b/dogfood/20260326-week9-release-readiness",
+  "profile": "interactive-renderer",
+  "ok": true,
+  "checks": [
+    {
+      "name": "bundle-exists",
+      "ok": true,
+      "message": "Bundle directory is readable: /home/coder/.mux/src/agent-terminal/agent_exec_b625c85e1b/dogfood/20260326-week9-release-readiness"
+    },
+    {
+      "name": "has-json-output",
+      "ok": true,
+      "message": "Found 3 JSON output file(s)."
+    },
+    {
+      "name": "has-review-page",
+      "ok": true,
+      "message": "Found review page index.html."
+    },
+    {
+      "name": "has-notes",
+      "ok": true,
+      "message": "Found 1 note file(s)."
+    },
+    {
+      "name": "json-readable",
+      "ok": true,
+      "message": "Parsed 3 JSON output file(s)."
+    },
+    {
+      "name": "has-screenshot",
+      "ok": true,
+      "message": "Found 1 screenshot file(s)."
+    },
+    {
+      "name": "has-recording",
+      "ok": true,
+      "message": "Found 1 recording file(s)."
+    }
+  ]
+}

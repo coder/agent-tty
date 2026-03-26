@@ -1,0 +1,130 @@
+{
+  "ok": true,
+  "command": "doctor",
+  "timestamp": "2026-03-26T21:22:16.307Z",
+  "result": {
+    "ok": false,
+    "checks": {
+      "environment": [
+        {
+          "name": "node-runtime",
+          "status": "fail",
+          "message": "Node 22.19.0 requires 24+",
+          "durationMs": 3
+        },
+        {
+          "name": "cwd-access",
+          "status": "pass",
+          "message": "cwd read/write: /home/coder/.mux/src/agent-terminal/agent_exec_b625c85e1b",
+          "durationMs": 3
+        },
+        {
+          "name": "temp-dir",
+          "status": "pass",
+          "message": "temp dir ok: /tmp",
+          "durationMs": 2
+        },
+        {
+          "name": "home_isolation",
+          "status": "pass",
+          "message": "Agent-terminal home is isolated from system home: /tmp/agent-terminal-week9-home.59Il6W",
+          "durationMs": 0
+        },
+        {
+          "name": "home-writable",
+          "status": "pass",
+          "message": "home writable: /tmp/agent-terminal-week9-home.59Il6W",
+          "durationMs": 1
+        },
+        {
+          "name": "pty-spawn",
+          "status": "pass",
+          "message": "spawned /usr/local/nvm/versions/node/v22.19.0/bin/node",
+          "durationMs": 30
+        },
+        {
+          "name": "socket-viable",
+          "status": "pass",
+          "message": "socket ok: /tmp/agent-terminal-week9-home.59Il6W/sessions/doctor-497248-mn7zac3j-2/host.sock",
+          "durationMs": 3
+        },
+        {
+          "name": "artifact-atomicity",
+          "status": "pass",
+          "message": "atomic rename ok: /tmp/agent-terminal-week9-home.59Il6W/sessions/doctor-497248-mn7zac3m-3/artifacts",
+          "durationMs": 1
+        },
+        {
+          "name": "event-log-writable",
+          "status": "pass",
+          "message": "append ok: /tmp/agent-terminal-week9-home.59Il6W/sessions/doctor-497248-mn7zac3o-5/events.jsonl",
+          "durationMs": 1
+        }
+      ],
+      "renderer": [
+        {
+          "name": "playwright_available",
+          "status": "pass",
+          "message": "available",
+          "durationMs": 1
+        },
+        {
+          "name": "browser_cache_accessible",
+          "status": "pass",
+          "message": "browser cache accessible: /home/coder/.cache/ms-playwright",
+          "durationMs": 1
+        },
+        {
+          "name": "browser_launch",
+          "status": "pass",
+          "message": "chromium launches",
+          "durationMs": 114
+        },
+        {
+          "name": "ghostty_web_available",
+          "status": "pass",
+          "message": "WASM available",
+          "durationMs": 127
+        },
+        {
+          "name": "screenshot_viable",
+          "status": "pass",
+          "message": "viable",
+          "durationMs": 187
+        }
+      ]
+    },
+    "capabilities": [
+      {
+        "name": "snapshot",
+        "status": "available",
+        "reason": "built-in capability",
+        "detail": "available without external renderer dependencies"
+      },
+      {
+        "name": "wait",
+        "status": "available",
+        "reason": "built-in capability",
+        "detail": "available without external renderer dependencies"
+      },
+      {
+        "name": "screenshot",
+        "status": "available",
+        "reason": "renderer smoke checks passed",
+        "detail": "playwright_available: available; browser_launch: chromium launches; ghostty_web_available: WASM available; screenshot_viable: viable"
+      },
+      {
+        "name": "record-export-asciicast",
+        "status": "available",
+        "reason": "built-in capability",
+        "detail": "available without external renderer dependencies"
+      },
+      {
+        "name": "record-export-webm",
+        "status": "available",
+        "reason": "browser-backed export dependencies available",
+        "detail": "playwright_available: available; browser_launch: chromium launches; ghostty_web_available: WASM available"
+      }
+    ]
+  }
+}

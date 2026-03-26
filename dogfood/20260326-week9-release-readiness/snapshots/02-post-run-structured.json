@@ -1,0 +1,113 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-26T21:22:24.585Z",
+  "result": {
+    "format": "structured",
+    "sessionId": "01KMP0DKXG9DPDKJJ3F1223PQV",
+    "capturedAtSeq": 7,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 7,
+    "cursorCol": 0,
+    "isAltScreen": false,
+    "visibleLines": [
+      {
+        "row": 0,
+        "text": "bash: command not found: starship"
+      },
+      {
+        "row": 1,
+        "text": "bash: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory"
+      },
+      {
+        "row": 2,
+        "text": "coder@aaaaaaa:~/.mux/src/agent-terminal/agent_exec_b625c85e1b$ echo \"Week 9 rele"
+      },
+      {
+        "row": 3,
+        "text": "ase readiness proof\""
+      },
+      {
+        "row": 4,
+        "text": "echo __AT_MARKER_36ecdc23dce2469cad11f6ac1dd08989__"
+      },
+      {
+        "row": 5,
+        "text": "uname -a && node --version"
+      },
+      {
+        "row": 6,
+        "text": "echo __AT_MARKER_b9817c92a128446fa9ed0f159f7ee9ab__"
+      },
+      {
+        "row": 7,
+        "text": ""
+      },
+      {
+        "row": 8,
+        "text": ""
+      },
+      {
+        "row": 9,
+        "text": ""
+      },
+      {
+        "row": 10,
+        "text": ""
+      },
+      {
+        "row": 11,
+        "text": ""
+      },
+      {
+        "row": 12,
+        "text": ""
+      },
+      {
+        "row": 13,
+        "text": ""
+      },
+      {
+        "row": 14,
+        "text": ""
+      },
+      {
+        "row": 15,
+        "text": ""
+      },
+      {
+        "row": 16,
+        "text": ""
+      },
+      {
+        "row": 17,
+        "text": ""
+      },
+      {
+        "row": 18,
+        "text": ""
+      },
+      {
+        "row": 19,
+        "text": ""
+      },
+      {
+        "row": 20,
+        "text": ""
+      },
+      {
+        "row": 21,
+        "text": ""
+      },
+      {
+        "row": 22,
+        "text": ""
+      },
+      {
+        "row": 23,
+        "text": ""
+      }
+    ]
+  }
+}

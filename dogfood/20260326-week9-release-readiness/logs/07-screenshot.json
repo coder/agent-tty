@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "command": "screenshot",
+  "timestamp": "2026-03-26T21:22:23.783Z",
+  "result": {
+    "sessionId": "01KMP0DKXG9DPDKJJ3F1223PQV",
+    "capturedAtSeq": 7,
+    "profileName": "reference-dark",
+    "cols": 80,
+    "rows": 24,
+    "artifactPath": "/tmp/agent-terminal-week9-home.59Il6W/sessions/01KMP0DKXG9DPDKJJ3F1223PQV/artifacts/screenshot-7-reference-dark.png",
+    "pngSizeBytes": 22396,
+    "cursorVisible": false,
+    "rendererBackend": "ghostty-web",
+    "pixelWidth": 640,
+    "pixelHeight": 384,
+    "sha256": "6b07d07c3a58035b4d432d4b449fc2e5423b02be422c2aaeb4588e36ef230d1d",
+    "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d"
+  }
+}
