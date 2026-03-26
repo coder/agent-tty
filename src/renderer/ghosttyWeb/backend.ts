@@ -9,6 +9,7 @@ import {
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
+import { ensurePlaywrightBrowsersPath } from '../browserPath.js';
 import {
   chromium,
   type Browser,
@@ -1979,6 +1980,18 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       const { origin, server } = await this.startServer(servedAssets);
       this.server = server;
       this.serverOrigin = origin;
+
+      const browserPathResolution = ensurePlaywrightBrowsersPath();
+      if (browserPathResolution === null) {
+        this.logger.debug(
+          'No Playwright browser cache override resolved; using Playwright defaults',
+        );
+      } else {
+        this.logger.debug(
+          'Resolved Playwright browser cache path',
+          browserPathResolution,
+        );
+      }
 
       this.browser = await chromium.launch({
         headless: true,

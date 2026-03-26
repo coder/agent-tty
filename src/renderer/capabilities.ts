@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 
 import { z } from 'zod';
 
+import { ensurePlaywrightBrowsersPath } from './browserPath.js';
+
 // --- Capability vocabulary ---
 
 export const CapabilityNameSchema = z.enum([
@@ -106,6 +108,8 @@ async function probePlaywrightAvailability(
   mode: DiscoveryMode,
 ): Promise<PlaywrightProbeResult> {
   try {
+    ensurePlaywrightBrowsersPath();
+
     const playwrightModule = (await import('playwright')) as {
       chromium?: {
         launch?: unknown;

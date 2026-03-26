@@ -110,6 +110,36 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     }
   });
 
+  it('resolves the browser cache from the original HOME when HOME is isolated before boot', async () => {
+    // prettier-ignore
+    const isolatedHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-renderer-home-')));
+    const previousHome = process.env.HOME;
+    const previousBrowsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
+    if (previousHome === undefined) {
+      throw new Error('expected HOME to be defined before isolating renderer boot');
+    }
+
+    try {
+      delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+      process.env.HOME = isolatedHome;
+
+      await backend.boot();
+
+      expect(backend.isBooted).toBe(true);
+      expect(process.env.PLAYWRIGHT_BROWSERS_PATH).toBe(
+        join(previousHome, '.cache', 'ms-playwright'),
+      );
+    } finally {
+      if (previousBrowsersPath === undefined) {
+        delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+      } else {
+        process.env.PLAYWRIGHT_BROWSERS_PATH = previousBrowsersPath;
+      }
+      process.env.HOME = previousHome;
+      await rm(isolatedHome, { recursive: true, force: true });
+    }
+  });
+
   it('replays consecutive output events and flushes batches before target breaks', async () => {
     await backend.boot();
 
