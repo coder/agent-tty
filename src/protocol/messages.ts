@@ -8,6 +8,7 @@ import type {
 } from './schemas.js';
 
 import {
+  RendererRuntimeSummarySchema,
   ScreenshotParamsSchema,
   ScreenshotResultSchema,
   SessionRecordSchema,
@@ -30,6 +31,25 @@ export {
   WaitForRenderParamsSchema,
   WaitForRenderResultSchema,
   WaitResultSchema,
+} from './schemas.js';
+
+// --- Week 8: Capability and renderer-runtime schemas ---
+export {
+  CapabilityEntrySchema,
+  CapabilityNameSchema,
+  CapabilityStatusSchema,
+  RendererRuntimeModeSchema,
+  RendererRuntimeStatusSchema,
+  RendererRuntimeSummarySchema,
+} from './schemas.js';
+
+export type {
+  CapabilityEntry,
+  CapabilityName,
+  CapabilityStatus,
+  RendererRuntimeMode,
+  RendererRuntimeStatus,
+  RendererRuntimeSummary,
 } from './schemas.js';
 
 const EmptyObjectSchema = z.object({}).strict();
@@ -136,6 +156,7 @@ export const InspectResultSchema = z
     terminationCategory: TerminationCategorySchema.optional(),
     artifacts: ArtifactHealthSummarySchema.optional(),
     usedOfflineReplay: z.boolean().optional(),
+    rendererRuntime: RendererRuntimeSummarySchema,
   })
   .strict();
 export type InspectResult = z.infer<typeof InspectResultSchema>;

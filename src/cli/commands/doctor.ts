@@ -24,7 +24,10 @@ import process from 'node:process';
 import type { CommandContext } from '../context.js';
 
 import { emitSuccess } from '../output.js';
+import type { CapabilityEntry } from '../../renderer/capabilities.js';
+
 import { createPty } from '../../pty/createPty.js';
+import { discoverCapabilities } from '../../renderer/capabilities.js';
 import {
   artifactPath,
   ensureArtifactsDir,
@@ -153,6 +156,7 @@ export interface DoctorCheckGroups {
 export interface DoctorResult {
   ok: boolean;
   checks: DoctorCheckGroups;
+  capabilities: CapabilityEntry[];
 }
 
 function formatErrorMessage(error: unknown): string {
@@ -708,12 +712,17 @@ export async function runDoctorChecks(): Promise<DoctorResult> {
     'doctor check names must be unique',
   );
 
+  const capabilities = await discoverCapabilities('full', {
+    rendererChecks: renderer,
+  });
+
   return {
     ok: allChecks.every((check) => check.status !== 'fail'),
     checks: {
       environment,
       renderer,
     },
+    capabilities,
   };
 }
 

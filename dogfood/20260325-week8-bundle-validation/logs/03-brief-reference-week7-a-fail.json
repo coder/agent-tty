@@ -1,0 +1,32 @@
+{
+  "bundleDir": "/home/coder/.mux/src/agent-terminal/agent_exec_20a332c5c3/dogfood/20260325-week7-a-cli-parity",
+  "profile": "contract-reporting",
+  "ok": false,
+  "checks": [
+    {
+      "name": "bundle-exists",
+      "ok": true,
+      "message": "Bundle directory is readable: /home/coder/.mux/src/agent-terminal/agent_exec_20a332c5c3/dogfood/20260325-week7-a-cli-parity"
+    },
+    {
+      "name": "has-json-output",
+      "ok": false,
+      "message": "Expected at least one JSON output file."
+    },
+    {
+      "name": "has-review-page",
+      "ok": true,
+      "message": "Found review page index.html."
+    },
+    {
+      "name": "has-notes",
+      "ok": true,
+      "message": "Found 1 note file(s)."
+    },
+    {
+      "name": "json-readable",
+      "ok": false,
+      "message": "No JSON output files were found to parse."
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-03-25T23:41:37.715Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KMKNZXNWZKGCXTCKGTVHC9T7",
+      "createdAt": "2026-03-25T23:41:33.759Z",
+      "updatedAt": "2026-03-25T23:41:34.547Z",
+      "status": "running",
+      "command": [
+        "node",
+        "--import",
+        "tsx",
+        "test/fixtures/apps/hello-prompt/main.ts"
+      ],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_6300059848",
+      "shell": "/bin/bash",
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "creationCols": 80,
+      "creationRows": 24,
+      "hostPid": 2429891,
+      "childPid": 2430004,
+      "exitCode": null,
+      "exitSignal": null
+    },
+    "eventCount": 1,
+    "uptime": 3955,
+    "lastEventSeq": 0,
+    "terminationCategory": "running",
+    "artifacts": {
+      "total": 0,
+      "byKind": {},
+      "missingCount": 0,
+      "health": "no-artifacts"
+    },
+    "usedOfflineReplay": false,
+    "rendererRuntime": {
+      "backend": "ghostty-web",
+      "mode": "live-host",
+      "status": "healthy"
+    }
+  }
+}

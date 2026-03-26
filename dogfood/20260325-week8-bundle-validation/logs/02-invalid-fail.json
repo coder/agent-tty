@@ -1,0 +1,32 @@
+{
+  "bundleDir": "/tmp/agent-terminal-week8-invalid.SVE1TL/invalid-sample",
+  "profile": "contract-reporting",
+  "ok": false,
+  "checks": [
+    {
+      "name": "bundle-exists",
+      "ok": true,
+      "message": "Bundle directory is readable: /tmp/agent-terminal-week8-invalid.SVE1TL/invalid-sample"
+    },
+    {
+      "name": "has-json-output",
+      "ok": false,
+      "message": "Expected at least one JSON output file."
+    },
+    {
+      "name": "has-review-page",
+      "ok": false,
+      "message": "Expected index.html review page in the bundle root."
+    },
+    {
+      "name": "has-notes",
+      "ok": false,
+      "message": "Expected at least one notes markdown file."
+    },
+    {
+      "name": "json-readable",
+      "ok": false,
+      "message": "No JSON output files were found to parse."
+    }
+  ]
+}

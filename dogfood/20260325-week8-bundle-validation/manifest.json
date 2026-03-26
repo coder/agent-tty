@@ -1,0 +1,61 @@
+{
+  "bundle": "20260325-week8-bundle-validation",
+  "title": "Week 8 — Bundle Validation",
+  "description": "Demonstrates validate-bundle across valid, invalid, existing-bundle, and self-validation contract-reporting cases.",
+  "createdAt": "2026-03-25T23:43:45Z",
+  "week": 8,
+  "result": "pass",
+  "commands": [
+    "bash dogfood/20260325-week8-bundle-validation/commands.sh",
+    "npm run --silent validate-bundle -- /tmp/.../valid-sample --profile contract-reporting",
+    "npm run --silent validate-bundle -- /tmp/.../invalid-sample --profile contract-reporting",
+    "npm run --silent validate-bundle -- dogfood/20260325-week7-a-cli-parity --profile contract-reporting",
+    "npm run --silent review-bundle -- /tmp/.../20260319-lifecycle",
+    "npm run --silent validate-bundle -- /tmp/.../20260319-lifecycle --profile contract-reporting",
+    "npm run --silent review-bundle -- dogfood/20260325-week8-bundle-validation",
+    "node --input-type=module <playwright review-page screenshot>",
+    "npm run --silent validate-bundle -- dogfood/20260325-week8-bundle-validation --profile contract-reporting"
+  ],
+  "artifacts": [
+    {
+      "path": "proof-summary.json",
+      "description": "Root-level JSON summary that keeps this proof bundle contract-reporting compliant"
+    },
+    {
+      "path": "logs/01-valid-pass.json",
+      "description": "Contract-reporting validation result for the temporary valid sample bundle"
+    },
+    {
+      "path": "logs/02-invalid-fail.json",
+      "description": "Contract-reporting validation result for the intentionally invalid sample bundle"
+    },
+    {
+      "path": "logs/03-brief-reference-week7-a-fail.json",
+      "description": "Captured mismatch showing the suggested Week 7-A bundle currently fails contract-reporting"
+    },
+    {
+      "path": "logs/04-existing-legacy-pass.json",
+      "description": "Contract-reporting validation result for a reviewed temp copy of the existing 20260319-lifecycle bundle"
+    },
+    {
+      "path": "logs/05-review-page-screenshot.json",
+      "description": "Playwright screenshot capture metadata for this bundle's generated review page"
+    },
+    {
+      "path": "screenshots/01-review-page.png",
+      "description": "Browser screenshot of this bundle's generated review page"
+    },
+    {
+      "path": "logs/06-self-pass.json",
+      "description": "Contract-reporting validation result for the Week 8 proof bundle itself"
+    },
+    {
+      "path": "logs/07-review-self.txt",
+      "description": "Final review-bundle run for the Week 8 proof bundle itself"
+    },
+    {
+      "path": "command-status.tsv",
+      "description": "Step-by-step exit-code ledger for valid, invalid, existing-bundle, review, screenshot, and self-validation runs"
+    }
+  ]
+}

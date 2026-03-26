@@ -2,8 +2,9 @@ import {
   HostInspectResultSchema,
   type ArtifactHealthSummary,
   type InspectResult,
+  type RendererRuntimeSummary,
 } from '../../protocol/messages.js';
-import type { SessionRecord } from '../../protocol/schemas.js';
+import type { SessionRecord, SessionStatus } from '../../protocol/schemas.js';
 
 import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
@@ -51,8 +52,63 @@ function formatArtifactKinds(byKind: Record<string, number>): string {
     .join(', ');
 }
 
+const RENDERER_BACKEND = 'ghostty-web';
+
+function usesOfflineReplay(sessionStatus: SessionStatus): boolean {
+  switch (sessionStatus) {
+    case 'running':
+    case 'exiting':
+      return false;
+    case 'exited':
+    case 'failed':
+    case 'destroying':
+    case 'destroyed':
+      return true;
+    default: {
+      const exhaustiveStatus: never = sessionStatus;
+      throw new Error(`unexpected session status: ${String(exhaustiveStatus)}`);
+    }
+  }
+}
+
+function deriveRendererRuntimeSummary(options: {
+  usedOfflineReplay: boolean;
+  sessionStatus: SessionStatus;
+}): RendererRuntimeSummary {
+  if (options.usedOfflineReplay) {
+    return {
+      backend: RENDERER_BACKEND,
+      mode: 'offline-replay',
+      status: 'fallback',
+      reason: 'host-unreachable',
+    };
+  }
+
+  if (usesOfflineReplay(options.sessionStatus)) {
+    return {
+      backend: RENDERER_BACKEND,
+      mode: 'offline-replay',
+      status: 'fallback',
+      reason: 'session-not-running',
+    };
+  }
+
+  return {
+    backend: RENDERER_BACKEND,
+    mode: 'live-host',
+    status: 'healthy',
+  };
+}
+
+function formatRendererRuntime(summary: RendererRuntimeSummary): string {
+  const reasonSuffix =
+    summary.reason === undefined ? '' : ` — ${summary.reason}`;
+
+  return `${summary.backend} (${summary.mode}, ${summary.status}${reasonSuffix})`;
+}
+
 function formatSessionLines(result: InspectResult): string[] {
-  const { session, eventCount, uptime } = result;
+  const { session, eventCount, rendererRuntime, uptime } = result;
   const lines = [
     `Session ID: ${session.sessionId}`,
     `Status: ${session.status}`,
@@ -63,6 +119,8 @@ function formatSessionLines(result: InspectResult): string[] {
     `Updated At: ${session.updatedAt}`,
     `Event Count: ${String(eventCount)}`,
   ];
+
+  lines.push(`Renderer: ${formatRendererRuntime(rendererRuntime)}`);
 
   if (result.lastEventSeq !== undefined) {
     lines.push(`Last Event Seq: ${String(result.lastEventSeq)}`);
@@ -123,10 +181,7 @@ export async function runInspectCommand(
     });
   }
 
-  const isOffline =
-    session.status === 'exited' ||
-    session.status === 'failed' ||
-    session.status === 'destroyed';
+  const isOffline = usesOfflineReplay(session.status);
   if (!isOffline) {
     try {
       const rawResult: unknown = await sendRpc(
@@ -166,6 +221,10 @@ export async function runInspectCommand(
     artifacts = undefined;
   }
   const terminationCategory = deriveTerminationCategory(session);
+  const rendererRuntime = deriveRendererRuntimeSummary({
+    usedOfflineReplay,
+    sessionStatus: session.status,
+  });
   const result: InspectResult = {
     session,
     eventCount,
@@ -174,6 +233,7 @@ export async function runInspectCommand(
     terminationCategory,
     artifacts,
     usedOfflineReplay,
+    rendererRuntime,
   };
 
   emitSuccess({

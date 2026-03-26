@@ -1,0 +1,6 @@
+validate-bundle PASS contract-reporting: /home/coder/.mux/src/agent-terminal/agent_exec_20a332c5c3/dogfood/20260325-week8-bundle-validation
+✓ bundle-exists: Bundle directory is readable: /home/coder/.mux/src/agent-terminal/agent_exec_20a332c5c3/dogfood/20260325-week8-bundle-validation
+✓ has-json-output: Found 1 JSON output file(s).
+✓ has-review-page: Found review page index.html.
+✓ has-notes: Found 1 note file(s).
+✓ json-readable: Parsed 1 JSON output file(s).

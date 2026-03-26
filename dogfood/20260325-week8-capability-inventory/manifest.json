@@ -1,0 +1,42 @@
+{
+  "bundle": "20260325-week8-capability-inventory",
+  "title": "Week 8 — Capability Inventory",
+  "description": "Captures version --json and doctor --json capability inventories from an isolated temp home for reviewer inspection.",
+  "createdAt": "2026-03-25T23:38:36Z",
+  "week": 8,
+  "result": "pass",
+  "commands": [
+    "npx tsx src/cli/main.ts version --json",
+    "npx tsx src/cli/main.ts doctor --json"
+  ],
+  "artifacts": [
+    {
+      "path": "01-version.json",
+      "description": "Reviewer-facing top-level copy of the version --json capability inventory output"
+    },
+    {
+      "path": "02-doctor.json",
+      "description": "Reviewer-facing top-level copy of the doctor --json capability diagnostics output"
+    },
+    {
+      "path": "logs/01-version.json",
+      "description": "Direct version --json output captured by commands.sh"
+    },
+    {
+      "path": "logs/02-doctor.json",
+      "description": "Direct doctor --json output captured by commands.sh"
+    },
+    {
+      "path": "command-status.tsv",
+      "description": "Step-by-step exit-code ledger for the proof run"
+    },
+    {
+      "path": "agent-terminal-home.txt",
+      "description": "Temp AGENT_TERMINAL_HOME path used during capture"
+    },
+    {
+      "path": "screenshots/01-review-page.png",
+      "description": "Screenshot of the generated review page for reviewer-friendly visual verification"
+    }
+  ]
+}

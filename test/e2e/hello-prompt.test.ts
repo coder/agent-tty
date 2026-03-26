@@ -21,6 +21,12 @@ interface CreateResult {
 
 interface InspectResult {
   session: SessionRecord;
+  rendererRuntime?: {
+    backend: string;
+    mode: string;
+    status: string;
+    reason?: string;
+  };
 }
 
 interface SendKeysResult {
@@ -132,6 +138,11 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
     expect(inspectRunning.command).toBe('inspect');
     expect(inspectRunning.result.session.status).toBe('running');
     expect(inspectRunning.result.session.exitCode).toBeNull();
+    expect(inspectRunning.result.rendererRuntime).toEqual({
+      backend: 'ghostty-web',
+      mode: 'live-host',
+      status: 'healthy',
+    });
 
     const typeExitEnvelope = runCliJson<SuccessEnvelope<Record<string, never>>>(
       ['type', sessionId, 'exit'],
@@ -179,6 +190,12 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
     );
     expect(inspectExited.result.session.status).toBe('exited');
     expect(inspectExited.result.session.exitCode).toBe(0);
+    expect(inspectExited.result.rendererRuntime).toEqual({
+      backend: 'ghostty-web',
+      mode: 'offline-replay',
+      status: 'fallback',
+      reason: 'session-not-running',
+    });
 
     const destroyEnvelope = runCliJson<
       SuccessEnvelope<{ sessionId: string; destroyed: boolean }>

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CapabilityEntrySchema,
   DestroyParamsSchema,
   DestroyResultSchema,
   HostInspectResultSchema,
   InspectResultSchema,
   MarkParamsSchema,
+  RendererRuntimeSummarySchema,
   MarkResultSchema,
   PasteParamsSchema,
   SendKeysResultSchema,
@@ -142,6 +144,87 @@ describe('protocol schemas', () => {
   });
 });
 
+describe('CapabilityEntrySchema', () => {
+  it('accepts a minimal available capability entry', () => {
+    const result = CapabilityEntrySchema.safeParse({
+      name: 'snapshot',
+      status: 'available',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a detailed unavailable capability entry', () => {
+    const result = CapabilityEntrySchema.safeParse({
+      name: 'screenshot',
+      status: 'unavailable',
+      reason: 'playwright-missing',
+      detail: 'Cannot find module',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts every capability name', () => {
+    const names = [
+      'snapshot',
+      'wait',
+      'screenshot',
+      'record-export-asciicast',
+      'record-export-webm',
+    ] as const;
+
+    for (const name of names) {
+      expect(
+        CapabilityEntrySchema.safeParse({ name, status: 'available' }).success,
+      ).toBe(true);
+    }
+  });
+
+  it('accepts every capability status', () => {
+    const statuses = [
+      'available',
+      'unavailable',
+      'degraded',
+      'unknown',
+    ] as const;
+
+    for (const status of statuses) {
+      expect(
+        CapabilityEntrySchema.safeParse({ name: 'snapshot', status }).success,
+      ).toBe(true);
+    }
+  });
+
+  it('rejects extra fields on capability entries', () => {
+    const result = CapabilityEntrySchema.safeParse({
+      name: 'snapshot',
+      status: 'available',
+      extra: true,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects invalid capability names', () => {
+    const result = CapabilityEntrySchema.safeParse({
+      name: 'video-export',
+      status: 'available',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects invalid capability statuses', () => {
+    const result = CapabilityEntrySchema.safeParse({
+      name: 'snapshot',
+      status: 'partial',
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
 describe('RPC message schemas', () => {
   it('accepts a base RPC request', () => {
     const result = RpcRequestSchema.safeParse({
@@ -200,9 +283,88 @@ describe('RPC message schemas', () => {
       session: createSessionRecord(),
       eventCount: 2,
       uptime: 1000,
+      rendererRuntime: {
+        backend: 'ghostty-web',
+        mode: 'live-host',
+        status: 'healthy',
+      },
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it('requires rendererRuntime on inspect results', () => {
+    const result = InspectResultSchema.safeParse({
+      session: createSessionRecord(),
+      eventCount: 2,
+      uptime: 1000,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts renderer runtime summaries for all supported statuses', () => {
+    expect(
+      RendererRuntimeSummarySchema.safeParse({
+        backend: 'ghostty-web',
+        mode: 'live-host',
+        status: 'healthy',
+      }).success,
+    ).toBe(true);
+    expect(
+      RendererRuntimeSummarySchema.safeParse({
+        backend: 'ghostty-web',
+        mode: 'offline-replay',
+        status: 'fallback',
+        reason: 'host-unreachable',
+      }).success,
+    ).toBe(true);
+    expect(
+      RendererRuntimeSummarySchema.safeParse({
+        backend: 'ghostty-web',
+        mode: 'live-host',
+        status: 'unavailable',
+        reason: 'renderer-not-installed',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts renderer runtime summaries for both runtime modes', () => {
+    expect(
+      RendererRuntimeSummarySchema.safeParse({
+        backend: 'ghostty-web',
+        mode: 'live-host',
+        status: 'healthy',
+      }).success,
+    ).toBe(true);
+    expect(
+      RendererRuntimeSummarySchema.safeParse({
+        backend: 'ghostty-web',
+        mode: 'offline-replay',
+        status: 'healthy',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('keeps renderer runtime summaries strict', () => {
+    const result = RendererRuntimeSummarySchema.safeParse({
+      backend: 'ghostty-web',
+      mode: 'live-host',
+      status: 'healthy',
+      detail: 'unexpected',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects renderer runtime summaries with invalid status values', () => {
+    const result = RendererRuntimeSummarySchema.safeParse({
+      backend: 'ghostty-web',
+      mode: 'live-host',
+      status: 'degraded',
+    });
+
+    expect(result.success).toBe(false);
   });
 
   it('keeps inspect RPC results limited to the session payload', () => {
