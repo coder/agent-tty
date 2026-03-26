@@ -1,10 +1,18 @@
-import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdtemp,
+  mkdir,
+  realpath,
+  rm,
+  truncate,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  MAX_JSON_FILE_BYTES,
   runValidateBundleCli,
   validateBundle,
   type BundleValidationCheck,
@@ -106,6 +114,31 @@ describe('validate-bundle', () => {
     );
   });
 
+  it('fails when the bundle directory is empty', async () => {
+    const bundleRoot = await createTempDir();
+
+    const result = await validateBundle(bundleRoot, 'contract-reporting');
+
+    expect(result.ok).toBe(false);
+    expect(findCheck(result, 'has-json-output').ok).toBe(false);
+    expect(findCheck(result, 'has-review-page').ok).toBe(false);
+    expect(findCheck(result, 'has-notes').ok).toBe(false);
+    expect(findCheck(result, 'json-readable').ok).toBe(false);
+  });
+
+  it('fails when a contract-reporting bundle is missing notes', async () => {
+    const bundleRoot = await createTempDir();
+    await writeFixtureFile(bundleRoot, 'index.html', '<!doctype html>\n');
+    await writeFixtureFile(bundleRoot, '01-create.json', '{"ok":true}\n');
+
+    const result = await validateBundle(bundleRoot, 'contract-reporting');
+
+    expect(result.ok).toBe(false);
+    expect(findCheck(result, 'has-json-output').ok).toBe(true);
+    expect(findCheck(result, 'has-review-page').ok).toBe(true);
+    expect(findCheck(result, 'has-notes').ok).toBe(false);
+  });
+
   it('fails when a contract-reporting bundle is missing JSON output', async () => {
     const bundleRoot = await createTempDir();
     await writeFixtureFile(bundleRoot, 'index.html', '<!doctype html>\n');
@@ -140,6 +173,27 @@ describe('validate-bundle', () => {
     expect(findCheck(result, 'json-readable').ok).toBe(false);
     expect(findCheck(result, 'json-readable').message).toContain(
       '01-create.json',
+    );
+  });
+
+  it('fails when a contract-reporting bundle has oversized JSON output', async () => {
+    const bundleRoot = await createTempDir();
+    const jsonPath = join(bundleRoot, '01-create.json');
+    await writeFixtureFile(bundleRoot, 'index.html', '<!doctype html>\n');
+    await writeFixtureFile(bundleRoot, 'notes.md', '# Notes\n');
+    await writeFile(jsonPath, '{', 'utf8');
+    await truncate(jsonPath, MAX_JSON_FILE_BYTES + 1);
+
+    const result = await validateBundle(bundleRoot, 'contract-reporting');
+
+    expect(result.ok).toBe(false);
+    expect(findCheck(result, 'has-json-output').ok).toBe(true);
+    expect(findCheck(result, 'json-readable').ok).toBe(false);
+    expect(findCheck(result, 'json-readable').message).toContain(
+      '01-create.json',
+    );
+    expect(findCheck(result, 'json-readable').message).toContain(
+      String(MAX_JSON_FILE_BYTES),
     );
   });
 

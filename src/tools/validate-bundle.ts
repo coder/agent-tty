@@ -64,6 +64,9 @@ function isBundleValidationProfile(
   return BUNDLE_VALIDATION_PROFILES.includes(value as BundleValidationProfile);
 }
 
+/** Maximum size for JSON files in a bundle (50 MB, matching event-log limit). */
+export const MAX_JSON_FILE_BYTES = 50 * 1024 * 1024;
+
 async function isFile(filePath: string): Promise<boolean> {
   try {
     return (await stat(filePath)).isFile();
@@ -85,16 +88,28 @@ async function buildJsonReadableCheck(
   }
 
   const invalidJsonPaths: string[] = [];
+  const oversizedJsonPaths: string[] = [];
   for (const artifact of jsonArtifacts) {
+    const filePath = join(bundleRoot, artifact.relativePath);
     try {
-      const content = await readFile(
-        join(bundleRoot, artifact.relativePath),
-        'utf8',
-      );
+      const fileStat = await stat(filePath);
+      if (fileStat.size > MAX_JSON_FILE_BYTES) {
+        oversizedJsonPaths.push(artifact.relativePath);
+        continue;
+      }
+      const content = await readFile(filePath, 'utf8');
       JSON.parse(content) as unknown;
     } catch {
       invalidJsonPaths.push(artifact.relativePath);
     }
+  }
+
+  if (oversizedJsonPaths.length > 0) {
+    return buildCheck(
+      'json-readable',
+      false,
+      `JSON output files exceed ${String(MAX_JSON_FILE_BYTES)} byte limit: ${oversizedJsonPaths.join(', ')}`,
+    );
   }
 
   if (invalidJsonPaths.length > 0) {
