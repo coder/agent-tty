@@ -37,11 +37,7 @@ import type {
   ScreenshotResult,
   SemanticSnapshot,
 } from '../types.js';
-import {
-  BUNDLED_FONT_BUFFER,
-  BUNDLED_FONT_CONTENT_TYPE,
-  BUNDLED_FONT_ROUTE,
-} from '../bundledFont.js';
+import { BUNDLED_FONT_ASSETS } from '../bundledFont.js';
 import { hashProfile } from '../profiles.js';
 
 interface GhosttyHarnessVisibleLine {
@@ -307,6 +303,7 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
             /^#[0-9a-fA-F]{6}$/u.test(profile.foregroundColor),
           'profile.foregroundColor must be a hex color',
         );
+        let validatedFontAssets;
         if (
           profile.fontAssetIdentity !== undefined &&
           profile.fontAssetIdentity !== null
@@ -317,8 +314,71 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
             'profile.fontAssetIdentity must be a 64-character lowercase SHA-256 hex string',
           );
         }
+        if (profile.fontAssets !== undefined) {
+          invariant(
+            Array.isArray(profile.fontAssets),
+            'profile.fontAssets must be an array when provided',
+          );
+          invariant(
+            profile.fontAssets.length > 0,
+            'profile.fontAssets must be non-empty when provided',
+          );
 
-        return Object.freeze({ ...profile });
+          const seenAssetIdentities = new Set();
+          const seenRoutes = new Set();
+          validatedFontAssets = profile.fontAssets.map((fontAsset, index) => {
+            invariant(
+              fontAsset !== null && typeof fontAsset === 'object',
+              \`profile.fontAssets[\${index}] must be an object\`,
+            );
+            assertNonEmptyString(
+              fontAsset.family,
+              \`profile.fontAssets[\${index}].family must be a non-empty string\`,
+            );
+            invariant(
+              typeof fontAsset.assetIdentity === 'string' &&
+                /^[a-f0-9]{64}$/u.test(fontAsset.assetIdentity),
+              \`profile.fontAssets[\${index}].assetIdentity must be a 64-character lowercase SHA-256 hex string\`,
+            );
+            assertNonEmptyString(
+              fontAsset.route,
+              \`profile.fontAssets[\${index}].route must be a non-empty string\`,
+            );
+            invariant(
+              fontAsset.route.startsWith('/'),
+              \`profile.fontAssets[\${index}].route must be an absolute route path\`,
+            );
+            assertNonEmptyString(
+              fontAsset.weight,
+              \`profile.fontAssets[\${index}].weight must be a non-empty string\`,
+            );
+            invariant(
+              fontAsset.style === 'normal' ||
+                fontAsset.style === 'italic' ||
+                fontAsset.style === 'oblique',
+              \`profile.fontAssets[\${index}].style must be normal, italic, or oblique\`,
+            );
+            invariant(
+              !seenAssetIdentities.has(fontAsset.assetIdentity),
+              \`profile.fontAssets[\${index}].assetIdentity must be unique\`,
+            );
+            invariant(
+              !seenRoutes.has(fontAsset.route),
+              \`profile.fontAssets[\${index}].route must be unique\`,
+            );
+            seenAssetIdentities.add(fontAsset.assetIdentity);
+            seenRoutes.add(fontAsset.route);
+
+            return Object.freeze({ ...fontAsset });
+          });
+        }
+
+        return Object.freeze({
+          ...profile,
+          ...(validatedFontAssets !== undefined && {
+            fontAssets: Object.freeze(validatedFontAssets),
+          }),
+        });
       }
 
       const profile = parseProfileFromLocation();
@@ -662,24 +722,65 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         },
       };
 
-      async function loadBundledFont() {
+      function getBundledFontAssets() {
+        if (Array.isArray(profile.fontAssets) && profile.fontAssets.length > 0) {
+          return profile.fontAssets;
+        }
         if (!profile.fontAssetIdentity) {
-          return;
+          return [];
         }
 
-        const fontFaceRule = new FontFace(
-          profile.fontFamily,
-          'url(/assets/fonts/JetBrainsMono-Regular-latin.woff2)',
-          { style: 'normal', weight: '400' },
-        );
+        return [
+          Object.freeze({
+            family: 'JetBrains Mono',
+            assetIdentity: profile.fontAssetIdentity,
+            route: '/assets/fonts/JetBrainsMono-Regular-latin.woff2',
+            style: 'normal',
+            weight: '400',
+          }),
+        ];
+      }
 
-        const loadedFace = await fontFaceRule.load();
-        document.fonts.add(loadedFace);
+      async function sha256Hex(buffer) {
+        const digest = await crypto.subtle.digest('SHA-256', buffer);
+        return Array.from(new Uint8Array(digest), (byte) =>
+          byte.toString(16).padStart(2, '0'),
+        ).join('');
+      }
+
+      async function loadBundledFonts() {
+        const bundledFontAssets = getBundledFontAssets();
+        for (const fontAsset of bundledFontAssets) {
+          const response = await fetch(fontAsset.route, { cache: 'no-store' });
+          invariant(
+            response.ok,
+            \`bundled font asset \${fontAsset.route} failed to load (\${response.status})\`,
+          );
+
+          const fontBuffer = await response.arrayBuffer();
+          invariant(
+            fontBuffer.byteLength > 0,
+            \`bundled font asset \${fontAsset.route} must not be empty\`,
+          );
+
+          const assetIdentity = await sha256Hex(fontBuffer);
+          invariant(
+            assetIdentity === fontAsset.assetIdentity,
+            \`bundled font asset \${fontAsset.route} identity did not match the profile descriptor\`,
+          );
+
+          const fontFaceRule = new FontFace(fontAsset.family, fontBuffer, {
+            style: fontAsset.style,
+            weight: fontAsset.weight,
+          });
+          const loadedFace = await fontFaceRule.load();
+          document.fonts.add(loadedFace);
+        }
         await document.fonts.ready;
       }
 
       async function boot() {
-        await loadBundledFont();
+        await loadBundledFonts();
         await init();
 
         const terminal = new Terminal({
@@ -875,14 +976,16 @@ async function loadServedAssets(): Promise<
     });
   }
 
-  invariant(
-    BUNDLED_FONT_BUFFER.byteLength > 0,
-    'bundled font buffer must not be empty',
-  );
-  assetEntries.set(BUNDLED_FONT_ROUTE, {
-    body: BUNDLED_FONT_BUFFER,
-    contentType: BUNDLED_FONT_CONTENT_TYPE,
-  });
+  for (const bundledFontAsset of BUNDLED_FONT_ASSETS) {
+    invariant(
+      bundledFontAsset.buffer.byteLength > 0,
+      `bundled font asset ${bundledFontAsset.route} must not be empty`,
+    );
+    assetEntries.set(bundledFontAsset.route, {
+      body: bundledFontAsset.buffer,
+      contentType: bundledFontAsset.contentType,
+    });
+  }
 
   return assetEntries;
 }

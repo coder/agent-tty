@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-03-26T00:17:58.564Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "UNICODE GRID COMPLETE",
+    "cursorRow": 10,
+    "cursorCol": 0,
+    "capturedAtSeq": 1
+  }
+}

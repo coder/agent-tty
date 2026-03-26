@@ -6,9 +6,14 @@ import { invariant } from '../util/assert.js';
 import {
   BUNDLED_FONT_ASSET_IDENTITY,
   BUNDLED_FONT_FAMILY,
+  BUNDLED_PRIMARY_FONT_ASSET,
+  BUNDLED_SYMBOLS_FONT_ASSET,
+  BUNDLED_SYMBOLS_FONT_FAMILY,
+  getBundledFontAssetByIdentity,
 } from './bundledFont.js';
 import {
   RenderProfileConfigSchema,
+  type RenderProfileBundledFont,
   type RenderProfileConfig,
 } from './types.js';
 
@@ -17,14 +22,50 @@ export const BUILTIN_PROFILE_NAMES = Object.freeze([
   'reference-light',
 ] as const);
 
+export const REFERENCE_PROFILE_FONT_STACK = `"${BUNDLED_FONT_FAMILY}", "${BUNDLED_SYMBOLS_FONT_FAMILY}", monospace`;
+
 type BuiltinProfileName = (typeof BUILTIN_PROFILE_NAMES)[number];
+
+function createBundledFontDescriptor(
+  family: string,
+  assetIdentity: string,
+  route: string,
+  weight: string,
+  style: 'italic' | 'normal' | 'oblique',
+): RenderProfileBundledFont {
+  return Object.freeze({
+    assetIdentity,
+    family,
+    route,
+    style,
+    weight,
+  });
+}
+
+const BUILTIN_PROFILE_FONT_ASSETS = Object.freeze([
+  createBundledFontDescriptor(
+    BUNDLED_PRIMARY_FONT_ASSET.family,
+    BUNDLED_PRIMARY_FONT_ASSET.assetIdentity,
+    BUNDLED_PRIMARY_FONT_ASSET.route,
+    BUNDLED_PRIMARY_FONT_ASSET.weight,
+    BUNDLED_PRIMARY_FONT_ASSET.style,
+  ),
+  createBundledFontDescriptor(
+    BUNDLED_SYMBOLS_FONT_ASSET.family,
+    BUNDLED_SYMBOLS_FONT_ASSET.assetIdentity,
+    BUNDLED_SYMBOLS_FONT_ASSET.route,
+    BUNDLED_SYMBOLS_FONT_ASSET.weight,
+    BUNDLED_SYMBOLS_FONT_ASSET.style,
+  ),
+] as const satisfies readonly RenderProfileBundledFont[]);
 
 const BUILTIN_PROFILES: Record<BuiltinProfileName, RenderProfileConfig> = {
   'reference-dark': {
     name: 'reference-dark',
     theme: 'dark',
-    fontFamily: BUNDLED_FONT_FAMILY,
+    fontFamily: REFERENCE_PROFILE_FONT_STACK,
     fontAssetIdentity: BUNDLED_FONT_ASSET_IDENTITY,
+    fontAssets: [...BUILTIN_PROFILE_FONT_ASSETS],
     fontSize: 14,
     cursorStyle: 'block',
     backgroundColor: '#1e1e2e',
@@ -33,8 +74,9 @@ const BUILTIN_PROFILES: Record<BuiltinProfileName, RenderProfileConfig> = {
   'reference-light': {
     name: 'reference-light',
     theme: 'light',
-    fontFamily: BUNDLED_FONT_FAMILY,
+    fontFamily: REFERENCE_PROFILE_FONT_STACK,
     fontAssetIdentity: BUNDLED_FONT_ASSET_IDENTITY,
+    fontAssets: [...BUILTIN_PROFILE_FONT_ASSETS],
     fontSize: 14,
     cursorStyle: 'block',
     backgroundColor: '#eff1f5',
@@ -49,6 +91,21 @@ function formatSchemaIssues(error: ZodError<RenderProfileConfig>): string {
       return `${path}: ${issue.message}`;
     })
     .join('; ');
+}
+
+function assertBundledFontDescriptor(
+  fontAsset: RenderProfileBundledFont,
+  label: string,
+): void {
+  const bundledAsset = getBundledFontAssetByIdentity(fontAsset.assetIdentity);
+  invariant(
+    bundledAsset !== undefined,
+    `${label} assetIdentity must reference a bundled font asset`,
+  );
+  invariant(
+    bundledAsset.route === fontAsset.route,
+    `${label} route must match the bundled font asset route`,
+  );
 }
 
 function assertRenderProfileConfig(
@@ -76,6 +133,21 @@ function assertRenderProfileConfig(
     /^#[0-9a-fA-F]{6}$/u.test(validatedConfig.foregroundColor),
     'render profile foregroundColor must be a hex color',
   );
+  if (validatedConfig.fontAssetIdentity !== undefined) {
+    invariant(
+      getBundledFontAssetByIdentity(validatedConfig.fontAssetIdentity) !==
+        undefined,
+      'render profile fontAssetIdentity must reference a bundled font asset',
+    );
+  }
+  for (const [index, fontAsset] of (
+    validatedConfig.fontAssets ?? []
+  ).entries()) {
+    assertBundledFontDescriptor(
+      fontAsset,
+      `render profile fontAssets.${String(index)}`,
+    );
+  }
 }
 
 function isBuiltinProfileName(name: string): name is BuiltinProfileName {
@@ -90,8 +162,19 @@ for (const profileName of BUILTIN_PROFILE_NAMES) {
   assertRenderProfileConfig(BUILTIN_PROFILES[profileName]);
 }
 
+function cloneBundledFontDescriptor(
+  fontAsset: RenderProfileBundledFont,
+): RenderProfileBundledFont {
+  return { ...fontAsset };
+}
+
 function cloneProfile(profile: RenderProfileConfig): RenderProfileConfig {
-  return { ...profile };
+  return {
+    ...profile,
+    ...(profile.fontAssets !== undefined
+      ? { fontAssets: profile.fontAssets.map(cloneBundledFontDescriptor) }
+      : {}),
+  };
 }
 
 export function getBuiltinProfile(
@@ -113,6 +196,14 @@ export function hashProfile(config: RenderProfileConfig): string {
     theme: config.theme,
     fontFamily: config.fontFamily,
     fontAssetIdentity: config.fontAssetIdentity ?? null,
+    fontAssets:
+      config.fontAssets?.map((fontAsset) => ({
+        assetIdentity: fontAsset.assetIdentity,
+        family: fontAsset.family,
+        route: fontAsset.route,
+        style: fontAsset.style,
+        weight: fontAsset.weight,
+      })) ?? null,
     fontSize: config.fontSize,
     cursorStyle: config.cursorStyle,
     backgroundColor: config.backgroundColor,

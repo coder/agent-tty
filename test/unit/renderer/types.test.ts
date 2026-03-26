@@ -201,6 +201,15 @@ describe('renderer schemas', () => {
         name: 'custom-profile',
         theme: 'dark',
         fontFamily: 'monospace',
+        fontAssets: [
+          {
+            family: 'JetBrains Mono',
+            assetIdentity: 'a'.repeat(64),
+            route: '/assets/fonts/JetBrainsMono-Regular-latin.woff2',
+            weight: '400',
+            style: 'normal',
+          },
+        ],
         fontSize: 14,
         cursorStyle: 'block',
         backgroundColor: '#1e1e2e',
@@ -239,6 +248,36 @@ describe('renderer schemas', () => {
         renderProfileHash: 'b'.repeat(64),
       }).success,
     ).toBe(true);
+  });
+
+  it('rejects render profiles with duplicate bundled font descriptors', () => {
+    const result = RenderProfileConfigSchema.safeParse({
+      name: 'duplicate-font-assets',
+      theme: 'dark',
+      fontFamily: 'monospace',
+      fontAssets: [
+        {
+          family: 'JetBrains Mono',
+          assetIdentity: 'a'.repeat(64),
+          route: '/assets/fonts/JetBrainsMono-Regular-latin.woff2',
+          weight: '400',
+          style: 'normal',
+        },
+        {
+          family: 'Symbols Nerd Font Mono',
+          assetIdentity: 'a'.repeat(64),
+          route: '/assets/fonts/SymbolsNerdFontMono-Regular.ttf',
+          weight: '400',
+          style: 'normal',
+        },
+      ],
+      fontSize: 14,
+      cursorStyle: 'block',
+      backgroundColor: '#1e1e2e',
+      foregroundColor: '#cdd6f4',
+    });
+
+    expect(result.success).toBe(false);
   });
 
   it('rejects invalid render profile colors', () => {

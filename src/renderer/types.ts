@@ -22,6 +22,11 @@ const Sha256HexSchema = z
     /^[a-f0-9]{64}$/u,
     'must be a 64-character lowercase SHA-256 hex string',
   );
+const BundledFontStyleSchema = z.enum(['normal', 'italic', 'oblique']);
+const RoutePathSchema = z
+  .string()
+  .min(1)
+  .refine((value) => value.startsWith('/'), 'must be an absolute route path');
 
 const OutputReplayEventSchema = z
   .object({
@@ -225,16 +230,57 @@ export const ScreenshotResultSchema = z
   .strict();
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;
 
+export const RenderProfileBundledFontSchema = z
+  .object({
+    family: NonEmptyStringSchema,
+    assetIdentity: Sha256HexSchema,
+    route: RoutePathSchema,
+    weight: NonEmptyStringSchema,
+    style: BundledFontStyleSchema,
+  })
+  .strict();
+export type RenderProfileBundledFont = z.infer<
+  typeof RenderProfileBundledFontSchema
+>;
+
 export const RenderProfileConfigSchema = z
   .object({
     name: NonEmptyStringSchema,
     theme: ThemeSchema,
     fontFamily: NonEmptyStringSchema,
     fontAssetIdentity: Sha256HexSchema.optional(),
+    fontAssets: z.array(RenderProfileBundledFontSchema).min(1).optional(),
     fontSize: PositiveNumberSchema,
     cursorStyle: CursorStyleSchema,
     backgroundColor: HexColorSchema,
     foregroundColor: HexColorSchema,
   })
-  .strict();
+  .strict()
+  .superRefine(({ fontAssets }, context) => {
+    if (fontAssets === undefined) {
+      return;
+    }
+
+    const seenAssetIdentities = new Set<string>();
+    const seenRoutes = new Set<string>();
+    for (const [index, fontAsset] of fontAssets.entries()) {
+      if (seenAssetIdentities.has(fontAsset.assetIdentity)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['fontAssets', index, 'assetIdentity'],
+          message: 'fontAssets must not repeat asset identities',
+        });
+      }
+      seenAssetIdentities.add(fontAsset.assetIdentity);
+
+      if (seenRoutes.has(fontAsset.route)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['fontAssets', index, 'route'],
+          message: 'fontAssets must not repeat route paths',
+        });
+      }
+      seenRoutes.add(fontAsset.route);
+    }
+  });
 export type RenderProfileConfig = z.infer<typeof RenderProfileConfigSchema>;

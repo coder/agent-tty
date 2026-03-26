@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-26T00:18:11.524Z",
+  "result": {
+    "sessionId": "01KMKR2GPS70FX8B8BTDGSZHJD",
+    "format": "asciicast",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent-terminal-v12b-1/dogfood/20260326-nerd-font-fallback/unicode-grid.cast",
+    "bytes": 799,
+    "sha256": "8b49f61b2f316d301f824829000a844c02b6a8ad3639ecc2a920ca411b9a5ec1",
+    "capturedAtSeq": 1,
+    "durationMs": 1216,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "title": "01KMKR2GPS70FX8B8BTDGSZHJD",
+      "timestamp": 1774484276,
+      "outputEventCount": 1,
+      "resizeEventCount": 0,
+      "markerCount": 0
+    }
+  }
+}

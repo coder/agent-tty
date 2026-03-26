@@ -96,7 +96,7 @@ describe('unicode-grid e2e', { timeout: 60_000 }, () => {
     const output = normalizeTerminalOutput(
       await readOutput(testHome, sessionId),
     );
-    for (const label of ['ASCII', 'BOX', 'CJK', 'EMOJI', 'AMBIG']) {
+    for (const label of ['ASCII', 'BOX', 'CJK', 'EMOJI', 'AMBIG', 'NERD']) {
       expect(output).toContain(label);
     }
     expect(output).toContain('UNICODE GRID COMPLETE');
@@ -109,9 +109,11 @@ describe('unicode-grid e2e', { timeout: 60_000 }, () => {
     expect(snapshotEnvelope.command).toBe('snapshot');
     expectTextSnapshot(snapshotEnvelope.result);
     expect(snapshotEnvelope.result.sessionId).toBe(sessionId);
-    for (const label of ['ASCII', 'BOX', 'CJK', 'EMOJI', 'AMBIG']) {
+    for (const label of ['ASCII', 'BOX', 'CJK', 'EMOJI', 'AMBIG', 'NERD']) {
       expect(snapshotEnvelope.result.text).toContain(label);
     }
+    expect(snapshotEnvelope.result.text).toContain('');
+    expect(snapshotEnvelope.result.text).toContain('');
     expect(snapshotEnvelope.result.text).toContain('UNICODE GRID COMPLETE');
 
     const screenshotEnvelope = runCliJson<SuccessEnvelope<ScreenshotResult>>(
