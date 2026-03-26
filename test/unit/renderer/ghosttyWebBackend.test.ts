@@ -5,11 +5,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  BUNDLED_FONT_BUFFER,
-  BUNDLED_FONT_CONTENT_TYPE,
-  BUNDLED_FONT_ROUTE,
-} from '../../../src/renderer/bundledFont.js';
+import { BUNDLED_FONT_ASSETS } from '../../../src/renderer/bundledFont.js';
 import { hashProfile, resolveProfile } from '../../../src/renderer/profiles.js';
 import { GhosttyWebBackend } from '../../../src/renderer/ghosttyWeb/index.js';
 
@@ -212,7 +208,7 @@ describe('GhosttyWebBackend unit guards', () => {
     );
   });
 
-  it('serves the bundled font asset over the backend HTTP server', async () => {
+  it('serves all bundled font assets over the backend HTTP server', async () => {
     const backend = createBackend();
 
     try {
@@ -226,17 +222,19 @@ describe('GhosttyWebBackend unit guards', () => {
         throw new Error('expected ghostty-web backend server origin');
       }
 
-      const response = await fetch(
-        new URL(BUNDLED_FONT_ROUTE, serverOrigin).toString(),
-      );
-      expect(response.status).toBe(200);
-      expect(response.headers.get('content-type')).toContain(
-        BUNDLED_FONT_CONTENT_TYPE,
-      );
+      for (const bundledFontAsset of BUNDLED_FONT_ASSETS) {
+        const response = await fetch(
+          new URL(bundledFontAsset.route, serverOrigin).toString(),
+        );
+        expect(response.status).toBe(200);
+        expect(response.headers.get('content-type')).toContain(
+          bundledFontAsset.contentType,
+        );
 
-      const fontBody = Buffer.from(await response.arrayBuffer());
-      expect(fontBody.byteLength).toBeGreaterThan(0);
-      expect(fontBody.equals(BUNDLED_FONT_BUFFER)).toBe(true);
+        const fontBody = Buffer.from(await response.arrayBuffer());
+        expect(fontBody.byteLength).toBeGreaterThan(0);
+        expect(fontBody.equals(bundledFontAsset.buffer)).toBe(true);
+      }
     } finally {
       await backend.dispose();
     }

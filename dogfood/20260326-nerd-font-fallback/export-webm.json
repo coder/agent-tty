@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-26T00:18:10.433Z",
+  "result": {
+    "sessionId": "01KMKR2GPS70FX8B8BTDGSZHJD",
+    "format": "webm",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent-terminal-v12b-1/dogfood/20260326-nerd-font-fallback/unicode-grid-reference-dark.webm",
+    "bytes": 34623,
+    "sha256": "62a0c16411970e23f075f4c5aceceb86c040ed04e0d25e9eee029e694c90ea71",
+    "capturedAtSeq": 1,
+    "durationMs": 1216,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d",
+      "timingMode": "recorded",
+      "outputEventCount": 1,
+      "resizeEventCount": 0
+    }
+  }
+}

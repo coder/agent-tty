@@ -26,6 +26,7 @@ const rows = [
   { row: 6, label: 'CJK', sample: '漢字テスト中文日本' },
   { row: 7, label: 'EMOJI', sample: '✓✗★♠♣♥♦⚡☀☁' },
   { row: 8, label: 'AMBIG', sample: 'αβγδ∑∏∫∂√∞' },
+  { row: 9, label: 'NERD', sample: '  󰊢 󰈙 ' },
 ] as const;
 
 for (const { label, sample } of rows) {

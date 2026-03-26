@@ -2,3 +2,8 @@ Font: JetBrains Mono by JetBrains s.r.o.
 License: SIL Open Font License 1.1
 Source: https://github.com/JetBrains/JetBrainsMono
 Subset: Latin (from Google Fonts CDN)
+
+Font: Symbols Nerd Font Mono by the Nerd Fonts contributors
+License: SIL Open Font License 1.1
+Source: https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/NerdFontsSymbolsOnly.zip
+Asset: SymbolsNerdFontMono-Regular.ttf
