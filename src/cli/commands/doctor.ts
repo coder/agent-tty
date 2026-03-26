@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   rename,
   rm,
   stat,
@@ -17,8 +18,8 @@ import {
   type Server,
   type Socket,
 } from 'node:net';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { join, normalize } from 'node:path';
 import process from 'node:process';
 
 import type { CommandContext } from '../context.js';
@@ -32,7 +33,7 @@ import {
   artifactPath,
   ensureArtifactsDir,
 } from '../../storage/artifactPaths.js';
-import { ensureHome } from '../../storage/home.js';
+import { ensureHome, resolveHome } from '../../storage/home.js';
 import {
   eventLogPath,
   sessionDir,
@@ -52,12 +53,14 @@ const DOCTOR_CHECK_LABELS: Readonly<Record<string, string>> = Object.freeze({
   'node-runtime': 'node',
   'cwd-access': 'cwd',
   'temp-dir': 'temp',
+  home_isolation: 'home-isolation',
   'home-writable': 'home-write',
   'pty-spawn': 'pty',
   'socket-viable': 'socket',
   'artifact-atomicity': 'artifacts',
   'event-log-writable': 'event-log',
   playwright_available: 'playwright',
+  browser_cache_accessible: 'browser-cache',
   browser_launch: 'browser',
   ghostty_web_available: 'ghostty-web',
   screenshot_viable: 'screenshot',
@@ -67,7 +70,16 @@ let doctorResourceSequence = 0;
 
 type DoctorCheckGroupName = 'environment' | 'renderer';
 type DoctorCheckStatus = 'pass' | 'fail' | 'skip';
-type DoctorCheckOperation = () => Promise<string> | string;
+
+interface DoctorCheckSkipResult {
+  status: 'skip';
+  message: string;
+}
+
+type DoctorCheckOutcome = string | DoctorCheckSkipResult;
+type DoctorCheckOperation = (
+  priorChecks: ReadonlyArray<DoctorCheck>,
+) => Promise<DoctorCheckOutcome> | DoctorCheckOutcome;
 type DoctorCheckDefinition = readonly [
   name: string,
   operation: DoctorCheckOperation,
@@ -171,6 +183,43 @@ function getCheckDurationMs(startedAtMs: number): number {
   return Math.max(0, Date.now() - startedAtMs);
 }
 
+function skipDoctorCheck(message: string): DoctorCheckSkipResult {
+  assert(message.length > 0, 'doctor check skip message must be non-empty');
+  return {
+    status: 'skip',
+    message,
+  };
+}
+
+function findDoctorCheck(
+  checks: ReadonlyArray<DoctorCheck>,
+  name: string,
+): DoctorCheck | undefined {
+  return checks.find((check) => check.name === name);
+}
+
+function resolveSystemHomeDirectory(): string {
+  const configuredHome = process.env.HOME ?? homedir();
+  assert(
+    configuredHome.length > 0,
+    'system home directory must be a non-empty path',
+  );
+  return normalize(configuredHome);
+}
+
+function resolvePlaywrightBrowserCachePath(): string {
+  const overridePath = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  if (overridePath !== undefined) {
+    assert(
+      overridePath.length > 0,
+      'PLAYWRIGHT_BROWSERS_PATH must be a non-empty path when set',
+    );
+    return normalize(overridePath);
+  }
+
+  return join(resolveSystemHomeDirectory(), '.cache', 'ms-playwright');
+}
+
 function getDoctorDependencies(
   overrides: Partial<DoctorDependencies>,
 ): DoctorDependencies {
@@ -247,24 +296,27 @@ export async function runDoctorCheck(
   name: string,
   operation: DoctorCheckOperation,
   timeoutMs = CHECK_TIMEOUT_MS,
+  priorChecks: ReadonlyArray<DoctorCheck> = [],
 ): Promise<DoctorCheck> {
   assert(name.length > 0, 'doctor check name must be a non-empty string');
 
   const startedAtMs = Date.now();
   try {
-    const message = await withTimeout(
-      Promise.resolve(operation()),
+    const outcome = await withTimeout(
+      Promise.resolve(operation(priorChecks)),
       timeoutMs,
       `${name} timed out after ${String(timeoutMs)}ms`,
     );
+    const status = typeof outcome === 'string' ? 'pass' : outcome.status;
+    const message = typeof outcome === 'string' ? outcome : outcome.message;
     assert(
       message.length > 0,
-      'doctor check success message must be non-empty',
+      `doctor check ${status} message must be non-empty`,
     );
 
     return {
       name,
-      status: 'pass',
+      status,
       message,
       durationMs: getCheckDurationMs(startedAtMs),
     };
@@ -289,7 +341,7 @@ async function runCheckGroup(
 ): Promise<DoctorCheck[]> {
   const results: DoctorCheck[] = [];
   for (const [name, operation, timeoutMs] of checks) {
-    results.push(await runDoctorCheck(name, operation, timeoutMs));
+    results.push(await runDoctorCheck(name, operation, timeoutMs, results));
   }
 
   return results;
@@ -318,6 +370,21 @@ async function runTemporaryDirectoryCheck(): Promise<string> {
   const temporaryDirectory = await mkdtemp(directoryPrefix);
   await rm(temporaryDirectory, { recursive: true, force: true });
   return `temp dir ok: ${tmpdir()}`;
+}
+
+export function runHomeIsolationCheck(): string {
+  const configuredHome = process.env.AGENT_TERMINAL_HOME;
+  if (configuredHome === undefined) {
+    return 'Agent-terminal home uses default location';
+  }
+
+  const resolvedDoctorHome = resolveHome(configuredHome);
+  const systemHome = resolveSystemHomeDirectory();
+  if (resolvedDoctorHome !== systemHome) {
+    return `Agent-terminal home is isolated from system home: ${resolvedDoctorHome}`;
+  }
+
+  return 'Agent-terminal home uses default location';
 }
 
 export async function runHomeWritableCheck(
@@ -606,6 +673,44 @@ async function runPlaywrightAvailableCheck(): Promise<string> {
   return 'available';
 }
 
+const PLAYWRIGHT_BROWSER_DIRECTORY_PATTERN =
+  /^(?:chromium(?:_headless_shell)?|firefox|webkit|msedge)-/;
+
+export async function runBrowserCacheAccessibleCheck(
+  priorChecks: ReadonlyArray<DoctorCheck> = [],
+): Promise<DoctorCheckOutcome> {
+  const playwrightCheck = findDoctorCheck(priorChecks, 'playwright_available');
+  if (playwrightCheck?.status === 'fail') {
+    return skipDoctorCheck(
+      'playwright unavailable; browser cache check not attempted',
+    );
+  }
+
+  const browserCachePath = resolvePlaywrightBrowserCachePath();
+  try {
+    await access(browserCachePath, fsConstants.R_OK | fsConstants.X_OK);
+    const cacheEntries = await readdir(browserCachePath, {
+      withFileTypes: true,
+    });
+    const browserDirectory = cacheEntries.find(
+      (entry) =>
+        entry.isDirectory() &&
+        PLAYWRIGHT_BROWSER_DIRECTORY_PATTERN.test(entry.name),
+    );
+    assert(
+      browserDirectory !== undefined,
+      `Playwright browser cache not found at ${browserCachePath}. Run 'npx playwright install chromium' to install.`,
+    );
+  } catch (error) {
+    throw new Error(
+      `Playwright browser cache not found at ${browserCachePath}. Run 'npx playwright install chromium' to install.`,
+      { cause: error },
+    );
+  }
+
+  return `browser cache accessible: ${browserCachePath}`;
+}
+
 async function runBrowserLaunchCheck(): Promise<string> {
   const chromium = await getPlaywrightChromium();
   const browser = await chromium.launch({
@@ -689,20 +794,33 @@ async function runScreenshotViabilityCheck(): Promise<string> {
 
 export async function runDoctorChecks(): Promise<DoctorResult> {
   const environment = await runCheckGroup([
-    ['node-runtime', runNodeRuntimeCheck],
-    ['cwd-access', runWorkingDirectoryCheck],
-    ['temp-dir', runTemporaryDirectoryCheck],
-    ['home-writable', runHomeWritableCheck, QUICK_CHECK_TIMEOUT_MS],
-    ['pty-spawn', runPtySpawnCheck, QUICK_CHECK_TIMEOUT_MS],
-    ['socket-viable', runSocketViabilityCheck, QUICK_CHECK_TIMEOUT_MS],
-    ['artifact-atomicity', runArtifactAtomicityCheck, QUICK_CHECK_TIMEOUT_MS],
-    ['event-log-writable', runEventLogWritabilityCheck, QUICK_CHECK_TIMEOUT_MS],
+    ['node-runtime', () => runNodeRuntimeCheck()],
+    ['cwd-access', () => runWorkingDirectoryCheck()],
+    ['temp-dir', () => runTemporaryDirectoryCheck()],
+    ['home_isolation', () => runHomeIsolationCheck(), QUICK_CHECK_TIMEOUT_MS],
+    ['home-writable', () => runHomeWritableCheck(), QUICK_CHECK_TIMEOUT_MS],
+    ['pty-spawn', () => runPtySpawnCheck(), QUICK_CHECK_TIMEOUT_MS],
+    ['socket-viable', () => runSocketViabilityCheck(), QUICK_CHECK_TIMEOUT_MS],
+    [
+      'artifact-atomicity',
+      () => runArtifactAtomicityCheck(),
+      QUICK_CHECK_TIMEOUT_MS,
+    ],
+    [
+      'event-log-writable',
+      () => runEventLogWritabilityCheck(),
+      QUICK_CHECK_TIMEOUT_MS,
+    ],
   ]);
   const renderer = await runCheckGroup([
-    ['playwright_available', runPlaywrightAvailableCheck],
-    ['browser_launch', runBrowserLaunchCheck],
-    ['ghostty_web_available', runGhosttyWebAvailableCheck],
-    ['screenshot_viable', runScreenshotViabilityCheck],
+    ['playwright_available', () => runPlaywrightAvailableCheck()],
+    [
+      'browser_cache_accessible',
+      (priorChecks) => runBrowserCacheAccessibleCheck(priorChecks),
+    ],
+    ['browser_launch', () => runBrowserLaunchCheck()],
+    ['ghostty_web_available', () => runGhosttyWebAvailableCheck()],
+    ['screenshot_viable', () => runScreenshotViabilityCheck()],
   ]);
   const allChecks = [...environment, ...renderer];
   const uniqueCheckNames = new Set(allChecks.map((check) => check.name));

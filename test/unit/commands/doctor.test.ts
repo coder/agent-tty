@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -7,9 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildDoctorLines,
   runArtifactAtomicityCheck,
+  runBrowserCacheAccessibleCheck,
   runDoctorCheck,
   runDoctorChecks,
   runEventLogWritabilityCheck,
+  runHomeIsolationCheck,
   runHomeWritableCheck,
   runPtySpawnCheck,
   runSocketViabilityCheck,
@@ -19,6 +21,7 @@ import {
 const QUICK_TIMEOUT_MS = 5_000;
 
 const NEW_DOCTOR_CHECKS = [
+  { name: 'home_isolation', run: () => runHomeIsolationCheck() },
   { name: 'home-writable', run: () => runHomeWritableCheck() },
   { name: 'pty-spawn', run: () => runPtySpawnCheck() },
   { name: 'socket-viable', run: () => runSocketViabilityCheck() },
@@ -89,9 +92,13 @@ const BROKEN_DOCTOR_CHECKS = [
 ] as const;
 
 let testHome = '';
+let originalHome: string | undefined;
+let originalPlaywrightBrowsersPath: string | undefined;
 
 describe('doctor command', () => {
   beforeEach(async () => {
+    originalHome = process.env.HOME;
+    originalPlaywrightBrowsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
     // prettier-ignore
     testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-doctor-home-')));
     process.env.AGENT_TERMINAL_HOME = testHome;
@@ -99,6 +106,16 @@ describe('doctor command', () => {
 
   afterEach(async () => {
     delete process.env.AGENT_TERMINAL_HOME;
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    if (originalPlaywrightBrowsersPath === undefined) {
+      delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+    } else {
+      process.env.PLAYWRIGHT_BROWSERS_PATH = originalPlaywrightBrowsersPath;
+    }
     await rm(testHome, { recursive: true, force: true });
     testHome = '';
   });
@@ -109,8 +126,8 @@ describe('doctor command', () => {
     const checkNames = allChecks.map((check) => check.name);
 
     expect(result.ok).toBe(true);
-    expect(result.checks.environment.length).toBeGreaterThan(0);
-    expect(result.checks.renderer.length).toBeGreaterThan(0);
+    expect(result.checks.environment).toHaveLength(9);
+    expect(result.checks.renderer).toHaveLength(5);
     expect(result.capabilities).toHaveLength(5);
     expect(result.capabilities.map((capability) => capability.name)).toEqual([
       'snapshot',
@@ -136,11 +153,13 @@ describe('doctor command', () => {
     });
     expect(checkNames).toEqual(
       expect.arrayContaining([
+        'home_isolation',
         'home-writable',
         'pty-spawn',
         'socket-viable',
         'artifact-atomicity',
         'event-log-writable',
+        'browser_cache_accessible',
       ]),
     );
     expect(new Set(checkNames).size).toBe(checkNames.length);
@@ -162,6 +181,154 @@ describe('doctor command', () => {
       expect(result.message.length).toBeGreaterThan(0);
     },
   );
+
+  it('reports the default location when AGENT_TERMINAL_HOME is not explicitly set', () => {
+    delete process.env.AGENT_TERMINAL_HOME;
+
+    expect(runHomeIsolationCheck()).toBe(
+      'Agent-terminal home uses default location',
+    );
+  });
+
+  it('reports the default location when AGENT_TERMINAL_HOME matches HOME', () => {
+    process.env.HOME = testHome;
+    process.env.AGENT_TERMINAL_HOME = testHome;
+
+    expect(runHomeIsolationCheck()).toBe(
+      'Agent-terminal home uses default location',
+    );
+  });
+
+  it('reports an isolated agent-terminal home when AGENT_TERMINAL_HOME differs from HOME', async () => {
+    const systemHome = await realpath(
+      await mkdtemp(join(tmpdir(), 'agent-terminal-system-home-')),
+    );
+    process.env.HOME = systemHome;
+    process.env.AGENT_TERMINAL_HOME = testHome;
+
+    try {
+      expect(runHomeIsolationCheck()).toBe(
+        `Agent-terminal home is isolated from system home: ${testHome}`,
+      );
+    } finally {
+      await rm(systemHome, { recursive: true, force: true });
+    }
+  });
+
+  it('passes browser_cache_accessible when PLAYWRIGHT_BROWSERS_PATH contains browser directories', async () => {
+    const browserCachePath = await realpath(
+      await mkdtemp(join(tmpdir(), 'agent-terminal-browser-cache-')),
+    );
+    process.env.PLAYWRIGHT_BROWSERS_PATH = browserCachePath;
+    await mkdir(join(browserCachePath, 'chromium-1234'));
+
+    try {
+      const result = await runDoctorCheck(
+        'browser_cache_accessible',
+        (priorChecks) => runBrowserCacheAccessibleCheck(priorChecks),
+        QUICK_TIMEOUT_MS,
+        [
+          {
+            name: 'playwright_available',
+            status: 'pass',
+            message: 'available',
+            durationMs: 1,
+          },
+        ],
+      );
+
+      expect(result).toMatchObject({
+        name: 'browser_cache_accessible',
+        status: 'pass',
+        message: `browser cache accessible: ${browserCachePath}`,
+      });
+    } finally {
+      await rm(browserCachePath, { recursive: true, force: true });
+    }
+  });
+
+  it('fails browser_cache_accessible with an actionable message when the cache is missing', async () => {
+    const missingCachePath = join(testHome, 'missing-browser-cache');
+    process.env.PLAYWRIGHT_BROWSERS_PATH = missingCachePath;
+
+    const result = await runDoctorCheck(
+      'browser_cache_accessible',
+      (priorChecks) => runBrowserCacheAccessibleCheck(priorChecks),
+      QUICK_TIMEOUT_MS,
+      [
+        {
+          name: 'playwright_available',
+          status: 'pass',
+          message: 'available',
+          durationMs: 1,
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      name: 'browser_cache_accessible',
+      status: 'fail',
+      message:
+        `Playwright browser cache not found at ${missingCachePath}. ` +
+        "Run 'npx playwright install chromium' to install.",
+    });
+  });
+
+  it('uses the HOME-based default Playwright cache path when no override is set', async () => {
+    const systemHome = await realpath(
+      await mkdtemp(join(tmpdir(), 'agent-terminal-system-home-')),
+    );
+    const browserCachePath = join(systemHome, '.cache', 'ms-playwright');
+    delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+    process.env.HOME = systemHome;
+    await mkdir(join(browserCachePath, 'chromium-1234'), { recursive: true });
+
+    try {
+      const result = await runDoctorCheck(
+        'browser_cache_accessible',
+        (priorChecks) => runBrowserCacheAccessibleCheck(priorChecks),
+        QUICK_TIMEOUT_MS,
+        [
+          {
+            name: 'playwright_available',
+            status: 'pass',
+            message: 'available',
+            durationMs: 1,
+          },
+        ],
+      );
+
+      expect(result).toMatchObject({
+        name: 'browser_cache_accessible',
+        status: 'pass',
+        message: `browser cache accessible: ${browserCachePath}`,
+      });
+    } finally {
+      await rm(systemHome, { recursive: true, force: true });
+    }
+  });
+
+  it('skips browser_cache_accessible when playwright is unavailable', async () => {
+    const result = await runDoctorCheck(
+      'browser_cache_accessible',
+      (priorChecks) => runBrowserCacheAccessibleCheck(priorChecks),
+      QUICK_TIMEOUT_MS,
+      [
+        {
+          name: 'playwright_available',
+          status: 'fail',
+          message: 'playwright missing',
+          durationMs: 1,
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      name: 'browser_cache_accessible',
+      status: 'skip',
+      message: 'playwright unavailable; browser cache check not attempted',
+    });
+  });
 
   it('kills the PTY when the outer doctor timeout expires', async () => {
     let onExitHandler:
