@@ -11,9 +11,8 @@ npm ci
 npx playwright install chromium
 npm run build
 
-SESSION_ID=$(node dist/cli/main.js create --json --name demo | jq -r '.data.sessionId')
-node dist/cli/main.js type "$SESSION_ID" 'echo hello from agent-terminal'
-node dist/cli/main.js send-keys "$SESSION_ID" Enter
+SESSION_ID=$(node dist/cli/main.js create --json --name demo | jq -r '.result.sessionId')
+node dist/cli/main.js run "$SESSION_ID" 'echo hello from agent-terminal'
 node dist/cli/main.js inspect "$SESSION_ID" --json
 node dist/cli/main.js destroy "$SESSION_ID"
 ```
@@ -25,6 +24,42 @@ node dist/cli/main.js destroy "$SESSION_ID"
 - Renderer-backed screenshots and replay exports for reviewable visual evidence.
 - Recording export to asciicast (`.cast`) or WebM for artifact bundles.
 - Failure recovery via reconciliation, stale-session cleanup, and retained manifests/artifacts.
+
+## 0.1.0 release focus
+
+`agent-terminal` `0.1.0` is the first release aimed at reliable, isolated, reviewable TUI automation.
+Week 9 closes the release-readiness bar around the new `run` command, isolated-environment renderer reliability, and isolation-aware `doctor` diagnostics.
+For the explicit release contract, see [`RELEASE.md`](./RELEASE.md).
+Reviewer-facing proof bundles live under `dogfood/`, including `dogfood/run-command/` and `dogfood/20260325-week8-contract-locks/`.
+
+## TUI Workflow
+
+For setup-heavy TUI automation, prefer an isolated home plus the higher-level `run` primitive:
+
+```bash
+AGENT_HOME="$(mktemp -d)"
+agent-terminal --home "$AGENT_HOME" doctor --json
+SESSION_ID=$(agent-terminal --home "$AGENT_HOME" create --json -- /bin/bash | jq -r '.result.sessionId')
+agent-terminal --home "$AGENT_HOME" run "$SESSION_ID" 'npm install'
+agent-terminal --home "$AGENT_HOME" wait "$SESSION_ID" --text 'ready'
+agent-terminal --home "$AGENT_HOME" screenshot "$SESSION_ID"
+agent-terminal --home "$AGENT_HOME" record export "$SESSION_ID" --format webm
+```
+
+Recommended sequence:
+
+1. Create an isolated session home with `create`.
+2. Use `run` for shell setup and multiline bootstrap work.
+3. Use `wait` for render-visible readiness conditions.
+4. Capture screenshots for point-in-time review.
+5. Export WebM recordings when reviewers need motion proof.
+
+## Isolation
+
+- `--home <path>` stores manifests, sockets, event logs, and artifacts under an isolated agent-terminal home. Pass the same `--home` value to each command in a workflow.
+- `doctor --json` reports whether `agent-terminal` is using the default location or an isolated home, and it also checks renderer prerequisites such as Playwright/browser availability and screenshot viability.
+- Renderer boot now carries Playwright browser-cache resolution into isolated-home workflows automatically when Chromium is installed in the normal cache or exposed through `PLAYWRIGHT_BROWSERS_PATH`.
+- In a new machine, CI job, or container, run `agent-terminal --home <path> doctor --json` before starting screenshot or recording workflows.
 
 ## Platform Support
 
@@ -50,6 +85,7 @@ node dist/cli/main.js destroy "$SESSION_ID"
 - `gc`: remove stale or old sessions.
 - `type <session-id> [text]`: type text into a session.
 - `paste <session-id> [text]`: paste text into a session.
+- `run <session-id> [command]`: run a command inside a session with optional completion detection.
 - `mark <session-id> <label>`: add a marker event to a session timeline.
 - `send-keys <session-id> <keys...>`: send key sequences such as `Enter` or `Ctrl+C`.
 - `resize <session-id>`: resize the PTY dimensions.
@@ -58,6 +94,30 @@ node dist/cli/main.js destroy "$SESSION_ID"
 - `screenshot <session-id>`: capture a rendered PNG screenshot.
 - `record export <session-id>`: export replay artifacts as asciicast or WebM.
 - `wait <session-id>`: wait for exit, idleness, text, regex, cursor, or stable-screen conditions.
+
+## Run Command
+
+Basic usage:
+
+```bash
+agent-terminal run <session-id> [command]
+agent-terminal run <session-id> --file ./setup.sh
+agent-terminal run <session-id> 'npm install && npm test' --timeout 60000 --json
+agent-terminal run <session-id> 'npm run dev' --no-wait
+```
+
+Important flags:
+
+- `--timeout <ms>` — completion timeout in milliseconds. Default: `30000`.
+- `--no-wait` — fire-and-forget mode. The command is injected and the CLI returns without waiting for completion.
+- `--file <path>` — read command text from a file instead of the positional argument.
+- `--json` — emit a machine-readable command envelope.
+
+Use `run` when you want shell-oriented setup inside the existing session, especially for multiline bootstrap scripts or other commands that should preserve shell state.
+Use `type` when the target application needs literal interactive typing, `paste` when the target should receive a literal pasted payload, and `send-keys` for discrete control keys such as `Enter`, `Escape`, or `Ctrl+C`.
+
+Under the hood, `run` injects the command through paste-mode and, unless `--no-wait` is set, appends a generated boundary marker that the renderer waits to see in visible output.
+That makes shell setup more reliable than simulating long keystroke sequences, but `run` does not capture command output or report an exit status.
 
 ## Development setup
 
@@ -82,7 +142,8 @@ That runs formatting, linting, typechecking, unit/e2e tests, and the production 
 
 ## Design docs
 
-Design and implementation notes live under `design/`, especially `design/20260319_agent-terminal-v1/`. See `design/20260319_agent-terminal-v1/` for architecture, weekly plans, and status docs through Week 5.
+Design and implementation notes live under `design/`, especially `design/20260319_agent-terminal-v1/`.
+See `design/20260319_agent-terminal-v1/` for architecture, weekly plans, and status docs through Week 9, and see [`RELEASE.md`](./RELEASE.md) for the `0.1.0` contract.
 
 ## Repository notes
 

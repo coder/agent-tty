@@ -19,7 +19,9 @@ It is designed to let an agent:
 
 This design intentionally describes a **general product**, not a Mux-specific implementation. A future Mux integration should consume `agent-terminal` as an external CLI/runtime rather than baking Mux-specific assumptions into the design.
 
-## Current shipped status (2026-03-25)
+## Current shipped status (2026-03-26)
+
+Update (2026-03-26): Week 9 is now complete as the pre-`0.1.0` release-readiness milestone. The shipped surface now includes the new `run` command for robust in-session command execution, renderer/browser-path handling that respects isolated-home workflows, and isolation-aware `doctor --json` diagnostics on top of the earlier lifecycle, snapshot, screenshot, and export work. With the explicit release contract captured in [`../RELEASE.md`](../RELEASE.md), the repository is ready for `0.1.0` once maintainers are satisfied with the documented proof bundles and release checklist; larger asks such as native renderers, mouse input, remote/network sessions, MCP wrapping, and broader semantic TUI automation remain intentionally deferred.
 
 The repository now ships the first three milestones of this design plus Weeks 4â€“7 of CLI/artifact/lifecycle hardening, config/rendering/platform closeout, contract/introspection reconciliation, and Week 7 contract/doc ratification:
 
@@ -38,7 +40,7 @@ The repository now ships the first three milestones of this design plus Weeks 4â
 - macOS CI validation,
 - and proof bundles under `dogfood/`.
 
-Week 7 closed the design-synchronization pass for the shipped v1 surface. Week 8 then completed runtime capability discovery, richer renderer/session introspection, the remaining lower-priority public-envelope locks, and proof-bundle normalization/validation. The next planned milestone is Week 9, which focuses on pre-`0.1.0` release readiness: isolated-environment renderer reliability, a higher-level in-session command primitive, TUI-focused diagnostics/docs, and a release-grade Neovim/LazyVim dogfood bar before broader native-renderer/platform expansion. The intentionally deferred platform/runtime work is tracked separately in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md). See [14-week-6-status.md](./20260319_agent-terminal-v1/14-week-6-status.md), [15-week-7-plan.md](./20260319_agent-terminal-v1/15-week-7-plan.md), [16-week-8-plan.md](./20260319_agent-terminal-v1/16-week-8-plan.md), [17-week-9-plan.md](./20260319_agent-terminal-v1/17-week-9-plan.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current state.
+Week 7 closed the design-synchronization pass for the shipped v1 surface. Week 8 then completed runtime capability discovery, richer renderer/session introspection, the remaining lower-priority public-envelope locks, and proof-bundle normalization/validation. Week 9 then closed the pre-`0.1.0` release-readiness milestone: isolated-environment renderer reliability is now part of the shipped contract, the higher-level in-session `run` primitive is documented and shipped, TUI-focused diagnostics/docs are in place, and the remaining large asks are intentionally deferred future-scope work rather than release blockers. The intentionally deferred platform/runtime work is tracked separately in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md). See [14-week-6-status.md](./20260319_agent-terminal-v1/14-week-6-status.md), [15-week-7-plan.md](./20260319_agent-terminal-v1/15-week-7-plan.md), [16-week-8-plan.md](./20260319_agent-terminal-v1/16-week-8-plan.md), [17-week-9-plan.md](./20260319_agent-terminal-v1/17-week-9-plan.md), [`../RELEASE.md`](../RELEASE.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current state.
 
 ## Executive summary
 
