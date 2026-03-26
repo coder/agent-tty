@@ -250,7 +250,9 @@ describe('inspect command', () => {
       mode: 'live-host',
       status: 'healthy',
     });
-    expect(emitted.lines).toContain('Renderer: ghostty-web (live-host, healthy)');
+    expect(emitted.lines).toContain(
+      'Renderer: ghostty-web (live-host, healthy)',
+    );
     expect(emitted.lines).not.toContain('Offline Replay: yes');
   });
 
