@@ -812,6 +812,7 @@ describe('RPC message schemas', () => {
       'screenshot',
       'type',
       'paste',
+      'run',
       'mark',
       'sendKeys',
       'resize',
