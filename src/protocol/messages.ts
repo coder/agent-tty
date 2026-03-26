@@ -156,7 +156,7 @@ export const InspectResultSchema = z
     terminationCategory: TerminationCategorySchema.optional(),
     artifacts: ArtifactHealthSummarySchema.optional(),
     usedOfflineReplay: z.boolean().optional(),
-    rendererRuntime: RendererRuntimeSummarySchema.optional(),
+    rendererRuntime: RendererRuntimeSummarySchema,
   })
   .strict();
 export type InspectResult = z.infer<typeof InspectResultSchema>;

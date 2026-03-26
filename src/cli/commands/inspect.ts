@@ -55,11 +55,20 @@ function formatArtifactKinds(byKind: Record<string, number>): string {
 const RENDERER_BACKEND = 'ghostty-web';
 
 function usesOfflineReplay(sessionStatus: SessionStatus): boolean {
-  return (
-    sessionStatus === 'exited' ||
-    sessionStatus === 'failed' ||
-    sessionStatus === 'destroyed'
-  );
+  switch (sessionStatus) {
+    case 'running':
+    case 'exiting':
+      return false;
+    case 'exited':
+    case 'failed':
+    case 'destroying':
+    case 'destroyed':
+      return true;
+    default: {
+      const exhaustiveStatus: never = sessionStatus;
+      throw new Error(`unexpected session status: ${String(exhaustiveStatus)}`);
+    }
+  }
 }
 
 function deriveRendererRuntimeSummary(options: {
@@ -111,9 +120,7 @@ function formatSessionLines(result: InspectResult): string[] {
     `Event Count: ${String(eventCount)}`,
   ];
 
-  if (rendererRuntime !== undefined) {
-    lines.push(`Renderer: ${formatRendererRuntime(rendererRuntime)}`);
-  }
+  lines.push(`Renderer: ${formatRendererRuntime(rendererRuntime)}`);
 
   if (result.lastEventSeq !== undefined) {
     lines.push(`Last Event Seq: ${String(result.lastEventSeq)}`);

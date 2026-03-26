@@ -666,6 +666,34 @@ describe('JSON envelope contracts', () => {
     expect(InspectResultSchema.safeParse(result).success).toBe(true);
   });
 
+  it('accepts inspect result with unavailable renderer runtime', () => {
+    const result = {
+      session: createSessionRecord(),
+      eventCount: 2,
+      uptime: 1_000,
+      lastEventSeq: 1,
+      terminationCategory: 'clean-exit',
+      artifacts: {
+        total: 2,
+        byKind: {
+          screenshot: 1,
+          snapshot: 1,
+        },
+        missingCount: 0,
+        health: 'healthy',
+      },
+      usedOfflineReplay: false,
+      rendererRuntime: {
+        backend: 'ghostty-web',
+        mode: 'live-host',
+        status: 'unavailable',
+        reason: 'renderer-not-installed',
+      },
+    };
+
+    expect(InspectResultSchema.safeParse(result).success).toBe(true);
+  });
+
   it('locks the version success envelope shape', async () => {
     const result = await buildVersionResult();
 

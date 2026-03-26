@@ -54,6 +54,7 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 }));
 
 import { runInspectCommand } from '../../../src/cli/commands/inspect.js';
+import type { SessionStatus } from '../../../src/protocol/schemas.js';
 import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
@@ -80,9 +81,7 @@ function getLastEmitSuccessPayload(): unknown {
   return mocks.emitSuccess.mock.calls.at(-1)?.[0] as unknown;
 }
 
-function createSessionRecord(
-  status: 'running' | 'exiting' | 'exited' | 'failed' = 'running',
-) {
+function createSessionRecord(status: SessionStatus = 'running') {
   return {
     version: 1,
     sessionId: 'session-01',
@@ -213,6 +212,46 @@ describe('inspect command', () => {
     );
     expect(emitted.lines).not.toContain('Offline Replay: yes');
     expect(emitted.lines).not.toContain('Termination: running');
+  });
+
+  it('treats exiting sessions as live-host renderer runtime', async () => {
+    const exitingSession = createSessionRecord('exiting');
+    mocks.readManifestIfExists.mockResolvedValueOnce(exitingSession);
+    mocks.sendRpc.mockResolvedValueOnce({ session: exitingSession });
+    mocks.deriveTerminationCategory.mockReturnValueOnce('running');
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      'inspect',
+    );
+
+    const emitted = getLastEmitSuccessPayload() as {
+      result: {
+        usedOfflineReplay?: boolean;
+        rendererRuntime: {
+          backend: string;
+          mode: string;
+          status: string;
+          reason?: string;
+        };
+      };
+      lines: string[];
+    };
+
+    expect(emitted.result.usedOfflineReplay).toBe(false);
+    expect(emitted.result.rendererRuntime).toEqual({
+      backend: 'ghostty-web',
+      mode: 'live-host',
+      status: 'healthy',
+    });
+    expect(emitted.lines).toContain('Renderer: ghostty-web (live-host, healthy)');
+    expect(emitted.lines).not.toContain('Offline Replay: yes');
   });
 
   it('degrades gracefully when artifact health computation fails', async () => {
@@ -385,6 +424,46 @@ describe('inspect command', () => {
       result: {
         usedOfflineReplay?: boolean;
         rendererRuntime?: {
+          backend: string;
+          mode: string;
+          status: string;
+          reason?: string;
+        };
+      };
+      lines: string[];
+    };
+
+    expect(emitted.result.usedOfflineReplay).toBe(false);
+    expect(emitted.result.rendererRuntime).toEqual({
+      backend: 'ghostty-web',
+      mode: 'offline-replay',
+      status: 'fallback',
+      reason: 'session-not-running',
+    });
+    expect(emitted.lines).toContain(
+      'Renderer: ghostty-web (offline-replay, fallback — session-not-running)',
+    );
+    expect(emitted.lines).not.toContain('Offline Replay: yes');
+  });
+
+  it('reports offline replay renderer runtime for destroying sessions', async () => {
+    const destroyingSession = createSessionRecord('destroying');
+    mocks.readManifestIfExists.mockResolvedValueOnce(destroyingSession);
+    mocks.countEventLogEntries.mockResolvedValueOnce(4);
+    mocks.deriveTerminationCategory.mockReturnValueOnce('destroyed');
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+
+    const emitted = getLastEmitSuccessPayload() as {
+      result: {
+        usedOfflineReplay?: boolean;
+        rendererRuntime: {
           backend: string;
           mode: string;
           status: string;

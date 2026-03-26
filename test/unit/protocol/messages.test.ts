@@ -6,6 +6,7 @@ import {
   HostInspectResultSchema,
   InspectResultSchema,
   MarkParamsSchema,
+  RendererRuntimeSummarySchema,
   MarkResultSchema,
   PasteParamsSchema,
   SendKeysResultSchema,
@@ -208,6 +209,80 @@ describe('RPC message schemas', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it('requires rendererRuntime on inspect results', () => {
+    const result = InspectResultSchema.safeParse({
+      session: createSessionRecord(),
+      eventCount: 2,
+      uptime: 1000,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts renderer runtime summaries for all supported statuses', () => {
+    expect(
+      RendererRuntimeSummarySchema.safeParse({
+        backend: 'ghostty-web',
+        mode: 'live-host',
+        status: 'healthy',
+      }).success,
+    ).toBe(true);
+    expect(
+      RendererRuntimeSummarySchema.safeParse({
+        backend: 'ghostty-web',
+        mode: 'offline-replay',
+        status: 'fallback',
+        reason: 'host-unreachable',
+      }).success,
+    ).toBe(true);
+    expect(
+      RendererRuntimeSummarySchema.safeParse({
+        backend: 'ghostty-web',
+        mode: 'live-host',
+        status: 'unavailable',
+        reason: 'renderer-not-installed',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts renderer runtime summaries for both runtime modes', () => {
+    expect(
+      RendererRuntimeSummarySchema.safeParse({
+        backend: 'ghostty-web',
+        mode: 'live-host',
+        status: 'healthy',
+      }).success,
+    ).toBe(true);
+    expect(
+      RendererRuntimeSummarySchema.safeParse({
+        backend: 'ghostty-web',
+        mode: 'offline-replay',
+        status: 'healthy',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('keeps renderer runtime summaries strict', () => {
+    const result = RendererRuntimeSummarySchema.safeParse({
+      backend: 'ghostty-web',
+      mode: 'live-host',
+      status: 'healthy',
+      detail: 'unexpected',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects renderer runtime summaries with invalid status values', () => {
+    const result = RendererRuntimeSummarySchema.safeParse({
+      backend: 'ghostty-web',
+      mode: 'live-host',
+      status: 'degraded',
+    });
+
+    expect(result.success).toBe(false);
   });
 
   it('keeps inspect RPC results limited to the session payload', () => {
