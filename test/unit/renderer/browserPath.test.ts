@@ -29,9 +29,9 @@ async function createPlaywrightCacheHome(): Promise<{
 
 afterEach(async () => {
   await Promise.all(
-    temporaryHomes.splice(0).map((home) =>
-      rm(home, { recursive: true, force: true }),
-    ),
+    temporaryHomes
+      .splice(0)
+      .map((home) => rm(home, { recursive: true, force: true })),
   );
 });
 
@@ -84,7 +84,9 @@ describe('Playwright browser path resolution', () => {
   });
 
   it('returns null without crashing when no browser cache is present', async () => {
-    const home = await createHomeDirectory('agent-terminal-browser-path-empty-');
+    const home = await createHomeDirectory(
+      'agent-terminal-browser-path-empty-',
+    );
     const env: NodeJS.ProcessEnv = {};
 
     const resolution = ensurePlaywrightBrowsersPath({

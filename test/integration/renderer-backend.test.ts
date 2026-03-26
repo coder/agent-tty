@@ -116,7 +116,9 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     const previousHome = process.env.HOME;
     const previousBrowsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
     if (previousHome === undefined) {
-      throw new Error('expected HOME to be defined before isolating renderer boot');
+      throw new Error(
+        'expected HOME to be defined before isolating renderer boot',
+      );
     }
 
     try {
