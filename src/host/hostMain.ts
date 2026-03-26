@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { rename, rm } from 'node:fs/promises';
 import process from 'node:process';
 
@@ -16,6 +17,8 @@ import type {
   MarkParams,
   PasteParams,
   ResizeParams,
+  RunParams,
+  RunResult,
   ScreenshotParams,
   SendKeysParams,
   SignalParams,
@@ -624,6 +627,142 @@ export async function runHost(sessionId: string): Promise<void> {
       lastActivityAt = Date.now();
       await eventLog.append('input_paste', { data: encoded });
       return {};
+    },
+    run: async (params: unknown) => {
+      const { command, noWait, timeoutMs } = params as RunParams;
+
+      if (!isSessionRunning(state)) {
+        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
+          message: 'Session is not running.',
+        });
+      }
+
+      invariant(
+        typeof command === 'string' && command.length > 0,
+        'run command must be a non-empty string',
+      );
+      invariant(
+        noWait === undefined || typeof noWait === 'boolean',
+        'run noWait must be a boolean when provided',
+      );
+      if (timeoutMs !== undefined) {
+        invariant(
+          Number.isInteger(timeoutMs) && timeoutMs > 0,
+          'run timeoutMs must be a positive integer',
+        );
+      }
+
+      const shouldWait = noWait !== true;
+      let marker: string | undefined;
+      if (shouldWait) {
+        marker = `__AT_MARKER_${crypto.randomUUID().replace(/-/g, '')}__`;
+      }
+
+      const injectedText = shouldWait
+        ? `${command}\necho ${marker}\n`
+        : `${command}\n`;
+      const encoded = encodePaste(injectedText);
+      pty.write(encoded);
+      lastActivityAt = Date.now();
+
+      const seq = await eventLog.append('input_run', {
+        command,
+        ...(marker === undefined ? {} : { marker }),
+        noWait: noWait === true,
+      });
+
+      if (!shouldWait) {
+        return {
+          accepted: true as const,
+          seq,
+        } satisfies RunResult;
+      }
+
+      const effectiveTimeoutMs = timeoutMs ?? 30_000;
+      const startTime = Date.now();
+      const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
+      const pollIntervalMs = 200;
+      const waitMarker = marker;
+      invariant(waitMarker !== undefined, 'run wait marker must be defined');
+      let clearWaitPoll: (() => void) | null = null;
+
+      const pollCondition = new Promise<{ matched: boolean }>((resolve) => {
+        let pollInFlight = false;
+        let consecutiveFailures = 0;
+
+        const checkInterval = setInterval(() => {
+          if (pollInFlight) {
+            return;
+          }
+
+          pollInFlight = true;
+          void (async () => {
+            try {
+              const replayInput = loadReplayInput();
+              const backend = await rendererManager.getBackend(
+                profile,
+                replayInput,
+              );
+              const snapshot = await backend.snapshot();
+              const visibleText = snapshot.visibleLines
+                .map((line) => line.text)
+                .join('\n');
+              consecutiveFailures = 0;
+
+              if (visibleText.includes(waitMarker)) {
+                clearInterval(checkInterval);
+                resolve({ matched: true });
+              }
+            } catch (pollError) {
+              void pollError;
+              consecutiveFailures += 1;
+              if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+                clearInterval(checkInterval);
+                resolve({ matched: false });
+              }
+            } finally {
+              pollInFlight = false;
+            }
+          })();
+        }, pollIntervalMs);
+
+        clearWaitPoll = (): void => {
+          clearInterval(checkInterval);
+        };
+      });
+
+      const pollResult = await new Promise<{ matched: boolean }>((resolve) => {
+        let resolved = false;
+        const timeoutHandle = setTimeout(() => {
+          if (resolved) {
+            return;
+          }
+          resolved = true;
+          clearWaitPoll?.();
+          resolve({ matched: false });
+        }, effectiveTimeoutMs);
+
+        void pollCondition.then((result) => {
+          if (resolved) {
+            return;
+          }
+          resolved = true;
+          clearTimeout(timeoutHandle);
+          clearWaitPoll?.();
+          resolve(result);
+        });
+      });
+
+      const durationMs = Date.now() - startTime;
+
+      return {
+        accepted: true as const,
+        completed: pollResult.matched,
+        timedOut: !pollResult.matched,
+        seq,
+        durationMs,
+        marker: waitMarker,
+      } satisfies RunResult;
     },
     sendKeys: async (params: unknown) => {
       const { keys } = params as SendKeysParams;
