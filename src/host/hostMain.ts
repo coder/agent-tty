@@ -658,9 +658,15 @@ export async function runHost(sessionId: string): Promise<void> {
         invariant(marker !== undefined, 'run marker must exist when waiting');
       }
       const injectedText = shouldWait
-        ? `${command}\necho "${marker as string}"\n`
+        ? (() => {
+            const waitMarker = marker as string;
+            const half = Math.ceil(waitMarker.length / 2);
+            const markerPart1 = waitMarker.slice(0, half);
+            const markerPart2 = waitMarker.slice(half);
+            return `${command}\nprintf '%s%s\\n' '${markerPart1}' '${markerPart2}'\n`;
+          })()
         : `${command}\n`;
-      const encoded = encodePaste(injectedText);
+      const encoded = `${encodePaste(injectedText)}${encodeKey('enter')}`;
       pty.write(encoded);
       lastActivityAt = Date.now();
 

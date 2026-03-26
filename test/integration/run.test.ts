@@ -125,6 +125,37 @@ describe('run command integration', { timeout: 45_000 }, () => {
     expect(envelope.result.timedOut).toBe(false);
   });
 
+  it('waits for the command to complete before reporting success', async () => {
+    sessionId = createSession(testHome, ['/bin/bash']);
+    await sleep(1000);
+
+    const start = Date.now();
+    const result = runCli(
+      ['run', sessionId, 'sleep 2', '--timeout', '10000', '--json'],
+      testEnv(),
+      15_000,
+    );
+    const elapsed = Date.now() - start;
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+
+    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+      accepted: true;
+      completed: boolean;
+      timedOut: boolean;
+      seq: number;
+      durationMs: number;
+      marker: string;
+    }>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.accepted).toBe(true);
+    expect(envelope.result.completed).toBe(true);
+    expect(envelope.result.timedOut).toBe(false);
+    expect(elapsed).toBeGreaterThan(1500);
+    expect(envelope.result.durationMs).toBeGreaterThan(1500);
+  });
+
   it('rejects inline text and --file together', () => {
     const scriptPath = join(testHome, 'test-input.txt');
     writeFileSync(scriptPath, 'echo hello');
