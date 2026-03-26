@@ -66,6 +66,23 @@ describe('Playwright browser path resolution', () => {
     });
   });
 
+  it('resolves macOS browser cache from captured HOME', async () => {
+    const home = await createHomeDirectory('agent-terminal-browser-path-mac-');
+    const macCachePath = join(home, 'Library', 'Caches', 'ms-playwright');
+    await mkdir(join(macCachePath, 'chromium-1234'), { recursive: true });
+
+    const resolution = resolvePlaywrightBrowsersPath({
+      capturedHome: home,
+      env: {},
+      platform: 'darwin',
+    });
+
+    expect(resolution).toEqual({
+      path: macCachePath,
+      source: 'captured-home',
+    });
+  });
+
   it('sets PLAYWRIGHT_BROWSERS_PATH when the captured HOME fallback resolves', async () => {
     const { browserCachePath, home } = await createPlaywrightCacheHome();
     const env: NodeJS.ProcessEnv = {};
@@ -81,6 +98,16 @@ describe('Playwright browser path resolution', () => {
       source: 'captured-home',
     });
     expect(env.PLAYWRIGHT_BROWSERS_PATH).toBe(browserCachePath);
+  });
+
+  it('returns null for unsupported platforms', () => {
+    const resolution = resolvePlaywrightBrowsersPath({
+      capturedHome: '/home/user',
+      env: {},
+      platform: 'win32',
+    });
+
+    expect(resolution).toBeNull();
   });
 
   it('returns null without crashing when no browser cache is present', async () => {

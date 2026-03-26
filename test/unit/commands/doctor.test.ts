@@ -190,12 +190,12 @@ describe('doctor command', () => {
     );
   });
 
-  it('reports the default location when AGENT_TERMINAL_HOME matches HOME', () => {
+  it('reports an explicit system home location when AGENT_TERMINAL_HOME matches HOME', () => {
     process.env.HOME = testHome;
     process.env.AGENT_TERMINAL_HOME = testHome;
 
     expect(runHomeIsolationCheck()).toBe(
-      'Agent-terminal home uses default location',
+      'Agent-terminal home is explicitly set to system home location',
     );
   });
 

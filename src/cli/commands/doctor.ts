@@ -380,11 +380,11 @@ export function runHomeIsolationCheck(): string {
 
   const resolvedDoctorHome = resolveHome(configuredHome);
   const systemHome = resolveSystemHomeDirectory();
-  if (resolvedDoctorHome !== systemHome) {
-    return `Agent-terminal home is isolated from system home: ${resolvedDoctorHome}`;
+  if (resolvedDoctorHome === systemHome) {
+    return 'Agent-terminal home is explicitly set to system home location';
   }
 
-  return 'Agent-terminal home uses default location';
+  return `Agent-terminal home is isolated from system home: ${resolvedDoctorHome}`;
 }
 
 export async function runHomeWritableCheck(

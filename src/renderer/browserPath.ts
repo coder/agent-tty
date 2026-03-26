@@ -15,6 +15,9 @@ export interface ResolvePlaywrightBrowsersPathOptions {
   platform?: NodeJS.Platform;
 }
 
+// Capture HOME at module load time — before any isolation may change it.
+// This lets us find the host's Playwright browser cache even when the
+// process later operates under an isolated HOME.
 const CAPTURED_PROCESS_HOME = process.env.HOME;
 
 function isNonEmptyString(value: unknown): value is string {
@@ -48,6 +51,13 @@ function directoryContainsChromiumBrowser(browserCachePath: string): boolean {
   }
 }
 
+/**
+ * Resolves the Playwright browser cache path from either an explicit override
+ * or the host HOME that was captured before any later home isolation.
+ *
+ * This helper is pure: it reads from the provided options and filesystem state
+ * but does not mutate process state or environment variables.
+ */
 export function resolvePlaywrightBrowsersPath(
   options: ResolvePlaywrightBrowsersPathOptions = {},
 ): PlaywrightBrowsersPathResolution | null {
@@ -83,6 +93,15 @@ export function resolvePlaywrightBrowsersPath(
   };
 }
 
+/**
+ * Resolves the Playwright browser cache path and, when the resolution comes
+ * from the captured host HOME, sets `PLAYWRIGHT_BROWSERS_PATH` on the target
+ * environment as a side effect so downstream Playwright imports can reuse the
+ * existing browser cache.
+ *
+ * The environment mutation only happens for the `captured-home` source. Calls
+ * are idempotent, so it is safe to invoke this helper multiple times.
+ */
 export function ensurePlaywrightBrowsersPath(
   options: ResolvePlaywrightBrowsersPathOptions = {},
 ): PlaywrightBrowsersPathResolution | null {

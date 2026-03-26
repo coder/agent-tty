@@ -1983,6 +1983,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       this.server = server;
       this.serverOrigin = origin;
 
+      // Set PLAYWRIGHT_BROWSERS_PATH in process.env so downstream Playwright calls
+      // find the browser cache even when HOME has been changed for isolation.
       const browserPathResolution = ensurePlaywrightBrowsersPath();
       if (browserPathResolution === null) {
         this.logger.debug(
