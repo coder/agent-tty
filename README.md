@@ -30,7 +30,7 @@ node dist/cli/main.js destroy "$SESSION_ID"
 `agent-terminal` `0.1.0` is the first release aimed at reliable, isolated, reviewable TUI automation.
 Week 9 closes the release-readiness bar around the new `run` command, isolated-environment renderer reliability, and isolation-aware `doctor` diagnostics.
 For the explicit release contract, see [`RELEASE.md`](./RELEASE.md).
-Reviewer-facing proof bundles live under `dogfood/`, including `dogfood/run-command/` and `dogfood/20260325-week8-contract-locks/`.
+Reviewer-facing proof bundles live under `dogfood/`, including `dogfood/20260326-week9-release-readiness/`, `dogfood/run-command/`, and `dogfood/20260325-week8-contract-locks/`.
 
 ## TUI Workflow
 
@@ -57,7 +57,8 @@ Recommended sequence:
 ## Isolation
 
 - `--home <path>` stores manifests, sockets, event logs, and artifacts under an isolated agent-terminal home. Pass the same `--home` value to each command in a workflow.
-- `doctor --json` reports whether `agent-terminal` is using the default location or an isolated home, and it also checks renderer prerequisites such as Playwright/browser availability and screenshot viability.
+- `doctor --json` reports whether `agent-terminal` is using the default location or an isolated home, including a `home_isolation` check for whether `--home` produced an isolated environment.
+- It also exposes `browser_cache_accessible`, which verifies the Playwright browser cache is discoverable for renderer operations before screenshot/export flows.
 - Renderer boot now carries Playwright browser-cache resolution into isolated-home workflows automatically when Chromium is installed in the normal cache or exposed through `PLAYWRIGHT_BROWSERS_PATH`.
 - In a new machine, CI job, or container, run `agent-terminal --home <path> doctor --json` before starting screenshot or recording workflows.
 

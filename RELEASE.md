@@ -33,5 +33,5 @@ If a workflow depends on behavior outside this document, it should be treated as
 ## Validation
 
 - Current release bar: 595 tests across 56 test files.
-- Reviewer-facing proof bundles live under `dogfood/`, including `dogfood/run-command/` and `dogfood/20260325-week8-contract-locks/`.
+- Reviewer-facing proof bundles live under `dogfood/`, including `dogfood/20260326-week9-release-readiness/`, `dogfood/run-command/`, and `dogfood/20260325-week8-contract-locks/`.
 - Run `npm run verify` for the full validation bar.
