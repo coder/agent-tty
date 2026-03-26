@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import * as capabilitiesModule from '../../../src/renderer/capabilities.js';
 import {
   buildVersionResult,
   loadPackageMetadata,
@@ -40,5 +41,28 @@ describe('version command', () => {
       name: 'snapshot',
       status: 'available',
     });
+  });
+
+  it('degrades gracefully when capability discovery fails', async () => {
+    vi.spyOn(capabilitiesModule, 'discoverCapabilities').mockRejectedValueOnce(
+      new Error('unexpected failure'),
+    );
+    const stderrWriteSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockReturnValue(true);
+
+    const result = await buildVersionResult({ includeCapabilities: true });
+
+    expect(result.cliVersion).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(result.protocolVersion).toBe('0.1.0');
+    expect(result.rendererBackends).toEqual(['ghostty-web']);
+    expect(result.runtime.node).toMatch(/^v\d+\.\d+\.\d+$/);
+    expect(result.runtime.platform).toBe(process.platform);
+    expect(result.runtime.arch).toBe(process.arch);
+    expect(result.capabilities).toBeUndefined();
+    expect('capabilities' in result).toBe(false);
+    expect(stderrWriteSpy).toHaveBeenCalledWith(
+      'warning: capability discovery failed: unexpected failure\n',
+    );
   });
 });

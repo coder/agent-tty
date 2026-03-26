@@ -50,9 +50,20 @@ export async function buildVersionResult(options?: {
   includeCapabilities?: boolean;
 }): Promise<VersionResult> {
   const packageMetadata = await loadPackageMetadata();
-  const capabilities = options?.includeCapabilities
-    ? await discoverCapabilities('quick')
-    : undefined;
+  let capabilities: CapabilityEntry[] | undefined;
+
+  if (options?.includeCapabilities) {
+    try {
+      capabilities = await discoverCapabilities('quick');
+    } catch (error: unknown) {
+      // Capability discovery is best-effort for version; never crash.
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(
+        `warning: capability discovery failed: ${message}\n`,
+      );
+      capabilities = undefined;
+    }
+  }
 
   return {
     cliVersion: packageMetadata.version,
