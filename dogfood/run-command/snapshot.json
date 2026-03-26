@@ -1,0 +1,113 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-26T20:54:49.270Z",
+  "result": {
+    "format": "structured",
+    "sessionId": "01KMNYV2FDGFXED8AGK1BDNDVP",
+    "capturedAtSeq": 6,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 6,
+    "cursorCol": 0,
+    "isAltScreen": false,
+    "visibleLines": [
+      {
+        "row": 0,
+        "text": "bash: command not found: starship"
+      },
+      {
+        "row": 1,
+        "text": "bash: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory"
+      },
+      {
+        "row": 2,
+        "text": "coder@aaaaaaa:~/.mux/src/agent-terminal/agent_exec_edfe4f992f$ echo hello-dogfoo"
+      },
+      {
+        "row": 3,
+        "text": "d"
+      },
+      {
+        "row": 4,
+        "text": "echo __AT_MARKER_13b03640d0b44390a1166c3142602c83__"
+      },
+      {
+        "row": 5,
+        "text": "echo async-dogfood"
+      },
+      {
+        "row": 6,
+        "text": ""
+      },
+      {
+        "row": 7,
+        "text": ""
+      },
+      {
+        "row": 8,
+        "text": ""
+      },
+      {
+        "row": 9,
+        "text": ""
+      },
+      {
+        "row": 10,
+        "text": ""
+      },
+      {
+        "row": 11,
+        "text": ""
+      },
+      {
+        "row": 12,
+        "text": ""
+      },
+      {
+        "row": 13,
+        "text": ""
+      },
+      {
+        "row": 14,
+        "text": ""
+      },
+      {
+        "row": 15,
+        "text": ""
+      },
+      {
+        "row": 16,
+        "text": ""
+      },
+      {
+        "row": 17,
+        "text": ""
+      },
+      {
+        "row": 18,
+        "text": ""
+      },
+      {
+        "row": 19,
+        "text": ""
+      },
+      {
+        "row": 20,
+        "text": ""
+      },
+      {
+        "row": 21,
+        "text": ""
+      },
+      {
+        "row": 22,
+        "text": ""
+      },
+      {
+        "row": 23,
+        "text": ""
+      }
+    ]
+  }
+}

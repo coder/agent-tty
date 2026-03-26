@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "command": "run",
+  "timestamp": "2026-03-26T20:54:45.649Z",
+  "result": {
+    "accepted": true,
+    "seq": 5
+  }
+}
