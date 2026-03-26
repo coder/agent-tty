@@ -7,8 +7,10 @@ import { z } from 'zod';
 
 import {
   EventRecordSchema,
+  InputRunEventPayloadSchema,
   MarkerEventPayloadSchema,
   type EventRecord,
+  type InputRunEventPayload,
   type MarkerEventPayload,
 } from '../protocol/schemas.js';
 import { invariant } from '../util/assert.js';
@@ -76,6 +78,7 @@ type EventLogEventType =
   | 'input_text'
   | 'input_paste'
   | 'input_keys'
+  | 'input_run'
   | 'resize'
   | 'signal'
   | 'exit'
@@ -85,6 +88,7 @@ type EventLogPayload =
   | InputTextEventPayload
   | InputPasteEventPayload
   | InputKeysEventPayload
+  | InputRunEventPayload
   | ResizeEventPayload
   | SignalEventPayload
   | ExitEventPayload
@@ -126,6 +130,11 @@ function validatePayload(
     case 'input_keys': {
       const result = InputKeysEventPayloadSchema.safeParse(payload);
       invariant(result.success, 'input_keys payload must match schema');
+      return result.data;
+    }
+    case 'input_run': {
+      const result = InputRunEventPayloadSchema.safeParse(payload);
+      invariant(result.success, 'input_run payload must match schema');
       return result.data;
     }
     case 'resize': {
@@ -301,6 +310,10 @@ export class EventLog {
   async append(
     type: 'input_keys',
     payload: InputKeysEventPayload,
+  ): Promise<number>;
+  async append(
+    type: 'input_run',
+    payload: InputRunEventPayload,
   ): Promise<number>;
   async append(type: 'resize', payload: ResizeEventPayload): Promise<number>;
   async append(type: 'signal', payload: SignalEventPayload): Promise<number>;

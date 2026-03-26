@@ -4,7 +4,7 @@ import { lstat, readFile, stat } from 'node:fs/promises';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 
 interface ResolveCommandInputTextOptions {
-  commandName: 'type' | 'paste';
+  commandName: 'type' | 'paste' | 'run';
   text: string | undefined;
   file: string | undefined;
 }
@@ -23,7 +23,7 @@ function createInvalidInputError(
   });
 }
 
-function usageMessage(commandName: 'type' | 'paste'): string {
+function usageMessage(commandName: 'type' | 'paste' | 'run'): string {
   return `Usage: agent-terminal ${commandName} <session-id> [text] [--file <path>]`;
 }
 

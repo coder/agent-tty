@@ -1463,6 +1463,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         case 'input_text':
         case 'input_paste':
         case 'input_keys':
+        case 'input_run':
         case 'signal':
         case 'exit': {
           await flushOutputBatch();
@@ -1720,6 +1721,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         case 'input_text':
         case 'input_paste':
         case 'input_keys':
+        case 'input_run':
         case 'signal':
         case 'exit': {
           await flushOutputBatch();

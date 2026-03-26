@@ -100,6 +100,15 @@ export const InputKeysEventPayloadSchema = z
   .strict();
 export type InputKeysEventPayload = z.infer<typeof InputKeysEventPayloadSchema>;
 
+export const InputRunEventPayloadSchema = z
+  .object({
+    command: z.string().min(1),
+    marker: z.string().optional(),
+    noWait: z.boolean(),
+  })
+  .strict();
+export type InputRunEventPayload = z.infer<typeof InputRunEventPayloadSchema>;
+
 export const ResizeEventPayloadSchema = z
   .object({
     cols: PositiveIntSchema,
@@ -137,6 +146,7 @@ export const EventTypeSchema = z.enum([
   'input_text',
   'input_paste',
   'input_keys',
+  'input_run',
   'resize',
   'signal',
   'exit',
@@ -181,6 +191,14 @@ export const InputKeysEventRecordSchema = z
   })
   .strict();
 
+export const InputRunEventRecordSchema = z
+  .object({
+    ...EventRecordBaseShape,
+    type: z.literal('input_run'),
+    payload: InputRunEventPayloadSchema,
+  })
+  .strict();
+
 export const ResizeEventRecordSchema = z
   .object({
     ...EventRecordBaseShape,
@@ -218,6 +236,7 @@ export const EventRecordSchema = z.discriminatedUnion('type', [
   InputTextEventRecordSchema,
   InputPasteEventRecordSchema,
   InputKeysEventRecordSchema,
+  InputRunEventRecordSchema,
   ResizeEventRecordSchema,
   SignalEventRecordSchema,
   ExitEventRecordSchema,

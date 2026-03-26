@@ -80,6 +80,21 @@ const InputKeysReplayEventSchema = z
   })
   .strict();
 
+const InputRunReplayEventSchema = z
+  .object({
+    seq: NonNegativeIntSchema,
+    ts: z.iso.datetime(),
+    type: z.literal('input_run'),
+    payload: z
+      .object({
+        command: z.string().min(1),
+        marker: z.string().optional(),
+        noWait: z.boolean(),
+      })
+      .strict(),
+  })
+  .strict();
+
 const ResizeReplayEventSchema = z
   .object({
     seq: NonNegativeIntSchema,
@@ -135,6 +150,7 @@ export const ReplayEventSchema = z.discriminatedUnion('type', [
   InputTextReplayEventSchema,
   InputPasteReplayEventSchema,
   InputKeysReplayEventSchema,
+  InputRunReplayEventSchema,
   ResizeReplayEventSchema,
   MarkerReplayEventSchema,
   SignalReplayEventSchema,
