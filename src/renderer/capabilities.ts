@@ -142,6 +142,15 @@ async function probePlaywrightAvailability(
   }
 }
 
+/**
+ * Built-in capabilities (snapshot, wait, record-export-asciicast) are always
+ * reported as 'available' because they depend only on the event log and
+ * built-in text processing; no external renderer or browser is needed.
+ *
+ * This reflects runtime feature availability, not guaranteed success for any
+ * particular session. Corrupted session data or an invalid event log will fail
+ * at invocation time rather than degrading capability discovery.
+ */
 function buildBuiltinCapability(
   name: CapabilityName,
   mode: DiscoveryMode,
@@ -342,17 +351,21 @@ async function buildPlaywrightCapability(
 function validateDiscoveredCapabilities(
   capabilities: ReadonlyArray<CapabilityEntry>,
 ): CapabilityEntry[] {
+  const actualNames = capabilities.map((capability) => capability.name);
+  const expectedNames = [...CAPABILITY_NAMES];
   assert.equal(
     capabilities.length,
     CAPABILITY_NAMES.length,
-    'discovered capabilities must include every known capability exactly once',
+    `discovered capabilities must include every known capability exactly once (got [${actualNames.join(', ')}], expected [${expectedNames.join(', ')}])`,
   );
 
-  const capabilityNames = capabilities.map((capability) => capability.name);
+  const duplicateNames = actualNames.filter(
+    (name, index) => actualNames.indexOf(name) !== index,
+  );
   assert.equal(
-    new Set(capabilityNames).size,
+    new Set(actualNames).size,
     CAPABILITY_NAMES.length,
-    'discovered capabilities must not contain duplicates',
+    `discovered capabilities must not contain duplicates (got [${actualNames.join(', ')}], expected [${expectedNames.join(', ')}], duplicates [${duplicateNames.join(', ')}])`,
   );
 
   return capabilities.map((capability) =>

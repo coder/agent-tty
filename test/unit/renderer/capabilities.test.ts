@@ -162,4 +162,33 @@ describe('discoverCapabilities', () => {
       detail: 'chromium binary missing',
     });
   });
+
+  it('marks full browser-backed capabilities unknown when renderer checks are incomplete', async () => {
+    const probePlaywright = vi.fn(() => Promise.resolve({ available: true }));
+
+    const capabilities = await discoverCapabilities('full', {
+      probePlaywright,
+      rendererChecks: [
+        {
+          name: 'playwright_available',
+          status: 'pass',
+          message: 'available',
+        },
+      ],
+    });
+
+    expect(probePlaywright).not.toHaveBeenCalled();
+    expect(getCapability(capabilities, 'screenshot')).toEqual({
+      name: 'screenshot',
+      status: 'unknown',
+      reason: 'renderer checks incomplete',
+      detail: 'doctor did not provide the full renderer check set',
+    });
+    expect(getCapability(capabilities, 'record-export-webm')).toEqual({
+      name: 'record-export-webm',
+      status: 'unknown',
+      reason: 'renderer checks incomplete',
+      detail: 'doctor did not provide the full renderer check set',
+    });
+  });
 });

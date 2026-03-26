@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CapabilityEntrySchema,
   DestroyParamsSchema,
   DestroyResultSchema,
   HostInspectResultSchema,
@@ -140,6 +141,87 @@ describe('protocol schemas', () => {
       type: 'marker',
       payload: { label: 'Step 1' },
     });
+  });
+});
+
+describe('CapabilityEntrySchema', () => {
+  it('accepts a minimal available capability entry', () => {
+    const result = CapabilityEntrySchema.safeParse({
+      name: 'snapshot',
+      status: 'available',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a detailed unavailable capability entry', () => {
+    const result = CapabilityEntrySchema.safeParse({
+      name: 'screenshot',
+      status: 'unavailable',
+      reason: 'playwright-missing',
+      detail: 'Cannot find module',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts every capability name', () => {
+    const names = [
+      'snapshot',
+      'wait',
+      'screenshot',
+      'record-export-asciicast',
+      'record-export-webm',
+    ] as const;
+
+    for (const name of names) {
+      expect(
+        CapabilityEntrySchema.safeParse({ name, status: 'available' }).success,
+      ).toBe(true);
+    }
+  });
+
+  it('accepts every capability status', () => {
+    const statuses = [
+      'available',
+      'unavailable',
+      'degraded',
+      'unknown',
+    ] as const;
+
+    for (const status of statuses) {
+      expect(
+        CapabilityEntrySchema.safeParse({ name: 'snapshot', status }).success,
+      ).toBe(true);
+    }
+  });
+
+  it('rejects extra fields on capability entries', () => {
+    const result = CapabilityEntrySchema.safeParse({
+      name: 'snapshot',
+      status: 'available',
+      extra: true,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects invalid capability names', () => {
+    const result = CapabilityEntrySchema.safeParse({
+      name: 'video-export',
+      status: 'available',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects invalid capability statuses', () => {
+    const result = CapabilityEntrySchema.safeParse({
+      name: 'snapshot',
+      status: 'partial',
+    });
+
+    expect(result.success).toBe(false);
   });
 });
 
