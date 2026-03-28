@@ -1,3 +1,10 @@
+// Post-tsc build step: copies bundled renderer assets (fonts, license) from
+// src/renderer/ghosttyWeb/assets into dist/renderer/ghosttyWeb/assets so that
+// the published npm package includes them alongside the compiled JS.
+//
+// This is a plain .mjs file (not TypeScript in src/tools/) because it runs
+// after tsc as part of `npm run build` and must not depend on the compilation
+// output it is completing.
 import { cp, mkdir, stat } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import process from 'node:process';

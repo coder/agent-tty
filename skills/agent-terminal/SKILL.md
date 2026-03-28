@@ -7,6 +7,7 @@ advertise: true
 # Terminal Automation with agent-terminal
 
 Install the CLI with `npm install -g agent-terminal`, then use `agent-terminal` directly.
+Examples use `jq` for JSON parsing; any JSON-processing tool works.
 Prefer isolated homes, JSON envelopes, and renderer-backed artifacts so terminal workflows stay reviewable and reproducible.
 
 ## Core Workflow

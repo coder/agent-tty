@@ -66,6 +66,7 @@ Recommended sequence:
 3. Use `wait` for render-visible readiness conditions.
 4. Capture screenshots for point-in-time review.
 5. Export WebM recordings when reviewers need motion proof.
+6. Destroy the session when done.
 
 ## AI agent skill
 
