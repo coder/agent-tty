@@ -116,6 +116,9 @@ Development server: **none**. This is a CLI project, so iterative development us
 - **Do update coupled limits together.** `src/host/eventLog.ts` and `src/host/replay.ts` both enforce the 50 MB event-log limit. **Do not** change one without the other.
 - **Do add tests at the right layer.** Small parser/validation changes usually belong in `test/unit`; CLI wiring and temp-home behavior fit `test/integration`; renderer/artifact flows belong in `test/e2e`.
 
+- **Do keep the public `skills/agent-terminal/` artifact binary-first.** The committed public skill and public-facing skill docs must use `agent-terminal ...`, not repo-local `npx`, `tsx`, or `src/cli/main.ts` invocations. When you execute those examples from this source tree, translate them locally to `npx tsx src/cli/main.ts ...`, but do not commit that substitution back into the public skill or README skill-install guidance.
+- **Do teach the terminal workflow the public skill is supposed to reinforce.** Prefer `--home`, `--json`, `run`, `wait`, `snapshot`, `screenshot`, and `record export` when writing or maintaining public skill examples. **Do not** teach `tmux`, blind `sleep`, or out-of-band screenshots as the primary workflow.
+
 ## Testing patterns
 
 - Unit tests often mock command dependencies and assert exact envelopes or manifest writes.

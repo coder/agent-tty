@@ -3,18 +3,31 @@
 `agent-terminal` is a Node/TypeScript CLI for launching, controlling, inspecting, and exporting reviewable terminal sessions.
 It is built for agent workflows that need both semantic state and visual artifacts from live or exited TUIs.
 
+## Installation
+
+### Global installation
+
+```bash
+npm install -g agent-terminal
+agent-terminal version --json
+```
+
+### Project installation
+
+```bash
+npm install agent-terminal
+./node_modules/.bin/agent-terminal version --json
+```
+
 ## Quick start
 
 ```bash
-mise install
-npm ci
-npx playwright install chromium
-npm run build
-
-SESSION_ID=$(node dist/cli/main.js create --json --name demo | jq -r '.result.sessionId')
-node dist/cli/main.js run "$SESSION_ID" 'echo hello from agent-terminal'
-node dist/cli/main.js inspect "$SESSION_ID" --json
-node dist/cli/main.js destroy "$SESSION_ID"
+AGENT_HOME="$(mktemp -d)"
+agent-terminal --home "$AGENT_HOME" doctor --json
+SESSION_ID=$(agent-terminal --home "$AGENT_HOME" create --json --name demo -- /bin/bash | jq -r '.result.sessionId')
+agent-terminal --home "$AGENT_HOME" run "$SESSION_ID" 'echo hello from agent-terminal' --json
+agent-terminal --home "$AGENT_HOME" snapshot "$SESSION_ID" --format text --json
+agent-terminal --home "$AGENT_HOME" destroy "$SESSION_ID" --json
 ```
 
 ## Feature highlights
@@ -53,6 +66,67 @@ Recommended sequence:
 3. Use `wait` for render-visible readiness conditions.
 4. Capture screenshots for point-in-time review.
 5. Export WebM recordings when reviewers need motion proof.
+6. Destroy the session when done.
+
+## AI agent skill
+
+The public skill lives under `skills/agent-terminal/` and ships in the npm package.
+You can install it directly for Mux-style skill loaders, or let TanStack Intent discover and map it for compatible coding agents.
+
+### TanStack Intent integration
+
+If your agent supports Intent-compatible skill mappings, install `agent-terminal` in the project and let Intent wire the mapping into `AGENTS.md`, `CLAUDE.md`, or another supported agent config file.
+
+```bash
+npm install agent-terminal
+npx @tanstack/intent@latest list
+npx @tanstack/intent@latest install
+```
+
+That workflow keeps the skill version aligned with the installed `agent-terminal` package and avoids writing one-off instructions for each individual coding agent.
+
+### Mux skill installation
+
+```bash
+npm install -g agent-terminal
+
+mkdir -p ~/.mux/skills/agent-terminal
+cp -R "$(npm root -g)/agent-terminal/skills/agent-terminal/." ~/.mux/skills/agent-terminal/
+```
+
+### Direct skill copy for other skill loaders
+
+```bash
+npm install -g agent-terminal
+
+mkdir -p ~/.claude/skills/agent-terminal
+cp -R "$(npm root -g)/agent-terminal/skills/agent-terminal/." ~/.claude/skills/agent-terminal/
+```
+
+If your assistant supports repository-backed skills, point it at `coder/agent-terminal` and select the `agent-terminal` skill directory.
+
+### Suggested `AGENTS.md` / `CLAUDE.md` snippet
+
+```markdown
+## Terminal Automation
+
+Use `agent-terminal` for terminal and TUI automation instead of `tmux`, ad hoc PTY wrappers, or external screenshot tools.
+
+Preferred workflow:
+
+1. Create an isolated home and session with `agent-terminal --home "$AGENT_HOME" create --json -- /bin/bash`.
+2. Use `agent-terminal run` for setup and bootstrap commands.
+3. Use `agent-terminal wait` for observable readiness instead of blind sleeps.
+4. Use `agent-terminal snapshot` to inspect the current terminal state.
+5. Use `agent-terminal screenshot` or `agent-terminal record export` for reviewer-facing artifacts.
+6. Destroy the session when the task is done.
+```
+
+Maintainers can validate the shipped skill locally with:
+
+```bash
+npm run intent:validate
+```
 
 ## Isolation
 

@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-03-27T17:01:30.995Z",
+  "result": {
+    "format": "text",
+    "sessionId": "01KMR3WRXSP97ZBVWXN0YQ3VG2",
+    "capturedAtSeq": 5,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 7,
+    "cursorCol": 61,
+    "text": "bash: command not found: starship\nbash: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory\ncoder@aaaaaaa:~/.mux/src/agent-terminal/agent-terminal-ejrg$ printf \"public-skil\nl smoke\\n\"\nprintf '%s%s\\n' '__AT_MARKER_0019af22a43' '542748c91caa3b31cdc5e__'\npublic-skill smoke\n__AT_MARKER_0019af22a43542748c91caa3b31cdc5e__\ncoder@aaaaaaa:~/.mux/src/agent-terminal/agent-terminal-ejrg$\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  }
+}

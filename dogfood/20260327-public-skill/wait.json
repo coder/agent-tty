@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-03-27T17:01:30.558Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "public-skill smoke",
+    "cursorRow": 7,
+    "cursorCol": 61,
+    "capturedAtSeq": 5
+  }
+}
