@@ -1,0 +1,37 @@
+{
+  "ok": true,
+  "command": "version",
+  "timestamp": "2026-03-27T17:01:27.066Z",
+  "result": {
+    "cliVersion": "0.1.0",
+    "protocolVersion": "0.1.0",
+    "rendererBackends": ["ghostty-web"],
+    "runtime": {
+      "node": "v24.14.0",
+      "platform": "linux",
+      "arch": "x64"
+    },
+    "capabilities": [
+      {
+        "name": "snapshot",
+        "status": "available"
+      },
+      {
+        "name": "wait",
+        "status": "available"
+      },
+      {
+        "name": "screenshot",
+        "status": "available"
+      },
+      {
+        "name": "record-export-asciicast",
+        "status": "available"
+      },
+      {
+        "name": "record-export-webm",
+        "status": "available"
+      }
+    ]
+  }
+}

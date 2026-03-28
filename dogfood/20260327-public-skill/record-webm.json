@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-03-27T17:01:33.848Z",
+  "result": {
+    "sessionId": "01KMR3WRXSP97ZBVWXN0YQ3VG2",
+    "format": "webm",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent-terminal-ejrg/dogfood/20260327-public-skill/packaged-smoke.webm",
+    "bytes": 48610,
+    "sha256": "9e9f7c8e2bf06ac4a3f5dc8889b5100cfea6b5cd68411680a56ab720dc6aaa37",
+    "capturedAtSeq": 5,
+    "durationMs": 414,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d",
+      "timingMode": "accelerated",
+      "outputEventCount": 5,
+      "resizeEventCount": 0
+    }
+  }
+}
