@@ -58,4 +58,4 @@ The remaining future scope is now concentrated in native/platform/runtime expans
 ## What remains for future work
 
 - The post-Week-5 delta is now concentrated in native renderer work, broader failure semantics, cross-platform parity, and related platform/runtime hardening rather than foundational CLI/config wiring.
-- See `WEEK2-GAPS.md` for the detailed remaining gap list.
+- See [`../../ROADMAP.md`](../../ROADMAP.md) for the detailed remaining gap list.

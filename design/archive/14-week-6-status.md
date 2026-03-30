@@ -79,4 +79,4 @@ So the Week 6 functional/contract work shipped, but proof-bundle completeness re
 
 - The high-value `inspect` / `version` / artifact-health / failure-reporting code gaps that Week 6 set out to close are done, but full CLI/example ratification and proof-bundle completeness still remain as Week 7 carry-over work.
 - Beyond that carry-over work, the remaining larger delta is future-scope platform/runtime expansion and data-model redesign questions.
-- See `WEEK2-GAPS.md` and [15-week-7-plan.md](./15-week-7-plan.md) for the current detailed gap list and next-step plan.
+- See [`../../ROADMAP.md`](../../ROADMAP.md) and [15-week-7-plan.md](./15-week-7-plan.md) for the current detailed gap list and next-step plan.

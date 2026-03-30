@@ -29,8 +29,9 @@ Session state is stored under `~/.agent-terminal` by default. In tests and autom
 - `src/renderer/ghosttyWeb/backend.ts` — reference renderer and Playwright browser harness.
 - `src/export/asciicast.ts` and `src/export/webm.ts` — recording export logic.
 - `src/util/assert.ts` — shared fail-fast assertion helpers.
-- `design/20260319_agent-terminal-v1.md` — architecture and product intent.
-- `dogfood/` — proof bundles plus scripts for reviewer-facing validation artifacts.
+- `design/ARCHITECTURE.md` — stable architecture and product intent overview.
+- `ROADMAP.md` and `RELEASE.md` — shipped scope vs deferred scope at the repo root.
+- `dogfood/README.md` and `dogfood/CATALOG.md` — proof-bundle navigation and reviewer-facing validation artifacts.
 
 ## Important directories
 
@@ -43,7 +44,8 @@ Session state is stored under `~/.agent-terminal` by default. In tests and autom
 - `test/integration/` — CLI-level behavior against isolated temp homes.
 - `test/e2e/` — higher-level fixture-driven flows that assert rendered output and artifacts.
 - `test/fixtures/apps/` — tiny terminal apps used by e2e and dogfooding.
-- `design/` — architecture, roadmap, and dogfooding docs.
+- `design/` — architecture references and archived planning/status docs.
+- `docs/` — contributor and maintainer workflow docs.
 
 ## Architecture
 

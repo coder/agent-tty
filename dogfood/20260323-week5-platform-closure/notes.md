@@ -19,10 +19,10 @@ Lane D completed the Week 5 platform/documentation closeout on 2026-03-23. This 
 ## Documentation changes
 
 - `README.md` now includes a `## Platform Support` section that spells out Linux tier-1, macOS tier-1, and Windows tier-2.
-- `design/20260319_agent-terminal-v1.md` updates the design entrypoint to the 2026-03-23 shipped status and calls out Week 5 foundational scaffolding plus macOS CI validation.
-- `design/20260319_agent-terminal-v1/12-week-5-status.md` records the actual Week 5 outcome and marks Workstream D as completed.
-- `design/20260319_agent-terminal-v1/11-week-5-plan.md` now includes a status update pointing readers to the Week 5 outcome.
-- `WEEK2-GAPS.md` is reclassified as the post-Week-5 remaining-gap tracker with explicit shipped / scaffolded / future annotations.
+- `design/ARCHITECTURE.md` updates the design entrypoint to the 2026-03-23 shipped status and calls out Week 5 foundational scaffolding plus macOS CI validation.
+- `design/archive/12-week-5-status.md` records the actual Week 5 outcome and marks Workstream D as completed.
+- `design/archive/11-week-5-plan.md` now includes a status update pointing readers to the Week 5 outcome.
+- `ROADMAP.md` is reclassified as the post-Week-5 remaining-gap tracker with explicit shipped / scaffolded / future annotations.
 
 ## Validation results
 
@@ -40,20 +40,20 @@ All requested validation gates passed for the platform/documentation closeout:
 npm run verify  (runs format:check, lint, typecheck, test, build)
 npx prettier --check .github/workflows/ci.yml
 npx prettier --check README.md
-npx prettier --check WEEK2-GAPS.md
-npx prettier --check design/20260319_agent-terminal-v1.md
-npx prettier --check design/20260319_agent-terminal-v1/12-week-5-status.md
-npx prettier --check design/20260319_agent-terminal-v1/11-week-5-plan.md
+npx prettier --check ROADMAP.md
+npx prettier --check design/ARCHITECTURE.md
+npx prettier --check design/archive/12-week-5-status.md
+npx prettier --check design/archive/11-week-5-plan.md
 ```
 
 ## Files changed
 
 1. `.github/workflows/ci.yml` — added the `quality-gates-macos` tier-1 validation job alongside the existing Ubuntu job.
 2. `README.md` — added the top-level `## Platform Support` section describing Linux tier-1, macOS tier-1, and Windows tier-2.
-3. `design/20260319_agent-terminal-v1.md` — updated the design entrypoint shipped-status section to 2026-03-23 and linked Week 5 status/current gaps.
-4. `design/20260319_agent-terminal-v1/12-week-5-status.md` — added the dedicated Week 5 status record documenting what shipped vs what remains future scope.
-5. `design/20260319_agent-terminal-v1/11-week-5-plan.md` — updated the status section near the top to reflect the Week 5 outcome and cross-link the status doc.
-6. `WEEK2-GAPS.md` — reclassified the tracker into the post-Week-5 gap list with shipped, scaffolded, and future-scope labels.
+3. `design/ARCHITECTURE.md` — updated the design entrypoint shipped-status section to 2026-03-23 and linked Week 5 status/current gaps.
+4. `design/archive/12-week-5-status.md` — added the dedicated Week 5 status record documenting what shipped vs what remains future scope.
+5. `design/archive/11-week-5-plan.md` — updated the status section near the top to reflect the Week 5 outcome and cross-link the status doc.
+6. `ROADMAP.md` — reclassified the tracker into the post-Week-5 gap list with shipped, scaffolded, and future-scope labels.
 
 ## What this proves
 
@@ -74,7 +74,7 @@ npx prettier --check design/20260319_agent-terminal-v1/11-week-5-plan.md
 
 - `../../.github/workflows/ci.yml`
 - `../../README.md`
-- `../../design/20260319_agent-terminal-v1.md`
-- `../../design/20260319_agent-terminal-v1/12-week-5-status.md`
-- `../../design/20260319_agent-terminal-v1/11-week-5-plan.md`
-- `../../WEEK2-GAPS.md`
+- `../../design/ARCHITECTURE.md`
+- `../../design/archive/12-week-5-status.md`
+- `../../design/archive/11-week-5-plan.md`
+- `../../ROADMAP.md`
