@@ -2,7 +2,8 @@
 
 `agent-terminal` `0.1.0` is the first release that explicitly targets isolated, reviewable terminal automation for real TUI workflows.
 The contract below is the bar for what maintainers should feel comfortable supporting at release time.
-If a workflow depends on behavior outside this document, it should be treated as future-scope or best-effort rather than a guaranteed `0.1.0` capability.
+If a workflow depends on behavior outside this document, treat it as future-scope or best-effort rather than a guaranteed `0.1.0` capability.
+For intentionally deferred work, see [`ROADMAP.md`](./ROADMAP.md). For reviewer-facing proof bundles, start with [`dogfood/CATALOG.md`](./dogfood/CATALOG.md).
 
 ## What 0.1.0 delivers
 
@@ -32,6 +33,6 @@ If a workflow depends on behavior outside this document, it should be treated as
 
 ## Validation
 
-- Current release bar: 595 tests across 56 test files.
-- Reviewer-facing proof bundles live under `dogfood/`, including `dogfood/20260326-week9-release-readiness/`, `dogfood/run-command/`, and `dogfood/20260325-week8-contract-locks/`.
+- Current release bar: 602 tests across 56 test files.
+- Reviewer-facing proof bundles are cataloged in [`dogfood/CATALOG.md`](./dogfood/CATALOG.md), including `dogfood/20260326-week9-release-readiness/`, `dogfood/run-command/`, and `dogfood/20260325-week8-contract-locks/`.
 - Run `npm run verify` for the full validation bar.

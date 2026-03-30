@@ -30,6 +30,14 @@ agent-terminal --home "$AGENT_HOME" snapshot "$SESSION_ID" --format text --json
 agent-terminal --home "$AGENT_HOME" destroy "$SESSION_ID" --json
 ```
 
+## Documentation map
+
+- [`RELEASE.md`](./RELEASE.md) — the current `0.1.0` release contract.
+- [`ROADMAP.md`](./ROADMAP.md) — intentionally deferred work and post-release direction.
+- [`design/README.md`](./design/README.md) — architecture references plus archived week-by-week planning.
+- [`dogfood/CATALOG.md`](./dogfood/CATALOG.md) — curated proof bundles and recommended review paths.
+- [`docs/README.md`](./docs/README.md) — contributor and maintainer navigation.
+
 ## Feature highlights
 
 - Full session lifecycle management: create, inspect, list, wait, destroy, and garbage-collect.
@@ -41,9 +49,8 @@ agent-terminal --home "$AGENT_HOME" destroy "$SESSION_ID" --json
 ## 0.1.0 release focus
 
 `agent-terminal` `0.1.0` is the first release aimed at reliable, isolated, reviewable TUI automation.
-Week 9 closes the release-readiness bar around the new `run` command, isolated-environment renderer reliability, and isolation-aware `doctor` diagnostics.
-For the explicit release contract, see [`RELEASE.md`](./RELEASE.md).
-Reviewer-facing proof bundles live under `dogfood/`, including `dogfood/20260326-week9-release-readiness/`, `dogfood/run-command/`, and `dogfood/20260325-week8-contract-locks/`.
+For the explicit shipping contract, see [`RELEASE.md`](./RELEASE.md). For intentionally deferred work, see [`ROADMAP.md`](./ROADMAP.md).
+Reviewer-facing proof bundles are curated in [`dogfood/CATALOG.md`](./dogfood/CATALOG.md), with current release-signoff evidence in `dogfood/20260326-week9-release-readiness/` and evergreen workflow coverage such as `dogfood/run-command/`.
 
 ## TUI Workflow
 
@@ -214,15 +221,16 @@ npm run verify
 ```
 
 That runs formatting, linting, typechecking, unit/e2e tests, and the production build.
+For contributor workflow and release hygiene, see [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md) and [`docs/RELEASE-PROCESS.md`](./docs/RELEASE-PROCESS.md).
 
 ## Design docs
 
-Design and implementation notes live under `design/`, especially `design/20260319_agent-terminal-v1/`.
-See `design/20260319_agent-terminal-v1/` for architecture, weekly plans, and status docs through Week 9, and see [`RELEASE.md`](./RELEASE.md) for the `0.1.0` contract.
+Design and implementation notes live under [`design/`](./design/README.md).
+Start with [`design/ARCHITECTURE.md`](./design/ARCHITECTURE.md) for the stable overview, use [`design/20260319_agent-terminal-v1/`](./design/20260319_agent-terminal-v1/) for the active reference set, and use [`design/archive/`](./design/archive/) for week-by-week project history.
 
 ## Repository notes
 
 - CI uses `mise` for tool provisioning and quality-gate entrypoints.
 - Chromium is required locally for screenshot and replay export coverage.
 - Platform support tiers are documented in this README; see also the design docs for detailed status.
-- Dogfood proof bundles and validation notes live under `dogfood/` and `design/`.
+- Dogfood proof bundles and review guidance live under [`dogfood/README.md`](./dogfood/README.md) and [`dogfood/CATALOG.md`](./dogfood/CATALOG.md).

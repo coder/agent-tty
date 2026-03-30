@@ -25,7 +25,7 @@ That audit found that the Week 1–7 plan and status docs are materially reflect
 - the intentionally deferred lower-priority public-envelope locks for `doctor`, `gc`, and `record export`,
 - and proof-bundle standard enforcement, where the docs describe a stronger preferred minimum than the repo currently validates automatically.
 
-See [15-week-7-plan.md](./15-week-7-plan.md), [05-dogfooding-and-validation.md](./05-dogfooding-and-validation.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current context this plan continues from.
+See [15-week-7-plan.md](./15-week-7-plan.md), [05-dogfooding-and-validation.md](./05-dogfooding-and-validation.md), and [`../../ROADMAP.md`](../../ROADMAP.md) for the current context this plan continues from.
 
 As work lands, this file should be updated in place the same way the earlier weekly plan/status docs were kept in sync:
 

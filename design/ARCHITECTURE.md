@@ -3,7 +3,7 @@ author: "@mux"
 date: 2026-03-19
 ---
 
-# agent-terminal v1
+# agent-terminal architecture overview
 
 `agent-terminal` is a CLI-first terminal automation system for AI agents and humans.
 
@@ -40,7 +40,9 @@ The repository now ships the first three milestones of this design plus Weeks 4â
 - macOS CI validation,
 - and proof bundles under `dogfood/`.
 
-Week 7 closed the design-synchronization pass for the shipped v1 surface. Week 8 then completed runtime capability discovery, richer renderer/session introspection, the remaining lower-priority public-envelope locks, and proof-bundle normalization/validation. Week 9 then closed the pre-`0.1.0` release-readiness milestone: isolated-environment renderer reliability is now part of the shipped contract, the higher-level in-session `run` primitive is documented and shipped, TUI-focused diagnostics/docs are in place, and the remaining large asks are intentionally deferred future-scope work rather than release blockers. The intentionally deferred platform/runtime work is tracked separately in [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md). See [14-week-6-status.md](./20260319_agent-terminal-v1/14-week-6-status.md), [15-week-7-plan.md](./20260319_agent-terminal-v1/15-week-7-plan.md), [16-week-8-plan.md](./20260319_agent-terminal-v1/16-week-8-plan.md), [17-week-9-plan.md](./20260319_agent-terminal-v1/17-week-9-plan.md), [`../RELEASE.md`](../RELEASE.md), and [`../WEEK2-GAPS.md`](../WEEK2-GAPS.md) for the current state.
+Week 7 closed the design-synchronization pass for the shipped v1 surface. Week 8 then completed runtime capability discovery, richer renderer/session introspection, the remaining lower-priority public-envelope locks, and proof-bundle normalization/validation. Week 9 then closed the pre-`0.1.0` release-readiness milestone: isolated-environment renderer reliability is now part of the shipped contract, the higher-level in-session `run` primitive is documented and shipped, TUI-focused diagnostics/docs are in place, and the remaining large asks are intentionally deferred future-scope work rather than release blockers.
+
+The stable contract and deferred work now have dedicated homes: use [`../RELEASE.md`](../RELEASE.md) for the shipping bar, [`../ROADMAP.md`](../ROADMAP.md) for future scope, [`./README.md`](./README.md) for the design index, and [`./archive/`](./archive/) for the historical week-by-week planning/status trail.
 
 ## Executive summary
 
@@ -195,25 +197,30 @@ Asciicast and replay-video export remain intended follow-on capabilities rather 
 
 ## Deliverables in this design set
 
-This design file is the entry point. Detailed supporting docs live in `design/20260319_agent-terminal-v1/`.
+This design file is the entry point. Detailed supporting docs live in the active reference set under `design/20260319_agent-terminal-v1/`, while historical planning/status material lives under `design/archive/`.
+
+### Active reference set
 
 - [01-architecture.md](./20260319_agent-terminal-v1/01-architecture.md)
 - [02-cli-contract.md](./20260319_agent-terminal-v1/02-cli-contract.md)
 - [03-rendering-and-artifacts.md](./20260319_agent-terminal-v1/03-rendering-and-artifacts.md)
 - [04-implementation-plan.md](./20260319_agent-terminal-v1/04-implementation-plan.md)
 - [05-dogfooding-and-validation.md](./20260319_agent-terminal-v1/05-dogfooding-and-validation.md)
-- [06-roadmap-and-week-1-plan.md](./20260319_agent-terminal-v1/06-roadmap-and-week-1-plan.md)
-- [07-week-2-plan.md](./20260319_agent-terminal-v1/07-week-2-plan.md)
-- [08-week-3-status.md](./20260319_agent-terminal-v1/08-week-3-status.md)
-- [09-week-4-plan.md](./20260319_agent-terminal-v1/09-week-4-plan.md)
-- [10-week-4-status.md](./20260319_agent-terminal-v1/10-week-4-status.md)
-- [11-week-5-plan.md](./20260319_agent-terminal-v1/11-week-5-plan.md)
-- [12-week-5-status.md](./20260319_agent-terminal-v1/12-week-5-status.md)
-- [13-week-6-plan.md](./20260319_agent-terminal-v1/13-week-6-plan.md)
-- [14-week-6-status.md](./20260319_agent-terminal-v1/14-week-6-status.md)
-- [15-week-7-plan.md](./20260319_agent-terminal-v1/15-week-7-plan.md)
-- [16-week-8-plan.md](./20260319_agent-terminal-v1/16-week-8-plan.md)
-- [17-week-9-plan.md](./20260319_agent-terminal-v1/17-week-9-plan.md)
+
+### Historical archive
+
+- [06-roadmap-and-week-1-plan.md](./archive/06-roadmap-and-week-1-plan.md)
+- [07-week-2-plan.md](./archive/07-week-2-plan.md)
+- [08-week-3-status.md](./archive/08-week-3-status.md)
+- [09-week-4-plan.md](./archive/09-week-4-plan.md)
+- [10-week-4-status.md](./archive/10-week-4-status.md)
+- [11-week-5-plan.md](./archive/11-week-5-plan.md)
+- [12-week-5-status.md](./archive/12-week-5-status.md)
+- [13-week-6-plan.md](./archive/13-week-6-plan.md)
+- [14-week-6-status.md](./archive/14-week-6-status.md)
+- [15-week-7-plan.md](./archive/15-week-7-plan.md)
+- [16-week-8-plan.md](./archive/16-week-8-plan.md)
+- [17-week-9-plan.md](./archive/17-week-9-plan.md)
 
 ## High-level architecture
 

@@ -106,7 +106,7 @@ This documentation update is the WS5 landing step:
 - `02-cli-contract.md` now marks shipped vs future CLI items,
 - `03-rendering-and-artifacts.md` now marks shipped vs future rendering items,
 - `05-dogfooding-and-validation.md` now records current coverage and remaining validation gaps,
-- and `WEEK2-GAPS.md` now tracks the post-Week-4 remaining delta rather than the older post-Week-3 view.
+- and [`../../ROADMAP.md`](../../ROADMAP.md) now tracks the post-Week-4 remaining delta rather than the older post-Week-3 view.
 
 ## Test coverage summary
 
@@ -170,4 +170,4 @@ Week 4 did not eliminate the need for the larger v1 design docs; it narrowed the
 
 - a record of the intended v1 contract,
 - annotated by what shipped in Week 4,
-- with the remaining follow-on work captured in `WEEK2-GAPS.md`.
+- with the remaining follow-on work captured in [`../../ROADMAP.md`](../../ROADMAP.md).
