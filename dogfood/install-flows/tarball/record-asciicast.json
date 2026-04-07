@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-04-07T20:30:33.556Z",
+  "result": {
+    "sessionId": "01KNMT70YKGVN6PR3MWWAK7MMM",
+    "format": "asciicast",
+    "artifactPath": "/tmp/tmp.0v4LnZJ3BC/sessions/01KNMT70YKGVN6PR3MWWAK7MMM/artifacts/recording-22-asciicast.cast",
+    "bytes": 8963,
+    "sha256": "fa20d495273b2959b738d84827d810f1bbc4d7818e4c73468e79631993e297a4",
+    "capturedAtSeq": 22,
+    "durationMs": 9348,
+    "metadata": {
+      "width": 140,
+      "height": 40,
+      "title": "01KNMT70YKGVN6PR3MWWAK7MMM",
+      "timestamp": 1775593817,
+      "outputEventCount": 20,
+      "resizeEventCount": 0,
+      "markerCount": 0
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-04-07T20:31:09.162Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "__DOGFOOD_DONE__ install",
+    "cursorRow": 39,
+    "cursorCol": 10,
+    "capturedAtSeq": 8
+  }
+}

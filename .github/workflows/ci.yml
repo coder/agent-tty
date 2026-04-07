@@ -51,6 +51,9 @@ jobs:
       - name: Build
         run: mise run build
 
+      - name: Packaging smoke
+        run: mise run install-smoke
+
   # macOS compilation and static-analysis counterpart to the Ubuntu quality
   # gates above.  Tests are excluded because the macOS GitHub Actions runner
   # has pre-existing issues with PTY spawning and Unix domain sockets that

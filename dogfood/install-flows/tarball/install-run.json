@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "run",
+  "timestamp": "2026-04-07T20:30:21.279Z",
+  "result": {
+    "accepted": true,
+    "completed": true,
+    "timedOut": false,
+    "seq": 2,
+    "durationMs": 307,
+    "marker": "__AT_MARKER_a451c1cc15544616bb8029b5478a0646__"
+  }
+}
