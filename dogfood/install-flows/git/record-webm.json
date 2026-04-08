@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-04-07T20:31:13.104Z",
+  "result": {
+    "sessionId": "01KNMT8ERRG69NVF3QF7A0M4PN",
+    "format": "webm",
+    "artifactPath": "/tmp/tmp.vQk7Eo2uSg/sessions/01KNMT8ERRG69NVF3QF7A0M4PN/artifacts/recording-8-webm.webm",
+    "bytes": 438307,
+    "sha256": "6c3075f3066643e2893f5f14df2023ce04ce1ed3042c47283854056c375b72f6",
+    "capturedAtSeq": 8,
+    "durationMs": 3038,
+    "metadata": {
+      "width": 140,
+      "height": 40,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d",
+      "timingMode": "accelerated",
+      "outputEventCount": 8,
+      "resizeEventCount": 0
+    }
+  }
+}

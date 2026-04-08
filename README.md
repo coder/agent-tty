@@ -5,19 +5,59 @@ It is built for agent workflows that need both semantic state and visual artifac
 
 ## Installation
 
-### Global installation
+`agent-terminal` currently supports Node `24.x`.
+Released builds install from npm. For prerelease/private use, the guaranteed install path is a built tarball; direct GitHub installs are best-effort and may still fail in some environments.
+
+### npm registry installation
+
+#### Global installation
 
 ```bash
 npm install -g agent-terminal
 agent-terminal version --json
 ```
 
-### Project installation
+#### Project installation
 
 ```bash
 npm install agent-terminal
 ./node_modules/.bin/agent-terminal version --json
 ```
+
+### Direct GitHub installation
+
+```bash
+npm install -g github:coder/agent-terminal
+agent-terminal version --json
+```
+
+GitHub installs attempt to build from source via npm's `prepare` hook.
+Use this when you want the latest default-branch snapshot and your npm/git-dependency environment can build native dependencies cleanly.
+
+Today, the guaranteed prerelease path is still the built tarball route below.
+The repository's install smoke now treats tarball install as the required path and records the current git-install caveat separately, because native dependencies such as `node-pty` can still fail during npm's git-dependency flow in some environments.
+
+If your shell setup injects `mise activate` (or similar trust-checked tooling) into npm lifecycle subprocesses, trust the checkout path first or use the tarball route below.
+
+### Private tarball installation
+
+When you need a deterministic prerelease artifact before the package is published, prefer a built tarball:
+
+```bash
+TARBALL_DIR=$(mktemp -d)
+npm ci
+npm run pack:private -- --pack-destination "$TARBALL_DIR"
+
+INSTALL_PREFIX=$(mktemp -d)
+npm install -g --prefix "$INSTALL_PREFIX" "$TARBALL_DIR"/agent-terminal-*.tgz
+"$INSTALL_PREFIX"/bin/agent-terminal version --json
+"$INSTALL_PREFIX"/bin/agent-terminal --home "$(mktemp -d)" doctor --json
+```
+
+`npm run pack:private` always rebuilds `dist/` before packing, so the tarball matches the private artifact reviewers should install.
+Keep the tarball route as the guaranteed private-distribution fallback even when GitHub installs are convenient.
+
+If `doctor --json` reports a missing Playwright browser cache on a fresh machine, run `npx playwright install chromium` once before renderer-backed workflows.
 
 ## Quick start
 
@@ -220,7 +260,7 @@ Useful shortcuts:
 npm run verify
 ```
 
-That runs formatting, linting, typechecking, unit/e2e tests, and the production build.
+That runs formatting, linting, typechecking, unit/e2e tests, the production build, and packaging/install smoke coverage for the required tarball route plus the current git-dependency behavior/caveat check.
 For contributor workflow and release hygiene, see [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md) and [`docs/RELEASE-PROCESS.md`](./docs/RELEASE-PROCESS.md).
 
 ## Design docs

@@ -17,6 +17,8 @@ Run the full repo validation command:
 npm run verify
 ```
 
+That command now includes the tarball packaging smoke plus a git-install caveat check, so release candidates exercise the guaranteed private-distribution path and record the current git-dependency behavior before publish.
+
 If the public skill changed, also run:
 
 ```bash

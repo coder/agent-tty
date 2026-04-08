@@ -23,6 +23,10 @@ run = "npm run build"
 sources = ["src/**/*.ts", "tsconfig.json", "tsconfig.build.json", "package.json"]
 outputs = ["dist/**/*.js", "dist/**/*.d.ts", "dist/**/*.map"]
 
+[tasks.install-smoke]
+description = "Validate the tarball route and check the current git-install caveat"
+run = "npm run smoke:install -- --skip-build"
+
 [tasks.typecheck]
 description = "Typecheck"
 run = "npm run typecheck"
@@ -75,4 +79,4 @@ sources = [
 
 [tasks.ci]
 description = "Run CI checks"
-run = "mise run format-check && mise run lint && mise run typecheck && mise run test && mise run build"
+run = "mise run format-check && mise run lint && mise run typecheck && mise run test && mise run build && mise run install-smoke"

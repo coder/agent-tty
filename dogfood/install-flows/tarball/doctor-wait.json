@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-04-07T20:30:28.623Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "__DOGFOOD_DONE__ doctor",
+    "cursorRow": 39,
+    "cursorCol": 10,
+    "capturedAtSeq": 22
+  }
+}
