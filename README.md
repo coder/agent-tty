@@ -120,6 +120,13 @@ Recommended sequence:
 The public skill lives under `skills/agent-terminal/` and ships in the npm package.
 You can install it directly for Mux-style skill loaders, or let TanStack Intent discover and map it for compatible coding agents.
 
+For coding agents that can ingest instructions on demand, `agent-terminal skill` prints the packaged `SKILL.md` directly to stdout after installation.
+
+```bash
+npm install -g agent-terminal
+agent-terminal skill
+```
+
 ### TanStack Intent integration
 
 If your agent supports Intent-compatible skill mappings, install `agent-terminal` in the project and let Intent wire the mapping into `AGENTS.md`, `CLAUDE.md`, or another supported agent config file.
