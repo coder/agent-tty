@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { buildSkillResult } from '../../../src/cli/commands/skill.js';
 import { buildVersionResult } from '../../../src/cli/commands/version.js';
 import {
   createErrorEnvelope,
@@ -38,6 +39,14 @@ const VersionResultSchema = z
       })
       .strict(),
     capabilities: z.array(CapabilityEntrySchema).optional(),
+  })
+  .strict();
+
+const SkillResultSchema = z
+  .object({
+    name: z.literal('agent-terminal'),
+    source: z.literal('packaged-file'),
+    content: z.string().min(1),
   })
   .strict();
 
@@ -978,6 +987,13 @@ describe('JSON envelope contracts', () => {
     };
 
     expect(InspectResultSchema.safeParse(result).success).toBe(true);
+  });
+
+  it('locks the skill success envelope shape', async () => {
+    const result = await buildSkillResult();
+
+    expectLockedSuccessEnvelope('skill', result);
+    expect(SkillResultSchema.safeParse(result).success).toBe(true);
   });
 
   it('locks the version success envelope shape', async () => {

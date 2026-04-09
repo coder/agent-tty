@@ -1,6 +1,7 @@
 import {
   existsSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -35,6 +36,10 @@ function parseErrorEnvelope(output: string): CommandErrorEnvelope {
   return JSON.parse(output) as CommandErrorEnvelope;
 }
 
+function readPackagedSkill(): string {
+  return readFileSync('skills/agent-terminal/SKILL.md', 'utf8');
+}
+
 describe('CLI integration', () => {
   beforeEach(() => {
     // prettier-ignore
@@ -60,6 +65,53 @@ describe('CLI integration', () => {
     expect(parsed.command).toBe('version');
     expect(parsed.result.cliVersion).toMatch(/^\d+\.\d+\.\d+$/);
     expect(parsed.result.rendererBackends).toEqual(['ghostty-web']);
+  });
+
+  it('prints the packaged skill verbatim', () => {
+    const result = runCli(['skill'], testEnv());
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toBe(readPackagedSkill());
+  });
+
+  it('prints a JSON envelope for skill', () => {
+    const result = runCli(['skill', '--json'], testEnv());
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+
+    const parsed = JSON.parse(result.stdout) as SuccessEnvelope<{
+      name: string;
+      source: string;
+      content: string;
+    }>;
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.command).toBe('skill');
+    expect(parsed.result).toEqual({
+      name: 'agent-terminal',
+      source: 'packaged-file',
+      content: readPackagedSkill(),
+    });
+  });
+
+  it('makes the packaged skill guidance prominent in top-level help', () => {
+    const result = runCli(['--help'], testEnv());
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout.startsWith('MANDATORY FOR CODING AGENTS:')).toBe(true);
+    expect(result.stdout).toContain(
+      'If your agent already loaded that skill, follow it; otherwise run `agent-terminal skill` before any other agent-terminal command.',
+    );
+    expect(result.stdout).toContain('skill [options]');
+    expect(result.stdout).toContain(
+      'Fallback first step for coding agents: print the packaged skill if it is not already loaded',
+    );
+    expect(result.stdout).toContain(
+      'Coding agents: use the preloaded `agent-terminal` skill when available; otherwise call `agent-terminal skill` before using session commands.',
+    );
   });
 
   it('accepts --append-newline for type', () => {

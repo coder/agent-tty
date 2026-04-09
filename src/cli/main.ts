@@ -20,6 +20,7 @@ import { runResizeCommand } from './commands/resize.js';
 import { runScreenshotCommand } from './commands/screenshot.js';
 import { runSendKeysCommand } from './commands/send-keys.js';
 import { runSignalCommand } from './commands/signal.js';
+import { runSkillCommand } from './commands/skill.js';
 import { runSnapshotCommand } from './commands/snapshot.js';
 import { runTypeCommand } from './commands/type.js';
 import { runVersionCommand } from './commands/version.js';
@@ -106,6 +107,13 @@ function wrapAction<Args extends unknown[]>(
   };
 }
 
+const CODING_AGENT_HELP_INTRO =
+  'MANDATORY FOR CODING AGENTS: read the `agent-terminal` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-terminal skill` before any other agent-terminal command.';
+const CODING_AGENT_HELP_OUTRO =
+  'Coding agents: use the preloaded `agent-terminal` skill when available; otherwise call `agent-terminal skill` before using session commands.';
+const SKILL_COMMAND_DESCRIPTION =
+  'Fallback first step for coding agents: print the packaged skill if it is not already loaded';
+
 async function main(): Promise<void> {
   const program = new Command()
     .name('agent-terminal')
@@ -144,6 +152,23 @@ async function main(): Promise<void> {
       logLevel: context.logLevel,
     });
   });
+
+  program.addHelpText('beforeAll', `${CODING_AGENT_HELP_INTRO}\n\n`);
+  program.addHelpText('afterAll', `\n${CODING_AGENT_HELP_OUTRO}\n`);
+
+  program
+    .command('skill')
+    .description(SKILL_COMMAND_DESCRIPTION)
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'skill',
+        async (options: { json: boolean }, context: CommandContext) => {
+          void context;
+          await runSkillCommand(options);
+        },
+      ),
+    );
 
   program
     .command('version')
