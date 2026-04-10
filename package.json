@@ -1,6 +1,6 @@
 {
   "name": "agent-terminal",
-  "version": "0.1.0",
+  "version": "0.1.1-beta.0",
   "description": "Terminal automation CLI for AI agents and humans",
   "keywords": [
     "terminal",
