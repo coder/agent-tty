@@ -1,6 +1,6 @@
 # Release process
 
-`RELEASE.md` defines the shipping contract. This document describes how maintainers should validate, package, and publish that contract on GitHub Releases.
+`RELEASE.md` defines the shipping contract. This document describes how maintainers should validate, version, tag, and publish that contract on GitHub Releases.
 
 ## Release prerequisites
 
@@ -8,8 +8,8 @@
 2. Re-read [`../ROADMAP.md`](../ROADMAP.md) and confirm deferred work is not mixed back into the release contract.
 3. Verify the primary docs route correctly from [`../README.md`](../README.md) to release, roadmap, design, and dogfood materials.
 4. Review [`../dogfood/CATALOG.md`](../dogfood/CATALOG.md) and make sure the release-signoff bundle is current and easy to find.
-5. Prefer cutting the release with npm's built-in version command so the package metadata and git tag are created together in one step.
-6. Confirm npm publication is still intentionally out of scope for this workflow; the supported hosted install path today is the GitHub Release tarball asset.
+5. Confirm npm publication is still intentionally out of scope for this workflow; the supported hosted install path today is the GitHub Release tarball asset.
+6. Remember that `main` is protected: release changes must land through a pull request, and the release tag must be created only after that PR is merged.
 
 ## Validation bar
 
@@ -31,7 +31,7 @@ If the public skill changed, also run:
 npm run intent:validate
 ```
 
-`mise run ci` exercises formatting, lint, typecheck, tests, build, and the install smoke. The install smoke now validates the shared release tarball packer plus the guaranteed tarball install route before any publish step runs.
+`mise run ci` exercises formatting, lint, typecheck, tests, build, and the install smoke. The install smoke validates the shared release tarball packer plus the guaranteed tarball install route before any publish step runs.
 
 ## Prepare the release asset locally (optional but recommended)
 
@@ -47,42 +47,117 @@ sha256sum -c "$RELEASE_DIR"/*.tgz.sha256
 
 That command produces the same tarball, checksum, and metadata shape that the GitHub release workflow uploads.
 
-## Cut the release commit and tag
+## Release flow overview
 
-The recommended maintainer flow is to use npm's built-in version command rather than editing `package.json` and creating a matching tag separately:
+Because `main` is pull-request-only, the correct release flow is:
+
+1. create a release branch from `main`,
+2. bump the version **without creating a tag yet**,
+3. open and merge a PR,
+4. tag the merged `main` commit,
+5. let the `Release` workflow publish the GitHub Release assets.
+
+Do **not** run `npm version ...` on `main` and then push `HEAD --follow-tags`; GitHub will reject the protected-branch push but still accept the tag, which can start a release from an unmerged commit.
+
+## Prepare the version-bump PR
+
+Start from an up-to-date `main` checkout:
 
 ```bash
-npm version patch -m "chore(release): %s"
-# or: npm version minor -m "chore(release): %s"
-# or: npm version major -m "chore(release): %s"
+git checkout main
+git pull origin main
 ```
 
-That updates `package.json` (and lockfiles if present), creates the release commit, and creates the matching git tag in one step.
-After that, push the commit and tag together:
+### Stable release examples
+
+Create a release branch, bump the version **without tagging**, and commit the result:
 
 ```bash
-git push origin HEAD --follow-tags
+git switch -c release/0.1.1
+npm version patch --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "chore(release): 0.1.1"
 ```
 
-If you prefer to choose the exact version yourself, you can also run `npm version <X.Y.Z> -m "chore(release): %s"`.
-The release workflow still validates that the checked-out `package.json` version matches the `vX.Y.Z` tag before publishing assets.
+You can also choose the exact stable version explicitly:
+
+```bash
+npm version 0.1.1 --no-git-tag-version
+```
+
+### Prerelease examples
+
+First beta on the next patch line:
+
+```bash
+git switch -c release/0.1.1-beta.0
+npm version prepatch --preid beta --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "chore(release): 0.1.1-beta.0"
+```
+
+Next beta on the same line:
+
+```bash
+npm version prerelease --preid beta --no-git-tag-version
+```
+
+Release candidate with an exact version:
+
+```bash
+npm version 0.1.1-rc.0 --no-git-tag-version
+```
+
+Versions containing a hyphen, such as `-beta.0` or `-rc.0`, are published by the workflow as GitHub prereleases.
+
+### Open the release PR
+
+After the version bump is committed:
+
+```bash
+git push -u origin <release-branch>
+gh pr create --base main --head <release-branch> --title "chore(release): <version>"
+```
+
+Run the normal PR checks, get approval as needed, and merge the PR.
+
+## Tag the merged `main` commit
+
+After the release PR has merged:
+
+```bash
+git checkout main
+git pull origin main
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push origin vX.Y.Z
+```
+
+For prereleases, use the full prerelease tag name, for example:
+
+```bash
+git tag -a v0.1.1-beta.0 -m "v0.1.1-beta.0"
+git push origin v0.1.1-beta.0
+```
+
+The tag must match `package.json` exactly:
+
+- `package.json`: `0.1.1`
+- tag: `v0.1.1`
+
+or:
+
+- `package.json`: `0.1.1-beta.0`
+- tag: `v0.1.1-beta.0`
 
 ## Publish the GitHub Release
 
 The hand-curated workflow lives at [`.github/workflows/release.yml`](../.github/workflows/release.yml).
-Trigger it in one of two ways:
-
-1. Push the release commit and tag created by `npm version`:
-
-   ```bash
-   git push origin HEAD --follow-tags
-   ```
-
-2. Or, if the release commit/tag already exists remotely, open the GitHub Actions UI, choose the **Release** workflow, and run it manually with the `tag` input set to `vX.Y.Z`.
+It triggers automatically on pushed `v*` tags, and it can also be rerun manually for an already-existing remote tag via the **Release** workflow's `tag` input.
 
 The workflow will:
 
 - resolve the release tag and check out that exact ref,
+- verify the tagged commit is already reachable from the default branch,
 - validate that the tag matches the `package.json` version,
 - run `mise run ci`,
 - pack the verified tarball with `npm run pack:release`,
@@ -106,7 +181,10 @@ AGENT_TERMINAL_HOME=$(mktemp -d)
 
 gh release download "$RELEASE_TAG" --repo coder/agent-terminal --dir "$DOWNLOAD_DIR" --pattern "$RELEASE_TGZ"
 gh release download "$RELEASE_TAG" --repo coder/agent-terminal --dir "$DOWNLOAD_DIR" --pattern "${RELEASE_TGZ}.sha256"
-sha256sum -c "$DOWNLOAD_DIR/${RELEASE_TGZ}.sha256"
+(
+  cd "$DOWNLOAD_DIR"
+  sha256sum -c "${RELEASE_TGZ}.sha256"
+)
 
 npm install -g --prefix "$INSTALL_PREFIX" "$DOWNLOAD_DIR/$RELEASE_TGZ"
 "$INSTALL_PREFIX"/bin/agent-terminal version --json
@@ -115,6 +193,25 @@ npm install -g --prefix "$INSTALL_PREFIX" "$DOWNLOAD_DIR/$RELEASE_TGZ"
 
 For private releases, authenticated download is the expected verification route.
 If you are testing a public release and the direct asset URL is reachable in your environment, you can also verify the hosted install path directly with `npm install -g <release-asset-url>`.
+
+## Recover from an accidental tag push
+
+If you accidentally push a release tag before the version-bump PR is merged:
+
+1. cancel the in-progress workflow run,
+2. delete the remote tag,
+3. delete the local tag,
+4. redo the release through the PR-first flow above.
+
+Example cleanup:
+
+```bash
+gh run cancel <run-id>
+git push origin :refs/tags/vX.Y.Z
+git tag -d vX.Y.Z
+```
+
+Then create or update the release branch PR, merge it, and tag the merged `main` commit.
 
 ## Proof expectations
 

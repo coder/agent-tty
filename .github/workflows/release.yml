@@ -59,6 +59,26 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ steps.release-tag.outputs.release_tag }}
+          fetch-depth: 0
+
+      - name: Fetch default branch for release ancestry checks
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \
+            "refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
+
+      - name: Validate release tag commit is on the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor HEAD "refs/remotes/origin/$DEFAULT_BRANCH"; then
+            echo "Release tag must reference a commit already merged into $DEFAULT_BRANCH." >&2
+            echo "Create the version-bump PR first, merge it, then tag the merged default-branch commit." >&2
+            exit 1
+          fi
 
       - name: Set up mise
         uses: jdx/mise-action@v3
@@ -74,8 +94,8 @@ jobs:
         run: npx playwright install chromium
 
       # Keep the tag/package check strict so release assets always match the
-      # committed package metadata. Maintainers can cut both together with
-      # `npm version` (documented in docs/RELEASE-PROCESS.md).
+      # committed package metadata. The documented flow is: version bump on a
+      # PR branch, merge it, then tag the merged default-branch commit.
       - name: Validate release tag matches package version
         shell: bash
         env:

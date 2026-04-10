@@ -40,6 +40,16 @@ function readPackagedSkill(): string {
   return readFileSync('skills/agent-terminal/SKILL.md', 'utf8');
 }
 
+function readPackageVersion(): string {
+  const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
+    version: unknown;
+  };
+  if (typeof packageJson.version !== 'string') {
+    throw new TypeError('package.json version must be a string');
+  }
+  return packageJson.version;
+}
+
 describe('CLI integration', () => {
   beforeEach(() => {
     // prettier-ignore
@@ -63,7 +73,7 @@ describe('CLI integration', () => {
 
     expect(parsed.ok).toBe(true);
     expect(parsed.command).toBe('version');
-    expect(parsed.result.cliVersion).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(parsed.result.cliVersion).toBe(readPackageVersion());
     expect(parsed.result.rendererBackends).toEqual(['ghostty-web']);
   });
 

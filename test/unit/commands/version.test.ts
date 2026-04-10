@@ -11,13 +11,14 @@ describe('version command', () => {
     const packageMetadata = await loadPackageMetadata();
 
     expect(packageMetadata.name).toBe('agent-terminal');
-    expect(packageMetadata.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(packageMetadata.version.length).toBeGreaterThan(0);
   });
 
   it('builds the version result without capabilities by default', async () => {
+    const packageMetadata = await loadPackageMetadata();
     const result = await buildVersionResult();
 
-    expect(result.cliVersion).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(result.cliVersion).toBe(packageMetadata.version);
     expect(result.protocolVersion).toBe('0.1.0');
     expect(result.rendererBackends).toEqual(['ghostty-web']);
     expect(result.runtime.node).toMatch(/^v\d+\.\d+\.\d+$/);
@@ -51,9 +52,10 @@ describe('version command', () => {
       .spyOn(process.stderr, 'write')
       .mockReturnValue(true);
 
+    const packageMetadata = await loadPackageMetadata();
     const result = await buildVersionResult({ includeCapabilities: true });
 
-    expect(result.cliVersion).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(result.cliVersion).toBe(packageMetadata.version);
     expect(result.protocolVersion).toBe('0.1.0');
     expect(result.rendererBackends).toEqual(['ghostty-web']);
     expect(result.runtime.node).toMatch(/^v\d+\.\d+\.\d+$/);
