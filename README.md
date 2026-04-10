@@ -6,42 +6,48 @@ It is built for agent workflows that need both semantic state and visual artifac
 ## Installation
 
 `agent-terminal` currently supports Node `24.x`.
-Released builds install from npm. For prerelease/private use, the guaranteed install path is a built tarball; direct GitHub installs are best-effort and may still fail in some environments.
+Today, the supported hosted install path is the GitHub Release tarball asset. npm publication is intentionally not wired yet, and direct git dependency installs remain best-effort because they build from source.
 
-### npm registry installation
+### GitHub Release tarball installation
 
-#### Global installation
+#### Direct release asset install
 
 ```bash
-npm install -g agent-terminal
+VERSION=<version>
+RELEASE_TAG="v${VERSION}"
+RELEASE_TGZ="agent-terminal-${VERSION}.tgz"
+TARBALL_URL="https://github.com/coder/agent-terminal/releases/download/${RELEASE_TAG}/${RELEASE_TGZ}"
+
+npm install -g "$TARBALL_URL"
 agent-terminal version --json
 ```
 
-#### Project installation
+#### Authenticated or private release install
 
 ```bash
-npm install agent-terminal
+VERSION=<version>
+RELEASE_TAG="v${VERSION}"
+RELEASE_TGZ="agent-terminal-${VERSION}.tgz"
+
+gh release download "$RELEASE_TAG" --repo coder/agent-terminal --pattern "$RELEASE_TGZ"
+npm install -g "./$RELEASE_TGZ"
+agent-terminal version --json
+agent-terminal --home "$(mktemp -d)" doctor --json
+```
+
+#### Project-local install from a downloaded tarball
+
+```bash
+VERSION=<version>
+RELEASE_TGZ="./agent-terminal-${VERSION}.tgz"
+
+npm install "$RELEASE_TGZ"
 ./node_modules/.bin/agent-terminal version --json
 ```
 
-### Direct GitHub installation
+### Local tarball build from a source checkout
 
-```bash
-npm install -g github:coder/agent-terminal
-agent-terminal version --json
-```
-
-GitHub installs attempt to build from source via npm's `prepare` hook.
-Use this when you want the latest default-branch snapshot and your npm/git-dependency environment can build native dependencies cleanly.
-
-Today, the guaranteed prerelease path is still the built tarball route below.
-The repository's install smoke now treats tarball install as the required path and records the current git-install caveat separately, because native dependencies such as `node-pty` can still fail during npm's git-dependency flow in some environments.
-
-If your shell setup injects `mise activate` (or similar trust-checked tooling) into npm lifecycle subprocesses, trust the checkout path first or use the tarball route below.
-
-### Private tarball installation
-
-When you need a deterministic prerelease artifact before the package is published, prefer a built tarball:
+When you need a deterministic local artifact before publishing a GitHub Release, build the tarball from a checkout:
 
 ```bash
 TARBALL_DIR=$(mktemp -d)
@@ -54,9 +60,20 @@ npm install -g --prefix "$INSTALL_PREFIX" "$TARBALL_DIR"/agent-terminal-*.tgz
 "$INSTALL_PREFIX"/bin/agent-terminal --home "$(mktemp -d)" doctor --json
 ```
 
-`npm run pack:private` always rebuilds `dist/` before packing, so the tarball matches the private artifact reviewers should install.
-Keep the tarball route as the guaranteed private-distribution fallback even when GitHub installs are convenient.
+`npm run pack:private` always rebuilds `dist/` before packing. Release automation instead uses `npm run pack:release` after the CI-quality build step so GitHub Releases upload the same verified tarball plus a checksum file.
 
+### Git source installation (best-effort)
+
+```bash
+npm install -g github:coder/agent-terminal
+agent-terminal version --json
+```
+
+GitHub installs attempt to build from source via npm's `prepare` hook.
+Use this only when you explicitly want the latest default-branch snapshot and your npm/git-dependency environment can build native dependencies such as `node-pty` cleanly.
+The repository's install smoke treats tarball install as the required path and records the current git-install caveat separately.
+
+If your shell setup injects `mise activate` (or similar trust-checked tooling) into npm lifecycle subprocesses, trust the checkout path first or prefer the release tarball route.
 If `doctor --json` reports a missing Playwright browser cache on a fresh machine, run `npx playwright install chromium` once before renderer-backed workflows.
 
 ## Quick start
@@ -117,22 +134,21 @@ Recommended sequence:
 
 ## AI agent skill
 
-The public skill lives under `skills/agent-terminal/` and ships in the npm package.
-You can install it directly for Mux-style skill loaders, or let TanStack Intent discover and map it for compatible coding agents.
+The public skill lives under `skills/agent-terminal/` and ships in the release tarball package.
+Install `agent-terminal` from a GitHub Release tarball first, then either use the packaged skill directly or let TanStack Intent map it into your agent config.
 
 For coding agents that can ingest instructions on demand, `agent-terminal skill` prints the packaged `SKILL.md` directly to stdout after installation.
 
 ```bash
-npm install -g agent-terminal
 agent-terminal skill
 ```
 
 ### TanStack Intent integration
 
-If your agent supports Intent-compatible skill mappings, install `agent-terminal` in the project and let Intent wire the mapping into `AGENTS.md`, `CLAUDE.md`, or another supported agent config file.
+After downloading `agent-terminal-<version>.tgz` from GitHub Releases, install it in the project and let Intent wire the mapping into `AGENTS.md`, `CLAUDE.md`, or another supported agent config file.
 
 ```bash
-npm install agent-terminal
+npm install ./agent-terminal-<version>.tgz
 npx @tanstack/intent@latest list
 npx @tanstack/intent@latest install
 ```
@@ -141,18 +157,18 @@ That workflow keeps the skill version aligned with the installed `agent-terminal
 
 ### Mux skill installation
 
-```bash
-npm install -g agent-terminal
+After installing the release tarball globally:
 
+```bash
 mkdir -p ~/.mux/skills/agent-terminal
 cp -R "$(npm root -g)/agent-terminal/skills/agent-terminal/." ~/.mux/skills/agent-terminal/
 ```
 
 ### Direct skill copy for other skill loaders
 
-```bash
-npm install -g agent-terminal
+After installing the release tarball globally:
 
+```bash
 mkdir -p ~/.claude/skills/agent-terminal
 cp -R "$(npm root -g)/agent-terminal/skills/agent-terminal/." ~/.claude/skills/agent-terminal/
 ```

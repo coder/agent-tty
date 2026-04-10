@@ -1,0 +1,247 @@
+name: Release
+
+# Keep this workflow hand-curated. The prepare job produces the verified tarball,
+# checksum, and metadata that future publish steps (for example npm) should
+# reuse instead of rebuilding from scratch.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Git tag to release (for example v0.1.0)
+        required: true
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      release_tag: ${{ steps.release-metadata.outputs.release_tag }}
+      package_name: ${{ steps.release-metadata.outputs.package_name }}
+      package_version: ${{ steps.release-metadata.outputs.package_version }}
+      tarball_filename: ${{ steps.release-metadata.outputs.tarball_filename }}
+      checksum_filename: ${{ steps.release-metadata.outputs.checksum_filename }}
+      checksum_sha256: ${{ steps.release-metadata.outputs.checksum_sha256 }}
+    steps:
+      - name: Resolve release tag
+        id: release-tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == 'workflow_dispatch' ]]; then
+            release_tag='${{ github.event.inputs.tag }}'
+          else
+            release_tag="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ -z "$release_tag" ]]; then
+            echo 'Release tag must not be empty.' >&2
+            exit 1
+          fi
+          if [[ "$release_tag" != v* ]]; then
+            echo "Release tag must start with v: $release_tag" >&2
+            exit 1
+          fi
+
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.release-tag.outputs.release_tag }}
+
+      - name: Set up mise
+        uses: jdx/mise-action@v3
+
+      - name: Install CI dependencies
+        run: mise run bootstrap-ci
+
+      # bootstrap-ci intentionally skips browser downloads so jobs that do not
+      # need Chromium can stay on deterministic `npm ci`. This release workflow
+      # runs the full Linux quality bar, so install Chromium explicitly just as
+      # `.github/workflows/ci.yml` does.
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      # Keep the tag/package check strict so release assets always match the
+      # committed package metadata. Maintainers can cut both together with
+      # `npm version` (documented in docs/RELEASE-PROCESS.md).
+      - name: Validate release tag matches package version
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release-tag.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          package_version="$(node --input-type=module <<'EOF'
+          import { readFileSync } from 'node:fs';
+          const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
+          process.stdout.write(packageJson.version);
+          EOF
+          )"
+          expected_tag="v${package_version}"
+
+          if [[ "$RELEASE_TAG" != "$expected_tag" ]]; then
+            echo "Release tag mismatch: expected $expected_tag from package.json, got $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+      - name: Run release quality gates
+        run: mise run ci
+
+      - name: Pack verified release tarball
+        env:
+          RELEASE_DIR: ${{ runner.temp }}/release-assets
+        run: |
+          set -euo pipefail
+          mkdir -p "$RELEASE_DIR"
+          npm run pack:release -- \
+            --pack-destination "$RELEASE_DIR" \
+            --metadata-file "$RELEASE_DIR/package-metadata.json"
+
+      - name: Export release metadata
+        id: release-metadata
+        shell: bash
+        env:
+          METADATA_FILE: ${{ runner.temp }}/release-assets/package-metadata.json
+          RELEASE_TAG: ${{ steps.release-tag.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'EOF'
+          import assert from 'node:assert/strict';
+          import { appendFileSync, readFileSync } from 'node:fs';
+
+          const metadata = JSON.parse(readFileSync(process.env.METADATA_FILE, 'utf8'));
+          assert(metadata !== null && typeof metadata === 'object', 'metadata must be an object');
+
+          const outputs = {
+            release_tag: process.env.RELEASE_TAG,
+            package_name: metadata.packageName,
+            package_version: metadata.packageVersion,
+            tarball_filename: metadata.tarballFilename,
+            checksum_filename: metadata.checksumFilename,
+            checksum_sha256: metadata.checksumSha256,
+          };
+
+          for (const [key, value] of Object.entries(outputs)) {
+            assert(typeof value === 'string' && value.length > 0, `${key} must not be empty`);
+            appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
+          }
+          EOF
+
+      - name: Upload release workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-${{ steps.release-metadata.outputs.release_tag }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/release-assets/${{ steps.release-metadata.outputs.tarball_filename }}
+            ${{ runner.temp }}/release-assets/${{ steps.release-metadata.outputs.checksum_filename }}
+            ${{ runner.temp }}/release-assets/package-metadata.json
+
+  publish-github-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: prepare-release
+    steps:
+      - name: Download verified release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets-${{ needs.prepare-release.outputs.release_tag }}
+          path: ${{ runner.temp }}/release-assets
+
+      - name: Write release notes
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+          PACKAGE_VERSION: ${{ needs.prepare-release.outputs.package_version }}
+          TARBALL_FILENAME: ${{ needs.prepare-release.outputs.tarball_filename }}
+          CHECKSUM_FILENAME: ${{ needs.prepare-release.outputs.checksum_filename }}
+          CHECKSUM_SHA256: ${{ needs.prepare-release.outputs.checksum_sha256 }}
+          RELEASE_NOTES_FILE: ${{ runner.temp }}/release-notes.md
+        run: |
+          set -euo pipefail
+          tarball_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${TARBALL_FILENAME}"
+
+          cat > "$RELEASE_NOTES_FILE" <<EOF
+          Install the verified tarball asset from this release instead of relying on the npm registry or a git dependency build:
+
+          ```bash
+          VERSION=${PACKAGE_VERSION}
+          RELEASE_TAG=${RELEASE_TAG}
+          TARBALL_URL=${tarball_url}
+
+          npm install -g "$TARBALL_URL"
+          agent-terminal version --json
+          ```
+
+          For private releases or environments that require authenticated downloads, fetch the asset first and then install locally:
+
+          ```bash
+          gh release download "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --pattern "${TARBALL_FILENAME}"
+          npm install -g "./${TARBALL_FILENAME}"
+          agent-terminal version --json
+          ```
+
+          SHA-256 checksum: `${CHECKSUM_SHA256}` (see `${CHECKSUM_FILENAME}` for the portable checksum file).
+
+          This workflow intentionally stops at the verified GitHub Release asset. A future npm-publish job should depend on the prepare-release outputs and reuse this tarball instead of rebuilding it.
+          EOF
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_DIR: ${{ runner.temp }}/release-assets
+          RELEASE_NOTES_FILE: ${{ runner.temp }}/release-notes.md
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+          PACKAGE_VERSION: ${{ needs.prepare-release.outputs.package_version }}
+          TARBALL_FILENAME: ${{ needs.prepare-release.outputs.tarball_filename }}
+          CHECKSUM_FILENAME: ${{ needs.prepare-release.outputs.checksum_filename }}
+        run: |
+          set -euo pipefail
+          create_flags=()
+          if [[ "$PACKAGE_VERSION" == *-* ]]; then
+            create_flags+=(--prerelease --latest=false)
+          fi
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit \
+              "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$RELEASE_TAG" \
+              --notes-file "$RELEASE_NOTES_FILE"
+            gh release upload \
+              "$RELEASE_TAG" \
+              "$RELEASE_DIR/$TARBALL_FILENAME" \
+              "$RELEASE_DIR/$CHECKSUM_FILENAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            gh release create \
+              "$RELEASE_TAG" \
+              "$RELEASE_DIR/$TARBALL_FILENAME" \
+              "$RELEASE_DIR/$CHECKSUM_FILENAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "$RELEASE_TAG" \
+              --notes-file "$RELEASE_NOTES_FILE" \
+              "${create_flags[@]}"
+          fi
+
+  # Future follow-up:
+  # publish-npm:
+  #   needs: prepare-release
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Publish verified tarball to npm
+  #       run: echo 'Reserved for a future npm publish job.'

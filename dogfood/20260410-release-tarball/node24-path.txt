@@ -1,0 +1,1 @@
+/home/coder/.npm/_npx/387698761821791d/node_modules/node/bin/node

@@ -2,20 +2,13 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { constants as fsConstants } from 'node:fs';
-import {
-  access,
-  cp,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  stat,
-} from 'node:fs/promises';
+import { access, cp, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, delimiter, join, relative, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import { packRelease } from './pack-release.mjs';
 
 const projectRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const npmCliPath = process.env.npm_execpath;
@@ -227,18 +220,10 @@ function getRequiredPackPaths(rendererAssets) {
   ];
 }
 
-function assertPackedFiles(packMetadata, requiredPaths, label) {
-  assert(
-    Array.isArray(packMetadata.files),
-    `${label} pack metadata must include files`,
-  );
+function assertPackedFiles(packPaths, requiredPaths, label) {
+  assert(Array.isArray(packPaths), `${label} pack metadata must include files`);
   const packedPaths = new Set(
-    packMetadata.files.map((entry) => {
-      assert(
-        typeof entry === 'object' && entry !== null,
-        `${label} pack entry must be an object`,
-      );
-      const path = entry.path;
+    packPaths.map((path) => {
       assert.equal(typeof path, 'string', 'pack entry path must be a string');
       return path;
     }),
@@ -422,54 +407,34 @@ try {
   );
   const requiredPaths = getRequiredPackPaths(rendererAssets);
 
-  if (!skipBuild) {
-    logStep('Building package contents for tarball smoke...');
-    runNpm(['run', 'build']);
-  }
-
-  logStep('Packing private tarball from built workspace...');
   const tarballDirectory = join(tempRoot, 'tarball');
   const tarballInstallPrefix = join(tempRoot, 'tarball-prefix');
-  await mkdir(tarballDirectory, { recursive: true });
-  const packResult = runNpm([
-    'pack',
-    '--json',
-    '--ignore-scripts',
-    '--pack-destination',
-    tarballDirectory,
-  ]);
-  const packMetadata = parseJsonOutput(packResult.stdout, 'npm pack output');
-  assert(Array.isArray(packMetadata), 'npm pack output must be an array');
+  const packMetadata = await packRelease({
+    build: !skipBuild,
+    packDestination: tarballDirectory,
+    env: getDefaultEnv(),
+    log: logStep,
+  });
   assert.equal(
-    packMetadata.length,
-    1,
-    'npm pack output must contain one entry',
+    packMetadata.packageName,
+    packageName,
+    'packed package name mismatch',
   );
-  const [packEntry] = packMetadata;
-  assert(
-    typeof packEntry === 'object' && packEntry !== null,
-    'npm pack entry must be an object',
-  );
-  assert.equal(packEntry.name, packageName, 'packed package name mismatch');
   assert.equal(
-    packEntry.version,
+    packMetadata.packageVersion,
     packageVersion,
     'packed package version mismatch',
   );
-  assertPackedFiles(packEntry, requiredPaths, 'tarball');
-
-  const tarballFilename = packEntry.filename;
-  assert.equal(
-    typeof tarballFilename,
-    'string',
-    'packed tarball filename missing',
-  );
-  const tarballPath = join(tarballDirectory, tarballFilename);
-  const tarballStats = await stat(tarballPath);
-  assert(tarballStats.size > 0, 'packed tarball must not be empty');
+  assertPackedFiles(packMetadata.packedPaths, requiredPaths, 'tarball');
 
   logStep('Installing built tarball into isolated prefix...');
-  runNpm(['install', '-g', '--prefix', tarballInstallPrefix, tarballPath]);
+  runNpm([
+    'install',
+    '-g',
+    '--prefix',
+    tarballInstallPrefix,
+    packMetadata.tarballPath,
+  ]);
   await verifyInstalledCli('Tarball', tarballInstallPrefix);
 
   logStep(
