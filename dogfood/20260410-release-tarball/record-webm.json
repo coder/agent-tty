@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-04-10T08:39:56.774Z",
+  "result": {
+    "sessionId": "01KNV8RAQB9PKZQRVQQ50QGGPK",
+    "format": "webm",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/build-deps-zkez/dogfood/20260410-release-tarball/videos/release-proof.webm",
+    "bytes": 106630,
+    "sha256": "b1230db443590ec1be88a3b4329ca030e617c979375c7a6a1ca223522f0bd84f",
+    "capturedAtSeq": 9,
+    "durationMs": 572,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d",
+      "timingMode": "accelerated",
+      "outputEventCount": 9,
+      "resizeEventCount": 0
+    }
+  }
+}

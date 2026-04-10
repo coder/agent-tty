@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-04-10T08:39:53.073Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "__DOGFOOD_DONE__ release-tarball",
+    "cursorRow": 23,
+    "cursorCol": 15,
+    "capturedAtSeq": 9
+  }
+}

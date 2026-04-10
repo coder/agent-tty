@@ -1,0 +1,18 @@
+# release tarball proof
+package: agent-terminal@0.1.0
+tarball: agent-terminal-0.1.0.tgz
+checksum: agent-terminal-0.1.0.tgz.sha256
+sha256: c241559f565989e3c21db48a86eff0e4b4decd22b17e3717a0a793c18829aa61
+size_bytes: 1771872
+
+# installed binary checks
+version.ok: true
+version.command: version
+version.cliVersion: 0.1.0
+version.node: v24.14.0
+doctor.ok: true
+doctor.command: doctor
+doctor.result.ok: true
+doctor.node_check: pass
+
+See package-metadata.json, install.log, version.json, and doctor.json for the raw outputs.
