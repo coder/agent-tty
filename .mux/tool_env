@@ -14,7 +14,15 @@ elif [ -x "/usr/local/bin/mise" ]; then
 fi
 
 if [ -n "$_mux_mise_bin" ]; then
+  _mux_mise_config="$PWD/mise.toml"
+  if [ -f "$_mux_mise_config" ]; then
+    # New worktree paths start untrusted, and bash commands may run before the
+    # async init hook finishes trusting the copied mise.toml.
+    "$_mux_mise_bin" trust -y "$_mux_mise_config" >/dev/null 2>&1 || true
+  fi
+
   eval "$("$_mux_mise_bin" activate bash --shims 2>/dev/null)" || true
 fi
 
 unset _mux_mise_bin
+unset _mux_mise_config

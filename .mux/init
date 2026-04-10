@@ -22,7 +22,16 @@ if [ -z "$_mux_mise_bin" ]; then
 fi
 
 echo "[mux:init] using mise at $_mux_mise_bin"
+
+_mux_mise_config="$PWD/mise.toml"
+if [ -f "$_mux_mise_config" ]; then
+  # Worktree workspaces live at unique paths, so mise treats each workspace copy
+  # as a newly untrusted config until it is explicitly trusted.
+  "$_mux_mise_bin" trust -y "$_mux_mise_config" >/dev/null 2>&1 || true
+fi
+
 "$_mux_mise_bin" install
 "$_mux_mise_bin" run bootstrap
 
 unset _mux_mise_bin
+unset _mux_mise_config
