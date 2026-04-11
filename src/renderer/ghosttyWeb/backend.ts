@@ -91,8 +91,8 @@ interface GhosttyBrowserBridge {
 }
 
 interface GhosttyBrowserGlobal {
-  __agentTerminal?: GhosttyBrowserBridge;
-  __agentTerminalLog?: (
+  __agentTty?: GhosttyBrowserBridge;
+  __agentTtyLog?: (
     level: LogLevel,
     message: string,
     detail?: string,
@@ -141,7 +141,7 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
-    <title>agent-terminal ghostty-web harness</title>
+    <title>agent-tty ghostty-web harness</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -215,11 +215,11 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
       const terminalShell = document.getElementById('terminal-shell');
 
       function log(level, message, detail) {
-        if (typeof globalThis.__agentTerminalLog !== 'function') {
+        if (typeof globalThis.__agentTtyLog !== 'function') {
           return;
         }
 
-        void globalThis.__agentTerminalLog(level, message, detail);
+        void globalThis.__agentTtyLog(level, message, detail);
       }
 
       function invariant(condition, message) {
@@ -658,7 +658,7 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         document.body.dataset.rows = String(rows);
       }
 
-      window.__agentTerminal = {
+      window.__agentTty = {
         async write(data) {
           const terminal = getReadyTerminal();
           assertStringValue(data, 'write() data must be a string');
@@ -1277,7 +1277,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     sessionId: string,
     profile: RenderProfileConfig,
     videoOptions?: VideoRecordingOptions,
-    // The default logger reads AGENT_TERMINAL_LOG_LEVEL from process.env at
+    // The default logger reads AGENT_TTY_LOG_LEVEL from process.env at
     // construction time. In CLI flows, main.ts sets this env var in preAction
     // before any command handler runs, so the effective level is correct.
     // Callers may pass an explicit Logger for testing or non-CLI contexts.
@@ -1954,7 +1954,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     const page = this.requireOperationalPage('getVisibleText()');
 
     const visibleText = await page.evaluate(() => {
-      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
+      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
       if (bridge === undefined || typeof bridge.getVisibleText !== 'function') {
         throw new Error('ghostty-web bridge getVisibleText() is unavailable');
       }
@@ -2034,7 +2034,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
 
       this.page = await this.browserContext.newPage();
       await this.page.exposeFunction(
-        '__agentTerminalLog',
+        '__agentTtyLog',
         (level: unknown, message: unknown, detail?: unknown) => {
           assertLogLevel(level, 'ghostty-web harness log level must be valid');
           assertString(
@@ -2089,7 +2089,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       });
       await this.page.waitForFunction(
         () => {
-          const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
+          const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
           return (
             bridge !== undefined &&
             typeof bridge.isReady === 'function' &&
@@ -2101,7 +2101,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       );
 
       const bridgeReady = await this.page.evaluate(() => {
-        const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
+        const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
         return (
           bridge !== undefined &&
           typeof bridge.isReady === 'function' &&
@@ -2241,7 +2241,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
 
     const snapshot = await page.evaluate(
       (opts) => {
-        const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
+        const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
         if (bridge === undefined || typeof bridge.getSnapshot !== 'function') {
           throw new Error('ghostty-web bridge getSnapshot() is unavailable');
         }
@@ -2331,7 +2331,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
 
     await page.evaluate(
       async ([nextCols, nextRows]) => {
-        const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
+        const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
         if (bridge === undefined || typeof bridge.resize !== 'function') {
           throw new Error('ghostty-web bridge resize() is unavailable');
         }
@@ -2347,7 +2347,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     visible: boolean,
   ): Promise<void> {
     await page.evaluate((showCursorInScreenshot: boolean) => {
-      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
+      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
       if (
         bridge === undefined ||
         typeof bridge.setCursorVisible !== 'function'
@@ -2505,7 +2505,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     }
 
     await page.evaluate(async (chunks: string[]) => {
-      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
+      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
       if (bridge === undefined || typeof bridge.write !== 'function') {
         throw new Error('ghostty-web bridge write() is unavailable');
       }
@@ -2520,7 +2520,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     assertString(data, 'bridge write data must be a string');
 
     await page.evaluate(async (nextData) => {
-      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTerminal;
+      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
       if (bridge === undefined || typeof bridge.write !== 'function') {
         throw new Error('ghostty-web bridge write() is unavailable');
       }

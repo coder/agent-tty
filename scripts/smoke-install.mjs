@@ -45,7 +45,7 @@ assert(
 const [binName] = Object.keys(packageBins);
 assert(typeof binName === 'string' && binName.length > 0, 'bin name missing');
 
-const tempRoot = await mkdtemp(join(tmpdir(), 'agent-terminal-install-smoke-'));
+const tempRoot = await mkdtemp(join(tmpdir(), 'agent-tty-install-smoke-'));
 
 function logStep(message) {
   assert(message.length > 0, 'log messages must be non-empty');
@@ -213,7 +213,7 @@ function getRequiredPackPaths(rendererAssets) {
     'dist/cli/main.js',
     'dist/index.js',
     'dist/index.d.ts',
-    'skills/agent-terminal/SKILL.md',
+    'skills/agent-tty/SKILL.md',
     ...rendererAssets.map(
       (assetPath) => `dist/renderer/ghosttyWeb/assets/${assetPath}`,
     ),
@@ -378,10 +378,10 @@ async function createGitInstallSource() {
   });
 
   run('git', ['init', '--quiet'], { cwd: gitSourceRoot });
-  run('git', ['config', 'user.email', 'agent-terminal@example.invalid'], {
+  run('git', ['config', 'user.email', 'agent-tty@example.invalid'], {
     cwd: gitSourceRoot,
   });
-  run('git', ['config', 'user.name', 'agent-terminal smoke'], {
+  run('git', ['config', 'user.name', 'agent-tty smoke'], {
     cwd: gitSourceRoot,
   });
   run('git', ['add', '--all'], { cwd: gitSourceRoot });

@@ -39,7 +39,7 @@ let testHome = '';
 describe('gc integration', { timeout: 30000 }, () => {
   beforeEach(async () => {
     // prettier-ignore
-    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-gc-')));
+    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-gc-')));
   });
 
   afterEach(async () => {
@@ -55,14 +55,14 @@ describe('gc integration', { timeout: 30000 }, () => {
     const sessionDirectory = join(testHome, 'sessions', sessionId);
 
     const destroyResult = runCli(['destroy', sessionId, '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(destroyResult.status).toBe(0);
     expect(destroyResult.stderr).toBe('');
     expect(await pathExists(sessionDirectory)).toBe(true);
 
     const gcResult = runCli(['gc', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(gcResult.status).toBe(0);
     expect(gcResult.stderr).toBe('');
@@ -98,7 +98,7 @@ describe('gc integration', { timeout: 30000 }, () => {
     expect(destroyedSession.status).toBe('destroyed');
 
     const gcResult = runCli(['gc', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(gcResult.status).toBe(0);
     expect(gcResult.stderr).toBe('');

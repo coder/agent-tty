@@ -1,8 +1,8 @@
 name: Release
 
 # Keep this workflow hand-curated. The prepare job produces the verified tarball,
-# checksum, and metadata that future publish steps (for example npm) should
-# reuse instead of rebuilding from scratch.
+# checksum, and metadata that downstream publish steps on GitHub Releases and
+# npm should reuse instead of rebuilding from scratch.
 on:
   workflow_dispatch:
     inputs:
@@ -183,6 +183,7 @@ jobs:
         shell: bash
         env:
           RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+          PACKAGE_NAME: ${{ needs.prepare-release.outputs.package_name }}
           PACKAGE_VERSION: ${{ needs.prepare-release.outputs.package_version }}
           TARBALL_FILENAME: ${{ needs.prepare-release.outputs.tarball_filename }}
           CHECKSUM_FILENAME: ${{ needs.prepare-release.outputs.checksum_filename }}
@@ -193,7 +194,14 @@ jobs:
           tarball_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${TARBALL_FILENAME}"
 
           cat > "$RELEASE_NOTES_FILE" <<EOF
-          Install the verified tarball asset from this release instead of relying on the npm registry or a git dependency build:
+          Install from npm once the trusted publish job for this workflow completes:
+
+          ```bash
+          npm install -g "${PACKAGE_NAME}@${PACKAGE_VERSION}"
+          agent-tty version --json
+          ```
+
+          If you need a registry-independent fallback, install the verified tarball asset from this release directly:
 
           ```bash
           VERSION=${PACKAGE_VERSION}
@@ -201,7 +209,7 @@ jobs:
           TARBALL_URL=${tarball_url}
 
           npm install -g "$TARBALL_URL"
-          agent-terminal version --json
+          agent-tty version --json
           ```
 
           For private releases or environments that require authenticated downloads, fetch the asset first and then install locally:
@@ -209,12 +217,12 @@ jobs:
           ```bash
           gh release download "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --pattern "${TARBALL_FILENAME}"
           npm install -g "./${TARBALL_FILENAME}"
-          agent-terminal version --json
+          agent-tty version --json
           ```
 
           SHA-256 checksum: `${CHECKSUM_SHA256}` (see `${CHECKSUM_FILENAME}` for the portable checksum file).
 
-          This workflow intentionally stops at the verified GitHub Release asset. A future npm-publish job should depend on the prepare-release outputs and reuse this tarball instead of rebuilding it.
+          This workflow prepares one verified tarball and reuses it across GitHub Release assets and npm publishing instead of rebuilding it.
           EOF
 
       - name: Create or update GitHub Release
@@ -258,10 +266,54 @@ jobs:
               "${create_flags[@]}"
           fi
 
-  # Future follow-up:
-  # publish-npm:
-  #   needs: prepare-release
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Publish verified tarball to npm
-  #       run: echo 'Reserved for a future npm publish job.'
+  publish-npm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: prepare-release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download verified release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets-${{ needs.prepare-release.outputs.release_tag }}
+          path: ${{ runner.temp }}/release-assets
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish verified tarball to npm
+        shell: bash
+        env:
+          PACKAGE_NAME: ${{ needs.prepare-release.outputs.package_name }}
+          PACKAGE_VERSION: ${{ needs.prepare-release.outputs.package_version }}
+          TARBALL_PATH: ${{ runner.temp }}/release-assets/${{ needs.prepare-release.outputs.tarball_filename }}
+        run: |
+          set -euo pipefail
+          if [[ ! -f "$TARBALL_PATH" ]]; then
+            echo "Release tarball missing: $TARBALL_PATH" >&2
+            exit 1
+          fi
+
+          publish_args=()
+          if [[ "$PACKAGE_NAME" == @* ]]; then
+            publish_args+=(--access public)
+          fi
+          if [[ "$PACKAGE_VERSION" == *-* ]]; then
+            dist_tag="${PACKAGE_VERSION#*-}"
+            dist_tag="${dist_tag%%.*}"
+            if [[ -z "$dist_tag" ]]; then
+              echo "Unable to derive prerelease dist-tag from $PACKAGE_VERSION" >&2
+              exit 1
+            fi
+            publish_args+=(--tag "$dist_tag")
+            echo "Publishing prerelease $PACKAGE_NAME@$PACKAGE_VERSION with dist-tag $dist_tag"
+          else
+            echo "Publishing stable $PACKAGE_NAME@$PACKAGE_VERSION with dist-tag latest"
+          fi
+
+          npm publish "$TARBALL_PATH" "${publish_args[@]}"

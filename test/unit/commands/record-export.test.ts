@@ -86,7 +86,7 @@ import { hashProfile, resolveProfile } from '../../../src/renderer/profiles.js';
 import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
-  home: '/tmp/agent-terminal',
+  home: '/tmp/agent-tty',
   timeoutMs: undefined,
   colorEnabled: true,
   logLevel: 'info',
@@ -132,10 +132,10 @@ async function createTemporaryDirectory(prefix: string): Promise<string> {
 describe('record export command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.resolveHome.mockReturnValue('/tmp/agent-terminal');
+    mocks.resolveHome.mockReturnValue('/tmp/agent-tty');
     mocks.sessionDir.mockImplementation(
       (_home: string, sessionId: string) =>
-        `/tmp/agent-terminal/sessions/${sessionId}`,
+        `/tmp/agent-tty/sessions/${sessionId}`,
     );
     mocks.manifestPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/session.json`,
@@ -159,10 +159,10 @@ describe('record export command', () => {
       },
     ]);
     mocks.ensureArtifactsDir.mockResolvedValue(
-      '/tmp/agent-terminal/sessions/session-01/artifacts',
+      '/tmp/agent-tty/sessions/session-01/artifacts',
     );
     mocks.loadPackageMetadata.mockResolvedValue({
-      name: 'agent-terminal',
+      name: 'agent-tty',
       version: '0.1.0-test',
     });
     mocks.recordingFilename.mockReturnValue('recording-1-asciicast.cast');
@@ -234,14 +234,14 @@ describe('record export command', () => {
     expect(mocks.loadPackageMetadata).toHaveBeenCalledTimes(1);
 
     expect(mocks.ensureArtifactsDir).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01',
+      '/tmp/agent-tty/sessions/session-01',
     );
     expect(mocks.writeTextFileAtomic).toHaveBeenCalledWith({
-      path: '/tmp/agent-terminal/sessions/session-01/artifacts/recording-2-asciicast.cast',
+      path: '/tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast',
       pathLabel: 'record export path',
       contents: expectedContents,
       writeErrorMessage:
-        'Failed to write record export artifact at /tmp/agent-terminal/sessions/session-01/artifacts/recording-2-asciicast.cast.',
+        'Failed to write record export artifact at /tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast.',
     });
     expect(mocks.createArtifactEntry).toHaveBeenCalledWith({
       kind: 'recording',
@@ -253,7 +253,7 @@ describe('record export command', () => {
       metadata: {
         format: 'asciicast',
         outputPath:
-          '/tmp/agent-terminal/sessions/session-01/artifacts/recording-2-asciicast.cast',
+          '/tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast',
         width: 80,
         height: 24,
         title: 'session-01',
@@ -264,7 +264,7 @@ describe('record export command', () => {
       },
     });
     expect(mocks.appendArtifact).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01',
+      '/tmp/agent-tty/sessions/session-01',
       expect.objectContaining({
         kind: 'recording',
         filename: 'recording-2-asciicast.cast',
@@ -279,7 +279,7 @@ describe('record export command', () => {
         sessionId: 'session-01',
         format: 'asciicast',
         artifactPath:
-          '/tmp/agent-terminal/sessions/session-01/artifacts/recording-2-asciicast.cast',
+          '/tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast',
         bytes: Buffer.byteLength(expectedContents, 'utf8'),
         sha256: expectedSha256,
         capturedAtSeq: 2,
@@ -298,7 +298,7 @@ describe('record export command', () => {
         'Session ID: session-01',
         'Format: asciicast',
         'Captured At Seq: 2',
-        'Artifact Path: /tmp/agent-terminal/sessions/session-01/artifacts/recording-2-asciicast.cast',
+        'Artifact Path: /tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast',
         `Bytes: ${String(Buffer.byteLength(expectedContents, 'utf8'))}`,
         `SHA256: ${expectedSha256}`,
         'Duration: 1500 ms',
@@ -354,7 +354,7 @@ describe('record export command', () => {
 
     expect(generateWebmExportArgs.sessionId).toBe('session-01');
     expect(generateWebmExportArgs.sessionDir).toBe(
-      '/tmp/agent-terminal/sessions/session-01',
+      '/tmp/agent-tty/sessions/session-01',
     );
     expect(generateWebmExportArgs.manifest).toEqual(createSessionRecord());
     expect(generateWebmExportArgs.events).toEqual([
@@ -372,14 +372,14 @@ describe('record export command', () => {
       },
     ]);
     expect(generateWebmExportArgs.outputPath).toBe(
-      '/tmp/agent-terminal/sessions/session-01/artifacts/recording-1-webm.webm',
+      '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm',
     );
     expect(mocks.writeTextFileAtomic).not.toHaveBeenCalled();
     expect(mocks.stat).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/artifacts/recording-1-webm.webm',
+      '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm',
     );
     expect(mocks.readFile).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/artifacts/recording-1-webm.webm',
+      '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm',
     );
 
     expect(mocks.createArtifactEntry).toHaveBeenCalledTimes(1);
@@ -654,7 +654,7 @@ describe('record export command', () => {
       code: ERROR_CODES.SESSION_NOT_FOUND,
       details: {
         sessionId: 'session-01',
-        manifestPath: '/tmp/agent-terminal/sessions/session-01/session.json',
+        manifestPath: '/tmp/agent-tty/sessions/session-01/session.json',
       },
     });
     expect(mocks.readEventLogRecords).not.toHaveBeenCalled();
@@ -663,7 +663,7 @@ describe('record export command', () => {
 
   it('writes explicit relative output paths within the current working directory', async () => {
     const workspaceDirectory = await createTemporaryDirectory(
-      'agent-terminal-record-export-workspace-',
+      'agent-tty-record-export-workspace-',
     );
     const exportsDirectory = join(workspaceDirectory, 'exports');
     await mkdir(exportsDirectory, { recursive: true });
@@ -700,7 +700,7 @@ describe('record export command', () => {
 
   it('resolves symlinked output directories to their real paths', async () => {
     const workspaceDirectory = await createTemporaryDirectory(
-      'agent-terminal-record-export-realpath-',
+      'agent-tty-record-export-realpath-',
     );
     const realExportsDirectory = join(workspaceDirectory, 'real-exports');
     const symlinkExportsDirectory = join(workspaceDirectory, 'linked-exports');
@@ -734,7 +734,7 @@ describe('record export command', () => {
 
   it('rejects output paths whose parent directory does not exist', async () => {
     const workspaceDirectory = await createTemporaryDirectory(
-      'agent-terminal-record-export-missing-parent-',
+      'agent-tty-record-export-missing-parent-',
     );
 
     await expect(

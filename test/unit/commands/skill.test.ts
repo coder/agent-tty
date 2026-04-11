@@ -11,10 +11,7 @@ import {
 
 describe('skill command', () => {
   it('loads the packaged skill content', async () => {
-    const expectedContent = await readFile(
-      'skills/agent-terminal/SKILL.md',
-      'utf8',
-    );
+    const expectedContent = await readFile('skills/agent-tty/SKILL.md', 'utf8');
     const content = await loadPackagedSkillContent();
 
     expect(content).toBe(expectedContent);
@@ -24,7 +21,7 @@ describe('skill command', () => {
   it('builds the skill result payload', async () => {
     const result = await buildSkillResult();
 
-    expect(result.name).toBe('agent-terminal');
+    expect(result.name).toBe('agent-tty');
     expect(result.source).toBe('packaged-file');
     expect(result.content.length).toBeGreaterThan(0);
   });
@@ -55,7 +52,7 @@ describe('skill command', () => {
           cause: error,
         });
       }
-      expect(skillPath).toContain('skills/agent-terminal/SKILL.md');
+      expect(skillPath).toContain('skills/agent-tty/SKILL.md');
     }
   });
 });

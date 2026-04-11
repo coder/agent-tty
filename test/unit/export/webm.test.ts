@@ -193,7 +193,7 @@ describe('generateWebmExport', () => {
     const result = await generateWebmExport(
       {
         sessionId: 'session-01',
-        sessionDir: '/tmp/agent-terminal/sessions/session-01',
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
         manifest: createManifest(),
         events: createEvents(),
         outputPath: '/tmp/exports/recording-1-webm.webm',
@@ -223,7 +223,7 @@ describe('generateWebmExport', () => {
       fontSize: 16,
       name: 'reference-dark',
     });
-    expect(videoOptions.outputDir).toContain('agent-terminal-webm-');
+    expect(videoOptions.outputDir).toContain('agent-tty-webm-');
     expect(videoOptions.size).toEqual({
       width: 864,
       height: 608,
@@ -267,7 +267,7 @@ describe('generateWebmExport', () => {
     const result = await generateWebmExport(
       {
         sessionId: 'session-01',
-        sessionDir: '/tmp/agent-terminal/sessions/session-01',
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
         manifest: createManifest(),
         events: createEvents(),
         outputPath: '/tmp/exports/recording-1-webm.webm',
@@ -289,7 +289,7 @@ describe('generateWebmExport', () => {
     const result = await generateWebmExport(
       {
         sessionId: 'session-01',
-        sessionDir: '/tmp/agent-terminal/sessions/session-01',
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
         manifest: createManifest(),
         events: createEvents(),
         outputPath: '/tmp/exports/recording-1-webm.webm',
@@ -311,7 +311,7 @@ describe('generateWebmExport', () => {
     const result = await generateWebmExport(
       {
         sessionId: 'session-01',
-        sessionDir: '/tmp/agent-terminal/sessions/session-01',
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
         manifest: createManifest(),
         events: createEvents(),
         outputPath: '/tmp/exports/recording-1-webm.webm',
@@ -335,7 +335,7 @@ describe('generateWebmExport', () => {
     await expect(
       generateWebmExport({
         sessionId: 'session-01',
-        sessionDir: '/tmp/agent-terminal/sessions/session-01',
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
         manifest: createManifest(),
         events: [],
         outputPath: '/tmp/exports/recording-1-webm.webm',
@@ -347,7 +347,7 @@ describe('generateWebmExport', () => {
     await expect(
       generateWebmExport({
         sessionId: 'session-01',
-        sessionDir: '/tmp/agent-terminal/sessions/session-01',
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
         manifest: createManifest(),
         events: createEvents(),
         outputPath: 'relative/path.webm',
@@ -364,7 +364,7 @@ describe('generateWebmExport', () => {
       generateWebmExport(
         {
           sessionId: 'session-01',
-          sessionDir: '/tmp/agent-terminal/sessions/session-01',
+          sessionDir: '/tmp/agent-tty/sessions/session-01',
           manifest: createManifest(),
           events: createEvents(),
           outputPath: '/tmp/exports/recording-1-webm.webm',
@@ -388,7 +388,7 @@ describe('generateWebmExport', () => {
       generateWebmExport(
         {
           sessionId: 'session-01',
-          sessionDir: '/tmp/agent-terminal/sessions/session-01',
+          sessionDir: '/tmp/agent-tty/sessions/session-01',
           manifest: createManifest(),
           events: createEvents(),
           outputPath: '/tmp/exports/recording-1-webm.webm',
@@ -413,7 +413,7 @@ describe('generateWebmExport', () => {
       generateWebmExport(
         {
           sessionId: 'session-01',
-          sessionDir: '/tmp/agent-terminal/sessions/session-01',
+          sessionDir: '/tmp/agent-tty/sessions/session-01',
           manifest: createManifest(),
           events: createEvents(),
           outputPath: '/tmp/exports/recording-1-webm.webm',

@@ -35,19 +35,19 @@ describe('CLI context resolution', () => {
     mocks.loadConfigFile.mockResolvedValue(null);
   });
 
-  it('prefers --home over AGENT_TERMINAL_HOME', async () => {
+  it('prefers --home over AGENT_TTY_HOME', async () => {
     const context = await resolveCommandContext(
       { home: TEST_FLAG_HOME },
-      { AGENT_TERMINAL_HOME: TEST_ENV_HOME },
+      { AGENT_TTY_HOME: TEST_ENV_HOME },
     );
 
     expect(context.home).toBe(TEST_FLAG_HOME);
   });
 
-  it('falls back to AGENT_TERMINAL_HOME when --home is absent', async () => {
+  it('falls back to AGENT_TTY_HOME when --home is absent', async () => {
     const context = await resolveCommandContext(
       {},
-      { AGENT_TERMINAL_HOME: TEST_ENV_HOME },
+      { AGENT_TTY_HOME: TEST_ENV_HOME },
     );
 
     expect(context.home).toBe(TEST_ENV_HOME);
@@ -95,8 +95,8 @@ describe('CLI context resolution', () => {
       resolveCommandContext(
         { home: TEST_FLAG_HOME },
         {
-          AGENT_TERMINAL_HOME: TEST_ENV_HOME,
-          AGENT_TERMINAL_LOG_LEVEL: 'debug',
+          AGENT_TTY_HOME: TEST_ENV_HOME,
+          AGENT_TTY_LOG_LEVEL: 'debug',
         },
       ),
     ).resolves.toMatchObject({ logLevel: 'debug' });
@@ -125,8 +125,8 @@ describe('CLI context resolution', () => {
       resolveCommandContext(
         { home: TEST_FLAG_HOME },
         {
-          AGENT_TERMINAL_HOME: TEST_ENV_HOME,
-          AGENT_TERMINAL_PROFILE: 'env-profile',
+          AGENT_TTY_HOME: TEST_ENV_HOME,
+          AGENT_TTY_PROFILE: 'env-profile',
         },
       ),
     ).resolves.toMatchObject({ profileDefault: 'env-profile' });
@@ -145,7 +145,7 @@ describe('CLI context resolution', () => {
 
     const context = await resolveCommandContext(
       { home: TEST_FLAG_HOME },
-      { AGENT_TERMINAL_LOG_LEVEL: 'debug' },
+      { AGENT_TTY_LOG_LEVEL: 'debug' },
     );
 
     expect(context.logger.getLevel()).toBe('debug');

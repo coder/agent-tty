@@ -104,23 +104,23 @@ export async function resolveCommandContext(
   options: GlobalCliOptions,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<CommandContext> {
-  const configuredHome = options.home ?? env.AGENT_TERMINAL_HOME;
+  const configuredHome = options.home ?? env.AGENT_TTY_HOME;
   const home =
     configuredHome === undefined
-      ? resolveHome(env.AGENT_TERMINAL_HOME)
+      ? resolveHome(env.AGENT_TTY_HOME)
       : validateHomePath(
           configuredHome,
-          options.home !== undefined ? '--home' : 'AGENT_TERMINAL_HOME',
+          options.home !== undefined ? '--home' : 'AGENT_TTY_HOME',
         );
   const configFile = await loadConfigFile(home);
   const logLevel = resolveLogLevel(
-    options.logLevel ?? env.AGENT_TERMINAL_LOG_LEVEL ?? configFile?.logLevel,
+    options.logLevel ?? env.AGENT_TTY_LOG_LEVEL ?? configFile?.logLevel,
   );
   const logger = createLogger(logLevel);
   const profileDefault =
     options.profileDefault ??
     options.profile ??
-    env.AGENT_TERMINAL_PROFILE ??
+    env.AGENT_TTY_PROFILE ??
     configFile?.defaultProfile;
 
   return Object.freeze({

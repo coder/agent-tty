@@ -44,7 +44,7 @@ const VersionResultSchema = z
 
 const SkillResultSchema = z
   .object({
-    name: z.literal('agent-terminal'),
+    name: z.literal('agent-tty'),
     source: z.literal('packaged-file'),
     content: z.string().min(1),
   })
@@ -734,7 +734,7 @@ const goldenResultContracts: readonly GoldenResultContractCase[] = [
       cols: 80,
       rows: 24,
       artifactPath:
-        '/tmp/agent-terminal/sessions/session-01/artifacts/screenshot-8-reference-dark.png',
+        '/tmp/agent-tty/sessions/session-01/artifacts/screenshot-8-reference-dark.png',
       pngSizeBytes: 4096,
       cursorVisible: true,
       rendererBackend: 'ghostty-web',
@@ -1048,8 +1048,7 @@ describe('JSON envelope contracts', () => {
       message: 'Session "missing-session" was not found.',
       details: {
         sessionId: 'missing-session',
-        manifestPath:
-          '/tmp/agent-terminal/sessions/missing-session/session.json',
+        manifestPath: '/tmp/agent-tty/sessions/missing-session/session.json',
       },
     });
 
@@ -1070,8 +1069,7 @@ describe('JSON envelope contracts', () => {
         retryable: false,
         details: {
           sessionId: 'missing-session',
-          manifestPath:
-            '/tmp/agent-terminal/sessions/missing-session/session.json',
+          manifestPath: '/tmp/agent-tty/sessions/missing-session/session.json',
         },
       },
     });

@@ -136,7 +136,7 @@ const SUPPORT_FILE_NAMES = new Set([
   'command-status.tsv',
   'doctor.json',
   'session-id.txt',
-  'agent-terminal-home.txt',
+  'agent-tty-home.txt',
   'events.jsonl',
   'event-log.jsonl',
 ]);

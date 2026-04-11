@@ -39,7 +39,7 @@ async function waitForOutputMarker(
 ): Promise<void> {
   const waitResult = runCli(
     ['wait', sessionId, '--idle-ms', '2000', '--timeout', '10000', '--json'],
-    { AGENT_TERMINAL_HOME: testHome },
+    { AGENT_TTY_HOME: testHome },
     15_000,
   );
 
@@ -83,7 +83,7 @@ describe(
 
     beforeEach(async () => {
       // prettier-ignore
-      testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-host-renderer-')));
+      testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-host-renderer-')));
       sessionId = createSession(testHome, [
         '/bin/sh',
         '-c',

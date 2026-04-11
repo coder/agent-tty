@@ -108,21 +108,21 @@ function wrapAction<Args extends unknown[]>(
 }
 
 const CODING_AGENT_HELP_INTRO =
-  'MANDATORY FOR CODING AGENTS: read the `agent-terminal` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-terminal skill` before any other agent-terminal command.';
+  'MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skill` before any other agent-tty command.';
 const CODING_AGENT_HELP_OUTRO =
-  'Coding agents: use the preloaded `agent-terminal` skill when available; otherwise call `agent-terminal skill` before using session commands.';
+  'Coding agents: use the preloaded `agent-tty` skill when available; otherwise call `agent-tty skill` before using session commands.';
 const SKILL_COMMAND_DESCRIPTION =
   'Fallback first step for coding agents: print the packaged skill if it is not already loaded';
 
 async function main(): Promise<void> {
   const program = new Command()
-    .name('agent-terminal')
+    .name('agent-tty')
     .description('CLI for managing and controlling terminal sessions')
     .showHelpAfterError()
     .exitOverride();
 
   program
-    .option('--home <path>', 'Override the agent-terminal home directory')
+    .option('--home <path>', 'Override the agent-tty home directory')
     .option(
       '--timeout-ms <n>',
       'Set a shared CLI timeout in milliseconds',
@@ -136,14 +136,14 @@ async function main(): Promise<void> {
     const context = await resolveCommandContext(
       actionCommand.optsWithGlobals<GlobalCliOptions>(),
     );
-    process.env.AGENT_TERMINAL_HOME = context.home;
+    process.env.AGENT_TTY_HOME = context.home;
     // Propagate the resolved log level to the process environment so that
     // subsystems instantiated outside the CLI context (e.g., renderer backends,
     // host processes) inherit the correct level via createProcessLogger().
     // This is intentional: threading a Logger instance through every factory
     // and constructor is a larger refactor with no user-visible benefit, since
     // the env var is set before any command handler runs.
-    process.env.AGENT_TERMINAL_LOG_LEVEL = context.logLevel;
+    process.env.AGENT_TTY_LOG_LEVEL = context.logLevel;
     setColorEnabled(context.colorEnabled);
     setCommandContext(actionCommand, context);
     context.logger.debug('resolved command context', {
@@ -753,7 +753,7 @@ try {
     process.exitCode = error.code === 'commander.helpDisplayed' ? 0 : 2;
   } else if (error instanceof CliError) {
     setColorEnabled(!process.argv.includes('--no-color'));
-    emitCliError('agent-terminal', error);
+    emitCliError('agent-tty', error);
   } else {
     throw error;
   }

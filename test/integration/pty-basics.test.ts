@@ -26,7 +26,7 @@ let testHome = '';
 describe('pty-basics integration', { timeout: 30000 }, () => {
   beforeEach(async () => {
     // prettier-ignore
-    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-home-')));
+    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
   });
 
   afterEach(async () => {
@@ -41,7 +41,7 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
       await sleep(500);
 
       const typeResult = runCli(['type', sessionId, 'hello', '--json'], {
-        AGENT_TERMINAL_HOME: testHome,
+        AGENT_TTY_HOME: testHome,
       });
       expect(typeResult.status).toBe(0);
       expect(typeResult.stderr).toBe('');
@@ -76,7 +76,7 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
       const typeResult = runCli(
         ['type', sessionId, '--file', inputPath, '--json'],
         {
-          AGENT_TERMINAL_HOME: testHome,
+          AGENT_TTY_HOME: testHome,
         },
       );
       expect(typeResult.status).toBe(0);
@@ -109,7 +109,7 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
       const sendKeysResult = runCli(
         ['send-keys', sessionId, 'Enter', '--json'],
         {
-          AGENT_TERMINAL_HOME: testHome,
+          AGENT_TTY_HOME: testHome,
         },
       );
       expect(sendKeysResult.status).toBe(0);
@@ -145,7 +145,7 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
       await sleep(500);
 
       const pasteResult = runCli(['paste', sessionId, 'test-text', '--json'], {
-        AGENT_TERMINAL_HOME: testHome,
+        AGENT_TTY_HOME: testHome,
       });
       expect(pasteResult.status).toBe(0);
       expect(pasteResult.stderr).toBe('');
@@ -185,7 +185,7 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
       const pasteResult = runCli(
         ['paste', sessionId, '--file', inputPath, '--json'],
         {
-          AGENT_TERMINAL_HOME: testHome,
+          AGENT_TTY_HOME: testHome,
         },
       );
       expect(pasteResult.status).toBe(0);
@@ -222,7 +222,7 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
 
       const resizeResult = runCli(
         ['resize', sessionId, '--cols', '120', '--rows', '40', '--json'],
-        { AGENT_TERMINAL_HOME: testHome },
+        { AGENT_TTY_HOME: testHome },
       );
       expect(resizeResult.status).toBe(0);
       expect(resizeResult.stderr).toBe('');

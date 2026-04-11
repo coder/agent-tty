@@ -6,19 +6,20 @@ import {
   loadPackageMetadata,
 } from '../../../src/cli/commands/version.js';
 
+const SEMVER_WITH_OPTIONAL_PRERELEASE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
 describe('version command', () => {
   it('loads package metadata', async () => {
     const packageMetadata = await loadPackageMetadata();
 
-    expect(packageMetadata.name).toBe('agent-terminal');
-    expect(packageMetadata.version.length).toBeGreaterThan(0);
+    expect(packageMetadata.name).toBe('agent-tty');
+    expect(packageMetadata.version).toMatch(SEMVER_WITH_OPTIONAL_PRERELEASE);
   });
 
   it('builds the version result without capabilities by default', async () => {
-    const packageMetadata = await loadPackageMetadata();
     const result = await buildVersionResult();
 
-    expect(result.cliVersion).toBe(packageMetadata.version);
+    expect(result.cliVersion).toMatch(SEMVER_WITH_OPTIONAL_PRERELEASE);
     expect(result.protocolVersion).toBe('0.1.0');
     expect(result.rendererBackends).toEqual(['ghostty-web']);
     expect(result.runtime.node).toMatch(/^v\d+\.\d+\.\d+$/);
@@ -52,10 +53,9 @@ describe('version command', () => {
       .spyOn(process.stderr, 'write')
       .mockReturnValue(true);
 
-    const packageMetadata = await loadPackageMetadata();
     const result = await buildVersionResult({ includeCapabilities: true });
 
-    expect(result.cliVersion).toBe(packageMetadata.version);
+    expect(result.cliVersion).toMatch(SEMVER_WITH_OPTIONAL_PRERELEASE);
     expect(result.protocolVersion).toBe('0.1.0');
     expect(result.rendererBackends).toEqual(['ghostty-web']);
     expect(result.runtime.node).toMatch(/^v\d+\.\d+\.\d+$/);

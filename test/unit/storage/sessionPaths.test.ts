@@ -47,18 +47,18 @@ afterEach(async () => {
 
 describe('session paths', () => {
   it('builds session-specific absolute paths', () => {
-    const home = '/tmp/agent-terminal-home';
+    const home = '/tmp/agent-tty-home';
     const directory = sessionDir(home, 'session-01');
 
-    expect(directory).toBe('/tmp/agent-terminal-home/sessions/session-01');
+    expect(directory).toBe('/tmp/agent-tty-home/sessions/session-01');
     expect(manifestPath(directory)).toBe(
-      '/tmp/agent-terminal-home/sessions/session-01/session.json',
+      '/tmp/agent-tty-home/sessions/session-01/session.json',
     );
     expect(eventLogPath(directory)).toBe(
-      '/tmp/agent-terminal-home/sessions/session-01/events.jsonl',
+      '/tmp/agent-tty-home/sessions/session-01/events.jsonl',
     );
     expect(socketPath(directory)).toBe(
-      '/tmp/agent-terminal-home/sessions/session-01/host.sock',
+      '/tmp/agent-tty-home/sessions/session-01/host.sock',
     );
   });
 
@@ -84,7 +84,7 @@ describe('session paths', () => {
 describe('manifest storage', () => {
   it('writes and reads manifests with validation', async () => {
     // prettier-ignore
-    const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-home-')));
+    const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
     temporaryDirectories.push(home);
     const path = manifestPath(sessionDir(home, 'session-01'));
     const record = createSessionRecord();
@@ -98,7 +98,7 @@ describe('manifest storage', () => {
 
   it('returns null when a manifest does not exist', async () => {
     // prettier-ignore
-    const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-home-')));
+    const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
     temporaryDirectories.push(home);
     const path = manifestPath(sessionDir(home, 'missing-session'));
 
@@ -107,7 +107,7 @@ describe('manifest storage', () => {
 
   it('rejects invalid manifest contents during reads', async () => {
     // prettier-ignore
-    const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-home-')));
+    const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
     temporaryDirectories.push(home);
     const path = manifestPath(sessionDir(home, 'session-01'));
 

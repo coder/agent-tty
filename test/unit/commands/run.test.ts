@@ -37,7 +37,7 @@ import { ERROR_CODES } from '../../../src/protocol/errors.js';
 import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
-  home: '/tmp/agent-terminal',
+  home: '/tmp/agent-tty',
   timeoutMs: undefined,
   colorEnabled: true,
   logLevel: 'info',
@@ -87,7 +87,7 @@ describe('run command', () => {
     vi.clearAllMocks();
     mocks.sessionDir.mockImplementation(
       (_home: string, sessionId: string) =>
-        `/tmp/agent-terminal/sessions/${sessionId}`,
+        `/tmp/agent-tty/sessions/${sessionId}`,
     );
     mocks.manifestPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/session.json`,
@@ -113,7 +113,7 @@ describe('run command', () => {
     await runRunCommand(createOptions());
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'run',
       {
         command: 'echo hello',
@@ -146,7 +146,7 @@ describe('run command', () => {
     await runRunCommand(createOptions({ wait: false }));
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'run',
       {
         command: 'echo hello',
@@ -169,7 +169,7 @@ describe('run command', () => {
     await runRunCommand(createOptions({ timeout: 5_000 }));
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'run',
       {
         command: 'echo hello',

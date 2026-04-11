@@ -1,6 +1,6 @@
-# agent-terminal v1 rendering and artifacts
+# agent-tty v1 rendering and artifacts
 
-This document defines how `agent-terminal` turns PTY activity into inspectable artifacts.
+This document defines how `agent-tty` turns PTY activity into inspectable artifacts.
 
 ## 1. Rendering philosophy
 

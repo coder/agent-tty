@@ -366,14 +366,14 @@ async function runWorkingDirectoryCheck(): Promise<string> {
 }
 
 async function runTemporaryDirectoryCheck(): Promise<string> {
-  const directoryPrefix = join(tmpdir(), 'agent-terminal-');
+  const directoryPrefix = join(tmpdir(), 'agent-tty-');
   const temporaryDirectory = await mkdtemp(directoryPrefix);
   await rm(temporaryDirectory, { recursive: true, force: true });
   return `temp dir ok: ${tmpdir()}`;
 }
 
 export function runHomeIsolationCheck(): string {
-  const configuredHome = process.env.AGENT_TERMINAL_HOME;
+  const configuredHome = process.env.AGENT_TTY_HOME;
   if (configuredHome === undefined) {
     return 'Agent-terminal home uses default location';
   }
@@ -750,9 +750,7 @@ async function runGhosttyWebAvailableCheck(): Promise<string> {
 
 async function runScreenshotViabilityCheck(): Promise<string> {
   const chromium = await getPlaywrightChromium();
-  const temporaryDirectory = await mkdtemp(
-    join(tmpdir(), 'agent-terminal-doctor-'),
-  );
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), 'agent-tty-doctor-'));
   const screenshotPath = join(temporaryDirectory, 'smoke-check.png');
   let browser: BrowserLike | null = null;
 

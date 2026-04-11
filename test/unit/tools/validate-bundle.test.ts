@@ -23,7 +23,7 @@ const tempDirs: string[] = [];
 
 async function createTempDir(): Promise<string> {
   // prettier-ignore
-  const directory = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-validate-bundle-')));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-validate-bundle-')));
   tempDirs.push(directory);
   return directory;
 }
@@ -222,7 +222,7 @@ describe('validate-bundle', () => {
   it('fails when the bundle directory does not exist', async () => {
     const missingBundleRoot = join(
       tmpdir(),
-      'agent-terminal-validate-bundle-does-not-exist',
+      'agent-tty-validate-bundle-does-not-exist',
     );
 
     const result = await validateBundle(

@@ -27,7 +27,7 @@ export const ConfigFileSchema = z
   .strict();
 export type ConfigFile = z.infer<typeof ConfigFileSchema>;
 
-export interface AgentTerminalConfig {
+export interface AgentTtyConfig {
   readonly home: string;
   readonly cols: number;
   readonly rows: number;
@@ -101,7 +101,7 @@ export async function loadConfigFile(home: string): Promise<ConfigFile | null> {
   return result.data;
 }
 
-export function resolveConfig(): Readonly<AgentTerminalConfig> {
+export function resolveConfig(): Readonly<AgentTtyConfig> {
   return Object.freeze({
     home: resolveHome(),
     cols: DEFAULT_COLS,

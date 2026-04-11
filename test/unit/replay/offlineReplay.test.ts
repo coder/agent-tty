@@ -168,7 +168,7 @@ async function createSessionFixture(options?: {
   manifestOverrides?: Partial<SessionRecord>;
 }): Promise<{ sessionDir: string; sessionId: string }> {
   // prettier-ignore
-  const sessionDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-offline-replay-')));
+  const sessionDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-offline-replay-')));
   tempDirs.push(sessionDir);
 
   const sessionId = basename(sessionDir);

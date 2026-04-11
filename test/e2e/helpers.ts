@@ -55,7 +55,7 @@ export function normalizeTerminalOutput(output: string): string {
 
 export async function createIsolatedHome(): Promise<string> {
   // prettier-ignore
-  const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-e2e-home-')));
+  const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-e2e-home-')));
   return home;
 }
 

@@ -1,12 +1,33 @@
-# agent-terminal
+# agent-tty
 
-`agent-terminal` is a Node/TypeScript CLI for launching, controlling, inspecting, and exporting reviewable terminal sessions.
+`agent-tty` is a Node/TypeScript CLI for launching, controlling, inspecting, and exporting reviewable terminal sessions.
 It is built for agent workflows that need both semantic state and visual artifacts from live or exited TUIs.
 
 ## Installation
 
-`agent-terminal` currently supports Node `24.x`.
-Today, the supported hosted install path is the GitHub Release tarball asset. npm publication is intentionally not wired yet, and direct git dependency installs remain best-effort because they build from source.
+`agent-tty` currently supports Node `24.x`.
+The recommended hosted install path is the npm package `agent-tty`. GitHub Release tarballs remain the registry-independent fallback, and direct git dependency installs remain best-effort because they build from source.
+
+### npm installation (recommended)
+
+#### Global install from npm
+
+```bash
+PACKAGE_VERSION=<version>
+npm install -g "agent-tty@${PACKAGE_VERSION}"
+agent-tty version --json
+agent-tty --home "$(mktemp -d)" doctor --json
+```
+
+To follow the prerelease channel instead of pinning an exact version, substitute `@beta` (or another dist-tag such as `@rc`) for `@${PACKAGE_VERSION}`.
+
+#### Project-local install from npm
+
+```bash
+PACKAGE_VERSION=<version>
+npm install "agent-tty@${PACKAGE_VERSION}"
+./node_modules/.bin/agent-tty version --json
+```
 
 ### GitHub Release tarball installation
 
@@ -15,11 +36,11 @@ Today, the supported hosted install path is the GitHub Release tarball asset. np
 ```bash
 VERSION=<version>
 RELEASE_TAG="v${VERSION}"
-RELEASE_TGZ="agent-terminal-${VERSION}.tgz"
-TARBALL_URL="https://github.com/coder/agent-terminal/releases/download/${RELEASE_TAG}/${RELEASE_TGZ}"
+RELEASE_TGZ="agent-tty-${VERSION}.tgz"
+TARBALL_URL="https://github.com/coder/agent-tty/releases/download/${RELEASE_TAG}/${RELEASE_TGZ}"
 
 npm install -g "$TARBALL_URL"
-agent-terminal version --json
+agent-tty version --json
 ```
 
 #### Authenticated or private release install
@@ -27,22 +48,22 @@ agent-terminal version --json
 ```bash
 VERSION=<version>
 RELEASE_TAG="v${VERSION}"
-RELEASE_TGZ="agent-terminal-${VERSION}.tgz"
+RELEASE_TGZ="agent-tty-${VERSION}.tgz"
 
-gh release download "$RELEASE_TAG" --repo coder/agent-terminal --pattern "$RELEASE_TGZ"
+gh release download "$RELEASE_TAG" --repo coder/agent-tty --pattern "$RELEASE_TGZ"
 npm install -g "./$RELEASE_TGZ"
-agent-terminal version --json
-agent-terminal --home "$(mktemp -d)" doctor --json
+agent-tty version --json
+agent-tty --home "$(mktemp -d)" doctor --json
 ```
 
 #### Project-local install from a downloaded tarball
 
 ```bash
 VERSION=<version>
-RELEASE_TGZ="./agent-terminal-${VERSION}.tgz"
+RELEASE_TGZ="./agent-tty-${VERSION}.tgz"
 
 npm install "$RELEASE_TGZ"
-./node_modules/.bin/agent-terminal version --json
+./node_modules/.bin/agent-tty version --json
 ```
 
 ### Local tarball build from a source checkout
@@ -55,18 +76,18 @@ npm ci
 npm run pack:private -- --pack-destination "$TARBALL_DIR"
 
 INSTALL_PREFIX=$(mktemp -d)
-npm install -g --prefix "$INSTALL_PREFIX" "$TARBALL_DIR"/agent-terminal-*.tgz
-"$INSTALL_PREFIX"/bin/agent-terminal version --json
-"$INSTALL_PREFIX"/bin/agent-terminal --home "$(mktemp -d)" doctor --json
+npm install -g --prefix "$INSTALL_PREFIX" "$TARBALL_DIR"/*.tgz
+"$INSTALL_PREFIX"/bin/agent-tty version --json
+"$INSTALL_PREFIX"/bin/agent-tty --home "$(mktemp -d)" doctor --json
 ```
 
-`npm run pack:private` always rebuilds `dist/` before packing. Release automation instead uses `npm run pack:release` after the CI-quality build step so GitHub Releases upload the same verified tarball plus a checksum file.
+`npm run pack:private` always rebuilds `dist/` before packing. Release automation instead uses `npm run pack:release` after the CI-quality build step so GitHub Releases and the npm publish job both reuse the same verified tarball plus a checksum file.
 
 ### Git source installation (best-effort)
 
 ```bash
-npm install -g github:coder/agent-terminal
-agent-terminal version --json
+npm install -g github:coder/agent-tty
+agent-tty version --json
 ```
 
 GitHub installs attempt to build from source via npm's `prepare` hook.
@@ -80,11 +101,11 @@ If `doctor --json` reports a missing Playwright browser cache on a fresh machine
 
 ```bash
 AGENT_HOME="$(mktemp -d)"
-agent-terminal --home "$AGENT_HOME" doctor --json
-SESSION_ID=$(agent-terminal --home "$AGENT_HOME" create --json --name demo -- /bin/bash | jq -r '.result.sessionId')
-agent-terminal --home "$AGENT_HOME" run "$SESSION_ID" 'echo hello from agent-terminal' --json
-agent-terminal --home "$AGENT_HOME" snapshot "$SESSION_ID" --format text --json
-agent-terminal --home "$AGENT_HOME" destroy "$SESSION_ID" --json
+agent-tty --home "$AGENT_HOME" doctor --json
+SESSION_ID=$(agent-tty --home "$AGENT_HOME" create --json --name demo -- /bin/bash | jq -r '.result.sessionId')
+agent-tty --home "$AGENT_HOME" run "$SESSION_ID" 'echo hello from agent-tty' --json
+agent-tty --home "$AGENT_HOME" snapshot "$SESSION_ID" --format text --json
+agent-tty --home "$AGENT_HOME" destroy "$SESSION_ID" --json
 ```
 
 ## Documentation map
@@ -105,7 +126,7 @@ agent-terminal --home "$AGENT_HOME" destroy "$SESSION_ID" --json
 
 ## 0.1.0 release focus
 
-`agent-terminal` `0.1.0` is the first release aimed at reliable, isolated, reviewable TUI automation.
+`agent-tty` `0.1.0` is the first release aimed at reliable, isolated, reviewable TUI automation.
 For the explicit shipping contract, see [`RELEASE.md`](./RELEASE.md). For intentionally deferred work, see [`ROADMAP.md`](./ROADMAP.md).
 Reviewer-facing proof bundles are curated in [`dogfood/CATALOG.md`](./dogfood/CATALOG.md), with current release-signoff evidence in `dogfood/20260326-week9-release-readiness/` and evergreen workflow coverage such as `dogfood/run-command/`.
 
@@ -115,12 +136,12 @@ For setup-heavy TUI automation, prefer an isolated home plus the higher-level `r
 
 ```bash
 AGENT_HOME="$(mktemp -d)"
-agent-terminal --home "$AGENT_HOME" doctor --json
-SESSION_ID=$(agent-terminal --home "$AGENT_HOME" create --json -- /bin/bash | jq -r '.result.sessionId')
-agent-terminal --home "$AGENT_HOME" run "$SESSION_ID" 'npm install'
-agent-terminal --home "$AGENT_HOME" wait "$SESSION_ID" --text 'ready'
-agent-terminal --home "$AGENT_HOME" screenshot "$SESSION_ID"
-agent-terminal --home "$AGENT_HOME" record export "$SESSION_ID" --format webm
+agent-tty --home "$AGENT_HOME" doctor --json
+SESSION_ID=$(agent-tty --home "$AGENT_HOME" create --json -- /bin/bash | jq -r '.result.sessionId')
+agent-tty --home "$AGENT_HOME" run "$SESSION_ID" 'npm install'
+agent-tty --home "$AGENT_HOME" wait "$SESSION_ID" --text 'ready'
+agent-tty --home "$AGENT_HOME" screenshot "$SESSION_ID"
+agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format webm
 ```
 
 Recommended sequence:
@@ -134,61 +155,62 @@ Recommended sequence:
 
 ## AI agent skill
 
-The public skill lives under `skills/agent-terminal/` and ships in the release tarball package.
-Install `agent-terminal` from a GitHub Release tarball first, then either use the packaged skill directly or let TanStack Intent map it into your agent config.
+The public skill lives under `skills/agent-tty/` and ships in the npm package as well as the GitHub Release tarball.
+Install `agent-tty` from npm first (or from a GitHub Release tarball when you need a registry-independent fallback), then either use the packaged skill directly or let TanStack Intent map it into your agent config.
 
-For coding agents that can ingest instructions on demand, `agent-terminal skill` prints the packaged `SKILL.md` directly to stdout after installation.
+For coding agents that can ingest instructions on demand, `agent-tty skill` prints the packaged `SKILL.md` directly to stdout after installation.
 
 ```bash
-agent-terminal skill
+agent-tty skill
 ```
 
 ### TanStack Intent integration
 
-After downloading `agent-terminal-<version>.tgz` from GitHub Releases, install it in the project and let Intent wire the mapping into `AGENTS.md`, `CLAUDE.md`, or another supported agent config file.
+After installing `agent-tty` in the project, let Intent wire the mapping into `AGENTS.md`, `CLAUDE.md`, or another supported agent config file.
 
 ```bash
-npm install ./agent-terminal-<version>.tgz
+PACKAGE_VERSION=<version>
+npm install "agent-tty@${PACKAGE_VERSION}"
 npx @tanstack/intent@latest list
 npx @tanstack/intent@latest install
 ```
 
-That workflow keeps the skill version aligned with the installed `agent-terminal` package and avoids writing one-off instructions for each individual coding agent.
+That workflow keeps the skill version aligned with the installed `agent-tty` package and avoids writing one-off instructions for each individual coding agent.
 
 ### Mux skill installation
 
-After installing the release tarball globally:
+After installing the npm package globally:
 
 ```bash
-mkdir -p ~/.mux/skills/agent-terminal
-cp -R "$(npm root -g)/agent-terminal/skills/agent-terminal/." ~/.mux/skills/agent-terminal/
+mkdir -p ~/.mux/skills/agent-tty
+cp -R "$(npm root -g)/agent-tty/skills/agent-tty/." ~/.mux/skills/agent-tty/
 ```
 
 ### Direct skill copy for other skill loaders
 
-After installing the release tarball globally:
+After installing the npm package globally:
 
 ```bash
-mkdir -p ~/.claude/skills/agent-terminal
-cp -R "$(npm root -g)/agent-terminal/skills/agent-terminal/." ~/.claude/skills/agent-terminal/
+mkdir -p ~/.claude/skills/agent-tty
+cp -R "$(npm root -g)/agent-tty/skills/agent-tty/." ~/.claude/skills/agent-tty/
 ```
 
-If your assistant supports repository-backed skills, point it at `coder/agent-terminal` and select the `agent-terminal` skill directory.
+If your assistant supports repository-backed skills, point it at `coder/agent-tty` and select the `agent-tty` skill directory.
 
 ### Suggested `AGENTS.md` / `CLAUDE.md` snippet
 
 ```markdown
 ## Terminal Automation
 
-Use `agent-terminal` for terminal and TUI automation instead of `tmux`, ad hoc PTY wrappers, or external screenshot tools.
+Use `agent-tty` for terminal and TUI automation instead of `tmux`, ad hoc PTY wrappers, or external screenshot tools.
 
 Preferred workflow:
 
-1. Create an isolated home and session with `agent-terminal --home "$AGENT_HOME" create --json -- /bin/bash`.
-2. Use `agent-terminal run` for setup and bootstrap commands.
-3. Use `agent-terminal wait` for observable readiness instead of blind sleeps.
-4. Use `agent-terminal snapshot` to inspect the current terminal state.
-5. Use `agent-terminal screenshot` or `agent-terminal record export` for reviewer-facing artifacts.
+1. Create an isolated home and session with `agent-tty --home "$AGENT_HOME" create --json -- /bin/bash`.
+2. Use `agent-tty run` for setup and bootstrap commands.
+3. Use `agent-tty wait` for observable readiness instead of blind sleeps.
+4. Use `agent-tty snapshot` to inspect the current terminal state.
+5. Use `agent-tty screenshot` or `agent-tty record export` for reviewer-facing artifacts.
 6. Destroy the session when the task is done.
 ```
 
@@ -200,11 +222,11 @@ npm run intent:validate
 
 ## Isolation
 
-- `--home <path>` stores manifests, sockets, event logs, and artifacts under an isolated agent-terminal home. Pass the same `--home` value to each command in a workflow.
-- `doctor --json` reports whether `agent-terminal` is using the default location or an isolated home, including a `home_isolation` check for whether `--home` produced an isolated environment.
+- `--home <path>` stores manifests, sockets, event logs, and artifacts under an isolated agent-tty home. Pass the same `--home` value to each command in a workflow.
+- `doctor --json` reports whether `agent-tty` is using the default location or an isolated home, including a `home_isolation` check for whether `--home` produced an isolated environment.
 - It also exposes `browser_cache_accessible`, which verifies the Playwright browser cache is discoverable for renderer operations before screenshot/export flows.
 - Renderer boot now carries Playwright browser-cache resolution into isolated-home workflows automatically when Chromium is installed in the normal cache or exposed through `PLAYWRIGHT_BROWSERS_PATH`.
-- In a new machine, CI job, or container, run `agent-terminal --home <path> doctor --json` before starting screenshot or recording workflows.
+- In a new machine, CI job, or container, run `agent-tty --home <path> doctor --json` before starting screenshot or recording workflows.
 
 ## Platform Support
 
@@ -214,7 +236,7 @@ npm run intent:validate
 
 ## CLI-wide flags
 
-- `--home <path>`: override the agent-terminal home directory.
+- `--home <path>`: override the agent-tty home directory.
 - `--timeout-ms <n>`: apply a shared CLI timeout budget in milliseconds.
 - `--no-color`: disable ANSI color in human-readable output.
 - `--json`: available on user-facing commands to emit structured command envelopes.
@@ -245,10 +267,10 @@ npm run intent:validate
 Basic usage:
 
 ```bash
-agent-terminal run <session-id> [command]
-agent-terminal run <session-id> --file ./setup.sh
-agent-terminal run <session-id> 'npm install && npm test' --timeout 60000 --json
-agent-terminal run <session-id> 'npm run dev' --no-wait
+agent-tty run <session-id> [command]
+agent-tty run <session-id> --file ./setup.sh
+agent-tty run <session-id> 'npm install && npm test' --timeout 60000 --json
+agent-tty run <session-id> 'npm run dev' --no-wait
 ```
 
 Important flags:
@@ -289,7 +311,7 @@ For contributor workflow and release hygiene, see [`docs/CONTRIBUTING.md`](./doc
 ## Design docs
 
 Design and implementation notes live under [`design/`](./design/README.md).
-Start with [`design/ARCHITECTURE.md`](./design/ARCHITECTURE.md) for the stable overview, use [`design/20260319_agent-terminal-v1/`](./design/20260319_agent-terminal-v1/) for the active reference set, and use [`design/archive/`](./design/archive/) for week-by-week project history.
+Start with [`design/ARCHITECTURE.md`](./design/ARCHITECTURE.md) for the stable overview, use [`design/20260319_agent-tty-v1/`](./design/20260319_agent-tty-v1/) for the active reference set, and use [`design/archive/`](./design/archive/) for week-by-week project history.
 
 ## Repository notes
 

@@ -1,4 +1,4 @@
-# agent-terminal v1 CLI contract
+# agent-tty v1 CLI contract
 
 This document defines the concrete v1 CLI contract.
 
@@ -66,7 +66,7 @@ Failure envelope:
     "retryable": false,
     "details": {
       "sessionId": "missing-session",
-      "manifestPath": "/tmp/agent-terminal/sessions/missing-session/session.json"
+      "manifestPath": "/tmp/agent-tty/sessions/missing-session/session.json"
     }
   }
 }
@@ -95,7 +95,7 @@ All public commands should support these where sensible:
 | Flag                  | Meaning                                             |
 | --------------------- | --------------------------------------------------- |
 | `--json`              | Emit JSON envelope                                  |
-| `--home <path>`       | Override `~/.agent-terminal`                        |
+| `--home <path>`       | Override `~/.agent-tty`                        |
 | `--log-level <level>` | `error`, `warn`, `info`, `debug`, `trace`           |
 | `--timeout-ms <n>`    | Command timeout                                     |
 | `--profile <name>`    | Render profile override for render-related commands |
@@ -114,11 +114,11 @@ Resolved config order:
 
 | Variable                      | Meaning                                |
 | ----------------------------- | -------------------------------------- |
-| `AGENT_TERMINAL_HOME`         | Override home directory                |
-| `AGENT_TERMINAL_LOG_LEVEL`    | Logging default                        |
-| `AGENT_TERMINAL_PROFILE`      | Default render profile                 |
-| `AGENT_TERMINAL_BROWSER_PATH` | Override Playwright browser executable |
-| `AGENT_TERMINAL_KEEP_TEMP`    | Preserve temp replay outputs           |
+| `AGENT_TTY_HOME`         | Override home directory                |
+| `AGENT_TTY_LOG_LEVEL`    | Logging default                        |
+| `AGENT_TTY_PROFILE`      | Default render profile                 |
+| `AGENT_TTY_BROWSER_PATH` | Override Playwright browser executable |
+| `AGENT_TTY_KEEP_TEMP`    | Preserve temp replay outputs           |
 
 ## 4. Resource identifiers
 
@@ -148,9 +148,9 @@ Create a new session host and spawn a PTY child.
 ### 5.1 Syntax
 
 ```bash
-agent-terminal create [options] [command...]
-agent-terminal create [options]
-agent-terminal create [options] --shell /bin/zsh
+agent-tty create [options] [command...]
+agent-tty create [options]
+agent-tty create [options] --shell /bin/zsh
 ```
 
 ### 5.2 Required behavior
@@ -209,7 +209,7 @@ List sessions known in the home directory.
 ### 6.1 Syntax
 
 ```bash
-agent-terminal list [--all] [--json]
+agent-tty list [--all] [--json]
 ```
 
 ### 6.2 Behavior
@@ -237,8 +237,8 @@ Return the shipped merged session summary for one session.
 ### 7.1 Syntax
 
 ```bash
-agent-terminal inspect <session-id>
-agent-terminal inspect <session-id> --json
+agent-tty inspect <session-id>
+agent-tty inspect <session-id> --json
 ```
 
 ### 7.2 Behavior
@@ -317,9 +317,9 @@ Write raw UTF-8 text bytes into the PTY.
 ### 8.1 Syntax
 
 ```bash
-agent-terminal type <session-id> 'hello world'
-agent-terminal type <session-id> --file ./payload.txt
-agent-terminal type <session-id> 'hello world' --append-newline
+agent-tty type <session-id> 'hello world'
+agent-tty type <session-id> --file ./payload.txt
+agent-tty type <session-id> 'hello world' --append-newline
 ```
 
 ### 8.2 Flags
@@ -344,8 +344,8 @@ Write text as a paste operation.
 ### 9.1 Syntax
 
 ```bash
-agent-terminal paste <session-id> 'multiline\ninput'
-agent-terminal paste <session-id> --file ./payload.txt
+agent-tty paste <session-id> 'multiline\ninput'
+agent-tty paste <session-id> --file ./payload.txt
 ```
 
 ### 9.2 Semantics
@@ -367,9 +367,9 @@ Send named keys and chords.
 ### 10.1 Syntax
 
 ```bash
-agent-terminal send-keys <session-id> Enter
-agent-terminal send-keys <session-id> ctrl+l g g
-agent-terminal send-keys <session-id> alt+shift+f10
+agent-tty send-keys <session-id> Enter
+agent-tty send-keys <session-id> ctrl+l g g
+agent-tty send-keys <session-id> alt+shift+f10
 ```
 
 ### 10.2 Key grammar
@@ -414,7 +414,7 @@ Resize the terminal.
 ### 11.1 Syntax
 
 ```bash
-agent-terminal resize <session-id> --rows 50 --cols 140
+agent-tty resize <session-id> --rows 50 --cols 140
 ```
 
 ### 11.2 Required behavior
@@ -438,8 +438,8 @@ Send a process signal to the PTY child.
 ### 12.1 Syntax
 
 ```bash
-agent-terminal signal <session-id> INT
-agent-terminal signal <session-id> TERM
+agent-tty signal <session-id> INT
+agent-tty signal <session-id> TERM
 ```
 
 ### 12.2 Required behavior
@@ -466,11 +466,11 @@ V1 should support:
 ### 13.2 Syntax examples
 
 ```bash
-agent-terminal wait <session-id> --text 'Ready'
-agent-terminal wait <session-id> --regex 'Connected: .*'
-agent-terminal wait <session-id> --idle-ms 250
-agent-terminal wait <session-id> --screen-stable-ms 300
-agent-terminal wait <session-id> --exit
+agent-tty wait <session-id> --text 'Ready'
+agent-tty wait <session-id> --regex 'Connected: .*'
+agent-tty wait <session-id> --idle-ms 250
+agent-tty wait <session-id> --screen-stable-ms 300
+agent-tty wait <session-id> --exit
 ```
 
 ### 13.3 Semantics
@@ -515,10 +515,10 @@ Capture semantic terminal state.
 ### 14.1 Syntax
 
 ```bash
-agent-terminal snapshot <session-id>
-agent-terminal snapshot <session-id> --format text
-agent-terminal snapshot <session-id> --include-scrollback
-agent-terminal snapshot <session-id> --include-scrollback --include-cells --json
+agent-tty snapshot <session-id>
+agent-tty snapshot <session-id> --format text
+agent-tty snapshot <session-id> --include-scrollback
+agent-tty snapshot <session-id> --include-scrollback --include-cells --json
 ```
 
 ### 14.2 Formats
@@ -558,10 +558,10 @@ Capture a PNG screenshot from the selected renderer backend.
 ### 15.1 Syntax
 
 ```bash
-agent-terminal screenshot <session-id>
-agent-terminal screenshot <session-id> --profile reference-light
-agent-terminal screenshot <session-id> --show-cursor
-agent-terminal screenshot <session-id> --hide-cursor
+agent-tty screenshot <session-id>
+agent-tty screenshot <session-id> --profile reference-light
+agent-tty screenshot <session-id> --show-cursor
+agent-tty screenshot <session-id> --hide-cursor
 ```
 
 ### 15.2 Required behavior
@@ -581,7 +581,7 @@ agent-terminal screenshot <session-id> --hide-cursor
   "profileName": "reference-dark",
   "cols": 120,
   "rows": 40,
-  "artifactPath": "/home/user/.agent-terminal/sessions/.../artifacts/screenshot-85-reference-dark.png",
+  "artifactPath": "/home/user/.agent-tty/sessions/.../artifacts/screenshot-85-reference-dark.png",
   "pngSizeBytes": 123456,
   "cursorVisible": false,
   "rendererBackend": "ghostty-web",
@@ -604,8 +604,8 @@ Export a replay artifact.
 ### 16.2 Syntax
 
 ```bash
-agent-terminal record export <session-id> --format asciicast --out ./run.cast
-agent-terminal record export <session-id> --format webm --out ./run.webm
+agent-tty record export <session-id> --format asciicast --out ./run.cast
+agent-tty record export <session-id> --format webm --out ./run.webm
 ```
 
 ### 16.3 Semantics
@@ -621,8 +621,8 @@ Terminate session control.
 ### 17.1 Syntax
 
 ```bash
-agent-terminal destroy <session-id>
-agent-terminal destroy <session-id> --force
+agent-tty destroy <session-id>
+agent-tty destroy <session-id> --force
 ```
 
 ### 17.2 Semantics
@@ -648,8 +648,8 @@ Garbage-collect old sessions and temp artifacts.
 ### 18.1 Syntax
 
 ```bash
-agent-terminal gc --older-than 7d
-agent-terminal gc --stale-only
+agent-tty gc --older-than 7d
+agent-tty gc --stale-only
 ```
 
 ### 18.2 Behavior

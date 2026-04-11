@@ -146,7 +146,7 @@ export async function generateWebmExport(
     480,
     Math.ceil(rows * profile.fontSize * 1.5) + 32,
   );
-  const videoTmpDir = await mkdtemp(join(tmpdir(), 'agent-terminal-webm-'));
+  const videoTmpDir = await mkdtemp(join(tmpdir(), 'agent-tty-webm-'));
   let backend: VideoCapableRendererBackend | null = null;
 
   try {

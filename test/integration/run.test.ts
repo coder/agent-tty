@@ -19,13 +19,13 @@ let testHome = '';
 let sessionId = '';
 
 function testEnv(): Record<string, string> {
-  return { AGENT_TERMINAL_HOME: testHome };
+  return { AGENT_TTY_HOME: testHome };
 }
 
 describe('run command integration', { timeout: 45_000 }, () => {
   beforeEach(() => {
     // prettier-ignore
-    testHome = realpathSync(mkdtempSync(join(tmpdir(), 'agent-terminal-run-home-')));
+    testHome = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tty-run-home-')));
   });
 
   afterEach(async () => {

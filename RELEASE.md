@@ -1,13 +1,13 @@
-# agent-terminal 0.1.0 release contract
+# agent-tty 0.1.0 release contract
 
-`agent-terminal` `0.1.0` is the first release that explicitly targets isolated, reviewable terminal automation for real TUI workflows.
+`agent-tty` `0.1.0` is the first release that explicitly targets isolated, reviewable terminal automation for real TUI workflows.
 The contract below is the bar for what maintainers should feel comfortable supporting at release time.
 If a workflow depends on behavior outside this document, treat it as future-scope or best-effort rather than a guaranteed `0.1.0` capability.
 For intentionally deferred work, see [`ROADMAP.md`](./ROADMAP.md). For reviewer-facing proof bundles, start with [`dogfood/CATALOG.md`](./dogfood/CATALOG.md).
 
 ## What 0.1.0 delivers
 
-- Reliable isolated session lifecycle management: `create`, `inspect`, `destroy`, and `gc` all work against isolated agent-terminal homes.
+- Reliable isolated session lifecycle management: `create`, `inspect`, `destroy`, and `gc` all work against isolated agent-tty homes.
 - Renderer-backed screenshots, semantic snapshots, and WebM export for reviewer-visible proof artifacts.
 - The `run` command for robust in-session command execution without having to simulate long shell setup scripts as manual keystrokes.
 - `doctor --json` with isolation-aware diagnostics for home resolution, renderer prerequisites, and screenshot viability.

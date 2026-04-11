@@ -38,7 +38,7 @@ import { runMarkCommand } from '../../../src/cli/commands/mark.js';
 import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
-  home: '/tmp/agent-terminal',
+  home: '/tmp/agent-tty',
   timeoutMs: undefined,
   colorEnabled: true,
   logLevel: 'info',
@@ -70,10 +70,10 @@ function createSessionRecord(
 describe('mark command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.resolveHome.mockReturnValue('/tmp/agent-terminal');
+    mocks.resolveHome.mockReturnValue('/tmp/agent-tty');
     mocks.sessionDir.mockImplementation(
       (_home: string, sessionId: string) =>
-        `/tmp/agent-terminal/sessions/${sessionId}`,
+        `/tmp/agent-tty/sessions/${sessionId}`,
     );
     mocks.manifestPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/session.json`,
@@ -97,7 +97,7 @@ describe('mark command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'mark',
       { label: 'checkpoint' },
     );
@@ -154,7 +154,7 @@ describe('mark command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'mark',
       { label: '' },
     );

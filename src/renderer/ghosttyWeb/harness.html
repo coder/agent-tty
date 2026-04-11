@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
-    <title>agent-terminal ghostty-web harness</title>
+    <title>agent-tty ghostty-web harness</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -491,7 +491,7 @@
         document.body.dataset.rows = String(rows);
       }
 
-      window.__agentTerminal = {
+      window.__agentTty = {
         async write(data) {
           const terminal = getReadyTerminal();
           assertStringValue(data, 'write() data must be a string');

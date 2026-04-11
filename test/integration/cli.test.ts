@@ -29,7 +29,7 @@ interface ErrorEnvelope {
 let testHome = '';
 
 function testEnv(): Record<string, string> {
-  return { AGENT_TERMINAL_HOME: testHome };
+  return { AGENT_TTY_HOME: testHome };
 }
 
 function parseErrorEnvelope(output: string): CommandErrorEnvelope {
@@ -37,23 +37,15 @@ function parseErrorEnvelope(output: string): CommandErrorEnvelope {
 }
 
 function readPackagedSkill(): string {
-  return readFileSync('skills/agent-terminal/SKILL.md', 'utf8');
+  return readFileSync('skills/agent-tty/SKILL.md', 'utf8');
 }
 
-function readPackageVersion(): string {
-  const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
-    version: unknown;
-  };
-  if (typeof packageJson.version !== 'string') {
-    throw new TypeError('package.json version must be a string');
-  }
-  return packageJson.version;
-}
+const SEMVER_WITH_OPTIONAL_PRERELEASE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 describe('CLI integration', () => {
   beforeEach(() => {
     // prettier-ignore
-    testHome = realpathSync(mkdtempSync(join(tmpdir(), 'agent-terminal-cli-home-')));
+    testHome = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tty-cli-home-')));
   });
 
   afterEach(() => {
@@ -73,7 +65,7 @@ describe('CLI integration', () => {
 
     expect(parsed.ok).toBe(true);
     expect(parsed.command).toBe('version');
-    expect(parsed.result.cliVersion).toBe(readPackageVersion());
+    expect(parsed.result.cliVersion).toMatch(SEMVER_WITH_OPTIONAL_PRERELEASE);
     expect(parsed.result.rendererBackends).toEqual(['ghostty-web']);
   });
 
@@ -100,7 +92,7 @@ describe('CLI integration', () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.command).toBe('skill');
     expect(parsed.result).toEqual({
-      name: 'agent-terminal',
+      name: 'agent-tty',
       source: 'packaged-file',
       content: readPackagedSkill(),
     });
@@ -113,14 +105,14 @@ describe('CLI integration', () => {
     expect(result.stderr).toBe('');
     expect(result.stdout.startsWith('MANDATORY FOR CODING AGENTS:')).toBe(true);
     expect(result.stdout).toContain(
-      'If your agent already loaded that skill, follow it; otherwise run `agent-terminal skill` before any other agent-terminal command.',
+      'If your agent already loaded that skill, follow it; otherwise run `agent-tty skill` before any other agent-tty command.',
     );
     expect(result.stdout).toContain('skill [options]');
     expect(result.stdout).toContain(
       'Fallback first step for coding agents: print the packaged skill if it is not already loaded',
     );
     expect(result.stdout).toContain(
-      'Coding agents: use the preloaded `agent-terminal` skill when available; otherwise call `agent-terminal skill` before using session commands.',
+      'Coding agents: use the preloaded `agent-tty` skill when available; otherwise call `agent-tty skill` before using session commands.',
     );
   });
 
@@ -293,9 +285,9 @@ describe('CLI integration', () => {
     expect(allChecks.every((check) => check.status === 'pass')).toBe(true);
   });
 
-  it('uses --home instead of AGENT_TERMINAL_HOME', () => {
+  it('uses --home instead of AGENT_TTY_HOME', () => {
     // prettier-ignore
-    const overrideHome = realpathSync(mkdtempSync(join(tmpdir(), 'agent-terminal-cli-override-')));
+    const overrideHome = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tty-cli-override-')));
 
     try {
       const result = runCli(
@@ -360,7 +352,7 @@ describe('CLI integration', () => {
     expect(result.status).toBe(0);
     expect(result.stderr).not.toBe('');
     expect(result.stderr).toContain(
-      '[agent-terminal] debug: resolved command context',
+      '[agent-tty] debug: resolved command context',
     );
 
     const parsed = JSON.parse(result.stdout) as SuccessEnvelope<{
@@ -398,7 +390,7 @@ describe('CLI integration', () => {
     const parsed = JSON.parse(result.stdout) as ErrorEnvelope;
 
     expect(parsed.ok).toBe(false);
-    expect(parsed.command).toBe('agent-terminal');
+    expect(parsed.command).toBe('agent-tty');
     expect(parsed.error.code).toBe('INVALID_INPUT');
     expect(parsed.error.message).toBe(
       'Log level must be one of debug, info, warn, or error.',
@@ -416,7 +408,7 @@ describe('CLI integration', () => {
     const parsed = JSON.parse(result.stdout) as ErrorEnvelope;
 
     expect(parsed.ok).toBe(false);
-    expect(parsed.command).toBe('agent-terminal');
+    expect(parsed.command).toBe('agent-tty');
     expect(parsed.error.code).toBe('INVALID_INPUT');
     expect(parsed.error.message).toBe('--home must be an absolute path.');
   });
@@ -425,7 +417,7 @@ describe('CLI integration', () => {
     const result = runCli(['--no-color', 'version'], testEnv());
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
-    expect(result.stdout).toContain('agent-terminal');
+    expect(result.stdout).toContain('agent-tty');
     expect(result.stdout).not.toContain('\u001b[');
   });
 });

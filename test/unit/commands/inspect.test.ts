@@ -58,7 +58,7 @@ import type { SessionStatus } from '../../../src/protocol/schemas.js';
 import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
-  home: '/tmp/agent-terminal',
+  home: '/tmp/agent-tty',
   timeoutMs: undefined,
   colorEnabled: true,
   logLevel: 'info',
@@ -114,7 +114,7 @@ describe('inspect command', () => {
     vi.clearAllMocks();
     mocks.sessionDir.mockImplementation(
       (_home: string, sessionId: string) =>
-        `/tmp/agent-terminal/sessions/${sessionId}`,
+        `/tmp/agent-tty/sessions/${sessionId}`,
     );
     mocks.manifestPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/session.json`,
@@ -150,14 +150,14 @@ describe('inspect command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'inspect',
     );
     expect(mocks.countEventLogEntries).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/events.jsonl',
+      '/tmp/agent-tty/sessions/session-01/events.jsonl',
     );
     expect(mocks.computeArtifactHealth).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01',
+      '/tmp/agent-tty/sessions/session-01',
     );
     expect(mocks.deriveTerminationCategory).toHaveBeenCalledWith(liveSession);
     const emitted = getLastEmitSuccessPayload() as {
@@ -227,7 +227,7 @@ describe('inspect command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'inspect',
     );
 
@@ -342,16 +342,16 @@ describe('inspect command', () => {
     });
 
     expect(mocks.reconcileSession).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01',
+      '/tmp/agent-tty/sessions/session-01',
     );
     expect(mocks.readManifest).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/session.json',
+      '/tmp/agent-tty/sessions/session-01/session.json',
     );
     expect(mocks.countEventLogEntries).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/events.jsonl',
+      '/tmp/agent-tty/sessions/session-01/events.jsonl',
     );
     expect(mocks.computeArtifactHealth).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01',
+      '/tmp/agent-tty/sessions/session-01',
     );
     expect(mocks.deriveTerminationCategory).toHaveBeenCalledWith(
       reconciledSession,

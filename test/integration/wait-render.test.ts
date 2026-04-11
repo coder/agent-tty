@@ -47,7 +47,7 @@ async function waitForOutputMarker(
 ): Promise<void> {
   const waitResult = runCli(
     ['wait', sessionId, '--idle-ms', '200', '--timeout', '10000', '--json'],
-    { AGENT_TERMINAL_HOME: testHome },
+    { AGENT_TTY_HOME: testHome },
     15_000,
   );
 
@@ -107,7 +107,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
   beforeEach(async () => {
     // prettier-ignore
-    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-wait-render-')));
+    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-wait-render-')));
     sessionId = createSession(testHome, [...SESSION_COMMAND]);
     await waitForOutputMarker(testHome, sessionId, 'booting');
 
@@ -250,7 +250,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
   it('matches text via CLI --text', () => {
     const result = runCli(
       ['wait', sessionId, '--text', 'Ready', '--timeout', '15000', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       20_000,
     );
 
@@ -276,7 +276,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
         '15000',
         '--json',
       ],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       20_000,
     );
 
@@ -294,7 +294,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
   it('detects screen stability via CLI --screen-stable-ms', () => {
     const readyResult = runCli(
       ['wait', sessionId, '--text', 'Ready', '--timeout', '15000', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       20_000,
     );
 
@@ -311,7 +311,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
         '10000',
         '--json',
       ],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       15_000,
     );
 
@@ -342,7 +342,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
         '5000',
         '--json',
       ],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       10_000,
     );
 
@@ -361,7 +361,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
   it('rejects non-integer CLI --cursor-row values', () => {
     const result = runCli(
       ['wait', sessionId, '--cursor-row', '1.5', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
 
     expect(result.exitCode).not.toBe(0);
@@ -374,7 +374,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
   it('rejects negative CLI --cursor-col values', () => {
     const result = runCli(['wait', sessionId, '--cursor-col', '-1', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
 
     expect(result.exitCode).not.toBe(0);
@@ -388,7 +388,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
   it('rejects mixing --exit with --text', () => {
     const result = runCli(
       ['wait', sessionId, '--exit', '--text', 'Ready', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
 
     expect(result.exitCode).not.toBe(0);
@@ -401,7 +401,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
   it('rejects --text and --regex together', () => {
     const result = runCli(
       ['wait', sessionId, '--text', 'foo', '--regex', 'bar', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
 
     expect(result.exitCode).not.toBe(0);
@@ -414,7 +414,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
   it('legacy wait --idle-ms still works', () => {
     const result = runCli(
       ['wait', sessionId, '--idle-ms', '300', '--timeout', '10000', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       15_000,
     );
 
@@ -433,7 +433,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     ]);
     const result = runCli(
       ['wait', shortSessionId, '--exit', '--timeout', '10000', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       15_000,
     );
 

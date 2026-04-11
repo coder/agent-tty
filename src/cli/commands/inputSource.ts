@@ -24,7 +24,7 @@ function createInvalidInputError(
 }
 
 function usageMessage(commandName: 'type' | 'paste' | 'run'): string {
-  return `Usage: agent-terminal ${commandName} <session-id> [text] [--file <path>]`;
+  return `Usage: agent-tty ${commandName} <session-id> [text] [--file <path>]`;
 }
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {

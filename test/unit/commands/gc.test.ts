@@ -216,7 +216,7 @@ describe('gc command helpers', () => {
   });
 
   it('removes exited sessions and never deletes running sessions', async () => {
-    const home = '/tmp/agent-terminal';
+    const home = '/tmp/agent-tty';
     const { dependencies, removedPaths, bytesBySession } =
       createMockDependencies(home, {
         'exited-01': {
@@ -260,7 +260,7 @@ describe('gc command helpers', () => {
   });
 
   it('skips deleting a session that restarts after the exited check', async () => {
-    const home = '/tmp/agent-terminal';
+    const home = '/tmp/agent-tty';
     const exitedManifest = createSessionRecord({
       sessionId: 'race-01',
       status: 'exited',
@@ -303,7 +303,7 @@ describe('gc command helpers', () => {
   });
 
   it('reports removals in dry-run mode without deleting anything', async () => {
-    const home = '/tmp/agent-terminal';
+    const home = '/tmp/agent-tty';
     const { dependencies, removedPaths, bytesBySession } =
       createMockDependencies(home, {
         'exited-01': {
@@ -335,7 +335,7 @@ describe('gc command helpers', () => {
   });
 
   it('filters removals by age threshold', async () => {
-    const home = '/tmp/agent-terminal';
+    const home = '/tmp/agent-tty';
     const { dependencies } = createMockDependencies(home, {
       'old-exited': {
         manifest: createSessionRecord({
@@ -373,7 +373,7 @@ describe('gc command helpers', () => {
   });
 
   it('handles rm failure gracefully and continues with other sessions', async () => {
-    const home = '/tmp/agent-terminal';
+    const home = '/tmp/agent-tty';
     const { dependencies, removedPaths, bytesBySession } =
       createMockDependencies(home, {
         'failed-01': {
@@ -425,7 +425,7 @@ describe('gc command helpers', () => {
   });
 
   it('only targets stale sessions when --stale-only is used', async () => {
-    const home = '/tmp/agent-terminal';
+    const home = '/tmp/agent-tty';
     const staleBefore = createSessionRecord({
       sessionId: 'stale-01',
       status: 'running',
