@@ -90,7 +90,7 @@ export async function runVersionCommand(options: {
     json: options.json,
     result,
     lines: [
-      `agent-terminal ${result.cliVersion}`,
+      `agent-tty ${result.cliVersion}`,
       `protocol ${result.protocolVersion}`,
       `runtime ${result.runtime.node} (${result.runtime.platform}/${result.runtime.arch})`,
     ],

@@ -2,7 +2,7 @@ You are an experienced, pragmatic software engineering AI agent. Do not over-eng
 
 # Project Overview
 
-`agent-terminal` is a CLI-first terminal automation tool for AI agents and humans. It creates long-lived PTY-backed sessions, exposes machine-friendly commands to control them, and produces inspectable artifacts such as semantic snapshots, PNG screenshots, asciicast recordings, and WebM exports.
+`agent-tty` is a CLI-first terminal automation tool for AI agents and humans. It creates long-lived PTY-backed sessions, exposes machine-friendly commands to control them, and produces inspectable artifacts such as semantic snapshots, PNG screenshots, asciicast recordings, and WebM exports.
 
 The current implementation is a TypeScript/Node v1 with these main building blocks:
 
@@ -13,7 +13,7 @@ The current implementation is a TypeScript/Node v1 with these main building bloc
 - **Vitest, ESLint, Prettier, and TypeScript** for quality gates.
 - **mise** as the canonical task runner in CI.
 
-Session state is stored under `~/.agent-terminal` by default. In tests and automation, prefer an isolated absolute `AGENT_TERMINAL_HOME` instead of writing into the real home directory.
+Session state is stored under `~/.agent-tty` by default. In tests and automation, prefer an isolated absolute `AGENT_TTY_HOME` instead of writing into the real home directory.
 
 # Reference
 
@@ -105,12 +105,12 @@ bash dogfood/generate-week3-bundles.sh
 find dogfood -type f -name 'commands.sh' | sort
 ```
 
-Development server: **none**. This is a CLI project, so iterative development usually means running `npx tsx src/cli/main.ts <command>` against an isolated `AGENT_TERMINAL_HOME`.
+Development server: **none**. This is a CLI project, so iterative development usually means running `npx tsx src/cli/main.ts <command>` against an isolated `AGENT_TTY_HOME`.
 
 # Patterns
 
 - **Do use `--json` for automation and prefer direct CLI invocation (`npx tsx src/cli/main.ts ...`) while developing.** Tests and design docs assume automation consumers read JSON envelopes. **Do not** scrape human-readable output when a JSON mode exists, and do not rely on noisy `npm run` wrappers when you need machine-parseable JSON.
-- **Do isolate session homes in tests.** Follow the pattern in `test/helpers.ts` and `test/e2e/helpers.ts`: create a temp directory, set absolute `AGENT_TERMINAL_HOME`, clean it up, and destroy any surviving sessions. **Do not** let tests mutate `~/.agent-terminal`.
+- **Do isolate session homes in tests.** Follow the pattern in `test/helpers.ts` and `test/e2e/helpers.ts`: create a temp directory, set absolute `AGENT_TTY_HOME`, clean it up, and destroy any surviving sessions. **Do not** let tests mutate `~/.agent-tty`.
 - **Do fail fast with assertions and schemas.** Existing code uses `invariant()`, `assertString()`, and `.safeParse()`/`.strict()` heavily. **Do not** silently coerce invalid paths, session IDs, or manifest data.
 - **Do preserve the event-log-as-truth model.** New snapshot, screenshot, wait, or export features should flow through replayable event/state data. **Do not** add one-off state that only live PTY code can see.
 - **Do keep storage writes inside validated helpers.** Path resolution in `src/storage/sessionPaths.ts`, manifest writers, and artifact helpers intentionally guard against path escape and invalid filenames. **Do not** write manifest-like files with ad hoc `fs.writeFile()` logic.
@@ -118,7 +118,7 @@ Development server: **none**. This is a CLI project, so iterative development us
 - **Do update coupled limits together.** `src/host/eventLog.ts` and `src/host/replay.ts` both enforce the 50 MB event-log limit. **Do not** change one without the other.
 - **Do add tests at the right layer.** Small parser/validation changes usually belong in `test/unit`; CLI wiring and temp-home behavior fit `test/integration`; renderer/artifact flows belong in `test/e2e`.
 
-- **Do keep the public `skills/agent-terminal/` artifact binary-first.** The committed public skill and public-facing skill docs must use `agent-terminal ...`, not repo-local `npx`, `tsx`, or `src/cli/main.ts` invocations. When you execute those examples from this source tree, translate them locally to `npx tsx src/cli/main.ts ...`, but do not commit that substitution back into the public skill or README skill-install guidance.
+- **Do keep the public `skills/agent-tty/` artifact binary-first.** The committed public skill and public-facing skill docs must use `agent-tty ...`, not repo-local `npx`, `tsx`, or `src/cli/main.ts` invocations. When you execute those examples from this source tree, translate them locally to `npx tsx src/cli/main.ts ...`, but do not commit that substitution back into the public skill or README skill-install guidance.
 - **Do teach the terminal workflow the public skill is supposed to reinforce.** Prefer `--home`, `--json`, `run`, `wait`, `snapshot`, `screenshot`, and `record export` when writing or maintaining public skill examples. **Do not** teach `tmux`, blind `sleep`, or out-of-band screenshots as the primary workflow.
 
 ## Testing patterns

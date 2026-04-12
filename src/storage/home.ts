@@ -6,7 +6,7 @@ import process from 'node:process';
 
 import { invariant } from '../util/assert.js';
 
-const DEFAULT_HOME_DIRECTORY_NAME = '.agent-terminal';
+const DEFAULT_HOME_DIRECTORY_NAME = '.agent-tty';
 
 function validateConfiguredHome(
   configuredHome: string,
@@ -24,18 +24,15 @@ function validateConfiguredHome(
 }
 
 export function resolveHome(
-  configuredHome = process.env.AGENT_TERMINAL_HOME,
+  configuredHome = process.env.AGENT_TTY_HOME,
 ): string {
   if (configuredHome !== undefined) {
-    return validateConfiguredHome(configuredHome, 'AGENT_TERMINAL_HOME');
+    return validateConfiguredHome(configuredHome, 'AGENT_TTY_HOME');
   }
 
   const normalized = normalize(join(homedir(), DEFAULT_HOME_DIRECTORY_NAME));
 
-  invariant(
-    isAbsolute(normalized),
-    'resolved agent-terminal home must be absolute',
-  );
+  invariant(isAbsolute(normalized), 'resolved agent-tty home must be absolute');
 
   try {
     return realpathSync(normalized);
@@ -45,7 +42,7 @@ export function resolveHome(
 }
 
 export async function ensureHome(
-  configuredHome = process.env.AGENT_TERMINAL_HOME,
+  configuredHome = process.env.AGENT_TTY_HOME,
 ): Promise<string> {
   const home = resolveHome(configuredHome);
 

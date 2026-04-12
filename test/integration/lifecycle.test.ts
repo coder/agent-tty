@@ -60,7 +60,7 @@ let testHome = '';
 describe('lifecycle integration', { timeout: 30000 }, () => {
   beforeEach(async () => {
     // prettier-ignore
-    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-home-')));
+    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
   });
 
   afterEach(async () => {
@@ -70,7 +70,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
   it('full lifecycle: create → list → inspect → destroy', () => {
     const createResult = runCli(
       ['create', '--json', '--', '/bin/sh', '-c', 'echo ready; sleep 30'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
     expect(createResult.status).toBe(0);
     expect(createResult.stderr).toBe('');
@@ -83,7 +83,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(sessionId.length).toBeGreaterThan(0);
 
     const listResult = runCli(['list', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(listResult.status).toBe(0);
     expect(listResult.stderr).toBe('');
@@ -103,7 +103,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(listedSession?.pid).toBeTypeOf('number');
 
     const inspectResult = runCli(['inspect', sessionId, '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(inspectResult.status).toBe(0);
     expect(inspectResult.stderr).toBe('');
@@ -131,7 +131,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(listedSession?.pid).toBe(inspectEnvelope.result.session.childPid);
 
     const destroyResult = runCli(['destroy', sessionId, '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(destroyResult.status).toBe(0);
     expect(destroyResult.stderr).toBe('');
@@ -148,7 +148,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
   it('exited sessions hidden by default list, visible with --all', () => {
     const createResult = runCli(
       ['create', '--json', '--', '/bin/sh', '-c', 'echo done; sleep 30'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
     expect(createResult.status).toBe(0);
     expect(createResult.stderr).toBe('');
@@ -157,13 +157,13 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     ).result.sessionId;
 
     const destroyResult = runCli(['destroy', sessionId, '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(destroyResult.status).toBe(0);
     expect(destroyResult.stderr).toBe('');
 
     const listDefault = runCli(['list', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(listDefault.status).toBe(0);
     expect(listDefault.stderr).toBe('');
@@ -177,7 +177,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     ).toBeUndefined();
 
     const listAll = runCli(['list', '--all', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(listAll.status).toBe(0);
     expect(listAll.stderr).toBe('');
@@ -218,7 +218,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         '-c',
         'printf "%s|%s|%s" "$FOO" "$BAZ" "$TERM"; exit 0',
       ],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
     expect(createResult.status).toBe(0);
     expect(createResult.stderr).toBe('');
@@ -245,7 +245,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(manifest.term).toBe('vt100');
 
     const listResult = runCli(['list', '--all', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(listResult.status).toBe(0);
     expect(listResult.stderr).toBe('');
@@ -293,7 +293,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         '-c',
         'sleep 30',
       ],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
     expect(createResult.status).toBe(0);
     expect(createResult.stderr).toBe('');
@@ -324,7 +324,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         '-c',
         'sleep 30',
       ],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
     expect(createResult.status).toBe(0);
     expect(createResult.stderr).toBe('');
@@ -360,7 +360,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     await chmod(shellPath, 0o755);
 
     const createResult = runCli(['create', '--shell', shellPath, '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(createResult.status).toBe(0);
     expect(createResult.stderr).toBe('');
@@ -382,7 +382,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(await readFile(shellMarkerPath, 'utf8')).toContain('custom-shell');
 
     const typeResult = runCli(['type', sessionId, 'exit\n', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(typeResult.status).toBe(0);
     expect(typeResult.stderr).toBe('');
@@ -400,7 +400,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         '-c',
         'exit 0',
       ],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
     expect(createResult.status).toBe(2);
     expect(createResult.stderr).toBe('');
@@ -415,7 +415,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     const missingShellPath = join(testHome, 'missing-shell.sh');
     const createResult = runCli(
       ['create', '--shell', missingShellPath, '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
     expect(createResult.status).toBe(2);
     expect(createResult.stderr).toBe('');
@@ -478,7 +478,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     await sleep(1000);
 
     const listResult = runCli(['list', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(
       listResult.status,
@@ -503,7 +503,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     ).toBeUndefined();
 
     const listAllResult = runCli(['list', '--all', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(
       listAllResult.status,
@@ -573,7 +573,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     ).toContain(String(hostPid));
 
     const gcResult = runCli(['gc', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(
       gcResult.status,
@@ -606,7 +606,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     ).toBeGreaterThan(0);
 
     const listAfterGcResult = runCli(['list', '--all', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(
       listAfterGcResult.status,
@@ -646,7 +646,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(session.status).toBe('destroyed');
 
     const typeResult = runCli(['type', sessionId, 'hello', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(typeResult.status).not.toBe(0);
     expect(typeResult.stderr).toBe('');
@@ -673,7 +673,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     const snapshotResult = runCli(
       ['snapshot', sessionId, '--format', 'text', '--json'],
       {
-        AGENT_TERMINAL_HOME: testHome,
+        AGENT_TTY_HOME: testHome,
       },
     );
     expect(snapshotResult.status).toBe(0);
@@ -691,7 +691,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
   it('inspect nonexistent session returns SESSION_NOT_FOUND', () => {
     const result = runCli(['inspect', 'NONEXISTENT', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toBe('');
@@ -702,7 +702,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
   it('send-keys to non-existent session returns SESSION_NOT_FOUND', () => {
     const result = runCli(['send-keys', 'NONEXISTENT', 'Enter', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toBe('');
@@ -713,7 +713,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
   it('destroy non-existent session returns SESSION_NOT_FOUND', () => {
     const result = runCli(['destroy', 'NONEXISTENT', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toBe('');
@@ -732,7 +732,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         '-c',
         'echo marker-test-output; exit 0',
       ],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
     expect(createResult.status).toBe(0);
     expect(createResult.stderr).toBe('');
@@ -767,7 +767,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(exitEvents[0]?.payload.exitCode).toBe(0);
 
     const destroyResult = runCli(['destroy', sessionId, '--force', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(destroyResult.status).toBe(0);
   });

@@ -16,7 +16,7 @@ import {
 } from '../helpers.js';
 
 function runMixedActionSequence(testHome: string, sessionId: string): void {
-  const env = { AGENT_TERMINAL_HOME: testHome };
+  const env = { AGENT_TTY_HOME: testHome };
 
   const typeResult = runCli(['type', sessionId, 'hello', '--json'], env);
   expect(typeResult.status).toBe(0);
@@ -57,7 +57,7 @@ let testHome = '';
 describe('event-log integration', { timeout: 30000 }, () => {
   beforeEach(async () => {
     // prettier-ignore
-    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-home-')));
+    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
   });
 
   afterEach(async () => {

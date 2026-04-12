@@ -47,7 +47,7 @@ function normalizeOutput(output: string): string {
 function waitForIdle(testHome: string, sessionId: string): void {
   const result = runCli(
     ['wait', sessionId, '--idle-ms', '300', '--timeout', '10000', '--json'],
-    { AGENT_TERMINAL_HOME: testHome },
+    { AGENT_TTY_HOME: testHome },
     15_000,
   );
 
@@ -61,7 +61,7 @@ function waitForIdle(testHome: string, sessionId: string): void {
 function waitForExit(testHome: string, sessionId: string): void {
   const result = runCli(
     ['wait', sessionId, '--exit', '--timeout', '10000', '--json'],
-    { AGENT_TERMINAL_HOME: testHome },
+    { AGENT_TTY_HOME: testHome },
     15_000,
   );
 
@@ -84,7 +84,7 @@ describe('record export integration', { timeout: 120_000 }, () => {
 
   beforeEach(async () => {
     // prettier-ignore
-    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-record-export-')));
+    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-record-export-')));
   });
 
   afterEach(async () => {
@@ -101,13 +101,13 @@ describe('record export integration', { timeout: 120_000 }, () => {
     waitForIdle(testHome, sessionId);
 
     const typeResult = runCli(['type', sessionId, 'hello export', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(typeResult.status).toBe(0);
     expect(typeResult.stderr).toBe('');
 
     const enterResult = runCli(['send-keys', sessionId, 'Enter', '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
     expect(enterResult.status).toBe(0);
     expect(enterResult.stderr).toBe('');
@@ -116,7 +116,7 @@ describe('record export integration', { timeout: 120_000 }, () => {
 
     const exportResult = runCli(
       ['record', 'export', sessionId, '--format', 'asciicast', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       15_000,
     );
     expect(exportResult.status).toBe(0);
@@ -171,7 +171,7 @@ describe('record export integration', { timeout: 120_000 }, () => {
 
     const secondExportResult = runCli(
       ['record', 'export', sessionId, '--format', 'asciicast', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       15_000,
     );
     expect(secondExportResult.status).toBe(0);
@@ -225,7 +225,7 @@ describe('record export integration', { timeout: 120_000 }, () => {
 
     const exportResult = runCli(
       ['record', 'export', sessionId, '--format', 'asciicast', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       15_000,
     );
     expect(exportResult.status).toBe(0);
@@ -258,7 +258,7 @@ describe('record export integration', { timeout: 120_000 }, () => {
 
     const exportResult = runCli(
       ['record', 'export', sessionId, '--format', 'webm', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       120_000,
     );
     expect(exportResult.status).toBe(0);
@@ -316,7 +316,7 @@ describe('record export integration', { timeout: 120_000 }, () => {
 
     const exportResult = runCli(
       ['record', 'export', sessionId, '--format', 'webm', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       120_000,
     );
     expect(exportResult.status).toBe(0);
@@ -364,7 +364,7 @@ describe('record export integration', { timeout: 120_000 }, () => {
   it('rejects invalid export formats', () => {
     const result = runCli(
       ['record', 'export', 'session-01', '--format', 'bogus', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       15_000,
     );
 

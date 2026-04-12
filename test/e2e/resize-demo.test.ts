@@ -34,7 +34,7 @@ interface SendKeysResult {
 }
 
 function testEnv(home: string): Record<string, string> {
-  return { AGENT_TERMINAL_HOME: home };
+  return { AGENT_TTY_HOME: home };
 }
 
 describe('resize-demo e2e', { timeout: 30_000 }, () => {

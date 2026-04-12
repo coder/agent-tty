@@ -79,7 +79,7 @@ let eventLogPath = '';
 describe('replay helpers', () => {
   beforeEach(async () => {
     // prettier-ignore
-    tempDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-replay-')));
+    tempDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-replay-')));
     eventLogPath = join(tempDir, 'events.jsonl');
   });
 

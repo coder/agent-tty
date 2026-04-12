@@ -100,12 +100,12 @@ describe('doctor command', () => {
     originalHome = process.env.HOME;
     originalPlaywrightBrowsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
     // prettier-ignore
-    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-doctor-home-')));
-    process.env.AGENT_TERMINAL_HOME = testHome;
+    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-doctor-home-')));
+    process.env.AGENT_TTY_HOME = testHome;
   });
 
   afterEach(async () => {
-    delete process.env.AGENT_TERMINAL_HOME;
+    delete process.env.AGENT_TTY_HOME;
     if (originalHome === undefined) {
       delete process.env.HOME;
     } else {
@@ -182,29 +182,29 @@ describe('doctor command', () => {
     },
   );
 
-  it('reports the default location when AGENT_TERMINAL_HOME is not explicitly set', () => {
-    delete process.env.AGENT_TERMINAL_HOME;
+  it('reports the default location when AGENT_TTY_HOME is not explicitly set', () => {
+    delete process.env.AGENT_TTY_HOME;
 
     expect(runHomeIsolationCheck()).toBe(
       'Agent-terminal home uses default location',
     );
   });
 
-  it('reports an explicit system home location when AGENT_TERMINAL_HOME matches HOME', () => {
+  it('reports an explicit system home location when AGENT_TTY_HOME matches HOME', () => {
     process.env.HOME = testHome;
-    process.env.AGENT_TERMINAL_HOME = testHome;
+    process.env.AGENT_TTY_HOME = testHome;
 
     expect(runHomeIsolationCheck()).toBe(
       'Agent-terminal home is explicitly set to system home location',
     );
   });
 
-  it('reports an isolated agent-terminal home when AGENT_TERMINAL_HOME differs from HOME', async () => {
+  it('reports an isolated agent-tty home when AGENT_TTY_HOME differs from HOME', async () => {
     const systemHome = await realpath(
-      await mkdtemp(join(tmpdir(), 'agent-terminal-system-home-')),
+      await mkdtemp(join(tmpdir(), 'agent-tty-system-home-')),
     );
     process.env.HOME = systemHome;
-    process.env.AGENT_TERMINAL_HOME = testHome;
+    process.env.AGENT_TTY_HOME = testHome;
 
     try {
       expect(runHomeIsolationCheck()).toBe(
@@ -217,7 +217,7 @@ describe('doctor command', () => {
 
   it('passes browser_cache_accessible when PLAYWRIGHT_BROWSERS_PATH contains browser directories', async () => {
     const browserCachePath = await realpath(
-      await mkdtemp(join(tmpdir(), 'agent-terminal-browser-cache-')),
+      await mkdtemp(join(tmpdir(), 'agent-tty-browser-cache-')),
     );
     process.env.PLAYWRIGHT_BROWSERS_PATH = browserCachePath;
     await mkdir(join(browserCachePath, 'chromium-1234'));
@@ -276,7 +276,7 @@ describe('doctor command', () => {
 
   it('uses the HOME-based default Playwright cache path when no override is set', async () => {
     const systemHome = await realpath(
-      await mkdtemp(join(tmpdir(), 'agent-terminal-system-home-')),
+      await mkdtemp(join(tmpdir(), 'agent-tty-system-home-')),
     );
     const browserCachePath = join(systemHome, '.cache', 'ms-playwright');
     delete process.env.PLAYWRIGHT_BROWSERS_PATH;

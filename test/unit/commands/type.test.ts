@@ -36,7 +36,7 @@ import { runTypeCommand } from '../../../src/cli/commands/type.js';
 import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
-  home: '/tmp/agent-terminal',
+  home: '/tmp/agent-tty',
   timeoutMs: undefined,
   colorEnabled: true,
   logLevel: 'info',
@@ -70,7 +70,7 @@ describe('type command', () => {
     vi.clearAllMocks();
     mocks.sessionDir.mockImplementation(
       (_home: string, sessionId: string) =>
-        `/tmp/agent-terminal/sessions/${sessionId}`,
+        `/tmp/agent-tty/sessions/${sessionId}`,
     );
     mocks.manifestPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/session.json`,
@@ -99,7 +99,7 @@ describe('type command', () => {
       file: undefined,
     });
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'type',
       { text: 'hello\n' },
     );
@@ -123,7 +123,7 @@ describe('type command', () => {
       file: '/tmp/input.txt',
     });
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'type',
       { text: 'from-file\n' },
     );
@@ -141,7 +141,7 @@ describe('type command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'type',
       { text: 'hello\n\n' },
     );
@@ -156,7 +156,7 @@ describe('type command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'type',
       { text: 'hello' },
     );
@@ -174,7 +174,7 @@ describe('type command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'type',
       { text: '\n' },
     );

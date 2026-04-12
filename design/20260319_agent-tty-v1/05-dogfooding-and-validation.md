@@ -1,6 +1,6 @@
-# agent-terminal v1 dogfooding and validation
+# agent-tty v1 dogfooding and validation
 
-This document defines how to prove that `agent-terminal` actually works for TUI dogfooding.
+This document defines how to prove that `agent-tty` actually works for TUI dogfooding.
 
 It is intentionally prescriptive.
 
@@ -501,7 +501,7 @@ Every scenario directory should include `notes.md` using a template like:
 
 ## Command under test
 
-`agent-terminal ...`
+`agent-tty ...`
 
 ## Expected behavior
 

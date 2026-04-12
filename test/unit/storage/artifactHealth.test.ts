@@ -28,7 +28,7 @@ afterEach(async () => {
 
 async function createSessionDir(sessionId = 'session-01'): Promise<string> {
   const home = await realpath(
-    await mkdtemp(join(tmpdir(), 'agent-terminal-artifact-health-')),
+    await mkdtemp(join(tmpdir(), 'agent-tty-artifact-health-')),
   );
   temporaryDirectories.push(home);
   return join(home, sessionId);

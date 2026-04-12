@@ -20,7 +20,7 @@ npx playwright install chromium
 
 - Use `npx tsx src/cli/main.ts ...` while developing from the source tree.
 - Prefer `--json` when a workflow needs machine-readable output.
-- Use an isolated absolute `AGENT_TERMINAL_HOME` for tests and manual dogfooding.
+- Use an isolated absolute `AGENT_TTY_HOME` for tests and manual dogfooding.
 - Keep storage writes, manifests, and protocol updates inside the existing validated helpers and schemas.
 
 ## Validation
@@ -52,4 +52,4 @@ npm run intent:validate
 - Keep the root docs split clear: `README.md` for overview, `RELEASE.md` for current scope, `ROADMAP.md` for future scope.
 - Update [`design/README.md`](../design/README.md) when the active vs archived design split changes.
 - Update [`dogfood/CATALOG.md`](../dogfood/CATALOG.md) when you add or promote a reviewer-facing proof bundle.
-- Prefer public `agent-terminal ...` invocations in shipped skill/docs examples; do not commit repo-local `npx tsx src/cli/main.ts ...` substitutions into public-facing examples.
+- Prefer public `agent-tty ...` invocations in shipped skill/docs examples; do not commit repo-local `npx tsx src/cli/main.ts ...` substitutions into public-facing examples.

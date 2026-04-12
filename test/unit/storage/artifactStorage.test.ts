@@ -42,7 +42,7 @@ afterEach(async () => {
 
 async function createSessionDir(sessionId = 'session-01'): Promise<string> {
   // prettier-ignore
-  const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-artifacts-')));
+  const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-artifacts-')));
   temporaryDirectories.push(home);
   return join(home, sessionId);
 }

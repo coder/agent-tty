@@ -8,7 +8,7 @@ import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { assertString, invariant } from '../../util/assert.js';
 
 const COMMAND_NAME = 'skill';
-const SKILL_NAME = 'agent-terminal';
+const SKILL_NAME = 'agent-tty';
 const SKILL_SOURCE = 'packaged-file';
 
 export interface SkillResult {
@@ -24,10 +24,7 @@ export interface SkillDependencies {
 
 const DEFAULT_SKILL_DEPENDENCIES: SkillDependencies = {
   readFile: (path, encoding) => readFile(path, encoding),
-  skillFileUrl: new URL(
-    '../../../skills/agent-terminal/SKILL.md',
-    import.meta.url,
-  ),
+  skillFileUrl: new URL('../../../skills/agent-tty/SKILL.md', import.meta.url),
 };
 
 export async function loadPackagedSkillContent(

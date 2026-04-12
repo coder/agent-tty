@@ -34,7 +34,7 @@ const RENDER_WAIT_TIMEOUT_MS = 10_000;
 const WEBM_TIMEOUT_MS = 120_000;
 
 function testEnv(home: string): Record<string, string> {
-  return { AGENT_TERMINAL_HOME: home };
+  return { AGENT_TTY_HOME: home };
 }
 
 function withJsonFlag(args: string[]): string[] {

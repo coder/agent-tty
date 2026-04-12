@@ -6,19 +6,19 @@ The active reference set stays separate from the week-by-week project history so
 ## Start here
 
 1. [`ARCHITECTURE.md`](./ARCHITECTURE.md) — stable product and architecture overview.
-2. [`20260319_agent-terminal-v1/02-cli-contract.md`](./20260319_agent-terminal-v1/02-cli-contract.md) — CLI contract details.
-3. [`20260319_agent-terminal-v1/03-rendering-and-artifacts.md`](./20260319_agent-terminal-v1/03-rendering-and-artifacts.md) — replay, screenshot, and export model.
-4. [`20260319_agent-terminal-v1/05-dogfooding-and-validation.md`](./20260319_agent-terminal-v1/05-dogfooding-and-validation.md) — proof-bundle expectations.
+2. [`20260319_agent-tty-v1/02-cli-contract.md`](./20260319_agent-tty-v1/02-cli-contract.md) — CLI contract details.
+3. [`20260319_agent-tty-v1/03-rendering-and-artifacts.md`](./20260319_agent-tty-v1/03-rendering-and-artifacts.md) — replay, screenshot, and export model.
+4. [`20260319_agent-tty-v1/05-dogfooding-and-validation.md`](./20260319_agent-tty-v1/05-dogfooding-and-validation.md) — proof-bundle expectations.
 
 ## Active reference set
 
 The original v1 design review produced a focused reference set that is still useful as evergreen technical documentation:
 
-- [`20260319_agent-terminal-v1/01-architecture.md`](./20260319_agent-terminal-v1/01-architecture.md)
-- [`20260319_agent-terminal-v1/02-cli-contract.md`](./20260319_agent-terminal-v1/02-cli-contract.md)
-- [`20260319_agent-terminal-v1/03-rendering-and-artifacts.md`](./20260319_agent-terminal-v1/03-rendering-and-artifacts.md)
-- [`20260319_agent-terminal-v1/04-implementation-plan.md`](./20260319_agent-terminal-v1/04-implementation-plan.md)
-- [`20260319_agent-terminal-v1/05-dogfooding-and-validation.md`](./20260319_agent-terminal-v1/05-dogfooding-and-validation.md)
+- [`20260319_agent-tty-v1/01-architecture.md`](./20260319_agent-tty-v1/01-architecture.md)
+- [`20260319_agent-tty-v1/02-cli-contract.md`](./20260319_agent-tty-v1/02-cli-contract.md)
+- [`20260319_agent-tty-v1/03-rendering-and-artifacts.md`](./20260319_agent-tty-v1/03-rendering-and-artifacts.md)
+- [`20260319_agent-tty-v1/04-implementation-plan.md`](./20260319_agent-tty-v1/04-implementation-plan.md)
+- [`20260319_agent-tty-v1/05-dogfooding-and-validation.md`](./20260319_agent-tty-v1/05-dogfooding-and-validation.md)
 
 ## Historical archive
 

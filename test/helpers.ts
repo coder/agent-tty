@@ -121,7 +121,7 @@ export function createSession(
   command: string[] = ['/bin/sh', '-c', 'exec cat'],
 ): string {
   const result = runCli(['create', '--json', '--', ...command], {
-    AGENT_TERMINAL_HOME: testHome,
+    AGENT_TTY_HOME: testHome,
   });
   expect(result.status).toBe(0);
   expect(result.stderr).toBe('');
@@ -139,7 +139,7 @@ export function destroySession(testHome: string, sessionId: string): void {
   }
 
   runCli(['destroy', sessionId, '--json'], {
-    AGENT_TERMINAL_HOME: testHome,
+    AGENT_TTY_HOME: testHome,
   });
 }
 
@@ -165,7 +165,7 @@ export function inspectSession(
   sessionId: string,
 ): SessionRecord {
   const result = runCli(['inspect', sessionId, '--json'], {
-    AGENT_TERMINAL_HOME: testHome,
+    AGENT_TTY_HOME: testHome,
   });
   expect(result.status).toBe(0);
   expect(result.stderr).toBe('');

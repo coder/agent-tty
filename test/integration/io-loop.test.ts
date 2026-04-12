@@ -21,7 +21,7 @@ let testHome = '';
 describe('io-loop integration', { timeout: 30000 }, () => {
   beforeEach(async () => {
     // prettier-ignore
-    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-home-')));
+    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
   });
 
   afterEach(async () => {
@@ -38,7 +38,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       const typeResult = runCli(
         ['type', sessionId, 'echo test-marker', '--json'],
         {
-          AGENT_TERMINAL_HOME: testHome,
+          AGENT_TTY_HOME: testHome,
         },
       );
       expect(typeResult.status).toBe(0);
@@ -47,7 +47,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       const sendKeysResult = runCli(
         ['send-keys', sessionId, 'Enter', '--json'],
         {
-          AGENT_TERMINAL_HOME: testHome,
+          AGENT_TTY_HOME: testHome,
         },
       );
       expect(sendKeysResult.status).toBe(0);
@@ -55,7 +55,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
 
       const waitResult = runCli(
         ['wait', sessionId, '--idle-ms', '500', '--timeout', '5000', '--json'],
-        { AGENT_TERMINAL_HOME: testHome },
+        { AGENT_TTY_HOME: testHome },
         30000,
       );
       expect(waitResult.status).toBe(0);
@@ -92,7 +92,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       const start = Date.now();
       const waitResult = runCli(
         ['wait', sessionId, '--idle-ms', '1000', '--timeout', '5000', '--json'],
-        { AGENT_TERMINAL_HOME: testHome },
+        { AGENT_TTY_HOME: testHome },
         30000,
       );
       const elapsed = Date.now() - start;
@@ -118,7 +118,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       await sleep(500);
 
       const typeResult = runCli(['type', sessionId, 'keepalive', '--json'], {
-        AGENT_TERMINAL_HOME: testHome,
+        AGENT_TTY_HOME: testHome,
       });
       expect(typeResult.status).toBe(0);
       expect(typeResult.stderr).toBe('');
@@ -126,7 +126,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       const sendKeysResult = runCli(
         ['send-keys', sessionId, 'Enter', '--json'],
         {
-          AGENT_TERMINAL_HOME: testHome,
+          AGENT_TTY_HOME: testHome,
         },
       );
       expect(sendKeysResult.status).toBe(0);
@@ -134,7 +134,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
 
       const waitResult = runCli(
         ['wait', sessionId, '--idle-ms', '60000', '--timeout', '300', '--json'],
-        { AGENT_TERMINAL_HOME: testHome },
+        { AGENT_TTY_HOME: testHome },
         30000,
       );
       expect(waitResult.status).toBe(0);
@@ -165,7 +165,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
           '-c',
           'exec cat',
         ],
-        { AGENT_TERMINAL_HOME: testHome },
+        { AGENT_TTY_HOME: testHome },
       );
       expect(createResult.status).toBe(0);
       expect(createResult.stderr).toBe('');
@@ -177,7 +177,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
 
       const waitResult = runCli(
         ['wait', sessionId, '--exit', '--timeout', '10000', '--json'],
-        { AGENT_TERMINAL_HOME: testHome },
+        { AGENT_TTY_HOME: testHome },
         30000,
       );
       expect(waitResult.status).toBe(0);
@@ -212,7 +212,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
           '-c',
           'exec cat',
         ],
-        { AGENT_TERMINAL_HOME: testHome },
+        { AGENT_TTY_HOME: testHome },
       );
       expect(createResult.status).toBe(0);
       expect(createResult.stderr).toBe('');
@@ -239,7 +239,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       await sleep(500);
 
       const signalResult = runCli(['signal', sessionId, 'SIGTERM', '--json'], {
-        AGENT_TERMINAL_HOME: testHome,
+        AGENT_TTY_HOME: testHome,
       });
       expect(signalResult.status).toBe(0);
       expect(signalResult.stderr).toBe('');
@@ -257,7 +257,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
 
       const waitResult = runCli(
         ['wait', sessionId, '--exit', '--timeout', '5000', '--json'],
-        { AGENT_TERMINAL_HOME: testHome },
+        { AGENT_TTY_HOME: testHome },
         30000,
       );
       expect(waitResult.status).toBe(0);
@@ -286,7 +286,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
 
       const waitResult = runCli(
         ['wait', sessionId, '--exit', '--timeout', '5000', '--json'],
-        { AGENT_TERMINAL_HOME: testHome },
+        { AGENT_TTY_HOME: testHome },
         30000,
       );
       expect(waitResult.status).toBe(0);
@@ -314,7 +314,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
 
       const waitResult = runCli(
         ['wait', sessionId, '--exit', '--json'],
-        { AGENT_TERMINAL_HOME: testHome },
+        { AGENT_TTY_HOME: testHome },
         30000,
       );
       expect(waitResult.status).toBe(0);

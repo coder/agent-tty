@@ -44,7 +44,7 @@ import { createLogger } from '../../../src/util/logger.js';
 
 describe('create command', () => {
   const context = {
-    home: '/tmp/agent-terminal-home',
+    home: '/tmp/agent-tty-home',
     timeoutMs: undefined,
     colorEnabled: true,
     logLevel: 'info',
@@ -90,14 +90,14 @@ describe('create command', () => {
     vi.clearAllMocks();
     mocks.allocateSession.mockResolvedValue({
       sessionId: 'session-01',
-      sessionDirectory: '/tmp/agent-terminal-home/sessions/session-01',
+      sessionDirectory: '/tmp/agent-tty-home/sessions/session-01',
     });
     mocks.launchHost.mockReturnValue(12345);
     mocks.sendRpc.mockResolvedValue({ session: { sessionId: 'session-01' } });
     mocks.readManifestIfExists.mockResolvedValue(makeManifest());
     mocks.sessionDir.mockImplementation(
       (_home: string, sessionId: string) =>
-        `/tmp/agent-terminal-home/sessions/${sessionId}`,
+        `/tmp/agent-tty-home/sessions/${sessionId}`,
     );
     mocks.manifestPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/session.json`,

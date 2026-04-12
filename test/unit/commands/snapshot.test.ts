@@ -62,7 +62,7 @@ import { runSnapshotCommand } from '../../../src/cli/commands/snapshot.js';
 import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
-  home: '/tmp/agent-terminal',
+  home: '/tmp/agent-tty',
   timeoutMs: undefined,
   colorEnabled: true,
   logLevel: 'info',
@@ -166,10 +166,10 @@ function installOfflineReplaySuccessMock(
 describe('snapshot command', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mocks.resolveHome.mockReturnValue('/tmp/agent-terminal');
+    mocks.resolveHome.mockReturnValue('/tmp/agent-tty');
     mocks.sessionDir.mockImplementation(
       (_home: string, sessionId: string) =>
-        `/tmp/agent-terminal/sessions/${sessionId}`,
+        `/tmp/agent-tty/sessions/${sessionId}`,
     );
     mocks.manifestPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/session.json`,
@@ -220,7 +220,7 @@ describe('snapshot command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'snapshot',
       { format: 'structured', includeScrollback: false, includeCells: false },
     );
@@ -263,7 +263,7 @@ describe('snapshot command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'snapshot',
       { format: 'text', includeScrollback: false, includeCells: false },
     );
@@ -359,7 +359,7 @@ describe('snapshot command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'snapshot',
       {
         format: 'structured',
@@ -406,7 +406,7 @@ describe('snapshot command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'snapshot',
       { format: 'text', includeScrollback: true, includeCells: false },
     );
@@ -443,11 +443,11 @@ describe('snapshot command', () => {
 
     expect(mocks.sendRpc).not.toHaveBeenCalled();
     expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
-      { sessionDir: '/tmp/agent-terminal/sessions/session-01' },
+      { sessionDir: '/tmp/agent-tty/sessions/session-01' },
       expect.any(Function),
     );
     expect(mocks.ensureArtifactsDir).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01',
+      '/tmp/agent-tty/sessions/session-01',
     );
     expect(mocks.snapshotFilename).toHaveBeenCalledWith(5, 'structured');
     expect(mocks.writeTextFileAtomic).toHaveBeenCalledWith({
@@ -472,7 +472,7 @@ describe('snapshot command', () => {
       },
     });
     expect(mocks.appendArtifact).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01',
+      '/tmp/agent-tty/sessions/session-01',
       {
         kind: 'snapshot',
         filename: 'snapshot-5-structured.json',
@@ -667,12 +667,12 @@ describe('snapshot command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'snapshot',
       { format: 'text', includeScrollback: false, includeCells: false },
     );
     expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
-      { sessionDir: '/tmp/agent-terminal/sessions/session-01' },
+      { sessionDir: '/tmp/agent-tty/sessions/session-01' },
       expect.any(Function),
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({

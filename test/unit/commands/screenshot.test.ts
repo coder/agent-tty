@@ -71,7 +71,7 @@ import { runScreenshotCommand } from '../../../src/cli/commands/screenshot.js';
 import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
-  home: '/tmp/agent-terminal',
+  home: '/tmp/agent-tty',
   timeoutMs: undefined,
   colorEnabled: true,
   logLevel: 'info',
@@ -180,10 +180,10 @@ function mockOfflineReplayRendererSuccess(
 describe('screenshot command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.resolveHome.mockReturnValue('/tmp/agent-terminal');
+    mocks.resolveHome.mockReturnValue('/tmp/agent-tty');
     mocks.sessionDir.mockImplementation(
       (_home: string, sessionId: string) =>
-        `/tmp/agent-terminal/sessions/${sessionId}`,
+        `/tmp/agent-tty/sessions/${sessionId}`,
     );
     mocks.manifestPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/session.json`,
@@ -199,7 +199,7 @@ describe('screenshot command', () => {
       ...(entry as Record<string, unknown>),
     }));
     mocks.ensureArtifactsDir.mockResolvedValue(
-      '/tmp/agent-terminal/sessions/session-01/artifacts',
+      '/tmp/agent-tty/sessions/session-01/artifacts',
     );
     mocks.rename.mockResolvedValue(undefined);
     mocks.rm.mockResolvedValue(undefined);
@@ -220,7 +220,7 @@ describe('screenshot command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'screenshot',
       { profile: 'reference-dark' },
     );
@@ -258,7 +258,7 @@ describe('screenshot command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'screenshot',
       { profile: 'reference-dark', showCursor: true },
     );
@@ -287,7 +287,7 @@ describe('screenshot command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'screenshot',
       { profile: 'configured-profile' },
     );
@@ -313,7 +313,7 @@ describe('screenshot command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'screenshot',
       { profile: 'reference-light' },
     );
@@ -352,7 +352,7 @@ describe('screenshot command', () => {
     expect(mocks.sendRpc).not.toHaveBeenCalled();
     expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
       {
-        sessionDir: '/tmp/agent-terminal/sessions/session-01',
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
         profileName: 'reference-dark',
       },
       expect.any(Function),
@@ -380,7 +380,7 @@ describe('screenshot command', () => {
       },
     });
     expect(mocks.appendArtifact).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01',
+      '/tmp/agent-tty/sessions/session-01',
       expect.objectContaining({
         kind: 'screenshot',
         filename: 'screenshot-5-reference-dark.png',
@@ -487,7 +487,7 @@ describe('screenshot command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'screenshot',
       { profile: 'reference-dark' },
     );

@@ -27,7 +27,7 @@ interface CreateResult {
 const PNG_MAGIC_HEX = '89504e470d0a1a0a';
 
 function testEnv(home: string): Record<string, string> {
-  return { AGENT_TERMINAL_HOME: home };
+  return { AGENT_TTY_HOME: home };
 }
 
 function expectTextSnapshot(

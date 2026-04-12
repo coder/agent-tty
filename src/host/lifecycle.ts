@@ -454,7 +454,7 @@ export function launchHost(config: LaunchHostConfig): number {
       env: {
         ...process.env,
         ...config.env,
-        AGENT_TERMINAL_HOME: config.home,
+        AGENT_TTY_HOME: config.home,
         TERM: config.term,
       },
     },

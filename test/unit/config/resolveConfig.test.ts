@@ -13,7 +13,7 @@ const temporaryHomes: string[] = [];
 
 async function createTemporaryHome(): Promise<string> {
   // prettier-ignore
-  const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-config-')));
+  const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-config-')));
   temporaryHomes.push(home);
   return home;
 }

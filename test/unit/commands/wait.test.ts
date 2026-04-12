@@ -43,7 +43,7 @@ import { runWaitCommand } from '../../../src/cli/commands/wait.js';
 import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
-  home: '/tmp/agent-terminal',
+  home: '/tmp/agent-tty',
   timeoutMs: undefined,
   colorEnabled: true,
   logLevel: 'info',
@@ -145,10 +145,10 @@ function mockOfflineReplaySnapshot(
 describe('wait command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.resolveHome.mockReturnValue('/tmp/agent-terminal');
+    mocks.resolveHome.mockReturnValue('/tmp/agent-tty');
     mocks.sessionDir.mockImplementation(
       (_home: string, sessionId: string) =>
-        `/tmp/agent-terminal/sessions/${sessionId}`,
+        `/tmp/agent-tty/sessions/${sessionId}`,
     );
     mocks.manifestPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/session.json`,
@@ -271,7 +271,7 @@ describe('wait command', () => {
     await runWaitCommand(createOptions({ text: 'hello', timeout: 0 }));
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'waitForRender',
       {
         text: 'hello',
@@ -316,7 +316,7 @@ describe('wait command', () => {
     await runWaitCommand(createOptions({ waitForExit: true }));
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'wait',
       {
         exit: true,
@@ -340,7 +340,7 @@ describe('wait command', () => {
     await runWaitCommand(createOptions({ idleMs: 500 }));
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'wait',
       {
         exit: undefined,
@@ -369,7 +369,7 @@ describe('wait command', () => {
     await runWaitCommand(createOptions({ text: 'hello' }));
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'waitForRender',
       {
         text: 'hello',
@@ -401,7 +401,7 @@ describe('wait command', () => {
     await runWaitCommand(createOptions({ regex: '\\d+' }));
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'waitForRender',
       {
         text: undefined,
@@ -436,7 +436,7 @@ describe('wait command', () => {
     );
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'waitForRender',
       {
         text: 'hello',
@@ -470,7 +470,7 @@ describe('wait command', () => {
     await runWaitCommand(createOptions({ text: 'hello' }));
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-terminal/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'waitForRender',
       {
         text: 'hello',
@@ -483,7 +483,7 @@ describe('wait command', () => {
       605_000,
     );
     expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
-      { sessionDir: '/tmp/agent-terminal/sessions/session-01' },
+      { sessionDir: '/tmp/agent-tty/sessions/session-01' },
       expect.any(Function),
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
@@ -591,7 +591,7 @@ describe('wait command', () => {
       code: ERROR_CODES.SESSION_NOT_FOUND,
       details: {
         sessionId: 'session-01',
-        manifestPath: '/tmp/agent-terminal/sessions/session-01/session.json',
+        manifestPath: '/tmp/agent-tty/sessions/session-01/session.json',
       },
     });
     expect(mocks.sendRpc).not.toHaveBeenCalled();

@@ -35,4 +35,4 @@ export type {
   SessionStatus,
 } from './protocol/schemas.js';
 export type { ProtocolErrorCode } from './protocol/errors.js';
-export type { AgentTerminalConfig } from './config/resolveConfig.js';
+export type { AgentTtyConfig } from './config/resolveConfig.js';

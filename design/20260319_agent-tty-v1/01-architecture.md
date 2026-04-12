@@ -1,10 +1,10 @@
-# agent-terminal v1 architecture
+# agent-tty v1 architecture
 
 ## 1. Design principles
 
 ### 1.1 General-purpose first
 
-`agent-terminal` must be useful outside Mux.
+`agent-tty` must be useful outside Mux.
 
 Concretely, that means:
 
@@ -80,18 +80,18 @@ A per-session host gives simpler isolation:
 
 Public binary:
 
-- `agent-terminal`
+- `agent-tty`
 
 Internal host entrypoint:
 
-- `agent-terminal _host --session-id ...`
+- `agent-tty _host --session-id ...`
 
 The internal `_host` subcommand is not documented for end users and may change without semver guarantees.
 
 ## 3. Suggested repository layout for a standalone implementation
 
 ```text
-agent-terminal/
+agent-tty/
 ├── src/
 │   ├── cli/
 │   │   ├── main.ts
@@ -151,7 +151,7 @@ agent-terminal/
 ## 4. Session directory layout
 
 ```text
-~/.agent-terminal/
+~/.agent-tty/
 ├── config.json
 ├── sessions/
 │   └── <session-id>/

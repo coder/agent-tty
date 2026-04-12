@@ -54,30 +54,30 @@ describe('Logger', () => {
       {
         loggerLevel: 'debug' as const,
         expectedWrites: [
-          '[agent-terminal] debug: visible debug\n',
-          '[agent-terminal] info: visible info\n',
-          '[agent-terminal] warn: visible warn\n',
-          '[agent-terminal] error: visible error\n',
+          '[agent-tty] debug: visible debug\n',
+          '[agent-tty] info: visible info\n',
+          '[agent-tty] warn: visible warn\n',
+          '[agent-tty] error: visible error\n',
         ],
       },
       {
         loggerLevel: 'info' as const,
         expectedWrites: [
-          '[agent-terminal] info: visible info\n',
-          '[agent-terminal] warn: visible warn\n',
-          '[agent-terminal] error: visible error\n',
+          '[agent-tty] info: visible info\n',
+          '[agent-tty] warn: visible warn\n',
+          '[agent-tty] error: visible error\n',
         ],
       },
       {
         loggerLevel: 'warn' as const,
         expectedWrites: [
-          '[agent-terminal] warn: visible warn\n',
-          '[agent-terminal] error: visible error\n',
+          '[agent-tty] warn: visible warn\n',
+          '[agent-tty] error: visible error\n',
         ],
       },
       {
         loggerLevel: 'error' as const,
-        expectedWrites: ['[agent-terminal] error: visible error\n'],
+        expectedWrites: ['[agent-tty] error: visible error\n'],
       },
     ];
 
@@ -102,7 +102,7 @@ describe('Logger', () => {
 
     expect(logger.getLevel()).toBe('debug');
     expect(writes).toHaveLength(1);
-    expect(writes[0]).toContain('[agent-terminal] debug: context');
+    expect(writes[0]).toContain('[agent-tty] debug: context');
     expect(writes[0]).toContain('{"command":"doctor"}');
     expect(writes[0]).toContain('boom');
   });
@@ -122,33 +122,30 @@ describe('Logger', () => {
     expect(() => logger.debug('msg', BigInt(42))).not.toThrow();
 
     expect(writes).toEqual([
-      '[agent-terminal] debug: msg null\n',
-      '[agent-terminal] debug: msg undefined\n',
-      '[agent-terminal] debug: msg 42\n',
-      '[agent-terminal] debug: msg true\n',
-      '[agent-terminal] debug: msg [object Object]\n',
-      '[agent-terminal] debug: msg Symbol(test)\n',
-      '[agent-terminal] debug: msg 42\n',
+      '[agent-tty] debug: msg null\n',
+      '[agent-tty] debug: msg undefined\n',
+      '[agent-tty] debug: msg 42\n',
+      '[agent-tty] debug: msg true\n',
+      '[agent-tty] debug: msg [object Object]\n',
+      '[agent-tty] debug: msg Symbol(test)\n',
+      '[agent-tty] debug: msg 42\n',
     ]);
   });
 
   it('creates a process logger from env', () => {
     const { writes, sink } = createSink();
-    const logger = createProcessLogger(
-      { AGENT_TERMINAL_LOG_LEVEL: 'error' },
-      sink,
-    );
+    const logger = createProcessLogger({ AGENT_TTY_LOG_LEVEL: 'error' }, sink);
 
     logger.warn('hidden warn');
     logger.error('visible error');
 
-    expect(writes).toEqual(['[agent-terminal] error: visible error\n']);
+    expect(writes).toEqual(['[agent-tty] error: visible error\n']);
   });
 
   it('defaults process loggers to info when the env var is missing or undefined', () => {
     for (const env of [
       {},
-      { AGENT_TERMINAL_LOG_LEVEL: undefined },
+      { AGENT_TTY_LOG_LEVEL: undefined },
     ] satisfies Array<NodeJS.ProcessEnv>) {
       const { writes, sink } = createSink();
       const logger = createProcessLogger(env, sink);
@@ -158,7 +155,7 @@ describe('Logger', () => {
       logger.debug('hidden debug');
       logger.info('visible info');
 
-      expect(writes).toEqual(['[agent-terminal] info: visible info\n']);
+      expect(writes).toEqual(['[agent-tty] info: visible info\n']);
     }
   });
 

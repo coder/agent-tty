@@ -1,4 +1,4 @@
-# agent-terminal v1 implementation plan
+# agent-tty v1 implementation plan
 
 This plan is written so a follow-up AI coding agent can execute against it directly.
 
@@ -132,8 +132,8 @@ Create the initial project scaffold and the fundamental types.
 
 ### Dogfooding gate
 
-- run `agent-terminal version --json`,
-- run `agent-terminal doctor --json`,
+- run `agent-tty version --json`,
+- run `agent-tty doctor --json`,
 - capture a screenshot of the CLI output,
 - record a short terminal video showing both commands,
 - store artifacts under `dogfood/phase-0/`.
@@ -413,7 +413,7 @@ Fixture apps under `test/fixtures/apps/`:
 
 ### Acceptance criteria
 
-- every fixture can be launched by `agent-terminal create -- ...`,
+- every fixture can be launched by `agent-tty create -- ...`,
 - every fixture is used by at least one integration or e2e test,
 - the final proof bundle contains screenshots and videos for the critical flows.
 

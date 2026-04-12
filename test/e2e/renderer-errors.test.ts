@@ -66,7 +66,7 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
 
     const envelope = runCliErrorEnvelope(
       ['screenshot', sessionId, '--profile', 'nonexistent-profile'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
 
     expect(envelope.command).toBe('screenshot');
@@ -84,7 +84,7 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
 
     const envelope = runCliErrorEnvelope(
       ['screenshot', sessionId, '--profile', oversizedProfile],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
 
     expect(profileValidation.success).toBe(false);
@@ -121,14 +121,14 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
 
     const waitResult = runCli(
       ['wait', sessionId, '--exit', '--timeout', '10000', '--json'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       15_000,
     );
     expect(waitResult.exitCode).toBe(0);
     expect(waitResult.stderr).toBe('');
 
     const result = runCli(['snapshot', sessionId, '--json'], {
-      AGENT_TERMINAL_HOME: testHome,
+      AGENT_TTY_HOME: testHome,
     });
 
     expect(result.exitCode).toBe(0);
@@ -157,7 +157,7 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
 
     const envelope = runCliErrorEnvelope(
       ['wait', sessionId, '--text', repeatCharacter(1001)],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       15_000,
     );
 
@@ -173,7 +173,7 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
 
     const envelope = runCliErrorEnvelope(
       ['wait', sessionId, '--regex', repeatCharacter(201)],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       15_000,
     );
 
@@ -189,7 +189,7 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
 
     const envelope = runCliErrorEnvelope(
       ['wait', sessionId, '--regex', '(a+)+'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       15_000,
     );
 
@@ -204,7 +204,7 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
 
     const envelope = runCliErrorEnvelope(
       ['wait', sessionId, '--regex', '[invalid('],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
       15_000,
     );
 
@@ -219,7 +219,7 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
 
     const envelope = runCliErrorEnvelope(
       ['wait', sessionId, '--text', 'hello', '--regex', 'world'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
 
     expect(envelope.command).toBe('wait');
@@ -233,7 +233,7 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
 
     const envelope = runCliErrorEnvelope(
       ['wait', sessionId, '--exit', '--text', 'hello'],
-      { AGENT_TERMINAL_HOME: testHome },
+      { AGENT_TTY_HOME: testHome },
     );
 
     expect(envelope.command).toBe('wait');

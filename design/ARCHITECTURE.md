@@ -3,9 +3,9 @@ author: "@mux"
 date: 2026-03-19
 ---
 
-# agent-terminal architecture overview
+# agent-tty architecture overview
 
-`agent-terminal` is a CLI-first terminal automation system for AI agents and humans.
+`agent-tty` is a CLI-first terminal automation system for AI agents and humans.
 
 It is designed to let an agent:
 
@@ -17,7 +17,7 @@ It is designed to let an agent:
 - export replay artifacts that reviewers can inspect,
 - and later swap the reference renderer for native terminal backends.
 
-This design intentionally describes a **general product**, not a Mux-specific implementation. A future Mux integration should consume `agent-terminal` as an external CLI/runtime rather than baking Mux-specific assumptions into the design.
+This design intentionally describes a **general product**, not a Mux-specific implementation. A future Mux integration should consume `agent-tty` as an external CLI/runtime rather than baking Mux-specific assumptions into the design.
 
 ## Current shipped status (2026-03-26)
 
@@ -48,7 +48,7 @@ The stable contract and deferred work now have dedicated homes: use [`../RELEASE
 
 The recommended v1 shape is:
 
-1. **CLI-first** public surface: `agent-terminal ...`
+1. **CLI-first** public surface: `agent-tty ...`
 2. **No MCP in v1**
 3. **TypeScript/Node** implementation
 4. **One session-host process per terminal session**, not a global daemon
@@ -103,7 +103,7 @@ This shape optimizes for the constraints discussed so far:
 
 The public contract is the CLI and its JSON output, not an internal RPC API and not Mux tools.
 
-This keeps `agent-terminal` reusable by:
+This keeps `agent-tty` reusable by:
 
 - AI coding agents,
 - shell scripts,
@@ -170,7 +170,7 @@ The architecture reserves native backends for later:
 
 ## Tiered truth model
 
-`agent-terminal` should treat terminal truth as layered rather than singular.
+`agent-tty` should treat terminal truth as layered rather than singular.
 
 | Layer                  | Source of truth             | What it answers                                           |
 | ---------------------- | --------------------------- | --------------------------------------------------------- |
@@ -197,15 +197,15 @@ Asciicast and replay-video export remain intended follow-on capabilities rather 
 
 ## Deliverables in this design set
 
-This design file is the entry point. Detailed supporting docs live in the active reference set under `design/20260319_agent-terminal-v1/`, while historical planning/status material lives under `design/archive/`.
+This design file is the entry point. Detailed supporting docs live in the active reference set under `design/20260319_agent-tty-v1/`, while historical planning/status material lives under `design/archive/`.
 
 ### Active reference set
 
-- [01-architecture.md](./20260319_agent-terminal-v1/01-architecture.md)
-- [02-cli-contract.md](./20260319_agent-terminal-v1/02-cli-contract.md)
-- [03-rendering-and-artifacts.md](./20260319_agent-terminal-v1/03-rendering-and-artifacts.md)
-- [04-implementation-plan.md](./20260319_agent-terminal-v1/04-implementation-plan.md)
-- [05-dogfooding-and-validation.md](./20260319_agent-terminal-v1/05-dogfooding-and-validation.md)
+- [01-architecture.md](./20260319_agent-tty-v1/01-architecture.md)
+- [02-cli-contract.md](./20260319_agent-tty-v1/02-cli-contract.md)
+- [03-rendering-and-artifacts.md](./20260319_agent-tty-v1/03-rendering-and-artifacts.md)
+- [04-implementation-plan.md](./20260319_agent-tty-v1/04-implementation-plan.md)
+- [05-dogfooding-and-validation.md](./20260319_agent-tty-v1/05-dogfooding-and-validation.md)
 
 ### Historical archive
 
@@ -226,8 +226,8 @@ This design file is the entry point. Detailed supporting docs live in the active
 
 ```mermaid
 flowchart TD
-    CLI["agent-terminal CLI"] --> SessionCtl["Session host control socket"]
-    CLI --> Home["~/.agent-terminal"]
+    CLI["agent-tty CLI"] --> SessionCtl["Session host control socket"]
+    CLI --> Home["~/.agent-tty"]
 
     SessionCtl --> Host["Per-session host process"]
     Host --> PTY["node-pty PTY child"]

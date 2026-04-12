@@ -126,7 +126,7 @@ export class Logger {
       details.length === 0
         ? ''
         : ` ${details.map((detail) => formatLogDetail(detail)).join(' ')}`;
-    this.sink(`[agent-terminal] ${level}: ${message}${suffix}\n`);
+    this.sink(`[agent-tty] ${level}: ${message}${suffix}\n`);
   }
 }
 
@@ -138,5 +138,5 @@ export function createProcessLogger(
   env: NodeJS.ProcessEnv = process.env,
   sink?: LogSink,
 ): Logger {
-  return createLogger(resolveLogLevel(env.AGENT_TERMINAL_LOG_LEVEL), sink);
+  return createLogger(resolveLogLevel(env.AGENT_TTY_LOG_LEVEL), sink);
 }

@@ -21,7 +21,7 @@ async function createPlaywrightCacheHome(): Promise<{
   browserCachePath: string;
   home: string;
 }> {
-  const home = await createHomeDirectory('agent-terminal-browser-path-');
+  const home = await createHomeDirectory('agent-tty-browser-path-');
   const browserCachePath = join(home, '.cache', 'ms-playwright');
   await mkdir(join(browserCachePath, 'chromium-1234'), { recursive: true });
   return { browserCachePath, home };
@@ -67,7 +67,7 @@ describe('Playwright browser path resolution', () => {
   });
 
   it('resolves macOS browser cache from captured HOME', async () => {
-    const home = await createHomeDirectory('agent-terminal-browser-path-mac-');
+    const home = await createHomeDirectory('agent-tty-browser-path-mac-');
     const macCachePath = join(home, 'Library', 'Caches', 'ms-playwright');
     await mkdir(join(macCachePath, 'chromium-1234'), { recursive: true });
 
@@ -111,9 +111,7 @@ describe('Playwright browser path resolution', () => {
   });
 
   it('returns null without crashing when no browser cache is present', async () => {
-    const home = await createHomeDirectory(
-      'agent-terminal-browser-path-empty-',
-    );
+    const home = await createHomeDirectory('agent-tty-browser-path-empty-');
     const env: NodeJS.ProcessEnv = {};
 
     const resolution = ensurePlaywrightBrowsersPath({

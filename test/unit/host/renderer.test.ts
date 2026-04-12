@@ -179,7 +179,7 @@ describe('HostRendererManager', () => {
 
   beforeEach(async () => {
     // prettier-ignore
-    sessionDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-renderer-')));
+    sessionDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-')));
     backends = [];
     backendFactory = vi.fn(() => {
       const backend = createFakeBackend();

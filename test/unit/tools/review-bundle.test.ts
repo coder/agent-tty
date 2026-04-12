@@ -25,7 +25,7 @@ const tempDirs: string[] = [];
 
 async function createTempDir(): Promise<string> {
   // prettier-ignore
-  const directory = await realpath(await mkdtemp(join(tmpdir(), 'agent-terminal-review-bundle-')));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-review-bundle-')));
   tempDirs.push(directory);
   return directory;
 }
