@@ -181,7 +181,11 @@ async function main(): Promise<void> {
     .action(
       wrapAction(
         'skills get',
-        async (name: string, options: { json: boolean }, context: CommandContext) => {
+        async (
+          name: string,
+          options: { json: boolean },
+          context: CommandContext,
+        ) => {
           void context;
           await runSkillsGetCommand(name, options);
         },
@@ -195,7 +199,11 @@ async function main(): Promise<void> {
     .action(
       wrapAction(
         'skills path',
-        async (name: string, options: { json: boolean }, context: CommandContext) => {
+        async (
+          name: string,
+          options: { json: boolean },
+          context: CommandContext,
+        ) => {
           void context;
           await runSkillsPathCommand(name, options);
         },
