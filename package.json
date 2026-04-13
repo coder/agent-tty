@@ -1,6 +1,6 @@
 {
   "name": "agent-tty",
-  "version": "0.1.1-beta.0",
+  "version": "0.1.1-beta.2",
   "description": "Terminal automation CLI for AI agents and humans",
   "keywords": [
     "terminal",
