@@ -17,6 +17,7 @@ import {
   runSocketViabilityCheck,
   type DoctorDependencies,
 } from '../../../src/cli/commands/doctor.js';
+import { resolveDefaultPlaywrightBrowsersPath } from '../../../src/renderer/browserPath.js';
 
 const QUICK_TIMEOUT_MS = 5_000;
 
@@ -278,7 +279,15 @@ describe('doctor command', () => {
     const systemHome = await realpath(
       await mkdtemp(join(tmpdir(), 'agent-tty-system-home-')),
     );
-    const browserCachePath = join(systemHome, '.cache', 'ms-playwright');
+    const browserCachePath = resolveDefaultPlaywrightBrowsersPath(
+      systemHome,
+      process.platform,
+    );
+    if (browserCachePath === null) {
+      throw new Error(
+        `expected a default Playwright browser cache path for ${process.platform}`,
+      );
+    }
     delete process.env.PLAYWRIGHT_BROWSERS_PATH;
     process.env.HOME = systemHome;
     await mkdir(join(browserCachePath, 'chromium-1234'), { recursive: true });

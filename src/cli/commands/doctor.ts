@@ -19,7 +19,7 @@ import {
   type Socket,
 } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
-import { join, normalize } from 'node:path';
+import { dirname, join, normalize } from 'node:path';
 import process from 'node:process';
 
 import type { CommandContext } from '../context.js';
@@ -28,6 +28,7 @@ import { emitSuccess } from '../output.js';
 import type { CapabilityEntry } from '../../renderer/capabilities.js';
 
 import { createPty } from '../../pty/createPty.js';
+import { resolveDefaultPlaywrightBrowsersPath } from '../../renderer/browserPath.js';
 import { discoverCapabilities } from '../../renderer/capabilities.js';
 import {
   artifactPath,
@@ -217,7 +218,16 @@ function resolvePlaywrightBrowserCachePath(): string {
     return normalize(overridePath);
   }
 
-  return join(resolveSystemHomeDirectory(), '.cache', 'ms-playwright');
+  const browserCachePath = resolveDefaultPlaywrightBrowsersPath(
+    resolveSystemHomeDirectory(),
+    process.platform,
+  );
+  assert(
+    browserCachePath !== null,
+    `unsupported platform for default Playwright browser cache resolution: ${process.platform}`,
+  );
+
+  return normalize(browserCachePath);
 }
 
 function getDoctorDependencies(
@@ -533,6 +543,8 @@ export async function runSocketViabilityCheck(
     overrides,
     async (sessionDirectory, deps) => {
       const socketFile = socketPath(sessionDirectory);
+      await deps.mkdir(dirname(socketFile), { recursive: true });
+
       let server: Server | null = null;
       let client: Socket | null = null;
       let acceptedConnection = false;

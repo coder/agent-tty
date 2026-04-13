@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
-import { rename, rm } from 'node:fs/promises';
+import { mkdir, rename, rm } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import process from 'node:process';
 
 import { ulid } from 'ulid';
@@ -666,8 +667,7 @@ export async function runHost(sessionId: string): Promise<void> {
             return `${command}\nprintf '%s%s\\n' '${markerPart1}' '${markerPart2}'\n`;
           })()
         : `${command}\n`;
-      const encoded = `${encodePaste(injectedText)}${encodeKey('enter')}`;
-      pty.write(encoded);
+      pty.write(injectedText);
       lastActivityAt = Date.now();
 
       const seq = await eventLog.append('input_run', {
@@ -1247,6 +1247,7 @@ export async function runHost(sessionId: string): Promise<void> {
 
   try {
     await writeManifest(mPath, state.snapshot());
+    await mkdir(dirname(sPath), { recursive: true });
 
     if (!isSessionRunning(state)) {
       await initiateShutdown();

@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -48,7 +49,9 @@ afterEach(async () => {
 describe('session paths', () => {
   it('builds session-specific absolute paths', () => {
     const home = '/tmp/agent-tty-home';
+    const sessionId = 'session-01';
     const directory = sessionDir(home, 'session-01');
+    const expectedSocketPath = `/tmp/agent-tty/${crypto.createHash('sha256').update(home).digest('hex').slice(0, 8)}/${crypto.createHash('sha256').update(sessionId).digest('hex').slice(0, 12)}`;
 
     expect(directory).toBe('/tmp/agent-tty-home/sessions/session-01');
     expect(manifestPath(directory)).toBe(
@@ -57,9 +60,7 @@ describe('session paths', () => {
     expect(eventLogPath(directory)).toBe(
       '/tmp/agent-tty-home/sessions/session-01/events.jsonl',
     );
-    expect(socketPath(directory)).toBe(
-      '/tmp/agent-tty-home/sessions/session-01/host.sock',
-    );
+    expect(socketPath(directory)).toBe(expectedSocketPath);
   });
 
   it('asserts on invalid path helper inputs', () => {

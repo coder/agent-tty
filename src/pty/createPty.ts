@@ -1,3 +1,6 @@
+import { chmodSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import process from 'node:process';
 
 import type { IPty } from 'node-pty';
@@ -11,6 +14,57 @@ export interface PtyOptions {
   rows: number;
   env: Record<string, string>;
   term: string;
+}
+
+const EXECUTABLE_PERMISSION_MASK = 0o111;
+const require = createRequire(import.meta.url);
+const NODE_PTY_PACKAGE_DIRECTORY = dirname(
+  require.resolve('node-pty/package.json'),
+);
+
+function resolveDarwinSpawnHelperPath(): string | null {
+  if (process.platform !== 'darwin') {
+    return null;
+  }
+
+  const prebuildDirectory =
+    process.arch === 'arm64'
+      ? 'darwin-arm64'
+      : process.arch === 'x64'
+        ? 'darwin-x64'
+        : null;
+  if (prebuildDirectory === null) {
+    return null;
+  }
+
+  return join(
+    NODE_PTY_PACKAGE_DIRECTORY,
+    'prebuilds',
+    prebuildDirectory,
+    'spawn-helper',
+  );
+}
+
+function ensureDarwinSpawnHelperExecutable(): void {
+  const helperPath = resolveDarwinSpawnHelperPath();
+  if (helperPath === null) {
+    return;
+  }
+
+  try {
+    const helperStats = statSync(helperPath);
+    if (!helperStats.isFile()) {
+      return;
+    }
+
+    if ((helperStats.mode & EXECUTABLE_PERMISSION_MASK) !== 0) {
+      return;
+    }
+
+    chmodSync(helperPath, helperStats.mode | EXECUTABLE_PERMISSION_MASK);
+  } catch {
+    // Best-effort repair; node-pty will still surface a clear spawn failure.
+  }
 }
 
 export function createPty(options: PtyOptions): IPty {
@@ -34,6 +88,8 @@ export function createPty(options: PtyOptions): IPty {
     invariant(entryKey.length > 0, 'PTY env keys must not be empty');
     invariant(typeof entryValue === 'string', 'PTY env values must be strings');
   }
+
+  ensureDarwinSpawnHelperExecutable();
 
   return spawn(file, command.slice(1), {
     cwd,

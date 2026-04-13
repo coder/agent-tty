@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { resolveDefaultPlaywrightBrowsersPath } from '../../src/renderer/browserPath.js';
 import { resolveProfile } from '../../src/renderer/profiles.js';
 import type { ReplayInput } from '../../src/renderer/types.js';
 import { GhosttyWebBackend } from '../../src/renderer/ghosttyWeb/index.js';
@@ -127,9 +128,19 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
 
       await backend.boot();
 
+      const expectedBrowserCachePath = resolveDefaultPlaywrightBrowsersPath(
+        previousHome,
+        process.platform,
+      );
+      if (expectedBrowserCachePath === null) {
+        throw new Error(
+          `expected a default Playwright browser cache path for ${process.platform}`,
+        );
+      }
+
       expect(backend.isBooted).toBe(true);
       expect(process.env.PLAYWRIGHT_BROWSERS_PATH).toBe(
-        join(previousHome, '.cache', 'ms-playwright'),
+        expectedBrowserCachePath,
       );
     } finally {
       if (previousBrowsersPath === undefined) {
