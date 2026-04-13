@@ -12,13 +12,14 @@ import { packRelease } from './pack-release.mjs';
 
 const projectRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const npmCliPath = process.env.npm_execpath;
-const supportedArgs = new Set(['--skip-build']);
+const supportedArgs = new Set(['--exercise-git-install', '--skip-build']);
 
 for (const argument of process.argv.slice(2)) {
   assert(supportedArgs.has(argument), `unsupported argument: ${argument}`);
 }
 
 const skipBuild = process.argv.includes('--skip-build');
+const exerciseGitInstall = process.argv.includes('--exercise-git-install');
 
 const packageJson = JSON.parse(
   await readFile(join(projectRoot, 'package.json'), 'utf8'),
@@ -437,44 +438,48 @@ try {
   ]);
   await verifyInstalledCli('Tarball', tarballInstallPrefix);
 
-  logStep(
-    'Preparing clean git source to exercise npm prepare for git installs...',
-  );
-  const gitInstallPrefix = join(tempRoot, 'git-prefix');
-  const { gitUrl } = await createGitInstallSource();
-
-  logStep('Installing from git dependency URL into isolated prefix...');
-  const gitInstallResult = runNpm(
-    ['install', '-g', '--prefix', gitInstallPrefix, gitUrl],
-    { allowFailure: true },
-  );
-
-  if (gitInstallResult.status === 0) {
-    await verifyInstalledCli('Git', gitInstallPrefix);
-    logStep('Git dependency install route succeeded.');
-  } else {
-    assert(
-      isKnownGitInstallCaveat(gitInstallResult),
-      [
-        'git dependency install failed in an unexpected way',
-        gitInstallResult.stdout.length === 0
-          ? ''
-          : `stdout:\n${gitInstallResult.stdout}`,
-        gitInstallResult.stderr.length === 0
-          ? ''
-          : `stderr:\n${gitInstallResult.stderr}`,
-      ]
-        .filter((line) => line.length > 0)
-        .join('\n\n'),
-    );
+  if (exerciseGitInstall) {
     logStep(
-      'Git dependency install matched the known caveat path; tarball fallback remains the guaranteed route.',
+      'Preparing clean git source to exercise npm prepare for git installs...',
+    );
+    const gitInstallPrefix = join(tempRoot, 'git-prefix');
+    const { gitUrl } = await createGitInstallSource();
+
+    logStep('Installing from git dependency URL into isolated prefix...');
+    const gitInstallResult = runNpm(
+      ['install', '-g', '--prefix', gitInstallPrefix, gitUrl],
+      { allowFailure: true },
+    );
+
+    if (gitInstallResult.status === 0) {
+      await verifyInstalledCli('Git', gitInstallPrefix);
+      logStep('Git dependency install route succeeded.');
+    } else {
+      assert(
+        isKnownGitInstallCaveat(gitInstallResult),
+        [
+          'git dependency install failed in an unexpected way',
+          gitInstallResult.stdout.length === 0
+            ? ''
+            : `stdout:\n${gitInstallResult.stdout}`,
+          gitInstallResult.stderr.length === 0
+            ? ''
+            : `stderr:\n${gitInstallResult.stderr}`,
+        ]
+          .filter((line) => line.length > 0)
+          .join('\n\n'),
+      );
+      logStep(
+        'Git dependency install matched the known caveat path; tarball fallback remains the guaranteed route.',
+      );
+    }
+  } else {
+    logStep(
+      'Skipping git dependency install route; tarball install is the supported packaging path.',
     );
   }
 
-  logStep(
-    'Packaging smoke passed: tarball route succeeded, and the current git-install behavior was validated.',
-  );
+  logStep('Packaging smoke passed: tarball route succeeded.');
 } finally {
   await rm(tempRoot, { recursive: true, force: true });
 }
