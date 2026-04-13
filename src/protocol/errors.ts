@@ -21,6 +21,7 @@ export const ERROR_CODES = {
   PROTOCOL_ERROR: 'PROTOCOL_ERROR',
   EXPORT_ERROR: 'EXPORT_ERROR',
   REPLAY_ERROR: 'REPLAY_ERROR',
+  SKILL_NOT_FOUND: 'SKILL_NOT_FOUND',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
@@ -45,6 +46,7 @@ export const DEFAULT_ERROR_MESSAGES: Record<ProtocolErrorCode, string> = {
   [ERROR_CODES.PROTOCOL_ERROR]: 'Unexpected response from host.',
   [ERROR_CODES.EXPORT_ERROR]: 'Export failed.',
   [ERROR_CODES.REPLAY_ERROR]: 'Replay failed.',
+  [ERROR_CODES.SKILL_NOT_FOUND]: 'Skill not found.',
   [ERROR_CODES.INTERNAL_ERROR]: 'Internal error.',
 };
 

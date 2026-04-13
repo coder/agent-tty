@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-04-13T10:10:56.842Z",
+  "result": {
+    "format": "text",
+    "sessionId": "01KP34JQENXVMGTMHQW8GSTHJH",
+    "capturedAtSeq": 5,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 2,
+    "cursorCol": 7,
+    "text": "READY> Agent\nECHO: Agent\nREADY>\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  }
+}

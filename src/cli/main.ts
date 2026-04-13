@@ -20,7 +20,9 @@ import { runResizeCommand } from './commands/resize.js';
 import { runScreenshotCommand } from './commands/screenshot.js';
 import { runSendKeysCommand } from './commands/send-keys.js';
 import { runSignalCommand } from './commands/signal.js';
-import { runSkillCommand } from './commands/skill.js';
+import { runSkillsGetCommand } from './commands/skills/get.js';
+import { runSkillsListCommand } from './commands/skills/list.js';
+import { runSkillsPathCommand } from './commands/skills/path.js';
 import { runSnapshotCommand } from './commands/snapshot.js';
 import { runTypeCommand } from './commands/type.js';
 import { runVersionCommand } from './commands/version.js';
@@ -108,11 +110,9 @@ function wrapAction<Args extends unknown[]>(
 }
 
 const CODING_AGENT_HELP_INTRO =
-  'MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skill` before any other agent-tty command.';
+  'MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get agent-tty` before any other agent-tty command.';
 const CODING_AGENT_HELP_OUTRO =
-  'Coding agents: use the preloaded `agent-tty` skill when available; otherwise call `agent-tty skill` before using session commands.';
-const SKILL_COMMAND_DESCRIPTION =
-  'Fallback first step for coding agents: print the packaged skill if it is not already loaded';
+  'Coding agents: use the preloaded `agent-tty` skill when available; otherwise call `agent-tty skills get agent-tty` before using session commands.';
 
 async function main(): Promise<void> {
   const program = new Command()
@@ -156,16 +156,56 @@ async function main(): Promise<void> {
   program.addHelpText('beforeAll', `${CODING_AGENT_HELP_INTRO}\n\n`);
   program.addHelpText('afterAll', `\n${CODING_AGENT_HELP_OUTRO}\n`);
 
-  program
-    .command('skill')
-    .description(SKILL_COMMAND_DESCRIPTION)
+  const skillsCommand = program
+    .command('skills')
+    .description('Manage built-in skills');
+
+  skillsCommand
+    .command('list')
+    .description('List all bundled skills')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
-        'skill',
+        'skills list',
         async (options: { json: boolean }, context: CommandContext) => {
           void context;
-          await runSkillCommand(options);
+          await runSkillsListCommand(options);
+        },
+      ),
+    );
+
+  skillsCommand
+    .command('get <name>')
+    .description('Print a bundled skill by name')
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'skills get',
+        async (
+          name: string,
+          options: { json: boolean },
+          context: CommandContext,
+        ) => {
+          void context;
+          await runSkillsGetCommand(name, options);
+        },
+      ),
+    );
+
+  skillsCommand
+    .command('path <name>')
+    .description('Print the directory path of a bundled skill')
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'skills path',
+        async (
+          name: string,
+          options: { json: boolean },
+          context: CommandContext,
+        ) => {
+          void context;
+          await runSkillsPathCommand(name, options);
         },
       ),
     );

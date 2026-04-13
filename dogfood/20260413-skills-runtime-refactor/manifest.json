@@ -1,0 +1,30 @@
+{
+  "bundle": "20260413-skills-runtime-refactor",
+  "description": "Skills runtime refactor validation",
+  "date": "2026-04-13",
+  "gitCommit": "2026f5c",
+  "notes": "notes.md",
+  "commands": "commands.sh",
+  "commandLog": "command-log.tsv",
+  "artifacts": {
+    "skills-list.json": "skills list --json output",
+    "skills-get-agent-tty.json": "skills get agent-tty --json output",
+    "skills-get-dogfood-tui.json": "skills get dogfood-tui --json output",
+    "skills-path-agent-tty.json": "skills path agent-tty --json output",
+    "skills-path-dogfood-tui.json": "skills path dogfood-tui --json output",
+    "npm-pack-skill-files.txt": "skill-related files in npm pack --json --dry-run output",
+    "tui-doctor.json": "doctor --json output for the isolated dogfood session",
+    "tui-create.json": "session creation output for the hello-prompt fixture",
+    "tui-wait-ready.json": "wait output for the READY prompt",
+    "tui-snapshot-text.json": "text snapshot after submitting Agent",
+    "tui-screenshot-echo.json": "screenshot command output for the echoed prompt",
+    "tui-record-export-cast.json": "asciicast export output",
+    "tui-record-export-webm.json": "webm export output",
+    "tui-inspect-final.json": "inspect output after the fixture exited",
+    "screenshots/hello-prompt-echo.png": "copied screenshot proof from the isolated session",
+    "recordings/hello-prompt.cast": "asciicast recording of the dogfood-tui flow",
+    "recordings/hello-prompt.webm": "webm recording of the dogfood-tui flow",
+    "session-id.txt": "captured session ID",
+    "agent-tty-home.txt": "temporary isolated home path used for the session"
+  }
+}

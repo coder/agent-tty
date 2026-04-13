@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-04-13T10:10:53.803Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "ECHO: Agent",
+    "cursorRow": 2,
+    "cursorCol": 7,
+    "capturedAtSeq": 5
+  }
+}

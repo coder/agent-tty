@@ -40,7 +40,7 @@ If `mise` is unavailable, run:
 npm run verify
 ```
 
-If the public skill changed, also run:
+If the public bootstrap under `skills/` or the bundled runtime skills under `skill-data/` changed, also run:
 
 ```bash
 npm run intent:validate
@@ -59,6 +59,8 @@ npm run pack:release -- --pack-destination "$RELEASE_DIR" --metadata-file "$RELE
 cat "$RELEASE_DIR/package-metadata.json"
 sha256sum -c "$RELEASE_DIR"/*.tgz.sha256
 ```
+
+When skill packaging changes, also inspect `npm pack --dry-run` output to confirm the tarball still includes both `skills/` (bootstrap) and `skill-data/` (runtime skills).
 
 That command produces the same tarball, checksum, and metadata shape that the GitHub release workflow uploads and later reuses for npm publishing.
 

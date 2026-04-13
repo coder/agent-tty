@@ -41,7 +41,7 @@ Or use the combined entry point:
 npm run verify
 ```
 
-If you touch the public skill, also run:
+If you touch the public bootstrap under `skills/` or the bundled runtime skills under `skill-data/`, also run:
 
 ```bash
 npm run intent:validate
@@ -51,5 +51,6 @@ npm run intent:validate
 
 - Keep the root docs split clear: `README.md` for overview, `RELEASE.md` for current scope, `ROADMAP.md` for future scope.
 - Update [`design/README.md`](../design/README.md) when the active vs archived design split changes.
+- Keep the skill split clear in docs and packaging notes: `skills/` contains the thin public bootstrap, while `skill-data/` contains the canonical runtime skills served by `agent-tty skills get`.
 - Update [`dogfood/CATALOG.md`](../dogfood/CATALOG.md) when you add or promote a reviewer-facing proof bundle.
 - Prefer public `agent-tty ...` invocations in shipped skill/docs examples; do not commit repo-local `npx tsx src/cli/main.ts ...` substitutions into public-facing examples.

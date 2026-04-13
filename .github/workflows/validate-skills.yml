@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - 'skills/**'
+      - 'skill-data/**'
       - 'package.json'
       - '.github/workflows/validate-skills.yml'
   push:
@@ -12,6 +13,7 @@ on:
       - main
     paths:
       - 'skills/**'
+      - 'skill-data/**'
       - 'package.json'
       - '.github/workflows/validate-skills.yml'
 

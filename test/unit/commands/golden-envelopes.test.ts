@@ -1,8 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { buildSkillResult } from '../../../src/cli/commands/skill.js';
 import { buildVersionResult } from '../../../src/cli/commands/version.js';
+import {
+  SkillGetResultSchema,
+  SkillListResultSchema,
+  SkillPathResultSchema,
+  getBundledSkill,
+  getSkillPath,
+  listBundledSkills,
+} from '../../../src/skills/index.js';
 import {
   createErrorEnvelope,
   createSuccessEnvelope,
@@ -39,14 +46,6 @@ const VersionResultSchema = z
       })
       .strict(),
     capabilities: z.array(CapabilityEntrySchema).optional(),
-  })
-  .strict();
-
-const SkillResultSchema = z
-  .object({
-    name: z.literal('agent-tty'),
-    source: z.literal('packaged-file'),
-    content: z.string().min(1),
   })
   .strict();
 
@@ -989,11 +988,36 @@ describe('JSON envelope contracts', () => {
     expect(InspectResultSchema.safeParse(result).success).toBe(true);
   });
 
-  it('locks the skill success envelope shape', async () => {
-    const result = await buildSkillResult();
+  it('locks the skills list success envelope shape', () => {
+    const result = { skills: listBundledSkills() };
 
-    expectLockedSuccessEnvelope('skill', result);
-    expect(SkillResultSchema.safeParse(result).success).toBe(true);
+    expectLockedSuccessEnvelope('skills list', result);
+    expect(SkillListResultSchema.safeParse(result).success).toBe(true);
+  });
+
+  it('locks the skills get success envelope shape', () => {
+    const skill = getBundledSkill('agent-tty');
+    const result = {
+      name: skill.frontmatter.name,
+      source: skill.source,
+      path: skill.path,
+      content: skill.content,
+    };
+
+    expectLockedSuccessEnvelope('skills get', result);
+    expect(SkillGetResultSchema.safeParse(result).success).toBe(true);
+  });
+
+  it('locks the skills path success envelope shape', () => {
+    const skill = getBundledSkill('agent-tty');
+    const result = {
+      name: skill.frontmatter.name,
+      source: skill.source,
+      path: getSkillPath('agent-tty'),
+    };
+
+    expectLockedSuccessEnvelope('skills path', result);
+    expect(SkillPathResultSchema.safeParse(result).success).toBe(true);
   });
 
   it('locks the version success envelope shape', async () => {

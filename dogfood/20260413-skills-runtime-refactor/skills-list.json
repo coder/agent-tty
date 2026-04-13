@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "command": "skills list",
+  "timestamp": "2026-04-13T10:00:39.624Z",
+  "result": {
+    "skills": [
+      {
+        "name": "agent-tty",
+        "description": "Terminal and TUI automation CLI for AI agents. Use when the user needs to create a terminal session, run a command in a terminal, automate an interactive CLI or TUI, wait for terminal output, capture a TUI screenshot, export a terminal recording, or test a CLI workflow with reviewable artifacts.",
+        "source": "bundled"
+      },
+      {
+        "name": "dogfood-tui",
+        "description": "Structured TUI dogfooding and QA workflow using agent-tty. Use for exploratory testing, bug hunting, release-readiness validation, and UX review of terminal applications.",
+        "source": "bundled"
+      }
+    ]
+  }
+}
