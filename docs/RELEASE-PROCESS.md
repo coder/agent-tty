@@ -26,6 +26,18 @@
 5. Confirm the published package metadata still points at `agent-tty` and the public GitHub repository.
 6. Remember that `main` is protected: release changes must land through a pull request, and the release tag must be created only after that PR is merged.
 
+## GitHub CLI readiness
+
+This flow assumes `gh` can create PRs, inspect checks, merge, and create releases. `gh auth status` is useful for a quick summary, but in some environments it can report a stale or misleading state even when real GitHub API calls still work.
+
+Before treating release automation as blocked, verify with a real API call such as:
+
+```bash
+gh api graphql -f query='query { viewer { login } }'
+```
+
+If that succeeds, prefer the result of the real `gh` operation over the status summary.
+
 ## Validation bar
 
 Preferred local validation uses `mise`:
@@ -138,6 +150,26 @@ gh pr create --base main --head <release-branch> --title "chore(release): <versi
 
 Run the normal PR checks, get approval as needed, and merge the PR.
 
+## Wait for CI and merge the release PR
+
+For interactive use, `gh pr checks <pr-number> --watch` is fine. For automation or agent-driven release work, prefer inspecting the workflow run directly so you can wait on structured `status` and `conclusion` fields instead of parsing live terminal refresh output.
+
+Typical sequence:
+
+```bash
+gh pr checks <pr-number>
+gh run list --branch <release-branch> --event pull_request --limit 5
+gh run view <run-id> --json status,conclusion,jobs
+```
+
+If the PR still cannot be merged after every required check passes, inspect the base-branch policy first. When normal merge and `--auto` are unavailable but an authorized releaser is allowed to override the policy, use:
+
+```bash
+gh pr merge <pr-number> --squash --admin --delete-branch
+```
+
+Use `--admin` sparingly and only after confirming the required release checks succeeded.
+
 ## Tag the merged `main` commit
 
 After the release PR has merged:
@@ -166,6 +198,22 @@ or:
 - `package.json`: `0.1.1-beta.0`
 - tag: `v0.1.1-beta.0`
 
+### GitHub CLI alternative: create the tag and release in one step
+
+If you already know the merged `main` commit SHA and want GitHub to create the tag and release together, this also works:
+
+```bash
+MERGED_SHA=<merge-commit-on-main>
+gh release create v0.1.1-beta.0 \
+  --target "$MERGED_SHA" \
+  --prerelease \
+  --latest=false \
+  --title v0.1.1-beta.0 \
+  --notes-file <notes-file>
+```
+
+`gh release create` creates the tag on the specified merged commit and still triggers the `Release` workflow via the pushed `v*` tag. Use the prerelease flags only for prerelease versions; omit them for stable releases.
+
 ## Publish the GitHub Release and npm package
 
 The hand-curated workflow lives at [`.github/workflows/release.yml`](../.github/workflows/release.yml).
@@ -187,19 +235,22 @@ Prerelease versions publish with the prerelease identifier as the dist-tag, so `
 
 ## Verify the published npm package
 
-After the workflow succeeds, verify the exact npm package version before announcing the release:
+After the workflow succeeds, verify the exact npm package version before announcing the release. Run these checks under Node 24; if your interactive shell is older, point `NODE_BIN` at an explicit Node 24 binary first.
 
 ```bash
 PACKAGE_NAME='agent-tty'
 PACKAGE_VERSION='<version>'
+NODE_BIN=${NODE_BIN:-node}
 INSTALL_PREFIX=$(mktemp -d)
 AGENT_TTY_HOME=$(mktemp -d)
 
 npm view "$PACKAGE_NAME" dist-tags --json
 npm install -g --prefix "$INSTALL_PREFIX" "$PACKAGE_NAME@$PACKAGE_VERSION"
-"$INSTALL_PREFIX"/bin/agent-tty version --json
-"$INSTALL_PREFIX"/bin/agent-tty --home "$AGENT_TTY_HOME" doctor --json
+"$NODE_BIN" "$INSTALL_PREFIX/bin/agent-tty" version --json | jq -r '.result.cliVersion'
+"$NODE_BIN" "$INSTALL_PREFIX/bin/agent-tty" --home "$AGENT_TTY_HOME" doctor --json | jq '.result.ok'
 ```
+
+`doctor --json` uses the outer `ok` field for command-envelope success; the release-health signal is `.result.ok`.
 
 If the release is a prerelease, also confirm the intended dist-tag points at the exact published version:
 
@@ -227,12 +278,13 @@ printf 'expected dist-tag %s for %s\n' "$DIST_TAG" "$PACKAGE_VERSION"
 
 ## Verify the published GitHub Release assets
 
-Also verify the hosted tarball fallback before announcing the release:
+Also verify the hosted tarball fallback before announcing the release. Run these checks under Node 24 for the same reason as the npm verification above.
 
 ```bash
 VERSION=<version>
 RELEASE_TAG="v${VERSION}"
 RELEASE_TGZ="agent-tty-${VERSION}.tgz"
+NODE_BIN=${NODE_BIN:-node}
 
 DOWNLOAD_DIR=$(mktemp -d)
 INSTALL_PREFIX=$(mktemp -d)
@@ -240,11 +292,14 @@ AGENT_TTY_HOME=$(mktemp -d)
 
 gh release download "$RELEASE_TAG" --repo coder/agent-tty --dir "$DOWNLOAD_DIR" --pattern "$RELEASE_TGZ"
 gh release download "$RELEASE_TAG" --repo coder/agent-tty --dir "$DOWNLOAD_DIR" --pattern "${RELEASE_TGZ}.sha256"
-sha256sum -c "$DOWNLOAD_DIR/${RELEASE_TGZ}.sha256"
+(
+  cd "$DOWNLOAD_DIR"
+  sha256sum -c "${RELEASE_TGZ}.sha256"
+)
 
 npm install -g --prefix "$INSTALL_PREFIX" "$DOWNLOAD_DIR/$RELEASE_TGZ"
-"$INSTALL_PREFIX"/bin/agent-tty version --json
-"$INSTALL_PREFIX"/bin/agent-tty --home "$AGENT_TTY_HOME" doctor --json
+"$NODE_BIN" "$INSTALL_PREFIX/bin/agent-tty" version --json | jq -r '.result.cliVersion'
+"$NODE_BIN" "$INSTALL_PREFIX/bin/agent-tty" --home "$AGENT_TTY_HOME" doctor --json | jq '.result.ok'
 ```
 
 For private releases, authenticated download is the expected verification route.
