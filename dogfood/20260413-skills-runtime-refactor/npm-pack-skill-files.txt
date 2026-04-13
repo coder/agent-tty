@@ -1,0 +1,3 @@
+skill-data/agent-tty/SKILL.md
+skill-data/dogfood-tui/SKILL.md
+skills/agent-tty/SKILL.md

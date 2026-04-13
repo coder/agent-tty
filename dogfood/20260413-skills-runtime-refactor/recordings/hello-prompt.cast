@@ -1,0 +1,11 @@
+{"version":2,"width":80,"height":24,"timestamp":1776074449,"title":"01KP34JQENXVMGTMHQW8GSTHJH","sessionId":"01KP34JQENXVMGTMHQW8GSTHJH","env":{"TERM":"xterm-256color"},"toolVersion":"0.1.1-beta.0"}
+[0,"o","READY> "]
+[601.826,"o","Agent"]
+[602.916,"o","\r\n"]
+[602.916,"o","ECHO: Agent\r\nREADY> "]
+[609.734,"o","exit"]
+[610.928,"o","\r\n"]
+[610.929,"o","BYE\r\n"]
+[610.949,"o","\\"]
+[610.951,"o","\u001b[1G"]
+[610.951,"o","\u001b[0K"]

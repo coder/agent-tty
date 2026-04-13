@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-04-13T10:10:50.100Z",
+  "result": {
+    "matched": false,
+    "timedOut": true,
+    "capturedAtSeq": 0
+  }
+}

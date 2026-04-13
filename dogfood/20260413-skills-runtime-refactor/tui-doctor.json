@@ -1,0 +1,130 @@
+{
+  "ok": true,
+  "command": "doctor",
+  "timestamp": "2026-04-13T10:00:47.260Z",
+  "result": {
+    "ok": true,
+    "checks": {
+      "environment": [
+        {
+          "name": "node-runtime",
+          "status": "pass",
+          "message": "Node 24.14.1 ok",
+          "durationMs": 0
+        },
+        {
+          "name": "cwd-access",
+          "status": "pass",
+          "message": "cwd read/write: /home/coder/.mux/src/agent-terminal/agent_exec_db10489d06",
+          "durationMs": 1
+        },
+        {
+          "name": "temp-dir",
+          "status": "pass",
+          "message": "temp dir ok: /tmp",
+          "durationMs": 1
+        },
+        {
+          "name": "home_isolation",
+          "status": "pass",
+          "message": "Agent-terminal home is isolated from system home: /tmp/tmp.FCAJKW974f",
+          "durationMs": 0
+        },
+        {
+          "name": "home-writable",
+          "status": "pass",
+          "message": "home writable: /tmp/tmp.FCAJKW974f",
+          "durationMs": 1
+        },
+        {
+          "name": "pty-spawn",
+          "status": "pass",
+          "message": "spawned /home/coder/.local/share/mise/installs/node/24.14.1/bin/node",
+          "durationMs": 27
+        },
+        {
+          "name": "socket-viable",
+          "status": "pass",
+          "message": "socket ok: /tmp/tmp.FCAJKW974f/sessions/doctor-445696-mnx0v9yi-2/host.sock",
+          "durationMs": 4
+        },
+        {
+          "name": "artifact-atomicity",
+          "status": "pass",
+          "message": "atomic rename ok: /tmp/tmp.FCAJKW974f/sessions/doctor-445696-mnx0v9yl-3/artifacts",
+          "durationMs": 2
+        },
+        {
+          "name": "event-log-writable",
+          "status": "pass",
+          "message": "append ok: /tmp/tmp.FCAJKW974f/sessions/doctor-445696-mnx0v9yn-5/events.jsonl",
+          "durationMs": 1
+        }
+      ],
+      "renderer": [
+        {
+          "name": "playwright_available",
+          "status": "pass",
+          "message": "available",
+          "durationMs": 1
+        },
+        {
+          "name": "browser_cache_accessible",
+          "status": "pass",
+          "message": "browser cache accessible: /home/coder/.cache/ms-playwright",
+          "durationMs": 1
+        },
+        {
+          "name": "browser_launch",
+          "status": "pass",
+          "message": "chromium launches",
+          "durationMs": 143
+        },
+        {
+          "name": "ghostty_web_available",
+          "status": "pass",
+          "message": "WASM available",
+          "durationMs": 79
+        },
+        {
+          "name": "screenshot_viable",
+          "status": "pass",
+          "message": "viable",
+          "durationMs": 138
+        }
+      ]
+    },
+    "capabilities": [
+      {
+        "name": "snapshot",
+        "status": "available",
+        "reason": "built-in capability",
+        "detail": "available without external renderer dependencies"
+      },
+      {
+        "name": "wait",
+        "status": "available",
+        "reason": "built-in capability",
+        "detail": "available without external renderer dependencies"
+      },
+      {
+        "name": "screenshot",
+        "status": "available",
+        "reason": "renderer smoke checks passed",
+        "detail": "playwright_available: available; browser_launch: chromium launches; ghostty_web_available: WASM available; screenshot_viable: viable"
+      },
+      {
+        "name": "record-export-asciicast",
+        "status": "available",
+        "reason": "built-in capability",
+        "detail": "available without external renderer dependencies"
+      },
+      {
+        "name": "record-export-webm",
+        "status": "available",
+        "reason": "browser-backed export dependencies available",
+        "detail": "playwright_available: available; browser_launch: chromium launches; ghostty_web_available: WASM available"
+      }
+    ]
+  }
+}

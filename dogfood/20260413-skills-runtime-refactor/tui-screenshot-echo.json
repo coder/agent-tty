@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "command": "screenshot",
+  "timestamp": "2026-04-13T10:10:58.056Z",
+  "result": {
+    "sessionId": "01KP34JQENXVMGTMHQW8GSTHJH",
+    "capturedAtSeq": 5,
+    "profileName": "reference-dark",
+    "cols": 80,
+    "rows": 24,
+    "artifactPath": "/tmp/tmp.FCAJKW974f/sessions/01KP34JQENXVMGTMHQW8GSTHJH/artifacts/screenshot-5-reference-dark.png",
+    "pngSizeBytes": 4882,
+    "cursorVisible": false,
+    "rendererBackend": "ghostty-web",
+    "pixelWidth": 640,
+    "pixelHeight": 384,
+    "sha256": "0d8b4c7c373acbd2951088ba5fd2b4e55cf1376ca1ba6ea9a704d8bf03aeac18",
+    "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d"
+  }
+}

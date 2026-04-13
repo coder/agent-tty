@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "command": "skills path",
+  "timestamp": "2026-04-13T10:00:44.099Z",
+  "result": {
+    "name": "dogfood-tui",
+    "source": "bundled",
+    "path": "/home/coder/.mux/src/agent-terminal/agent_exec_db10489d06/skill-data/dogfood-tui"
+  }
+}
