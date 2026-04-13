@@ -13,6 +13,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { runCli, type SuccessEnvelope } from '../helpers.js';
 import type { CommandErrorEnvelope } from '../../src/protocol/envelope.js';
+import {
+  SkillGetResultSchema,
+  SkillListResultSchema,
+  SkillPathResultSchema,
+} from '../../src/skills/index.js';
 
 interface ErrorEnvelope {
   ok: false;
@@ -36,8 +41,8 @@ function parseErrorEnvelope(output: string): CommandErrorEnvelope {
   return JSON.parse(output) as CommandErrorEnvelope;
 }
 
-function readPackagedSkill(): string {
-  return readFileSync('skills/agent-tty/SKILL.md', 'utf8');
+function readBundledSkill(name: string): string {
+  return readFileSync(join('skill-data', name, 'SKILL.md'), 'utf8');
 }
 
 const SEMVER_WITH_OPTIONAL_PRERELEASE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
@@ -69,51 +74,114 @@ describe('CLI integration', () => {
     expect(parsed.result.rendererBackends).toEqual(['ghostty-web']);
   });
 
-  it('prints the packaged skill verbatim', () => {
-    const result = runCli(['skill'], testEnv());
+  it('lists bundled skills in human output', () => {
+    const result = runCli(['skills', 'list'], testEnv());
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
-    expect(result.stdout).toBe(readPackagedSkill());
+    expect(result.stdout).toContain('agent-tty');
+    expect(result.stdout).toContain('dogfood-tui');
   });
 
-  it('prints a JSON envelope for skill', () => {
-    const result = runCli(['skill', '--json'], testEnv());
+  it('prints a JSON envelope for skills list', () => {
+    const result = runCli(['skills', 'list', '--json'], testEnv());
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
 
-    const parsed = JSON.parse(result.stdout) as SuccessEnvelope<{
-      name: string;
-      source: string;
-      content: string;
-    }>;
+    const parsed = JSON.parse(result.stdout) as SuccessEnvelope<unknown>;
 
     expect(parsed.ok).toBe(true);
-    expect(parsed.command).toBe('skill');
-    expect(parsed.result).toEqual({
-      name: 'agent-tty',
-      source: 'packaged-file',
-      content: readPackagedSkill(),
-    });
+    expect(parsed.command).toBe('skills list');
+    expect(SkillListResultSchema.safeParse(parsed.result).success).toBe(true);
+    expect(SkillListResultSchema.parse(parsed.result).skills).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'agent-tty' }),
+        expect.objectContaining({ name: 'dogfood-tui' }),
+      ]),
+    );
   });
 
-  it('makes the packaged skill guidance prominent in top-level help', () => {
+  it('prints the requested bundled skill verbatim', () => {
+    const result = runCli(['skills', 'get', 'agent-tty'], testEnv());
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toBe(readBundledSkill('agent-tty'));
+  });
+
+  it('prints a JSON envelope for skills get', () => {
+    const result = runCli(['skills', 'get', 'agent-tty', '--json'], testEnv());
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+
+    const parsed = JSON.parse(result.stdout) as SuccessEnvelope<unknown>;
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.command).toBe('skills get');
+    expect(SkillGetResultSchema.safeParse(parsed.result).success).toBe(true);
+    expect(SkillGetResultSchema.parse(parsed.result).content).toBe(
+      readBundledSkill('agent-tty'),
+    );
+  });
+
+  it('reports SKILL_NOT_FOUND for unknown skills', () => {
+    const result = runCli(['skills', 'get', 'nonexistent'], testEnv());
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('SKILL_NOT_FOUND: Skill not found.');
+  });
+
+  it('prints the bundled skill directory path', () => {
+    const result = runCli(['skills', 'path', 'agent-tty'], testEnv());
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('skill-data/agent-tty');
+  });
+
+  it('prints a JSON envelope for skills path', () => {
+    const result = runCli(['skills', 'path', 'agent-tty', '--json'], testEnv());
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+
+    const parsed = JSON.parse(result.stdout) as SuccessEnvelope<unknown>;
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.command).toBe('skills path');
+    expect(SkillPathResultSchema.safeParse(parsed.result).success).toBe(true);
+    expect(SkillPathResultSchema.parse(parsed.result).path).toContain(
+      'skill-data/agent-tty',
+    );
+  });
+
+  it('makes the bundled skill guidance prominent in top-level help', () => {
     const result = runCli(['--help'], testEnv());
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
     expect(result.stdout.startsWith('MANDATORY FOR CODING AGENTS:')).toBe(true);
     expect(result.stdout).toContain(
-      'If your agent already loaded that skill, follow it; otherwise run `agent-tty skill` before any other agent-tty command.',
+      'If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get agent-tty` before any other agent-tty command.',
     );
-    expect(result.stdout).toContain('skill [options]');
+    expect(result.stdout).toMatch(/\n {2}skills\s+Manage built-in skills\n/u);
+    expect(result.stdout).not.toContain('skill [options]');
+    expect(result.stdout).not.toContain('`agent-tty skill`');
     expect(result.stdout).toContain(
-      'Fallback first step for coding agents: print the packaged skill if it is not already loaded',
+      'Coding agents: use the preloaded `agent-tty` skill when available; otherwise call `agent-tty skills get agent-tty` before using session commands.',
     );
-    expect(result.stdout).toContain(
-      'Coding agents: use the preloaded `agent-tty` skill when available; otherwise call `agent-tty skill` before using session commands.',
-    );
+  });
+
+  it('rejects the removed singular skill command', () => {
+    const result = runCli(['skill'], testEnv());
+
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain("unknown command 'skill'");
+    expect(result.stderr).toContain('(Did you mean skills?)');
   });
 
   it('accepts --append-newline for type', () => {
