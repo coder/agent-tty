@@ -153,20 +153,27 @@ Recommended sequence:
 5. Export WebM recordings when reviewers need motion proof.
 6. Destroy the session when done.
 
-## AI agent skill
+## AI agent skills
 
-The public skill lives under `skills/agent-tty/` and ships in the npm package as well as the GitHub Release tarball.
-Install `agent-tty` from npm first (or from a GitHub Release tarball when you need a registry-independent fallback), then either use the packaged skill directly or let TanStack Intent map it into your agent config.
+`agent-tty` ships two related skill trees in the npm package as well as the GitHub Release tarball:
 
-For coding agents that can ingest instructions on demand, `agent-tty skill` prints the packaged `SKILL.md` directly to stdout after installation.
+- `skills/agent-tty/` is the thin public bootstrap used by TanStack Intent and other skill loaders that discover files directly.
+- `skill-data/` contains the canonical runtime skills served by the CLI.
+- `agent-tty skills list` discovers the bundled runtime skills, including `agent-tty` and `dogfood-tui`.
+
+Install `agent-tty` from npm first (or from a GitHub Release tarball when you need a registry-independent fallback), then either copy the bootstrap skill into your agent config or let the CLI print the canonical runtime skill on demand.
+
+For coding agents that can ingest instructions on demand, `agent-tty skills get <name>` prints the packaged runtime `SKILL.md` directly to stdout after installation.
 
 ```bash
-agent-tty skill
+agent-tty skills get agent-tty
 ```
+
+Use `agent-tty skills list` to discover every bundled runtime skill, and `agent-tty skills get dogfood-tui` when you want the built-in TUI dogfooding skill.
 
 ### TanStack Intent integration
 
-After installing `agent-tty` in the project, let Intent wire the mapping into `AGENTS.md`, `CLAUDE.md`, or another supported agent config file.
+After installing `agent-tty` in the project, let Intent wire the bootstrap from `skills/agent-tty/` into `AGENTS.md`, `CLAUDE.md`, or another supported agent config file.
 
 ```bash
 PACKAGE_VERSION=<version>
@@ -175,27 +182,29 @@ npx @tanstack/intent@latest list
 npx @tanstack/intent@latest install
 ```
 
-That workflow keeps the skill version aligned with the installed `agent-tty` package and avoids writing one-off instructions for each individual coding agent.
+That workflow keeps the skill version aligned with the installed `agent-tty` package, while the bootstrap stays small and points agents back to the CLI-served runtime skill.
 
 ### Mux skill installation
 
-After installing the npm package globally:
+After installing the npm package globally, copy the bootstrap skill from `skills/agent-tty/`:
 
 ```bash
 mkdir -p ~/.mux/skills/agent-tty
 cp -R "$(npm root -g)/agent-tty/skills/agent-tty/." ~/.mux/skills/agent-tty/
 ```
 
+Mux can then discover the bootstrap normally, and the bootstrap instructs the agent to load the canonical runtime skill with `agent-tty skills get agent-tty`.
+
 ### Direct skill copy for other skill loaders
 
-After installing the npm package globally:
+After installing the npm package globally, copy the same bootstrap for loaders that read skill files directly:
 
 ```bash
 mkdir -p ~/.claude/skills/agent-tty
 cp -R "$(npm root -g)/agent-tty/skills/agent-tty/." ~/.claude/skills/agent-tty/
 ```
 
-If your assistant supports repository-backed skills, point it at `coder/agent-tty` and select the `agent-tty` skill directory.
+If your assistant supports repository-backed skills, point it at `coder/agent-tty` and select the `skills/agent-tty/` bootstrap directory.
 
 ### Suggested `AGENTS.md` / `CLAUDE.md` snippet
 
@@ -214,7 +223,7 @@ Preferred workflow:
 6. Destroy the session when the task is done.
 ```
 
-Maintainers can validate the shipped skill locally with:
+Maintainers can validate the shipped bootstrap skill locally with:
 
 ```bash
 npm run intent:validate

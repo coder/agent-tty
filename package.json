@@ -28,6 +28,7 @@
   "files": [
     "dist",
     "skills",
+    "skill-data",
     "!skills/_artifacts"
   ],
   "main": "./dist/index.js",
