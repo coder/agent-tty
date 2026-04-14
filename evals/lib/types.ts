@@ -156,7 +156,13 @@ export interface BundleCompletenessScore {
 export interface ReportCompletenessScore {
   sectionsExpected: number;
   sectionsFound: number;
+  evidenceRefsFound: number;
   score: number;
+  details: Array<{
+    section: string;
+    found: boolean;
+    required?: boolean;
+  }>;
   missingSections: string[];
   matchedRequirements: PatternMatchResult[];
   forbiddenFindings: ForbiddenPatternResult[];
@@ -166,10 +172,18 @@ export interface ReportCompletenessScore {
 export interface EvidenceQualityScore {
   score: number;
   artifactCoverage: number;
+  modalityCoverage: number;
+  fileDiversity: number;
+  manifestSanity: number;
   breakdown: ScoreBreakdown;
   bundleCompleteness?: BundleCompletenessScore;
   reportCompleteness?: ReportCompletenessScore;
   notes: string[];
+  details: Array<{
+    dimension: string;
+    score: number;
+    notes?: string;
+  }>;
 }
 
 /** Metadata describing a whole eval report run. */

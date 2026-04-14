@@ -316,7 +316,17 @@ export const ReportCompletenessScoreSchema = z
   .object({
     sectionsExpected: NonNegativeIntSchema,
     sectionsFound: NonNegativeIntSchema,
+    evidenceRefsFound: NonNegativeIntSchema,
     score: UnitIntervalSchema,
+    details: z.array(
+      z
+        .object({
+          section: NonEmptyStringSchema,
+          found: z.boolean(),
+          required: z.boolean().optional(),
+        })
+        .strict(),
+    ),
     missingSections: z.array(NonEmptyStringSchema),
     matchedRequirements: z.array(PatternMatchResultSchema),
     forbiddenFindings: z.array(ForbiddenPatternResultSchema),
@@ -336,12 +346,35 @@ export const EvidenceQualityScoreSchema = z
   .object({
     score: UnitIntervalSchema,
     artifactCoverage: UnitIntervalSchema,
+    modalityCoverage: UnitIntervalSchema,
+    fileDiversity: UnitIntervalSchema,
+    manifestSanity: UnitIntervalSchema,
     breakdown: ScoreBreakdownSchema,
     bundleCompleteness: BundleCompletenessScoreSchema.optional(),
     reportCompleteness: ReportCompletenessScoreSchema.optional(),
     notes: z.array(NonEmptyStringSchema),
+    details: z.array(
+      z
+        .object({
+          dimension: NonEmptyStringSchema,
+          score: UnitIntervalSchema,
+          notes: NonEmptyStringSchema.optional(),
+        })
+        .strict(),
+    ),
   })
-  .strict();
+  .strict()
+  .superRefine((obj, ctx) => {
+    if (
+      Math.abs(obj.artifactCoverage - obj.modalityCoverage) > Number.EPSILON
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'artifactCoverage must match modalityCoverage',
+        path: ['artifactCoverage'],
+      });
+    }
+  });
 
 export const RunMetadataSchema = z
   .object({
