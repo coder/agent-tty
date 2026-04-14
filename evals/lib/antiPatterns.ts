@@ -1,4 +1,5 @@
 import { assertString, invariant } from '../../src/util/assert.js';
+import { isInNegationContext } from './scoring.js';
 import type {
   AntiPatternFinding,
   AntiPatternRule,
@@ -28,6 +29,14 @@ const SESSION_ID_PATTERNS = [
   /\bSession\s+([A-Za-z0-9][A-Za-z0-9._:-]*)\b/gu,
   /--session(?:-id)?\s+([A-Za-z0-9][A-Za-z0-9._:-]*)\b/gu,
 ] as const;
+const NEGATION_AWARE_RULE_IDS = new Set<string>([
+  'blind-sleep',
+  'tmux-usage',
+  'screen-usage',
+  'adhoc-screenshot',
+]);
+const STRUCTURED_SESSION_REFERENCE_LINE_PATTERN =
+  /^\s*(?:\{|\[|["']?session(?:_id|Id)["']?\s*[:=]|Session\s+[A-Za-z0-9]|--session(?:-id)?\s+)/u;
 
 /**
  * Canonical transcript anti-pattern rules for terminal automation evals.
@@ -369,14 +378,36 @@ function addRegexFindings(
   patterns: readonly RegExp[],
 ): void {
   for (const pattern of patterns) {
-    for (const matchedText of collectMatches(line, pattern)) {
+    for (const occurrence of collectMatches(line, pattern)) {
       addFinding(
         findings,
         seenFindingKeys,
-        buildFinding(rule, matchedText, lineNumber),
+        buildRegexFinding(rule, occurrence, line, lineNumber),
       );
     }
   }
+}
+
+function buildRegexFinding(
+  rule: AntiPatternRule,
+  occurrence: MatchedOccurrence,
+  line: string,
+  lineNumber: number,
+): AntiPatternFinding {
+  if (
+    NEGATION_AWARE_RULE_IDS.has(rule.id) &&
+    isInNegationContext(line, occurrence.offset)
+  ) {
+    return buildFinding(
+      rule,
+      occurrence.matchedText,
+      lineNumber,
+      `Matched "${occurrence.matchedText}" only in a negation context, so this anti-pattern was skipped.`,
+      'info',
+    );
+  }
+
+  return buildFinding(rule, occurrence.matchedText, lineNumber);
 }
 
 function addMissingJsonFlagFinding(
@@ -419,6 +450,11 @@ type AgentTtyCommandSegment = {
   lineNumber: number;
 };
 
+type MatchedOccurrence = {
+  matchedText: string;
+  offset: number;
+};
+
 function collectAgentTtyCommandSegments(
   transcript: string,
 ): AgentTtyCommandSegment[] {
@@ -453,13 +489,20 @@ function collectAgentTtyCommandSegments(
   return commandSegments;
 }
 
-function collectMatches(line: string, pattern: RegExp): string[] {
-  const matches: string[] = [];
+function collectMatches(line: string, pattern: RegExp): MatchedOccurrence[] {
+  const matches: MatchedOccurrence[] = [];
   pattern.lastIndex = 0;
   let match: RegExpExecArray | null = pattern.exec(line);
 
   while (match !== null) {
-    matches.push(extractMatchedText(match));
+    invariant(
+      typeof match.index === 'number',
+      'anti-pattern match index missing',
+    );
+    matches.push({
+      matchedText: extractMatchedText(match),
+      offset: match.index,
+    });
 
     if (match[0].length === 0) {
       pattern.lastIndex += 1;
@@ -487,10 +530,11 @@ function buildFinding(
   matchedText: string,
   lineNumber: number,
   message = rule.description,
+  severity: AntiPatternSeverity = rule.severity,
 ): AntiPatternFinding {
   return {
     ruleId: rule.id,
-    severity: rule.severity,
+    severity,
     message,
     matchedText,
     lineNumber,
@@ -505,6 +549,7 @@ function addFinding(
 ): void {
   const findingKey = [
     finding.ruleId,
+    finding.severity,
     String(finding.lineNumber ?? ''),
     finding.matchedText ?? '',
   ].join(':');
@@ -539,9 +584,25 @@ function detectOrphanedSessions(
     }
 
     const lineNumber = index + 1;
-    const sessionIds = extractSessionIds(line);
-    const isDestroyContext = SESSION_DESTROY_CONTEXT_PATTERN.test(line);
-    const isCreateContext = SESSION_CREATE_CONTEXT_PATTERN.test(line);
+    const sessionIds = extractSessionIdOccurrences(line)
+      .filter((occurrence) => !isInNegationContext(line, occurrence.offset))
+      .map((occurrence) => occurrence.id);
+    const destroyContextIndex = findFirstMatchIndex(
+      line,
+      SESSION_DESTROY_CONTEXT_PATTERN,
+    );
+    const createContextIndex = findFirstMatchIndex(
+      line,
+      SESSION_CREATE_CONTEXT_PATTERN,
+    );
+    const isDestroyContext =
+      destroyContextIndex !== null &&
+      !isInNegationContext(line, destroyContextIndex);
+    const isCreateContext =
+      createContextIndex !== null &&
+      !isInNegationContext(line, createContextIndex);
+    const hasStructuredSessionReference =
+      sessionIds.length > 0 && isStructuredSessionReferenceLine(line);
 
     if (isDestroyContext) {
       markSessionCleanup(
@@ -553,7 +614,7 @@ function detectOrphanedSessions(
       continue;
     }
 
-    if (isCreateContext || sessionIds.length > 0) {
+    if (isCreateContext || hasStructuredSessionReference) {
       registerSessionCreation(
         records,
         createdById,
@@ -664,8 +725,14 @@ function markSessionCleanup(
   }
 }
 
-function extractSessionIds(line: string): string[] {
-  const sessionIds = new Set<string>();
+type SessionIdOccurrence = {
+  id: string;
+  offset: number;
+};
+
+function extractSessionIdOccurrences(line: string): SessionIdOccurrence[] {
+  const occurrences: SessionIdOccurrence[] = [];
+  const seenKeys = new Set<string>();
 
   for (const pattern of SESSION_ID_PATTERNS) {
     pattern.lastIndex = 0;
@@ -673,8 +740,19 @@ function extractSessionIds(line: string): string[] {
 
     while (match !== null) {
       const sessionId = match[1]?.trim();
+      invariant(
+        typeof match.index === 'number',
+        'session-id match index missing',
+      );
       if (sessionId) {
-        sessionIds.add(sessionId);
+        const occurrenceKey = `${sessionId}:${String(match.index)}`;
+        if (!seenKeys.has(occurrenceKey)) {
+          seenKeys.add(occurrenceKey);
+          occurrences.push({
+            id: sessionId,
+            offset: match.index,
+          });
+        }
       }
 
       if (match[0].length === 0) {
@@ -685,5 +763,23 @@ function extractSessionIds(line: string): string[] {
     }
   }
 
-  return [...sessionIds];
+  return occurrences;
+}
+
+function findFirstMatchIndex(line: string, pattern: RegExp): number | null {
+  pattern.lastIndex = 0;
+  const match = pattern.exec(line);
+  if (match === null) {
+    return null;
+  }
+
+  invariant(
+    typeof match.index === 'number',
+    'anti-pattern context index missing',
+  );
+  return match.index;
+}
+
+function isStructuredSessionReferenceLine(line: string): boolean {
+  return STRUCTURED_SESSION_REFERENCE_LINE_PATTERN.test(line);
 }

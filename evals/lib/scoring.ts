@@ -604,15 +604,15 @@ function buildPatternMatchResult(
   };
 }
 
-function isInNegationContext(text: string, matchIndex: number): boolean {
-  assertString(text, 'Forbidden-pattern text must be a string');
+export function isInNegationContext(text: string, matchIndex: number): boolean {
+  assertString(text, 'Negation-context text must be a string');
   invariant(
     Number.isInteger(matchIndex),
-    'Forbidden-pattern match index must be an integer',
+    'Negation-context match index must be an integer',
   );
   invariant(
     matchIndex >= 0 && matchIndex <= text.length,
-    'Forbidden-pattern match index must be within text bounds',
+    'Negation-context match index must be within text bounds',
   );
 
   const windowStart = Math.max(0, matchIndex - NEGATION_CONTEXT_WINDOW);
