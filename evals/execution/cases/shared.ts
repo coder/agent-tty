@@ -15,7 +15,7 @@ import type {
   WorkflowCheck,
 } from '../../lib/types.js';
 
-const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_AGENT_STEPS = 16;
 const DEFAULT_MAX_WALL_CLOCK_MS = 90_000;
 

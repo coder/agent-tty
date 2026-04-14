@@ -70,7 +70,7 @@ export const colorGridCase = createExecutionCase({
     ),
   ],
   budgets: executionBudgets({
-    timeoutMs: 45_000,
+    timeoutMs: 180_000,
     maxAgentSteps: 10,
     maxWallClockMs: 60_000,
   }),

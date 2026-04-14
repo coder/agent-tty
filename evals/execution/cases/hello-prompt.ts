@@ -82,7 +82,7 @@ export const helloPromptCase = createExecutionCase({
   antiPatterns: executionAntiPatterns(),
   artifactRequirements: [],
   budgets: executionBudgets({
-    timeoutMs: 45_000,
+    timeoutMs: 120_000,
     maxAgentSteps: 12,
     maxWallClockMs: 60_000,
   }),

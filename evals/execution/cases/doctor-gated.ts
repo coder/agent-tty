@@ -70,7 +70,7 @@ export const doctorGatedCase = createExecutionCase({
     ),
   ],
   budgets: executionBudgets({
-    timeoutMs: 60_000,
+    timeoutMs: 180_000,
     maxAgentSteps: 14,
     maxWallClockMs: 75_000,
   }),

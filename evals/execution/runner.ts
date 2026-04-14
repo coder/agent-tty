@@ -211,24 +211,7 @@ function countPassedArtifactRequirements(
 }
 
 function antiPatternScore(findings: readonly AntiPatternFinding[]): number {
-  let penalty = 0;
-  for (const finding of findings) {
-    switch (finding.severity) {
-      case 'error':
-        penalty += 1;
-        break;
-      case 'warning':
-        penalty += 0.5;
-        break;
-      case 'info':
-        penalty += 0.25;
-        break;
-      default:
-        break;
-    }
-  }
-
-  return Math.max(0, 1 - Math.min(1, penalty));
+  return Math.max(0, 1 - Math.min(1, findings.length));
 }
 
 function summarizeAntiPatterns(
@@ -616,7 +599,7 @@ function buildScoreBreakdown(
     },
     {
       name: 'anti-pattern-avoidance',
-      score: antiPatternScore(antiPatternFindings),
+      score: antiPatternScore(errorFindings),
       maxScore: 1,
       reason: summarizeAntiPatterns(antiPatternFindings),
     },

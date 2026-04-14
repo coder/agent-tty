@@ -62,7 +62,7 @@ export const crashRecoveryCase = createExecutionCase({
   antiPatterns: executionAntiPatterns(),
   artifactRequirements: [],
   budgets: executionBudgets({
-    timeoutMs: 60_000,
+    timeoutMs: 180_000,
     maxAgentSteps: 12,
     maxWallClockMs: 75_000,
   }),

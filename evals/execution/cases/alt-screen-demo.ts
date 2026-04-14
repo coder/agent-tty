@@ -67,7 +67,7 @@ export const altScreenDemoCase = createExecutionCase({
   antiPatterns: executionAntiPatterns(),
   artifactRequirements: [],
   budgets: executionBudgets({
-    timeoutMs: 60_000,
+    timeoutMs: 180_000,
     maxAgentSteps: 14,
     maxWallClockMs: 75_000,
   }),

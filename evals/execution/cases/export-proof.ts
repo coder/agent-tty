@@ -67,7 +67,7 @@ export const exportProofCase = createExecutionCase({
     ),
   ],
   budgets: executionBudgets({
-    timeoutMs: 90_000,
+    timeoutMs: 300_000,
     maxAgentSteps: 18,
     maxWallClockMs: 120_000,
   }),

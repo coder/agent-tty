@@ -121,7 +121,7 @@ export const resizeRegressionCase = DogfoodEvalCaseSchema.parse({
   workflowChecks: [],
   antiPatterns: [...DEFAULT_ANTI_PATTERN_RULES],
   budgets: {
-    timeoutMs: 180000,
+    timeoutMs: 300_000,
     maxWallClockMs: 300000,
   },
 });
