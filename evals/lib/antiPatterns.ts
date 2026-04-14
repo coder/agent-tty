@@ -161,6 +161,9 @@ export function detectAntiPatterns(
   const orphanedSessionRule = rules.find(
     (rule) => rule.id === 'orphaned-session',
   );
+  const missingJsonFlagRule = rules.find(
+    (rule) => rule.id === 'missing-json-flag',
+  );
   const lines = transcript.split(/\r?\n/u);
 
   for (const [index, line] of lines.entries()) {
@@ -171,7 +174,7 @@ export function detectAntiPatterns(
     const lineNumber = index + 1;
 
     for (const rule of rules) {
-      if (rule.id === 'orphaned-session') {
+      if (rule.id === 'orphaned-session' || rule.id === 'missing-json-flag') {
         continue;
       }
 
@@ -183,17 +186,6 @@ export function detectAntiPatterns(
           line,
           lineNumber,
           compiledPatterns.get(rule.id) ?? [],
-        );
-        continue;
-      }
-
-      if (rule.id === 'missing-json-flag') {
-        addMissingJsonFlagFindings(
-          findings,
-          seenFindingKeys,
-          rule,
-          line,
-          lineNumber,
         );
         continue;
       }
@@ -216,6 +208,15 @@ export function detectAntiPatterns(
     )) {
       addFinding(findings, seenFindingKeys, finding);
     }
+  }
+
+  if (missingJsonFlagRule) {
+    addMissingJsonFlagFinding(
+      findings,
+      seenFindingKeys,
+      missingJsonFlagRule,
+      transcript,
+    );
   }
 
   return findings.sort((left, right) => {
@@ -378,36 +379,78 @@ function addRegexFindings(
   }
 }
 
-function addMissingJsonFlagFindings(
+function addMissingJsonFlagFinding(
   findings: AntiPatternFinding[],
   seenFindingKeys: Set<string>,
   rule: AntiPatternRule,
-  line: string,
-  lineNumber: number,
+  transcript: string,
 ): void {
-  AGENT_TTY_SEGMENT_PATTERN.lastIndex = 0;
-  let match: RegExpExecArray | null = AGENT_TTY_SEGMENT_PATTERN.exec(line);
-
-  while (match !== null) {
-    const segment = match[0].trim();
-
-    if (
-      AGENT_TTY_SUBCOMMAND_PATTERN.test(segment) &&
-      !AGENT_TTY_JSON_FLAG_PATTERN.test(segment)
-    ) {
-      addFinding(
-        findings,
-        seenFindingKeys,
-        buildFinding(rule, segment, lineNumber),
-      );
-    }
-
-    if (match[0].length === 0) {
-      AGENT_TTY_SEGMENT_PATTERN.lastIndex += 1;
-    }
-
-    match = AGENT_TTY_SEGMENT_PATTERN.exec(line);
+  const commandSegments = collectAgentTtyCommandSegments(transcript);
+  if (commandSegments.length === 0) {
+    return;
   }
+
+  const hasJsonCommand = commandSegments.some(({ segment }) =>
+    AGENT_TTY_JSON_FLAG_PATTERN.test(segment),
+  );
+  if (hasJsonCommand) {
+    return;
+  }
+
+  const firstCommand = commandSegments[0];
+  invariant(
+    firstCommand !== undefined,
+    'missing-json-flag requires at least one agent-tty command segment',
+  );
+  addFinding(
+    findings,
+    seenFindingKeys,
+    buildFinding(
+      rule,
+      firstCommand.segment,
+      firstCommand.lineNumber,
+      'Detected agent-tty commands without any --json usage in the response, which makes automation less reliable.',
+    ),
+  );
+}
+
+type AgentTtyCommandSegment = {
+  segment: string;
+  lineNumber: number;
+};
+
+function collectAgentTtyCommandSegments(
+  transcript: string,
+): AgentTtyCommandSegment[] {
+  const commandSegments: AgentTtyCommandSegment[] = [];
+  const lines = transcript.split(/\r?\n/u);
+
+  for (const [index, line] of lines.entries()) {
+    if (isCommentOnlyLine(line)) {
+      continue;
+    }
+
+    AGENT_TTY_SEGMENT_PATTERN.lastIndex = 0;
+    let match: RegExpExecArray | null = AGENT_TTY_SEGMENT_PATTERN.exec(line);
+
+    while (match !== null) {
+      const segment = match[0].trim();
+      if (AGENT_TTY_SUBCOMMAND_PATTERN.test(segment)) {
+        commandSegments.push({
+          segment,
+          lineNumber: index + 1,
+        });
+      }
+
+      if (match[0].length === 0) {
+        AGENT_TTY_SEGMENT_PATTERN.lastIndex += 1;
+      }
+
+      match = AGENT_TTY_SEGMENT_PATTERN.exec(line);
+    }
+  }
+
+  return commandSegments;
 }
 
 function collectMatches(line: string, pattern: RegExp): string[] {

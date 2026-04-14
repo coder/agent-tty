@@ -251,6 +251,7 @@ export const ForbiddenPatternResultSchema = z
     matchedTexts: z.array(z.string()),
     lineNumbers: z.array(NonNegativeIntSchema),
     matchCount: NonNegativeIntSchema,
+    note: NonEmptyStringSchema.optional(),
   })
   .strict();
 

@@ -3,6 +3,9 @@ import type { PromptEvalCase } from '../../lib/types.js';
 
 const PROMPT_TIMEOUT_MS = 30_000;
 const EMPTY_ANTI_PATTERNS: PromptEvalCase['antiPatterns'] = [];
+const TMUX_RECOMMENDATION_PATTERN = String.raw`/(?:^|\n)\s*tmux\b[^\n]*|(?:(?<=\buse\s)|(?<=\bstart\s)|(?<=\blaunch\s)|(?<=\brun\s)|(?<=\bcreate\s)|(?<=\bcreate a\s))tmux\b/i`;
+const SCREEN_RECOMMENDATION_PATTERN = String.raw`/(?:^|\n)\s*screen\b[^\n]*|(?:(?<=\buse\s)|(?<=\bstart\s)|(?<=\blaunch\s)|(?<=\brun\s)|(?<=\bcreate\s)|(?<=\bcreate a\s))(?:gnu\s+)?screen\b/i`;
+const SLEEP_RECOMMENDATION_PATTERN = String.raw`/(?:^|\n)\s*sleep\s+\d+(?:\.\d+)?\b|(?:(?<=\buse\s)|(?<=\brun\s)|(?<=\badd\s)|(?<=\binsert\s))sleep\s+\d+(?:\.\d+)?\b/i`;
 
 function requiredCheck(
   id: string,
@@ -39,7 +42,11 @@ export const TRIGGER_DOGFOOD_TUI_PROMPT_CASES: PromptEvalCase[] = [
       '/\\b(?:dogfood|qa|exploratory|testing)\\b/i',
       '/\\b(?:evidence|screenshot|proof|bundle)\\b/i',
     ],
-    forbiddenPatterns: ['/\\btmux\\b/i', '/\\bscreen\\b/i', '/sleep \\d+/i'],
+    forbiddenPatterns: [
+      TMUX_RECOMMENDATION_PATTERN,
+      SCREEN_RECOMMENDATION_PATTERN,
+      SLEEP_RECOMMENDATION_PATTERN,
+    ],
     rubric: [
       'Routes exploratory QA to dogfood-tui rather than plain terminal automation.',
       'Mentions collecting evidence such as screenshots, proof, or a review bundle.',
@@ -76,7 +83,11 @@ export const TRIGGER_DOGFOOD_TUI_PROMPT_CASES: PromptEvalCase[] = [
       '/\\b(?:dogfood|bug.*hunt|qa)\\b/i',
       '/\\b(?:render|input|edge)\\b/i',
     ],
-    forbiddenPatterns: ['/\\btmux\\b/i', '/\\bscreen\\b/i', '/sleep \\d+/i'],
+    forbiddenPatterns: [
+      TMUX_RECOMMENDATION_PATTERN,
+      SCREEN_RECOMMENDATION_PATTERN,
+      SLEEP_RECOMMENDATION_PATTERN,
+    ],
     rubric: [
       'Selects dogfood-tui for bug-hunting work on a terminal application.',
       'Covers rendering, input, and edge-case investigation explicitly.',
@@ -110,7 +121,11 @@ export const TRIGGER_DOGFOOD_TUI_PROMPT_CASES: PromptEvalCase[] = [
       '/\\b(?:release|readiness|quality)\\b/i',
       '/\\b(?:report|checklist)\\b/i',
     ],
-    forbiddenPatterns: ['/\\btmux\\b/i', '/\\bscreen\\b/i', '/sleep \\d+/i'],
+    forbiddenPatterns: [
+      TMUX_RECOMMENDATION_PATTERN,
+      SCREEN_RECOMMENDATION_PATTERN,
+      SLEEP_RECOMMENDATION_PATTERN,
+    ],
     rubric: [
       'Routes release-readiness work to dogfood-tui.',
       'Mentions a quality report or checklist rather than an ad hoc run.',
@@ -147,7 +162,11 @@ export const TRIGGER_DOGFOOD_TUI_PROMPT_CASES: PromptEvalCase[] = [
       '/\\b(?:ux|user.*experience|usability)\\b/i',
       '/\\b(?:review|assess)\\b/i',
     ],
-    forbiddenPatterns: ['/\\btmux\\b/i', '/\\bscreen\\b/i', '/sleep \\d+/i'],
+    forbiddenPatterns: [
+      TMUX_RECOMMENDATION_PATTERN,
+      SCREEN_RECOMMENDATION_PATTERN,
+      SLEEP_RECOMMENDATION_PATTERN,
+    ],
     rubric: [
       'Selects dogfood-tui for a TUI UX review.',
       'Uses review or assessment language focused on navigation and usability.',
@@ -184,7 +203,11 @@ export const TRIGGER_DOGFOOD_TUI_PROMPT_CASES: PromptEvalCase[] = [
       '/\\b(?:reproduce|repro)\\b/i',
       '/\\b(?:evidence|screenshot|recording)\\b/i',
     ],
-    forbiddenPatterns: ['/\\btmux\\b/i', '/\\bscreen\\b/i', '/sleep \\d+/i'],
+    forbiddenPatterns: [
+      TMUX_RECOMMENDATION_PATTERN,
+      SCREEN_RECOMMENDATION_PATTERN,
+      SLEEP_RECOMMENDATION_PATTERN,
+    ],
     rubric: [
       'Routes bug reproduction for a TUI issue to dogfood-tui.',
       'Mentions reproduction steps plus evidence such as screenshots or recordings.',
@@ -221,7 +244,11 @@ export const TRIGGER_DOGFOOD_TUI_PROMPT_CASES: PromptEvalCase[] = [
       '/\\b(?:regression|triage)\\b/i',
       '/\\b(?:scrollback|behavior)\\b/i',
     ],
-    forbiddenPatterns: ['/\\btmux\\b/i', '/\\bscreen\\b/i', '/sleep \\d+/i'],
+    forbiddenPatterns: [
+      TMUX_RECOMMENDATION_PATTERN,
+      SCREEN_RECOMMENDATION_PATTERN,
+      SLEEP_RECOMMENDATION_PATTERN,
+    ],
     rubric: [
       'Routes scrollback regression triage to dogfood-tui.',
       'Names the regression/triage task and the scrollback behavior under test.',

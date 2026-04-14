@@ -3,6 +3,9 @@ import type { PromptEvalCase } from '../../lib/types.js';
 
 const PROMPT_TIMEOUT_MS = 30_000;
 const EMPTY_ANTI_PATTERNS: PromptEvalCase['antiPatterns'] = [];
+const TMUX_RECOMMENDATION_PATTERN = String.raw`/(?:^|\n)\s*tmux\b[^\n]*|(?:(?<=\buse\s)|(?<=\bstart\s)|(?<=\blaunch\s)|(?<=\brun\s)|(?<=\bcreate\s)|(?<=\bcreate a\s))tmux\b/i`;
+const SCREEN_RECOMMENDATION_PATTERN = String.raw`/(?:^|\n)\s*screen\b[^\n]*|(?:(?<=\buse\s)|(?<=\bstart\s)|(?<=\blaunch\s)|(?<=\brun\s)|(?<=\bcreate\s)|(?<=\bcreate a\s))(?:gnu\s+)?screen\b/i`;
+const SLEEP_RECOMMENDATION_PATTERN = String.raw`/(?:^|\n)\s*sleep\s+\d+(?:\.\d+)?\b|(?:(?<=\buse\s)|(?<=\brun\s)|(?<=\badd\s)|(?<=\binsert\s))sleep\s+\d+(?:\.\d+)?\b/i`;
 
 function requiredCheck(
   id: string,
@@ -35,7 +38,11 @@ export const TRIGGER_AGENT_TTY_PROMPT_CASES: PromptEvalCase[] = [
     context:
       'The correct plan should use a session-oriented terminal automation workflow instead of tmux, screen, or blind waiting.',
     expectedPatterns: ['/agent-tty/i', '/\\bcreate\\b/i', '/\\bsession\\b/i'],
-    forbiddenPatterns: ['/\\btmux\\b/i', '/\\bscreen\\b/i', '/\\bsleep\\b/i'],
+    forbiddenPatterns: [
+      TMUX_RECOMMENDATION_PATTERN,
+      SCREEN_RECOMMENDATION_PATTERN,
+      SLEEP_RECOMMENDATION_PATTERN,
+    ],
     rubric: [
       'Selects agent-tty as the right skill for long-lived terminal automation.',
       'Uses a create-session workflow to run the build and inspect output.',
@@ -50,7 +57,7 @@ export const TRIGGER_AGENT_TTY_PROMPT_CASES: PromptEvalCase[] = [
         'session-creation.create-session',
         'Creates a terminal session instead of using a multiplexer.',
         ['/\\bcreate\\b/i', '/\\bsession\\b/i'],
-        ['/\\btmux\\b/i', '/\\bscreen\\b/i'],
+        [TMUX_RECOMMENDATION_PATTERN, SCREEN_RECOMMENDATION_PATTERN],
       ),
     ],
     antiPatterns: EMPTY_ANTI_PATTERNS,
@@ -70,7 +77,11 @@ export const TRIGGER_AGENT_TTY_PROMPT_CASES: PromptEvalCase[] = [
       '/\\bwait\\b/i',
       '/\\b(?:type|run|input|paste|send-keys)\\b/i',
     ],
-    forbiddenPatterns: ['/sleep \\d+/i', '/setTimeout/i', '/\\btmux\\b/i'],
+    forbiddenPatterns: [
+      SLEEP_RECOMMENDATION_PATTERN,
+      '/setTimeout/i',
+      TMUX_RECOMMENDATION_PATTERN,
+    ],
     rubric: [
       'Recognizes the task as interactive terminal automation.',
       'Uses wait plus an input primitive to answer installer prompts safely.',
@@ -85,7 +96,7 @@ export const TRIGGER_AGENT_TTY_PROMPT_CASES: PromptEvalCase[] = [
         'interactive-cli.wait-and-input',
         'Waits for prompts and then sends input deliberately.',
         ['/\\bwait\\b/i', '/\\b(?:type|input|paste|send-keys|run)\\b/i'],
-        ['/sleep \\d+/i', '/setTimeout/i'],
+        [SLEEP_RECOMMENDATION_PATTERN, '/setTimeout/i'],
       ),
     ],
     antiPatterns: EMPTY_ANTI_PATTERNS,
@@ -101,7 +112,7 @@ export const TRIGGER_AGENT_TTY_PROMPT_CASES: PromptEvalCase[] = [
     context:
       'The answer should prefer waiting on observable terminal text over fixed delays before starting the next step.',
     expectedPatterns: ['/agent-tty/i', '/\\bwait\\b/i'],
-    forbiddenPatterns: ['/sleep \\d+/i', '/setTimeout/i'],
+    forbiddenPatterns: [SLEEP_RECOMMENDATION_PATTERN, '/setTimeout/i'],
     rubric: [
       'Chooses agent-tty for terminal readiness coordination.',
       'Uses wait against concrete terminal output instead of fixed timing guesses.',
@@ -116,7 +127,7 @@ export const TRIGGER_AGENT_TTY_PROMPT_CASES: PromptEvalCase[] = [
         'wait-for-output.observe-readiness',
         'Waits for the listening message before running tests.',
         ['/\\bwait\\b/i', '/Listening on port 3000/i'],
-        ['/sleep \\d+/i', '/setTimeout/i'],
+        [SLEEP_RECOMMENDATION_PATTERN, '/setTimeout/i'],
       ),
     ],
     antiPatterns: EMPTY_ANTI_PATTERNS,
@@ -132,7 +143,10 @@ export const TRIGGER_AGENT_TTY_PROMPT_CASES: PromptEvalCase[] = [
     context:
       'The answer should inspect the current terminal state directly instead of relying on generic shell multiplexers.',
     expectedPatterns: ['/agent-tty/i', '/\\bsnapshot\\b/i'],
-    forbiddenPatterns: ['/\\btmux\\b/i', '/\\bscreen\\b/i'],
+    forbiddenPatterns: [
+      TMUX_RECOMMENDATION_PATTERN,
+      SCREEN_RECOMMENDATION_PATTERN,
+    ],
     rubric: [
       'Selects agent-tty for terminal-state inspection.',
       'Uses snapshot as the inspection primitive before deciding whether the build passed.',
@@ -229,7 +243,10 @@ export const TRIGGER_AGENT_TTY_PROMPT_CASES: PromptEvalCase[] = [
     context:
       'The response should propose a terminal workflow that runs commands and verifies output incrementally without brittle sleeps.',
     expectedPatterns: ['/agent-tty/i', '/\\b(?:run|wait|snapshot)\\b/i'],
-    forbiddenPatterns: ['/sleep \\d+/i', '/\\btmux\\b/i'],
+    forbiddenPatterns: [
+      SLEEP_RECOMMENDATION_PATTERN,
+      TMUX_RECOMMENDATION_PATTERN,
+    ],
     rubric: [
       'Recognizes the need for an automated terminal workflow.',
       'Uses agent-tty commands to run steps and verify output after each command.',
@@ -260,7 +277,10 @@ export const TRIGGER_AGENT_TTY_PROMPT_CASES: PromptEvalCase[] = [
     context:
       'A correct plan should use terminal-aware resize automation and verification rather than manual guessing.',
     expectedPatterns: ['/agent-tty/i', '/\\bresize\\b/i'],
-    forbiddenPatterns: ['/sleep \\d+/i', '/\\btmux\\b/i'],
+    forbiddenPatterns: [
+      SLEEP_RECOMMENDATION_PATTERN,
+      TMUX_RECOMMENDATION_PATTERN,
+    ],
     rubric: [
       'Selects agent-tty for resize-sensitive TUI validation.',
       'Mentions resizing the terminal and verifying the resulting layout update.',

@@ -3,6 +3,9 @@ import type { PromptEvalCase } from '../../lib/types.js';
 
 const PROMPT_TIMEOUT_MS = 30_000;
 const EMPTY_ANTI_PATTERNS: PromptEvalCase['antiPatterns'] = [];
+const TMUX_RECOMMENDATION_PATTERN = String.raw`/(?:^|\n)\s*tmux\b[^\n]*|(?:(?<=\buse\s)|(?<=\bstart\s)|(?<=\blaunch\s)|(?<=\brun\s)|(?<=\bcreate\s)|(?<=\bcreate a\s))tmux\b/i`;
+const SCREEN_RECOMMENDATION_PATTERN = String.raw`/(?:^|\n)\s*screen\b[^\n]*|(?:(?<=\buse\s)|(?<=\bstart\s)|(?<=\blaunch\s)|(?<=\brun\s)|(?<=\bcreate\s)|(?<=\bcreate a\s))(?:gnu\s+)?screen\b/i`;
+const SLEEP_RECOMMENDATION_PATTERN = String.raw`/(?:^|\n)\s*sleep\s+\d+(?:\.\d+)?\b|(?:(?<=\buse\s)|(?<=\brun\s)|(?<=\badd\s)|(?<=\binsert\s))sleep\s+\d+(?:\.\d+)?\b/i`;
 
 function requiredCheck(
   id: string,
@@ -34,7 +37,7 @@ export const ANTI_PATTERN_PROMPT_CASES: PromptEvalCase[] = [
     context:
       'The answer should replace the blind delay with observable terminal readiness checks.',
     expectedPatterns: ['/agent-tty/i', '/\\bwait\\b/i'],
-    forbiddenPatterns: ['/sleep \\d+/i', '/setTimeout.*\\d{4}/i'],
+    forbiddenPatterns: [SLEEP_RECOMMENDATION_PATTERN, '/setTimeout.*\\d{4}/i'],
     rubric: [
       'Replaces the fixed sleep with agent-tty wait.',
       'Uses observable readiness rather than arbitrary timing.',
@@ -49,7 +52,7 @@ export const ANTI_PATTERN_PROMPT_CASES: PromptEvalCase[] = [
         'blind-sleep.replace-delay',
         'Uses wait instead of a hard-coded delay.',
         ['/\\bwait\\b/i'],
-        ['/sleep \\d+/i', '/setTimeout.*\\d{4}/i'],
+        [SLEEP_RECOMMENDATION_PATTERN, '/setTimeout.*\\d{4}/i'],
       ),
     ],
     antiPatterns: EMPTY_ANTI_PATTERNS,
@@ -64,7 +67,7 @@ export const ANTI_PATTERN_PROMPT_CASES: PromptEvalCase[] = [
     context:
       'The answer should replace tmux with the supported agent-tty session workflow.',
     expectedPatterns: ['/agent-tty/i'],
-    forbiddenPatterns: ['/\\btmux\\b/i', '/tmux new-session/i'],
+    forbiddenPatterns: [TMUX_RECOMMENDATION_PATTERN, '/tmux new-session/i'],
     rubric: [
       'Rejects tmux in favor of agent-tty.',
       'Keeps the plan inside the supported session lifecycle.',
@@ -79,7 +82,7 @@ export const ANTI_PATTERN_PROMPT_CASES: PromptEvalCase[] = [
         'tmux-usage.reject-tmux',
         'Avoids tmux and uses the supported session workflow instead.',
         ['/agent-tty/i'],
-        ['/\\btmux\\b/i', '/tmux new-session/i'],
+        [TMUX_RECOMMENDATION_PATTERN, '/tmux new-session/i'],
       ),
     ],
     antiPatterns: EMPTY_ANTI_PATTERNS,
@@ -94,7 +97,7 @@ export const ANTI_PATTERN_PROMPT_CASES: PromptEvalCase[] = [
     context:
       'The answer should replace screen with the supported agent-tty session workflow.',
     expectedPatterns: ['/agent-tty/i'],
-    forbiddenPatterns: ['/\\bscreen\\b/i', '/screen -S/i'],
+    forbiddenPatterns: [SCREEN_RECOMMENDATION_PATTERN, '/screen -S/i'],
     rubric: [
       'Rejects GNU screen in favor of agent-tty.',
       'Keeps the long-running process inside the supported workflow.',
@@ -109,7 +112,7 @@ export const ANTI_PATTERN_PROMPT_CASES: PromptEvalCase[] = [
         'screen-usage.reject-screen',
         'Avoids screen and uses the supported session workflow instead.',
         ['/agent-tty/i'],
-        ['/\\bscreen\\b/i', '/screen -S/i'],
+        [SCREEN_RECOMMENDATION_PATTERN, '/screen -S/i'],
       ),
     ],
     antiPatterns: EMPTY_ANTI_PATTERNS,

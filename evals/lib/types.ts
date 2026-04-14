@@ -114,6 +114,7 @@ export interface ForbiddenPatternResult {
   matchedTexts: string[];
   lineNumbers: number[];
   matchCount: number;
+  note?: string;
 }
 
 /** Anti-pattern detection finding emitted from a transcript scan. */

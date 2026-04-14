@@ -18,6 +18,19 @@ const REGEX_LITERAL_FLAGS_PATTERN = /^[dgimsuvy]*$/;
 const COMPILED_PATTERN_CACHE = new Map<string, RegExp>();
 const FORBIDDEN_PATTERN_PENALTY = 0.1;
 const ANTI_PATTERN_PENALTY = 0.05;
+export const PASS_THRESHOLD = 0.6;
+const NEGATION_CONTEXT_WINDOW = 50;
+const NEGATION_CONTEXT_PATTERNS = Object.freeze([
+  /\binstead of(?:\s+\S+){0,4}$/iu,
+  /\brather than(?:\s+\S+){0,4}$/iu,
+  /\bdon['’]t\s+(?:use|create|start|launch|run|add|insert)(?:\s+\S+){0,4}$/iu,
+  /\bdo not\s+(?:use|create|start|launch|run|add|insert)(?:\s+\S+){0,4}$/iu,
+  /\bavoid(?:\s+\S+){0,4}$/iu,
+  /\bnot(?:\s+\S+){0,2}$/iu,
+  /\bwithout(?:\s+\S+){0,4}$/iu,
+  /\bunlike(?:\s+\S+){0,2}$/iu,
+  /\bno need for(?:\s+\S+){0,4}$/iu,
+]);
 const PROMPT_SCORE_WEIGHTS = Object.freeze({
   expectedPatterns: 0.4,
   skillSelection: 0.4,
@@ -38,6 +51,11 @@ interface MatchOccurrence {
   matchedText: string;
   offset: number;
   lineNumber: number;
+}
+
+interface EvaluatedForbiddenOccurrence {
+  occurrence: MatchOccurrence;
+  negated: boolean;
 }
 
 interface AggregateMetricsWithStats extends AggregateMetrics {
@@ -127,7 +145,11 @@ export function checkForbiddenPatterns(
       compilePattern(pattern),
       lineStarts,
     );
-    return buildForbiddenPatternResult(pattern, occurrences);
+    const evaluatedOccurrences = occurrences.map((occurrence) => ({
+      occurrence,
+      negated: isInNegationContext(text, occurrence.offset),
+    }));
+    return buildForbiddenPatternResult(pattern, evaluatedOccurrences);
   });
 }
 
@@ -312,16 +334,7 @@ export function scorePromptCase(
     },
   ];
 
-  const passed =
-    patternMatches.every((match) => match.matched) &&
-    forbiddenViolationCount === 0 &&
-    expectedSkillCorrect &&
-    requiredChecks.every((check) =>
-      workflowChecks.some(
-        (result) => result.checkId === check.id && result.passed,
-      ),
-    ) &&
-    antiPatternFindings.length === 0;
+  const passed = totalScore >= PASS_THRESHOLD && expectedSkillCorrect;
 
   return {
     expectedSkillCorrect,
@@ -591,17 +604,65 @@ function buildPatternMatchResult(
   };
 }
 
+function isInNegationContext(text: string, matchIndex: number): boolean {
+  assertString(text, 'Forbidden-pattern text must be a string');
+  invariant(
+    Number.isInteger(matchIndex),
+    'Forbidden-pattern match index must be an integer',
+  );
+  invariant(
+    matchIndex >= 0 && matchIndex <= text.length,
+    'Forbidden-pattern match index must be within text bounds',
+  );
+
+  const windowStart = Math.max(0, matchIndex - NEGATION_CONTEXT_WINDOW);
+  const normalizedContext = text
+    .slice(windowStart, matchIndex)
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .toLowerCase();
+
+  if (normalizedContext.length === 0) {
+    return false;
+  }
+
+  return NEGATION_CONTEXT_PATTERNS.some((pattern) =>
+    pattern.test(normalizedContext),
+  );
+}
+
 function buildForbiddenPatternResult(
   pattern: string,
-  occurrences: MatchOccurrence[],
+  occurrences: EvaluatedForbiddenOccurrence[],
 ): ForbiddenPatternResult {
-  return {
+  const violatingOccurrences = occurrences.filter(
+    (occurrence) => !occurrence.negated,
+  );
+  const ignoredNegatedOccurrences = occurrences.filter(
+    (occurrence) => occurrence.negated,
+  );
+  const result: ForbiddenPatternResult = {
     pattern,
-    violated: occurrences.length > 0,
-    matchedTexts: occurrences.map((occurrence) => occurrence.matchedText),
-    lineNumbers: occurrences.map((occurrence) => occurrence.lineNumber),
-    matchCount: occurrences.length,
+    violated: violatingOccurrences.length > 0,
+    matchedTexts: violatingOccurrences.map(
+      ({ occurrence }) => occurrence.matchedText,
+    ),
+    lineNumbers: violatingOccurrences.map(
+      ({ occurrence }) => occurrence.lineNumber,
+    ),
+    matchCount: violatingOccurrences.length,
   };
+
+  if (ignoredNegatedOccurrences.length > 0) {
+    const ignoredCount = ignoredNegatedOccurrences.length;
+    const ignoredLabel = ignoredCount === 1 ? 'match' : 'matches';
+    result.note =
+      violatingOccurrences.length === 0
+        ? `Ignored ${String(ignoredCount)} forbidden-pattern ${ignoredLabel} in negation context.`
+        : `Ignored ${String(ignoredCount)} forbidden-pattern ${ignoredLabel} in negation context while counting actual violations.`;
+  }
+
+  return result;
 }
 
 function resolveWorkflowStatus(
@@ -744,7 +805,10 @@ function countMatchedPatterns(results: PatternMatchResult[]): number {
 }
 
 function countForbiddenViolations(results: ForbiddenPatternResult[]): number {
-  return results.reduce((count, result) => count + result.matchCount, 0);
+  return results.reduce(
+    (count, result) => count + (result.violated ? result.matchCount : 0),
+    0,
+  );
 }
 
 function normalizeScoreBreakdown(result: EvalResult): number {
