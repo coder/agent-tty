@@ -316,7 +316,9 @@ function parseJsonRecords(raw: string): unknown[] {
   return records;
 }
 
-function extractPlainTextToolCalls(raw: string): Array<Record<string, unknown>> {
+function extractPlainTextToolCalls(
+  raw: string,
+): Array<Record<string, unknown>> {
   const toolCalls: Array<Record<string, unknown>> = [];
   const seen = new Set<string>();
   const patterns = [
@@ -391,7 +393,9 @@ function extractPlainTextMessages(raw: string): {
   }
 
   const messages = sections.map((section) =>
-    section.role === undefined ? section.content : `${section.role}: ${section.content}`,
+    section.role === undefined
+      ? section.content
+      : `${section.role}: ${section.content}`,
   );
   const finalAssistantSection = [...sections]
     .reverse()
@@ -430,7 +434,9 @@ async function runCommand(
 
   return await new Promise((resolveResult) => {
     let settled = false;
-    const settle = (result: Omit<CommandExecutionResult, 'durationMs'>): void => {
+    const settle = (
+      result: Omit<CommandExecutionResult, 'durationMs'>,
+    ): void => {
       if (settled) {
         return;
       }
@@ -460,14 +466,14 @@ async function runCommand(
       (error: ExecFileException | null, stdout: string, stderr: string) => {
         const exitCode =
           error === null
-            ? child.exitCode ?? 0
+            ? (child.exitCode ?? 0)
             : typeof error.code === 'number'
               ? error.code
               : child.exitCode;
         const signal = error?.signal ?? child.signalCode;
         const resolvedError = timedOut
           ? new Error(`Claude command timed out after ${String(timeoutMs)}ms`)
-          : error ?? undefined;
+          : (error ?? undefined);
         settle({
           stdout,
           stderr,
@@ -576,8 +582,12 @@ export class ClaudeProvider implements EvalProvider {
     const available = execution.exitCode === 0 && !execution.timedOut;
     const notes = available
       ? [
-          ...(version === undefined ? [] : [`detected Claude version ${version}`]),
-          ...(combinedOutput.length === 0 ? ['Claude version output was empty'] : []),
+          ...(version === undefined
+            ? []
+            : [`detected Claude version ${version}`]),
+          ...(combinedOutput.length === 0
+            ? ['Claude version output was empty']
+            : []),
         ]
       : [
           buildErrorMessage(
@@ -666,7 +676,9 @@ export class ClaudeProvider implements EvalProvider {
       {
         ...runtime,
         defaultModelId:
-          parsedOutput.modelId ?? parsedRequest.modelId ?? runtime.defaultModelId,
+          parsedOutput.modelId ??
+          parsedRequest.modelId ??
+          runtime.defaultModelId,
       },
       'Invalid Claude prompt runtime info',
     );
@@ -688,7 +700,9 @@ export class ClaudeProvider implements EvalProvider {
         ...(ok
           ? {}
           : {
-              errorClass: execution.timedOut ? 'TimeoutError' : 'ClaudeExecutionError',
+              errorClass: execution.timedOut
+                ? 'TimeoutError'
+                : 'ClaudeExecutionError',
               errorMessage: buildErrorMessage(
                 execution,
                 'Claude plan-mode invocation failed',
@@ -765,7 +779,9 @@ export class ClaudeProvider implements EvalProvider {
       {
         ...runtime,
         defaultModelId:
-          parsedOutput.modelId ?? parsedRequest.modelId ?? runtime.defaultModelId,
+          parsedOutput.modelId ??
+          parsedRequest.modelId ??
+          runtime.defaultModelId,
       },
       'Invalid Claude agent runtime info',
     );
@@ -790,7 +806,9 @@ export class ClaudeProvider implements EvalProvider {
         ...(ok
           ? {}
           : {
-              errorClass: execution.timedOut ? 'TimeoutError' : 'ClaudeExecutionError',
+              errorClass: execution.timedOut
+                ? 'TimeoutError'
+                : 'ClaudeExecutionError',
               errorMessage: buildErrorMessage(
                 execution,
                 'Claude agent-mode invocation failed',
@@ -857,7 +875,9 @@ export class ClaudeProvider implements EvalProvider {
       }
       if (selectedSkill === undefined) {
         selectedSkill = inferSelectedSkill(
-          typeof record.selectedSkill === 'string' ? record.selectedSkill : undefined,
+          typeof record.selectedSkill === 'string'
+            ? record.selectedSkill
+            : undefined,
           typeof record.selected_skill === 'string'
             ? record.selected_skill
             : undefined,
@@ -868,7 +888,10 @@ export class ClaudeProvider implements EvalProvider {
       }
 
       const payload = isRecord(record.message) ? record.message : record;
-      if (isRecord(record.message) && typeof record.message.model === 'string') {
+      if (
+        isRecord(record.message) &&
+        typeof record.message.model === 'string'
+      ) {
         modelId = record.message.model;
       }
       const role =
@@ -1003,7 +1026,10 @@ export class ClaudeProvider implements EvalProvider {
         text.push(value.result);
       }
 
-      if (typeof value.content === 'string' && value.content.trim().length > 0) {
+      if (
+        typeof value.content === 'string' &&
+        value.content.trim().length > 0
+      ) {
         if (type === 'thinking' || type === 'reasoning') {
           reasoning.push(value.content);
         } else {

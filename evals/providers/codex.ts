@@ -301,7 +301,9 @@ function extractTextFragments(value: unknown): string[] {
   return fragments;
 }
 
-function extractPlainTextToolCalls(raw: string): Array<Record<string, unknown>> {
+function extractPlainTextToolCalls(
+  raw: string,
+): Array<Record<string, unknown>> {
   const toolCalls: Array<Record<string, unknown>> = [];
   const seen = new Set<string>();
   const patterns = [
@@ -361,7 +363,9 @@ async function runCommand(
 
   return await new Promise((resolveResult) => {
     let settled = false;
-    const settle = (result: Omit<CommandExecutionResult, 'durationMs'>): void => {
+    const settle = (
+      result: Omit<CommandExecutionResult, 'durationMs'>,
+    ): void => {
       if (settled) {
         return;
       }
@@ -391,14 +395,14 @@ async function runCommand(
       (error: ExecFileException | null, stdout: string, stderr: string) => {
         const exitCode =
           error === null
-            ? child.exitCode ?? 0
+            ? (child.exitCode ?? 0)
             : typeof error.code === 'number'
               ? error.code
               : child.exitCode;
         const signal = error?.signal ?? child.signalCode;
         const resolvedError = timedOut
           ? new Error(`Codex command timed out after ${String(timeoutMs)}ms`)
-          : error ?? undefined;
+          : (error ?? undefined);
         settle({
           stdout,
           stderr,
@@ -466,7 +470,10 @@ export class CodexProvider implements EvalProvider {
         ...DEFAULT_CODEX_CONFIG,
         ...baseConfig,
         command: baseConfig.command ?? DEFAULT_CODEX_CONFIG.command,
-        capabilities: mergeCapabilities(DEFAULT_CODEX_CAPABILITIES, capabilities),
+        capabilities: mergeCapabilities(
+          DEFAULT_CODEX_CAPABILITIES,
+          capabilities,
+        ),
       },
       'Invalid Codex provider config',
     );
@@ -504,8 +511,12 @@ export class CodexProvider implements EvalProvider {
     const available = execution.exitCode === 0 && !execution.timedOut;
     const notes = available
       ? [
-          ...(version === undefined ? [] : [`detected Codex version ${version}`]),
-          ...(combinedOutput.length === 0 ? ['Codex version output was empty'] : []),
+          ...(version === undefined
+            ? []
+            : [`detected Codex version ${version}`]),
+          ...(combinedOutput.length === 0
+            ? ['Codex version output was empty']
+            : []),
         ]
       : [
           buildErrorMessage(
@@ -578,7 +589,10 @@ export class CodexProvider implements EvalProvider {
         ...(parsedRequest.modelId === undefined
           ? []
           : ['--model', parsedRequest.modelId]),
-        buildPrompt(parsedRequest.evalCase.prompt, parsedRequest.evalCase.context),
+        buildPrompt(
+          parsedRequest.evalCase.prompt,
+          parsedRequest.evalCase.context,
+        ),
       ],
       resolve(parsedRequest.cwd ?? this.config.cwd ?? process.cwd()),
       {
@@ -595,7 +609,9 @@ export class CodexProvider implements EvalProvider {
       {
         ...runtime,
         defaultModelId:
-          parsedOutput.modelId ?? parsedRequest.modelId ?? runtime.defaultModelId,
+          parsedOutput.modelId ??
+          parsedRequest.modelId ??
+          runtime.defaultModelId,
       },
       'Invalid Codex prompt runtime info',
     );
@@ -617,7 +633,9 @@ export class CodexProvider implements EvalProvider {
         ...(ok
           ? {}
           : {
-              errorClass: execution.timedOut ? 'TimeoutError' : 'CodexExecutionError',
+              errorClass: execution.timedOut
+                ? 'TimeoutError'
+                : 'CodexExecutionError',
               errorMessage: buildErrorMessage(
                 execution,
                 'Codex plan-mode invocation failed',
@@ -694,7 +712,9 @@ export class CodexProvider implements EvalProvider {
       {
         ...runtime,
         defaultModelId:
-          parsedOutput.modelId ?? parsedRequest.modelId ?? runtime.defaultModelId,
+          parsedOutput.modelId ??
+          parsedRequest.modelId ??
+          runtime.defaultModelId,
       },
       'Invalid Codex agent runtime info',
     );
@@ -719,7 +739,9 @@ export class CodexProvider implements EvalProvider {
         ...(ok
           ? {}
           : {
-              errorClass: execution.timedOut ? 'TimeoutError' : 'CodexExecutionError',
+              errorClass: execution.timedOut
+                ? 'TimeoutError'
+                : 'CodexExecutionError',
               errorMessage: buildErrorMessage(
                 execution,
                 'Codex agent-mode invocation failed',
@@ -805,7 +827,10 @@ export class CodexProvider implements EvalProvider {
         return;
       }
 
-      if (record.type === 'thread.started' && typeof record.thread_id === 'string') {
+      if (
+        record.type === 'thread.started' &&
+        typeof record.thread_id === 'string'
+      ) {
         sessionId = record.thread_id;
       }
       if (typeof record.model === 'string' && modelId === undefined) {
@@ -813,7 +838,9 @@ export class CodexProvider implements EvalProvider {
       }
       if (selectedSkill === undefined) {
         selectedSkill = inferSelectedSkill(
-          typeof record.selectedSkill === 'string' ? record.selectedSkill : undefined,
+          typeof record.selectedSkill === 'string'
+            ? record.selectedSkill
+            : undefined,
           typeof record.selected_skill === 'string'
             ? record.selected_skill
             : undefined,

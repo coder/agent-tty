@@ -28,10 +28,7 @@ import navigationFocusReproCase from './cases/navigation-focus-repro.js';
 import releaseReadinessCase from './cases/release-readiness.js';
 import renderingBugReproCase from './cases/rendering-bug-repro.js';
 import resizeRegressionCase from './cases/resize-regression.js';
-import {
-  scoreDogfoodRun,
-  scoreReportRequirements,
-} from './scorers/index.js';
+import { scoreDogfoodRun, scoreReportRequirements } from './scorers/index.js';
 
 function coerceDogfoodCase(evalCase: unknown): DogfoodEvalCase {
   return DogfoodEvalCaseSchema.parse(evalCase) as DogfoodEvalCase;
@@ -134,7 +131,9 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
-async function readOptionalTextFile(filePath: string): Promise<string | undefined> {
+async function readOptionalTextFile(
+  filePath: string,
+): Promise<string | undefined> {
   try {
     return await readFile(filePath, 'utf8');
   } catch {
@@ -158,7 +157,10 @@ async function readSkillText(relativePath: string): Promise<string> {
 function formatArtifactRequirement(evalCase: DogfoodEvalCase): string[] {
   return evalCase.artifactRequirements.map((requirement) => {
     const prefix = requirement.required ? 'required' : 'optional';
-    const count = requirement.minCount === undefined ? '' : ` (min ${String(requirement.minCount)})`;
+    const count =
+      requirement.minCount === undefined
+        ? ''
+        : ` (min ${String(requirement.minCount)})`;
     return `- ${requirement.kind} [${prefix}]${count}: ${requirement.description}`;
   });
 }
@@ -288,7 +290,9 @@ async function resolveReportText(
   if (bundlePath !== undefined) {
     try {
       const artifacts = await scanBundleArtifacts(bundlePath);
-      const noteArtifacts = artifacts.filter((artifact) => artifact.kind === 'notes');
+      const noteArtifacts = artifacts.filter(
+        (artifact) => artifact.kind === 'notes',
+      );
       if (noteArtifacts.length > 0) {
         const noteContents = await Promise.all(
           noteArtifacts.map(async (artifact) => {
@@ -327,11 +331,7 @@ async function resolveTranscriptText(result: {
     }
   }
 
-  return [
-    result.rawStdout,
-    result.rawStderr,
-    ...result.normalized.messages,
-  ]
+  return [result.rawStdout, result.rawStderr, ...result.normalized.messages]
     .filter((chunk) => chunk.trim().length > 0)
     .join('\n\n');
 }
@@ -377,23 +377,33 @@ function validateConditionList(
       SKILL_CONDITIONS.includes(condition),
       `Unsupported dogfood skill condition: ${condition}`,
     );
-    invariant(!seen.has(condition), `Duplicate dogfood skill condition: ${condition}`);
+    invariant(
+      !seen.has(condition),
+      `Duplicate dogfood skill condition: ${condition}`,
+    );
     seen.add(condition);
   }
 
   return [...conditions];
 }
 
-function validateCaseFilter(caseFilter: readonly string[] | undefined): string[] | undefined {
+function validateCaseFilter(
+  caseFilter: readonly string[] | undefined,
+): string[] | undefined {
   if (caseFilter === undefined) {
     return undefined;
   }
 
-  const availableCaseIds = new Set(DOGFOOD_CASES.map((evalCase) => evalCase.id));
+  const availableCaseIds = new Set(
+    DOGFOOD_CASES.map((evalCase) => evalCase.id),
+  );
   const seen = new Set<string>();
   for (const caseId of caseFilter) {
     invariant(caseId.trim().length > 0, 'caseFilter entries must not be empty');
-    invariant(availableCaseIds.has(caseId), `Unknown dogfood case id: ${caseId}`);
+    invariant(
+      availableCaseIds.has(caseId),
+      `Unknown dogfood case id: ${caseId}`,
+    );
     invariant(!seen.has(caseId), `Duplicate dogfood case id: ${caseId}`);
     seen.add(caseId);
   }
@@ -436,7 +446,10 @@ function buildCaseInventory(): DogfoodEvalCase[] {
   }
 
   invariant(cases.length === 6, 'Dogfood lane must define exactly 6 cases');
-  invariant(categoryCounts.get('qa') === 1, 'Dogfood lane must define exactly 1 QA case');
+  invariant(
+    categoryCounts.get('qa') === 1,
+    'Dogfood lane must define exactly 1 QA case',
+  );
   invariant(
     categoryCounts.get('release-readiness') === 1,
     'Dogfood lane must define exactly 1 release-readiness case',
@@ -470,7 +483,9 @@ export async function runDogfoodLane(
       ? allCases
       : allCases.filter((evalCase) => selectedCaseIds.includes(evalCase.id));
   const bootstrapSkill = await readSkillText('../../skills/agent-tty/SKILL.md');
-  const dogfoodSkill = await readSkillText('../../skill-data/dogfood-tui/SKILL.md');
+  const dogfoodSkill = await readSkillText(
+    '../../skill-data/dogfood-tui/SKILL.md',
+  );
   const staleSkill = await readSkillText('../../skill-data/agent-tty/SKILL.md');
 
   let detectedRuntime: ProviderRuntimeInfo;
@@ -531,7 +546,9 @@ export async function runDogfoodLane(
           providerId: provider.id,
           condition,
           trial: 1,
-          ...(requestedModelId === undefined ? {} : { modelId: requestedModelId }),
+          ...(requestedModelId === undefined
+            ? {}
+            : { modelId: requestedModelId }),
           cwd: repoRoot,
           homeDir,
           outputDir,
@@ -577,8 +594,9 @@ export async function runDogfoodLane(
         const reportCompleteness = {
           ...baseReportCompleteness,
           sectionsExpected: reportRequirementScore.details.length,
-          sectionsFound: reportRequirementScore.details.filter((detail) => detail.found)
-            .length,
+          sectionsFound: reportRequirementScore.details.filter(
+            (detail) => detail.found,
+          ).length,
           score: clampUnitInterval(
             (baseReportCompleteness.score + reportRequirementScore.score) / 2,
           ),
@@ -610,13 +628,13 @@ export async function runDogfoodLane(
           transcript,
           requestCase.antiPatterns,
         );
-        const artifactManifestPath = await resolveArtifactManifestPath(bundlePath);
+        const artifactManifestPath =
+          await resolveArtifactManifestPath(bundlePath);
         const blockingAntiPattern = antiPatternFindings.some(
           (finding) => finding.severity === 'error',
         );
-        const missingRequiredReportSection = reportRequirementScore.details.some(
-          (detail) => !detail.found,
-        );
+        const missingRequiredReportSection =
+          reportRequirementScore.details.some((detail) => !detail.found);
         const missingRequiredWorkflow = workflowChecks.some(
           (check) => !check.passed,
         );
@@ -633,7 +651,9 @@ export async function runDogfoodLane(
           ...(agentResult.runtime.version === undefined
             ? {}
             : { providerVersion: agentResult.runtime.version }),
-          ...(requestedModelId === undefined ? {} : { modelId: requestedModelId }),
+          ...(requestedModelId === undefined
+            ? {}
+            : { modelId: requestedModelId }),
           lane: 'dogfood',
           caseId: evalCase.id,
           category: evalCase.category,
@@ -655,7 +675,9 @@ export async function runDogfoodLane(
             ? {}
             : { transcriptPath: agentResult.transcriptPath }),
           ...(bundlePath === undefined ? {} : { bundlePath }),
-          ...(artifactManifestPath === undefined ? {} : { artifactManifestPath }),
+          ...(artifactManifestPath === undefined
+            ? {}
+            : { artifactManifestPath }),
           ...(agentResult.eventLogPath === undefined
             ? {}
             : { eventLogPath: agentResult.eventLogPath }),
@@ -674,16 +696,21 @@ export async function runDogfoodLane(
         results.push(result);
       } catch (error) {
         const completedAt = new Date().toISOString();
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         const errorClass =
-          error instanceof Error && error.name.length > 0 ? error.name : 'Error';
+          error instanceof Error && error.name.length > 0
+            ? error.name
+            : 'Error';
         const result: EvalResult = EvalResultSchema.parse({
           runId: metadata.runId,
           providerId: provider.id,
           ...(detectedRuntime.version === undefined
             ? {}
             : { providerVersion: detectedRuntime.version }),
-          ...(requestedModelId === undefined ? {} : { modelId: requestedModelId }),
+          ...(requestedModelId === undefined
+            ? {}
+            : { modelId: requestedModelId }),
           lane: 'dogfood',
           caseId: evalCase.id,
           category: evalCase.category,

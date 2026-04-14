@@ -493,9 +493,7 @@ export async function runPromptLane(
         const startedAtMs = Date.now();
 
         try {
-          const promptResult = (await provider.invokePlanMode(
-            request,
-          )) as ProviderPromptResult;
+          const promptResult = await provider.invokePlanMode(request);
           results.push(buildEvalResult(request, promptResult));
         } catch (error: unknown) {
           const completedAt = new Date().toISOString();
