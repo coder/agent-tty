@@ -40,7 +40,7 @@ const DEFAULT_CODEX_CONFIG: ProviderConfig = {
   providerId: 'codex',
   mode: 'agent-run',
   command: ['codex'],
-  defaultModelId: 'o4-mini',
+  defaultModelId: 'gpt-5.4',
   capabilities: DEFAULT_CODEX_CAPABILITIES,
 };
 

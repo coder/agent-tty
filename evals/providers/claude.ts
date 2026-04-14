@@ -225,6 +225,21 @@ function buildPrompt(prompt: string, context?: string): string {
   return `${prompt}\n\nAdditional context:\n${context}`;
 }
 
+function buildEffortArgs(env: Record<string, string> | undefined): string[] {
+  const effort = env?.CLAUDE_CODE_EFFORT ?? process.env.CLAUDE_CODE_EFFORT;
+  if (effort === undefined) {
+    return [];
+  }
+
+  assertString(effort, 'Claude effort must be a string when provided');
+  const trimmed = effort.trim();
+  invariant(
+    trimmed.length > 0,
+    'Claude effort must be a non-empty string when provided',
+  );
+  return ['--effort', trimmed];
+}
+
 function resolveTimeoutMs(
   overrideTimeoutMs: number | undefined,
   requestTimeoutMs: number,
@@ -672,11 +687,13 @@ export class ClaudeProvider implements EvalProvider {
       this.config.timeoutMs,
       parsedRequest.evalCase.budgets.timeoutMs,
     );
+    const effortArgs = buildEffortArgs(this.config.env);
     const startedAtMs = Date.now();
     const execution = await runCommand(
       [
         ...this.config.command,
         '--print',
+        ...effortArgs,
         '--output-format',
         'json',
         ...(parsedRequest.modelId === undefined
@@ -771,12 +788,14 @@ export class ClaudeProvider implements EvalProvider {
       parsedRequest.evalCase.budgets.timeoutMs,
     );
     const maxAgentSteps = extractMaxAgentSteps(parsedRequest);
+    const effortArgs = buildEffortArgs(this.config.env);
     const startedAtMs = Date.now();
     const execution = await runCommand(
       [
         ...this.config.command,
         '--bare',
         '--print',
+        ...effortArgs,
         '--verbose',
         '--output-format',
         'stream-json',

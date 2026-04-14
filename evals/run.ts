@@ -45,6 +45,8 @@ const HELP_TEXT = [
   '',
   'Options:',
   `  --provider <id>     Provider to use (${CLI_PROVIDER_IDS.join(', ')})`,
+  '  --model <model>     Model to use (for example: opus, claude-opus-4-6, gpt-5.4, o4-mini)',
+  '  --effort <level>    Claude Code effort/thinking level (low, medium, high, max)',
   '  --lane <lane>       Lane to run (prompt, execution, dogfood, all)',
   '  --condition <cond>  Skill condition (none, self-load, preloaded, stale, all). Default: all',
   '  --case <id>         Run specific case(s) by ID. May be repeated.',
@@ -56,8 +58,8 @@ const HELP_TEXT = [
   '',
   'Examples:',
   '  npx tsx evals/run.ts --provider stub --lane prompt',
-  '  npx tsx evals/run.ts --provider claude --lane prompt',
-  '  npx tsx evals/run.ts --provider codex --lane all',
+  '  npx tsx evals/run.ts --provider claude --model opus --effort high --lane prompt',
+  '  npx tsx evals/run.ts --provider codex --model gpt-5.4 --lane all',
   '  npx tsx evals/run.ts --provider stub --lane execution --case hello-prompt --case resize-demo',
   '',
   'Notes:',
@@ -67,6 +69,8 @@ const HELP_TEXT = [
 
 interface CliOptions {
   providerId?: string;
+  modelId?: string;
+  effortLevel?: string;
   lane?: string;
   condition?: string;
   caseIds: string[];
@@ -79,6 +83,8 @@ interface CliOptions {
 
 interface ResolvedCliOptions {
   providerId: string;
+  modelId?: string;
+  effortLevel?: string;
   requestedLane: string;
   requestedCondition: string;
   caseIds: string[];
@@ -249,6 +255,23 @@ function parseCliArgs(argumentsList: readonly string[]): CliOptions {
       index = parsed.nextIndex;
       continue;
     }
+    if (argument === '--model' || argument.startsWith('--model=')) {
+      const parsed = parseOptionValue(argument, '--model', argumentsList, index);
+      invariant(options.modelId === undefined, '--model may only be set once');
+      options.modelId = parsed.value;
+      index = parsed.nextIndex;
+      continue;
+    }
+    if (argument === '--effort' || argument.startsWith('--effort=')) {
+      const parsed = parseOptionValue(argument, '--effort', argumentsList, index);
+      invariant(
+        options.effortLevel === undefined,
+        '--effort may only be set once',
+      );
+      options.effortLevel = parsed.value;
+      index = parsed.nextIndex;
+      continue;
+    }
     if (argument === '--lane' || argument.startsWith('--lane=')) {
       const parsed = parseOptionValue(argument, '--lane', argumentsList, index);
       invariant(options.lane === undefined, '--lane may only be set once');
@@ -309,6 +332,22 @@ function resolveProviderId(providerId: string | undefined): CliProviderId {
     `Unsupported provider id: ${providerId}. Expected one of ${CLI_PROVIDER_IDS.join(', ')}`,
   );
   return providerId;
+}
+
+function resolveOptionalStringOption(
+  value: string | undefined,
+  optionName: string,
+): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  assertString(optionName, 'optionName must be a string');
+  invariant(optionName.startsWith('--'), 'optionName must start with "--"');
+  assertString(value, `${optionName} must be a string`);
+  const trimmed = value.trim();
+  invariant(trimmed.length > 0, `${optionName} must not be empty`);
+  return trimmed;
 }
 
 function resolveRequestedLanes(lane: string | undefined): EvalLane[] {
@@ -483,6 +522,11 @@ function buildResolvedOptions(
   options: CliOptions,
 ): ResolvedCliOptions {
   const providerId = resolveProviderId(options.providerId);
+  const modelId = resolveOptionalStringOption(options.modelId, '--model');
+  const effortLevel = resolveOptionalStringOption(
+    options.effortLevel,
+    '--effort',
+  );
   const requestedLanes = resolveRequestedLanes(options.lane);
   const requestedConditions = resolveRequestedConditions(options.condition);
   const caseIds = resolveRequestedCaseIds(options.caseIds);
@@ -496,6 +540,8 @@ function buildResolvedOptions(
 
   return {
     providerId,
+    ...(modelId === undefined ? {} : { modelId }),
+    ...(effortLevel === undefined ? {} : { effortLevel }),
     requestedLane: options.lane ?? 'all',
     requestedCondition: options.condition ?? 'all',
     caseIds,
@@ -532,6 +578,7 @@ function writeDryRunSummary(options: ResolvedCliOptions): void {
   const summary: RunSummary = {
     ok: true,
     providerId: options.providerId,
+    ...(options.modelId === undefined ? {} : { modelId: options.modelId }),
     lanes: options.activeLanes,
     conditions: options.activeConditions,
     totalInvocations: options.totalInvocations,
@@ -551,6 +598,12 @@ function writeDryRunSummary(options: ResolvedCliOptions): void {
 
   writeLine(process.stdout, 'Dry run: no providers will be invoked.');
   writeLine(process.stdout, `Provider: ${options.providerId}`);
+  if (options.modelId !== undefined) {
+    writeLine(process.stdout, `Model: ${options.modelId}`);
+  }
+  if (options.effortLevel !== undefined) {
+    writeLine(process.stdout, `Effort: ${options.effortLevel}`);
+  }
   writeLine(process.stdout, `Lanes: ${options.activeLanes.join(', ')}`);
   writeLine(
     process.stdout,
@@ -568,21 +621,31 @@ function writeDryRunSummary(options: ResolvedCliOptions): void {
 }
 
 function createEvalProvider(
-  providerId: string,
+  options: Pick<ResolvedCliOptions, 'providerId' | 'modelId' | 'effortLevel'>,
   repoRoot: string,
 ): EvalProvider {
-  if (providerId === 'fixture') {
+  const providerConfig = {
+    ...(options.modelId === undefined
+      ? {}
+      : { defaultModelId: options.modelId }),
+    ...(options.providerId !== 'claude' || options.effortLevel === undefined
+      ? {}
+      : { env: { CLAUDE_CODE_EFFORT: options.effortLevel } }),
+  };
+
+  if (options.providerId === 'fixture') {
     const fixtureDir = process.env.EVAL_FIXTURE_DIR;
     invariant(
       typeof fixtureDir === 'string' && fixtureDir.trim().length > 0,
       'The fixture provider requires EVAL_FIXTURE_DIR to point at a fixture directory',
     );
-    return createProvider(providerId, {
+    return createProvider(options.providerId, {
+      ...providerConfig,
       fixtureDir: resolve(repoRoot, fixtureDir),
     });
   }
 
-  return createProvider(providerId);
+  return createProvider(options.providerId, providerConfig);
 }
 
 function appendMetadataNote(notes: string[], note: string | undefined): void {
@@ -619,6 +682,16 @@ function buildRunMetadata(
     metadataNotes,
     `output base dir: ${options.outputBaseDir}`,
   );
+  appendMetadataNote(
+    metadataNotes,
+    options.modelId === undefined ? undefined : `requested model: ${options.modelId}`,
+  );
+  appendMetadataNote(
+    metadataNotes,
+    options.effortLevel === undefined
+      ? undefined
+      : `requested effort: ${options.effortLevel}`,
+  );
   if (runtimeInfo === undefined) {
     appendMetadataNote(
       metadataNotes,
@@ -647,15 +720,13 @@ function buildRunMetadata(
     }
   }
 
+  const selectedModelId = options.modelId ?? runtimeInfo?.defaultModelId;
   const parsedMetadata = RunMetadataSchema.parse({
     runId,
     createdAt: new Date().toISOString(),
     repoRoot,
     providers: [options.providerId],
-    models:
-      runtimeInfo?.defaultModelId === undefined
-        ? []
-        : [runtimeInfo.defaultModelId],
+    models: selectedModelId === undefined ? [] : [selectedModelId],
     lanes: options.activeLanes,
     conditions: options.activeConditions,
     totalTrials: DEFAULT_TOTAL_TRIALS,
@@ -818,7 +889,7 @@ export async function runEvalCli(
   }
 
   await mkdir(options.outputBaseDir, { recursive: true });
-  const provider = createEvalProvider(options.providerId, repoRoot);
+  const provider = createEvalProvider(options, repoRoot);
   const { runtimeInfo, runtimeErrorMessage } = await detectProviderRuntime(
     provider,
     options,
