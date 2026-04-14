@@ -8,6 +8,8 @@ import type {
   ProviderPromptResult,
   ProviderRuntimeInfo,
 } from '../lib/types.js';
+import { ClaudeProvider } from './claude.js';
+import { CodexProvider } from './codex.js';
 import {
   FixtureProvider,
   RecordingProvider,
@@ -15,7 +17,13 @@ import {
 } from './fixtures.js';
 
 /** Supported provider identifiers for the eval foundation. */
-export const SUPPORTED_PROVIDER_IDS = ['stub', 'fixture', 'recording'] as const;
+export const SUPPORTED_PROVIDER_IDS = [
+  'stub',
+  'fixture',
+  'recording',
+  'claude',
+  'codex',
+] as const;
 
 type SupportedProviderId = (typeof SUPPORTED_PROVIDER_IDS)[number];
 
@@ -56,13 +64,17 @@ export function createProvider(
   if (!isSupportedProviderId(id)) {
     invariant(
       false,
-      `Unknown provider id: ${id}. Supported: stub, fixture, recording`,
+      `Unknown provider id: ${id}. Supported: stub, fixture, recording, claude, codex`,
     );
   }
 
   switch (id) {
     case 'stub':
       return new StubProvider(stripRecordingConfig(config));
+    case 'claude':
+      return new ClaudeProvider(stripRecordingConfig(config));
+    case 'codex':
+      return new CodexProvider(stripRecordingConfig(config));
     case 'fixture': {
       invariant(
         typeof config.fixtureDir === 'string' && config.fixtureDir.length > 0,
