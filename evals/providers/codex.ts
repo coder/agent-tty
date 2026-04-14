@@ -44,6 +44,9 @@ const DEFAULT_CODEX_CONFIG: ProviderConfig = {
   capabilities: DEFAULT_CODEX_CAPABILITIES,
 };
 
+const CODEX_FULL_ACCESS_SANDBOX_PERMISSIONS =
+  'sandbox_permissions=["disk-full-read-access","disk-write-access","network-full-access"]';
+
 type CommandExecutionResult = {
   stdout: string;
   stderr: string;
@@ -435,6 +438,7 @@ async function runCommand(
         });
       },
     );
+    child.stdin?.end();
 
     if (timeoutMs > 0) {
       timeoutHandle = setTimeout(() => {
@@ -603,14 +607,11 @@ export class CodexProvider implements EvalProvider {
         'exec',
         '--color',
         'never',
-        '--sandbox',
-        'read-only',
-        '--ask-for-approval',
-        'never',
+        '--ephemeral',
         '--skip-git-repo-check',
         ...(parsedRequest.modelId === undefined
           ? []
-          : ['--model', parsedRequest.modelId]),
+          : ['-m', parsedRequest.modelId]),
         buildPrompt(
           parsedRequest.evalCase.prompt,
           parsedRequest.evalCase.context,
@@ -710,13 +711,13 @@ export class CodexProvider implements EvalProvider {
         '--json',
         '--color',
         'never',
-        '--full-auto',
-        '--ask-for-approval',
-        'never',
+        '--ephemeral',
         '--skip-git-repo-check',
+        '-c',
+        CODEX_FULL_ACCESS_SANDBOX_PERMISSIONS,
         ...(parsedRequest.modelId === undefined
           ? []
-          : ['--model', parsedRequest.modelId]),
+          : ['-m', parsedRequest.modelId]),
         parsedRequest.evalCase.prompt,
       ],
       resolve(parsedRequest.cwd),
