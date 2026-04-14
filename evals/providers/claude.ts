@@ -506,6 +506,7 @@ async function runCommand(
         });
       },
     );
+    child.stdin?.end();
 
     if (timeoutMs > 0) {
       timeoutHandle = setTimeout(() => {
@@ -774,7 +775,9 @@ export class ClaudeProvider implements EvalProvider {
     const execution = await runCommand(
       [
         ...this.config.command,
+        '--bare',
         '--print',
+        '--verbose',
         '--output-format',
         'stream-json',
         '--dangerously-skip-permissions',
