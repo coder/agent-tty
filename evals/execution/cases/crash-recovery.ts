@@ -6,6 +6,7 @@ import {
   createExecutionCase,
   executionAntiPatterns,
   executionBudgets,
+  executionTaskPrompt,
   fixtureSetupStep,
   requiredVerifier,
   workflowCheck,
@@ -15,8 +16,10 @@ export const crashRecoveryCase = createExecutionCase({
   id: 'crash-recovery',
   lane: 'execution',
   category: 'recovery',
-  prompt:
+  prompt: executionTaskPrompt(
     'Launch crash-demo, wait for it to exit with code 1, inspect the session status, and then destroy or otherwise clean up the crashed session.',
+    'crash-demo',
+  ),
   expectedSkill: 'agent-tty',
   fixture: 'crash-demo',
   conditions: [...ALL_EXECUTION_CONDITIONS],

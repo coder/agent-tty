@@ -10,6 +10,7 @@ import {
   createExecutionCase,
   executionAntiPatterns,
   executionBudgets,
+  executionTaskPrompt,
   fixtureSetupStep,
   requiredVerifier,
   workflowCheck,
@@ -36,8 +37,10 @@ export const runCommandCase = createExecutionCase({
   id: 'run-command',
   lane: 'execution',
   category: 'session',
-  prompt:
+  prompt: executionTaskPrompt(
     "Launch hello-prompt, use the 'run' command to send 'echo test' instead of typing, wait for the output, and capture a snapshot.",
+    'hello-prompt',
+  ),
   expectedSkill: 'agent-tty',
   fixture: 'hello-prompt',
   conditions: [...ALL_EXECUTION_CONDITIONS],

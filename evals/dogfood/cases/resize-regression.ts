@@ -1,6 +1,7 @@
 import { DEFAULT_ANTI_PATTERN_RULES } from '../../lib/antiPatterns.js';
 import { SKILL_CONDITIONS } from '../../lib/matrix.js';
 import { DogfoodEvalCaseSchema } from '../../lib/schemas.js';
+import { dogfoodTaskPrompt } from './shared.js';
 import type {
   ArtifactRequirement,
   ReportRequirement,
@@ -53,8 +54,10 @@ export const resizeRegressionCase = DogfoodEvalCaseSchema.parse({
   id: 'resize-regression',
   lane: 'dogfood',
   category: 'bug-repro',
-  prompt:
+  prompt: dogfoodTaskPrompt(
     'Triage a potential resize regression: the resize-demo fixture should update SIZE output after terminal resize, but users report stale values. Test resize from 80x24 to 120x40 and back. Capture evidence at each step.',
+    'resize-demo',
+  ),
   expectedSkill: 'dogfood-tui',
   fixture: 'resize-demo',
   bundlePath: 'proof-bundle',

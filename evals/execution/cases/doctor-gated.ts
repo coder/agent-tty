@@ -7,6 +7,7 @@ import {
   createExecutionCase,
   executionAntiPatterns,
   executionBudgets,
+  executionTaskPrompt,
   fixtureSetupStep,
   ordered,
   requiredVerifier,
@@ -17,8 +18,10 @@ export const doctorGatedCase = createExecutionCase({
   id: 'doctor-gated',
   lane: 'execution',
   category: 'artifact',
-  prompt:
+  prompt: executionTaskPrompt(
     'Before capturing a screenshot, run doctor --json to verify renderer prerequisites and then capture a screenshot of hello-prompt.',
+    'hello-prompt',
+  ),
   expectedSkill: 'agent-tty',
   fixture: 'hello-prompt',
   conditions: [...ALL_EXECUTION_CONDITIONS],

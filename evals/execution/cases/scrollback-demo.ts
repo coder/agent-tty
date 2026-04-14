@@ -7,6 +7,7 @@ import {
   createExecutionCase,
   executionAntiPatterns,
   executionBudgets,
+  executionTaskPrompt,
   fixtureSetupStep,
   requiredVerifier,
   workflowCheck,
@@ -16,8 +17,10 @@ export const scrollbackDemoCase = createExecutionCase({
   id: 'scrollback-demo',
   lane: 'execution',
   category: 'tui',
-  prompt:
+  prompt: executionTaskPrompt(
     'Launch scrollback-demo, wait for the output to fill the buffer, and take a snapshot that proves scrollback content was captured.',
+    'scrollback-demo',
+  ),
   expectedSkill: 'agent-tty',
   fixture: 'scrollback-demo',
   conditions: [...ALL_EXECUTION_CONDITIONS],

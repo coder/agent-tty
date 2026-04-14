@@ -8,6 +8,7 @@ import {
   createExecutionCase,
   executionAntiPatterns,
   executionBudgets,
+  executionTaskPrompt,
   fixtureSetupStep,
   requiredVerifier,
   workflowCheck,
@@ -17,8 +18,10 @@ export const colorGridCase = createExecutionCase({
   id: 'color-grid',
   lane: 'execution',
   category: 'artifact',
-  prompt:
+  prompt: executionTaskPrompt(
     'Launch color-grid, wait for the fixture to render, and capture a screenshot of the color output for review.',
+    'color-grid',
+  ),
   expectedSkill: 'agent-tty',
   fixture: 'color-grid',
   conditions: [...ALL_EXECUTION_CONDITIONS],

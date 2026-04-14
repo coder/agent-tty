@@ -2,7 +2,7 @@ import { mkdtemp, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { invariant } from '../../src/util/assert.js';
+import { assertString, invariant } from '../../src/util/assert.js';
 import { detectAntiPatterns } from '../lib/antiPatterns.js';
 import { createIsolatedEvalHome } from '../lib/cliHarness.js';
 import { EvalResultSchema } from '../lib/schemas.js';
@@ -60,6 +60,57 @@ type EvaluatedVerifier = {
   spec: VerifierSpec;
   result: VerifierResult;
 };
+
+interface LoadedExecutionSkillPrompts {
+  bootstrapSkillText: string;
+  canonicalAgentTtySkillText: string;
+}
+
+let loadedExecutionSkillPromptsPromise:
+  | Promise<LoadedExecutionSkillPrompts>
+  | undefined;
+
+const EXECUTION_INSTRUCTIONS = [
+  'IMPORTANT: You must ACTUALLY PERFORM this task by running commands, not just describe what you would do.',
+  'Use `npx tsx src/cli/main.ts` to invoke agent-tty commands.',
+  'Set `AGENT_TTY_HOME` to the provided home directory for session isolation.',
+].join('\n');
+
+const STALE_EXECUTION_SKILL_TEXT = [
+  'Legacy agent-tty guidance snapshot (known to be stale/wrong):',
+  '- Start sessions with `agent-tty start` instead of `agent-tty create`.',
+  '- Use `sleep 5` before checking terminal readiness instead of `agent-tty wait`.',
+  '- Capture screenshots with `scrot` or other OS tools instead of `agent-tty screenshot`.',
+  '- It is fine to leave sessions running after the task ends.',
+  '',
+  'Some of the guidance above is wrong for this repository snapshot. Verify commands against the current CLI behavior while completing the task.',
+].join('\n');
+
+async function readSkillFile(relativePath: string): Promise<string> {
+  const content = await readFile(
+    new URL(relativePath, import.meta.url),
+    'utf8',
+  );
+  assertString(content, `Skill file ${relativePath} must be a string`);
+  invariant(content.length > 0, `Skill file ${relativePath} must not be empty`);
+  return content;
+}
+
+async function loadExecutionSkillPrompts(): Promise<LoadedExecutionSkillPrompts> {
+  loadedExecutionSkillPromptsPromise ??= (async () => {
+    const [bootstrapSkillText, canonicalAgentTtySkillText] = await Promise.all([
+      readSkillFile('../../skills/agent-tty/SKILL.md'),
+      readSkillFile('../../skill-data/agent-tty/SKILL.md'),
+    ]);
+
+    return {
+      bootstrapSkillText,
+      canonicalAgentTtySkillText,
+    };
+  })();
+
+  return loadedExecutionSkillPromptsPromise;
+}
 
 type EvaluatedArtifactRequirement = {
   requirement: ArtifactRequirement;
@@ -343,27 +394,60 @@ function formatCommand(command: string, argv: readonly string[]): string {
   return [command, ...argv].join(' ');
 }
 
-function buildPromptForCondition(
+async function buildPromptForCondition(
   evalCase: ExecutionEvalCase,
   condition: SkillCondition,
-): string {
-  const conditionContext: Record<SkillCondition, string> = {
-    none: 'Do not assume any terminal-automation skill text is preloaded or discoverable.',
-    'self-load':
-      'Relevant agent-tty skills may be discoverable but are not preloaded; load them yourself if useful.',
-    preloaded:
-      'Assume the canonical agent-tty skill is already available in context.',
-    stale:
-      'A potentially stale or mismatched agent-tty skill may already be present; verify commands against the current repo behavior.',
-  };
-  const sections = [
-    evalCase.prompt,
-    '',
-    `Skill condition: ${conditionContext[condition]}`,
-  ];
+): Promise<string> {
+  const sections = [evalCase.prompt, '', EXECUTION_INSTRUCTIONS];
+
+  switch (condition) {
+    case 'none': {
+      sections.push(
+        '',
+        'Skill condition: none.',
+        'No agent-tty skill text is preloaded for this run. Complete the task using the current repository context and actual CLI behavior.',
+      );
+      break;
+    }
+    case 'self-load': {
+      const { bootstrapSkillText } = await loadExecutionSkillPrompts();
+      sections.push(
+        '',
+        'Skill condition: self-load.',
+        'The following bootstrap skill is available. You can load the full skill by running `agent-tty skills get agent-tty`. Use this guidance to complete the task.',
+        '',
+        'Bootstrap skill text:',
+        bootstrapSkillText.trim(),
+      );
+      break;
+    }
+    case 'preloaded': {
+      const { canonicalAgentTtySkillText } = await loadExecutionSkillPrompts();
+      sections.push(
+        '',
+        'Skill condition: preloaded.',
+        'The following agent-tty skill documentation is preloaded. Follow it to complete the task.',
+        '',
+        'Canonical core skill text:',
+        canonicalAgentTtySkillText.trim(),
+      );
+      break;
+    }
+    case 'stale': {
+      sections.push(
+        '',
+        'Skill condition: stale.',
+        'The following guidance is intentionally stale or wrong. Verify commands against the current repository behavior while completing the task.',
+        '',
+        'Stale guidance:',
+        STALE_EXECUTION_SKILL_TEXT,
+      );
+      break;
+    }
+  }
 
   if (evalCase.fixture !== undefined) {
-    sections.push(`Fixture: ${evalCase.fixture}`);
+    sections.push('', `Fixture: ${evalCase.fixture}`);
   }
 
   if (evalCase.setup.length > 0) {
@@ -587,7 +671,7 @@ function resolveModelId(
   return runtime?.defaultModelId;
 }
 
-function createEvalRequest(
+async function createEvalRequest(
   provider: EvalProvider,
   metadata: RunMetadata,
   evalCase: ExecutionEvalCase,
@@ -595,8 +679,8 @@ function createEvalRequest(
   homeDir: string,
   outputDir: string,
   runtime: ProviderRuntimeInfo | undefined,
-): Parameters<EvalProvider['invokeAgentMode']>[0] {
-  const prompt = buildPromptForCondition(evalCase, condition);
+): Promise<Parameters<EvalProvider['invokeAgentMode']>[0]> {
+  const prompt = await buildPromptForCondition(evalCase, condition);
   const modelId = resolveModelId(metadata, runtime);
 
   return {
@@ -715,7 +799,7 @@ async function runSingleExecutionCase(
 ): Promise<EvalResult> {
   const homeDir = await createIsolatedEvalHome();
   const outputDir = await mkdtemp(join(tmpdir(), RUNNER_OUTPUT_PREFIX));
-  const request = createEvalRequest(
+  const request = await createEvalRequest(
     provider,
     metadata,
     evalCase,

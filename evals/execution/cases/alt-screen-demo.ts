@@ -6,6 +6,7 @@ import {
   createExecutionCase,
   executionAntiPatterns,
   executionBudgets,
+  executionTaskPrompt,
   fixtureSetupStep,
   requiredVerifier,
   workflowCheck,
@@ -15,8 +16,10 @@ export const altScreenDemoCase = createExecutionCase({
   id: 'alt-screen-demo',
   lane: 'execution',
   category: 'tui',
-  prompt:
+  prompt: executionTaskPrompt(
     'Launch alt-screen-demo, observe the alt-screen transition, and capture snapshots at each stage so the main-screen restore is documented before destroying the session.',
+    'alt-screen-demo',
+  ),
   expectedSkill: 'agent-tty',
   fixture: 'alt-screen-demo',
   conditions: [...ALL_EXECUTION_CONDITIONS],

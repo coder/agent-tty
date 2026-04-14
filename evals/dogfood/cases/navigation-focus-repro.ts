@@ -1,6 +1,7 @@
 import { DEFAULT_ANTI_PATTERN_RULES } from '../../lib/antiPatterns.js';
 import { SKILL_CONDITIONS } from '../../lib/matrix.js';
 import { DogfoodEvalCaseSchema } from '../../lib/schemas.js';
+import { dogfoodTaskPrompt } from './shared.js';
 import type {
   ArtifactRequirement,
   ReportRequirement,
@@ -66,8 +67,10 @@ export const navigationFocusReproCase = DogfoodEvalCaseSchema.parse({
   id: 'navigation-focus-repro',
   lane: 'dogfood',
   category: 'bug-repro',
-  prompt:
+  prompt: dogfoodTaskPrompt(
     'Investigate a reported focus/input issue: the hello-prompt fixture may not respond to paste input in certain sequences. Reproduce, capture evidence, and write a structured report.',
+    'hello-prompt',
+  ),
   expectedSkill: 'dogfood-tui',
   fixture: 'hello-prompt',
   bundlePath: 'proof-bundle',

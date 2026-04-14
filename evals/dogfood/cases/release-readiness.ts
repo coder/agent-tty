@@ -1,6 +1,7 @@
 import { DEFAULT_ANTI_PATTERN_RULES } from '../../lib/antiPatterns.js';
 import { SKILL_CONDITIONS } from '../../lib/matrix.js';
 import { DogfoodEvalCaseSchema } from '../../lib/schemas.js';
+import { dogfoodTaskPrompt } from './shared.js';
 import type {
   ArtifactRequirement,
   ReportRequirement,
@@ -66,8 +67,10 @@ export const releaseReadinessCase = DogfoodEvalCaseSchema.parse({
   id: 'release-readiness',
   lane: 'dogfood',
   category: 'release-readiness',
-  prompt:
+  prompt: dogfoodTaskPrompt(
     'Perform a release-readiness check on the color-grid fixture. Verify color rendering across all modes (3-bit, 8-bit, 24-bit), capture visual evidence, and produce a release-readiness report.',
+    'color-grid',
+  ),
   expectedSkill: 'dogfood-tui',
   fixture: 'color-grid',
   bundlePath: 'proof-bundle',

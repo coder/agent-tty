@@ -6,6 +6,7 @@ import {
   createExecutionCase,
   executionAntiPatterns,
   executionBudgets,
+  executionTaskPrompt,
   fixtureSetupStep,
   requiredVerifier,
   workflowCheck,
@@ -15,8 +16,10 @@ export const unicodeGridCase = createExecutionCase({
   id: 'unicode-grid',
   lane: 'execution',
   category: 'artifact',
-  prompt:
+  prompt: executionTaskPrompt(
     'Launch unicode-grid, capture a semantic snapshot to verify Unicode rendering, then destroy the session.',
+    'unicode-grid',
+  ),
   expectedSkill: 'agent-tty',
   fixture: 'unicode-grid',
   conditions: [...ALL_EXECUTION_CONDITIONS],

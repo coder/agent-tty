@@ -1,6 +1,7 @@
 import { DEFAULT_ANTI_PATTERN_RULES } from '../../lib/antiPatterns.js';
 import { SKILL_CONDITIONS } from '../../lib/matrix.js';
 import { DogfoodEvalCaseSchema } from '../../lib/schemas.js';
+import { dogfoodTaskPrompt } from './shared.js';
 import type {
   ArtifactRequirement,
   ReportRequirement,
@@ -53,8 +54,10 @@ export const evidenceCompletenessCase = DogfoodEvalCaseSchema.parse({
   id: 'evidence-completeness',
   lane: 'dogfood',
   category: 'reporting',
-  prompt:
+  prompt: dogfoodTaskPrompt(
     'Test the scrollback-demo fixture and produce the most complete evidence bundle possible: screenshots, recordings, WebM exports, snapshots, notes, and a structured report following the full evidence checklist.',
+    'scrollback-demo',
+  ),
   expectedSkill: 'dogfood-tui',
   fixture: 'scrollback-demo',
   bundlePath: 'proof-bundle',

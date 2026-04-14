@@ -8,6 +8,7 @@ import {
   createExecutionCase,
   executionAntiPatterns,
   executionBudgets,
+  executionTaskPrompt,
   fixtureSetupStep,
   requiredVerifier,
   workflowCheck,
@@ -23,8 +24,10 @@ export const helloPromptCase = createExecutionCase({
   id: 'hello-prompt',
   lane: 'execution',
   category: 'session',
-  prompt:
+  prompt: executionTaskPrompt(
     "Launch the hello-prompt fixture, send 'hello world' as input, wait for the READY> prompt to reappear, take a snapshot to verify the echo, then destroy the session.",
+    'hello-prompt',
+  ),
   expectedSkill: 'agent-tty',
   fixture: 'hello-prompt',
   conditions: [...ALL_EXECUTION_CONDITIONS],

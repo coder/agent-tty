@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { scanBundleArtifacts } from '../../src/tools/review-bundle.js';
-import { invariant } from '../../src/util/assert.js';
+import { assertString, invariant } from '../../src/util/assert.js';
 import { detectAntiPatterns } from '../lib/antiPatterns.js';
 import {
   scoreBundleCompleteness,
@@ -11,6 +11,7 @@ import {
   scoreReportCompleteness,
 } from '../lib/bundleScoring.js';
 import { SKILL_CONDITIONS } from '../lib/matrix.js';
+import { fixtureCommand } from '../lib/cliHarness.js';
 import { DogfoodEvalCaseSchema, EvalResultSchema } from '../lib/schemas.js';
 import { checkWorkflow } from '../lib/scoring.js';
 import type {
@@ -59,7 +60,33 @@ const NO_CAPABILITIES: ProviderRuntimeInfo['capabilities'] = {
   supportsTranscriptCapture: false,
 };
 
-const SKILL_TEXT_CACHE = new Map<string, Promise<string>>();
+interface LoadedDogfoodSkillPrompts {
+  bootstrapSkillText: string;
+  canonicalAgentTtySkillText: string;
+  canonicalDogfoodSkillText: string;
+}
+
+let loadedDogfoodSkillPromptsPromise:
+  | Promise<LoadedDogfoodSkillPrompts>
+  | undefined;
+
+const DOGFOOD_EXECUTION_INSTRUCTIONS = [
+  'IMPORTANT: You must ACTUALLY PERFORM this task by running commands, not just describe what you would do.',
+  'Use `npx tsx src/cli/main.ts` to invoke agent-tty commands.',
+  'Set `AGENT_TTY_HOME` to the provided home directory for session isolation.',
+  'Create the requested proof bundle and capture the required evidence artifacts instead of only describing what you would collect.',
+].join('\n');
+
+const STALE_DOGFOOD_SKILL_TEXT = [
+  'Legacy dogfood guidance snapshot (known to be stale/wrong):',
+  '- Start sessions with `agent-tty start` instead of `agent-tty create`.',
+  '- Use blind `sleep 5` calls instead of `agent-tty wait`.',
+  '- Capture screenshots with OS tools instead of `agent-tty screenshot` or `agent-tty record export`.',
+  '- Skip the proof bundle manifest and write only a short unstructured paragraph.',
+  '- Cleanup is optional after QA runs.',
+  '',
+  'Some of the guidance above is wrong for this repository snapshot. Verify the current workflow while completing the task.',
+].join('\n');
 
 function clampUnitInterval(value: number): number {
   if (!Number.isFinite(value)) {
@@ -141,17 +168,41 @@ async function readOptionalTextFile(
   }
 }
 
-async function readSkillText(relativePath: string): Promise<string> {
-  const url = new URL(relativePath, import.meta.url);
-  const cacheKey = url.href;
-  const cached = SKILL_TEXT_CACHE.get(cacheKey);
-  if (cached !== undefined) {
-    return cached;
-  }
+async function readSkillFile(relativePath: string): Promise<string> {
+  const content = await readFile(
+    new URL(relativePath, import.meta.url),
+    'utf8',
+  );
+  assertString(content, `Skill file ${relativePath} must be a string`);
+  invariant(content.length > 0, `Skill file ${relativePath} must not be empty`);
+  return content;
+}
 
-  const readPromise = readFile(url, 'utf8');
-  SKILL_TEXT_CACHE.set(cacheKey, readPromise);
-  return readPromise;
+async function loadDogfoodSkillPrompts(): Promise<LoadedDogfoodSkillPrompts> {
+  loadedDogfoodSkillPromptsPromise ??= (async () => {
+    const [
+      bootstrapSkillText,
+      canonicalAgentTtySkillText,
+      canonicalDogfoodSkillText,
+    ] = await Promise.all([
+      readSkillFile('../../skills/agent-tty/SKILL.md'),
+      readSkillFile('../../skill-data/agent-tty/SKILL.md'),
+      readSkillFile('../../skill-data/dogfood-tui/SKILL.md'),
+    ]);
+
+    return {
+      bootstrapSkillText,
+      canonicalAgentTtySkillText,
+      canonicalDogfoodSkillText,
+    };
+  })();
+
+  return loadedDogfoodSkillPromptsPromise;
+}
+
+function formatCommandSegments(segments: readonly string[]): string {
+  invariant(segments.length > 0, 'Command must include at least one segment');
+  return segments.join(' ');
 }
 
 function formatArtifactRequirement(evalCase: DogfoodEvalCase): string[] {
@@ -172,12 +223,19 @@ function formatReportRequirement(evalCase: DogfoodEvalCase): string[] {
   });
 }
 
-function buildSystemPromptContext(
-  condition: SkillCondition,
-  bootstrapSkill: string,
-  dogfoodSkill: string,
-  staleSkill: string,
-): { summary: string; systemPrompt: string; env: Record<string, string> } {
+function formatFixtureLaunchCommand(
+  evalCase: DogfoodEvalCase,
+): string | undefined {
+  return evalCase.fixture === undefined
+    ? undefined
+    : formatCommandSegments(fixtureCommand(evalCase.fixture));
+}
+
+async function buildSystemPromptContext(condition: SkillCondition): Promise<{
+  summary: string;
+  systemPrompt: string;
+  env: Record<string, string>;
+}> {
   switch (condition) {
     case 'none': {
       const systemPrompt =
@@ -193,16 +251,17 @@ function buildSystemPromptContext(
       };
     }
     case 'self-load': {
+      const { bootstrapSkillText } = await loadDogfoodSkillPrompts();
       const systemPrompt = [
-        'Only the bootstrap agent-tty skill is preloaded for this run.',
-        'Use it to decide whether to self-load the specialized dogfood-tui skill.',
+        'The following bootstrap skill is available.',
+        'You can load the full dogfood workflow by running `agent-tty skills get dogfood-tui`. Use this guidance to complete the task.',
         '--- BEGIN BOOTSTRAP SKILL: agent-tty ---',
-        bootstrapSkill.trim(),
+        bootstrapSkillText.trim(),
         '--- END BOOTSTRAP SKILL ---',
       ].join('\n\n');
       return {
         summary:
-          'Bootstrap-only context is preloaded. The agent should decide whether to self-load dogfood-tui.',
+          'Bootstrap-only context is available. The agent can self-load dogfood-tui if it needs the full QA workflow.',
         systemPrompt,
         env: {
           EVAL_SKILL_CONDITION: condition,
@@ -212,20 +271,24 @@ function buildSystemPromptContext(
       };
     }
     case 'preloaded': {
+      const { canonicalAgentTtySkillText, canonicalDogfoodSkillText } =
+        await loadDogfoodSkillPrompts();
       const systemPrompt = [
-        'The canonical dogfood-tui skill is preloaded for this run.',
-        'Follow it as the system prompt context for the task below.',
+        'The following agent-tty core skill and dogfood-tui QA skill documentation are preloaded. Follow them to complete the task.',
+        '--- BEGIN PRELOADED SKILL: agent-tty ---',
+        canonicalAgentTtySkillText.trim(),
+        '--- END PRELOADED SKILL: agent-tty ---',
         '--- BEGIN PRELOADED SKILL: dogfood-tui ---',
-        dogfoodSkill.trim(),
-        '--- END PRELOADED SKILL ---',
+        canonicalDogfoodSkillText.trim(),
+        '--- END PRELOADED SKILL: dogfood-tui ---',
       ].join('\n\n');
       return {
         summary:
-          'The canonical dogfood-tui skill is preloaded and should guide the workflow.',
+          'The canonical agent-tty core skill and dogfood-tui skill are preloaded and should guide the workflow.',
         systemPrompt,
         env: {
           EVAL_SKILL_CONDITION: condition,
-          EVAL_PRELOADED_SKILL_NAME: 'dogfood-tui',
+          EVAL_PRELOADED_SKILL_NAME: 'agent-tty+dogfood-tui',
           EVAL_SYSTEM_PROMPT: systemPrompt,
         },
       };
@@ -233,18 +296,18 @@ function buildSystemPromptContext(
     case 'stale': {
       const systemPrompt = [
         'A stale or mismatched skill is preloaded for this run.',
-        'It is intentionally limited to generalized terminal automation guidance and omits the specialized dogfood evidence workflow.',
+        'It is intentionally outdated and conflicts with the current dogfood workflow.',
         '--- BEGIN STALE OR WRONG SKILL CONTEXT ---',
-        staleSkill.trim(),
+        STALE_DOGFOOD_SKILL_TEXT,
         '--- END STALE OR WRONG SKILL CONTEXT ---',
       ].join('\n\n');
       return {
         summary:
-          'Mismatched generalized agent-tty guidance is preloaded instead of dogfood-tui.',
+          'Intentionally stale guidance is preloaded instead of the current dogfood-tui workflow.',
         systemPrompt,
         env: {
           EVAL_SKILL_CONDITION: condition,
-          EVAL_PRELOADED_SKILL_NAME: 'agent-tty-stale',
+          EVAL_PRELOADED_SKILL_NAME: 'dogfood-stale',
           EVAL_SYSTEM_PROMPT: systemPrompt,
         },
       };
@@ -257,11 +320,13 @@ function buildPrompt(
   requestedBundlePath: string,
   systemPromptContext: { summary: string; systemPrompt: string },
 ): string {
-  return [
+  const sections = [
     `Skill condition: ${evalCase.conditions.join(', ')}.`,
     `Fixture: ${evalCase.fixture ?? evalCase.target ?? 'unknown'}.`,
     `Requested proof bundle directory: ${requestedBundlePath}.`,
     `Bundle validation profile: ${evalCase.validationProfile}.`,
+    '',
+    DOGFOOD_EXECUTION_INSTRUCTIONS,
     '',
     'System prompt context summary:',
     systemPromptContext.summary,
@@ -280,7 +345,14 @@ function buildPrompt(
     '',
     'Task:',
     evalCase.prompt,
-  ].join('\n');
+  ];
+
+  const fixtureLaunchCommand = formatFixtureLaunchCommand(evalCase);
+  if (fixtureLaunchCommand !== undefined) {
+    sections.splice(2, 0, `Fixture launch command: ${fixtureLaunchCommand}.`);
+  }
+
+  return sections.join('\n');
 }
 
 async function resolveReportText(
@@ -482,11 +554,6 @@ export async function runDogfoodLane(
     selectedCaseIds === undefined
       ? allCases
       : allCases.filter((evalCase) => selectedCaseIds.includes(evalCase.id));
-  const bootstrapSkill = await readSkillText('../../skills/agent-tty/SKILL.md');
-  const dogfoodSkill = await readSkillText(
-    '../../skill-data/dogfood-tui/SKILL.md',
-  );
-  const staleSkill = await readSkillText('../../skill-data/agent-tty/SKILL.md');
 
   let detectedRuntime: ProviderRuntimeInfo;
   try {
@@ -523,12 +590,7 @@ export async function runDogfoodLane(
       await mkdir(outputDir, { recursive: true });
       await mkdir(homeDir, { recursive: true });
 
-      const systemPromptContext = buildSystemPromptContext(
-        condition,
-        bootstrapSkill,
-        dogfoodSkill,
-        staleSkill,
-      );
+      const systemPromptContext = await buildSystemPromptContext(condition);
       const requestCase = DogfoodEvalCaseSchema.parse({
         ...evalCase,
         prompt: buildPrompt(

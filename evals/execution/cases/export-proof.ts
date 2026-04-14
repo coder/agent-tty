@@ -6,6 +6,7 @@ import {
   createExecutionCase,
   executionAntiPatterns,
   executionBudgets,
+  executionTaskPrompt,
   fixtureSetupStep,
   customVerifier,
   workflowCheck,
@@ -15,8 +16,10 @@ export const exportProofCase = createExecutionCase({
   id: 'export-proof',
   lane: 'execution',
   category: 'artifact',
-  prompt:
+  prompt: executionTaskPrompt(
     'Launch hello-prompt, interact briefly, and then export the session recording as both asciicast and WebM formats.',
+    'hello-prompt',
+  ),
   expectedSkill: 'agent-tty',
   fixture: 'hello-prompt',
   conditions: [...ALL_EXECUTION_CONDITIONS],

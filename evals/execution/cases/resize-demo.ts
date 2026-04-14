@@ -7,6 +7,7 @@ import {
   createExecutionCase,
   executionAntiPatterns,
   executionBudgets,
+  executionTaskPrompt,
   fixtureSetupStep,
   requiredVerifier,
   workflowCheck,
@@ -22,8 +23,10 @@ export const resizeDemoCase = createExecutionCase({
   id: 'resize-demo',
   lane: 'execution',
   category: 'tui',
-  prompt:
+  prompt: executionTaskPrompt(
     'Launch resize-demo, verify the initial size, resize the session to 100x30, wait for the SIZE output to update, and take a snapshot to confirm the change.',
+    'resize-demo',
+  ),
   expectedSkill: 'agent-tty',
   fixture: 'resize-demo',
   conditions: [...ALL_EXECUTION_CONDITIONS],

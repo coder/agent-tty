@@ -101,6 +101,25 @@ export function executionAntiPatterns(
   ];
 }
 
+export function executionTaskPrompt(task: string, fixture?: string): string {
+  const normalizedTask = task.trim();
+  invariant(
+    normalizedTask.length > 0,
+    'execution task prompt must not be empty',
+  );
+
+  return [
+    'ACTUALLY PERFORM this task by running agent-tty CLI commands via `npx tsx src/cli/main.ts`; do not just describe the steps.',
+    'Use the isolated `AGENT_TTY_HOME` provided for this eval so session state stays contained.',
+    fixture === undefined
+      ? undefined
+      : `Use the repository fixture app \`${fixture}\` from \`test/fixtures/apps/${fixture}/main.ts\` via the provided setup command.`,
+    normalizedTask,
+  ]
+    .filter((section): section is string => section !== undefined)
+    .join(' ');
+}
+
 export function fixtureSetupStep(
   id: string,
   fixture: string,

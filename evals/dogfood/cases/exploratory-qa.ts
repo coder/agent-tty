@@ -1,6 +1,7 @@
 import { DEFAULT_ANTI_PATTERN_RULES } from '../../lib/antiPatterns.js';
 import { SKILL_CONDITIONS } from '../../lib/matrix.js';
 import { DogfoodEvalCaseSchema } from '../../lib/schemas.js';
+import { dogfoodTaskPrompt } from './shared.js';
 import type {
   ArtifactRequirement,
   ReportRequirement,
@@ -53,8 +54,10 @@ export const exploratoryQaCase = DogfoodEvalCaseSchema.parse({
   id: 'exploratory-qa',
   lane: 'dogfood',
   category: 'qa',
-  prompt:
+  prompt: dogfoodTaskPrompt(
     'Perform exploratory QA testing on the hello-prompt fixture app. Test input handling, exit behavior, error codes, and edge cases. Produce a proof bundle with screenshots, recordings, and a structured report of findings.',
+    'hello-prompt',
+  ),
   expectedSkill: 'dogfood-tui',
   fixture: 'hello-prompt',
   bundlePath: 'proof-bundle',

@@ -1,6 +1,7 @@
 import { DEFAULT_ANTI_PATTERN_RULES } from '../../lib/antiPatterns.js';
 import { SKILL_CONDITIONS } from '../../lib/matrix.js';
 import { DogfoodEvalCaseSchema } from '../../lib/schemas.js';
+import { dogfoodTaskPrompt } from './shared.js';
 import type {
   ArtifactRequirement,
   ReportRequirement,
@@ -53,8 +54,10 @@ export const renderingBugReproCase = DogfoodEvalCaseSchema.parse({
   id: 'rendering-bug-repro',
   lane: 'dogfood',
   category: 'bug-repro',
-  prompt:
+  prompt: dogfoodTaskPrompt(
     'Reproduce a reported rendering issue: the unicode-grid fixture displays combining characters incorrectly when the terminal is narrower than 80 columns. Capture before/after evidence and write a bug report.',
+    'unicode-grid',
+  ),
   expectedSkill: 'dogfood-tui',
   fixture: 'unicode-grid',
   bundlePath: 'proof-bundle',
