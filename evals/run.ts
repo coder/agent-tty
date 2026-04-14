@@ -256,14 +256,24 @@ function parseCliArgs(argumentsList: readonly string[]): CliOptions {
       continue;
     }
     if (argument === '--model' || argument.startsWith('--model=')) {
-      const parsed = parseOptionValue(argument, '--model', argumentsList, index);
+      const parsed = parseOptionValue(
+        argument,
+        '--model',
+        argumentsList,
+        index,
+      );
       invariant(options.modelId === undefined, '--model may only be set once');
       options.modelId = parsed.value;
       index = parsed.nextIndex;
       continue;
     }
     if (argument === '--effort' || argument.startsWith('--effort=')) {
-      const parsed = parseOptionValue(argument, '--effort', argumentsList, index);
+      const parsed = parseOptionValue(
+        argument,
+        '--effort',
+        argumentsList,
+        index,
+      );
       invariant(
         options.effortLevel === undefined,
         '--effort may only be set once',
@@ -684,7 +694,9 @@ function buildRunMetadata(
   );
   appendMetadataNote(
     metadataNotes,
-    options.modelId === undefined ? undefined : `requested model: ${options.modelId}`,
+    options.modelId === undefined
+      ? undefined
+      : `requested model: ${options.modelId}`,
   );
   appendMetadataNote(
     metadataNotes,
