@@ -20,6 +20,11 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"],
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "evals/**/*.ts",
+    "vitest.config.ts"
+  ],
   "exclude": ["dist", "coverage", "node_modules"]
 }
