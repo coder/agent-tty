@@ -139,65 +139,6 @@ function buildFallbackNormalizedOutput(
   };
 }
 
-function sanitizePatternMatch(
-  match: PromptCaseScore['patternMatches'][number],
-): PromptCaseScore['patternMatches'][number] {
-  return {
-    pattern: match.pattern,
-    matched: match.matched,
-    matchedTexts: [...match.matchedTexts],
-    lineNumbers: [...match.lineNumbers],
-    matchCount: match.matchCount,
-  };
-}
-
-function sanitizeForbiddenPatternMatch(
-  match: PromptCaseScore['forbiddenPatternMatches'][number],
-): PromptCaseScore['forbiddenPatternMatches'][number] {
-  return {
-    pattern: match.pattern,
-    violated: match.violated,
-    matchedTexts: [...match.matchedTexts],
-    lineNumbers: [...match.lineNumbers],
-    matchCount: match.matchCount,
-  };
-}
-
-function sanitizePromptCaseScore(
-  promptScore: PromptCaseScore,
-): PromptCaseScore {
-  return {
-    expectedSkillCorrect: promptScore.expectedSkillCorrect,
-    patternMatches: promptScore.patternMatches.map(sanitizePatternMatch),
-    forbiddenPatternMatches: promptScore.forbiddenPatternMatches.map(
-      sanitizeForbiddenPatternMatch,
-    ),
-    workflowChecks: promptScore.workflowChecks.map((check) => ({
-      checkId: check.checkId,
-      passed: check.passed,
-      ...(check.message === undefined ? {} : { message: check.message }),
-      matches: check.matches.map(sanitizePatternMatch),
-      forbiddenMatches: check.forbiddenMatches.map(
-        sanitizeForbiddenPatternMatch,
-      ),
-    })),
-    antiPatternFindings: promptScore.antiPatternFindings.map((finding) => ({
-      ...finding,
-    })),
-    breakdown: {
-      total: promptScore.breakdown.total,
-      maxPossible: promptScore.breakdown.maxPossible,
-      items: promptScore.breakdown.items.map((item) => ({
-        name: item.name,
-        score: item.score,
-        maxScore: item.maxScore,
-        ...(item.reason === undefined ? {} : { reason: item.reason }),
-      })),
-    },
-    passed: promptScore.passed,
-  };
-}
-
 function buildConditionSystemPrompt(
   condition: SkillCondition,
   loadedSkillPrompts: LoadedSkillPrompts,
@@ -294,9 +235,7 @@ function buildEvalResult(
   promptResult: ProviderPromptResult,
 ): EvalResult {
   const responseText = extractResponseText(promptResult);
-  const promptScore = sanitizePromptCaseScore(
-    scorePromptCase(responseText, request.evalCase),
-  );
+  const promptScore = scorePromptCase(responseText, request.evalCase);
   const antiPatternFindings = mergeAntiPatternFindings(
     detectAntiPatterns(responseText),
   );
@@ -338,9 +277,7 @@ function buildErrorEvalResult(
 ): EvalResult {
   const message = error instanceof Error ? error.message : String(error);
   const errorClass = error instanceof Error ? error.name : 'Error';
-  const promptScore: PromptCaseScore = sanitizePromptCaseScore(
-    scorePromptCase('', request.evalCase),
-  );
+  const promptScore: PromptCaseScore = scorePromptCase('', request.evalCase);
   const antiPatternFindings = mergeAntiPatternFindings(detectAntiPatterns(''));
 
   return EvalResultSchema.parse({

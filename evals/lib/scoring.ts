@@ -16,7 +16,6 @@ import type {
 
 const REGEX_LITERAL_FLAGS_PATTERN = /^[dgimsuvy]*$/;
 const COMPILED_PATTERN_CACHE = new Map<string, RegExp>();
-const FORBIDDEN_PATTERN_SEVERITY = 'error' as const;
 const FORBIDDEN_PATTERN_PENALTY = 0.1;
 const ANTI_PATTERN_PENALTY = 0.05;
 const PROMPT_SCORE_WEIGHTS = Object.freeze({
@@ -39,21 +38,6 @@ interface MatchOccurrence {
   matchedText: string;
   offset: number;
   lineNumber: number;
-}
-
-interface PatternMatchResultWithMetadata extends PatternMatchResult {
-  matchedText?: string;
-  offset?: number;
-  lineNumber?: number;
-  offsets: number[];
-}
-
-interface ForbiddenPatternResultWithMetadata extends ForbiddenPatternResult {
-  severity: typeof FORBIDDEN_PATTERN_SEVERITY;
-  matchedText?: string;
-  offset?: number;
-  lineNumber?: number;
-  offsets: number[];
 }
 
 interface AggregateMetricsWithStats extends AggregateMetrics {
@@ -103,10 +87,6 @@ export function compilePattern(source: string): RegExp {
 
 /**
  * Match each expected pattern against text.
- *
- * Returned objects include aggregate arrays required by PatternMatchResult and
- * also carry first-match debug metadata at runtime (`matchedText`, `offset`,
- * `lineNumber`, and `offsets`). Offsets are 0-based; line numbers are 1-based.
  */
 export function matchPatterns(
   text: string,
@@ -130,11 +110,6 @@ export function matchPatterns(
 
 /**
  * Match each forbidden pattern against text.
- *
- * Returned objects include aggregate arrays required by
- * ForbiddenPatternResult and also carry runtime debug metadata
- * (`severity`, `matchedText`, `offset`, `lineNumber`, and `offsets`). Offsets
- * are 0-based; line numbers are 1-based.
  */
 export function checkForbiddenPatterns(
   text: string,
@@ -606,51 +581,26 @@ function createGlobalMatcher(pattern: RegExp): RegExp {
 function buildPatternMatchResult(
   pattern: string,
   occurrences: MatchOccurrence[],
-): PatternMatchResultWithMetadata {
-  const baseResult = {
+): PatternMatchResult {
+  return {
     pattern,
     matched: occurrences.length > 0,
     matchedTexts: occurrences.map((occurrence) => occurrence.matchedText),
     lineNumbers: occurrences.map((occurrence) => occurrence.lineNumber),
-    offsets: occurrences.map((occurrence) => occurrence.offset),
     matchCount: occurrences.length,
-  };
-  const firstOccurrence = occurrences[0];
-  if (firstOccurrence === undefined) {
-    return baseResult;
-  }
-
-  return {
-    ...baseResult,
-    matchedText: firstOccurrence.matchedText,
-    offset: firstOccurrence.offset,
-    lineNumber: firstOccurrence.lineNumber,
   };
 }
 
 function buildForbiddenPatternResult(
   pattern: string,
   occurrences: MatchOccurrence[],
-): ForbiddenPatternResultWithMetadata {
-  const baseResult = {
+): ForbiddenPatternResult {
+  return {
     pattern,
     violated: occurrences.length > 0,
     matchedTexts: occurrences.map((occurrence) => occurrence.matchedText),
     lineNumbers: occurrences.map((occurrence) => occurrence.lineNumber),
-    offsets: occurrences.map((occurrence) => occurrence.offset),
     matchCount: occurrences.length,
-    severity: FORBIDDEN_PATTERN_SEVERITY,
-  };
-  const firstOccurrence = occurrences[0];
-  if (firstOccurrence === undefined) {
-    return baseResult;
-  }
-
-  return {
-    ...baseResult,
-    matchedText: firstOccurrence.matchedText,
-    offset: firstOccurrence.offset,
-    lineNumber: firstOccurrence.lineNumber,
   };
 }
 

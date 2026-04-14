@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import type { ExecFileException } from 'node:child_process';
-import { resolve } from 'node:path';
+import { delimiter, resolve } from 'node:path';
 import process from 'node:process';
 
 import { assertString, invariant } from '../../src/util/assert.js';
@@ -85,6 +85,31 @@ function assertStringRecord(
     invariant(key.length > 0, `${label} keys must be non-empty strings`);
     assertString(entryValue, `${label}.${key} must be a string`);
   }
+}
+
+function buildCommandEnv(
+  env: Record<string, string> | undefined,
+): NodeJS.ProcessEnv {
+  const mergedEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...env,
+  };
+  const homeDirectory = process.env.HOME;
+  if (homeDirectory === undefined || homeDirectory.length === 0) {
+    return mergedEnv;
+  }
+
+  const localBinPath = resolve(homeDirectory, '.local/bin');
+  const currentPath = mergedEnv.PATH;
+  const pathEntries =
+    currentPath === undefined || currentPath.length === 0
+      ? []
+      : currentPath.split(delimiter).filter((entry) => entry.length > 0);
+  if (!pathEntries.includes(localBinPath)) {
+    pathEntries.unshift(localBinPath);
+  }
+  mergedEnv.PATH = pathEntries.join(delimiter);
+  return mergedEnv;
 }
 
 function mergeCapabilities(
@@ -455,10 +480,7 @@ async function runCommand(
       [...command.slice(1)],
       {
         cwd,
-        env: {
-          ...process.env,
-          ...env,
-        },
+        env: buildCommandEnv(env),
         encoding: 'utf8',
         maxBuffer: 10 * 1024 * 1024,
         signal: controller.signal,
