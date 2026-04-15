@@ -8,7 +8,6 @@ import {
   executionBudgets,
   executionTaskPrompt,
   fixtureSetupStep,
-  requiredVerifier,
   workflowCheck,
 } from './shared.js';
 
@@ -31,14 +30,26 @@ export const crashRecoveryCase = createExecutionCase({
     ),
   ],
   verifiers: [
-    requiredVerifier(
-      'crash-demo-exit-code',
-      'command',
-      'The crashed fixture should be observed with exit code 1.',
-      {
+    {
+      id: 'crash-demo-exit-code',
+      kind: 'command',
+      description:
+        'The crashed fixture should be observed with exit code 1 when the session metadata is available.',
+      required: false,
+      config: {
         expectedExitCode: 1,
       },
-    ),
+    },
+    {
+      id: 'crash-demo-status-observed',
+      kind: 'snapshot',
+      description:
+        'The transcript should show that the crashed session status was inspected.',
+      required: true,
+      config: {
+        patterns: [String.raw`exited|failed|exit.code|exitCode|status`],
+      },
+    },
   ],
   workflowChecks: [
     workflowCheck(

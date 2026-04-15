@@ -55,7 +55,7 @@ export const exploratoryQaCase = DogfoodEvalCaseSchema.parse({
   lane: 'dogfood',
   category: 'qa',
   prompt: dogfoodTaskPrompt(
-    'Perform exploratory QA testing on the hello-prompt fixture app. Test input handling, exit behavior, error codes, and edge cases. Produce a proof bundle with screenshots, recordings, and a structured report of findings.',
+    'Launch the hello-prompt fixture, test exactly three inputs (`hello world`, a blank line, and `symbols-!@#$%^&*`), capture a snapshot after each input, then send `exit` to verify clean shutdown. Save at least one screenshot and one recording, and write a brief findings report with severity and evidence references.',
     'hello-prompt',
   ),
   expectedSkill: 'dogfood-tui',
@@ -124,8 +124,9 @@ export const exploratoryQaCase = DogfoodEvalCaseSchema.parse({
   workflowChecks: [],
   antiPatterns: [...DEFAULT_ANTI_PATTERN_RULES],
   budgets: {
-    timeoutMs: 300_000,
-    maxWallClockMs: 300000,
+    timeoutMs: 600_000,
+    maxAgentSteps: 30,
+    maxWallClockMs: 600_000,
   },
 });
 

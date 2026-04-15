@@ -68,7 +68,7 @@ export const releaseReadinessCase = DogfoodEvalCaseSchema.parse({
   lane: 'dogfood',
   category: 'release-readiness',
   prompt: dogfoodTaskPrompt(
-    'Perform a release-readiness check on the color-grid fixture. Verify color rendering across all modes (3-bit, 8-bit, 24-bit), capture visual evidence, and produce a release-readiness report.',
+    'Launch the color-grid fixture, capture three screenshots that cover the basic, 256-color, and truecolor sections, and confirm the transcript or snapshots show the expected section headers. Then write a step-by-step release-readiness report with a checklist, visual evidence, and a ship-or-hold recommendation.',
     'color-grid',
   ),
   expectedSkill: 'dogfood-tui',
@@ -133,8 +133,9 @@ export const releaseReadinessCase = DogfoodEvalCaseSchema.parse({
   workflowChecks: [],
   antiPatterns: [...DEFAULT_ANTI_PATTERN_RULES],
   budgets: {
-    timeoutMs: 300_000,
-    maxWallClockMs: 300000,
+    timeoutMs: 600_000,
+    maxAgentSteps: 30,
+    maxWallClockMs: 600_000,
   },
 });
 

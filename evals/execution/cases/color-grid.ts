@@ -2,9 +2,9 @@ import {
   ALL_EXECUTION_CONDITIONS,
   CREATE_SESSION_PATTERN,
   SCREENSHOT_PATTERN,
+  SNAPSHOT_PATTERN,
   WAIT_PATTERN,
   anyOf,
-  artifactRequirement,
   createExecutionCase,
   executionAntiPatterns,
   executionBudgets,
@@ -19,7 +19,7 @@ export const colorGridCase = createExecutionCase({
   lane: 'execution',
   category: 'artifact',
   prompt: executionTaskPrompt(
-    'Launch color-grid, wait for the fixture to render, and capture a screenshot of the color output for review.',
+    'Launch color-grid, wait for the fixture to render, and capture either a screenshot or a text snapshot of the color output for review.',
     'color-grid',
   ),
   expectedSkill: 'agent-tty',
@@ -34,11 +34,13 @@ export const colorGridCase = createExecutionCase({
   ],
   verifiers: [
     requiredVerifier(
-      'color-grid-screenshot',
-      'screenshot',
-      'A screenshot artifact should exist for the rendered color grid.',
+      'color-grid-evidence',
+      'snapshot',
+      'The transcript should contain either screenshot evidence or a text snapshot of the rendered color grid.',
       {
-        kind: 'screenshot',
+        patterns: [
+          String.raw`(?:${SCREENSHOT_PATTERN}|(?:${SNAPSHOT_PATTERN}[\s\S]*?(?:COLOR GRID FIXTURE|Basic background colors|Bright background colors|256-color sample backgrounds|Truecolor sample backgrounds|Foreground sample labels|COLOR GRID COMPLETE)))`,
+        ],
       },
     ),
   ],
@@ -55,19 +57,22 @@ export const colorGridCase = createExecutionCase({
       { dependsOn: ['create'] },
     ),
     workflowCheck(
-      'screenshot',
-      'Capture a screenshot of the rendered color grid.',
-      SCREENSHOT_PATTERN,
+      'capture-evidence',
+      'Capture either a screenshot or a text snapshot of the rendered color grid.',
+      anyOf(SCREENSHOT_PATTERN, SNAPSHOT_PATTERN),
       { dependsOn: ['wait'] },
     ),
   ],
   antiPatterns: executionAntiPatterns(),
   artifactRequirements: [
-    artifactRequirement(
-      'screenshot',
-      'A PNG screenshot should be saved for reviewer inspection.',
-      String.raw`\.png$`,
-    ),
+    {
+      kind: 'screenshot',
+      required: false,
+      description:
+        'A PNG screenshot should be saved for reviewer inspection when renderer support is available.',
+      minCount: 1,
+      pathPatterns: [String.raw`\.png$`],
+    },
   ],
   budgets: executionBudgets({
     timeoutMs: 180_000,

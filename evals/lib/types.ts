@@ -293,6 +293,7 @@ export interface DogfoodEvalCase {
   antiPatterns: AntiPatternRule[];
   budgets: {
     timeoutMs: number;
+    maxAgentSteps?: number;
     maxWallClockMs?: number;
   };
 }

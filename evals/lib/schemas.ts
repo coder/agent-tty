@@ -129,6 +129,7 @@ const ExecutionBudgetSchema = z
 const DogfoodBudgetSchema = z
   .object({
     timeoutMs: PositiveIntSchema,
+    maxAgentSteps: PositiveIntSchema.optional(),
     maxWallClockMs: PositiveIntSchema.optional(),
   })
   .strict();
