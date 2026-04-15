@@ -122,8 +122,9 @@ export const renderingBugReproCase = DogfoodEvalCaseSchema.parse({
   workflowChecks: [],
   antiPatterns: [...DEFAULT_ANTI_PATTERN_RULES],
   budgets: {
-    timeoutMs: 300_000,
-    maxWallClockMs: 300000,
+    timeoutMs: 600_000,
+    maxAgentSteps: 30,
+    maxWallClockMs: 600_000,
   },
 });
 

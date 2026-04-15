@@ -164,7 +164,7 @@ function clamp(value: number, minimum: number, maximum: number): number {
 }
 
 function buildComparableGroupMapKey(result: EvalResult): string {
-  return JSON.stringify([result.providerId, result.caseId]);
+  return JSON.stringify([result.providerId, result.lane, result.caseId]);
 }
 
 function buildComparisonGroupKey(result: EvalResult): string {

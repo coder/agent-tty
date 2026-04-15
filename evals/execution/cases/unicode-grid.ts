@@ -22,6 +22,7 @@ export const unicodeGridCase = createExecutionCase({
   ),
   expectedSkill: 'agent-tty',
   fixture: 'unicode-grid',
+  referenceSteps: 4,
   conditions: [...ALL_EXECUTION_CONDITIONS],
   setup: [
     fixtureSetupStep(

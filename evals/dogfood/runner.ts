@@ -4,7 +4,10 @@ import { join, resolve } from 'node:path';
 
 import { scanBundleArtifacts } from '../../src/tools/review-bundle.js';
 import { assertString, invariant } from '../../src/util/assert.js';
-import { detectAntiPatterns } from '../lib/antiPatterns.js';
+import {
+  buildScannableTranscript,
+  detectAntiPatterns,
+} from '../lib/antiPatterns.js';
 import {
   scoreBundleCompleteness,
   scoreEvidenceQuality,
@@ -686,8 +689,11 @@ export async function runDogfoodLane(
           requestCase.workflowChecks.length === 0
             ? []
             : checkWorkflow(transcript, requestCase.workflowChecks);
+        const scannableTranscript = buildScannableTranscript(
+          agentResult.normalized,
+        );
         const antiPatternFindings = detectAntiPatterns(
-          transcript,
+          scannableTranscript,
           requestCase.antiPatterns,
         );
         const artifactManifestPath =

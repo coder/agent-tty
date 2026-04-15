@@ -129,6 +129,7 @@ const ExecutionBudgetSchema = z
 const DogfoodBudgetSchema = z
   .object({
     timeoutMs: PositiveIntSchema,
+    maxAgentSteps: PositiveIntSchema.optional(),
     maxWallClockMs: PositiveIntSchema.optional(),
   })
   .strict();
@@ -459,6 +460,7 @@ export const ExecutionEvalCaseSchema = z
     antiPatterns: z.array(AntiPatternRuleSchema),
     artifactRequirements: z.array(ArtifactRequirementSchema),
     budgets: ExecutionBudgetSchema,
+    referenceSteps: PositiveIntSchema.optional(),
   })
   .strict()
   .superRefine((obj, ctx) => {
@@ -506,6 +508,7 @@ export const DogfoodEvalCaseSchema = z
     workflowChecks: z.array(WorkflowCheckSchema),
     antiPatterns: z.array(AntiPatternRuleSchema),
     budgets: DogfoodBudgetSchema,
+    referenceSteps: PositiveIntSchema.optional(),
   })
   .strict()
   .superRefine((obj, ctx) => {

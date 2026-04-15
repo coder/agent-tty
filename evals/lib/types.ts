@@ -271,6 +271,7 @@ export interface ExecutionEvalCase {
     maxAgentSteps?: number;
     maxWallClockMs?: number;
   };
+  referenceSteps?: number;
 }
 
 /** Dogfood eval case for evidence capture and reporting quality. */
@@ -293,8 +294,10 @@ export interface DogfoodEvalCase {
   antiPatterns: AntiPatternRule[];
   budgets: {
     timeoutMs: number;
+    maxAgentSteps?: number;
     maxWallClockMs?: number;
   };
+  referenceSteps?: number;
 }
 
 /** Any supported eval case. */

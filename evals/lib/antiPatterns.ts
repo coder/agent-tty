@@ -4,6 +4,7 @@ import type {
   AntiPatternFinding,
   AntiPatternRule,
   AntiPatternSeverity,
+  NormalizedProviderOutput,
 } from './types.js';
 
 const SEVERITY_ORDER: Record<AntiPatternSeverity, number> = {
@@ -15,18 +16,60 @@ const SEVERITY_ORDER: Record<AntiPatternSeverity, number> = {
 const COMMENT_ONLY_LINE_PATTERN = /^\s*(?:#|\/\/|\/\*|\*|\*\/|<!--)/u;
 const BLIND_SLEEP_CONTEXT_PATTERN =
   /\b(?:while|until|for|do|done|retry|poll|watch|loop)\b/iu;
-const AGENT_TTY_SEGMENT_PATTERN = /\bagent-tty\b[^;&|\n]*/giu;
-const AGENT_TTY_SUBCOMMAND_PATTERN =
-  /^\s*agent-tty\b(?:\s+--?[A-Za-z][\w-]*(?:=(?:"[^"]*"|'[^']*'|[^\s;&|]+)|\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+))?)*\s+[A-Za-z][\w-]*/iu;
+const FENCED_CODE_BLOCK_PATTERN = /^\s*```/u;
+const COMMAND_PROMPT_PREFIX_PATTERN = /^\s*(?:[$>])\s*/u;
+const AGENT_TTY_COMMAND_TEXT_PATTERN = String.raw`(?:agent-tty\b|npx\s+tsx\b[^\n]*?\bsrc\/cli\/main\.ts\b)`;
+const SHELL_TOOL_NAME_PATTERN =
+  /^(?:bash|shell|execute|command|run_command|terminal)$/iu;
+const SHELL_TOOL_FALLBACK_TYPE_PATTERN =
+  /^(?:command_execution|function_call|tool_use)$/iu;
+const SHELL_TOOL_HINT_KEYS = ['script', 'command', 'cmd'] as const;
+const SCANNABLE_TOOL_TEXT_KEYS = [
+  'script',
+  'command',
+  'cmd',
+  'arguments',
+  'text',
+  'content',
+  'output',
+  'stdout',
+  'stderr',
+  'result',
+  'aggregated_output',
+] as const;
+const AGENT_TTY_TOOL_INPUT_PATTERN = new RegExp(
+  AGENT_TTY_COMMAND_TEXT_PATTERN,
+  'iu',
+);
+const AGENT_TTY_SEGMENT_PATTERN = new RegExp(
+  String.raw`${AGENT_TTY_COMMAND_TEXT_PATTERN}[^;&|\n]*`,
+  'giu',
+);
+const AGENT_TTY_SUBCOMMAND_PATTERN = new RegExp(
+  String.raw`^\s*${AGENT_TTY_COMMAND_TEXT_PATTERN}(?:\s+--?[A-Za-z][\w-]*(?:=(?:"[^"]*"|'[^']*'|[^\s;&|]+)|\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+))?)*\s+[A-Za-z][\w-]*`,
+  'iu',
+);
+const AGENT_TTY_SUBCOMMAND_NAME_PATTERN = new RegExp(
+  String.raw`${AGENT_TTY_COMMAND_TEXT_PATTERN}(?:\s+--?[A-Za-z][\w-]*(?:=(?:"[^"]*"|'[^']*'|[^\s;&|]+)|\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+))?)*\s+([A-Za-z][\w-]*)`,
+  'iu',
+);
+const COMMAND_LIKE_LINE_PATTERN = new RegExp(
+  String.raw`^\s*(?:[$>]\s*)?(?:agent-tty\b|npx\s+tsx\b)`,
+  'iu',
+);
 const AGENT_TTY_JSON_FLAG_PATTERN = /(?:^|\s)--json(?:\s|$|=)/iu;
-const SESSION_CREATE_CONTEXT_PATTERN =
-  /\bagent-tty\b[^\n]*\b(?:run|create)\b/iu;
-const SESSION_DESTROY_CONTEXT_PATTERN =
-  /\bagent-tty\b[^\n]*\b(?:destroy|kill)\b/iu;
+const SESSION_CREATE_CONTEXT_PATTERN = new RegExp(
+  String.raw`${AGENT_TTY_COMMAND_TEXT_PATTERN}[^\n]*\b(?:run|create)\b`,
+  'iu',
+);
+const SESSION_DESTROY_CONTEXT_PATTERN = new RegExp(
+  String.raw`${AGENT_TTY_COMMAND_TEXT_PATTERN}[^\n]*\b(?:destroy|kill)\b`,
+  'iu',
+);
 const SESSION_ID_PATTERNS = [
   /\bsession_id\b\s*[:=]\s*["']?([A-Za-z0-9][A-Za-z0-9._:-]*)["']?/giu,
   /\bsessionId\b\s*[:=]\s*["']?([A-Za-z0-9][A-Za-z0-9._:-]*)["']?/gu,
-  /\bSession\s+([A-Za-z0-9][A-Za-z0-9._:-]*)\b/gu,
+  /\bSession ID\b\s*[:=]\s*["']?([A-Za-z0-9][A-Za-z0-9._:-]*)["']?/giu,
   /--session(?:-id)?\s+([A-Za-z0-9][A-Za-z0-9._:-]*)\b/gu,
 ] as const;
 const NEGATION_AWARE_RULE_IDS = new Set<string>([
@@ -36,7 +79,7 @@ const NEGATION_AWARE_RULE_IDS = new Set<string>([
   'adhoc-screenshot',
 ]);
 const STRUCTURED_SESSION_REFERENCE_LINE_PATTERN =
-  /^\s*(?:\{|\[|["']?session(?:_id|Id)["']?\s*[:=]|Session\s+[A-Za-z0-9]|--session(?:-id)?\s+)/u;
+  /^\s*(?:\{|\[|["']?session(?:_id|Id)["']?\s*[:=]|Session ID\s*[:=]|--session(?:-id)?\s+)/u;
 
 /**
  * Canonical transcript anti-pattern rules for terminal automation evals.
@@ -152,6 +195,33 @@ export function compileAntiPatternRegex(pattern: string): RegExp {
       },
     );
   }
+}
+
+/**
+ * Build a scannable transcript from shell-style tool-call inputs and outputs.
+ */
+export function buildScannableTranscript(
+  normalized: NormalizedProviderOutput,
+): string {
+  return collectShellToolCalls(normalized)
+    .map((toolCall) => extractScannableToolCallTexts(toolCall).join('\n'))
+    .filter((block) => block.length > 0)
+    .join('\n');
+}
+
+/**
+ * Count shell-style tool calls that invoked agent-tty.
+ */
+export function countAgentTtyCalls(
+  normalized: NormalizedProviderOutput,
+): number {
+  return collectShellToolCalls(normalized).reduce((count, toolCall) => {
+    return extractScannableToolCallTexts(toolCall).some((fragment) =>
+      AGENT_TTY_TOOL_INPUT_PATTERN.test(fragment),
+    )
+      ? count + 1
+      : count;
+  }, 0);
 }
 
 /**
@@ -289,6 +359,133 @@ export function summarizeFindings(findings: readonly AntiPatternFinding[]): {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function collectShellToolCalls(
+  normalized: NormalizedProviderOutput,
+): Array<Record<string, unknown>> {
+  invariant(
+    Array.isArray(normalized.toolCalls),
+    'normalized.toolCalls must be an array',
+  );
+
+  return normalized.toolCalls.filter(isShellToolCall);
+}
+
+function isShellToolCall(toolCall: Record<string, unknown>): boolean {
+  const toolName = toolCall.name;
+  if (typeof toolName === 'string' && SHELL_TOOL_NAME_PATTERN.test(toolName)) {
+    return true;
+  }
+
+  if (
+    hasShellToolHints(toolCall) ||
+    hasShellToolHints(toolCall.input) ||
+    hasShellToolHints(toolCall.output)
+  ) {
+    return true;
+  }
+
+  const toolType =
+    typeof toolCall.type === 'string' ? toolCall.type : undefined;
+  return (
+    typeof toolType === 'string' &&
+    SHELL_TOOL_FALLBACK_TYPE_PATTERN.test(toolType) &&
+    extractScannableToolCallTexts(toolCall).length > 0
+  );
+}
+
+function hasShellToolHints(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return SHELL_TOOL_HINT_KEYS.some(
+    (key) => extractScannableToolText(value[key]).length > 0,
+  );
+}
+
+function extractScannableToolCallTexts(
+  toolCall: Record<string, unknown>,
+): string[] {
+  const fragments: string[] = [];
+
+  for (const value of [
+    toolCall.input,
+    toolCall.output,
+    {
+      script: toolCall.script,
+      command: toolCall.command,
+      cmd: toolCall.cmd,
+      arguments: toolCall.arguments,
+      text: toolCall.text,
+      content: toolCall.content,
+    },
+    {
+      output: toolCall.output,
+      stdout: toolCall.stdout,
+      stderr: toolCall.stderr,
+      result: toolCall.result,
+      aggregated_output: toolCall.aggregated_output,
+    },
+  ]) {
+    const fragment = extractScannableToolText(value);
+    if (fragment.length > 0 && !fragments.includes(fragment)) {
+      fragments.push(fragment);
+    }
+  }
+
+  return fragments;
+}
+
+function extractScannableToolText(value: unknown): string {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  if (Array.isArray(value)) {
+    const fragments: string[] = [];
+
+    for (const entry of value) {
+      const fragment = extractScannableToolText(entry);
+      if (fragment.length > 0 && !fragments.includes(fragment)) {
+        fragments.push(fragment);
+      }
+    }
+
+    return fragments.join('\n').trim();
+  }
+
+  if (!isRecord(value)) {
+    return '';
+  }
+
+  const fragments: string[] = [];
+
+  for (const key of SCANNABLE_TOOL_TEXT_KEYS) {
+    const fragment = extractScannableToolText(value[key]);
+    if (fragment.length > 0 && !fragments.includes(fragment)) {
+      fragments.push(fragment);
+    }
+  }
+
+  return fragments.join('\n').trim();
+}
+
 function validateRules(rules: readonly AntiPatternRule[]): void {
   const seenRuleIds = new Set<string>();
 
@@ -352,6 +549,26 @@ function compileRules(
 
 function isCommentOnlyLine(line: string): boolean {
   return COMMENT_ONLY_LINE_PATTERN.test(line);
+}
+
+function isCodeFenceBoundary(line: string): boolean {
+  return FENCED_CODE_BLOCK_PATTERN.test(line);
+}
+
+function isCommandLikeLine(line: string, inFencedCodeBlock: boolean): boolean {
+  return (
+    inFencedCodeBlock ||
+    COMMAND_PROMPT_PREFIX_PATTERN.test(line) ||
+    COMMAND_LIKE_LINE_PATTERN.test(line)
+  );
+}
+
+function describeCommandSegment(segment: string, lineNumber: number): string {
+  const normalizedSegment = segment.replace(/\s+/gu, ' ').trim();
+  AGENT_TTY_SUBCOMMAND_NAME_PATTERN.lastIndex = 0;
+  const match = AGENT_TTY_SUBCOMMAND_NAME_PATTERN.exec(normalizedSegment);
+  const commandName = match?.[1] ?? normalizedSegment;
+  return `${commandName} (line ${String(lineNumber)})`;
 }
 
 function addBlindSleepFindings(
@@ -421,26 +638,40 @@ function addMissingJsonFlagFinding(
     return;
   }
 
-  const hasJsonCommand = commandSegments.some(({ segment }) =>
+  const commandsWithJson = commandSegments.filter(({ segment }) =>
     AGENT_TTY_JSON_FLAG_PATTERN.test(segment),
   );
-  if (hasJsonCommand) {
+  const commandsMissingJson = commandSegments.filter(
+    ({ segment }) => !AGENT_TTY_JSON_FLAG_PATTERN.test(segment),
+  );
+  if (commandsMissingJson.length === 0) {
     return;
   }
 
-  const firstCommand = commandSegments[0];
+  const firstMissingCommand = commandsMissingJson[0];
   invariant(
-    firstCommand !== undefined,
+    firstMissingCommand !== undefined,
     'missing-json-flag requires at least one agent-tty command segment',
   );
+  const missingCommandList = commandsMissingJson
+    .map(({ segment, lineNumber }) =>
+      describeCommandSegment(segment, lineNumber),
+    )
+    .join(', ');
+  const message =
+    commandsWithJson.length > 0
+      ? `Informational only: some agent-tty commands omitted --json even though other commands included it. Missing --json on ${missingCommandList}.`
+      : `Detected agent-tty commands without any --json usage in the response. Missing --json on ${missingCommandList}.`;
+
   addFinding(
     findings,
     seenFindingKeys,
     buildFinding(
       rule,
-      firstCommand.segment,
-      firstCommand.lineNumber,
-      'Detected agent-tty commands without any --json usage in the response, which makes automation less reliable.',
+      firstMissingCommand.segment,
+      firstMissingCommand.lineNumber,
+      message,
+      commandsWithJson.length > 0 ? 'info' : rule.severity,
     ),
   );
 }
@@ -460,9 +691,18 @@ function collectAgentTtyCommandSegments(
 ): AgentTtyCommandSegment[] {
   const commandSegments: AgentTtyCommandSegment[] = [];
   const lines = transcript.split(/\r?\n/u);
+  let inFencedCodeBlock = false;
 
   for (const [index, line] of lines.entries()) {
-    if (isCommentOnlyLine(line)) {
+    if (isCodeFenceBoundary(line)) {
+      inFencedCodeBlock = !inFencedCodeBlock;
+      continue;
+    }
+
+    if (
+      isCommentOnlyLine(line) ||
+      !isCommandLikeLine(line, inFencedCodeBlock)
+    ) {
       continue;
     }
 
@@ -471,6 +711,7 @@ function collectAgentTtyCommandSegments(
 
     while (match !== null) {
       const segment = match[0].trim();
+      AGENT_TTY_SUBCOMMAND_PATTERN.lastIndex = 0;
       if (AGENT_TTY_SUBCOMMAND_PATTERN.test(segment)) {
         commandSegments.push({
           segment,
@@ -576,14 +817,22 @@ function detectOrphanedSessions(
   const records: SessionCreationRecord[] = [];
   const createdById = new Map<string, number>();
   const pendingAnonymousRecords: number[] = [];
+  const pendingCleanupIds = new Set<string>();
   const lines = transcript.split(/\r?\n/u);
+  let inFencedCodeBlock = false;
 
   for (const [index, line] of lines.entries()) {
+    if (isCodeFenceBoundary(line)) {
+      inFencedCodeBlock = !inFencedCodeBlock;
+      continue;
+    }
+
     if (isCommentOnlyLine(line)) {
       continue;
     }
 
     const lineNumber = index + 1;
+    const commandLikeLine = isCommandLikeLine(line, inFencedCodeBlock);
     const sessionIds = extractSessionIdOccurrences(line)
       .filter((occurrence) => !isInNegationContext(line, occurrence.offset))
       .map((occurrence) => occurrence.id);
@@ -596,21 +845,20 @@ function detectOrphanedSessions(
       SESSION_CREATE_CONTEXT_PATTERN,
     );
     const isDestroyContext =
+      commandLikeLine &&
       destroyContextIndex !== null &&
       !isInNegationContext(line, destroyContextIndex);
     const isCreateContext =
+      commandLikeLine &&
       createContextIndex !== null &&
       !isInNegationContext(line, createContextIndex);
     const hasStructuredSessionReference =
-      sessionIds.length > 0 && isStructuredSessionReferenceLine(line);
+      sessionIds.length > 0 &&
+      isStructuredSessionReferenceLine(line) &&
+      (inFencedCodeBlock || commandLikeLine);
 
     if (isDestroyContext) {
-      markSessionCleanup(
-        records,
-        createdById,
-        pendingAnonymousRecords,
-        sessionIds,
-      );
+      markSessionCleanup(records, createdById, pendingCleanupIds, sessionIds);
       continue;
     }
 
@@ -619,12 +867,19 @@ function detectOrphanedSessions(
         records,
         createdById,
         pendingAnonymousRecords,
+        pendingCleanupIds,
         sessionIds,
         lineNumber,
         line.trim() || rule.description,
       );
     }
   }
+
+  reconcileAnonymousSessionCleanup(
+    records,
+    pendingAnonymousRecords,
+    pendingCleanupIds,
+  );
 
   return records
     .filter((record) => !record.cleaned)
@@ -646,6 +901,7 @@ function registerSessionCreation(
   records: SessionCreationRecord[],
   createdById: Map<string, number>,
   pendingAnonymousRecords: number[],
+  pendingCleanupIds: Set<string>,
   sessionIds: readonly string[],
   lineNumber: number,
   matchedText: string,
@@ -661,7 +917,16 @@ function registerSessionCreation(
   }
 
   for (const sessionId of sessionIds) {
-    if (createdById.has(sessionId)) {
+    const existingIndex = createdById.get(sessionId);
+    if (existingIndex !== undefined) {
+      const existingRecord = records[existingIndex];
+      invariant(
+        existingRecord !== undefined,
+        `missing session record at index ${String(existingIndex)}`,
+      );
+      if (pendingCleanupIds.delete(sessionId)) {
+        existingRecord.cleaned = true;
+      }
       continue;
     }
 
@@ -673,6 +938,9 @@ function registerSessionCreation(
         `missing anonymous session record at index ${String(anonymousIndex)}`,
       );
       record.id = sessionId;
+      if (pendingCleanupIds.delete(sessionId)) {
+        record.cleaned = true;
+      }
       createdById.set(sessionId, anonymousIndex);
       continue;
     }
@@ -681,7 +949,7 @@ function registerSessionCreation(
       id: sessionId,
       lineNumber,
       matchedText,
-      cleaned: false,
+      cleaned: pendingCleanupIds.delete(sessionId),
     });
     createdById.set(sessionId, records.length - 1);
   }
@@ -690,7 +958,7 @@ function registerSessionCreation(
 function markSessionCleanup(
   records: SessionCreationRecord[],
   createdById: Map<string, number>,
-  pendingAnonymousRecords: number[],
+  pendingCleanupIds: Set<string>,
   sessionIds: readonly string[],
 ): void {
   if (sessionIds.length > 0) {
@@ -706,15 +974,7 @@ function markSessionCleanup(
         continue;
       }
 
-      const anonymousIndex = pendingAnonymousRecords.shift();
-      if (anonymousIndex !== undefined) {
-        const record = records[anonymousIndex];
-        invariant(
-          record !== undefined,
-          `missing anonymous session record at index ${String(anonymousIndex)}`,
-        );
-        record.cleaned = true;
-      }
+      pendingCleanupIds.add(sessionId);
     }
     return;
   }
@@ -722,6 +982,39 @@ function markSessionCleanup(
   const unmatchedRecord = records.find((record) => !record.cleaned);
   if (unmatchedRecord) {
     unmatchedRecord.cleaned = true;
+  }
+}
+
+function reconcileAnonymousSessionCleanup(
+  records: SessionCreationRecord[],
+  pendingAnonymousRecords: readonly number[],
+  pendingCleanupIds: Set<string>,
+): void {
+  if (pendingCleanupIds.size === 0) {
+    return;
+  }
+
+  for (const anonymousIndex of pendingAnonymousRecords) {
+    if (pendingCleanupIds.size === 0) {
+      break;
+    }
+
+    const record = records[anonymousIndex];
+    invariant(
+      record !== undefined,
+      `missing anonymous session record at index ${String(anonymousIndex)}`,
+    );
+    if (record.cleaned || record.id !== undefined) {
+      continue;
+    }
+
+    record.cleaned = true;
+    const nextPendingCleanup = pendingCleanupIds.values().next();
+    invariant(
+      !nextPendingCleanup.done,
+      'pending cleanup ids must contain a value',
+    );
+    pendingCleanupIds.delete(nextPendingCleanup.value);
   }
 }
 

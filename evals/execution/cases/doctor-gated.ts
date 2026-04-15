@@ -24,6 +24,7 @@ export const doctorGatedCase = createExecutionCase({
   ),
   expectedSkill: 'agent-tty',
   fixture: 'hello-prompt',
+  referenceSteps: 5,
   conditions: [...ALL_EXECUTION_CONDITIONS],
   setup: [
     fixtureSetupStep(

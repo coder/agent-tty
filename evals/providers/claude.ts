@@ -799,6 +799,7 @@ export class ClaudeProvider implements EvalProvider {
         '--verbose',
         '--output-format',
         'stream-json',
+        '--allow-dangerously-skip-permissions',
         '--dangerously-skip-permissions',
         ...(maxAgentSteps === undefined
           ? []
