@@ -28,11 +28,14 @@ npx tsx evals/run.ts --provider codex --lane all
 
 # Specific cases
 npx tsx evals/run.ts --provider stub --lane execution --case hello-prompt --case resize-demo
+
+# Compare conditions in one dry run
+npx tsx evals/run.ts --provider stub --lane execution --condition none --condition preloaded --dry-run
 ```
 
 Useful flags:
 
-- `--condition <cond>` — `none`, `self-load`, `preloaded`, `stale`, or `all` (default: `all`)
+- `--condition <cond>` — `none`, `self-load`, `preloaded`, `stale`, or `all` (default: `all`). May be repeated.
 - `--output <dir>` — output base directory (default: `evals/reports/{timestamp}`)
 - `--dry-run` — list the case/condition matrix without invoking a provider
 - `--json` — emit only a JSON summary to stdout
@@ -46,6 +49,9 @@ npx tsx evals/run.ts --provider stub --lane all --dry-run
 
 # Restrict to one condition
 npx tsx evals/run.ts --provider stub --lane prompt --condition self-load
+
+# Compare two conditions in one run
+npx tsx evals/run.ts --provider stub --lane prompt --condition none --condition preloaded
 
 # Write results under a custom directory
 npx tsx evals/run.ts --provider stub --lane execution --output evals/reports/local-smoke
