@@ -205,6 +205,45 @@ Prompt cases currently cover positive routing, negative routing, and explicit an
 | `run-command`     | `session`  | `hello-prompt`    | all four   | Use `agent-tty run` instead of simulated typing, then snapshot the result.         |
 | `doctor-gated`    | `artifact` | `hello-prompt`    | all four   | Run `doctor --json` before taking a renderer-dependent screenshot.                 |
 
+#### Lane B readiness and renderer requirements
+
+Lane B coverage is intentionally uneven today. Use the **readiness tier** to decide where to add smoke coverage next, and use the **renderer requirement** column to decide whether a failure is likely a skill regression or an environment problem.
+
+- **`battle-tested`** — safest execution smoke cases today.
+- **`non-renderer unproven`** — next expansion batch before spending more time on renderer-heavy cases. `export-proof` stays in this rollout bucket even though its required `.webm` export is renderer-backed.
+- **`renderer-optional`** — the case can still pass without Playwright/Chromium, but renderer-backed artifacts are useful when available.
+- **`renderer-required`** — failing Playwright/Chromium/ghostty-web checks should be treated as an `environment-blocked` result, not as a skill regression.
+
+| Case ID           | Readiness tier      | Renderer requirement | Notes |
+| ----------------- | ------------------- | -------------------- | ----- |
+| `hello-prompt`    | `battle-tested`     | `none`               | Core create → input → wait → snapshot → cleanup loop. |
+| `crash-recovery`  | `battle-tested`     | `none`               | Core crash inspection and cleanup flow. |
+| `run-command`     | `battle-tested`     | `none`               | Core programmatic input flow via `agent-tty run`. |
+| `resize-demo`     | `non-renderer unproven` | `none`               | Snapshot-only resize verifier; high-value next smoke target. |
+| `alt-screen-demo` | `non-renderer unproven` | `none`               | Event-log plus snapshot proof still needs broader smoke coverage. |
+| `scrollback-demo` | `non-renderer unproven` | `none`               | Scrollback snapshot proof still needs broader smoke coverage. |
+| `unicode-grid`    | `non-renderer unproven` | `none`               | Semantic snapshot verifier still needs broader smoke coverage. |
+| `export-proof`    | `non-renderer unproven` | `required`           | Still part of the next smoke batch, but the required `.webm` export is renderer-backed. |
+| `color-grid`      | `renderer-optional` | `optional`           | Screenshot evidence is preferred when renderer support exists, but non-renderer verification can still satisfy the case. |
+| `doctor-gated`    | `renderer-required` | `required`           | Must run `doctor --json` first; missing renderer support blocks the required screenshot. |
+
+**Expansion order:** keep prioritizing `resize-demo`, `alt-screen-demo`, `scrollback-demo`, `unicode-grid`, and `export-proof` before spending more time on `color-grid` or `doctor-gated`. Within that batch, `export-proof` is the one case that still needs renderer-backed WebM export, so preflight renderer availability first.
+
+To avoid mistaking a missing browser/runtime dependency for a skill regression, pair execution-lane dry runs with a renderer preflight:
+
+```sh
+# Preview the case/condition matrix
+npx tsx evals/run.ts --provider stub --lane execution --dry-run
+
+# Check renderer prerequisites before renderer-backed cases
+npx tsx src/cli/main.ts doctor --json
+
+# If doctor reports a missing Playwright browser cache
+npx playwright install chromium
+```
+
+`--dry-run` currently tells you which execution cases and conditions will run, but it does not yet annotate renderer needs inline. Use the table above to decide whether `color-grid`, `export-proof`, or `doctor-gated` should be treated as renderer-backed for your environment.
+
 ### Dogfood lane
 
 | Case ID                  | Category            | Fixture           | Conditions | Description                                                                                          |
