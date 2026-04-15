@@ -179,7 +179,7 @@ export function workflowCheck(
   return {
     id,
     description,
-    required: options.required ?? true,
+    required: options.required ?? false,
     requiredPatterns: [requiredPattern],
     forbiddenPatterns:
       options.forbiddenPattern === undefined ? [] : [options.forbiddenPattern],

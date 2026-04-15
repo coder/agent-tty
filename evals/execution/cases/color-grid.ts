@@ -24,6 +24,7 @@ export const colorGridCase = createExecutionCase({
   ),
   expectedSkill: 'agent-tty',
   fixture: 'color-grid',
+  referenceSteps: 4,
   conditions: [...ALL_EXECUTION_CONDITIONS],
   setup: [
     fixtureSetupStep(

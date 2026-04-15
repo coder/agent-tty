@@ -22,6 +22,7 @@ export const altScreenDemoCase = createExecutionCase({
   ),
   expectedSkill: 'agent-tty',
   fixture: 'alt-screen-demo',
+  referenceSteps: 4,
   conditions: [...ALL_EXECUTION_CONDITIONS],
   setup: [
     fixtureSetupStep(

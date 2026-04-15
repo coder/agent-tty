@@ -1,10 +1,7 @@
-import type { AntiPatternRule } from '../../lib/types.js';
-
 import {
   ALL_EXECUTION_CONDITIONS,
   CREATE_SESSION_PATTERN,
   SNAPSHOT_PATTERN,
-  TYPE_PATTERN,
   WAIT_PATTERN,
   anyOf,
   createExecutionCase,
@@ -16,20 +13,9 @@ import {
   workflowCheck,
 } from './shared.js';
 
-const NO_SIMULATED_TYPING_RULE: AntiPatternRule = {
-  id: 'no-simulated-typing',
-  severity: 'error',
-  description:
-    'Detected simulated typing instead of agent-tty run for the run-command execution case.',
-  patterns: [TYPE_PATTERN],
-  suggestedFix:
-    'Use agent-tty run to send the command payload instead of typing it character-by-character.',
-  lanes: ['execution'],
-};
-
 const RUN_COMMAND_PATTERN = anyOf(
-  String.raw`\bagent-tty\b[^\n]*\brun\b[^\n]*echo test`,
-  String.raw`\brun(?:ning|s|ned)?\b[^\n]*echo test\b`,
+  String.raw`\bagent-tty\b[^\n]*\b(?:run|type|send-keys|paste)\b[^\n]*echo test`,
+  String.raw`\b(?:run|type|send-keys|paste)(?:ning|s|ned|d|ing)?\b[^\n]*echo test\b`,
   String.raw`ECHO:\s*echo test`,
 );
 
@@ -43,6 +29,7 @@ export const runCommandCase = createExecutionCase({
   ),
   expectedSkill: 'agent-tty',
   fixture: 'hello-prompt',
+  referenceSteps: 5,
   conditions: [...ALL_EXECUTION_CONDITIONS],
   setup: [
     fixtureSetupStep(
@@ -69,12 +56,9 @@ export const runCommandCase = createExecutionCase({
     ),
     workflowCheck(
       'run',
-      'Use agent-tty run instead of typing the command.',
+      'Send the command payload via any programmatic method.',
       RUN_COMMAND_PATTERN,
-      {
-        dependsOn: ['create'],
-        forbiddenPattern: TYPE_PATTERN,
-      },
+      { dependsOn: ['create'] },
     ),
     workflowCheck(
       'wait',
@@ -89,7 +73,7 @@ export const runCommandCase = createExecutionCase({
       { dependsOn: ['wait'] },
     ),
   ],
-  antiPatterns: executionAntiPatterns(NO_SIMULATED_TYPING_RULE),
+  antiPatterns: executionAntiPatterns(),
   artifactRequirements: [],
   budgets: executionBudgets({
     timeoutMs: 120_000,

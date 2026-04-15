@@ -23,6 +23,7 @@ export const scrollbackDemoCase = createExecutionCase({
   ),
   expectedSkill: 'agent-tty',
   fixture: 'scrollback-demo',
+  referenceSteps: 4,
   conditions: [...ALL_EXECUTION_CONDITIONS],
   setup: [
     fixtureSetupStep(

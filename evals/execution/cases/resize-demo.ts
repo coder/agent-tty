@@ -29,6 +29,7 @@ export const resizeDemoCase = createExecutionCase({
   ),
   expectedSkill: 'agent-tty',
   fixture: 'resize-demo',
+  referenceSteps: 5,
   conditions: [...ALL_EXECUTION_CONDITIONS],
   setup: [
     fixtureSetupStep(

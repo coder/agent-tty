@@ -21,6 +21,7 @@ export const crashRecoveryCase = createExecutionCase({
   ),
   expectedSkill: 'agent-tty',
   fixture: 'crash-demo',
+  referenceSteps: 3,
   conditions: [...ALL_EXECUTION_CONDITIONS],
   setup: [
     fixtureSetupStep(
