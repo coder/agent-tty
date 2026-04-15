@@ -294,6 +294,179 @@ function tryParseJson(value: string): unknown {
   }
 }
 
+const SHELL_INPUT_KEYS = ['command', 'script', 'cmd'] as const;
+
+function joinShellCommandTokens(value: unknown): string | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const tokens: string[] = [];
+  for (const entry of value) {
+    if (
+      typeof entry === 'string' ||
+      typeof entry === 'number' ||
+      typeof entry === 'boolean' ||
+      typeof entry === 'bigint'
+    ) {
+      tokens.push(String(entry));
+      continue;
+    }
+
+    return undefined;
+  }
+
+  return tokens.length > 0 ? tokens.join(' ') : undefined;
+}
+
+function normalizeShellToolPayload(value: unknown): unknown {
+  const joinedCommand = joinShellCommandTokens(value);
+  if (joinedCommand !== undefined) {
+    return joinedCommand;
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  const normalized: Record<string, unknown> = { ...value };
+  for (const key of SHELL_INPUT_KEYS) {
+    const joinedValue = joinShellCommandTokens(value[key]);
+    if (joinedValue !== undefined) {
+      normalized[key] = joinedValue;
+    }
+  }
+
+  return normalized;
+}
+
+function parseStructuredCodexValue(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return normalizeShellToolPayload(value);
+  }
+
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  ) {
+    const parsed = tryParseJson(trimmed);
+    if (parsed !== undefined) {
+      return normalizeShellToolPayload(parsed);
+    }
+  }
+
+  return value;
+}
+
+function buildCodexToolCallInput(source: Record<string, unknown>): unknown {
+  if (source.input !== undefined) {
+    return parseStructuredCodexValue(source.input);
+  }
+  if (source.arguments !== undefined) {
+    return parseStructuredCodexValue(source.arguments);
+  }
+
+  const input: Record<string, unknown> = {};
+  for (const key of [...SHELL_INPUT_KEYS, 'description', 'cwd'] as const) {
+    if (source[key] !== undefined) {
+      input[key] = normalizeShellToolPayload(source[key]);
+    }
+  }
+
+  return Object.keys(input).length > 0 ? input : undefined;
+}
+
+function buildCodexToolCallOutput(source: Record<string, unknown>): unknown {
+  if (source.output !== undefined) {
+    return parseStructuredCodexValue(source.output);
+  }
+  if (source.result !== undefined) {
+    return parseStructuredCodexValue(source.result);
+  }
+
+  const output: Record<string, unknown> = {};
+  if (source.aggregated_output !== undefined) {
+    output.stdout = source.aggregated_output;
+  }
+  if (source.stdout !== undefined) {
+    output.stdout = source.stdout;
+  }
+  if (source.stderr !== undefined) {
+    output.stderr = source.stderr;
+  }
+  if (source.exit_code !== undefined) {
+    output.exitCode = source.exit_code;
+  }
+  if (source.status !== undefined) {
+    output.status = source.status;
+  }
+
+  return Object.keys(output).length > 0 ? output : undefined;
+}
+
+function isCodexToolCallRecord(value: Record<string, unknown>): boolean {
+  const type = typeof value.type === 'string' ? value.type : undefined;
+  if (
+    type === 'command_execution' ||
+    type === 'function_call' ||
+    type === 'function_call_output' ||
+    type === 'tool_use'
+  ) {
+    return true;
+  }
+
+  return (
+    (typeof value.name === 'string' &&
+      (value.input !== undefined || value.arguments !== undefined)) ||
+    (typeof value.call_id === 'string' &&
+      (value.output !== undefined || value.result !== undefined))
+  );
+}
+
+function normalizeCodexToolCallRecord(
+  source: Record<string, unknown>,
+  eventType: string | undefined,
+): Record<string, unknown> | undefined {
+  if (!isCodexToolCallRecord(source)) {
+    return undefined;
+  }
+
+  const normalized: Record<string, unknown> = {
+    ...(eventType === undefined ? {} : { eventType }),
+    ...source,
+  };
+  if (typeof source.name === 'string' && source.name.trim().length > 0) {
+    normalized.name = source.name;
+  } else if (source.type === 'command_execution') {
+    normalized.name = 'shell';
+  }
+
+  const input = buildCodexToolCallInput(source);
+  if (input !== undefined) {
+    normalized.input = input;
+  }
+  const output = buildCodexToolCallOutput(source);
+  if (output !== undefined) {
+    normalized.output = output;
+  }
+
+  return normalized;
+}
+
+function resolveCodexToolCallId(
+  source: Record<string, unknown>,
+  fallbackId: string,
+): string {
+  for (const key of ['call_id', 'tool_call_id', 'id'] as const) {
+    if (typeof source[key] === 'string' && source[key].length > 0) {
+      return source[key];
+    }
+  }
+
+  return fallbackId;
+}
+
 function extractTextFragments(value: unknown): string[] {
   if (typeof value === 'string') {
     return value.trim().length > 0 ? [value] : [];
@@ -877,6 +1050,42 @@ export class CodexProvider implements EvalProvider {
         }
       }
 
+      const recordType = typeof record.type === 'string' ? record.type : undefined;
+      const recordText = extractTextFragments(record).join('\n').trim();
+      if (selectedSkill === undefined && recordText.length > 0) {
+        selectedSkill = inferSelectedSkillFromText(recordText);
+      }
+
+      if (recordType === 'agent_message') {
+        if (recordText.length > 0) {
+          messages.push(`assistant: ${recordText}`);
+          finalText = recordText;
+        }
+        return;
+      }
+
+      if (recordType === 'reasoning') {
+        if (recordText.length > 0) {
+          reasoningFragments.push(recordText);
+          messages.push(`reasoning: ${recordText}`);
+        }
+        return;
+      }
+
+      const topLevelToolCall = normalizeCodexToolCallRecord(record, recordType);
+      if (topLevelToolCall !== undefined) {
+        const toolCallId = resolveCodexToolCallId(
+          topLevelToolCall,
+          `${String(index)}:${recordType ?? 'record'}`,
+        );
+        const existingToolCall = toolCalls.get(toolCallId);
+        toolCalls.set(toolCallId, {
+          ...existingToolCall,
+          ...topLevelToolCall,
+        });
+        return;
+      }
+
       const item = isRecord(record.item) ? record.item : undefined;
       if (item === undefined) {
         return;
@@ -907,15 +1116,19 @@ export class CodexProvider implements EvalProvider {
         return;
       }
 
-      const itemId =
-        typeof item.id === 'string'
-          ? item.id
-          : `${String(index)}:${itemType ?? 'item'}`;
+      const normalizedToolCall = normalizeCodexToolCallRecord(item, recordType);
+      if (normalizedToolCall === undefined) {
+        return;
+      }
+
+      const itemId = resolveCodexToolCallId(
+        normalizedToolCall,
+        `${String(index)}:${itemType ?? 'item'}`,
+      );
       const existing = toolCalls.get(itemId);
       toolCalls.set(itemId, {
         ...existing,
-        eventType: record.type,
-        ...item,
+        ...normalizedToolCall,
       });
     });
 

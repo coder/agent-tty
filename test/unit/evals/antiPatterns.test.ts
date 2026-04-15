@@ -426,6 +426,25 @@ describe('buildScannableTranscript', () => {
     expect(transcript).not.toContain('file contents');
   });
 
+  it('includes unnamed Codex command execution records', () => {
+    const normalized = createNormalizedOutput({
+      toolCalls: [
+        {
+          type: 'command_execution',
+          command: 'npx tsx src/cli/main.ts wait --json --session demo',
+          aggregated_output: 'wait completed',
+        },
+      ],
+    });
+
+    const transcript = buildScannableTranscript(normalized);
+
+    expect(transcript).toContain(
+      'npx tsx src/cli/main.ts wait --json --session demo',
+    );
+    expect(transcript).toContain('wait completed');
+  });
+
   it('returns empty string when toolCalls is empty', () => {
     expect(buildScannableTranscript(createNormalizedOutput())).toBe('');
   });
@@ -488,6 +507,22 @@ describe('countAgentTtyCalls', () => {
     });
 
     expect(countAgentTtyCalls(normalized)).toBe(2);
+  });
+
+  it('counts unnamed Codex shell records using output text when needed', () => {
+    const normalized = createNormalizedOutput({
+      toolCalls: [
+        {
+          type: 'command_execution',
+          output: {
+            stdout:
+              'executed npx tsx src/cli/main.ts snapshot --json --session demo',
+          },
+        },
+      ],
+    });
+
+    expect(countAgentTtyCalls(normalized)).toBe(1);
   });
 
   it('returns 0 when no tool calls mention agent-tty', () => {

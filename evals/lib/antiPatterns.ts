@@ -21,16 +21,21 @@ const COMMAND_PROMPT_PREFIX_PATTERN = /^\s*(?:[$>])\s*/u;
 const AGENT_TTY_COMMAND_TEXT_PATTERN = String.raw`(?:agent-tty\b|npx\s+tsx\b[^\n]*?\bsrc\/cli\/main\.ts\b)`;
 const SHELL_TOOL_NAME_PATTERN =
   /^(?:bash|shell|execute|command|run_command|terminal)$/iu;
+const SHELL_TOOL_FALLBACK_TYPE_PATTERN =
+  /^(?:command_execution|function_call|tool_use)$/iu;
+const SHELL_TOOL_HINT_KEYS = ['script', 'command', 'cmd'] as const;
 const SCANNABLE_TOOL_TEXT_KEYS = [
   'script',
   'command',
   'cmd',
+  'arguments',
   'text',
   'content',
   'output',
   'stdout',
   'stderr',
   'result',
+  'aggregated_output',
 ] as const;
 const AGENT_TTY_TOOL_INPUT_PATTERN = new RegExp(
   AGENT_TTY_COMMAND_TEXT_PATTERN,
@@ -199,13 +204,7 @@ export function buildScannableTranscript(
   normalized: NormalizedProviderOutput,
 ): string {
   return collectShellToolCalls(normalized)
-    .map((toolCall) => {
-      const inputText = extractScannableToolText(toolCall.input);
-      const outputText = extractScannableToolText(toolCall.output);
-      return [inputText, outputText]
-        .filter((value) => value.length > 0)
-        .join('\n');
-    })
+    .map((toolCall) => extractScannableToolCallTexts(toolCall).join('\n'))
     .filter((block) => block.length > 0)
     .join('\n');
 }
@@ -217,8 +216,9 @@ export function countAgentTtyCalls(
   normalized: NormalizedProviderOutput,
 ): number {
   return collectShellToolCalls(normalized).reduce((count, toolCall) => {
-    const inputText = extractScannableToolText(toolCall.input);
-    return inputText.length > 0 && AGENT_TTY_TOOL_INPUT_PATTERN.test(inputText)
+    return extractScannableToolCallTexts(toolCall).some((fragment) =>
+      AGENT_TTY_TOOL_INPUT_PATTERN.test(fragment),
+    )
       ? count + 1
       : count;
   }, 0);
@@ -376,7 +376,67 @@ function collectShellToolCalls(
 
 function isShellToolCall(toolCall: Record<string, unknown>): boolean {
   const toolName = toolCall.name;
-  return typeof toolName === 'string' && SHELL_TOOL_NAME_PATTERN.test(toolName);
+  if (typeof toolName === 'string' && SHELL_TOOL_NAME_PATTERN.test(toolName)) {
+    return true;
+  }
+
+  if (
+    hasShellToolHints(toolCall) ||
+    hasShellToolHints(toolCall.input) ||
+    hasShellToolHints(toolCall.output)
+  ) {
+    return true;
+  }
+
+  const toolType = typeof toolCall.type === 'string' ? toolCall.type : undefined;
+  return (
+    typeof toolType === 'string' &&
+    SHELL_TOOL_FALLBACK_TYPE_PATTERN.test(toolType) &&
+    extractScannableToolCallTexts(toolCall).length > 0
+  );
+}
+
+function hasShellToolHints(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return SHELL_TOOL_HINT_KEYS.some(
+    (key) => extractScannableToolText(value[key]).length > 0,
+  );
+}
+
+function extractScannableToolCallTexts(
+  toolCall: Record<string, unknown>,
+): string[] {
+  const fragments: string[] = [];
+
+  for (const value of [
+    toolCall.input,
+    toolCall.output,
+    {
+      script: toolCall.script,
+      command: toolCall.command,
+      cmd: toolCall.cmd,
+      arguments: toolCall.arguments,
+      text: toolCall.text,
+      content: toolCall.content,
+    },
+    {
+      output: toolCall.output,
+      stdout: toolCall.stdout,
+      stderr: toolCall.stderr,
+      result: toolCall.result,
+      aggregated_output: toolCall.aggregated_output,
+    },
+  ]) {
+    const fragment = extractScannableToolText(value);
+    if (fragment.length > 0 && !fragments.includes(fragment)) {
+      fragments.push(fragment);
+    }
+  }
+
+  return fragments;
 }
 
 function extractScannableToolText(value: unknown): string {
