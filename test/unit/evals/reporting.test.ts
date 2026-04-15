@@ -434,9 +434,7 @@ describe('eval reporting condition comparison summary', () => {
     expect(markdown).toContain('## Condition comparison');
     expect(markdown).toContain('- Compared conditions: `none`, `preloaded`');
     expect(markdown).toContain('| `none` | 1 | 0 | 1 | 0.0% | 0.200 |');
-    expect(markdown).toContain(
-      '| `preloaded` | 1 | 1 | 0 | 100.0% | 0.800 |',
-    );
+    expect(markdown).toContain('| `preloaded` | 1 | 1 | 0 | 100.0% | 0.800 |');
     expect(markdown).toContain('| Realized skill lift | 0.0% |');
     expect(markdown).toContain('| Oracle skill lift | 60.0% |');
     expect(markdown.indexOf('## Condition comparison')).toBeLessThan(

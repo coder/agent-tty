@@ -54,12 +54,14 @@ const EXECUTION_CASE_COVERAGE_BY_ID = {
   'resize-demo': {
     readinessTier: 'non-renderer-unproven',
     rendererRequirement: 'none',
-    summary: 'Snapshot-only resize verification still needs broader smoke coverage.',
+    summary:
+      'Snapshot-only resize verification still needs broader smoke coverage.',
   },
   'alt-screen-demo': {
     readinessTier: 'non-renderer-unproven',
     rendererRequirement: 'none',
-    summary: 'Alt-screen event-log and snapshot proof still needs broader smoke coverage.',
+    summary:
+      'Alt-screen event-log and snapshot proof still needs broader smoke coverage.',
   },
   'scrollback-demo': {
     readinessTier: 'non-renderer-unproven',
@@ -69,7 +71,8 @@ const EXECUTION_CASE_COVERAGE_BY_ID = {
   'unicode-grid': {
     readinessTier: 'non-renderer-unproven',
     rendererRequirement: 'none',
-    summary: 'Unicode snapshot verification still needs broader smoke coverage.',
+    summary:
+      'Unicode snapshot verification still needs broader smoke coverage.',
   },
   'export-proof': {
     readinessTier: 'non-renderer-unproven',

@@ -693,13 +693,28 @@ function buildConditionComparisonMarkdown(
       ['Delta', 'Value'],
       ['left', 'right'],
       [
-        ['Realized skill lift', formatComparisonValue(summary.keyDeltas.realizedSkillLift)],
-        ['Oracle skill lift', formatComparisonValue(summary.keyDeltas.oracleSkillLift)],
+        [
+          'Realized skill lift',
+          formatComparisonValue(summary.keyDeltas.realizedSkillLift),
+        ],
+        [
+          'Oracle skill lift',
+          formatComparisonValue(summary.keyDeltas.oracleSkillLift),
+        ],
         ['Routing gap', formatComparisonValue(summary.keyDeltas.routingGap)],
-        ['Stale-skill harm', formatComparisonValue(summary.keyDeltas.staleSkillHarm)],
-        ['Regression rate', formatComparisonValue(summary.keyDeltas.regressionRate)],
+        [
+          'Stale-skill harm',
+          formatComparisonValue(summary.keyDeltas.staleSkillHarm),
+        ],
+        [
+          'Regression rate',
+          formatComparisonValue(summary.keyDeltas.regressionRate),
+        ],
         ['Unlock rate', formatComparisonValue(summary.keyDeltas.unlockRate)],
-        ['Routing efficiency', formatComparisonValue(summary.keyDeltas.routingEfficiency)],
+        [
+          'Routing efficiency',
+          formatComparisonValue(summary.keyDeltas.routingEfficiency),
+        ],
       ],
     ),
   ];

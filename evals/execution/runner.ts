@@ -226,10 +226,7 @@ function assertExecutionCaseCoverageMetadata(
   }
 }
 
-function matchesAnyPattern(
-  text: string,
-  patterns: readonly RegExp[],
-): boolean {
+function matchesAnyPattern(text: string, patterns: readonly RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
 }
 

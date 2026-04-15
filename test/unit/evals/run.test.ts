@@ -24,7 +24,10 @@ function getWrittenStdout(calls: readonly unknown[][]): string {
 }
 
 function resolveRepoPath(...segments: string[]): string {
-  return resolve(fileURLToPath(new URL('../../..', import.meta.url)), ...segments);
+  return resolve(
+    fileURLToPath(new URL('../../..', import.meta.url)),
+    ...segments,
+  );
 }
 
 afterEach(() => {
@@ -129,9 +132,9 @@ describe('runEvalCli dry-run output', () => {
     ]);
 
     expect(exitCode).toBe(0);
-    expect(getWrittenStdout(stdoutWriteSpy.mock.calls as unknown[][])).toContain(
-      `Output directory: ${outputDir}\n`,
-    );
+    expect(
+      getWrittenStdout(stdoutWriteSpy.mock.calls as unknown[][]),
+    ).toContain(`Output directory: ${outputDir}\n`);
   });
 
   it('emits the resolved output directory in the JSON summary', async () => {
