@@ -181,7 +181,7 @@ describe('detectAntiPatterns', () => {
       expect(findings).toEqual([]);
     });
 
-    it('does not emit when any agent-tty command in the transcript has --json', () => {
+    it('emits info-level finding when some commands have --json and others do not', () => {
       const findings = findByRule(
         [
           'agent-tty create --session demo',
@@ -190,7 +190,18 @@ describe('detectAntiPatterns', () => {
         'missing-json-flag',
       );
 
-      expect(findings).toEqual([]);
+      expect(findings).toEqual([
+        {
+          ruleId: 'missing-json-flag',
+          severity: 'info',
+          message:
+            'Informational only: some agent-tty commands omitted --json even though other commands included it. Missing --json on create (line 1).',
+          matchedText: 'agent-tty create --session demo',
+          lineNumber: 1,
+          suggestedFix:
+            'Add --json to agent-tty commands used in transcripts, evals, or automation so downstream parsing is stable.',
+        },
+      ]);
     });
 
     it('does not emit when there are no agent-tty commands', () => {
