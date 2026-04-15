@@ -44,9 +44,6 @@ const DEFAULT_CODEX_CONFIG: ProviderConfig = {
   capabilities: DEFAULT_CODEX_CAPABILITIES,
 };
 
-const CODEX_FULL_ACCESS_SANDBOX_PERMISSIONS =
-  'sandbox_permissions=["disk-full-read-access","disk-write-access","network-full-access"]';
-
 type CommandExecutionResult = {
   stdout: string;
   stderr: string;
@@ -609,6 +606,7 @@ export class CodexProvider implements EvalProvider {
         'never',
         '--ephemeral',
         '--skip-git-repo-check',
+        '--dangerously-bypass-approvals-and-sandbox',
         ...(parsedRequest.modelId === undefined
           ? []
           : ['-m', parsedRequest.modelId]),
@@ -713,8 +711,7 @@ export class CodexProvider implements EvalProvider {
         'never',
         '--ephemeral',
         '--skip-git-repo-check',
-        '-c',
-        CODEX_FULL_ACCESS_SANDBOX_PERMISSIONS,
+        '--dangerously-bypass-approvals-and-sandbox',
         ...(parsedRequest.modelId === undefined
           ? []
           : ['-m', parsedRequest.modelId]),
