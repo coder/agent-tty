@@ -388,7 +388,8 @@ function isShellToolCall(toolCall: Record<string, unknown>): boolean {
     return true;
   }
 
-  const toolType = typeof toolCall.type === 'string' ? toolCall.type : undefined;
+  const toolType =
+    typeof toolCall.type === 'string' ? toolCall.type : undefined;
   return (
     typeof toolType === 'string' &&
     SHELL_TOOL_FALLBACK_TYPE_PATTERN.test(toolType) &&

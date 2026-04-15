@@ -1050,7 +1050,8 @@ export class CodexProvider implements EvalProvider {
         }
       }
 
-      const recordType = typeof record.type === 'string' ? record.type : undefined;
+      const recordType =
+        typeof record.type === 'string' ? record.type : undefined;
       const recordText = extractTextFragments(record).join('\n').trim();
       if (selectedSkill === undefined && recordText.length > 0) {
         selectedSkill = inferSelectedSkillFromText(recordText);

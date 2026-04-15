@@ -895,7 +895,9 @@ async function runSingleExecutionCase(
       evalCase.artifactRequirements,
       artifacts,
     );
-    const scannableTranscript = buildScannableTranscript(providerResult.normalized);
+    const scannableTranscript = buildScannableTranscript(
+      providerResult.normalized,
+    );
     return buildResult(
       metadata,
       provider,
