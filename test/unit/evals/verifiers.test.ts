@@ -23,9 +23,7 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 }));
 
 vi.mock('node:fs/promises', async () => {
-  const actual = await vi.importActual<typeof import('node:fs/promises')>(
-    'node:fs/promises',
-  );
+  const actual = await vi.importActual<typeof FsPromises>('node:fs/promises');
   return {
     ...actual,
     readFile: mocks.readFile,
@@ -34,6 +32,7 @@ vi.mock('node:fs/promises', async () => {
 });
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import type * as FsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -56,13 +55,11 @@ import type {
 } from '../../../evals/execution/verifiers/index.js';
 import type { VerifierSpec } from '../../../evals/lib/types.js';
 
-let actualFsPromises: typeof import('node:fs/promises');
+let actualFsPromises: typeof FsPromises;
 const tempDirs = new Set<string>();
 
 beforeAll(async () => {
-  actualFsPromises = await vi.importActual<typeof import('node:fs/promises')>(
-    'node:fs/promises',
-  );
+  actualFsPromises = await vi.importActual<typeof FsPromises>('node:fs/promises');
 });
 
 beforeEach(() => {
