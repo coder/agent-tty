@@ -388,6 +388,7 @@ export const RunMetadataSchema = z
     runId: NonEmptyStringSchema,
     createdAt: IsoTimestampSchema,
     repoRoot: PathStringSchema,
+    outputBaseDir: PathStringSchema.optional(),
     providers: z.array(NonEmptyStringSchema),
     models: z.array(NonEmptyStringSchema),
     lanes: z.array(EvalLaneSchema),
@@ -667,6 +668,56 @@ export const AggregateMetricsSchema = z
     }
   });
 
+export const ConditionAggregateSummarySchema = z
+  .object({
+    condition: SkillConditionSchema,
+    totalCases: NonNegativeIntSchema,
+    passed: NonNegativeIntSchema,
+    failed: NonNegativeIntSchema,
+    passRate: UnitIntervalSchema,
+    averageScore: NonNegativeNumberSchema,
+  })
+  .strict()
+  .superRefine((obj, ctx) => {
+    if (obj.passed + obj.failed !== obj.totalCases) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'passed + failed must equal totalCases',
+        path: ['totalCases'],
+      });
+    }
+  });
+
+export const ConditionComparisonSummarySchema = z
+  .object({
+    comparedConditions: z.array(SkillConditionSchema).min(2),
+    comparedGroups: NonNegativeIntSchema,
+    comparedCases: NonNegativeIntSchema,
+    conditionBreakdown: z.array(ConditionAggregateSummarySchema).min(2),
+    keyDeltas: z
+      .object({
+        realizedSkillLift: FiniteNumberSchema.optional(),
+        oracleSkillLift: FiniteNumberSchema.optional(),
+        routingGap: FiniteNumberSchema.optional(),
+        staleSkillHarm: FiniteNumberSchema.optional(),
+        regressionRate: FiniteNumberSchema.optional(),
+        unlockRate: FiniteNumberSchema.optional(),
+        routingEfficiency: FiniteNumberSchema.optional(),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((obj, ctx) => {
+    if (obj.conditionBreakdown.length !== obj.comparedConditions.length) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'conditionBreakdown length must match comparedConditions length',
+        path: ['conditionBreakdown'],
+      });
+    }
+  });
+
 const ProviderAggregateSchema = z
   .object({
     providerId: NonEmptyStringSchema,
@@ -770,6 +821,7 @@ export const JsonReportSchema = z
   .object({
     metadata: RunMetadataSchema,
     aggregate: AggregateMetricsSchema,
+    conditionComparisonSummary: ConditionComparisonSummarySchema.optional(),
     comparisons: z.array(ComparisonMetricsSchema),
     results: z.array(EvalResultSchema),
     providerComparison: ProviderComparisonReportSchema.optional(),

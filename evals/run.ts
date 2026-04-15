@@ -744,7 +744,7 @@ function writeDryRunSummary(options: ResolvedCliOptions): void {
     process.stdout,
     `Conditions: ${options.activeConditions.join(', ')}`,
   );
-  writeLine(process.stdout, `Output base dir: ${options.outputBaseDir}`);
+  writeLine(process.stdout, `Output directory: ${options.outputBaseDir}`);
   writeLine(
     process.stdout,
     `Total eval invocations: ${String(options.totalInvocations)}`,
@@ -819,10 +819,6 @@ function buildRunMetadata(
   }
   appendMetadataNote(
     metadataNotes,
-    `output base dir: ${options.outputBaseDir}`,
-  );
-  appendMetadataNote(
-    metadataNotes,
     options.modelId === undefined
       ? undefined
       : `requested model: ${options.modelId}`,
@@ -866,6 +862,7 @@ function buildRunMetadata(
     runId,
     createdAt: new Date().toISOString(),
     repoRoot,
+    outputBaseDir: options.outputBaseDir,
     providers: [options.providerId],
     models: selectedModelId === undefined ? [] : [selectedModelId],
     lanes: options.activeLanes,
@@ -948,7 +945,7 @@ function writeHumanSummary(summary: RunSummary): void {
   }
   writeLine(process.stdout, `Lanes: ${summary.lanes.join(', ')}`);
   writeLine(process.stdout, `Conditions: ${summary.conditions.join(', ')}`);
-  writeLine(process.stdout, `Output base dir: ${summary.outputBaseDir}`);
+  writeLine(process.stdout, `Output directory: ${summary.outputBaseDir}`);
   if (summary.runDir !== undefined) {
     writeLine(process.stdout, `Run dir: ${summary.runDir}`);
   }

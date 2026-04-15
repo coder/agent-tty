@@ -14,6 +14,7 @@ import type {
   AntiPatternSeverity,
   BaselineComparison,
   ComparisonMetrics,
+  ConditionComparisonSummary,
   EvalLane,
   EvalResult,
   JsonReport,
@@ -82,6 +83,11 @@ export function generateJsonReport(
   const normalizedComparisons = normalizeComparisonMetrics(comparisonMetrics);
   const aggregateMetrics = buildAggregateMetrics(sortedResults);
   const aggregate = toAggregateMetricsCore(aggregateMetrics);
+  const conditionComparisonSummary = buildConditionComparisonSummary(
+    sortedResults,
+    metadata.conditions,
+    normalizedComparisons,
+  );
   const laneSummaries = buildLaneSummaries(sortedResults, metadata.lanes);
   const providerComparisons = buildPairwiseProviderComparisons(
     sortedResults,
@@ -101,6 +107,9 @@ export function generateJsonReport(
   const coreReport = {
     metadata,
     aggregate,
+    ...(conditionComparisonSummary === undefined
+      ? {}
+      : { conditionComparisonSummary }),
     comparisons: normalizedComparisons,
     results: sortedResults,
     ...(providerComparison === undefined ? {} : { providerComparison }),
@@ -162,6 +171,11 @@ export function generateMarkdownReport(
     `- Run ID: \`${sanitizeInline(report.metadata.runId)}\``,
     `- Created: \`${sanitizeInline(report.metadata.createdAt)}\``,
     `- Repo root: \`${sanitizeInline(report.metadata.repoRoot)}\``,
+    ...(report.metadata.outputBaseDir === undefined
+      ? []
+      : [
+          `- Output directory: \`${sanitizeInline(report.metadata.outputBaseDir)}\``,
+        ]),
     `- Providers: ${formatList(providers.map((providerId) => `\`${providerId}\``))}`,
     `- Models: ${formatList(
       [...report.metadata.models]
@@ -186,6 +200,13 @@ export function generateMarkdownReport(
   }
 
   sections.push('', formatSummaryTable(report.aggregateMetrics));
+
+  if (report.conditionComparisonSummary !== undefined) {
+    sections.push(
+      '',
+      ...buildConditionComparisonMarkdown(report.conditionComparisonSummary),
+    );
+  }
 
   if (lanes.length > 0) {
     sections.push('', '## Lane breakdown', '');
@@ -217,85 +238,6 @@ export function generateMarkdownReport(
         ['Provider', 'Lane', 'Total', 'Passed', 'Failed', 'Pass Rate', 'Mean'],
         ['left', 'left', 'right', 'right', 'right', 'right', 'right'],
         buildProviderLaneRows(report.results, providers, lanes),
-      ),
-    );
-  }
-
-  if (report.comparisons.length > 0) {
-    sections.push('', '## Condition comparison', '');
-    sections.push(
-      buildMarkdownTable(
-        ['Metric', 'Value'],
-        ['left', 'right'],
-        [
-          ['Compared groups', String(report.comparisons.length)],
-          [
-            'Compared cases',
-            String(
-              report.comparisons.reduce(
-                (count, metric) => count + metric.totalCompared,
-                0,
-              ),
-            ),
-          ],
-          [
-            'Realized skill lift',
-            formatComparisonValue(
-              averageDefined(
-                report.comparisons,
-                (metric) => metric.realizedSkillLift,
-              ),
-            ),
-          ],
-          [
-            'Oracle skill lift',
-            formatComparisonValue(
-              averageDefined(
-                report.comparisons,
-                (metric) => metric.oracleSkillLift,
-              ),
-            ),
-          ],
-          [
-            'Routing gap',
-            formatComparisonValue(
-              averageDefined(report.comparisons, (metric) => metric.routingGap),
-            ),
-          ],
-          [
-            'Stale-skill harm',
-            formatComparisonValue(
-              averageDefined(
-                report.comparisons,
-                (metric) => metric.staleSkillHarm,
-              ),
-            ),
-          ],
-          [
-            'Regression rate',
-            formatComparisonValue(
-              averageDefined(
-                report.comparisons,
-                (metric) => metric.regressionRate,
-              ),
-            ),
-          ],
-          [
-            'Unlock rate',
-            formatComparisonValue(
-              averageDefined(report.comparisons, (metric) => metric.unlockRate),
-            ),
-          ],
-          [
-            'Routing efficiency',
-            formatComparisonValue(
-              averageDefined(
-                report.comparisons,
-                (metric) => metric.routingEfficiency,
-              ),
-            ),
-          ],
-        ],
       ),
     );
   }
@@ -718,6 +660,115 @@ function buildOverallComparisonVerdict(
   return 'inconclusive';
 }
 
+function buildConditionComparisonMarkdown(
+  summary: ConditionComparisonSummary,
+): string[] {
+  invariant(
+    summary.comparedConditions.length > 1,
+    'Condition comparison markdown requires at least two conditions',
+  );
+
+  return [
+    '## Condition comparison',
+    '',
+    `- Compared conditions: ${formatList(
+      summary.comparedConditions.map((condition) => `\`${condition}\``),
+    )}`,
+    `- Compared groups / cases: ${String(summary.comparedGroups)} / ${String(summary.comparedCases)}`,
+    '',
+    buildMarkdownTable(
+      ['Condition', 'Total', 'Passed', 'Failed', 'Pass Rate', 'Mean'],
+      ['left', 'right', 'right', 'right', 'right', 'right'],
+      summary.conditionBreakdown.map((row) => [
+        `\`${row.condition}\``,
+        String(row.totalCases),
+        String(row.passed),
+        String(row.failed),
+        formatPercent(row.passRate),
+        formatScore(row.averageScore),
+      ]),
+    ),
+    '',
+    buildMarkdownTable(
+      ['Delta', 'Value'],
+      ['left', 'right'],
+      [
+        ['Realized skill lift', formatComparisonValue(summary.keyDeltas.realizedSkillLift)],
+        ['Oracle skill lift', formatComparisonValue(summary.keyDeltas.oracleSkillLift)],
+        ['Routing gap', formatComparisonValue(summary.keyDeltas.routingGap)],
+        ['Stale-skill harm', formatComparisonValue(summary.keyDeltas.staleSkillHarm)],
+        ['Regression rate', formatComparisonValue(summary.keyDeltas.regressionRate)],
+        ['Unlock rate', formatComparisonValue(summary.keyDeltas.unlockRate)],
+        ['Routing efficiency', formatComparisonValue(summary.keyDeltas.routingEfficiency)],
+      ],
+    ),
+  ];
+}
+
+function buildConditionComparisonSummary(
+  results: EvalResult[],
+  metadataConditions: readonly SkillCondition[],
+  comparisons: ComparisonMetrics[],
+): ConditionComparisonSummary | undefined {
+  if (comparisons.length === 0) {
+    return undefined;
+  }
+
+  const comparedConditions = collectConditions(results, metadataConditions);
+  invariant(
+    comparedConditions.length > 1,
+    'Condition comparison summary requires at least two conditions',
+  );
+
+  const conditionBreakdown = comparedConditions.map((condition) => {
+    const metrics = buildAggregateMetrics(
+      results.filter((result) => result.condition === condition),
+    );
+    return {
+      condition,
+      totalCases: metrics.totalCases,
+      passed: metrics.passed,
+      failed: metrics.failed,
+      passRate: metrics.passRate,
+      averageScore: metrics.averageScore,
+    };
+  });
+
+  return {
+    comparedConditions,
+    comparedGroups: comparisons.length,
+    comparedCases: comparisons.reduce(
+      (count, metric) => count + metric.totalCompared,
+      0,
+    ),
+    conditionBreakdown,
+    keyDeltas: {
+      realizedSkillLift: averageDefined(
+        comparisons,
+        (metric) => metric.realizedSkillLift,
+      ),
+      oracleSkillLift: averageDefined(
+        comparisons,
+        (metric) => metric.oracleSkillLift,
+      ),
+      routingGap: averageDefined(comparisons, (metric) => metric.routingGap),
+      staleSkillHarm: averageDefined(
+        comparisons,
+        (metric) => metric.staleSkillHarm,
+      ),
+      regressionRate: averageDefined(
+        comparisons,
+        (metric) => metric.regressionRate,
+      ),
+      unlockRate: averageDefined(comparisons, (metric) => metric.unlockRate),
+      routingEfficiency: averageDefined(
+        comparisons,
+        (metric) => metric.routingEfficiency,
+      ),
+    },
+  };
+}
+
 /**
  * Build deterministic pairwise provider comparisons with per-condition
  * aggregate breakdowns.
@@ -786,6 +837,12 @@ function assertMetadata(metadata: RunMetadata): void {
   invariant(
     typeof metadata.runId === 'string' && metadata.runId.length > 0,
     'Run metadata runId must be a non-empty string',
+  );
+  invariant(
+    metadata.outputBaseDir === undefined ||
+      (typeof metadata.outputBaseDir === 'string' &&
+        metadata.outputBaseDir.length > 0),
+    'Run metadata outputBaseDir must be a non-empty string when provided',
   );
   invariant(
     Array.isArray(metadata.providers),

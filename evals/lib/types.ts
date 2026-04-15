@@ -225,6 +225,7 @@ export interface RunMetadata {
   runId: string;
   createdAt: string;
   repoRoot: string;
+  outputBaseDir?: string | undefined;
   providers: string[];
   models: string[];
   lanes: EvalLane[];
@@ -396,10 +397,38 @@ export interface AggregateMetrics {
   evidenceQualityRate?: number;
 }
 
+/** Per-condition pass/fail summary for a comparison view. */
+export interface ConditionAggregateSummary {
+  condition: SkillCondition;
+  totalCases: number;
+  passed: number;
+  failed: number;
+  passRate: number;
+  averageScore: number;
+}
+
+/** Concise condition comparison summary promoted near the top of reports. */
+export interface ConditionComparisonSummary {
+  comparedConditions: SkillCondition[];
+  comparedGroups: number;
+  comparedCases: number;
+  conditionBreakdown: ConditionAggregateSummary[];
+  keyDeltas: {
+    realizedSkillLift?: number | undefined;
+    oracleSkillLift?: number | undefined;
+    routingGap?: number | undefined;
+    staleSkillHarm?: number | undefined;
+    regressionRate?: number | undefined;
+    unlockRate?: number | undefined;
+    routingEfficiency?: number | undefined;
+  };
+}
+
 /** JSON-serializable top-level eval report. */
 export interface JsonReport {
   metadata: RunMetadata;
   aggregate: AggregateMetrics;
+  conditionComparisonSummary?: ConditionComparisonSummary;
   comparisons: ComparisonMetrics[];
   results: EvalResult[];
   providerComparison?: ProviderComparisonReport;
