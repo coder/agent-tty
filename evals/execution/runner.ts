@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { assertString, invariant } from '../../src/util/assert.js';
-import { detectAntiPatterns } from '../lib/antiPatterns.js';
+import {
+  buildScannableTranscript,
+  countAgentTtyCalls,
+  detectAntiPatterns,
+} from '../lib/antiPatterns.js';
 import { createIsolatedEvalHome } from '../lib/cliHarness.js';
 import { EvalResultSchema } from '../lib/schemas.js';
 import { checkWorkflow } from '../lib/scoring.js';
@@ -536,7 +540,9 @@ function summarizeFailureReasons(
     .filter((check) => !check.passed)
     .map((check) => check.checkId);
   if (failedWorkflowChecks.length > 0) {
-    reasons.push(`Failed workflow checks: ${failedWorkflowChecks.join(', ')}`);
+    reasons.push(
+      `(informational) Failed workflow checks: ${failedWorkflowChecks.join(', ')}`,
+    );
   }
 
   const errorFindings = antiPatternFindings.filter(
@@ -552,7 +558,9 @@ function summarizeFailureReasons(
     .filter(({ requirement, result }) => requirement.required && !result.pass)
     .map(({ requirement }) => requirement.kind);
   if (missingArtifacts.length > 0) {
-    reasons.push(`Missing required artifacts: ${missingArtifacts.join(', ')}`);
+    reasons.push(
+      `(informational) Missing required artifacts: ${missingArtifacts.join(', ')}`,
+    );
   }
 
   return reasons.join('; ');
@@ -565,6 +573,7 @@ function buildScoreBreakdown(
   workflowChecks: readonly WorkflowCheckResult[],
   antiPatternFindings: readonly AntiPatternFinding[],
   artifactResults: readonly EvaluatedArtifactRequirement[],
+  normalizedOutput: NormalizedProviderOutput,
 ): {
   breakdown: { total: number; maxPossible: number; items: ScoreComponent[] };
   ok: boolean;
@@ -572,9 +581,27 @@ function buildScoreBreakdown(
   const verifierStatus = countPassedVerifiers(verifierResults);
   const workflowStatus = countPassedWorkflowChecks(workflowChecks, evalCase);
   const artifactStatus = countPassedArtifactRequirements(artifactResults);
+  invariant(
+    artifactStatus.passed <= artifactStatus.total &&
+      artifactStatus.failed.length <= artifactStatus.total,
+    'Artifact requirement counts must stay within their evaluated total',
+  );
   const errorFindings = antiPatternFindings.filter(
     (finding) => finding.severity === 'error',
   );
+  const actualCalls = countAgentTtyCalls(normalizedOutput);
+  const referenceSteps = evalCase.referenceSteps;
+  const efficiencyScore =
+    referenceSteps !== undefined && referenceSteps > 0
+      ? Math.max(
+          0,
+          Math.min(1, referenceSteps / Math.max(referenceSteps, actualCalls)),
+        )
+      : 0;
+  const efficiencyReason =
+    referenceSteps !== undefined && referenceSteps > 0
+      ? `Used ${String(actualCalls)} agent-tty call(s) vs ${String(referenceSteps)} reference step(s)`
+      : 'No reference steps defined for this case';
 
   const items: ScoreComponent[] = [
     {
@@ -595,7 +622,7 @@ function buildScoreBreakdown(
       name: 'workflow-compliance',
       score: safeRatio(workflowStatus.passed, workflowStatus.total),
       maxScore: 1,
-      reason: `Passed ${String(workflowStatus.passed)} of ${String(workflowStatus.total)} required workflow check(s)`,
+      reason: `(informational) Passed ${String(workflowStatus.passed)} of ${String(workflowStatus.total)} required workflow check(s)`,
     },
     {
       name: 'anti-pattern-avoidance',
@@ -603,25 +630,20 @@ function buildScoreBreakdown(
       maxScore: 1,
       reason: summarizeAntiPatterns(antiPatternFindings),
     },
-  ];
-
-  if (artifactStatus.total > 0) {
-    items.push({
-      name: 'artifact-requirements',
-      score: safeRatio(artifactStatus.passed, artifactStatus.total),
+    {
+      name: 'efficiency',
+      score: efficiencyScore,
       maxScore: 1,
-      reason: `Satisfied ${String(artifactStatus.passed)} of ${String(artifactStatus.total)} required artifact expectation(s)`,
-    });
-  }
+      reason: efficiencyReason,
+    },
+  ];
 
   const total = items.reduce((sum, item) => sum + item.score, 0);
   const maxPossible = items.reduce((sum, item) => sum + item.maxScore, 0);
   const ok =
     providerOk &&
     verifierStatus.failed.length === 0 &&
-    workflowStatus.failed.length === 0 &&
-    errorFindings.length === 0 &&
-    artifactStatus.failed.length === 0;
+    errorFindings.length === 0;
 
   return {
     breakdown: {
@@ -716,6 +738,7 @@ function buildResult(
     workflowChecks,
     antiPatternFindings,
     artifactResults,
+    normalizedOutput,
   );
   const modelId = resolveModelId(metadata, runtime);
   const failureMessage = scored.ok
@@ -796,6 +819,8 @@ async function runSingleExecutionCase(
 
   if (runtime !== undefined && !runtime.available) {
     const transcript = `Provider ${provider.id} is unavailable.`;
+    const normalizedOutput = createFallbackNormalizedOutput(transcript);
+    const scannableTranscript = buildScannableTranscript(normalizedOutput);
     const persisted = await persistRunnerArtifacts(
       outputDir,
       transcript,
@@ -808,13 +833,13 @@ async function runSingleExecutionCase(
       evalCase,
       condition,
       runtime,
-      createFallbackNormalizedOutput(transcript),
+      normalizedOutput,
       false,
       invocationStartedAt,
       invocationStartedAt,
       0,
       checkWorkflow(transcript, evalCase.workflowChecks),
-      detectAntiPatterns(transcript, evalCase.antiPatterns),
+      detectAntiPatterns(scannableTranscript, evalCase.antiPatterns),
       buildVerifierFailures(
         evalCase,
         'Provider is unavailable; verifier did not run.',
@@ -870,6 +895,7 @@ async function runSingleExecutionCase(
       evalCase.artifactRequirements,
       artifacts,
     );
+    const scannableTranscript = buildScannableTranscript(providerResult.normalized);
     return buildResult(
       metadata,
       provider,
@@ -882,7 +908,7 @@ async function runSingleExecutionCase(
       providerResult.completedAt,
       providerResult.durationMs,
       checkWorkflow(transcript, evalCase.workflowChecks),
-      detectAntiPatterns(transcript, evalCase.antiPatterns),
+      detectAntiPatterns(scannableTranscript, evalCase.antiPatterns),
       verifierResults,
       artifactResults,
       providerResult.transcriptPath ?? persisted.transcriptPath,
@@ -901,6 +927,8 @@ async function runSingleExecutionCase(
       error instanceof Error && error.stack !== undefined
         ? `${error.name}: ${errorMessage}\n${error.stack}`
         : errorMessage;
+    const normalizedOutput = createFallbackNormalizedOutput(transcript);
+    const scannableTranscript = buildScannableTranscript(normalizedOutput);
     const persisted = await persistRunnerArtifacts(
       outputDir,
       transcript,
@@ -913,13 +941,13 @@ async function runSingleExecutionCase(
       evalCase,
       condition,
       runtime,
-      createFallbackNormalizedOutput(transcript),
+      normalizedOutput,
       false,
       invocationStartedAt,
       completedAt,
       durationMs,
       checkWorkflow(transcript, evalCase.workflowChecks),
-      detectAntiPatterns(transcript, evalCase.antiPatterns),
+      detectAntiPatterns(scannableTranscript, evalCase.antiPatterns),
       buildVerifierFailures(
         evalCase,
         'Provider invocation failed before verifier execution.',
