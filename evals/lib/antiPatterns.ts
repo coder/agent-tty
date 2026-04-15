@@ -4,6 +4,7 @@ import type {
   AntiPatternFinding,
   AntiPatternRule,
   AntiPatternSeverity,
+  NormalizedProviderOutput,
 } from './types.js';
 
 const SEVERITY_ORDER: Record<AntiPatternSeverity, number> = {
@@ -18,6 +19,23 @@ const BLIND_SLEEP_CONTEXT_PATTERN =
 const FENCED_CODE_BLOCK_PATTERN = /^\s*```/u;
 const COMMAND_PROMPT_PREFIX_PATTERN = /^\s*(?:[$>])\s*/u;
 const AGENT_TTY_COMMAND_TEXT_PATTERN = String.raw`(?:agent-tty\b|npx\s+tsx\b[^\n]*?\bsrc\/cli\/main\.ts\b)`;
+const SHELL_TOOL_NAME_PATTERN =
+  /^(?:bash|shell|execute|command|run_command|terminal)$/iu;
+const SCANNABLE_TOOL_TEXT_KEYS = [
+  'script',
+  'command',
+  'cmd',
+  'text',
+  'content',
+  'output',
+  'stdout',
+  'stderr',
+  'result',
+] as const;
+const AGENT_TTY_TOOL_INPUT_PATTERN = new RegExp(
+  AGENT_TTY_COMMAND_TEXT_PATTERN,
+  'iu',
+);
 const AGENT_TTY_SEGMENT_PATTERN = new RegExp(
   String.raw`${AGENT_TTY_COMMAND_TEXT_PATTERN}[^;&|\n]*`,
   'giu',
@@ -175,6 +193,38 @@ export function compileAntiPatternRegex(pattern: string): RegExp {
 }
 
 /**
+ * Build a scannable transcript from shell-style tool-call inputs and outputs.
+ */
+export function buildScannableTranscript(
+  normalized: NormalizedProviderOutput,
+): string {
+  return collectShellToolCalls(normalized)
+    .map((toolCall) => {
+      const inputText = extractScannableToolText(toolCall.input);
+      const outputText = extractScannableToolText(toolCall.output);
+      return [inputText, outputText]
+        .filter((value) => value.length > 0)
+        .join('\n');
+    })
+    .filter((block) => block.length > 0)
+    .join('\n');
+}
+
+/**
+ * Count shell-style tool calls that invoked agent-tty.
+ */
+export function countAgentTtyCalls(
+  normalized: NormalizedProviderOutput,
+): number {
+  return collectShellToolCalls(normalized).reduce((count, toolCall) => {
+    const inputText = extractScannableToolText(toolCall.input);
+    return inputText.length > 0 && AGENT_TTY_TOOL_INPUT_PATTERN.test(inputText)
+      ? count + 1
+      : count;
+  }, 0);
+}
+
+/**
  * Detect transcript anti-pattern findings using the provided rules.
  */
 export function detectAntiPatterns(
@@ -307,6 +357,72 @@ export function summarizeFindings(findings: readonly AntiPatternFinding[]): {
     byRule,
     bySeverity,
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function collectShellToolCalls(
+  normalized: NormalizedProviderOutput,
+): Array<Record<string, unknown>> {
+  invariant(
+    Array.isArray(normalized.toolCalls),
+    'normalized.toolCalls must be an array',
+  );
+
+  return normalized.toolCalls.filter(isShellToolCall);
+}
+
+function isShellToolCall(toolCall: Record<string, unknown>): boolean {
+  const toolName = toolCall.name;
+  return typeof toolName === 'string' && SHELL_TOOL_NAME_PATTERN.test(toolName);
+}
+
+function extractScannableToolText(value: unknown): string {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  if (Array.isArray(value)) {
+    const fragments: string[] = [];
+
+    for (const entry of value) {
+      const fragment = extractScannableToolText(entry);
+      if (fragment.length > 0 && !fragments.includes(fragment)) {
+        fragments.push(fragment);
+      }
+    }
+
+    return fragments.join('\n').trim();
+  }
+
+  if (!isRecord(value)) {
+    return '';
+  }
+
+  const fragments: string[] = [];
+
+  for (const key of SCANNABLE_TOOL_TEXT_KEYS) {
+    const fragment = extractScannableToolText(value[key]);
+    if (fragment.length > 0 && !fragments.includes(fragment)) {
+      fragments.push(fragment);
+    }
+  }
+
+  return fragments.join('\n').trim();
 }
 
 function validateRules(rules: readonly AntiPatternRule[]): void {
