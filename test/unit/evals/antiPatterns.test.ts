@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_ANTI_PATTERN_RULES,
+  buildScannableTranscript,
   compileAntiPatternRegex,
+  countAgentTtyCalls,
   detectAntiPatterns,
   filterRulesBySeverity,
   summarizeFindings,
@@ -10,6 +12,7 @@ import {
 import type {
   AntiPatternFinding,
   AntiPatternSeverity,
+  NormalizedProviderOutput,
 } from '../../../evals/lib/types.js';
 
 function findByRule(transcript: string, ruleId: string): AntiPatternFinding[] {
@@ -26,6 +29,18 @@ function makeFinding(
     ruleId,
     severity,
     message: `${ruleId} ${severity}`,
+  };
+}
+
+function createNormalizedOutput(
+  overrides: Partial<NormalizedProviderOutput> = {},
+): NormalizedProviderOutput {
+  return {
+    finalText: '',
+    messages: [],
+    referencedSkills: [],
+    toolCalls: [],
+    ...overrides,
   };
 }
 
@@ -373,5 +388,127 @@ describe('summarizeFindings', () => {
         error: 2,
       },
     });
+  });
+});
+
+describe('buildScannableTranscript', () => {
+  it('includes only bash/shell tool call content', () => {
+    const normalized = createNormalizedOutput({
+      finalText: 'Some planning text about tmux and sleep',
+      messages: ['Use agent-tty instead of tmux'],
+      referencedSkills: ['agent-tty'],
+      toolCalls: [
+        {
+          name: 'bash',
+          input: { script: 'agent-tty create --json --session demo' },
+          output: { stdout: 'session created' },
+        },
+        {
+          name: 'read_file',
+          input: { path: '/tmp/test.txt' },
+          output: { content: 'file contents' },
+        },
+        {
+          name: 'Bash',
+          input: { script: 'agent-tty snapshot --json --session demo' },
+          output: { stdout: 'snapshot taken' },
+        },
+      ],
+    });
+
+    const transcript = buildScannableTranscript(normalized);
+
+    expect(transcript).toContain('agent-tty create');
+    expect(transcript).toContain('agent-tty snapshot');
+    expect(transcript).not.toContain('tmux');
+    expect(transcript).not.toContain('sleep');
+    expect(transcript).not.toContain('read_file');
+    expect(transcript).not.toContain('file contents');
+  });
+
+  it('returns empty string when toolCalls is empty', () => {
+    expect(buildScannableTranscript(createNormalizedOutput())).toBe('');
+  });
+
+  it('returns empty string when no tool calls are shell-like', () => {
+    const normalized = createNormalizedOutput({
+      toolCalls: [{ name: 'read_file', input: { path: '/foo' } }],
+    });
+
+    expect(buildScannableTranscript(normalized)).toBe('');
+  });
+
+  it('handles malformed tool call records defensively', () => {
+    const normalized = createNormalizedOutput({
+      toolCalls: [
+        { name: 'bash' },
+        {},
+        { name: 123 },
+        { name: 'bash', input: 'raw string' },
+      ],
+    });
+
+    expect(() => buildScannableTranscript(normalized)).not.toThrow();
+    expect(typeof buildScannableTranscript(normalized)).toBe('string');
+  });
+
+  it('preserves ordering of tool calls', () => {
+    const normalized = createNormalizedOutput({
+      toolCalls: [
+        { name: 'bash', input: { script: 'first command' } },
+        { name: 'bash', input: { script: 'second command' } },
+      ],
+    });
+
+    const transcript = buildScannableTranscript(normalized);
+    const firstIndex = transcript.indexOf('first command');
+    const secondIndex = transcript.indexOf('second command');
+
+    expect(firstIndex).toBeGreaterThanOrEqual(0);
+    expect(secondIndex).toBeGreaterThan(firstIndex);
+  });
+});
+
+describe('countAgentTtyCalls', () => {
+  it('counts tool calls that invoke agent-tty commands', () => {
+    const normalized = createNormalizedOutput({
+      toolCalls: [
+        {
+          name: 'bash',
+          input: { script: 'agent-tty create --json --session demo' },
+        },
+        { name: 'bash', input: { script: 'echo hello' } },
+        {
+          name: 'bash',
+          input: {
+            script: 'npx tsx src/cli/main.ts snapshot --json --session demo',
+          },
+        },
+      ],
+    });
+
+    expect(countAgentTtyCalls(normalized)).toBe(2);
+  });
+
+  it('returns 0 when no tool calls mention agent-tty', () => {
+    const normalized = createNormalizedOutput({
+      toolCalls: [{ name: 'bash', input: { script: 'echo hello' } }],
+    });
+
+    expect(countAgentTtyCalls(normalized)).toBe(0);
+  });
+
+  it('returns 0 for empty toolCalls', () => {
+    expect(countAgentTtyCalls(createNormalizedOutput())).toBe(0);
+  });
+
+  it('ignores non-shell tool calls even if input mentions agent-tty', () => {
+    const normalized = createNormalizedOutput({
+      toolCalls: [
+        { name: 'read_file', input: { path: 'agent-tty/config.json' } },
+      ],
+    });
+
+    expect(countAgentTtyCalls(normalized)).toBe(0);
   });
 });
