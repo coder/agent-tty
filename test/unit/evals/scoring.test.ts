@@ -194,7 +194,9 @@ describe('matchPatterns', () => {
 describe('checkForbiddenPatterns', () => {
   it('reports violations outside negation contexts', () => {
     const result = getFirstResult(
-      checkForbiddenPatterns('Run tmux new-session\nthen tmux attach', ['tmux']),
+      checkForbiddenPatterns('Run tmux new-session\nthen tmux attach', [
+        'tmux',
+      ]),
       'forbidden-pattern violation',
     );
 
@@ -232,7 +234,9 @@ describe('checkForbiddenPatterns', () => {
     expect(result.matchedTexts).toEqual([]);
     expect(result.lineNumbers).toEqual([]);
     expect(result.matchCount).toBe(0);
-    expect(result.note).toContain('Ignored 1 forbidden-pattern match in negation context');
+    expect(result.note).toContain(
+      'Ignored 1 forbidden-pattern match in negation context',
+    );
   });
 
   it('counts only non-negated matches when both negated and actual violations exist', () => {
@@ -502,15 +506,12 @@ describe('checkWorkflow', () => {
   });
 
   it('fails a check when a required pattern is missing', () => {
-    const results = checkWorkflow(
-      'Use agent-tty only.',
-      [
-        createWorkflowCheck({
-          id: 'capture-proof',
-          requiredPatterns: ['snapshot'],
-        }),
-      ],
-    );
+    const results = checkWorkflow('Use agent-tty only.', [
+      createWorkflowCheck({
+        id: 'capture-proof',
+        requiredPatterns: ['snapshot'],
+      }),
+    ]);
     const result = getWorkflowResult(results, 'capture-proof');
 
     expect(result.passed).toBe(false);

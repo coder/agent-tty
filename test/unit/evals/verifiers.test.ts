@@ -1,4 +1,12 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   readEvalEvents: vi.fn(),
@@ -59,7 +67,8 @@ let actualFsPromises: typeof FsPromises;
 const tempDirs = new Set<string>();
 
 beforeAll(async () => {
-  actualFsPromises = await vi.importActual<typeof FsPromises>('node:fs/promises');
+  actualFsPromises =
+    await vi.importActual<typeof FsPromises>('node:fs/promises');
 });
 
 beforeEach(() => {
@@ -198,7 +207,9 @@ function requireDefined<T>(value: T | undefined, label: string): T {
 
 function useRealStat(): void {
   mocks.stat.mockImplementation(
-    actualFsPromises.stat as Parameters<typeof mocks.stat.mockImplementation>[0],
+    actualFsPromises.stat as Parameters<
+      typeof mocks.stat.mockImplementation
+    >[0],
   );
 }
 
@@ -210,7 +221,9 @@ function useRealReadFile(): void {
   );
 }
 
-function expectFailure(result: VerifierResult): VerifierResult & { pass: false } {
+function expectFailure(
+  result: VerifierResult,
+): VerifierResult & { pass: false } {
   expect(result.pass).toBe(false);
   return result as VerifierResult & { pass: false };
 }
@@ -667,7 +680,9 @@ describe('verifyEventLogCheck', () => {
 
 describe('verifyBundleValid', () => {
   it('passes and defaults the validation profile when validateBundle succeeds', async () => {
-    const checks = [createBundleCheck('has-review-page', true, 'Found index.html.')];
+    const checks = [
+      createBundleCheck('has-review-page', true, 'Found index.html.'),
+    ];
     mocks.validateBundle.mockResolvedValue(
       createBundleValidationResult({ checks }),
     );
@@ -693,7 +708,11 @@ describe('verifyBundleValid', () => {
 
   it('returns validator failures and preserves an explicit profile', async () => {
     const checks = [
-      createBundleCheck('has-json-output', false, 'Expected at least one JSON output file.'),
+      createBundleCheck(
+        'has-json-output',
+        false,
+        'Expected at least one JSON output file.',
+      ),
     ];
     mocks.validateBundle.mockResolvedValue(
       createBundleValidationResult({

@@ -43,7 +43,9 @@ function createEvalResult(overrides: Partial<EvalResult> = {}): EvalResult {
   };
 }
 
-function createPromptCase(overrides: Partial<PromptEvalCase> = {}): PromptEvalCase {
+function createPromptCase(
+  overrides: Partial<PromptEvalCase> = {},
+): PromptEvalCase {
   return {
     id: 'prompt-case-1',
     lane: 'prompt',
@@ -155,10 +157,10 @@ describe('buildConditionMatrix', () => {
   });
 
   it('creates a full provider cross-product for prompt cases', () => {
-    const matrix = buildConditionMatrix([createPromptCase()], [
-      'provider-a',
-      'provider-b',
-    ]);
+    const matrix = buildConditionMatrix(
+      [createPromptCase()],
+      ['provider-a', 'provider-b'],
+    );
 
     expect(matrix).toHaveLength(8);
     expect(
@@ -180,7 +182,10 @@ describe('buildConditionMatrix', () => {
 
     const matrix = buildConditionMatrix([executionCase], ['provider-a']);
 
-    expect(matrix.map((entry) => entry.condition)).toEqual(['none', 'preloaded']);
+    expect(matrix.map((entry) => entry.condition)).toEqual([
+      'none',
+      'preloaded',
+    ]);
   });
 
   it('falls back to all conditions when execution conditions are empty', () => {

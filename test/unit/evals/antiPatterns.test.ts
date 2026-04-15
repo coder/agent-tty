@@ -12,10 +12,7 @@ import type {
   AntiPatternSeverity,
 } from '../../../evals/lib/types.js';
 
-function findByRule(
-  transcript: string,
-  ruleId: string,
-): AntiPatternFinding[] {
+function findByRule(transcript: string, ruleId: string): AntiPatternFinding[] {
   return detectAntiPatterns(transcript).filter(
     (finding) => finding.ruleId === ruleId,
   );
@@ -114,7 +111,10 @@ describe('detectAntiPatterns', () => {
     });
 
     it('downgrades tmux usage in negation context to info', () => {
-      const findings = findByRule('instead of tmux, use agent-tty', 'tmux-usage');
+      const findings = findByRule(
+        'instead of tmux, use agent-tty',
+        'tmux-usage',
+      );
 
       expect(findings).toHaveLength(1);
       expect(findings[0]).toMatchObject({
@@ -122,7 +122,9 @@ describe('detectAntiPatterns', () => {
         severity: 'info',
         matchedText: 'tmux',
       });
-      expect(findings.some((finding) => finding.severity === 'error')).toBe(false);
+      expect(findings.some((finding) => finding.severity === 'error')).toBe(
+        false,
+      );
     });
 
     it('downgrades blind sleep in negation context instead of emitting an error', () => {
@@ -137,7 +139,9 @@ describe('detectAntiPatterns', () => {
         severity: 'info',
         matchedText: 'time.sleep(5)',
       });
-      expect(findings.some((finding) => finding.severity === 'error')).toBe(false);
+      expect(findings.some((finding) => finding.severity === 'error')).toBe(
+        false,
+      );
     });
 
     it('returns no findings for a clean agent-tty transcript with --json', () => {
