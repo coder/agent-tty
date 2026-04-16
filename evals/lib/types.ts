@@ -25,7 +25,10 @@ export interface EvalWorkItemIdentity {
 
 /** Build a stable string key for a work item identity. */
 export function buildWorkItemKey(identity: EvalWorkItemIdentity): string {
-  invariant(identity.caseId.length > 0, 'identity.caseId must be a non-empty string');
+  invariant(
+    identity.caseId.length > 0,
+    'identity.caseId must be a non-empty string',
+  );
   invariant(
     Number.isInteger(identity.trial) && identity.trial > 0,
     'identity.trial must be a positive integer',

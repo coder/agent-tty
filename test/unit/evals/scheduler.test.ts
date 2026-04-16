@@ -36,7 +36,9 @@ function expectRejectedError(
 
 describe('runScheduled', () => {
   it('respects max concurrency', async () => {
-    const items = Array.from({ length: 6 }, (_, index) => ({ key: `item-${index}` }));
+    const items = Array.from({ length: 6 }, (_, index) => ({
+      key: `item-${String(index)}`,
+    }));
     let inFlight = 0;
     let maxInFlight = 0;
 
@@ -62,9 +64,9 @@ describe('runScheduled', () => {
 
     const results = await runScheduled(
       [],
-      async () => {
+      () => {
         called = true;
-        return 'unused';
+        return Promise.resolve('unused');
       },
       { concurrency: 1 },
     );
@@ -78,7 +80,7 @@ describe('runScheduled', () => {
 
     const results = await runScheduled(
       items,
-      (_item): Promise<string> => {
+      (): Promise<string> => {
         throw new Error('sync boom');
       },
       { concurrency: 1 },
@@ -177,11 +179,11 @@ describe('runScheduled', () => {
 
     await runScheduled(
       items,
-      async (item) => {
+      (item) => {
         if (item.key === 'beta') {
           throw new Error('beta failed');
         }
-        return `${item.key} ok`;
+        return Promise.resolve(`${item.key} ok`);
       },
       {
         concurrency: 1,
@@ -205,7 +207,9 @@ describe('runScheduled', () => {
 
     for (const concurrency of [0, -1, 1.5]) {
       await expect(
-        runScheduled(items, async (item) => item.key, { concurrency }),
+        runScheduled(items, (item) => Promise.resolve(item.key), {
+          concurrency,
+        }),
       ).rejects.toThrow('options.concurrency must be a positive integer');
     }
   });

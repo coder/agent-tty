@@ -26,7 +26,9 @@ export async function runScheduled<T extends ScheduledWorkItem, R>(
     return [];
   }
 
-  const settlements: Array<SettledResult<T, R> | undefined> = new Array(items.length);
+  const settlements: Array<SettledResult<T, R> | undefined> = new Array(
+    items.length,
+  );
   const workerCount = Math.min(options.concurrency, items.length);
   const logLine = options.logLine;
   let nextIndex = 0;

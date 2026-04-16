@@ -54,7 +54,9 @@ function createRunMetadata(overrides: Partial<RunMetadata> = {}): RunMetadata {
     ...(overrides.createdAt === undefined
       ? {}
       : { createdAt: overrides.createdAt }),
-    ...(overrides.repoRoot === undefined ? {} : { repoRoot: overrides.repoRoot }),
+    ...(overrides.repoRoot === undefined
+      ? {}
+      : { repoRoot: overrides.repoRoot }),
   };
 }
 
@@ -128,10 +130,13 @@ describe('enumeratePromptWorkItems', () => {
 
   it('filters prompt work items by condition', async () => {
     const requestedConditions: SkillCondition[] = ['none', 'stale'];
-    const items = await enumeratePromptWorkItems(createRunMetadata({ totalTrials: 1 }), {
-      caseFilter: [PROMPT_TEST_CASE_ID],
-      conditions: requestedConditions,
-    });
+    const items = await enumeratePromptWorkItems(
+      createRunMetadata({ totalTrials: 1 }),
+      {
+        caseFilter: [PROMPT_TEST_CASE_ID],
+        conditions: requestedConditions,
+      },
+    );
 
     expect(items).toHaveLength(requestedConditions.length);
     expect(items.map((item) => item.condition)).toEqual(requestedConditions);
@@ -143,12 +148,16 @@ describe('enumeratePromptWorkItems', () => {
 
 describe('executePromptWorkItem', () => {
   it('builds a prompt request and returns the provider result payload', async () => {
-    const metadata = createRunMetadata({ conditions: ['none'], totalTrials: 1 });
+    const metadata = createRunMetadata({
+      conditions: ['none'],
+      totalTrials: 1,
+    });
     const [workItem] = await enumeratePromptWorkItems(metadata, {
       caseFilter: [PROMPT_TEST_CASE_ID],
       conditions: ['none'],
     });
-    const responseText = 'Use agent-tty create, wait, and snapshot to validate the task.';
+    const responseText =
+      'Use agent-tty create, wait, and snapshot to validate the task.';
     let receivedRequest: ProviderPromptRequest | undefined;
 
     expect(workItem).toBeDefined();
@@ -158,14 +167,15 @@ describe('executePromptWorkItem', () => {
 
     const provider = {
       id: 'stub',
-      detect: async () => PROMPT_RUNTIME,
-      invokePlanMode: async (request: ProviderPromptRequest) => {
+      detect: () => Promise.resolve(PROMPT_RUNTIME),
+      invokePlanMode: (request: ProviderPromptRequest) => {
         receivedRequest = request;
-        return createPromptResult(request, responseText);
+        return Promise.resolve(createPromptResult(request, responseText));
       },
-      invokeAgentMode: async () => {
-        throw new Error('invokeAgentMode should not be called in prompt tests');
-      },
+      invokeAgentMode: () =>
+        Promise.reject(
+          new Error('invokeAgentMode should not be called in prompt tests'),
+        ),
       parse: (raw: string) => createNormalizedOutput(raw),
     } satisfies EvalProvider;
 
@@ -199,7 +209,10 @@ describe('executePromptWorkItem', () => {
   });
 
   it('converts provider errors into failed eval results', async () => {
-    const metadata = createRunMetadata({ conditions: ['none'], totalTrials: 1 });
+    const metadata = createRunMetadata({
+      conditions: ['none'],
+      totalTrials: 1,
+    });
     const [workItem] = await enumeratePromptWorkItems(metadata, {
       caseFilter: [PROMPT_TEST_CASE_ID],
       conditions: ['none'],
@@ -212,13 +225,12 @@ describe('executePromptWorkItem', () => {
 
     const provider = {
       id: 'stub',
-      detect: async () => PROMPT_RUNTIME,
-      invokePlanMode: async () => {
-        throw new Error('prompt boom');
-      },
-      invokeAgentMode: async () => {
-        throw new Error('invokeAgentMode should not be called in prompt tests');
-      },
+      detect: () => Promise.resolve(PROMPT_RUNTIME),
+      invokePlanMode: () => Promise.reject(new Error('prompt boom')),
+      invokeAgentMode: () =>
+        Promise.reject(
+          new Error('invokeAgentMode should not be called in prompt tests'),
+        ),
       parse: (raw: string) => createNormalizedOutput(raw),
     } satisfies EvalProvider;
 

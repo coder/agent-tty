@@ -1,4 +1,11 @@
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -1005,7 +1012,8 @@ async function runSingleExecutionCase(
     } catch (error) {
       const completedAt = new Date().toISOString();
       const durationMs = Math.max(0, Date.now() - invocationStartedMs);
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       const transcript =
         error instanceof Error && error.stack !== undefined
           ? `${error.name}: ${errorMessage}\n${error.stack}`
@@ -1099,7 +1107,8 @@ export function enumerateExecutionWorkItems(options?: {
     return evalCase.conditions
       .filter(
         (condition) =>
-          requestedConditions === undefined || requestedConditions.has(condition),
+          requestedConditions === undefined ||
+          requestedConditions.has(condition),
       )
       .map((condition) => buildExecutionWorkItem(evalCase, condition));
   });

@@ -27,7 +27,9 @@ describe('enumerateExecutionWorkItems', () => {
   });
 
   it('filters execution work items by case id', () => {
-    const items = enumerateExecutionWorkItems({ caseFilter: [EXECUTION_CASE_ID] });
+    const items = enumerateExecutionWorkItems({
+      caseFilter: [EXECUTION_CASE_ID],
+    });
 
     expect(items.length).toBeGreaterThan(0);
     expect(items.every((item) => item.caseId === EXECUTION_CASE_ID)).toBe(true);
