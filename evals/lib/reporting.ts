@@ -1,5 +1,11 @@
 import { invariant } from '../../src/util/assert.js';
 import { AggregateMetricsSchema, JsonReportSchema } from './schemas.js';
+import {
+  computeConfidenceInterval,
+  computeMean,
+  computePassRate,
+  computeStdDev,
+} from './statistics.js';
 import { computeAggregateMetrics } from './scoring.js';
 import type {
   AggregateMetrics,
@@ -12,6 +18,7 @@ import type {
   ProviderComparisonReport,
   RunMetadata,
   SkillCondition,
+  TrialAggregation,
 } from './types.js';
 
 const LANE_ORDER: readonly EvalLane[] = ['prompt', 'execution', 'dogfood'];
@@ -80,6 +87,8 @@ export function generateJsonReport(
     metadata,
     normalizedComparisons,
   );
+  const aggregated =
+    metadata.totalTrials > 1 ? buildTrialAggregations(sortedResults) : undefined;
   const resultRefs = sortedResults.map((result) => result.caseId);
 
   const coreReport = {
@@ -88,6 +97,7 @@ export function generateJsonReport(
     comparisons: normalizedComparisons,
     results: sortedResults,
     ...(providerComparison === undefined ? {} : { providerComparison }),
+    ...(aggregated === undefined ? {} : { aggregated }),
   } satisfies JsonReport;
 
   JsonReportSchema.parse(coreReport);
@@ -295,6 +305,53 @@ export function generateMarkdownReport(
           `\`${result.condition}\``,
           formatScore(normalizeScore(result)),
           formatError(result),
+        ]),
+      ),
+    );
+  }
+
+  if (report.aggregated !== undefined) {
+    sections.push('', '## Trial Aggregation', '');
+    sections.push(
+      buildMarkdownTable(
+        [
+          'Lane',
+          'Case',
+          'Condition',
+          'Trials',
+          'Pass Rate',
+          'Pass Rate CI',
+          'Mean Score',
+          'Std Dev',
+          'Score CI',
+          'Min',
+          'Max',
+        ],
+        [
+          'left',
+          'left',
+          'left',
+          'right',
+          'right',
+          'right',
+          'right',
+          'right',
+          'right',
+          'right',
+          'right',
+        ],
+        report.aggregated.map((aggregation) => [
+          `\`${aggregation.lane}\``,
+          `\`${sanitizeInline(aggregation.caseId)}\``,
+          `\`${aggregation.condition}\``,
+          String(aggregation.trials),
+          formatPercent(aggregation.passRate),
+          formatConfidenceInterval(aggregation.passRateCI, formatPercent),
+          formatScore(aggregation.meanScore),
+          formatScore(aggregation.stdDev),
+          formatConfidenceInterval(aggregation.scoreCI, formatScore),
+          formatScore(aggregation.minScore),
+          formatScore(aggregation.maxScore),
         ]),
       ),
     );
@@ -520,6 +577,54 @@ function readAggregateStat(
   fallback: number,
 ): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function buildTrialAggregations(
+  results: readonly EvalResult[],
+): TrialAggregation[] {
+  const groups = new Map<string, EvalResult[]>();
+
+  for (const result of results) {
+    const key = `${result.lane}:${result.caseId}:${result.condition}`;
+    const group = groups.get(key);
+    if (group === undefined) {
+      groups.set(key, [result]);
+      continue;
+    }
+
+    group.push(result);
+  }
+
+  return [...groups.values()]
+    .map((group) => {
+      const first = group[0];
+      invariant(first !== undefined, 'Trial aggregation group must not be empty');
+      const normalizedScores = group.map((result) => normalizeScore(result));
+      const passRateSummary = computePassRate(group);
+      const meanScore = computeMean(normalizedScores);
+      const stdDev = computeStdDev(normalizedScores, meanScore);
+      const scoreSummary = computeConfidenceInterval(normalizedScores);
+
+      return {
+        lane: first.lane,
+        caseId: first.caseId,
+        condition: first.condition,
+        trials: group.length,
+        passRate: passRateSummary.rate,
+        passRateCI: passRateSummary.ci,
+        meanScore,
+        stdDev,
+        scoreCI: scoreSummary.ci,
+        minScore: Math.min(...normalizedScores),
+        maxScore: Math.max(...normalizedScores),
+      };
+    })
+    .sort(
+      (left, right) =>
+        compareLane(left.lane, right.lane) ||
+        compareStrings(left.caseId, right.caseId) ||
+        compareCondition(left.condition, right.condition),
+    );
 }
 
 function buildLaneSummaries(
@@ -937,6 +1042,13 @@ function formatPercent(value: number): string {
 
 function formatScore(value: number): string {
   return value.toFixed(3);
+}
+
+function formatConfidenceInterval(
+  interval: { lower: number; upper: number },
+  formatter: (value: number) => string,
+): string {
+  return `[${formatter(interval.lower)}, ${formatter(interval.upper)}]`;
 }
 
 function formatComparisonValue(value: number | undefined): string {
