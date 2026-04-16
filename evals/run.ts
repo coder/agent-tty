@@ -14,13 +14,14 @@ import {
 } from './lib/matrix.js';
 import { generateJsonReport, generateMarkdownReport } from './lib/reporting.js';
 import { RunMetadataSchema } from './lib/schemas.js';
-import type {
-  EvalCase,
-  EvalLane,
-  EvalResult,
-  ProviderRuntimeInfo,
-  RunMetadata,
-  SkillCondition,
+import {
+  buildWorkItemKey,
+  type EvalCase,
+  type EvalLane,
+  type EvalResult,
+  type ProviderRuntimeInfo,
+  type RunMetadata,
+  type SkillCondition,
 } from './lib/types.js';
 import { getAllPromptCases, runPromptLane } from './prompt/runner.js';
 import { createProvider, SUPPORTED_PROVIDER_IDS } from './providers/base.js';
@@ -919,6 +920,18 @@ async function runLane(
   }
 }
 
+function recordLaneFailure(
+  lane: EvalLane,
+  message: string,
+  laneErrors: LaneErrorSummary[],
+  metadata: RunMetadata,
+  options: ResolvedCliOptions,
+): void {
+  laneErrors.push({ lane, message });
+  appendMetadataNote(metadata.notes, `lane ${lane} failed: ${message}`);
+  logVerbose(options, `Lane ${lane} failed: ${message}`);
+}
+
 export async function runEvalCli(
   argumentsList: readonly string[],
 ): Promise<number> {
@@ -951,22 +964,68 @@ export async function runEvalCli(
   const results: EvalResult[] = [];
   const laneErrors: LaneErrorSummary[] = [];
 
-  for (const lane of options.activeLanes) {
-    logVerbose(options, `Running ${lane} lane`);
-    try {
-      const laneResults = await runLane(lane, provider, metadata, options);
-      results.push(...laneResults);
-      logVerbose(
-        options,
-        `Completed ${lane} lane with ${String(laneResults.length)} result(s)`,
+  if (options.concurrency > 1) {
+    const lanePromises = options.activeLanes.map(async (lane) => {
+      try {
+        logVerbose(options, `Running ${lane} lane`);
+        const laneResults = await runLane(lane, provider, metadata, options);
+        logVerbose(
+          options,
+          `Completed ${lane} lane with ${String(laneResults.length)} result(s)`,
+        );
+        return { lane, results: laneResults } as const;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return { lane, error: message } as const;
+      }
+    });
+    const settled = await Promise.allSettled(lanePromises);
+    for (const [index, outcome] of settled.entries()) {
+      const lane = options.activeLanes[index];
+      invariant(
+        lane !== undefined,
+        `Missing active lane for settled outcome at index ${String(index)}`,
       );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      laneErrors.push({ lane, message });
-      appendMetadataNote(metadata.notes, `lane ${lane} failed: ${message}`);
-      logVerbose(options, `Lane ${lane} failed: ${message}`);
+      if (outcome.status === 'rejected') {
+        const message =
+          outcome.reason instanceof Error
+            ? outcome.reason.message
+            : String(outcome.reason);
+        recordLaneFailure(lane, message, laneErrors, metadata, options);
+        continue;
+      }
+      if ('error' in outcome.value) {
+        recordLaneFailure(
+          outcome.value.lane,
+          outcome.value.error,
+          laneErrors,
+          metadata,
+          options,
+        );
+        continue;
+      }
+      results.push(...outcome.value.results);
+    }
+  } else {
+    for (const lane of options.activeLanes) {
+      logVerbose(options, `Running ${lane} lane`);
+      try {
+        const laneResults = await runLane(lane, provider, metadata, options);
+        results.push(...laneResults);
+        logVerbose(
+          options,
+          `Completed ${lane} lane with ${String(laneResults.length)} result(s)`,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        recordLaneFailure(lane, message, laneErrors, metadata, options);
+      }
     }
   }
+
+  results.sort((left, right) =>
+    buildWorkItemKey(left).localeCompare(buildWorkItemKey(right)),
+  );
 
   const comparisonMetrics =
     options.activeConditions.length > 1
