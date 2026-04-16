@@ -970,7 +970,9 @@ export type ConfidenceIntervalSchemaType = z.infer<
   typeof ConfidenceIntervalSchema
 >;
 export type TrialAggregationSchemaType = z.infer<typeof TrialAggregationSchema>;
-export type PerCaseComparisonSchemaType = z.infer<typeof PerCaseComparisonSchema>;
+export type PerCaseComparisonSchemaType = z.infer<
+  typeof PerCaseComparisonSchema
+>;
 export type BaselineOverallSchemaType = z.infer<typeof BaselineOverallSchema>;
 export type BaselineComparisonSchemaType = z.infer<
   typeof BaselineComparisonSchema

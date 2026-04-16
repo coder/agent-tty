@@ -99,7 +99,9 @@ describe('computePassRate', () => {
   });
 
   it('computes the Wilson score interval at 95% confidence', () => {
-    const summary = computePassRate(createPassResults([true, true, false, true]));
+    const summary = computePassRate(
+      createPassResults([true, true, false, true]),
+    );
 
     expect(summary.rate).toBe(0.75);
     expect(summary.passed).toBe(3);
@@ -110,9 +112,9 @@ describe('computePassRate', () => {
 
   it('throws when a result does not expose a boolean ok flag', () => {
     expect(() =>
-      computePassRate(
-        [{ ok: true }, { ok: 1 }] as unknown as readonly { ok: boolean }[],
-      ),
+      computePassRate([{ ok: true }, { ok: 1 }] as unknown as readonly {
+        ok: boolean;
+      }[]),
     ).toThrow('boolean ok flag');
   });
 });
@@ -188,12 +190,12 @@ describe('bootstrapPairedCI', () => {
   });
 
   it('throws for invalid confidence, invalid iterations, and length mismatches', () => {
-    expect(() =>
-      bootstrapPairedCI([1, 2], [1, 2], { confidence: 0 }),
-    ).toThrow('confidence must be between 0 and 1');
-    expect(() =>
-      bootstrapPairedCI([1, 2], [1, 2], { iterations: 99 }),
-    ).toThrow('iterations must be an integer greater than or equal to 100');
+    expect(() => bootstrapPairedCI([1, 2], [1, 2], { confidence: 0 })).toThrow(
+      'confidence must be between 0 and 1',
+    );
+    expect(() => bootstrapPairedCI([1, 2], [1, 2], { iterations: 99 })).toThrow(
+      'iterations must be an integer greater than or equal to 100',
+    );
     expect(() => bootstrapPairedCI([1], [1, 2])).toThrow('equal length');
   });
 });

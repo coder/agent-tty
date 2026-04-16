@@ -146,7 +146,7 @@ function inverseStandardNormal(probability: number): number {
     const q = probability - 0.5;
     const r = q * q;
     return (
-      (((((a1 * r + a2) * r + a3) * r + a4) * r + a5) * r + a6) * q /
+      ((((((a1 * r + a2) * r + a3) * r + a4) * r + a5) * r + a6) * q) /
       (((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1)
     );
   }
@@ -198,7 +198,10 @@ function zCriticalValue(alpha: number): number {
   return inverseStandardNormal(1 - alpha / 2);
 }
 
-function percentile(sortedValues: readonly number[], probability: number): number {
+function percentile(
+  sortedValues: readonly number[],
+  probability: number,
+): number {
   invariant(sortedValues.length > 0, 'percentile input must not be empty');
   invariant(
     probability >= 0 && probability <= 1,
@@ -305,7 +308,8 @@ export function computeConfidenceInterval(
 
   const alpha = 1 - confidence;
   const standardError = stdDev / Math.sqrt(n);
-  const critical = n < 30 ? tCriticalValue(n - 1, alpha) : zCriticalValue(alpha);
+  const critical =
+    n < 30 ? tCriticalValue(n - 1, alpha) : zCriticalValue(alpha);
   const margin = critical * standardError;
 
   return {
@@ -318,9 +322,12 @@ export function computeConfidenceInterval(
   };
 }
 
-export function computePassRate(
-  results: readonly { ok: boolean }[],
-): { rate: number; ci: Interval; n: number; passed: number } {
+export function computePassRate(results: readonly { ok: boolean }[]): {
+  rate: number;
+  ci: Interval;
+  n: number;
+  passed: number;
+} {
   const n = results.length;
   if (n === 0) {
     return {
@@ -352,8 +359,7 @@ export function computePassRate(
   const denominator = 1 + zSquared / n;
   const center = (rate + zSquared / (2 * n)) / denominator;
   const margin =
-    (z * Math.sqrt((rate * (1 - rate) + zSquared / (4 * n)) / n)) /
-    denominator;
+    (z * Math.sqrt((rate * (1 - rate) + zSquared / (4 * n)) / n)) / denominator;
 
   return {
     rate,

@@ -182,7 +182,10 @@ describe('generateJsonReport trial aggregation', () => {
 
   it('computes aggregated pass rate, score, and confidence intervals', () => {
     const results = createMultiTrialResults();
-    const report = generateJsonReport(results, createRunMetadata({ totalTrials: 3 }));
+    const report = generateJsonReport(
+      results,
+      createRunMetadata({ totalTrials: 3 }),
+    );
 
     expect(report.aggregated).toBeDefined();
     const aggregated = report.aggregated ?? [];
@@ -202,7 +205,11 @@ describe('generateJsonReport trial aggregation', () => {
     });
 
     const promptScores = [1, 0.5, 0];
-    const promptPassRate = computePassRate([{ ok: true }, { ok: false }, { ok: false }]);
+    const promptPassRate = computePassRate([
+      { ok: true },
+      { ok: false },
+      { ok: false },
+    ]);
     const promptScoreCI = computeConfidenceInterval(promptScores);
     const promptMean = computeMean(promptScores);
     const promptStdDev = computeStdDev(promptScores, promptMean);
@@ -210,12 +217,20 @@ describe('generateJsonReport trial aggregation', () => {
 
     expect(promptAggregation).toBeDefined();
     expect(promptAggregation?.passRate).toBeCloseTo(promptPassRate.rate);
-    expect(promptAggregation?.passRateCI.lower).toBeCloseTo(promptPassRate.ci.lower);
-    expect(promptAggregation?.passRateCI.upper).toBeCloseTo(promptPassRate.ci.upper);
+    expect(promptAggregation?.passRateCI.lower).toBeCloseTo(
+      promptPassRate.ci.lower,
+    );
+    expect(promptAggregation?.passRateCI.upper).toBeCloseTo(
+      promptPassRate.ci.upper,
+    );
     expect(promptAggregation?.meanScore).toBeCloseTo(promptMean);
     expect(promptAggregation?.stdDev).toBeCloseTo(promptStdDev);
-    expect(promptAggregation?.scoreCI.lower).toBeCloseTo(promptScoreCI.ci.lower);
-    expect(promptAggregation?.scoreCI.upper).toBeCloseTo(promptScoreCI.ci.upper);
+    expect(promptAggregation?.scoreCI.lower).toBeCloseTo(
+      promptScoreCI.ci.lower,
+    );
+    expect(promptAggregation?.scoreCI.upper).toBeCloseTo(
+      promptScoreCI.ci.upper,
+    );
     expect(promptAggregation?.minScore).toBe(0);
     expect(promptAggregation?.maxScore).toBe(1);
 
@@ -258,7 +273,11 @@ describe('generateMarkdownReport trial aggregation', () => {
       createRunMetadata({ totalTrials: 3 }),
     );
 
-    const promptPassRate = computePassRate([{ ok: true }, { ok: false }, { ok: false }]);
+    const promptPassRate = computePassRate([
+      { ok: true },
+      { ok: false },
+      { ok: false },
+    ]);
     const promptScoreCI = computeConfidenceInterval([1, 0.5, 0]);
     const executionPassRate = computePassRate([
       { ok: false },
