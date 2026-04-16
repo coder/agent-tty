@@ -1,3 +1,4 @@
+import { invariant } from '../../src/util/assert.js';
 import type { EventRecord } from '../../src/protocol/schemas.js';
 import type { ArtifactKind } from '../../src/tools/review-bundle.js';
 import type {
@@ -13,6 +14,35 @@ export type SkillCondition = 'none' | 'self-load' | 'preloaded' | 'stale';
 
 /** Eval lane identifier. */
 export type EvalLane = 'prompt' | 'execution' | 'dogfood';
+
+/** Stable identity for one eval work item across lanes and trials. */
+export interface EvalWorkItemIdentity {
+  lane: EvalLane;
+  caseId: string;
+  condition: SkillCondition;
+  trial: number;
+}
+
+/** Build a stable string key for a work item identity. */
+export function buildWorkItemKey(identity: EvalWorkItemIdentity): string {
+  invariant(identity.caseId.length > 0, 'identity.caseId must be a non-empty string');
+  invariant(
+    Number.isInteger(identity.trial) && identity.trial > 0,
+    'identity.trial must be a positive integer',
+  );
+
+  return `${identity.lane}:${identity.caseId}:${identity.condition}:${identity.trial}`;
+}
+
+/** Assert that a list of work item identities contains no duplicates. */
+export function assertUniqueWorkItems(items: EvalWorkItemIdentity[]): void {
+  const seen = new Set<string>();
+  for (const item of items) {
+    const key = buildWorkItemKey(item);
+    invariant(!seen.has(key), `Duplicate work item identity: ${key}`);
+    seen.add(key);
+  }
+}
 
 /** Deterministic verifier kind. */
 export type VerifierKind =
