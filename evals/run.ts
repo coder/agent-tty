@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,13 +12,18 @@ import {
   computeComparisonMetrics,
   SKILL_CONDITIONS,
 } from './lib/matrix.js';
-import { generateJsonReport, generateMarkdownReport } from './lib/reporting.js';
-import { RunMetadataSchema } from './lib/schemas.js';
+import {
+  buildBaselineComparison,
+  generateJsonReport,
+  generateMarkdownReport,
+} from './lib/reporting.js';
+import { JsonReportSchema, RunMetadataSchema } from './lib/schemas.js';
 import {
   buildWorkItemKey,
   type EvalCase,
   type EvalLane,
   type EvalResult,
+  type JsonReport,
   type ProviderRuntimeInfo,
   type RunMetadata,
   type SkillCondition,
@@ -57,6 +62,7 @@ const HELP_TEXT = [
   '  --dry-run           List cases that would run without invoking providers',
   '  --concurrency <n>  Maximum work items to run concurrently per lane. Default: 1',
   '  --trials <n>       Number of independent trials per case/condition. Default: 1',
+  '  --compare-baseline <path>  Path to a prior report.json for paired baseline comparison',
   '  --help              Show this help text',
   '',
   'Examples:',
@@ -80,6 +86,7 @@ interface CliOptions {
   outputDir?: string;
   concurrency?: string;
   trials?: string;
+  compareBaseline?: string;
   json: boolean;
   verbose: boolean;
   dryRun: boolean;
@@ -94,6 +101,7 @@ interface ResolvedCliOptions {
   requestedCondition: string;
   caseIds: string[];
   outputBaseDir: string;
+  compareBaselinePath?: string;
   concurrency: number;
   totalTrials: number;
   json: boolean;
@@ -263,9 +271,32 @@ function parseCliArgs(argumentsList: readonly string[]): CliOptions {
       continue;
     }
     if (argument === '--trials' || argument.startsWith('--trials=')) {
-      const parsed = parseOptionValue(argument, '--trials', argumentsList, index);
+      const parsed = parseOptionValue(
+        argument,
+        '--trials',
+        argumentsList,
+        index,
+      );
       invariant(options.trials === undefined, '--trials may only be set once');
       options.trials = parsed.value;
+      index = parsed.nextIndex;
+      continue;
+    }
+    if (
+      argument === '--compare-baseline' ||
+      argument.startsWith('--compare-baseline=')
+    ) {
+      const parsed = parseOptionValue(
+        argument,
+        '--compare-baseline',
+        argumentsList,
+        index,
+      );
+      invariant(
+        options.compareBaseline === undefined,
+        '--compare-baseline may only be set once',
+      );
+      options.compareBaseline = parsed.value;
       index = parsed.nextIndex;
       continue;
     }
@@ -595,6 +626,10 @@ function buildResolvedOptions(
   const requestedConditions = resolveRequestedConditions(options.condition);
   const caseIds = resolveRequestedCaseIds(options.caseIds);
   const outputBaseDir = resolveOutputBaseDir(repoRoot, options.outputDir);
+  const compareBaselinePath = resolveOptionalStringOption(
+    options.compareBaseline,
+    '--compare-baseline',
+  );
   const concurrency = resolveConcurrency(options.concurrency);
   const totalTrials = resolveTotalTrials(options.trials);
   const selection = buildCaseSelections(
@@ -613,6 +648,9 @@ function buildResolvedOptions(
     requestedCondition: options.condition ?? 'all',
     caseIds,
     outputBaseDir,
+    ...(compareBaselinePath === undefined
+      ? {}
+      : { compareBaselinePath: resolve(repoRoot, compareBaselinePath) }),
     concurrency,
     totalTrials,
     json: options.json,
@@ -805,6 +843,26 @@ function buildRunMetadata(
   });
   const metadata: RunMetadata = parsedMetadata;
   return metadata;
+}
+
+async function loadBaselineReport(path: string): Promise<JsonReport> {
+  const text = await readFile(path, 'utf8');
+  const parsed = JSON.parse(text) as JsonReport & Record<string, unknown>;
+  return JsonReportSchema.parse({
+    metadata: parsed.metadata,
+    aggregate: parsed.aggregate,
+    comparisons: parsed.comparisons,
+    results: parsed.results,
+    ...(parsed.providerComparison === undefined
+      ? {}
+      : { providerComparison: parsed.providerComparison }),
+    ...(parsed.aggregated === undefined
+      ? {}
+      : { aggregated: parsed.aggregated }),
+    ...(parsed.baselineComparison === undefined
+      ? {}
+      : { baselineComparison: parsed.baselineComparison }),
+  }) as JsonReport;
 }
 
 function buildSummary(
@@ -1057,11 +1115,32 @@ export async function runEvalCli(
     options.activeConditions.length > 1
       ? computeComparisonMetrics(results)
       : [];
-  const jsonReport = generateJsonReport(results, metadata, comparisonMetrics);
+  const candidateCoreReport = generateJsonReport(
+    results,
+    metadata,
+    comparisonMetrics,
+  );
+  const baselineComparison =
+    options.compareBaselinePath === undefined
+      ? undefined
+      : buildBaselineComparison(
+          await loadBaselineReport(options.compareBaselinePath),
+          candidateCoreReport,
+        );
+  const jsonReport =
+    baselineComparison === undefined
+      ? candidateCoreReport
+      : generateJsonReport(
+          results,
+          metadata,
+          comparisonMetrics,
+          baselineComparison,
+        );
   const markdownReport = generateMarkdownReport(
     results,
     metadata,
     comparisonMetrics,
+    baselineComparison,
   );
 
   const artifactStore = new EvalArtifactStore(options.outputBaseDir);
