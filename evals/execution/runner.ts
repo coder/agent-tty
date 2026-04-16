@@ -10,11 +10,15 @@ import {
 } from '../lib/antiPatterns.js';
 import { cleanupEvalHome, createIsolatedEvalHome } from '../lib/cliHarness.js';
 import { EvalResultSchema } from '../lib/schemas.js';
+import { runScheduled } from '../lib/scheduler.js';
 import { checkWorkflow } from '../lib/scoring.js';
+import { assertUniqueWorkItems, buildWorkItemKey } from '../lib/types.js';
+import type { ScheduledWorkItem } from '../lib/scheduler.js';
 import type {
   AntiPatternFinding,
   ArtifactRequirement,
   EvalResult,
+  EvalWorkItemIdentity,
   ExecutionEvalCase,
   NormalizedProviderOutput,
   ProviderRuntimeInfo,
@@ -59,6 +63,11 @@ const CASE_CATEGORY_EXPECTATIONS = {
 } as const;
 const RUNNER_OUTPUT_PREFIX = 'agent-tty-execution-eval-';
 const DEFAULT_TRIAL = 1;
+
+type ExecutionWorkItem = EvalWorkItemIdentity &
+  ScheduledWorkItem & {
+    evalCase: ExecutionEvalCase;
+  };
 
 type EvaluatedVerifier = {
   spec: VerifierSpec;
@@ -665,6 +674,76 @@ function normalizeRequestedConditions(
   return new Set(conditions);
 }
 
+function buildExecutionWorkItem(
+  evalCase: ExecutionEvalCase,
+  condition: SkillCondition,
+): ExecutionWorkItem {
+  const identity: EvalWorkItemIdentity = {
+    lane: 'execution',
+    caseId: evalCase.id,
+    condition,
+    trial: DEFAULT_TRIAL,
+  };
+
+  return {
+    ...identity,
+    key: buildWorkItemKey(identity),
+    evalCase,
+  };
+}
+
+function buildRejectedExecutionWorkItemResult(
+  provider: EvalProvider,
+  metadata: RunMetadata,
+  workItem: ExecutionWorkItem,
+  runtime: ProviderRuntimeInfo | undefined,
+  reason: unknown,
+): EvalResult {
+  const errorClass =
+    reason instanceof Error && reason.name.length > 0
+      ? reason.name
+      : 'ExecutionWorkItemError';
+  const rawErrorMessage =
+    reason instanceof Error && reason.message.length > 0
+      ? reason.message
+      : safeStringify(reason);
+  const errorMessage =
+    rawErrorMessage.length > 0
+      ? rawErrorMessage
+      : 'Unknown execution work item failure';
+  const timestamp = new Date().toISOString();
+  const modelId = resolveModelId(metadata, runtime);
+
+  return EvalResultSchema.parse({
+    runId: metadata.runId,
+    providerId: provider.id,
+    ...(runtime?.version === undefined
+      ? {}
+      : { providerVersion: runtime.version }),
+    ...(modelId === undefined ? {} : { modelId }),
+    lane: 'execution',
+    caseId: workItem.evalCase.id,
+    category: workItem.evalCase.category,
+    condition: workItem.condition,
+    expectedSkill: workItem.evalCase.expectedSkill,
+    trial: workItem.trial,
+    ok: false,
+    score: {
+      total: 0,
+      maxPossible: 0,
+      items: [],
+    },
+    workflowChecks: [],
+    antiPatternFindings: [],
+    normalizedOutput: createFallbackNormalizedOutput(''),
+    errorClass,
+    errorMessage,
+    startedAt: timestamp,
+    completedAt: timestamp,
+    durationMs: 0,
+  }) as EvalResult;
+}
+
 function resolveModelId(
   metadata: RunMetadata,
   runtime: ProviderRuntimeInfo | undefined,
@@ -989,18 +1068,13 @@ export function getAllExecutionCases(): ExecutionEvalCase[] {
   return [...EXECUTION_CASES];
 }
 
-/**
- * Run the execution eval lane for one provider across the selected case and
- * condition matrix.
- */
-export async function runExecutionLane(
-  provider: EvalProvider,
-  metadata: RunMetadata,
-  options: { conditions?: SkillCondition[]; caseFilter?: string[] } = {},
-): Promise<EvalResult[]> {
-  const requestedConditions = normalizeRequestedConditions(options.conditions);
+export function enumerateExecutionWorkItems(options?: {
+  conditions?: SkillCondition[];
+  caseFilter?: string[];
+}): ExecutionWorkItem[] {
+  const requestedConditions = normalizeRequestedConditions(options?.conditions);
   const requestedCaseIds =
-    options.caseFilter === undefined || options.caseFilter.length === 0
+    options?.caseFilter === undefined || options.caseFilter.length === 0
       ? undefined
       : new Set(options.caseFilter);
   const availableCases = getAllExecutionCases();
@@ -1017,30 +1091,70 @@ export async function runExecutionLane(
     }
   }
 
-  const selectedCases = availableCases.filter(
-    (evalCase) =>
-      requestedCaseIds === undefined || requestedCaseIds.has(evalCase.id),
-  );
-  const runtime = await detectRuntime(provider);
-  const results: EvalResult[] = [];
+  const items = availableCases.flatMap((evalCase) => {
+    if (requestedCaseIds !== undefined && !requestedCaseIds.has(evalCase.id)) {
+      return [];
+    }
 
-  for (const evalCase of selectedCases) {
-    const selectedConditions = evalCase.conditions.filter(
-      (condition) =>
-        requestedConditions === undefined || requestedConditions.has(condition),
-    );
-    for (const condition of selectedConditions) {
-      results.push(
-        await runSingleExecutionCase(
+    return evalCase.conditions
+      .filter(
+        (condition) =>
+          requestedConditions === undefined || requestedConditions.has(condition),
+      )
+      .map((condition) => buildExecutionWorkItem(evalCase, condition));
+  });
+
+  assertUniqueWorkItems(items);
+  return items;
+}
+
+export async function executeExecutionWorkItem(
+  provider: EvalProvider,
+  metadata: RunMetadata,
+  workItem: ExecutionWorkItem,
+  runtime: ProviderRuntimeInfo | undefined,
+): Promise<EvalResult> {
+  return runSingleExecutionCase(
+    provider,
+    metadata,
+    workItem.evalCase,
+    workItem.condition,
+    runtime,
+  );
+}
+
+/**
+ * Run the execution eval lane for one provider across the selected case and
+ * condition matrix.
+ */
+export async function runExecutionLane(
+  provider: EvalProvider,
+  metadata: RunMetadata,
+  options: {
+    conditions?: SkillCondition[];
+    caseFilter?: string[];
+    concurrency?: number;
+  } = {},
+): Promise<EvalResult[]> {
+  const items = enumerateExecutionWorkItems(options);
+  const runtime = await detectRuntime(provider);
+  const settlements = await runScheduled(
+    items,
+    (item) => executeExecutionWorkItem(provider, metadata, item, runtime),
+    {
+      concurrency: options.concurrency ?? 1,
+    },
+  );
+
+  return settlements.map((settlement) =>
+    settlement.status === 'fulfilled'
+      ? settlement.value
+      : buildRejectedExecutionWorkItemResult(
           provider,
           metadata,
-          evalCase,
-          condition,
+          settlement.item,
           runtime,
+          settlement.reason,
         ),
-      );
-    }
-  }
-
-  return results;
+  );
 }
