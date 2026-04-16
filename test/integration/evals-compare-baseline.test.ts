@@ -36,11 +36,12 @@ function runEvalCli(argumentsList: readonly string[]) {
   return result;
 }
 
-function readJsonFile<T>(path: string): T {
-  return JSON.parse(readFileSync(path, 'utf8')) as T;
+function readJsonFile(filePath: string): unknown {
+  return JSON.parse(readFileSync(filePath, 'utf8')) as unknown;
 }
 
 function expectPerCaseComparisonShape(comparison: PerCaseComparison): void {
+  /* eslint-disable @typescript-eslint/no-unsafe-assignment -- expect.any() and expect.objectContaining() return any */
   expect(comparison).toEqual(
     expect.objectContaining({
       caseId: expect.any(String),
@@ -75,6 +76,7 @@ function expectPerCaseComparisonShape(comparison: PerCaseComparison): void {
       verdict: expect.any(String),
     }),
   );
+  /* eslint-enable @typescript-eslint/no-unsafe-assignment */
 }
 
 let testRoot = '';
@@ -132,9 +134,9 @@ describe(
         conditions: ['none'],
       });
 
-      const baselineReport = readJsonFile<JsonReport>(
+      const baselineReport = readJsonFile(
         baselineSummary.jsonReportPath,
-      );
+      ) as JsonReport;
 
       const candidateResult = runEvalCli([
         ...sharedArguments,
@@ -153,9 +155,9 @@ describe(
         conditions: ['none'],
       });
 
-      const candidateReport = readJsonFile<JsonReport>(
+      const candidateReport = readJsonFile(
         candidateSummary.jsonReportPath,
-      );
+      ) as JsonReport;
       const candidateMarkdown = readFileSync(
         candidateSummary.markdownReportPath,
         'utf8',
