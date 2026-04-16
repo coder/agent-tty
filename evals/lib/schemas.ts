@@ -6,8 +6,11 @@ import type { BundleValidationProfile } from '../../src/tools/validate-bundle.js
 import type {
   AggregateMetrics,
   AntiPatternFinding,
+  BaselineComparison,
+  BaselineOverall,
   BundleCompletenessScore,
   ComparisonMetrics,
+  ConfidenceInterval,
   DogfoodEvalCase,
   EvalCase,
   EvalCliOptions,
@@ -19,6 +22,7 @@ import type {
   MatrixEntry,
   NormalizedProviderOutput,
   PatternMatchResult,
+  PerCaseComparison,
   PromptCaseScore,
   PromptEvalCase,
   ProviderAgentRequest,
@@ -30,6 +34,7 @@ import type {
   ProviderPromptResult,
   ProviderRuntimeInfo,
   ReportCompletenessScore,
+  TrialAggregation,
 } from './types.js';
 
 const NonEmptyStringSchema = z.string().min(1);
@@ -681,6 +686,86 @@ export const ProviderComparisonReportSchema = z
   })
   .strict();
 
+export const ConfidenceIntervalSchema = z
+  .object({
+    lower: FiniteNumberSchema,
+    upper: FiniteNumberSchema,
+  })
+  .strict();
+
+export const TrialAggregationSchema = z
+  .object({
+    lane: EvalLaneSchema,
+    caseId: NonEmptyStringSchema,
+    condition: SkillConditionSchema,
+    trials: PositiveIntSchema,
+    passRate: UnitIntervalSchema,
+    passRateCI: ConfidenceIntervalSchema,
+    meanScore: FiniteNumberSchema,
+    stdDev: NonNegativeNumberSchema,
+    scoreCI: ConfidenceIntervalSchema,
+    minScore: FiniteNumberSchema,
+    maxScore: FiniteNumberSchema,
+  })
+  .strict();
+
+export const PerCaseComparisonSchema = z
+  .object({
+    caseId: NonEmptyStringSchema,
+    condition: SkillConditionSchema,
+    baselinePassRate: UnitIntervalSchema,
+    candidatePassRate: UnitIntervalSchema,
+    baselineMeanScore: FiniteNumberSchema,
+    candidateMeanScore: FiniteNumberSchema,
+    scoreDelta: z
+      .object({
+        mean: FiniteNumberSchema,
+        ci: ConfidenceIntervalSchema,
+        significant: z.boolean(),
+      })
+      .strict(),
+    passRateDelta: z
+      .object({
+        mean: FiniteNumberSchema,
+        ci: ConfidenceIntervalSchema,
+        significant: z.boolean(),
+      })
+      .strict(),
+    winRate: z
+      .object({
+        wins: NonNegativeIntSchema,
+        losses: NonNegativeIntSchema,
+        ties: NonNegativeIntSchema,
+        n: NonNegativeIntSchema,
+        winRate: UnitIntervalSchema,
+      })
+      .strict(),
+    verdict: z.enum(['improved', 'regressed', 'inconclusive']),
+  })
+  .strict();
+
+export const BaselineOverallSchema = z
+  .object({
+    baselineMeanScore: FiniteNumberSchema,
+    candidateMeanScore: FiniteNumberSchema,
+    baselinePassRate: UnitIntervalSchema,
+    candidatePassRate: UnitIntervalSchema,
+    totalWins: NonNegativeIntSchema,
+    totalLosses: NonNegativeIntSchema,
+    totalTies: NonNegativeIntSchema,
+    verdict: z.enum(['improved', 'regressed', 'inconclusive']),
+  })
+  .strict();
+
+export const BaselineComparisonSchema = z
+  .object({
+    baselineRunId: NonEmptyStringSchema,
+    baselineCreatedAt: IsoTimestampSchema,
+    overall: BaselineOverallSchema,
+    perCase: z.array(PerCaseComparisonSchema),
+  })
+  .strict();
+
 export const JsonReportSchema = z
   .object({
     metadata: RunMetadataSchema,
@@ -688,6 +773,8 @@ export const JsonReportSchema = z
     comparisons: z.array(ComparisonMetricsSchema),
     results: z.array(EvalResultSchema),
     providerComparison: ProviderComparisonReportSchema.optional(),
+    aggregated: z.array(TrialAggregationSchema).optional(),
+    baselineComparison: BaselineComparisonSchema.optional(),
   })
   .strict();
 
@@ -879,6 +966,17 @@ export type AggregateMetricsSchemaType = z.infer<typeof AggregateMetricsSchema>;
 export type ProviderComparisonReportSchemaType = z.infer<
   typeof ProviderComparisonReportSchema
 >;
+export type ConfidenceIntervalSchemaType = z.infer<
+  typeof ConfidenceIntervalSchema
+>;
+export type TrialAggregationSchemaType = z.infer<typeof TrialAggregationSchema>;
+export type PerCaseComparisonSchemaType = z.infer<
+  typeof PerCaseComparisonSchema
+>;
+export type BaselineOverallSchemaType = z.infer<typeof BaselineOverallSchema>;
+export type BaselineComparisonSchemaType = z.infer<
+  typeof BaselineComparisonSchema
+>;
 export type JsonReportSchemaType = z.infer<typeof JsonReportSchema>;
 export type EvalCliOptionsSchemaType = z.infer<typeof EvalCliOptionsSchema>;
 export type EvalCliResultSchemaType = z.infer<typeof EvalCliResultSchema>;
@@ -959,6 +1057,26 @@ export type _EvalResultSchemaParity = AssertExact<
 export type _AggregateMetricsSchemaParity = AssertExact<
   AggregateMetrics,
   AggregateMetricsSchemaType
+>;
+export type _ConfidenceIntervalSchemaParity = AssertExact<
+  ConfidenceInterval,
+  ConfidenceIntervalSchemaType
+>;
+export type _TrialAggregationSchemaParity = AssertExact<
+  TrialAggregation,
+  TrialAggregationSchemaType
+>;
+export type _PerCaseComparisonSchemaParity = AssertExact<
+  PerCaseComparison,
+  PerCaseComparisonSchemaType
+>;
+export type _BaselineOverallSchemaParity = AssertExact<
+  BaselineOverall,
+  BaselineOverallSchemaType
+>;
+export type _BaselineComparisonSchemaParity = AssertExact<
+  BaselineComparison,
+  BaselineComparisonSchemaType
 >;
 export type _JsonReportSchemaParity = AssertExact<
   JsonReport,

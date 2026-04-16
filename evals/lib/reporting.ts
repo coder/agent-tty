@@ -1,17 +1,28 @@
 import { invariant } from '../../src/util/assert.js';
 import { AggregateMetricsSchema, JsonReportSchema } from './schemas.js';
+import {
+  bootstrapPairedCI,
+  computeConfidenceInterval,
+  computeMean,
+  computePassRate,
+  computeStdDev,
+  computeWinRate,
+} from './statistics.js';
 import { computeAggregateMetrics } from './scoring.js';
 import type {
   AggregateMetrics,
   AntiPatternSeverity,
+  BaselineComparison,
   ComparisonMetrics,
   EvalLane,
   EvalResult,
   JsonReport,
   MatrixEntry,
+  PerCaseComparison,
   ProviderComparisonReport,
   RunMetadata,
   SkillCondition,
+  TrialAggregation,
 } from './types.js';
 
 const LANE_ORDER: readonly EvalLane[] = ['prompt', 'execution', 'dogfood'];
@@ -62,6 +73,7 @@ export function generateJsonReport(
   results: EvalResult[],
   metadata: RunMetadata,
   comparisonMetrics?: ComparisonMetrics | ComparisonMetrics[],
+  baselineComparison?: BaselineComparison,
 ): JsonReport {
   assertResults(results);
   assertMetadata(metadata);
@@ -80,6 +92,10 @@ export function generateJsonReport(
     metadata,
     normalizedComparisons,
   );
+  const aggregated =
+    metadata.totalTrials > 1
+      ? buildTrialAggregations(sortedResults)
+      : undefined;
   const resultRefs = sortedResults.map((result) => result.caseId);
 
   const coreReport = {
@@ -88,6 +104,8 @@ export function generateJsonReport(
     comparisons: normalizedComparisons,
     results: sortedResults,
     ...(providerComparison === undefined ? {} : { providerComparison }),
+    ...(aggregated === undefined ? {} : { aggregated }),
+    ...(baselineComparison === undefined ? {} : { baselineComparison }),
   } satisfies JsonReport;
 
   JsonReportSchema.parse(coreReport);
@@ -111,6 +129,7 @@ export function generateMarkdownReport(
   results: EvalResult[],
   metadata: RunMetadata,
   comparisonMetrics?: ComparisonMetrics | ComparisonMetrics[],
+  baselineComparison?: BaselineComparison,
 ): string {
   assertResults(results);
   assertMetadata(metadata);
@@ -119,6 +138,7 @@ export function generateMarkdownReport(
     results,
     metadata,
     comparisonMetrics,
+    baselineComparison,
   ) as JsonReport & RichJsonReport;
   const providers = collectProviders(report.results, report.metadata.providers);
   const lanes = collectLanes(report.results, report.metadata.lanes);
@@ -300,6 +320,60 @@ export function generateMarkdownReport(
     );
   }
 
+  if (report.aggregated !== undefined) {
+    sections.push('', '## Trial Aggregation', '');
+    sections.push(
+      buildMarkdownTable(
+        [
+          'Lane',
+          'Case',
+          'Condition',
+          'Trials',
+          'Pass Rate',
+          'Pass Rate CI',
+          'Mean Score',
+          'Std Dev',
+          'Score CI',
+          'Min',
+          'Max',
+        ],
+        [
+          'left',
+          'left',
+          'left',
+          'right',
+          'right',
+          'right',
+          'right',
+          'right',
+          'right',
+          'right',
+          'right',
+        ],
+        report.aggregated.map((aggregation) => [
+          `\`${aggregation.lane}\``,
+          `\`${sanitizeInline(aggregation.caseId)}\``,
+          `\`${aggregation.condition}\``,
+          String(aggregation.trials),
+          formatPercent(aggregation.passRate),
+          formatConfidenceInterval(aggregation.passRateCI, formatPercent),
+          formatScore(aggregation.meanScore),
+          formatScore(aggregation.stdDev),
+          formatConfidenceInterval(aggregation.scoreCI, formatScore),
+          formatScore(aggregation.minScore),
+          formatScore(aggregation.maxScore),
+        ]),
+      ),
+    );
+  }
+
+  if (report.baselineComparison !== undefined) {
+    sections.push(
+      '',
+      ...buildBaselineComparisonMarkdownSection(report.baselineComparison),
+    );
+  }
+
   sections.push('', '## Anti-pattern summary', '');
   if (antiPatternRows.length === 0) {
     sections.push('- None.');
@@ -330,6 +404,318 @@ export function generateMarkdownReport(
   }
 
   return `${sections.join('\n').trimEnd()}\n`;
+}
+
+interface BaselineComparisonGroup {
+  caseId: string;
+  condition: SkillCondition;
+  results: EvalResult[];
+}
+
+export function buildBaselineComparison(
+  baseline: JsonReport,
+  candidate: JsonReport,
+): BaselineComparison {
+  assertResults(baseline.results);
+  assertMetadata(baseline.metadata);
+  assertResults(candidate.results);
+  assertMetadata(candidate.metadata);
+
+  const baselineGroups = groupResultsForBaselineComparison(baseline.results);
+  const candidateGroups = groupResultsForBaselineComparison(candidate.results);
+  const matchedGroups = [...baselineGroups.values()]
+    .filter((group) =>
+      candidateGroups.has(
+        buildBaselineComparisonGroupKey(group.caseId, group.condition),
+      ),
+    )
+    .sort(
+      (left, right) =>
+        compareStrings(left.caseId, right.caseId) ||
+        compareCondition(left.condition, right.condition),
+    );
+
+  invariant(
+    matchedGroups.length > 0,
+    'Baseline and candidate reports must share at least one case/condition group',
+  );
+
+  const perCase: PerCaseComparison[] = [];
+  const allBaselineScores: number[] = [];
+  const allCandidateScores: number[] = [];
+  const allBaselinePassBits: number[] = [];
+  const allCandidatePassBits: number[] = [];
+  let totalWins = 0;
+  let totalLosses = 0;
+  let totalTies = 0;
+
+  for (const baselineGroup of matchedGroups) {
+    const groupLabel = buildBaselineComparisonGroupKey(
+      baselineGroup.caseId,
+      baselineGroup.condition,
+    );
+    const candidateGroup = candidateGroups.get(groupLabel);
+    invariant(
+      candidateGroup !== undefined,
+      `Missing candidate group for ${groupLabel}`,
+    );
+
+    const baselineTrials = sortBaselineComparisonTrials(
+      baselineGroup.results,
+      `baseline ${groupLabel}`,
+    );
+    const candidateTrials = sortBaselineComparisonTrials(
+      candidateGroup.results,
+      `candidate ${groupLabel}`,
+    );
+    invariant(
+      baselineTrials.length === candidateTrials.length,
+      `Baseline and candidate must have equal trial counts for ${groupLabel}`,
+    );
+
+    const baselineScores: number[] = [];
+    const candidateScores: number[] = [];
+    const baselinePassBits: number[] = [];
+    const candidatePassBits: number[] = [];
+
+    for (let index = 0; index < baselineTrials.length; index += 1) {
+      const baselineResult = baselineTrials[index];
+      const candidateResult = candidateTrials[index];
+      invariant(
+        baselineResult !== undefined,
+        `Missing baseline trial ${String(index)} for ${groupLabel}`,
+      );
+      invariant(
+        candidateResult !== undefined,
+        `Missing candidate trial ${String(index)} for ${groupLabel}`,
+      );
+      invariant(
+        baselineResult.trial === candidateResult.trial,
+        `Baseline and candidate trials must align for ${groupLabel}`,
+      );
+
+      baselineScores.push(normalizeScore(baselineResult));
+      candidateScores.push(normalizeScore(candidateResult));
+      baselinePassBits.push(toPassBit(baselineResult));
+      candidatePassBits.push(toPassBit(candidateResult));
+    }
+
+    const scoreDeltaSummary = bootstrapPairedCI(
+      baselineScores,
+      candidateScores,
+    );
+    const passRateDeltaSummary = bootstrapPairedCI(
+      baselinePassBits,
+      candidatePassBits,
+    );
+    const scoreDelta = {
+      mean: scoreDeltaSummary.mean,
+      ci: scoreDeltaSummary.ci,
+      significant: scoreDeltaSummary.significant,
+    };
+    const passRateDelta = {
+      mean: passRateDeltaSummary.mean,
+      ci: passRateDeltaSummary.ci,
+      significant: passRateDeltaSummary.significant,
+    };
+    const winRate = computeWinRate(baselineScores, candidateScores);
+
+    perCase.push({
+      caseId: baselineGroup.caseId,
+      condition: baselineGroup.condition,
+      baselinePassRate: computePassRate(baselineTrials).rate,
+      candidatePassRate: computePassRate(candidateTrials).rate,
+      baselineMeanScore: computeMean(baselineScores),
+      candidateMeanScore: computeMean(candidateScores),
+      scoreDelta,
+      passRateDelta,
+      winRate,
+      verdict: buildPerCaseComparisonVerdict(scoreDelta),
+    });
+
+    allBaselineScores.push(...baselineScores);
+    allCandidateScores.push(...candidateScores);
+    allBaselinePassBits.push(...baselinePassBits);
+    allCandidatePassBits.push(...candidatePassBits);
+    totalWins += winRate.wins;
+    totalLosses += winRate.losses;
+    totalTies += winRate.ties;
+  }
+
+  const overallScoreDelta = bootstrapPairedCI(
+    allBaselineScores,
+    allCandidateScores,
+  );
+  const overallPassRateDelta = bootstrapPairedCI(
+    allBaselinePassBits,
+    allCandidatePassBits,
+  );
+
+  return {
+    baselineRunId: baseline.metadata.runId,
+    baselineCreatedAt: baseline.metadata.createdAt,
+    overall: {
+      baselineMeanScore: computeMean(allBaselineScores),
+      candidateMeanScore: computeMean(allCandidateScores),
+      baselinePassRate: computePassRateFromBits(allBaselinePassBits),
+      candidatePassRate: computePassRateFromBits(allCandidatePassBits),
+      totalWins,
+      totalLosses,
+      totalTies,
+      verdict: buildOverallComparisonVerdict(
+        overallScoreDelta,
+        overallPassRateDelta,
+      ),
+    },
+    perCase,
+  };
+}
+
+function buildBaselineComparisonMarkdownSection(
+  comparison: BaselineComparison,
+): string[] {
+  const scoreDelta =
+    comparison.overall.candidateMeanScore -
+    comparison.overall.baselineMeanScore;
+  const passRateDelta =
+    comparison.overall.candidatePassRate - comparison.overall.baselinePassRate;
+
+  return [
+    '## Baseline comparison',
+    '',
+    `- Baseline run ID: \`${sanitizeInline(comparison.baselineRunId)}\``,
+    `- Baseline created: \`${sanitizeInline(comparison.baselineCreatedAt)}\``,
+    `- Overall verdict: \`${comparison.overall.verdict}\``,
+    `- Mean score: ${formatScore(comparison.overall.baselineMeanScore)} → ${formatScore(comparison.overall.candidateMeanScore)} (Δ ${formatScore(scoreDelta)})`,
+    `- Pass rate: ${formatPercent(comparison.overall.baselinePassRate)} → ${formatPercent(comparison.overall.candidatePassRate)} (Δ ${formatPercent(passRateDelta)})`,
+    `- Wins / Losses / Ties: ${String(comparison.overall.totalWins)} / ${String(comparison.overall.totalLosses)} / ${String(comparison.overall.totalTies)}`,
+    '',
+    buildMarkdownTable(
+      [
+        'Case',
+        'Condition',
+        'Verdict',
+        'Score Δ',
+        'Score CI',
+        'Pass Rate Δ',
+        'Wins/Losses/Ties',
+      ],
+      ['left', 'left', 'left', 'right', 'right', 'right', 'right'],
+      comparison.perCase.map((perCase) => [
+        `\`${sanitizeInline(perCase.caseId)}\``,
+        `\`${perCase.condition}\``,
+        `\`${perCase.verdict}\``,
+        formatScore(perCase.scoreDelta.mean),
+        formatConfidenceInterval(perCase.scoreDelta.ci, formatScore),
+        formatPercent(perCase.passRateDelta.mean),
+        `${String(perCase.winRate.wins)}/${String(perCase.winRate.losses)}/${String(perCase.winRate.ties)}`,
+      ]),
+    ),
+  ];
+}
+
+function groupResultsForBaselineComparison(
+  results: readonly EvalResult[],
+): Map<string, BaselineComparisonGroup> {
+  const groups = new Map<string, BaselineComparisonGroup>();
+
+  for (const result of results) {
+    const key = buildBaselineComparisonGroupKey(
+      result.caseId,
+      result.condition,
+    );
+    const existing = groups.get(key);
+    if (existing === undefined) {
+      groups.set(key, {
+        caseId: result.caseId,
+        condition: result.condition,
+        results: [result],
+      });
+      continue;
+    }
+
+    existing.results.push(result);
+  }
+
+  return groups;
+}
+
+function buildBaselineComparisonGroupKey(
+  caseId: string,
+  condition: SkillCondition,
+): string {
+  return `${caseId}:${condition}`;
+}
+
+function sortBaselineComparisonTrials(
+  results: readonly EvalResult[],
+  groupLabel: string,
+): EvalResult[] {
+  invariant(results.length > 0, `${groupLabel} results must not be empty`);
+  const sorted = [...results].sort(
+    (left, right) =>
+      left.trial - right.trial ||
+      compareLane(left.lane, right.lane) ||
+      compareStrings(left.providerId, right.providerId) ||
+      compareStrings(left.runId, right.runId),
+  );
+
+  const seenTrials = new Set<number>();
+  for (const result of sorted) {
+    invariant(
+      !seenTrials.has(result.trial),
+      `Baseline comparison requires unique trial numbers for ${groupLabel}`,
+    );
+    seenTrials.add(result.trial);
+  }
+
+  return sorted;
+}
+
+function toPassBit(result: EvalResult): 0 | 1 {
+  return result.ok ? 1 : 0;
+}
+
+function computePassRateFromBits(passBits: readonly number[]): number {
+  return computePassRate(
+    passBits.map((value) => {
+      invariant(value === 0 || value === 1, 'pass bit must be either 0 or 1');
+      return { ok: value === 1 };
+    }),
+  ).rate;
+}
+
+function buildPerCaseComparisonVerdict(comparison: {
+  mean: number;
+  ci: { lower: number; upper: number };
+}): 'improved' | 'regressed' | 'inconclusive' {
+  if (comparison.ci.lower > 0 && comparison.mean >= 0.05) {
+    return 'improved';
+  }
+  if (comparison.ci.upper < 0) {
+    return 'regressed';
+  }
+  return 'inconclusive';
+}
+
+function buildOverallComparisonVerdict(
+  scoreDelta: { mean: number; ci: { lower: number; upper: number } },
+  passRateDelta: { mean: number; ci: { lower: number; upper: number } },
+): 'improved' | 'regressed' | 'inconclusive' {
+  const scoreRegressed = scoreDelta.ci.upper < 0;
+  const passRateRegressed = passRateDelta.ci.upper < 0;
+  if (scoreRegressed || passRateRegressed) {
+    return 'regressed';
+  }
+
+  const scoreImproved = scoreDelta.ci.lower > 0 && scoreDelta.mean >= 0.05;
+  const passRateImproved =
+    passRateDelta.ci.lower > 0 && passRateDelta.mean >= 0.05;
+  if (scoreImproved || passRateImproved) {
+    return 'improved';
+  }
+
+  return 'inconclusive';
 }
 
 /**
@@ -520,6 +906,57 @@ function readAggregateStat(
   fallback: number,
 ): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function buildTrialAggregations(
+  results: readonly EvalResult[],
+): TrialAggregation[] {
+  const groups = new Map<string, EvalResult[]>();
+
+  for (const result of results) {
+    const key = `${result.lane}:${result.caseId}:${result.condition}`;
+    const group = groups.get(key);
+    if (group === undefined) {
+      groups.set(key, [result]);
+      continue;
+    }
+
+    group.push(result);
+  }
+
+  return [...groups.values()]
+    .map((group) => {
+      const first = group[0];
+      invariant(
+        first !== undefined,
+        'Trial aggregation group must not be empty',
+      );
+      const normalizedScores = group.map((result) => normalizeScore(result));
+      const passRateSummary = computePassRate(group);
+      const meanScore = computeMean(normalizedScores);
+      const stdDev = computeStdDev(normalizedScores, meanScore);
+      const scoreSummary = computeConfidenceInterval(normalizedScores);
+
+      return {
+        lane: first.lane,
+        caseId: first.caseId,
+        condition: first.condition,
+        trials: group.length,
+        passRate: passRateSummary.rate,
+        passRateCI: passRateSummary.ci,
+        meanScore,
+        stdDev,
+        scoreCI: scoreSummary.ci,
+        minScore: Math.min(...normalizedScores),
+        maxScore: Math.max(...normalizedScores),
+      };
+    })
+    .sort(
+      (left, right) =>
+        compareLane(left.lane, right.lane) ||
+        compareStrings(left.caseId, right.caseId) ||
+        compareCondition(left.condition, right.condition),
+    );
 }
 
 function buildLaneSummaries(
@@ -772,11 +1209,11 @@ function summarizeAntiPatterns(results: EvalResult[]): AntiPatternSummaryRow[] {
 function sortResults(results: EvalResult[]): EvalResult[] {
   return [...results].sort(
     (left, right) =>
-      compareStrings(left.providerId, right.providerId) ||
       compareLane(left.lane, right.lane) ||
-      compareCondition(left.condition, right.condition) ||
       compareStrings(left.caseId, right.caseId) ||
+      compareCondition(left.condition, right.condition) ||
       left.trial - right.trial ||
+      compareStrings(left.providerId, right.providerId) ||
       compareStrings(left.runId, right.runId) ||
       compareStrings(left.startedAt, right.startedAt) ||
       compareStrings(left.completedAt, right.completedAt),
@@ -937,6 +1374,13 @@ function formatPercent(value: number): string {
 
 function formatScore(value: number): string {
   return value.toFixed(3);
+}
+
+function formatConfidenceInterval(
+  interval: { lower: number; upper: number },
+  formatter: (value: number) => string,
+): string {
+  return `[${formatter(interval.lower)}, ${formatter(interval.upper)}]`;
 }
 
 function formatComparisonValue(value: number | undefined): string {

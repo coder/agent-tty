@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,15 +12,21 @@ import {
   computeComparisonMetrics,
   SKILL_CONDITIONS,
 } from './lib/matrix.js';
-import { generateJsonReport, generateMarkdownReport } from './lib/reporting.js';
-import { RunMetadataSchema } from './lib/schemas.js';
-import type {
-  EvalCase,
-  EvalLane,
-  EvalResult,
-  ProviderRuntimeInfo,
-  RunMetadata,
-  SkillCondition,
+import {
+  buildBaselineComparison,
+  generateJsonReport,
+  generateMarkdownReport,
+} from './lib/reporting.js';
+import { JsonReportSchema, RunMetadataSchema } from './lib/schemas.js';
+import {
+  buildWorkItemKey,
+  type EvalCase,
+  type EvalLane,
+  type EvalResult,
+  type JsonReport,
+  type ProviderRuntimeInfo,
+  type RunMetadata,
+  type SkillCondition,
 } from './lib/types.js';
 import { getAllPromptCases, runPromptLane } from './prompt/runner.js';
 import { createProvider, SUPPORTED_PROVIDER_IDS } from './providers/base.js';
@@ -54,6 +60,9 @@ const HELP_TEXT = [
   '  --json              Print JSON summary only',
   '  --verbose           Print verbose progress logs to stderr',
   '  --dry-run           List cases that would run without invoking providers',
+  '  --concurrency <n>  Maximum work items to run concurrently per lane. Default: 1',
+  '  --trials <n>       Number of independent trials per case/condition. Default: 1',
+  '  --compare-baseline <path>  Path to a prior report.json for paired baseline comparison',
   '  --help              Show this help text',
   '',
   'Examples:',
@@ -75,6 +84,9 @@ interface CliOptions {
   condition?: string;
   caseIds: string[];
   outputDir?: string;
+  concurrency?: string;
+  trials?: string;
+  compareBaseline?: string;
   json: boolean;
   verbose: boolean;
   dryRun: boolean;
@@ -89,6 +101,9 @@ interface ResolvedCliOptions {
   requestedCondition: string;
   caseIds: string[];
   outputBaseDir: string;
+  compareBaselinePath?: string;
+  concurrency: number;
+  totalTrials: number;
   json: boolean;
   verbose: boolean;
   dryRun: boolean;
@@ -238,6 +253,51 @@ function parseCliArgs(argumentsList: readonly string[]): CliOptions {
     if (argument === '--dry-run') {
       invariant(!options.dryRun, '--dry-run may only be provided once');
       options.dryRun = true;
+      continue;
+    }
+    if (argument === '--concurrency' || argument.startsWith('--concurrency=')) {
+      const parsed = parseOptionValue(
+        argument,
+        '--concurrency',
+        argumentsList,
+        index,
+      );
+      invariant(
+        options.concurrency === undefined,
+        '--concurrency may only be set once',
+      );
+      options.concurrency = parsed.value;
+      index = parsed.nextIndex;
+      continue;
+    }
+    if (argument === '--trials' || argument.startsWith('--trials=')) {
+      const parsed = parseOptionValue(
+        argument,
+        '--trials',
+        argumentsList,
+        index,
+      );
+      invariant(options.trials === undefined, '--trials may only be set once');
+      options.trials = parsed.value;
+      index = parsed.nextIndex;
+      continue;
+    }
+    if (
+      argument === '--compare-baseline' ||
+      argument.startsWith('--compare-baseline=')
+    ) {
+      const parsed = parseOptionValue(
+        argument,
+        '--compare-baseline',
+        argumentsList,
+        index,
+      );
+      invariant(
+        options.compareBaseline === undefined,
+        '--compare-baseline may only be set once',
+      );
+      options.compareBaseline = parsed.value;
+      index = parsed.nextIndex;
       continue;
     }
     if (argument === '--provider' || argument.startsWith('--provider=')) {
@@ -407,6 +467,30 @@ function resolveRequestedCaseIds(caseIds: readonly string[]): string[] {
   return resolvedCaseIds;
 }
 
+function resolveConcurrency(value: string | undefined): number {
+  if (value === undefined) {
+    return 1;
+  }
+  const parsed = Number(value);
+  invariant(
+    Number.isInteger(parsed) && parsed > 0,
+    `--concurrency must be a positive integer, got: ${value}`,
+  );
+  return parsed;
+}
+
+function resolveTotalTrials(value: string | undefined): number {
+  if (value === undefined) {
+    return DEFAULT_TOTAL_TRIALS;
+  }
+  const parsed = Number(value);
+  invariant(
+    Number.isInteger(parsed) && parsed > 0,
+    `--trials must be a positive integer, got: ${value}`,
+  );
+  return parsed;
+}
+
 function resolveOutputBaseDir(
   repoRoot: string,
   outputDir: string | undefined,
@@ -443,6 +527,7 @@ function buildCaseSelections(
   lanes: readonly EvalLane[],
   conditions: readonly SkillCondition[],
   caseIds: readonly string[],
+  totalTrials: number,
 ): {
   activeConditions: SkillCondition[];
   activeLanes: EvalLane[];
@@ -515,8 +600,8 @@ function buildCaseSelections(
   const activeConditions = SKILL_CONDITIONS.filter((condition) =>
     matrixEntries.some((entry) => entry.condition === condition),
   );
-  const totalInvocations = matrixEntries.reduce((count, entry) => {
-    return count + (entry.lane === 'prompt' ? DEFAULT_TOTAL_TRIALS : 1);
+  const totalInvocations = matrixEntries.reduce((count) => {
+    return count + totalTrials;
   }, 0);
 
   return {
@@ -541,11 +626,18 @@ function buildResolvedOptions(
   const requestedConditions = resolveRequestedConditions(options.condition);
   const caseIds = resolveRequestedCaseIds(options.caseIds);
   const outputBaseDir = resolveOutputBaseDir(repoRoot, options.outputDir);
+  const compareBaselinePath = resolveOptionalStringOption(
+    options.compareBaseline,
+    '--compare-baseline',
+  );
+  const concurrency = resolveConcurrency(options.concurrency);
+  const totalTrials = resolveTotalTrials(options.trials);
   const selection = buildCaseSelections(
     providerId,
     requestedLanes,
     requestedConditions,
     caseIds,
+    totalTrials,
   );
 
   return {
@@ -556,6 +648,11 @@ function buildResolvedOptions(
     requestedCondition: options.condition ?? 'all',
     caseIds,
     outputBaseDir,
+    ...(compareBaselinePath === undefined
+      ? {}
+      : { compareBaselinePath: resolve(repoRoot, compareBaselinePath) }),
+    concurrency,
+    totalTrials,
     json: options.json,
     verbose: options.verbose,
     dryRun: options.dryRun,
@@ -741,11 +838,31 @@ function buildRunMetadata(
     models: selectedModelId === undefined ? [] : [selectedModelId],
     lanes: options.activeLanes,
     conditions: options.activeConditions,
-    totalTrials: DEFAULT_TOTAL_TRIALS,
+    totalTrials: options.totalTrials,
     notes: metadataNotes,
   });
   const metadata: RunMetadata = parsedMetadata;
   return metadata;
+}
+
+async function loadBaselineReport(path: string): Promise<JsonReport> {
+  const text = await readFile(path, 'utf8');
+  const parsed = JSON.parse(text) as JsonReport & Record<string, unknown>;
+  return JsonReportSchema.parse({
+    metadata: parsed.metadata,
+    aggregate: parsed.aggregate,
+    comparisons: parsed.comparisons,
+    results: parsed.results,
+    ...(parsed.providerComparison === undefined
+      ? {}
+      : { providerComparison: parsed.providerComparison }),
+    ...(parsed.aggregated === undefined
+      ? {}
+      : { aggregated: parsed.aggregated }),
+    ...(parsed.baselineComparison === undefined
+      ? {}
+      : { baselineComparison: parsed.baselineComparison }),
+  }) as JsonReport;
 }
 
 function buildSummary(
@@ -868,20 +985,35 @@ async function runLane(
       return runPromptLane(provider, metadata, {
         conditions: options.activeConditions,
         caseFilter,
+        concurrency: options.concurrency,
       });
     case 'execution':
       return runExecutionLane(provider, metadata, {
         conditions: options.activeConditions,
         caseFilter,
+        concurrency: options.concurrency,
       });
     case 'dogfood':
       return runDogfoodLane(provider, metadata, {
         conditions: options.activeConditions,
         caseFilter,
+        concurrency: options.concurrency,
       });
     default:
       return lane satisfies never;
   }
+}
+
+function recordLaneFailure(
+  lane: EvalLane,
+  message: string,
+  laneErrors: LaneErrorSummary[],
+  metadata: RunMetadata,
+  options: ResolvedCliOptions,
+): void {
+  laneErrors.push({ lane, message });
+  appendMetadataNote(metadata.notes, `lane ${lane} failed: ${message}`);
+  logVerbose(options, `Lane ${lane} failed: ${message}`);
 }
 
 export async function runEvalCli(
@@ -916,32 +1048,99 @@ export async function runEvalCli(
   const results: EvalResult[] = [];
   const laneErrors: LaneErrorSummary[] = [];
 
-  for (const lane of options.activeLanes) {
-    logVerbose(options, `Running ${lane} lane`);
-    try {
-      const laneResults = await runLane(lane, provider, metadata, options);
-      results.push(...laneResults);
-      logVerbose(
-        options,
-        `Completed ${lane} lane with ${String(laneResults.length)} result(s)`,
+  if (options.concurrency > 1) {
+    const lanePromises = options.activeLanes.map(async (lane) => {
+      try {
+        logVerbose(options, `Running ${lane} lane`);
+        const laneResults = await runLane(lane, provider, metadata, options);
+        logVerbose(
+          options,
+          `Completed ${lane} lane with ${String(laneResults.length)} result(s)`,
+        );
+        return { lane, results: laneResults } as const;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return { lane, error: message } as const;
+      }
+    });
+    const settled = await Promise.allSettled(lanePromises);
+    for (const [index, outcome] of settled.entries()) {
+      const lane = options.activeLanes[index];
+      invariant(
+        lane !== undefined,
+        `Missing active lane for settled outcome at index ${String(index)}`,
       );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      laneErrors.push({ lane, message });
-      appendMetadataNote(metadata.notes, `lane ${lane} failed: ${message}`);
-      logVerbose(options, `Lane ${lane} failed: ${message}`);
+      if (outcome.status === 'rejected') {
+        const message =
+          outcome.reason instanceof Error
+            ? outcome.reason.message
+            : String(outcome.reason);
+        recordLaneFailure(lane, message, laneErrors, metadata, options);
+        continue;
+      }
+      if ('error' in outcome.value) {
+        recordLaneFailure(
+          outcome.value.lane,
+          outcome.value.error,
+          laneErrors,
+          metadata,
+          options,
+        );
+        continue;
+      }
+      results.push(...outcome.value.results);
+    }
+  } else {
+    for (const lane of options.activeLanes) {
+      logVerbose(options, `Running ${lane} lane`);
+      try {
+        const laneResults = await runLane(lane, provider, metadata, options);
+        results.push(...laneResults);
+        logVerbose(
+          options,
+          `Completed ${lane} lane with ${String(laneResults.length)} result(s)`,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        recordLaneFailure(lane, message, laneErrors, metadata, options);
+      }
     }
   }
+
+  results.sort((left, right) =>
+    buildWorkItemKey(left).localeCompare(buildWorkItemKey(right)),
+  );
 
   const comparisonMetrics =
     options.activeConditions.length > 1
       ? computeComparisonMetrics(results)
       : [];
-  const jsonReport = generateJsonReport(results, metadata, comparisonMetrics);
+  const candidateCoreReport = generateJsonReport(
+    results,
+    metadata,
+    comparisonMetrics,
+  );
+  const baselineComparison =
+    options.compareBaselinePath === undefined
+      ? undefined
+      : buildBaselineComparison(
+          await loadBaselineReport(options.compareBaselinePath),
+          candidateCoreReport,
+        );
+  const jsonReport =
+    baselineComparison === undefined
+      ? candidateCoreReport
+      : generateJsonReport(
+          results,
+          metadata,
+          comparisonMetrics,
+          baselineComparison,
+        );
   const markdownReport = generateMarkdownReport(
     results,
     metadata,
     comparisonMetrics,
+    baselineComparison,
   );
 
   const artifactStore = new EvalArtifactStore(options.outputBaseDir);

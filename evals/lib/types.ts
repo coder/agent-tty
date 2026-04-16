@@ -1,3 +1,4 @@
+import { invariant } from '../../src/util/assert.js';
 import type { EventRecord } from '../../src/protocol/schemas.js';
 import type { ArtifactKind } from '../../src/tools/review-bundle.js';
 import type {
@@ -13,6 +14,38 @@ export type SkillCondition = 'none' | 'self-load' | 'preloaded' | 'stale';
 
 /** Eval lane identifier. */
 export type EvalLane = 'prompt' | 'execution' | 'dogfood';
+
+/** Stable identity for one eval work item across lanes and trials. */
+export interface EvalWorkItemIdentity {
+  lane: EvalLane;
+  caseId: string;
+  condition: SkillCondition;
+  trial: number;
+}
+
+/** Build a stable string key for a work item identity. */
+export function buildWorkItemKey(identity: EvalWorkItemIdentity): string {
+  invariant(
+    identity.caseId.length > 0,
+    'identity.caseId must be a non-empty string',
+  );
+  invariant(
+    Number.isInteger(identity.trial) && identity.trial > 0,
+    'identity.trial must be a positive integer',
+  );
+
+  return `${identity.lane}:${identity.caseId}:${identity.condition}:${String(identity.trial)}`;
+}
+
+/** Assert that a list of work item identities contains no duplicates. */
+export function assertUniqueWorkItems(items: EvalWorkItemIdentity[]): void {
+  const seen = new Set<string>();
+  for (const item of items) {
+    const key = buildWorkItemKey(item);
+    invariant(!seen.has(key), `Duplicate work item identity: ${key}`);
+    seen.add(key);
+  }
+}
 
 /** Deterministic verifier kind. */
 export type VerifierKind =
@@ -370,6 +403,77 @@ export interface JsonReport {
   comparisons: ComparisonMetrics[];
   results: EvalResult[];
   providerComparison?: ProviderComparisonReport;
+  aggregated?: TrialAggregation[];
+  baselineComparison?: BaselineComparison;
+}
+
+/** Confidence interval bounds. */
+export interface ConfidenceInterval {
+  lower: number;
+  upper: number;
+}
+
+/** Trial-aggregated statistics for one case/condition group. */
+export interface TrialAggregation {
+  lane: EvalLane;
+  caseId: string;
+  condition: SkillCondition;
+  trials: number;
+  passRate: number;
+  passRateCI: ConfidenceInterval;
+  meanScore: number;
+  stdDev: number;
+  scoreCI: ConfidenceInterval;
+  minScore: number;
+  maxScore: number;
+}
+
+/** Per-case comparison between baseline and candidate runs. */
+export interface PerCaseComparison {
+  caseId: string;
+  condition: SkillCondition;
+  baselinePassRate: number;
+  candidatePassRate: number;
+  baselineMeanScore: number;
+  candidateMeanScore: number;
+  scoreDelta: {
+    mean: number;
+    ci: ConfidenceInterval;
+    significant: boolean;
+  };
+  passRateDelta: {
+    mean: number;
+    ci: ConfidenceInterval;
+    significant: boolean;
+  };
+  winRate: {
+    wins: number;
+    losses: number;
+    ties: number;
+    n: number;
+    winRate: number;
+  };
+  verdict: 'improved' | 'regressed' | 'inconclusive';
+}
+
+/** Overall comparison summary across all matched cases. */
+export interface BaselineOverall {
+  baselineMeanScore: number;
+  candidateMeanScore: number;
+  baselinePassRate: number;
+  candidatePassRate: number;
+  totalWins: number;
+  totalLosses: number;
+  totalTies: number;
+  verdict: 'improved' | 'regressed' | 'inconclusive';
+}
+
+/** Top-level baseline comparison attached to a report. */
+export interface BaselineComparison {
+  baselineRunId: string;
+  baselineCreatedAt: string;
+  overall: BaselineOverall;
+  perCase: PerCaseComparison[];
 }
 
 /** Cross-provider comparison view for an eval run. */

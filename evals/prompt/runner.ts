@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { assertString, invariant } from '../../src/util/assert.js';
 import { detectAntiPatterns } from '../lib/antiPatterns.js';
 import { SKILL_CONDITIONS } from '../lib/matrix.js';
+import { runScheduled } from '../lib/scheduler.js';
 import {
   EvalResultSchema,
   PromptEvalCaseSchema,
@@ -10,9 +11,12 @@ import {
   RunMetadataSchema,
 } from '../lib/schemas.js';
 import { scorePromptCase } from '../lib/scoring.js';
+import type { ScheduledWorkItem, SettledResult } from '../lib/scheduler.js';
+import { assertUniqueWorkItems, buildWorkItemKey } from '../lib/types.js';
 import type {
   AntiPatternFinding,
   EvalResult,
+  EvalWorkItemIdentity,
   PromptCaseScore,
   PromptEvalCase,
   ProviderPromptRequest,
@@ -48,6 +52,26 @@ interface LoadedSkillPrompts {
 }
 
 let loadedSkillPromptsPromise: Promise<LoadedSkillPrompts> | undefined;
+
+type PromptWorkItemOptions = {
+  conditions?: SkillCondition[];
+  caseFilter?: string[];
+};
+
+type PromptLaneOptions = PromptWorkItemOptions & {
+  concurrency?: number;
+};
+
+type PromptWorkItem = EvalWorkItemIdentity &
+  ScheduledWorkItem & {
+    evalCase: PromptEvalCase;
+    systemPrompt: string;
+  };
+
+type RejectedPromptWorkItemSettlement = Extract<
+  SettledResult<PromptWorkItem, EvalResult>,
+  { status: 'rejected' }
+>;
 
 function clonePromptCase(evalCase: PromptEvalCase): PromptEvalCase {
   return PromptEvalCaseSchema.parse({
@@ -126,6 +150,45 @@ function resolveRequestedCases(
     invariant(evalCase !== undefined, `Unknown prompt eval case id: ${caseId}`);
     return clonePromptCase(evalCase);
   });
+}
+
+function validatePromptRunMetadata(metadata: RunMetadata): RunMetadata {
+  const parsedMetadata = RunMetadataSchema.parse(metadata) as RunMetadata;
+  invariant(
+    parsedMetadata.lanes.includes('prompt'),
+    'Run metadata must include the prompt lane',
+  );
+  invariant(
+    parsedMetadata.totalTrials > 0,
+    'Run metadata totalTrials must be positive for prompt-lane runs',
+  );
+  return parsedMetadata;
+}
+
+function assertPromptProviderMetadata(
+  provider: EvalProvider,
+  metadata: RunMetadata,
+): void {
+  invariant(
+    metadata.providers.includes(provider.id),
+    `Run metadata providers must include ${provider.id}`,
+  );
+}
+
+function assertPromptWorkItem(workItem: PromptWorkItem): void {
+  invariant(workItem.lane === 'prompt', 'Prompt work item lane must be prompt');
+  invariant(
+    workItem.caseId === workItem.evalCase.id,
+    `Prompt work item case id must match eval case id for ${workItem.key}`,
+  );
+  invariant(
+    workItem.systemPrompt.length > 0,
+    `Prompt work item system prompt must not be empty for ${workItem.key}`,
+  );
+  invariant(
+    workItem.key === buildWorkItemKey(workItem),
+    `Prompt work item key must match identity for ${workItem.caseId}`,
+  );
 }
 
 function buildFallbackNormalizedOutput(
@@ -304,6 +367,54 @@ function buildErrorEvalResult(
   }) as EvalResult;
 }
 
+function buildRejectedPromptWorkItemEvalResult(
+  provider: EvalProvider,
+  metadata: RunMetadata,
+  settlement: RejectedPromptWorkItemSettlement,
+): EvalResult {
+  const errorMessage =
+    settlement.reason instanceof Error
+      ? settlement.reason.message
+      : String(settlement.reason);
+  const message = `Unexpected scheduler rejection for ${settlement.item.key}: ${errorMessage}`;
+  const errorClass =
+    settlement.reason instanceof Error ? settlement.reason.name : 'Error';
+  const promptScore: PromptCaseScore = scorePromptCase(
+    '',
+    settlement.item.evalCase,
+  );
+  const antiPatternFindings = mergeAntiPatternFindings(detectAntiPatterns(''));
+  const startedAt = new Date().toISOString();
+  const completedAt = new Date().toISOString();
+  const durationMs = Math.max(
+    0,
+    Date.parse(completedAt) - Date.parse(startedAt),
+  );
+
+  return EvalResultSchema.parse({
+    runId: metadata.runId,
+    providerId: provider.id,
+    modelId: metadata.models[0],
+    lane: settlement.item.lane,
+    caseId: settlement.item.caseId,
+    category: settlement.item.evalCase.category,
+    condition: settlement.item.condition,
+    expectedSkill: settlement.item.evalCase.expectedSkill,
+    trial: settlement.item.trial,
+    ok: false,
+    score: promptScore.breakdown,
+    promptScore,
+    workflowChecks: promptScore.workflowChecks,
+    antiPatternFindings,
+    normalizedOutput: buildFallbackNormalizedOutput(message),
+    errorClass,
+    errorMessage: message,
+    startedAt,
+    completedAt,
+    durationMs,
+  }) as EvalResult;
+}
+
 async function readSkillFile(relativePath: string): Promise<string> {
   const content = await readFile(
     new URL(relativePath, import.meta.url),
@@ -377,33 +488,18 @@ export function getAllPromptCases(): PromptEvalCase[] {
   return allCases;
 }
 
-export async function runPromptLane(
-  provider: EvalProvider,
+async function enumeratePromptWorkItemsFromMetadata(
   metadata: RunMetadata,
-  options?: { conditions?: SkillCondition[]; caseFilter?: string[] },
-): Promise<EvalResult[]> {
-  const parsedMetadata = RunMetadataSchema.parse(metadata) as RunMetadata;
-  invariant(
-    parsedMetadata.lanes.includes('prompt'),
-    'Run metadata must include the prompt lane',
-  );
-  invariant(
-    parsedMetadata.providers.includes(provider.id),
-    `Run metadata providers must include ${provider.id}`,
-  );
-  invariant(
-    parsedMetadata.totalTrials > 0,
-    'Run metadata totalTrials must be positive for prompt-lane runs',
-  );
-
+  options?: PromptWorkItemOptions,
+): Promise<PromptWorkItem[]> {
   const allCases = getAllPromptCases();
   const requestedCases = resolveRequestedCases(allCases, options?.caseFilter);
   const requestedConditions = resolveRequestedConditions(
-    parsedMetadata,
+    metadata,
     options?.conditions,
   );
   const loadedSkillPrompts = await loadSkillPrompts();
-  const results: EvalResult[] = [];
+  const items: PromptWorkItem[] = [];
 
   for (const evalCase of requestedCases) {
     for (const condition of requestedConditions) {
@@ -414,40 +510,100 @@ export async function runPromptLane(
 
       for (
         let trialIndex = 0;
-        trialIndex < parsedMetadata.totalTrials;
+        trialIndex < metadata.totalTrials;
         trialIndex += 1
       ) {
         const trial = trialIndex + 1;
-        const request = buildPromptRequest(
-          provider,
-          parsedMetadata,
-          evalCase,
+        const identity: EvalWorkItemIdentity = {
+          lane: 'prompt',
+          caseId: evalCase.id,
           condition,
           trial,
+        };
+        items.push({
+          ...identity,
+          key: buildWorkItemKey(identity),
+          evalCase,
           systemPrompt,
-        );
-        const startedAt = new Date().toISOString();
-        const startedAtMs = Date.now();
-
-        try {
-          const promptResult = await provider.invokePlanMode(request);
-          results.push(buildEvalResult(request, promptResult));
-        } catch (error: unknown) {
-          const completedAt = new Date().toISOString();
-          const durationMs = Math.max(0, Date.now() - startedAtMs);
-          results.push(
-            buildErrorEvalResult(
-              request,
-              error,
-              startedAt,
-              completedAt,
-              durationMs,
-            ),
-          );
-        }
+        });
       }
     }
   }
 
-  return results;
+  assertUniqueWorkItems(items);
+  return items;
+}
+
+export async function enumeratePromptWorkItems(
+  metadata: RunMetadata,
+  options?: PromptWorkItemOptions,
+): Promise<PromptWorkItem[]> {
+  const parsedMetadata = validatePromptRunMetadata(metadata);
+  return enumeratePromptWorkItemsFromMetadata(parsedMetadata, options);
+}
+
+export async function executePromptWorkItem(
+  provider: EvalProvider,
+  metadata: RunMetadata,
+  workItem: PromptWorkItem,
+): Promise<EvalResult> {
+  assertPromptProviderMetadata(provider, metadata);
+  assertPromptWorkItem(workItem);
+
+  const request = buildPromptRequest(
+    provider,
+    metadata,
+    workItem.evalCase,
+    workItem.condition,
+    workItem.trial,
+    workItem.systemPrompt,
+  );
+  const startedAt = new Date().toISOString();
+  const startedAtMs = Date.now();
+
+  try {
+    const promptResult = await provider.invokePlanMode(request);
+    return buildEvalResult(request, promptResult);
+  } catch (error: unknown) {
+    const completedAt = new Date().toISOString();
+    const durationMs = Math.max(0, Date.now() - startedAtMs);
+    return buildErrorEvalResult(
+      request,
+      error,
+      startedAt,
+      completedAt,
+      durationMs,
+    );
+  }
+}
+
+export async function runPromptLane(
+  provider: EvalProvider,
+  metadata: RunMetadata,
+  options?: PromptLaneOptions,
+): Promise<EvalResult[]> {
+  const parsedMetadata = validatePromptRunMetadata(metadata);
+  assertPromptProviderMetadata(provider, parsedMetadata);
+
+  const items = await enumeratePromptWorkItemsFromMetadata(
+    parsedMetadata,
+    options,
+  );
+  const settlements = await runScheduled(
+    items,
+    async (item) => executePromptWorkItem(provider, parsedMetadata, item),
+    {
+      concurrency: options?.concurrency ?? 1,
+    },
+  );
+
+  return settlements.map((settlement) =>
+    settlement.status === 'fulfilled'
+      ? settlement.value
+      : buildRejectedPromptWorkItemEvalResult(
+          provider,
+          parsedMetadata,
+          settlement,
+        ),
+  );
 }

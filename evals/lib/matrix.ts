@@ -1,5 +1,6 @@
 import { invariant } from '../../src/util/assert.js';
 import { ComparisonMetricsSchema, MatrixEntrySchema } from './schemas.js';
+import { computeMean } from './statistics.js';
 import type {
   ComparisonMetrics,
   EvalCase,
@@ -117,20 +118,6 @@ function resolveConditionList(evalCase: EvalCase): readonly SkillCondition[] {
   }
 
   return evalCase.conditions;
-}
-
-function computeMean(values: readonly number[]): number {
-  if (values.length === 0) {
-    return 0;
-  }
-
-  let total = 0;
-  for (const value of values) {
-    assertFiniteNumber(value, 'Mean input value');
-    total += value;
-  }
-
-  return total / values.length;
 }
 
 function collectScoreTotals(
