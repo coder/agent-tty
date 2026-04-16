@@ -48,4 +48,19 @@ describe('enumerateDogfoodWorkItems', () => {
       key: 'dogfood:exploratory-qa:none:1',
     });
   });
+
+  it('enumerates multiple dogfood trials per case and condition', () => {
+    const items = enumerateDogfoodWorkItems({
+      caseFilter: [DOGFOOD_CASE_ID],
+      conditions: ['none'],
+      totalTrials: 2,
+    });
+
+    expect(items).toHaveLength(2);
+    expect(items.map((item) => item.trial)).toEqual([1, 2]);
+    expect(items.map((item) => item.key)).toEqual([
+      'dogfood:exploratory-qa:none:1',
+      'dogfood:exploratory-qa:none:2',
+    ]);
+  });
 });

@@ -66,6 +66,7 @@ const NO_CAPABILITIES: ProviderRuntimeInfo['capabilities'] = {
   supportsToolCalls: false,
   supportsTranscriptCapture: false,
 };
+const DEFAULT_TOTAL_TRIALS = 1;
 
 type DogfoodWorkItem = EvalWorkItemIdentity &
   ScheduledWorkItem & {
@@ -501,11 +502,21 @@ function validateCaseFilter(
   return [...caseFilter];
 }
 
+function resolveTotalTrials(totalTrials: number | undefined): number {
+  const resolvedTotalTrials = totalTrials ?? DEFAULT_TOTAL_TRIALS;
+  invariant(
+    Number.isInteger(resolvedTotalTrials) && resolvedTotalTrials > 0,
+    `Dogfood totalTrials must be a positive integer, got: ${String(totalTrials)}`,
+  );
+  return resolvedTotalTrials;
+}
+
 function buildRequestedPaths(
   metadata: RunMetadata,
   providerId: string,
   evalCase: DogfoodEvalCase,
   condition: SkillCondition,
+  trial: number,
 ): { outputDir: string; homeDir: string; requestedBundlePath: string } {
   const outputDir = resolve(
     tmpdir(),
@@ -514,6 +525,7 @@ function buildRequestedPaths(
     providerId,
     evalCase.id,
     condition,
+    `trial-${String(trial)}`,
   );
   const homeDir = join(outputDir, 'agent-tty-home');
   const requestedBundlePath = join(outputDir, evalCase.bundlePath);
@@ -563,12 +575,13 @@ export function getAllDogfoodCases(): DogfoodEvalCase[] {
 function buildDogfoodWorkItem(
   evalCase: DogfoodEvalCase,
   condition: SkillCondition,
+  trial: number,
 ): DogfoodWorkItem {
   const identity: EvalWorkItemIdentity = {
     lane: 'dogfood',
     caseId: evalCase.id,
     condition,
-    trial: 1,
+    trial,
   };
 
   return {
@@ -616,7 +629,7 @@ function buildFailedDogfoodEvalResult(params: {
     category: params.workItem.evalCase.category,
     condition: params.workItem.condition,
     expectedSkill: params.workItem.evalCase.expectedSkill,
-    trial: 1,
+    trial: params.workItem.trial,
     ok: false,
     score: {
       total: 0,
@@ -643,8 +656,10 @@ function buildFailedDogfoodEvalResult(params: {
 export function enumerateDogfoodWorkItems(options?: {
   conditions?: SkillCondition[];
   caseFilter?: string[];
+  totalTrials?: number;
 }): DogfoodWorkItem[] {
   const selectedConditions = validateConditionList(options?.conditions);
+  const totalTrials = resolveTotalTrials(options?.totalTrials);
   const selectedCaseIds = validateCaseFilter(options?.caseFilter);
   const allCases = getAllDogfoodCases();
   const cases =
@@ -662,7 +677,10 @@ export function enumerateDogfoodWorkItems(options?: {
           );
 
     for (const condition of caseConditions) {
-      items.push(buildDogfoodWorkItem(evalCase, condition));
+      for (let trialIndex = 0; trialIndex < totalTrials; trialIndex += 1) {
+        const trial = trialIndex + 1;
+        items.push(buildDogfoodWorkItem(evalCase, condition, trial));
+      }
     }
   }
 
@@ -688,7 +706,10 @@ export async function executeDogfoodWorkItem(
     workItem.evalCase.conditions.includes(workItem.condition),
     'Dogfood work item condition must be supported by the eval case',
   );
-  invariant(workItem.trial === 1, 'Dogfood work item trial must be 1');
+  invariant(
+    Number.isInteger(workItem.trial) && workItem.trial > 0,
+    'Dogfood work item trial must be a positive integer',
+  );
 
   const startedAt = new Date().toISOString();
   const { outputDir, homeDir, requestedBundlePath } = buildRequestedPaths(
@@ -696,6 +717,7 @@ export async function executeDogfoodWorkItem(
     provider.id,
     workItem.evalCase,
     workItem.condition,
+    workItem.trial,
   );
 
   try {
@@ -902,7 +924,11 @@ export async function runDogfoodLane(
     concurrency?: number;
   },
 ): Promise<EvalResult[]> {
-  const items = enumerateDogfoodWorkItems(options);
+  const totalTrials = resolveTotalTrials(metadata.totalTrials);
+  const items = enumerateDogfoodWorkItems({
+    ...options,
+    totalTrials,
+  });
 
   let detectedRuntime: ProviderRuntimeInfo;
   try {

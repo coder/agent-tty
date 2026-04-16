@@ -50,4 +50,20 @@ describe('enumerateExecutionWorkItems', () => {
       key: 'execution:hello-prompt:none:1',
     });
   });
+
+  it('enumerates multiple execution trials per case and condition', () => {
+    const items = enumerateExecutionWorkItems({
+      caseFilter: [EXECUTION_CASE_ID],
+      conditions: ['none'],
+      totalTrials: 3,
+    });
+
+    expect(items).toHaveLength(3);
+    expect(items.map((item) => item.trial)).toEqual([1, 2, 3]);
+    expect(items.map((item) => item.key)).toEqual([
+      'execution:hello-prompt:none:1',
+      'execution:hello-prompt:none:2',
+      'execution:hello-prompt:none:3',
+    ]);
+  });
 });

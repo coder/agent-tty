@@ -56,6 +56,7 @@ const HELP_TEXT = [
   '  --verbose           Print verbose progress logs to stderr',
   '  --dry-run           List cases that would run without invoking providers',
   '  --concurrency <n>  Maximum work items to run concurrently per lane. Default: 1',
+  '  --trials <n>       Number of independent trials per case/condition. Default: 1',
   '  --help              Show this help text',
   '',
   'Examples:',
@@ -78,6 +79,7 @@ interface CliOptions {
   caseIds: string[];
   outputDir?: string;
   concurrency?: string;
+  trials?: string;
   json: boolean;
   verbose: boolean;
   dryRun: boolean;
@@ -93,6 +95,7 @@ interface ResolvedCliOptions {
   caseIds: string[];
   outputBaseDir: string;
   concurrency: number;
+  totalTrials: number;
   json: boolean;
   verbose: boolean;
   dryRun: boolean;
@@ -256,6 +259,13 @@ function parseCliArgs(argumentsList: readonly string[]): CliOptions {
         '--concurrency may only be set once',
       );
       options.concurrency = parsed.value;
+      index = parsed.nextIndex;
+      continue;
+    }
+    if (argument === '--trials' || argument.startsWith('--trials=')) {
+      const parsed = parseOptionValue(argument, '--trials', argumentsList, index);
+      invariant(options.trials === undefined, '--trials may only be set once');
+      options.trials = parsed.value;
       index = parsed.nextIndex;
       continue;
     }
@@ -438,6 +448,18 @@ function resolveConcurrency(value: string | undefined): number {
   return parsed;
 }
 
+function resolveTotalTrials(value: string | undefined): number {
+  if (value === undefined) {
+    return DEFAULT_TOTAL_TRIALS;
+  }
+  const parsed = Number(value);
+  invariant(
+    Number.isInteger(parsed) && parsed > 0,
+    `--trials must be a positive integer, got: ${value}`,
+  );
+  return parsed;
+}
+
 function resolveOutputBaseDir(
   repoRoot: string,
   outputDir: string | undefined,
@@ -474,6 +496,7 @@ function buildCaseSelections(
   lanes: readonly EvalLane[],
   conditions: readonly SkillCondition[],
   caseIds: readonly string[],
+  totalTrials: number,
 ): {
   activeConditions: SkillCondition[];
   activeLanes: EvalLane[];
@@ -546,8 +569,8 @@ function buildCaseSelections(
   const activeConditions = SKILL_CONDITIONS.filter((condition) =>
     matrixEntries.some((entry) => entry.condition === condition),
   );
-  const totalInvocations = matrixEntries.reduce((count, entry) => {
-    return count + (entry.lane === 'prompt' ? DEFAULT_TOTAL_TRIALS : 1);
+  const totalInvocations = matrixEntries.reduce((count) => {
+    return count + totalTrials;
   }, 0);
 
   return {
@@ -573,11 +596,13 @@ function buildResolvedOptions(
   const caseIds = resolveRequestedCaseIds(options.caseIds);
   const outputBaseDir = resolveOutputBaseDir(repoRoot, options.outputDir);
   const concurrency = resolveConcurrency(options.concurrency);
+  const totalTrials = resolveTotalTrials(options.trials);
   const selection = buildCaseSelections(
     providerId,
     requestedLanes,
     requestedConditions,
     caseIds,
+    totalTrials,
   );
 
   return {
@@ -589,6 +614,7 @@ function buildResolvedOptions(
     caseIds,
     outputBaseDir,
     concurrency,
+    totalTrials,
     json: options.json,
     verbose: options.verbose,
     dryRun: options.dryRun,
@@ -774,7 +800,7 @@ function buildRunMetadata(
     models: selectedModelId === undefined ? [] : [selectedModelId],
     lanes: options.activeLanes,
     conditions: options.activeConditions,
-    totalTrials: DEFAULT_TOTAL_TRIALS,
+    totalTrials: options.totalTrials,
     notes: metadataNotes,
   });
   const metadata: RunMetadata = parsedMetadata;

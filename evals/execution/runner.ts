@@ -69,7 +69,7 @@ const CASE_CATEGORY_EXPECTATIONS = {
   recovery: 1,
 } as const;
 const RUNNER_OUTPUT_PREFIX = 'agent-tty-execution-eval-';
-const DEFAULT_TRIAL = 1;
+const DEFAULT_TOTAL_TRIALS = 1;
 
 type ExecutionWorkItem = EvalWorkItemIdentity &
   ScheduledWorkItem & {
@@ -681,15 +681,25 @@ function normalizeRequestedConditions(
   return new Set(conditions);
 }
 
+function resolveTotalTrials(totalTrials: number | undefined): number {
+  const resolvedTotalTrials = totalTrials ?? DEFAULT_TOTAL_TRIALS;
+  invariant(
+    Number.isInteger(resolvedTotalTrials) && resolvedTotalTrials > 0,
+    `Execution totalTrials must be a positive integer, got: ${String(totalTrials)}`,
+  );
+  return resolvedTotalTrials;
+}
+
 function buildExecutionWorkItem(
   evalCase: ExecutionEvalCase,
   condition: SkillCondition,
+  trial: number,
 ): ExecutionWorkItem {
   const identity: EvalWorkItemIdentity = {
     lane: 'execution',
     caseId: evalCase.id,
     condition,
-    trial: DEFAULT_TRIAL,
+    trial,
   };
 
   return {
@@ -767,6 +777,7 @@ async function createEvalRequest(
   metadata: RunMetadata,
   evalCase: ExecutionEvalCase,
   condition: SkillCondition,
+  trial: number,
   homeDir: string,
   outputDir: string,
   runtime: ProviderRuntimeInfo | undefined,
@@ -778,7 +789,7 @@ async function createEvalRequest(
     runId: metadata.runId,
     providerId: provider.id,
     condition,
-    trial: DEFAULT_TRIAL,
+    trial,
     cwd: resolve(metadata.repoRoot),
     homeDir,
     outputDir,
@@ -799,6 +810,7 @@ function buildResult(
   provider: EvalProvider,
   evalCase: ExecutionEvalCase,
   condition: SkillCondition,
+  trial: number,
   runtime: ProviderRuntimeInfo | undefined,
   normalizedOutput: NormalizedProviderOutput,
   providerOk: boolean,
@@ -850,7 +862,7 @@ function buildResult(
     category: evalCase.category,
     condition,
     expectedSkill: evalCase.expectedSkill,
-    trial: DEFAULT_TRIAL,
+    trial,
     ok: scored.ok,
     score: scored.breakdown,
     workflowChecks,
@@ -887,6 +899,7 @@ async function runSingleExecutionCase(
   metadata: RunMetadata,
   evalCase: ExecutionEvalCase,
   condition: SkillCondition,
+  trial: number,
   runtime: ProviderRuntimeInfo | undefined,
 ): Promise<EvalResult> {
   const homeDir = await createIsolatedEvalHome();
@@ -898,6 +911,7 @@ async function runSingleExecutionCase(
       metadata,
       evalCase,
       condition,
+      trial,
       homeDir,
       outputDir,
       runtime,
@@ -920,6 +934,7 @@ async function runSingleExecutionCase(
         provider,
         evalCase,
         condition,
+        trial,
         runtime,
         normalizedOutput,
         false,
@@ -991,6 +1006,7 @@ async function runSingleExecutionCase(
         provider,
         evalCase,
         condition,
+        trial,
         providerResult.runtime,
         providerResult.normalized,
         providerResult.ok,
@@ -1031,6 +1047,7 @@ async function runSingleExecutionCase(
         provider,
         evalCase,
         condition,
+        trial,
         runtime,
         normalizedOutput,
         false,
@@ -1079,8 +1096,10 @@ export function getAllExecutionCases(): ExecutionEvalCase[] {
 export function enumerateExecutionWorkItems(options?: {
   conditions?: SkillCondition[];
   caseFilter?: string[];
+  totalTrials?: number;
 }): ExecutionWorkItem[] {
   const requestedConditions = normalizeRequestedConditions(options?.conditions);
+  const totalTrials = resolveTotalTrials(options?.totalTrials);
   const requestedCaseIds =
     options?.caseFilter === undefined || options.caseFilter.length === 0
       ? undefined
@@ -1104,13 +1123,21 @@ export function enumerateExecutionWorkItems(options?: {
       return [];
     }
 
-    return evalCase.conditions
-      .filter(
-        (condition) =>
-          requestedConditions === undefined ||
-          requestedConditions.has(condition),
-      )
-      .map((condition) => buildExecutionWorkItem(evalCase, condition));
+    return evalCase.conditions.flatMap((condition) => {
+      if (
+        requestedConditions !== undefined &&
+        !requestedConditions.has(condition)
+      ) {
+        return [];
+      }
+
+      const conditionItems: ExecutionWorkItem[] = [];
+      for (let trialIndex = 0; trialIndex < totalTrials; trialIndex += 1) {
+        const trial = trialIndex + 1;
+        conditionItems.push(buildExecutionWorkItem(evalCase, condition, trial));
+      }
+      return conditionItems;
+    });
   });
 
   assertUniqueWorkItems(items);
@@ -1123,11 +1150,16 @@ export async function executeExecutionWorkItem(
   workItem: ExecutionWorkItem,
   runtime: ProviderRuntimeInfo | undefined,
 ): Promise<EvalResult> {
+  invariant(
+    Number.isInteger(workItem.trial) && workItem.trial > 0,
+    'Execution work item trial must be a positive integer',
+  );
   return runSingleExecutionCase(
     provider,
     metadata,
     workItem.evalCase,
     workItem.condition,
+    workItem.trial,
     runtime,
   );
 }
@@ -1145,7 +1177,11 @@ export async function runExecutionLane(
     concurrency?: number;
   } = {},
 ): Promise<EvalResult[]> {
-  const items = enumerateExecutionWorkItems(options);
+  const totalTrials = resolveTotalTrials(metadata.totalTrials);
+  const items = enumerateExecutionWorkItems({
+    ...options,
+    totalTrials,
+  });
   const runtime = await detectRuntime(provider);
   const settlements = await runScheduled(
     items,
