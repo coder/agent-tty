@@ -54,6 +54,7 @@ const HELP_TEXT = [
   '  --json              Print JSON summary only',
   '  --verbose           Print verbose progress logs to stderr',
   '  --dry-run           List cases that would run without invoking providers',
+  '  --concurrency <n>  Maximum work items to run concurrently per lane. Default: 1',
   '  --help              Show this help text',
   '',
   'Examples:',
@@ -75,6 +76,7 @@ interface CliOptions {
   condition?: string;
   caseIds: string[];
   outputDir?: string;
+  concurrency?: string;
   json: boolean;
   verbose: boolean;
   dryRun: boolean;
@@ -89,6 +91,7 @@ interface ResolvedCliOptions {
   requestedCondition: string;
   caseIds: string[];
   outputBaseDir: string;
+  concurrency: number;
   json: boolean;
   verbose: boolean;
   dryRun: boolean;
@@ -238,6 +241,21 @@ function parseCliArgs(argumentsList: readonly string[]): CliOptions {
     if (argument === '--dry-run') {
       invariant(!options.dryRun, '--dry-run may only be provided once');
       options.dryRun = true;
+      continue;
+    }
+    if (argument === '--concurrency' || argument.startsWith('--concurrency=')) {
+      const parsed = parseOptionValue(
+        argument,
+        '--concurrency',
+        argumentsList,
+        index,
+      );
+      invariant(
+        options.concurrency === undefined,
+        '--concurrency may only be set once',
+      );
+      options.concurrency = parsed.value;
+      index = parsed.nextIndex;
       continue;
     }
     if (argument === '--provider' || argument.startsWith('--provider=')) {
@@ -407,6 +425,18 @@ function resolveRequestedCaseIds(caseIds: readonly string[]): string[] {
   return resolvedCaseIds;
 }
 
+function resolveConcurrency(value: string | undefined): number {
+  if (value === undefined) {
+    return 1;
+  }
+  const parsed = Number(value);
+  invariant(
+    Number.isInteger(parsed) && parsed > 0,
+    `--concurrency must be a positive integer, got: ${value}`,
+  );
+  return parsed;
+}
+
 function resolveOutputBaseDir(
   repoRoot: string,
   outputDir: string | undefined,
@@ -541,6 +571,7 @@ function buildResolvedOptions(
   const requestedConditions = resolveRequestedConditions(options.condition);
   const caseIds = resolveRequestedCaseIds(options.caseIds);
   const outputBaseDir = resolveOutputBaseDir(repoRoot, options.outputDir);
+  const concurrency = resolveConcurrency(options.concurrency);
   const selection = buildCaseSelections(
     providerId,
     requestedLanes,
@@ -556,6 +587,7 @@ function buildResolvedOptions(
     requestedCondition: options.condition ?? 'all',
     caseIds,
     outputBaseDir,
+    concurrency,
     json: options.json,
     verbose: options.verbose,
     dryRun: options.dryRun,
@@ -868,16 +900,19 @@ async function runLane(
       return runPromptLane(provider, metadata, {
         conditions: options.activeConditions,
         caseFilter,
+        concurrency: options.concurrency,
       });
     case 'execution':
       return runExecutionLane(provider, metadata, {
         conditions: options.activeConditions,
         caseFilter,
+        concurrency: options.concurrency,
       });
     case 'dogfood':
       return runDogfoodLane(provider, metadata, {
         conditions: options.activeConditions,
         caseFilter,
+        concurrency: options.concurrency,
       });
     default:
       return lane satisfies never;

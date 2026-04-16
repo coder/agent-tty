@@ -772,11 +772,11 @@ function summarizeAntiPatterns(results: EvalResult[]): AntiPatternSummaryRow[] {
 function sortResults(results: EvalResult[]): EvalResult[] {
   return [...results].sort(
     (left, right) =>
-      compareStrings(left.providerId, right.providerId) ||
       compareLane(left.lane, right.lane) ||
-      compareCondition(left.condition, right.condition) ||
       compareStrings(left.caseId, right.caseId) ||
+      compareCondition(left.condition, right.condition) ||
       left.trial - right.trial ||
+      compareStrings(left.providerId, right.providerId) ||
       compareStrings(left.runId, right.runId) ||
       compareStrings(left.startedAt, right.startedAt) ||
       compareStrings(left.completedAt, right.completedAt),
