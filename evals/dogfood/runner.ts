@@ -13,13 +13,17 @@ import {
   scoreEvidenceQuality,
   scoreReportCompleteness,
 } from '../lib/bundleScoring.js';
-import { SKILL_CONDITIONS } from '../lib/matrix.js';
 import { fixtureCommand } from '../lib/cliHarness.js';
+import { SKILL_CONDITIONS } from '../lib/matrix.js';
 import { DogfoodEvalCaseSchema, EvalResultSchema } from '../lib/schemas.js';
 import { checkWorkflow } from '../lib/scoring.js';
+import { runScheduled } from '../lib/scheduler.js';
+import { assertUniqueWorkItems, buildWorkItemKey } from '../lib/types.js';
+import type { ScheduledWorkItem } from '../lib/scheduler.js';
 import type {
   DogfoodEvalCase,
   EvalResult,
+  EvalWorkItemIdentity,
   NormalizedProviderOutput,
   ProviderRuntimeInfo,
   RunMetadata,
@@ -63,10 +67,21 @@ const NO_CAPABILITIES: ProviderRuntimeInfo['capabilities'] = {
   supportsTranscriptCapture: false,
 };
 
+type DogfoodWorkItem = EvalWorkItemIdentity &
+  ScheduledWorkItem & {
+    evalCase: DogfoodEvalCase;
+  };
+
 interface LoadedDogfoodSkillPrompts {
   bootstrapSkillText: string;
   canonicalAgentTtySkillText: string;
   canonicalDogfoodSkillText: string;
+}
+
+interface DogfoodLaneContext {
+  detectedRuntime: ProviderRuntimeInfo;
+  requestedModelId: string | undefined;
+  repoRoot: string;
 }
 
 let loadedDogfoodSkillPromptsPromise:
@@ -545,11 +560,90 @@ export function getAllDogfoodCases(): DogfoodEvalCase[] {
   return buildCaseInventory();
 }
 
-export async function runDogfoodLane(
-  provider: EvalProvider,
-  metadata: RunMetadata,
-  options?: { conditions?: SkillCondition[]; caseFilter?: string[] },
-): Promise<EvalResult[]> {
+function buildDogfoodWorkItem(
+  evalCase: DogfoodEvalCase,
+  condition: SkillCondition,
+): DogfoodWorkItem {
+  const identity: EvalWorkItemIdentity = {
+    lane: 'dogfood',
+    caseId: evalCase.id,
+    condition,
+    trial: 1,
+  };
+
+  return {
+    ...identity,
+    key: buildWorkItemKey(identity),
+    evalCase,
+  };
+}
+
+function describeDogfoodError(error: unknown): {
+  errorClass: string;
+  errorMessage: string;
+} {
+  return {
+    errorClass:
+      error instanceof Error && error.name.length > 0 ? error.name : 'Error',
+    errorMessage: error instanceof Error ? error.message : String(error),
+  };
+}
+
+function buildFailedDogfoodEvalResult(params: {
+  metadata: RunMetadata;
+  providerId: string;
+  providerVersion: string | undefined;
+  requestedModelId: string | undefined;
+  workItem: DogfoodWorkItem;
+  startedAt?: string;
+  error: unknown;
+}): EvalResult {
+  const completedAt = new Date().toISOString();
+  const startedAt = params.startedAt ?? completedAt;
+  const { errorClass, errorMessage } = describeDogfoodError(params.error);
+
+  return EvalResultSchema.parse({
+    runId: params.metadata.runId,
+    providerId: params.providerId,
+    ...(params.providerVersion === undefined
+      ? {}
+      : { providerVersion: params.providerVersion }),
+    ...(params.requestedModelId === undefined
+      ? {}
+      : { modelId: params.requestedModelId }),
+    lane: 'dogfood',
+    caseId: params.workItem.caseId,
+    category: params.workItem.evalCase.category,
+    condition: params.workItem.condition,
+    expectedSkill: params.workItem.evalCase.expectedSkill,
+    trial: 1,
+    ok: false,
+    score: {
+      total: 0,
+      maxPossible: 1,
+      items: buildDogfoodBreakdownItems({
+        bundleCompleteness: 0,
+        reportCompleteness: 0,
+        evidenceQuality: 0,
+        taxonomyUsage: 0,
+        reproducibility: 0,
+      }),
+    },
+    workflowChecks: [],
+    antiPatternFindings: [],
+    normalizedOutput: EMPTY_NORMALIZED_OUTPUT,
+    errorClass,
+    errorMessage,
+    startedAt,
+    completedAt,
+    durationMs: Math.max(0, Date.parse(completedAt) - Date.parse(startedAt)),
+  }) as EvalResult;
+}
+
+export function enumerateDogfoodWorkItems(options?: {
+  conditions?: SkillCondition[];
+  caseFilter?: string[];
+}): DogfoodWorkItem[] {
   const selectedConditions = validateConditionList(options?.conditions);
   const selectedCaseIds = validateCaseFilter(options?.caseFilter);
   const allCases = getAllDogfoodCases();
@@ -557,6 +651,258 @@ export async function runDogfoodLane(
     selectedCaseIds === undefined
       ? allCases
       : allCases.filter((evalCase) => selectedCaseIds.includes(evalCase.id));
+  const items: DogfoodWorkItem[] = [];
+
+  for (const evalCase of cases) {
+    const caseConditions =
+      selectedConditions === undefined
+        ? evalCase.conditions
+        : evalCase.conditions.filter((condition) =>
+            selectedConditions.includes(condition),
+          );
+
+    for (const condition of caseConditions) {
+      items.push(buildDogfoodWorkItem(evalCase, condition));
+    }
+  }
+
+  assertUniqueWorkItems(items);
+  return items;
+}
+
+export async function executeDogfoodWorkItem(
+  provider: EvalProvider,
+  metadata: RunMetadata,
+  workItem: DogfoodWorkItem,
+  ctx: DogfoodLaneContext,
+): Promise<EvalResult> {
+  invariant(
+    workItem.lane === 'dogfood',
+    'Dogfood work item lane must be dogfood',
+  );
+  invariant(
+    workItem.evalCase.id === workItem.caseId,
+    'Dogfood work item caseId must match evalCase.id',
+  );
+  invariant(
+    workItem.evalCase.conditions.includes(workItem.condition),
+    'Dogfood work item condition must be supported by the eval case',
+  );
+  invariant(workItem.trial === 1, 'Dogfood work item trial must be 1');
+
+  const startedAt = new Date().toISOString();
+  const { outputDir, homeDir, requestedBundlePath } = buildRequestedPaths(
+    metadata,
+    provider.id,
+    workItem.evalCase,
+    workItem.condition,
+  );
+
+  try {
+    await mkdir(outputDir, { recursive: true });
+    await mkdir(homeDir, { recursive: true });
+
+    const systemPromptContext = await buildSystemPromptContext(
+      workItem.condition,
+    );
+    const requestCase = DogfoodEvalCaseSchema.parse({
+      ...workItem.evalCase,
+      prompt: buildPrompt(
+        { ...workItem.evalCase, conditions: [workItem.condition] },
+        requestedBundlePath,
+        systemPromptContext,
+      ),
+      bundlePath: requestedBundlePath,
+      conditions: [workItem.condition],
+    }) as DogfoodEvalCase;
+
+    const agentResult = await provider.invokeAgentMode({
+      runId: metadata.runId,
+      providerId: provider.id,
+      condition: workItem.condition,
+      trial: workItem.trial,
+      ...(ctx.requestedModelId === undefined
+        ? {}
+        : { modelId: ctx.requestedModelId }),
+      cwd: ctx.repoRoot,
+      homeDir,
+      outputDir,
+      env: {
+        AGENT_TTY_HOME: homeDir,
+        EVAL_OUTPUT_DIR: outputDir,
+        EVAL_REQUESTED_BUNDLE_DIR: requestedBundlePath,
+        EVAL_FIXTURE: workItem.evalCase.fixture ?? '',
+        ...systemPromptContext.env,
+      },
+      evalCase: requestCase,
+    });
+
+    const transcript = await resolveTranscriptText(agentResult);
+    const bundlePath = await resolveBundlePath(
+      agentResult.bundlePath,
+      requestedBundlePath,
+    );
+    const reportText = await resolveReportText(
+      bundlePath,
+      agentResult.normalized.finalText,
+    );
+    const dogfoodScore = await scoreDogfoodRun(
+      bundlePath ?? requestedBundlePath,
+      reportText,
+      transcript,
+      workItem.evalCase,
+    );
+    const reportRequirementScore = scoreReportRequirements(
+      reportText ?? '',
+      workItem.evalCase.reportRequirements,
+    );
+    const reportSections = workItem.evalCase.reportRequirements
+      .map((requirement) => requirement.section)
+      .filter(
+        (section): section is string =>
+          typeof section === 'string' && section.trim().length > 0,
+      );
+    const baseReportCompleteness = scoreReportCompleteness(
+      reportText ?? '',
+      reportSections,
+    );
+    const reportCompleteness = {
+      ...baseReportCompleteness,
+      sectionsExpected: reportRequirementScore.details.length,
+      sectionsFound: reportRequirementScore.details.filter(
+        (detail) => detail.found,
+      ).length,
+      score: clampUnitInterval(
+        (baseReportCompleteness.score + reportRequirementScore.score) / 2,
+      ),
+      details: reportRequirementScore.details.map((detail) => ({
+        section: detail.section,
+        found: detail.found,
+        required:
+          workItem.evalCase.reportRequirements.find(
+            (requirement) =>
+              (requirement.section ?? requirement.id) === detail.section,
+          )?.required ?? true,
+      })),
+      missingSections: reportRequirementScore.details
+        .filter((detail) => !detail.found)
+        .map((detail) => detail.section),
+    };
+    const bundleCompleteness = await scoreBundleCompleteness(
+      bundlePath ?? requestedBundlePath,
+      workItem.evalCase.validationProfile,
+    );
+    const evidenceQuality = await scoreEvidenceQuality(
+      bundlePath ?? requestedBundlePath,
+    );
+    const workflowChecks =
+      requestCase.workflowChecks.length === 0
+        ? []
+        : checkWorkflow(transcript, requestCase.workflowChecks);
+    const scannableTranscript = buildScannableTranscript(
+      agentResult.normalized,
+    );
+    const antiPatternFindings = detectAntiPatterns(
+      scannableTranscript,
+      requestCase.antiPatterns,
+    );
+    const artifactManifestPath = await resolveArtifactManifestPath(bundlePath);
+    const blockingAntiPattern = antiPatternFindings.some(
+      (finding) => finding.severity === 'error',
+    );
+    const missingRequiredReportSection = reportRequirementScore.details.some(
+      (detail) => !detail.found,
+    );
+    const missingRequiredWorkflow = workflowChecks.some(
+      (check) => !check.passed,
+    );
+    const ok =
+      agentResult.ok &&
+      !blockingAntiPattern &&
+      !missingRequiredReportSection &&
+      !missingRequiredWorkflow &&
+      dogfoodScore.overallScore >= 0.6;
+    const completedAt = agentResult.completedAt;
+
+    return EvalResultSchema.parse({
+      runId: metadata.runId,
+      providerId: provider.id,
+      ...(agentResult.runtime.version === undefined
+        ? {}
+        : { providerVersion: agentResult.runtime.version }),
+      ...(ctx.requestedModelId === undefined
+        ? {}
+        : { modelId: ctx.requestedModelId }),
+      lane: 'dogfood',
+      caseId: workItem.caseId,
+      category: workItem.evalCase.category,
+      condition: workItem.condition,
+      expectedSkill: workItem.evalCase.expectedSkill,
+      trial: workItem.trial,
+      ok,
+      score: {
+        total: dogfoodScore.overallScore,
+        maxPossible: 1,
+        items: buildDogfoodBreakdownItems(dogfoodScore),
+      },
+      workflowChecks,
+      antiPatternFindings,
+      bundleCompleteness,
+      reportCompleteness,
+      evidenceQuality,
+      ...(agentResult.transcriptPath === undefined
+        ? {}
+        : { transcriptPath: agentResult.transcriptPath }),
+      ...(bundlePath === undefined ? {} : { bundlePath }),
+      ...(artifactManifestPath === undefined ? {} : { artifactManifestPath }),
+      ...(agentResult.eventLogPath === undefined
+        ? {}
+        : { eventLogPath: agentResult.eventLogPath }),
+      normalizedOutput: agentResult.normalized,
+      ...(agentResult.errorClass === undefined
+        ? {}
+        : { errorClass: agentResult.errorClass }),
+      ...(agentResult.errorMessage === undefined
+        ? {}
+        : { errorMessage: agentResult.errorMessage }),
+      startedAt: agentResult.startedAt,
+      completedAt,
+      durationMs: agentResult.durationMs,
+    }) as EvalResult;
+  } catch (error) {
+    return buildFailedDogfoodEvalResult({
+      metadata,
+      providerId: provider.id,
+      providerVersion: ctx.detectedRuntime.version,
+      requestedModelId: ctx.requestedModelId,
+      workItem,
+      startedAt,
+      error,
+    });
+  } finally {
+    try {
+      await rm(homeDir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup; preserve the eval result when temp-home cleanup fails.
+    }
+    try {
+      await rm(outputDir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup; preserve the eval result when temp-dir cleanup fails.
+    }
+  }
+}
+
+export async function runDogfoodLane(
+  provider: EvalProvider,
+  metadata: RunMetadata,
+  options?: {
+    conditions?: SkillCondition[];
+    caseFilter?: string[];
+    concurrency?: number;
+  },
+): Promise<EvalResult[]> {
+  const items = enumerateDogfoodWorkItems(options);
 
   let detectedRuntime: ProviderRuntimeInfo;
   try {
@@ -569,264 +915,30 @@ export async function runDogfoodLane(
     );
   }
 
-  const requestedModelId =
-    metadata.models[0] ?? detectedRuntime.defaultModelId ?? undefined;
-  const repoRoot = resolve(metadata.repoRoot);
-  const results: EvalResult[] = [];
+  const ctx: DogfoodLaneContext = {
+    detectedRuntime,
+    requestedModelId:
+      metadata.models[0] ?? detectedRuntime.defaultModelId ?? undefined,
+    repoRoot: resolve(metadata.repoRoot),
+  };
+  const settlements = await runScheduled(
+    items,
+    (item) => executeDogfoodWorkItem(provider, metadata, item, ctx),
+    { concurrency: options?.concurrency ?? 1 },
+  );
 
-  for (const evalCase of cases) {
-    const caseConditions =
-      selectedConditions === undefined
-        ? evalCase.conditions
-        : evalCase.conditions.filter((condition) =>
-            selectedConditions.includes(condition),
-          );
-
-    for (const condition of caseConditions) {
-      const startedAt = new Date().toISOString();
-      const { outputDir, homeDir, requestedBundlePath } = buildRequestedPaths(
-        metadata,
-        provider.id,
-        evalCase,
-        condition,
-      );
-      await mkdir(outputDir, { recursive: true });
-      await mkdir(homeDir, { recursive: true });
-
-      try {
-        const systemPromptContext = await buildSystemPromptContext(condition);
-        const requestCase = DogfoodEvalCaseSchema.parse({
-          ...evalCase,
-          prompt: buildPrompt(
-            { ...evalCase, conditions: [condition] },
-            requestedBundlePath,
-            systemPromptContext,
-          ),
-          bundlePath: requestedBundlePath,
-          conditions: [condition],
-        }) as DogfoodEvalCase;
-
-        try {
-          const agentResult = await provider.invokeAgentMode({
-            runId: metadata.runId,
-            providerId: provider.id,
-            condition,
-            trial: 1,
-            ...(requestedModelId === undefined
-              ? {}
-              : { modelId: requestedModelId }),
-            cwd: repoRoot,
-            homeDir,
-            outputDir,
-            env: {
-              AGENT_TTY_HOME: homeDir,
-              EVAL_OUTPUT_DIR: outputDir,
-              EVAL_REQUESTED_BUNDLE_DIR: requestedBundlePath,
-              EVAL_FIXTURE: evalCase.fixture ?? '',
-              ...systemPromptContext.env,
-            },
-            evalCase: requestCase,
-          });
-
-          const transcript = await resolveTranscriptText(agentResult);
-          const bundlePath = await resolveBundlePath(
-            agentResult.bundlePath,
-            requestedBundlePath,
-          );
-          const reportText = await resolveReportText(
-            bundlePath,
-            agentResult.normalized.finalText,
-          );
-          const dogfoodScore = await scoreDogfoodRun(
-            bundlePath ?? requestedBundlePath,
-            reportText,
-            transcript,
-            evalCase,
-          );
-          const reportRequirementScore = scoreReportRequirements(
-            reportText ?? '',
-            evalCase.reportRequirements,
-          );
-          const reportSections = evalCase.reportRequirements
-            .map((requirement) => requirement.section)
-            .filter(
-              (section): section is string =>
-                typeof section === 'string' && section.trim().length > 0,
-            );
-          const baseReportCompleteness = scoreReportCompleteness(
-            reportText ?? '',
-            reportSections,
-          );
-          const reportCompleteness = {
-            ...baseReportCompleteness,
-            sectionsExpected: reportRequirementScore.details.length,
-            sectionsFound: reportRequirementScore.details.filter(
-              (detail) => detail.found,
-            ).length,
-            score: clampUnitInterval(
-              (baseReportCompleteness.score + reportRequirementScore.score) / 2,
-            ),
-            details: reportRequirementScore.details.map((detail) => ({
-              section: detail.section,
-              found: detail.found,
-              required:
-                evalCase.reportRequirements.find(
-                  (requirement) =>
-                    (requirement.section ?? requirement.id) === detail.section,
-                )?.required ?? true,
-            })),
-            missingSections: reportRequirementScore.details
-              .filter((detail) => !detail.found)
-              .map((detail) => detail.section),
-          };
-          const bundleCompleteness = await scoreBundleCompleteness(
-            bundlePath ?? requestedBundlePath,
-            evalCase.validationProfile,
-          );
-          const evidenceQuality = await scoreEvidenceQuality(
-            bundlePath ?? requestedBundlePath,
-          );
-          const workflowChecks =
-            requestCase.workflowChecks.length === 0
-              ? []
-              : checkWorkflow(transcript, requestCase.workflowChecks);
-          const scannableTranscript = buildScannableTranscript(
-            agentResult.normalized,
-          );
-          const antiPatternFindings = detectAntiPatterns(
-            scannableTranscript,
-            requestCase.antiPatterns,
-          );
-          const artifactManifestPath =
-            await resolveArtifactManifestPath(bundlePath);
-          const blockingAntiPattern = antiPatternFindings.some(
-            (finding) => finding.severity === 'error',
-          );
-          const missingRequiredReportSection =
-            reportRequirementScore.details.some((detail) => !detail.found);
-          const missingRequiredWorkflow = workflowChecks.some(
-            (check) => !check.passed,
-          );
-          const ok =
-            agentResult.ok &&
-            !blockingAntiPattern &&
-            !missingRequiredReportSection &&
-            !missingRequiredWorkflow &&
-            dogfoodScore.overallScore >= 0.6;
-          const completedAt = agentResult.completedAt;
-          const result: EvalResult = EvalResultSchema.parse({
-            runId: metadata.runId,
-            providerId: provider.id,
-            ...(agentResult.runtime.version === undefined
-              ? {}
-              : { providerVersion: agentResult.runtime.version }),
-            ...(requestedModelId === undefined
-              ? {}
-              : { modelId: requestedModelId }),
-            lane: 'dogfood',
-            caseId: evalCase.id,
-            category: evalCase.category,
-            condition,
-            expectedSkill: evalCase.expectedSkill,
-            trial: 1,
-            ok,
-            score: {
-              total: dogfoodScore.overallScore,
-              maxPossible: 1,
-              items: buildDogfoodBreakdownItems(dogfoodScore),
-            },
-            workflowChecks,
-            antiPatternFindings,
-            bundleCompleteness,
-            reportCompleteness,
-            evidenceQuality,
-            ...(agentResult.transcriptPath === undefined
-              ? {}
-              : { transcriptPath: agentResult.transcriptPath }),
-            ...(bundlePath === undefined ? {} : { bundlePath }),
-            ...(artifactManifestPath === undefined
-              ? {}
-              : { artifactManifestPath }),
-            ...(agentResult.eventLogPath === undefined
-              ? {}
-              : { eventLogPath: agentResult.eventLogPath }),
-            normalizedOutput: agentResult.normalized,
-            ...(agentResult.errorClass === undefined
-              ? {}
-              : { errorClass: agentResult.errorClass }),
-            ...(agentResult.errorMessage === undefined
-              ? {}
-              : { errorMessage: agentResult.errorMessage }),
-            startedAt: agentResult.startedAt,
-            completedAt,
-            durationMs: agentResult.durationMs,
-          }) as EvalResult;
-
-          results.push(result);
-        } catch (error) {
-          const completedAt = new Date().toISOString();
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          const errorClass =
-            error instanceof Error && error.name.length > 0
-              ? error.name
-              : 'Error';
-          const result: EvalResult = EvalResultSchema.parse({
-            runId: metadata.runId,
-            providerId: provider.id,
-            ...(detectedRuntime.version === undefined
-              ? {}
-              : { providerVersion: detectedRuntime.version }),
-            ...(requestedModelId === undefined
-              ? {}
-              : { modelId: requestedModelId }),
-            lane: 'dogfood',
-            caseId: evalCase.id,
-            category: evalCase.category,
-            condition,
-            expectedSkill: evalCase.expectedSkill,
-            trial: 1,
-            ok: false,
-            score: {
-              total: 0,
-              maxPossible: 1,
-              items: buildDogfoodBreakdownItems({
-                bundleCompleteness: 0,
-                reportCompleteness: 0,
-                evidenceQuality: 0,
-                taxonomyUsage: 0,
-                reproducibility: 0,
-              }),
-            },
-            workflowChecks: [],
-            antiPatternFindings: [],
-            normalizedOutput: EMPTY_NORMALIZED_OUTPUT,
-            errorClass,
-            errorMessage,
-            startedAt,
-            completedAt,
-            durationMs: Math.max(
-              0,
-              Date.parse(completedAt) - Date.parse(startedAt),
-            ),
-          }) as EvalResult;
-
-          results.push(result);
-        }
-      } finally {
-        try {
-          await rm(homeDir, { recursive: true, force: true });
-        } catch {
-          // Best-effort cleanup; preserve the eval result when temp-home cleanup fails.
-        }
-        try {
-          await rm(outputDir, { recursive: true, force: true });
-        } catch {
-          // Best-effort cleanup; preserve the eval result when temp-dir cleanup fails.
-        }
-      }
+  return settlements.map((settlement) => {
+    if (settlement.status === 'fulfilled') {
+      return settlement.value;
     }
-  }
 
-  return results;
+    return buildFailedDogfoodEvalResult({
+      metadata,
+      providerId: provider.id,
+      providerVersion: ctx.detectedRuntime.version,
+      requestedModelId: ctx.requestedModelId,
+      workItem: settlement.item,
+      error: settlement.reason,
+    });
+  });
 }
