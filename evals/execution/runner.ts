@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -8,7 +8,7 @@ import {
   countAgentTtyCalls,
   detectAntiPatterns,
 } from '../lib/antiPatterns.js';
-import { createIsolatedEvalHome } from '../lib/cliHarness.js';
+import { cleanupEvalHome, createIsolatedEvalHome } from '../lib/cliHarness.js';
 import { EvalResultSchema } from '../lib/schemas.js';
 import { checkWorkflow } from '../lib/scoring.js';
 import type {
@@ -805,167 +805,181 @@ async function runSingleExecutionCase(
 ): Promise<EvalResult> {
   const homeDir = await createIsolatedEvalHome();
   const outputDir = await mkdtemp(join(tmpdir(), RUNNER_OUTPUT_PREFIX));
-  const request = await createEvalRequest(
-    provider,
-    metadata,
-    evalCase,
-    condition,
-    homeDir,
-    outputDir,
-    runtime,
-  );
-  const invocationStartedAt = new Date().toISOString();
-  const invocationStartedMs = Date.now();
-
-  if (runtime !== undefined && !runtime.available) {
-    const transcript = `Provider ${provider.id} is unavailable.`;
-    const normalizedOutput = createFallbackNormalizedOutput(transcript);
-    const scannableTranscript = buildScannableTranscript(normalizedOutput);
-    const persisted = await persistRunnerArtifacts(
-      outputDir,
-      transcript,
-      '',
-      '',
-    );
-    return buildResult(
-      metadata,
-      provider,
-      evalCase,
-      condition,
-      runtime,
-      normalizedOutput,
-      false,
-      invocationStartedAt,
-      invocationStartedAt,
-      0,
-      checkWorkflow(transcript, evalCase.workflowChecks),
-      detectAntiPatterns(scannableTranscript, evalCase.antiPatterns),
-      buildVerifierFailures(
-        evalCase,
-        'Provider is unavailable; verifier did not run.',
-      ),
-      buildArtifactFailures(
-        evalCase,
-        'Provider is unavailable; artifact verification did not run.',
-      ),
-      persisted.transcriptPath,
-      persisted.stdoutPath,
-      persisted.stderrPath,
-      undefined,
-      undefined,
-      'provider-unavailable',
-      'Provider detect() reported unavailable.',
-    );
-  }
 
   try {
-    const providerResult = await provider.invokeAgentMode(request);
-    const transcript = await buildTranscript(providerResult);
-    const persisted = await persistRunnerArtifacts(
-      outputDir,
-      transcript,
-      providerResult.rawStdout,
-      providerResult.rawStderr,
-    );
-    const artifacts = await collectArtifacts([
-      outputDir,
-      ...(providerResult.bundlePath === undefined
-        ? []
-        : [providerResult.bundlePath]),
-      ...(providerResult.transcriptPath === undefined
-        ? []
-        : [providerResult.transcriptPath]),
-      ...(providerResult.eventLogPath === undefined
-        ? []
-        : [providerResult.eventLogPath]),
-    ]);
-    const verifierContext = {
-      home: homeDir,
-      sessionId: providerResult.sessionId ?? '',
-      transcript,
-      artifacts,
-    };
-    const verifierResults = await Promise.all(
-      evalCase.verifiers.map(async (spec) => ({
-        spec,
-        result: await verify(spec, verifierContext),
-      })),
-    );
-    const artifactResults = await evaluateArtifactRequirements(
-      evalCase.artifactRequirements,
-      artifacts,
-    );
-    const scannableTranscript = buildScannableTranscript(
-      providerResult.normalized,
-    );
-    return buildResult(
-      metadata,
+    const request = await createEvalRequest(
       provider,
+      metadata,
       evalCase,
       condition,
-      providerResult.runtime,
-      providerResult.normalized,
-      providerResult.ok,
-      providerResult.startedAt,
-      providerResult.completedAt,
-      providerResult.durationMs,
-      checkWorkflow(transcript, evalCase.workflowChecks),
-      detectAntiPatterns(scannableTranscript, evalCase.antiPatterns),
-      verifierResults,
-      artifactResults,
-      providerResult.transcriptPath ?? persisted.transcriptPath,
-      persisted.stdoutPath,
-      persisted.stderrPath,
-      providerResult.bundlePath,
-      providerResult.eventLogPath,
-      providerResult.errorClass,
-      providerResult.errorMessage,
-    );
-  } catch (error) {
-    const completedAt = new Date().toISOString();
-    const durationMs = Math.max(0, Date.now() - invocationStartedMs);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const transcript =
-      error instanceof Error && error.stack !== undefined
-        ? `${error.name}: ${errorMessage}\n${error.stack}`
-        : errorMessage;
-    const normalizedOutput = createFallbackNormalizedOutput(transcript);
-    const scannableTranscript = buildScannableTranscript(normalizedOutput);
-    const persisted = await persistRunnerArtifacts(
+      homeDir,
       outputDir,
-      transcript,
-      '',
-      errorMessage,
-    );
-    return buildResult(
-      metadata,
-      provider,
-      evalCase,
-      condition,
       runtime,
-      normalizedOutput,
-      false,
-      invocationStartedAt,
-      completedAt,
-      durationMs,
-      checkWorkflow(transcript, evalCase.workflowChecks),
-      detectAntiPatterns(scannableTranscript, evalCase.antiPatterns),
-      buildVerifierFailures(
-        evalCase,
-        'Provider invocation failed before verifier execution.',
-      ),
-      buildArtifactFailures(
-        evalCase,
-        'Provider invocation failed before artifact verification.',
-      ),
-      persisted.transcriptPath,
-      persisted.stdoutPath,
-      persisted.stderrPath,
-      undefined,
-      undefined,
-      error instanceof Error ? error.name : 'ProviderInvocationError',
-      errorMessage,
     );
+    const invocationStartedAt = new Date().toISOString();
+    const invocationStartedMs = Date.now();
+
+    if (runtime !== undefined && !runtime.available) {
+      const transcript = `Provider ${provider.id} is unavailable.`;
+      const normalizedOutput = createFallbackNormalizedOutput(transcript);
+      const scannableTranscript = buildScannableTranscript(normalizedOutput);
+      const persisted = await persistRunnerArtifacts(
+        outputDir,
+        transcript,
+        '',
+        '',
+      );
+      return buildResult(
+        metadata,
+        provider,
+        evalCase,
+        condition,
+        runtime,
+        normalizedOutput,
+        false,
+        invocationStartedAt,
+        invocationStartedAt,
+        0,
+        checkWorkflow(transcript, evalCase.workflowChecks),
+        detectAntiPatterns(scannableTranscript, evalCase.antiPatterns),
+        buildVerifierFailures(
+          evalCase,
+          'Provider is unavailable; verifier did not run.',
+        ),
+        buildArtifactFailures(
+          evalCase,
+          'Provider is unavailable; artifact verification did not run.',
+        ),
+        persisted.transcriptPath,
+        persisted.stdoutPath,
+        persisted.stderrPath,
+        undefined,
+        undefined,
+        'provider-unavailable',
+        'Provider detect() reported unavailable.',
+      );
+    }
+
+    try {
+      const providerResult = await provider.invokeAgentMode(request);
+      const transcript = await buildTranscript(providerResult);
+      const persisted = await persistRunnerArtifacts(
+        outputDir,
+        transcript,
+        providerResult.rawStdout,
+        providerResult.rawStderr,
+      );
+      const artifacts = await collectArtifacts([
+        outputDir,
+        ...(providerResult.bundlePath === undefined
+          ? []
+          : [providerResult.bundlePath]),
+        ...(providerResult.transcriptPath === undefined
+          ? []
+          : [providerResult.transcriptPath]),
+        ...(providerResult.eventLogPath === undefined
+          ? []
+          : [providerResult.eventLogPath]),
+      ]);
+      const verifierContext = {
+        home: homeDir,
+        sessionId: providerResult.sessionId ?? '',
+        transcript,
+        artifacts,
+      };
+      const verifierResults = await Promise.all(
+        evalCase.verifiers.map(async (spec) => ({
+          spec,
+          result: await verify(spec, verifierContext),
+        })),
+      );
+      const artifactResults = await evaluateArtifactRequirements(
+        evalCase.artifactRequirements,
+        artifacts,
+      );
+      const scannableTranscript = buildScannableTranscript(
+        providerResult.normalized,
+      );
+      return buildResult(
+        metadata,
+        provider,
+        evalCase,
+        condition,
+        providerResult.runtime,
+        providerResult.normalized,
+        providerResult.ok,
+        providerResult.startedAt,
+        providerResult.completedAt,
+        providerResult.durationMs,
+        checkWorkflow(transcript, evalCase.workflowChecks),
+        detectAntiPatterns(scannableTranscript, evalCase.antiPatterns),
+        verifierResults,
+        artifactResults,
+        providerResult.transcriptPath ?? persisted.transcriptPath,
+        persisted.stdoutPath,
+        persisted.stderrPath,
+        providerResult.bundlePath,
+        providerResult.eventLogPath,
+        providerResult.errorClass,
+        providerResult.errorMessage,
+      );
+    } catch (error) {
+      const completedAt = new Date().toISOString();
+      const durationMs = Math.max(0, Date.now() - invocationStartedMs);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const transcript =
+        error instanceof Error && error.stack !== undefined
+          ? `${error.name}: ${errorMessage}\n${error.stack}`
+          : errorMessage;
+      const normalizedOutput = createFallbackNormalizedOutput(transcript);
+      const scannableTranscript = buildScannableTranscript(normalizedOutput);
+      const persisted = await persistRunnerArtifacts(
+        outputDir,
+        transcript,
+        '',
+        errorMessage,
+      );
+      return buildResult(
+        metadata,
+        provider,
+        evalCase,
+        condition,
+        runtime,
+        normalizedOutput,
+        false,
+        invocationStartedAt,
+        completedAt,
+        durationMs,
+        checkWorkflow(transcript, evalCase.workflowChecks),
+        detectAntiPatterns(scannableTranscript, evalCase.antiPatterns),
+        buildVerifierFailures(
+          evalCase,
+          'Provider invocation failed before verifier execution.',
+        ),
+        buildArtifactFailures(
+          evalCase,
+          'Provider invocation failed before artifact verification.',
+        ),
+        persisted.transcriptPath,
+        persisted.stdoutPath,
+        persisted.stderrPath,
+        undefined,
+        undefined,
+        error instanceof Error ? error.name : 'ProviderInvocationError',
+        errorMessage,
+      );
+    }
+  } finally {
+    try {
+      await cleanupEvalHome(homeDir);
+    } catch {
+      // Best-effort cleanup; preserve the eval result when temp-home cleanup fails.
+    }
+    try {
+      await rm(outputDir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup; preserve the eval result when temp-dir cleanup fails.
+    }
   }
 }
 
