@@ -167,6 +167,38 @@ describe('detectAntiPatterns', () => {
 
       expect(detectAntiPatterns(transcript)).toEqual([]);
     });
+
+    it('ignores anti-pattern keywords that appear only in shell tool output', () => {
+      const normalized = createNormalizedOutput({
+        toolCalls: [
+          {
+            name: 'bash',
+            input: { script: 'agent-tty skills get agent-tty --json' },
+            output: 'scrot\ntmux\nxdotool\ngnome-screenshot',
+          },
+        ],
+      });
+
+      expect(detectAntiPatterns(buildScannableTranscript(normalized))).toEqual(
+        [],
+      );
+    });
+
+    it('detects tmux usage from shell tool-call inputs', () => {
+      const normalized = createNormalizedOutput({
+        toolCalls: [{ name: 'bash', input: { script: 'tmux new-session' } }],
+      });
+
+      const findings = detectAntiPatterns(buildScannableTranscript(normalized));
+
+      expect(findings).toHaveLength(1);
+      expect(findings[0]).toMatchObject({
+        ruleId: 'tmux-usage',
+        severity: 'error',
+        matchedText: 'tmux new-session',
+        lineNumber: 1,
+      });
+    });
   });
 
   describe('missing-json-flag', () => {
@@ -392,7 +424,7 @@ describe('summarizeFindings', () => {
 });
 
 describe('buildScannableTranscript', () => {
-  it('includes only bash/shell tool call content', () => {
+  it('includes only bash/shell tool-call inputs', () => {
     const normalized = createNormalizedOutput({
       finalText: 'Some planning text about tmux and sleep',
       messages: ['Use agent-tty instead of tmux'],
@@ -420,13 +452,15 @@ describe('buildScannableTranscript', () => {
 
     expect(transcript).toContain('agent-tty create');
     expect(transcript).toContain('agent-tty snapshot');
+    expect(transcript).not.toContain('session created');
+    expect(transcript).not.toContain('snapshot taken');
     expect(transcript).not.toContain('tmux');
     expect(transcript).not.toContain('sleep');
     expect(transcript).not.toContain('read_file');
     expect(transcript).not.toContain('file contents');
   });
 
-  it('includes unnamed Codex command execution records', () => {
+  it('includes unnamed Codex command execution inputs', () => {
     const normalized = createNormalizedOutput({
       toolCalls: [
         {
@@ -442,7 +476,7 @@ describe('buildScannableTranscript', () => {
     expect(transcript).toContain(
       'npx tsx src/cli/main.ts wait --json --session demo',
     );
-    expect(transcript).toContain('wait completed');
+    expect(transcript).not.toContain('wait completed');
   });
 
   it('returns empty string when toolCalls is empty', () => {

@@ -24,18 +24,24 @@ const SHELL_TOOL_NAME_PATTERN =
 const SHELL_TOOL_FALLBACK_TYPE_PATTERN =
   /^(?:command_execution|function_call|tool_use)$/iu;
 const SHELL_TOOL_HINT_KEYS = ['script', 'command', 'cmd'] as const;
-const SCANNABLE_TOOL_TEXT_KEYS = [
+const SCANNABLE_TOOL_INPUT_TEXT_KEYS = [
   'script',
   'command',
   'cmd',
   'arguments',
   'text',
   'content',
+] as const;
+const SCANNABLE_TOOL_OUTPUT_TEXT_KEYS = [
   'output',
   'stdout',
   'stderr',
   'result',
   'aggregated_output',
+] as const;
+const SCANNABLE_TOOL_TEXT_KEYS = [
+  ...SCANNABLE_TOOL_INPUT_TEXT_KEYS,
+  ...SCANNABLE_TOOL_OUTPUT_TEXT_KEYS,
 ] as const;
 const AGENT_TTY_TOOL_INPUT_PATTERN = new RegExp(
   AGENT_TTY_COMMAND_TEXT_PATTERN,
@@ -198,7 +204,7 @@ export function compileAntiPatternRegex(pattern: string): RegExp {
 }
 
 /**
- * Build a scannable transcript from shell-style tool-call inputs and outputs.
+ * Build a scannable transcript from shell-style tool-call inputs.
  */
 export function buildScannableTranscript(
   normalized: NormalizedProviderOutput,
@@ -216,9 +222,9 @@ export function countAgentTtyCalls(
   normalized: NormalizedProviderOutput,
 ): number {
   return collectShellToolCalls(normalized).reduce((count, toolCall) => {
-    return extractScannableToolCallTexts(toolCall).some((fragment) =>
-      AGENT_TTY_TOOL_INPUT_PATTERN.test(fragment),
-    )
+    return extractScannableToolCallTexts(toolCall, {
+      includeOutputs: true,
+    }).some((fragment) => AGENT_TTY_TOOL_INPUT_PATTERN.test(fragment))
       ? count + 1
       : count;
   }, 0);
@@ -393,7 +399,7 @@ function isShellToolCall(toolCall: Record<string, unknown>): boolean {
   return (
     typeof toolType === 'string' &&
     SHELL_TOOL_FALLBACK_TYPE_PATTERN.test(toolType) &&
-    extractScannableToolCallTexts(toolCall).length > 0
+    extractScannableToolCallTexts(toolCall, { includeOutputs: true }).length > 0
   );
 }
 
@@ -409,12 +415,13 @@ function hasShellToolHints(value: unknown): boolean {
 
 function extractScannableToolCallTexts(
   toolCall: Record<string, unknown>,
+  options: { includeOutputs?: boolean } = {},
 ): string[] {
+  const includeOutputs = options.includeOutputs ?? false;
   const fragments: string[] = [];
 
   for (const value of [
     toolCall.input,
-    toolCall.output,
     {
       script: toolCall.script,
       command: toolCall.command,
@@ -423,24 +430,44 @@ function extractScannableToolCallTexts(
       text: toolCall.text,
       content: toolCall.content,
     },
-    {
-      output: toolCall.output,
-      stdout: toolCall.stdout,
-      stderr: toolCall.stderr,
-      result: toolCall.result,
-      aggregated_output: toolCall.aggregated_output,
-    },
   ]) {
-    const fragment = extractScannableToolText(value);
+    const fragment = extractScannableToolText(
+      value,
+      SCANNABLE_TOOL_INPUT_TEXT_KEYS,
+    );
     if (fragment.length > 0 && !fragments.includes(fragment)) {
       fragments.push(fragment);
+    }
+  }
+
+  if (includeOutputs) {
+    for (const value of [
+      toolCall.output,
+      {
+        output: toolCall.output,
+        stdout: toolCall.stdout,
+        stderr: toolCall.stderr,
+        result: toolCall.result,
+        aggregated_output: toolCall.aggregated_output,
+      },
+    ]) {
+      const fragment = extractScannableToolText(
+        value,
+        SCANNABLE_TOOL_TEXT_KEYS,
+      );
+      if (fragment.length > 0 && !fragments.includes(fragment)) {
+        fragments.push(fragment);
+      }
     }
   }
 
   return fragments;
 }
 
-function extractScannableToolText(value: unknown): string {
+function extractScannableToolText(
+  value: unknown,
+  scannableKeys: readonly string[] = SCANNABLE_TOOL_TEXT_KEYS,
+): string {
   if (typeof value === 'string') {
     return value.trim();
   }
@@ -461,7 +488,7 @@ function extractScannableToolText(value: unknown): string {
     const fragments: string[] = [];
 
     for (const entry of value) {
-      const fragment = extractScannableToolText(entry);
+      const fragment = extractScannableToolText(entry, scannableKeys);
       if (fragment.length > 0 && !fragments.includes(fragment)) {
         fragments.push(fragment);
       }
@@ -476,8 +503,8 @@ function extractScannableToolText(value: unknown): string {
 
   const fragments: string[] = [];
 
-  for (const key of SCANNABLE_TOOL_TEXT_KEYS) {
-    const fragment = extractScannableToolText(value[key]);
+  for (const key of scannableKeys) {
+    const fragment = extractScannableToolText(value[key], scannableKeys);
     if (fragment.length > 0 && !fragments.includes(fragment)) {
       fragments.push(fragment);
     }

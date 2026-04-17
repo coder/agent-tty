@@ -53,7 +53,9 @@ describe('CodexProvider.parse', () => {
     expect(buildScannableTranscript(normalized)).toContain(
       'npx tsx src/cli/main.ts snapshot --json --session demo',
     );
-    expect(buildScannableTranscript(normalized)).toContain('snapshot ready');
+    expect(buildScannableTranscript(normalized)).not.toContain(
+      'snapshot ready',
+    );
     expect(countAgentTtyCalls(normalized)).toBe(1);
   });
 
@@ -103,7 +105,9 @@ describe('CodexProvider.parse', () => {
     expect(buildScannableTranscript(normalized)).toContain(
       'npx tsx src/cli/main.ts run --json --session demo',
     );
-    expect(buildScannableTranscript(normalized)).toContain('command finished');
+    expect(buildScannableTranscript(normalized)).not.toContain(
+      'command finished',
+    );
     expect(countAgentTtyCalls(normalized)).toBe(1);
   });
 });
