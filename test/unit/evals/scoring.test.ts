@@ -6,6 +6,7 @@ import {
   checkWorkflow,
   compilePattern,
   computePrecisionRecall,
+  inferSelectedSkill,
   isInNegationContext,
   matchPatterns,
   scorePromptCase,
@@ -293,6 +294,31 @@ describe('isInNegationContext', () => {
 
   it('returns false when the match is at the start of the text', () => {
     expect(isInNegationContext('tmux is mentioned first', 0)).toBe(false);
+  });
+});
+
+describe('inferSelectedSkill', () => {
+  it('falls back to agent-tty when dogfood-tui only appears in a rejection context', () => {
+    const response = [
+      'agent-tty',
+      '',
+      'This is a task... dogfood-tui would be too specialized because the user is not asking for QA.',
+    ].join('\n');
+
+    expect(inferSelectedSkill(response)).toBe('agent-tty');
+  });
+
+  it('returns dogfood-tui when it is positively selected', () => {
+    expect(
+      inferSelectedSkill('Use the dogfood-tui skill to explore the TUI.'),
+    ).toBe('dogfood-tui');
+  });
+
+  it('ignores negated dogfood-tui mentions in favor of agent-tty', () => {
+    const response =
+      'We should NOT use dogfood-tui here. I will use agent-tty.';
+
+    expect(inferSelectedSkill(response)).toBe('agent-tty');
   });
 });
 
