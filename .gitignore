@@ -43,3 +43,6 @@ pids/
 tmp/
 .tmp/
 .cache/
+
+# Eval reports (generated per-run under evals/reports/{timestamp}/)
+evals/reports/
