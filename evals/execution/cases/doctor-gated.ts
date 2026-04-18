@@ -1,78 +1,56 @@
+import { executionCase } from '../../authoring/index.js';
 import {
   ALL_EXECUTION_CONDITIONS,
-  CREATE_SESSION_PATTERN,
   DOCTOR_JSON_PATTERN,
   SCREENSHOT_PATTERN,
   artifactRequirement,
-  createExecutionCase,
-  executionAntiPatterns,
-  executionBudgets,
-  executionTaskPrompt,
-  fixtureSetupStep,
   ordered,
-  requiredVerifier,
-  workflowCheck,
 } from './shared.js';
 
-export const doctorGatedCase = createExecutionCase({
-  id: 'doctor-gated',
-  lane: 'execution',
-  category: 'artifact',
-  prompt: executionTaskPrompt(
+export const doctorGatedCase = executionCase('doctor-gated')
+  .category('artifact')
+  .task(
     'Before capturing a screenshot, run doctor --json to verify renderer prerequisites and then capture a screenshot of hello-prompt.',
-    'hello-prompt',
-  ),
-  expectedSkill: 'agent-tty',
-  fixture: 'hello-prompt',
-  referenceSteps: 5,
-  conditions: [...ALL_EXECUTION_CONDITIONS],
-  setup: [
-    fixtureSetupStep(
-      'launch-doctor-gated',
-      'hello-prompt',
+  )
+  .fixture('hello-prompt', {
+    setupId: 'launch-doctor-gated',
+    setupDescription:
       'Create an agent-tty session that runs the hello-prompt fixture.',
-    ),
-  ],
-  verifiers: [
-    requiredVerifier(
+  })
+  .referenceSteps(5)
+  .conditions(...ALL_EXECUTION_CONDITIONS)
+  .assertions((assertions) => {
+    assertions.screenshot(
       'doctor-gated-screenshot',
-      'screenshot',
       'A screenshot artifact should be produced after the doctor check passes.',
       {
         kind: 'screenshot',
       },
-    ),
-  ],
-  workflowChecks: [
-    workflowCheck(
-      'create',
-      'Create the fixture session.',
-      CREATE_SESSION_PATTERN,
-    ),
-    workflowCheck(
-      'doctor',
-      'Run doctor --json before any renderer-dependent capture.',
-      DOCTOR_JSON_PATTERN,
-      { dependsOn: ['create'] },
-    ),
-    workflowCheck(
-      'screenshot',
-      'Capture the screenshot only after the doctor gate.',
-      ordered(DOCTOR_JSON_PATTERN, SCREENSHOT_PATTERN),
-      { dependsOn: ['doctor'] },
-    ),
-  ],
-  antiPatterns: executionAntiPatterns(),
-  artifactRequirements: [
+    );
+  })
+  .workflow((workflow) => {
+    workflow
+      .createSession()
+      .run('doctor --json', {
+        id: 'doctor',
+        description: 'Run doctor --json before any renderer-dependent capture.',
+        pattern: DOCTOR_JSON_PATTERN,
+      })
+      .screenshot({
+        description: 'Capture the screenshot only after the doctor gate.',
+        pattern: ordered(DOCTOR_JSON_PATTERN, SCREENSHOT_PATTERN),
+      });
+  })
+  .rawArtifactRequirement(
     artifactRequirement(
       'screenshot',
       'A PNG screenshot should be saved after the doctor check.',
       String.raw`\.png$`,
     ),
-  ],
-  budgets: executionBudgets({
+  )
+  .budget({
     timeoutMs: 180_000,
     maxAgentSteps: 14,
     maxWallClockMs: 75_000,
-  }),
-});
+  })
+  .build();
