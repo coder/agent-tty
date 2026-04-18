@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 
 import { scanBundleArtifacts } from '../../src/tools/review-bundle.js';
 import { assertString, invariant } from '../../src/util/assert.js';
+import { EvalArtifactStore, writeTokenUsageArtifact } from '../lib/artifacts.js';
 import {
   buildScannableTranscript,
   detectAntiPatterns,
@@ -770,6 +771,72 @@ function buildFailedDogfoodEvalResult(params: {
   }) as EvalResult;
 }
 
+async function writeDogfoodTokenUsageArtifacts(
+  metadata: RunMetadata,
+  results: readonly EvalResult[],
+): Promise<void> {
+  let artifactsDir: string | undefined;
+
+  for (const result of results) {
+    const tokenUsage = result.normalizedOutput.tokenUsage;
+    if (tokenUsage === undefined) {
+      continue;
+    }
+
+    if (artifactsDir === undefined) {
+      const outputBaseDir = metadata.outputBaseDir;
+      invariant(
+        typeof outputBaseDir === 'string' && outputBaseDir.length > 0,
+        'Dogfood lane token usage artifacts require metadata.outputBaseDir',
+      );
+      artifactsDir = new EvalArtifactStore(outputBaseDir).runDir(metadata.runId);
+    }
+
+    invariant(
+      result.providerId.length > 0,
+      'Dogfood lane token usage artifacts require result.providerId',
+    );
+    invariant(
+      typeof result.modelId === 'string' && result.modelId.length > 0,
+      'Dogfood lane token usage artifacts require result.modelId',
+    );
+    invariant(
+      result.caseId.length > 0,
+      'Dogfood lane token usage artifacts require result.caseId',
+    );
+    invariant(
+      result.condition.length > 0,
+      'Dogfood lane token usage artifacts require result.condition',
+    );
+    invariant(
+      result.lane === 'dogfood',
+      'Dogfood lane token usage artifacts require dogfood results',
+    );
+    invariant(
+      Number.isInteger(result.trial) && result.trial > 0,
+      'Dogfood lane token usage artifacts require positive result.trial',
+    );
+
+    const createdAtMs = Date.parse(result.completedAt);
+    invariant(
+      Number.isInteger(createdAtMs) && createdAtMs >= 0,
+      'Dogfood lane token usage artifacts require a valid completedAt timestamp',
+    );
+
+    await writeTokenUsageArtifact({
+      artifactsDir,
+      caseId: result.caseId,
+      lane: result.lane,
+      condition: result.condition,
+      provider: result.providerId,
+      model: result.modelId,
+      trialIndex: result.trial - 1,
+      tokenUsage,
+      createdAtMs,
+    });
+  }
+}
+
 export function enumerateDogfoodWorkItems(options?: {
   conditions?: SkillCondition[];
   caseFilter?: string[];
@@ -1234,6 +1301,23 @@ export async function runDogfoodLane(
     },
   );
 
+  const results = settlements.map((settlement) => {
+    if (settlement.status === 'fulfilled') {
+      return settlement.value;
+    }
+
+    return buildFailedDogfoodEvalResult({
+      metadata,
+      providerId: provider.id,
+      providerVersion: ctx.detectedRuntime.version,
+      requestedModelId: ctx.requestedModelId,
+      workItem: settlement.item,
+      error: settlement.reason,
+    });
+  });
+
+  await writeDogfoodTokenUsageArtifacts(metadata, results);
+
   if (activeReporter !== undefined && laneStartedAt !== undefined) {
     const completed = getTimestamp();
     const laneTotals = settlements.reduce(
@@ -1264,18 +1348,5 @@ export async function runDogfoodLane(
     });
   }
 
-  return settlements.map((settlement) => {
-    if (settlement.status === 'fulfilled') {
-      return settlement.value;
-    }
-
-    return buildFailedDogfoodEvalResult({
-      metadata,
-      providerId: provider.id,
-      providerVersion: ctx.detectedRuntime.version,
-      requestedModelId: ctx.requestedModelId,
-      workItem: settlement.item,
-      error: settlement.reason,
-    });
-  });
+  return results;
 }

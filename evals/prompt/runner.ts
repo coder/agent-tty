@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
 import { assertString, invariant } from '../../src/util/assert.js';
+import { EvalArtifactStore, writeTokenUsageArtifact } from '../lib/artifacts.js';
 import { detectAntiPatterns } from '../lib/antiPatterns.js';
 import { SKILL_CONDITIONS } from '../lib/matrix.js';
 import { runScheduled } from '../lib/scheduler.js';
@@ -421,6 +422,72 @@ function buildRejectedPromptWorkItemEvalResult(
   }) as EvalResult;
 }
 
+async function writePromptTokenUsageArtifacts(
+  metadata: RunMetadata,
+  results: readonly EvalResult[],
+): Promise<void> {
+  let artifactsDir: string | undefined;
+
+  for (const result of results) {
+    const tokenUsage = result.normalizedOutput.tokenUsage;
+    if (tokenUsage === undefined) {
+      continue;
+    }
+
+    if (artifactsDir === undefined) {
+      const outputBaseDir = metadata.outputBaseDir;
+      invariant(
+        typeof outputBaseDir === 'string' && outputBaseDir.length > 0,
+        'Prompt lane token usage artifacts require metadata.outputBaseDir',
+      );
+      artifactsDir = new EvalArtifactStore(outputBaseDir).runDir(metadata.runId);
+    }
+
+    invariant(
+      result.providerId.length > 0,
+      'Prompt lane token usage artifacts require result.providerId',
+    );
+    invariant(
+      typeof result.modelId === 'string' && result.modelId.length > 0,
+      'Prompt lane token usage artifacts require result.modelId',
+    );
+    invariant(
+      result.caseId.length > 0,
+      'Prompt lane token usage artifacts require result.caseId',
+    );
+    invariant(
+      result.condition.length > 0,
+      'Prompt lane token usage artifacts require result.condition',
+    );
+    invariant(
+      result.lane === 'prompt',
+      'Prompt lane token usage artifacts require prompt results',
+    );
+    invariant(
+      Number.isInteger(result.trial) && result.trial > 0,
+      'Prompt lane token usage artifacts require positive result.trial',
+    );
+
+    const createdAtMs = Date.parse(result.completedAt);
+    invariant(
+      Number.isInteger(createdAtMs) && createdAtMs >= 0,
+      'Prompt lane token usage artifacts require a valid completedAt timestamp',
+    );
+
+    await writeTokenUsageArtifact({
+      artifactsDir,
+      caseId: result.caseId,
+      lane: result.lane,
+      condition: result.condition,
+      provider: result.providerId,
+      model: result.modelId,
+      trialIndex: result.trial - 1,
+      tokenUsage,
+      createdAtMs,
+    });
+  }
+}
+
 async function readSkillFile(relativePath: string): Promise<string> {
   const content = await readFile(
     new URL(relativePath, import.meta.url),
@@ -744,6 +811,18 @@ export async function runPromptLane(
     },
   );
 
+  const results = settlements.map((settlement) =>
+    settlement.status === 'fulfilled'
+      ? settlement.value
+      : buildRejectedPromptWorkItemEvalResult(
+          provider,
+          parsedMetadata,
+          settlement,
+        ),
+  );
+
+  await writePromptTokenUsageArtifacts(parsedMetadata, results);
+
   if (activeReporter !== undefined && laneStartedAt !== undefined) {
     const completed = getTimestamp();
     const laneTotals = settlements.reduce(
@@ -774,13 +853,5 @@ export async function runPromptLane(
     });
   }
 
-  return settlements.map((settlement) =>
-    settlement.status === 'fulfilled'
-      ? settlement.value
-      : buildRejectedPromptWorkItemEvalResult(
-          provider,
-          parsedMetadata,
-          settlement,
-        ),
-  );
+  return results;
 }

@@ -131,6 +131,25 @@ const VALID_TOKEN_USAGE = {
   totalTokens: 165,
   cachedTokens: 15,
 } as const;
+const TokenUsageArtifactSchema = z
+  .object({
+    caseId: z.string().min(1),
+    lane: LaneSchema,
+    condition: ConditionSchema,
+    provider: z.string().min(1),
+    model: z.string().min(1),
+    trialIndex: z.number().int().nonnegative(),
+    tokenUsage: z
+      .object({
+        inputTokens: z.number().int().nonnegative(),
+        outputTokens: z.number().int().nonnegative(),
+        totalTokens: z.number().int().nonnegative(),
+        cachedTokens: z.number().int().nonnegative().optional(),
+      })
+      .strict(),
+    createdAtMs: z.number().int().nonnegative(),
+  })
+  .strict();
 const INVALID_TOKEN_USAGE_CASES = [
   [
     'partial',
@@ -440,6 +459,60 @@ function readReport(summary: EvalRunSummary) {
   return JsonReportEnvelopeSchema.parse(JSON.parse(text));
 }
 
+function setPromptFixtureTokenUsage(caseId: string): void {
+  const fixturePath = join(fixtureRoot, 'responses', `${caseId}.json`);
+  const fixture = ProviderPromptResultSchema.parse(
+    JSON.parse(readFileSync(fixturePath, 'utf8')),
+  );
+  writeJson(fixturePath, {
+    ...fixture,
+    normalized: {
+      ...fixture.normalized,
+      tokenUsage: VALID_TOKEN_USAGE,
+    },
+  });
+}
+
+function setAgentFixtureTokenUsage(caseId: string): void {
+  const fixturePath = join(fixtureRoot, 'agent-results', `${caseId}.json`);
+  const fixture = ProviderAgentResultSchema.parse(
+    JSON.parse(readFileSync(fixturePath, 'utf8')),
+  );
+  writeJson(fixturePath, {
+    ...fixture,
+    normalized: {
+      ...fixture.normalized,
+      tokenUsage: VALID_TOKEN_USAGE,
+    },
+  });
+}
+
+function resolveTokenUsageArtifactPath(
+  summary: EvalRunSummary,
+  lane: 'prompt' | 'execution' | 'dogfood',
+  caseId: string,
+): string {
+  return join(
+    requireDefined(summary.runDir, 'summary.runDir'),
+    lane,
+    caseId,
+    'none',
+    'token-usage.json',
+  );
+}
+
+function readTokenUsageArtifact(
+  summary: EvalRunSummary,
+  lane: 'prompt' | 'execution' | 'dogfood',
+  caseId: string,
+) {
+  return TokenUsageArtifactSchema.parse(
+    JSON.parse(
+      readFileSync(resolveTokenUsageArtifactPath(summary, lane, caseId), 'utf8'),
+    ),
+  );
+}
+
 let testRoot = '';
 let fixtureRoot = '';
 
@@ -690,5 +763,95 @@ describe(
         expect(agentResult.normalized).not.toHaveProperty('tokenUsage');
       }
     });
+
+    const tokenUsageArtifactCases = [
+      {
+        lane: 'prompt' as const,
+        caseId: 'wait-for-output',
+        enableTokenUsage: () => setPromptFixtureTokenUsage('wait-for-output'),
+      },
+      {
+        lane: 'execution' as const,
+        caseId: 'hello-prompt',
+        enableTokenUsage: () => setAgentFixtureTokenUsage('hello-prompt'),
+      },
+      {
+        lane: 'dogfood' as const,
+        caseId: 'exploratory-qa',
+        enableTokenUsage: () => setAgentFixtureTokenUsage('exploratory-qa'),
+      },
+    ];
+
+    for (const testCase of tokenUsageArtifactCases) {
+      it(`writes a token-usage sidecar for ${testCase.lane}:${testCase.caseId} when token usage is present`, () => {
+        testCase.enableTokenUsage();
+
+        const outputDir = join(
+          testRoot,
+          `token-usage-present-${testCase.lane}-${testCase.caseId}`,
+        );
+        const result = runEvalCli(
+          [
+            '--provider',
+            'fixture',
+            '--lane',
+            testCase.lane,
+            '--case',
+            testCase.caseId,
+            '--condition',
+            'none',
+            '--output',
+            outputDir,
+            '--json',
+          ],
+          { EVAL_FIXTURE_DIR: fixtureRoot },
+        );
+
+        expect(result.status).toBe(0);
+        const summary = parseSummary(result.stdout);
+        expect(readTokenUsageArtifact(summary, testCase.lane, testCase.caseId)).toEqual({
+          caseId: testCase.caseId,
+          lane: testCase.lane,
+          condition: 'none',
+          provider: 'fixture',
+          model: PLACEHOLDER_MODEL_ID,
+          trialIndex: 0,
+          tokenUsage: VALID_TOKEN_USAGE,
+          createdAtMs: Date.parse(FIXTURE_COMPLETED_AT),
+        });
+      });
+
+      it(`skips the token-usage sidecar for ${testCase.lane}:${testCase.caseId} when token usage is absent`, () => {
+        const outputDir = join(
+          testRoot,
+          `token-usage-absent-${testCase.lane}-${testCase.caseId}`,
+        );
+        const result = runEvalCli(
+          [
+            '--provider',
+            'fixture',
+            '--lane',
+            testCase.lane,
+            '--case',
+            testCase.caseId,
+            '--condition',
+            'none',
+            '--output',
+            outputDir,
+            '--json',
+          ],
+          { EVAL_FIXTURE_DIR: fixtureRoot },
+        );
+
+        expect(result.status).toBe(0);
+        const summary = parseSummary(result.stdout);
+        expect(() =>
+          readFileSync(
+            resolveTokenUsageArtifactPath(summary, testCase.lane, testCase.caseId),
+            'utf8',
+          ),
+        ).toThrow();
+      });
+    }
   },
 );
