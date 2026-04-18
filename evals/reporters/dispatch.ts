@@ -60,7 +60,9 @@ function validatePayload<K extends ReporterEventName>(
 ): ReporterEventPayloads[K] {
   const validation = EVENT_SCHEMAS[eventName].safeParse(payload);
   if (!validation.success) {
-    const issues = validation.error.issues.map(formatValidationIssue).join('; ');
+    const issues = validation.error.issues
+      .map(formatValidationIssue)
+      .join('; ');
     throw new Error(
       `Invalid reporter payload for event "${eventName}": ${issues}`,
     );

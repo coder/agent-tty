@@ -4,7 +4,10 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { generateJsonReport, generateMarkdownReport } from '../../../../evals/lib/reporting.js';
+import {
+  generateJsonReport,
+  generateMarkdownReport,
+} from '../../../../evals/lib/reporting.js';
 import type { EvalResult, RunMetadata } from '../../../../evals/lib/types.js';
 import { FinalReportReporter } from '../../../../evals/reporters/final-report.js';
 
@@ -57,9 +60,9 @@ function createEvalResult(overrides: Partial<EvalResult> = {}): EvalResult {
 
 afterEach(async () => {
   await Promise.all(
-    tempDirs.splice(0, tempDirs.length).map((directory) =>
-      fs.rm(directory, { recursive: true, force: true }),
-    ),
+    tempDirs
+      .splice(0, tempDirs.length)
+      .map((directory) => fs.rm(directory, { recursive: true, force: true })),
   );
 });
 

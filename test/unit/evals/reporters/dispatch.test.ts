@@ -136,21 +136,25 @@ describe('ReporterDispatcher', () => {
 
   it('throws descriptive validation errors for missing required fields and wrong types', async () => {
     const dispatcher = new ReporterDispatcher();
-    const missingProvider = { ...createRunStartEvent() } as Partial<RunStartEvent>;
+    const missingProvider = {
+      ...createRunStartEvent(),
+    } as Partial<RunStartEvent>;
     delete missingProvider.provider;
-
-    await expect(
-      dispatcher.dispatch('runStart', missingProvider as unknown as RunStartEvent),
-    ).rejects.toThrow(/Invalid reporter payload for event "runStart": provider:/);
 
     await expect(
       dispatcher.dispatch(
         'runStart',
-        {
-          ...createRunStartEvent(),
-          totalTrials: 'two',
-        } as unknown as RunStartEvent,
+        missingProvider as unknown as RunStartEvent,
       ),
+    ).rejects.toThrow(
+      /Invalid reporter payload for event "runStart": provider:/,
+    );
+
+    await expect(
+      dispatcher.dispatch('runStart', {
+        ...createRunStartEvent(),
+        totalTrials: 'two',
+      } as unknown as RunStartEvent),
     ).rejects.toThrow(
       /Invalid reporter payload for event "runStart": totalTrials:/,
     );
@@ -159,10 +163,7 @@ describe('ReporterDispatcher', () => {
   it('rejects duplicate reporter names at construction', () => {
     expect(
       () =>
-        new ReporterDispatcher([
-          { name: 'duplicate' },
-          { name: 'duplicate' },
-        ]),
+        new ReporterDispatcher([{ name: 'duplicate' }, { name: 'duplicate' }]),
     ).toThrow('Duplicate reporter name: duplicate');
   });
 

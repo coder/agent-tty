@@ -17,17 +17,20 @@ import {
   createTrialStartEvent,
 } from './fixtures.js';
 
-const ISO_TIMESTAMP_PATTERN =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const ISO_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 const tempDirs: string[] = [];
 
-async function readJsonlRecords(outputPath: string): Promise<
+async function readJsonlRecords(
+  outputPath: string,
+): Promise<
   Array<{ type: string; timestamp: string; payload: Record<string, unknown> }>
 > {
   const content = await fs.readFile(outputPath, 'utf8');
   const lines = content.trimEnd().split('\n');
-  return lines.map((line) => JSON.parse(line) as Record<string, unknown>) as Array<{
+  return lines.map(
+    (line) => JSON.parse(line) as Record<string, unknown>,
+  ) as Array<{
     type: string;
     timestamp: string;
     payload: Record<string, unknown>;
@@ -37,9 +40,9 @@ async function readJsonlRecords(outputPath: string): Promise<
 afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(
-    tempDirs.splice(0, tempDirs.length).map((directory) =>
-      fs.rm(directory, { recursive: true, force: true }),
-    ),
+    tempDirs
+      .splice(0, tempDirs.length)
+      .map((directory) => fs.rm(directory, { recursive: true, force: true })),
   );
 });
 
