@@ -12,6 +12,7 @@ import {
   ProviderPromptRequestSchema,
   ProviderPromptResultSchema,
   ProviderRuntimeInfoSchema,
+  TokenUsageSchema,
 } from '../lib/schemas.js';
 import type {
   NormalizedProviderOutput,
@@ -22,6 +23,7 @@ import type {
   ProviderPromptRequest,
   ProviderPromptResult,
   ProviderRuntimeInfo,
+  TokenUsage,
 } from '../lib/types.js';
 import type { EvalProvider } from './base.js';
 
@@ -354,6 +356,58 @@ function parseJsonRecords(raw: string): unknown[] {
   }
 
   return records;
+}
+
+function parseClaudeTokenUsageObject(usage: unknown): TokenUsage | undefined {
+  if (!isRecord(usage)) {
+    return undefined;
+  }
+
+  const candidate = {
+    ...(typeof usage.input_tokens === 'number'
+      ? { inputTokens: usage.input_tokens }
+      : {}),
+    ...(typeof usage.output_tokens === 'number'
+      ? { outputTokens: usage.output_tokens }
+      : {}),
+    ...(typeof usage.total_tokens === 'number'
+      ? { totalTokens: usage.total_tokens }
+      : {}),
+    ...(typeof usage.cache_read_input_tokens === 'number'
+      ? { cachedTokens: usage.cache_read_input_tokens }
+      : {}),
+  };
+
+  const parsedUsage = TokenUsageSchema.safeParse(candidate);
+  if (!parsedUsage.success) {
+    return undefined;
+  }
+
+  const { inputTokens, outputTokens, totalTokens, cachedTokens } =
+    parsedUsage.data;
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    ...(cachedTokens === undefined ? {} : { cachedTokens }),
+  };
+}
+
+function extractClaudeTokenUsage(record: Record<string, unknown>): TokenUsage | undefined {
+  let tokenUsage: TokenUsage | undefined;
+  const sources = [
+    record.usage,
+    isRecord(record.message) ? record.message.usage : undefined,
+  ];
+
+  for (const source of sources) {
+    const parsedUsage = parseClaudeTokenUsageObject(source);
+    if (parsedUsage !== undefined) {
+      tokenUsage = parsedUsage;
+    }
+  }
+
+  return tokenUsage;
 }
 
 function extractPlainTextToolCalls(
@@ -906,6 +960,7 @@ export class ClaudeProvider implements EvalProvider {
     let sessionId: string | undefined;
     let modelId: string | undefined;
     let selectedSkill: 'none' | 'agent-tty' | 'dogfood-tui' | undefined;
+    let tokenUsage: TokenUsage | undefined;
 
     records.forEach((record, index) => {
       if (!isRecord(record)) {
@@ -928,6 +983,13 @@ export class ClaudeProvider implements EvalProvider {
             : undefined,
         );
       }
+
+      const parsedTokenUsage = extractClaudeTokenUsage(record);
+      if (parsedTokenUsage !== undefined) {
+        // Later Claude JSON records typically reflect the final result payload.
+        tokenUsage = parsedTokenUsage;
+      }
+
       if (record.type === 'result' && typeof record.result === 'string') {
         finalText = record.result;
       }
@@ -993,6 +1055,7 @@ export class ClaudeProvider implements EvalProvider {
           referencedSkills: extractReferencedSkills(allText),
           ...(selectedSkill === undefined ? {} : { selectedSkill }),
           toolCalls: [...toolCalls.values()],
+          ...(tokenUsage === undefined ? {} : { tokenUsage }),
         },
         raw,
         'Invalid Claude JSON normalized output',
