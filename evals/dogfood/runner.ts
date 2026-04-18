@@ -29,6 +29,8 @@ import type {
   RunMetadata,
   SkillCondition,
 } from '../lib/types.js';
+import type { ReporterDispatcher } from '../reporters/dispatch.js';
+import { CaseProgressTracker, computePlannedCases } from '../reporters/runtime.js';
 import type { EvalProvider } from '../providers/base.js';
 import evidenceCompletenessCase from './cases/evidence-completeness.js';
 import exploratoryQaCase from './cases/exploratory-qa.js';
@@ -72,6 +74,13 @@ type DogfoodWorkItem = EvalWorkItemIdentity &
   ScheduledWorkItem & {
     evalCase: DogfoodEvalCase;
   };
+
+type DogfoodLaneOptions = {
+  conditions?: SkillCondition[];
+  caseFilter?: string[];
+  concurrency?: number;
+  reporter?: ReporterDispatcher;
+};
 
 interface LoadedDogfoodSkillPrompts {
   bootstrapSkillText: string;
@@ -918,17 +927,43 @@ export async function executeDogfoodWorkItem(
 export async function runDogfoodLane(
   provider: EvalProvider,
   metadata: RunMetadata,
-  options?: {
-    conditions?: SkillCondition[];
-    caseFilter?: string[];
-    concurrency?: number;
-  },
+  options?: DogfoodLaneOptions,
 ): Promise<EvalResult[]> {
   const totalTrials = resolveTotalTrials(metadata.totalTrials);
   const items = enumerateDogfoodWorkItems({
-    ...options,
+    ...(options?.conditions === undefined
+      ? {}
+      : { conditions: options.conditions }),
+    ...(options?.caseFilter === undefined
+      ? {}
+      : { caseFilter: options.caseFilter }),
     totalTrials,
   });
+  const plannedCases = computePlannedCases(items);
+  const reporter = options?.reporter;
+  const concurrency = options?.concurrency ?? 1;
+  const activeReporter =
+    reporter !== undefined && items.length > 0 ? reporter : undefined;
+  if (activeReporter !== undefined) {
+    invariant(
+      Number.isInteger(concurrency) && concurrency > 0,
+      'options.concurrency must be a positive integer',
+    );
+  }
+
+  let trackerTimestamp: string | undefined;
+  const tracker = new CaseProgressTracker<DogfoodWorkItem, EvalResult>({
+    runId: metadata.runId,
+    lane: 'dogfood',
+    plannedCases,
+    ...(reporter === undefined ? {} : { dispatcher: reporter }),
+    now: () => trackerTimestamp ?? new Date().toISOString(),
+  });
+  const trialStarts = new Map<string, { startedAt: string; startedAtMs: number }>();
+  const getTimestamp = (): { iso: string; ms: number } => {
+    const iso = new Date().toISOString();
+    return { iso, ms: Date.parse(iso) };
+  };
 
   let detectedRuntime: ProviderRuntimeInfo;
   try {
@@ -947,11 +982,156 @@ export async function runDogfoodLane(
       metadata.models[0] ?? detectedRuntime.defaultModelId ?? undefined,
     repoRoot: resolve(metadata.repoRoot),
   };
-  const settlements = await runScheduled(
+  const laneStartedAt =
+    activeReporter === undefined ? undefined : getTimestamp();
+  if (activeReporter !== undefined && laneStartedAt !== undefined) {
+    await activeReporter.dispatch('laneStart', {
+      runId: metadata.runId,
+      lane: 'dogfood',
+      caseIds: Array.from(new Set(items.map((item) => item.caseId))),
+      conditions: Array.from(new Set(items.map((item) => item.condition))),
+      concurrency,
+      plannedItems: items.length,
+      startedAt: laneStartedAt.iso,
+    });
+  }
+
+  const settlements = await runScheduled<DogfoodWorkItem, EvalResult>(
     items,
     (item) => executeDogfoodWorkItem(provider, metadata, item, ctx),
-    { concurrency: options?.concurrency ?? 1 },
+    {
+      concurrency,
+      ...(activeReporter === undefined
+        ? {}
+        : {
+            onItemStart: async (item: DogfoodWorkItem) => {
+              const started = getTimestamp();
+              trialStarts.set(item.key, {
+                startedAt: started.iso,
+                startedAtMs: started.ms,
+              });
+
+              trackerTimestamp = started.iso;
+              try {
+                await tracker.onTrialStart(item);
+              } finally {
+                trackerTimestamp = undefined;
+              }
+
+              const requestedPaths = buildRequestedPaths(
+                metadata,
+                provider.id,
+                item.evalCase,
+                item.condition,
+                item.trial,
+              );
+              await activeReporter.dispatch('trialStart', {
+                runId: metadata.runId,
+                lane: 'dogfood',
+                caseId: item.caseId,
+                condition: item.condition,
+                trial: item.trial,
+                startedAt: started.iso,
+                requestedOutputPath: requestedPaths.outputDir,
+                requestedArtifactPath: requestedPaths.requestedBundlePath,
+              });
+            },
+            onItemFinish: async (item: DogfoodWorkItem, settled) => {
+              const started = trialStarts.get(item.key);
+              invariant(
+                started !== undefined,
+                `Missing reporter start state for ${item.key}`,
+              );
+              const completed = getTimestamp();
+
+              if (settled.status === 'fulfilled') {
+                await activeReporter.dispatch('trialFinish', {
+                  runId: metadata.runId,
+                  lane: 'dogfood',
+                  caseId: item.caseId,
+                  condition: item.condition,
+                  trial: item.trial,
+                  startedAt: started.startedAt,
+                  completedAt: completed.iso,
+                  durationMs: Math.max(0, completed.ms - started.startedAtMs),
+                  status: settled.value.ok ? 'passed' : 'failed',
+                  ok: settled.value.ok,
+                  errorClass: settled.value.errorClass ?? null,
+                  errorMessage: settled.value.errorMessage ?? null,
+                  score: settled.value.score.total,
+                  transcriptPath: settled.value.transcriptPath ?? null,
+                  stdoutPath: settled.value.stdoutPath ?? null,
+                  stderrPath: settled.value.stderrPath ?? null,
+                  eventLogPath: settled.value.eventLogPath ?? null,
+                  bundlePath: settled.value.bundlePath ?? null,
+                  artifactManifestPath: settled.value.artifactManifestPath ?? null,
+                });
+              } else {
+                const describedError = describeDogfoodError(settled.reason);
+                await activeReporter.dispatch('trialFinish', {
+                  runId: metadata.runId,
+                  lane: 'dogfood',
+                  caseId: item.caseId,
+                  condition: item.condition,
+                  trial: item.trial,
+                  startedAt: started.startedAt,
+                  completedAt: completed.iso,
+                  durationMs: Math.max(0, completed.ms - started.startedAtMs),
+                  status: 'errored',
+                  ok: false,
+                  errorClass: describedError.errorClass,
+                  errorMessage: describedError.errorMessage,
+                  score: null,
+                  transcriptPath: null,
+                  stdoutPath: null,
+                  stderrPath: null,
+                  eventLogPath: null,
+                  bundlePath: null,
+                  artifactManifestPath: null,
+                });
+              }
+
+              trackerTimestamp = completed.iso;
+              try {
+                await tracker.onTrialFinish(item, settled);
+              } finally {
+                trackerTimestamp = undefined;
+                trialStarts.delete(item.key);
+              }
+            },
+          }),
+    },
   );
+
+  if (activeReporter !== undefined && laneStartedAt !== undefined) {
+    const completed = getTimestamp();
+    const laneTotals = settlements.reduce(
+      (totals, settlement) => {
+        totals.total += 1;
+        if (settlement.status === 'rejected') {
+          totals.errored += 1;
+        } else if (settlement.value.ok) {
+          totals.passed += 1;
+        } else {
+          totals.failed += 1;
+        }
+        return totals;
+      },
+      { total: 0, passed: 0, failed: 0, errored: 0 },
+    );
+
+    await activeReporter.dispatch('laneFinish', {
+      runId: metadata.runId,
+      lane: 'dogfood',
+      startedAt: laneStartedAt.iso,
+      completedAt: completed.iso,
+      durationMs: Math.max(0, completed.ms - laneStartedAt.ms),
+      total: laneTotals.total,
+      passed: laneTotals.passed,
+      failed: laneTotals.failed,
+      errored: laneTotals.errored,
+    });
+  }
 
   return settlements.map((settlement) => {
     if (settlement.status === 'fulfilled') {

@@ -35,6 +35,8 @@ import type {
   VerifierSpec,
   WorkflowCheckResult,
 } from '../lib/types.js';
+import type { ReporterDispatcher } from '../reporters/dispatch.js';
+import { CaseProgressTracker, computePlannedCases } from '../reporters/runtime.js';
 import type { EvalProvider } from '../providers/base.js';
 import { altScreenDemoCase } from './cases/alt-screen-demo.js';
 import { colorGridCase } from './cases/color-grid.js';
@@ -79,6 +81,13 @@ type ExecutionWorkItem = EvalWorkItemIdentity &
   ScheduledWorkItem & {
     evalCase: ExecutionEvalCase;
   };
+
+type ExecutionLaneOptions = {
+  conditions?: SkillCondition[];
+  caseFilter?: string[];
+  concurrency?: number;
+  reporter?: ReporterDispatcher;
+};
 
 type EvaluatedVerifier = {
   spec: VerifierSpec;
@@ -1277,25 +1286,193 @@ export async function executeExecutionWorkItem(
 export async function runExecutionLane(
   provider: EvalProvider,
   metadata: RunMetadata,
-  options: {
-    conditions?: SkillCondition[];
-    caseFilter?: string[];
-    concurrency?: number;
-  } = {},
+  options: ExecutionLaneOptions = {},
 ): Promise<EvalResult[]> {
   const totalTrials = resolveTotalTrials(metadata.totalTrials);
   const items = enumerateExecutionWorkItems({
-    ...options,
+    ...(options.conditions === undefined
+      ? {}
+      : { conditions: options.conditions }),
+    ...(options.caseFilter === undefined
+      ? {}
+      : { caseFilter: options.caseFilter }),
     totalTrials,
   });
+  const plannedCases = computePlannedCases(items);
+  const reporter = options.reporter;
+  const concurrency = options.concurrency ?? 1;
+  const activeReporter =
+    reporter !== undefined && items.length > 0 ? reporter : undefined;
+  if (activeReporter !== undefined) {
+    invariant(
+      Number.isInteger(concurrency) && concurrency > 0,
+      'options.concurrency must be a positive integer',
+    );
+  }
+
+  let trackerTimestamp: string | undefined;
+  const tracker = new CaseProgressTracker<ExecutionWorkItem, EvalResult>({
+    runId: metadata.runId,
+    lane: 'execution',
+    plannedCases,
+    ...(reporter === undefined ? {} : { dispatcher: reporter }),
+    now: () => trackerTimestamp ?? new Date().toISOString(),
+  });
+  const trialStarts = new Map<string, { startedAt: string; startedAtMs: number }>();
+  const getTimestamp = (): { iso: string; ms: number } => {
+    const iso = new Date().toISOString();
+    return { iso, ms: Date.parse(iso) };
+  };
   const runtime = await detectRuntime(provider);
-  const settlements = await runScheduled(
+
+  const laneStartedAt =
+    activeReporter === undefined ? undefined : getTimestamp();
+  if (activeReporter !== undefined && laneStartedAt !== undefined) {
+    await activeReporter.dispatch('laneStart', {
+      runId: metadata.runId,
+      lane: 'execution',
+      caseIds: Array.from(new Set(items.map((item) => item.caseId))),
+      conditions: Array.from(new Set(items.map((item) => item.condition))),
+      concurrency,
+      plannedItems: items.length,
+      startedAt: laneStartedAt.iso,
+    });
+  }
+
+  const settlements = await runScheduled<ExecutionWorkItem, EvalResult>(
     items,
     (item) => executeExecutionWorkItem(provider, metadata, item, runtime),
     {
-      concurrency: options.concurrency ?? 1,
+      concurrency,
+      ...(activeReporter === undefined
+        ? {}
+        : {
+            onItemStart: async (item: ExecutionWorkItem) => {
+              const started = getTimestamp();
+              trialStarts.set(item.key, {
+                startedAt: started.iso,
+                startedAtMs: started.ms,
+              });
+
+              trackerTimestamp = started.iso;
+              try {
+                await tracker.onTrialStart(item);
+              } finally {
+                trackerTimestamp = undefined;
+              }
+
+              await activeReporter.dispatch('trialStart', {
+                runId: metadata.runId,
+                lane: 'execution',
+                caseId: item.caseId,
+                condition: item.condition,
+                trial: item.trial,
+                startedAt: started.iso,
+                requestedOutputPath: null,
+                requestedArtifactPath: null,
+              });
+            },
+            onItemFinish: async (item: ExecutionWorkItem, settled) => {
+              const started = trialStarts.get(item.key);
+              invariant(
+                started !== undefined,
+                `Missing reporter start state for ${item.key}`,
+              );
+              const completed = getTimestamp();
+
+              if (settled.status === 'fulfilled') {
+                await activeReporter.dispatch('trialFinish', {
+                  runId: metadata.runId,
+                  lane: 'execution',
+                  caseId: item.caseId,
+                  condition: item.condition,
+                  trial: item.trial,
+                  startedAt: started.startedAt,
+                  completedAt: completed.iso,
+                  durationMs: Math.max(0, completed.ms - started.startedAtMs),
+                  status: settled.value.ok ? 'passed' : 'failed',
+                  ok: settled.value.ok,
+                  errorClass: settled.value.errorClass ?? null,
+                  errorMessage: settled.value.errorMessage ?? null,
+                  score: settled.value.score.total,
+                  transcriptPath: settled.value.transcriptPath ?? null,
+                  stdoutPath: settled.value.stdoutPath ?? null,
+                  stderrPath: settled.value.stderrPath ?? null,
+                  eventLogPath: settled.value.eventLogPath ?? null,
+                  bundlePath: settled.value.bundlePath ?? null,
+                  artifactManifestPath: settled.value.artifactManifestPath ?? null,
+                });
+              } else {
+                await activeReporter.dispatch('trialFinish', {
+                  runId: metadata.runId,
+                  lane: 'execution',
+                  caseId: item.caseId,
+                  condition: item.condition,
+                  trial: item.trial,
+                  startedAt: started.startedAt,
+                  completedAt: completed.iso,
+                  durationMs: Math.max(0, completed.ms - started.startedAtMs),
+                  status: 'errored',
+                  ok: false,
+                  errorClass:
+                    settled.reason instanceof Error
+                      ? settled.reason.name
+                      : 'Error',
+                  errorMessage:
+                    settled.reason instanceof Error
+                      ? settled.reason.message
+                      : String(settled.reason),
+                  score: null,
+                  transcriptPath: null,
+                  stdoutPath: null,
+                  stderrPath: null,
+                  eventLogPath: null,
+                  bundlePath: null,
+                  artifactManifestPath: null,
+                });
+              }
+
+              trackerTimestamp = completed.iso;
+              try {
+                await tracker.onTrialFinish(item, settled);
+              } finally {
+                trackerTimestamp = undefined;
+                trialStarts.delete(item.key);
+              }
+            },
+          }),
     },
   );
+
+  if (activeReporter !== undefined && laneStartedAt !== undefined) {
+    const completed = getTimestamp();
+    const laneTotals = settlements.reduce(
+      (totals, settlement) => {
+        totals.total += 1;
+        if (settlement.status === 'rejected') {
+          totals.errored += 1;
+        } else if (settlement.value.ok) {
+          totals.passed += 1;
+        } else {
+          totals.failed += 1;
+        }
+        return totals;
+      },
+      { total: 0, passed: 0, failed: 0, errored: 0 },
+    );
+
+    await activeReporter.dispatch('laneFinish', {
+      runId: metadata.runId,
+      lane: 'execution',
+      startedAt: laneStartedAt.iso,
+      completedAt: completed.iso,
+      durationMs: Math.max(0, completed.ms - laneStartedAt.ms),
+      total: laneTotals.total,
+      passed: laneTotals.passed,
+      failed: laneTotals.failed,
+      errored: laneTotals.errored,
+    });
+  }
 
   return settlements.map((settlement) =>
     settlement.status === 'fulfilled'
