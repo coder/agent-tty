@@ -13,7 +13,7 @@ import {
   scoreEvidenceQuality,
   scoreReportCompleteness,
 } from '../lib/bundleScoring.js';
-import { fixtureCommand } from '../lib/cliHarness.js';
+import { fixtureCommand, materializeEvalWorkspace } from '../lib/cliHarness.js';
 import { SKILL_CONDITIONS } from '../lib/matrix.js';
 import { DogfoodEvalCaseSchema, EvalResultSchema } from '../lib/schemas.js';
 import { checkWorkflow } from '../lib/scoring.js';
@@ -35,6 +35,12 @@ import {
   computePlannedCases,
 } from '../reporters/runtime.js';
 import type { EvalProvider } from '../providers/base.js';
+import { lookupPreset } from '../workspaces/registry.js';
+import {
+  deriveEffectiveEnv,
+  resolveWorkspacePreset,
+} from '../workspaces/resolver.js';
+import type { ResolvedWorkspacePlan } from '../workspaces/types.js';
 import evidenceCompletenessCase from './cases/evidence-completeness.js';
 import exploratoryQaCase from './cases/exploratory-qa.js';
 import navigationFocusReproCase from './cases/navigation-focus-repro.js';
@@ -95,6 +101,11 @@ interface DogfoodLaneContext {
   detectedRuntime: ProviderRuntimeInfo;
   requestedModelId: string | undefined;
   repoRoot: string;
+}
+
+interface ResolvedDogfoodWorkspace {
+  plan: ResolvedWorkspacePlan;
+  effectiveEnv: Readonly<Record<string, string>>;
 }
 
 let loadedDogfoodSkillPromptsPromise:
@@ -549,6 +560,68 @@ function buildRequestedPaths(
   };
 }
 
+function readDogfoodWorkspaceId(evalCase: DogfoodEvalCase): string | undefined {
+  const candidateWorkspaceId = (evalCase as { workspace?: unknown }).workspace;
+  if (candidateWorkspaceId === undefined) {
+    return undefined;
+  }
+
+  assertString(
+    candidateWorkspaceId,
+    'Dogfood eval case workspace must be a string when provided',
+  );
+  const workspaceId = candidateWorkspaceId.trim();
+  invariant(
+    workspaceId.length > 0,
+    'Dogfood eval case workspace must be a non-empty string when provided',
+  );
+  return workspaceId;
+}
+
+function stripDogfoodWorkspace(evalCase: DogfoodEvalCase): DogfoodEvalCase {
+  const { workspace: _workspace, ...requestEvalCase } =
+    evalCase as DogfoodEvalCase & {
+      workspace?: unknown;
+    };
+  void _workspace;
+  return requestEvalCase;
+}
+
+async function resolveDogfoodWorkspace(
+  evalCase: DogfoodEvalCase,
+  ctx: DogfoodLaneContext,
+  homeDir: string,
+  outputDir: string,
+  requestedBundlePath: string,
+  systemPromptEnv: Record<string, string>,
+): Promise<ResolvedDogfoodWorkspace | undefined> {
+  const workspaceId = readDogfoodWorkspaceId(evalCase);
+  if (workspaceId === undefined) {
+    return undefined;
+  }
+
+  const preset = lookupPreset(workspaceId);
+  const plan = resolveWorkspacePreset(
+    { homeDir, repoRoot: ctx.repoRoot },
+    preset,
+  );
+  const effectiveEnv = deriveEffectiveEnv(preset, {
+    EVAL_OUTPUT_DIR: outputDir,
+    EVAL_REQUESTED_BUNDLE_DIR: requestedBundlePath,
+    EVAL_FIXTURE: evalCase.fixture ?? '',
+    ...systemPromptEnv,
+  });
+
+  await materializeEvalWorkspace({
+    homeDir,
+    plan,
+    effectiveEnv,
+    defaultCwd: ctx.repoRoot,
+  });
+
+  return { plan, effectiveEnv };
+}
+
 function buildCaseInventory(): DogfoodEvalCase[] {
   const cases = [...DOGFOOD_CASES];
   const categoryCounts = new Map<DogfoodEvalCase['category'], number>();
@@ -739,16 +812,38 @@ export async function executeDogfoodWorkItem(
     const systemPromptContext = await buildSystemPromptContext(
       workItem.condition,
     );
+    const workspace = await resolveDogfoodWorkspace(
+      workItem.evalCase,
+      ctx,
+      homeDir,
+      outputDir,
+      requestedBundlePath,
+      systemPromptContext.env,
+    );
+    const requestCaseBase = stripDogfoodWorkspace(workItem.evalCase);
     const requestCase = DogfoodEvalCaseSchema.parse({
-      ...workItem.evalCase,
+      ...requestCaseBase,
       prompt: buildPrompt(
-        { ...workItem.evalCase, conditions: [workItem.condition] },
+        { ...requestCaseBase, conditions: [workItem.condition] },
         requestedBundlePath,
         systemPromptContext,
       ),
       bundlePath: requestedBundlePath,
       conditions: [workItem.condition],
     }) as DogfoodEvalCase;
+    const requestEnv =
+      workspace === undefined
+        ? {
+            AGENT_TTY_HOME: homeDir,
+            EVAL_OUTPUT_DIR: outputDir,
+            EVAL_REQUESTED_BUNDLE_DIR: requestedBundlePath,
+            EVAL_FIXTURE: workItem.evalCase.fixture ?? '',
+            ...systemPromptContext.env,
+          }
+        : {
+            ...workspace.effectiveEnv,
+            AGENT_TTY_HOME: homeDir,
+          };
 
     const agentResult = await provider.invokeAgentMode({
       runId: metadata.runId,
@@ -758,16 +853,10 @@ export async function executeDogfoodWorkItem(
       ...(ctx.requestedModelId === undefined
         ? {}
         : { modelId: ctx.requestedModelId }),
-      cwd: ctx.repoRoot,
+      cwd: workspace?.plan.cwd ?? ctx.repoRoot,
       homeDir,
       outputDir,
-      env: {
-        AGENT_TTY_HOME: homeDir,
-        EVAL_OUTPUT_DIR: outputDir,
-        EVAL_REQUESTED_BUNDLE_DIR: requestedBundlePath,
-        EVAL_FIXTURE: workItem.evalCase.fixture ?? '',
-        ...systemPromptContext.env,
-      },
+      env: requestEnv,
       evalCase: requestCase,
     });
 

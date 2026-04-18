@@ -15,7 +15,11 @@ import {
   countAgentTtyCalls,
   detectAntiPatterns,
 } from '../lib/antiPatterns.js';
-import { cleanupEvalHome, createIsolatedEvalHome } from '../lib/cliHarness.js';
+import {
+  cleanupEvalHome,
+  createIsolatedEvalHome,
+  materializeEvalWorkspace,
+} from '../lib/cliHarness.js';
 import { EvalResultSchema } from '../lib/schemas.js';
 import { runScheduled } from '../lib/scheduler.js';
 import { checkWorkflow } from '../lib/scoring.js';
@@ -41,6 +45,12 @@ import {
   computePlannedCases,
 } from '../reporters/runtime.js';
 import type { EvalProvider } from '../providers/base.js';
+import { lookupPreset } from '../workspaces/registry.js';
+import {
+  deriveEffectiveEnv,
+  resolveWorkspacePreset,
+} from '../workspaces/resolver.js';
+import type { ResolvedWorkspacePlan } from '../workspaces/types.js';
 import { altScreenDemoCase } from './cases/alt-screen-demo.js';
 import { colorGridCase } from './cases/color-grid.js';
 import { crashRecoveryCase } from './cases/crash-recovery.js';
@@ -100,6 +110,11 @@ type EvaluatedVerifier = {
 interface LoadedExecutionSkillPrompts {
   bootstrapSkillText: string;
   canonicalAgentTtySkillText: string;
+}
+
+interface ResolvedCaseWorkspace {
+  plan: ResolvedWorkspacePlan;
+  effectiveEnv: Readonly<Record<string, string>>;
 }
 
 let loadedExecutionSkillPromptsPromise:
@@ -871,6 +886,65 @@ function resolveModelId(
   return runtime?.defaultModelId;
 }
 
+function readExecutionWorkspaceId(
+  evalCase: ExecutionEvalCase,
+): string | undefined {
+  const candidateWorkspaceId = (evalCase as { workspace?: unknown }).workspace;
+  if (candidateWorkspaceId === undefined) {
+    return undefined;
+  }
+
+  assertString(
+    candidateWorkspaceId,
+    'Execution eval case workspace must be a string when provided',
+  );
+  const workspaceId = candidateWorkspaceId.trim();
+  invariant(
+    workspaceId.length > 0,
+    'Execution eval case workspace must be a non-empty string when provided',
+  );
+  return workspaceId;
+}
+
+function stripExecutionWorkspace(
+  evalCase: ExecutionEvalCase,
+): ExecutionEvalCase {
+  const { workspace: _workspace, ...requestEvalCase } =
+    evalCase as ExecutionEvalCase & {
+      workspace?: unknown;
+    };
+  void _workspace;
+  return requestEvalCase;
+}
+
+async function resolveExecutionWorkspace(
+  metadata: RunMetadata,
+  evalCase: ExecutionEvalCase,
+  homeDir: string,
+  outputDir: string,
+): Promise<ResolvedCaseWorkspace | undefined> {
+  const workspaceId = readExecutionWorkspaceId(evalCase);
+  if (workspaceId === undefined) {
+    return undefined;
+  }
+
+  const repoRoot = resolve(metadata.repoRoot);
+  const preset = lookupPreset(workspaceId);
+  const plan = resolveWorkspacePreset({ homeDir, repoRoot }, preset);
+  const effectiveEnv = deriveEffectiveEnv(preset, {
+    AGENT_TTY_EVAL_OUTPUT_DIR: outputDir,
+  });
+
+  await materializeEvalWorkspace({
+    homeDir,
+    plan,
+    effectiveEnv,
+    defaultCwd: repoRoot,
+  });
+
+  return { plan, effectiveEnv };
+}
+
 async function createEvalRequest(
   provider: EvalProvider,
   metadata: RunMetadata,
@@ -880,24 +954,32 @@ async function createEvalRequest(
   homeDir: string,
   outputDir: string,
   runtime: ProviderRuntimeInfo | undefined,
+  workspace: ResolvedCaseWorkspace | undefined,
 ): Promise<Parameters<EvalProvider['invokeAgentMode']>[0]> {
   const prompt = await buildPromptForCondition(evalCase, condition);
   const modelId = resolveModelId(metadata, runtime);
+  const requestEnv =
+    workspace === undefined
+      ? {
+          AGENT_TTY_HOME: homeDir,
+          AGENT_TTY_EVAL_OUTPUT_DIR: outputDir,
+        }
+      : {
+          ...workspace.effectiveEnv,
+          AGENT_TTY_HOME: homeDir,
+        };
 
   return {
     runId: metadata.runId,
     providerId: provider.id,
     condition,
     trial,
-    cwd: resolve(metadata.repoRoot),
+    cwd: workspace?.plan.cwd ?? resolve(metadata.repoRoot),
     homeDir,
     outputDir,
-    env: {
-      AGENT_TTY_HOME: homeDir,
-      AGENT_TTY_EVAL_OUTPUT_DIR: outputDir,
-    },
+    env: requestEnv,
     evalCase: {
-      ...evalCase,
+      ...stripExecutionWorkspace(evalCase),
       prompt,
     },
     ...(modelId === undefined ? {} : { modelId }),
@@ -1022,6 +1104,12 @@ async function runSingleExecutionCase(
   const outputDir = await mkdtemp(join(tmpdir(), RUNNER_OUTPUT_PREFIX));
 
   try {
+    const workspace = await resolveExecutionWorkspace(
+      metadata,
+      evalCase,
+      homeDir,
+      outputDir,
+    );
     const request = await createEvalRequest(
       provider,
       metadata,
@@ -1031,6 +1119,7 @@ async function runSingleExecutionCase(
       homeDir,
       outputDir,
       runtime,
+      workspace,
     );
     const invocationStartedAt = new Date().toISOString();
     const invocationStartedMs = Date.now();
