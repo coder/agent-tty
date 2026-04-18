@@ -36,7 +36,10 @@ import type {
   WorkflowCheckResult,
 } from '../lib/types.js';
 import type { ReporterDispatcher } from '../reporters/dispatch.js';
-import { CaseProgressTracker, computePlannedCases } from '../reporters/runtime.js';
+import {
+  CaseProgressTracker,
+  computePlannedCases,
+} from '../reporters/runtime.js';
 import type { EvalProvider } from '../providers/base.js';
 import { altScreenDemoCase } from './cases/alt-screen-demo.js';
 import { colorGridCase } from './cases/color-grid.js';
@@ -1318,7 +1321,10 @@ export async function runExecutionLane(
     ...(reporter === undefined ? {} : { dispatcher: reporter }),
     now: () => trackerTimestamp ?? new Date().toISOString(),
   });
-  const trialStarts = new Map<string, { startedAt: string; startedAtMs: number }>();
+  const trialStarts = new Map<
+    string,
+    { startedAt: string; startedAtMs: number }
+  >();
   const getTimestamp = (): { iso: string; ms: number } => {
     const iso = new Date().toISOString();
     return { iso, ms: Date.parse(iso) };
@@ -1400,7 +1406,8 @@ export async function runExecutionLane(
                   stderrPath: settled.value.stderrPath ?? null,
                   eventLogPath: settled.value.eventLogPath ?? null,
                   bundlePath: settled.value.bundlePath ?? null,
-                  artifactManifestPath: settled.value.artifactManifestPath ?? null,
+                  artifactManifestPath:
+                    settled.value.artifactManifestPath ?? null,
                 });
               } else {
                 await activeReporter.dispatch('trialFinish', {

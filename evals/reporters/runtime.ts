@@ -75,7 +75,10 @@ function parseTimestampMs(value: string, label: string): number {
   invariant(value.length > 0, `${label} must not be empty`);
 
   const timestampMs = Date.parse(value);
-  invariant(Number.isFinite(timestampMs), `${label} must be a valid ISO timestamp`);
+  invariant(
+    Number.isFinite(timestampMs),
+    `${label} must be a valid ISO timestamp`,
+  );
   return timestampMs;
 }
 
@@ -85,7 +88,10 @@ function defaultScoreFromResult(result: CaseProgressResult): number | null {
     return null;
   }
   if (typeof scoreValue === 'number') {
-    invariant(Number.isFinite(scoreValue), 'fulfilled score must be a finite number');
+    invariant(
+      Number.isFinite(scoreValue),
+      'fulfilled score must be a finite number',
+    );
     return scoreValue;
   }
   if (typeof scoreValue === 'object') {
@@ -175,7 +181,8 @@ export class CaseProgressTracker<
     assertString(options.lane, 'tracker lane must be a string');
     invariant(options.lane.length > 0, 'tracker lane must not be empty');
     invariant(
-      options.dispatcher === undefined || typeof options.dispatcher.dispatch === 'function',
+      options.dispatcher === undefined ||
+        typeof options.dispatcher.dispatch === 'function',
       'tracker dispatcher must expose a dispatch function or be undefined',
     );
     invariant(
@@ -198,7 +205,8 @@ export class CaseProgressTracker<
     for (const [key, plannedCase] of options.plannedCases.entries()) {
       validateCaseIdentity(plannedCase, `plannedCases[${key}]`);
       invariant(
-        Number.isInteger(plannedCase.plannedTrials) && plannedCase.plannedTrials > 0,
+        Number.isInteger(plannedCase.plannedTrials) &&
+          plannedCase.plannedTrials > 0,
         `plannedCases[${key}].plannedTrials must be a positive integer`,
       );
       invariant(

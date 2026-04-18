@@ -30,7 +30,10 @@ import type {
   SkillCondition,
 } from '../lib/types.js';
 import type { ReporterDispatcher } from '../reporters/dispatch.js';
-import { CaseProgressTracker, computePlannedCases } from '../reporters/runtime.js';
+import {
+  CaseProgressTracker,
+  computePlannedCases,
+} from '../reporters/runtime.js';
 import type { EvalProvider } from '../providers/base.js';
 import evidenceCompletenessCase from './cases/evidence-completeness.js';
 import exploratoryQaCase from './cases/exploratory-qa.js';
@@ -959,7 +962,10 @@ export async function runDogfoodLane(
     ...(reporter === undefined ? {} : { dispatcher: reporter }),
     now: () => trackerTimestamp ?? new Date().toISOString(),
   });
-  const trialStarts = new Map<string, { startedAt: string; startedAtMs: number }>();
+  const trialStarts = new Map<
+    string,
+    { startedAt: string; startedAtMs: number }
+  >();
   const getTimestamp = (): { iso: string; ms: number } => {
     const iso = new Date().toISOString();
     return { iso, ms: Date.parse(iso) };
@@ -1064,7 +1070,8 @@ export async function runDogfoodLane(
                   stderrPath: settled.value.stderrPath ?? null,
                   eventLogPath: settled.value.eventLogPath ?? null,
                   bundlePath: settled.value.bundlePath ?? null,
-                  artifactManifestPath: settled.value.artifactManifestPath ?? null,
+                  artifactManifestPath:
+                    settled.value.artifactManifestPath ?? null,
                 });
               } else {
                 const describedError = describeDogfoodError(settled.reason);

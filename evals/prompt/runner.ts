@@ -25,7 +25,10 @@ import type {
   SkillCondition,
 } from '../lib/types.js';
 import type { ReporterDispatcher } from '../reporters/dispatch.js';
-import { CaseProgressTracker, computePlannedCases } from '../reporters/runtime.js';
+import {
+  CaseProgressTracker,
+  computePlannedCases,
+} from '../reporters/runtime.js';
 import type { EvalProvider } from '../providers/base.js';
 import { ANTI_PATTERN_PROMPT_CASES } from './cases/anti-patterns.js';
 import { SHOULD_NOT_TRIGGER_PROMPT_CASES } from './cases/should-not-trigger.js';
@@ -612,7 +615,10 @@ export async function runPromptLane(
     ...(reporter === undefined ? {} : { dispatcher: reporter }),
     now: () => trackerTimestamp ?? new Date().toISOString(),
   });
-  const trialStarts = new Map<string, { startedAt: string; startedAtMs: number }>();
+  const trialStarts = new Map<
+    string,
+    { startedAt: string; startedAtMs: number }
+  >();
   const getTimestamp = (): { iso: string; ms: number } => {
     const iso = new Date().toISOString();
     return { iso, ms: Date.parse(iso) };
@@ -693,7 +699,8 @@ export async function runPromptLane(
                   stderrPath: settled.value.stderrPath ?? null,
                   eventLogPath: settled.value.eventLogPath ?? null,
                   bundlePath: settled.value.bundlePath ?? null,
-                  artifactManifestPath: settled.value.artifactManifestPath ?? null,
+                  artifactManifestPath:
+                    settled.value.artifactManifestPath ?? null,
                 });
               } else {
                 await activeReporter.dispatch('trialFinish', {

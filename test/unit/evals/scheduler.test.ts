@@ -204,23 +204,19 @@ describe('runScheduled', () => {
     const items: TestItem[] = [{ key: 'alpha' }];
     const seen: Array<{ key: string; status: string; value?: string }> = [];
 
-    await runScheduled(
-      items,
-      (item) => Promise.resolve(`${item.key} ok`),
-      {
-        concurrency: 1,
-        onItemFinish: async (item, settled) => {
-          await delay(5);
-          if (settled.status === 'fulfilled') {
-            seen.push({
-              key: item.key,
-              status: settled.status,
-              value: settled.value,
-            });
-          }
-        },
+    await runScheduled(items, (item) => Promise.resolve(`${item.key} ok`), {
+      concurrency: 1,
+      onItemFinish: async (item, settled) => {
+        await delay(5);
+        if (settled.status === 'fulfilled') {
+          seen.push({
+            key: item.key,
+            status: settled.status,
+            value: settled.value,
+          });
+        }
       },
-    );
+    });
 
     expect(seen).toEqual([
       { key: 'alpha', status: 'fulfilled', value: 'alpha ok' },

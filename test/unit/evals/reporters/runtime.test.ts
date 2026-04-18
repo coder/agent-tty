@@ -11,7 +11,10 @@ import type {
   CaseStartEvent,
 } from '../../../../evals/reporters/types.js';
 
-interface RuntimeItem extends Pick<EvalWorkItemIdentity, 'caseId' | 'condition'> {
+interface RuntimeItem extends Pick<
+  EvalWorkItemIdentity,
+  'caseId' | 'condition'
+> {
   trial: number;
 }
 
@@ -343,11 +346,15 @@ describe('CaseProgressTracker', () => {
     });
 
     const caseStartEvents = events.filter(
-      (event): event is Extract<RecordedCaseEvent, { eventName: 'caseStart' }> =>
+      (
+        event,
+      ): event is Extract<RecordedCaseEvent, { eventName: 'caseStart' }> =>
         event.eventName === 'caseStart',
     );
     const caseFinishEvents = events.filter(
-      (event): event is Extract<RecordedCaseEvent, { eventName: 'caseFinish' }> =>
+      (
+        event,
+      ): event is Extract<RecordedCaseEvent, { eventName: 'caseFinish' }> =>
         event.eventName === 'caseFinish',
     );
     const countByKey = (
