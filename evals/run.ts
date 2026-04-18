@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -15,7 +15,6 @@ import {
 import {
   buildBaselineComparison,
   generateJsonReport,
-  generateMarkdownReport,
 } from './lib/reporting.js';
 import { JsonReportSchema, RunMetadataSchema } from './lib/schemas.js';
 import {
@@ -30,6 +29,13 @@ import {
 } from './lib/types.js';
 import { getAllPromptCases, runPromptLane } from './prompt/runner.js';
 import { createProvider, SUPPORTED_PROVIDER_IDS } from './providers/base.js';
+import { ConsoleReporter } from './reporters/console.js';
+import { ReporterDispatcher } from './reporters/dispatch.js';
+import {
+  FinalReportReporter,
+  type FinalReportInputs,
+} from './reporters/final-report.js';
+import { JsonlReporter } from './reporters/jsonl.js';
 import type { EvalProvider } from './providers/base.js';
 
 const DEFAULT_TOTAL_TRIALS = 1;
@@ -45,6 +51,9 @@ const CLI_PROVIDER_IDS = SUPPORTED_PROVIDER_IDS.filter(
   (providerId) => providerId !== 'recording',
 );
 const CLI_PROVIDER_SET = new Set<string>(CLI_PROVIDER_IDS);
+const REPORTER_IDS = ['final', 'console', 'jsonl'] as const;
+const REPORTER_SET = new Set<string>(REPORTER_IDS);
+export type ReporterId = (typeof REPORTER_IDS)[number];
 
 const HELP_TEXT = [
   'Usage: npx tsx evals/run.ts [options]',
@@ -57,6 +66,9 @@ const HELP_TEXT = [
   '  --condition <cond>  Skill condition (none, self-load, preloaded, stale, all). Default: all. May be repeated.',
   '  --case <id>         Run specific case(s) by ID. May be repeated.',
   '  --output <dir>      Output directory. Default: evals/reports/{timestamp}',
+  `  --reporter <name>   Reporter to enable (${REPORTER_IDS.join(', ')}). May be repeated.`,
+  '  --reporter-output <path>  Output path for reporters that write files (required for jsonl)',
+  '  --progress          Enable progress reporting on stderr',
   '  --json              Print JSON summary only',
   '  --verbose           Print verbose progress logs to stderr',
   '  --dry-run           List cases that would run without invoking providers',
@@ -84,14 +96,22 @@ interface CliOptions {
   lane?: string;
   conditions: string[];
   caseIds: string[];
+  reporters: string[];
   outputDir?: string;
+  reporterOutput?: string;
   concurrency?: string;
   trials?: string;
   compareBaseline?: string;
   json: boolean;
   verbose: boolean;
   dryRun: boolean;
+  progress: boolean;
   help: boolean;
+}
+
+export interface ResolvedReporterSelection {
+  reporterNames: ReporterId[];
+  reporterOutputPath?: string;
 }
 
 interface ResolvedCliOptions {
@@ -103,6 +123,8 @@ interface ResolvedCliOptions {
   caseIds: string[];
   outputBaseDir: string;
   compareBaselinePath?: string;
+  reporterNames: ReporterId[];
+  reporterOutputPath?: string;
   concurrency: number;
   totalTrials: number;
   json: boolean;
@@ -163,6 +185,10 @@ function isSkillCondition(value: string): value is SkillCondition {
 
 function isCliProviderId(value: string): value is CliProviderId {
   return CLI_PROVIDER_SET.has(value);
+}
+
+function isReporterId(value: string): value is ReporterId {
+  return REPORTER_SET.has(value);
 }
 
 function compareStrings(left: string, right: string): number {
@@ -228,9 +254,11 @@ export function parseCliArgs(argumentsList: readonly string[]): CliOptions {
   const options: CliOptions = {
     conditions: [],
     caseIds: [],
+    reporters: [],
     json: false,
     verbose: false,
     dryRun: false,
+    progress: false,
     help: false,
   };
 
@@ -255,6 +283,11 @@ export function parseCliArgs(argumentsList: readonly string[]): CliOptions {
     if (argument === '--dry-run') {
       invariant(!options.dryRun, '--dry-run may only be provided once');
       options.dryRun = true;
+      continue;
+    }
+    if (argument === '--progress') {
+      invariant(!options.progress, '--progress may only be provided once');
+      options.progress = true;
       continue;
     }
     if (argument === '--concurrency' || argument.startsWith('--concurrency=')) {
@@ -380,6 +413,35 @@ export function parseCliArgs(argumentsList: readonly string[]): CliOptions {
         '--output may only be set once',
       );
       options.outputDir = parsed.value;
+      index = parsed.nextIndex;
+      continue;
+    }
+    if (argument === '--reporter' || argument.startsWith('--reporter=')) {
+      const parsed = parseOptionValue(
+        argument,
+        '--reporter',
+        argumentsList,
+        index,
+      );
+      options.reporters.push(parsed.value);
+      index = parsed.nextIndex;
+      continue;
+    }
+    if (
+      argument === '--reporter-output' ||
+      argument.startsWith('--reporter-output=')
+    ) {
+      const parsed = parseOptionValue(
+        argument,
+        '--reporter-output',
+        argumentsList,
+        index,
+      );
+      invariant(
+        options.reporterOutput === undefined,
+        '--reporter-output may only be set once',
+      );
+      options.reporterOutput = parsed.value;
       index = parsed.nextIndex;
       continue;
     }
@@ -532,6 +594,53 @@ function resolveOutputBaseDir(
   return resolve(repoRoot, outputDir);
 }
 
+export function resolveReporterSelection(
+  repoRoot: string,
+  options: Pick<CliOptions, 'progress' | 'reporters' | 'reporterOutput'>,
+): ResolvedReporterSelection {
+  assertString(repoRoot, 'repoRoot must be a string');
+  invariant(repoRoot.length > 0, 'repoRoot must not be empty');
+  invariant(
+    Array.isArray(options.reporters),
+    '--reporter values must be an array',
+  );
+  invariant(
+    typeof options.progress === 'boolean',
+    '--progress must be a boolean',
+  );
+
+  const explicit = options.reporters ?? [];
+  const ordered = explicit.length === 0 ? ['final'] : [...explicit];
+  if (options.progress && !ordered.includes('console')) {
+    ordered.push('console');
+  }
+
+  for (const reporterName of ordered) {
+    assertString(reporterName, '--reporter values must be strings');
+    invariant(reporterName.length > 0, '--reporter values must not be empty');
+    invariant(
+      isReporterId(reporterName),
+      `Unsupported reporter: ${reporterName}. Expected one of ${REPORTER_IDS.join(', ')}`,
+    );
+  }
+
+  const reporterOutputPath = resolveOptionalStringOption(
+    options.reporterOutput,
+    '--reporter-output',
+  );
+  invariant(
+    !ordered.includes('jsonl') || reporterOutputPath !== undefined,
+    '--reporter jsonl requires --reporter-output',
+  );
+
+  return {
+    reporterNames: ordered as ReporterId[],
+    ...(reporterOutputPath === undefined
+      ? {}
+      : { reporterOutputPath: resolve(repoRoot, reporterOutputPath) }),
+  };
+}
+
 function getCasesForLane(lane: EvalLane): EvalCase[] {
   switch (lane) {
     case 'prompt':
@@ -658,6 +767,7 @@ function buildResolvedOptions(
     options.compareBaseline,
     '--compare-baseline',
   );
+  const reporterSelection = resolveReporterSelection(repoRoot, options);
   const concurrency = resolveConcurrency(options.concurrency);
   const totalTrials = resolveTotalTrials(options.trials);
   const selection = buildCaseSelections(
@@ -679,6 +789,10 @@ function buildResolvedOptions(
     ...(compareBaselinePath === undefined
       ? {}
       : { compareBaselinePath: resolve(repoRoot, compareBaselinePath) }),
+    reporterNames: reporterSelection.reporterNames,
+    ...(reporterSelection.reporterOutputPath === undefined
+      ? {}
+      : { reporterOutputPath: reporterSelection.reporterOutputPath }),
     concurrency,
     totalTrials,
     json: options.json,
@@ -899,8 +1013,8 @@ function buildSummary(
   results: EvalResult[],
   laneErrors: readonly LaneErrorSummary[],
   metadata: RunMetadata,
-  jsonReportPath: string,
-  markdownReportPath: string,
+  jsonReportPath: string | undefined,
+  markdownReportPath: string | undefined,
   runDir: string,
 ): RunSummary {
   const passed = results.filter((result) => result.ok).length;
@@ -921,8 +1035,8 @@ function buildSummary(
     failed,
     outputBaseDir: options.outputBaseDir,
     runDir,
-    jsonReportPath,
-    markdownReportPath,
+    ...(jsonReportPath === undefined ? {} : { jsonReportPath }),
+    ...(markdownReportPath === undefined ? {} : { markdownReportPath }),
     laneErrors: [...laneErrors],
     dryRun: false,
     selectedCases: options.selectedCases,
@@ -995,11 +1109,65 @@ async function detectProviderRuntime(
   }
 }
 
+function createReporterDispatcher(
+  options: Pick<
+    ResolvedCliOptions,
+    'reporterNames' | 'reporterOutputPath' | 'verbose'
+  >,
+  getFinalReportInputs: () => FinalReportInputs | null,
+): ReporterDispatcher {
+  const reporters = options.reporterNames.map((reporterName) => {
+    switch (reporterName) {
+      case 'console':
+        return new ConsoleReporter({ verbose: options.verbose });
+      case 'jsonl':
+        invariant(
+          options.reporterOutputPath !== undefined,
+          'jsonl reporter requires an output path',
+        );
+        return new JsonlReporter({ outputPath: options.reporterOutputPath });
+      case 'final':
+        return new FinalReportReporter({ getFinalReportInputs });
+      default:
+        return reporterName satisfies never;
+    }
+  });
+
+  return new ReporterDispatcher(reporters);
+}
+
+function resolveReporterModel(metadata: RunMetadata): string {
+  return metadata.models[0] ?? 'unknown';
+}
+
+function buildRunResultCounts(results: readonly EvalResult[]): {
+  total: number;
+  passed: number;
+  failed: number;
+  errored: number;
+} {
+  return results.reduce(
+    (counts, result) => {
+      counts.total += 1;
+      if (result.ok) {
+        counts.passed += 1;
+      } else if (result.errorClass === undefined) {
+        counts.failed += 1;
+      } else {
+        counts.errored += 1;
+      }
+      return counts;
+    },
+    { total: 0, passed: 0, failed: 0, errored: 0 },
+  );
+}
+
 async function runLane(
   lane: EvalLane,
   provider: EvalProvider,
   metadata: RunMetadata,
   options: ResolvedCliOptions,
+  reporter: ReporterDispatcher,
 ): Promise<EvalResult[]> {
   const caseFilter = options.selectedCases
     .filter((selection) => selection.lane === lane)
@@ -1015,18 +1183,21 @@ async function runLane(
         conditions: options.activeConditions,
         caseFilter,
         concurrency: options.concurrency,
+        reporter,
       });
     case 'execution':
       return runExecutionLane(provider, metadata, {
         conditions: options.activeConditions,
         caseFilter,
         concurrency: options.concurrency,
+        reporter,
       });
     case 'dogfood':
       return runDogfoodLane(provider, metadata, {
         conditions: options.activeConditions,
         caseFilter,
         concurrency: options.concurrency,
+        reporter,
       });
     default:
       return lane satisfies never;
@@ -1056,6 +1227,10 @@ export async function runEvalCli(
   }
 
   const options = buildResolvedOptions(repoRoot, parsedOptions);
+  let finalReportInputs: FinalReportInputs | null = null;
+  const getFinalReportInputs = (): FinalReportInputs | null =>
+    finalReportInputs;
+  const reporter = createReporterDispatcher(options, getFinalReportInputs);
   if (options.dryRun) {
     writeDryRunSummary(options);
     return 0;
@@ -1076,12 +1251,30 @@ export async function runEvalCli(
   );
   const results: EvalResult[] = [];
   const laneErrors: LaneErrorSummary[] = [];
+  const runStartedAtMs = Date.parse(metadata.createdAt);
+  await reporter.dispatch('runStart', {
+    runId: metadata.runId,
+    provider: options.providerId,
+    model: resolveReporterModel(metadata),
+    lanes: metadata.lanes,
+    conditions: metadata.conditions,
+    totalTrials: options.totalTrials,
+    totalInvocations: options.totalInvocations,
+    outputDir: options.outputBaseDir,
+    startedAt: metadata.createdAt,
+  });
 
   if (options.concurrency > 1) {
     const lanePromises = options.activeLanes.map(async (lane) => {
       try {
         logVerbose(options, `Running ${lane} lane`);
-        const laneResults = await runLane(lane, provider, metadata, options);
+        const laneResults = await runLane(
+          lane,
+          provider,
+          metadata,
+          options,
+          reporter,
+        );
         logVerbose(
           options,
           `Completed ${lane} lane with ${String(laneResults.length)} result(s)`,
@@ -1123,7 +1316,13 @@ export async function runEvalCli(
     for (const lane of options.activeLanes) {
       logVerbose(options, `Running ${lane} lane`);
       try {
-        const laneResults = await runLane(lane, provider, metadata, options);
+        const laneResults = await runLane(
+          lane,
+          provider,
+          metadata,
+          options,
+          reporter,
+        );
         results.push(...laneResults);
         logVerbose(
           options,
@@ -1156,22 +1355,6 @@ export async function runEvalCli(
           await loadBaselineReport(options.compareBaselinePath),
           candidateCoreReport,
         );
-  const jsonReport =
-    baselineComparison === undefined
-      ? candidateCoreReport
-      : generateJsonReport(
-          results,
-          metadata,
-          comparisonMetrics,
-          baselineComparison,
-        );
-  const markdownReport = generateMarkdownReport(
-    results,
-    metadata,
-    comparisonMetrics,
-    baselineComparison,
-  );
-
   const artifactStore = new EvalArtifactStore(options.outputBaseDir);
   await artifactStore.saveRunMetadata(metadata.runId, metadata);
   const runDir = artifactStore.runDir(metadata.runId);
@@ -1179,20 +1362,38 @@ export async function runEvalCli(
 
   const jsonReportPath = join(runDir, 'report.json');
   const markdownReportPath = join(runDir, 'report.md');
-  await writeFile(
-    jsonReportPath,
-    `${JSON.stringify(jsonReport, null, 2)}\n`,
-    'utf8',
-  );
-  await writeFile(markdownReportPath, markdownReport, 'utf8');
+  const finalReporterEnabled = options.reporterNames.includes('final');
+  if (finalReporterEnabled) {
+    finalReportInputs = {
+      results,
+      metadata,
+      comparisonMetrics,
+      ...(baselineComparison === undefined ? {} : { baselineComparison }),
+      jsonReportPath,
+      markdownReportPath,
+    };
+  }
+
+  const runCompletedAt = new Date().toISOString();
+  await reporter.dispatch('runFinish', {
+    runId: metadata.runId,
+    startedAt: metadata.createdAt,
+    completedAt: runCompletedAt,
+    durationMs: Math.max(0, Date.parse(runCompletedAt) - runStartedAtMs),
+    ...buildRunResultCounts(results),
+    laneErrors: [...laneErrors],
+    runDir,
+    reportJsonPath: finalReporterEnabled ? jsonReportPath : null,
+    reportMarkdownPath: finalReporterEnabled ? markdownReportPath : null,
+  });
 
   const summary = buildSummary(
     options,
     results,
     laneErrors,
     metadata,
-    jsonReportPath,
-    markdownReportPath,
+    finalReporterEnabled ? jsonReportPath : undefined,
+    finalReporterEnabled ? markdownReportPath : undefined,
     runDir,
   );
 
