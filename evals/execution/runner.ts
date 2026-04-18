@@ -46,6 +46,10 @@ import { resizeDemoCase } from './cases/resize-demo.js';
 import { runCommandCase } from './cases/run-command.js';
 import { scrollbackDemoCase } from './cases/scrollback-demo.js';
 import { unicodeGridCase } from './cases/unicode-grid.js';
+import {
+  EXECUTION_CASE_COVERAGE,
+  getExecutionCaseCoverage,
+} from './cases/shared.js';
 import type { VerifierResult } from './verifiers/index.js';
 import { verify, verifyArtifactExists } from './verifiers/index.js';
 
@@ -105,6 +109,31 @@ const STALE_EXECUTION_SKILL_TEXT = [
   '',
   'Some of the guidance above is wrong for this repository snapshot. Verify commands against the current CLI behavior while completing the task.',
 ].join('\n');
+
+const ENVIRONMENT_BLOCKED_ERROR_CLASS = 'environment-blocked';
+const RENDERER_ENVIRONMENT_HINT =
+  'Run `npx tsx src/cli/main.ts doctor --json` before retrying. If the renderer checks report a missing browser cache, run `npx playwright install chromium`.';
+const RENDERER_ENVIRONMENT_ERROR_PATTERNS = [
+  /Playwright browser cache not found/iu,
+  /Run 'npx playwright install chromium' to install\./iu,
+  /\bplaywright unavailable\b/iu,
+  /\bplaywright not installed\b/iu,
+  /\bplaywright import failed\b/iu,
+  /\bghostty-web unavailable\b/iu,
+  /\bbrowser launch failed\b/iu,
+  /\bscreenshot smoke test failed\b/iu,
+  /Failed to boot or replay renderer/iu,
+  /Executable doesn't exist/iu,
+] as const;
+const RENDERER_DOCTOR_FAILURE_PATTERNS = [
+  /"name"\s*:\s*"playwright_available"[\s\S]*?"status"\s*:\s*"fail"/iu,
+  /"name"\s*:\s*"browser_cache_accessible"[\s\S]*?"status"\s*:\s*"(?:fail|skip)"/iu,
+  /"name"\s*:\s*"browser_launch"[\s\S]*?"status"\s*:\s*"fail"/iu,
+  /"name"\s*:\s*"ghostty_web_available"[\s\S]*?"status"\s*:\s*"fail"/iu,
+  /"name"\s*:\s*"screenshot_viable"[\s\S]*?"status"\s*:\s*"fail"/iu,
+  /"name"\s*:\s*"screenshot"[\s\S]*?"status"\s*:\s*"(?:unavailable|degraded)"/iu,
+  /"name"\s*:\s*"record-export-webm"[\s\S]*?"status"\s*:\s*"(?:unavailable|degraded)"/iu,
+] as const;
 
 async function readSkillFile(relativePath: string): Promise<string> {
   const content = await readFile(
@@ -172,6 +201,64 @@ function assertExecutionCaseInventory(
       `Execution lane category ${category} must contain ${String(expectedCount)} cases`,
     );
   }
+}
+
+assertExecutionCaseCoverageMetadata(EXECUTION_CASES);
+
+function assertExecutionCaseCoverageMetadata(
+  cases: readonly ExecutionEvalCase[],
+): void {
+  const caseIds = new Set(cases.map((evalCase) => evalCase.id));
+  const coverageIds = Object.keys(EXECUTION_CASE_COVERAGE);
+
+  for (const caseId of caseIds) {
+    invariant(
+      coverageIds.includes(caseId),
+      `Missing execution coverage metadata for case ${caseId}`,
+    );
+  }
+
+  for (const coverageId of coverageIds) {
+    invariant(
+      caseIds.has(coverageId),
+      `Execution coverage metadata references unknown case ${coverageId}`,
+    );
+  }
+}
+
+function matchesAnyPattern(text: string, patterns: readonly RegExp[]): boolean {
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function detectRendererEnvironmentBlock(
+  evalCase: ExecutionEvalCase,
+  transcript: string,
+  providerErrorMessage: string | undefined,
+): string | undefined {
+  const coverage = getExecutionCaseCoverage(evalCase.id);
+  if (coverage.rendererRequirement !== 'required') {
+    return undefined;
+  }
+
+  const combinedText = [transcript, providerErrorMessage]
+    .filter((value): value is string => value !== undefined && value.length > 0)
+    .join('\n');
+  if (combinedText.length === 0) {
+    return undefined;
+  }
+
+  if (
+    !matchesAnyPattern(combinedText, RENDERER_ENVIRONMENT_ERROR_PATTERNS) &&
+    !matchesAnyPattern(combinedText, RENDERER_DOCTOR_FAILURE_PATTERNS)
+  ) {
+    return undefined;
+  }
+
+  return [
+    `Renderer-backed case ${evalCase.id} was blocked by missing or unhealthy Playwright/Chromium/ghostty-web dependencies.`,
+    `Case note: ${coverage.summary}`,
+    RENDERER_ENVIRONMENT_HINT,
+  ].join(' ');
 }
 
 function safeRatio(numerator: number, denominator: number): number {
@@ -812,6 +899,7 @@ function buildResult(
   condition: SkillCondition,
   trial: number,
   runtime: ProviderRuntimeInfo | undefined,
+  transcript: string,
   normalizedOutput: NormalizedProviderOutput,
   providerOk: boolean,
   startedAt: string,
@@ -839,16 +927,30 @@ function buildResult(
     normalizedOutput,
   );
   const modelId = resolveModelId(metadata, runtime);
+  const summarizedFailure = summarizeFailureReasons(
+    providerOk,
+    verifierResults,
+    workflowChecks,
+    antiPatternFindings,
+    artifactResults,
+    providerErrorMessage,
+  );
+  const environmentBlockedMessage = detectRendererEnvironmentBlock(
+    evalCase,
+    transcript,
+    providerErrorMessage,
+  );
+  const effectiveErrorClass =
+    environmentBlockedMessage === undefined
+      ? errorClass
+      : ENVIRONMENT_BLOCKED_ERROR_CLASS;
   const failureMessage = scored.ok
     ? undefined
-    : summarizeFailureReasons(
-        providerOk,
-        verifierResults,
-        workflowChecks,
-        antiPatternFindings,
-        artifactResults,
-        providerErrorMessage,
-      );
+    : environmentBlockedMessage === undefined
+      ? summarizedFailure
+      : [environmentBlockedMessage, summarizedFailure]
+          .filter((value) => value.length > 0)
+          .join(' ');
 
   const result: EvalResult = {
     runId: metadata.runId,
@@ -873,7 +975,9 @@ function buildResult(
     ...(bundlePath === undefined ? {} : { bundlePath }),
     ...(eventLogPath === undefined ? {} : { eventLogPath }),
     normalizedOutput,
-    ...(scored.ok || errorClass === undefined ? {} : { errorClass }),
+    ...(scored.ok || effectiveErrorClass === undefined
+      ? {}
+      : { errorClass: effectiveErrorClass }),
     ...(failureMessage === undefined ? {} : { errorMessage: failureMessage }),
     startedAt,
     completedAt,
@@ -936,6 +1040,7 @@ async function runSingleExecutionCase(
         condition,
         trial,
         runtime,
+        transcript,
         normalizedOutput,
         false,
         invocationStartedAt,
@@ -1008,6 +1113,7 @@ async function runSingleExecutionCase(
         condition,
         trial,
         providerResult.runtime,
+        transcript,
         providerResult.normalized,
         providerResult.ok,
         providerResult.startedAt,
@@ -1049,6 +1155,7 @@ async function runSingleExecutionCase(
         condition,
         trial,
         runtime,
+        transcript,
         normalizedOutput,
         false,
         invocationStartedAt,
@@ -1086,7 +1193,6 @@ async function runSingleExecutionCase(
     }
   }
 }
-
 /** Return all registered execution-lane cases in deterministic order. */
 export function getAllExecutionCases(): ExecutionEvalCase[] {
   assertExecutionCaseInventory(EXECUTION_CASES);

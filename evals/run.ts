@@ -54,7 +54,7 @@ const HELP_TEXT = [
   '  --model <model>     Model to use (for example: opus, claude-opus-4-6, gpt-5.4, o4-mini)',
   '  --effort <level>    Claude Code effort/thinking level (low, medium, high, max)',
   '  --lane <lane>       Lane to run (prompt, execution, dogfood, all)',
-  '  --condition <cond>  Skill condition (none, self-load, preloaded, stale, all). Default: all',
+  '  --condition <cond>  Skill condition (none, self-load, preloaded, stale, all). Default: all. May be repeated.',
   '  --case <id>         Run specific case(s) by ID. May be repeated.',
   '  --output <dir>      Output directory. Default: evals/reports/{timestamp}',
   '  --json              Print JSON summary only',
@@ -70,6 +70,7 @@ const HELP_TEXT = [
   '  npx tsx evals/run.ts --provider claude --model opus --effort high --lane prompt',
   '  npx tsx evals/run.ts --provider codex --model gpt-5.4 --lane all',
   '  npx tsx evals/run.ts --provider stub --lane execution --case hello-prompt --case resize-demo',
+  '  npx tsx evals/run.ts --provider stub --lane execution --condition none --condition preloaded --dry-run',
   '',
   'Notes:',
   '  - Relative --output paths resolve from the repository root.',
@@ -81,7 +82,7 @@ interface CliOptions {
   modelId?: string;
   effortLevel?: string;
   lane?: string;
-  condition?: string;
+  conditions: string[];
   caseIds: string[];
   outputDir?: string;
   concurrency?: string;
@@ -98,7 +99,7 @@ interface ResolvedCliOptions {
   modelId?: string;
   effortLevel?: string;
   requestedLane: string;
-  requestedCondition: string;
+  requestedConditions: string[];
   caseIds: string[];
   outputBaseDir: string;
   compareBaselinePath?: string;
@@ -223,8 +224,9 @@ function parseOptionValue(
   };
 }
 
-function parseCliArgs(argumentsList: readonly string[]): CliOptions {
+export function parseCliArgs(argumentsList: readonly string[]): CliOptions {
   const options: CliOptions = {
+    conditions: [],
     caseIds: [],
     json: false,
     verbose: false,
@@ -356,11 +358,7 @@ function parseCliArgs(argumentsList: readonly string[]): CliOptions {
         argumentsList,
         index,
       );
-      invariant(
-        options.condition === undefined,
-        '--condition may only be set once',
-      );
-      options.condition = parsed.value;
+      options.conditions.push(parsed.value);
       index = parsed.nextIndex;
       continue;
     }
@@ -436,20 +434,45 @@ function resolveRequestedLanes(lane: string | undefined): EvalLane[] {
   return [lane];
 }
 
-function resolveRequestedConditions(
-  condition: string | undefined,
+export function resolveRequestedConditions(
+  conditions: readonly string[],
 ): SkillCondition[] {
-  if (condition === undefined || condition === 'all') {
+  invariant(Array.isArray(conditions), '--condition values must be an array');
+  if (conditions.length === 0) {
     return [...SKILL_CONDITIONS];
   }
 
-  assertString(condition, '--condition must be a string');
-  invariant(condition.length > 0, '--condition must not be empty');
-  invariant(
-    isSkillCondition(condition),
-    `Unsupported condition: ${condition}. Expected one of ${[...SKILL_CONDITIONS, 'all'].join(', ')}`,
+  let requestedAll = false;
+  const requestedConditions = new Set<SkillCondition>();
+  for (const condition of conditions) {
+    assertString(condition, '--condition values must be strings');
+    invariant(condition.length > 0, '--condition values must not be empty');
+    if (condition === 'all') {
+      requestedAll = true;
+      continue;
+    }
+    invariant(
+      isSkillCondition(condition),
+      `Unsupported condition: ${condition}. Expected one of ${[...SKILL_CONDITIONS, 'all'].join(', ')}`,
+    );
+    invariant(
+      !requestedAll,
+      '--condition all may not be combined with specific values',
+    );
+    requestedConditions.add(condition);
+  }
+
+  if (requestedAll) {
+    invariant(
+      requestedConditions.size === 0,
+      '--condition all may not be combined with specific values',
+    );
+    return [...SKILL_CONDITIONS];
+  }
+
+  return SKILL_CONDITIONS.filter((condition) =>
+    requestedConditions.has(condition),
   );
-  return [condition];
 }
 
 function resolveRequestedCaseIds(caseIds: readonly string[]): string[] {
@@ -623,7 +646,12 @@ function buildResolvedOptions(
     '--effort',
   );
   const requestedLanes = resolveRequestedLanes(options.lane);
-  const requestedConditions = resolveRequestedConditions(options.condition);
+  const requestedConditions = resolveRequestedConditions(options.conditions);
+  const requestedConditionFilters =
+    options.conditions.length === 0 ||
+    options.conditions.some((condition) => condition === 'all')
+      ? ['all']
+      : [...requestedConditions];
   const caseIds = resolveRequestedCaseIds(options.caseIds);
   const outputBaseDir = resolveOutputBaseDir(repoRoot, options.outputDir);
   const compareBaselinePath = resolveOptionalStringOption(
@@ -645,7 +673,7 @@ function buildResolvedOptions(
     ...(modelId === undefined ? {} : { modelId }),
     ...(effortLevel === undefined ? {} : { effortLevel }),
     requestedLane: options.lane ?? 'all',
-    requestedCondition: options.condition ?? 'all',
+    requestedConditions: requestedConditionFilters,
     caseIds,
     outputBaseDir,
     ...(compareBaselinePath === undefined
@@ -716,7 +744,7 @@ function writeDryRunSummary(options: ResolvedCliOptions): void {
     process.stdout,
     `Conditions: ${options.activeConditions.join(', ')}`,
   );
-  writeLine(process.stdout, `Output base dir: ${options.outputBaseDir}`);
+  writeLine(process.stdout, `Output directory: ${options.outputBaseDir}`);
   writeLine(
     process.stdout,
     `Total eval invocations: ${String(options.totalInvocations)}`,
@@ -775,9 +803,13 @@ function buildRunMetadata(
 ): RunMetadata {
   const metadataNotes: string[] = [];
   appendMetadataNote(metadataNotes, `requested lane: ${options.requestedLane}`);
+  invariant(
+    options.requestedConditions.length > 0,
+    'resolved requestedConditions must contain at least one value',
+  );
   appendMetadataNote(
     metadataNotes,
-    `requested condition: ${options.requestedCondition}`,
+    `requested conditions: ${options.requestedConditions.join(', ')}`,
   );
   if (options.caseIds.length > 0) {
     appendMetadataNote(
@@ -785,10 +817,6 @@ function buildRunMetadata(
       `case filter: ${options.caseIds.join(', ')}`,
     );
   }
-  appendMetadataNote(
-    metadataNotes,
-    `output base dir: ${options.outputBaseDir}`,
-  );
   appendMetadataNote(
     metadataNotes,
     options.modelId === undefined
@@ -834,6 +862,7 @@ function buildRunMetadata(
     runId,
     createdAt: new Date().toISOString(),
     repoRoot,
+    outputBaseDir: options.outputBaseDir,
     providers: [options.providerId],
     models: selectedModelId === undefined ? [] : [selectedModelId],
     lanes: options.activeLanes,
@@ -916,7 +945,7 @@ function writeHumanSummary(summary: RunSummary): void {
   }
   writeLine(process.stdout, `Lanes: ${summary.lanes.join(', ')}`);
   writeLine(process.stdout, `Conditions: ${summary.conditions.join(', ')}`);
-  writeLine(process.stdout, `Output base dir: ${summary.outputBaseDir}`);
+  writeLine(process.stdout, `Output directory: ${summary.outputBaseDir}`);
   if (summary.runDir !== undefined) {
     writeLine(process.stdout, `Run dir: ${summary.runDir}`);
   }

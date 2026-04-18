@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import { computeComparisonMetrics } from '../../../evals/lib/matrix.js';
 import {
   generateJsonReport,
   generateMarkdownReport,
 } from '../../../evals/lib/reporting.js';
+import { JsonReportSchema } from '../../../evals/lib/schemas.js';
 import {
   computeConfidenceInterval,
   computeMean,
@@ -305,5 +307,138 @@ describe('generateMarkdownReport trial aggregation', () => {
     );
 
     expect(markdown).not.toContain('## Trial Aggregation');
+  });
+});
+
+describe('eval reporting condition comparison summary', () => {
+  function createConditionComparisonMetadata(): RunMetadata {
+    return {
+      runId: 'run-1',
+      createdAt: '2025-01-01T00:00:00.000Z',
+      repoRoot: '/repo',
+      outputBaseDir: '/tmp/evals/out',
+      providers: ['stub'],
+      models: ['stub'],
+      lanes: ['execution'],
+      conditions: ['none', 'preloaded'],
+      totalTrials: 1,
+      notes: [],
+    };
+  }
+
+  function createConditionComparisonResults(): EvalResult[] {
+    return [
+      createEvalResult({
+        runId: 'run-1',
+        lane: 'execution',
+        category: 'session',
+        caseId: 'case-1',
+        condition: 'none',
+        ok: false,
+        score: { total: 0.2, maxPossible: 1, items: [] },
+        startedAt: '2025-01-01T00:00:00.000Z',
+        completedAt: '2025-01-01T00:00:01.000Z',
+      }),
+      createEvalResult({
+        runId: 'run-1',
+        lane: 'execution',
+        category: 'session',
+        caseId: 'case-1',
+        condition: 'preloaded',
+        trial: 2,
+        score: { total: 0.8, maxPossible: 1, items: [] },
+        startedAt: '2025-01-01T00:00:00.000Z',
+        completedAt: '2025-01-01T00:00:01.000Z',
+      }),
+      createEvalResult({
+        runId: 'run-1',
+        lane: 'execution',
+        category: 'session',
+        caseId: 'case-2',
+        condition: 'none',
+        trial: 3,
+        ok: false,
+        score: { total: 0.4, maxPossible: 1, items: [] },
+        startedAt: '2025-01-01T00:00:00.000Z',
+        completedAt: '2025-01-01T00:00:01.000Z',
+      }),
+      createEvalResult({
+        runId: 'run-1',
+        lane: 'execution',
+        category: 'session',
+        caseId: 'case-2',
+        condition: 'preloaded',
+        trial: 4,
+        score: { total: 1, maxPossible: 1, items: [] },
+        startedAt: '2025-01-01T00:00:00.000Z',
+        completedAt: '2025-01-01T00:00:01.000Z',
+      }),
+    ];
+  }
+
+  it('adds a structured condition comparison summary to the JSON report', () => {
+    const results = createConditionComparisonResults();
+    const metadata = createConditionComparisonMetadata();
+    const comparisons = computeComparisonMetrics(results);
+
+    const report = generateJsonReport(results, metadata, comparisons);
+
+    expect(report.metadata.outputBaseDir).toBe('/tmp/evals/out');
+    expect(report.conditionComparisonSummary).toBeDefined();
+    const summary = report.conditionComparisonSummary;
+    if (summary === undefined) {
+      throw new Error('Expected conditionComparisonSummary to be defined');
+    }
+
+    expect(summary.comparedConditions).toEqual(['none', 'preloaded']);
+    expect(summary.comparedGroups).toBe(2);
+    expect(summary.comparedCases).toBe(2);
+    expect(
+      summary.conditionBreakdown.map((row) => [
+        row.condition,
+        row.totalCases,
+        row.passed,
+        row.failed,
+      ]),
+    ).toEqual([
+      ['none', 2, 0, 2],
+      ['preloaded', 2, 2, 0],
+    ]);
+    expect(summary.conditionBreakdown[0]?.averageScore).toBeCloseTo(0.3);
+    expect(summary.conditionBreakdown[1]?.averageScore).toBeCloseTo(0.9);
+    expect(summary.keyDeltas.realizedSkillLift).toBeCloseTo(0);
+    expect(summary.keyDeltas.oracleSkillLift).toBeCloseTo(0.6);
+
+    expect(() =>
+      JsonReportSchema.parse({
+        metadata: report.metadata,
+        aggregate: report.aggregate,
+        conditionComparisonSummary: report.conditionComparisonSummary,
+        comparisons: report.comparisons,
+        results: report.results,
+        ...(report.providerComparison === undefined
+          ? {}
+          : { providerComparison: report.providerComparison }),
+      }),
+    ).not.toThrow();
+  });
+
+  it('promotes the condition comparison summary near the top of the markdown report', () => {
+    const results = createConditionComparisonResults().slice(0, 2);
+    const metadata = createConditionComparisonMetadata();
+    const comparisons = computeComparisonMetrics(results);
+
+    const markdown = generateMarkdownReport(results, metadata, comparisons);
+
+    expect(markdown).toContain('- Output directory: `/tmp/evals/out`');
+    expect(markdown).toContain('## Condition comparison');
+    expect(markdown).toContain('- Compared conditions: `none`, `preloaded`');
+    expect(markdown).toContain('| `none` | 1 | 0 | 1 | 0.0% | 0.200 |');
+    expect(markdown).toContain('| `preloaded` | 1 | 1 | 0 | 100.0% | 0.800 |');
+    expect(markdown).toContain('| Realized skill lift | 0.0% |');
+    expect(markdown).toContain('| Oracle skill lift | 60.0% |');
+    expect(markdown.indexOf('## Condition comparison')).toBeLessThan(
+      markdown.indexOf('## Lane breakdown'),
+    );
   });
 });

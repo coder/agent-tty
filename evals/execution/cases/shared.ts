@@ -21,6 +21,93 @@ const DEFAULT_MAX_WALL_CLOCK_MS = 90_000;
 
 export const ALL_EXECUTION_CONDITIONS: SkillCondition[] = [...SKILL_CONDITIONS];
 
+export type ExecutionRendererRequirement = 'none' | 'optional' | 'required';
+
+export type ExecutionReadinessTier =
+  | 'battle-tested'
+  | 'non-renderer-unproven'
+  | 'renderer-optional'
+  | 'renderer-required';
+
+export interface ExecutionCaseCoverageMetadata {
+  readinessTier: ExecutionReadinessTier;
+  rendererRequirement: ExecutionRendererRequirement;
+  summary: string;
+}
+
+const EXECUTION_CASE_COVERAGE_BY_ID = {
+  'hello-prompt': {
+    readinessTier: 'battle-tested',
+    rendererRequirement: 'none',
+    summary: 'Battle-tested create → input → wait → snapshot → cleanup flow.',
+  },
+  'crash-recovery': {
+    readinessTier: 'battle-tested',
+    rendererRequirement: 'none',
+    summary: 'Battle-tested crash inspection and cleanup flow.',
+  },
+  'run-command': {
+    readinessTier: 'battle-tested',
+    rendererRequirement: 'none',
+    summary: 'Battle-tested programmatic input flow via agent-tty run.',
+  },
+  'resize-demo': {
+    readinessTier: 'non-renderer-unproven',
+    rendererRequirement: 'none',
+    summary:
+      'Snapshot-only resize verification still needs broader smoke coverage.',
+  },
+  'alt-screen-demo': {
+    readinessTier: 'non-renderer-unproven',
+    rendererRequirement: 'none',
+    summary:
+      'Alt-screen event-log and snapshot proof still needs broader smoke coverage.',
+  },
+  'scrollback-demo': {
+    readinessTier: 'non-renderer-unproven',
+    rendererRequirement: 'none',
+    summary: 'Scrollback snapshot proof still needs broader smoke coverage.',
+  },
+  'unicode-grid': {
+    readinessTier: 'non-renderer-unproven',
+    rendererRequirement: 'none',
+    summary:
+      'Unicode snapshot verification still needs broader smoke coverage.',
+  },
+  'export-proof': {
+    readinessTier: 'non-renderer-unproven',
+    rendererRequirement: 'required',
+    summary:
+      'Still in the next smoke batch, but the required WebM export is renderer-backed.',
+  },
+  'color-grid': {
+    readinessTier: 'renderer-optional',
+    rendererRequirement: 'optional',
+    summary:
+      'Can pass with non-renderer verification, but renderer-backed screenshots remain useful reviewer evidence.',
+  },
+  'doctor-gated': {
+    readinessTier: 'renderer-required',
+    rendererRequirement: 'required',
+    summary:
+      'Must pass doctor --json renderer checks before the required screenshot capture.',
+  },
+} as const satisfies Record<string, ExecutionCaseCoverageMetadata>;
+
+export const EXECUTION_CASE_COVERAGE = EXECUTION_CASE_COVERAGE_BY_ID;
+
+export function getExecutionCaseCoverage(
+  caseId: string,
+): ExecutionCaseCoverageMetadata {
+  invariant(
+    Object.prototype.hasOwnProperty.call(EXECUTION_CASE_COVERAGE_BY_ID, caseId),
+    `Missing execution case coverage metadata for ${caseId}`,
+  );
+  return EXECUTION_CASE_COVERAGE_BY_ID[
+    caseId as keyof typeof EXECUTION_CASE_COVERAGE_BY_ID
+  ];
+}
+
 export function anyOf(...patterns: string[]): string {
   invariant(patterns.length > 0, 'anyOf() requires at least one pattern');
   return `(?:${patterns.join('|')})`;

@@ -31,6 +31,14 @@ const NEGATION_CONTEXT_PATTERNS = Object.freeze([
   /\bunlike(?:\s+\S+){0,2}$/iu,
   /\bno need for(?:\s+\S+){0,4}$/iu,
 ]);
+const SKILL_REJECTION_LEADING_PATTERNS = Object.freeze([
+  /\brule\s+out(?:\s+\S+){0,4}$/iu,
+]);
+const SKILL_REJECTION_TRAILING_PATTERNS = Object.freeze([
+  /^(?:would\s+be|is|seems|feels)\s+too\s+specialized\b/iu,
+  /^(?:is(?:n['’]t|\s+not)|would(?:n['’]t|\s+not)\s+be)\s+the\s+right\s+skill\b/iu,
+  /^(?:is|would\s+be)\s+the\s+wrong\s+skill\b/iu,
+]);
 const PROMPT_SCORE_WEIGHTS = Object.freeze({
   expectedPatterns: 0.4,
   skillSelection: 0.4,
@@ -778,8 +786,10 @@ function detectAntiPatternFindings(
   return findings;
 }
 
-function inferSelectedSkill(response: string): ExpectedSkill {
-  if (matchesAny(response, ['\\bdogfood-tui\\b'])) {
+export function inferSelectedSkill(response: string): ExpectedSkill {
+  assertString(response, 'Prompt response must be a string');
+
+  if (matchesAnyOutsideSkillRejectionContext(response, ['\\bdogfood-tui\\b'])) {
     return 'dogfood-tui';
   }
 
@@ -794,6 +804,68 @@ function inferSelectedSkill(response: string): ExpectedSkill {
   }
 
   return 'none';
+}
+
+function matchesAnyOutsideSkillRejectionContext(
+  text: string,
+  patterns: string[],
+): boolean {
+  assertString(text, 'Text to scan must be a string');
+  invariant(Array.isArray(patterns), 'Patterns must be an array');
+
+  const lineStarts = computeLineStarts(text);
+  return patterns.some((pattern) => {
+    assertString(pattern, 'Each pattern must be a string');
+    invariant(pattern.length > 0, 'Patterns must not be empty');
+    const occurrences = collectOccurrences(
+      text,
+      compilePattern(pattern),
+      lineStarts,
+    );
+
+    return occurrences.some(
+      (occurrence) => !isRejectedSkillMention(text, occurrence),
+    );
+  });
+}
+
+function isRejectedSkillMention(
+  text: string,
+  occurrence: MatchOccurrence,
+): boolean {
+  if (isInNegationContext(text, occurrence.offset)) {
+    return true;
+  }
+
+  const leadingContext = text
+    .slice(
+      Math.max(0, occurrence.offset - NEGATION_CONTEXT_WINDOW),
+      occurrence.offset,
+    )
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .toLowerCase();
+  if (
+    SKILL_REJECTION_LEADING_PATTERNS.some((pattern) =>
+      pattern.test(leadingContext),
+    )
+  ) {
+    return true;
+  }
+
+  const trailingContext = text
+    .slice(
+      occurrence.offset + occurrence.matchedText.length,
+      occurrence.offset +
+        occurrence.matchedText.length +
+        NEGATION_CONTEXT_WINDOW,
+    )
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .toLowerCase();
+  return SKILL_REJECTION_TRAILING_PATTERNS.some((pattern) =>
+    pattern.test(trailingContext),
+  );
 }
 
 function matchesAny(text: string, patterns: string[]): boolean {
