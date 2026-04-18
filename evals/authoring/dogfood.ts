@@ -13,7 +13,10 @@ import type {
   WorkflowCheck,
 } from '../lib/types.js';
 import { dogfoodTaskPrompt } from '../dogfood/cases/shared.js';
-import { artifactRequirement, requiredVerifier } from '../execution/cases/shared.js';
+import {
+  artifactRequirement,
+  requiredVerifier,
+} from '../execution/cases/shared.js';
 import {
   assertCase,
   assertDefined,
@@ -33,8 +36,7 @@ const DEFAULT_DOGFOOD_BUDGETS: DogfoodEvalCase['budgets'] = {
 };
 const SCREENSHOT_BUNDLE_PATH_PATTERN = String.raw`\.png$`;
 const RECORDING_BUNDLE_PATH_PATTERN = String.raw`\.cast$`;
-const NOTES_BUNDLE_PATH_PATTERN =
-  String.raw`(?:^|/)(?:README|NOTES|index|notes)\.md$`;
+const NOTES_BUNDLE_PATH_PATTERN = String.raw`(?:^|/)(?:README|NOTES|index|notes)\.md$`;
 
 function cloneAntiPatternRule(rule: AntiPatternRule): AntiPatternRule {
   return cloneValue(rule, 'dogfood', 'defaults', 'antiPatterns');
@@ -175,9 +177,7 @@ export class DogfoodCaseBuilder {
     return this;
   }
 
-  proofBundle(
-    callback: (bundle: DogfoodProofBundleBuilder) => unknown,
-  ): this {
+  proofBundle(callback: (bundle: DogfoodProofBundleBuilder) => unknown): this {
     callback(
       new DogfoodProofBundleBuilder((requirement) =>
         this.addArtifactRequirement(requirement),
@@ -376,7 +376,12 @@ export class DogfoodCaseBuilder {
         'artifactRequirements',
       ),
       reportRequirements: this.reportBuilder.build(),
-      verifiers: cloneValue(this.verifiersValue, 'dogfood', this.id, 'verifiers'),
+      verifiers: cloneValue(
+        this.verifiersValue,
+        'dogfood',
+        this.id,
+        'verifiers',
+      ),
       workflowChecks,
       antiPatterns,
       budgets: {
@@ -394,17 +399,17 @@ export class DogfoodCaseBuilder {
       compiled.referenceSteps = this.referenceStepsValue;
     }
 
-    return compileAndValidate('dogfood', this.id, DogfoodEvalCaseSchema, compiled);
+    return compileAndValidate(
+      'dogfood',
+      this.id,
+      DogfoodEvalCaseSchema,
+      compiled,
+    );
   }
 
   private addArtifactRequirement(requirement: ArtifactRequirement): void {
     this.artifactRequirementsValue.push(
-      cloneValue(
-        requirement,
-        'dogfood',
-        this.id,
-        'artifactRequirements',
-      ),
+      cloneValue(requirement, 'dogfood', this.id, 'artifactRequirements'),
     );
   }
 

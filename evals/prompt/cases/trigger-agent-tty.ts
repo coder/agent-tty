@@ -45,10 +45,7 @@ const waitForOutputCase = promptCase('wait-for-output')
   )
   .workflow((workflow) => {
     workflow
-      .step(
-        'wait-for-output.select-agent-tty',
-        'Explicitly selects agent-tty.',
-      )
+      .step('wait-for-output.select-agent-tty', 'Explicitly selects agent-tty.')
       .mustMention('/agent-tty/i');
     workflow
       .step(

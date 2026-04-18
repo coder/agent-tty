@@ -134,7 +134,8 @@ export class WorkflowBuilder {
       );
       return {
         id: entry.draft.id,
-        description: entry.draft.description ?? `Workflow step ${entry.draft.id}`,
+        description:
+          entry.draft.description ?? `Workflow step ${entry.draft.id}`,
         required: entry.draft.required,
         requiredPatterns: [...entry.draft.mustMention],
         forbiddenPatterns: [...entry.draft.mustNotMention],

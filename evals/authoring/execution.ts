@@ -44,7 +44,9 @@ function escapeRegexLiteral(value: string): string {
 }
 
 function describePatternInput(value: PatternInput): string {
-  return typeof value === 'string' ? JSON.stringify(value) : 'the expected pattern';
+  return typeof value === 'string'
+    ? JSON.stringify(value)
+    : 'the expected pattern';
 }
 
 interface FixtureOptions {
@@ -137,7 +139,8 @@ export class ExecutionWorkflowBuilder {
   input(value: PatternInput, options: ExecutionActionStepOptions = {}): this {
     return this.appendCheck(
       options.id ?? 'input',
-      options.description ?? `Send ${describePatternInput(value)} with run or type.`,
+      options.description ??
+        `Send ${describePatternInput(value)} with run or type.`,
       resolveCommandPattern(value, defaultInputPattern, options.pattern),
       options,
     );
@@ -223,7 +226,9 @@ export class ExecutionWorkflowBuilder {
     this.workflowBuilder.raw(
       workflowCheck(id, description, requiredPattern, {
         ...(dependsOn === undefined ? {} : { dependsOn }),
-        ...(options.required === undefined ? {} : { required: options.required }),
+        ...(options.required === undefined
+          ? {}
+          : { required: options.required }),
         ...(options.weight === undefined ? {} : { weight: options.weight }),
         ...(options.forbiddenPattern === undefined
           ? {}
@@ -276,11 +281,7 @@ export class ExecutionAssertionBuilder {
     return this.verifier(id, 'event-log', description, config);
   }
 
-  json(
-    id: string,
-    description: string,
-    config: Record<string, unknown>,
-  ): this {
+  json(id: string, description: string, config: Record<string, unknown>): this {
     return this.verifier(id, 'json', description, config);
   }
 
@@ -404,7 +405,9 @@ export class ExecutionCaseBuilder {
   assertions(
     callback: (assertions: ExecutionAssertionBuilder) => unknown,
   ): this {
-    callback(new ExecutionAssertionBuilder((verifier) => this.addVerifier(verifier)));
+    callback(
+      new ExecutionAssertionBuilder((verifier) => this.addVerifier(verifier)),
+    );
     return this;
   }
 
@@ -531,7 +534,12 @@ export class ExecutionCaseBuilder {
       expectedSkill: 'agent-tty',
       conditions: [...this.conditionsValue],
       setup,
-      verifiers: cloneValue(this.verifiersValue, 'execution', this.id, 'verifiers'),
+      verifiers: cloneValue(
+        this.verifiersValue,
+        'execution',
+        this.id,
+        'verifiers',
+      ),
       workflowChecks,
       antiPatterns: executionAntiPatterns(...this.antiPatternExtraRulesValue),
       artifactRequirements: cloneValue(
@@ -552,7 +560,12 @@ export class ExecutionCaseBuilder {
       compiled.referenceSteps = this.referenceStepsValue;
     }
 
-    return compileAndValidate('execution', this.id, ExecutionEvalCaseSchema, compiled);
+    return compileAndValidate(
+      'execution',
+      this.id,
+      ExecutionEvalCaseSchema,
+      compiled,
+    );
   }
 
   private addVerifier(verifier: VerifierSpec): void {

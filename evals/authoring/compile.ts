@@ -11,7 +11,9 @@ export function formatAuthoringPath(path: AuthoringPath): string {
     return path.length === 0 ? '<root>' : path;
   }
 
-  return path.length === 0 ? '<root>' : path.map((segment) => String(segment)).join('.');
+  return path.length === 0
+    ? '<root>'
+    : path.map((segment) => String(segment)).join('.');
 }
 
 export function toPatternSource(pattern: PatternInput): string {
@@ -92,13 +94,7 @@ export function assertUniqueId(
   path: AuthoringPath,
   label: string,
 ): void {
-  assertCase(
-    !seen.has(id),
-    lane,
-    caseId,
-    path,
-    `Duplicate ${label} "${id}"`,
-  );
+  assertCase(!seen.has(id), lane, caseId, path, `Duplicate ${label} "${id}"`);
   seen.add(id);
 }
 

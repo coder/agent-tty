@@ -26,16 +26,11 @@ type ReportEntry =
     };
 
 const TITLE_PATTERN = String.raw`/(?:^|\n)\s*(?:#{1,3}\s*Title\b|\*\*Title:?\*\*)/im`;
-const REPRODUCTION_SECTION_PATTERN =
-  String.raw`/(?:^|\n)\s*(?:#{1,3}\s*(?:Reproduction steps|Repro(?:duction)? steps|Steps)\b|\*\*(?:Reproduction steps|Repro(?:duction)? steps|Steps):?\*\*)/im`;
-const FINDINGS_SECTION_PATTERN =
-  String.raw`/(?:^|\n)\s*(?:#{1,3}\s*(?:Findings|Issues)\b|\*\*(?:Findings|Issues):?\*\*)/im`;
-const EVIDENCE_SECTION_PATTERN =
-  String.raw`/(?:^|\n)\s*(?:#{1,3}\s*Evidence\b|\*\*Evidence:?\*\*)/im`;
-const CLI_REFERENCE_PATTERN =
-  String.raw`/\b(?:agent-tty|npx\s+tsx\s+src\/cli\/main\.ts)\b/i`;
-const SEVERITY_PATTERN =
-  String.raw`/\b(?:severity|critical|high|medium|low|info)\b/i`;
+const REPRODUCTION_SECTION_PATTERN = String.raw`/(?:^|\n)\s*(?:#{1,3}\s*(?:Reproduction steps|Repro(?:duction)? steps|Steps)\b|\*\*(?:Reproduction steps|Repro(?:duction)? steps|Steps):?\*\*)/im`;
+const FINDINGS_SECTION_PATTERN = String.raw`/(?:^|\n)\s*(?:#{1,3}\s*(?:Findings|Issues)\b|\*\*(?:Findings|Issues):?\*\*)/im`;
+const EVIDENCE_SECTION_PATTERN = String.raw`/(?:^|\n)\s*(?:#{1,3}\s*Evidence\b|\*\*Evidence:?\*\*)/im`;
+const CLI_REFERENCE_PATTERN = String.raw`/\b(?:agent-tty|npx\s+tsx\s+src\/cli\/main\.ts)\b/i`;
+const SEVERITY_PATTERN = String.raw`/\b(?:severity|critical|high|medium|low|info)\b/i`;
 const EVIDENCE_REFERENCE_PATTERN = String.raw`/\.(?:png|cast|webm|json|md)\b/i`;
 
 export class ReportBuilder {
@@ -71,7 +66,9 @@ export class ReportBuilder {
         ...(section === undefined ? {} : { section }),
         description,
         required: true,
-        requiredPatterns: requiredPatterns.map((pattern) => toPatternSource(pattern)),
+        requiredPatterns: requiredPatterns.map((pattern) =>
+          toPatternSource(pattern),
+        ),
         forbiddenPatterns: forbiddenPatterns.map((pattern) =>
           toPatternSource(pattern),
         ),

@@ -8,9 +8,7 @@ import {
   ExecutionEvalCaseSchema,
   PromptEvalCaseSchema,
 } from '../../../../evals/lib/schemas.js';
-import {
-  TRIGGER_AGENT_TTY_PROMPT_CASES,
-} from '../../../../evals/prompt/cases/trigger-agent-tty.js';
+import { TRIGGER_AGENT_TTY_PROMPT_CASES } from '../../../../evals/prompt/cases/trigger-agent-tty.js';
 import type {
   AntiPatternRule,
   DogfoodEvalCase,
@@ -19,7 +17,12 @@ import type {
 } from '../../../../evals/lib/types.js';
 
 const PROCESS_EXEC_PATH_SENTINEL = '<process.execPath>';
-const ALL_SKILL_CONDITIONS = ['none', 'self-load', 'preloaded', 'stale'] as const;
+const ALL_SKILL_CONDITIONS = [
+  'none',
+  'self-load',
+  'preloaded',
+  'stale',
+] as const;
 const HELLO_PROMPT_FIXTURE_ARGV = [
   '--import',
   'tsx',
@@ -161,7 +164,7 @@ const LEGACY_HELLO_PROMPT_CASE = ExecutionEvalCaseSchema.parse({
   lane: 'execution',
   category: 'session',
   prompt:
-    'ACTUALLY PERFORM this task by running agent-tty CLI commands via `npx tsx src/cli/main.ts`; do not just describe the steps. Use the isolated `AGENT_TTY_HOME` provided for this eval so session state stays contained. Use the repository fixture app `hello-prompt` from `test/fixtures/apps/hello-prompt/main.ts` via the provided setup command. Launch the hello-prompt fixture, send \'hello world\' as input, wait for the READY> prompt to reappear, take a snapshot to verify the echo, then destroy the session.',
+    "ACTUALLY PERFORM this task by running agent-tty CLI commands via `npx tsx src/cli/main.ts`; do not just describe the steps. Use the isolated `AGENT_TTY_HOME` provided for this eval so session state stays contained. Use the repository fixture app `hello-prompt` from `test/fixtures/apps/hello-prompt/main.ts` via the provided setup command. Launch the hello-prompt fixture, send 'hello world' as input, wait for the READY> prompt to reappear, take a snapshot to verify the echo, then destroy the session.",
   expectedSkill: 'agent-tty',
   conditions: [...ALL_SKILL_CONDITIONS],
   setup: [
@@ -446,9 +449,9 @@ function findPromptCaseOrThrow(caseId: string): PromptEvalCase {
   return evalCase;
 }
 
-function normalizeRuntimeShape<T extends PromptEvalCase | ExecutionEvalCase | DogfoodEvalCase>(
-  evalCase: T,
-): T {
+function normalizeRuntimeShape<
+  T extends PromptEvalCase | ExecutionEvalCase | DogfoodEvalCase,
+>(evalCase: T): T {
   const normalized = structuredClone(evalCase);
   if ('setup' in normalized) {
     normalized.setup = normalized.setup.map((step) => ({

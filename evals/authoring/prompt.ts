@@ -188,7 +188,12 @@ export class PromptCaseBuilder {
       compiled.context = this.contextValue;
     }
 
-    return compileAndValidate('prompt', this.id, PromptEvalCaseSchema, compiled);
+    return compileAndValidate(
+      'prompt',
+      this.id,
+      PromptEvalCaseSchema,
+      compiled,
+    );
   }
 }
 

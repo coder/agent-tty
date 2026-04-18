@@ -26,9 +26,7 @@ import {
   ProviderPromptResultSchema,
   ProviderRuntimeInfoSchema,
 } from '../../../evals/lib/schemas.js';
-import {
-  TRIGGER_AGENT_TTY_PROMPT_CASES,
-} from '../../../evals/prompt/cases/trigger-agent-tty.js';
+import { TRIGGER_AGENT_TTY_PROMPT_CASES } from '../../../evals/prompt/cases/trigger-agent-tty.js';
 import type {
   DogfoodEvalCase,
   ExecutionEvalCase,
@@ -308,14 +306,12 @@ function createFixtureProviderDirectory(fixtureRoot: string): void {
   writeText(join(dogfoodBundleDir, 'notes.md'), dogfoodNotes);
   writeJson(join(dogfoodBundleDir, 'manifest.json'), {
     generatedBy: 'authoring-pilots.test.ts',
-    artifacts: [
-      'proof.png',
-      'proof.cast',
-      'notes.md',
-      'manifest.json',
-    ],
+    artifacts: ['proof.png', 'proof.cast', 'notes.md', 'manifest.json'],
   });
-  writeText(join(dogfoodBundleDir, 'index.html'), '<html><body>fixture</body></html>');
+  writeText(
+    join(dogfoodBundleDir, 'index.html'),
+    '<html><body>fixture</body></html>',
+  );
 
   writeJson(join(fixtureRoot, 'runtime-info.json'), FIXTURE_RUNTIME_INFO);
   writeJson(
@@ -393,105 +389,112 @@ function readReport(summary: EvalRunSummary) {
 let testRoot = '';
 let fixtureRoot = '';
 
-describe('eval CLI authoring pilot cases', { timeout: DEFAULT_EVAL_TIMEOUT_MS }, () => {
-  beforeEach(() => {
-    // prettier-ignore
-    testRoot = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tty-evals-authoring-pilots-')));
-    fixtureRoot = join(testRoot, 'fixture-provider');
-    createFixtureProviderDirectory(fixtureRoot);
-  });
-
-  afterEach(() => {
-    rmSync(testRoot, { recursive: true, force: true });
-    testRoot = '';
-    fixtureRoot = '';
-  });
-
-  for (const pilot of PILOT_CASES) {
-    it(`resolves ${pilot.caseId} in the dry-run matrix`, () => {
-      const result = runEvalCli([
-        '--provider',
-        'stub',
-        '--lane',
-        pilot.lane,
-        '--case',
-        pilot.caseId,
-        '--condition',
-        'none',
-        '--dry-run',
-        '--json',
-      ]);
-
-      expect(result.status).toBe(0);
-      const summary = parseSummary(result.stdout);
-      expect(summary).toMatchObject({
-        ok: true,
-        providerId: 'stub',
-        lanes: [pilot.lane],
-        conditions: ['none'],
-        totalInvocations: 1,
-        totalResults: 0,
-        passed: 0,
-        failed: 0,
-        dryRun: true,
-        laneErrors: [],
-      });
-      expectSelectedCase(summary, pilot);
+describe(
+  'eval CLI authoring pilot cases',
+  { timeout: DEFAULT_EVAL_TIMEOUT_MS },
+  () => {
+    beforeEach(() => {
+      // prettier-ignore
+      testRoot = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tty-evals-authoring-pilots-')));
+      fixtureRoot = join(testRoot, 'fixture-provider');
+      createFixtureProviderDirectory(fixtureRoot);
     });
 
-    it(`runs ${pilot.caseId} end-to-end through the CLI facade with fixture playback`, () => {
-      const outputDir = join(testRoot, `run-${pilot.caseId}`);
-      const result = runEvalCli(
-        [
+    afterEach(() => {
+      rmSync(testRoot, { recursive: true, force: true });
+      testRoot = '';
+      fixtureRoot = '';
+    });
+
+    for (const pilot of PILOT_CASES) {
+      it(`resolves ${pilot.caseId} in the dry-run matrix`, () => {
+        const result = runEvalCli([
           '--provider',
-          'fixture',
+          'stub',
           '--lane',
           pilot.lane,
           '--case',
           pilot.caseId,
           '--condition',
           'none',
-          '--output',
-          outputDir,
+          '--dry-run',
           '--json',
-        ],
-        {
-          EVAL_FIXTURE_DIR: fixtureRoot,
-        },
-      );
+        ]);
 
-      const summary = parseSummary(result.stdout);
-      expect(result.status).toBe(summary.ok ? 0 : 1);
-      expect(summary).toMatchObject({
-        ok: pilot.expectedOk,
-        providerId: 'fixture',
-        lanes: [pilot.lane],
-        conditions: ['none'],
-        totalInvocations: 1,
-        totalResults: 1,
-        passed: pilot.expectedOk ? 1 : 0,
-        failed: pilot.expectedOk ? 0 : 1,
-        dryRun: false,
-        laneErrors: [],
+        expect(result.status).toBe(0);
+        const summary = parseSummary(result.stdout);
+        expect(summary).toMatchObject({
+          ok: true,
+          providerId: 'stub',
+          lanes: [pilot.lane],
+          conditions: ['none'],
+          totalInvocations: 1,
+          totalResults: 0,
+          passed: 0,
+          failed: 0,
+          dryRun: true,
+          laneErrors: [],
+        });
+        expectSelectedCase(summary, pilot);
       });
-      expectSelectedCase(summary, pilot);
 
-      const report = readReport(summary);
-      expect(report.metadata.providers).toEqual(['fixture']);
-      expect(report.metadata.lanes).toEqual([pilot.lane]);
-      expect(report.metadata.conditions).toEqual(['none']);
-      expect(report.results).toHaveLength(1);
+      it(`runs ${pilot.caseId} end-to-end through the CLI facade with fixture playback`, () => {
+        const outputDir = join(testRoot, `run-${pilot.caseId}`);
+        const result = runEvalCli(
+          [
+            '--provider',
+            'fixture',
+            '--lane',
+            pilot.lane,
+            '--case',
+            pilot.caseId,
+            '--condition',
+            'none',
+            '--output',
+            outputDir,
+            '--json',
+          ],
+          {
+            EVAL_FIXTURE_DIR: fixtureRoot,
+          },
+        );
 
-      const singleResult = requireDefined(report.results[0], 'report.results[0]');
-      expect(singleResult).toMatchObject({
-        lane: pilot.lane,
-        caseId: pilot.caseId,
-        condition: 'none',
-        expectedSkill: pilot.expectedSkill,
-        ok: pilot.expectedOk,
+        const summary = parseSummary(result.stdout);
+        expect(result.status).toBe(summary.ok ? 0 : 1);
+        expect(summary).toMatchObject({
+          ok: pilot.expectedOk,
+          providerId: 'fixture',
+          lanes: [pilot.lane],
+          conditions: ['none'],
+          totalInvocations: 1,
+          totalResults: 1,
+          passed: pilot.expectedOk ? 1 : 0,
+          failed: pilot.expectedOk ? 0 : 1,
+          dryRun: false,
+          laneErrors: [],
+        });
+        expectSelectedCase(summary, pilot);
+
+        const report = readReport(summary);
+        expect(report.metadata.providers).toEqual(['fixture']);
+        expect(report.metadata.lanes).toEqual([pilot.lane]);
+        expect(report.metadata.conditions).toEqual(['none']);
+        expect(report.results).toHaveLength(1);
+
+        const singleResult = requireDefined(
+          report.results[0],
+          'report.results[0]',
+        );
+        expect(singleResult).toMatchObject({
+          lane: pilot.lane,
+          caseId: pilot.caseId,
+          condition: 'none',
+          expectedSkill: pilot.expectedSkill,
+          ok: pilot.expectedOk,
+        });
+        expect(singleResult.errorClass).toBeUndefined();
+        expect(singleResult.errorMessage).toBeUndefined();
       });
-      expect(singleResult.errorClass).toBeUndefined();
-      expect(singleResult.errorMessage).toBeUndefined();
-    });
-  }
-});
+    }
+  },
+);
