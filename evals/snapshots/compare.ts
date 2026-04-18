@@ -13,17 +13,16 @@ export type {
   SnapshotCheckSummary,
 } from './schemas/report.js';
 
-export interface SnapshotComparableRecord
-  extends Pick<
-    SnapshotEntry,
-    | 'provider'
-    | 'model'
-    | 'lane'
-    | 'caseId'
-    | 'condition'
-    | 'caseFingerprint'
-    | 'totalTokens'
-  > {}
+export interface SnapshotComparableRecord extends Pick<
+  SnapshotEntry,
+  | 'provider'
+  | 'model'
+  | 'lane'
+  | 'caseId'
+  | 'condition'
+  | 'caseFingerprint'
+  | 'totalTokens'
+> {}
 
 export interface CompareSnapshotRecordsOptions {
   currentRecords: readonly SnapshotComparableRecord[];
@@ -61,7 +60,10 @@ function createRecordMap(
   for (const record of records) {
     const parsedRecord = SnapshotComparableRecordSchema.safeParse(record);
     if (!parsedRecord.success) {
-      invariant(false, `${label} validation failed: ${parsedRecord.error.message}`);
+      invariant(
+        false,
+        `${label} validation failed: ${parsedRecord.error.message}`,
+      );
     }
 
     const key = buildSnapshotComparisonKey(parsedRecord.data);
@@ -78,7 +80,10 @@ function classifySnapshotCase(
   regressionThresholdPercent: number,
 ): SnapshotCheckCase {
   const sourceRecord = currentRecord ?? snapshotRecord;
-  invariant(sourceRecord !== undefined, 'Snapshot comparison source record must exist');
+  invariant(
+    sourceRecord !== undefined,
+    'Snapshot comparison source record must exist',
+  );
 
   if (currentRecord === undefined) {
     invariant(

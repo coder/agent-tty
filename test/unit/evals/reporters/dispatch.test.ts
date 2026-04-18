@@ -208,7 +208,9 @@ describe('ReporterDispatcher', () => {
       tokenReport: createTokenReportSummary(),
     });
 
-    await expect(dispatcher.dispatch('runFinish', bareRunFinish)).resolves.toBeUndefined();
+    await expect(
+      dispatcher.dispatch('runFinish', bareRunFinish),
+    ).resolves.toBeUndefined();
     await expect(
       dispatcher.dispatch('runFinish', tokenizedRunFinish),
     ).resolves.toBeUndefined();

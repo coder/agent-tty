@@ -70,12 +70,17 @@ function createPromptEvalCase(
 ): PromptEvalCase {
   const builder = promptCase('snapshot-case')
     .category('workflow')
-    .prompt(overrides.prompt ?? 'Use agent-tty to collect a snapshot of the app.')
+    .prompt(
+      overrides.prompt ?? 'Use agent-tty to collect a snapshot of the app.',
+    )
     .expectSkill('agent-tty')
     .budget(overrides.budgetMs ?? 30_000)
     .antiPatterns(...(overrides.antiPatterns ?? DEFAULT_ANTI_PATTERNS));
 
-  for (const pattern of overrides.expectedPatterns ?? ['agent-tty', 'snapshot']) {
+  for (const pattern of overrides.expectedPatterns ?? [
+    'agent-tty',
+    'snapshot',
+  ]) {
     builder.expectedPattern(pattern);
   }
   for (const pattern of overrides.forbiddenPatterns ?? ['tmux']) {
@@ -95,7 +100,9 @@ describe('caseFingerprint', () => {
     const differentBudgetCase = createPromptEvalCase({ budgetMs: 60_000 });
 
     expect(caseFingerprint(defaultCase)).toBe(caseFingerprint(rebuiltCase));
-    expect(caseFingerprint(defaultCase)).toBe(caseFingerprint(differentBudgetCase));
+    expect(caseFingerprint(defaultCase)).toBe(
+      caseFingerprint(differentBudgetCase),
+    );
   });
 
   it('ignores object key insertion order when serializing semantic fields', () => {

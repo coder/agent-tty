@@ -522,7 +522,9 @@ function parseCodexTokenUsageObject(usage: unknown): TokenUsage | undefined {
   };
 }
 
-function extractCodexTokenUsage(record: Record<string, unknown>): TokenUsage | undefined {
+function extractCodexTokenUsage(
+  record: Record<string, unknown>,
+): TokenUsage | undefined {
   let tokenUsage: TokenUsage | undefined;
   const recordItem = isRecord(record.item) ? record.item : undefined;
   const sources = [

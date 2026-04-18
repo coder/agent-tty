@@ -4,10 +4,7 @@ import { isAbsolute, relative, resolve } from 'node:path';
 import { writeTextFileAtomic } from '../../src/storage/manifests.js';
 import { assertString, invariant } from '../../src/util/assert.js';
 import { validatePathSegment } from '../lib/artifacts.js';
-import {
-  buildSnapshotLogicalKey,
-  SnapshotEntrySchema,
-} from './schema.js';
+import { buildSnapshotLogicalKey, SnapshotEntrySchema } from './schema.js';
 import type { SnapshotEntry } from './schema.js';
 
 interface NodeError {
@@ -51,7 +48,10 @@ function resolveSnapshotDir(snapshotDir: string): string {
   invariant(snapshotDir.length > 0, 'snapshotDir must be a non-empty string');
 
   const resolvedSnapshotDir = resolve(snapshotDir);
-  invariant(isAbsolute(resolvedSnapshotDir), 'snapshotDir must resolve to absolute');
+  invariant(
+    isAbsolute(resolvedSnapshotDir),
+    'snapshotDir must resolve to absolute',
+  );
 
   return resolvedSnapshotDir;
 }

@@ -10,7 +10,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { assertString, invariant } from '../../src/util/assert.js';
-import { EvalArtifactStore, writeTokenUsageArtifact } from '../lib/artifacts.js';
+import {
+  EvalArtifactStore,
+  writeTokenUsageArtifact,
+} from '../lib/artifacts.js';
 import {
   buildScannableTranscript,
   countAgentTtyCalls,
@@ -896,7 +899,9 @@ async function writeExecutionTokenUsageArtifacts(
         typeof outputBaseDir === 'string' && outputBaseDir.length > 0,
         'Execution lane token usage artifacts require metadata.outputBaseDir',
       );
-      artifactsDir = new EvalArtifactStore(outputBaseDir).runDir(metadata.runId);
+      artifactsDir = new EvalArtifactStore(outputBaseDir).runDir(
+        metadata.runId,
+      );
     }
 
     invariant(

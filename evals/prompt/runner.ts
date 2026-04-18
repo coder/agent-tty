@@ -1,7 +1,10 @@
 import { readFile } from 'node:fs/promises';
 
 import { assertString, invariant } from '../../src/util/assert.js';
-import { EvalArtifactStore, writeTokenUsageArtifact } from '../lib/artifacts.js';
+import {
+  EvalArtifactStore,
+  writeTokenUsageArtifact,
+} from '../lib/artifacts.js';
 import { detectAntiPatterns } from '../lib/antiPatterns.js';
 import { SKILL_CONDITIONS } from '../lib/matrix.js';
 import { runScheduled } from '../lib/scheduler.js';
@@ -440,7 +443,9 @@ async function writePromptTokenUsageArtifacts(
         typeof outputBaseDir === 'string' && outputBaseDir.length > 0,
         'Prompt lane token usage artifacts require metadata.outputBaseDir',
       );
-      artifactsDir = new EvalArtifactStore(outputBaseDir).runDir(metadata.runId);
+      artifactsDir = new EvalArtifactStore(outputBaseDir).runDir(
+        metadata.runId,
+      );
     }
 
     invariant(

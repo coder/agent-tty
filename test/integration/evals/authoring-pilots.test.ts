@@ -508,7 +508,10 @@ function readTokenUsageArtifact(
 ) {
   return TokenUsageArtifactSchema.parse(
     JSON.parse(
-      readFileSync(resolveTokenUsageArtifactPath(summary, lane, caseId), 'utf8'),
+      readFileSync(
+        resolveTokenUsageArtifactPath(summary, lane, caseId),
+        'utf8',
+      ),
     ),
   );
 }
@@ -683,7 +686,9 @@ describe(
         await provider.invokeAgentMode(agentRequest),
       );
 
-      expect(NormalizedProviderOutputSchema.parse(promptResult.normalized)).toEqual(
+      expect(
+        NormalizedProviderOutputSchema.parse(promptResult.normalized),
+      ).toEqual(
         NormalizedProviderOutputSchema.parse({
           finalText: promptText,
           messages: [promptText],
@@ -692,7 +697,9 @@ describe(
           tokenUsage: VALID_TOKEN_USAGE,
         }),
       );
-      expect(NormalizedProviderOutputSchema.parse(agentResult.normalized)).toEqual(
+      expect(
+        NormalizedProviderOutputSchema.parse(agentResult.normalized),
+      ).toEqual(
         NormalizedProviderOutputSchema.parse({
           finalText: agentText,
           messages: [agentText],
@@ -724,7 +731,9 @@ describe(
       let agentResult = ProviderAgentResultSchema.parse(
         await provider.invokeAgentMode(agentRequest),
       );
-      expect(NormalizedProviderOutputSchema.parse(agentResult.normalized)).toEqual(
+      expect(
+        NormalizedProviderOutputSchema.parse(agentResult.normalized),
+      ).toEqual(
         NormalizedProviderOutputSchema.parse({
           finalText: validLegacyNormalized.normalizedText,
           messages: [
@@ -809,7 +818,9 @@ describe(
 
         expect(result.status).toBe(0);
         const summary = parseSummary(result.stdout);
-        expect(readTokenUsageArtifact(summary, testCase.lane, testCase.caseId)).toEqual({
+        expect(
+          readTokenUsageArtifact(summary, testCase.lane, testCase.caseId),
+        ).toEqual({
           caseId: testCase.caseId,
           lane: testCase.lane,
           condition: 'none',
@@ -847,7 +858,11 @@ describe(
         const summary = parseSummary(result.stdout);
         expect(() =>
           readFileSync(
-            resolveTokenUsageArtifactPath(summary, testCase.lane, testCase.caseId),
+            resolveTokenUsageArtifactPath(
+              summary,
+              testCase.lane,
+              testCase.caseId,
+            ),
             'utf8',
           ),
         ).toThrow();

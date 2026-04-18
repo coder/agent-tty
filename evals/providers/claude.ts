@@ -393,7 +393,9 @@ function parseClaudeTokenUsageObject(usage: unknown): TokenUsage | undefined {
   };
 }
 
-function extractClaudeTokenUsage(record: Record<string, unknown>): TokenUsage | undefined {
+function extractClaudeTokenUsage(
+  record: Record<string, unknown>,
+): TokenUsage | undefined {
   let tokenUsage: TokenUsage | undefined;
   const sources = [
     record.usage,

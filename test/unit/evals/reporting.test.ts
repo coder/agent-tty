@@ -588,7 +588,13 @@ describe('eval reporting tokenReport', () => {
     const metadata = createRunMetadata({ totalTrials: 1 });
     const tokenReport = createTokenReportSummary();
 
-    const report = generateJsonReport(results, metadata, [], undefined, tokenReport);
+    const report = generateJsonReport(
+      results,
+      metadata,
+      [],
+      undefined,
+      tokenReport,
+    );
     const markdown = generateMarkdownReport(
       results,
       metadata,
@@ -599,7 +605,9 @@ describe('eval reporting tokenReport', () => {
 
     expect(report.tokenReport).toEqual(tokenReport);
     expect(markdown).toContain('## Token usage');
-    expect(markdown).toContain('| Lane | Input | Output | Total | Cached | Trials |');
+    expect(markdown).toContain(
+      '| Lane | Input | Output | Total | Cached | Trials |',
+    );
     expect(markdown).toContain('| `prompt` | 80 | 25 | 105 | 10 | 2 |');
     expect(markdown).toContain(
       '| `execution` | `case-2` | `self-load` | 40 | 20 | 60 | 5 | 1 |',
@@ -614,7 +622,13 @@ describe('eval reporting tokenReport', () => {
       snapshotCheck: createSnapshotCheckReport(),
     });
 
-    const report = generateJsonReport(results, metadata, [], undefined, tokenReport);
+    const report = generateJsonReport(
+      results,
+      metadata,
+      [],
+      undefined,
+      tokenReport,
+    );
     const markdown = generateMarkdownReport(
       results,
       metadata,
@@ -623,7 +637,9 @@ describe('eval reporting tokenReport', () => {
       tokenReport,
     );
 
-    expect(report.tokenReport?.snapshotCheck).toEqual(tokenReport.snapshotCheck);
+    expect(report.tokenReport?.snapshotCheck).toEqual(
+      tokenReport.snapshotCheck,
+    );
     expect(markdown).toContain('### Snapshot check');
     expect(markdown).toContain(
       '- Warning: 1 regressed snapshot case(s) exceeded the threshold.',

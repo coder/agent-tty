@@ -4,7 +4,10 @@ import { join, resolve } from 'node:path';
 
 import { scanBundleArtifacts } from '../../src/tools/review-bundle.js';
 import { assertString, invariant } from '../../src/util/assert.js';
-import { EvalArtifactStore, writeTokenUsageArtifact } from '../lib/artifacts.js';
+import {
+  EvalArtifactStore,
+  writeTokenUsageArtifact,
+} from '../lib/artifacts.js';
 import {
   buildScannableTranscript,
   detectAntiPatterns,
@@ -789,7 +792,9 @@ async function writeDogfoodTokenUsageArtifacts(
         typeof outputBaseDir === 'string' && outputBaseDir.length > 0,
         'Dogfood lane token usage artifacts require metadata.outputBaseDir',
       );
-      artifactsDir = new EvalArtifactStore(outputBaseDir).runDir(metadata.runId);
+      artifactsDir = new EvalArtifactStore(outputBaseDir).runDir(
+        metadata.runId,
+      );
     }
 
     invariant(

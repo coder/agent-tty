@@ -1,4 +1,11 @@
-import { mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -24,7 +31,9 @@ afterEach(async () => {
 });
 
 async function createSnapshotDir(): Promise<string> {
-  const directory = await realpath(await mkdtemp(join(tmpdir(), 'eval-snapshots-')));
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), 'eval-snapshots-')),
+  );
   temporaryDirectories.push(directory);
   return directory;
 }
@@ -69,7 +78,10 @@ describe('snapshot store', () => {
     expect(loaded.diagnostics).toEqual([]);
     expect(loaded.entries).toEqual([entry]);
     await expect(
-      readFile(snapshotFilePath(snapshotDir, entry.provider, entry.model), 'utf8'),
+      readFile(
+        snapshotFilePath(snapshotDir, entry.provider, entry.model),
+        'utf8',
+      ),
     ).resolves.toBe(`${JSON.stringify(entry)}\n`);
   });
 
@@ -119,7 +131,9 @@ describe('snapshot store', () => {
       currentEntry.provider,
       currentEntry.model,
     );
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
 
     await writeFile(
       path,
@@ -171,7 +185,11 @@ describe('snapshot store', () => {
       caseFingerprint: 'c'.repeat(64),
       totalTokens: 220,
     });
-    const path = snapshotFilePath(snapshotDir, originalEntry.provider, originalEntry.model);
+    const path = snapshotFilePath(
+      snapshotDir,
+      originalEntry.provider,
+      originalEntry.model,
+    );
 
     await writeSnapshotFile({
       snapshotDir,
@@ -192,6 +210,10 @@ describe('snapshot store', () => {
       .split('\n')
       .map((line) => JSON.parse(line) as SnapshotEntry);
 
-    expect(parsedEntries).toEqual([updatedEntry, preservedEntry, appendedEntry]);
+    expect(parsedEntries).toEqual([
+      updatedEntry,
+      preservedEntry,
+      appendedEntry,
+    ]);
   });
 });

@@ -98,7 +98,9 @@ function buildPassThroughNormalizedOutput(
   );
 }
 
-function coerceOptionalTokenUsage(rawTokenUsage: unknown): TokenUsage | undefined {
+function coerceOptionalTokenUsage(
+  rawTokenUsage: unknown,
+): TokenUsage | undefined {
   if (rawTokenUsage === undefined) {
     return undefined;
   }

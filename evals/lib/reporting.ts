@@ -128,7 +128,9 @@ export function generateJsonReport(
     ...(providerComparison === undefined ? {} : { providerComparison }),
     ...(aggregated === undefined ? {} : { aggregated }),
     ...(baselineComparison === undefined ? {} : { baselineComparison }),
-    ...(emittedTokenReport === undefined ? {} : { tokenReport: emittedTokenReport }),
+    ...(emittedTokenReport === undefined
+      ? {}
+      : { tokenReport: emittedTokenReport }),
   } satisfies JsonReport;
 
   JsonReportSchema.parse(coreReport);
@@ -1272,13 +1274,15 @@ function buildTokenUsageMarkdown(tokenReport: TokenReportSummary): string[] {
     buildMarkdownTable(
       ['Input', 'Output', 'Total', 'Cached', 'Trials'],
       ['right', 'right', 'right', 'right', 'right'],
-      [[
-        String(tokenReport.grandTotal.inputTokens),
-        String(tokenReport.grandTotal.outputTokens),
-        String(tokenReport.grandTotal.totalTokens),
-        formatOptionalTokenCount(tokenReport.grandTotal.cachedTokens),
-        String(tokenReport.grandTotal.trials),
-      ]],
+      [
+        [
+          String(tokenReport.grandTotal.inputTokens),
+          String(tokenReport.grandTotal.outputTokens),
+          String(tokenReport.grandTotal.totalTokens),
+          formatOptionalTokenCount(tokenReport.grandTotal.cachedTokens),
+          String(tokenReport.grandTotal.trials),
+        ],
+      ],
     ),
     '',
     '### Per lane',
@@ -1310,7 +1314,16 @@ function buildTokenUsageMarkdown(tokenReport: TokenReportSummary): string[] {
   } else {
     sections.push(
       buildMarkdownTable(
-        ['Lane', 'Case', 'Condition', 'Input', 'Output', 'Total', 'Cached', 'Trials'],
+        [
+          'Lane',
+          'Case',
+          'Condition',
+          'Input',
+          'Output',
+          'Total',
+          'Cached',
+          'Trials',
+        ],
         ['left', 'left', 'left', 'right', 'right', 'right', 'right', 'right'],
         tokenReport.perCase.map((entry) => [
           `\`${sanitizeInline(entry.lane)}\``,
@@ -1341,14 +1354,16 @@ function buildTokenUsageMarkdown(tokenReport: TokenReportSummary): string[] {
       buildMarkdownTable(
         ['Total', 'New', 'Orphaned', 'Unchanged', 'Improved', 'Regressed'],
         ['right', 'right', 'right', 'right', 'right', 'right'],
-        [[
-          String(tokenReport.snapshotCheck.summary.total),
-          String(tokenReport.snapshotCheck.summary.new),
-          String(tokenReport.snapshotCheck.summary.orphaned),
-          String(tokenReport.snapshotCheck.summary.unchanged),
-          String(tokenReport.snapshotCheck.summary.improved),
-          String(tokenReport.snapshotCheck.summary.regressed),
-        ]],
+        [
+          [
+            String(tokenReport.snapshotCheck.summary.total),
+            String(tokenReport.snapshotCheck.summary.new),
+            String(tokenReport.snapshotCheck.summary.orphaned),
+            String(tokenReport.snapshotCheck.summary.unchanged),
+            String(tokenReport.snapshotCheck.summary.improved),
+            String(tokenReport.snapshotCheck.summary.regressed),
+          ],
+        ],
       ),
       '',
     );
