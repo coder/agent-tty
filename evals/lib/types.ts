@@ -5,6 +5,7 @@ import type {
   BundleValidationCheck,
   BundleValidationProfile,
 } from '../../src/tools/validate-bundle.js';
+import type { SnapshotCheckReport } from '../snapshots/schemas/report.js';
 
 /** Expected skill for an eval case. */
 export type ExpectedSkill = 'none' | 'agent-tty' | 'dogfood-tui';
@@ -426,6 +427,35 @@ export interface ConditionComparisonSummary {
   };
 }
 
+export interface TokenReportSummary {
+  grandTotal: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    cachedTokens?: number | undefined;
+    trials: number;
+  };
+  perLane: Array<{
+    lane: string;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    cachedTokens?: number | undefined;
+    trials: number;
+  }>;
+  perCase: Array<{
+    lane: string;
+    caseId: string;
+    condition: string;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    cachedTokens?: number | undefined;
+    trials: number;
+  }>;
+  snapshotCheck?: SnapshotCheckReport | undefined;
+}
+
 /** JSON-serializable top-level eval report. */
 export interface JsonReport {
   metadata: RunMetadata;
@@ -436,6 +466,7 @@ export interface JsonReport {
   providerComparison?: ProviderComparisonReport;
   aggregated?: TrialAggregation[];
   baselineComparison?: BaselineComparison;
+  tokenReport?: TokenReportSummary | undefined;
 }
 
 /** Confidence interval bounds. */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { compareSnapshotRecords } from '../../../../evals/snapshots/compare.js';
+import { SnapshotCheckReportSchema } from '../../../../evals/snapshots/schemas/report.js';
 import type { SnapshotComparableRecord } from '../../../../evals/snapshots/compare.js';
 
 function createComparableRecord(
@@ -87,6 +88,16 @@ describe('compareSnapshotRecords', () => {
       improved: 1,
       regressed: 0,
     });
+  });
+
+  it('parses compare-produced reports with the shared strict snapshot schema', () => {
+    const report = compareSnapshotRecords({
+      regressionThresholdPercent: 10,
+      currentRecords: [createComparableRecord({ totalTokens: 105 })],
+      snapshotRecords: [createComparableRecord({ totalTokens: 100 })],
+    });
+
+    expect(() => SnapshotCheckReportSchema.parse(report)).not.toThrow();
   });
 
   it('omits deltaPercent for zero-token baselines while still flagging regressions', () => {

@@ -1,6 +1,17 @@
 import { invariant } from '../../src/util/assert.js';
 import { SnapshotEntrySchema } from './schema.js';
 import type { SnapshotEntry } from './schema.js';
+import type {
+  SnapshotCheckCase,
+  SnapshotCheckReport,
+  SnapshotCheckSummary,
+} from './schemas/report.js';
+export type {
+  SnapshotCheckCase,
+  SnapshotCheckOutcome,
+  SnapshotCheckReport,
+  SnapshotCheckSummary,
+} from './schemas/report.js';
 
 export interface SnapshotComparableRecord
   extends Pick<
@@ -13,36 +24,6 @@ export interface SnapshotComparableRecord
     | 'caseFingerprint'
     | 'totalTokens'
   > {}
-
-export type SnapshotCheckOutcome =
-  | 'new'
-  | 'orphaned'
-  | 'unchanged'
-  | 'improved'
-  | 'regressed';
-
-export interface SnapshotCheckCase extends SnapshotComparableRecord {
-  outcome: SnapshotCheckOutcome;
-  currentTotalTokens?: number;
-  snapshotTotalTokens?: number;
-  deltaTokens?: number;
-  deltaPercent?: number;
-}
-
-export interface SnapshotCheckSummary {
-  total: number;
-  new: number;
-  orphaned: number;
-  unchanged: number;
-  improved: number;
-  regressed: number;
-}
-
-export interface SnapshotCheckReport {
-  regressionThresholdPercent: number;
-  cases: SnapshotCheckCase[];
-  summary: SnapshotCheckSummary;
-}
 
 export interface CompareSnapshotRecordsOptions {
   currentRecords: readonly SnapshotComparableRecord[];
