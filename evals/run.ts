@@ -18,6 +18,10 @@ import {
 } from './lib/reporting.js';
 import { JsonReportSchema, RunMetadataSchema } from './lib/schemas.js';
 import {
+  aggregateTokenRecords,
+  type RawTokenRecord,
+} from './lib/tokenAggregation.js';
+import {
   buildWorkItemKey,
   type EvalCase,
   type EvalLane,
@@ -26,6 +30,7 @@ import {
   type ProviderRuntimeInfo,
   type RunMetadata,
   type SkillCondition,
+  type TokenReportSummary,
 } from './lib/types.js';
 import { getAllPromptCases, runPromptLane } from './prompt/runner.js';
 import { createProvider, SUPPORTED_PROVIDER_IDS } from './providers/base.js';
@@ -36,8 +41,20 @@ import {
   type FinalReportInputs,
 } from './reporters/final-report.js';
 import { JsonlReporter } from './reporters/jsonl.js';
+import { compareSnapshotRecords } from './snapshots/compare.js';
+import { caseFingerprint } from './snapshots/fingerprint.js';
+import {
+  buildSnapshotLogicalKey,
+  type SnapshotEntry,
+} from './snapshots/schema.js';
+import { loadSnapshotFile, writeSnapshotFile } from './snapshots/store.js';
 import { registerBuiltinPresets } from './workspaces/builtins.js';
 import type { EvalProvider } from './providers/base.js';
+import type {
+  SnapshotCheckCase,
+  SnapshotCheckReport,
+  SnapshotCheckSummary,
+} from './snapshots/schemas/report.js';
 
 const DEFAULT_TOTAL_TRIALS = 1;
 const EVAL_LANES: readonly EvalLane[] = ['prompt', 'execution', 'dogfood'];
@@ -55,6 +72,7 @@ const CLI_PROVIDER_SET = new Set<string>(CLI_PROVIDER_IDS);
 const REPORTER_IDS = ['final', 'console', 'jsonl'] as const;
 const REPORTER_SET = new Set<string>(REPORTER_IDS);
 export type ReporterId = (typeof REPORTER_IDS)[number];
+type SnapshotMode = 'off' | 'update' | 'check';
 
 const HELP_TEXT = [
   'Usage: npx tsx evals/run.ts [options]',
@@ -67,12 +85,15 @@ const HELP_TEXT = [
   '  --condition <cond>  Skill condition (none, self-load, preloaded, stale, all). Default: all. May be repeated.',
   '  --case <id>         Run specific case(s) by ID. May be repeated.',
   '  --output <dir>      Output directory. Default: evals/reports/{timestamp}',
+  '  --snapshot-update   Write token usage snapshots for the selected cases',
+  '  --snapshot-check    Compare token usage against saved snapshots',
+  '  --snapshot-threshold <percent>  Regression threshold percent for snapshot checks. Default: 20',
+  '  --snapshot-dir <path>  Snapshot directory. Default: <output>/snapshots',
   `  --reporter <name>   Reporter to enable (${REPORTER_IDS.join(', ')}). May be repeated.`,
   '  --reporter-output <path>  Output path for reporters that write files (required for jsonl)',
   '  --progress          Enable progress reporting on stderr',
   '  --json              Print JSON summary only',
   '  --verbose           Print verbose progress logs to stderr',
-type SnapshotMode = 'off' | 'update' | 'check';
   '  --dry-run           List cases that would run without invoking providers',
   '  --concurrency <n>  Maximum work items to run concurrently per lane. Default: 1',
   '  --trials <n>       Number of independent trials per case/condition. Default: 1',
@@ -85,10 +106,6 @@ type SnapshotMode = 'off' | 'update' | 'check';
   '  npx tsx evals/run.ts --provider codex --model gpt-5.4 --lane all',
   '  npx tsx evals/run.ts --provider stub --lane execution --case hello-prompt --case resize-demo',
   '  npx tsx evals/run.ts --provider stub --lane execution --condition none --condition preloaded --dry-run',
-  '  --snapshot-update   Write token usage snapshots for the selected cases',
-  '  --snapshot-check    Compare token usage against saved snapshots',
-  '  --snapshot-threshold <percent>  Regression threshold percent for snapshot checks. Default: 20',
-  '  --snapshot-dir <path>  Snapshot directory. Default: <output>/snapshots',
   '',
   'Notes:',
   '  - Relative --output paths resolve from the repository root.',
@@ -108,6 +125,10 @@ interface CliOptions {
   concurrency?: string;
   trials?: string;
   compareBaseline?: string;
+  snapshotThreshold?: string;
+  snapshotDir?: string;
+  snapshotUpdate: boolean;
+  snapshotCheck: boolean;
   json: boolean;
   verbose: boolean;
   dryRun: boolean;
@@ -120,19 +141,24 @@ export interface ResolvedReporterSelection {
   reporterOutputPath?: string;
 }
 
+interface ResolvedSnapshotOptions {
+  snapshotMode: SnapshotMode;
+  snapshotThresholdPercent: number;
+  snapshotDir: string;
+}
+
 interface ResolvedCliOptions {
   providerId: string;
   modelId?: string;
   effortLevel?: string;
   requestedLane: string;
-  snapshotThreshold?: string;
-  snapshotDir?: string;
-  snapshotUpdate: boolean;
-  snapshotCheck: boolean;
   requestedConditions: string[];
   caseIds: string[];
   outputBaseDir: string;
   compareBaselinePath?: string;
+  snapshotMode: SnapshotMode;
+  snapshotThresholdPercent: number;
+  snapshotDir: string;
   reporterNames: ReporterId[];
   reporterOutputPath?: string;
   concurrency: number;
@@ -141,14 +167,9 @@ interface ResolvedCliOptions {
   verbose: boolean;
   dryRun: boolean;
   activeLanes: EvalLane[];
-interface ResolvedSnapshotOptions {
-  snapshotMode: SnapshotMode;
-  snapshotThresholdPercent: number;
-  snapshotDir: string;
-}
-
   activeConditions: SkillCondition[];
   selectedCases: CaseSelection[];
+  compiledCasesBySelection: ReadonlyMap<string, EvalCase>;
   totalInvocations: number;
 }
 
@@ -156,9 +177,6 @@ interface CaseSelection {
   lane: EvalLane;
   caseId: string;
   category: string;
-  snapshotMode: SnapshotMode;
-  snapshotThresholdPercent: number;
-  snapshotDir: string;
   expectedSkill: EvalCase['expectedSkill'];
   conditions: SkillCondition[];
   fixture?: string;
@@ -218,6 +236,10 @@ function compareLane(left: EvalLane, right: EvalLane): number {
   return EVAL_LANES.indexOf(left) - EVAL_LANES.indexOf(right);
 }
 
+function compareCondition(left: SkillCondition, right: SkillCondition): number {
+  return SKILL_CONDITIONS.indexOf(left) - SKILL_CONDITIONS.indexOf(right);
+}
+
 function compareCaseSelection(
   left: CaseSelection,
   right: CaseSelection,
@@ -227,6 +249,12 @@ function compareCaseSelection(
     return laneComparison;
   }
   return compareStrings(left.caseId, right.caseId);
+}
+
+function buildSelectedCaseKey(lane: EvalLane, caseId: string): string {
+  assertString(caseId, 'caseId must be a string');
+  invariant(caseId.length > 0, 'caseId must not be empty');
+  return `${lane}::${caseId}`;
 }
 
 function formatTimestampForPath(date: Date): string {
@@ -274,6 +302,8 @@ export function parseCliArgs(argumentsList: readonly string[]): CliOptions {
     conditions: [],
     caseIds: [],
     reporters: [],
+    snapshotUpdate: false,
+    snapshotCheck: false,
     json: false,
     verbose: false,
     dryRun: false,
@@ -302,8 +332,6 @@ export function parseCliArgs(argumentsList: readonly string[]): CliOptions {
     if (argument === '--dry-run') {
       invariant(!options.dryRun, '--dry-run may only be provided once');
       options.dryRun = true;
-    snapshotUpdate: false,
-    snapshotCheck: false,
       continue;
     }
     if (argument === '--progress') {
@@ -311,34 +339,6 @@ export function parseCliArgs(argumentsList: readonly string[]): CliOptions {
       options.progress = true;
       continue;
     }
-    if (argument === '--concurrency' || argument.startsWith('--concurrency=')) {
-      const parsed = parseOptionValue(
-        argument,
-        '--concurrency',
-        argumentsList,
-        index,
-      );
-      invariant(
-        options.concurrency === undefined,
-        '--concurrency may only be set once',
-      );
-      options.concurrency = parsed.value;
-      index = parsed.nextIndex;
-      continue;
-    }
-    if (argument === '--trials' || argument.startsWith('--trials=')) {
-      const parsed = parseOptionValue(
-        argument,
-        '--trials',
-        argumentsList,
-        index,
-      );
-      invariant(options.trials === undefined, '--trials may only be set once');
-      options.trials = parsed.value;
-      index = parsed.nextIndex;
-      continue;
-    }
-    if (
     if (argument === '--snapshot-update') {
       invariant(
         !options.snapshotUpdate,
@@ -391,6 +391,34 @@ export function parseCliArgs(argumentsList: readonly string[]): CliOptions {
       index = parsed.nextIndex;
       continue;
     }
+    if (argument === '--concurrency' || argument.startsWith('--concurrency=')) {
+      const parsed = parseOptionValue(
+        argument,
+        '--concurrency',
+        argumentsList,
+        index,
+      );
+      invariant(
+        options.concurrency === undefined,
+        '--concurrency may only be set once',
+      );
+      options.concurrency = parsed.value;
+      index = parsed.nextIndex;
+      continue;
+    }
+    if (argument === '--trials' || argument.startsWith('--trials=')) {
+      const parsed = parseOptionValue(
+        argument,
+        '--trials',
+        argumentsList,
+        index,
+      );
+      invariant(options.trials === undefined, '--trials may only be set once');
+      options.trials = parsed.value;
+      index = parsed.nextIndex;
+      continue;
+    }
+    if (
       argument === '--compare-baseline' ||
       argument.startsWith('--compare-baseline=')
     ) {
@@ -667,34 +695,6 @@ function resolveOutputBaseDir(
   return resolve(repoRoot, outputDir);
 }
 
-export function resolveReporterSelection(
-  repoRoot: string,
-  options: Pick<CliOptions, 'progress' | 'reporters' | 'reporterOutput'>,
-): ResolvedReporterSelection {
-  assertString(repoRoot, 'repoRoot must be a string');
-  invariant(repoRoot.length > 0, 'repoRoot must not be empty');
-  invariant(
-    Array.isArray(options.reporters),
-    '--reporter values must be an array',
-  );
-  invariant(
-    typeof options.progress === 'boolean',
-    '--progress must be a boolean',
-  );
-
-  const explicit = options.reporters ?? [];
-  const ordered = explicit.length === 0 ? ['final'] : [...explicit];
-  if (options.progress && !ordered.includes('console')) {
-    ordered.push('console');
-  }
-
-  for (const reporterName of ordered) {
-    assertString(reporterName, '--reporter values must be strings');
-    invariant(reporterName.length > 0, '--reporter values must not be empty');
-    invariant(
-      isReporterId(reporterName),
-      `Unsupported reporter: ${reporterName}. Expected one of ${REPORTER_IDS.join(', ')}`,
-    );
 function resolveSnapshotOptions(
   repoRoot: string,
   outputBaseDir: string,
@@ -737,6 +737,34 @@ function resolveSnapshotOptions(
   };
 }
 
+export function resolveReporterSelection(
+  repoRoot: string,
+  options: Pick<CliOptions, 'progress' | 'reporters' | 'reporterOutput'>,
+): ResolvedReporterSelection {
+  assertString(repoRoot, 'repoRoot must be a string');
+  invariant(repoRoot.length > 0, 'repoRoot must not be empty');
+  invariant(
+    Array.isArray(options.reporters),
+    '--reporter values must be an array',
+  );
+  invariant(
+    typeof options.progress === 'boolean',
+    '--progress must be a boolean',
+  );
+
+  const explicit = options.reporters ?? [];
+  const ordered = explicit.length === 0 ? ['final'] : [...explicit];
+  if (options.progress && !ordered.includes('console')) {
+    ordered.push('console');
+  }
+
+  for (const reporterName of ordered) {
+    assertString(reporterName, '--reporter values must be strings');
+    invariant(reporterName.length > 0, '--reporter values must not be empty');
+    invariant(
+      isReporterId(reporterName),
+      `Unsupported reporter: ${reporterName}. Expected one of ${REPORTER_IDS.join(', ')}`,
+    );
   }
 
   const reporterOutputPath = resolveOptionalStringOption(
@@ -779,6 +807,7 @@ function buildCaseSelections(
   activeConditions: SkillCondition[];
   activeLanes: EvalLane[];
   cases: CaseSelection[];
+  compiledCasesBySelection: ReadonlyMap<string, EvalCase>;
   totalInvocations: number;
 } {
   const availableCases = lanes.flatMap((lane) => getCasesForLane(lane));
@@ -802,6 +831,19 @@ function buildCaseSelections(
     'No eval cases matched the requested lanes',
   );
 
+  const compiledCasesBySelection = new Map<string, EvalCase>();
+  for (const compiledCase of selectedCases) {
+    const selectionKey = buildSelectedCaseKey(
+      compiledCase.lane,
+      compiledCase.id,
+    );
+    invariant(
+      !compiledCasesBySelection.has(selectionKey),
+      `Duplicate compiled eval case selection: ${selectionKey}`,
+    );
+    compiledCasesBySelection.set(selectionKey, compiledCase);
+  }
+
   const requestedConditions = new Set(conditions);
   const matrixEntries = buildConditionMatrix(selectedCases, [
     providerId,
@@ -813,7 +855,7 @@ function buildCaseSelections(
 
   const groupedSelections = new Map<string, CaseSelection>();
   for (const entry of matrixEntries) {
-    const key = `${entry.lane}::${entry.caseId}`;
+    const key = buildSelectedCaseKey(entry.lane, entry.caseId);
     const existing = groupedSelections.get(key);
     if (existing === undefined) {
       groupedSelections.set(key, {
@@ -835,10 +877,7 @@ function buildCaseSelections(
 
   const cases = [...groupedSelections.values()].sort(compareCaseSelection);
   for (const selection of cases) {
-    selection.conditions.sort(
-      (left, right) =>
-        SKILL_CONDITIONS.indexOf(left) - SKILL_CONDITIONS.indexOf(right),
-    );
+    selection.conditions.sort(compareCondition);
   }
 
   const activeLanes = EVAL_LANES.filter((lane) =>
@@ -855,6 +894,7 @@ function buildCaseSelections(
     activeConditions,
     activeLanes,
     cases,
+    compiledCasesBySelection,
     totalInvocations,
   };
 }
@@ -878,6 +918,11 @@ function buildResolvedOptions(
       : [...requestedConditions];
   const caseIds = resolveRequestedCaseIds(options.caseIds);
   const outputBaseDir = resolveOutputBaseDir(repoRoot, options.outputDir);
+  const snapshotOptions = resolveSnapshotOptions(
+    repoRoot,
+    outputBaseDir,
+    options,
+  );
   const compareBaselinePath = resolveOptionalStringOption(
     options.compareBaseline,
     '--compare-baseline',
@@ -901,6 +946,9 @@ function buildResolvedOptions(
     requestedConditions: requestedConditionFilters,
     caseIds,
     outputBaseDir,
+    snapshotMode: snapshotOptions.snapshotMode,
+    snapshotThresholdPercent: snapshotOptions.snapshotThresholdPercent,
+    snapshotDir: snapshotOptions.snapshotDir,
     ...(compareBaselinePath === undefined
       ? {}
       : { compareBaselinePath: resolve(repoRoot, compareBaselinePath) }),
@@ -916,13 +964,9 @@ function buildResolvedOptions(
     activeLanes: selection.activeLanes,
     activeConditions: selection.activeConditions,
     selectedCases: selection.cases,
+    compiledCasesBySelection: selection.compiledCasesBySelection,
     totalInvocations: selection.totalInvocations,
   };
-  const snapshotOptions = resolveSnapshotOptions(
-    repoRoot,
-    outputBaseDir,
-    options,
-  );
 }
 
 function logVerbose(options: ResolvedCliOptions, message: string): void {
@@ -946,9 +990,6 @@ function formatCaseSelection(selection: CaseSelection): string {
 function writeDryRunSummary(options: ResolvedCliOptions): void {
   const summary: RunSummary = {
     ok: true,
-    snapshotMode: snapshotOptions.snapshotMode,
-    snapshotThresholdPercent: snapshotOptions.snapshotThresholdPercent,
-    snapshotDir: snapshotOptions.snapshotDir,
     providerId: options.providerId,
     ...(options.modelId === undefined ? {} : { modelId: options.modelId }),
     lanes: options.activeLanes,
@@ -1285,6 +1326,356 @@ function buildRunResultCounts(results: readonly EvalResult[]): {
   );
 }
 
+interface ReducedSnapshotRecord {
+  provider: string;
+  model: string;
+  lane: EvalLane;
+  caseId: string;
+  condition: SkillCondition;
+  caseFingerprint: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedTokens?: number;
+  trials: number;
+}
+
+function compareSnapshotIdentity(
+  left: Pick<
+    ReducedSnapshotRecord,
+    'provider' | 'model' | 'lane' | 'caseId' | 'condition' | 'caseFingerprint'
+  >,
+  right: Pick<
+    ReducedSnapshotRecord,
+    'provider' | 'model' | 'lane' | 'caseId' | 'condition' | 'caseFingerprint'
+  >,
+): number {
+  const providerComparison = compareStrings(left.provider, right.provider);
+  if (providerComparison !== 0) {
+    return providerComparison;
+  }
+  const modelComparison = compareStrings(left.model, right.model);
+  if (modelComparison !== 0) {
+    return modelComparison;
+  }
+  const laneComparison = compareLane(left.lane, right.lane);
+  if (laneComparison !== 0) {
+    return laneComparison;
+  }
+  const caseComparison = compareStrings(left.caseId, right.caseId);
+  if (caseComparison !== 0) {
+    return caseComparison;
+  }
+  const conditionComparison = compareCondition(left.condition, right.condition);
+  if (conditionComparison !== 0) {
+    return conditionComparison;
+  }
+  return compareStrings(left.caseFingerprint, right.caseFingerprint);
+}
+
+function buildRawTokenRecords(
+  results: readonly EvalResult[],
+  metadata: RunMetadata,
+  compiledCasesBySelection: ReadonlyMap<string, EvalCase>,
+): RawTokenRecord[] {
+  const fingerprintBySelection = new Map<string, string>();
+  const rawTokenRecords: RawTokenRecord[] = [];
+
+  for (const result of results) {
+    const tokenUsage = result.normalizedOutput.tokenUsage;
+    if (tokenUsage === undefined) {
+      continue;
+    }
+
+    const selectionKey = buildSelectedCaseKey(result.lane, result.caseId);
+    let fingerprint = fingerprintBySelection.get(selectionKey);
+    if (fingerprint === undefined) {
+      const compiledCase = compiledCasesBySelection.get(selectionKey);
+      invariant(
+        compiledCase !== undefined,
+        `Missing compiled eval case for token record: ${selectionKey}`,
+      );
+      fingerprint = caseFingerprint(compiledCase);
+      fingerprintBySelection.set(selectionKey, fingerprint);
+    }
+
+    rawTokenRecords.push({
+      provider: result.providerId,
+      model: result.modelId ?? metadata.models[0] ?? 'unknown',
+      lane: result.lane,
+      caseId: result.caseId,
+      condition: result.condition,
+      caseFingerprint: fingerprint,
+      usage: tokenUsage,
+    });
+  }
+
+  return rawTokenRecords;
+}
+
+function reduceSnapshotTokenRecords(
+  records: readonly RawTokenRecord[],
+): ReducedSnapshotRecord[] {
+  const groupedRecords = new Map<
+    string,
+    ReducedSnapshotRecord & {
+      cachedTokensTotal: number;
+      sawMissingCachedTokens: boolean;
+    }
+  >();
+
+  for (const record of records) {
+    const key = JSON.stringify([
+      record.provider,
+      record.model,
+      record.lane,
+      record.caseId,
+      record.condition,
+      record.caseFingerprint,
+    ]);
+    const existing = groupedRecords.get(key);
+    if (existing === undefined) {
+      groupedRecords.set(key, {
+        provider: record.provider,
+        model: record.model,
+        lane: record.lane,
+        caseId: record.caseId,
+        condition: record.condition,
+        caseFingerprint: record.caseFingerprint,
+        inputTokens: record.usage.inputTokens,
+        outputTokens: record.usage.outputTokens,
+        totalTokens: record.usage.totalTokens,
+        trials: 1,
+        cachedTokensTotal: record.usage.cachedTokens ?? 0,
+        sawMissingCachedTokens: record.usage.cachedTokens === undefined,
+      });
+      continue;
+    }
+
+    existing.inputTokens += record.usage.inputTokens;
+    existing.outputTokens += record.usage.outputTokens;
+    existing.totalTokens += record.usage.totalTokens;
+    existing.trials += 1;
+    if (record.usage.cachedTokens === undefined) {
+      existing.sawMissingCachedTokens = true;
+    } else {
+      existing.cachedTokensTotal += record.usage.cachedTokens;
+    }
+  }
+
+  return [...groupedRecords.values()]
+    .map(({ cachedTokensTotal, sawMissingCachedTokens, ...record }) => ({
+      ...record,
+      ...(sawMissingCachedTokens ? {} : { cachedTokens: cachedTokensTotal }),
+    }))
+    .sort(compareSnapshotIdentity);
+}
+
+function buildValidSnapshotLogicalKeys(
+  options: Pick<
+    ResolvedCliOptions,
+    'compiledCasesBySelection' | 'selectedCases'
+  >,
+): ReadonlySet<string> {
+  const validCurrentKeys = new Set<string>();
+
+  for (const selection of options.selectedCases) {
+    const selectionKey = buildSelectedCaseKey(selection.lane, selection.caseId);
+    const compiledCase = options.compiledCasesBySelection.get(selectionKey);
+    invariant(
+      compiledCase !== undefined,
+      `Missing compiled eval case for snapshot selection: ${selectionKey}`,
+    );
+    const fingerprint = caseFingerprint(compiledCase);
+    for (const condition of selection.conditions) {
+      validCurrentKeys.add(
+        buildSnapshotLogicalKey({
+          lane: selection.lane,
+          caseId: selection.caseId,
+          condition,
+          caseFingerprint: fingerprint,
+        }),
+      );
+    }
+  }
+
+  return validCurrentKeys;
+}
+
+function mergeSnapshotCheckReports(
+  reports: readonly SnapshotCheckReport[],
+  regressionThresholdPercent: number,
+): SnapshotCheckReport {
+  const summary: SnapshotCheckSummary = {
+    total: 0,
+    new: 0,
+    orphaned: 0,
+    unchanged: 0,
+    improved: 0,
+    regressed: 0,
+  };
+  const cases: SnapshotCheckCase[] = [];
+
+  for (const report of reports) {
+    invariant(
+      report.regressionThresholdPercent === regressionThresholdPercent,
+      'snapshot check regression threshold must stay consistent across groups',
+    );
+    summary.total += report.summary.total;
+    summary.new += report.summary.new;
+    summary.orphaned += report.summary.orphaned;
+    summary.unchanged += report.summary.unchanged;
+    summary.improved += report.summary.improved;
+    summary.regressed += report.summary.regressed;
+    cases.push(...report.cases);
+  }
+
+  cases.sort(compareSnapshotIdentity);
+  return {
+    regressionThresholdPercent,
+    cases,
+    summary,
+  };
+}
+
+async function buildTokenReport(
+  results: readonly EvalResult[],
+  metadata: RunMetadata,
+  options: Pick<
+    ResolvedCliOptions,
+    | 'activeLanes'
+    | 'compiledCasesBySelection'
+    | 'selectedCases'
+    | 'snapshotDir'
+    | 'snapshotMode'
+    | 'snapshotThresholdPercent'
+  >,
+): Promise<TokenReportSummary | undefined> {
+  const rawTokenRecords = buildRawTokenRecords(
+    results,
+    metadata,
+    options.compiledCasesBySelection,
+  );
+  if (rawTokenRecords.length === 0) {
+    return undefined;
+  }
+
+  const tokenReport = aggregateTokenRecords(
+    rawTokenRecords,
+    options.activeLanes,
+  );
+  invariant(
+    tokenReport !== undefined,
+    'token report must exist for token records',
+  );
+  if (options.snapshotMode === 'off') {
+    return tokenReport;
+  }
+
+  const reducedSnapshotRecords = reduceSnapshotTokenRecords(rawTokenRecords);
+  const groupedSnapshotRecords = new Map<
+    string,
+    {
+      provider: string;
+      model: string;
+      records: ReducedSnapshotRecord[];
+    }
+  >();
+  for (const record of reducedSnapshotRecords) {
+    const groupKey = JSON.stringify([record.provider, record.model]);
+    const existingGroup = groupedSnapshotRecords.get(groupKey);
+    if (existingGroup === undefined) {
+      groupedSnapshotRecords.set(groupKey, {
+        provider: record.provider,
+        model: record.model,
+        records: [record],
+      });
+      continue;
+    }
+    existingGroup.records.push(record);
+  }
+
+  const sortedGroups = [...groupedSnapshotRecords.values()].sort(
+    (left, right) => {
+      const providerComparison = compareStrings(left.provider, right.provider);
+      if (providerComparison !== 0) {
+        return providerComparison;
+      }
+      return compareStrings(left.model, right.model);
+    },
+  );
+
+  if (options.snapshotMode === 'update') {
+    const createdAtMs = Date.now();
+    for (const group of sortedGroups) {
+      const entries: SnapshotEntry[] = group.records.map((record) => ({
+        provider: record.provider,
+        model: record.model,
+        lane: record.lane,
+        caseId: record.caseId,
+        condition: record.condition,
+        caseFingerprint: record.caseFingerprint,
+        inputTokens: record.inputTokens,
+        outputTokens: record.outputTokens,
+        totalTokens: record.totalTokens,
+        createdAtMs,
+        ...(record.cachedTokens === undefined
+          ? {}
+          : { cachedTokens: record.cachedTokens }),
+      }));
+      await writeSnapshotFile({
+        snapshotDir: options.snapshotDir,
+        provider: group.provider,
+        model: group.model,
+        entries,
+      });
+    }
+    return tokenReport;
+  }
+
+  const validCurrentKeys = buildValidSnapshotLogicalKeys(options);
+  const snapshotReports: SnapshotCheckReport[] = [];
+  for (const group of sortedGroups) {
+    const snapshotFile = await loadSnapshotFile({
+      snapshotDir: options.snapshotDir,
+      provider: group.provider,
+      model: group.model,
+      validCurrentKeys,
+    });
+    snapshotReports.push(
+      compareSnapshotRecords({
+        currentRecords: group.records.map((record) => ({
+          provider: record.provider,
+          model: record.model,
+          lane: record.lane,
+          caseId: record.caseId,
+          condition: record.condition,
+          caseFingerprint: record.caseFingerprint,
+          totalTokens: record.totalTokens,
+        })),
+        snapshotRecords: snapshotFile.entries.map((entry) => ({
+          provider: entry.provider,
+          model: entry.model,
+          lane: entry.lane,
+          caseId: entry.caseId,
+          condition: entry.condition,
+          caseFingerprint: entry.caseFingerprint,
+          totalTokens: entry.totalTokens,
+        })),
+        regressionThresholdPercent: options.snapshotThresholdPercent,
+      }),
+    );
+  }
+
+  return {
+    ...tokenReport,
+    snapshotCheck: mergeSnapshotCheckReports(
+      snapshotReports,
+      options.snapshotThresholdPercent,
+    ),
+  };
+}
+
 async function runLane(
   lane: EvalLane,
   provider: EvalProvider,
@@ -1480,6 +1871,7 @@ export async function runEvalCli(
           await loadBaselineReport(options.compareBaselinePath),
           candidateCoreReport,
         );
+  const tokenReport = await buildTokenReport(results, metadata, options);
   const artifactStore = new EvalArtifactStore(options.outputBaseDir);
   await artifactStore.saveRunMetadata(metadata.runId, metadata);
   const runDir = artifactStore.runDir(metadata.runId);
@@ -1510,6 +1902,7 @@ export async function runEvalCli(
     runDir,
     reportJsonPath: finalReporterEnabled ? jsonReportPath : null,
     reportMarkdownPath: finalReporterEnabled ? markdownReportPath : null,
+    ...(tokenReport === undefined ? {} : { tokenReport }),
   });
 
   const summary = buildSummary(
