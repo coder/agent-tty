@@ -72,6 +72,7 @@ const HELP_TEXT = [
   '  --progress          Enable progress reporting on stderr',
   '  --json              Print JSON summary only',
   '  --verbose           Print verbose progress logs to stderr',
+type SnapshotMode = 'off' | 'update' | 'check';
   '  --dry-run           List cases that would run without invoking providers',
   '  --concurrency <n>  Maximum work items to run concurrently per lane. Default: 1',
   '  --trials <n>       Number of independent trials per case/condition. Default: 1',
@@ -84,6 +85,10 @@ const HELP_TEXT = [
   '  npx tsx evals/run.ts --provider codex --model gpt-5.4 --lane all',
   '  npx tsx evals/run.ts --provider stub --lane execution --case hello-prompt --case resize-demo',
   '  npx tsx evals/run.ts --provider stub --lane execution --condition none --condition preloaded --dry-run',
+  '  --snapshot-update   Write token usage snapshots for the selected cases',
+  '  --snapshot-check    Compare token usage against saved snapshots',
+  '  --snapshot-threshold <percent>  Regression threshold percent for snapshot checks. Default: 20',
+  '  --snapshot-dir <path>  Snapshot directory. Default: <output>/snapshots',
   '',
   'Notes:',
   '  - Relative --output paths resolve from the repository root.',
@@ -120,6 +125,10 @@ interface ResolvedCliOptions {
   modelId?: string;
   effortLevel?: string;
   requestedLane: string;
+  snapshotThreshold?: string;
+  snapshotDir?: string;
+  snapshotUpdate: boolean;
+  snapshotCheck: boolean;
   requestedConditions: string[];
   caseIds: string[];
   outputBaseDir: string;
@@ -132,6 +141,12 @@ interface ResolvedCliOptions {
   verbose: boolean;
   dryRun: boolean;
   activeLanes: EvalLane[];
+interface ResolvedSnapshotOptions {
+  snapshotMode: SnapshotMode;
+  snapshotThresholdPercent: number;
+  snapshotDir: string;
+}
+
   activeConditions: SkillCondition[];
   selectedCases: CaseSelection[];
   totalInvocations: number;
@@ -141,6 +156,9 @@ interface CaseSelection {
   lane: EvalLane;
   caseId: string;
   category: string;
+  snapshotMode: SnapshotMode;
+  snapshotThresholdPercent: number;
+  snapshotDir: string;
   expectedSkill: EvalCase['expectedSkill'];
   conditions: SkillCondition[];
   fixture?: string;
@@ -284,6 +302,8 @@ export function parseCliArgs(argumentsList: readonly string[]): CliOptions {
     if (argument === '--dry-run') {
       invariant(!options.dryRun, '--dry-run may only be provided once');
       options.dryRun = true;
+    snapshotUpdate: false,
+    snapshotCheck: false,
       continue;
     }
     if (argument === '--progress') {
@@ -319,6 +339,58 @@ export function parseCliArgs(argumentsList: readonly string[]): CliOptions {
       continue;
     }
     if (
+    if (argument === '--snapshot-update') {
+      invariant(
+        !options.snapshotUpdate,
+        '--snapshot-update may only be provided once',
+      );
+      options.snapshotUpdate = true;
+      continue;
+    }
+    if (argument === '--snapshot-check') {
+      invariant(
+        !options.snapshotCheck,
+        '--snapshot-check may only be provided once',
+      );
+      options.snapshotCheck = true;
+      continue;
+    }
+    if (
+      argument === '--snapshot-threshold' ||
+      argument.startsWith('--snapshot-threshold=')
+    ) {
+      const parsed = parseOptionValue(
+        argument,
+        '--snapshot-threshold',
+        argumentsList,
+        index,
+      );
+      invariant(
+        options.snapshotThreshold === undefined,
+        '--snapshot-threshold may only be set once',
+      );
+      options.snapshotThreshold = parsed.value;
+      index = parsed.nextIndex;
+      continue;
+    }
+    if (
+      argument === '--snapshot-dir' ||
+      argument.startsWith('--snapshot-dir=')
+    ) {
+      const parsed = parseOptionValue(
+        argument,
+        '--snapshot-dir',
+        argumentsList,
+        index,
+      );
+      invariant(
+        options.snapshotDir === undefined,
+        '--snapshot-dir may only be set once',
+      );
+      options.snapshotDir = parsed.value;
+      index = parsed.nextIndex;
+      continue;
+    }
       argument === '--compare-baseline' ||
       argument.startsWith('--compare-baseline=')
     ) {
@@ -623,6 +695,48 @@ export function resolveReporterSelection(
       isReporterId(reporterName),
       `Unsupported reporter: ${reporterName}. Expected one of ${REPORTER_IDS.join(', ')}`,
     );
+function resolveSnapshotOptions(
+  repoRoot: string,
+  outputBaseDir: string,
+  options: Pick<
+    CliOptions,
+    'snapshotCheck' | 'snapshotDir' | 'snapshotThreshold' | 'snapshotUpdate'
+  >,
+): ResolvedSnapshotOptions {
+  invariant(
+    !(options.snapshotUpdate && options.snapshotCheck),
+    '--snapshot-update and --snapshot-check may not be combined',
+  );
+
+  const snapshotThresholdValue =
+    options.snapshotThreshold === undefined ? '20' : options.snapshotThreshold;
+  const snapshotThresholdPercent = Number(snapshotThresholdValue);
+  invariant(
+    Number.isFinite(snapshotThresholdPercent) &&
+      snapshotThresholdPercent >= 0 &&
+      snapshotThresholdPercent <= 100,
+    `--snapshot-threshold must be a number between 0 and 100, got: ${snapshotThresholdValue}`,
+  );
+
+  const snapshotDirValue = resolveOptionalStringOption(
+    options.snapshotDir,
+    '--snapshot-dir',
+  );
+
+  return {
+    snapshotMode: options.snapshotUpdate
+      ? 'update'
+      : options.snapshotCheck
+        ? 'check'
+        : 'off',
+    snapshotThresholdPercent,
+    snapshotDir:
+      snapshotDirValue === undefined
+        ? resolve(outputBaseDir, 'snapshots')
+        : resolve(repoRoot, snapshotDirValue),
+  };
+}
+
   }
 
   const reporterOutputPath = resolveOptionalStringOption(
@@ -804,6 +918,11 @@ function buildResolvedOptions(
     selectedCases: selection.cases,
     totalInvocations: selection.totalInvocations,
   };
+  const snapshotOptions = resolveSnapshotOptions(
+    repoRoot,
+    outputBaseDir,
+    options,
+  );
 }
 
 function logVerbose(options: ResolvedCliOptions, message: string): void {
@@ -827,6 +946,9 @@ function formatCaseSelection(selection: CaseSelection): string {
 function writeDryRunSummary(options: ResolvedCliOptions): void {
   const summary: RunSummary = {
     ok: true,
+    snapshotMode: snapshotOptions.snapshotMode,
+    snapshotThresholdPercent: snapshotOptions.snapshotThresholdPercent,
+    snapshotDir: snapshotOptions.snapshotDir,
     providerId: options.providerId,
     ...(options.modelId === undefined ? {} : { modelId: options.modelId }),
     lanes: options.activeLanes,
