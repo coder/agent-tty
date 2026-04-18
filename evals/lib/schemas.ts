@@ -467,6 +467,7 @@ export const ExecutionEvalCaseSchema = z
     artifactRequirements: z.array(ArtifactRequirementSchema),
     budgets: ExecutionBudgetSchema,
     referenceSteps: PositiveIntSchema.optional(),
+    workspace: NonEmptyStringSchema.optional(),
   })
   .strict()
   .superRefine((obj, ctx) => {
@@ -515,6 +516,7 @@ export const DogfoodEvalCaseSchema = z
     antiPatterns: z.array(AntiPatternRuleSchema),
     budgets: DogfoodBudgetSchema,
     referenceSteps: PositiveIntSchema.optional(),
+    workspace: NonEmptyStringSchema.optional(),
   })
   .strict()
   .superRefine((obj, ctx) => {

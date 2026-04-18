@@ -46,4 +46,5 @@ export const helloPromptCase = executionCase('hello-prompt')
     maxAgentSteps: 12,
     maxWallClockMs: 60_000,
   })
+  .workspace('agent-tty-smoke')
   .build();

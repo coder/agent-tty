@@ -250,6 +250,7 @@ const LEGACY_HELLO_PROMPT_CASE = ExecutionEvalCaseSchema.parse({
   },
   fixture: 'hello-prompt',
   referenceSteps: 5,
+  workspace: 'agent-tty-smoke',
 }) as ExecutionEvalCase;
 
 const LEGACY_DOCTOR_GATED_CASE = ExecutionEvalCaseSchema.parse({
@@ -437,6 +438,7 @@ const LEGACY_EXPLORATORY_QA_CASE = DogfoodEvalCaseSchema.parse({
     maxWallClockMs: 600_000,
   },
   fixture: 'hello-prompt',
+  workspace: 'agent-tty-smoke',
 }) as DogfoodEvalCase;
 
 function findPromptCaseOrThrow(caseId: string): PromptEvalCase {

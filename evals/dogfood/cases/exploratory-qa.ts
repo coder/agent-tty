@@ -35,6 +35,7 @@ export const exploratoryQaCase = dogfoodCase('exploratory-qa')
     maxAgentSteps: 30,
     maxWallClockMs: 600_000,
   })
+  .workspace('agent-tty-smoke')
   .build();
 
 export default exploratoryQaCase;

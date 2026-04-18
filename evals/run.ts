@@ -36,6 +36,7 @@ import {
   type FinalReportInputs,
 } from './reporters/final-report.js';
 import { JsonlReporter } from './reporters/jsonl.js';
+import { registerBuiltinPresets } from './workspaces/builtins.js';
 import type { EvalProvider } from './providers/base.js';
 
 const DEFAULT_TOTAL_TRIALS = 1;
@@ -1219,6 +1220,8 @@ function recordLaneFailure(
 export async function runEvalCli(
   argumentsList: readonly string[],
 ): Promise<number> {
+  registerBuiltinPresets();
+
   const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
   const parsedOptions = parseCliArgs(argumentsList);
   if (parsedOptions.help) {

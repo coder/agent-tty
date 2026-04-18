@@ -113,6 +113,7 @@ export class DogfoodCaseBuilder {
   private taskValue?: string;
   private fixtureValue?: string;
   private targetValue?: string;
+  private workspaceValue?: string;
   private bundlePathValue?: string;
   private readonly bundleRequirementsValue: string[] = [];
   private conditionsValue: SkillCondition[] = [...SKILL_CONDITIONS];
@@ -296,6 +297,11 @@ export class DogfoodCaseBuilder {
     return this;
   }
 
+  workspace(workspace: string): this {
+    this.workspaceValue = workspace;
+    return this;
+  }
+
   build(): DogfoodEvalCase {
     const category = assertDefined(
       this.categoryValue,
@@ -397,6 +403,9 @@ export class DogfoodCaseBuilder {
     }
     if (this.referenceStepsValue !== undefined) {
       compiled.referenceSteps = this.referenceStepsValue;
+    }
+    if (this.workspaceValue !== undefined) {
+      compiled.workspace = this.workspaceValue;
     }
 
     return compileAndValidate(

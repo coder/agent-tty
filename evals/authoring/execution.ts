@@ -329,6 +329,7 @@ export class ExecutionCaseBuilder {
   private taskValue?: string;
   private fixtureValue?: ExecutionFixtureDraft;
   private targetValue?: string;
+  private workspaceValue?: string;
   private conditionsValue: SkillCondition[] = [...ALL_EXECUTION_CONDITIONS];
   private referenceStepsValue?: number;
   private readonly workflowBuilder: WorkflowBuilder;
@@ -388,6 +389,11 @@ export class ExecutionCaseBuilder {
 
   referenceSteps(referenceSteps: number): this {
     this.referenceStepsValue = referenceSteps;
+    return this;
+  }
+
+  workspace(workspace: string): this {
+    this.workspaceValue = workspace;
     return this;
   }
 
@@ -558,6 +564,9 @@ export class ExecutionCaseBuilder {
     }
     if (this.referenceStepsValue !== undefined) {
       compiled.referenceSteps = this.referenceStepsValue;
+    }
+    if (this.workspaceValue !== undefined) {
+      compiled.workspace = this.workspaceValue;
     }
 
     return compileAndValidate(

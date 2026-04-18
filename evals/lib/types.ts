@@ -306,6 +306,7 @@ export interface ExecutionEvalCase {
     maxWallClockMs?: number;
   };
   referenceSteps?: number;
+  workspace?: string;
 }
 
 /** Dogfood eval case for evidence capture and reporting quality. */
@@ -332,6 +333,7 @@ export interface DogfoodEvalCase {
     maxWallClockMs?: number;
   };
   referenceSteps?: number;
+  workspace?: string;
 }
 
 /** Any supported eval case. */
