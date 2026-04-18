@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { TokenReportSummarySchema } from '../lib/schemas.js';
+
 const NonEmptyStringSchema = z.string().min(1);
 const PositiveIntSchema = z.number().int().positive();
 const NonNegativeIntSchema = z.number().int().nonnegative();
@@ -157,6 +159,7 @@ export const RunFinishEventSchema = z
     runDir: NonEmptyStringSchema,
     reportJsonPath: NullablePathSchema,
     reportMarkdownPath: NullablePathSchema,
+    tokenReport: TokenReportSummarySchema.optional(),
   })
   .strict();
 export type RunFinishEvent = z.infer<typeof RunFinishEventSchema>;

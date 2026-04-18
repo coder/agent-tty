@@ -4,6 +4,7 @@ import {
   ReporterDispatcher,
   redactSecretLikeValues,
 } from '../../../../evals/reporters/dispatch.js';
+import type { TokenReportSummary } from '../../../../evals/lib/types.js';
 import type {
   RunFinishEvent,
   RunStartEvent,
@@ -48,6 +49,40 @@ function createRunFinishEvent(
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createTokenReportSummary(): TokenReportSummary {
+  return {
+    grandTotal: {
+      inputTokens: 12,
+      outputTokens: 8,
+      totalTokens: 20,
+      cachedTokens: 4,
+      trials: 1,
+    },
+    perLane: [
+      {
+        lane: 'prompt',
+        inputTokens: 12,
+        outputTokens: 8,
+        totalTokens: 20,
+        cachedTokens: 4,
+        trials: 1,
+      },
+    ],
+    perCase: [
+      {
+        lane: 'prompt',
+        caseId: 'case-1',
+        condition: 'none',
+        inputTokens: 12,
+        outputTokens: 8,
+        totalTokens: 20,
+        cachedTokens: 4,
+        trials: 1,
+      },
+    ],
+  };
 }
 
 afterEach(() => {
@@ -158,6 +193,61 @@ describe('ReporterDispatcher', () => {
     ).rejects.toThrow(
       /Invalid reporter payload for event "runStart": totalTrials:/,
     );
+  });
+
+  it('validates runFinish payloads with and without tokenReport', async () => {
+    const onRunFinish = vi.fn();
+    const dispatcher = new ReporterDispatcher([
+      {
+        name: 'capture',
+        onRunFinish,
+      },
+    ]);
+    const bareRunFinish = createRunFinishEvent();
+    const tokenizedRunFinish = createRunFinishEvent({
+      tokenReport: createTokenReportSummary(),
+    });
+
+    await expect(dispatcher.dispatch('runFinish', bareRunFinish)).resolves.toBeUndefined();
+    await expect(
+      dispatcher.dispatch('runFinish', tokenizedRunFinish),
+    ).resolves.toBeUndefined();
+
+    expect(onRunFinish).toHaveBeenNthCalledWith(1, bareRunFinish);
+    expect(onRunFinish).toHaveBeenNthCalledWith(2, tokenizedRunFinish);
+  });
+
+  it('rejects malformed nested tokenReport payloads on runFinish', async () => {
+    const dispatcher = new ReporterDispatcher();
+    const tokenReport = createTokenReportSummary();
+
+    await expect(
+      dispatcher.dispatch('runFinish', {
+        ...createRunFinishEvent(),
+        tokenReport: {
+          ...tokenReport,
+          perLane: [
+            {
+              ...tokenReport.perLane[0],
+              unexpected: 1,
+            },
+          ],
+        },
+      } as unknown as RunFinishEvent),
+    ).rejects.toThrow(/tokenReport\.perLane\.0: Unrecognized key/);
+
+    await expect(
+      dispatcher.dispatch('runFinish', {
+        ...createRunFinishEvent(),
+        tokenReport: {
+          ...tokenReport,
+          grandTotal: {
+            ...tokenReport.grandTotal,
+            totalTokens: 20.5,
+          },
+        },
+      } as unknown as RunFinishEvent),
+    ).rejects.toThrow(/tokenReport\.grandTotal\.totalTokens:/);
   });
 
   it('rejects duplicate reporter names at construction', () => {

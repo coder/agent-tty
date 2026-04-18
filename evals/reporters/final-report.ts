@@ -45,7 +45,7 @@ export class FinalReportReporter implements Reporter {
     this.getFinalReportInputs = context.getFinalReportInputs;
   }
 
-  public async onRunFinish(_event: RunFinishEvent): Promise<void> {
+  public async onRunFinish(event: RunFinishEvent): Promise<void> {
     const inputs = this.getFinalReportInputs();
     if (inputs === null) {
       return;
@@ -73,12 +73,14 @@ export class FinalReportReporter implements Reporter {
       inputs.metadata,
       inputs.comparisonMetrics,
       inputs.baselineComparison,
+      event.tokenReport,
     );
     const markdownReport = generateMarkdownReport(
       inputs.results,
       inputs.metadata,
       inputs.comparisonMetrics,
       inputs.baselineComparison,
+      event.tokenReport,
     );
 
     await writeFile(

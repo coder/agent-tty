@@ -8,7 +8,11 @@ import {
   generateJsonReport,
   generateMarkdownReport,
 } from '../../../../evals/lib/reporting.js';
-import type { EvalResult, RunMetadata } from '../../../../evals/lib/types.js';
+import type {
+  EvalResult,
+  RunMetadata,
+  TokenReportSummary,
+} from '../../../../evals/lib/types.js';
 import { FinalReportReporter } from '../../../../evals/reporters/final-report.js';
 
 import { createRunFinishEvent } from './fixtures.js';
@@ -58,6 +62,67 @@ function createEvalResult(overrides: Partial<EvalResult> = {}): EvalResult {
   };
 }
 
+function createTokenReportSummary(): TokenReportSummary {
+  return {
+    grandTotal: {
+      inputTokens: 90,
+      outputTokens: 30,
+      totalTokens: 120,
+      cachedTokens: 12,
+      trials: 1,
+    },
+    perLane: [
+      {
+        lane: 'prompt',
+        inputTokens: 90,
+        outputTokens: 30,
+        totalTokens: 120,
+        cachedTokens: 12,
+        trials: 1,
+      },
+    ],
+    perCase: [
+      {
+        lane: 'prompt',
+        caseId: 'case-1',
+        condition: 'none',
+        inputTokens: 90,
+        outputTokens: 30,
+        totalTokens: 120,
+        cachedTokens: 12,
+        trials: 1,
+      },
+    ],
+    snapshotCheck: {
+      regressionThresholdPercent: 10,
+      cases: [
+        {
+          provider: 'stub',
+          model: 'stub-model',
+          lane: 'prompt',
+          caseId: 'case-1',
+          condition: 'none',
+          caseFingerprint: 'b'.repeat(64),
+          totalTokens: 120,
+          outcome: 'unchanged',
+          currentTotalTokens: 120,
+          snapshotTotalTokens: 118,
+          deltaTokens: 2,
+          deltaPercent: 1.7,
+        },
+      ],
+      summary: {
+        total: 1,
+        new: 0,
+        orphaned: 0,
+        unchanged: 1,
+        improved: 0,
+        regressed: 0,
+      },
+    },
+  };
+}
+
 afterEach(async () => {
   await Promise.all(
     tempDirs
@@ -104,6 +169,54 @@ describe('FinalReportReporter', () => {
     expect(await fs.readFile(jsonReportPath, 'utf8')).toBe(expectedJson);
     expect(await fs.readFile(markdownReportPath, 'utf8')).toBe(
       expectedMarkdown,
+    );
+  });
+
+  it('threads tokenReport into the written JSON and Markdown reports', async () => {
+    const tempDir = await fs.mkdtemp(join(tmpdir(), 'final-report-token-'));
+    tempDirs.push(tempDir);
+    const results = [createEvalResult()];
+    const metadata = createRunMetadata();
+    const tokenReport = createTokenReportSummary();
+    const jsonReportPath = join(tempDir, 'report.json');
+    const markdownReportPath = join(tempDir, 'report.md');
+    const reporter = new FinalReportReporter({
+      getFinalReportInputs: () => ({
+        results,
+        metadata,
+        comparisonMetrics: [],
+        jsonReportPath,
+        markdownReportPath,
+      }),
+    });
+
+    await reporter.onRunFinish(
+      createRunFinishEvent({
+        runId: metadata.runId,
+        runDir: tempDir,
+        reportJsonPath: jsonReportPath,
+        reportMarkdownPath: markdownReportPath,
+        tokenReport,
+      }),
+    );
+
+    const expectedJson = `${JSON.stringify(generateJsonReport(results, metadata, [], undefined, tokenReport), null, 2)}\n`;
+    const expectedMarkdown = generateMarkdownReport(
+      results,
+      metadata,
+      [],
+      undefined,
+      tokenReport,
+    );
+    const writtenJson = await fs.readFile(jsonReportPath, 'utf8');
+    const writtenMarkdown = await fs.readFile(markdownReportPath, 'utf8');
+
+    expect(writtenJson).toBe(expectedJson);
+    expect(writtenMarkdown).toBe(expectedMarkdown);
+    expect(JSON.parse(writtenJson)).toMatchObject({ tokenReport });
+    expect(writtenMarkdown).toContain('## Token usage');
+    expect(writtenMarkdown.indexOf('## Token usage')).toBeGreaterThan(
+      writtenMarkdown.indexOf('## Anti-pattern summary'),
     );
   });
 
