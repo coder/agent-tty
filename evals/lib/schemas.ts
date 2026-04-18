@@ -34,6 +34,7 @@ import type {
   ProviderPromptResult,
   ProviderRuntimeInfo,
   ReportCompletenessScore,
+  TokenUsage,
   TrialAggregation,
 } from './types.js';
 
@@ -596,6 +597,15 @@ export const ProviderRuntimeInfoSchema = z
   })
   .strict();
 
+export const TokenUsageSchema = z
+  .object({
+    inputTokens: NonNegativeIntSchema,
+    outputTokens: NonNegativeIntSchema,
+    totalTokens: NonNegativeIntSchema,
+    cachedTokens: NonNegativeIntSchema.optional(),
+  })
+  .strict();
+
 export const NormalizedProviderOutputSchema = z
   .object({
     finalText: z.string(),
@@ -604,6 +614,7 @@ export const NormalizedProviderOutputSchema = z
     referencedSkills: z.array(NonEmptyStringSchema),
     selectedSkill: ExpectedSkillSchema.optional(),
     toolCalls: z.array(UnknownRecordSchema),
+    tokenUsage: TokenUsageSchema.optional(),
   })
   .strict();
 
@@ -1012,6 +1023,7 @@ export type ProviderCapabilitiesSchemaType = z.infer<
 export type ProviderRuntimeInfoSchemaType = z.infer<
   typeof ProviderRuntimeInfoSchema
 >;
+export type TokenUsageSchemaType = z.infer<typeof TokenUsageSchema>;
 export type NormalizedProviderOutputSchemaType = z.infer<
   typeof NormalizedProviderOutputSchema
 >;
@@ -1171,6 +1183,10 @@ export type _ProviderAgentResultSchemaParity = AssertExact<
 export type _ProviderRuntimeInfoSchemaParity = AssertExact<
   ProviderRuntimeInfo,
   ProviderRuntimeInfoSchemaType
+>;
+export type _TokenUsageSchemaParity = AssertExact<
+  TokenUsage,
+  TokenUsageSchemaType
 >;
 export type _NormalizedProviderOutputSchemaParity = AssertExact<
   NormalizedProviderOutput,

@@ -623,6 +623,14 @@ export interface ProviderRuntimeInfo {
   notes: string[];
 }
 
+/** Normalized provider token-usage metadata. */
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedTokens?: number;
+}
+
 /** Provider output normalized for downstream scoring and storage. */
 export interface NormalizedProviderOutput {
   finalText: string;
@@ -631,6 +639,7 @@ export interface NormalizedProviderOutput {
   referencedSkills: string[];
   selectedSkill?: ExpectedSkill;
   toolCalls: Array<Record<string, unknown>>;
+  tokenUsage?: TokenUsage;
 }
 
 /** Capability flags exposed by a provider adapter. */
