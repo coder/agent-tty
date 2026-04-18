@@ -93,6 +93,8 @@ const DEFAULT_TOTAL_TRIALS = 1;
 type ExecutionWorkItem = EvalWorkItemIdentity &
   ScheduledWorkItem & {
     evalCase: ExecutionEvalCase;
+    homeDir?: string;
+    workspacePlan?: ResolvedWorkspacePlan;
   };
 
 type ExecutionLaneOptions = {
@@ -917,11 +919,39 @@ function stripExecutionWorkspace(
   return requestEvalCase;
 }
 
+async function prepareExecutionWorkspacePlan(
+  metadata: RunMetadata,
+  workItem: ExecutionWorkItem,
+): Promise<void> {
+  if (workItem.workspacePlan !== undefined) {
+    return;
+  }
+
+  const workspaceId = readExecutionWorkspaceId(workItem.evalCase);
+  if (workspaceId === undefined) {
+    return;
+  }
+
+  const homeDir = workItem.homeDir ?? (await createIsolatedEvalHome());
+  workItem.homeDir = homeDir;
+
+  try {
+    const preset = lookupPreset(workspaceId);
+    workItem.workspacePlan = resolveWorkspacePreset(
+      { homeDir, repoRoot: resolve(metadata.repoRoot) },
+      preset,
+    );
+  } catch {
+    // Preserve existing per-item execution failures when plan-only resolution cannot complete before reporter emission.
+  }
+}
+
 async function resolveExecutionWorkspace(
   metadata: RunMetadata,
   evalCase: ExecutionEvalCase,
   homeDir: string,
   outputDir: string,
+  workspacePlan?: ResolvedWorkspacePlan,
 ): Promise<ResolvedCaseWorkspace | undefined> {
   const workspaceId = readExecutionWorkspaceId(evalCase);
   if (workspaceId === undefined) {
@@ -930,7 +960,14 @@ async function resolveExecutionWorkspace(
 
   const repoRoot = resolve(metadata.repoRoot);
   const preset = lookupPreset(workspaceId);
-  const plan = resolveWorkspacePreset({ homeDir, repoRoot }, preset);
+  if (workspacePlan !== undefined) {
+    invariant(
+      workspacePlan.presetId === preset.id,
+      `Execution workspace plan preset mismatch: expected ${preset.id}, got ${workspacePlan.presetId}`,
+    );
+  }
+  const plan =
+    workspacePlan ?? resolveWorkspacePreset({ homeDir, repoRoot }, preset);
   const effectiveEnv = deriveEffectiveEnv(preset, {
     AGENT_TTY_EVAL_OUTPUT_DIR: outputDir,
   });
@@ -1095,12 +1132,12 @@ async function detectRuntime(
 async function runSingleExecutionCase(
   provider: EvalProvider,
   metadata: RunMetadata,
-  evalCase: ExecutionEvalCase,
-  condition: SkillCondition,
-  trial: number,
+  workItem: ExecutionWorkItem,
   runtime: ProviderRuntimeInfo | undefined,
 ): Promise<EvalResult> {
-  const homeDir = await createIsolatedEvalHome();
+  const { evalCase, condition, trial } = workItem;
+  const homeDir = workItem.homeDir ?? (await createIsolatedEvalHome());
+  workItem.homeDir = homeDir;
   const outputDir = await mkdtemp(join(tmpdir(), RUNNER_OUTPUT_PREFIX));
 
   try {
@@ -1109,6 +1146,7 @@ async function runSingleExecutionCase(
       evalCase,
       homeDir,
       outputDir,
+      workItem.workspacePlan,
     );
     const request = await createEvalRequest(
       provider,
@@ -1361,14 +1399,7 @@ export async function executeExecutionWorkItem(
     Number.isInteger(workItem.trial) && workItem.trial > 0,
     'Execution work item trial must be a positive integer',
   );
-  return runSingleExecutionCase(
-    provider,
-    metadata,
-    workItem.evalCase,
-    workItem.condition,
-    workItem.trial,
-    runtime,
-  );
+  return runSingleExecutionCase(provider, metadata, workItem, runtime);
 }
 
 /**
@@ -1448,6 +1479,8 @@ export async function runExecutionLane(
                 startedAt: started.iso,
                 startedAtMs: started.ms,
               });
+
+              await prepareExecutionWorkspacePlan(metadata, item);
 
               trackerTimestamp = started.iso;
               try {

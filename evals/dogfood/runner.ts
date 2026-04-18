@@ -82,6 +82,7 @@ const DEFAULT_TOTAL_TRIALS = 1;
 type DogfoodWorkItem = EvalWorkItemIdentity &
   ScheduledWorkItem & {
     evalCase: DogfoodEvalCase;
+    workspacePlan?: ResolvedWorkspacePlan;
   };
 
 type DogfoodLaneOptions = {
@@ -587,6 +588,31 @@ function stripDogfoodWorkspace(evalCase: DogfoodEvalCase): DogfoodEvalCase {
   return requestEvalCase;
 }
 
+function prepareDogfoodWorkspacePlan(
+  workItem: DogfoodWorkItem,
+  ctx: DogfoodLaneContext,
+  homeDir: string,
+): void {
+  if (workItem.workspacePlan !== undefined) {
+    return;
+  }
+
+  const workspaceId = readDogfoodWorkspaceId(workItem.evalCase);
+  if (workspaceId === undefined) {
+    return;
+  }
+
+  try {
+    const preset = lookupPreset(workspaceId);
+    workItem.workspacePlan = resolveWorkspacePreset(
+      { homeDir, repoRoot: ctx.repoRoot },
+      preset,
+    );
+  } catch {
+    // Preserve existing per-item dogfood failures when plan-only resolution cannot complete before reporter emission.
+  }
+}
+
 async function resolveDogfoodWorkspace(
   evalCase: DogfoodEvalCase,
   ctx: DogfoodLaneContext,
@@ -594,6 +620,7 @@ async function resolveDogfoodWorkspace(
   outputDir: string,
   requestedBundlePath: string,
   systemPromptEnv: Record<string, string>,
+  workspacePlan?: ResolvedWorkspacePlan,
 ): Promise<ResolvedDogfoodWorkspace | undefined> {
   const workspaceId = readDogfoodWorkspaceId(evalCase);
   if (workspaceId === undefined) {
@@ -601,10 +628,15 @@ async function resolveDogfoodWorkspace(
   }
 
   const preset = lookupPreset(workspaceId);
-  const plan = resolveWorkspacePreset(
-    { homeDir, repoRoot: ctx.repoRoot },
-    preset,
-  );
+  if (workspacePlan !== undefined) {
+    invariant(
+      workspacePlan.presetId === preset.id,
+      `Dogfood workspace plan preset mismatch: expected ${preset.id}, got ${workspacePlan.presetId}`,
+    );
+  }
+  const plan =
+    workspacePlan ??
+    resolveWorkspacePreset({ homeDir, repoRoot: ctx.repoRoot }, preset);
   const effectiveEnv = deriveEffectiveEnv(preset, {
     EVAL_OUTPUT_DIR: outputDir,
     EVAL_REQUESTED_BUNDLE_DIR: requestedBundlePath,
@@ -819,6 +851,7 @@ export async function executeDogfoodWorkItem(
       outputDir,
       requestedBundlePath,
       systemPromptContext.env,
+      workItem.workspacePlan,
     );
     const requestCaseBase = stripDogfoodWorkspace(workItem.evalCase);
     const requestCase = DogfoodEvalCaseSchema.parse({
@@ -1106,13 +1139,6 @@ export async function runDogfoodLane(
                 startedAtMs: started.ms,
               });
 
-              trackerTimestamp = started.iso;
-              try {
-                await tracker.onTrialStart(item);
-              } finally {
-                trackerTimestamp = undefined;
-              }
-
               const requestedPaths = buildRequestedPaths(
                 metadata,
                 provider.id,
@@ -1120,6 +1146,15 @@ export async function runDogfoodLane(
                 item.condition,
                 item.trial,
               );
+              prepareDogfoodWorkspacePlan(item, ctx, requestedPaths.homeDir);
+
+              trackerTimestamp = started.iso;
+              try {
+                await tracker.onTrialStart(item);
+              } finally {
+                trackerTimestamp = undefined;
+              }
+
               await activeReporter.dispatch('trialStart', {
                 runId: metadata.runId,
                 lane: 'dogfood',

@@ -2,6 +2,7 @@ import { assertString, invariant } from '../../src/util/assert.js';
 
 import type { SchedulerItemSettlement } from '../lib/scheduler.js';
 import type { EvalLane, EvalWorkItemIdentity } from '../lib/types.js';
+import type { ResolvedWorkspacePlan } from '../workspaces/types.js';
 import type { ReporterEventPayloads } from './types.js';
 
 type CaseProgressEventName = 'caseStart' | 'caseFinish';
@@ -14,6 +15,10 @@ export type CaseProgressIdentity = Pick<
 export type CaseProgressResult = {
   ok: boolean;
 };
+
+export interface CaseProgressWorkspaceCarrier {
+  workspacePlan?: ResolvedWorkspacePlan;
+}
 
 export interface PlannedCase {
   caseId: string;
@@ -29,7 +34,7 @@ export interface CaseProgressDispatcher {
 }
 
 export interface CaseProgressTrackerOptions<
-  TItem extends CaseProgressIdentity,
+  TItem extends CaseProgressIdentity & CaseProgressWorkspaceCarrier,
   TResult extends CaseProgressResult,
 > {
   runId: string;
@@ -135,6 +140,59 @@ function createCaseState(plannedCase: PlannedCase): CaseProgressState {
   };
 }
 
+function buildCaseStartWorkspace(
+  workspacePlan: ResolvedWorkspacePlan | undefined,
+): ReporterEventPayloads['caseStart']['workspace'] {
+  if (workspacePlan === undefined) {
+    return undefined;
+  }
+
+  assertString(
+    workspacePlan.presetId,
+    'tracker workspacePlan.presetId must be a string',
+  );
+  invariant(
+    workspacePlan.presetId.length > 0,
+    'tracker workspacePlan.presetId must not be empty',
+  );
+  if (workspacePlan.cwd !== undefined) {
+    assertString(
+      workspacePlan.cwd,
+      'tracker workspacePlan.cwd must be a string',
+    );
+    invariant(
+      workspacePlan.cwd.length > 0,
+      'tracker workspacePlan.cwd must not be empty when provided',
+    );
+  }
+  if (workspacePlan.env !== undefined) {
+    invariant(
+      !Array.isArray(workspacePlan.env),
+      'tracker workspacePlan.env must be a record when provided',
+    );
+    for (const [key, value] of Object.entries(workspacePlan.env)) {
+      assertString(key, 'tracker workspacePlan.env keys must be strings');
+      assertString(value, `tracker workspacePlan.env.${key} must be a string`);
+    }
+  }
+  invariant(
+    Number.isInteger(workspacePlan.bootstrapCount) &&
+      workspacePlan.bootstrapCount >= 0,
+    'tracker workspacePlan.bootstrapCount must be a non-negative integer',
+  );
+  invariant(
+    workspacePlan.bootstrapCount === workspacePlan.bootstrap.length,
+    'tracker workspacePlan.bootstrapCount must match bootstrap length',
+  );
+
+  return {
+    presetId: workspacePlan.presetId,
+    ...(workspacePlan.cwd === undefined ? {} : { cwd: workspacePlan.cwd }),
+    ...(workspacePlan.env === undefined ? {} : { env: workspacePlan.env }),
+    bootstrapCount: workspacePlan.bootstrapCount,
+  };
+}
+
 export function computePlannedCases(
   items: readonly CaseProgressIdentity[],
 ): Map<string, PlannedCase> {
@@ -165,7 +223,7 @@ export function computePlannedCases(
 }
 
 export class CaseProgressTracker<
-  TItem extends CaseProgressIdentity,
+  TItem extends CaseProgressIdentity & CaseProgressWorkspaceCarrier,
   TResult extends CaseProgressResult,
 > {
   private readonly runId: string;
@@ -238,6 +296,7 @@ export class CaseProgressTracker<
       condition: state.plannedCase.condition,
       plannedTrials: state.plannedCase.plannedTrials,
       startedAt: startedAt.iso,
+      workspace: buildCaseStartWorkspace(item.workspacePlan),
     });
   }
 

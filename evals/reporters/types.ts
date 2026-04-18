@@ -40,6 +40,15 @@ export const LaneStartEventSchema = z
   .strict();
 export type LaneStartEvent = z.infer<typeof LaneStartEventSchema>;
 
+const CaseStartWorkspaceSchema = z
+  .object({
+    presetId: z.string(),
+    cwd: z.string().optional(),
+    env: z.record(z.string(), z.string()).optional(),
+    bootstrapCount: NonNegativeIntSchema,
+  })
+  .strict();
+
 export const CaseStartEventSchema = z
   .object({
     runId: NonEmptyStringSchema,
@@ -48,6 +57,7 @@ export const CaseStartEventSchema = z
     condition: NonEmptyStringSchema,
     plannedTrials: PositiveIntSchema,
     startedAt: IsoTimestampSchema,
+    workspace: CaseStartWorkspaceSchema.optional(),
   })
   .strict();
 export type CaseStartEvent = z.infer<typeof CaseStartEventSchema>;
