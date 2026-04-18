@@ -26,12 +26,15 @@ import {
   ProviderPromptResultSchema,
   ProviderRuntimeInfoSchema,
 } from '../../../evals/lib/schemas.js';
+import { createFixtureProvider } from '../../../evals/providers/fixtures.js';
 import { TRIGGER_AGENT_TTY_PROMPT_CASES } from '../../../evals/prompt/cases/trigger-agent-tty.js';
 import type {
   DogfoodEvalCase,
   ExecutionEvalCase,
   PromptEvalCase,
+  ProviderAgentRequest,
   ProviderAgentResult,
+  ProviderPromptRequest,
   ProviderPromptResult,
   ProviderRuntimeInfo,
 } from '../../../evals/lib/types.js';
@@ -122,6 +125,47 @@ const FIXTURE_RUNTIME_INFO = ProviderRuntimeInfoSchema.parse({
   notes: ['eval authoring pilot integration fixture'],
 }) as ProviderRuntimeInfo;
 
+const VALID_TOKEN_USAGE = {
+  inputTokens: 120,
+  outputTokens: 45,
+  totalTokens: 165,
+  cachedTokens: 15,
+} as const;
+const INVALID_TOKEN_USAGE_CASES = [
+  [
+    'partial',
+    {
+      inputTokens: 1,
+      outputTokens: 2,
+    },
+  ],
+  [
+    'negative',
+    {
+      inputTokens: -1,
+      outputTokens: 2,
+      totalTokens: 1,
+    },
+  ],
+  [
+    'fractional',
+    {
+      inputTokens: 1.5,
+      outputTokens: 2,
+      totalTokens: 3.5,
+    },
+  ],
+  [
+    'extra key',
+    {
+      inputTokens: 1,
+      outputTokens: 2,
+      totalTokens: 3,
+      extra: 4,
+    },
+  ],
+] as const;
+
 const waitForOutputCase = findPromptCaseOrThrow('wait-for-output');
 const PILOT_CASES: readonly PilotCaseExpectation[] = [
   {
@@ -170,6 +214,34 @@ function requireDefined<T>(value: T | undefined, label: string): T {
   return value;
 }
 
+function buildPromptRequest(evalCase: PromptEvalCase): ProviderPromptRequest {
+  return ProviderPromptRequestSchema.parse({
+    runId: PLACEHOLDER_RUN_ID,
+    providerId: PLACEHOLDER_PROVIDER_ID,
+    condition: 'none',
+    trial: 1,
+    modelId: PLACEHOLDER_MODEL_ID,
+    cwd: process.cwd(),
+    evalCase,
+  }) as ProviderPromptRequest;
+}
+
+function buildAgentRequest(
+  evalCase: ExecutionEvalCase | DogfoodEvalCase,
+): ProviderAgentRequest {
+  return ProviderAgentRequestSchema.parse({
+    runId: PLACEHOLDER_RUN_ID,
+    providerId: PLACEHOLDER_PROVIDER_ID,
+    condition: 'none',
+    trial: 1,
+    modelId: PLACEHOLDER_MODEL_ID,
+    cwd: process.cwd(),
+    homeDir: PLACEHOLDER_HOME_DIR,
+    outputDir: PLACEHOLDER_OUTPUT_DIR,
+    evalCase,
+  }) as ProviderAgentRequest;
+}
+
 function buildNormalizedOutput(text: string) {
   return NormalizedProviderOutputSchema.parse({
     finalText: text,
@@ -183,15 +255,7 @@ function buildPromptFixture(
   evalCase: PromptEvalCase,
   responseText: string,
 ): ProviderPromptResult {
-  const request = ProviderPromptRequestSchema.parse({
-    runId: PLACEHOLDER_RUN_ID,
-    providerId: PLACEHOLDER_PROVIDER_ID,
-    condition: 'none',
-    trial: 1,
-    modelId: PLACEHOLDER_MODEL_ID,
-    cwd: process.cwd(),
-    evalCase,
-  });
+  const request = buildPromptRequest(evalCase);
 
   return ProviderPromptResultSchema.parse({
     request,
@@ -216,17 +280,7 @@ function buildAgentFixture(
     rawStderr?: string;
   } = {},
 ): ProviderAgentResult {
-  const request = ProviderAgentRequestSchema.parse({
-    runId: PLACEHOLDER_RUN_ID,
-    providerId: PLACEHOLDER_PROVIDER_ID,
-    condition: 'none',
-    trial: 1,
-    modelId: PLACEHOLDER_MODEL_ID,
-    cwd: process.cwd(),
-    homeDir: PLACEHOLDER_HOME_DIR,
-    outputDir: PLACEHOLDER_OUTPUT_DIR,
-    evalCase,
-  });
+  const request = buildAgentRequest(evalCase);
 
   return ProviderAgentResultSchema.parse({
     request,
@@ -496,5 +550,145 @@ describe(
         expect(singleResult.errorMessage).toBeUndefined();
       });
     }
+    it('round-trips tokenUsage from full normalized override fixtures', async () => {
+      const expectedNormalized = NormalizedProviderOutputSchema.parse({
+        finalText: 'normalized override text',
+        messages: ['raw override text', 'normalized override text'],
+        referencedSkills: ['agent-tty'],
+        selectedSkill: 'agent-tty',
+        toolCalls: [{ tool: 'wait', pattern: 'Listening on port 3000' }],
+        tokenUsage: VALID_TOKEN_USAGE,
+      });
+      writeJson(
+        join(fixtureRoot, 'normalized', 'wait-for-output.json'),
+        expectedNormalized,
+      );
+
+      const provider = createFixtureProvider(fixtureRoot);
+      const result = ProviderPromptResultSchema.parse(
+        await provider.invokePlanMode(buildPromptRequest(waitForOutputCase)),
+      );
+
+      expect(NormalizedProviderOutputSchema.parse(result.normalized)).toEqual(
+        expectedNormalized,
+      );
+      expect(result.normalized.tokenUsage).toEqual(VALID_TOKEN_USAGE);
+    });
+
+    it('preserves inline prompt and agent tokenUsage and keeps omissions undefined', async () => {
+      const promptRequest = buildPromptRequest(waitForOutputCase);
+      const agentRequest = buildAgentRequest(helloPromptCase);
+
+      const defaultProvider = createFixtureProvider(fixtureRoot);
+      const defaultPromptResult = ProviderPromptResultSchema.parse(
+        await defaultProvider.invokePlanMode(promptRequest),
+      );
+      const defaultAgentResult = ProviderAgentResultSchema.parse(
+        await defaultProvider.invokeAgentMode(agentRequest),
+      );
+      expect(defaultPromptResult.normalized.tokenUsage).toBeUndefined();
+      expect(defaultPromptResult.normalized).not.toHaveProperty('tokenUsage');
+      expect(defaultAgentResult.normalized.tokenUsage).toBeUndefined();
+      expect(defaultAgentResult.normalized).not.toHaveProperty('tokenUsage');
+
+      const promptText = 'prompt fallback token usage';
+      const agentText = 'agent fallback token usage';
+      writeJson(join(fixtureRoot, 'responses', 'wait-for-output.json'), {
+        response: promptText,
+        tokenUsage: VALID_TOKEN_USAGE,
+      });
+      writeJson(join(fixtureRoot, 'agent-results', 'hello-prompt.json'), {
+        transcript: agentText,
+        tokenUsage: VALID_TOKEN_USAGE,
+      });
+
+      const provider = createFixtureProvider(fixtureRoot);
+      const promptResult = ProviderPromptResultSchema.parse(
+        await provider.invokePlanMode(promptRequest),
+      );
+      const agentResult = ProviderAgentResultSchema.parse(
+        await provider.invokeAgentMode(agentRequest),
+      );
+
+      expect(NormalizedProviderOutputSchema.parse(promptResult.normalized)).toEqual(
+        NormalizedProviderOutputSchema.parse({
+          finalText: promptText,
+          messages: [promptText],
+          referencedSkills: [],
+          toolCalls: [],
+          tokenUsage: VALID_TOKEN_USAGE,
+        }),
+      );
+      expect(NormalizedProviderOutputSchema.parse(agentResult.normalized)).toEqual(
+        NormalizedProviderOutputSchema.parse({
+          finalText: agentText,
+          messages: [agentText],
+          referencedSkills: [],
+          toolCalls: [],
+          tokenUsage: VALID_TOKEN_USAGE,
+        }),
+      );
+    });
+
+    it('preserves valid legacy normalized tokenUsage and drops invalid tokenUsage payloads', async () => {
+      const promptRequest = buildPromptRequest(waitForOutputCase);
+      const agentRequest = buildAgentRequest(helloPromptCase);
+      const normalizedFixturePath = join(
+        fixtureRoot,
+        'normalized',
+        'hello-prompt.json',
+      );
+      const validLegacyNormalized = {
+        rawText: 'legacy raw text',
+        normalizedText: 'legacy normalized text',
+        skillDetected: 'agent-tty',
+        toolCalls: [{ tool: 'snapshot' }],
+        tokenUsage: VALID_TOKEN_USAGE,
+      };
+      writeJson(normalizedFixturePath, validLegacyNormalized);
+
+      let provider = createFixtureProvider(fixtureRoot);
+      let agentResult = ProviderAgentResultSchema.parse(
+        await provider.invokeAgentMode(agentRequest),
+      );
+      expect(NormalizedProviderOutputSchema.parse(agentResult.normalized)).toEqual(
+        NormalizedProviderOutputSchema.parse({
+          finalText: validLegacyNormalized.normalizedText,
+          messages: [
+            validLegacyNormalized.rawText,
+            validLegacyNormalized.normalizedText,
+          ],
+          referencedSkills: ['agent-tty'],
+          selectedSkill: 'agent-tty',
+          toolCalls: validLegacyNormalized.toolCalls,
+          tokenUsage: VALID_TOKEN_USAGE,
+        }),
+      );
+
+      for (const [, invalidTokenUsage] of INVALID_TOKEN_USAGE_CASES) {
+        writeJson(join(fixtureRoot, 'responses', 'wait-for-output.json'), {
+          response: 'prompt inline invalid token usage',
+          tokenUsage: invalidTokenUsage,
+        });
+        writeJson(normalizedFixturePath, {
+          rawText: 'legacy raw invalid token usage',
+          normalizedText: 'legacy normalized invalid token usage',
+          tokenUsage: invalidTokenUsage,
+        });
+
+        provider = createFixtureProvider(fixtureRoot);
+        const promptResult = ProviderPromptResultSchema.parse(
+          await provider.invokePlanMode(promptRequest),
+        );
+        agentResult = ProviderAgentResultSchema.parse(
+          await provider.invokeAgentMode(agentRequest),
+        );
+
+        expect(promptResult.normalized.tokenUsage).toBeUndefined();
+        expect(promptResult.normalized).not.toHaveProperty('tokenUsage');
+        expect(agentResult.normalized.tokenUsage).toBeUndefined();
+        expect(agentResult.normalized).not.toHaveProperty('tokenUsage');
+      }
+    });
   },
 );
