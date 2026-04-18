@@ -173,6 +173,136 @@ describe('runScheduled', () => {
     ).toEqual(items.map((item) => item.key));
   });
 
+  it('runs onItemStart immediately before executor and awaits it inline', async () => {
+    const items: TestItem[] = [{ key: 'alpha' }];
+    const steps: string[] = [];
+    let hookCompleted = false;
+
+    const results = await runScheduled(
+      items,
+      (item) => {
+        steps.push(`executor:${item.key}:${String(hookCompleted)}`);
+        return Promise.resolve(`${item.key} ok`);
+      },
+      {
+        concurrency: 1,
+        onItemStart: async (item) => {
+          steps.push(`start:${item.key}`);
+          await delay(5);
+          hookCompleted = true;
+        },
+      },
+    );
+
+    expect(steps).toEqual(['start:alpha', 'executor:alpha:true']);
+    expect(results).toMatchObject([
+      { item: items[0], status: 'fulfilled', value: 'alpha ok' },
+    ]);
+  });
+
+  it('passes fulfilled settlements to onItemFinish', async () => {
+    const items: TestItem[] = [{ key: 'alpha' }];
+    const seen: Array<{ key: string; status: string; value?: string }> = [];
+
+    await runScheduled(
+      items,
+      (item) => Promise.resolve(`${item.key} ok`),
+      {
+        concurrency: 1,
+        onItemFinish: async (item, settled) => {
+          await delay(5);
+          if (settled.status === 'fulfilled') {
+            seen.push({
+              key: item.key,
+              status: settled.status,
+              value: settled.value,
+            });
+          }
+        },
+      },
+    );
+
+    expect(seen).toEqual([
+      { key: 'alpha', status: 'fulfilled', value: 'alpha ok' },
+    ]);
+  });
+
+  it('passes rejected settlements to onItemFinish', async () => {
+    const items: TestItem[] = [{ key: 'beta' }];
+    const seen: Array<{ key: string; status: string; message: string }> = [];
+
+    await runScheduled(
+      items,
+      async () => Promise.reject(new Error('beta boom')),
+      {
+        concurrency: 1,
+        onItemFinish: async (item, settled) => {
+          await delay(5);
+          if (settled.status === 'rejected') {
+            seen.push({
+              key: item.key,
+              status: settled.status,
+              message:
+                settled.reason instanceof Error
+                  ? settled.reason.message
+                  : String(settled.reason),
+            });
+          }
+        },
+      },
+    );
+
+    expect(seen).toEqual([
+      { key: 'beta', status: 'rejected', message: 'beta boom' },
+    ]);
+  });
+
+  it('preserves input-order settlement and hook coverage with concurrency greater than one', async () => {
+    const items: TestItem[] = [
+      { key: 'item-0', delayMs: 30 },
+      { key: 'item-1', delayMs: 0 },
+      { key: 'item-2', delayMs: 5 },
+    ];
+    const startKeys: string[] = [];
+    const finishKeys: string[] = [];
+
+    const results = await runScheduled(
+      items,
+      async (item) => {
+        await delay(item.delayMs ?? 0);
+        return item.key;
+      },
+      {
+        concurrency: 2,
+        onItemStart: async (item) => {
+          startKeys.push(item.key);
+          await delay(1);
+        },
+        onItemFinish: async (item, settled) => {
+          finishKeys.push(`${item.key}:${settled.status}`);
+          await delay(1);
+        },
+      },
+    );
+
+    expect(startKeys).toEqual(['item-0', 'item-1', 'item-2']);
+    expect(finishKeys).toEqual([
+      'item-1:fulfilled',
+      'item-2:fulfilled',
+      'item-0:fulfilled',
+    ]);
+    expect(results.map((settlement) => settlement.item.key)).toEqual([
+      'item-0',
+      'item-1',
+      'item-2',
+    ]);
+    expect(
+      results.map((settlement) =>
+        settlement.status === 'fulfilled' ? settlement.value : 'rejected',
+      ),
+    ).toEqual(['item-0', 'item-1', 'item-2']);
+  });
+
   it('logs lifecycle lines with the work-item key prefix', async () => {
     const items: TestItem[] = [{ key: 'alpha' }, { key: 'beta' }];
     const lines: string[] = [];
@@ -200,6 +330,45 @@ describe('runScheduled', () => {
     for (const item of items) {
       expect(lines.some((line) => line.startsWith(`[${item.key}]`))).toBe(true);
     }
+  });
+
+  it('keeps logLine output unchanged when hooks are provided', async () => {
+    const items: TestItem[] = [{ key: 'alpha' }, { key: 'beta' }];
+    const lines: string[] = [];
+    const hookEvents: string[] = [];
+
+    await runScheduled(
+      items,
+      (item) => {
+        if (item.key === 'beta') {
+          throw new Error('beta failed');
+        }
+        return Promise.resolve(`${item.key} ok`);
+      },
+      {
+        concurrency: 1,
+        logLine: (line) => lines.push(line),
+        onItemStart: (item) => {
+          hookEvents.push(`start:${item.key}`);
+        },
+        onItemFinish: (item, settled) => {
+          hookEvents.push(`finish:${item.key}:${settled.status}`);
+        },
+      },
+    );
+
+    expect(lines).toEqual([
+      '[alpha] start',
+      '[alpha] ok',
+      '[beta] start',
+      '[beta] failed: Error: beta failed',
+    ]);
+    expect(hookEvents).toEqual([
+      'start:alpha',
+      'finish:alpha:fulfilled',
+      'start:beta',
+      'finish:beta:rejected',
+    ]);
   });
 
   it('asserts on invalid concurrency values', async () => {
