@@ -95,6 +95,37 @@ describe('parseCliArgs', () => {
 
     expect(options.conditions).toEqual([]);
   });
+  it('parses snapshot update flags and option values', () => {
+    const options = parseCliArgs([
+      '--provider',
+      'stub',
+      '--lane',
+      'prompt',
+      '--snapshot-update',
+      '--snapshot-threshold',
+      '12.5',
+      '--snapshot-dir',
+      'tmp/snapshots',
+    ]);
+
+    expect(options.snapshotUpdate).toBe(true);
+    expect(options.snapshotCheck).toBe(false);
+    expect(options.snapshotThreshold).toBe('12.5');
+    expect(options.snapshotDir).toBe('tmp/snapshots');
+  });
+
+  it('parses --snapshot-check independently from --snapshot-update', () => {
+    const options = parseCliArgs([
+      '--provider',
+      'stub',
+      '--lane',
+      'prompt',
+      '--snapshot-check',
+    ]);
+
+    expect(options.snapshotUpdate).toBe(false);
+    expect(options.snapshotCheck).toBe(true);
+  });
 });
 
 describe('resolveRequestedConditions', () => {
@@ -185,6 +216,74 @@ describe('resolveReporterSelection', () => {
         progress: false,
       }),
     ).toThrow('--reporter jsonl requires --reporter-output');
+  });
+});
+
+describe('runEvalCli snapshot option validation', () => {
+  it('rejects mutually exclusive snapshot update and check modes', async () => {
+    await expect(
+      runEvalCli([
+        '--provider',
+        'stub',
+        '--lane',
+        'execution',
+        '--case',
+        'hello-prompt',
+        '--condition',
+        'none',
+        '--snapshot-update',
+        '--snapshot-check',
+        '--dry-run',
+      ]),
+    ).rejects.toThrow(
+      '--snapshot-update and --snapshot-check may not be combined',
+    );
+  });
+
+  it.each(['NaN', '-1', '101'])(
+    'rejects invalid snapshot thresholds: %s',
+    async (threshold) => {
+      await expect(
+        runEvalCli([
+          '--provider',
+          'stub',
+          '--lane',
+          'execution',
+          '--case',
+          'hello-prompt',
+          '--condition',
+          'none',
+          '--snapshot-check',
+          '--snapshot-threshold',
+          threshold,
+          '--dry-run',
+        ]),
+      ).rejects.toThrow(
+        '--snapshot-threshold must be a number between 0 and 100',
+      );
+    },
+  );
+
+  it('includes the snapshot options in --help output', async () => {
+    const stdoutWriteSpy = vi
+      .spyOn(process.stdout, 'write')
+      .mockReturnValue(true);
+
+    const exitCode = await runEvalCli(['--help']);
+
+    expect(exitCode).toBe(0);
+    expect(
+      getWrittenStdout(stdoutWriteSpy.mock.calls as unknown[][]),
+    ).toContain('--snapshot-update');
+    expect(
+      getWrittenStdout(stdoutWriteSpy.mock.calls as unknown[][]),
+    ).toContain('--snapshot-check');
+    expect(
+      getWrittenStdout(stdoutWriteSpy.mock.calls as unknown[][]),
+    ).toContain('--snapshot-threshold <percent>');
+    expect(
+      getWrittenStdout(stdoutWriteSpy.mock.calls as unknown[][]),
+    ).toContain('--snapshot-dir <path>');
   });
 });
 
