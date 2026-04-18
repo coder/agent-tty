@@ -21,17 +21,20 @@ Paths below are relative to the repository root.
 
 ## Validation and release gates
 
-| Bundle                                         | Why it matters                                                                                                    |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `dogfood/20260326-week9-release-readiness/`    | Current release-signoff bundle for the `0.1.0` bar.                                                               |
-| `dogfood/20260410-release-tarball/`            | Local proof of the shared release tarball packer, checksum, and install flow used by the GitHub release workflow. |
-| `dogfood/20260325-week8-contract-locks/`       | Contract-lock and reporting review evidence.                                                                      |
-| `dogfood/20260325-week8-bundle-validation/`    | Validation of proof-bundle conventions.                                                                           |
-| `dogfood/20260325-week8-capability-inventory/` | Runtime capability inventory/reporting evidence.                                                                  |
-| `dogfood/20260325-week8-inspect-runtime/`      | `inspect --json` runtime reporting review.                                                                        |
-| `dogfood/20260323-week5-platform-closure/`     | Platform/documentation closeout evidence from the earlier hardening phase.                                        |
+| Bundle                                         | Why it matters                                                                                                             |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `dogfood/20260326-week9-release-readiness/`    | Current release-signoff bundle for the `0.1.0` bar.                                                                        |
+| `dogfood/20260410-release-tarball/`            | Local proof of the shared release tarball packer, checksum, and install flow used by the GitHub release workflow.          |
+| `dogfood/20260325-week8-contract-locks/`       | Contract-lock and reporting review evidence.                                                                               |
+| `dogfood/20260325-week8-bundle-validation/`    | Validation of proof-bundle conventions.                                                                                    |
+| `dogfood/20260325-week8-capability-inventory/` | Runtime capability inventory/reporting evidence.                                                                           |
+| `dogfood/20260325-week8-inspect-runtime/`      | `inspect --json` runtime reporting review.                                                                                 |
+| `dogfood/token-usage-phase5-proof/`            | Phase 5 eval DX token-usage proof bundle (commit `91a571de`) with screenshot, WebM recording, snapshot, and replay script. |
+| `dogfood/20260323-week5-platform-closure/`     | Platform/documentation closeout evidence from the earlier hardening phase.                                                 |
 
 | `dogfood/20260330-docs-navigation/` | Repository docs walkthrough with screenshots and a WebM recording of the new navigation path. |
+
+Follow-up: `dogfood/token-usage-phase5-proof/` is the only dedicated eval DX phase bundle currently cataloged. Dedicated proof bundles for the authoring façade, reporter lifecycle, and workspace-preset phases (Phases 1-4) are not currently present under `dogfood/`; reviewers who need fresh artifacts for those phases should capture a local proof bundle.
 
 ## Recovery and hardening
 
