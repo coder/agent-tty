@@ -179,3 +179,34 @@ npx tsx evals/run.ts --provider stub --lane prompt --trials 3 --concurrency 4
 ```
 
 Use `stub` to validate wiring, not to judge whether a real-provider prompt or skill change helped.
+
+## 7. Writing new eval cases
+
+Checklist:
+
+- Prefer the fluent builders in `evals/authoring/*` (`promptCase()`, `executionCase()`, `dogfoodCase()`) over hand-assembled schema objects.
+- Use the raw escape hatches when the sugar does not fit: `rawWorkflowCheck()`, `rawVerifier()`, `rawArtifactRequirement()`, and `rawReportRequirement()`.
+- After the new case compiles, rerun `npm run test`.
+
+## 8. Reporter lifecycle
+
+Need lifecycle events plus local progress and a machine-readable trace?
+
+```bash
+npx tsx evals/run.ts \
+  --provider stub \
+  --lane execution \
+  --reporter jsonl \
+  --reporter-output evals/reports/execution-events.jsonl \
+  --progress
+```
+
+When you omit `--reporter`, the default `final` reporter still writes `report.json` and `report.md`.
+
+## 9. Workspace presets
+
+Add `.workspace('agent-tty-smoke')` to an `executionCase()` or `dogfoodCase()` when the case needs preset bootstrap/env/template setup. Register custom presets with `registerPreset()` in a module that loads before `runEvalCli()`.
+
+## 10. Token snapshots
+
+Use `--snapshot-update` first, then `--snapshot-check --snapshot-threshold 20` against the same `--snapshot-dir` when you want regression signals over time. Snapshot regressions are warnings only.

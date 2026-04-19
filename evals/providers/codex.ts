@@ -12,6 +12,7 @@ import {
   ProviderPromptRequestSchema,
   ProviderPromptResultSchema,
   ProviderRuntimeInfoSchema,
+  TokenUsageSchema,
 } from '../lib/schemas.js';
 import type {
   NormalizedProviderOutput,
@@ -22,6 +23,7 @@ import type {
   ProviderPromptRequest,
   ProviderPromptResult,
   ProviderRuntimeInfo,
+  TokenUsage,
 } from '../lib/types.js';
 import type { EvalProvider } from './base.js';
 
@@ -465,6 +467,81 @@ function resolveCodexToolCallId(
   }
 
   return fallbackId;
+}
+
+function parseCodexTokenUsageObject(usage: unknown): TokenUsage | undefined {
+  if (!isRecord(usage)) {
+    return undefined;
+  }
+
+  const cachedInputTokens =
+    typeof usage.cached_input_tokens === 'number'
+      ? usage.cached_input_tokens
+      : undefined;
+  const cachedTokensFromDetails =
+    isRecord(usage.input_tokens_details) &&
+    typeof usage.input_tokens_details.cached_tokens === 'number'
+      ? usage.input_tokens_details.cached_tokens
+      : undefined;
+  if (
+    cachedInputTokens !== undefined &&
+    cachedTokensFromDetails !== undefined &&
+    cachedInputTokens !== cachedTokensFromDetails
+  ) {
+    return undefined;
+  }
+
+  const cachedTokenCount = cachedInputTokens ?? cachedTokensFromDetails;
+  const candidate = {
+    ...(typeof usage.input_tokens === 'number'
+      ? { inputTokens: usage.input_tokens }
+      : {}),
+    ...(typeof usage.output_tokens === 'number'
+      ? { outputTokens: usage.output_tokens }
+      : {}),
+    ...(typeof usage.total_tokens === 'number'
+      ? { totalTokens: usage.total_tokens }
+      : {}),
+    ...(cachedTokenCount === undefined
+      ? {}
+      : { cachedTokens: cachedTokenCount }),
+  };
+
+  const parsedUsage = TokenUsageSchema.safeParse(candidate);
+  if (!parsedUsage.success) {
+    return undefined;
+  }
+
+  const { inputTokens, outputTokens, totalTokens, cachedTokens } =
+    parsedUsage.data;
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    ...(cachedTokens === undefined ? {} : { cachedTokens }),
+  };
+}
+
+function extractCodexTokenUsage(
+  record: Record<string, unknown>,
+): TokenUsage | undefined {
+  let tokenUsage: TokenUsage | undefined;
+  const recordItem = isRecord(record.item) ? record.item : undefined;
+  const sources = [
+    record.usage,
+    isRecord(record.response) ? record.response.usage : undefined,
+    recordItem?.usage,
+    isRecord(recordItem?.response) ? recordItem.response.usage : undefined,
+  ];
+
+  for (const source of sources) {
+    const parsedUsage = parseCodexTokenUsageObject(source);
+    if (parsedUsage !== undefined) {
+      tokenUsage = parsedUsage;
+    }
+  }
+
+  return tokenUsage;
 }
 
 function extractTextFragments(value: unknown): string[] {
@@ -1014,6 +1091,7 @@ export class CodexProvider implements EvalProvider {
     let sessionId: string | undefined;
     let modelId: string | undefined;
     let selectedSkill: 'none' | 'agent-tty' | 'dogfood-tui' | undefined;
+    let tokenUsage: TokenUsage | undefined;
 
     records.forEach((record, index) => {
       if (!isRecord(record)) {
@@ -1038,6 +1116,12 @@ export class CodexProvider implements EvalProvider {
             ? record.selected_skill
             : undefined,
         );
+      }
+
+      const parsedTokenUsage = extractCodexTokenUsage(record);
+      if (parsedTokenUsage !== undefined) {
+        // Later Codex JSONL records typically carry the final turn-completed usage.
+        tokenUsage = parsedTokenUsage;
       }
 
       if (record.type === 'error') {
@@ -1145,6 +1229,7 @@ export class CodexProvider implements EvalProvider {
           referencedSkills: extractReferencedSkills(allText),
           ...(selectedSkill === undefined ? {} : { selectedSkill }),
           toolCalls: [...toolCalls.values()],
+          ...(tokenUsage === undefined ? {} : { tokenUsage }),
         },
         raw,
         'Invalid Codex JSONL normalized output',

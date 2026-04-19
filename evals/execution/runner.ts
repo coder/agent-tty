@@ -11,11 +11,19 @@ import { join, resolve } from 'node:path';
 
 import { assertString, invariant } from '../../src/util/assert.js';
 import {
+  EvalArtifactStore,
+  writeTokenUsageArtifact,
+} from '../lib/artifacts.js';
+import {
   buildScannableTranscript,
   countAgentTtyCalls,
   detectAntiPatterns,
 } from '../lib/antiPatterns.js';
-import { cleanupEvalHome, createIsolatedEvalHome } from '../lib/cliHarness.js';
+import {
+  cleanupEvalHome,
+  createIsolatedEvalHome,
+  materializeEvalWorkspace,
+} from '../lib/cliHarness.js';
 import { EvalResultSchema } from '../lib/schemas.js';
 import { runScheduled } from '../lib/scheduler.js';
 import { checkWorkflow } from '../lib/scoring.js';
@@ -35,7 +43,18 @@ import type {
   VerifierSpec,
   WorkflowCheckResult,
 } from '../lib/types.js';
+import type { ReporterDispatcher } from '../reporters/dispatch.js';
+import {
+  CaseProgressTracker,
+  computePlannedCases,
+} from '../reporters/runtime.js';
 import type { EvalProvider } from '../providers/base.js';
+import { lookupPreset } from '../workspaces/registry.js';
+import {
+  deriveEffectiveEnv,
+  resolveWorkspacePreset,
+} from '../workspaces/resolver.js';
+import type { ResolvedWorkspacePlan } from '../workspaces/types.js';
 import { altScreenDemoCase } from './cases/alt-screen-demo.js';
 import { colorGridCase } from './cases/color-grid.js';
 import { crashRecoveryCase } from './cases/crash-recovery.js';
@@ -78,7 +97,16 @@ const DEFAULT_TOTAL_TRIALS = 1;
 type ExecutionWorkItem = EvalWorkItemIdentity &
   ScheduledWorkItem & {
     evalCase: ExecutionEvalCase;
+    homeDir?: string;
+    workspacePlan?: ResolvedWorkspacePlan;
   };
+
+type ExecutionLaneOptions = {
+  conditions?: SkillCondition[];
+  caseFilter?: string[];
+  concurrency?: number;
+  reporter?: ReporterDispatcher;
+};
 
 type EvaluatedVerifier = {
   spec: VerifierSpec;
@@ -88,6 +116,11 @@ type EvaluatedVerifier = {
 interface LoadedExecutionSkillPrompts {
   bootstrapSkillText: string;
   canonicalAgentTtySkillText: string;
+}
+
+interface ResolvedCaseWorkspace {
+  plan: ResolvedWorkspacePlan;
+  effectiveEnv: Readonly<Record<string, string>>;
 }
 
 let loadedExecutionSkillPromptsPromise:
@@ -848,6 +881,74 @@ function buildRejectedExecutionWorkItemResult(
   }) as EvalResult;
 }
 
+async function writeExecutionTokenUsageArtifacts(
+  metadata: RunMetadata,
+  results: readonly EvalResult[],
+): Promise<void> {
+  let artifactsDir: string | undefined;
+
+  for (const result of results) {
+    const tokenUsage = result.normalizedOutput.tokenUsage;
+    if (tokenUsage === undefined) {
+      continue;
+    }
+
+    if (artifactsDir === undefined) {
+      const outputBaseDir = metadata.outputBaseDir;
+      invariant(
+        typeof outputBaseDir === 'string' && outputBaseDir.length > 0,
+        'Execution lane token usage artifacts require metadata.outputBaseDir',
+      );
+      artifactsDir = new EvalArtifactStore(outputBaseDir).runDir(
+        metadata.runId,
+      );
+    }
+
+    invariant(
+      result.providerId.length > 0,
+      'Execution lane token usage artifacts require result.providerId',
+    );
+    invariant(
+      typeof result.modelId === 'string' && result.modelId.length > 0,
+      'Execution lane token usage artifacts require result.modelId',
+    );
+    invariant(
+      result.caseId.length > 0,
+      'Execution lane token usage artifacts require result.caseId',
+    );
+    invariant(
+      result.condition.length > 0,
+      'Execution lane token usage artifacts require result.condition',
+    );
+    invariant(
+      result.lane === 'execution',
+      'Execution lane token usage artifacts require execution results',
+    );
+    invariant(
+      Number.isInteger(result.trial) && result.trial > 0,
+      'Execution lane token usage artifacts require positive result.trial',
+    );
+
+    const createdAtMs = Date.parse(result.completedAt);
+    invariant(
+      Number.isInteger(createdAtMs) && createdAtMs >= 0,
+      'Execution lane token usage artifacts require a valid completedAt timestamp',
+    );
+
+    await writeTokenUsageArtifact({
+      artifactsDir,
+      caseId: result.caseId,
+      lane: result.lane,
+      condition: result.condition,
+      provider: result.providerId,
+      model: result.modelId,
+      trialIndex: result.trial - 1,
+      tokenUsage,
+      createdAtMs,
+    });
+  }
+}
+
 function resolveModelId(
   metadata: RunMetadata,
   runtime: ProviderRuntimeInfo | undefined,
@@ -859,6 +960,100 @@ function resolveModelId(
   return runtime?.defaultModelId;
 }
 
+function readExecutionWorkspaceId(
+  evalCase: ExecutionEvalCase,
+): string | undefined {
+  const candidateWorkspaceId = (evalCase as { workspace?: unknown }).workspace;
+  if (candidateWorkspaceId === undefined) {
+    return undefined;
+  }
+
+  assertString(
+    candidateWorkspaceId,
+    'Execution eval case workspace must be a string when provided',
+  );
+  const workspaceId = candidateWorkspaceId.trim();
+  invariant(
+    workspaceId.length > 0,
+    'Execution eval case workspace must be a non-empty string when provided',
+  );
+  return workspaceId;
+}
+
+function stripExecutionWorkspace(
+  evalCase: ExecutionEvalCase,
+): ExecutionEvalCase {
+  const { workspace: _workspace, ...requestEvalCase } =
+    evalCase as ExecutionEvalCase & {
+      workspace?: unknown;
+    };
+  void _workspace;
+  return requestEvalCase;
+}
+
+async function prepareExecutionWorkspacePlan(
+  metadata: RunMetadata,
+  workItem: ExecutionWorkItem,
+): Promise<void> {
+  if (workItem.workspacePlan !== undefined) {
+    return;
+  }
+
+  const workspaceId = readExecutionWorkspaceId(workItem.evalCase);
+  if (workspaceId === undefined) {
+    return;
+  }
+
+  const homeDir = workItem.homeDir ?? (await createIsolatedEvalHome());
+  workItem.homeDir = homeDir;
+
+  try {
+    const preset = lookupPreset(workspaceId);
+    workItem.workspacePlan = resolveWorkspacePreset(
+      { homeDir, repoRoot: resolve(metadata.repoRoot) },
+      preset,
+    );
+  } catch {
+    // Preserve existing per-item execution failures when plan-only resolution cannot complete before reporter emission.
+  }
+}
+
+async function resolveExecutionWorkspace(
+  metadata: RunMetadata,
+  evalCase: ExecutionEvalCase,
+  homeDir: string,
+  outputDir: string,
+  workspacePlan?: ResolvedWorkspacePlan,
+): Promise<ResolvedCaseWorkspace | undefined> {
+  const workspaceId = readExecutionWorkspaceId(evalCase);
+  if (workspaceId === undefined) {
+    return undefined;
+  }
+
+  const repoRoot = resolve(metadata.repoRoot);
+  const preset = lookupPreset(workspaceId);
+  if (workspacePlan !== undefined) {
+    invariant(
+      workspacePlan.presetId === preset.id,
+      `Execution workspace plan preset mismatch: expected ${preset.id}, got ${workspacePlan.presetId}`,
+    );
+  }
+  const plan =
+    workspacePlan ?? resolveWorkspacePreset({ homeDir, repoRoot }, preset);
+  const effectiveEnv = deriveEffectiveEnv(preset, {
+    AGENT_TTY_EVAL_OUTPUT_DIR: outputDir,
+  });
+
+  await materializeEvalWorkspace({
+    homeDir,
+    plan,
+    effectiveEnv,
+    defaultCwd: repoRoot,
+  });
+
+  return { plan, effectiveEnv };
+}
+
 async function createEvalRequest(
   provider: EvalProvider,
   metadata: RunMetadata,
@@ -868,24 +1063,32 @@ async function createEvalRequest(
   homeDir: string,
   outputDir: string,
   runtime: ProviderRuntimeInfo | undefined,
+  workspace: ResolvedCaseWorkspace | undefined,
 ): Promise<Parameters<EvalProvider['invokeAgentMode']>[0]> {
   const prompt = await buildPromptForCondition(evalCase, condition);
   const modelId = resolveModelId(metadata, runtime);
+  const requestEnv =
+    workspace === undefined
+      ? {
+          AGENT_TTY_HOME: homeDir,
+          AGENT_TTY_EVAL_OUTPUT_DIR: outputDir,
+        }
+      : {
+          ...workspace.effectiveEnv,
+          AGENT_TTY_HOME: homeDir,
+        };
 
   return {
     runId: metadata.runId,
     providerId: provider.id,
     condition,
     trial,
-    cwd: resolve(metadata.repoRoot),
+    cwd: workspace?.plan.cwd ?? resolve(metadata.repoRoot),
     homeDir,
     outputDir,
-    env: {
-      AGENT_TTY_HOME: homeDir,
-      AGENT_TTY_EVAL_OUTPUT_DIR: outputDir,
-    },
+    env: requestEnv,
     evalCase: {
-      ...evalCase,
+      ...stripExecutionWorkspace(evalCase),
       prompt,
     },
     ...(modelId === undefined ? {} : { modelId }),
@@ -1001,15 +1204,22 @@ async function detectRuntime(
 async function runSingleExecutionCase(
   provider: EvalProvider,
   metadata: RunMetadata,
-  evalCase: ExecutionEvalCase,
-  condition: SkillCondition,
-  trial: number,
+  workItem: ExecutionWorkItem,
   runtime: ProviderRuntimeInfo | undefined,
 ): Promise<EvalResult> {
-  const homeDir = await createIsolatedEvalHome();
+  const { evalCase, condition, trial } = workItem;
+  const homeDir = workItem.homeDir ?? (await createIsolatedEvalHome());
+  workItem.homeDir = homeDir;
   const outputDir = await mkdtemp(join(tmpdir(), RUNNER_OUTPUT_PREFIX));
 
   try {
+    const workspace = await resolveExecutionWorkspace(
+      metadata,
+      evalCase,
+      homeDir,
+      outputDir,
+      workItem.workspacePlan,
+    );
     const request = await createEvalRequest(
       provider,
       metadata,
@@ -1019,6 +1229,7 @@ async function runSingleExecutionCase(
       homeDir,
       outputDir,
       runtime,
+      workspace,
     );
     const invocationStartedAt = new Date().toISOString();
     const invocationStartedMs = Date.now();
@@ -1260,14 +1471,7 @@ export async function executeExecutionWorkItem(
     Number.isInteger(workItem.trial) && workItem.trial > 0,
     'Execution work item trial must be a positive integer',
   );
-  return runSingleExecutionCase(
-    provider,
-    metadata,
-    workItem.evalCase,
-    workItem.condition,
-    workItem.trial,
-    runtime,
-  );
+  return runSingleExecutionCase(provider, metadata, workItem, runtime);
 }
 
 /**
@@ -1277,27 +1481,171 @@ export async function executeExecutionWorkItem(
 export async function runExecutionLane(
   provider: EvalProvider,
   metadata: RunMetadata,
-  options: {
-    conditions?: SkillCondition[];
-    caseFilter?: string[];
-    concurrency?: number;
-  } = {},
+  options: ExecutionLaneOptions = {},
 ): Promise<EvalResult[]> {
   const totalTrials = resolveTotalTrials(metadata.totalTrials);
   const items = enumerateExecutionWorkItems({
-    ...options,
+    ...(options.conditions === undefined
+      ? {}
+      : { conditions: options.conditions }),
+    ...(options.caseFilter === undefined
+      ? {}
+      : { caseFilter: options.caseFilter }),
     totalTrials,
   });
+  const plannedCases = computePlannedCases(items);
+  const reporter = options.reporter;
+  const concurrency = options.concurrency ?? 1;
+  const activeReporter =
+    reporter !== undefined && items.length > 0 ? reporter : undefined;
+  if (activeReporter !== undefined) {
+    invariant(
+      Number.isInteger(concurrency) && concurrency > 0,
+      'options.concurrency must be a positive integer',
+    );
+  }
+
+  let trackerTimestamp: string | undefined;
+  const tracker = new CaseProgressTracker<ExecutionWorkItem, EvalResult>({
+    runId: metadata.runId,
+    lane: 'execution',
+    plannedCases,
+    ...(reporter === undefined ? {} : { dispatcher: reporter }),
+    now: () => trackerTimestamp ?? new Date().toISOString(),
+  });
+  const trialStarts = new Map<
+    string,
+    { startedAt: string; startedAtMs: number }
+  >();
+  const getTimestamp = (): { iso: string; ms: number } => {
+    const iso = new Date().toISOString();
+    return { iso, ms: Date.parse(iso) };
+  };
   const runtime = await detectRuntime(provider);
-  const settlements = await runScheduled(
+
+  const laneStartedAt =
+    activeReporter === undefined ? undefined : getTimestamp();
+  if (activeReporter !== undefined && laneStartedAt !== undefined) {
+    await activeReporter.dispatch('laneStart', {
+      runId: metadata.runId,
+      lane: 'execution',
+      caseIds: Array.from(new Set(items.map((item) => item.caseId))),
+      conditions: Array.from(new Set(items.map((item) => item.condition))),
+      concurrency,
+      plannedItems: items.length,
+      startedAt: laneStartedAt.iso,
+    });
+  }
+
+  const settlements = await runScheduled<ExecutionWorkItem, EvalResult>(
     items,
     (item) => executeExecutionWorkItem(provider, metadata, item, runtime),
     {
-      concurrency: options.concurrency ?? 1,
+      concurrency,
+      ...(activeReporter === undefined
+        ? {}
+        : {
+            onItemStart: async (item: ExecutionWorkItem) => {
+              const started = getTimestamp();
+              trialStarts.set(item.key, {
+                startedAt: started.iso,
+                startedAtMs: started.ms,
+              });
+
+              await prepareExecutionWorkspacePlan(metadata, item);
+
+              trackerTimestamp = started.iso;
+              try {
+                await tracker.onTrialStart(item);
+              } finally {
+                trackerTimestamp = undefined;
+              }
+
+              await activeReporter.dispatch('trialStart', {
+                runId: metadata.runId,
+                lane: 'execution',
+                caseId: item.caseId,
+                condition: item.condition,
+                trial: item.trial,
+                startedAt: started.iso,
+                requestedOutputPath: null,
+                requestedArtifactPath: null,
+              });
+            },
+            onItemFinish: async (item: ExecutionWorkItem, settled) => {
+              const started = trialStarts.get(item.key);
+              invariant(
+                started !== undefined,
+                `Missing reporter start state for ${item.key}`,
+              );
+              const completed = getTimestamp();
+
+              if (settled.status === 'fulfilled') {
+                await activeReporter.dispatch('trialFinish', {
+                  runId: metadata.runId,
+                  lane: 'execution',
+                  caseId: item.caseId,
+                  condition: item.condition,
+                  trial: item.trial,
+                  startedAt: started.startedAt,
+                  completedAt: completed.iso,
+                  durationMs: Math.max(0, completed.ms - started.startedAtMs),
+                  status: settled.value.ok ? 'passed' : 'failed',
+                  ok: settled.value.ok,
+                  errorClass: settled.value.errorClass ?? null,
+                  errorMessage: settled.value.errorMessage ?? null,
+                  score: settled.value.score.total,
+                  transcriptPath: settled.value.transcriptPath ?? null,
+                  stdoutPath: settled.value.stdoutPath ?? null,
+                  stderrPath: settled.value.stderrPath ?? null,
+                  eventLogPath: settled.value.eventLogPath ?? null,
+                  bundlePath: settled.value.bundlePath ?? null,
+                  artifactManifestPath:
+                    settled.value.artifactManifestPath ?? null,
+                });
+              } else {
+                await activeReporter.dispatch('trialFinish', {
+                  runId: metadata.runId,
+                  lane: 'execution',
+                  caseId: item.caseId,
+                  condition: item.condition,
+                  trial: item.trial,
+                  startedAt: started.startedAt,
+                  completedAt: completed.iso,
+                  durationMs: Math.max(0, completed.ms - started.startedAtMs),
+                  status: 'errored',
+                  ok: false,
+                  errorClass:
+                    settled.reason instanceof Error
+                      ? settled.reason.name
+                      : 'Error',
+                  errorMessage:
+                    settled.reason instanceof Error
+                      ? settled.reason.message
+                      : String(settled.reason),
+                  score: null,
+                  transcriptPath: null,
+                  stdoutPath: null,
+                  stderrPath: null,
+                  eventLogPath: null,
+                  bundlePath: null,
+                  artifactManifestPath: null,
+                });
+              }
+
+              trackerTimestamp = completed.iso;
+              try {
+                await tracker.onTrialFinish(item, settled);
+              } finally {
+                trackerTimestamp = undefined;
+                trialStarts.delete(item.key);
+              }
+            },
+          }),
     },
   );
 
-  return settlements.map((settlement) =>
+  const results = settlements.map((settlement) =>
     settlement.status === 'fulfilled'
       ? settlement.value
       : buildRejectedExecutionWorkItemResult(
@@ -1308,4 +1656,38 @@ export async function runExecutionLane(
           settlement.reason,
         ),
   );
+
+  await writeExecutionTokenUsageArtifacts(metadata, results);
+
+  if (activeReporter !== undefined && laneStartedAt !== undefined) {
+    const completed = getTimestamp();
+    const laneTotals = settlements.reduce(
+      (totals, settlement) => {
+        totals.total += 1;
+        if (settlement.status === 'rejected') {
+          totals.errored += 1;
+        } else if (settlement.value.ok) {
+          totals.passed += 1;
+        } else {
+          totals.failed += 1;
+        }
+        return totals;
+      },
+      { total: 0, passed: 0, failed: 0, errored: 0 },
+    );
+
+    await activeReporter.dispatch('laneFinish', {
+      runId: metadata.runId,
+      lane: 'execution',
+      startedAt: laneStartedAt.iso,
+      completedAt: completed.iso,
+      durationMs: Math.max(0, completed.ms - laneStartedAt.ms),
+      total: laneTotals.total,
+      passed: laneTotals.passed,
+      failed: laneTotals.failed,
+      errored: laneTotals.errored,
+    });
+  }
+
+  return results;
 }

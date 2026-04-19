@@ -1,6 +1,10 @@
 import { readFile } from 'node:fs/promises';
 
 import { assertString, invariant } from '../../src/util/assert.js';
+import {
+  EvalArtifactStore,
+  writeTokenUsageArtifact,
+} from '../lib/artifacts.js';
 import { detectAntiPatterns } from '../lib/antiPatterns.js';
 import { SKILL_CONDITIONS } from '../lib/matrix.js';
 import { runScheduled } from '../lib/scheduler.js';
@@ -24,6 +28,11 @@ import type {
   RunMetadata,
   SkillCondition,
 } from '../lib/types.js';
+import type { ReporterDispatcher } from '../reporters/dispatch.js';
+import {
+  CaseProgressTracker,
+  computePlannedCases,
+} from '../reporters/runtime.js';
 import type { EvalProvider } from '../providers/base.js';
 import { ANTI_PATTERN_PROMPT_CASES } from './cases/anti-patterns.js';
 import { SHOULD_NOT_TRIGGER_PROMPT_CASES } from './cases/should-not-trigger.js';
@@ -60,6 +69,7 @@ type PromptWorkItemOptions = {
 
 type PromptLaneOptions = PromptWorkItemOptions & {
   concurrency?: number;
+  reporter?: ReporterDispatcher;
 };
 
 type PromptWorkItem = EvalWorkItemIdentity &
@@ -415,6 +425,74 @@ function buildRejectedPromptWorkItemEvalResult(
   }) as EvalResult;
 }
 
+async function writePromptTokenUsageArtifacts(
+  metadata: RunMetadata,
+  results: readonly EvalResult[],
+): Promise<void> {
+  let artifactsDir: string | undefined;
+
+  for (const result of results) {
+    const tokenUsage = result.normalizedOutput.tokenUsage;
+    if (tokenUsage === undefined) {
+      continue;
+    }
+
+    if (artifactsDir === undefined) {
+      const outputBaseDir = metadata.outputBaseDir;
+      invariant(
+        typeof outputBaseDir === 'string' && outputBaseDir.length > 0,
+        'Prompt lane token usage artifacts require metadata.outputBaseDir',
+      );
+      artifactsDir = new EvalArtifactStore(outputBaseDir).runDir(
+        metadata.runId,
+      );
+    }
+
+    invariant(
+      result.providerId.length > 0,
+      'Prompt lane token usage artifacts require result.providerId',
+    );
+    invariant(
+      typeof result.modelId === 'string' && result.modelId.length > 0,
+      'Prompt lane token usage artifacts require result.modelId',
+    );
+    invariant(
+      result.caseId.length > 0,
+      'Prompt lane token usage artifacts require result.caseId',
+    );
+    invariant(
+      result.condition.length > 0,
+      'Prompt lane token usage artifacts require result.condition',
+    );
+    invariant(
+      result.lane === 'prompt',
+      'Prompt lane token usage artifacts require prompt results',
+    );
+    invariant(
+      Number.isInteger(result.trial) && result.trial > 0,
+      'Prompt lane token usage artifacts require positive result.trial',
+    );
+
+    const createdAtMs = Date.parse(result.completedAt);
+    invariant(
+      Number.isInteger(createdAtMs) && createdAtMs >= 0,
+      'Prompt lane token usage artifacts require a valid completedAt timestamp',
+    );
+
+    await writeTokenUsageArtifact({
+      artifactsDir,
+      caseId: result.caseId,
+      lane: result.lane,
+      condition: result.condition,
+      provider: result.providerId,
+      model: result.modelId,
+      trialIndex: result.trial - 1,
+      tokenUsage,
+      createdAtMs,
+    });
+  }
+}
+
 async function readSkillFile(relativePath: string): Promise<string> {
   const content = await readFile(
     new URL(relativePath, import.meta.url),
@@ -589,15 +667,156 @@ export async function runPromptLane(
     parsedMetadata,
     options,
   );
-  const settlements = await runScheduled(
+  const plannedCases = computePlannedCases(items);
+  const reporter = options?.reporter;
+  const concurrency = options?.concurrency ?? 1;
+  const activeReporter =
+    reporter !== undefined && items.length > 0 ? reporter : undefined;
+  if (activeReporter !== undefined) {
+    invariant(
+      Number.isInteger(concurrency) && concurrency > 0,
+      'options.concurrency must be a positive integer',
+    );
+  }
+
+  let trackerTimestamp: string | undefined;
+  const tracker = new CaseProgressTracker<PromptWorkItem, EvalResult>({
+    runId: parsedMetadata.runId,
+    lane: 'prompt',
+    plannedCases,
+    ...(reporter === undefined ? {} : { dispatcher: reporter }),
+    now: () => trackerTimestamp ?? new Date().toISOString(),
+  });
+  const trialStarts = new Map<
+    string,
+    { startedAt: string; startedAtMs: number }
+  >();
+  const getTimestamp = (): { iso: string; ms: number } => {
+    const iso = new Date().toISOString();
+    return { iso, ms: Date.parse(iso) };
+  };
+
+  const laneStartedAt =
+    activeReporter === undefined ? undefined : getTimestamp();
+  if (activeReporter !== undefined && laneStartedAt !== undefined) {
+    await activeReporter.dispatch('laneStart', {
+      runId: parsedMetadata.runId,
+      lane: 'prompt',
+      caseIds: Array.from(new Set(items.map((item) => item.caseId))),
+      conditions: Array.from(new Set(items.map((item) => item.condition))),
+      concurrency,
+      plannedItems: items.length,
+      startedAt: laneStartedAt.iso,
+    });
+  }
+
+  const settlements = await runScheduled<PromptWorkItem, EvalResult>(
     items,
     async (item) => executePromptWorkItem(provider, parsedMetadata, item),
     {
-      concurrency: options?.concurrency ?? 1,
+      concurrency,
+      ...(activeReporter === undefined
+        ? {}
+        : {
+            onItemStart: async (item: PromptWorkItem) => {
+              const started = getTimestamp();
+              trialStarts.set(item.key, {
+                startedAt: started.iso,
+                startedAtMs: started.ms,
+              });
+
+              trackerTimestamp = started.iso;
+              try {
+                await tracker.onTrialStart(item);
+              } finally {
+                trackerTimestamp = undefined;
+              }
+
+              await activeReporter.dispatch('trialStart', {
+                runId: parsedMetadata.runId,
+                lane: 'prompt',
+                caseId: item.caseId,
+                condition: item.condition,
+                trial: item.trial,
+                startedAt: started.iso,
+                requestedOutputPath: null,
+                requestedArtifactPath: null,
+              });
+            },
+            onItemFinish: async (item: PromptWorkItem, settled) => {
+              const started = trialStarts.get(item.key);
+              invariant(
+                started !== undefined,
+                `Missing reporter start state for ${item.key}`,
+              );
+              const completed = getTimestamp();
+
+              if (settled.status === 'fulfilled') {
+                await activeReporter.dispatch('trialFinish', {
+                  runId: parsedMetadata.runId,
+                  lane: 'prompt',
+                  caseId: item.caseId,
+                  condition: item.condition,
+                  trial: item.trial,
+                  startedAt: started.startedAt,
+                  completedAt: completed.iso,
+                  durationMs: Math.max(0, completed.ms - started.startedAtMs),
+                  status: settled.value.ok ? 'passed' : 'failed',
+                  ok: settled.value.ok,
+                  errorClass: settled.value.errorClass ?? null,
+                  errorMessage: settled.value.errorMessage ?? null,
+                  score: settled.value.score.total,
+                  transcriptPath: settled.value.transcriptPath ?? null,
+                  stdoutPath: settled.value.stdoutPath ?? null,
+                  stderrPath: settled.value.stderrPath ?? null,
+                  eventLogPath: settled.value.eventLogPath ?? null,
+                  bundlePath: settled.value.bundlePath ?? null,
+                  artifactManifestPath:
+                    settled.value.artifactManifestPath ?? null,
+                });
+              } else {
+                await activeReporter.dispatch('trialFinish', {
+                  runId: parsedMetadata.runId,
+                  lane: 'prompt',
+                  caseId: item.caseId,
+                  condition: item.condition,
+                  trial: item.trial,
+                  startedAt: started.startedAt,
+                  completedAt: completed.iso,
+                  durationMs: Math.max(0, completed.ms - started.startedAtMs),
+                  status: 'errored',
+                  ok: false,
+                  errorClass:
+                    settled.reason instanceof Error
+                      ? settled.reason.name
+                      : 'Error',
+                  errorMessage:
+                    settled.reason instanceof Error
+                      ? settled.reason.message
+                      : String(settled.reason),
+                  score: null,
+                  transcriptPath: null,
+                  stdoutPath: null,
+                  stderrPath: null,
+                  eventLogPath: null,
+                  bundlePath: null,
+                  artifactManifestPath: null,
+                });
+              }
+
+              trackerTimestamp = completed.iso;
+              try {
+                await tracker.onTrialFinish(item, settled);
+              } finally {
+                trackerTimestamp = undefined;
+                trialStarts.delete(item.key);
+              }
+            },
+          }),
     },
   );
 
-  return settlements.map((settlement) =>
+  const results = settlements.map((settlement) =>
     settlement.status === 'fulfilled'
       ? settlement.value
       : buildRejectedPromptWorkItemEvalResult(
@@ -606,4 +825,38 @@ export async function runPromptLane(
           settlement,
         ),
   );
+
+  await writePromptTokenUsageArtifacts(parsedMetadata, results);
+
+  if (activeReporter !== undefined && laneStartedAt !== undefined) {
+    const completed = getTimestamp();
+    const laneTotals = settlements.reduce(
+      (totals, settlement) => {
+        totals.total += 1;
+        if (settlement.status === 'rejected') {
+          totals.errored += 1;
+        } else if (settlement.value.ok) {
+          totals.passed += 1;
+        } else {
+          totals.failed += 1;
+        }
+        return totals;
+      },
+      { total: 0, passed: 0, failed: 0, errored: 0 },
+    );
+
+    await activeReporter.dispatch('laneFinish', {
+      runId: parsedMetadata.runId,
+      lane: 'prompt',
+      startedAt: laneStartedAt.iso,
+      completedAt: completed.iso,
+      durationMs: Math.max(0, completed.ms - laneStartedAt.ms),
+      total: laneTotals.total,
+      passed: laneTotals.passed,
+      failed: laneTotals.failed,
+      errored: laneTotals.errored,
+    });
+  }
+
+  return results;
 }

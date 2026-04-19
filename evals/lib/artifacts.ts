@@ -2,18 +2,61 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readdir, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 
+import { z } from 'zod';
+
 import {
   readValidatedJsonFile,
   writeTextFileAtomic,
   writeValidatedJsonFile,
 } from '../../src/storage/manifests.js';
 import { assertString, invariant } from '../../src/util/assert.js';
-import { EvalResultSchema, RunMetadataSchema } from './schemas.js';
-import type { EvalResult, RunMetadata } from './types.js';
+import {
+  EvalLaneSchema,
+  EvalResultSchema,
+  RunMetadataSchema,
+  SkillConditionSchema,
+  TokenUsageSchema,
+} from './schemas.js';
+import type {
+  EvalLane,
+  EvalResult,
+  RunMetadata,
+  SkillCondition,
+  TokenUsage,
+} from './types.js';
 
 const TRANSCRIPT_FILENAME = 'transcript.txt';
 const RESULT_FILENAME = 'result.json';
 const METADATA_FILENAME = 'metadata.json';
+const TOKEN_USAGE_FILENAME = 'token-usage.json';
+
+export interface TokenUsageArtifact {
+  caseId: string;
+  lane: EvalLane;
+  condition: SkillCondition;
+  provider: string;
+  model: string;
+  trialIndex: number;
+  tokenUsage: TokenUsage;
+  createdAtMs: number;
+}
+
+export interface WriteTokenUsageArtifactParams extends TokenUsageArtifact {
+  artifactsDir: string;
+}
+
+const TokenUsageArtifactSchema = z
+  .object({
+    caseId: z.string().min(1),
+    lane: EvalLaneSchema,
+    condition: SkillConditionSchema,
+    provider: z.string().min(1),
+    model: z.string().min(1),
+    trialIndex: z.number().int().nonnegative(),
+    tokenUsage: TokenUsageSchema,
+    createdAtMs: z.number().int().nonnegative(),
+  })
+  .strict();
 
 interface NodeError {
   code?: string;
@@ -101,6 +144,73 @@ function validateRunMetadataData(
 function warnSkippedResult(resultPath: string, error: unknown): void {
   const details = error instanceof Error ? error.message : String(error);
   console.warn(`[evals] Skipping result at ${resultPath}: ${details}`);
+}
+
+function validateTokenUsageArtifactData(
+  path: string,
+  data: unknown,
+): TokenUsageArtifact {
+  const parsedArtifact = TokenUsageArtifactSchema.safeParse(data);
+  if (!parsedArtifact.success) {
+    throw new Error(
+      `Token usage artifact validation failed for ${path}: ${parsedArtifact.error.message}`,
+    );
+  }
+
+  return parsedArtifact.data as TokenUsageArtifact;
+}
+
+/**
+ * Write a validated token-usage sidecar artifact and return the absolute file path.
+ */
+export async function writeTokenUsageArtifact(
+  params: WriteTokenUsageArtifactParams,
+): Promise<string> {
+  assertString(params.artifactsDir, 'artifactsDir must be a string');
+  invariant(
+    params.artifactsDir.length > 0,
+    'artifactsDir must be a non-empty string',
+  );
+
+  const artifact: TokenUsageArtifact = {
+    caseId: params.caseId,
+    lane: params.lane,
+    condition: params.condition,
+    provider: params.provider,
+    model: params.model,
+    trialIndex: params.trialIndex,
+    tokenUsage: params.tokenUsage,
+    createdAtMs: params.createdAtMs,
+  };
+
+  validatePathSegment(artifact.lane, 'token usage artifact lane');
+  validatePathSegment(artifact.caseId, 'token usage artifact caseId');
+  validatePathSegment(artifact.condition, 'token usage artifact condition');
+
+  const resolvedArtifactsDir = resolve(params.artifactsDir);
+  invariant(
+    isAbsolute(resolvedArtifactsDir),
+    'resolved artifactsDir must be absolute',
+  );
+
+  const artifactPath = resolveWithinBase(
+    resolvedArtifactsDir,
+    'token usage artifact path',
+    artifact.lane,
+    artifact.caseId,
+    artifact.condition,
+    TOKEN_USAGE_FILENAME,
+  );
+
+  await writeValidatedJsonFile({
+    path: artifactPath,
+    pathLabel: 'token usage artifact path',
+    data: artifact,
+    writeErrorMessage: `Failed to write token usage artifact at ${artifactPath}.`,
+    validate: validateTokenUsageArtifactData,
+  });
+
+  return artifactPath;
 }
 
 /**

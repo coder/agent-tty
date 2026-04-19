@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { EventRecordSchema } from '../../src/protocol/schemas.js';
+import { SnapshotCheckReportSchema } from '../snapshots/schemas/report.js';
 import type { ArtifactKind } from '../../src/tools/review-bundle.js';
 import type { BundleValidationProfile } from '../../src/tools/validate-bundle.js';
 import type {
@@ -34,6 +35,8 @@ import type {
   ProviderPromptResult,
   ProviderRuntimeInfo,
   ReportCompletenessScore,
+  TokenReportSummary,
+  TokenUsage,
   TrialAggregation,
 } from './types.js';
 
@@ -467,6 +470,7 @@ export const ExecutionEvalCaseSchema = z
     artifactRequirements: z.array(ArtifactRequirementSchema),
     budgets: ExecutionBudgetSchema,
     referenceSteps: PositiveIntSchema.optional(),
+    workspace: NonEmptyStringSchema.optional(),
   })
   .strict()
   .superRefine((obj, ctx) => {
@@ -515,6 +519,7 @@ export const DogfoodEvalCaseSchema = z
     antiPatterns: z.array(AntiPatternRuleSchema),
     budgets: DogfoodBudgetSchema,
     referenceSteps: PositiveIntSchema.optional(),
+    workspace: NonEmptyStringSchema.optional(),
   })
   .strict()
   .superRefine((obj, ctx) => {
@@ -594,6 +599,58 @@ export const ProviderRuntimeInfoSchema = z
   })
   .strict();
 
+export const TokenUsageSchema = z
+  .object({
+    inputTokens: NonNegativeIntSchema,
+    outputTokens: NonNegativeIntSchema,
+    totalTokens: NonNegativeIntSchema,
+    cachedTokens: NonNegativeIntSchema.optional(),
+  })
+  .strict();
+
+const TokenReportGrandTotalSchema = z
+  .object({
+    inputTokens: NonNegativeIntSchema,
+    outputTokens: NonNegativeIntSchema,
+    totalTokens: NonNegativeIntSchema,
+    cachedTokens: NonNegativeIntSchema.optional(),
+    trials: NonNegativeIntSchema,
+  })
+  .strict();
+
+const TokenReportLaneSchema = z
+  .object({
+    lane: NonEmptyStringSchema,
+    inputTokens: NonNegativeIntSchema,
+    outputTokens: NonNegativeIntSchema,
+    totalTokens: NonNegativeIntSchema,
+    cachedTokens: NonNegativeIntSchema.optional(),
+    trials: NonNegativeIntSchema,
+  })
+  .strict();
+
+const TokenReportCaseSchema = z
+  .object({
+    lane: NonEmptyStringSchema,
+    caseId: NonEmptyStringSchema,
+    condition: NonEmptyStringSchema,
+    inputTokens: NonNegativeIntSchema,
+    outputTokens: NonNegativeIntSchema,
+    totalTokens: NonNegativeIntSchema,
+    cachedTokens: NonNegativeIntSchema.optional(),
+    trials: NonNegativeIntSchema,
+  })
+  .strict();
+
+export const TokenReportSummarySchema = z
+  .object({
+    grandTotal: TokenReportGrandTotalSchema,
+    perLane: z.array(TokenReportLaneSchema),
+    perCase: z.array(TokenReportCaseSchema),
+    snapshotCheck: SnapshotCheckReportSchema.optional(),
+  })
+  .strict();
+
 export const NormalizedProviderOutputSchema = z
   .object({
     finalText: z.string(),
@@ -602,6 +659,7 @@ export const NormalizedProviderOutputSchema = z
     referencedSkills: z.array(NonEmptyStringSchema),
     selectedSkill: ExpectedSkillSchema.optional(),
     toolCalls: z.array(UnknownRecordSchema),
+    tokenUsage: TokenUsageSchema.optional(),
   })
   .strict();
 
@@ -827,6 +885,7 @@ export const JsonReportSchema = z
     providerComparison: ProviderComparisonReportSchema.optional(),
     aggregated: z.array(TrialAggregationSchema).optional(),
     baselineComparison: BaselineComparisonSchema.optional(),
+    tokenReport: TokenReportSummarySchema.optional(),
   })
   .strict();
 
@@ -1010,6 +1069,10 @@ export type ProviderCapabilitiesSchemaType = z.infer<
 export type ProviderRuntimeInfoSchemaType = z.infer<
   typeof ProviderRuntimeInfoSchema
 >;
+export type TokenUsageSchemaType = z.infer<typeof TokenUsageSchema>;
+export type TokenReportSummarySchemaType = z.infer<
+  typeof TokenReportSummarySchema
+>;
 export type NormalizedProviderOutputSchemaType = z.infer<
   typeof NormalizedProviderOutputSchema
 >;
@@ -1169,6 +1232,14 @@ export type _ProviderAgentResultSchemaParity = AssertExact<
 export type _ProviderRuntimeInfoSchemaParity = AssertExact<
   ProviderRuntimeInfo,
   ProviderRuntimeInfoSchemaType
+>;
+export type _TokenUsageSchemaParity = AssertExact<
+  TokenUsage,
+  TokenUsageSchemaType
+>;
+export type _TokenReportSummarySchemaParity = AssertExact<
+  TokenReportSummary,
+  TokenReportSummarySchemaType
 >;
 export type _NormalizedProviderOutputSchemaParity = AssertExact<
   NormalizedProviderOutput,

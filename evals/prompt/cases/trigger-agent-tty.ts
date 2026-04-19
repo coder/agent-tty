@@ -1,3 +1,4 @@
+import { promptCase } from '../../authoring/index.js';
 import { PromptEvalCaseSchema } from '../../lib/schemas.js';
 import type { PromptEvalCase } from '../../lib/types.js';
 
@@ -26,6 +27,37 @@ function requiredCheck(
 function parseCase(evalCase: PromptEvalCase): PromptEvalCase {
   return PromptEvalCaseSchema.parse(evalCase) as PromptEvalCase;
 }
+
+const waitForOutputCase = promptCase('wait-for-output')
+  .category('trigger')
+  .prompt(
+    "I need to wait until my server prints 'Listening on port 3000' before running tests",
+  )
+  .expectSkill('agent-tty')
+  .context(
+    'The answer should prefer waiting on observable terminal text over fixed delays before starting the next step.',
+  )
+  .expectedPatterns(['/agent-tty/i', '/\\bwait\\b/i'])
+  .forbiddenPatterns([SLEEP_RECOMMENDATION_PATTERN, '/setTimeout/i'])
+  .rubric(
+    'Chooses agent-tty for terminal readiness coordination.',
+    'Uses wait against concrete terminal output instead of fixed timing guesses.',
+  )
+  .workflow((workflow) => {
+    workflow
+      .step('wait-for-output.select-agent-tty', 'Explicitly selects agent-tty.')
+      .mustMention('/agent-tty/i');
+    workflow
+      .step(
+        'wait-for-output.observe-readiness',
+        'Waits for the listening message before running tests.',
+      )
+      .mustMention('/\\bwait\\b/i', '/Listening on port 3000/i')
+      .mustNotMention(SLEEP_RECOMMENDATION_PATTERN, '/setTimeout/i');
+  })
+  .antiPatterns(...EMPTY_ANTI_PATTERNS)
+  .budget(PROMPT_TIMEOUT_MS)
+  .build();
 
 export const TRIGGER_AGENT_TTY_PROMPT_CASES: PromptEvalCase[] = [
   parseCase({
@@ -102,37 +134,7 @@ export const TRIGGER_AGENT_TTY_PROMPT_CASES: PromptEvalCase[] = [
     antiPatterns: EMPTY_ANTI_PATTERNS,
     budgets: { timeoutMs: PROMPT_TIMEOUT_MS },
   }),
-  parseCase({
-    id: 'wait-for-output',
-    lane: 'prompt',
-    category: 'trigger',
-    prompt:
-      "I need to wait until my server prints 'Listening on port 3000' before running tests",
-    expectedSkill: 'agent-tty',
-    context:
-      'The answer should prefer waiting on observable terminal text over fixed delays before starting the next step.',
-    expectedPatterns: ['/agent-tty/i', '/\\bwait\\b/i'],
-    forbiddenPatterns: [SLEEP_RECOMMENDATION_PATTERN, '/setTimeout/i'],
-    rubric: [
-      'Chooses agent-tty for terminal readiness coordination.',
-      'Uses wait against concrete terminal output instead of fixed timing guesses.',
-    ],
-    workflowChecks: [
-      requiredCheck(
-        'wait-for-output.select-agent-tty',
-        'Explicitly selects agent-tty.',
-        ['/agent-tty/i'],
-      ),
-      requiredCheck(
-        'wait-for-output.observe-readiness',
-        'Waits for the listening message before running tests.',
-        ['/\\bwait\\b/i', '/Listening on port 3000/i'],
-        [SLEEP_RECOMMENDATION_PATTERN, '/setTimeout/i'],
-      ),
-    ],
-    antiPatterns: EMPTY_ANTI_PATTERNS,
-    budgets: { timeoutMs: PROMPT_TIMEOUT_MS },
-  }),
+  waitForOutputCase,
   parseCase({
     id: 'snapshot-inspection',
     lane: 'prompt',

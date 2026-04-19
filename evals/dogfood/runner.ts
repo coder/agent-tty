@@ -5,6 +5,10 @@ import { join, resolve } from 'node:path';
 import { scanBundleArtifacts } from '../../src/tools/review-bundle.js';
 import { assertString, invariant } from '../../src/util/assert.js';
 import {
+  EvalArtifactStore,
+  writeTokenUsageArtifact,
+} from '../lib/artifacts.js';
+import {
   buildScannableTranscript,
   detectAntiPatterns,
 } from '../lib/antiPatterns.js';
@@ -13,7 +17,7 @@ import {
   scoreEvidenceQuality,
   scoreReportCompleteness,
 } from '../lib/bundleScoring.js';
-import { fixtureCommand } from '../lib/cliHarness.js';
+import { fixtureCommand, materializeEvalWorkspace } from '../lib/cliHarness.js';
 import { SKILL_CONDITIONS } from '../lib/matrix.js';
 import { DogfoodEvalCaseSchema, EvalResultSchema } from '../lib/schemas.js';
 import { checkWorkflow } from '../lib/scoring.js';
@@ -29,7 +33,18 @@ import type {
   RunMetadata,
   SkillCondition,
 } from '../lib/types.js';
+import type { ReporterDispatcher } from '../reporters/dispatch.js';
+import {
+  CaseProgressTracker,
+  computePlannedCases,
+} from '../reporters/runtime.js';
 import type { EvalProvider } from '../providers/base.js';
+import { lookupPreset } from '../workspaces/registry.js';
+import {
+  deriveEffectiveEnv,
+  resolveWorkspacePreset,
+} from '../workspaces/resolver.js';
+import type { ResolvedWorkspacePlan } from '../workspaces/types.js';
 import evidenceCompletenessCase from './cases/evidence-completeness.js';
 import exploratoryQaCase from './cases/exploratory-qa.js';
 import navigationFocusReproCase from './cases/navigation-focus-repro.js';
@@ -71,7 +86,15 @@ const DEFAULT_TOTAL_TRIALS = 1;
 type DogfoodWorkItem = EvalWorkItemIdentity &
   ScheduledWorkItem & {
     evalCase: DogfoodEvalCase;
+    workspacePlan?: ResolvedWorkspacePlan;
   };
+
+type DogfoodLaneOptions = {
+  conditions?: SkillCondition[];
+  caseFilter?: string[];
+  concurrency?: number;
+  reporter?: ReporterDispatcher;
+};
 
 interface LoadedDogfoodSkillPrompts {
   bootstrapSkillText: string;
@@ -83,6 +106,11 @@ interface DogfoodLaneContext {
   detectedRuntime: ProviderRuntimeInfo;
   requestedModelId: string | undefined;
   repoRoot: string;
+}
+
+interface ResolvedDogfoodWorkspace {
+  plan: ResolvedWorkspacePlan;
+  effectiveEnv: Readonly<Record<string, string>>;
 }
 
 let loadedDogfoodSkillPromptsPromise:
@@ -537,6 +565,99 @@ function buildRequestedPaths(
   };
 }
 
+function readDogfoodWorkspaceId(evalCase: DogfoodEvalCase): string | undefined {
+  const candidateWorkspaceId = (evalCase as { workspace?: unknown }).workspace;
+  if (candidateWorkspaceId === undefined) {
+    return undefined;
+  }
+
+  assertString(
+    candidateWorkspaceId,
+    'Dogfood eval case workspace must be a string when provided',
+  );
+  const workspaceId = candidateWorkspaceId.trim();
+  invariant(
+    workspaceId.length > 0,
+    'Dogfood eval case workspace must be a non-empty string when provided',
+  );
+  return workspaceId;
+}
+
+function stripDogfoodWorkspace(evalCase: DogfoodEvalCase): DogfoodEvalCase {
+  const { workspace: _workspace, ...requestEvalCase } =
+    evalCase as DogfoodEvalCase & {
+      workspace?: unknown;
+    };
+  void _workspace;
+  return requestEvalCase;
+}
+
+function prepareDogfoodWorkspacePlan(
+  workItem: DogfoodWorkItem,
+  ctx: DogfoodLaneContext,
+  homeDir: string,
+): void {
+  if (workItem.workspacePlan !== undefined) {
+    return;
+  }
+
+  const workspaceId = readDogfoodWorkspaceId(workItem.evalCase);
+  if (workspaceId === undefined) {
+    return;
+  }
+
+  try {
+    const preset = lookupPreset(workspaceId);
+    workItem.workspacePlan = resolveWorkspacePreset(
+      { homeDir, repoRoot: ctx.repoRoot },
+      preset,
+    );
+  } catch {
+    // Preserve existing per-item dogfood failures when plan-only resolution cannot complete before reporter emission.
+  }
+}
+
+async function resolveDogfoodWorkspace(
+  evalCase: DogfoodEvalCase,
+  ctx: DogfoodLaneContext,
+  homeDir: string,
+  outputDir: string,
+  requestedBundlePath: string,
+  systemPromptEnv: Record<string, string>,
+  workspacePlan?: ResolvedWorkspacePlan,
+): Promise<ResolvedDogfoodWorkspace | undefined> {
+  const workspaceId = readDogfoodWorkspaceId(evalCase);
+  if (workspaceId === undefined) {
+    return undefined;
+  }
+
+  const preset = lookupPreset(workspaceId);
+  if (workspacePlan !== undefined) {
+    invariant(
+      workspacePlan.presetId === preset.id,
+      `Dogfood workspace plan preset mismatch: expected ${preset.id}, got ${workspacePlan.presetId}`,
+    );
+  }
+  const plan =
+    workspacePlan ??
+    resolveWorkspacePreset({ homeDir, repoRoot: ctx.repoRoot }, preset);
+  const effectiveEnv = deriveEffectiveEnv(preset, {
+    EVAL_OUTPUT_DIR: outputDir,
+    EVAL_REQUESTED_BUNDLE_DIR: requestedBundlePath,
+    EVAL_FIXTURE: evalCase.fixture ?? '',
+    ...systemPromptEnv,
+  });
+
+  await materializeEvalWorkspace({
+    homeDir,
+    plan,
+    effectiveEnv,
+    defaultCwd: ctx.repoRoot,
+  });
+
+  return { plan, effectiveEnv };
+}
+
 function buildCaseInventory(): DogfoodEvalCase[] {
   const cases = [...DOGFOOD_CASES];
   const categoryCounts = new Map<DogfoodEvalCase['category'], number>();
@@ -653,6 +774,74 @@ function buildFailedDogfoodEvalResult(params: {
   }) as EvalResult;
 }
 
+async function writeDogfoodTokenUsageArtifacts(
+  metadata: RunMetadata,
+  results: readonly EvalResult[],
+): Promise<void> {
+  let artifactsDir: string | undefined;
+
+  for (const result of results) {
+    const tokenUsage = result.normalizedOutput.tokenUsage;
+    if (tokenUsage === undefined) {
+      continue;
+    }
+
+    if (artifactsDir === undefined) {
+      const outputBaseDir = metadata.outputBaseDir;
+      invariant(
+        typeof outputBaseDir === 'string' && outputBaseDir.length > 0,
+        'Dogfood lane token usage artifacts require metadata.outputBaseDir',
+      );
+      artifactsDir = new EvalArtifactStore(outputBaseDir).runDir(
+        metadata.runId,
+      );
+    }
+
+    invariant(
+      result.providerId.length > 0,
+      'Dogfood lane token usage artifacts require result.providerId',
+    );
+    invariant(
+      typeof result.modelId === 'string' && result.modelId.length > 0,
+      'Dogfood lane token usage artifacts require result.modelId',
+    );
+    invariant(
+      result.caseId.length > 0,
+      'Dogfood lane token usage artifacts require result.caseId',
+    );
+    invariant(
+      result.condition.length > 0,
+      'Dogfood lane token usage artifacts require result.condition',
+    );
+    invariant(
+      result.lane === 'dogfood',
+      'Dogfood lane token usage artifacts require dogfood results',
+    );
+    invariant(
+      Number.isInteger(result.trial) && result.trial > 0,
+      'Dogfood lane token usage artifacts require positive result.trial',
+    );
+
+    const createdAtMs = Date.parse(result.completedAt);
+    invariant(
+      Number.isInteger(createdAtMs) && createdAtMs >= 0,
+      'Dogfood lane token usage artifacts require a valid completedAt timestamp',
+    );
+
+    await writeTokenUsageArtifact({
+      artifactsDir,
+      caseId: result.caseId,
+      lane: result.lane,
+      condition: result.condition,
+      provider: result.providerId,
+      model: result.modelId,
+      trialIndex: result.trial - 1,
+      tokenUsage,
+      createdAtMs,
+    });
+  }
+}
+
 export function enumerateDogfoodWorkItems(options?: {
   conditions?: SkillCondition[];
   caseFilter?: string[];
@@ -727,16 +916,39 @@ export async function executeDogfoodWorkItem(
     const systemPromptContext = await buildSystemPromptContext(
       workItem.condition,
     );
+    const workspace = await resolveDogfoodWorkspace(
+      workItem.evalCase,
+      ctx,
+      homeDir,
+      outputDir,
+      requestedBundlePath,
+      systemPromptContext.env,
+      workItem.workspacePlan,
+    );
+    const requestCaseBase = stripDogfoodWorkspace(workItem.evalCase);
     const requestCase = DogfoodEvalCaseSchema.parse({
-      ...workItem.evalCase,
+      ...requestCaseBase,
       prompt: buildPrompt(
-        { ...workItem.evalCase, conditions: [workItem.condition] },
+        { ...requestCaseBase, conditions: [workItem.condition] },
         requestedBundlePath,
         systemPromptContext,
       ),
       bundlePath: requestedBundlePath,
       conditions: [workItem.condition],
     }) as DogfoodEvalCase;
+    const requestEnv =
+      workspace === undefined
+        ? {
+            AGENT_TTY_HOME: homeDir,
+            EVAL_OUTPUT_DIR: outputDir,
+            EVAL_REQUESTED_BUNDLE_DIR: requestedBundlePath,
+            EVAL_FIXTURE: workItem.evalCase.fixture ?? '',
+            ...systemPromptContext.env,
+          }
+        : {
+            ...workspace.effectiveEnv,
+            AGENT_TTY_HOME: homeDir,
+          };
 
     const agentResult = await provider.invokeAgentMode({
       runId: metadata.runId,
@@ -746,16 +958,10 @@ export async function executeDogfoodWorkItem(
       ...(ctx.requestedModelId === undefined
         ? {}
         : { modelId: ctx.requestedModelId }),
-      cwd: ctx.repoRoot,
+      cwd: workspace?.plan.cwd ?? ctx.repoRoot,
       homeDir,
       outputDir,
-      env: {
-        AGENT_TTY_HOME: homeDir,
-        EVAL_OUTPUT_DIR: outputDir,
-        EVAL_REQUESTED_BUNDLE_DIR: requestedBundlePath,
-        EVAL_FIXTURE: workItem.evalCase.fixture ?? '',
-        ...systemPromptContext.env,
-      },
+      env: requestEnv,
       evalCase: requestCase,
     });
 
@@ -918,17 +1124,46 @@ export async function executeDogfoodWorkItem(
 export async function runDogfoodLane(
   provider: EvalProvider,
   metadata: RunMetadata,
-  options?: {
-    conditions?: SkillCondition[];
-    caseFilter?: string[];
-    concurrency?: number;
-  },
+  options?: DogfoodLaneOptions,
 ): Promise<EvalResult[]> {
   const totalTrials = resolveTotalTrials(metadata.totalTrials);
   const items = enumerateDogfoodWorkItems({
-    ...options,
+    ...(options?.conditions === undefined
+      ? {}
+      : { conditions: options.conditions }),
+    ...(options?.caseFilter === undefined
+      ? {}
+      : { caseFilter: options.caseFilter }),
     totalTrials,
   });
+  const plannedCases = computePlannedCases(items);
+  const reporter = options?.reporter;
+  const concurrency = options?.concurrency ?? 1;
+  const activeReporter =
+    reporter !== undefined && items.length > 0 ? reporter : undefined;
+  if (activeReporter !== undefined) {
+    invariant(
+      Number.isInteger(concurrency) && concurrency > 0,
+      'options.concurrency must be a positive integer',
+    );
+  }
+
+  let trackerTimestamp: string | undefined;
+  const tracker = new CaseProgressTracker<DogfoodWorkItem, EvalResult>({
+    runId: metadata.runId,
+    lane: 'dogfood',
+    plannedCases,
+    ...(reporter === undefined ? {} : { dispatcher: reporter }),
+    now: () => trackerTimestamp ?? new Date().toISOString(),
+  });
+  const trialStarts = new Map<
+    string,
+    { startedAt: string; startedAtMs: number }
+  >();
+  const getTimestamp = (): { iso: string; ms: number } => {
+    const iso = new Date().toISOString();
+    return { iso, ms: Date.parse(iso) };
+  };
 
   let detectedRuntime: ProviderRuntimeInfo;
   try {
@@ -947,13 +1182,131 @@ export async function runDogfoodLane(
       metadata.models[0] ?? detectedRuntime.defaultModelId ?? undefined,
     repoRoot: resolve(metadata.repoRoot),
   };
-  const settlements = await runScheduled(
+  const laneStartedAt =
+    activeReporter === undefined ? undefined : getTimestamp();
+  if (activeReporter !== undefined && laneStartedAt !== undefined) {
+    await activeReporter.dispatch('laneStart', {
+      runId: metadata.runId,
+      lane: 'dogfood',
+      caseIds: Array.from(new Set(items.map((item) => item.caseId))),
+      conditions: Array.from(new Set(items.map((item) => item.condition))),
+      concurrency,
+      plannedItems: items.length,
+      startedAt: laneStartedAt.iso,
+    });
+  }
+
+  const settlements = await runScheduled<DogfoodWorkItem, EvalResult>(
     items,
     (item) => executeDogfoodWorkItem(provider, metadata, item, ctx),
-    { concurrency: options?.concurrency ?? 1 },
+    {
+      concurrency,
+      ...(activeReporter === undefined
+        ? {}
+        : {
+            onItemStart: async (item: DogfoodWorkItem) => {
+              const started = getTimestamp();
+              trialStarts.set(item.key, {
+                startedAt: started.iso,
+                startedAtMs: started.ms,
+              });
+
+              const requestedPaths = buildRequestedPaths(
+                metadata,
+                provider.id,
+                item.evalCase,
+                item.condition,
+                item.trial,
+              );
+              prepareDogfoodWorkspacePlan(item, ctx, requestedPaths.homeDir);
+
+              trackerTimestamp = started.iso;
+              try {
+                await tracker.onTrialStart(item);
+              } finally {
+                trackerTimestamp = undefined;
+              }
+
+              await activeReporter.dispatch('trialStart', {
+                runId: metadata.runId,
+                lane: 'dogfood',
+                caseId: item.caseId,
+                condition: item.condition,
+                trial: item.trial,
+                startedAt: started.iso,
+                requestedOutputPath: requestedPaths.outputDir,
+                requestedArtifactPath: requestedPaths.requestedBundlePath,
+              });
+            },
+            onItemFinish: async (item: DogfoodWorkItem, settled) => {
+              const started = trialStarts.get(item.key);
+              invariant(
+                started !== undefined,
+                `Missing reporter start state for ${item.key}`,
+              );
+              const completed = getTimestamp();
+
+              if (settled.status === 'fulfilled') {
+                await activeReporter.dispatch('trialFinish', {
+                  runId: metadata.runId,
+                  lane: 'dogfood',
+                  caseId: item.caseId,
+                  condition: item.condition,
+                  trial: item.trial,
+                  startedAt: started.startedAt,
+                  completedAt: completed.iso,
+                  durationMs: Math.max(0, completed.ms - started.startedAtMs),
+                  status: settled.value.ok ? 'passed' : 'failed',
+                  ok: settled.value.ok,
+                  errorClass: settled.value.errorClass ?? null,
+                  errorMessage: settled.value.errorMessage ?? null,
+                  score: settled.value.score.total,
+                  transcriptPath: settled.value.transcriptPath ?? null,
+                  stdoutPath: settled.value.stdoutPath ?? null,
+                  stderrPath: settled.value.stderrPath ?? null,
+                  eventLogPath: settled.value.eventLogPath ?? null,
+                  bundlePath: settled.value.bundlePath ?? null,
+                  artifactManifestPath:
+                    settled.value.artifactManifestPath ?? null,
+                });
+              } else {
+                const describedError = describeDogfoodError(settled.reason);
+                await activeReporter.dispatch('trialFinish', {
+                  runId: metadata.runId,
+                  lane: 'dogfood',
+                  caseId: item.caseId,
+                  condition: item.condition,
+                  trial: item.trial,
+                  startedAt: started.startedAt,
+                  completedAt: completed.iso,
+                  durationMs: Math.max(0, completed.ms - started.startedAtMs),
+                  status: 'errored',
+                  ok: false,
+                  errorClass: describedError.errorClass,
+                  errorMessage: describedError.errorMessage,
+                  score: null,
+                  transcriptPath: null,
+                  stdoutPath: null,
+                  stderrPath: null,
+                  eventLogPath: null,
+                  bundlePath: null,
+                  artifactManifestPath: null,
+                });
+              }
+
+              trackerTimestamp = completed.iso;
+              try {
+                await tracker.onTrialFinish(item, settled);
+              } finally {
+                trackerTimestamp = undefined;
+                trialStarts.delete(item.key);
+              }
+            },
+          }),
+    },
   );
 
-  return settlements.map((settlement) => {
+  const results = settlements.map((settlement) => {
     if (settlement.status === 'fulfilled') {
       return settlement.value;
     }
@@ -967,4 +1320,38 @@ export async function runDogfoodLane(
       error: settlement.reason,
     });
   });
+
+  await writeDogfoodTokenUsageArtifacts(metadata, results);
+
+  if (activeReporter !== undefined && laneStartedAt !== undefined) {
+    const completed = getTimestamp();
+    const laneTotals = settlements.reduce(
+      (totals, settlement) => {
+        totals.total += 1;
+        if (settlement.status === 'rejected') {
+          totals.errored += 1;
+        } else if (settlement.value.ok) {
+          totals.passed += 1;
+        } else {
+          totals.failed += 1;
+        }
+        return totals;
+      },
+      { total: 0, passed: 0, failed: 0, errored: 0 },
+    );
+
+    await activeReporter.dispatch('laneFinish', {
+      runId: metadata.runId,
+      lane: 'dogfood',
+      startedAt: laneStartedAt.iso,
+      completedAt: completed.iso,
+      durationMs: Math.max(0, completed.ms - laneStartedAt.ms),
+      total: laneTotals.total,
+      passed: laneTotals.passed,
+      failed: laneTotals.failed,
+      errored: laneTotals.errored,
+    });
+  }
+
+  return results;
 }

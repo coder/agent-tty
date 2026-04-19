@@ -1,0 +1,62 @@
+phase5-proof$ npm run typecheck
+
+> agent-tty@0.1.1-beta.3 typecheck
+> tsc -p tsconfig.json --noEmit
+
+phase5-proof$ printf '%s%s\n' '__AT_MARKER_219ee04df48' 'b4d0a9bcaaa71b3c0f578__'
+__AT_MARKER_219ee04df48b4d0a9bcaaa71b3c0f578__
+phase5-proof$ npm run lint
+
+> agent-tty@0.1.1-beta.3 lint
+> eslint src test vitest.config.ts --max-warnings=0
+
+phase5-proof$ printf '%s%s\n' '__AT_MARKER_9eeecfa1bf8' '74baca2e5f837d57f6727__'
+__AT_MARKER_9eeecfa1bf874baca2e5f837d57f6727__
+phase5-proof$ npx vitest run test/unit/evals/claude.test.ts test/unit/evals/codex.test.ts test/unit/evals/promptRunner.test.ts test/integrat
+ion/evals/authoring-pilots.test.ts --reporter=verbose
+
+ RUN  v4.1.2 /home/coder/.mux/src/agent-terminal/agent_exec_f53d8e814f
+
+ ✓ test/unit/evals/claude.test.ts > ClaudeProvider.parse > normalizes complete JSON usage objects and prefers the last valid record 8ms
+ ✓ test/unit/evals/claude.test.ts > ClaudeProvider.parse > omits tokenUsage for 'missing total_tokens' 1ms
+ ✓ test/unit/evals/claude.test.ts > ClaudeProvider.parse > omits tokenUsage for 'fractional totals' 0ms
+ ✓ test/unit/evals/claude.test.ts > ClaudeProvider.parse > omits tokenUsage for 'negative cached tokens' 0ms
+ ✓ test/unit/evals/claude.test.ts > ClaudeProvider.parse > does not emit tokenUsage for plain-text output 1ms
+ ✓ test/unit/evals/codex.test.ts > CodexProvider.parse > normalizes command_execution items into shell-style tool calls 11ms
+ ✓ test/unit/evals/codex.test.ts > CodexProvider.parse > normalizes function_call records with parsed arguments and outputs 2ms
+ ✓ test/unit/evals/codex.test.ts > CodexProvider.parse > normalizes complete JSON usage objects and prefers the last valid record 2ms
+ ✓ test/unit/evals/codex.test.ts > CodexProvider.parse > omits tokenUsage for 'missing total_tokens' 1ms
+ ✓ test/unit/evals/codex.test.ts > CodexProvider.parse > omits tokenUsage for 'conflicting cached-token aliases' 0ms
+ ✓ test/unit/evals/codex.test.ts > CodexProvider.parse > does not emit tokenUsage for plain-text output 1ms
+ ✓ test/unit/evals/promptRunner.test.ts > enumeratePromptWorkItems > returns unique prompt work items with stable keys 48ms
+ ✓ test/unit/evals/promptRunner.test.ts > enumeratePromptWorkItems > filters prompt work items by case id 3ms
+ ✓ test/unit/evals/promptRunner.test.ts > enumeratePromptWorkItems > filters prompt work items by condition 2ms
+ ✓ test/unit/evals/promptRunner.test.ts > executePromptWorkItem > builds a prompt request and returns the provider result payload 13ms
+ ✓ test/unit/evals/promptRunner.test.ts > executePromptWorkItem > converts provider errors into failed eval results 3ms
+ ✓ test/integration/evals/authoring-pilots.test.ts > eval CLI authoring pilot cases > resolves wait-for-output in the dry-run matrix 549ms
+ ✓ test/integration/evals/authoring-pilots.test.ts > eval CLI authoring pilot cases > runs wait-for-output end-to-end through the CLI facade
+ with fixture playback 571ms
+ ✓ test/integration/evals/authoring-pilots.test.ts > eval CLI authoring pilot cases > resolves hello-prompt in the dry-run matrix 579ms
+ ✓ test/integration/evals/authoring-pilots.test.ts > eval CLI authoring pilot cases > runs hello-prompt end-to-end through the CLI facade wi
+th fixture playback 441ms
+ ✓ test/integration/evals/authoring-pilots.test.ts > eval CLI authoring pilot cases > resolves doctor-gated in the dry-run matrix 552ms
+ ✓ test/integration/evals/authoring-pilots.test.ts > eval CLI authoring pilot cases > runs doctor-gated end-to-end through the CLI facade wi
+th fixture playback 451ms
+ ✓ test/integration/evals/authoring-pilots.test.ts > eval CLI authoring pilot cases > resolves exploratory-qa in the dry-run matrix 422ms
+ ✓ test/integration/evals/authoring-pilots.test.ts > eval CLI authoring pilot cases > runs exploratory-qa end-to-end through the CLI facade
+with fixture playback 571ms
+ ✓ test/integration/evals/authoring-pilots.test.ts > eval CLI authoring pilot cases > round-trips tokenUsage from full normalized override f
+ixtures 8ms
+ ✓ test/integration/evals/authoring-pilots.test.ts > eval CLI authoring pilot cases > preserves inline prompt and agent tokenUsage and keeps
+ omissions undefined 8ms
+ ✓ test/integration/evals/authoring-pilots.test.ts > eval CLI authoring pilot cases > preserves valid legacy normalized tokenUsage and drops
+ invalid tokenUsage payloads 13ms
+
+ Test Files  4 passed (4)
+      Tests  27 passed (27)
+   Start at  11:31:58
+   Duration  4.71s (transform 650ms, setup 0ms, import 1.31s, tests 4.27s, environment 0ms)
+
+phase5-proof$ printf '%s%s\n' '__AT_MARKER_e2b4fb7e307' '7485a89622cec04e0982a__'
+__AT_MARKER_e2b4fb7e3077485a89622cec04e0982a__
+phase5-proof$

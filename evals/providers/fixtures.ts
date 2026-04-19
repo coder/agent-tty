@@ -11,6 +11,7 @@ import {
   ProviderPromptRequestSchema,
   ProviderPromptResultSchema,
   ProviderRuntimeInfoSchema,
+  TokenUsageSchema,
 } from '../lib/schemas.js';
 import type {
   NormalizedProviderOutput,
@@ -21,6 +22,7 @@ import type {
   ProviderPromptRequest,
   ProviderPromptResult,
   ProviderRuntimeInfo,
+  TokenUsage,
 } from '../lib/types.js';
 import type { EvalProvider } from './base.js';
 
@@ -77,12 +79,14 @@ function safeStringify(value: unknown): string {
 
 function buildPassThroughNormalizedOutput(
   raw: string,
+  tokenUsage?: TokenUsage,
 ): NormalizedProviderOutput {
   const parsedResult = NormalizedProviderOutputSchema.safeParse({
     finalText: raw,
     messages: [raw],
     referencedSkills: [],
     toolCalls: [],
+    ...(tokenUsage === undefined ? {} : { tokenUsage }),
   });
 
   if (parsedResult.success) {
@@ -92,6 +96,21 @@ function buildPassThroughNormalizedOutput(
   return failInvariant(
     `Failed to build normalized provider output: ${parsedResult.error.message}`,
   );
+}
+
+function coerceOptionalTokenUsage(
+  rawTokenUsage: unknown,
+): TokenUsage | undefined {
+  if (rawTokenUsage === undefined) {
+    return undefined;
+  }
+
+  const parsedTokenUsage = TokenUsageSchema.safeParse(rawTokenUsage);
+  if (!parsedTokenUsage.success) {
+    return undefined;
+  }
+
+  return parsedTokenUsage.data as TokenUsage;
 }
 
 function parseProviderConfig(config: unknown, message: string): ProviderConfig {
@@ -857,6 +876,7 @@ export class FixtureProvider implements EvalProvider {
       rawOutput.skillDetected === 'dogfood-tui'
         ? rawOutput.skillDetected
         : undefined;
+    const tokenUsage = coerceOptionalTokenUsage(rawOutput.tokenUsage);
 
     return parseNormalizedOutput(
       {
@@ -868,6 +888,7 @@ export class FixtureProvider implements EvalProvider {
         referencedSkills,
         ...(selectedSkill === undefined ? {} : { selectedSkill }),
         toolCalls: toolCalls ?? [],
+        ...(tokenUsage === undefined ? {} : { tokenUsage }),
       },
       `Invalid normalized output fixture in ${sourceLabel}`,
     );
@@ -905,9 +926,10 @@ export class FixtureProvider implements EvalProvider {
     const durationMs = this.coerceDurationMs(rawResult.latencyMs);
     const startedAtMs = Date.now();
     const completedAtMs = startedAtMs + durationMs;
+    const tokenUsage = coerceOptionalTokenUsage(rawResult.tokenUsage);
     const normalized =
       normalizedOverride ??
-      buildPassThroughNormalizedOutput(rawResult.response);
+      buildPassThroughNormalizedOutput(rawResult.response, tokenUsage);
     const adaptedRuntime =
       typeof rawResult.model === 'string' && rawResult.model.length > 0
         ? parseRuntimeInfo(
@@ -971,9 +993,10 @@ export class FixtureProvider implements EvalProvider {
     const errorLines = this.coerceErrorLines(rawResult.errors, sourceLabel);
     const startedAtMs = Date.now();
     const completedAtMs = startedAtMs + durationMs;
+    const tokenUsage = coerceOptionalTokenUsage(rawResult.tokenUsage);
     const normalized =
       normalizedOverride ??
-      buildPassThroughNormalizedOutput(rawResult.transcript);
+      buildPassThroughNormalizedOutput(rawResult.transcript, tokenUsage);
 
     return parseAgentResult(
       {

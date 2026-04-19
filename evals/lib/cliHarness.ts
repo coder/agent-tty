@@ -1,6 +1,14 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdtemp, readFile, readdir, realpath, rm } from 'node:fs/promises';
+import {
+  cp,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  stat,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -11,6 +19,7 @@ import type {
   EvalCliResult,
   EvalEventRecord,
 } from './types.js';
+import type { ResolvedWorkspacePlan } from '../workspaces/types.js';
 
 import { EvalCliResultSchema } from './schemas.js';
 import {
@@ -42,7 +51,7 @@ function assertNonEmptyString(value: string, label: string): void {
   invariant(value.length > 0, `${label} must be a non-empty string`);
 }
 
-function assertStringArray(values: string[], label: string): void {
+function assertStringArray(values: readonly string[], label: string): void {
   invariant(Array.isArray(values), `${label} must be an array of strings`);
 
   for (const value of values) {
@@ -51,7 +60,7 @@ function assertStringArray(values: string[], label: string): void {
 }
 
 function assertStringRecord(
-  value: Record<string, string> | undefined,
+  value: Readonly<Record<string, string>> | undefined,
   label: string,
 ): void {
   if (value === undefined) {
@@ -63,6 +72,43 @@ function assertStringRecord(
   for (const [key, entryValue] of Object.entries(value)) {
     assertNonEmptyString(key, `${label} keys`);
     assertString(entryValue, `${label}.${key} must be a string`);
+  }
+}
+
+interface PreparedWorkspaceInput {
+  homeDir: string;
+  plan: ResolvedWorkspacePlan;
+  effectiveEnv: Readonly<Record<string, string>>;
+  defaultCwd: string;
+}
+
+async function assertExistingDirectory(
+  pathValue: string,
+  label: string,
+): Promise<void> {
+  assertAbsolutePath(pathValue, label);
+
+  const stats = await stat(pathValue).catch((error: unknown) => {
+    throw new Error(`${label} must exist at ${pathValue}`, { cause: error });
+  });
+  invariant(stats.isDirectory(), `${label} must be a directory`);
+}
+
+function formatCommand(command: string, args: readonly string[]): string {
+  return [command, ...args].join(' ');
+}
+
+async function copyDirectoryContents(
+  sourceDir: string,
+  destinationDir: string,
+): Promise<void> {
+  const entries = await readdir(sourceDir, { withFileTypes: true });
+  for (const entry of entries) {
+    await cp(join(sourceDir, entry.name), join(destinationDir, entry.name), {
+      recursive: entry.isDirectory(),
+      errorOnExist: false,
+      force: true,
+    });
   }
 }
 
@@ -249,6 +295,74 @@ export async function createIsolatedEvalHome(): Promise<string> {
 
   assertAbsolutePath(home, 'home');
   return home;
+}
+
+/** Materialize a resolved workspace plan inside an isolated eval home. */
+export async function materializeEvalWorkspace(
+  input: PreparedWorkspaceInput,
+): Promise<void> {
+  assertAbsolutePath(input.homeDir, 'workspace homeDir');
+  assertAbsolutePath(input.defaultCwd, 'workspace defaultCwd');
+  assertStringRecord(input.effectiveEnv, 'workspace effectiveEnv');
+  assertNonEmptyString(input.plan.presetId, 'workspace plan.presetId');
+  invariant(
+    Number.isInteger(input.plan.bootstrapCount) &&
+      input.plan.bootstrapCount >= 0,
+    'workspace plan.bootstrapCount must be a non-negative integer',
+  );
+  invariant(
+    input.plan.bootstrapCount === input.plan.bootstrap.length,
+    'workspace plan.bootstrapCount must match bootstrap length',
+  );
+
+  await assertExistingDirectory(input.homeDir, 'workspace homeDir');
+
+  if (input.plan.templateDir !== undefined) {
+    await assertExistingDirectory(
+      input.plan.templateDir,
+      'workspace plan.templateDir',
+    );
+    await copyDirectoryContents(input.plan.templateDir, input.homeDir);
+  }
+
+  if (input.plan.cwd !== undefined) {
+    assertAbsolutePath(input.plan.cwd, 'workspace plan.cwd');
+  }
+
+  const workspaceCwd = resolve(input.plan.cwd ?? input.defaultCwd);
+  await assertExistingDirectory(workspaceCwd, 'workspace bootstrap cwd');
+
+  for (const [index, step] of input.plan.bootstrap.entries()) {
+    assertNonEmptyString(
+      step.command,
+      `workspace bootstrap[${String(index)}].command`,
+    );
+    assertStringArray(step.args, `workspace bootstrap[${String(index)}].args`);
+
+    const commandString = formatCommand(step.command, step.args);
+    const result = spawnSync(step.command, [...step.args], {
+      cwd: workspaceCwd,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        ...input.effectiveEnv,
+        AGENT_TTY_HOME: input.homeDir,
+      },
+    });
+
+    if (result.error !== undefined) {
+      throw new Error(
+        `Workspace preset "${input.plan.presetId}" bootstrap command failed to start: ${commandString}`,
+        { cause: result.error },
+      );
+    }
+
+    if (result.status !== 0) {
+      throw new Error(
+        `Workspace preset "${input.plan.presetId}" bootstrap command failed: ${commandString} (exitCode=${String(result.status)}, signal=${String(result.signal)})`,
+      );
+    }
+  }
 }
 
 /** Best-effort cleanup for an isolated eval home and any lingering session processes. */

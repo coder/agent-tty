@@ -1,5 +1,9 @@
 import { invariant } from '../../src/util/assert.js';
-import { AggregateMetricsSchema, JsonReportSchema } from './schemas.js';
+import {
+  AggregateMetricsSchema,
+  JsonReportSchema,
+  TokenReportSummarySchema,
+} from './schemas.js';
 import {
   bootstrapPairedCI,
   computeConfidenceInterval,
@@ -23,6 +27,7 @@ import type {
   ProviderComparisonReport,
   RunMetadata,
   SkillCondition,
+  TokenReportSummary,
   TrialAggregation,
 } from './types.js';
 
@@ -75,12 +80,20 @@ export function generateJsonReport(
   metadata: RunMetadata,
   comparisonMetrics?: ComparisonMetrics | ComparisonMetrics[],
   baselineComparison?: BaselineComparison,
+  tokenReport?: TokenReportSummary,
 ): JsonReport {
   assertResults(results);
   assertMetadata(metadata);
 
   const sortedResults = sortResults(results);
   const normalizedComparisons = normalizeComparisonMetrics(comparisonMetrics);
+  const normalizedTokenReport =
+    tokenReport === undefined
+      ? undefined
+      : TokenReportSummarySchema.parse(tokenReport);
+  const emittedTokenReport = shouldEmitTokenReport(normalizedTokenReport)
+    ? normalizedTokenReport
+    : undefined;
   const aggregateMetrics = buildAggregateMetrics(sortedResults);
   const aggregate = toAggregateMetricsCore(aggregateMetrics);
   const conditionComparisonSummary = buildConditionComparisonSummary(
@@ -115,6 +128,9 @@ export function generateJsonReport(
     ...(providerComparison === undefined ? {} : { providerComparison }),
     ...(aggregated === undefined ? {} : { aggregated }),
     ...(baselineComparison === undefined ? {} : { baselineComparison }),
+    ...(emittedTokenReport === undefined
+      ? {}
+      : { tokenReport: emittedTokenReport }),
   } satisfies JsonReport;
 
   JsonReportSchema.parse(coreReport);
@@ -139,6 +155,7 @@ export function generateMarkdownReport(
   metadata: RunMetadata,
   comparisonMetrics?: ComparisonMetrics | ComparisonMetrics[],
   baselineComparison?: BaselineComparison,
+  tokenReport?: TokenReportSummary,
 ): string {
   assertResults(results);
   assertMetadata(metadata);
@@ -148,6 +165,7 @@ export function generateMarkdownReport(
     metadata,
     comparisonMetrics,
     baselineComparison,
+    tokenReport,
   ) as JsonReport & RichJsonReport;
   const providers = collectProviders(report.results, report.metadata.providers);
   const lanes = collectLanes(report.results, report.metadata.lanes);
@@ -343,6 +361,10 @@ export function generateMarkdownReport(
         completenessRows,
       ),
     );
+  }
+
+  if (report.tokenReport !== undefined) {
+    sections.push('', ...buildTokenUsageMarkdown(report.tokenReport));
   }
 
   return `${sections.join('\n').trimEnd()}\n`;
@@ -1237,6 +1259,164 @@ function buildCompletenessRows(
   return rows;
 }
 
+function shouldEmitTokenReport(
+  tokenReport: TokenReportSummary | undefined,
+): tokenReport is TokenReportSummary {
+  return tokenReport !== undefined && tokenReport.grandTotal.trials > 0;
+}
+
+function buildTokenUsageMarkdown(tokenReport: TokenReportSummary): string[] {
+  const sections = [
+    '## Token usage',
+    '',
+    '### Grand total',
+    '',
+    buildMarkdownTable(
+      ['Input', 'Output', 'Total', 'Cached', 'Trials'],
+      ['right', 'right', 'right', 'right', 'right'],
+      [
+        [
+          String(tokenReport.grandTotal.inputTokens),
+          String(tokenReport.grandTotal.outputTokens),
+          String(tokenReport.grandTotal.totalTokens),
+          formatOptionalTokenCount(tokenReport.grandTotal.cachedTokens),
+          String(tokenReport.grandTotal.trials),
+        ],
+      ],
+    ),
+    '',
+    '### Per lane',
+    '',
+  ];
+
+  if (tokenReport.perLane.length === 0) {
+    sections.push('- None.');
+  } else {
+    sections.push(
+      buildMarkdownTable(
+        ['Lane', 'Input', 'Output', 'Total', 'Cached', 'Trials'],
+        ['left', 'right', 'right', 'right', 'right', 'right'],
+        tokenReport.perLane.map((entry) => [
+          `\`${sanitizeInline(entry.lane)}\``,
+          String(entry.inputTokens),
+          String(entry.outputTokens),
+          String(entry.totalTokens),
+          formatOptionalTokenCount(entry.cachedTokens),
+          String(entry.trials),
+        ]),
+      ),
+    );
+  }
+
+  sections.push('', '### Per case', '');
+  if (tokenReport.perCase.length === 0) {
+    sections.push('- None.');
+  } else {
+    sections.push(
+      buildMarkdownTable(
+        [
+          'Lane',
+          'Case',
+          'Condition',
+          'Input',
+          'Output',
+          'Total',
+          'Cached',
+          'Trials',
+        ],
+        ['left', 'left', 'left', 'right', 'right', 'right', 'right', 'right'],
+        tokenReport.perCase.map((entry) => [
+          `\`${sanitizeInline(entry.lane)}\``,
+          `\`${sanitizeInline(entry.caseId)}\``,
+          `\`${sanitizeInline(entry.condition)}\``,
+          String(entry.inputTokens),
+          String(entry.outputTokens),
+          String(entry.totalTokens),
+          formatOptionalTokenCount(entry.cachedTokens),
+          String(entry.trials),
+        ]),
+      ),
+    );
+  }
+
+  if (tokenReport.snapshotCheck !== undefined) {
+    sections.push('', '### Snapshot check', '');
+    sections.push(
+      `- Regression threshold: ${formatPercentValue(tokenReport.snapshotCheck.regressionThresholdPercent)}`,
+    );
+    if (tokenReport.snapshotCheck.summary.regressed > 0) {
+      sections.push(
+        `- Warning: ${String(tokenReport.snapshotCheck.summary.regressed)} regressed snapshot case(s) exceeded the threshold.`,
+      );
+    }
+    sections.push(
+      '',
+      buildMarkdownTable(
+        ['Total', 'New', 'Orphaned', 'Unchanged', 'Improved', 'Regressed'],
+        ['right', 'right', 'right', 'right', 'right', 'right'],
+        [
+          [
+            String(tokenReport.snapshotCheck.summary.total),
+            String(tokenReport.snapshotCheck.summary.new),
+            String(tokenReport.snapshotCheck.summary.orphaned),
+            String(tokenReport.snapshotCheck.summary.unchanged),
+            String(tokenReport.snapshotCheck.summary.improved),
+            String(tokenReport.snapshotCheck.summary.regressed),
+          ],
+        ],
+      ),
+      '',
+    );
+
+    if (tokenReport.snapshotCheck.cases.length === 0) {
+      sections.push('- None.');
+    } else {
+      sections.push(
+        buildMarkdownTable(
+          [
+            'Provider',
+            'Model',
+            'Lane',
+            'Case',
+            'Condition',
+            'Outcome',
+            'Current',
+            'Snapshot',
+            'Delta',
+            'Delta %',
+          ],
+          [
+            'left',
+            'left',
+            'left',
+            'left',
+            'left',
+            'left',
+            'right',
+            'right',
+            'right',
+            'right',
+          ],
+          tokenReport.snapshotCheck.cases.map((entry) => [
+            `\`${sanitizeInline(entry.provider)}\``,
+            `\`${sanitizeInline(entry.model)}\``,
+            `\`${entry.lane}\``,
+            `\`${sanitizeInline(entry.caseId)}\``,
+            `\`${entry.condition}\``,
+            `\`${entry.outcome}\``,
+            formatOptionalTokenCount(entry.currentTotalTokens),
+            formatOptionalTokenCount(entry.snapshotTotalTokens),
+            formatOptionalSignedCount(entry.deltaTokens),
+            formatOptionalPercentValue(entry.deltaPercent),
+          ]),
+        ),
+      );
+    }
+  }
+
+  return sections;
+}
+
 function summarizeAntiPatterns(results: EvalResult[]): AntiPatternSummaryRow[] {
   const summaries = new Map<
     string,
@@ -1446,6 +1626,22 @@ function formatPercent(value: number): string {
 
 function formatScore(value: number): string {
   return value.toFixed(3);
+}
+
+function formatPercentValue(value: number): string {
+  return `${value.toFixed(1)}%`;
+}
+
+function formatOptionalTokenCount(value: number | undefined): string {
+  return value === undefined ? '—' : String(value);
+}
+
+function formatOptionalSignedCount(value: number | undefined): string {
+  return value === undefined ? '—' : String(value);
+}
+
+function formatOptionalPercentValue(value: number | undefined): string {
+  return value === undefined ? '—' : formatPercentValue(value);
 }
 
 function formatConfidenceInterval(
