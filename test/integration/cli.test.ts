@@ -158,7 +158,7 @@ describe('CLI integration', () => {
     );
   });
 
-  it('makes the bundled skill guidance prominent in top-level help', () => {
+  it('makes the bundled skill guidance prominent and discoverable in top-level help', () => {
     const result = runCli(['--help'], testEnv());
 
     expect(result.status).toBe(0);
@@ -171,7 +171,7 @@ describe('CLI integration', () => {
     expect(result.stdout).not.toContain('skill [options]');
     expect(result.stdout).not.toContain('`agent-tty skill`');
     expect(result.stdout).toContain(
-      'Coding agents: use the preloaded `agent-tty` skill when available; otherwise call `agent-tty skills get agent-tty` before using session commands.',
+      'Coding agents: after loading the core `agent-tty` skill, run `agent-tty skills list` to discover other bundled skills and `agent-tty skills get <name>` to load one.',
     );
   });
 

@@ -112,7 +112,7 @@ function wrapAction<Args extends unknown[]>(
 const CODING_AGENT_HELP_INTRO =
   'MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get agent-tty` before any other agent-tty command.';
 const CODING_AGENT_HELP_OUTRO =
-  'Coding agents: use the preloaded `agent-tty` skill when available; otherwise call `agent-tty skills get agent-tty` before using session commands.';
+  'Coding agents: after loading the core `agent-tty` skill, run `agent-tty skills list` to discover other bundled skills and `agent-tty skills get <name>` to load one.';
 
 async function main(): Promise<void> {
   const program = new Command()
