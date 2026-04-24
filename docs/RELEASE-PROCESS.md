@@ -25,6 +25,9 @@
 4. Review [`../dogfood/CATALOG.md`](../dogfood/CATALOG.md) and make sure the release-signoff bundle is current and easy to find.
 5. Confirm the published package metadata still points at `agent-tty` and the public GitHub repository.
 6. Remember that `main` is protected: release changes must land through a pull request, and the release tag must be created only after that PR is merged.
+7. Confirm release-note automation has an LLM provider secret available in GitHub Actions:
+   - default/recommended: `ANTHROPIC_API_KEY`
+   - OpenAI-compatible fallback: `OPENAI_API_KEY` plus a repository variable named `COMMUNIQUE_MODEL`
 
 ## GitHub CLI readiness
 
@@ -46,6 +49,12 @@ Preferred local validation uses `mise`:
 mise run ci
 ```
 
+GitHub Actions installs mise-managed tools from the committed [`../mise.lock`](../mise.lock) with `--locked`. If `mise.toml` tool versions or supported CI platforms change, regenerate the lock before opening the release PR:
+
+```bash
+mise lock
+```
+
 If `mise` is unavailable, run:
 
 ```bash
@@ -58,7 +67,7 @@ If the public bootstrap under `skills/` or the bundled runtime skills under `ski
 npm run intent:validate
 ```
 
-`mise run ci` exercises formatting, lint, typecheck, tests, build, and the install smoke. The install smoke validates the shared release tarball packer plus the required tarball install route before any publish step runs.
+`mise run ci` exercises formatting, GitHub Actions workflow linting, lint, typecheck, tests, build, and the install smoke. The install smoke validates the shared release tarball packer plus the required tarball install route before any publish step runs.
 
 ## Prepare the release asset locally (optional but recommended)
 
@@ -99,13 +108,11 @@ git pull origin main
 
 ### Stable release examples
 
-Create a release branch, bump the version **without tagging**, and commit the result:
+Create a release branch and bump the version **without tagging**:
 
 ```bash
 git switch -c release/0.1.1
 npm version patch --no-git-tag-version
-git add package.json package-lock.json
-git commit -m "chore(release): 0.1.1"
 ```
 
 You can also choose the exact stable version explicitly:
@@ -121,8 +128,6 @@ First beta on the next patch line:
 ```bash
 git switch -c release/0.1.1-beta.0
 npm version prepatch --preid beta --no-git-tag-version
-git add package.json package-lock.json
-git commit -m "chore(release): 0.1.1-beta.0"
 ```
 
 Next beta on the same line:
@@ -140,6 +145,26 @@ npm version 0.1.1-rc.0 --no-git-tag-version
 Versions containing a hyphen, such as `-beta.0` or `-rc.0`, are published by the workflow as GitHub prereleases and published to the matching npm dist-tag (`beta`, `rc`, and so on).
 
 ### Open the release PR
+
+Release branches named `release/*` are watched by the `Release Changelog` workflow. When `package.json` changes the package version and `CHANGELOG.md` does not already contain that version, the workflow runs:
+
+```bash
+communique generate "v<version>" --changelog --repo coder/agent-tty
+```
+
+and commits the resulting `CHANGELOG.md` update back to the release branch.
+When it pushes that bot commit, it dispatches the CI and skill-validation
+workflows for the updated release branch so protected-branch checks can run
+against the new head commit.
+
+If you want to inspect or update the changelog before opening the PR, run the same command locally after `npm version ... --no-git-tag-version` and include `CHANGELOG.md` in the release commit:
+
+```bash
+VERSION=$(node --input-type=module -e "import pkg from './package.json' with { type: 'json' }; process.stdout.write(pkg.version)")
+communique generate "v${VERSION}" --changelog --repo coder/agent-tty
+git add package.json package-lock.json CHANGELOG.md
+git commit -m "chore(release): ${VERSION}"
+```
 
 After the version bump is committed:
 
@@ -222,12 +247,14 @@ It triggers automatically on pushed `v*` tags, and it can also be rerun manually
 The workflow will:
 
 - resolve the release tag and check out that exact ref,
+- install mise-managed tools from the committed lock file,
 - verify the tagged commit is already reachable from the default branch,
 - validate that the tag matches the `package.json` version,
 - run `mise run ci`,
 - pack the verified tarball with `npm run pack:release`,
 - upload the tarball, checksum, and metadata JSON as workflow artifacts,
-- create or update the GitHub Release with the `.tgz` and `.sha256` assets attached,
+- generate Communique release notes for the tag,
+- create or update the GitHub Release with Communique notes plus the deterministic install/checksum block and the `.tgz` / `.sha256` assets attached,
 - and publish that same verified tarball to npm via trusted publishing on a GitHub-hosted runner.
 
 Stable releases publish with npm's default `latest` dist-tag.

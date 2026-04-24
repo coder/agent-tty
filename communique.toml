@@ -1,0 +1,26 @@
+system_extra = """
+Write direct, maintainer-focused release notes for a CLI project.
+Use plain Markdown with no emoji.
+Prioritize user-facing CLI behavior, automation-facing JSON or protocol changes,
+packaging and install changes, and artifact or renderer behavior.
+Call out breaking changes and migration notes prominently.
+Do not mention version-only release preparation commits unless they affect users.
+"""
+
+context = """
+agent-tty is a CLI-first terminal automation tool for AI agents and humans.
+It manages long-lived PTY-backed sessions and produces semantic snapshots,
+screenshots, asciicast recordings, and WebM exports.
+Release notes should be useful to automation consumers, package users, and
+maintainers validating GitHub Release and npm artifacts.
+"""
+
+[defaults]
+#model = "claude-opus-4-7"
+#max_tokens = 4096
+repo = "coder/agent-tty"
+#provider = "anthropic"
+#base_url = ""
+emoji = false
+verify_links = true
+match_style = true

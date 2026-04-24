@@ -1,0 +1,165 @@
+name: Release Changelog
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - package.json
+      - package-lock.json
+      - CHANGELOG.md
+      - communique.toml
+      - mise.lock
+      - mise.toml
+      - .github/workflows/release-changelog.yml
+
+permissions:
+  actions: write
+  contents: write
+  issues: read
+  pull-requests: read
+
+jobs:
+  update-changelog:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.head_ref, 'release/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          install_args: --locked
+
+      - name: Resolve release metadata
+        id: release-metadata
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \
+            "refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+
+          node --input-type=module <<'EOF'
+          import assert from 'node:assert/strict';
+          import { appendFileSync, readFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+
+          const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
+          assert(packageJson !== null && typeof packageJson === 'object', 'package.json must parse to an object');
+          assert(typeof packageJson.version === 'string' && packageJson.version.length > 0, 'package.json version must not be empty');
+
+          const basePackageJsonText = execFileSync(
+            'git',
+            ['show', `refs/remotes/origin/${process.env.BASE_REF}:package.json`],
+            { encoding: 'utf8' },
+          );
+          const basePackageJson = JSON.parse(basePackageJsonText);
+          assert(basePackageJson !== null && typeof basePackageJson === 'object', 'base package.json must parse to an object');
+
+          const packageVersion = packageJson.version;
+          const baseVersion = typeof basePackageJson.version === 'string' ? basePackageJson.version : '';
+          const releaseTag = `v${packageVersion}`;
+          const shouldRun = packageVersion !== baseVersion;
+
+          for (const [key, value] of Object.entries({
+            package_version: packageVersion,
+            release_tag: releaseTag,
+            should_run: String(shouldRun),
+          })) {
+            assert(typeof value === 'string' && value.length > 0, `${key} must not be empty`);
+            appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
+          }
+          EOF
+
+      - name: Check existing changelog entry
+        id: changelog-entry
+        if: steps.release-metadata.outputs.should_run == 'true'
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ steps.release-metadata.outputs.package_version }}
+          RELEASE_TAG: ${{ steps.release-metadata.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [[ -f CHANGELOG.md ]] && { grep -Fq "## [${RELEASE_TAG}]" CHANGELOG.md || grep -Fq "## [${PACKAGE_VERSION}]" CHANGELOG.md; }; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update CHANGELOG.md with Communique
+        if: >-
+          steps.release-metadata.outputs.should_run == 'true' &&
+          steps.changelog-entry.outputs.exists == 'false'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          COMMUNIQUE_MODEL: ${{ vars.COMMUNIQUE_MODEL }}
+          RELEASE_TAG: ${{ steps.release-metadata.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ANTHROPIC_API_KEY:-}" && -z "${OPENAI_API_KEY:-}" ]]; then
+            echo 'ANTHROPIC_API_KEY or OPENAI_API_KEY is required to generate release changelog entries with Communique.' >&2
+            exit 1
+          fi
+          if [[ -z "${ANTHROPIC_API_KEY:-}" && -z "${COMMUNIQUE_MODEL:-}" ]]; then
+            echo 'Set COMMUNIQUE_MODEL when using OPENAI_API_KEY so Communique can select an OpenAI-compatible model.' >&2
+            exit 1
+          fi
+
+          communique_args=()
+          if [[ -n "${COMMUNIQUE_MODEL:-}" ]]; then
+            communique_args+=(--model "$COMMUNIQUE_MODEL")
+          fi
+
+          communique generate "$RELEASE_TAG" \
+            --changelog \
+            --repo "$GITHUB_REPOSITORY" \
+            "${communique_args[@]}"
+
+      - name: Commit changelog update
+        id: commit_changelog
+        if: >-
+          steps.release-metadata.outputs.should_run == 'true' &&
+          steps.changelog-entry.outputs.exists == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release-metadata.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- CHANGELOG.md; then
+            echo 'CHANGELOG.md is already up to date.'
+            echo 'pushed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add CHANGELOG.md
+          git commit -m "docs: update changelog for ${RELEASE_TAG}"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" \
+            push "https://github.com/${GITHUB_REPOSITORY}.git" "HEAD:${GITHUB_HEAD_REF}"
+          echo 'pushed=true' >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch follow-up checks
+        if: steps.commit_changelog.outputs.pushed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run ci.yml --ref "$GITHUB_HEAD_REF"
+          gh workflow run validate-skills.yml --ref "$GITHUB_HEAD_REF"

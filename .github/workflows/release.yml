@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   prepare-release:
@@ -36,10 +36,12 @@ jobs:
       - name: Resolve release tag
         id: release-tag
         shell: bash
+        env:
+          WORKFLOW_DISPATCH_TAG: ${{ github.event.inputs.tag }}
         run: |
           set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" == 'workflow_dispatch' ]]; then
-            release_tag='${{ github.event.inputs.tag }}'
+            release_tag="${WORKFLOW_DISPATCH_TAG}"
           else
             release_tag="${GITHUB_REF_NAME}"
           fi
@@ -56,10 +58,11 @@ jobs:
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
 
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ steps.release-tag.outputs.release_tag }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Fetch default branch for release ancestry checks
         env:
@@ -81,7 +84,10 @@ jobs:
           fi
 
       - name: Set up mise
-        uses: jdx/mise-action@v3
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          cache: false
+          install_args: --locked
 
       - name: Install CI dependencies
         run: mise run bootstrap-ci
@@ -159,7 +165,7 @@ jobs:
           EOF
 
       - name: Upload release workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-assets-${{ steps.release-metadata.outputs.release_tag }}
           if-no-files-found: error
@@ -170,14 +176,91 @@ jobs:
 
   publish-github-release:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     needs: prepare-release
+    permissions:
+      contents: write
+      issues: read
+      pull-requests: read
     steps:
       - name: Download verified release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: release-assets-${{ needs.prepare-release.outputs.release_tag }}
           path: ${{ runner.temp }}/release-assets
+
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ needs.prepare-release.outputs.release_tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          cache: false
+          install_args: --locked
+
+      - name: Generate Communique release notes
+        id: communique_notes
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          COMMUNIQUE_MODEL: ${{ vars.COMMUNIQUE_MODEL }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+          COMMUNIQUE_NOTES_FILE: ${{ runner.temp }}/communique-notes.md
+          COMMUNIQUE_BODY_FILE: ${{ runner.temp }}/communique-body.md
+        run: |
+          set -euo pipefail
+          if [[ -z "${ANTHROPIC_API_KEY:-}" && -z "${OPENAI_API_KEY:-}" ]]; then
+            echo 'ANTHROPIC_API_KEY or OPENAI_API_KEY is required to generate GitHub Release notes with Communique.' >&2
+            exit 1
+          fi
+          if [[ -z "${ANTHROPIC_API_KEY:-}" && -z "${COMMUNIQUE_MODEL:-}" ]]; then
+            echo 'Set COMMUNIQUE_MODEL when using OPENAI_API_KEY so Communique can select an OpenAI-compatible model.' >&2
+            exit 1
+          fi
+
+          communique_args=()
+          if [[ -n "${COMMUNIQUE_MODEL:-}" ]]; then
+            communique_args+=(--model "$COMMUNIQUE_MODEL")
+          fi
+
+          communique generate "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --output "$COMMUNIQUE_NOTES_FILE" \
+            "${communique_args[@]}"
+
+          node --input-type=module <<'EOF'
+          import assert from 'node:assert/strict';
+          import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+
+          const releaseTag = process.env.RELEASE_TAG;
+          const notesPath = process.env.COMMUNIQUE_NOTES_FILE;
+          const bodyPath = process.env.COMMUNIQUE_BODY_FILE;
+          assert(typeof releaseTag === 'string' && releaseTag.length > 0, 'RELEASE_TAG must not be empty');
+          assert(typeof notesPath === 'string' && notesPath.length > 0, 'COMMUNIQUE_NOTES_FILE must not be empty');
+          assert(typeof bodyPath === 'string' && bodyPath.length > 0, 'COMMUNIQUE_BODY_FILE must not be empty');
+
+          const notes = readFileSync(notesPath, 'utf8').trimEnd();
+          assert(notes.length > 0, 'Communique notes must not be empty');
+
+          const lines = notes.split(/\r?\n/);
+          let releaseTitle = releaseTag;
+          let releaseBody = notes;
+          if (lines[0]?.startsWith('# ')) {
+            releaseTitle = lines[0].slice(2).trim();
+            releaseBody = lines.slice(1).join('\n').trimStart();
+          }
+
+          assert(releaseTitle.length > 0, 'Communique release title must not be empty');
+          assert(!releaseTitle.includes('\n'), 'Communique release title must be one line');
+          writeFileSync(bodyPath, `${releaseBody.trimEnd()}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `release_title=${releaseTitle}\n`);
+          EOF
 
       - name: Write release notes
         shell: bash
@@ -188,41 +271,78 @@ jobs:
           TARBALL_FILENAME: ${{ needs.prepare-release.outputs.tarball_filename }}
           CHECKSUM_FILENAME: ${{ needs.prepare-release.outputs.checksum_filename }}
           CHECKSUM_SHA256: ${{ needs.prepare-release.outputs.checksum_sha256 }}
+          COMMUNIQUE_BODY_FILE: ${{ runner.temp }}/communique-body.md
           RELEASE_NOTES_FILE: ${{ runner.temp }}/release-notes.md
         run: |
           set -euo pipefail
-          tarball_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${TARBALL_FILENAME}"
+          node --input-type=module <<'EOF'
+          import assert from 'node:assert/strict';
+          import { readFileSync, writeFileSync } from 'node:fs';
 
-          cat > "$RELEASE_NOTES_FILE" <<EOF
+          const communiqueBodyPath = process.env.COMMUNIQUE_BODY_FILE;
+          const releaseNotesPath = process.env.RELEASE_NOTES_FILE;
+          const releaseTag = process.env.RELEASE_TAG;
+          const packageName = process.env.PACKAGE_NAME;
+          const packageVersion = process.env.PACKAGE_VERSION;
+          const tarballFilename = process.env.TARBALL_FILENAME;
+          const checksumFilename = process.env.CHECKSUM_FILENAME;
+          const checksumSha256 = process.env.CHECKSUM_SHA256;
+          const githubServerUrl = process.env.GITHUB_SERVER_URL;
+          const githubRepository = process.env.GITHUB_REPOSITORY;
+
+          assert(typeof communiqueBodyPath === 'string' && communiqueBodyPath.length > 0, 'COMMUNIQUE_BODY_FILE must not be empty');
+          assert(typeof releaseNotesPath === 'string' && releaseNotesPath.length > 0, 'RELEASE_NOTES_FILE must not be empty');
+          assert(typeof releaseTag === 'string' && releaseTag.length > 0, 'RELEASE_TAG must not be empty');
+          assert(typeof packageName === 'string' && packageName.length > 0, 'PACKAGE_NAME must not be empty');
+          assert(typeof packageVersion === 'string' && packageVersion.length > 0, 'PACKAGE_VERSION must not be empty');
+          assert(typeof tarballFilename === 'string' && tarballFilename.length > 0, 'TARBALL_FILENAME must not be empty');
+          assert(typeof checksumFilename === 'string' && checksumFilename.length > 0, 'CHECKSUM_FILENAME must not be empty');
+          assert(typeof checksumSha256 === 'string' && checksumSha256.length > 0, 'CHECKSUM_SHA256 must not be empty');
+          assert(typeof githubServerUrl === 'string' && githubServerUrl.length > 0, 'GITHUB_SERVER_URL must not be empty');
+          assert(typeof githubRepository === 'string' && githubRepository.length > 0, 'GITHUB_REPOSITORY must not be empty');
+
+          const communiqueBody = readFileSync(communiqueBodyPath, 'utf8').trim();
+          assert(communiqueBody.length > 0, 'Communique release body must not be empty');
+
+          const tarballUrl = `${githubServerUrl}/${githubRepository}/releases/download/${releaseTag}/${tarballFilename}`;
+          const installNotes = `
           Install from npm once the trusted publish job for this workflow completes:
 
-          ```bash
-          npm install -g "${PACKAGE_NAME}@${PACKAGE_VERSION}"
+          \`\`\`bash
+          npm install -g "${packageName}@${packageVersion}"
           agent-tty version --json
-          ```
+          \`\`\`
 
           If you need a registry-independent fallback, install the verified tarball asset from this release directly:
 
-          ```bash
-          VERSION=${PACKAGE_VERSION}
-          RELEASE_TAG=${RELEASE_TAG}
-          TARBALL_URL=${tarball_url}
+          \`\`\`bash
+          VERSION=${packageVersion}
+          RELEASE_TAG=${releaseTag}
+          TARBALL_URL=${tarballUrl}
 
           npm install -g "$TARBALL_URL"
           agent-tty version --json
-          ```
+          \`\`\`
 
           For private releases or environments that require authenticated downloads, fetch the asset first and then install locally:
 
-          ```bash
-          gh release download "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --pattern "${TARBALL_FILENAME}"
-          npm install -g "./${TARBALL_FILENAME}"
+          \`\`\`bash
+          gh release download "${releaseTag}" --repo "${githubRepository}" --pattern "${tarballFilename}"
+          npm install -g "./${tarballFilename}"
           agent-tty version --json
-          ```
+          \`\`\`
 
-          SHA-256 checksum: `${CHECKSUM_SHA256}` (see `${CHECKSUM_FILENAME}` for the portable checksum file).
+          SHA-256 checksum: \`${checksumSha256}\` (see \`${checksumFilename}\` for the portable checksum file).
 
           This workflow prepares one verified tarball and reuses it across GitHub Release assets and npm publishing instead of rebuilding it.
+          `
+            .split('\n')
+            .map((line) => line.replace(/^          /, ''))
+            .join('\n')
+            .trim();
+          assert(installNotes.length > 0, 'install notes must not be empty');
+
+          writeFileSync(releaseNotesPath, `${communiqueBody}\n\n---\n\n${installNotes}\n`);
           EOF
 
       - name: Create or update GitHub Release
@@ -232,6 +352,7 @@ jobs:
           RELEASE_DIR: ${{ runner.temp }}/release-assets
           RELEASE_NOTES_FILE: ${{ runner.temp }}/release-notes.md
           RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+          RELEASE_TITLE: ${{ steps.communique_notes.outputs.release_title }}
           PACKAGE_VERSION: ${{ needs.prepare-release.outputs.package_version }}
           TARBALL_FILENAME: ${{ needs.prepare-release.outputs.tarball_filename }}
           CHECKSUM_FILENAME: ${{ needs.prepare-release.outputs.checksum_filename }}
@@ -246,7 +367,7 @@ jobs:
             gh release edit \
               "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
-              --title "$RELEASE_TAG" \
+              --title "$RELEASE_TITLE" \
               --notes-file "$RELEASE_NOTES_FILE"
             gh release upload \
               "$RELEASE_TAG" \
@@ -261,7 +382,7 @@ jobs:
               "$RELEASE_DIR/$CHECKSUM_FILENAME" \
               --repo "$GITHUB_REPOSITORY" \
               --verify-tag \
-              --title "$RELEASE_TAG" \
+              --title "$RELEASE_TITLE" \
               --notes-file "$RELEASE_NOTES_FILE" \
               "${create_flags[@]}"
           fi
@@ -275,15 +396,16 @@ jobs:
       id-token: write
     steps:
       - name: Download verified release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: release-assets-${{ needs.prepare-release.outputs.release_tag }}
           path: ${{ runner.temp }}/release-assets
 
       - name: Set up Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '24'
+          package-manager-cache: false
           registry-url: 'https://registry.npmjs.org'
 
       - name: Publish verified tarball to npm
