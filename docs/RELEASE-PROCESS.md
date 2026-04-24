@@ -1,6 +1,6 @@
 # Release process
 
-`RELEASE.md` defines the shipping contract. This document describes how maintainers should validate, version, tag, and publish that contract on GitHub Releases and npm.
+[`../RELEASE.md`](../RELEASE.md) defines the supported product contract. This document is the canonical maintainer process for validating, versioning, tagging, and publishing that contract on GitHub Releases and npm.
 
 ## One-time npm trusted publishing setup
 
@@ -146,7 +146,14 @@ Versions containing a hyphen, such as `-beta.0` or `-rc.0`, are published by the
 
 ### Open the release PR
 
-Release branches named `release/*` are watched by the `Release Changelog` workflow. When `package.json` changes the package version and `CHANGELOG.md` does not already contain that version, the workflow runs:
+Release branches named `release/*` are watched by the `Release Changelog` workflow. The default path is to commit only the version bump, then let that workflow add `CHANGELOG.md` if needed:
+
+```bash
+git add package.json package-lock.json
+git commit -m "chore(release): <version>"
+```
+
+When `package.json` changes the package version and `CHANGELOG.md` does not already contain that version, the workflow runs:
 
 ```bash
 communique generate "v<version>" --changelog --repo coder/agent-tty
@@ -157,7 +164,7 @@ When it pushes that bot commit, it dispatches the CI and skill-validation
 workflows for the updated release branch so protected-branch checks can run
 against the new head commit.
 
-If you want to inspect or update the changelog before opening the PR, run the same command locally after `npm version ... --no-git-tag-version` and include `CHANGELOG.md` in the release commit:
+If you want to inspect or update the changelog before opening the PR, run the same command locally after `npm version ... --no-git-tag-version` and include `CHANGELOG.md` in the release commit instead:
 
 ```bash
 VERSION=$(node --input-type=module -e "import pkg from './package.json' with { type: 'json' }; process.stdout.write(pkg.version)")
@@ -166,7 +173,7 @@ git add package.json package-lock.json CHANGELOG.md
 git commit -m "chore(release): ${VERSION}"
 ```
 
-After the version bump is committed:
+After committing either the default version bump or the local changelog variant:
 
 ```bash
 git push -u origin <release-branch>
