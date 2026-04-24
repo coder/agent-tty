@@ -2,6 +2,7 @@
   "name": "agent-tty",
   "version": "0.1.1-beta.3",
   "description": "Terminal automation CLI for AI agents and humans",
+  "license": "Apache-2.0",
   "keywords": [
     "terminal",
     "tui",

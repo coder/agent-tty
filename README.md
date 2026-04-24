@@ -201,5 +201,4 @@ For contributor details, see [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md).
 
 ## License
 
-This repository does not currently declare a project license.
-Add a root `LICENSE` file and `package.json` `license` field before relying on broader redistribution terms.
+`agent-tty` is licensed under the [Apache License 2.0](./LICENSE).
