@@ -20,7 +20,7 @@
   "type": "module",
   "packageManager": "npm@11.9.0",
   "engines": {
-    "node": ">=24.0.0 <25"
+    "node": ">=24.0.0 <26"
   },
   "bin": {
     "agent-tty": "./dist/cli/main.js"

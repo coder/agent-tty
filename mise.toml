@@ -1,8 +1,10 @@
 [tools]
-# CI intentionally tracks major tool versions for v1; we are not committing a
-# mise.lock file yet because the current quality gates only require stable major
-# versions in automation.
-node = "24"
+actionlint = "1.7.12"
+communique = "1.0.3"
+zizmor = "1.24.1"
+# CI installs with `mise install --locked`, so update mise.lock whenever tool
+# versions or supported CI platforms change.
+node = "25"
 python = "3"
 
 [tasks.bootstrap]
@@ -20,7 +22,12 @@ run = "npm run clean"
 [tasks.build]
 description = "Build"
 run = "npm run build"
-sources = ["src/**/*.ts", "tsconfig.json", "tsconfig.build.json", "package.json"]
+sources = [
+  "src/**/*.ts",
+  "tsconfig.json",
+  "tsconfig.build.json",
+  "package.json",
+]
 outputs = ["dist/**/*.js", "dist/**/*.d.ts", "dist/**/*.map"]
 
 [tasks.install-smoke]
@@ -61,22 +68,27 @@ sources = [
   "src/**/*.ts",
   "test/**/*.ts",
   "*.json",
+  "mise.lock",
   "*.mjs",
   "*.toml",
   "*.md",
   "design/**/*.md",
 ]
 
+[tasks.workflow-lint]
+description = "Lint GitHub Actions workflows"
+run = "actionlint && zizmor --offline ."
+sources = [
+  ".github/workflows/**/*.yml",
+  ".github/workflows/**/*.yaml",
+  "zizmor.yml",
+]
+
 [tasks.test]
 description = "Test"
 run = "npm run test"
-sources = [
-  "src/**/*.ts",
-  "test/**/*.ts",
-  "vitest.config.ts",
-  "package.json",
-]
+sources = ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts", "package.json"]
 
 [tasks.ci]
 description = "Run CI checks"
-run = "mise run format-check && mise run lint && mise run typecheck && mise run test && mise run build && mise run install-smoke"
+run = "mise run format-check && mise run workflow-lint && mise run lint && mise run typecheck && mise run test && mise run build && mise run install-smoke"
