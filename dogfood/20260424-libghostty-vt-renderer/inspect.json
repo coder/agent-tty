@@ -9,11 +9,7 @@
       "createdAt": "2026-04-24T19:31:44.666Z",
       "updatedAt": "2026-04-24T19:31:56.928Z",
       "status": "exited",
-      "command": [
-        "npx",
-        "tsx",
-        "test/fixtures/apps/hello-prompt/main.ts"
-      ],
+      "command": ["npx", "tsx", "test/fixtures/apps/hello-prompt/main.ts"],
       "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_2d8f238d80",
       "name": "phase6-libghostty-vt",
       "shell": "/bin/bash",
