@@ -110,7 +110,7 @@ agent-tty --home "$AGENT_HOME" destroy "$SESSION_ID" --json
 
 ## Documentation map
 
-- [`RELEASE.md`](./RELEASE.md) — the current `0.1.0` release contract.
+- [`RELEASE.md`](./RELEASE.md) — the supported release contract for the `0.1.x` line.
 - [`ROADMAP.md`](./ROADMAP.md) — intentionally deferred work and post-release direction.
 - [`design/README.md`](./design/README.md) — architecture references plus archived week-by-week planning.
 - [`dogfood/CATALOG.md`](./dogfood/CATALOG.md) — curated proof bundles and recommended review paths.
@@ -124,10 +124,10 @@ agent-tty --home "$AGENT_HOME" destroy "$SESSION_ID" --json
 - Recording export to asciicast (`.cast`) or WebM for artifact bundles.
 - Failure recovery via reconciliation, stale-session cleanup, and retained manifests/artifacts.
 
-## 0.1.0 release focus
+## Release contract
 
-`agent-tty` `0.1.0` is the first release aimed at reliable, isolated, reviewable TUI automation.
-For the explicit shipping contract, see [`RELEASE.md`](./RELEASE.md). For intentionally deferred work, see [`ROADMAP.md`](./ROADMAP.md).
+The `0.1.x` release line is centered on reliable, isolated, reviewable TUI automation.
+For the explicit support contract, see [`RELEASE.md`](./RELEASE.md). For intentionally deferred work, see [`ROADMAP.md`](./ROADMAP.md).
 Reviewer-facing proof bundles are curated in [`dogfood/CATALOG.md`](./dogfood/CATALOG.md), with current release-signoff evidence in `dogfood/20260326-week9-release-readiness/` and evergreen workflow coverage such as `dogfood/run-command/`.
 
 ## TUI Workflow

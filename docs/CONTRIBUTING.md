@@ -49,7 +49,7 @@ npm run intent:validate
 
 ## Documentation and proof expectations
 
-- Keep the root docs split clear: `README.md` for overview, `RELEASE.md` for current scope, `ROADMAP.md` for future scope.
+- Keep the root docs split clear: `README.md` for overview, `RELEASE.md` for supported scope, `ROADMAP.md` for future scope.
 - Update [`design/README.md`](../design/README.md) when the active vs archived design split changes.
 - Keep the skill split clear in docs and packaging notes: `skills/` contains the thin public bootstrap, while `skill-data/` contains the canonical runtime skills served by `agent-tty skills get`.
 - Update [`dogfood/CATALOG.md`](../dogfood/CATALOG.md) when you add or promote a reviewer-facing proof bundle.
