@@ -77,6 +77,7 @@ const TEST_CONTEXT = {
   logLevel: 'info',
   logger: createLogger('info', () => undefined),
   profileDefault: undefined,
+  rendererDefault: 'ghostty-web',
   configFile: null,
 } as const;
 const TEST_SCREENSHOT_SHA256 = 'a'.repeat(64);
@@ -222,7 +223,7 @@ describe('screenshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'screenshot',
-      { profile: 'reference-dark' },
+      { profile: 'reference-dark', rendererName: 'ghostty-web' },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'screenshot',
@@ -260,7 +261,11 @@ describe('screenshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'screenshot',
-      { profile: 'reference-dark', showCursor: true },
+      {
+        profile: 'reference-dark',
+        rendererName: 'ghostty-web',
+        showCursor: true,
+      },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -289,7 +294,7 @@ describe('screenshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'screenshot',
-      { profile: 'configured-profile' },
+      { profile: 'configured-profile', rendererName: 'ghostty-web' },
     );
   });
 
@@ -315,7 +320,7 @@ describe('screenshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'screenshot',
-      { profile: 'reference-light' },
+      { profile: 'reference-light', rendererName: 'ghostty-web' },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'screenshot',
@@ -354,6 +359,7 @@ describe('screenshot command', () => {
       {
         sessionDir: '/tmp/agent-tty/sessions/session-01',
         profileName: 'reference-dark',
+        rendererName: 'ghostty-web',
       },
       expect.any(Function),
     );
@@ -489,7 +495,7 @@ describe('screenshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'screenshot',
-      { profile: 'reference-dark' },
+      { profile: 'reference-dark', rendererName: 'ghostty-web' },
     );
     expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledTimes(1);
     expect(mocks.emitSuccess).toHaveBeenCalledWith(

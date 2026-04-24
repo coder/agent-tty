@@ -79,5 +79,8 @@
     "playwright": "1.58.2",
     "ulid": "3.0.2",
     "zod": "4.3.6"
+  },
+  "optionalDependencies": {
+    "@coder/libghostty-vt-node": "0.1.0-beta.0"
   }
 }

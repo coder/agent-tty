@@ -130,11 +130,12 @@ function parseScreenshotResult(
 
 async function runOfflineScreenshot(
   sessionDirectory: string,
+  rendererName: CommandContext['rendererDefault'],
   profile: string,
   showCursor: boolean | undefined,
 ): Promise<ScreenshotResult> {
   return withOfflineReplayRenderer(
-    { sessionDir: sessionDirectory, profileName: profile },
+    { sessionDir: sessionDirectory, profileName: profile, rendererName },
     async ({ backend, manifest }) => {
       await ensureArtifactsDir(sessionDirectory);
       const temporaryOutputPath = artifactPath(
@@ -258,6 +259,7 @@ export async function runScreenshotCommand(
     try {
       rawResult = await sendRpc(socketPath(sessionDirectory), 'screenshot', {
         profile,
+        rendererName: options.context.rendererDefault,
         ...(showCursor === undefined ? {} : { showCursor }),
       });
     } catch (error) {
@@ -270,6 +272,7 @@ export async function runScreenshotCommand(
 
       rawResult = await runOfflineScreenshot(
         sessionDirectory,
+        options.context.rendererDefault,
         profile,
         showCursor,
       );
@@ -278,6 +281,7 @@ export async function runScreenshotCommand(
   } else {
     rawResult = await runOfflineScreenshot(
       sessionDirectory,
+      options.context.rendererDefault,
       profile,
       showCursor,
     );

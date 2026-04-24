@@ -172,13 +172,14 @@ function buildOfflineRenderWaitResult(
 
 async function runOfflineRenderWait(
   sessionDirectory: string,
+  rendererName: CommandContext['rendererDefault'],
   options: Pick<
     CommandOptions,
     'text' | 'regex' | 'screenStableMs' | 'cursorRow' | 'cursorCol'
   >,
 ): Promise<WaitForRenderResult> {
   return await withOfflineReplayRenderer(
-    { sessionDir: sessionDirectory },
+    { sessionDir: sessionDirectory, rendererName },
     async ({ backend }) => {
       const snapshot = await backend.snapshot({ includeScrollback: false });
       return buildOfflineRenderWaitResult(snapshot, options);
@@ -270,6 +271,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       cursorRow: options.cursorRow,
       cursorCol: options.cursorCol,
       timeoutMs: effectiveTimeout === 0 ? undefined : effectiveTimeout,
+      rendererName: options.context.rendererDefault,
     };
     const clientTimeout = effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
     let rawResult: unknown;
@@ -285,7 +287,11 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
         error instanceof CliError &&
         error.code === ERROR_CODES.HOST_UNREACHABLE
       ) {
-        rawResult = await runOfflineRenderWait(sessionDirectory, options);
+        rawResult = await runOfflineRenderWait(
+          sessionDirectory,
+          options.context.rendererDefault,
+          options,
+        );
       } else {
         throw error;
       }

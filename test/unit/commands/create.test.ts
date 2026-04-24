@@ -50,6 +50,7 @@ describe('create command', () => {
     logLevel: 'info',
     logger: createLogger('info', () => undefined),
     profileDefault: undefined,
+    rendererDefault: 'ghostty-web',
     configFile: null,
   } as const;
   const baseOptions = {

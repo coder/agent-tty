@@ -18,6 +18,7 @@ export const ConfigFileSchema = z
   .object({
     logLevel: z.enum(['debug', 'info', 'warn', 'error']).optional(),
     defaultProfile: z.string().optional(),
+    defaultRenderer: z.string().optional(),
     defaultShell: z.string().optional(),
     defaultTerm: z.string().optional(),
     defaultCols: z.number().int().positive().optional(),

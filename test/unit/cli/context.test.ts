@@ -21,6 +21,7 @@ import {
   parseTimeoutMsOption,
   resolveCommandContext,
   resolveLogLevel,
+  resolveRendererDefault,
   setCommandContext,
 } from '../../../src/cli/context.js';
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
@@ -140,6 +141,45 @@ describe('CLI context resolution', () => {
     ).resolves.toMatchObject({ profileDefault: undefined });
   });
 
+  it('resolves rendererDefault from flag, env, config, and default precedence', async () => {
+    mocks.loadConfigFile.mockResolvedValue({
+      defaultRenderer: 'libghostty-vt',
+    });
+
+    await expect(
+      resolveCommandContext(
+        { home: TEST_FLAG_HOME, renderer: 'ghostty-web' },
+        {},
+      ),
+    ).resolves.toMatchObject({ rendererDefault: 'ghostty-web' });
+    await expect(
+      resolveCommandContext(
+        { home: TEST_FLAG_HOME },
+        {
+          AGENT_TTY_HOME: TEST_ENV_HOME,
+          AGENT_TTY_RENDERER: 'ghostty-web',
+        },
+      ),
+    ).resolves.toMatchObject({ rendererDefault: 'ghostty-web' });
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME }, {}),
+    ).resolves.toMatchObject({ rendererDefault: 'libghostty-vt' });
+
+    mocks.loadConfigFile.mockResolvedValue(null);
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME }, {}),
+    ).resolves.toMatchObject({ rendererDefault: 'ghostty-web' });
+  });
+
+  it('rejects invalid renderer names', async () => {
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME, renderer: 'canvas' }, {}),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      message: 'Renderer must be one of: ghostty-web, libghostty-vt.',
+    });
+  });
+
   it('keeps resolving when the config file is missing', async () => {
     mocks.loadConfigFile.mockResolvedValue(null);
 
@@ -173,6 +213,7 @@ describe('CLI context resolution', () => {
       logLevel: 'info' as const,
       logger: createLogger('info', () => undefined),
       profileDefault: 'default-profile',
+      rendererDefault: 'ghostty-web',
       configFile: null,
     });
     setCommandContext(command, cachedContext);
@@ -198,6 +239,17 @@ describe('CLI context resolution', () => {
     expect(() => parseTimeoutMsOption('12.5')).toThrow(
       expect.objectContaining({
         code: ERROR_CODES.INVALID_DURATION,
+      }),
+    );
+  });
+
+  it('resolves and validates renderer names', () => {
+    expect(resolveRendererDefault()).toBe('ghostty-web');
+    expect(resolveRendererDefault('libghostty-vt')).toBe('libghostty-vt');
+    expect(() => resolveRendererDefault('canvas')).toThrow(
+      expect.objectContaining({
+        code: ERROR_CODES.INVALID_INPUT,
+        message: 'Renderer must be one of: ghostty-web, libghostty-vt.',
       }),
     );
   });

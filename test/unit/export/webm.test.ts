@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { VideoCapableRendererBackend } from '../../../src/renderer/backend.js';
+import type {
+  VideoCapableRendererBackend,
+  VideoRecordingOptions,
+} from '../../../src/renderer/backend.js';
 import type {
   EventRecord,
   SessionRecord,
 } from '../../../src/protocol/schemas.js';
+import type { RenderProfileConfig } from '../../../src/renderer/types.js';
 
 const mocks = vi.hoisted(() => ({
   buildReplayInput: vi.fn(),
@@ -173,6 +177,7 @@ describe('generateWebmExport', () => {
     });
     const backendFactory = vi.fn(
       (
+        rendererName: 'ghostty-web' | 'libghostty-vt',
         sessionId: string,
         profile: { fontSize: number; name: string },
         videoOptions: {
@@ -183,6 +188,7 @@ describe('generateWebmExport', () => {
           };
         },
       ) => {
+        void rendererName;
         void sessionId;
         void profile;
         void videoOptions;
@@ -216,8 +222,14 @@ describe('generateWebmExport', () => {
       return;
     }
 
-    const [backendSessionId, backendProfile, videoOptions] = backendCall;
+    const [
+      backendRendererName,
+      backendSessionId,
+      backendProfile,
+      videoOptions,
+    ] = backendCall;
 
+    expect(backendRendererName).toBe('ghostty-web');
     expect(backendSessionId).toBe('session-01');
     expect(backendProfile).toMatchObject({
       fontSize: 16,
@@ -258,7 +270,50 @@ describe('generateWebmExport', () => {
       rows: 24,
       profileName: 'reference-dark',
       timingMode: 'accelerated',
+      rendererBackend: 'ghostty-web',
     });
+  });
+
+  it('falls back to ghostty-web when libghostty-vt is requested', async () => {
+    const mockBackend = createMockBackend();
+    const backendFactory = vi.fn(
+      (
+        rendererName: 'ghostty-web' | 'libghostty-vt',
+        sessionId: string,
+        profile: RenderProfileConfig,
+        videoOptions: VideoRecordingOptions,
+      ) => {
+        void rendererName;
+        void sessionId;
+        void profile;
+        void videoOptions;
+        return mockBackend.backend;
+      },
+    );
+
+    const result = await generateWebmExport(
+      {
+        sessionId: 'session-01',
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
+        manifest: createManifest(),
+        events: createEvents(),
+        outputPath: '/tmp/exports/recording-1-webm.webm',
+        rendererName: 'libghostty-vt',
+      },
+      { backendFactory },
+    );
+
+    const backendFactoryCall = backendFactory.mock.calls[0];
+    expect(backendFactoryCall).toBeDefined();
+    if (backendFactoryCall === undefined) {
+      throw new Error('expected backendFactory to be called');
+    }
+    const [rendererName, sessionId, profile, videoOptions] = backendFactoryCall;
+    expect(rendererName).toBe('ghostty-web');
+    expect(sessionId).toBe('session-01');
+    expect(profile).toMatchObject({ name: 'reference-dark' });
+    expect(videoOptions.outputDir).toContain('agent-tty-webm-');
+    expect(result.rendererBackend).toBe('ghostty-web');
   });
 
   it('passes recorded timing options when timingMode is recorded', async () => {

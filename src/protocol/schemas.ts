@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { RendererNameSchema } from '../renderer/names.js';
+
 const NonEmptyStringSchema = z.string().min(1);
 const TextMatchSchema = z.string().min(1).max(1000);
 const RegexPatternSchema = z.string().min(1).max(200);
@@ -295,6 +297,7 @@ export const SnapshotParamsSchema = z
     format: SnapshotFormatSchema.optional(),
     includeScrollback: z.boolean().optional(),
     includeCells: z.boolean().optional(),
+    rendererName: RendererNameSchema.optional(),
   })
   .strict();
 export type SnapshotParams = z.infer<typeof SnapshotParamsSchema>;
@@ -342,6 +345,7 @@ export const ScreenshotParamsSchema = z
   .object({
     profile: ProfileNameSchema.optional(),
     showCursor: z.boolean().optional(),
+    rendererName: RendererNameSchema.optional(),
   })
   .strict();
 export type ScreenshotParams = z.infer<typeof ScreenshotParamsSchema>;
@@ -373,6 +377,7 @@ export const WaitForRenderParamsSchema = z
     cursorRow: NonNegativeIntSchema.optional(),
     cursorCol: NonNegativeIntSchema.optional(),
     timeoutMs: PositiveIntSchema.optional(),
+    rendererName: RendererNameSchema.optional(),
   })
   .strict()
   .superRefine((value, ctx) => {

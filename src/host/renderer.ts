@@ -2,6 +2,8 @@ import { mkdirSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 
 import type { RendererBackend } from '../renderer/backend.js';
+import type { RendererName } from '../renderer/names.js';
+import { hashProfile } from '../renderer/profiles.js';
 import type { RenderProfileConfig, ReplayInput } from '../renderer/types.js';
 import { invariant } from '../util/assert.js';
 
@@ -9,9 +11,10 @@ interface HostRendererManagerOptions {
   sessionId: string;
   sessionDir: string;
   backendFactory: (
+    rendererName: RendererName,
     sessionId: string,
     profile: RenderProfileConfig,
-  ) => RendererBackend;
+  ) => RendererBackend | Promise<RendererBackend>;
 }
 
 function assertNonEmptyString(
@@ -35,7 +38,7 @@ export class HostRendererManager {
   private readonly backendFactory: HostRendererManagerOptions['backendFactory'];
 
   private currentBackend: RendererBackend | null = null;
-  private currentProfileName: string | null = null;
+  private currentBackendKey: string | null = null;
   private cachedInitialCols: number | null = null;
   private cachedInitialRows: number | null = null;
   private bootPromise: Promise<RendererBackend> | null = null;
@@ -56,9 +59,11 @@ export class HostRendererManager {
   }
 
   async getBackend(
+    rendererName: RendererName,
     profile: RenderProfileConfig,
     replayInput: ReplayInput | null,
   ): Promise<RendererBackend> {
+    assertNonEmptyString(rendererName, 'rendererName');
     assertNonEmptyString(profile.name, 'profile name');
 
     if (replayInput !== null) {
@@ -80,7 +85,7 @@ export class HostRendererManager {
         await this.disposeCurrentBackend();
       }
 
-      const backend = await this.ensureBackend(profile);
+      const backend = await this.ensureBackend(rendererName, profile);
 
       if (replayInput !== null && replayInput.targetSeq >= 0) {
         await backend.replayTo(replayInput);
@@ -133,20 +138,26 @@ export class HostRendererManager {
   }
 
   private async ensureBackend(
+    rendererName: RendererName,
     profile: RenderProfileConfig,
   ): Promise<RendererBackend> {
+    const backendKey = `${rendererName}:${hashProfile(profile)}`;
     const requiresReplacement =
       this.currentBackend === null ||
-      this.currentProfileName !== profile.name ||
+      this.currentBackendKey !== backendKey ||
       !this.currentBackend.isBooted;
 
     if (requiresReplacement) {
       await this.disposeCurrentBackend();
 
-      const backend = this.backendFactory(this.sessionId, profile);
+      const backend = await this.backendFactory(
+        rendererName,
+        this.sessionId,
+        profile,
+      );
 
       this.currentBackend = backend;
-      this.currentProfileName = profile.name;
+      this.currentBackendKey = backendKey;
     }
 
     invariant(this.currentBackend !== null, 'current backend must exist');
@@ -191,7 +202,7 @@ export class HostRendererManager {
     const backend = this.currentBackend;
 
     this.currentBackend = null;
-    this.currentProfileName = null;
+    this.currentBackendKey = null;
     this.cachedInitialCols = null;
     this.cachedInitialRows = null;
     this.bootPromise = null;
