@@ -1,0 +1,108 @@
+$ node --version
+v22.19.0
+
+$ npm --version
+10.9.3
+
+$ git rev-parse HEAD
+efee65ee798b41b1f176781f312fbbd0761a5af8
+
+$ git log --oneline -n 1
+efee65e feat(renderer): add selectable libghostty-vt backend
+
+$ uname -a
+Linux aaaaaaa 6.8.0-94-generic #96-Ubuntu SMP PREEMPT_DYNAMIC Fri Jan  9 20:36:55 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+$ npx tsx src/cli/main.ts --version
+error: unknown option '--version'
+
+MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get agent-tty` before any other agent-tty command.
+
+
+Usage: agent-tty [options] [command]
+
+CLI for managing and controlling terminal sessions
+
+Options:
+  --home <path>                               Override the agent-tty home directory
+  --timeout-ms <n>                            Set a shared CLI timeout in milliseconds
+  --no-color                                  Disable ANSI color in human-readable output
+  --log-level <level>                         Set log level (debug, info, warn, error)
+  --profile <name>                            Default render profile name
+  --renderer <name>                           Renderer backend (ghostty-web or libghostty-vt)
+  -h, --help                                  display help for command
+
+Commands:
+  skills                                      Manage built-in skills
+  version [options]                           Print version
+  doctor [options]                            Check env
+  create [options] [command...]               Create a session
+  list [options]                              List sessions
+  inspect [options] <session-id>              Inspect a session
+  destroy [options] <session-id>              Destroy a session
+  gc [options]                                Clean up stale or exited sessions
+  type [options] <session-id> [text]          Type text into a session
+  paste [options] <session-id> [text]         Paste text into a session
+  run [options] <session-id> [command]        Run a command in a session and optionally wait for completion
+  mark [options] <session-id> <label>         Add a marker to a session
+  send-keys [options] <session-id> <keys...>  Send keys to a session
+  resize [options] <session-id>               Resize a session
+  signal [options] <session-id> <signal>      Send a signal to a session
+  snapshot [options] <session-id>             Capture a terminal snapshot
+  screenshot [options] <session-id>           Capture a rendered screenshot
+  record                                      Manage recorded session artifacts
+  wait [options] <session-id>                 Wait for a session condition
+  help [command]                              display help for command
+
+Coding agents: after loading the core `agent-tty` skill, run `agent-tty skills list` to discover other bundled skills and `agent-tty skills get <name>` to load one.
+(command exited non-zero; use `npx tsx src/cli/main.ts version --json` for this CLI)
+
+$ npx tsx src/cli/main.ts version --json
+{
+  "ok": true,
+  "command": "version",
+  "timestamp": "2026-04-24T19:31:29.498Z",
+  "result": {
+    "cliVersion": "0.1.1-beta.3",
+    "protocolVersion": "0.1.0",
+    "rendererBackends": [
+      "ghostty-web"
+    ],
+    "runtime": {
+      "node": "v25.9.0",
+      "platform": "linux",
+      "arch": "x64"
+    },
+    "capabilities": [
+      {
+        "name": "snapshot",
+        "status": "available"
+      },
+      {
+        "name": "wait",
+        "status": "available"
+      },
+      {
+        "name": "screenshot",
+        "status": "available"
+      },
+      {
+        "name": "record-export-asciicast",
+        "status": "available"
+      },
+      {
+        "name": "record-export-webm",
+        "status": "available"
+      }
+    ]
+  }
+}
+
+$ node --input-type=module -e "import getNativeInfo"
+{
+  "napiVersion": 10,
+  "ghosttyVersion": "0.1.0-dev",
+  "packageVersion": "0.1.0-beta.0",
+  "platform": "linux",
+  "arch": "x64"
+}

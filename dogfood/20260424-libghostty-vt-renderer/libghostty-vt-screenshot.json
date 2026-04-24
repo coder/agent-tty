@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "command": "screenshot",
+  "timestamp": "2026-04-24T19:31:54.632Z",
+  "result": {
+    "sessionId": "01KQ0FM1WQ5ETGBNSYK93G0H8T",
+    "capturedAtSeq": 5,
+    "profileName": "reference-dark",
+    "cols": 80,
+    "rows": 24,
+    "artifactPath": "/tmp/agent-tty-dogfood.b67EGa/sessions/01KQ0FM1WQ5ETGBNSYK93G0H8T/artifacts/screenshot-5-reference-dark.png",
+    "pngSizeBytes": 6129,
+    "cursorVisible": false,
+    "rendererBackend": "ghostty-web",
+    "pixelWidth": 640,
+    "pixelHeight": 384,
+    "sha256": "6dd4625cea7d858b8b5250e748761771d387dca92d64feb272eff97ab0cb556e",
+    "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d"
+  }
+}

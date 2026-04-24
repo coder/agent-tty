@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-04-24T19:31:38.044Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "ECHO: Phase 6 renderer proof",
+    "cursorRow": 2,
+    "cursorCol": 7,
+    "capturedAtSeq": 6
+  }
+}

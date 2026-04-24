@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-04-24T19:31:40.986Z",
+  "result": {
+    "format": "text",
+    "sessionId": "01KQ0FKNNZPCPCRVXX2TN6E774",
+    "capturedAtSeq": 6,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 2,
+    "cursorCol": 7,
+    "text": "READY> Phase 6 renderer proof\nECHO: Phase 6 renderer proof\nREADY>\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  }
+}
