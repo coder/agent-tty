@@ -1,330 +1,205 @@
 # agent-tty
 
-`agent-tty` is a Node/TypeScript CLI for launching, controlling, inspecting, and exporting reviewable terminal sessions.
-It is built for agent workflows that need both semantic state and visual artifacts from live or exited TUIs.
+`agent-tty` is a CLI-first terminal automation tool for AI agents and humans.
+It creates long-lived PTY-backed sessions, lets automation drive and inspect those sessions across CLI invocations, and produces reviewable artifacts such as semantic snapshots, PNG screenshots, asciicast recordings, and WebM exports.
 
-## Installation
+The goal is to make terminal and TUI automation inspectable rather than only scriptable.
+It is inspired by the `agent-browser` style of agent workflow: give an agent a stateful environment, explicit wait/inspect primitives, and evidence a human can review after the fact.
 
-`agent-tty` currently supports Node `24.x`.
-The recommended hosted install path is the npm package `agent-tty`. GitHub Release tarballs remain the registry-independent fallback, and direct git dependency installs remain best-effort because they build from source.
+## Why It Exists
 
-### npm installation (recommended)
+Most terminal automation falls back to brittle patterns: blind sleeps, long simulated keystroke streams, ad hoc screenshots, or detached `tmux` sessions that are hard for another process to inspect.
+`agent-tty` provides a tighter loop:
 
-#### Global install from npm
+1. create an isolated terminal session,
+2. run setup or send input,
+3. wait for observable terminal state,
+4. inspect the screen semantically,
+5. capture renderer-backed visual evidence,
+6. export replay artifacts,
+7. clean up the session.
 
-```bash
-PACKAGE_VERSION=<version>
-npm install -g "agent-tty@${PACKAGE_VERSION}"
-agent-tty version --json
-agent-tty --home "$(mktemp -d)" doctor --json
+That loop is useful for AI coding agents, shell scripts, CI smoke tests, TUI dogfooding, and humans debugging terminal workflows locally.
+
+## What It Provides
+
+- Long-lived terminal sessions backed by `node-pty`.
+- A stable, machine-readable CLI surface with JSON envelopes.
+- `run`, `type`, `paste`, `send-keys`, `resize`, and `signal` controls.
+- `wait` and `snapshot` primitives for semantic inspection.
+- Renderer-backed screenshots and WebM exports using `ghostty-web` under Playwright/Chromium.
+- Append-only event logs so snapshots, screenshots, and recordings can be replayed from session history.
+- Isolated homes via `--home`, useful for agents, tests, CI, and proof bundles.
+
+## How It Works
+
+The architecture is:
+
+```text
+agent-tty CLI -> per-session host -> PTY + event log -> ghostty-web renderer -> artifacts
 ```
 
-To follow the prerelease channel instead of pinning an exact version, substitute `@beta` (or another dist-tag such as `@rc`) for `@${PACKAGE_VERSION}`.
+The PTY and append-only event log are the execution truth.
+`ghostty-web` is the reference renderer for semantic snapshots, screenshots, and replay video; it is not a native-terminal parity guarantee.
+The design keeps rendering behind an adapter so future native renderers can be added without changing the public CLI contract.
 
-#### Project-local install from npm
+## Quick Start
 
-```bash
-PACKAGE_VERSION=<version>
-npm install "agent-tty@${PACKAGE_VERSION}"
-./node_modules/.bin/agent-tty version --json
-```
-
-### GitHub Release tarball installation
-
-#### Direct release asset install
+`agent-tty` requires Node `>=24 <26`.
+Renderer-backed screenshots and WebM export also require a discoverable Playwright Chromium install.
 
 ```bash
-VERSION=<version>
-RELEASE_TAG="v${VERSION}"
-RELEASE_TGZ="agent-tty-${VERSION}.tgz"
-TARBALL_URL="https://github.com/coder/agent-tty/releases/download/${RELEASE_TAG}/${RELEASE_TGZ}"
+npm install -g agent-tty
 
-npm install -g "$TARBALL_URL"
-agent-tty version --json
+AGENT_HOME="$(mktemp -d)"
+agent-tty --home "$AGENT_HOME" doctor --json
+
+SESSION_ID=$(agent-tty --home "$AGENT_HOME" create --json --name demo -- /bin/bash | jq -r '.result.sessionId')
+agent-tty --home "$AGENT_HOME" run "$SESSION_ID" 'printf "hello from agent-tty\n"' --json
+agent-tty --home "$AGENT_HOME" wait "$SESSION_ID" --text 'hello from agent-tty' --json
+agent-tty --home "$AGENT_HOME" snapshot "$SESSION_ID" --format text --json
+agent-tty --home "$AGENT_HOME" screenshot "$SESSION_ID" --json
+agent-tty --home "$AGENT_HOME" destroy "$SESSION_ID" --json
 ```
 
-#### Authenticated or private release install
+If Chromium is missing on a fresh machine, run:
 
 ```bash
-VERSION=<version>
-RELEASE_TAG="v${VERSION}"
-RELEASE_TGZ="agent-tty-${VERSION}.tgz"
-
-gh release download "$RELEASE_TAG" --repo coder/agent-tty --pattern "$RELEASE_TGZ"
-npm install -g "./$RELEASE_TGZ"
-agent-tty version --json
-agent-tty --home "$(mktemp -d)" doctor --json
+npx playwright install chromium
 ```
 
-#### Project-local install from a downloaded tarball
+For prerelease channels, tarball installs, authenticated GitHub Release installs, and source-checkout tarballs, see [`docs/INSTALL.md`](./docs/INSTALL.md).
 
-```bash
-VERSION=<version>
-RELEASE_TGZ="./agent-tty-${VERSION}.tgz"
+## Common Usage
 
-npm install "$RELEASE_TGZ"
-./node_modules/.bin/agent-tty version --json
-```
-
-### Local tarball build from a source checkout
-
-When you need a deterministic local artifact before publishing a GitHub Release, build the tarball from a checkout:
-
-```bash
-TARBALL_DIR=$(mktemp -d)
-npm ci
-npm run pack:private -- --pack-destination "$TARBALL_DIR"
-
-INSTALL_PREFIX=$(mktemp -d)
-npm install -g --prefix "$INSTALL_PREFIX" "$TARBALL_DIR"/*.tgz
-"$INSTALL_PREFIX"/bin/agent-tty version --json
-"$INSTALL_PREFIX"/bin/agent-tty --home "$(mktemp -d)" doctor --json
-```
-
-`npm run pack:private` always rebuilds `dist/` before packing. Release automation instead uses `npm run pack:release` after the CI-quality build step so GitHub Releases and the npm publish job both reuse the same verified tarball plus a checksum file.
-
-### Git source installation (best-effort)
-
-```bash
-npm install -g github:coder/agent-tty
-agent-tty version --json
-```
-
-GitHub installs attempt to build from source via npm's `prepare` hook.
-Use this only when you explicitly want the latest default-branch snapshot and your npm/git-dependency environment can build native dependencies such as `node-pty` cleanly.
-The repository's install smoke treats tarball install as the required path and records the current git-install caveat separately.
-
-If your shell setup injects `mise activate` (or similar trust-checked tooling) into npm lifecycle subprocesses, trust the checkout path first or prefer the release tarball route.
-If `doctor --json` reports a missing Playwright browser cache on a fresh machine, run `npx playwright install chromium` once before renderer-backed workflows.
-
-## Quick start
+### Run setup inside a shell
 
 ```bash
 AGENT_HOME="$(mktemp -d)"
-agent-tty --home "$AGENT_HOME" doctor --json
-SESSION_ID=$(agent-tty --home "$AGENT_HOME" create --json --name demo -- /bin/bash | jq -r '.result.sessionId')
-agent-tty --home "$AGENT_HOME" run "$SESSION_ID" 'echo hello from agent-tty' --json
+SESSION_ID=$(agent-tty --home "$AGENT_HOME" create --json -- /bin/bash | jq -r '.result.sessionId')
+
+agent-tty --home "$AGENT_HOME" run "$SESSION_ID" 'pwd && npm test' --json
 agent-tty --home "$AGENT_HOME" snapshot "$SESSION_ID" --format text --json
 agent-tty --home "$AGENT_HOME" destroy "$SESSION_ID" --json
 ```
 
-## Documentation map
-
-- [`RELEASE.md`](./RELEASE.md) — the supported release contract for the `0.1.x` line.
-- [`ROADMAP.md`](./ROADMAP.md) — intentionally deferred work and post-release direction.
-- [`design/README.md`](./design/README.md) — architecture references plus archived week-by-week planning.
-- [`dogfood/CATALOG.md`](./dogfood/CATALOG.md) — curated proof bundles and recommended review paths.
-- [`docs/README.md`](./docs/README.md) — contributor and maintainer navigation.
-
-## Feature highlights
-
-- Full session lifecycle management: create, inspect, list, wait, destroy, and garbage-collect.
-- Semantic snapshots for structured or text inspection, including optional scrollback capture.
-- Renderer-backed screenshots and replay exports for reviewable visual evidence.
-- Recording export to asciicast (`.cast`) or WebM for artifact bundles.
-- Failure recovery via reconciliation, stale-session cleanup, and retained manifests/artifacts.
-
-## Release contract
-
-The `0.1.x` release line is centered on reliable, isolated, reviewable TUI automation.
-For the explicit support contract, see [`RELEASE.md`](./RELEASE.md). For intentionally deferred work, see [`ROADMAP.md`](./ROADMAP.md).
-Reviewer-facing proof bundles are curated in [`dogfood/CATALOG.md`](./dogfood/CATALOG.md), with current release-signoff evidence in `dogfood/20260326-week9-release-readiness/` and evergreen workflow coverage such as `dogfood/run-command/`.
-
-## TUI Workflow
-
-For setup-heavy TUI automation, prefer an isolated home plus the higher-level `run` primitive:
+### Drive an interactive CLI or TUI
 
 ```bash
 AGENT_HOME="$(mktemp -d)"
-agent-tty --home "$AGENT_HOME" doctor --json
 SESSION_ID=$(agent-tty --home "$AGENT_HOME" create --json -- /bin/bash | jq -r '.result.sessionId')
-agent-tty --home "$AGENT_HOME" run "$SESSION_ID" 'npm install'
-agent-tty --home "$AGENT_HOME" wait "$SESSION_ID" --text 'ready'
-agent-tty --home "$AGENT_HOME" screenshot "$SESSION_ID"
-agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format webm
+
+agent-tty --home "$AGENT_HOME" run "$SESSION_ID" '<launch-command>' --no-wait --json
+agent-tty --home "$AGENT_HOME" wait "$SESSION_ID" --screen-stable-ms 1000 --json
+agent-tty --home "$AGENT_HOME" send-keys "$SESSION_ID" Down Down Enter --json
+agent-tty --home "$AGENT_HOME" screenshot "$SESSION_ID" --json
+agent-tty --home "$AGENT_HOME" destroy "$SESSION_ID" --json
 ```
 
-Recommended sequence:
-
-1. Create an isolated session home with `create`.
-2. Use `run` for shell setup and multiline bootstrap work.
-3. Use `wait` for render-visible readiness conditions.
-4. Capture screenshots for point-in-time review.
-5. Export WebM recordings when reviewers need motion proof.
-6. Destroy the session when done.
-
-## AI agent skills
-
-`agent-tty` ships two related skill trees in the npm package as well as the GitHub Release tarball:
-
-- `skills/agent-tty/` is the thin public bootstrap used by TanStack Intent and other skill loaders that discover files directly.
-- `skill-data/` contains the canonical runtime skills served by the CLI.
-- `agent-tty skills list` discovers the bundled runtime skills, including `agent-tty` and `dogfood-tui`.
-
-Install `agent-tty` from npm first (or from a GitHub Release tarball when you need a registry-independent fallback), then either copy the bootstrap skill into your agent config or let the CLI print the canonical runtime skill on demand.
-
-For coding agents that can ingest instructions on demand, `agent-tty skills get <name>` prints the packaged runtime `SKILL.md` directly to stdout after installation.
+### Export reviewer-facing proof
 
 ```bash
-agent-tty skills get agent-tty
+AGENT_HOME="$(mktemp -d)"
+SESSION_ID=$(agent-tty --home "$AGENT_HOME" create --json -- /bin/bash | jq -r '.result.sessionId')
+
+agent-tty --home "$AGENT_HOME" run "$SESSION_ID" 'printf "artifact proof\n"' --json
+agent-tty --home "$AGENT_HOME" wait "$SESSION_ID" --text 'artifact proof' --json
+agent-tty --home "$AGENT_HOME" screenshot "$SESSION_ID" --json
+agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format asciicast --json
+agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format webm --json
+agent-tty --home "$AGENT_HOME" destroy "$SESSION_ID" --json
 ```
 
-Use `agent-tty skills list` to discover every bundled runtime skill, and `agent-tty skills get dogfood-tui` when you want the built-in TUI dogfooding skill.
+For command details, examples, and workflow notes, see [`docs/USAGE.md`](./docs/USAGE.md).
 
-### TanStack Intent integration
+## Command Surface
 
-After installing `agent-tty` in the project, let Intent wire the bootstrap from `skills/agent-tty/` into `AGENTS.md`, `CLAUDE.md`, or another supported agent config file.
-
-```bash
-PACKAGE_VERSION=<version>
-npm install "agent-tty@${PACKAGE_VERSION}"
-npx @tanstack/intent@latest list
-npx @tanstack/intent@latest install
-```
-
-That workflow keeps the skill version aligned with the installed `agent-tty` package, while the bootstrap stays small and points agents back to the CLI-served runtime skill.
-
-### Mux skill installation
-
-After installing the npm package globally, copy the bootstrap skill from `skills/agent-tty/`:
-
-```bash
-mkdir -p ~/.mux/skills/agent-tty
-cp -R "$(npm root -g)/agent-tty/skills/agent-tty/." ~/.mux/skills/agent-tty/
-```
-
-Mux can then discover the bootstrap normally, and the bootstrap instructs the agent to load the canonical runtime skill with `agent-tty skills get agent-tty`.
-
-### Direct skill copy for other skill loaders
-
-After installing the npm package globally, copy the same bootstrap for loaders that read skill files directly:
-
-```bash
-mkdir -p ~/.claude/skills/agent-tty
-cp -R "$(npm root -g)/agent-tty/skills/agent-tty/." ~/.claude/skills/agent-tty/
-```
-
-If your assistant supports repository-backed skills, point it at `coder/agent-tty` and select the `skills/agent-tty/` bootstrap directory.
-
-### Suggested `AGENTS.md` / `CLAUDE.md` snippet
-
-```markdown
-## Terminal Automation
-
-Use `agent-tty` for terminal and TUI automation instead of `tmux`, ad hoc PTY wrappers, or external screenshot tools.
-
-Preferred workflow:
-
-1. Create an isolated home and session with `agent-tty --home "$AGENT_HOME" create --json -- /bin/bash`.
-2. Use `agent-tty run` for setup and bootstrap commands.
-3. Use `agent-tty wait` for observable readiness instead of blind sleeps.
-4. Use `agent-tty snapshot` to inspect the current terminal state.
-5. Use `agent-tty screenshot` or `agent-tty record export` for reviewer-facing artifacts.
-6. Destroy the session when the task is done.
-```
-
-Maintainers can validate the shipped bootstrap skill locally with:
-
-```bash
-npm run intent:validate
-```
-
-## Isolation
-
-- `--home <path>` stores manifests, sockets, event logs, and artifacts under an isolated agent-tty home. Pass the same `--home` value to each command in a workflow.
-- `doctor --json` reports whether `agent-tty` is using the default location or an isolated home, including a `home_isolation` check for whether `--home` produced an isolated environment.
-- It also exposes `browser_cache_accessible`, which verifies the Playwright browser cache is discoverable for renderer operations before screenshot/export flows.
-- Renderer boot now carries Playwright browser-cache resolution into isolated-home workflows automatically when Chromium is installed in the normal cache or exposed through `PLAYWRIGHT_BROWSERS_PATH`.
-- In a new machine, CI job, or container, run `agent-tty --home <path> doctor --json` before starting screenshot or recording workflows.
-
-## Platform Support
-
-- **Linux** — Tier-1. CI-tested on `ubuntu-latest`. Primary development and testing platform.
-- **macOS** — Tier-1. CI-tested on `macos-latest`. Supported for local development and agent workflows.
-- **Windows** — Tier-2. Not CI-tested. PTY uses ConPTY when available; rendering and PTY behavior differences are possible. Community contributions welcome.
-
-## CLI-wide flags
+Global flags:
 
 - `--home <path>`: override the agent-tty home directory.
 - `--timeout-ms <n>`: apply a shared CLI timeout budget in milliseconds.
 - `--no-color`: disable ANSI color in human-readable output.
-- `--json`: available on user-facing commands to emit structured command envelopes.
+- `--log-level <level>`: set log level (`debug`, `info`, `warn`, `error`).
+- `--profile <name>`: select a default render profile.
+- `--json`: available on user-facing commands for structured output.
 
-## Commands
+Command groups:
 
-- `version`: print the CLI version.
-- `doctor`: validate local environment requirements.
-- `create [command...]`: create a session and launch the requested command or shell.
-- `list`: list sessions, optionally including exited ones.
-- `inspect <session-id>`: inspect manifest state and artifact metadata for a session.
-- `destroy <session-id>`: tear down a session, with optional forced shutdown.
-- `gc`: remove stale or old sessions.
-- `type <session-id> [text]`: type text into a session.
-- `paste <session-id> [text]`: paste text into a session.
-- `run <session-id> [command]`: run a command inside a session with optional completion detection.
-- `mark <session-id> <label>`: add a marker event to a session timeline.
-- `send-keys <session-id> <keys...>`: send key sequences such as `Enter` or `Ctrl+C`.
-- `resize <session-id>`: resize the PTY dimensions.
-- `signal <session-id> <signal>`: send a POSIX signal to the session child process.
-- `snapshot <session-id>`: capture a semantic snapshot of terminal contents.
-- `screenshot <session-id>`: capture a rendered PNG screenshot.
-- `record export <session-id>`: export replay artifacts as asciicast or WebM.
-- `wait <session-id>`: wait for exit, idleness, text, regex, cursor, or stable-screen conditions.
+- Environment and skills: `version`, `doctor`, `skills list|get|path`.
+- Lifecycle: `create`, `list`, `inspect`, `destroy`, `gc`.
+- Input and control: `run`, `type`, `paste`, `send-keys`, `resize`, `signal`, `mark`.
+- Observation and artifacts: `wait`, `snapshot`, `screenshot`, `record export`.
 
-## Run Command
+## Notes And Limitations
 
-Basic usage:
+- Linux and macOS are tier-1 targets; Windows is tier-2 and not CI-tested.
+- Screenshots and WebM export depend on Playwright/Chromium and the bundled `ghostty-web` renderer.
+- `ghostty-web` provides reference visual truth, not exact parity with every native terminal emulator.
+- `run` is best for shell-oriented setup and bootstrap work. It does not capture command output as a structured result or report the child command's exit status.
+- Use `--home <path>` for isolated automation. Passing the same home to every command keeps manifests, sockets, event logs, and artifacts together.
+- Run `agent-tty --home <path> doctor --json` before screenshot or recording workflows in a new machine, CI job, or container.
+
+Troubleshooting notes live in [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md).
+
+## Agent Skills
+
+`agent-tty` ships a thin public bootstrap skill under `skills/agent-tty/` and canonical runtime skills under `skill-data/`.
+After installing the CLI, coding agents can load the current runtime instructions directly:
 
 ```bash
-agent-tty run <session-id> [command]
-agent-tty run <session-id> --file ./setup.sh
-agent-tty run <session-id> 'npm install && npm test' --timeout 60000 --json
-agent-tty run <session-id> 'npm run dev' --no-wait
+agent-tty skills get agent-tty
+agent-tty skills list
+agent-tty skills get dogfood-tui
 ```
 
-Important flags:
+For TanStack Intent, Mux, and direct skill-copy instructions, see [`docs/AGENT-SKILLS.md`](./docs/AGENT-SKILLS.md).
 
-- `--timeout <ms>` — completion timeout in milliseconds. Default: `30000`.
-- `--no-wait` — fire-and-forget mode. The command is injected and the CLI returns without waiting for completion.
-- `--file <path>` — read command text from a file instead of the positional argument.
-- `--json` — emit a machine-readable command envelope.
+## Vision And Roadmap
 
-Use `run` when you want shell-oriented setup inside the existing session, especially for multiline bootstrap scripts or other commands that should preserve shell state.
-Use `type` when the target application needs literal interactive typing, `paste` when the target should receive a literal pasted payload, and `send-keys` for discrete control keys such as `Enter`, `Escape`, or `Ctrl+C`.
+The current `0.1.x` line is centered on reliable, isolated, reviewable TUI automation through the CLI.
+Future work includes native renderer adapters, broader platform parity, mouse input, richer semantic TUI automation, remote/networked control, and external control layers such as an MCP wrapper.
 
-Under the hood, `run` injects the command through paste-mode and, unless `--no-wait` is set, appends a generated boundary marker that the renderer waits to see in visible output.
-That makes shell setup more reliable than simulating long keystroke sequences, but `run` does not capture command output or report an exit status.
+- [`RELEASE.md`](./RELEASE.md) defines the supported release contract.
+- [`ROADMAP.md`](./ROADMAP.md) tracks intentionally deferred work and post-release direction.
+- [`design/ARCHITECTURE.md`](./design/ARCHITECTURE.md) explains the architecture and product intent in more detail.
 
-## Development setup
+## Local Development
+
+Preferred setup uses `mise`:
 
 ```bash
 mise install
+mise run bootstrap
+```
+
+Fallback setup:
+
+```bash
 npm ci
 npx playwright install chromium
 ```
 
-Useful shortcuts:
-
-- `mise run bootstrap`: install npm dependencies and Chromium in one step.
-- `npm run cli -- --help`: inspect the CLI locally without building.
-
-## Verification
+Useful local commands:
 
 ```bash
+npm run cli -- --help
 npm run verify
 ```
 
-That runs formatting, linting, typechecking, unit/e2e tests, the production build, and packaging/install smoke coverage for the required tarball route plus the current git-dependency behavior/caveat check.
-For contributor workflow and release hygiene, see [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md) and [`docs/RELEASE-PROCESS.md`](./docs/RELEASE-PROCESS.md).
+Use `npx tsx src/cli/main.ts ...` while developing from a source checkout, and use an isolated absolute `AGENT_TTY_HOME` for tests or manual dogfooding.
+For contributor details, see [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md).
 
-## Design docs
+## Documentation
 
-Design and implementation notes live under [`design/`](./design/README.md).
-Start with [`design/ARCHITECTURE.md`](./design/ARCHITECTURE.md) for the stable overview, use [`design/20260319_agent-tty-v1/`](./design/20260319_agent-tty-v1/) for the active reference set, and use [`design/archive/`](./design/archive/) for week-by-week project history.
+- [`docs/README.md`](./docs/README.md) — user, contributor, and maintainer docs map.
+- [`docs/INSTALL.md`](./docs/INSTALL.md) — installation paths and release tarball flows.
+- [`docs/USAGE.md`](./docs/USAGE.md) — CLI workflows and command examples.
+- [`docs/AGENT-SKILLS.md`](./docs/AGENT-SKILLS.md) — packaged agent skill guidance.
+- [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) — environment and renderer troubleshooting.
+- [`design/README.md`](./design/README.md) — architecture and design references.
+- [`dogfood/CATALOG.md`](./dogfood/CATALOG.md) — curated proof bundles and review paths.
 
-## Repository notes
+## License
 
-- CI uses `mise` for tool provisioning and quality-gate entrypoints.
-- Chromium is required locally for screenshot and replay export coverage.
-- Platform support tiers are documented in this README; see also the design docs for detailed status.
-- Dogfood proof bundles and review guidance live under [`dogfood/README.md`](./dogfood/README.md) and [`dogfood/CATALOG.md`](./dogfood/CATALOG.md).
+This repository does not currently declare a project license.
+Add a root `LICENSE` file and `package.json` `license` field before relying on broader redistribution terms.

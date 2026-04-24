@@ -19,9 +19,9 @@ It is designed to let an agent:
 
 This design intentionally describes a **general product**, not a Mux-specific implementation. A future Mux integration should consume `agent-tty` as an external CLI/runtime rather than baking Mux-specific assumptions into the design.
 
-## Current shipped status (2026-03-26)
+## Current shipped status
 
-Update (2026-03-26): Week 9 is now complete as the pre-`0.1.0` release-readiness milestone. The shipped surface now includes the new `run` command for robust in-session command execution, renderer/browser-path handling that respects isolated-home workflows, and isolation-aware `doctor --json` diagnostics on top of the earlier lifecycle, snapshot, screenshot, and export work. With the explicit release contract captured in [`../RELEASE.md`](../RELEASE.md), the repository is ready for `0.1.0` once maintainers are satisfied with the documented proof bundles and release checklist; larger asks such as native renderers, mouse input, remote/network sessions, MCP wrapping, and broader semantic TUI automation remain intentionally deferred.
+The current `0.1.x` line is centered on reliable, isolated, reviewable terminal and TUI automation. The shipped surface includes `run` for robust in-session command execution, renderer/browser-path handling that respects isolated-home workflows, and isolation-aware `doctor --json` diagnostics on top of lifecycle, snapshot, screenshot, and export work. Larger asks such as native renderers, mouse input, remote/network sessions, MCP wrapping, and broader semantic TUI automation remain intentionally deferred and tracked in [`../ROADMAP.md`](../ROADMAP.md).
 
 The repository now ships the first three milestones of this design plus Weeks 4–7 of CLI/artifact/lifecycle hardening, config/rendering/platform closeout, contract/introspection reconciliation, and Week 7 contract/doc ratification:
 
@@ -67,6 +67,8 @@ This shape optimizes for the constraints discussed so far:
 - it supports both semantic inspection and visual inspection,
 - it avoids committing v1 to one terminal emulator forever,
 - and it preserves a clean path to a later Rust rewrite of hot paths.
+
+The product is inspired by `agent-browser`'s stateful, inspectable automation model, applied to terminal sessions instead of browser pages.
 
 ## Primary goals
 
@@ -191,9 +193,8 @@ V1 is successful when an AI agent can:
 5. fetch a semantic snapshot of the screen,
 6. capture a PNG screenshot,
 7. destroy the session,
-8. and leave behind an artifact bundle that a human reviewer can inspect.
-
-Asciicast and replay-video export remain intended follow-on capabilities rather than current success criteria for the shipped slice.
+8. export asciicast or WebM replay artifacts,
+9. and leave behind an artifact bundle that a human reviewer can inspect.
 
 ## Deliverables in this design set
 

@@ -187,7 +187,7 @@ describe('doctor command', () => {
     delete process.env.AGENT_TTY_HOME;
 
     expect(runHomeIsolationCheck()).toBe(
-      'Agent-terminal home uses default location',
+      'agent-tty home uses default location',
     );
   });
 
@@ -196,7 +196,7 @@ describe('doctor command', () => {
     process.env.AGENT_TTY_HOME = testHome;
 
     expect(runHomeIsolationCheck()).toBe(
-      'Agent-terminal home is explicitly set to system home location',
+      'agent-tty home is explicitly set to system home location',
     );
   });
 
@@ -209,7 +209,7 @@ describe('doctor command', () => {
 
     try {
       expect(runHomeIsolationCheck()).toBe(
-        `Agent-terminal home is isolated from system home: ${testHome}`,
+        `agent-tty home is isolated from system home: ${testHome}`,
       );
     } finally {
       await rm(systemHome, { recursive: true, force: true });

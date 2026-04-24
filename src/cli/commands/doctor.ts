@@ -385,16 +385,16 @@ async function runTemporaryDirectoryCheck(): Promise<string> {
 export function runHomeIsolationCheck(): string {
   const configuredHome = process.env.AGENT_TTY_HOME;
   if (configuredHome === undefined) {
-    return 'Agent-terminal home uses default location';
+    return 'agent-tty home uses default location';
   }
 
   const resolvedDoctorHome = resolveHome(configuredHome);
   const systemHome = resolveSystemHomeDirectory();
   if (resolvedDoctorHome === systemHome) {
-    return 'Agent-terminal home is explicitly set to system home location';
+    return 'agent-tty home is explicitly set to system home location';
   }
 
-  return `Agent-terminal home is isolated from system home: ${resolvedDoctorHome}`;
+  return `agent-tty home is isolated from system home: ${resolvedDoctorHome}`;
 }
 
 export async function runHomeWritableCheck(

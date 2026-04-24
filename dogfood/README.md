@@ -1,6 +1,6 @@
 # Dogfood proof bundles
 
-This directory contains reviewer-facing proof bundles for `agent-terminal`.
+This directory contains reviewer-facing proof bundles for `agent-tty`.
 Some bundles are evergreen workflow scenarios, some are release/contract validation bundles, and many older date-stamped bundles are historical evidence from the v1 build-out.
 
 ## Start here
