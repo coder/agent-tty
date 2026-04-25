@@ -2,12 +2,25 @@
 
 ## [Unreleased]
 
+## [v0.1.1-beta.4](https://github.com/coder/agent-tty/releases/tag/v0.1.1-beta.4) - 2026-04-25
+
 ### Added
 
-- Release automation now uses Communique to update release PR changelog entries and compose GitHub Release notes while preserving install, checksum, and tarball fallback guidance.
-- CI now runs GitHub Actions workflow linting with `actionlint` and `zizmor` through the shared `mise run workflow-lint` task.
-- CI now installs mise-managed tools from the committed `mise.lock` so tool archive URLs and checksums are stable across release automation.
-- The package engine range now allows Node 25 in addition to Node 24.
+- Selectable `libghostty-vt` renderer backend support with backend-selection plumbing for live commands, offline replay, screenshots, snapshots, waits, and WebM export, plus dogfood coverage for the fallback path (#42).
+- Skills eval authoring and reporting DX, including workspace presets, reporter lifecycle hooks, token usage snapshots, and stronger statistical guidance for measuring skill changes (#33, #35, #36, #37).
+- Communique-powered release changelog and GitHub Release note automation, locked `mise` tooling, and GitHub Actions workflow linting with `actionlint` and `zizmor` (#32, #39).
+- Apache license and reorganized repository documentation for release, roadmap, design, dogfood, contributor, and maintainer workflows (#40, #41, #43).
+
+### Changed
+
+- The package engine range now allows Node 25 in addition to Node 24 (#39).
+- Development dependency maintenance updated PostCSS (#44).
+
+### Fixed
+
+- `agent-tty --help` now points users at `agent-tty skills list` for bundled skill discovery (#38).
+- Release workflows now authenticate protected branch fetches so private-repository release automation can read base/default branch refs (#45).
+- Eval scoring, reporting, verifier calibration, and anti-pattern checks were hardened with additional unit coverage (#34, #36).
 
 ## [v0.1.1-beta.3](https://github.com/coder/agent-tty/releases/tag/v0.1.1-beta.3) - 2026-04-24
 
