@@ -6,6 +6,11 @@ import type { Command } from 'commander';
 
 import { loadConfigFile, type ConfigFile } from '../config/resolveConfig.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
+import {
+  DEFAULT_RENDERER_NAME,
+  resolveRendererName,
+  type RendererName,
+} from '../renderer/names.js';
 import { resolveHome } from '../storage/home.js';
 import { invariant } from '../util/assert.js';
 import {
@@ -23,6 +28,7 @@ export interface GlobalCliOptions {
   logLevel?: string;
   profile?: string;
   profileDefault?: string;
+  renderer?: string;
 }
 
 export interface CommandContext {
@@ -32,6 +38,7 @@ export interface CommandContext {
   readonly logLevel: LogLevel;
   readonly logger: ReturnType<typeof createLogger>;
   readonly profileDefault: string | undefined;
+  readonly rendererDefault: RendererName;
   readonly configFile: ConfigFile | null;
 }
 
@@ -86,6 +93,18 @@ export function parseTimeoutMsOption(value: string): number {
   return parsedValue;
 }
 
+export function resolveRendererDefault(raw?: string): RendererName {
+  try {
+    return resolveRendererName(raw ?? DEFAULT_RENDERER_NAME);
+  } catch (error) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: 'Renderer must be one of: ghostty-web, libghostty-vt.',
+      details: { renderer: raw },
+      cause: error,
+    });
+  }
+}
+
 export function resolveLogLevel(raw?: string): LogLevel {
   try {
     return resolveLoggerLevel(raw);
@@ -122,6 +141,12 @@ export async function resolveCommandContext(
     options.profile ??
     env.AGENT_TTY_PROFILE ??
     configFile?.defaultProfile;
+  const rendererDefault = resolveRendererDefault(
+    options.renderer ??
+      env.AGENT_TTY_RENDERER ??
+      configFile?.defaultRenderer ??
+      DEFAULT_RENDERER_NAME,
+  );
 
   return Object.freeze({
     home,
@@ -130,6 +155,7 @@ export async function resolveCommandContext(
     logLevel,
     logger,
     profileDefault,
+    rendererDefault,
     configFile,
   });
 }

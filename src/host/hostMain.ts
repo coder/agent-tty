@@ -29,8 +29,13 @@ import type {
   WaitForRenderResult,
   WaitParams,
 } from '../protocol/messages.js';
-import { GhosttyWebBackend } from '../renderer/ghosttyWeb/index.js';
+import {
+  DEFAULT_RENDERER_NAME,
+  resolveRendererName,
+  type RendererName,
+} from '../renderer/names.js';
 import { resolveProfile } from '../renderer/profiles.js';
+import { createRendererBackend } from '../renderer/registry.js';
 import {
   appendArtifact,
   createArtifactEntry,
@@ -95,6 +100,20 @@ function rethrowAsync(error: unknown): void {
   process.nextTick(() => {
     throw error;
   });
+}
+
+function resolveHostRendererName(input: string | undefined): RendererName {
+  try {
+    return resolveRendererName(
+      input ?? process.env.AGENT_TTY_RENDERER ?? DEFAULT_RENDERER_NAME,
+    );
+  } catch (error) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: 'Renderer must be one of: ghostty-web, libghostty-vt.',
+      details: { renderer: input ?? process.env.AGENT_TTY_RENDERER },
+      cause: error,
+    });
+  }
 }
 
 function isRegexQuantifierAt(pattern: string, index: number): boolean {
@@ -234,7 +253,8 @@ export async function runHost(sessionId: string): Promise<void> {
   const rendererManager = new HostRendererManager({
     sessionId,
     sessionDir: sessDir,
-    backendFactory: (sid, profile) => new GhosttyWebBackend(sid, profile),
+    backendFactory: (rendererName, sid, profile) =>
+      createRendererBackend(rendererName, sid, profile),
   });
 
   const loadReplayInput = () => {
@@ -396,6 +416,7 @@ export async function runHost(sessionId: string): Promise<void> {
         format: requestedFormat,
         includeScrollback: requestedIncludeScrollback,
         includeCells: requestedIncludeCells,
+        rendererName: requestedRendererName,
       } = params as SnapshotParams;
 
       const format = requestedFormat ?? 'structured';
@@ -411,9 +432,14 @@ export async function runHost(sessionId: string): Promise<void> {
         'snapshot includeCells must normalize to a boolean',
       );
 
+      const rendererName = resolveHostRendererName(requestedRendererName);
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
       const replayInput = loadReplayInput();
-      const backend = await rendererManager.getBackend(profile, replayInput);
+      const backend = await rendererManager.getBackend(
+        rendererName,
+        profile,
+        replayInput,
+      );
       const snapshot = await backend.snapshot({
         includeScrollback,
         includeCells,
@@ -479,8 +505,11 @@ export async function runHost(sessionId: string): Promise<void> {
       return snapshotResult;
     },
     screenshot: async (params: unknown) => {
-      const { profile: requestedProfileName, showCursor } =
-        params as ScreenshotParams;
+      const {
+        profile: requestedProfileName,
+        rendererName: requestedRendererName,
+        showCursor,
+      } = params as ScreenshotParams;
 
       const profile = (() => {
         try {
@@ -501,8 +530,13 @@ export async function runHost(sessionId: string): Promise<void> {
         }
       })();
 
+      const rendererName = resolveHostRendererName(requestedRendererName);
       const replayInput = loadReplayInput();
-      const backend = await rendererManager.getBackend(profile, replayInput);
+      const backend = await rendererManager.getBackend(
+        rendererName,
+        profile,
+        replayInput,
+      );
       await ensureArtifactsDir(sessDir);
       const temporaryOutputPath = artifactPath(
         sessDir,
@@ -685,6 +719,7 @@ export async function runHost(sessionId: string): Promise<void> {
 
       const effectiveTimeoutMs = timeoutMs ?? 30_000;
       const startTime = Date.now();
+      const rendererName = resolveHostRendererName(undefined);
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
       const pollIntervalMs = 200;
       const waitMarker = marker;
@@ -708,6 +743,7 @@ export async function runHost(sessionId: string): Promise<void> {
             try {
               const replayInput = loadReplayInput();
               const backend = await rendererManager.getBackend(
+                rendererName,
                 profile,
                 replayInput,
               );
@@ -1012,8 +1048,15 @@ export async function runHost(sessionId: string): Promise<void> {
       });
     },
     waitForRender: async (params: unknown) => {
-      const { text, regex, screenStableMs, cursorRow, cursorCol, timeoutMs } =
-        params as WaitForRenderParams;
+      const {
+        text,
+        regex,
+        screenStableMs,
+        cursorRow,
+        cursorCol,
+        timeoutMs,
+        rendererName: requestedRendererName,
+      } = params as WaitForRenderParams;
 
       invariant(
         text !== undefined ||
@@ -1074,6 +1117,7 @@ export async function runHost(sessionId: string): Promise<void> {
         }
       }
 
+      const rendererName = resolveHostRendererName(requestedRendererName);
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
       const pollIntervalMs = 200;
       let lastVisibleText: string | undefined;
@@ -1095,6 +1139,7 @@ export async function runHost(sessionId: string): Promise<void> {
             try {
               const replayInput = loadReplayInput();
               const backend = await rendererManager.getBackend(
+                rendererName,
                 profile,
                 replayInput,
               );

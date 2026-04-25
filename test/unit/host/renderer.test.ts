@@ -168,6 +168,7 @@ function getCreatedBackend(
 }
 
 type BackendFactory = (
+  rendererName: 'ghostty-web' | 'libghostty-vt',
   sessionId: string,
   profile: RenderProfileConfig,
 ) => RendererBackend;
@@ -211,8 +212,8 @@ describe('HostRendererManager', () => {
       return backend;
     });
 
-    const first = manager.getBackend(createProfile(), null);
-    const second = manager.getBackend(createProfile(), null);
+    const first = manager.getBackend('ghostty-web', createProfile(), null);
+    const second = manager.getBackend('ghostty-web', createProfile(), null);
 
     await flushAsyncQueue();
 
@@ -234,8 +235,16 @@ describe('HostRendererManager', () => {
       backendFactory,
     });
 
-    const firstBackend = await manager.getBackend(createProfile(), null);
-    const secondBackend = await manager.getBackend(createProfile(), null);
+    const firstBackend = await manager.getBackend(
+      'ghostty-web',
+      createProfile(),
+      null,
+    );
+    const secondBackend = await manager.getBackend(
+      'ghostty-web',
+      createProfile(),
+      null,
+    );
 
     expect(firstBackend).toBe(secondBackend);
     expect(backendFactory).toHaveBeenCalledTimes(1);
@@ -248,9 +257,38 @@ describe('HostRendererManager', () => {
       backendFactory,
     });
 
-    const firstBackend = await manager.getBackend(createProfile('dark'), null);
+    const firstBackend = await manager.getBackend(
+      'ghostty-web',
+      createProfile('dark'),
+      null,
+    );
     const secondBackend = await manager.getBackend(
+      'ghostty-web',
       createProfile('light'),
+      null,
+    );
+
+    expect(secondBackend).not.toBe(firstBackend);
+    expect(backendFactory).toHaveBeenCalledTimes(2);
+    expect(getCreatedBackend(backends, 0).disposeMock).toHaveBeenCalledTimes(1);
+    expect(getCreatedBackend(backends, 1)).toBe(secondBackend);
+  });
+
+  it('recreates the backend when the renderer name changes', async () => {
+    const manager = new HostRendererManager({
+      sessionId: 'session-01',
+      sessionDir,
+      backendFactory,
+    });
+
+    const firstBackend = await manager.getBackend(
+      'ghostty-web',
+      createProfile('dark'),
+      null,
+    );
+    const secondBackend = await manager.getBackend(
+      'libghostty-vt',
+      createProfile('dark'),
       null,
     );
 
@@ -268,6 +306,7 @@ describe('HostRendererManager', () => {
     });
 
     await manager.getBackend(
+      'ghostty-web',
       createProfile(),
       createReplayInput({ events: [], targetSeq: -1 }),
     );
@@ -283,7 +322,7 @@ describe('HostRendererManager', () => {
     });
     const replayInput = createReplayInput();
 
-    await manager.getBackend(createProfile(), replayInput);
+    await manager.getBackend('ghostty-web', createProfile(), replayInput);
 
     expect(getCreatedBackend(backends, 0).replayToMock).toHaveBeenCalledTimes(
       1,
@@ -300,12 +339,20 @@ describe('HostRendererManager', () => {
       backendFactory,
     });
 
-    const firstBackend = await manager.getBackend(createProfile(), null);
+    const firstBackend = await manager.getBackend(
+      'ghostty-web',
+      createProfile(),
+      null,
+    );
     const crashedBackend = getCreatedBackend(backends, 0);
     expect(crashedBackend).toBe(firstBackend);
     crashedBackend.setBooted(false);
 
-    const secondBackend = await manager.getBackend(createProfile(), null);
+    const secondBackend = await manager.getBackend(
+      'ghostty-web',
+      createProfile(),
+      null,
+    );
 
     expect(secondBackend).not.toBe(firstBackend);
     expect(backendFactory).toHaveBeenCalledTimes(2);
@@ -328,12 +375,16 @@ describe('HostRendererManager', () => {
       return backend;
     });
 
-    await expect(manager.getBackend(createProfile(), null)).rejects.toThrow(
-      'boot failed',
-    );
+    await expect(
+      manager.getBackend('ghostty-web', createProfile(), null),
+    ).rejects.toThrow('boot failed');
     expect(getCreatedBackend(backends, 0).disposeMock).toHaveBeenCalledTimes(1);
 
-    const recoveredBackend = await manager.getBackend(createProfile(), null);
+    const recoveredBackend = await manager.getBackend(
+      'ghostty-web',
+      createProfile(),
+      null,
+    );
 
     expect(recoveredBackend).toBe(getCreatedBackend(backends, 1));
     expect(backendFactory).toHaveBeenCalledTimes(2);
@@ -346,7 +397,7 @@ describe('HostRendererManager', () => {
       backendFactory,
     });
 
-    await manager.getBackend(createProfile(), null);
+    await manager.getBackend('ghostty-web', createProfile(), null);
 
     await expect(manager.dispose()).resolves.toBeUndefined();
     await expect(manager.dispose()).resolves.toBeUndefined();
@@ -410,10 +461,7 @@ describe('HostRendererManager', () => {
         new HostRendererManager({
           sessionId: 'session-01',
           sessionDir,
-          backendFactory: null as unknown as (
-            sessionId: string,
-            profile: RenderProfileConfig,
-          ) => RendererBackend,
+          backendFactory: null as unknown as BackendFactory,
         }),
     ).toThrow('backendFactory must be a function');
   });

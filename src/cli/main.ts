@@ -94,6 +94,7 @@ function wrapAction<Args extends unknown[]>(
       setColorEnabled(context.colorEnabled);
       context.logger.debug(`starting ${commandName} command`, {
         logLevel: context.logLevel,
+        renderer: context.rendererDefault,
       });
       const args = rawArgs.slice(0, -1) as Args;
       await fn(...([...args, context] as [...Args, CommandContext]));
@@ -130,7 +131,11 @@ async function main(): Promise<void> {
     )
     .option('--no-color', 'Disable ANSI color in human-readable output')
     .option('--log-level <level>', 'Set log level (debug, info, warn, error)')
-    .option('--profile <name>', 'Default render profile name');
+    .option('--profile <name>', 'Default render profile name')
+    .option(
+      '--renderer <name>',
+      'Renderer backend (ghostty-web or libghostty-vt)',
+    );
 
   program.hook('preAction', async (_thisCommand, actionCommand) => {
     const context = await resolveCommandContext(
@@ -144,6 +149,7 @@ async function main(): Promise<void> {
     // and constructor is a larger refactor with no user-visible benefit, since
     // the env var is set before any command handler runs.
     process.env.AGENT_TTY_LOG_LEVEL = context.logLevel;
+    process.env.AGENT_TTY_RENDERER = context.rendererDefault;
     setColorEnabled(context.colorEnabled);
     setCommandContext(actionCommand, context);
     context.logger.debug('resolved command context', {

@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-04-24T19:32:02.673Z",
+  "result": {
+    "sessionId": "01KQ0FM1WQ5ETGBNSYK93G0H8T",
+    "format": "webm",
+    "artifactPath": "/tmp/agent-tty-dogfood.b67EGa/sessions/01KQ0FM1WQ5ETGBNSYK93G0H8T/artifacts/recording-14-webm.webm",
+    "bytes": 20848,
+    "sha256": "66f15e14a348f3793e222922e407cfc453293b02045ccae9cb865b6bb4665902",
+    "capturedAtSeq": 14,
+    "durationMs": 11141,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d",
+      "timingMode": "accelerated",
+      "rendererBackend": "ghostty-web",
+      "outputEventCount": 10,
+      "resizeEventCount": 0
+    }
+  }
+}

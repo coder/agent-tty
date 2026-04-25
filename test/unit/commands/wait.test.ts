@@ -49,6 +49,7 @@ const TEST_CONTEXT = {
   logLevel: 'info',
   logger: createLogger('info', () => undefined),
   profileDefault: undefined,
+  rendererDefault: 'ghostty-web',
   configFile: null,
 } as const;
 
@@ -280,6 +281,7 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         timeoutMs: undefined,
+        rendererName: 'ghostty-web',
       },
       0,
     );
@@ -378,6 +380,7 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         timeoutMs: 600_000,
+        rendererName: 'ghostty-web',
       },
       605_000,
     );
@@ -410,6 +413,7 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         timeoutMs: 600_000,
+        rendererName: 'ghostty-web',
       },
       605_000,
     );
@@ -445,6 +449,7 @@ describe('wait command', () => {
         cursorRow: 3,
         cursorCol: 4,
         timeoutMs: 600_000,
+        rendererName: 'ghostty-web',
       },
       605_000,
     );
@@ -479,11 +484,15 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         timeoutMs: 600_000,
+        rendererName: 'ghostty-web',
       },
       605_000,
     );
     expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
-      { sessionDir: '/tmp/agent-tty/sessions/session-01' },
+      {
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
+        rendererName: 'ghostty-web',
+      },
       expect.any(Function),
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({

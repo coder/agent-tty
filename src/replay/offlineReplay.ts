@@ -4,8 +4,13 @@ import { buildReplayInput, readEventLogRecords } from '../host/replay.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import type { EventRecord, SessionRecord } from '../protocol/schemas.js';
 import type { RendererBackend } from '../renderer/backend.js';
-import { GhosttyWebBackend } from '../renderer/ghosttyWeb/backend.js';
+import {
+  DEFAULT_RENDERER_NAME,
+  resolveRendererName,
+  type RendererName,
+} from '../renderer/names.js';
 import { resolveProfile } from '../renderer/profiles.js';
+import { createRendererBackend } from '../renderer/registry.js';
 import type { RenderProfileConfig, ReplayInput } from '../renderer/types.js';
 import { readManifestIfExists } from '../storage/manifests.js';
 import { eventLogPath, manifestPath } from '../storage/sessionPaths.js';
@@ -13,9 +18,10 @@ import { invariant } from '../util/assert.js';
 
 export interface OfflineReplayDeps {
   backendFactory?: (
+    rendererName: RendererName,
     sessionId: string,
     profile: RenderProfileConfig,
-  ) => RendererBackend;
+  ) => RendererBackend | Promise<RendererBackend>;
 }
 
 interface OfflineReplayContext {
@@ -51,22 +57,31 @@ function isEnoentError(error: unknown): error is Error & NodeError {
   );
 }
 
-function createBackend(
+async function createBackend(
+  rendererName: RendererName,
   sessionId: string,
   profile: RenderProfileConfig,
   deps?: OfflineReplayDeps,
-): RendererBackend {
+): Promise<RendererBackend> {
   const backendFactory =
     deps?.backendFactory ??
-    ((factorySessionId: string, factoryProfile: RenderProfileConfig) =>
-      new GhosttyWebBackend(factorySessionId, factoryProfile));
+    ((
+      factoryRendererName: RendererName,
+      factorySessionId: string,
+      factoryProfile: RenderProfileConfig,
+    ) =>
+      createRendererBackend(
+        factoryRendererName,
+        factorySessionId,
+        factoryProfile,
+      ));
 
   invariant(
     typeof backendFactory === 'function',
     'backendFactory must be a function when provided',
   );
 
-  return backendFactory(sessionId, profile);
+  return await backendFactory(rendererName, sessionId, profile);
 }
 
 async function readOfflineReplayInput(
@@ -106,6 +121,7 @@ export async function withOfflineReplayRenderer<T>(
     sessionDir: string;
     profileName?: string;
     targetSeq?: number;
+    rendererName?: RendererName;
   },
   run: (context: OfflineReplayContext) => Promise<T>,
   deps?: OfflineReplayDeps,
@@ -113,6 +129,9 @@ export async function withOfflineReplayRenderer<T>(
   invariant(typeof run === 'function', 'run must be a function');
   const sessionDir = assertAbsoluteSessionDir(options.sessionDir);
   const sessionId = getSessionId(sessionDir);
+  const rendererName = resolveRendererName(
+    options.rendererName ?? DEFAULT_RENDERER_NAME,
+  );
 
   const manifestFile = manifestPath(sessionDir);
   const manifest = await readManifestIfExists(manifestFile);
@@ -131,7 +150,7 @@ export async function withOfflineReplayRenderer<T>(
     });
   }
 
-  const backend = createBackend(sessionId, profile, deps);
+  const backend = await createBackend(rendererName, sessionId, profile, deps);
 
   try {
     const replayInput = await readOfflineReplayInput(

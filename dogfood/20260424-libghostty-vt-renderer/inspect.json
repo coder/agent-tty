@@ -1,0 +1,49 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-04-24T19:32:03.987Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KQ0FM1WQ5ETGBNSYK93G0H8T",
+      "createdAt": "2026-04-24T19:31:44.666Z",
+      "updatedAt": "2026-04-24T19:31:56.928Z",
+      "status": "exited",
+      "command": ["npx", "tsx", "test/fixtures/apps/hello-prompt/main.ts"],
+      "cwd": "/home/coder/.mux/src/agent-terminal/agent_exec_2d8f238d80",
+      "name": "phase6-libghostty-vt",
+      "shell": "/bin/bash",
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "creationCols": 80,
+      "creationRows": 24,
+      "hostPid": 1338881,
+      "childPid": 1338894,
+      "exitCode": 0,
+      "exitSignal": null
+    },
+    "eventCount": 15,
+    "uptime": 12262,
+    "lastEventSeq": 14,
+    "terminationCategory": "clean-exit",
+    "artifacts": {
+      "total": 4,
+      "byKind": {
+        "snapshot": 1,
+        "screenshot": 1,
+        "recording": 1,
+        "video": 1
+      },
+      "missingCount": 0,
+      "health": "healthy"
+    },
+    "usedOfflineReplay": false,
+    "rendererRuntime": {
+      "backend": "ghostty-web",
+      "mode": "offline-replay",
+      "status": "fallback",
+      "reason": "session-not-running"
+    }
+  }
+}

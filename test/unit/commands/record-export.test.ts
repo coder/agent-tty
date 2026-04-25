@@ -92,6 +92,7 @@ const TEST_CONTEXT = {
   logLevel: 'info',
   logger: createLogger('info', () => undefined),
   profileDefault: undefined,
+  rendererDefault: 'ghostty-web',
   configFile: null,
 } as const;
 
@@ -329,6 +330,7 @@ describe('record export command', () => {
       rows: 24,
       profileName: 'reference-dark',
       timingMode: 'accelerated',
+      rendererBackend: 'ghostty-web',
     });
     mocks.stat.mockResolvedValue({ size: webmBytes });
     mocks.readFile.mockResolvedValue(webmContent);
@@ -348,6 +350,7 @@ describe('record export command', () => {
         manifest: ReturnType<typeof createSessionRecord>;
         events: unknown[];
         outputPath: string;
+        rendererName?: string;
       },
     ];
     const [generateWebmExportArgs] = generateWebmExportCall;
@@ -374,6 +377,7 @@ describe('record export command', () => {
     expect(generateWebmExportArgs.outputPath).toBe(
       '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm',
     );
+    expect(generateWebmExportArgs.rendererName).toBe('ghostty-web');
     expect(mocks.writeTextFileAtomic).not.toHaveBeenCalled();
     expect(mocks.stat).toHaveBeenCalledWith(
       '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm',
@@ -404,6 +408,7 @@ describe('record export command', () => {
     );
     expect(artifactEntry.metadata.profileName).toBe('reference-dark');
     expect(artifactEntry.metadata.timingMode).toBe('accelerated');
+    expect(artifactEntry.metadata.rendererBackend).toBe('ghostty-web');
 
     expect(mocks.emitSuccess).toHaveBeenCalledTimes(1);
     const emitSuccessCall = mocks.emitSuccess.mock.calls[0] as [
@@ -433,6 +438,7 @@ describe('record export command', () => {
     expect(emitSuccessArgs.result.metadata.renderProfileHash).toBe(
       expectedRenderProfileHash,
     );
+    expect(emitSuccessArgs.result.metadata.rendererBackend).toBe('ghostty-web');
     expect(emitSuccessArgs.result.durationMs).toBe(1_500);
   });
 
@@ -447,6 +453,7 @@ describe('record export command', () => {
       rows: 24,
       profileName: 'reference-light',
       timingMode: 'accelerated',
+      rendererBackend: 'ghostty-web',
     });
     const webmBytes = 12_345;
     const webmContent = Buffer.alloc(webmBytes, 0x42);
@@ -506,6 +513,7 @@ describe('record export command', () => {
       rows: 24,
       profileName: 'reference-dark',
       timingMode: 'recorded',
+      rendererBackend: 'ghostty-web',
     });
     const webmBytes = 12_345;
     const webmContent = Buffer.alloc(webmBytes, 0x42);
@@ -538,6 +546,7 @@ describe('record export command', () => {
       rows: 24,
       profileName: 'reference-dark',
       timingMode: 'max-speed',
+      rendererBackend: 'ghostty-web',
     });
     const webmBytes = 12_345;
     const webmContent = Buffer.alloc(webmBytes, 0x42);
@@ -570,6 +579,7 @@ describe('record export command', () => {
       rows: 24,
       profileName: 'reference-dark',
       timingMode: 'accelerated',
+      rendererBackend: 'ghostty-web',
     });
     const webmBytes = 12_345;
     const webmContent = Buffer.alloc(webmBytes, 0x42);
@@ -615,6 +625,7 @@ describe('record export command', () => {
       rows: 24,
       profileName: 'reference-dark',
       timingMode: 'max-speed',
+      rendererBackend: 'ghostty-web',
     });
     const webmBytes = 12_345;
     const webmContent = Buffer.alloc(webmBytes, 0x42);

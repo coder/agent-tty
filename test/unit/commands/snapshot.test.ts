@@ -68,6 +68,7 @@ const TEST_CONTEXT = {
   logLevel: 'info',
   logger: createLogger('info', () => undefined),
   profileDefault: undefined,
+  rendererDefault: 'ghostty-web',
   configFile: null,
 } as const;
 
@@ -222,7 +223,12 @@ describe('snapshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'snapshot',
-      { format: 'structured', includeScrollback: false, includeCells: false },
+      {
+        format: 'structured',
+        includeScrollback: false,
+        includeCells: false,
+        rendererName: 'ghostty-web',
+      },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'snapshot',
@@ -265,7 +271,12 @@ describe('snapshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'snapshot',
-      { format: 'text', includeScrollback: false, includeCells: false },
+      {
+        format: 'text',
+        includeScrollback: false,
+        includeCells: false,
+        rendererName: 'ghostty-web',
+      },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'snapshot',
@@ -312,6 +323,7 @@ describe('snapshot command', () => {
       format: 'structured',
       includeScrollback: true,
       includeCells: false,
+      rendererName: 'ghostty-web',
     });
     const emitted = getLastEmitSuccessPayload() as {
       lines: string[];
@@ -365,6 +377,7 @@ describe('snapshot command', () => {
         format: 'structured',
         includeScrollback: false,
         includeCells: true,
+        rendererName: 'ghostty-web',
       },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
@@ -408,7 +421,12 @@ describe('snapshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'snapshot',
-      { format: 'text', includeScrollback: true, includeCells: false },
+      {
+        format: 'text',
+        includeScrollback: true,
+        includeCells: false,
+        rendererName: 'ghostty-web',
+      },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'snapshot',
@@ -443,7 +461,10 @@ describe('snapshot command', () => {
 
     expect(mocks.sendRpc).not.toHaveBeenCalled();
     expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
-      { sessionDir: '/tmp/agent-tty/sessions/session-01' },
+      {
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
+        rendererName: 'ghostty-web',
+      },
       expect.any(Function),
     );
     expect(mocks.ensureArtifactsDir).toHaveBeenCalledWith(
@@ -669,10 +690,18 @@ describe('snapshot command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'snapshot',
-      { format: 'text', includeScrollback: false, includeCells: false },
+      {
+        format: 'text',
+        includeScrollback: false,
+        includeCells: false,
+        rendererName: 'ghostty-web',
+      },
     );
     expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
-      { sessionDir: '/tmp/agent-tty/sessions/session-01' },
+      {
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
+        rendererName: 'ghostty-web',
+      },
       expect.any(Function),
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({

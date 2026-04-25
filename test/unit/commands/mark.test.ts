@@ -44,6 +44,7 @@ const TEST_CONTEXT = {
   logLevel: 'info',
   logger: createLogger('info', () => undefined),
   profileDefault: undefined,
+  rendererDefault: 'ghostty-web',
   configFile: null,
 } as const;
 

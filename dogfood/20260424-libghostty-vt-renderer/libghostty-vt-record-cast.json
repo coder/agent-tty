@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-04-24T19:31:59.169Z",
+  "result": {
+    "sessionId": "01KQ0FM1WQ5ETGBNSYK93G0H8T",
+    "format": "asciicast",
+    "artifactPath": "/tmp/agent-tty-dogfood.b67EGa/sessions/01KQ0FM1WQ5ETGBNSYK93G0H8T/artifacts/recording-14-asciicast.cast",
+    "bytes": 456,
+    "sha256": "8f8c8dd0548fa94917a3efc64b00982f830762f2275619b308332f1466a0661f",
+    "capturedAtSeq": 14,
+    "durationMs": 11141,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "title": "01KQ0FM1WQ5ETGBNSYK93G0H8T",
+      "timestamp": 1777059105,
+      "outputEventCount": 10,
+      "resizeEventCount": 0,
+      "markerCount": 0
+    }
+  }
+}

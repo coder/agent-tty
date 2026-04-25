@@ -179,6 +179,7 @@ async function persistSnapshotArtifact(
 
 async function runRpcSnapshot(
   sessionDirectory: string,
+  rendererName: CommandContext['rendererDefault'],
   format: SnapshotFormat,
   includeScrollback: boolean,
   includeCells: boolean,
@@ -190,6 +191,7 @@ async function runRpcSnapshot(
       format,
       includeScrollback,
       includeCells,
+      rendererName,
     },
   );
 
@@ -198,12 +200,13 @@ async function runRpcSnapshot(
 
 async function runOfflineSnapshot(
   sessionDirectory: string,
+  rendererName: CommandContext['rendererDefault'],
   format: SnapshotFormat,
   includeScrollback: boolean,
   includeCells: boolean,
 ): Promise<SnapshotResult> {
   return withOfflineReplayRenderer(
-    { sessionDir: sessionDirectory },
+    { sessionDir: sessionDirectory, rendererName },
     async ({ backend }) => {
       const snapshot: SemanticSnapshot = await backend.snapshot({
         includeScrollback,
@@ -313,6 +316,7 @@ export async function runSnapshotCommand(
     try {
       result = await runRpcSnapshot(
         sessionDirectory,
+        options.context.rendererDefault,
         format,
         includeScrollback,
         includeCells,
@@ -324,6 +328,7 @@ export async function runSnapshotCommand(
       ) {
         result = await runOfflineSnapshot(
           sessionDirectory,
+          options.context.rendererDefault,
           format,
           includeScrollback,
           includeCells,
@@ -335,6 +340,7 @@ export async function runSnapshotCommand(
   } else {
     result = await runOfflineSnapshot(
       sessionDirectory,
+      options.context.rendererDefault,
       format,
       includeScrollback,
       includeCells,

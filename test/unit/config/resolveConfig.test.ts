@@ -32,6 +32,7 @@ describe('loadConfigFile', () => {
     const config = {
       logLevel: 'debug',
       defaultProfile: 'reference-dark',
+      defaultRenderer: 'libghostty-vt',
       defaultShell: '/bin/bash',
       defaultTerm: 'xterm-256color',
       defaultCols: 120,
@@ -76,6 +77,9 @@ describe('ConfigFileSchema', () => {
   it('accepts supported edge cases and rejects invalid values', () => {
     expect(ConfigFileSchema.safeParse({ idleTimeoutMs: 0 }).success).toBe(true);
     expect(ConfigFileSchema.safeParse({ defaultCols: 1 }).success).toBe(true);
+    expect(
+      ConfigFileSchema.safeParse({ defaultRenderer: 'ghostty-web' }).success,
+    ).toBe(true);
     expect(ConfigFileSchema.safeParse({ defaultRows: 0 }).success).toBe(false);
     expect(ConfigFileSchema.safeParse({ idleTimeoutMs: -1 }).success).toBe(
       false,

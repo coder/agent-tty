@@ -15,7 +15,6 @@ import {
   type WebmExportResult,
 } from '../../export/webm.js';
 import { readEventLogRecords } from '../../host/replay.js';
-import { GhosttyWebBackend } from '../../renderer/ghosttyWeb/backend.js';
 import { hashProfile, resolveProfile } from '../../renderer/profiles.js';
 import { CliError } from '../errors.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
@@ -313,23 +312,18 @@ export async function runRecordExportCommand(
       );
 
       invariant(events.length > 0, 'webm export requires at least one event');
-      const webmResult: WebmExportResult = await generateWebmExport(
-        {
-          sessionId: options.sessionId,
-          sessionDir: sessionDirectory,
-          manifest,
-          events,
-          outputPath: artifactOutputPath,
-          ...(webmProfileName !== undefined
-            ? { profileName: webmProfileName }
-            : {}),
-          ...(timingMode !== undefined ? { timingMode } : {}),
-        },
-        {
-          backendFactory: (sessionId, profile, videoOptions) =>
-            new GhosttyWebBackend(sessionId, profile, videoOptions),
-        },
-      );
+      const webmResult: WebmExportResult = await generateWebmExport({
+        sessionId: options.sessionId,
+        sessionDir: sessionDirectory,
+        manifest,
+        events,
+        outputPath: artifactOutputPath,
+        ...(webmProfileName !== undefined
+          ? { profileName: webmProfileName }
+          : {}),
+        ...(timingMode !== undefined ? { timingMode } : {}),
+        rendererName: options.context.rendererDefault,
+      });
 
       const resolvedProfile = resolveProfile(webmResult.profileName);
       invariant(
@@ -349,6 +343,7 @@ export async function runRecordExportCommand(
         profileName: webmResult.profileName,
         renderProfileHash,
         timingMode: webmResult.timingMode,
+        rendererBackend: webmResult.rendererBackend,
         outputEventCount: webmResult.outputEventCount,
         resizeEventCount: webmResult.resizeEventCount,
       };
@@ -358,6 +353,7 @@ export async function runRecordExportCommand(
         profileName: webmResult.profileName,
         renderProfileHash,
         timingMode: webmResult.timingMode,
+        rendererBackend: webmResult.rendererBackend,
         outputEventCount: webmResult.outputEventCount,
         resizeEventCount: webmResult.resizeEventCount,
       };

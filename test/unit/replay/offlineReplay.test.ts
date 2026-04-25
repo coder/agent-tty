@@ -217,7 +217,8 @@ describe('withOfflineReplayRenderer', () => {
         return Promise.resolve('captured');
       },
       {
-        backendFactory(factorySessionId, profile) {
+        backendFactory(rendererName, factorySessionId, profile) {
+          expect(rendererName).toBe('ghostty-web');
           expect(factorySessionId).toBe(sessionId);
           expect(profile.name).toBe('reference-dark');
           return backend;
@@ -230,6 +231,24 @@ describe('withOfflineReplayRenderer', () => {
     expect(backend.booted).toBe(true);
     expect(backend.replayedInput?.targetSeq).toBe(2);
     expect(backend.disposed).toBe(true);
+  });
+
+  it('passes the selected renderer name to the backend factory', async () => {
+    const { sessionDir, sessionId } = await createSessionFixture();
+    const backend = createMockBackend();
+
+    await withOfflineReplayRenderer(
+      { sessionDir, rendererName: 'libghostty-vt' },
+      () => Promise.resolve(undefined),
+      {
+        backendFactory(rendererName, factorySessionId, profile) {
+          expect(rendererName).toBe('libghostty-vt');
+          expect(factorySessionId).toBe(sessionId);
+          expect(profile.name).toBe('reference-dark');
+          return backend;
+        },
+      },
+    );
   });
 
   it('rebuilds replay input that matches the expected event sequence from the event log', async () => {

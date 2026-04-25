@@ -15,6 +15,11 @@ import type {
   VideoRecordingOptions,
 } from '../renderer/backend.js';
 import { GhosttyWebBackend } from '../renderer/ghosttyWeb/backend.js';
+import {
+  DEFAULT_RENDERER_NAME,
+  resolveRendererName,
+  type RendererName,
+} from '../renderer/names.js';
 import { resolveProfile } from '../renderer/profiles.js';
 import type { RenderProfileConfig, ReplayState } from '../renderer/types.js';
 import { invariant, unreachable } from '../util/assert.js';
@@ -51,10 +56,12 @@ export interface WebmExportOptions {
   targetSeq?: number;
   profileName?: string;
   timingMode?: ReplayTimingMode;
+  rendererName?: RendererName;
 }
 
 export interface WebmExportDeps {
   backendFactory?: (
+    rendererName: RendererName,
     sessionId: string,
     profile: RenderProfileConfig,
     videoOptions: VideoRecordingOptions,
@@ -71,13 +78,19 @@ export interface WebmExportResult {
   rows: number;
   profileName: string;
   timingMode: ReplayTimingMode;
+  rendererBackend: RendererName;
 }
 
 function createDefaultBackend(
+  rendererName: RendererName,
   sessionId: string,
   profile: RenderProfileConfig,
   videoOptions: VideoRecordingOptions,
 ): VideoCapableRendererBackend {
+  invariant(
+    rendererName === 'ghostty-web',
+    'WebM export currently requires the ghostty-web renderer backend',
+  );
   return new GhosttyWebBackend(sessionId, profile, videoOptions);
 }
 
@@ -163,13 +176,26 @@ export async function generateWebmExport(
       options.timingMode ?? 'accelerated';
     const timingOptions = buildReplayTimingOptions(resolvedTimingMode);
     const backendFactory = deps?.backendFactory ?? createDefaultBackend;
+    const requestedRendererName = resolveRendererName(
+      options.rendererName ?? DEFAULT_RENDERER_NAME,
+    );
+    // libghostty-vt is semantic-only; WebM output must be produced by ghostty-web.
+    const videoRendererName: RendererName =
+      requestedRendererName === 'libghostty-vt'
+        ? 'ghostty-web'
+        : requestedRendererName;
     const replayTimeoutMs = deps?.replayTimeoutMs ?? REPLAY_TIMEOUT_MS;
 
     invariant(
       replayTimeoutMs > 0,
       'replayTimeoutMs must be a positive number when provided',
     );
-    backend = backendFactory(options.sessionId, profile, videoOptions);
+    backend = backendFactory(
+      videoRendererName,
+      options.sessionId,
+      profile,
+      videoOptions,
+    );
 
     await backend.boot();
 
@@ -223,6 +249,7 @@ export async function generateWebmExport(
       rows: replayState.rows,
       profileName,
       timingMode: resolvedTimingMode,
+      rendererBackend: videoRendererName,
     };
   } finally {
     if (backend !== null) {
