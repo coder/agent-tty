@@ -89,6 +89,21 @@ description = "Test"
 run = "npm run test"
 sources = ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts", "package.json"]
 
+[tasks.test-unit]
+description = "Run unit tests"
+run = "npm run test:unit"
+sources = ["src/**/*.ts", "test/unit/**/*.ts", "vitest.config.ts", "package.json"]
+
+[tasks.test-integration]
+description = "Run integration tests serially"
+run = "npm run test:integration"
+sources = ["src/**/*.ts", "test/integration/**/*.ts", "vitest.config.ts", "package.json"]
+
+[tasks.test-e2e]
+description = "Run e2e tests serially"
+run = "npm run test:e2e"
+sources = ["src/**/*.ts", "test/e2e/**/*.ts", "test/fixtures/**/*.ts", "vitest.config.ts", "package.json"]
+
 [tasks.ci]
 description = "Run CI checks"
 run = "mise run format-check && mise run workflow-lint && mise run lint && mise run typecheck && mise run test && mise run build && mise run install-smoke"

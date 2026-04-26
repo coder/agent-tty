@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 jobs:
-  quality-gates:
+  linux-static:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -52,14 +52,109 @@ jobs:
       - name: Typecheck
         run: mise run typecheck
 
-      - name: Test
-        run: mise run test
-
       - name: Build
         run: mise run build
 
       - name: Packaging smoke
         run: mise run install-smoke
+
+  test-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          install_args: --locked
+
+      - name: Install CI dependencies
+        run: mise run bootstrap-ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Test unit
+        run: mise run test-unit
+
+  test-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/4, 2/4, 3/4, 4/4]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          install_args: --locked
+
+      - name: Install CI dependencies
+        run: mise run bootstrap-ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Test integration shard
+        run: npm run test:integration -- --shard=${{ matrix.shard }}
+
+  test-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/3, 2/3, 3/3]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          install_args: --locked
+
+      - name: Install CI dependencies
+        run: mise run bootstrap-ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Test e2e shard
+        run: npm run test:e2e -- --shard=${{ matrix.shard }}
+
+  quality-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - linux-static
+      - test-unit
+      - test-integration
+      - test-e2e
+    if: ${{ always() }}
+    steps:
+      - name: Report Linux quality gate results
+        run: |
+          echo "linux-static: ${{ needs.linux-static.result }}"
+          echo "test-unit: ${{ needs.test-unit.result }}"
+          echo "test-integration: ${{ needs.test-integration.result }}"
+          echo "test-e2e: ${{ needs.test-e2e.result }}"
+
+      - name: Fail if any Linux quality gate failed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: exit 1
 
   # macOS compilation and static-analysis counterpart to the Ubuntu quality
   # gates above.  Tests are excluded because the macOS GitHub Actions runner
