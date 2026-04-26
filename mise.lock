@@ -19,6 +19,22 @@ checksum = "sha256:5b44c3bc2255115c9b69e30efc0fecdf498fdb63c5d58e17084fd5f16324c
 url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_darwin_amd64.tar.gz"
 provenance = "github-attestations"
 
+[[tools.aube]]
+version = "1.2.0"
+backend = "github:endevco/aube"
+
+[tools.aube."platforms.linux-x64"]
+checksum = "sha256:910353e9e4d0b12bd36f06e150a248a0f5ead3afcb4f05955e497ac8d627f531"
+url = "https://github.com/endevco/aube/releases/download/v1.2.0/aube-v1.2.0-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/endevco/aube/releases/assets/405458209"
+provenance = "github-attestations"
+
+[tools.aube."platforms.macos-arm64"]
+checksum = "sha256:7a3799cc642f7540eaa4e7bb1d3f32be9da1f7dcdbca5c3c3d26910b64a476e1"
+url = "https://github.com/endevco/aube/releases/download/v1.2.0/aube-v1.2.0-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/endevco/aube/releases/assets/405458273"
+provenance = "github-attestations"
+
 [[tools.communique]]
 version = "1.1.2"
 backend = "github:jdx/communique"

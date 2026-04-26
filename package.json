@@ -19,7 +19,7 @@
     "url": "git+https://github.com/coder/agent-tty.git"
   },
   "type": "module",
-  "packageManager": "npm@11.9.0",
+  "packageManager": "aube@1.2.0",
   "engines": {
     "node": ">=24.0.0 <26"
   },
@@ -86,5 +86,13 @@
   },
   "optionalDependencies": {
     "@coder/libghostty-vt-node": "0.1.0-beta.0"
+  },
+  "pnpm": {
+    "allowBuilds": {
+      "@coder/libghostty-vt-node": true,
+      "esbuild": true,
+      "fsevents": true,
+      "node-pty": true
+    }
   }
 }

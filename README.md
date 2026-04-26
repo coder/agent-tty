@@ -172,11 +172,10 @@ mise install
 mise run bootstrap
 ```
 
-Fallback setup:
+Fallback setup after installing `aube` directly:
 
 ```bash
-npm ci
-npx playwright install chromium
+aube exec playwright install chromium
 ```
 
 Useful local commands:

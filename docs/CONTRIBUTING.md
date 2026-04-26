@@ -9,11 +9,10 @@ mise install
 mise run bootstrap
 ```
 
-Fallback setup if `mise` is unavailable:
+Fallback setup after installing `aube` directly:
 
 ```bash
-npm ci
-npx playwright install chromium
+aube exec playwright install chromium
 ```
 
 ## Day-to-day workflow

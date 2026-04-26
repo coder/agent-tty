@@ -22,6 +22,11 @@ if [ -n "$_mux_mise_bin" ]; then
   fi
 
   eval "$("$_mux_mise_bin" activate bash --shims 2>/dev/null)" || true
+  # Some mise builds emit a capitalized Path assignment for shim activation.
+  # Normalize it so non-interactive Mux bash commands can find project tools.
+  if [ -n "${Path:-}" ]; then
+    export PATH="$Path"
+  fi
 fi
 
 unset _mux_mise_bin
