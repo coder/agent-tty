@@ -114,14 +114,14 @@ jobs:
           pr_number="$(gh pr list --head "$CHANGELOG_BRANCH" --state open --json number --jq '.[0].number // empty')"
           if [[ -n "$pr_number" ]]; then
             gh pr edit "$pr_number" \
-              --title 'docs: update unreleased changelog' \
+              --title 'docs(CHANGELOG.md): update unreleased section' \
               --body-file "$body_file"
             echo "Updated existing changelog PR #${pr_number}."
           else
             gh pr create \
               --head "$CHANGELOG_BRANCH" \
               --base "$BASE_BRANCH" \
-              --title 'docs: update unreleased changelog' \
+              --title 'docs(CHANGELOG.md): update unreleased section' \
               --body-file "$body_file"
           fi
 
