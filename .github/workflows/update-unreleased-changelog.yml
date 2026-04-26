@@ -96,7 +96,7 @@ jobs:
             fetch --no-tags origin \
             "+refs/heads/${CHANGELOG_BRANCH}:refs/remotes/origin/${CHANGELOG_BRANCH}" || true
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
-            push --force-with-lease "https://github.com/${GITHUB_REPOSITORY}.git" "HEAD:${CHANGELOG_BRANCH}"
+            push --force-with-lease origin "HEAD:${CHANGELOG_BRANCH}"
 
           body_file="$(mktemp)"
           cat > "$body_file" <<'EOF'
