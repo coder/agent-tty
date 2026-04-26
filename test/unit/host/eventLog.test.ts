@@ -119,6 +119,61 @@ describe('EventLog', () => {
     }
   });
 
+  it('appends run_complete events and round-trips them from JSONL', async () => {
+    const eventLog = await EventLog.open(eventLogPath);
+
+    try {
+      const firstSeq = await eventLog.append('run_complete', {
+        marker: '__AT_MARKER_first__',
+      });
+      const secondSeq = await eventLog.append('run_complete', {
+        marker: '__AT_MARKER_second__',
+        inputRunSeq: 12,
+      });
+
+      expect([firstSeq, secondSeq]).toEqual([0, 1]);
+      expect(await eventLog.readAll()).toEqual([
+        expect.objectContaining({
+          seq: 0,
+          type: 'run_complete',
+          payload: { marker: '__AT_MARKER_first__' },
+        }),
+        expect.objectContaining({
+          seq: 1,
+          type: 'run_complete',
+          payload: { marker: '__AT_MARKER_second__', inputRunSeq: 12 },
+        }),
+      ]);
+    } finally {
+      await eventLog.close();
+    }
+
+    const reopenedEventLog = await EventLog.open(eventLogPath);
+
+    try {
+      expect(reopenedEventLog.getEvents()).toEqual([
+        expect.objectContaining({
+          seq: 0,
+          type: 'run_complete',
+          payload: { marker: '__AT_MARKER_first__' },
+        }),
+        expect.objectContaining({
+          seq: 1,
+          type: 'run_complete',
+          payload: { marker: '__AT_MARKER_second__', inputRunSeq: 12 },
+        }),
+      ]);
+
+      const logLines = (await readFile(eventLogPath, 'utf8'))
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as unknown);
+      expect(logLines).toEqual(reopenedEventLog.getEvents());
+    } finally {
+      await reopenedEventLog.close();
+    }
+  });
+
   it('returns buffered events without rereading the log file', async () => {
     const eventLog = await EventLog.open(eventLogPath);
 

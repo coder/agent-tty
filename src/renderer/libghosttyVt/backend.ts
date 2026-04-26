@@ -464,6 +464,7 @@ export class LibghosttyVtBackend implements RendererBackend {
         case 'input_paste':
         case 'input_keys':
         case 'input_run':
+        case 'run_complete':
         case 'signal':
         case 'exit':
           break;

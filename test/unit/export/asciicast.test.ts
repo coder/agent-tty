@@ -170,6 +170,43 @@ describe('generateAsciicast', () => {
     expect(result.durationMs).toBe(2000);
   });
 
+  it('skips run_complete events without emitting asciicast frames', () => {
+    const manifest = createManifest();
+    const events: EventRecord[] = [
+      {
+        seq: 0,
+        ts: '2026-03-19T12:00:01.000Z',
+        type: 'output',
+        payload: { data: 'before' },
+      },
+      {
+        seq: 1,
+        ts: '2026-03-19T12:00:01.500Z',
+        type: 'run_complete',
+        payload: { marker: '__AT_MARKER_done__', inputRunSeq: 0 },
+      },
+      {
+        seq: 2,
+        ts: '2026-03-19T12:00:02.000Z',
+        type: 'output',
+        payload: { data: 'after' },
+      },
+    ];
+
+    const result = generateAsciicast('session-01', manifest, events);
+
+    expect(parseAsciicastLines(result.contents)).toEqual([
+      result.header,
+      [0, 'o', 'before'],
+      [1, 'o', 'after'],
+    ]);
+    expect(result.outputEventCount).toBe(2);
+    expect(result.resizeEventCount).toBe(0);
+    expect(result.markerCount).toBe(0);
+    expect(result.capturedAtSeq).toBe(2);
+    expect(result.durationMs).toBe(1000);
+  });
+
   it('produces a header-only cast for empty event logs', () => {
     const manifest = createManifest({
       createdAt: '2026-03-19T12:34:56.000Z',
