@@ -70,6 +70,16 @@ npx playwright install chromium
 
 For prerelease channels, tarball installs, authenticated GitHub Release installs, and source-checkout tarballs, see [`docs/INSTALL.md`](./docs/INSTALL.md).
 
+## Agent Demo
+
+This dogfood bundle records Codex and Claude interactive TUIs using `agent-tty` to drive `nvim --clean`, write a file, export proof artifacts, and exit cleanly. The linked WebMs are trimmed review cuts; the bundle also keeps untrimmed outer recordings.
+
+| Codex                                                                                                                                              | Claude                                                                                                                                                |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [![Codex agent-tty demo](./dogfood/agent-uses-agent-tty/artifacts/codex-thumbnail.png)](./dogfood/agent-uses-agent-tty/artifacts/codex-outer.webm) | [![Claude agent-tty demo](./dogfood/agent-uses-agent-tty/artifacts/claude-thumbnail.png)](./dogfood/agent-uses-agent-tty/artifacts/claude-outer.webm) |
+
+See [`dogfood/agent-uses-agent-tty/`](./dogfood/agent-uses-agent-tty/) for the reproducer, inner Neovim recordings, transcripts, and final file proofs.
+
 ## Common Usage
 
 ### Run setup inside a shell

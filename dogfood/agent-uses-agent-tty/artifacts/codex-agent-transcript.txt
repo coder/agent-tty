@@ -1,0 +1,81 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.125.0)                              │
+│                                                         │
+│ model:       gpt-5.4-mini low   /model to change        │
+│ directory:   /private/var/folders/pq/…/workspaces/codex │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+  Tip: New Use /fast to enable our fastest inference with increased plan usage.
+
+› You are running inside a temporary, disposable git workspace for an agent-tty dogfood proof.
+
+  Run the checked helper script below immediately. Do not inspect files first and do not explain the plan before
+  running it.
+
+  The helper loads `agent-tty skills get agent-tty`, asserts the temp `agent-tty` binary, creates an isolated shell
+  agent.`, verifies the file, exports the inner asciicast/WebM artifacts, and destroys the inner session.
+
+  ```bash
+  bash "/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/codex/run-
+  inner-nvim-proof.sh"
+  ```
+  Use the installed `agent-tty` binary on PATH after prepending `/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/
+  agent-uses-agent-tty.XXXXXX.schsAgakaz/install/bin`. Do not use repo-local `npx`, `tsx`, or `src/cli/main.ts`
+  commands.
+
+  After the helper exits, report only whether it passed and list the three generated files: `/var/folders/pq/
+  ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/codex/demo-note.txt`, `/var/
+  folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/codex/artifacts/inner-
+  nvim.cast`, and `/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/
+  codex/artifacts/inner-nvim.webm`.
+
+
+• Running the helper script now and will report only pass/fail plus the three requested file paths.
+
+• The helper is still running. I’m waiting for it to finish and confirm the artifact export.
+
+• Waited for background terminal · export PATH="/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-
+tty.XXXXXX.schsAgakaz/install/bin:$PATH" && bash "/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-
+tty.XXXXXX.schsAgakaz/workspaces/codex/run-inner-nvim-proof.sh"
+
+• The nested Neovim interaction is in progress. I’m waiting for the script to finish the write, verification, and export
+  steps.
+
+• Waited for background terminal · export PATH="/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-
+tty.XXXXXX.schsAgakaz/install/bin:$PATH" && bash "/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-
+tty.XXXXXX.schsAgakaz/workspaces/codex/run-inner-nvim-proof.sh"
+
+• The script reached the export stage and is finishing the WebM artifact. I’m waiting for the final completion and
+  cleanup.
+
+• Waited for background terminal · export PATH="/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-
+tty.XXXXXX.schsAgakaz/install/bin:$PATH" && bash "/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-
+tty.XXXXXX.schsAgakaz/workspaces/codex/run-inner-nvim-proof.sh"
+
+• Ran export PATH="/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/install/bin:
+  │ $PATH" && bash "/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/
+  │ workspaces/codex/run-inner-nvim-proof.sh"
+  └ $ agent-tty --home /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/
+    inner-home/codex doctor --json
+    … +176 lines (ctrl + t to view transcript)
+    inner_webm=/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/codex/
+    artifacts/inner-nvim.webm
+
+• Waited for background terminal
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Passed.
+
+  /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/codex/demo-note.txt
+  /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/codex/artifacts/
+  inner-nvim.cast
+  /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/codex/artifacts/
+  inner-nvim.webm
+Token usage: total=8,232 input=7,555 (+ 143,104 cached) output=677 (reasoning 44)
+To continue this session, run codex resume 019dcb07-6f70-7d93-9f8a-2d2365b044fd
+
+
+

@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-04-26T18:24:15.813Z",
+  "result": {
+    "sessionId": "01KQ5GEKPQCHTVS8Z79CXE3JXD",
+    "format": "asciicast",
+    "artifactPath": "/Users/thomask33/Projects/agent-tty/dogfood/agent-uses-agent-tty/artifacts/codex-outer.cast",
+    "bytes": 515590,
+    "sha256": "605f8d6e3c40450fdac7fd29335d4640dc9a61944f0cae80d9ec9d16dca70af5",
+    "capturedAtSeq": 2030,
+    "durationMs": 64085,
+    "metadata": {
+      "width": 120,
+      "height": 36,
+      "title": "01KQ5GEKPQCHTVS8Z79CXE3JXD",
+      "timestamp": 1777227747,
+      "outputEventCount": 2028,
+      "resizeEventCount": 0,
+      "markerCount": 0
+    }
+  }
+}

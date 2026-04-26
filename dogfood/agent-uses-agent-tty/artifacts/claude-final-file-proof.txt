@@ -1,0 +1,6 @@
+agent=claude
+workspace=/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/claude
+file=/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/claude/demo-note.txt
+expected=agent-tty nested Neovim proof from an AI coding agent.
+actual=agent-tty nested Neovim proof from an AI coding agent.
+sha256=818c0d5f147a79968105195e1ff627588add18fa6a9bacf8ec4ea4f3696dc2e3

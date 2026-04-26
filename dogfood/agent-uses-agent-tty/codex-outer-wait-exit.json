@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-04-26T18:23:33.586Z",
+  "result": {
+    "timedOut": false,
+    "exitCode": 0
+  }
+}

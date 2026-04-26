@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-04-26T18:25:40.893Z",
+  "result": {
+    "sessionId": "01KQ5GEKPQCHTVS8Z79CXE3JXD",
+    "format": "webm",
+    "artifactPath": "/Users/thomask33/Projects/agent-tty/dogfood/agent-uses-agent-tty/artifacts/codex-outer-full.webm",
+    "bytes": 2598918,
+    "sha256": "b6af637364b4dcf5a7c7ab3320af84308b198b05848f66d78e2079ae7f821b39",
+    "capturedAtSeq": 2030,
+    "durationMs": 64085,
+    "metadata": {
+      "width": 120,
+      "height": 36,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d",
+      "timingMode": "recorded",
+      "rendererBackend": "ghostty-web",
+      "outputEventCount": 2028,
+      "resizeEventCount": 0
+    }
+  }
+}

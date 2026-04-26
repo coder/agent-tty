@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "command": "create",
+  "timestamp": "2026-04-26T18:25:48.501Z",
+  "result": {
+    "sessionId": "01KQ5GMR2NM9429MM3DBKV7FDW",
+    "createdAt": "2026-04-26T18:25:48.118Z",
+    "cols": 120,
+    "rows": 36,
+    "shell": "/bin/zsh",
+    "env": {
+      "PATH": "/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/install/bin:/Users/thomask33/.local/share/mise/shims:/Users/thomask33/.local/share/mise/shims:/Users/thomask33/.codex/tmp/arg0/codex-arg0nzT0lE:/opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/path:/Users/thomask33/.local/share/mise/installs/actionlint/1.7.12:/Users/thomask33/.local/share/mise/installs/communique/1.0.3:/Users/thomask33/.local/share/mise/installs/zizmor/1.24.1:/Users/thomask33/.local/share/mise/installs/node/25.9.0/bin:/Users/thomask33/.local/share/mise/installs/python/3.14.4/bin:/Users/thomask33/.local/share/mise/installs/github-ataraxy-labs-inspect/0.1.1:/Users/thomask33/.local/share/mise/installs/github-ataraxy-labs-sem/0.3.23:/Users/thomask33/.local/share/mise/installs/github-tailcallhq-forgecode/2.12.6:/Users/thomask33/.bun/bin:/Users/thomask33/.local/share/bob/nvim-bin:/Users/thomask33/.bun/bin:/opt/homebrew/opt/llvm/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pkg/env/active/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/Applications/Wireshark.app/Contents/MacOS:/usr/local/go/bin:/Users/thomask33/.local/share/mise/shims:/Users/thomask33/.bun/bin:/Users/thomask33/.local/share/bob/nvim-bin:/Users/thomask33/Library/pnpm:/Users/thomask33/.local/bin:/opt/homebrew/opt/llvm/bin:/Users/thomask33/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/Applications/Ghostty.app/Contents/MacOS:/Users/thomask33/.orbstack/bin:/Users/thomask33/Library/Application Support/JetBrains/Toolbox/scripts:/Users/thomask33/.krew/bin:/Users/thomask33/go/bin:/Users/thomask33/.zvm/bin:/Users/thomask33/.orbstack/bin:/Users/thomask33/Library/Application Support/JetBrains/Toolbox/scripts:/Users/thomask33/.krew/bin:/Users/thomask33/go/bin:/Users/thomask33/.zvm/bin:/Applications/Ghostty.app/Contents/MacOS",
+      "AGENT_TTY_HOME": "/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claude"
+    }
+  }
+}

@@ -15,6 +15,7 @@ Paths below are relative to the repository root.
 | Scrollback       | Scrollback-aware snapshots, screenshots, and recording export                       | `dogfood/20260322-dogfood-scrollback/`   |
 | Unicode          | Unicode rendering plus snapshot/export review                                       | `dogfood/20260322-dogfood-unicode/`      |
 | LazyVim          | A real TUI scenario that exercises editor startup and reviewer-visible artifacts    | `dogfood/20260322-lazyvim-scenario/`     |
+| Agent uses TTY   | Codex and Claude TUIs using `agent-tty` to drive Neovim and export proof artifacts  | `dogfood/agent-uses-agent-tty/`          |
 | Public skill     | The shipped `skills/agent-terminal/` workflow and documentation surface             | `dogfood/20260327-public-skill/`         |
 | Install flows    | Pre-public tarball install proof plus the current local git-install caveat evidence | `dogfood/install-flows/`                 |
 | Config parity    | Configuration/profile behavior checks that remain useful as a standing scenario     | `dogfood/week5-config-parity/`           |

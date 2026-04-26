@@ -1,0 +1,197 @@
+$ git rev-parse HEAD
+3f6c9d699862402b375f557ab2d0cc6841e6b9f3
+
+$ git log --oneline -n 1
+3f6c9d6 [codex] update agent guidance (#46)
+
+$ node --version
+v25.9.0
+
+$ npm --version
+11.12.1
+
+$ nvim --version | sed -n "1p"
+NVIM v0.13.0-dev-336+g924dbf10b8
+
+$ agent-tty version --json
+{
+  "ok": true,
+  "command": "version",
+  "timestamp": "2026-04-26T18:22:19.387Z",
+  "result": {
+    "cliVersion": "0.1.1-beta.4",
+    "protocolVersion": "0.1.0",
+    "rendererBackends": [
+      "ghostty-web"
+    ],
+    "runtime": {
+      "node": "v25.9.0",
+      "platform": "darwin",
+      "arch": "arm64"
+    },
+    "capabilities": [
+      {
+        "name": "snapshot",
+        "status": "available"
+      },
+      {
+        "name": "wait",
+        "status": "available"
+      },
+      {
+        "name": "screenshot",
+        "status": "available"
+      },
+      {
+        "name": "record-export-asciicast",
+        "status": "available"
+      },
+      {
+        "name": "record-export-webm",
+        "status": "available"
+      }
+    ]
+  }
+}
+
+$ agent-tty --home <temp> doctor --json
+{
+  "ok": true,
+  "command": "doctor",
+  "timestamp": "2026-04-26T18:22:23.618Z",
+  "result": {
+    "ok": true,
+    "checks": {
+      "environment": [
+        {
+          "name": "node-runtime",
+          "status": "pass",
+          "message": "Node 25.9.0 ok",
+          "durationMs": 0
+        },
+        {
+          "name": "cwd-access",
+          "status": "pass",
+          "message": "cwd read/write: /Users/thomask33/Projects/agent-tty",
+          "durationMs": 0
+        },
+        {
+          "name": "temp-dir",
+          "status": "pass",
+          "message": "temp dir ok: /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T",
+          "durationMs": 1
+        },
+        {
+          "name": "home_isolation",
+          "status": "pass",
+          "message": "agent-tty home is isolated from system home: /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/doctor-home",
+          "durationMs": 0
+        },
+        {
+          "name": "home-writable",
+          "status": "pass",
+          "message": "home writable: /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/doctor-home",
+          "durationMs": 1
+        },
+        {
+          "name": "pty-spawn",
+          "status": "pass",
+          "message": "spawned /Users/thomask33/.local/share/mise/installs/node/25.9.0/bin/node",
+          "durationMs": 946
+        },
+        {
+          "name": "socket-viable",
+          "status": "pass",
+          "message": "socket ok: /tmp/agent-tty/60bda681/3396b2d61971",
+          "durationMs": 5
+        },
+        {
+          "name": "artifact-atomicity",
+          "status": "pass",
+          "message": "atomic rename ok: /private/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/doctor-home/sessions/doctor-88196-mog3id69-3/artifacts",
+          "durationMs": 2
+        },
+        {
+          "name": "event-log-writable",
+          "status": "pass",
+          "message": "append ok: /private/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/doctor-home/sessions/doctor-88196-mog3id6b-5/events.jsonl",
+          "durationMs": 1
+        }
+      ],
+      "renderer": [
+        {
+          "name": "playwright_available",
+          "status": "pass",
+          "message": "available",
+          "durationMs": 1
+        },
+        {
+          "name": "browser_cache_accessible",
+          "status": "pass",
+          "message": "browser cache accessible: /Users/thomask33/Library/Caches/ms-playwright",
+          "durationMs": 0
+        },
+        {
+          "name": "browser_launch",
+          "status": "pass",
+          "message": "chromium launches",
+          "durationMs": 1782
+        },
+        {
+          "name": "ghostty_web_available",
+          "status": "pass",
+          "message": "WASM available",
+          "durationMs": 6
+        },
+        {
+          "name": "screenshot_viable",
+          "status": "pass",
+          "message": "viable",
+          "durationMs": 1104
+        }
+      ]
+    },
+    "capabilities": [
+      {
+        "name": "snapshot",
+        "status": "available",
+        "reason": "built-in capability",
+        "detail": "available without external renderer dependencies"
+      },
+      {
+        "name": "wait",
+        "status": "available",
+        "reason": "built-in capability",
+        "detail": "available without external renderer dependencies"
+      },
+      {
+        "name": "screenshot",
+        "status": "available",
+        "reason": "renderer smoke checks passed",
+        "detail": "playwright_available: available; browser_launch: chromium launches; ghostty_web_available: WASM available; screenshot_viable: viable"
+      },
+      {
+        "name": "record-export-asciicast",
+        "status": "available",
+        "reason": "built-in capability",
+        "detail": "available without external renderer dependencies"
+      },
+      {
+        "name": "record-export-webm",
+        "status": "available",
+        "reason": "browser-backed export dependencies available",
+        "detail": "playwright_available: available; browser_launch: chromium launches; ghostty_web_available: WASM available"
+      }
+    ]
+  }
+}
+
+$ codex --version
+codex-cli 0.125.0
+$ codex login status
+ok
+
+$ claude --version
+2.1.119 (Claude Code)
+$ claude auth status
+ok
