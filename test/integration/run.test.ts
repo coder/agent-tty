@@ -56,6 +56,7 @@ function expectCompletionArtifactsClean(text: string, marker: string): void {
   expect(text).not.toContain('__AT_MARKER_');
   expect(text).not.toContain('__AT_');
   expect(text).not.toContain('MARKER_');
+  expect(text).not.toContain("printf '\\033");
   expect(text).not.toContain('agent-tty:run-complete:');
   expect(text).not.toContain(markerPayload);
   expect(text).not.toContain(markerPayloadPart1);

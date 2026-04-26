@@ -106,6 +106,7 @@ type TimedRunCompletionWaitResult =
   | RunCompletionWaitResult
   | { kind: 'timeout' };
 
+const RUN_COMPLETION_POSTAMBLE_ECHO_PREFIX = String.raw`printf '\033\133\061\101`;
 const RUN_MARKER_PATTERN = /^__AT_MARKER_([0-9a-f]{32})__$/u;
 
 function normalizeExitSignal(signal: number | null): string | null {
@@ -162,6 +163,10 @@ function buildRunCompletePostamble(marker: string): string {
   const postamble = `printf '${shellOctalEscapedBytes(
     `${hideEchoedPostambleLine}${buildRunCompleteSentinel(marker)}`,
   )}'`;
+  invariant(
+    postamble.startsWith(RUN_COMPLETION_POSTAMBLE_ECHO_PREFIX),
+    'run-completion postamble echo prefix must stay in sync with sanitizer',
+  );
   invariant(
     !postamble.includes('agent-tty:run-complete:'),
     'run-completion postamble must not echo the complete sentinel label',
@@ -359,6 +364,7 @@ export async function runHost(sessionId: string): Promise<void> {
   const sentinelScanner = new RunCompletionSentinelScanner();
   const activeRunCompletions = new Map<string, ActiveRunCompletion>();
   const runCompletionWaiters = new Map<string, RunCompletionWaiter>();
+  let suppressRunCompletionEcho = false;
   let ptyIngestionQueue: Promise<void> = Promise.resolve();
 
   const ptyExitPromise = new Promise<void>((resolve) => {
@@ -497,13 +503,34 @@ export async function runHost(sessionId: string): Promise<void> {
     );
   };
 
+  const sanitizeRunCompletionEchoOutput = (data: string): string => {
+    invariant(typeof data === 'string', 'output data must be a string');
+
+    if (suppressRunCompletionEcho) {
+      return '';
+    }
+
+    if (activeRunCompletions.size === 0) {
+      return data;
+    }
+
+    const echoIndex = data.indexOf(RUN_COMPLETION_POSTAMBLE_ECHO_PREFIX);
+    if (echoIndex === -1) {
+      return data;
+    }
+
+    suppressRunCompletionEcho = true;
+    return data.slice(0, echoIndex);
+  };
+
   const appendSentinelPieces = async (
     pieces: SentinelPiece[],
   ): Promise<void> => {
     for (const piece of pieces) {
       if (piece.type === 'output') {
-        if (piece.data.length > 0) {
-          await eventLog.append('output', { data: piece.data });
+        const outputData = sanitizeRunCompletionEchoOutput(piece.data);
+        if (outputData.length > 0) {
+          await eventLog.append('output', { data: outputData });
         }
         continue;
       }
@@ -525,6 +552,7 @@ export async function runHost(sessionId: string): Promise<void> {
             ? {}
             : { inputRunSeq: activeCompletion.inputRunSeq }),
         });
+        suppressRunCompletionEcho = false;
         const deleted = activeRunCompletions.delete(piece.marker);
         invariant(
           deleted,
