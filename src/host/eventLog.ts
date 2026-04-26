@@ -280,22 +280,27 @@ export class EventLog {
     assertFilePath(filePath);
 
     const fileHandle = await open(filePath, 'a');
-    const fileStats = await fileHandle.stat();
-    invariant(
-      fileStats.size <= MAX_EVENT_LOG_SIZE,
-      `event log file exceeds size limit (${String(fileStats.size)} bytes, max ${String(MAX_EVENT_LOG_SIZE)})`,
-    );
+    try {
+      const fileStats = await fileHandle.stat();
+      invariant(
+        fileStats.size <= MAX_EVENT_LOG_SIZE,
+        `event log file exceeds size limit (${String(fileStats.size)} bytes, max ${String(MAX_EVENT_LOG_SIZE)})`,
+      );
 
-    let eventBuffer: EventRecord[] = [];
-    let nextSeq = 0;
-    if (fileStats.size > 0) {
-      const existingContent = await readFile(filePath, 'utf8');
-      eventBuffer = parseEventLogContent(existingContent);
-      nextSeq = deriveNextSeq(eventBuffer);
-      invariant(nextSeq >= 0, 'derived next seq must be non-negative');
+      let eventBuffer: EventRecord[] = [];
+      let nextSeq = 0;
+      if (fileStats.size > 0) {
+        const existingContent = await readFile(filePath, 'utf8');
+        eventBuffer = parseEventLogContent(existingContent);
+        nextSeq = deriveNextSeq(eventBuffer);
+        invariant(nextSeq >= 0, 'derived next seq must be non-negative');
+      }
+
+      return new EventLog(filePath, fileHandle, nextSeq, eventBuffer);
+    } catch (error) {
+      await fileHandle.close();
+      throw error;
     }
-
-    return new EventLog(filePath, fileHandle, nextSeq, eventBuffer);
   }
 
   async append(type: 'output', payload: OutputEventPayload): Promise<number>;

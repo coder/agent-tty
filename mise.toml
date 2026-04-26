@@ -6,14 +6,15 @@ zizmor = "1.24.1"
 # versions or supported CI platforms change.
 node = "25"
 python = "3"
+aube = "1.2.0"
 
 [tasks.bootstrap]
 description = "Install deps and Chromium for local development"
-run = "npm install && npx playwright install chromium"
+run = "aube exec playwright install chromium"
 
 [tasks.bootstrap-ci]
 description = "Install deps for CI without browser downloads"
-run = "npm ci"
+run = "aube ci"
 
 [tasks.clean]
 description = "Clean artifacts"

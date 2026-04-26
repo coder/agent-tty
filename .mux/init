@@ -31,7 +31,7 @@ if [ -f "$_mux_mise_config" ]; then
 fi
 
 "$_mux_mise_bin" install
-"$_mux_mise_bin" run bootstrap
+"$_mux_mise_bin" exec -- aube exec playwright install chromium
 
 unset _mux_mise_bin
 unset _mux_mise_config

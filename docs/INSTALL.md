@@ -99,7 +99,7 @@ When you need a deterministic local artifact before publishing a GitHub Release,
 
 ```bash
 TARBALL_DIR=$(mktemp -d)
-npm ci
+aube ci
 npm run pack:private -- --pack-destination "$TARBALL_DIR"
 
 INSTALL_PREFIX=$(mktemp -d)
