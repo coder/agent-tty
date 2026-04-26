@@ -4,12 +4,17 @@
 
 ### Changed
 
+- Switched local and CI dependency bootstrap to [`aube`](https://github.com/endevco/aube): `mise run bootstrap` now runs `aube exec playwright install chromium`, `mise run bootstrap-ci` runs `aube ci`, and the documented fallback (when `mise` is unavailable) is `aube exec playwright install chromium`. The repo's `packageManager` field is now `aube@1.2.0` and a `pnpm.allowBuilds` allow-list permits native builds for `@coder/libghostty-vt-node`, `esbuild`, `fsevents`, and `node-pty` (#51).
 - Refreshed contributor and agent guidance in `AGENTS.md` with an outcome-first operating contract, validation guidance, and grouped project invariants (#46).
+
+### Fixed
+
+- `EventLog.open` now closes the underlying file handle when validation (size limit check or existing-content parsing) fails, preventing a file-descriptor leak on rejected session host startup (#51).
 
 ### Internal
 
-- Bumped the `communique` changelog dev tool to 1.0.4 / 1.1.2 and added a post-merge workflow that opens or updates an unreleased-changelog PR on pushes to `main` (#46, #47, #50, #52).
-- Sharded Linux CI into separate static, unit, integration (4 shards), and e2e (3 shards) jobs while preserving the aggregate `quality-gates` check and the local `npm test` / `mise run test` contract (#48).
+- Added a post-merge workflow that runs `communique generate HEAD --changelog` on pushes to `main` and opens or updates a stable unreleased-changelog PR, with follow-up fixes for the PR title and `--force-with-lease` push against the configured `origin` remote (#47, #49, #50, #52).
+- Sharded Linux CI into separate static, unit, integration (4 shards), and e2e (3 shards) jobs while preserving the aggregate `quality-gates` required check and the local `npm test` / `mise run test` contract (#48).
 
 ## [v0.1.1-beta.4](https://github.com/coder/agent-tty/releases/tag/v0.1.1-beta.4) - 2026-04-25
 
