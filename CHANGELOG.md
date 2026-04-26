@@ -4,8 +4,12 @@
 
 ### Changed
 
-- Refreshed internal contributor and agent guidance in `AGENTS.md` (#46, 3f6c9d6).
-- Bumped the `communique` dev tool used for changelog generation to 1.0.4 (#46, 3f6c9d6).
+- Refreshed contributor and agent guidance in `AGENTS.md` with an outcome-first operating contract, validation guidance, and grouped project invariants (#46).
+
+### Internal
+
+- Bumped the `communique` changelog dev tool to 1.0.4 / 1.1.2 and added a post-merge workflow that opens or updates an unreleased-changelog PR on pushes to `main` (#46, #47, #50, #52).
+- Sharded Linux CI into separate static, unit, integration (4 shards), and e2e (3 shards) jobs while preserving the aggregate `quality-gates` check and the local `npm test` / `mise run test` contract (#48).
 
 ## [v0.1.1-beta.4](https://github.com/coder/agent-tty/releases/tag/v0.1.1-beta.4) - 2026-04-25
 
