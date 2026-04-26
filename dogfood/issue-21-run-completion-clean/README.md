@@ -10,6 +10,7 @@ removed after capture). See `commands.sh` for the exact reproduction.
 ## What was exercised
 
 The waited `run` command was:
+
 ```sh
 printf "before-clean-marker-proof\n"; sleep 0.2; printf "after-clean-marker-proof\n"
 ```
@@ -19,12 +20,12 @@ Run marker returned in the JSON envelope: `__AT_MARKER_739e240b0762477e833bf3fd8
 
 ## Verification matrix
 
-| Artifact | User output present | `__AT_MARKER_` count | `agent-tty:run-complete:` count | Marker UUID count |
-| --- | --- | --- | --- | --- |
-| `03-snapshot.json` (visibleLines text) | ✅ both lines | 0 | 0 | 0 |
-| `05-recording.cast` (asciicast frames) | ✅ both lines | 0 | 0 | 0 |
-| `06-recording.webm` (binary, byte scan) | n/a (encoded video) | 0 | 0 | 0 |
-| `07-events.jsonl` `output` events | ✅ visible bytes only | 0 | 0 | 0 |
+| Artifact                                | User output present   | `__AT_MARKER_` count | `agent-tty:run-complete:` count | Marker UUID count |
+| --------------------------------------- | --------------------- | -------------------- | ------------------------------- | ----------------- |
+| `03-snapshot.json` (visibleLines text)  | ✅ both lines         | 0                    | 0                               | 0                 |
+| `05-recording.cast` (asciicast frames)  | ✅ both lines         | 0                    | 0                               | 0                 |
+| `06-recording.webm` (binary, byte scan) | n/a (encoded video)   | 0                    | 0                               | 0                 |
+| `07-events.jsonl` `output` events       | ✅ visible bytes only | 0                    | 0                               | 0                 |
 
 Allowed and expected: the marker text appears only in the structured metadata
 events that never reach renderer/export — `input_run.payload.marker` and
@@ -39,6 +40,7 @@ Single waited run produced 9 events:
 - 1 × `run_complete` (new structured non-rendered event with `{ marker, inputRunSeq: 2 }`)
 
 `run_complete` event payload:
+
 ```json
 { "marker": "__AT_MARKER_739e240b0762477e833bf3fd8b0dfd5f__", "inputRunSeq": 2 }
 ```
@@ -48,8 +50,14 @@ Single waited run produced 9 events:
 `02-run.json` still includes:
 
 ```json
-{ "accepted": true, "completed": true, "timedOut": false,
-  "seq": 2, "durationMs": 208, "marker": "__AT_MARKER_739e240b0762477e833bf3fd8b0dfd5f__" }
+{
+  "accepted": true,
+  "completed": true,
+  "timedOut": false,
+  "seq": 2,
+  "durationMs": 208,
+  "marker": "__AT_MARKER_739e240b0762477e833bf3fd8b0dfd5f__"
+}
 ```
 
 ## Files
