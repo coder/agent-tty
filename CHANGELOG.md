@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Refreshed internal contributor and agent guidance in `AGENTS.md` (#46, 3f6c9d6).
+- Bumped the `communique` dev tool used for changelog generation to 1.0.4 (#46, 3f6c9d6).
+
 ## [v0.1.1-beta.4](https://github.com/coder/agent-tty/releases/tag/v0.1.1-beta.4) - 2026-04-25
 
 ### Added
