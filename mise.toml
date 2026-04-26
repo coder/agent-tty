@@ -1,6 +1,6 @@
 [tools]
 actionlint = "1.7.12"
-communique = "1.0.3"
+communique = "1.0.4"
 zizmor = "1.24.1"
 # CI installs with `mise install --locked`, so update mise.lock whenever tool
 # versions or supported CI platforms change.

@@ -1,4 +1,21 @@
-You are an experienced, pragmatic software engineering AI agent. Do not over-engineer a solution when a simple one is possible. Keep edits minimal. If you want an exception to ANY rule, you MUST stop and get permission first.
+You are an experienced, pragmatic software engineering AI agent. Do not over-engineer a solution when a simple one is possible. Keep edits minimal.
+
+Follow these instructions unless they conflict with higher-priority instructions or make the task impossible. Treat destructive actions, running-session deletion, public API/JSON contract changes, and public skill behavior as hard-stop areas: ask before making an exception. For ordinary judgment calls, choose the smallest safe path, state the assumption, and verify it.
+
+# Operating Contract
+
+Goal: complete the user's repo task end to end with the smallest safe change.
+
+Success means:
+
+- Relevant code, tests, and docs were inspected before edits.
+- Every changed line traces directly to the request.
+- Public CLI JSON, protocol schemas, event logs, and artifacts remain consistent.
+- Assertions or Zod validation guard non-obvious assumptions.
+- Targeted validation was run, or the reason it could not run is stated.
+- The final response names what changed and the exact checks performed.
+
+Stop and ask only when the missing information would materially change the implementation, cause irreversible side effects, or require overriding a hard project invariant.
 
 # Project Overview
 
@@ -107,21 +124,56 @@ find dogfood -type f -name 'commands.sh' | sort
 
 Development server: **none**. This is a CLI project, so iterative development usually means running `npx tsx src/cli/main.ts <command>` against an isolated `AGENT_TTY_HOME`.
 
-# Patterns
+# Validation
 
-- **Do use `--json` for automation and prefer direct CLI invocation (`npx tsx src/cli/main.ts ...`) while developing.** Tests and design docs assume automation consumers read JSON envelopes. **Do not** scrape human-readable output when a JSON mode exists, and do not rely on noisy `npm run` wrappers when you need machine-parseable JSON.
-- **Do isolate session homes in tests.** Follow the pattern in `test/helpers.ts` and `test/e2e/helpers.ts`: create a temp directory, set absolute `AGENT_TTY_HOME`, clean it up, and destroy any surviving sessions. **Do not** let tests mutate `~/.agent-tty`.
-- **Do fail fast with assertions and schemas.** Existing code uses `invariant()`, `assertString()`, and `.safeParse()`/`.strict()` heavily. **Do not** silently coerce invalid paths, session IDs, or manifest data.
-- **Do preserve the event-log-as-truth model.** New snapshot, screenshot, wait, or export features should flow through replayable event/state data. **Do not** add one-off state that only live PTY code can see.
-- **Do keep storage writes inside validated helpers.** Path resolution in `src/storage/sessionPaths.ts`, manifest writers, and artifact helpers intentionally guard against path escape and invalid filenames. **Do not** write manifest-like files with ad hoc `fs.writeFile()` logic.
-- **Do keep CI hand-curated.** `.github/workflows/ci.yml` is intentionally maintained by hand even though `mise generate github-action` can scaffold it. **Do not** overwrite the checked-in workflow with generated output without preserving the repo-specific steps and comments.
-- **Do update coupled limits together.** `src/host/eventLog.ts` and `src/host/replay.ts` both enforce the 50 MB event-log limit. **Do not** change one without the other.
-- **Do add tests at the right layer.** Small parser/validation changes usually belong in `test/unit`; CLI wiring and temp-home behavior fit `test/integration`; renderer/artifact flows belong in `test/e2e`.
+Run the narrowest useful validation for the change:
 
-- **Do keep the public `skills/agent-tty/` artifact binary-first.** The committed public skill and public-facing skill docs must use `agent-tty ...`, not repo-local `npx`, `tsx`, or `src/cli/main.ts` invocations. When you execute those examples from this source tree, translate them locally to `npx tsx src/cli/main.ts ...`, but do not commit that substitution back into the public skill or README skill-install guidance.
-- **Do teach the terminal workflow the public skill is supposed to reinforce.** Prefer `--home`, `--json`, `run`, `wait`, `snapshot`, `screenshot`, and `record export` when writing or maintaining public skill examples. **Do not** teach `tmux`, blind `sleep`, or out-of-band screenshots as the primary workflow.
+- Parser, helper, or schema changes: targeted unit tests.
+- CLI behavior: integration tests with isolated `AGENT_TTY_HOME`.
+- Renderer, screenshot, wait, export, or retention behavior: relevant e2e tests and dogfood artifact inspection when feasible.
+- Broad or release-sensitive changes: `mise run ci`.
 
-## Testing patterns
+If validation cannot run, state why and name the next best check.
+
+# Project Invariants
+
+## Automation Surface
+
+- Prefer `--json` for automation and direct CLI invocation (`npx tsx src/cli/main.ts ...`) while developing.
+- Do not scrape human-readable output when a JSON mode exists.
+- Do not rely on noisy `npm run` wrappers when you need machine-parseable JSON.
+- If CLI JSON changes, update the corresponding schemas/messages/tests in the same change.
+
+## Session And Storage Safety
+
+- Use an isolated absolute `AGENT_TTY_HOME` in tests and automation.
+- Never let tests mutate `~/.agent-tty`.
+- Never delete running sessions; cleanup code must reconcile state first.
+- Keep storage writes inside validated helpers such as `src/storage/sessionPaths.ts`, manifest writers, and artifact helpers.
+- Do not write manifest-like files with ad hoc `fs.writeFile()` logic.
+
+## Event Log And Replay
+
+- Treat the event log as canonical execution truth.
+- New snapshot, screenshot, wait, or export features should flow through replayable event/state data.
+- Do not add one-off state that only live PTY code can see.
+- Keep `src/host/eventLog.ts` and `src/host/replay.ts` assumptions aligned.
+- If you change the 50 MB event-log limit, update both `src/host/eventLog.ts` and `src/host/replay.ts`.
+
+## CI And Generated Files
+
+- Keep `.github/workflows/ci.yml` hand-curated.
+- Do not overwrite the checked-in workflow with `mise generate github-action` output without preserving the repo-specific steps and comments.
+
+## Public Skill Contract
+
+- Keep the public `skills/agent-tty/` artifact binary-first.
+- Public skill and public-facing skill docs must use `agent-tty ...`, not repo-local `npx`, `tsx`, or `src/cli/main.ts` invocations.
+- When executing those examples from this source tree, translate them locally to `npx tsx src/cli/main.ts ...`, but do not commit that substitution back into public skill or README skill-install guidance.
+- Prefer `--home`, `--json`, `run`, `wait`, `snapshot`, `screenshot`, and `record export` when writing or maintaining public skill examples.
+- Do not teach `tmux`, blind `sleep`, or out-of-band screenshots as the primary workflow.
+
+## Test Layers
 
 - Unit tests often mock command dependencies and assert exact envelopes or manifest writes.
 - Integration tests run the real CLI via `tsx src/cli/main.ts` against temp homes.
