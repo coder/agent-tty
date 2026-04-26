@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-04-26T20:50:41.609Z",
+  "result": {
+    "sessionId": "01KQ5RWH177CRZKPXSW91K16RG",
+    "format": "webm",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/agent-tty-4d32/dogfood/issue-21-run-completion-clean/06-recording.webm",
+    "bytes": 26432,
+    "sha256": "27384d1fafaeee27c0e8511f3df659c3b195c4fccf56262fdb5605caa7b7dcee",
+    "capturedAtSeq": 8,
+    "durationMs": 14205,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d",
+      "timingMode": "accelerated",
+      "rendererBackend": "ghostty-web",
+      "outputEventCount": 7,
+      "resizeEventCount": 0
+    }
+  }
+}
