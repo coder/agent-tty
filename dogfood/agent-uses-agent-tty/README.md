@@ -10,7 +10,7 @@ This evergreen bundle records coding agents using the public `agent-tty` CLI to 
 | Claude | [![Claude recording thumbnail](./artifacts/claude-thumbnail.png)](./artifacts/claude-outer.webm) | [`claude-inner-nvim.webm`](./artifacts/claude-inner-nvim.webm), [`claude-inner-nvim.cast`](./artifacts/claude-inner-nvim.cast) | [`claude-final-file-proof.txt`](./artifacts/claude-final-file-proof.txt) |
 
 The outer recording shows the Codex or Claude interactive TUI running inside an `agent-tty` session. The inner recording is the nested `agent-tty` session that the agent created to control `nvim --clean -n demo-note.txt`.
-The thumbnail links point to slowed review cuts trimmed to the final visible agent/`agent-tty` interaction. The untrimmed outer WebM is kept as `artifacts/*-outer-full.webm`.
+The thumbnail links point to slowed review cuts from the final command/export window of an accelerated replay, so startup waits do not dominate the video. The untrimmed recorded-timing outer WebM is kept as `artifacts/*-outer-full.webm`.
 
 ## Reproduce
 
@@ -48,16 +48,16 @@ Each agent run uses:
 - isolated Neovim XDG config, data, state, and cache directories.
 
 Temporary directories are removed on exit. Set `KEEP_AGENT_USES_AGENT_TTY_TEMP=1` when debugging a failed run.
-Set `AGENT_USES_AGENT_TTY_REVIEW_TAIL_SECONDS` and `AGENT_USES_AGENT_TTY_REVIEW_SLOWDOWN` to tune the linked review cuts; the defaults keep the last 6 seconds of the full recording and slow that segment by 5x.
+Set `AGENT_USES_AGENT_TTY_REVIEW_TAIL_SECONDS`, `AGENT_USES_AGENT_TTY_REVIEW_SLOWDOWN`, `AGENT_USES_AGENT_TTY_REVIEW_CPU_USED`, and `AGENT_USES_AGENT_TTY_REVIEW_CRF` to tune the linked review cuts. The defaults export an accelerated replay of the outer session, keep the final 6 seconds, and slow that segment by 4x.
 
 ## Bundle Contents
 
 - `reproduce.sh` — self-contained generator.
-- `prompts/codex.md` and `prompts/claude.md` — prompt templates used for the nested agent runs.
+- `prompts/template.md` — prompt template used for the nested agent runs.
 - `environment.txt` — generated environment and auth-check summary.
 - `*-outer-*.json` — generated CLI envelopes for the outer recording session.
-- `artifacts/*-outer.webm` — trimmed review cut of the coding agent process.
-- `artifacts/*-outer-full.webm` and `artifacts/*-outer.cast` — untrimmed recordings of the coding agent process.
+- `artifacts/*-outer.webm` — slowed accelerated-replay review cut of the coding agent command/export window.
+- `artifacts/*-outer-full.webm` and `artifacts/*-outer.cast` — untrimmed recorded-timing recordings of the coding agent process.
 - `artifacts/*-thumbnail.png` — README thumbnails copied from `agent-tty screenshot`.
 - `artifacts/*-inner-nvim.webm` and `artifacts/*-inner-nvim.cast` — artifacts exported by the nested coding agent.
 - `artifacts/*-demo-note.txt` and `artifacts/*-final-file-proof.txt` — final file proof.
@@ -65,10 +65,9 @@ Set `AGENT_USES_AGENT_TTY_REVIEW_TAIL_SECONDS` and `AGENT_USES_AGENT_TTY_REVIEW_
 
 ## Adding Another Agent
 
-1. Add `prompts/<agent>.md` with the same placeholders used by the existing templates.
-2. Extend `selected_agents`, `write_runner`, and argument validation in `reproduce.sh`.
-3. Add a README row for the new `artifacts/<agent>-*` outputs.
-4. Run `bash dogfood/agent-uses-agent-tty/reproduce.sh --agent <agent>` and confirm the generated file proof, outer recording, inner recording, thumbnail, and transcript are non-empty.
+1. Extend `selected_agents`, `write_runner`, and argument validation in `reproduce.sh`.
+2. Add a README row for the new `artifacts/<agent>-*` outputs.
+3. Run `bash dogfood/agent-uses-agent-tty/reproduce.sh --agent <agent>` and confirm the generated file proof, outer recording, inner recording, thumbnail, and transcript are non-empty.
 
 ## References
 

@@ -13,7 +13,9 @@ PROOF_TIMEOUT_MS="${AGENT_USES_AGENT_TTY_PROOF_TIMEOUT_MS:-900000}"
 WEBM_TIMING="${AGENT_USES_AGENT_TTY_WEBM_TIMING:-recorded}"
 CODEX_MODEL="${AGENT_USES_AGENT_TTY_CODEX_MODEL:-gpt-5.4-mini}"
 REVIEW_TAIL_SECONDS="${AGENT_USES_AGENT_TTY_REVIEW_TAIL_SECONDS:-6}"
-REVIEW_SLOWDOWN="${AGENT_USES_AGENT_TTY_REVIEW_SLOWDOWN:-5}"
+REVIEW_SLOWDOWN="${AGENT_USES_AGENT_TTY_REVIEW_SLOWDOWN:-4}"
+REVIEW_CPU_USED="${AGENT_USES_AGENT_TTY_REVIEW_CPU_USED:-4}"
+REVIEW_CRF="${AGENT_USES_AGENT_TTY_REVIEW_CRF:-34}"
 KEEP_TEMP="${KEEP_AGENT_USES_AGENT_TTY_TEMP:-0}"
 TEMP_ROOT=""
 INSTALL_PREFIX=""
@@ -46,6 +48,31 @@ require_command() {
 assert_file_nonempty() {
   local path="$1"
   [[ -s "$path" ]] || fail "expected non-empty file: $path"
+}
+
+assert_positive_number() {
+  local name="$1"
+  local value="$2"
+  [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] || fail "$name must be numeric"
+  node -e 'process.exit(Number(process.argv[1]) > 0 ? 0 : 1)' "$value" || fail "$name must be greater than 0"
+}
+
+assert_positive_integer() {
+  local name="$1"
+  local value="$2"
+  [[ "$value" =~ ^[0-9]+$ ]] || fail "$name must be an integer"
+  (( value > 0 )) || fail "$name must be greater than 0"
+}
+
+file_state() {
+  local path="$1"
+  if [[ -s "$path" ]]; then
+    printf 'present:%sB' "$(wc -c < "$path" | tr -d ' ')"
+  elif [[ -e "$path" ]]; then
+    printf 'empty'
+  else
+    printf 'missing'
+  fi
 }
 
 assert_text_file_equals() {
@@ -91,16 +118,49 @@ copy_artifact_from_envelope() {
   assert_file_nonempty "$destination_path"
 }
 
-trim_outer_webm_for_review() {
+media_duration_seconds() {
+  local path="$1"
+  ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$path"
+}
+
+assert_media_duration_at_least() {
+  local path="$1"
+  local min_seconds="$2"
+  local label="$3"
+  local duration
+
+  duration="$(media_duration_seconds "$path")"
+  node -e 'const duration = Number(process.argv[1]); const min = Number(process.argv[2]); process.exit(Number.isFinite(duration) && duration >= min ? 0 : 1);' "$duration" "$min_seconds" ||
+    fail "$label duration is ${duration}s (minimum ${min_seconds}s): $path"
+}
+
+slow_outer_webm_for_review() {
   local source_webm="$1"
   local destination_webm="$2"
   local duration
   local trim_start
 
-  duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$source_webm")"
+  duration="$(media_duration_seconds "$source_webm")"
   trim_start="$(node -e 'const duration = Number(process.argv[1]); const tail = Number(process.argv[2]); console.log(Math.max(0, duration - tail).toFixed(3));' "$duration" "$REVIEW_TAIL_SECONDS")"
-  ffmpeg -nostdin -y -hide_banner -loglevel error -i "$source_webm" -vf "trim=start=$trim_start,setpts=$REVIEW_SLOWDOWN*(PTS-STARTPTS)" -an -c:v libvpx-vp9 -deadline good -cpu-used 4 -b:v 0 -crf 34 "$destination_webm"
+
+  # VP9 CRF 34 and cpu-used 4 keep checked-in review cuts compact while
+  # preserving enough terminal text detail for GitHub reviewers.
+  ffmpeg -nostdin -y -hide_banner -loglevel error -i "$source_webm" -vf "trim=start=$trim_start,setpts=$REVIEW_SLOWDOWN*(PTS-STARTPTS)" -an -c:v libvpx-vp9 -deadline good -cpu-used "$REVIEW_CPU_USED" -b:v 0 -crf "$REVIEW_CRF" "$destination_webm"
   assert_file_nonempty "$destination_webm"
+  assert_media_duration_at_least "$destination_webm" 1 'outer review WebM'
+}
+
+destroy_sessions_in_home() {
+  local home="$1"
+  local list_json
+
+  [[ -d "$home" ]] || return 0
+  command -v agent-tty >/dev/null 2>&1 || return 0
+  list_json="$(agent-tty --home "$home" list --all --json 2>/dev/null)" || return 0
+  while IFS= read -r session_id; do
+    [[ -n "$session_id" ]] || continue
+    agent-tty --home "$home" destroy "$session_id" --force --json >/dev/null 2>&1 || true
+  done < <(printf '%s\n' "$list_json" | jq -r '.result.sessions[].sessionId?')
 }
 
 try_capture_outer_thumbnail() {
@@ -127,6 +187,12 @@ cleanup() {
   set +e
   if [[ -n "$CURRENT_OUTER_HOME" && -n "$CURRENT_OUTER_SESSION_ID" ]]; then
     agent-tty --home "$CURRENT_OUTER_HOME" destroy "$CURRENT_OUTER_SESSION_ID" --force --json >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$TEMP_ROOT" && -d "$TEMP_ROOT" ]]; then
+    local home
+    for home in "$TEMP_ROOT"/inner-home/* "$TEMP_ROOT"/outer-home/*; do
+      destroy_sessions_in_home "$home"
+    done
   fi
   if [[ -n "$PACK_TARBALL_PATH" && -f "$PACK_TARBALL_PATH" ]]; then
     rm -f "$PACK_TARBALL_PATH"
@@ -167,8 +233,10 @@ parse_args() {
     recorded|accelerated|max-speed) ;;
     *) fail "AGENT_USES_AGENT_TTY_WEBM_TIMING must be one of: recorded, accelerated, max-speed" ;;
   esac
-  [[ "$REVIEW_TAIL_SECONDS" =~ ^[0-9]+([.][0-9]+)?$ ]] || fail 'AGENT_USES_AGENT_TTY_REVIEW_TAIL_SECONDS must be numeric'
-  [[ "$REVIEW_SLOWDOWN" =~ ^[0-9]+([.][0-9]+)?$ ]] || fail 'AGENT_USES_AGENT_TTY_REVIEW_SLOWDOWN must be numeric'
+  assert_positive_number 'AGENT_USES_AGENT_TTY_REVIEW_TAIL_SECONDS' "$REVIEW_TAIL_SECONDS"
+  assert_positive_number 'AGENT_USES_AGENT_TTY_REVIEW_SLOWDOWN' "$REVIEW_SLOWDOWN"
+  assert_positive_integer 'AGENT_USES_AGENT_TTY_REVIEW_CPU_USED' "$REVIEW_CPU_USED"
+  assert_positive_integer 'AGENT_USES_AGENT_TTY_REVIEW_CRF' "$REVIEW_CRF"
 }
 
 selected_agents() {
@@ -195,7 +263,7 @@ render_prompt() {
   local xdg_data_home="${10}"
   local xdg_state_home="${11}"
   local xdg_cache_home="${12}"
-  local template_path="$PROMPTS_DIR/$agent.md"
+  local template_path="$PROMPTS_DIR/template.md"
   [[ -f "$template_path" ]] || fail "missing prompt template: $template_path"
 
   local prompt
@@ -243,6 +311,7 @@ write_inner_helper() {
     printf 'XDG_DATA_HOME=%q\n' "$xdg_data_home"
     printf 'XDG_STATE_HOME=%q\n' "$xdg_state_home"
     printf 'XDG_CACHE_HOME=%q\n' "$xdg_cache_home"
+    printf 'DIAGNOSTICS_DIR="$WORKSPACE/diagnostics"\n'
     printf 'SESSION_ID=\n'
     printf 'cleanup() {\n'
     printf '  if [[ -n "${SESSION_ID:-}" ]]; then\n'
@@ -250,11 +319,11 @@ write_inner_helper() {
     printf '  fi\n'
     printf '}\n'
     printf 'trap cleanup EXIT\n'
-    printf 'mkdir -p "$INNER_HOME" "$(dirname "$INNER_CAST")" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"\n'
+    printf 'mkdir -p "$INNER_HOME" "$(dirname "$INNER_CAST")" "$DIAGNOSTICS_DIR" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"\n'
     printf 'export PS4="$ "\n'
     printf 'set -x\n'
-    printf 'agent-tty skills get agent-tty >/tmp/agent-tty-skill.md\n'
-    printf 'agent-tty --home "$INNER_HOME" doctor --json >/tmp/agent-tty-inner-doctor.json\n'
+    printf 'agent-tty skills get agent-tty >"$DIAGNOSTICS_DIR/agent-tty-skill.md"\n'
+    printf 'agent-tty --home "$INNER_HOME" doctor --json >"$DIAGNOSTICS_DIR/agent-tty-inner-doctor.json"\n'
     printf 'SESSION_ID="$(agent-tty --home "$INNER_HOME" create --json --cwd "$WORKSPACE" --cols 100 --rows 28 --name inner-nvim --shell /bin/bash | jq -r '"'"'.result.sessionId'"'"')"\n'
     printf 'agent-tty --home "$INNER_HOME" run "$SESSION_ID" "printf '"'"'launching nvim --clean -n demo-note.txt\\\\n'"'"'; XDG_CONFIG_HOME=\\"$XDG_CONFIG_HOME\\" XDG_DATA_HOME=\\"$XDG_DATA_HOME\\" XDG_STATE_HOME=\\"$XDG_STATE_HOME\\" XDG_CACHE_HOME=\\"$XDG_CACHE_HOME\\" nvim --clean -n demo-note.txt" --no-wait --json\n'
     printf 'agent-tty --home "$INNER_HOME" wait "$SESSION_ID" --screen-stable-ms 1000 --timeout 60000 --json\n'
@@ -316,15 +385,12 @@ wait_for_agent_proof() {
 
   while (( SECONDS < deadline )); do
     if [[ -s "$final_file" && -s "$inner_cast" && -s "$inner_webm" ]]; then
-      assert_text_file_equals "$final_file" "$expected"
-      grep -F 'nvim --clean -n demo-note.txt' "$inner_cast" >/dev/null || fail "inner cast does not show the clean Neovim launch: $inner_cast"
-      grep -F "$expected" "$inner_cast" >/dev/null || fail "inner cast does not contain the expected sentence: $inner_cast"
       return 0
     fi
     sleep 2
   done
 
-  fail "timed out waiting for nested agent proof files"
+  fail "timed out waiting for nested agent proof files: final_file=$(file_state "$final_file"), inner_cast=$(file_state "$inner_cast"), inner_webm=$(file_state "$inner_webm")"
 }
 
 stop_outer_agent_tui() {
@@ -380,9 +446,9 @@ acknowledge_startup_prompt_if_present() {
   local session_id="$2"
   local tmp_path="$3"
 
-  if agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" wait "$session_id" --regex 'Do you trust|trust this|trust this folder|Yes.*trust|Accessingworkspace|Accessing workspace|continue' --timeout 30000 --json > "$tmp_path" 2>/dev/null; then
+  if agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" wait "$session_id" --regex 'Do you trust|trust this|trust this folder|Yes.*trust|Accessing workspace|continue.*trust|Press.*continue' --timeout 30000 --json > "$tmp_path" 2>/dev/null; then
     if jq -e '.ok == true and .result.matched == true' "$tmp_path" >/dev/null; then
-      agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" send-keys "$session_id" Enter --json >/dev/null
+      agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" send-keys "$session_id" Enter --json >/dev/null || true
     fi
   fi
   rm -f "$tmp_path"
@@ -399,7 +465,7 @@ install_local_agent_tty() {
   tarball_name="$(jq -er '.[0].filename' "$pack_json")"
   PACK_TARBALL_PATH="$REPO_ROOT/$tarball_name"
   assert_file_nonempty "$PACK_TARBALL_PATH"
-  npm install -g --prefix "$INSTALL_PREFIX" "$PACK_TARBALL_PATH" --ignore-scripts >/dev/null
+  npm install -g --prefix "$INSTALL_PREFIX" "$PACK_TARBALL_PATH" >/dev/null
   rm -f "$PACK_TARBALL_PATH"
   PACK_TARBALL_PATH=""
 
@@ -458,6 +524,7 @@ verify_agent_outputs() {
   assert_file_nonempty "$inner_webm"
   grep -F 'nvim --clean -n demo-note.txt' "$inner_cast" >/dev/null || fail "inner cast does not show the clean Neovim launch: $inner_cast"
   grep -F "$DEMO_SENTENCE" "$inner_cast" >/dev/null || fail "inner cast does not contain the expected sentence: $inner_cast"
+  assert_media_duration_at_least "$inner_webm" 1 'inner WebM'
 
   cp "$final_file" "$ARTIFACTS_DIR/$agent-demo-note.txt"
   cp "$inner_cast" "$ARTIFACTS_DIR/$agent-inner-nvim.cast"
@@ -500,7 +567,7 @@ verify_outer_recording() {
   local duration_ms
   duration_ms="$(jq -er '.result.durationMs' "$webm_envelope_path")"
   [[ "$duration_ms" =~ ^[0-9]+$ ]] || fail "outer WebM duration is not numeric in $webm_envelope_path"
-  (( duration_ms >= 10000 )) || fail "outer WebM is too short to show the TUI flow: $webm_path"
+  (( duration_ms >= 10000 )) || fail "outer WebM duration is ${duration_ms}ms (minimum 10000ms): $webm_path"
   jq -e --arg timing "$WEBM_TIMING" '.result.metadata.timingMode == $timing' "$webm_envelope_path" >/dev/null ||
     fail "outer WebM does not use $WEBM_TIMING timing: $webm_envelope_path"
 }
@@ -528,6 +595,7 @@ run_agent_demo() {
   local outer_cast_path="$ARTIFACTS_DIR/$agent-outer.cast"
   local outer_full_webm_path="$ARTIFACTS_DIR/$agent-outer-full.webm"
   local outer_review_webm_path="$ARTIFACTS_DIR/$agent-outer.webm"
+  local outer_review_raw_webm_path="$TEMP_ROOT/$agent-outer-review-accelerated.webm"
   local inner_helper_path="$workspace/run-inner-nvim-proof.sh"
   local runner_path="$workspace/run-$agent.sh"
 
@@ -570,7 +638,7 @@ run_agent_demo() {
   stop_outer_agent_tui "$agent" "$outer_home" "$CURRENT_OUTER_SESSION_ID" "$BUNDLE_DIR/$agent-outer-wait-exit.json"
 
   local exit_code
-  exit_code="$(jq -r '.result.exitCode // 0' "$BUNDLE_DIR/$agent-outer-wait-exit.json")"
+  exit_code="$(jq -r '.result.exitCode // "unknown"' "$BUNDLE_DIR/$agent-outer-wait-exit.json")"
 
   run_json_file \
     "$BUNDLE_DIR/$agent-outer-snapshot.json" \
@@ -597,7 +665,11 @@ run_agent_demo() {
     "$BUNDLE_DIR/$agent-outer-record-webm.json" \
     agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" \
     record export "$CURRENT_OUTER_SESSION_ID" --format webm --timing "$WEBM_TIMING" --out "$outer_full_webm_path" --json
-  trim_outer_webm_for_review "$outer_full_webm_path" "$outer_review_webm_path"
+  run_json_file \
+    "$BUNDLE_DIR/$agent-outer-record-review-webm.json" \
+    agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" \
+    record export "$CURRENT_OUTER_SESSION_ID" --format webm --timing accelerated --out "$outer_review_raw_webm_path" --json
+  slow_outer_webm_for_review "$outer_review_raw_webm_path" "$outer_review_webm_path"
   verify_outer_recording "$agent" "$outer_cast_path" "$outer_full_webm_path" "$BUNDLE_DIR/$agent-outer-record-webm.json" "$outer_review_webm_path"
 
   run_json_file \
@@ -607,6 +679,7 @@ run_agent_demo() {
   CURRENT_OUTER_HOME=""
   CURRENT_OUTER_SESSION_ID=""
 
+  # 130 is SIGINT, expected when the script uses Ctrl+C to close a TUI.
   [[ "$exit_code" == '0' || "$exit_code" == '130' ]] || fail "$agent exited with code $exit_code; see $ARTIFACTS_DIR/$agent-outer.cast"
   verify_agent_outputs "$agent" "$workspace" "$final_file" "$inner_cast" "$inner_webm"
   log "completed $agent proof"

@@ -6,8 +6,8 @@ $ claude --permission-mode bypassPermissions --dangerously-skip-permissions --ef
 │                       ▐▛███▜▌                      │ Recent activity                                            │
 │▝▜█████▛▘│Norecentactivity│
 │                    ▘▘ ▝▝                   │                                                  │
-│  Sonnet4.6 with loweffort · Claude Enterprise·  │                                  │
-│Coder││
+│ Opus 4.7 (1M context) with lo… ·Claude Enterprise │                                  │
+│·Coder││
 │              /…/workspaces/claude             │       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
@@ -21,208 +21,206 @@ session,drives`nvim--clean-ndemo-note.txt`,writesexactly`agent-ttynestedNeovimpr
 agent.`,verifiesthefile,exportstheinnerasciicast/WebMartifacts,anddestroystheinnersession.
 
 ```bash
-bash"/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/claude/run-i
+bash"/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/run-i
 nner-nvim-proof.sh"
 ```
 
 Usetheinstalled`agent-tty`binaryonPATHafterprepending
-`/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/install/bin`.Donotuse
+`/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/install/bin`.Donotuse
 repo-local`npx`,`tsx`,or`src/cli/main.ts`commands.
 
 Afterthehelperexits,reportonlywhetheritpassedandlistthethreegeneratedfiles:`/var/folders/pq/ft6166r921
-ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/claude/demo-note.txt`,`/var/folders/pq/ft61
-66r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/claude/artifacts/inner-nvim.cast`,and
-`/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/claude/artifacts
+ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/demo-note.txt`,`/var/folders/pq/ft61
+66r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/artifacts/inner-nvim.cast`,and
+`/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/artifacts
 /inner-nvim.webm`.
 
- Bash(export
-PATH="/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/install/bin:$PATH"
-      && bash "/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/claude
-   /run-inner-nvim-proof.sh")
+⏺Bash(bash "/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/r
+un-inner-nvim-proof.sh")
   ⎿  $ agent-tty skills get agent-tty
-$agent-tty--home
-    /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claudedoctor
+   $agent-tty--home
+     /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/claude doctor
 --json
      $$ agent-tty --home
-   /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claudecreate
+   /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/claudecreate
      --json --cwd
-/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/claude --cols
+/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude --cols
   100 --rows 28 --name inner-nvim --shell /bin/bash
 $$jq-r.result.sessionId
-$ SESSION_ID=01KQ5GN49FV0S6RMVSFKW7FFPY
-$ agent-tty --home
-/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/clauderun
-    01KQ5GN49FV0S6RMVSFKW7FFPY 'printf'\''launchingnvim--clean-ndemo-note.txt\n'\'';XDG_CONFIG_HOME="/var/folders
-/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/claude/.xdg/config"
-     XDG_DATA_HOME="/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/c
-   laude/.xdg/data"XDG_STATE_HOME="/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsA
-     gakaz/workspaces/claude/.xdg/state" XDG_CACHE_HOME="/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-age
-nt-tty.XXXXXX.schsAgakaz/workspaces/claude/.xdg/cache"nvim--clean-ndemo-note.txt'--no-wait--json
-  {
+$SESSION_ID=01KQ7KY0B6HGFAN9C4GP419KM9
+$agent-tty--home
+/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/clauderun
+01KQ7KY0B6HGFAN9C4GP419KM9'printf'\''launchingnvim--clean-ndemo-note.txt\n'\'';XDG_CONFIG_HOME="/var/folders
+/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/.xdg/config"
+XDG_DATA_HOME="/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/c
+laude/.xdg/data"XDG_STATE_HOME="/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3
+KlnG7/workspaces/claude/.xdg/state"XDG_CACHE_HOME="/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-age
+nt-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/.xdg/cache"nvim--clean-ndemo-note.txt'--no-wait--json
+{
   "ok":true,
 "command":"run",
-      "timestamp": "2026-04-26T18:26:01.916Z",
+      "timestamp": "2026-04-27T14:01:47.128Z",
 "result":{
          "accepted": true,
    "seq":3
        }
 }
   $ agent-tty --home
-/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claudewait
-01KQ5GN49FV0S6RMVSFKW7FFPY--screen-stable-ms1000--timeout60000--json
+/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/claudewait
+01KQ7KY0B6HGFAN9C4GP419KM9--screen-stable-ms1000--timeout60000--json
 {
   "ok":true,
 "command":"wait",
-      "timestamp": "2026-04-26T18:26:05.042Z",
+      "timestamp": "2026-04-27T14:01:50.609Z",
 "result":{
          "matched": true,
    "timedOut":false,
          "cursorRow": 0,
 "cursorCol":0,
-      "capturedAtSeq": 25
+      "capturedAtSeq": 108
 }
 }
 $agent-tty--home
-/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claudetype
-01KQ5GN49FV0S6RMVSFKW7FFPYi--json
+/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/claudetype
+01KQ7KY0B6HGFAN9C4GP419KM9i--json
 {
   "ok":true,
 "command":"type",
-      "timestamp": "2026-04-26T18:26:05.972Z",
+      "timestamp": "2026-04-27T14:01:51.065Z",
 "result":{}
      }
    $agent-tty--home
-     /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claude paste
-01KQ5GN49FV0S6RMVSFKW7FFPY'agent-ttynestedNeovimprooffromanAIcodingagent.'--json
+     /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/claude paste
+01KQ7KY0B6HGFAN9C4GP419KM9'agent-ttynestedNeovimprooffromanAIcodingagent.'--json
   {
 "ok":true,
 "command":"paste",
-"timestamp":"2026-04-26T18:26:06.433Z",
+"timestamp":"2026-04-27T14:01:51.467Z",
 "result":{}
 }
 $agent-tty--home
-/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claudewait
-01KQ5GN49FV0S6RMVSFKW7FFPY--text'agent-ttynestedNeovimprooffromanAIcodingagent.'--timeout60000--json
+/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/claudewait
+01KQ7KY0B6HGFAN9C4GP419KM9--text'agent-ttynestedNeovimprooffromanAIcodingagent.'--timeout60000--json
 {
   "ok":true,
 "command":"wait",
-      "timestamp": "2026-04-26T18:26:07.181Z",
+      "timestamp": "2026-04-27T14:01:52.121Z",
 "result":{
          "matched": true,
-   "timedOut":false,
-         "matchedText": "agent-tty nested Neovim proof from an AI coding agent.",
-"cursorRow":0,
-      "cursorCol": 54,
-"capturedAtSeq":31
+   "cursorCol": 54,
+         "capturedAtSeq": 113
 }
-}
-$agent-tty--home
-/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claudesend-keys
-  "ok": true,
-{ "command": "send-keys",
-  "timestamp":"2026-04-26T18:26:07.697Z",
-"resuln": {"send-keys",
-        "accepted:: [        6T18:26:07.697Z",
-    "Escae"
-         ],     e ": [
-   bytssWritten":1,
-         "seq": 32
-}  ytesWritten":1,
   }
 $agent-tty --home
-    "accepted": [
-      "Enter"
- v  ],     s      6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claudetype
-    "bytesWritten": 1,
+/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/claudesend-keys
+ 01KQ7KY0B6HGFAN9C4GP419KM9Escape--json
+{
+  "ok": true,
+ "command": "send-keys",
+ "timestamp":"2026-04-27T14:01:52.532Z",
+"result": {
+  "accepted": [
+    "Escape"
+  ],
+"bytesWritten":1,
+"seq": 114
+}
 }
 $agent-tty --home
-/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claudetype
-01KQ5GN49FV0S6RMVSFKW7FFPY :wq --json
+/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/claudetype
+      "Enter"
+   ],
+    "bytesWritten": 1,
+    "seq": 118
+}
+$agent-tty --home
+/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/claudetype
+01KQ7KY0B6HGFAN9C4GP419KM9 :wq --json
 {
 "ok": true,
   "command": "type",
-"timestamp": "2026-04-26T18:26:08.189Z",
+"timestamp": "2026-04-27T14:01:52.960Z",
 "result": {}
 }
 $agent-tty --home
-/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claude
-send-keys 01KQ5GN49FV0S6RMVSFKW7FFPYEnter--json
+/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/claude
+send-keys 01KQ7KY0B6HGFAN9C4GP419KM9Enter--json
 {
 "ok": true,
 "command": "send-keys",
-"timestamp": "2026-04-26T18:26:08.680Z",
+"timestamp": "2026-04-27T14:01:53.376Z",
 "result": {
 "accepted": [
 "Enter"
 ],
  "bytesWritten":1,
- "seq":36
+ "seq":118
  }
 }
 $ agent-tty --home
-/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claudewait
- 01KQ5GN49FV0S6RMVSFKW7FFPY --screen-stable-ms1000--timeout60000--json
+/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/claudewait
+ 01KQ7KY0B6HGFAN9C4GP419KM9 --screen-stable-ms1000--timeout60000--json
 {
       "ok": true,
 "command":"wait",
-       "timestamp": "2026-04-26T18:26:11.027Z",
+       "timestamp": "2026-04-27T14:01:55.615Z",
    "result":{
          "matched": true,
       "timedOut": false,
 "cursorRow":12,
 "cursorCol":10,
-"capturedAtSeq":42
+"capturedAtSeq":124
 }
 }
-$$cat/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/clau
+$$cat/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/clau
 de/demo-note.txt
 $test'agent-ttynestedNeovimprooffromanAIcodingagent.'='agent-ttynestedNeovimprooffromanAI
 codingagent.'
 $agent-tty--home
-/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claude
-recordexport01KQ5GN49FV0S6RMVSFKW7FFPY--formatasciicast--out/var/folders/pq/ft6166r921ddfcph0dyg4skc0000
-gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/claude/artifacts/inner-nvim.cast--json
+/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/claude
+recordexport01KQ7KY0B6HGFAN9C4GP419KM9--formatasciicast--out/var/folders/pq/ft6166r921ddfcph0dyg4skc0000
+gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/artifacts/inner-nvim.cast--json
 {
 "ok":true,
 "command":"recordexport",
-"timestamp":"2026-04-26T18:26:11.567Z",
+"timestamp":"2026-04-27T14:01:56.065Z",
 "result":{
-"sessionId":"01KQ5GN49FV0S6RMVSFKW7FFPY",
+"sessionId":"01KQ7KY0B6HGFAN9C4GP419KM9",
 "format":"asciicast",
-"artifactPath":"/private/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schs
-Agakaz/workspaces/claude/artifacts/inner-nvim.cast",
-"bytes":12888,
-"sha256":"fb33e7bc69f8994a48765be9dc1f015311d862d4e871dc613cd3e801f9fc724d",
-"capturedAtSeq":42,
-"durationMs":8570,
+"artifactPath":"/private/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm
+3KlnG7/workspaces/claude/artifacts/inner-nvim.cast",
+"bytes":14067,
+"sha256":"a75b1d85fe13dc3e58aa8aa673336ab9262afbc0cac40a7e91316b00713dd86a",
+"capturedAtSeq":124,
+"durationMs":7870,
 "metadata":{
 "width":100,
 "height":28,
-"title":"01KQ5GN49FV0S6RMVSFKW7FFPY",
-"timestamp":1777227961,
-"outputEventCount":37,
+"title":"01KQ7KY0B6HGFAN9C4GP419KM9",
+"timestamp":1777298506,
+"outputEventCount":119,
 "resizeEventCount":0,
 "markerCount":0
 }
 }
 }
 $agent-tty--home
-/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claude
-recordexport01KQ5GN49FV0S6RMVSFKW7FFPY--formatwebm--timingrecorded--out/var/folders/pq/ft6166r921ddfcp
-h0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/claude/artifacts/inner-nvim.webm--json
+/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/claude
+recordexport01KQ7KY0B6HGFAN9C4GP419KM9--formatwebm--timingrecorded--out/var/folders/pq/ft6166r921ddfcp
+h0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/artifacts/inner-nvim.webm--json
 {
 "ok":true,
 "command":"recordexport",
-"timestamp":"2026-04-26T18:26:23.252Z",
+"timestamp":"2026-04-27T14:02:07.352Z",
 "result":{
-"sessionId":"01KQ5GN49FV0S6RMVSFKW7FFPY",
+"sessionId":"01KQ7KY0B6HGFAN9C4GP419KM9",
 "format":"webm",
-"artifactPath":"/private/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schs
-Agakaz/workspaces/claude/artifacts/inner-nvim.webm",
-"bytes":313124,
-"sha256":"1a148df5750dbd49631f250e33b0f0f3cec592bd75a1da1480e898df06b44c35",
-"capturedAtSeq":42,
-"durationMs":8570,
+"artifactPath":"/private/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm
+3KlnG7/workspaces/claude/artifacts/inner-nvim.webm",
+"bytes":318282,
+"sha256":"5816cda8e4293547075ce8031b0e041e062db025b52765229f5756d5cffb4cd4",
+"capturedAtSeq":124,
+"durationMs":7870,
 "metadata":{
 "width":100,
 "height":28,
@@ -230,42 +228,41 @@ Agakaz/workspaces/claude/artifacts/inner-nvim.webm",
 "renderProfileHash":"8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d",
 "timingMode":"recorded",
 "rendererBackend":"ghostty-web",
-"outputEventCount":37,
+"outputEventCount":119,
 "resizeEventCount":0
 }
 }
 }
 $agent-tty--home
-/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/inner-home/claude
-destroy01KQ5GN49FV0S6RMVSFKW7FFPY--json
+/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/inner-home/claude
+destroy01KQ7KY0B6HGFAN9C4GP419KM9--json
 {
 "ok":true,
 "command":"destroy",
-"timestamp":"2026-04-26T18:26:24.102Z",
+"timestamp":"2026-04-27T14:02:08.035Z",
 "result":{
-"sessionId":"01KQ5GN49FV0S6RMVSFKW7FFPY",
+"sessionId":"01KQ7KY0B6HGFAN9C4GP419KM9",
 "destroyed":true
 }
 }
 $SESSION_ID=
 $set+x
-final_file=/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/
+final_file=/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/
 claude/demo-note.txt
-inner_cast=/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/
+inner_cast=/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/
 claude/artifacts/inner-nvim.cast
-inner_webm=/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/workspaces/
+inner_webm=/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/
 claude/artifacts/inner-nvim.webm
-⎿ (timeout2m)
 
-⏺PASSED.
+⏺Passed. Generated files:
+-/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/demo-note.
+  txt
+  - /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/artifacts/
+  inner-nvim.cast
+  - /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/artifacts/
+  inner-nvim.webm
 
-  The three generated files:
-
-  - demo-note.txt — contains agent-tty nested Neovim proof from an AI coding agent.
-  - artifacts/inner-nvim.cast — asciicast recording (12,888 bytes)
-  - artifacts/inner-nvim.webm — WebM video export (313,124 bytes)
-
-✻ Worked for 37s
+✻ Churned for 35s
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ❯ /exit
@@ -278,5 +275,5 @@ shouldincludepromptcaching.AlsohandlesmigratingexistingClaudeAPIcodebetwee…
 /memoryEditClaudememoryfiles
 
 Resume this session with:
-claude --resume 7dabf180-dcfe-4138-8652-0a0694659271
+claude --resume 2b5e10f0-0ef8-4077-9862-55718fb990f0
 

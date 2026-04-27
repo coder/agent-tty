@@ -1,20 +1,20 @@
 {
   "ok": true,
   "command": "screenshot",
-  "timestamp": "2026-04-26T18:26:30.405Z",
+  "timestamp": "2026-04-27T14:02:14.793Z",
   "result": {
-    "sessionId": "01KQ5GMR2NM9429MM3DBKV7FDW",
-    "capturedAtSeq": 403,
+    "sessionId": "01KQ7KXNN44VZGKTF3FWAGCDWR",
+    "capturedAtSeq": 390,
     "profileName": "reference-dark",
     "cols": 120,
     "rows": 36,
-    "artifactPath": "/private/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/outer-home/claude/sessions/01KQ5GMR2NM9429MM3DBKV7FDW/artifacts/screenshot-403-reference-dark.png",
-    "pngSizeBytes": 82744,
+    "artifactPath": "/private/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/outer-home/claude/sessions/01KQ7KXNN44VZGKTF3FWAGCDWR/artifacts/screenshot-390-reference-dark.png",
+    "pngSizeBytes": 87418,
     "cursorVisible": false,
     "rendererBackend": "ghostty-web",
     "pixelWidth": 1080,
     "pixelHeight": 576,
-    "sha256": "5a5ab377ae67ea20d7318d0e64c640c58a38d1aeb0623545de33e960fc64cae7",
+    "sha256": "7d3d04a2827d386f287ad506615139614e25c199fd73e2a8a06c440a37bcdb41",
     "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d"
   }
 }

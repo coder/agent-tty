@@ -1,8 +1,8 @@
 $ git rev-parse HEAD
-3f6c9d699862402b375f557ab2d0cc6841e6b9f3
+cc464e37284af04080d4757c7e6967bd6e44f355
 
 $ git log --oneline -n 1
-3f6c9d6 [codex] update agent guidance (#46)
+cc464e3 docs: add agent-tty dogfood demo bundle
 
 $ node --version
 v25.9.0
@@ -17,7 +17,7 @@ $ agent-tty version --json
 {
   "ok": true,
   "command": "version",
-  "timestamp": "2026-04-26T18:22:19.387Z",
+  "timestamp": "2026-04-27T13:57:50.549Z",
   "result": {
     "cliVersion": "0.1.1-beta.4",
     "protocolVersion": "0.1.0",
@@ -58,7 +58,7 @@ $ agent-tty --home <temp> doctor --json
 {
   "ok": true,
   "command": "doctor",
-  "timestamp": "2026-04-26T18:22:23.618Z",
+  "timestamp": "2026-04-27T13:57:54.214Z",
   "result": {
     "ok": true,
     "checks": {
@@ -84,37 +84,37 @@ $ agent-tty --home <temp> doctor --json
         {
           "name": "home_isolation",
           "status": "pass",
-          "message": "agent-tty home is isolated from system home: /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/doctor-home",
+          "message": "agent-tty home is isolated from system home: /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/doctor-home",
           "durationMs": 0
         },
         {
           "name": "home-writable",
           "status": "pass",
-          "message": "home writable: /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/doctor-home",
-          "durationMs": 1
+          "message": "home writable: /var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/doctor-home",
+          "durationMs": 0
         },
         {
           "name": "pty-spawn",
           "status": "pass",
           "message": "spawned /Users/thomask33/.local/share/mise/installs/node/25.9.0/bin/node",
-          "durationMs": 946
+          "durationMs": 291
         },
         {
           "name": "socket-viable",
           "status": "pass",
-          "message": "socket ok: /tmp/agent-tty/60bda681/3396b2d61971",
-          "durationMs": 5
+          "message": "socket ok: /tmp/agent-tty/881871c8/2901c711f20d",
+          "durationMs": 3
         },
         {
           "name": "artifact-atomicity",
           "status": "pass",
-          "message": "atomic rename ok: /private/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/doctor-home/sessions/doctor-88196-mog3id69-3/artifacts",
-          "durationMs": 2
+          "message": "atomic rename ok: /private/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/doctor-home/sessions/doctor-42277-moh9i2tc-3/artifacts",
+          "durationMs": 1
         },
         {
           "name": "event-log-writable",
           "status": "pass",
-          "message": "append ok: /private/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/doctor-home/sessions/doctor-88196-mog3id6b-5/events.jsonl",
+          "message": "append ok: /private/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/doctor-home/sessions/doctor-42277-moh9i2td-5/events.jsonl",
           "durationMs": 1
         }
       ],
@@ -123,31 +123,31 @@ $ agent-tty --home <temp> doctor --json
           "name": "playwright_available",
           "status": "pass",
           "message": "available",
-          "durationMs": 1
+          "durationMs": 0
         },
         {
           "name": "browser_cache_accessible",
           "status": "pass",
           "message": "browser cache accessible: /Users/thomask33/Library/Caches/ms-playwright",
-          "durationMs": 0
+          "durationMs": 1
         },
         {
           "name": "browser_launch",
           "status": "pass",
           "message": "chromium launches",
-          "durationMs": 1782
+          "durationMs": 1692
         },
         {
           "name": "ghostty_web_available",
           "status": "pass",
           "message": "WASM available",
-          "durationMs": 6
+          "durationMs": 10
         },
         {
           "name": "screenshot_viable",
           "status": "pass",
           "message": "viable",
-          "durationMs": 1104
+          "durationMs": 1340
         }
       ]
     },

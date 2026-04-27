@@ -1,21 +1,21 @@
 {
   "ok": true,
   "command": "record export",
-  "timestamp": "2026-04-26T18:26:38.306Z",
+  "timestamp": "2026-04-27T14:02:21.089Z",
   "result": {
-    "sessionId": "01KQ5GMR2NM9429MM3DBKV7FDW",
+    "sessionId": "01KQ7KXNN44VZGKTF3FWAGCDWR",
     "format": "asciicast",
     "artifactPath": "/Users/thomask33/Projects/agent-tty/dogfood/agent-uses-agent-tty/artifacts/claude-outer.cast",
-    "bytes": 94177,
-    "sha256": "4c36923433a629e1d75a553842adde3d129c990a7b037078102fc460ad608f9a",
-    "capturedAtSeq": 432,
-    "durationMs": 43807,
+    "bytes": 88486,
+    "sha256": "fb72cf32c6e81a1d81ce5f264c344dff6c33bd02466584a940e9d81000147bd0",
+    "capturedAtSeq": 413,
+    "durationMs": 40451,
     "metadata": {
       "width": 120,
       "height": 36,
-      "title": "01KQ5GMR2NM9429MM3DBKV7FDW",
-      "timestamp": 1777227948,
-      "outputEventCount": 429,
+      "title": "01KQ7KXNN44VZGKTF3FWAGCDWR",
+      "timestamp": 1777298495,
+      "outputEventCount": 410,
       "resizeEventCount": 0,
       "markerCount": 0
     }

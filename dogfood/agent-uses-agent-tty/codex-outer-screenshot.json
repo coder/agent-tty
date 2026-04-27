@@ -1,20 +1,20 @@
 {
   "ok": true,
   "command": "screenshot",
-  "timestamp": "2026-04-26T18:24:10.249Z",
+  "timestamp": "2026-04-27T13:59:19.503Z",
   "result": {
-    "sessionId": "01KQ5GEKPQCHTVS8Z79CXE3JXD",
-    "capturedAtSeq": 2030,
+    "sessionId": "01KQ7KQ0WV8WKTD4QHXZYBPHXK",
+    "capturedAtSeq": 1577,
     "profileName": "reference-dark",
     "cols": 120,
     "rows": 36,
-    "artifactPath": "/private/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.schsAgakaz/outer-home/codex/sessions/01KQ5GEKPQCHTVS8Z79CXE3JXD/artifacts/screenshot-2030-reference-dark.png",
-    "pngSizeBytes": 124022,
+    "artifactPath": "/private/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/outer-home/codex/sessions/01KQ7KQ0WV8WKTD4QHXZYBPHXK/artifacts/screenshot-1577-reference-dark.png",
+    "pngSizeBytes": 108115,
     "cursorVisible": false,
     "rendererBackend": "ghostty-web",
     "pixelWidth": 1080,
     "pixelHeight": 576,
-    "sha256": "dd648b6895bb1a43cbf29abca3243321eece5c3fa004cf97b40b9f8d384cb4a3",
+    "sha256": "cb35e7261a0bcb762031e01a01acf125740823e6e0cd1bdfa4d25afea35e738a",
     "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d"
   }
 }

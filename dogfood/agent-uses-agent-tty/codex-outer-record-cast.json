@@ -1,21 +1,21 @@
 {
   "ok": true,
   "command": "record export",
-  "timestamp": "2026-04-26T18:24:15.813Z",
+  "timestamp": "2026-04-27T13:59:24.949Z",
   "result": {
-    "sessionId": "01KQ5GEKPQCHTVS8Z79CXE3JXD",
+    "sessionId": "01KQ7KQ0WV8WKTD4QHXZYBPHXK",
     "format": "asciicast",
     "artifactPath": "/Users/thomask33/Projects/agent-tty/dogfood/agent-uses-agent-tty/artifacts/codex-outer.cast",
-    "bytes": 515590,
-    "sha256": "605f8d6e3c40450fdac7fd29335d4640dc9a61944f0cae80d9ec9d16dca70af5",
-    "capturedAtSeq": 2030,
-    "durationMs": 64085,
+    "bytes": 390553,
+    "sha256": "53aac241471c1a9a81826c5eb335d02afe17495174cee80868f967174387b988",
+    "capturedAtSeq": 1577,
+    "durationMs": 50928,
     "metadata": {
       "width": 120,
       "height": 36,
-      "title": "01KQ5GEKPQCHTVS8Z79CXE3JXD",
-      "timestamp": 1777227747,
-      "outputEventCount": 2028,
+      "title": "01KQ7KQ0WV8WKTD4QHXZYBPHXK",
+      "timestamp": 1777298277,
+      "outputEventCount": 1575,
       "resizeEventCount": 0,
       "markerCount": 0
     }
