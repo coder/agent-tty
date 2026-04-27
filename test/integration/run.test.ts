@@ -19,9 +19,8 @@ import {
   type EventRecord,
   type SuccessEnvelope,
 } from '../helpers.js';
+import { RUN_MARKER_PATTERN } from '../../src/host/runCompletionSentinel.js';
 import type { CommandErrorEnvelope } from '../../src/protocol/envelope.js';
-
-const RUN_MARKER_PATTERN = /^__AT_MARKER_([0-9a-f]{32})__$/u;
 
 function expectRunMarker(marker: string): string {
   const match = RUN_MARKER_PATTERN.exec(marker);
@@ -332,6 +331,84 @@ describe('run command integration', { timeout: 45_000 }, () => {
     expect(envelope.result.completed).toBe(false);
     expect(envelope.result.timedOut).toBe(false);
     expect(envelope.result.durationMs).toBeLessThan(10_000);
+  });
+
+  it('does not log postamble cursor controls when shell echo is disabled', async () => {
+    sessionId = createSession(testHome, ['/bin/bash', '--noprofile', '--norc']);
+    await sleep(1000);
+
+    const disableEchoResult = runCli(
+      ['run', sessionId, 'stty -echo', '--timeout', '15000', '--json'],
+      testEnv(),
+      30_000,
+    );
+    expect(disableEchoResult.status).toBe(0);
+    expect(disableEchoResult.stderr).toBe('');
+
+    const result = runCli(
+      [
+        'run',
+        sessionId,
+        "printf 'noecho-before-proof\\n'; printf 'noecho-after-proof\\n'",
+        '--timeout',
+        '15000',
+        '--json',
+      ],
+      testEnv(),
+      30_000,
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+
+    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+      accepted: true;
+      completed: boolean;
+      timedOut: boolean;
+      seq: number;
+      durationMs: number;
+      marker: string;
+    }>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.accepted).toBe(true);
+    expect(envelope.result.completed).toBe(true);
+    expect(envelope.result.timedOut).toBe(false);
+    const marker = envelope.result.marker;
+    expectRunMarker(marker);
+
+    const events = await readEvents(testHome, sessionId);
+    const outputText = collectOutputText(events);
+    expect(outputText).toContain('noecho-before-proof');
+    expect(outputText).toContain('noecho-after-proof');
+    expect(outputText).not.toContain('\x1b[1A');
+    expect(outputText).not.toContain('\x1b[2K');
+    expectCompletionArtifactsClean(outputText, marker);
+
+    const snapshotResult = runCli(
+      [
+        'snapshot',
+        sessionId,
+        '--format',
+        'text',
+        '--include-scrollback',
+        '--json',
+      ],
+      testEnv(),
+      30_000,
+    );
+    expect(snapshotResult.status).toBe(0);
+    expect(snapshotResult.stderr).toBe('');
+    const snapshotEnvelope = JSON.parse(
+      snapshotResult.stdout,
+    ) as SuccessEnvelope<{
+      text: string;
+    }>;
+    expect(snapshotEnvelope.ok).toBe(true);
+    expect(snapshotEnvelope.result.text).toContain('noecho-before-proof');
+    expect(snapshotEnvelope.result.text).toContain('noecho-after-proof');
+    expect(snapshotEnvelope.result.text).not.toContain('\x1b[1A');
+    expect(snapshotEnvelope.result.text).not.toContain('\x1b[2K');
+    expectCompletionArtifactsClean(snapshotEnvelope.result.text, marker);
   });
 
   it('records structured run completion without leaking sentinel text to artifacts', async () => {

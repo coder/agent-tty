@@ -11,6 +11,7 @@ import { HostRendererManager } from './renderer.js';
 import { RpcServer, type MethodHandler } from './rpcServer.js';
 import {
   buildRunCompleteSentinel,
+  RUN_MARKER_PATTERN,
   RunCompletionSentinelScanner,
   type SentinelPiece,
 } from './runCompletionSentinel.js';
@@ -106,8 +107,7 @@ type TimedRunCompletionWaitResult =
   | RunCompletionWaitResult
   | { kind: 'timeout' };
 
-const RUN_COMPLETION_POSTAMBLE_ECHO_PREFIX = String.raw`printf '\033\133\061\101`;
-const RUN_MARKER_PATTERN = /^__AT_MARKER_([0-9a-f]{32})__$/u;
+const RUN_COMPLETION_POSTAMBLE_ECHO_PREFIX = String.raw`printf '\033\137`;
 
 function normalizeExitSignal(signal: number | null): string | null {
   invariant(
@@ -146,22 +146,8 @@ function buildRunCompletePostamble(marker: string): string {
     'run marker payload must be 32 lowercase hex characters',
   );
 
-  const markerPayloadPart1 = markerPayload.slice(0, 16);
-  const markerPayloadPart2 = markerPayload.slice(16);
-  invariant(
-    markerPayloadPart1.length > 0 && markerPayloadPart2.length > 0,
-    'run marker payload must split into non-empty pieces',
-  );
-
-  const sentinelPayload = `agent-tty:run-complete:__AT_MARKER_${markerPayloadPart1}${markerPayloadPart2}__`;
-  invariant(
-    `\x1b_${sentinelPayload}\x1b\\` === buildRunCompleteSentinel(marker),
-    'run-completion postamble pieces must reconstruct the expected sentinel',
-  );
-
-  const hideEchoedPostambleLine = '\x1b[1A\r\x1b[2K';
   const postamble = `printf '${shellOctalEscapedBytes(
-    `${hideEchoedPostambleLine}${buildRunCompleteSentinel(marker)}`,
+    buildRunCompleteSentinel(marker),
   )}'`;
   invariant(
     postamble.startsWith(RUN_COMPLETION_POSTAMBLE_ECHO_PREFIX),
@@ -1470,15 +1456,33 @@ export async function runHost(sessionId: string): Promise<void> {
     lastActivityAt = lastOutputAt;
     void enqueuePtyIngestion(async () => {
       await appendSentinelPieces(sentinelScanner.feed(data));
-    }).catch(rethrowAsync);
+    }).catch((error: unknown) => {
+      // Run-completion sentinels make serialized PTY ingestion part of the
+      // canonical event-log contract: if appending output/control events fails,
+      // the log can no longer be trusted to drive waits or replay artifacts.
+      rethrowAsync(error);
+    });
   });
 
   pty.onExit(({ exitCode, signal }) => {
+    let ingestionError: unknown;
+
     void enqueuePtyIngestion(async () => {
       await appendSentinelPieces(sentinelScanner.flush());
     })
-      .then(() => {
-        handlePtyExit(exitCode, signal ?? null);
+      .catch((error: unknown) => {
+        ingestionError = error;
+      })
+      .finally(() => {
+        try {
+          handlePtyExit(exitCode, signal ?? null);
+        } finally {
+          if (ingestionError !== undefined) {
+            // Still record PTY exit state first; the ingestion failure is
+            // surfaced asynchronously after exit handling has run.
+            rethrowAsync(ingestionError);
+          }
+        }
       })
       .catch(rethrowAsync);
   });

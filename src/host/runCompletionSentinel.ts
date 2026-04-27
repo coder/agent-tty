@@ -19,6 +19,7 @@ import { invariant } from '../util/assert.js';
 
 export const RUN_COMPLETE_SENTINEL_PREFIX = '\x1b_agent-tty:run-complete:';
 export const RUN_COMPLETE_SENTINEL_SUFFIX = '\x1b\\';
+export const RUN_MARKER_PATTERN = /^__AT_MARKER_([0-9a-f]{32})__$/u;
 
 export type SentinelPiece =
   | { type: 'output'; data: string }
