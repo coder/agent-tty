@@ -60,6 +60,7 @@ function expectCompletionArtifactsClean(text: string, marker: string): void {
   expect(text).not.toContain(markerPayload);
   expect(text).not.toContain(markerPayloadPart1);
   expect(text).not.toContain(markerPayloadPart2);
+  expect(text).not.toContain('\x1b_at');
   expect(text).not.toContain('\x1b_agent-tty');
   expect(text).not.toContain(`\x1b_agent-tty:run-complete:${marker}\x1b\\`);
 }
