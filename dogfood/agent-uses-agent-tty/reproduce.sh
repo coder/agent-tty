@@ -95,16 +95,35 @@ assert_text_file_equals() {
   }
 }
 
+json_error_message_from_file() {
+  local path="$1"
+  jq -r '.error.message // .error // "unknown"' "$path" 2>/dev/null || printf 'unknown'
+}
+
+json_error_message_from_text() {
+  local json="$1"
+  printf '%s\n' "$json" | jq -r '.error.message // .error // "unknown"' 2>/dev/null || printf 'unknown'
+}
+
 run_json_file() {
   local output_path="$1"
   shift
   [[ -n "$TEMP_ROOT" && -d "$TEMP_ROOT" ]] || fail 'TEMP_ROOT must exist before run_json_file'
   local tmp_path
+  local command_status=0
   tmp_path="$(mktemp "$TEMP_ROOT/run-json.XXXXXX")"
-  "$@" > "$tmp_path"
-  jq . "$tmp_path" > "$output_path"
+  "$@" > "$tmp_path" || command_status=$?
+  if ! jq . "$tmp_path" > "$output_path"; then
+    rm -f "$tmp_path"
+    fail "command returned invalid JSON ($output_path, exit_code=$command_status)"
+  fi
   rm -f "$tmp_path"
-  jq -e '.ok == true' "$output_path" >/dev/null
+  if (( command_status != 0 )); then
+    fail "command failed ($output_path, exit_code=$command_status): $(json_error_message_from_file "$output_path")"
+  fi
+  if ! jq -e '.ok == true' "$output_path" >/dev/null; then
+    fail "command returned ok=false ($output_path): $(json_error_message_from_file "$output_path")"
+  fi
 }
 
 capture_json_var() {
@@ -112,9 +131,18 @@ capture_json_var() {
   shift
   local raw_json
   local pretty_json
-  raw_json="$("$@")"
-  pretty_json="$(printf '%s\n' "$raw_json" | jq .)"
-  printf '%s\n' "$pretty_json" | jq -e '.ok == true' >/dev/null
+  local command_status=0
+  raw_json="$("$@")" || command_status=$?
+  [[ -n "$raw_json" ]] || fail "command returned no JSON (exit_code=$command_status): $*"
+  if ! pretty_json="$(printf '%s\n' "$raw_json" | jq .)"; then
+    fail "command returned invalid JSON (exit_code=$command_status): $*"
+  fi
+  if (( command_status != 0 )); then
+    fail "command failed (exit_code=$command_status): $(json_error_message_from_text "$pretty_json")"
+  fi
+  if ! printf '%s\n' "$pretty_json" | jq -e '.ok == true' >/dev/null; then
+    fail "command returned ok=false: $(json_error_message_from_text "$pretty_json")"
+  fi
   printf -v "$__resultvar" '%s' "$pretty_json"
 }
 
@@ -492,8 +520,10 @@ stop_outer_agent_tui() {
 acknowledge_startup_prompt_if_present() {
   local outer_home="$1"
   local session_id="$2"
-  local tmp_path="$3"
+  local tmp_path
 
+  [[ -n "$TEMP_ROOT" && -d "$TEMP_ROOT" ]] || fail 'TEMP_ROOT must exist before acknowledge_startup_prompt_if_present'
+  tmp_path="$(mktemp "$TEMP_ROOT/startup-prompt.XXXXXX")"
   if agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" wait "$session_id" --regex 'Do you trust|trust this|trust this folder|Yes.*trust|Accessing workspace|continue.*trust|Press.*continue' --timeout 30000 --json > "$tmp_path" 2>/dev/null; then
     if jq -e '.ok == true and .result.matched == true' "$tmp_path" >/dev/null; then
       agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" send-keys "$session_id" Enter --json >/dev/null || true
@@ -669,7 +699,7 @@ run_agent_demo() {
   CURRENT_OUTER_HOME="$outer_home"
   CURRENT_OUTER_SESSION_ID="$(printf '%s\n' "$create_json" | jq -er '.result.sessionId')"
 
-  acknowledge_startup_prompt_if_present "$outer_home" "$CURRENT_OUTER_SESSION_ID" "$BUNDLE_DIR/$agent-startup-prompt.json"
+  acknowledge_startup_prompt_if_present "$outer_home" "$CURRENT_OUTER_SESSION_ID"
   wait_for_agent_proof "$outer_home" "$CURRENT_OUTER_SESSION_ID" "$final_file" "$inner_cast" "$inner_webm"
 
   # Capture the thumbnail before leaving the TUI so README links show the agent UI,
