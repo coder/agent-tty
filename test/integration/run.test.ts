@@ -80,6 +80,8 @@ function collectAsciicastOutputFrameText(contents: string): string {
     .join('');
 }
 
+const WIDE_ARTIFACT_PROOF_COLS = 200;
+
 let testHome = '';
 let sessionId = '';
 
@@ -302,7 +304,9 @@ describe('run command integration', { timeout: 45_000 }, () => {
   });
 
   it('preserves command output in line-discipline echo shells', async () => {
-    sessionId = createSession(testHome, ['/bin/sh']);
+    sessionId = createSession(testHome, ['/bin/sh'], {
+      cols: WIDE_ARTIFACT_PROOF_COLS,
+    });
     await sleep(1000);
 
     const result = runCli(
@@ -344,7 +348,9 @@ describe('run command integration', { timeout: 45_000 }, () => {
   });
 
   it('keeps later output visible after a timed-out line-discipline echo run', async () => {
-    sessionId = createSession(testHome, ['/bin/sh']);
+    sessionId = createSession(testHome, ['/bin/sh'], {
+      cols: WIDE_ARTIFACT_PROOF_COLS,
+    });
     await sleep(1000);
 
     const result = runCli(
@@ -425,7 +431,13 @@ describe('run command integration', { timeout: 45_000 }, () => {
   });
 
   it('does not log postamble cursor controls when shell echo is disabled', async () => {
-    sessionId = createSession(testHome, ['/bin/bash', '--noprofile', '--norc']);
+    sessionId = createSession(
+      testHome,
+      ['/bin/bash', '--noprofile', '--norc'],
+      {
+        cols: WIDE_ARTIFACT_PROOF_COLS,
+      },
+    );
     await sleep(1000);
 
     const disableEchoResult = runCli(
@@ -503,7 +515,9 @@ describe('run command integration', { timeout: 45_000 }, () => {
   });
 
   it('records structured run completion without leaking sentinel text to artifacts', async () => {
-    sessionId = createSession(testHome, ['/bin/bash']);
+    sessionId = createSession(testHome, ['/bin/bash'], {
+      cols: WIDE_ARTIFACT_PROOF_COLS,
+    });
     await sleep(1000);
 
     const result = runCli(
