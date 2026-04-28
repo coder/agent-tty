@@ -14,6 +14,8 @@ import { invariant } from '../util/assert.js';
 
 export const RUN_COMPLETE_SENTINEL_PREFIX = '\x1b_agent-tty:run-complete:';
 export const RUN_COMPLETE_SENTINEL_SUFFIX = '\x1b\\';
+const RUN_COMPLETE_SHORT_SENTINEL_PREFIX = '\x1b_at';
+const RUN_COMPLETE_SHORT_SENTINEL_TOKEN_PATTERN = /^[A-Za-z0-9_-]{6}$/u;
 export const RUN_MARKER_PATTERN = /^__AT_MARKER_([0-9a-f]{32})__$/u;
 
 const MIN_TOLERANT_ECHO_PREFIX_LENGTH = String.raw`printf '\033\137`.length;
@@ -186,6 +188,15 @@ function postambleEchoVariants(postamble: string): readonly string[] {
 
   const crlfEcho = `${postamble.slice(0, -1)}\r\n`;
   return crlfEcho === postamble ? [postamble] : [crlfEcho, postamble];
+}
+
+export function buildRunCompleteSignalSentinel(token: string): string {
+  invariant(
+    RUN_COMPLETE_SHORT_SENTINEL_TOKEN_PATTERN.test(token),
+    'run-completion signal token must be six base64url characters',
+  );
+
+  return `${RUN_COMPLETE_SHORT_SENTINEL_PREFIX}${token}${RUN_COMPLETE_SENTINEL_SUFFIX}`;
 }
 
 export function buildRunCompleteSentinel(marker: string): string {
@@ -558,8 +569,12 @@ export class RunCompletionSentinelScanner {
    * no-op; after the marker completes and deactivates, a later register() call
    * activates it again for a future run.
    */
-  public register(marker: string): void {
+  public register(
+    marker: string,
+    sentinel = buildRunCompleteSentinel(marker),
+  ): void {
     assertRunMarker(marker);
+    assertNonEmptyString(sentinel, 'run-completion sentinel');
 
     if (this.#activeSentinels.has(marker)) {
       return;
@@ -567,7 +582,7 @@ export class RunCompletionSentinelScanner {
 
     this.#activeSentinels.set(marker, {
       marker,
-      sentinel: buildRunCompleteSentinel(marker),
+      sentinel,
     });
     this.#assertPendingTailBound();
   }

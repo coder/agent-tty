@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildRunCompleteSentinel,
+  buildRunCompleteSignalSentinel,
   RUN_COMPLETE_SENTINEL_PREFIX,
   RUN_COMPLETE_SENTINEL_SUFFIX,
   RunCompletionPostambleEchoSanitizer,
@@ -71,6 +72,20 @@ describe('buildRunCompleteSentinel', () => {
     );
     expect(() => buildRunCompleteSentinel('__AT_MARKER_123__')).toThrow(
       'run marker must match expected format',
+    );
+  });
+});
+
+describe('buildRunCompleteSignalSentinel', () => {
+  it('returns a short APC-framed signal sentinel', () => {
+    expect(buildRunCompleteSignalSentinel('abc123')).toBe(
+      '\x1b_atabc123\x1b\\',
+    );
+  });
+
+  it('rejects invalid signal tokens', () => {
+    expect(() => buildRunCompleteSignalSentinel('short')).toThrow(
+      'run-completion signal token must be six base64url characters',
     );
   });
 });
@@ -263,6 +278,19 @@ describe('RunCompletionSentinelScanner', () => {
       expect(scanner.hasActiveMarkers()).toBe(false);
     },
   );
+
+  it('matches a custom short sentinel registered for a marker', () => {
+    const scanner = new RunCompletionSentinelScanner();
+    const marker = runMarker(210);
+    const sentinel = buildRunCompleteSignalSentinel('Abc-12');
+    scanner.register(marker, sentinel);
+
+    expect(scanner.feed(`before${sentinel}after`)).toEqual([
+      { type: 'output', data: 'before' },
+      { type: 'run_complete', marker },
+      { type: 'output', data: 'after' },
+    ]);
+  });
 
   it('matches a sentinel split one byte at a time across the full frame', () => {
     const scanner = new RunCompletionSentinelScanner();

@@ -10,7 +10,7 @@ import { buildReplayInput } from './replay.js';
 import { HostRendererManager } from './renderer.js';
 import { RpcServer, type MethodHandler } from './rpcServer.js';
 import {
-  buildRunCompleteSentinel,
+  buildRunCompleteSignalSentinel,
   RUN_MARKER_PATTERN,
   RunCompletionPostambleEchoSanitizer,
   RunCompletionSentinelScanner,
@@ -110,6 +110,9 @@ type TimedRunCompletionWaitResult =
 
 const RUN_COMPLETION_POSTAMBLE_ECHO_PREFIX = String.raw`printf '\033\137`;
 
+const RUN_COMPLETION_SIGNAL_TOKEN_BYTES = 4;
+const MAX_RUN_COMPLETION_POSTAMBLE_ECHO_LENGTH = 64;
+
 function normalizeExitSignal(signal: number | null): string | null {
   invariant(
     signal === null || (Number.isInteger(signal) && signal >= 0),
@@ -137,9 +140,25 @@ function shellOctalEscapedBytes(value: string): string {
     .join('');
 }
 
-function buildRunCompletePostamble(marker: string): string {
+function generateRunCompleteSignalSentinel(): string {
+  const token = crypto
+    .randomBytes(RUN_COMPLETION_SIGNAL_TOKEN_BYTES)
+    .toString('base64url');
+  invariant(
+    token.length === 6,
+    'run-completion signal token must encode to six base64url characters',
+  );
+
+  return buildRunCompleteSignalSentinel(token);
+}
+
+function buildRunCompletePostamble(marker: string, sentinel: string): string {
   const markerMatch = RUN_MARKER_PATTERN.exec(marker);
   invariant(markerMatch !== null, 'run marker must match expected format');
+  invariant(
+    typeof sentinel === 'string' && sentinel.length > 0,
+    'sentinel must be non-empty',
+  );
 
   const markerPayload = markerMatch[1];
   invariant(
@@ -147,9 +166,11 @@ function buildRunCompletePostamble(marker: string): string {
     'run marker payload must be 32 lowercase hex characters',
   );
 
-  const postamble = `printf '${shellOctalEscapedBytes(
-    buildRunCompleteSentinel(marker),
-  )}'`;
+  const postamble = `printf '${shellOctalEscapedBytes(sentinel)}'`;
+  invariant(
+    postamble.length <= MAX_RUN_COMPLETION_POSTAMBLE_ECHO_LENGTH,
+    'run-completion postamble echo must stay short enough to avoid terminal wrapping',
+  );
   invariant(
     postamble.startsWith(RUN_COMPLETION_POSTAMBLE_ECHO_PREFIX),
     'run-completion postamble echo prefix must stay in sync with sanitizer',
@@ -524,8 +545,8 @@ export async function runHost(sessionId: string): Promise<void> {
         'run-completion sentinel must correspond to an active run marker',
       );
       invariant(
-        activeCompletion.sentinel === buildRunCompleteSentinel(piece.marker),
-        'active run-completion sentinel must match the completed marker',
+        activeCompletion.sentinel.length > 0,
+        'active run-completion sentinel must be non-empty',
       );
 
       try {
@@ -968,8 +989,15 @@ export async function runHost(sessionId: string): Promise<void> {
         RUN_MARKER_PATTERN.test(marker),
         'generated run marker must match expected format',
       );
-      const sentinel = buildRunCompleteSentinel(marker);
-      const postamble = buildRunCompletePostamble(marker);
+      let sentinel = generateRunCompleteSignalSentinel();
+      while (
+        [...activeRunCompletions.values()].some(
+          (completion) => completion.sentinel === sentinel,
+        )
+      ) {
+        sentinel = generateRunCompleteSignalSentinel();
+      }
+      const postamble = buildRunCompletePostamble(marker, sentinel);
       const seq = await eventLog.append('input_run', {
         command,
         marker,
@@ -981,7 +1009,7 @@ export async function runHost(sessionId: string): Promise<void> {
         'generated run marker must be unique among active completions',
       );
       activeRunCompletions.set(marker, { inputRunSeq: seq, sentinel });
-      sentinelScanner.register(marker);
+      sentinelScanner.register(marker, sentinel);
       postambleEchoSanitizer.register(marker, postamble);
       const completionPromise = subscribeRunCompletion(marker);
       const injectedText = `${command}\n${postamble}`;
