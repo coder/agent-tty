@@ -58,9 +58,11 @@ Set `AGENT_USES_AGENT_TTY_REVIEW_TAIL_SECONDS`, `AGENT_USES_AGENT_TTY_REVIEW_SLO
 - `*-outer-*.json` — generated CLI envelopes for the outer recording session.
 - `artifacts/*-outer.webm` — slowed accelerated-replay review cut of the coding agent command/export window.
 - `artifacts/*-outer-full.webm` and `artifacts/*-outer.cast` — untrimmed recorded-timing recordings of the coding agent process.
+- `artifacts/*-outer-snapshot.txt` — text snapshot captured from the outer coding agent session.
 - `artifacts/*-thumbnail.png` — README thumbnails copied from `agent-tty screenshot`.
 - `artifacts/*-inner-nvim.webm` and `artifacts/*-inner-nvim.cast` — artifacts exported by the nested coding agent.
 - `artifacts/*-demo-note.txt` and `artifacts/*-final-file-proof.txt` — final file proof.
+- `artifacts/*-prompt.md` — rendered prompt given to the coding agent.
 - `artifacts/*-agent-transcript.txt` and `artifacts/*-final-message.txt` — captured agent output.
 
 ## Adding Another Agent

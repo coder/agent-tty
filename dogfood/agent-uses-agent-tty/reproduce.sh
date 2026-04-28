@@ -64,6 +64,14 @@ assert_positive_integer() {
   (( value > 0 )) || fail "$name must be greater than 0"
 }
 
+assert_integer_at_least() {
+  local name="$1"
+  local value="$2"
+  local minimum="$3"
+  assert_positive_integer "$name" "$value"
+  (( value >= minimum )) || fail "$name must be at least $minimum"
+}
+
 file_state() {
   local path="$1"
   if [[ -s "$path" ]]; then
@@ -90,7 +98,9 @@ assert_text_file_equals() {
 run_json_file() {
   local output_path="$1"
   shift
-  local tmp_path="$output_path.tmp"
+  [[ -n "$TEMP_ROOT" && -d "$TEMP_ROOT" ]] || fail 'TEMP_ROOT must exist before run_json_file'
+  local tmp_path
+  tmp_path="$(mktemp "$TEMP_ROOT/run-json.XXXXXX")"
   "$@" > "$tmp_path"
   jq . "$tmp_path" > "$output_path"
   rm -f "$tmp_path"
@@ -233,6 +243,8 @@ parse_args() {
     recorded|accelerated|max-speed) ;;
     *) fail "AGENT_USES_AGENT_TTY_WEBM_TIMING must be one of: recorded, accelerated, max-speed" ;;
   esac
+  assert_integer_at_least 'AGENT_USES_AGENT_TTY_TIMEOUT_MS' "$OUTER_TIMEOUT_MS" 1000
+  assert_integer_at_least 'AGENT_USES_AGENT_TTY_PROOF_TIMEOUT_MS' "$PROOF_TIMEOUT_MS" 1000
   assert_positive_number 'AGENT_USES_AGENT_TTY_REVIEW_TAIL_SECONDS' "$REVIEW_TAIL_SECONDS"
   assert_positive_number 'AGENT_USES_AGENT_TTY_REVIEW_SLOWDOWN' "$REVIEW_SLOWDOWN"
   assert_positive_integer 'AGENT_USES_AGENT_TTY_REVIEW_CPU_USED' "$REVIEW_CPU_USED"
@@ -251,18 +263,17 @@ selected_agents() {
 }
 
 render_prompt() {
-  local agent="$1"
-  local prompt_path="$2"
-  local workspace="$3"
-  local inner_home="$4"
-  local final_file="$5"
-  local inner_cast="$6"
-  local inner_webm="$7"
-  local inner_helper="$8"
-  local xdg_config_home="$9"
-  local xdg_data_home="${10}"
-  local xdg_state_home="${11}"
-  local xdg_cache_home="${12}"
+  local prompt_path="$1"
+  local workspace="$2"
+  local inner_home="$3"
+  local final_file="$4"
+  local inner_cast="$5"
+  local inner_webm="$6"
+  local inner_helper="$7"
+  local xdg_config_home="$8"
+  local xdg_data_home="$9"
+  local xdg_state_home="${10}"
+  local xdg_cache_home="${11}"
   local template_path="$PROMPTS_DIR/template.md"
   [[ -f "$template_path" ]] || fail "missing prompt template: $template_path"
 
@@ -281,6 +292,9 @@ render_prompt() {
   prompt="${prompt//\{\{XDG_STATE_HOME\}\}/$xdg_state_home}"
   prompt="${prompt//\{\{XDG_CACHE_HOME\}\}/$xdg_cache_home}"
   printf '%s\n' "$prompt" > "$prompt_path"
+  if grep -q '{{' "$prompt_path"; then
+    fail "unsubstituted placeholders in rendered prompt: $prompt_path"
+  fi
 }
 
 write_inner_helper() {
@@ -377,17 +391,29 @@ write_runner() {
 }
 
 wait_for_agent_proof() {
-  local final_file="$1"
-  local inner_cast="$2"
-  local inner_webm="$3"
-  local expected="$4"
+  local outer_home="$1"
+  local session_id="$2"
+  local final_file="$3"
+  local inner_cast="$4"
+  local inner_webm="$5"
   local deadline=$((SECONDS + (PROOF_TIMEOUT_MS / 1000)))
 
   while (( SECONDS < deadline )); do
     if [[ -s "$final_file" && -s "$inner_cast" && -s "$inner_webm" ]]; then
       return 0
     fi
-    sleep 2
+
+    local wait_json
+    capture_json_var \
+      wait_json \
+      agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" \
+      wait "$session_id" --exit --timeout 1000 --json
+    if printf '%s\n' "$wait_json" | jq -e '.result.timedOut == false' >/dev/null; then
+      local exit_code
+      exit_code="$(printf '%s\n' "$wait_json" | jq -r '.result.exitCode // "unknown"')"
+      fail "outer agent exited before nested proof files were ready: exit_code=$exit_code, final_file=$(file_state "$final_file"), inner_cast=$(file_state "$inner_cast"), inner_webm=$(file_state "$inner_webm")"
+    fi
+    sleep 1
   done
 
   fail "timed out waiting for nested agent proof files: final_file=$(file_state "$final_file"), inner_cast=$(file_state "$inner_cast"), inner_webm=$(file_state "$inner_webm")"
@@ -555,6 +581,7 @@ verify_outer_recording() {
   assert_file_nonempty "$cast_path"
   assert_file_nonempty "$webm_path"
   assert_file_nonempty "$review_webm_path"
+  assert_media_duration_at_least "$webm_path" 10 'outer full WebM'
   case "$agent" in
     codex) tui_marker='OpenAI Codex' ;;
     claude) tui_marker='Claude Code' ;;
@@ -603,7 +630,7 @@ run_agent_demo() {
   git -C "$workspace" init -q
   printf '# agent-tty dogfood workspace\n' > "$workspace/README.md"
   write_inner_helper "$inner_helper_path" "$workspace" "$inner_home" "$final_file" "$inner_cast" "$inner_webm" "$xdg_config_home" "$xdg_data_home" "$xdg_state_home" "$xdg_cache_home"
-  render_prompt "$agent" "$prompt_path" "$workspace" "$inner_home" "$final_file" "$inner_cast" "$inner_webm" "$inner_helper_path" "$xdg_config_home" "$xdg_data_home" "$xdg_state_home" "$xdg_cache_home"
+  render_prompt "$prompt_path" "$workspace" "$inner_home" "$final_file" "$inner_cast" "$inner_webm" "$inner_helper_path" "$xdg_config_home" "$xdg_data_home" "$xdg_state_home" "$xdg_cache_home"
   write_runner "$agent" "$runner_path" "$workspace" "$prompt_path"
 
   log "starting outer $agent recording"
@@ -620,7 +647,7 @@ run_agent_demo() {
   CURRENT_OUTER_SESSION_ID="$(printf '%s\n' "$create_json" | jq -er '.result.sessionId')"
 
   acknowledge_startup_prompt_if_present "$outer_home" "$CURRENT_OUTER_SESSION_ID" "$BUNDLE_DIR/$agent-startup-prompt.json"
-  wait_for_agent_proof "$final_file" "$inner_cast" "$inner_webm" "$DEMO_SENTENCE"
+  wait_for_agent_proof "$outer_home" "$CURRENT_OUTER_SESSION_ID" "$final_file" "$inner_cast" "$inner_webm"
 
   # Capture the thumbnail before leaving the TUI so README links show the agent UI,
   # not the shell prompt restored after alt-screen exit.
