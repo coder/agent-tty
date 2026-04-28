@@ -157,7 +157,7 @@ slow_outer_webm_for_review() {
   # preserving enough terminal text detail for GitHub reviewers.
   ffmpeg -nostdin -y -hide_banner -loglevel error -i "$source_webm" -vf "trim=start=$trim_start,setpts=$REVIEW_SLOWDOWN*(PTS-STARTPTS)" -an -c:v libvpx-vp9 -deadline good -cpu-used "$REVIEW_CPU_USED" -b:v 0 -crf "$REVIEW_CRF" "$destination_webm"
   assert_file_nonempty "$destination_webm"
-  assert_media_duration_at_least "$destination_webm" 1 'outer review WebM'
+  assert_media_duration_at_least "$destination_webm" 5 'outer review WebM'
 }
 
 destroy_sessions_in_home() {
@@ -178,17 +178,25 @@ try_capture_outer_thumbnail() {
   local session_id="$2"
   local envelope_path="$3"
   local thumbnail_path="$4"
+  local tmp_path
 
-  if agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" screenshot "$session_id" --hide-cursor --json > "$envelope_path.tmp"; then
-    jq . "$envelope_path.tmp" > "$envelope_path"
-    rm -f "$envelope_path.tmp"
-    jq -e '.ok == true' "$envelope_path" >/dev/null
-    copy_artifact_from_envelope "$envelope_path" "$thumbnail_path"
-    return 0
+  [[ -n "$TEMP_ROOT" && -d "$TEMP_ROOT" ]] || fail 'TEMP_ROOT must exist before try_capture_outer_thumbnail'
+  tmp_path="$(mktemp "$TEMP_ROOT/outer-screenshot.XXXXXX")"
+  if agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" screenshot "$session_id" --hide-cursor --json > "$tmp_path"; then
+    if jq . "$tmp_path" > "$envelope_path"; then
+      rm -f "$tmp_path"
+      if jq -e '.ok == true' "$envelope_path" >/dev/null; then
+        copy_artifact_from_envelope "$envelope_path" "$thumbnail_path"
+        return 0
+      fi
+      return 1
+    fi
   fi
 
-  jq . "$envelope_path.tmp" > "$envelope_path" 2>/dev/null || cp "$envelope_path.tmp" "$envelope_path"
-  rm -f "$envelope_path.tmp"
+  if [[ -s "$tmp_path" ]]; then
+    jq . "$tmp_path" > "$envelope_path" 2>/dev/null || cp "$tmp_path" "$envelope_path"
+  fi
+  rm -f "$tmp_path"
   return 1
 }
 
@@ -404,10 +412,18 @@ wait_for_agent_proof() {
     fi
 
     local wait_json
-    capture_json_var \
-      wait_json \
-      agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" \
-      wait "$session_id" --exit --timeout 1000 --json
+    wait_json="$(agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" wait "$session_id" --exit --timeout 1000 --json 2>/dev/null || true)"
+    if [[ -z "$wait_json" ]]; then
+      fail "outer agent liveness check returned no JSON before nested proof files were ready: session_id=$session_id, final_file=$(file_state "$final_file"), inner_cast=$(file_state "$inner_cast"), inner_webm=$(file_state "$inner_webm")"
+    fi
+    if ! printf '%s\n' "$wait_json" | jq . >/dev/null 2>&1; then
+      fail "outer agent liveness check returned invalid JSON before nested proof files were ready: session_id=$session_id, final_file=$(file_state "$final_file"), inner_cast=$(file_state "$inner_cast"), inner_webm=$(file_state "$inner_webm")"
+    fi
+    if ! printf '%s\n' "$wait_json" | jq -e '.ok == true' >/dev/null; then
+      local error_message
+      error_message="$(printf '%s\n' "$wait_json" | jq -r '.error.message // .error // "unknown"')"
+      fail "outer agent liveness check failed before nested proof files were ready: session_id=$session_id, error=$error_message, final_file=$(file_state "$final_file"), inner_cast=$(file_state "$inner_cast"), inner_webm=$(file_state "$inner_webm")"
+    fi
     if printf '%s\n' "$wait_json" | jq -e '.result.timedOut == false' >/dev/null; then
       local exit_code
       exit_code="$(printf '%s\n' "$wait_json" | jq -r '.result.exitCode // "unknown"')"
@@ -426,16 +442,22 @@ stop_outer_agent_tui() {
   local wait_path="$4"
 
   try_wait_for_outer_exit() {
-    if agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" wait "$session_id" --exit --timeout 20000 --json > "$wait_path.tmp"; then
-      jq . "$wait_path.tmp" > "$wait_path"
-      rm -f "$wait_path.tmp"
-      jq -e '.ok == true and .result.timedOut == false' "$wait_path" >/dev/null
-      return $?
+    local tmp_path
+    [[ -n "$TEMP_ROOT" && -d "$TEMP_ROOT" ]] || fail 'TEMP_ROOT must exist before try_wait_for_outer_exit'
+    tmp_path="$(mktemp "$TEMP_ROOT/outer-wait-exit.XXXXXX")"
+    if agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" wait "$session_id" --exit --timeout 20000 --json > "$tmp_path"; then
+      if jq . "$tmp_path" > "$wait_path"; then
+        rm -f "$tmp_path"
+        if jq -e '.ok == true and .result.timedOut == false' "$wait_path" >/dev/null; then
+          return 0
+        fi
+        return 1
+      fi
     fi
-    if [[ -s "$wait_path.tmp" ]]; then
-      jq . "$wait_path.tmp" > "$wait_path"
+    if [[ -s "$tmp_path" ]]; then
+      jq . "$tmp_path" > "$wait_path" 2>/dev/null || cp "$tmp_path" "$wait_path"
     fi
-    rm -f "$wait_path.tmp"
+    rm -f "$tmp_path"
     return 1
   }
 
@@ -623,6 +645,7 @@ run_agent_demo() {
   local outer_full_webm_path="$ARTIFACTS_DIR/$agent-outer-full.webm"
   local outer_review_webm_path="$ARTIFACTS_DIR/$agent-outer.webm"
   local outer_review_raw_webm_path="$TEMP_ROOT/$agent-outer-review-accelerated.webm"
+  local outer_review_envelope_path="$TEMP_ROOT/$agent-outer-record-review-webm.json"
   local inner_helper_path="$workspace/run-inner-nvim-proof.sh"
   local runner_path="$workspace/run-$agent.sh"
 
@@ -693,7 +716,7 @@ run_agent_demo() {
     agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" \
     record export "$CURRENT_OUTER_SESSION_ID" --format webm --timing "$WEBM_TIMING" --out "$outer_full_webm_path" --json
   run_json_file \
-    "$BUNDLE_DIR/$agent-outer-record-review-webm.json" \
+    "$outer_review_envelope_path" \
     agent-tty --home "$outer_home" --timeout-ms "$OUTER_TIMEOUT_MS" \
     record export "$CURRENT_OUTER_SESSION_ID" --format webm --timing accelerated --out "$outer_review_raw_webm_path" --json
   slow_outer_webm_for_review "$outer_review_raw_webm_path" "$outer_review_webm_path"
