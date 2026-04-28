@@ -565,12 +565,14 @@ describe('run command integration', { timeout: 45_000 }, () => {
       throw new Error('expected run_complete event to exist');
     }
     const inputRunSeq = runCompleteEvent.payload.inputRunSeq;
-    if (inputRunSeq !== undefined) {
-      expect(inputRunSeq).toBeTypeOf('number');
-      const inputRunEvent = events.find((event) => event.seq === inputRunSeq);
-      expect(inputRunEvent?.type).toBe('input_run');
-      expect(inputRunEvent?.payload).toMatchObject({ marker });
+    expect(inputRunSeq).toBeDefined();
+    if (inputRunSeq === undefined) {
+      throw new Error('run_complete inputRunSeq must be defined');
     }
+    expect(inputRunSeq).toBeTypeOf('number');
+    const inputRunEvent = events.find((event) => event.seq === inputRunSeq);
+    expect(inputRunEvent?.type).toBe('input_run');
+    expect(inputRunEvent?.payload).toMatchObject({ marker });
 
     const outputText = collectOutputText(events);
     expect(outputText).toContain('before-clean-marker-proof');
