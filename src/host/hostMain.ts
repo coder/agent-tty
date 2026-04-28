@@ -12,6 +12,7 @@ import { RpcServer, type MethodHandler } from './rpcServer.js';
 import {
   buildRunCompleteSentinel,
   RUN_MARKER_PATTERN,
+  RunCompletionPostambleEchoSanitizer,
   RunCompletionSentinelScanner,
   type SentinelPiece,
 } from './runCompletionSentinel.js';
@@ -348,9 +349,9 @@ export async function runHost(sessionId: string): Promise<void> {
   };
 
   const sentinelScanner = new RunCompletionSentinelScanner();
+  const postambleEchoSanitizer = new RunCompletionPostambleEchoSanitizer();
   const activeRunCompletions = new Map<string, ActiveRunCompletion>();
   const runCompletionWaiters = new Map<string, RunCompletionWaiter>();
-  let suppressRunCompletionEcho = false;
   let ptyIngestionQueue: Promise<void> = Promise.resolve();
 
   const ptyExitPromise = new Promise<void>((resolve) => {
@@ -414,9 +415,10 @@ export async function runHost(sessionId: string): Promise<void> {
       'run completion waiter must be unique per marker',
     );
 
-    return new Promise<RunCompletionWaitResult>((resolve, reject) => {
-      runCompletionWaiters.set(marker, { reject, resolve });
-    });
+    const { promise, reject, resolve } =
+      Promise.withResolvers<RunCompletionWaitResult>();
+    runCompletionWaiters.set(marker, { reject, resolve });
+    return promise;
   };
 
   const waitForRunCompletion = async (
@@ -429,41 +431,43 @@ export async function runHost(sessionId: string): Promise<void> {
       'timeoutMs must be positive',
     );
 
-    return await new Promise<TimedRunCompletionWaitResult>(
-      (resolve, reject) => {
-        let resolved = false;
-        const timeoutHandle = setTimeout(() => {
-          if (resolved) {
-            return;
-          }
+    const { promise, reject, resolve } =
+      Promise.withResolvers<TimedRunCompletionWaitResult>();
+    let resolved = false;
+    const timeoutHandle = setTimeout(() => {
+      if (resolved) {
+        return;
+      }
 
-          resolved = true;
-          runCompletionWaiters.delete(marker);
-          resolve({ kind: 'timeout' });
-        }, timeoutMs);
+      resolved = true;
+      // Keep sentinel/postamble registrations active after timeout so the
+      // eventual internal completion bytes are still hidden from artifacts.
+      runCompletionWaiters.delete(marker);
+      resolve({ kind: 'timeout' });
+    }, timeoutMs);
 
-        void completionPromise.then(
-          (result) => {
-            if (resolved) {
-              return;
-            }
+    void completionPromise.then(
+      (result) => {
+        if (resolved) {
+          return;
+        }
 
-            resolved = true;
-            clearTimeout(timeoutHandle);
-            resolve(result);
-          },
-          (error: unknown) => {
-            if (resolved) {
-              return;
-            }
+        resolved = true;
+        clearTimeout(timeoutHandle);
+        resolve(result);
+      },
+      (error: unknown) => {
+        if (resolved) {
+          return;
+        }
 
-            resolved = true;
-            clearTimeout(timeoutHandle);
-            reject(error instanceof Error ? error : new Error(String(error)));
-          },
-        );
+        resolved = true;
+        clearTimeout(timeoutHandle);
+        reject(error instanceof Error ? error : new Error(String(error)));
       },
     );
+
+    return await promise;
   };
 
   const replayRendererThroughSeq = async (targetSeq: number): Promise<void> => {
@@ -489,24 +493,20 @@ export async function runHost(sessionId: string): Promise<void> {
     );
   };
 
-  const sanitizeRunCompletionEchoOutput = (data: string): string => {
+  const appendOutput = async (data: string): Promise<void> => {
     invariant(typeof data === 'string', 'output data must be a string');
 
-    if (suppressRunCompletionEcho) {
-      return '';
+    const outputData = postambleEchoSanitizer.feed(data);
+    if (outputData.length > 0) {
+      await eventLog.append('output', { data: outputData });
     }
+  };
 
-    if (activeRunCompletions.size === 0) {
-      return data;
+  const appendFlushedPostambleEchoOutput = async (): Promise<void> => {
+    const outputData = postambleEchoSanitizer.flush();
+    if (outputData.length > 0) {
+      await eventLog.append('output', { data: outputData });
     }
-
-    const echoIndex = data.indexOf(RUN_COMPLETION_POSTAMBLE_ECHO_PREFIX);
-    if (echoIndex === -1) {
-      return data;
-    }
-
-    suppressRunCompletionEcho = true;
-    return data.slice(0, echoIndex);
   };
 
   const appendSentinelPieces = async (
@@ -514,10 +514,7 @@ export async function runHost(sessionId: string): Promise<void> {
   ): Promise<void> => {
     for (const piece of pieces) {
       if (piece.type === 'output') {
-        const outputData = sanitizeRunCompletionEchoOutput(piece.data);
-        if (outputData.length > 0) {
-          await eventLog.append('output', { data: outputData });
-        }
+        await appendOutput(piece.data);
         continue;
       }
 
@@ -532,13 +529,19 @@ export async function runHost(sessionId: string): Promise<void> {
       );
 
       try {
+        const trailingEchoOutput = postambleEchoSanitizer.deregister(
+          piece.marker,
+        );
+        if (trailingEchoOutput.length > 0) {
+          await eventLog.append('output', { data: trailingEchoOutput });
+        }
+
         const seq = await eventLog.append('run_complete', {
           marker: piece.marker,
           ...(activeCompletion.inputRunSeq === undefined
             ? {}
             : { inputRunSeq: activeCompletion.inputRunSeq }),
         });
-        suppressRunCompletionEcho = false;
         const deleted = activeRunCompletions.delete(piece.marker);
         invariant(
           deleted,
@@ -658,8 +661,8 @@ export async function runHost(sessionId: string): Promise<void> {
     void (async () => {
       try {
         await eventLog.append('exit', { exitCode, exitSignal });
-        resolveRunCompletionWaitersForExit();
       } finally {
+        resolveRunCompletionWaitersForExit();
         try {
           await writeManifest(mPath, state.snapshot());
         } finally {
@@ -966,6 +969,7 @@ export async function runHost(sessionId: string): Promise<void> {
         'generated run marker must match expected format',
       );
       const sentinel = buildRunCompleteSentinel(marker);
+      const postamble = buildRunCompletePostamble(marker);
       const seq = await eventLog.append('input_run', {
         command,
         marker,
@@ -978,8 +982,9 @@ export async function runHost(sessionId: string): Promise<void> {
       );
       activeRunCompletions.set(marker, { inputRunSeq: seq, sentinel });
       sentinelScanner.register(marker);
+      postambleEchoSanitizer.register(marker, postamble);
       const completionPromise = subscribeRunCompletion(marker);
-      const injectedText = `${command}\n${buildRunCompletePostamble(marker)}`;
+      const injectedText = `${command}\n${postamble}`;
       const effectiveTimeoutMs = timeoutMs ?? 30_000;
       const startTime = Date.now();
       pty.write(injectedText);
@@ -993,7 +998,13 @@ export async function runHost(sessionId: string): Promise<void> {
       const durationMs = Date.now() - startTime;
 
       if (waitResult.kind === 'completed') {
-        await replayRendererThroughSeq(waitResult.seq);
+        try {
+          await replayRendererThroughSeq(waitResult.seq);
+        } catch {
+          // The run already completed and was committed to the event log. Do not
+          // turn a best-effort renderer catch-up failure into a command retry
+          // hazard; replay-driven snapshots can catch up on the next request.
+        }
       }
 
       return {
@@ -1469,6 +1480,7 @@ export async function runHost(sessionId: string): Promise<void> {
 
     void enqueuePtyIngestion(async () => {
       await appendSentinelPieces(sentinelScanner.flush());
+      await appendFlushedPostambleEchoOutput();
     })
       .catch((error: unknown) => {
         ingestionError = error;

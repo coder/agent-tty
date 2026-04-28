@@ -4,9 +4,14 @@ import {
   buildRunCompleteSentinel,
   RUN_COMPLETE_SENTINEL_PREFIX,
   RUN_COMPLETE_SENTINEL_SUFFIX,
+  RunCompletionPostambleEchoSanitizer,
   RunCompletionSentinelScanner,
 } from '../../../src/host/runCompletionSentinel.js';
 import type { SentinelPiece } from '../../../src/host/runCompletionSentinel.js';
+
+function runMarker(value: number): string {
+  return `__AT_MARKER_${value.toString(16).padStart(32, '0')}__`;
+}
 
 function feedChunks(
   scanner: RunCompletionSentinelScanner,
@@ -35,26 +40,125 @@ function oneCodeUnitChunks(data: string): string[] {
   return chunks;
 }
 
+function postamble(marker: string): string {
+  return `printf '${marker}'\n`;
+}
+
 describe('buildRunCompleteSentinel', () => {
   it('returns the expected APC-framed sentinel bytes', () => {
-    expect(buildRunCompleteSentinel('__AT_MARKER_123')).toBe(
-      '\x1b_agent-tty:run-complete:__AT_MARKER_123\x1b\\',
+    const marker = runMarker(1);
+
+    expect(buildRunCompleteSentinel(marker)).toBe(
+      `\x1b_agent-tty:run-complete:${marker}\x1b\\`,
     );
     expect(RUN_COMPLETE_SENTINEL_PREFIX).toBe('\x1b_agent-tty:run-complete:');
     expect(RUN_COMPLETE_SENTINEL_SUFFIX).toBe('\x1b\\');
   });
 
-  it('rejects empty markers', () => {
+  it('rejects non-production marker formats', () => {
     expect(() => buildRunCompleteSentinel('')).toThrow(
-      'marker must be a non-empty string',
+      'run marker must match expected format',
     );
+    expect(() => buildRunCompleteSentinel('__AT_MARKER_123__')).toThrow(
+      'run marker must match expected format',
+    );
+  });
+});
+
+describe('RunCompletionPostambleEchoSanitizer', () => {
+  it('removes an exact CRLF postamble echo without suppressing later output', () => {
+    const sanitizer = new RunCompletionPostambleEchoSanitizer();
+    const marker = runMarker(10);
+    const echo = postamble(marker);
+    sanitizer.register(marker, echo);
+
+    expect(
+      sanitizer.feed(
+        `command echo\r\n${echo.replace(/\n$/u, '\r\n')}user output\n`,
+      ),
+    ).toBe('command echo\r\nuser output\n');
+    expect(sanitizer.feed('more output\n')).toBe('more output\n');
+  });
+
+  it('removes an exact LF postamble echo', () => {
+    const sanitizer = new RunCompletionPostambleEchoSanitizer();
+    const marker = runMarker(11);
+    const echo = postamble(marker);
+    sanitizer.register(marker, echo);
+
+    expect(sanitizer.feed(`before${echo}after`)).toBe('beforeafter');
+  });
+
+  it('removes postamble echoes split across chunks', () => {
+    const sanitizer = new RunCompletionPostambleEchoSanitizer();
+    const marker = runMarker(12);
+    const echo = postamble(marker).replace(/\n$/u, '\r\n');
+    sanitizer.register(marker, postamble(marker));
+
+    const split = "printf '".length + 8;
+    expect(sanitizer.feed(`before${echo.slice(0, split)}`)).toBe('before');
+    expect(sanitizer.feed(`${echo.slice(split)}after`)).toBe('after');
+  });
+
+  it('preserves interleaved command output while stripping postamble echo bytes', () => {
+    const sanitizer = new RunCompletionPostambleEchoSanitizer();
+    const marker = runMarker(120);
+    const echo = postamble(marker).replace(/\n$/u, '\r\n');
+    sanitizer.register(marker, postamble(marker));
+
+    const split = 24;
+    expect(
+      sanitizer.feed(
+        `${echo.slice(0, split)}visible-output\n${echo.slice(split)}`,
+      ),
+    ).toBe('visible-output\n');
+  });
+
+  it('drops line-editor control sequences interleaved into postamble echo', () => {
+    const sanitizer = new RunCompletionPostambleEchoSanitizer();
+    const marker = runMarker(121);
+    const echo = postamble(marker).replace(/\n$/u, '\r\n');
+    sanitizer.register(marker, postamble(marker));
+
+    const split = 24;
+    expect(
+      sanitizer.feed(`${echo.slice(0, split)}\x1b[A\x1b[K${echo.slice(split)}`),
+    ).toBe('');
+  });
+
+  it('removes repeated exact postamble text while the marker remains active', () => {
+    const sanitizer = new RunCompletionPostambleEchoSanitizer();
+    const marker = runMarker(13);
+    const echo = postamble(marker).replace(/\n$/u, '\r\n');
+    sanitizer.register(marker, postamble(marker));
+
+    expect(sanitizer.feed(`${echo}visible${echo}`)).toBe('visible');
+  });
+
+  it('flushes a pending partial postamble when its marker is deregistered', () => {
+    const sanitizer = new RunCompletionPostambleEchoSanitizer();
+    const marker = runMarker(14);
+    const echo = postamble(marker);
+    sanitizer.register(marker, echo);
+
+    expect(sanitizer.feed(`visible${echo.slice(0, 7)}`)).toBe('visible');
+    expect(sanitizer.deregister(marker)).toBe(echo.slice(0, 7));
+    expect(sanitizer.hasActiveEchoes()).toBe(false);
+  });
+
+  it('passes data through unchanged when no postamble echoes are active', () => {
+    const sanitizer = new RunCompletionPostambleEchoSanitizer();
+    const data = `before${postamble(runMarker(15))}after`;
+
+    expect(sanitizer.feed(data)).toBe(data);
+    expect(sanitizer.flush()).toBe('');
   });
 });
 
 describe('RunCompletionSentinelScanner', () => {
   it('matches a sentinel fully contained in one chunk with output around it', () => {
     const scanner = new RunCompletionSentinelScanner();
-    const marker = '__AT_MARKER_one_chunk';
+    const marker = runMarker(20);
     scanner.register(marker);
 
     expect(
@@ -72,17 +176,17 @@ describe('RunCompletionSentinelScanner', () => {
     ['inside prefix', 1],
     [
       'inside marker payload',
-      RUN_COMPLETE_SENTINEL_PREFIX.length + '__AT_MARKER_split'.length - 3,
+      RUN_COMPLETE_SENTINEL_PREFIX.length + runMarker(21).length - 3,
     ],
     [
       'inside suffix',
-      RUN_COMPLETE_SENTINEL_PREFIX.length + '__AT_MARKER_split'.length + 1,
+      RUN_COMPLETE_SENTINEL_PREFIX.length + runMarker(21).length + 1,
     ],
   ])(
     'matches a sentinel split across two chunks with boundary %s',
     (_, split) => {
       const scanner = new RunCompletionSentinelScanner();
-      const marker = '__AT_MARKER_split';
+      const marker = runMarker(21);
       const sentinel = buildRunCompleteSentinel(marker);
       scanner.register(marker);
 
@@ -96,7 +200,7 @@ describe('RunCompletionSentinelScanner', () => {
 
   it('matches a sentinel split one byte at a time across the full frame', () => {
     const scanner = new RunCompletionSentinelScanner();
-    const marker = '__AT_MARKER_bytewise';
+    const marker = runMarker(22);
     scanner.register(marker);
 
     const pieces = [
@@ -118,8 +222,8 @@ describe('RunCompletionSentinelScanner', () => {
 
   it('completes multiple active markers in input order without cross-matching', () => {
     const scanner = new RunCompletionSentinelScanner();
-    const firstMarker = '__AT_MARKER_A';
-    const secondMarker = '__AT_MARKER_AB';
+    const firstMarker = runMarker(23);
+    const secondMarker = runMarker(24);
     scanner.register(firstMarker);
     scanner.register(secondMarker);
 
@@ -145,8 +249,8 @@ describe('RunCompletionSentinelScanner', () => {
 
   it('keeps inactive or unknown sentinel-like bytes in output', () => {
     const scanner = new RunCompletionSentinelScanner();
-    const marker = '__AT_MARKER_known';
-    const unknownSentinel = buildRunCompleteSentinel('__AT_MARKER_unknown');
+    const marker = runMarker(25);
+    const unknownSentinel = buildRunCompleteSentinel(runMarker(26));
     const strayApc = '\x1b_random text that is not an active sentinel';
     scanner.register(marker);
 
@@ -167,7 +271,7 @@ describe('RunCompletionSentinelScanner', () => {
     const scanner = new RunCompletionSentinelScanner();
     const data = [
       'before',
-      buildRunCompleteSentinel('__AT_MARKER_inactive'),
+      buildRunCompleteSentinel(runMarker(27)),
       '\x1b_random',
       'after',
     ].join('');
@@ -178,7 +282,7 @@ describe('RunCompletionSentinelScanner', () => {
 
   it('does not leak active sentinel bytes into output pieces', () => {
     const scanner = new RunCompletionSentinelScanner();
-    const marker = '__AT_MARKER_secret';
+    const marker = runMarker(28);
     const sentinel = buildRunCompleteSentinel(marker);
     scanner.register(marker);
 
@@ -208,7 +312,7 @@ describe('RunCompletionSentinelScanner', () => {
 
   it('flushes a pending non-sentinel tail once', () => {
     const scanner = new RunCompletionSentinelScanner();
-    const marker = '__AT_MARKER_flush';
+    const marker = runMarker(29);
     scanner.register(marker);
 
     expect(
@@ -222,7 +326,7 @@ describe('RunCompletionSentinelScanner', () => {
 
   it('passes the same sentinel through as output after deactivation', () => {
     const scanner = new RunCompletionSentinelScanner();
-    const marker = '__AT_MARKER_once';
+    const marker = runMarker(30);
     const sentinel = buildRunCompleteSentinel(marker);
     scanner.register(marker);
 
@@ -232,37 +336,17 @@ describe('RunCompletionSentinelScanner', () => {
     ]);
   });
 
-  it('waits for a longer active sentinel when one frame prefixes another', () => {
+  it('rejects non-production markers so prefix-overlap cases are impossible', () => {
     const scanner = new RunCompletionSentinelScanner();
-    const shortMarker = 'prefix';
-    const longMarker = `prefix${RUN_COMPLETE_SENTINEL_SUFFIX}tail`;
-    scanner.register(shortMarker);
-    scanner.register(longMarker);
 
-    expect(scanner.feed(buildRunCompleteSentinel(shortMarker))).toEqual([]);
-    expect(scanner.feed(`tail${RUN_COMPLETE_SENTINEL_SUFFIX}`)).toEqual([
-      { type: 'run_complete', marker: longMarker },
-    ]);
-    expect(scanner.hasActiveMarkers()).toBe(true);
-  });
-
-  it('emits a shorter complete sentinel on flush if no longer frame arrives', () => {
-    const scanner = new RunCompletionSentinelScanner();
-    const shortMarker = 'prefix';
-    const longMarker = `prefix${RUN_COMPLETE_SENTINEL_SUFFIX}tail`;
-    scanner.register(shortMarker);
-    scanner.register(longMarker);
-
-    expect(scanner.feed(buildRunCompleteSentinel(shortMarker))).toEqual([]);
-    expect(scanner.flush()).toEqual([
-      { type: 'run_complete', marker: shortMarker },
-    ]);
-    expect(scanner.hasActiveMarkers()).toBe(true);
+    expect(() => scanner.register('prefix')).toThrow(
+      'run marker must match expected format',
+    );
   });
 
   it('reports whether active markers remain', () => {
     const scanner = new RunCompletionSentinelScanner();
-    const marker = '__AT_MARKER_active';
+    const marker = runMarker(31);
 
     expect(scanner.hasActiveMarkers()).toBe(false);
     scanner.register(marker);
@@ -276,7 +360,7 @@ describe('RunCompletionSentinelScanner', () => {
 
   it('preserves unknown output data when an active marker remains registered', () => {
     const scanner = new RunCompletionSentinelScanner();
-    const marker = '__AT_MARKER_registered';
+    const marker = runMarker(32);
     const unknownData = `${RUN_COMPLETE_SENTINEL_PREFIX}not-${marker}`;
     scanner.register(marker);
 

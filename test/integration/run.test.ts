@@ -301,6 +301,97 @@ describe('run command integration', { timeout: 45_000 }, () => {
     ).toBe(false);
   });
 
+  it('preserves command output in line-discipline echo shells', async () => {
+    sessionId = createSession(testHome, ['/bin/sh']);
+    await sleep(1000);
+
+    const result = runCli(
+      [
+        'run',
+        sessionId,
+        "printf 'dash-before-proof\\n'; sleep 0.1; printf 'dash-after-proof\\n'",
+        '--timeout',
+        '15000',
+        '--json',
+      ],
+      testEnv(),
+      30_000,
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+
+    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+      accepted: true;
+      completed: boolean;
+      timedOut: boolean;
+      seq: number;
+      durationMs: number;
+      marker: string;
+    }>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.accepted).toBe(true);
+    expect(envelope.result.completed).toBe(true);
+    expect(envelope.result.timedOut).toBe(false);
+    const marker = envelope.result.marker;
+    expectRunMarker(marker);
+
+    const events = await readEvents(testHome, sessionId);
+    const outputText = collectOutputText(events);
+    expect(outputText).toContain('dash-before-proof');
+    expect(outputText).toContain('dash-after-proof');
+    expectCompletionArtifactsClean(outputText, marker);
+  });
+
+  it('keeps later output visible after a timed-out line-discipline echo run', async () => {
+    sessionId = createSession(testHome, ['/bin/sh']);
+    await sleep(1000);
+
+    const result = runCli(
+      ['run', sessionId, 'cat', '--timeout', '300', '--json'],
+      testEnv(),
+      30_000,
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+
+    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+      accepted: true;
+      completed: boolean;
+      timedOut: boolean;
+      seq: number;
+      durationMs: number;
+      marker: string;
+    }>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.accepted).toBe(true);
+    expect(envelope.result.completed).toBe(false);
+    expect(envelope.result.timedOut).toBe(true);
+    const marker = envelope.result.marker;
+    expectRunMarker(marker);
+
+    const typeResult = runCli(
+      [
+        'type',
+        sessionId,
+        'timeout-still-visible',
+        '--append-newline',
+        '--json',
+      ],
+      testEnv(),
+      30_000,
+    );
+    expect(typeResult.status).toBe(0);
+    expect(typeResult.stderr).toBe('');
+    await sleep(500);
+
+    const events = await readEvents(testHome, sessionId);
+    const outputText = collectOutputText(events);
+    expect(outputText).toContain('timeout-still-visible');
+    expectCompletionArtifactsClean(outputText, marker);
+  });
+
   it('detects session exit during wait before timing out', async () => {
     sessionId = createSession(testHome, [
       '/bin/sh',
