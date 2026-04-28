@@ -9,9 +9,11 @@ import {
   EventRecordSchema,
   InputRunEventPayloadSchema,
   MarkerEventPayloadSchema,
+  RunCompleteEventPayloadSchema,
   type EventRecord,
   type InputRunEventPayload,
   type MarkerEventPayload,
+  type RunCompleteEventPayload,
 } from '../protocol/schemas.js';
 import { invariant } from '../util/assert.js';
 
@@ -79,6 +81,7 @@ type EventLogEventType =
   | 'input_paste'
   | 'input_keys'
   | 'input_run'
+  | 'run_complete'
   | 'resize'
   | 'signal'
   | 'exit'
@@ -89,6 +92,7 @@ type EventLogPayload =
   | InputPasteEventPayload
   | InputKeysEventPayload
   | InputRunEventPayload
+  | RunCompleteEventPayload
   | ResizeEventPayload
   | SignalEventPayload
   | ExitEventPayload
@@ -135,6 +139,11 @@ function validatePayload(
     case 'input_run': {
       const result = InputRunEventPayloadSchema.safeParse(payload);
       invariant(result.success, 'input_run payload must match schema');
+      return result.data;
+    }
+    case 'run_complete': {
+      const result = RunCompleteEventPayloadSchema.safeParse(payload);
+      invariant(result.success, 'run_complete payload must match schema');
       return result.data;
     }
     case 'resize': {
@@ -319,6 +328,10 @@ export class EventLog {
   async append(
     type: 'input_run',
     payload: InputRunEventPayload,
+  ): Promise<number>;
+  async append(
+    type: 'run_complete',
+    payload: RunCompleteEventPayload,
   ): Promise<number>;
   async append(type: 'resize', payload: ResizeEventPayload): Promise<number>;
   async append(type: 'signal', payload: SignalEventPayload): Promise<number>;

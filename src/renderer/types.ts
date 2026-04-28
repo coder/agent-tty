@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   MarkerEventPayloadSchema,
   RichSnapshotLineSchema,
+  RunCompleteEventPayloadSchema,
   VisibleLineSchema,
   type VisibleLine,
 } from '../protocol/schemas.js';
@@ -95,6 +96,15 @@ const InputRunReplayEventSchema = z
   })
   .strict();
 
+const RunCompleteReplayEventSchema = z
+  .object({
+    seq: NonNegativeIntSchema,
+    ts: z.iso.datetime(),
+    type: z.literal('run_complete'),
+    payload: RunCompleteEventPayloadSchema,
+  })
+  .strict();
+
 const ResizeReplayEventSchema = z
   .object({
     seq: NonNegativeIntSchema,
@@ -151,6 +161,7 @@ export const ReplayEventSchema = z.discriminatedUnion('type', [
   InputPasteReplayEventSchema,
   InputKeysReplayEventSchema,
   InputRunReplayEventSchema,
+  RunCompleteReplayEventSchema,
   ResizeReplayEventSchema,
   MarkerReplayEventSchema,
   SignalReplayEventSchema,

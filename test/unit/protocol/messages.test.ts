@@ -33,6 +33,8 @@ import {
 import {
   EventRecordSchema,
   MarkerEventRecordSchema,
+  RunCompleteEventPayloadSchema,
+  RunCompleteEventRecordSchema,
   SessionRecordSchema,
 } from '../../../src/protocol/schemas.js';
 
@@ -141,6 +143,52 @@ describe('protocol schemas', () => {
       type: 'marker',
       payload: { label: 'Step 1' },
     });
+  });
+
+  it('strictly validates run_complete event payloads and records', () => {
+    expect(
+      RunCompleteEventPayloadSchema.parse({
+        marker: '__AT_MARKER_123__',
+        inputRunSeq: 7,
+      }),
+    ).toEqual({
+      marker: '__AT_MARKER_123__',
+      inputRunSeq: 7,
+    });
+    expect(
+      RunCompleteEventPayloadSchema.parse({ marker: '__AT_MARKER_456__' }),
+    ).toEqual({ marker: '__AT_MARKER_456__' });
+    expect(
+      RunCompleteEventRecordSchema.parse({
+        seq: 2,
+        ts: '2026-03-19T12:00:04.000Z',
+        type: 'run_complete',
+        payload: { marker: '__AT_MARKER_789__', inputRunSeq: 1 },
+      }),
+    ).toEqual({
+      seq: 2,
+      ts: '2026-03-19T12:00:04.000Z',
+      type: 'run_complete',
+      payload: { marker: '__AT_MARKER_789__', inputRunSeq: 1 },
+    });
+
+    expect(
+      RunCompleteEventPayloadSchema.safeParse({
+        marker: '__AT_MARKER_extra__',
+        extra: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      RunCompleteEventPayloadSchema.safeParse({
+        marker: '__AT_MARKER_bad_seq__',
+        inputRunSeq: -1,
+      }).success,
+    ).toBe(false);
+    expect(
+      RunCompleteEventPayloadSchema.safeParse({
+        marker: 123,
+      }).success,
+    ).toBe(false);
   });
 });
 

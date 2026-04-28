@@ -254,6 +254,51 @@ describe('LibghosttyVtBackend', () => {
     });
   });
 
+  it('skips run_complete events during replay', async () => {
+    const fixture = createNativeFixture();
+    const backend = createBackend(fixture);
+
+    await backend.boot();
+    const state = await backend.replayTo(
+      createReplayInput({
+        targetSeq: 3,
+        events: [
+          {
+            seq: 0,
+            ts: '2026-03-20T12:00:00.000Z',
+            type: 'output',
+            payload: { data: 'hello' },
+          },
+          {
+            seq: 1,
+            ts: '2026-03-20T12:00:00.100Z',
+            type: 'run_complete',
+            payload: {
+              marker: '__AT_MARKER_00000000000000000000000000000001__',
+            },
+          },
+          {
+            seq: 2,
+            ts: '2026-03-20T12:00:00.200Z',
+            type: 'resize',
+            payload: { cols: 12, rows: 5 },
+          },
+          {
+            seq: 3,
+            ts: '2026-03-20T12:00:00.300Z',
+            type: 'output',
+            payload: { data: ' world' },
+          },
+        ],
+      }),
+    );
+
+    expect(fixture.feed).toHaveBeenCalledTimes(2);
+    expect(fixture.feed).toHaveBeenNthCalledWith(1, 'hello');
+    expect(fixture.feed).toHaveBeenNthCalledWith(2, ' world');
+    expect(state.lastSeq).toBe(3);
+  });
+
   it('maps native snapshots into semantic snapshots', async () => {
     const fixture = createNativeFixture();
     const backend = createBackend(fixture);

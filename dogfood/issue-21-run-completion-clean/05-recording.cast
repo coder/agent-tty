@@ -1,0 +1,8 @@
+{"version":2,"width":80,"height":24,"timestamp":1777236592,"title":"01KQ5RWH177CRZKPXSW91K16RG","sessionId":"01KQ5RWH177CRZKPXSW91K16RG","env":{"TERM":"xterm-256color"},"toolVersion":"0.1.1-beta.4"}
+[0,"o","\u001b[?2004h"]
+[0.001,"o","bash-5.1$ "]
+[13.998,"o","printf \"before-clean-marker-proof\\n\"; sleep 0.2; printf \"after-clean-ma\rarker-proof\\n\"\r\n\u001b[?2004l\r"]
+[13.999,"o","before-clean-marker-proof\r\n"]
+[14.201,"o","after-clean-marker-proof\r\n\u001b[?2004h"]
+[14.201,"o","bash-5.1$ "]
+[14.205,"o","\u001b[?2004hbash-5.1$ "]

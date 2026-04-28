@@ -116,11 +116,26 @@ export async function cleanupHome(home: string): Promise<void> {
   await rm(home, { recursive: true, force: true });
 }
 
+interface CreateSessionOptions {
+  cols?: number;
+  rows?: number;
+}
+
 export function createSession(
   testHome: string,
   command: string[] = ['/bin/sh', '-c', 'exec cat'],
+  options: CreateSessionOptions = {},
 ): string {
-  const result = runCli(['create', '--json', '--', ...command], {
+  const args = ['create', '--json'];
+  if (options.cols !== undefined) {
+    args.push('--cols', String(options.cols));
+  }
+  if (options.rows !== undefined) {
+    args.push('--rows', String(options.rows));
+  }
+  args.push('--', ...command);
+
+  const result = runCli(args, {
     AGENT_TTY_HOME: testHome,
   });
   expect(result.status).toBe(0);

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import type { ReplayInput } from '../../../src/renderer/types.js';
 import { BUNDLED_FONT_ASSETS } from '../../../src/renderer/bundledFont.js';
 import { hashProfile, resolveProfile } from '../../../src/renderer/profiles.js';
 import { GhosttyWebBackend } from '../../../src/renderer/ghosttyWeb/index.js';
@@ -68,6 +69,68 @@ describe('GhosttyWebBackend unit guards', () => {
 
     expect(recordedBatchSizes).toEqual([1000, 1000, 501]);
     expect(recordedChunks).toEqual(chunks);
+  });
+
+  it('flushes and skips run_complete events during replay', async () => {
+    const backend = createBackend();
+    const flushedChunks: string[][] = [];
+    const resizeBridge = vi.fn(() => Promise.resolve());
+    const page = { isClosed: () => false };
+
+    Object.assign(backend as object, {
+      isBooted: true,
+      page,
+      resizeBridge,
+      flushOutputBatch: (_page: object, dataChunks: string[]) => {
+        flushedChunks.push([...dataChunks]);
+        return Promise.resolve();
+      },
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 80,
+            rows: 24,
+            cursorRow: 0,
+            cursorCol: 0,
+            visibleLines: [{ row: 0, text: 'after' }],
+          }),
+        ),
+    });
+
+    const input: ReplayInput = {
+      sessionId: 'renderer-unit-session',
+      initialCols: 80,
+      initialRows: 24,
+      targetSeq: 2,
+      events: [
+        {
+          seq: 0,
+          ts: '2026-03-19T12:00:00.000Z',
+          type: 'output',
+          payload: { data: 'before' },
+        },
+        {
+          seq: 1,
+          ts: '2026-03-19T12:00:01.000Z',
+          type: 'run_complete',
+          payload: { marker: '__AT_MARKER_done__', inputRunSeq: 0 },
+        },
+        {
+          seq: 2,
+          ts: '2026-03-19T12:00:02.000Z',
+          type: 'output',
+          payload: { data: 'after' },
+        },
+      ],
+    };
+
+    await expect(backend.replayTo(input)).resolves.toMatchObject({
+      lastSeq: 2,
+      cols: 80,
+      rows: 24,
+    });
+    expect(resizeBridge).toHaveBeenCalledWith(page, 80, 24);
+    expect(flushedChunks).toEqual([['before'], ['after']]);
   });
 
   it('rejects oversized bridge batches before page evaluation', async () => {

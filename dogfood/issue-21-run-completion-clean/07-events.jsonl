@@ -1,0 +1,9 @@
+{"seq":0,"ts":"2026-04-26T20:49:52.489Z","type":"output","payload":{"data":"\u001b[?2004h"}}
+{"seq":1,"ts":"2026-04-26T20:49:52.490Z","type":"output","payload":{"data":"bash-5.1$ "}}
+{"seq":2,"ts":"2026-04-26T20:50:06.485Z","type":"input_run","payload":{"command":"printf \"before-clean-marker-proof\\n\"; sleep 0.2; printf \"after-clean-marker-proof\\n\"","marker":"__AT_MARKER_739e240b0762477e833bf3fd8b0dfd5f__","noWait":false}}
+{"seq":3,"ts":"2026-04-26T20:50:06.487Z","type":"output","payload":{"data":"printf \"before-clean-marker-proof\\n\"; sleep 0.2; printf \"after-clean-ma\rarker-proof\\n\"\r\n\u001b[?2004l\r"}}
+{"seq":4,"ts":"2026-04-26T20:50:06.488Z","type":"output","payload":{"data":"before-clean-marker-proof\r\n"}}
+{"seq":5,"ts":"2026-04-26T20:50:06.690Z","type":"output","payload":{"data":"after-clean-marker-proof\r\n\u001b[?2004h"}}
+{"seq":6,"ts":"2026-04-26T20:50:06.690Z","type":"output","payload":{"data":"bash-5.1$ "}}
+{"seq":7,"ts":"2026-04-26T20:50:06.693Z","type":"run_complete","payload":{"marker":"__AT_MARKER_739e240b0762477e833bf3fd8b0dfd5f__","inputRunSeq":2}}
+{"seq":8,"ts":"2026-04-26T20:50:06.694Z","type":"output","payload":{"data":"\u001b[?2004hbash-5.1$ "}}

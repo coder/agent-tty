@@ -1,7 +1,7 @@
 import type { EventRecord, SessionRecord } from '../protocol/schemas.js';
 
 import { DEFAULT_TERM } from '../config/defaults.js';
-import { invariant } from '../util/assert.js';
+import { invariant, unreachable } from '../util/assert.js';
 
 export interface AsciicastHeader {
   version: 2;
@@ -117,39 +117,52 @@ export function generateAsciicast(
     );
     previousTimestampMs = eventTimestampMs;
 
-    if (event.type === 'output') {
-      outputEventCount += 1;
-      lines.push(
-        JSON.stringify([
-          relativeSeconds(eventTimestampMs, firstTimestampMs),
-          'o',
-          event.payload.data,
-        ]),
-      );
-      continue;
-    }
-
-    if (event.type === 'resize') {
-      resizeEventCount += 1;
-      lines.push(
-        JSON.stringify([
-          relativeSeconds(eventTimestampMs, firstTimestampMs),
-          'r',
-          `${String(event.payload.cols)}x${String(event.payload.rows)}`,
-        ]),
-      );
-      continue;
-    }
-
-    if (event.type === 'marker') {
-      markerCount += 1;
-      lines.push(
-        JSON.stringify([
-          relativeSeconds(eventTimestampMs, firstTimestampMs),
-          'm',
-          event.payload.label,
-        ]),
-      );
+    switch (event.type) {
+      case 'output': {
+        outputEventCount += 1;
+        lines.push(
+          JSON.stringify([
+            relativeSeconds(eventTimestampMs, firstTimestampMs),
+            'o',
+            event.payload.data,
+          ]),
+        );
+        break;
+      }
+      case 'resize': {
+        resizeEventCount += 1;
+        lines.push(
+          JSON.stringify([
+            relativeSeconds(eventTimestampMs, firstTimestampMs),
+            'r',
+            `${String(event.payload.cols)}x${String(event.payload.rows)}`,
+          ]),
+        );
+        break;
+      }
+      case 'marker': {
+        markerCount += 1;
+        lines.push(
+          JSON.stringify([
+            relativeSeconds(eventTimestampMs, firstTimestampMs),
+            'm',
+            event.payload.label,
+          ]),
+        );
+        break;
+      }
+      case 'input_text':
+      case 'input_paste':
+      case 'input_keys':
+      case 'input_run':
+      case 'run_complete':
+      case 'signal':
+      case 'exit': {
+        break;
+      }
+      default: {
+        unreachable(event, 'unsupported asciicast event type');
+      }
     }
   }
 

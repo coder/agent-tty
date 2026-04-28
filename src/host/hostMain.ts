@@ -9,6 +9,13 @@ import { EventLog } from './eventLog.js';
 import { buildReplayInput } from './replay.js';
 import { HostRendererManager } from './renderer.js';
 import { RpcServer, type MethodHandler } from './rpcServer.js';
+import {
+  buildRunCompleteSignalSentinel,
+  RUN_MARKER_PATTERN,
+  RunCompletionPostambleEchoSanitizer,
+  RunCompletionSentinelScanner,
+  type SentinelPiece,
+} from './runCompletionSentinel.js';
 import { SessionState } from './sessionState.js';
 import { createPty } from '../pty/createPty.js';
 import { encodeKey } from '../pty/keyEncoder.js';
@@ -83,6 +90,29 @@ type WaitOutcome = {
   timedOut: boolean;
 };
 
+interface ActiveRunCompletion {
+  inputRunSeq?: number;
+  sentinel: string;
+}
+
+type RunCompletionWaitResult =
+  | { kind: 'completed'; seq: number }
+  | { kind: 'exited' };
+
+interface RunCompletionWaiter {
+  reject: (error: unknown) => void;
+  resolve: (result: RunCompletionWaitResult) => void;
+}
+
+type TimedRunCompletionWaitResult =
+  | RunCompletionWaitResult
+  | { kind: 'timeout' };
+
+const RUN_COMPLETION_POSTAMBLE_ECHO_PREFIX = String.raw`printf '\033\137`;
+
+const RUN_COMPLETION_SIGNAL_TOKEN_BYTES = 4;
+const MAX_RUN_COMPLETION_POSTAMBLE_ECHO_LENGTH = 64;
+
 function normalizeExitSignal(signal: number | null): string | null {
   invariant(
     signal === null || (Number.isInteger(signal) && signal >= 0),
@@ -100,6 +130,65 @@ function rethrowAsync(error: unknown): void {
   process.nextTick(() => {
     throw error;
   });
+}
+
+function shellOctalEscapedBytes(value: string): string {
+  invariant(typeof value === 'string', 'value must be a string');
+
+  return [...Buffer.from(value, 'utf8')]
+    .map((byte) => `\\${byte.toString(8).padStart(3, '0')}`)
+    .join('');
+}
+
+function generateRunCompleteSignalSentinel(): string {
+  const token = crypto
+    .randomBytes(RUN_COMPLETION_SIGNAL_TOKEN_BYTES)
+    .toString('base64url');
+  invariant(
+    token.length === 6,
+    'run-completion signal token must encode to six base64url characters',
+  );
+
+  return buildRunCompleteSignalSentinel(token);
+}
+
+function buildRunCompletePostamble(marker: string, sentinel: string): string {
+  const markerMatch = RUN_MARKER_PATTERN.exec(marker);
+  invariant(markerMatch !== null, 'run marker must match expected format');
+  invariant(
+    typeof sentinel === 'string' && sentinel.length > 0,
+    'sentinel must be non-empty',
+  );
+
+  const markerPayload = markerMatch[1];
+  invariant(
+    markerPayload !== undefined && markerPayload.length === 32,
+    'run marker payload must be 32 lowercase hex characters',
+  );
+
+  const postamble = `printf '${shellOctalEscapedBytes(sentinel)}'`;
+  invariant(
+    postamble.length <= MAX_RUN_COMPLETION_POSTAMBLE_ECHO_LENGTH,
+    'run-completion postamble echo must stay short enough to avoid terminal wrapping',
+  );
+  invariant(
+    postamble.startsWith(RUN_COMPLETION_POSTAMBLE_ECHO_PREFIX),
+    'run-completion postamble echo prefix must stay in sync with sanitizer',
+  );
+  invariant(
+    !postamble.includes('agent-tty:run-complete:'),
+    'run-completion postamble must not echo the complete sentinel label',
+  );
+  invariant(
+    !postamble.includes('__AT_MARKER_'),
+    'run-completion postamble must not echo the complete marker prefix',
+  );
+  invariant(
+    !postamble.includes(markerPayload),
+    'run-completion postamble must not echo the complete marker payload',
+  );
+
+  return `${postamble}\n`;
 }
 
 function resolveHostRendererName(input: string | undefined): RendererName {
@@ -257,9 +346,14 @@ export async function runHost(sessionId: string): Promise<void> {
       createRendererBackend(rendererName, sid, profile),
   });
 
-  const loadReplayInput = () => {
+  const loadReplayInput = (targetSeq?: number) => {
     const events = [...eventLog.getEvents()];
-    const replayInput = buildReplayInput(sessionId, state.snapshot(), events);
+    const replayInput = buildReplayInput(
+      sessionId,
+      state.snapshot(),
+      events,
+      targetSeq,
+    );
     return replayInput.targetSeq === -1 ? null : replayInput;
   };
 
@@ -274,6 +368,12 @@ export async function runHost(sessionId: string): Promise<void> {
   let markPtyExited: () => void = () => {
     invariant(false, 'PTY exit resolver must be initialized');
   };
+
+  const sentinelScanner = new RunCompletionSentinelScanner();
+  const postambleEchoSanitizer = new RunCompletionPostambleEchoSanitizer();
+  const activeRunCompletions = new Map<string, ActiveRunCompletion>();
+  const runCompletionWaiters = new Map<string, RunCompletionWaiter>();
+  let ptyIngestionQueue: Promise<void> = Promise.resolve();
 
   const ptyExitPromise = new Promise<void>((resolve) => {
     markPtyExited = (): void => {
@@ -300,6 +400,189 @@ export async function runHost(sessionId: string): Promise<void> {
     'PTY child PID must be a positive integer',
   );
   state.setChildPid(pty.pid);
+
+  const resolveRunCompletionWaiter = (marker: string, seq: number): void => {
+    const waiter = runCompletionWaiters.get(marker);
+    if (waiter === undefined) {
+      return;
+    }
+
+    runCompletionWaiters.delete(marker);
+    waiter.resolve({ kind: 'completed', seq });
+  };
+
+  const rejectRunCompletionWaiter = (marker: string, error: unknown): void => {
+    const waiter = runCompletionWaiters.get(marker);
+    if (waiter === undefined) {
+      return;
+    }
+
+    runCompletionWaiters.delete(marker);
+    waiter.reject(error);
+  };
+
+  const resolveRunCompletionWaitersForExit = (): void => {
+    for (const [marker, waiter] of runCompletionWaiters) {
+      runCompletionWaiters.delete(marker);
+      waiter.resolve({ kind: 'exited' });
+    }
+  };
+
+  const subscribeRunCompletion = (
+    marker: string,
+  ): Promise<RunCompletionWaitResult> => {
+    invariant(
+      !runCompletionWaiters.has(marker),
+      'run completion waiter must be unique per marker',
+    );
+
+    const { promise, reject, resolve } =
+      Promise.withResolvers<RunCompletionWaitResult>();
+    runCompletionWaiters.set(marker, { reject, resolve });
+    return promise;
+  };
+
+  const waitForRunCompletion = async (
+    marker: string,
+    completionPromise: Promise<RunCompletionWaitResult>,
+    timeoutMs: number,
+  ): Promise<TimedRunCompletionWaitResult> => {
+    invariant(
+      Number.isInteger(timeoutMs) && timeoutMs > 0,
+      'timeoutMs must be positive',
+    );
+
+    const { promise, reject, resolve } =
+      Promise.withResolvers<TimedRunCompletionWaitResult>();
+    let resolved = false;
+    const timeoutHandle = setTimeout(() => {
+      if (resolved) {
+        return;
+      }
+
+      resolved = true;
+      // Keep sentinel/postamble registrations active after timeout so the
+      // eventual internal completion bytes are still hidden from artifacts.
+      runCompletionWaiters.delete(marker);
+      resolve({ kind: 'timeout' });
+    }, timeoutMs);
+
+    void completionPromise.then(
+      (result) => {
+        if (resolved) {
+          return;
+        }
+
+        resolved = true;
+        clearTimeout(timeoutHandle);
+        resolve(result);
+      },
+      (error: unknown) => {
+        if (resolved) {
+          return;
+        }
+
+        resolved = true;
+        clearTimeout(timeoutHandle);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+
+    return await promise;
+  };
+
+  const replayRendererThroughSeq = async (targetSeq: number): Promise<void> => {
+    invariant(
+      Number.isInteger(targetSeq) && targetSeq >= 0,
+      'targetSeq must be a non-negative integer',
+    );
+
+    const replayInput = loadReplayInput(targetSeq);
+    invariant(replayInput !== null, 'run-complete replay input must exist');
+
+    const rendererName = resolveHostRendererName(undefined);
+    const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
+    const backend = await rendererManager.getBackend(
+      rendererName,
+      profile,
+      replayInput,
+    );
+    const snapshot = await backend.snapshot();
+    invariant(
+      snapshot.capturedAtSeq >= targetSeq,
+      'renderer snapshot must include the run-complete event sequence',
+    );
+  };
+
+  const appendOutput = async (data: string): Promise<void> => {
+    invariant(typeof data === 'string', 'output data must be a string');
+
+    const outputData = postambleEchoSanitizer.feed(data);
+    if (outputData.length > 0) {
+      await eventLog.append('output', { data: outputData });
+    }
+  };
+
+  const appendFlushedPostambleEchoOutput = async (): Promise<void> => {
+    const outputData = postambleEchoSanitizer.flush();
+    if (outputData.length > 0) {
+      await eventLog.append('output', { data: outputData });
+    }
+  };
+
+  const appendSentinelPieces = async (
+    pieces: SentinelPiece[],
+  ): Promise<void> => {
+    for (const piece of pieces) {
+      if (piece.type === 'output') {
+        await appendOutput(piece.data);
+        continue;
+      }
+
+      const activeCompletion = activeRunCompletions.get(piece.marker);
+      invariant(
+        activeCompletion !== undefined,
+        'run-completion sentinel must correspond to an active run marker',
+      );
+      invariant(
+        activeCompletion.sentinel.length > 0,
+        'active run-completion sentinel must be non-empty',
+      );
+
+      try {
+        const trailingEchoOutput = postambleEchoSanitizer.deregister(
+          piece.marker,
+        );
+        if (trailingEchoOutput.length > 0) {
+          await eventLog.append('output', { data: trailingEchoOutput });
+        }
+
+        const seq = await eventLog.append('run_complete', {
+          marker: piece.marker,
+          ...(activeCompletion.inputRunSeq === undefined
+            ? {}
+            : { inputRunSeq: activeCompletion.inputRunSeq }),
+        });
+        const deleted = activeRunCompletions.delete(piece.marker);
+        invariant(
+          deleted,
+          'active run completion must be deleted after append succeeds',
+        );
+        resolveRunCompletionWaiter(piece.marker, seq);
+      } catch (error) {
+        rejectRunCompletionWaiter(piece.marker, error);
+        throw error;
+      }
+    }
+  };
+
+  const enqueuePtyIngestion = (
+    operation: () => Promise<void>,
+  ): Promise<void> => {
+    const queuedOperation = ptyIngestionQueue.then(operation, operation);
+    ptyIngestionQueue = queuedOperation.catch(() => undefined);
+    return queuedOperation;
+  };
 
   const clearIdleTimeout = (): void => {
     // Idempotent: safe to call multiple times during shutdown and PTY exit.
@@ -400,6 +683,7 @@ export async function runHost(sessionId: string): Promise<void> {
       try {
         await eventLog.append('exit', { exitCode, exitSignal });
       } finally {
+        resolveRunCompletionWaitersForExit();
         try {
           await writeManifest(mPath, state.snapshot());
         } finally {
@@ -684,146 +968,80 @@ export async function runHost(sessionId: string): Promise<void> {
       }
 
       const shouldWait = !noWait;
-      let marker: string | undefined;
-      if (shouldWait) {
-        marker = `__AT_MARKER_${crypto.randomUUID().replace(/-/g, '')}__`;
-      }
-
-      if (shouldWait) {
-        invariant(marker !== undefined, 'run marker must exist when waiting');
-      }
-      const injectedText = shouldWait
-        ? (() => {
-            const waitMarker = marker as string;
-            const half = Math.ceil(waitMarker.length / 2);
-            const markerPart1 = waitMarker.slice(0, half);
-            const markerPart2 = waitMarker.slice(half);
-            return `${command}\nprintf '%s%s\\n' '${markerPart1}' '${markerPart2}'\n`;
-          })()
-        : `${command}\n`;
-      pty.write(injectedText);
-      lastActivityAt = Date.now();
-
-      const seq = await eventLog.append('input_run', {
-        command,
-        ...(marker === undefined ? {} : { marker }),
-        noWait,
-      });
 
       if (!shouldWait) {
+        pty.write(`${command}\n`);
+        lastActivityAt = Date.now();
+
+        const seq = await eventLog.append('input_run', {
+          command,
+          noWait,
+        });
+
         return {
           accepted: true as const,
           seq,
         } satisfies RunResult;
       }
 
+      const marker = `__AT_MARKER_${crypto.randomUUID().replace(/-/g, '')}__`;
+      invariant(
+        RUN_MARKER_PATTERN.test(marker),
+        'generated run marker must match expected format',
+      );
+      let sentinel = generateRunCompleteSignalSentinel();
+      while (
+        [...activeRunCompletions.values()].some(
+          (completion) => completion.sentinel === sentinel,
+        )
+      ) {
+        sentinel = generateRunCompleteSignalSentinel();
+      }
+      const postamble = buildRunCompletePostamble(marker, sentinel);
+      const seq = await eventLog.append('input_run', {
+        command,
+        marker,
+        noWait,
+      });
+
+      invariant(
+        !activeRunCompletions.has(marker),
+        'generated run marker must be unique among active completions',
+      );
+      activeRunCompletions.set(marker, { inputRunSeq: seq, sentinel });
+      sentinelScanner.register(marker, sentinel);
+      postambleEchoSanitizer.register(marker, postamble);
+      const completionPromise = subscribeRunCompletion(marker);
+      const injectedText = `${command}\n${postamble}`;
       const effectiveTimeoutMs = timeoutMs ?? 30_000;
       const startTime = Date.now();
-      const rendererName = resolveHostRendererName(undefined);
-      const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
-      const pollIntervalMs = 200;
-      const waitMarker = marker;
-      invariant(waitMarker !== undefined, 'run wait marker must be defined');
-      let clearWaitPoll: (() => void) | null = null;
+      pty.write(injectedText);
+      lastActivityAt = Date.now();
 
-      const pollCondition = new Promise<{
-        matched: boolean;
-        exited: boolean;
-      }>((resolve) => {
-        let pollInFlight = false;
-        let consecutiveFailures = 0;
-
-        const checkInterval = setInterval(() => {
-          if (pollInFlight) {
-            return;
-          }
-
-          pollInFlight = true;
-          void (async () => {
-            try {
-              const replayInput = loadReplayInput();
-              const backend = await rendererManager.getBackend(
-                rendererName,
-                profile,
-                replayInput,
-              );
-              const snapshot = await backend.snapshot();
-              const visibleText = snapshot.visibleLines
-                .map((line) => line.text)
-                .join('\n');
-              consecutiveFailures = 0;
-
-              if (visibleText.includes(waitMarker)) {
-                clearInterval(checkInterval);
-                resolve({ matched: true, exited: false });
-                return;
-              }
-
-              if (!isSessionRunning(state)) {
-                clearInterval(checkInterval);
-                resolve({ matched: false, exited: true });
-                return;
-              }
-            } catch (pollError) {
-              void pollError;
-              consecutiveFailures += 1;
-
-              if (!isSessionRunning(state)) {
-                clearInterval(checkInterval);
-                resolve({ matched: false, exited: true });
-                return;
-              }
-
-              if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
-                clearInterval(checkInterval);
-                resolve({ matched: false, exited: false });
-                return;
-              }
-            } finally {
-              pollInFlight = false;
-            }
-          })();
-        }, pollIntervalMs);
-
-        clearWaitPoll = (): void => {
-          clearInterval(checkInterval);
-        };
-      });
-
-      const pollResult = await new Promise<{
-        matched: boolean;
-        exited: boolean;
-      }>((resolve) => {
-        let resolved = false;
-        const timeoutHandle = setTimeout(() => {
-          if (resolved) {
-            return;
-          }
-          resolved = true;
-          clearWaitPoll?.();
-          resolve({ matched: false, exited: false });
-        }, effectiveTimeoutMs);
-
-        void pollCondition.then((result) => {
-          if (resolved) {
-            return;
-          }
-          resolved = true;
-          clearTimeout(timeoutHandle);
-          clearWaitPoll?.();
-          resolve(result);
-        });
-      });
-
+      const waitResult = await waitForRunCompletion(
+        marker,
+        completionPromise,
+        effectiveTimeoutMs,
+      );
       const durationMs = Date.now() - startTime;
+
+      if (waitResult.kind === 'completed') {
+        try {
+          await replayRendererThroughSeq(waitResult.seq);
+        } catch {
+          // The run already completed and was committed to the event log. Do not
+          // turn a best-effort renderer catch-up failure into a command retry
+          // hazard; replay-driven snapshots can catch up on the next request.
+        }
+      }
 
       return {
         accepted: true as const,
-        completed: pollResult.matched,
-        timedOut: !pollResult.matched && !pollResult.exited,
+        completed: waitResult.kind === 'completed',
+        timedOut: waitResult.kind === 'timeout',
         seq,
         durationMs,
-        marker: waitMarker,
+        marker,
       } satisfies RunResult;
     },
     sendKeys: async (params: unknown) => {
@@ -1275,13 +1493,38 @@ export async function runHost(sessionId: string): Promise<void> {
     // A session actively producing output (e.g., a running build, log tail)
     // is "in use" and should not be killed for inactivity.
     lastActivityAt = lastOutputAt;
-    void eventLog.append('output', { data }).catch(() => {
-      // Best-effort logging; shutdown should not fail on transient append errors.
+    void enqueuePtyIngestion(async () => {
+      await appendSentinelPieces(sentinelScanner.feed(data));
+    }).catch((error: unknown) => {
+      // Run-completion sentinels make serialized PTY ingestion part of the
+      // canonical event-log contract: if appending output/control events fails,
+      // the log can no longer be trusted to drive waits or replay artifacts.
+      rethrowAsync(error);
     });
   });
 
   pty.onExit(({ exitCode, signal }) => {
-    handlePtyExit(exitCode, signal ?? null);
+    let ingestionError: unknown;
+
+    void enqueuePtyIngestion(async () => {
+      await appendSentinelPieces(sentinelScanner.flush());
+      await appendFlushedPostambleEchoOutput();
+    })
+      .catch((error: unknown) => {
+        ingestionError = error;
+      })
+      .finally(() => {
+        try {
+          handlePtyExit(exitCode, signal ?? null);
+        } finally {
+          if (ingestionError !== undefined) {
+            // Still record PTY exit state first; the ingestion failure is
+            // surfaced asynchronously after exit handling has run.
+            rethrowAsync(ingestionError);
+          }
+        }
+      })
+      .catch(rethrowAsync);
   });
 
   startIdlePolling();

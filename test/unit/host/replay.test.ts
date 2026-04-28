@@ -221,6 +221,54 @@ describe('replay helpers', () => {
     );
   });
 
+  it('readEventLogRecords parses legacy JSONL logs without run_complete events', async () => {
+    const legacyEvents: EventRecord[] = [
+      {
+        seq: 0,
+        ts: '2026-03-19T12:00:02.000Z',
+        type: 'output',
+        payload: { data: 'legacy output' },
+      },
+      {
+        seq: 1,
+        ts: '2026-03-19T12:00:03.000Z',
+        type: 'input_run',
+        payload: {
+          command: 'echo done',
+          marker: '__AT_MARKER_legacy__',
+          noWait: false,
+        },
+      },
+      {
+        seq: 2,
+        ts: '2026-03-19T12:00:04.000Z',
+        type: 'exit',
+        payload: { exitCode: 0, exitSignal: null },
+      },
+    ];
+    await writeFile(
+      eventLogPath,
+      legacyEvents
+        .map((event) => JSON.stringify(event))
+        .concat('')
+        .join('\n'),
+      'utf8',
+    );
+
+    await expect(readEventLogRecords(eventLogPath)).resolves.toEqual(
+      legacyEvents,
+    );
+    expect(
+      buildReplayInput('session-01', createManifest(), legacyEvents),
+    ).toEqual({
+      sessionId: 'session-01',
+      initialCols: 80,
+      initialRows: 24,
+      events: legacyEvents,
+      targetSeq: 2,
+    });
+  });
+
   it('readEventLogRecords parses and validates JSONL event logs', async () => {
     await writeFile(
       eventLogPath,
