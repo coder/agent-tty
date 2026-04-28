@@ -18,6 +18,7 @@ export const RUN_MARKER_PATTERN = /^__AT_MARKER_([0-9a-f]{32})__$/u;
 
 const MIN_TOLERANT_ECHO_PREFIX_LENGTH = String.raw`printf '\033\137`.length;
 const MAX_SKIPPABLE_ECHO_CONTROL_LENGTH = 64;
+const CARRIAGE_RETURN_CODE = 0x0d;
 const ESC_CODE = 0x1b;
 const POSTAMBLE_ECHO_START_CODE = 'p'.charCodeAt(0);
 
@@ -90,6 +91,10 @@ function findSkippableEchoControl(
     Number.isInteger(index) && index >= 0 && index < buffer.length,
     'control scan index must point inside the buffer',
   );
+
+  if (buffer.charCodeAt(index) === CARRIAGE_RETURN_CODE) {
+    return { kind: 'complete', length: 1 };
+  }
 
   if (buffer.charCodeAt(index) !== ESC_CODE) {
     return undefined;
@@ -194,9 +199,9 @@ export function buildRunCompleteSentinel(marker: string): string {
  * preserving command output that can arrive between echoed postamble bytes.
  * Canonical TTY echo and readline repainting can interleave command output or
  * cursor controls into the echoed postamble, so after a long active-postamble
- * prefix match (tolerating known CSI repaint controls) this sanitizer drops only
- * the remaining expected postamble bytes and controls; nonmatching bytes
- * continue through as user output.
+ * prefix match (tolerating known CSI repaint controls and line-wrap carriage
+ * returns) this sanitizer drops only the remaining expected postamble bytes and
+ * controls; nonmatching bytes continue through as user output.
  */
 export class RunCompletionPostambleEchoSanitizer {
   readonly #activeEchoes = new Map<string, ActivePostambleEcho>();
@@ -365,6 +370,10 @@ export class RunCompletionPostambleEchoSanitizer {
       if (/^[\x40-\x7e]$/u.test(char)) {
         state.dropControl = null;
       }
+      return { nextIndex: index + 1, output: '' };
+    }
+
+    if (char === '\r') {
       return { nextIndex: index + 1, output: '' };
     }
 

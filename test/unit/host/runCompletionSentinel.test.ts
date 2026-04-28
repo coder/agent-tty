@@ -161,6 +161,28 @@ describe('RunCompletionPostambleEchoSanitizer', () => {
     expect(sanitizer.feed(`K${echo.slice(split)}`)).toBe('');
   });
 
+  it('drops terminal line-wrap carriage returns inserted into the postamble echo', () => {
+    const sanitizer = new RunCompletionPostambleEchoSanitizer();
+    const marker = runMarker(125);
+    const postambleText = productionLikePostamble(marker);
+    const echo = postambleText.replace(/\n$/u, '\r\n');
+    sanitizer.register(marker, postambleText);
+
+    const split = String.raw`printf '\03`.length;
+    expect(
+      sanitizer.feed(`${echo.slice(0, split)}\r${echo.slice(split)}`),
+    ).toBe('');
+  });
+
+  it('preserves printf-like output with carriage returns that diverges before the tolerant prefix threshold', () => {
+    const sanitizer = new RunCompletionPostambleEchoSanitizer();
+    const marker = runMarker(126);
+    sanitizer.register(marker, productionLikePostamble(marker));
+
+    const output = "pri\rntf 'hello'\r\n";
+    expect(sanitizer.feed(output)).toBe(output);
+  });
+
   it('preserves printf-like output that diverges before the tolerant prefix threshold', () => {
     const sanitizer = new RunCompletionPostambleEchoSanitizer();
     const marker = runMarker(124);
