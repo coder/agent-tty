@@ -63,7 +63,8 @@ Set `AGENT_USES_AGENT_TTY_REVIEW_TAIL_SECONDS`, `AGENT_USES_AGENT_TTY_REVIEW_SLO
 - `artifacts/*-inner-nvim.webm` and `artifacts/*-inner-nvim.cast` — artifacts exported by the nested coding agent.
 - `artifacts/*-demo-note.txt` and `artifacts/*-final-file-proof.txt` — final file proof.
 - `artifacts/*-prompt.md` — rendered prompt given to the coding agent.
-- `artifacts/*-agent-transcript.txt` and `artifacts/*-final-message.txt` — captured agent output.
+- `artifacts/*-agent-transcript.txt` — captured agent output from the outer session snapshot.
+- `artifacts/*-recording-summary.txt` — script-generated summary of the recording artifacts.
 
 ## Adding Another Agent
 

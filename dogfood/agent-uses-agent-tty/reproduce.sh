@@ -300,33 +300,21 @@ selected_agents() {
 
 render_prompt() {
   local prompt_path="$1"
-  local workspace="$2"
-  local inner_home="$3"
-  local final_file="$4"
-  local inner_cast="$5"
-  local inner_webm="$6"
-  local inner_helper="$7"
-  local xdg_config_home="$8"
-  local xdg_data_home="$9"
-  local xdg_state_home="${10}"
-  local xdg_cache_home="${11}"
+  local final_file="$2"
+  local inner_cast="$3"
+  local inner_webm="$4"
+  local inner_helper="$5"
   local template_path="$PROMPTS_DIR/template.md"
   [[ -f "$template_path" ]] || fail "missing prompt template: $template_path"
 
   local prompt
   prompt="$(cat "$template_path")"
   prompt="${prompt//\{\{DEMO_SENTENCE\}\}/$DEMO_SENTENCE}"
-  prompt="${prompt//\{\{WORKSPACE\}\}/$workspace}"
   prompt="${prompt//\{\{AGENT_TTY_BIN_DIR\}\}/$INSTALL_PREFIX\/bin}"
   prompt="${prompt//\{\{INNER_HELPER\}\}/$inner_helper}"
-  prompt="${prompt//\{\{INNER_HOME\}\}/$inner_home}"
   prompt="${prompt//\{\{FINAL_FILE\}\}/$final_file}"
   prompt="${prompt//\{\{INNER_CAST\}\}/$inner_cast}"
   prompt="${prompt//\{\{INNER_WEBM\}\}/$inner_webm}"
-  prompt="${prompt//\{\{XDG_CONFIG_HOME\}\}/$xdg_config_home}"
-  prompt="${prompt//\{\{XDG_DATA_HOME\}\}/$xdg_data_home}"
-  prompt="${prompt//\{\{XDG_STATE_HOME\}\}/$xdg_state_home}"
-  prompt="${prompt//\{\{XDG_CACHE_HOME\}\}/$xdg_cache_home}"
   printf '%s\n' "$prompt" > "$prompt_path"
   if grep -q '{{' "$prompt_path"; then
     fail "unsubstituted placeholders in rendered prompt: $prompt_path"
@@ -670,7 +658,7 @@ run_agent_demo() {
   local inner_webm="$workspace_artifacts/inner-nvim.webm"
   local prompt_path="$ARTIFACTS_DIR/$agent-prompt.md"
   local transcript_path="$ARTIFACTS_DIR/$agent-agent-transcript.txt"
-  local final_message_path="$ARTIFACTS_DIR/$agent-final-message.txt"
+  local recording_summary_path="$ARTIFACTS_DIR/$agent-recording-summary.txt"
   local outer_cast_path="$ARTIFACTS_DIR/$agent-outer.cast"
   local outer_full_webm_path="$ARTIFACTS_DIR/$agent-outer-full.webm"
   local outer_review_webm_path="$ARTIFACTS_DIR/$agent-outer.webm"
@@ -683,7 +671,7 @@ run_agent_demo() {
   git -C "$workspace" init -q
   printf '# agent-tty dogfood workspace\n' > "$workspace/README.md"
   write_inner_helper "$inner_helper_path" "$workspace" "$inner_home" "$final_file" "$inner_cast" "$inner_webm" "$xdg_config_home" "$xdg_data_home" "$xdg_state_home" "$xdg_cache_home"
-  render_prompt "$prompt_path" "$workspace" "$inner_home" "$final_file" "$inner_cast" "$inner_webm" "$inner_helper_path" "$xdg_config_home" "$xdg_data_home" "$xdg_state_home" "$xdg_cache_home"
+  render_prompt "$prompt_path" "$final_file" "$inner_cast" "$inner_webm" "$inner_helper_path"
   write_runner "$agent" "$runner_path" "$workspace" "$prompt_path"
 
   log "starting outer $agent recording"
@@ -727,7 +715,7 @@ run_agent_demo() {
   jq -r '.result.text' "$BUNDLE_DIR/$agent-outer-snapshot.json" > "$ARTIFACTS_DIR/$agent-outer-snapshot.txt"
   assert_file_nonempty "$ARTIFACTS_DIR/$agent-outer-snapshot.txt"
   cp "$ARTIFACTS_DIR/$agent-outer-snapshot.txt" "$transcript_path"
-  printf 'Interactive %s TUI recording captured in %s-outer.cast, %s-outer-full.webm, and the trimmed review cut %s-outer.webm.\n' "$agent" "$agent" "$agent" "$agent" > "$final_message_path"
+  printf 'Interactive %s TUI recording captured in %s-outer.cast, %s-outer-full.webm, and the trimmed review cut %s-outer.webm.\n' "$agent" "$agent" "$agent" "$agent" > "$recording_summary_path"
 
   if [[ "$captured_live_thumbnail" == '0' ]]; then
     try_capture_outer_thumbnail \
