@@ -17,8 +17,13 @@ export const RUN_COMPLETE_SENTINEL_SUFFIX = '\x1b\\';
 export const RUN_MARKER_PATTERN = /^__AT_MARKER_([0-9a-f]{32})__$/u;
 
 const MIN_TOLERANT_ECHO_PREFIX_LENGTH = String.raw`printf '\033\137`.length;
+const MAX_SKIPPABLE_ECHO_CONTROL_LENGTH = 64;
 const ESC_CODE = 0x1b;
 const POSTAMBLE_ECHO_START_CODE = 'p'.charCodeAt(0);
+
+type SkippableControlMatch =
+  | { kind: 'complete'; length: number }
+  | { kind: 'partial' };
 
 export type SentinelPiece =
   | { type: 'output'; data: string }
@@ -59,18 +64,106 @@ function assertNonEmptyString(value: string, label: string): void {
   );
 }
 
-function commonPrefixLength(left: string, right: string): number {
-  const maxLength = Math.min(left.length, right.length);
-  let index = 0;
+interface EchoPrefixScanResult {
+  complete: boolean;
+  consumedLength: number;
+  echoIndex: number;
+  pending: boolean;
+}
 
-  while (
-    index < maxLength &&
-    left.charCodeAt(index) === right.charCodeAt(index)
-  ) {
-    index += 1;
+interface TolerantEchoPrefixMatch {
+  candidates: TolerantEchoCandidate[];
+  completed: boolean;
+  consumedLength: number;
+}
+
+function isCsiFinalByte(code: number): boolean {
+  return code >= 0x40 && code <= 0x7e;
+}
+
+function findSkippableEchoControl(
+  buffer: string,
+  index: number,
+): SkippableControlMatch | undefined {
+  invariant(typeof buffer === 'string', 'buffer must be a string');
+  invariant(
+    Number.isInteger(index) && index >= 0 && index < buffer.length,
+    'control scan index must point inside the buffer',
+  );
+
+  if (buffer.charCodeAt(index) !== ESC_CODE) {
+    return undefined;
   }
 
-  return index;
+  if (index + 1 >= buffer.length) {
+    return { kind: 'partial' };
+  }
+
+  if (buffer.charAt(index + 1) !== '[') {
+    return { kind: 'complete', length: 2 };
+  }
+
+  const controlEnd = Math.min(
+    buffer.length,
+    index + MAX_SKIPPABLE_ECHO_CONTROL_LENGTH,
+  );
+  for (let cursor = index + 2; cursor < controlEnd; cursor += 1) {
+    if (isCsiFinalByte(buffer.charCodeAt(cursor))) {
+      return { kind: 'complete', length: cursor - index + 1 };
+    }
+  }
+
+  if (controlEnd < buffer.length) {
+    return undefined;
+  }
+
+  return { kind: 'partial' };
+}
+
+function scanEchoPrefixToleratingControls(
+  remaining: string,
+  echo: string,
+): EchoPrefixScanResult {
+  invariant(typeof remaining === 'string', 'remaining buffer must be a string');
+  assertNonEmptyString(echo, 'echo');
+
+  let bufferIndex = 0;
+  let echoIndex = 0;
+
+  while (bufferIndex < remaining.length && echoIndex < echo.length) {
+    const control = findSkippableEchoControl(remaining, bufferIndex);
+    if (control?.kind === 'partial') {
+      return {
+        complete: false,
+        consumedLength: bufferIndex,
+        echoIndex,
+        pending: true,
+      };
+    }
+    if (control?.kind === 'complete') {
+      bufferIndex += control.length;
+      continue;
+    }
+
+    if (remaining.charCodeAt(bufferIndex) !== echo.charCodeAt(echoIndex)) {
+      return {
+        complete: false,
+        consumedLength: bufferIndex,
+        echoIndex,
+        pending: false,
+      };
+    }
+
+    bufferIndex += 1;
+    echoIndex += 1;
+  }
+
+  return {
+    complete: echoIndex === echo.length,
+    consumedLength: bufferIndex,
+    echoIndex,
+    pending: bufferIndex === remaining.length && echoIndex < echo.length,
+  };
 }
 
 function pushOutputPiece(pieces: SentinelPiece[], data: string): void {
@@ -100,9 +193,10 @@ export function buildRunCompleteSentinel(marker: string): string {
  * Removes the shell's echo of agent-tty's injected completion postamble while
  * preserving command output that can arrive between echoed postamble bytes.
  * Canonical TTY echo and readline repainting can interleave command output or
- * cursor controls into the echoed postamble, so after a long exact prefix match
- * this sanitizer drops only the remaining expected postamble bytes and known
- * CSI repaint controls; nonmatching bytes continue through as user output.
+ * cursor controls into the echoed postamble, so after a long active-postamble
+ * prefix match (tolerating known CSI repaint controls) this sanitizer drops only
+ * the remaining expected postamble bytes and controls; nonmatching bytes
+ * continue through as user output.
  */
 export class RunCompletionPostambleEchoSanitizer {
   readonly #activeEchoes = new Map<string, ActivePostambleEcho>();
@@ -227,12 +321,14 @@ export class RunCompletionPostambleEchoSanitizer {
       const tolerantMatch = this.#findTolerantEchoPrefixMatch(remaining);
       if (tolerantMatch !== undefined) {
         output += buffer.slice(outputStart, index);
-        this.#tolerantStripState = {
-          candidates: tolerantMatch.candidates,
-          dropControl: null,
-        };
-        index += tolerantMatch.prefixLength;
+        index += tolerantMatch.consumedLength;
         outputStart = index;
+        if (!tolerantMatch.completed) {
+          this.#tolerantStripState = {
+            candidates: tolerantMatch.candidates,
+            dropControl: null,
+          };
+        }
         continue;
       }
 
@@ -301,31 +397,57 @@ export class RunCompletionPostambleEchoSanitizer {
 
   #findTolerantEchoPrefixMatch(
     remaining: string,
-  ): { candidates: TolerantEchoCandidate[]; prefixLength: number } | undefined {
-    let bestPrefixLength = 0;
+  ): TolerantEchoPrefixMatch | undefined {
+    let completedConsumedLength: number | undefined;
+    let bestEchoIndex = 0;
+    let bestConsumedLength = 0;
     let candidates: TolerantEchoCandidate[] = [];
 
     for (const [marker, { echoes }] of this.#activeEchoes) {
       for (const echo of echoes) {
-        const prefixLength = commonPrefixLength(remaining, echo);
-        if (prefixLength < MIN_TOLERANT_ECHO_PREFIX_LENGTH) {
+        const scan = scanEchoPrefixToleratingControls(remaining, echo);
+        if (scan.complete) {
+          invariant(
+            scan.echoIndex === echo.length,
+            'complete postamble echo scan must consume the full echo',
+          );
+          completedConsumedLength = Math.max(
+            completedConsumedLength ?? 0,
+            scan.consumedLength,
+          );
           continue;
         }
-        if (prefixLength === echo.length) {
+        if (scan.echoIndex < MIN_TOLERANT_ECHO_PREFIX_LENGTH) {
           continue;
         }
 
-        if (prefixLength > bestPrefixLength) {
-          bestPrefixLength = prefixLength;
+        if (
+          scan.echoIndex > bestEchoIndex ||
+          (scan.echoIndex === bestEchoIndex &&
+            scan.consumedLength > bestConsumedLength)
+        ) {
+          bestEchoIndex = scan.echoIndex;
+          bestConsumedLength = scan.consumedLength;
           candidates = [];
         }
-        if (prefixLength === bestPrefixLength) {
-          candidates.push({ echo, index: prefixLength, marker });
+        if (
+          scan.echoIndex === bestEchoIndex &&
+          scan.consumedLength === bestConsumedLength
+        ) {
+          candidates.push({ echo, index: scan.echoIndex, marker });
         }
       }
     }
 
-    if (bestPrefixLength === 0) {
+    if (completedConsumedLength !== undefined) {
+      return {
+        candidates: [],
+        completed: true,
+        consumedLength: completedConsumedLength,
+      };
+    }
+
+    if (bestEchoIndex === 0) {
       return undefined;
     }
 
@@ -333,7 +455,11 @@ export class RunCompletionPostambleEchoSanitizer {
       candidates.length > 0,
       'tolerant postamble echo prefix match must have candidates',
     );
-    return { candidates, prefixLength: bestPrefixLength };
+    return {
+      candidates,
+      completed: false,
+      consumedLength: bestConsumedLength,
+    };
   }
 
   #findCompleteEchoMatch(buffer: string, index: number): string | undefined {
@@ -357,9 +483,15 @@ export class RunCompletionPostambleEchoSanitizer {
   }
 
   #hasPartialEchoMatch(remaining: string): boolean {
+    const maxEchoLength = this.#maxActiveEchoLength();
+    if (remaining.length >= maxEchoLength) {
+      return false;
+    }
+
     for (const { echoes } of this.#activeEchoes.values()) {
       for (const echo of echoes) {
-        if (remaining.length < echo.length && echo.startsWith(remaining)) {
+        const scan = scanEchoPrefixToleratingControls(remaining, echo);
+        if (scan.pending && scan.echoIndex > 0) {
           return true;
         }
       }

@@ -44,6 +44,16 @@ function postamble(marker: string): string {
   return `printf '${marker}'\n`;
 }
 
+function shellOctalEscapedBytes(value: string): string {
+  return [...Buffer.from(value, 'utf8')]
+    .map((byte) => `\\${byte.toString(8).padStart(3, '0')}`)
+    .join('');
+}
+
+function productionLikePostamble(marker: string): string {
+  return `printf '${shellOctalEscapedBytes(buildRunCompleteSentinel(marker))}'\n`;
+}
+
 describe('buildRunCompleteSentinel', () => {
   it('returns the expected APC-framed sentinel bytes', () => {
     const marker = runMarker(1);
@@ -124,6 +134,40 @@ describe('RunCompletionPostambleEchoSanitizer', () => {
     expect(
       sanitizer.feed(`${echo.slice(0, split)}\x1b[A\x1b[K${echo.slice(split)}`),
     ).toBe('');
+  });
+
+  it('drops line-editor control sequences inserted before the old tolerant prefix threshold', () => {
+    const sanitizer = new RunCompletionPostambleEchoSanitizer();
+    const marker = runMarker(122);
+    const postambleText = productionLikePostamble(marker);
+    const echo = postambleText.replace(/\n$/u, '\r\n');
+    sanitizer.register(marker, postambleText);
+
+    const split = 'pri'.length;
+    expect(
+      sanitizer.feed(`${echo.slice(0, split)}\x1b[K${echo.slice(split)}`),
+    ).toBe('');
+  });
+
+  it('drops line-editor control sequences split across chunks before the tolerant prefix threshold', () => {
+    const sanitizer = new RunCompletionPostambleEchoSanitizer();
+    const marker = runMarker(123);
+    const postambleText = productionLikePostamble(marker);
+    const echo = postambleText.replace(/\n$/u, '\r\n');
+    sanitizer.register(marker, postambleText);
+
+    const split = "printf '".length;
+    expect(sanitizer.feed(`${echo.slice(0, split)}\x1b[`)).toBe('');
+    expect(sanitizer.feed(`K${echo.slice(split)}`)).toBe('');
+  });
+
+  it('preserves printf-like output that diverges before the tolerant prefix threshold', () => {
+    const sanitizer = new RunCompletionPostambleEchoSanitizer();
+    const marker = runMarker(124);
+    sanitizer.register(marker, productionLikePostamble(marker));
+
+    const output = "printf 'hello'\r\n";
+    expect(sanitizer.feed(output)).toBe(output);
   });
 
   it('removes repeated exact postamble text while the marker remains active', () => {
