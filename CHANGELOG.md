@@ -2,19 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- New `run_complete` event in the canonical event log carrying `{ marker, inputRunSeq }`, so automation consumers can correlate `input_run` and completion without scanning rendered output (#55, tracking #21).
+- "Agent Demo" section in the README and an evergreen `dogfood/agent-uses-agent-tty/` bundle that records Codex and Claude TUIs driving `nvim --clean` through `agent-tty`, including outer/inner WebMs, asciicasts, transcripts, thumbnails, and a `reproduce.sh` script (#54).
+- New `dogfood/issue-21-run-completion-clean/` verification bundle proving snapshots, screenshots, asciicasts, WebM, and the `output` event stream contain no completion-marker bytes while the public `run` envelope still exposes `marker`, `completed`, and `durationMs` (#55).
+
 ### Changed
 
-- Switched local and CI dependency bootstrap to [`aube`](https://github.com/endevco/aube): `mise run bootstrap` now runs `aube exec playwright install chromium`, `mise run bootstrap-ci` runs `aube ci`, and the documented fallback (when `mise` is unavailable) is `aube exec playwright install chromium`. The repo's `packageManager` field is now `aube@1.2.0` and a `pnpm.allowBuilds` allow-list permits native builds for `@coder/libghostty-vt-node`, `esbuild`, `fsevents`, and `node-pty` (#51).
+- `run --wait` no longer leaks its internal completion marker into rendered artifacts. Completion is now signaled through an APC sentinel (`ESC _ at<token> ESC \`) that is filtered out of the event log along with the shell's echoed `printf` postamble, and waits resolve on the new `run_complete` event instead of polling rendered snapshots for the marker text. The public `run` JSON envelope (`accepted`, `completed`, `timedOut`, `seq`, `durationMs`, `marker`) is unchanged (#55, tracking #21).
+- Asciicast export now explicitly skips non-rendered events (`input_text`, `input_paste`, `input_keys`, `input_run`, `run_complete`, `signal`, `exit`) so recordings only contain `o`, `r`, and `m` frames (#55).
+- Local and CI dependency bootstrap now uses [`aube`](https://github.com/endevco/aube): `mise run bootstrap` runs `aube exec playwright install chromium`, `mise run bootstrap-ci` runs `aube ci`, and the documented fallback (when `mise` is unavailable) is `aube exec playwright install chromium`. The `packageManager` field is now `aube@1.2.0`, and a new `pnpm.allowBuilds` allow-list permits native builds for `@coder/libghostty-vt-node`, `esbuild`, `fsevents`, and `node-pty` (#51).
 - Refreshed contributor and agent guidance in `AGENTS.md` with an outcome-first operating contract, validation guidance, and grouped project invariants (#46).
 
 ### Fixed
 
-- `EventLog.open` now closes the underlying file handle when validation (size limit check or existing-content parsing) fails, preventing a file-descriptor leak on rejected session host startup (#51).
-
-### Internal
-
-- Added a post-merge workflow that runs `communique generate HEAD --changelog` on pushes to `main` and opens or updates a stable unreleased-changelog PR, with follow-up fixes for the PR title and `--force-with-lease` push against the configured `origin` remote (#47, #49, #50, #52).
-- Sharded Linux CI into separate static, unit, integration (4 shards), and e2e (3 shards) jobs while preserving the aggregate `quality-gates` required check and the local `npm test` / `mise run test` contract (#48).
+- `EventLog.open` now closes the underlying file handle when validation (size-limit check or existing-content parsing) fails, preventing a file-descriptor leak on rejected session host startup (#51).
 
 ## [v0.1.1-beta.4](https://github.com/coder/agent-tty/releases/tag/v0.1.1-beta.4) - 2026-04-25
 
