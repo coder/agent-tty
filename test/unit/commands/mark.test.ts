@@ -49,7 +49,7 @@ const TEST_CONTEXT = {
 } as const;
 
 function createSessionRecord(
-  status: 'running' | 'exiting' | 'exited' = 'running',
+  status: 'running' | 'exiting' | 'exited' | 'destroyed' = 'running',
 ) {
   return {
     version: 1,
@@ -123,6 +123,29 @@ describe('mark command', () => {
     ).rejects.toMatchObject({
       code: ERROR_CODES.SESSION_NOT_RUNNING,
       message: 'Session "session-01" is not running.',
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('throws SESSION_ALREADY_DESTROYED when the session is destroyed', async () => {
+    mocks.readManifestIfExists.mockResolvedValue(
+      createSessionRecord('destroyed'),
+    );
+
+    await expect(
+      runMarkCommand({
+        context: TEST_CONTEXT,
+        json: false,
+        sessionId: 'session-01',
+        label: 'checkpoint',
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.SESSION_ALREADY_DESTROYED,
+      message: 'Session "session-01" is already destroyed.',
+      details: {
+        sessionId: 'session-01',
+        status: 'destroyed',
+      },
     });
     expect(mocks.sendRpc).not.toHaveBeenCalled();
   });

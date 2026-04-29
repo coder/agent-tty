@@ -312,6 +312,9 @@ export async function runSnapshotCommand(
   }
 
   let result: SnapshotResult;
+  // Snapshot and screenshot intentionally keep their narrower legacy live-RPC
+  // gate. `exiting` sessions are live-host eligible for inspect, but these
+  // commands preserve their existing offline-replay capture behavior.
   if (manifest.status === 'running') {
     try {
       result = await runRpcSnapshot(

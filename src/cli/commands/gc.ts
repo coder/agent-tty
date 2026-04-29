@@ -6,6 +6,10 @@ import type { CommandContext } from '../context.js';
 import { emitSuccess } from '../output.js';
 import { reconcileSession } from '../../host/lifecycle.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
+import {
+  isCollectableSessionStatus,
+  isTerminalSessionStatus,
+} from '../../protocol/sessionStatusPolicy.js';
 import type { SessionRecord } from '../../protocol/schemas.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import { manifestPath, sessionDir } from '../../storage/sessionPaths.js';
@@ -142,9 +146,10 @@ function wasReconciledFromStaleHost(
   manifestBefore: SessionRecord,
   manifestAfter: SessionRecord,
 ): boolean {
-  const isTerminal = (s: string): boolean =>
-    s === 'exited' || s === 'failed' || s === 'destroyed';
-  return !isTerminal(manifestBefore.status) && isTerminal(manifestAfter.status);
+  return (
+    !isTerminalSessionStatus(manifestBefore.status) &&
+    isTerminalSessionStatus(manifestAfter.status)
+  );
 }
 
 function shouldSkipForAge(
@@ -335,11 +340,7 @@ export async function gcSessions(
     }
 
     const sessionId = manifestAfter.sessionId;
-    const isTerminalAfter =
-      manifestAfter.status === 'exited' ||
-      manifestAfter.status === 'failed' ||
-      manifestAfter.status === 'destroyed';
-    if (!isTerminalAfter) {
+    if (!isCollectableSessionStatus(manifestAfter.status)) {
       result.skippedSessions.push({
         sessionId,
         reason: 'session host is still alive',
@@ -384,11 +385,10 @@ export async function gcSessions(
         continue;
       }
 
-      const isFinalTerminal =
-        finalManifest?.status === 'exited' ||
-        finalManifest?.status === 'failed' ||
-        finalManifest?.status === 'destroyed';
-      if (finalManifest !== null && !isFinalTerminal) {
+      if (
+        finalManifest !== null &&
+        !isCollectableSessionStatus(finalManifest.status)
+      ) {
         result.skippedSessions.push({
           sessionId,
           reason: 'session restarted between check and delete',

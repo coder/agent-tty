@@ -11,6 +11,7 @@ import {
   sessionDir,
   socketPath,
 } from '../../storage/sessionPaths.js';
+import { assertSessionCommandable } from '../sessionGuards.js';
 
 export type { SendKeysResult } from '../../protocol/messages.js';
 
@@ -39,25 +40,7 @@ export async function runSendKeysCommand(
     });
   }
 
-  if (manifest.status === 'destroyed') {
-    throw makeCliError(ERROR_CODES.SESSION_ALREADY_DESTROYED, {
-      message: `Session "${options.sessionId}" is already destroyed.`,
-      details: {
-        sessionId: options.sessionId,
-        status: manifest.status,
-      },
-    });
-  }
-
-  if (manifest.status !== 'running') {
-    throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
-      message: `Session "${options.sessionId}" is not running.`,
-      details: {
-        sessionId: options.sessionId,
-        status: manifest.status,
-      },
-    });
-  }
+  assertSessionCommandable(manifest, options.sessionId);
 
   const rawResult: unknown = await sendRpc(
     socketPath(sessionDirectory),

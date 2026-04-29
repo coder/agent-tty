@@ -14,6 +14,7 @@ import {
   WaitForRenderResultSchema,
   WaitResultSchema,
 } from '../../protocol/schemas.js';
+import { isTerminalSessionStatus } from '../../protocol/sessionStatusPolicy.js';
 import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
@@ -21,6 +22,7 @@ import {
   sessionDir,
   socketPath,
 } from '../../storage/sessionPaths.js';
+import { assertSessionCommandable } from '../sessionGuards.js';
 
 interface CommandOptions {
   context: CommandContext;
@@ -345,12 +347,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
 
   const manifestStatus = manifest.status;
 
-  if (
-    options.waitForExit &&
-    (manifestStatus === 'exited' ||
-      manifestStatus === 'failed' ||
-      manifestStatus === 'destroyed')
-  ) {
+  if (options.waitForExit && isTerminalSessionStatus(manifestStatus)) {
     const result: WaitResult = {
       timedOut: false,
       ...(manifest.exitCode === null ? {} : { exitCode: manifest.exitCode }),
@@ -365,24 +362,8 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     return;
   }
 
-  if (manifest.status === 'destroyed') {
-    throw makeCliError(ERROR_CODES.SESSION_ALREADY_DESTROYED, {
-      message: `Session "${options.sessionId}" is already destroyed.`,
-      details: {
-        sessionId: options.sessionId,
-        status: manifest.status,
-      },
-    });
-  }
-
-  if (!options.waitForExit && manifestStatus !== 'running') {
-    throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
-      message: `Session "${options.sessionId}" is not running.`,
-      details: {
-        sessionId: options.sessionId,
-        status: manifest.status,
-      },
-    });
+  if (!options.waitForExit) {
+    assertSessionCommandable(manifest, options.sessionId);
   }
 
   const effectiveTimeout = options.timeout ?? DEFAULT_WAIT_TIMEOUT_MS;

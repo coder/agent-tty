@@ -54,7 +54,7 @@ const TEST_CONTEXT = {
 } as const;
 
 function createSessionRecord(
-  status: 'running' | 'exited' = 'running',
+  status: 'running' | 'exited' | 'destroyed' = 'running',
   exitCode: number | null = null,
 ) {
   return {
@@ -335,6 +335,43 @@ describe('wait command', () => {
     );
   });
 
+  it('returns immediately for --exit waits on already-terminal sessions', async () => {
+    mocks.readManifestIfExists.mockResolvedValue(
+      createSessionRecord('exited', 42),
+    );
+
+    await runWaitCommand(createOptions({ waitForExit: true }));
+
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+    expect(mocks.emitSuccess).toHaveBeenCalledWith({
+      command: 'wait',
+      json: false,
+      result: {
+        timedOut: false,
+        exitCode: 42,
+      },
+      lines: ['Process exited with code 42.'],
+    });
+  });
+
+  it('omits exitCode for --exit waits on terminal sessions without an exit code', async () => {
+    mocks.readManifestIfExists.mockResolvedValue(
+      createSessionRecord('exited', null),
+    );
+
+    await runWaitCommand(createOptions({ waitForExit: true }));
+
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+    expect(mocks.emitSuccess).toHaveBeenCalledWith({
+      command: 'wait',
+      json: false,
+      result: {
+        timedOut: false,
+      },
+      lines: ['Wait condition met.'],
+    });
+  });
+
   it('routes --idle-ms waits to the legacy wait RPC', async () => {
     const result = { timedOut: false };
     mocks.sendRpc.mockResolvedValue(result);
@@ -601,6 +638,24 @@ describe('wait command', () => {
       details: {
         sessionId: 'session-01',
         manifestPath: '/tmp/agent-tty/sessions/session-01/session.json',
+      },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('throws SESSION_ALREADY_DESTROYED for idle waits on destroyed sessions', async () => {
+    mocks.readManifestIfExists.mockResolvedValue(
+      createSessionRecord('destroyed'),
+    );
+
+    await expect(
+      runWaitCommand(createOptions({ idleMs: 500 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.SESSION_ALREADY_DESTROYED,
+      message: 'Session "session-01" is already destroyed.',
+      details: {
+        sessionId: 'session-01',
+        status: 'destroyed',
       },
     });
     expect(mocks.sendRpc).not.toHaveBeenCalled();
