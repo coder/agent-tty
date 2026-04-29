@@ -66,6 +66,15 @@ describe('event log codec', () => {
     );
   });
 
+  it('rejects negative and fractional event log sizes', () => {
+    expect(() => assertEventLogSize(-1)).toThrow(
+      'event log size must be non-negative',
+    );
+    expect(() => assertEventLogSize(3.5)).toThrow(
+      'event log size must be an integer',
+    );
+  });
+
   it('rejects oversized event log files before reading content', async () => {
     await writeFile(eventLogPath, '', 'utf8');
     await truncate(eventLogPath, MAX_EVENT_LOG_SIZE + 1);
@@ -204,6 +213,10 @@ describe('event log codec', () => {
     expect(() => validateEventRecords(events)).toThrow(
       'event log seq values must increase by 1 without gaps',
     );
+  });
+
+  it('validates an empty array of loaded event records', () => {
+    expect(validateEventRecords([])).toEqual([]);
   });
 
   it('validates already-loaded event records', () => {

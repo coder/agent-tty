@@ -51,6 +51,7 @@ function assertContiguousSequence(records: readonly EventRecord[]): void {
   }
 }
 
+/** Parses JSONL content. Errors reference 1-based non-empty-line ordinals. */
 export function parseEventLogContent(content: string): EventRecord[] {
   const lines = content
     .split('\n')
@@ -64,6 +65,7 @@ export function parseEventLogContent(content: string): EventRecord[] {
   return records;
 }
 
+/** Validates already-loaded records. Errors reference 0-based array indexes. */
 export function validateEventRecords(
   events: readonly unknown[],
 ): EventRecord[] {
