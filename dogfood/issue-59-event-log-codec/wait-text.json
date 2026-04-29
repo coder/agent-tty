@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-04-29T12:42:23.643Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "hello from codec dogfood",
+    "cursorRow": 2,
+    "cursorCol": 2,
+    "capturedAtSeq": 4
+  }
+}

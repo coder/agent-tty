@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-04-29T12:42:29.443Z",
+  "result": {
+    "sessionId": "01KQCM5YXV7201SPAN58AGD96S",
+    "format": "asciicast",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/grill-docs-cyte/dogfood/issue-59-event-log-codec/recording.cast",
+    "bytes": 350,
+    "sha256": "6743c1b391eb593bb538eec634cf1a33aa14a693759ad574edc69892e5a26272",
+    "capturedAtSeq": 9,
+    "durationMs": 5984,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "title": "01KQCM5YXV7201SPAN58AGD96S",
+      "timestamp": 1777466539,
+      "outputEventCount": 5,
+      "resizeEventCount": 0,
+      "markerCount": 0
+    }
+  }
+}

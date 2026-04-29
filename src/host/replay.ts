@@ -1,79 +1,14 @@
-import { readFile, stat } from 'node:fs/promises';
-
 import type { ReplayInput } from '../renderer/types.js';
 import {
-  EventRecordSchema,
   SessionRecordSchema,
   type EventRecord,
   type SessionRecord,
 } from '../protocol/schemas.js';
+import { validateEventRecords } from '../storage/eventLogCodec.js';
 import { invariant } from '../util/assert.js';
-
-export const MAX_EVENT_LOG_SIZE = 50 * 1024 * 1024;
 
 function assertNonEmptyString(value: string, message: string): void {
   invariant(value.length > 0, message);
-}
-
-function parseEventRecord(event: unknown, index: number): EventRecord {
-  const parsedEvent = EventRecordSchema.safeParse(event);
-  invariant(
-    parsedEvent.success,
-    `replay event ${String(index)} must match EventRecordSchema`,
-  );
-  return parsedEvent.data;
-}
-
-function assertContiguousEventSequence(events: EventRecord[]): void {
-  if (events.length === 0) {
-    return;
-  }
-
-  invariant(events[0]?.seq === 0, 'first replay event seq must be 0');
-
-  for (let index = 1; index < events.length; index += 1) {
-    const previous = events[index - 1];
-    const current = events[index];
-
-    invariant(previous !== undefined, 'previous replay event must exist');
-    invariant(current !== undefined, 'current replay event must exist');
-    invariant(
-      current.seq === previous.seq + 1,
-      'replay events must have contiguous seq values',
-    );
-  }
-}
-
-function parseEventLogLine(line: string, lineNumber: number): EventRecord {
-  let parsedLine: unknown;
-  try {
-    parsedLine = JSON.parse(line) as unknown;
-  } catch {
-    invariant(false, `event log line ${String(lineNumber)} must be valid JSON`);
-  }
-
-  return parseEventRecord(parsedLine, lineNumber);
-}
-
-export async function readEventLogRecords(
-  filePath: string,
-): Promise<EventRecord[]> {
-  assertNonEmptyString(filePath, 'filePath must be a non-empty string');
-
-  const fileStats = await stat(filePath);
-  invariant(
-    fileStats.size <= MAX_EVENT_LOG_SIZE,
-    `event log file exceeds 50 MB size limit (${String(fileStats.size)} bytes)`,
-  );
-
-  const content = await readFile(filePath, 'utf8');
-  const lines = content
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-  const events = lines.map((line, index) => parseEventLogLine(line, index + 1));
-  assertContiguousEventSequence(events);
-  return events;
 }
 
 export function buildReplayInput(
@@ -103,10 +38,7 @@ export function buildReplayInput(
   invariant(initialCols > 0, 'initial cols must be positive');
   invariant(initialRows > 0, 'initial rows must be positive');
 
-  const validatedEvents = events.map((event, index) =>
-    parseEventRecord(event, index),
-  );
-  assertContiguousEventSequence(validatedEvents);
+  const validatedEvents = validateEventRecords(events);
 
   let lastSeq = -1;
   if (validatedEvents.length > 0) {

@@ -1,0 +1,6 @@
+{"version":2,"width":80,"height":24,"timestamp":1777466539,"title":"01KQCM5YXV7201SPAN58AGD96S","sessionId":"01KQCM5YXV7201SPAN58AGD96S","env":{"TERM":"xterm-256color"},"toolVersion":"0.1.1-beta.4"}
+[0,"o","$ "]
+[1.213,"o","printf 'hello from codec dogfood\\n'"]
+[2.317,"o","\r\nhello from codec dogfood\r\n$ "]
+[4.988,"o","exit"]
+[5.983,"o","\r\n"]

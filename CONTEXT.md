@@ -7,6 +7,9 @@
 **Session**:
 A long-lived PTY-backed terminal instance owned by `agent-tty`.
 
+**Event Log**:
+The append-only history of a **Session**'s terminal output, user inputs, control actions, and lifecycle events. It is the canonical source used to reconstruct **Session** state for replay and artifact generation.
+
 **Session Status**:
 The lifecycle state of a **Session**: `running`, `exiting`, `exited`, `failed`, `destroying`, or `destroyed`.
 
@@ -40,6 +43,9 @@ A convenience policy predicate for the single `destroyed` **Session Status** val
 - An `exiting` **Session** is **Active** and **Live Host Eligible**, but not **Commandable**.
 - A `destroying` **Session** is **Active** and **Offline Replay Eligible**, but not **Terminal** or **Collectable**.
 - `exited`, `failed`, and `destroyed` **Sessions** are **Terminal**, **Offline Replay Eligible**, and **Collectable**.
+
+- A **Session** has one **Event Log**.
+- An **Offline Replay Eligible Session** is reconstructed from its persisted **Event Log** and manifest.
 
 ## Example dialogue
 

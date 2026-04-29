@@ -14,7 +14,7 @@ import {
   generateWebmExport,
   type WebmExportResult,
 } from '../../export/webm.js';
-import { readEventLogRecords } from '../../host/replay.js';
+import { readEventLogRecords } from '../../storage/eventLogCodec.js';
 import { hashProfile, resolveProfile } from '../../renderer/profiles.js';
 import { CliError } from '../errors.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';

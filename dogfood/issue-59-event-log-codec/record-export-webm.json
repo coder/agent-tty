@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-04-29T12:42:39.419Z",
+  "result": {
+    "sessionId": "01KQCM5YXV7201SPAN58AGD96S",
+    "format": "webm",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/grill-docs-cyte/dogfood/issue-59-event-log-codec/recording.webm",
+    "bytes": 14356,
+    "sha256": "bb845c575030ded3c0aeacda922ec2ceb76454abcaf7f68c39867456bdf8c1ae",
+    "capturedAtSeq": 9,
+    "durationMs": 5984,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d",
+      "timingMode": "max-speed",
+      "rendererBackend": "ghostty-web",
+      "outputEventCount": 5,
+      "resizeEventCount": 0
+    }
+  }
+}
