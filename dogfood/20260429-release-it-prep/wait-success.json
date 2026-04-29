@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-04-29T14:55:00.434Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "DOGFOOD: success",
+    "cursorRow": 39,
+    "cursorCol": 15,
+    "capturedAtSeq": 183
+  }
+}
