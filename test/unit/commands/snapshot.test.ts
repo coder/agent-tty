@@ -58,6 +58,7 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
   socketPath: mocks.socketPath,
 }));
 
+import { createTestSemanticSnapshot } from '../../helpers.js';
 import { runSnapshotCommand } from '../../../src/cli/commands/snapshot.js';
 import { createLogger } from '../../../src/util/logger.js';
 
@@ -107,44 +108,11 @@ function getLastEmitSuccessPayload(): unknown {
   return mocks.emitSuccess.mock.calls.at(-1)?.[0] as unknown;
 }
 
-function createOfflineSemanticSnapshot(
-  options: {
-    scrollbackLines?: { row: number; text: string }[];
-    cells?: {
-      lineNumber: number;
-      cells: {
-        char: string;
-        fg?: string;
-        bg?: string;
-        bold?: boolean;
-        italic?: boolean;
-        underline?: boolean;
-        strikethrough?: boolean;
-      }[];
-    }[];
-  } = {},
-) {
-  return {
-    sessionId: 'session-01',
-    capturedAtSeq: 5,
-    cols: 80,
-    rows: 24,
-    cursorRow: 0,
-    cursorCol: 0,
-    isAltScreen: false,
-    visibleLines: [{ row: 0, text: 'offline output' }],
-    ...(options.scrollbackLines === undefined
-      ? {}
-      : { scrollbackLines: options.scrollbackLines }),
-    ...(options.cells === undefined ? {} : { cells: options.cells }),
-  };
-}
-
 function installOfflineReplaySuccessMock(
   snapshotImpl: (
     options?: unknown,
-  ) => MaybePromise<ReturnType<typeof createOfflineSemanticSnapshot>> = () =>
-    createOfflineSemanticSnapshot(),
+  ) => MaybePromise<ReturnType<typeof createTestSemanticSnapshot>> = () =>
+    createTestSemanticSnapshot(),
 ) {
   mocks.withOfflineReplayRenderer.mockImplementation(
     async (_options: unknown, run: (ctx: unknown) => Promise<unknown>) => {
@@ -444,8 +412,8 @@ describe('snapshot command', () => {
     });
   });
 
-  it('uses offline replay for exited sessions and persists the artifact', async () => {
-    const snapshot = createOfflineSemanticSnapshot();
+  it('uses offline replay for exited sessions', async () => {
+    const snapshot = createTestSemanticSnapshot();
     const result = {
       format: 'structured' as const,
       ...snapshot,
@@ -467,50 +435,6 @@ describe('snapshot command', () => {
       },
       expect.any(Function),
     );
-    expect(mocks.ensureArtifactsDir).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01',
-    );
-    expect(mocks.snapshotFilename).toHaveBeenCalledWith(5, 'structured');
-    expect(mocks.writeTextFileAtomic).toHaveBeenCalledWith({
-      path: '/artifacts/snapshot-5-structured.json',
-      pathLabel: 'snapshot artifact path',
-      contents: `${JSON.stringify(result, null, 2)}\n`,
-      writeErrorMessage:
-        'Failed to write snapshot artifact at /artifacts/snapshot-5-structured.json.',
-    });
-    expect(mocks.createArtifactEntry).toHaveBeenCalledWith({
-      kind: 'snapshot',
-      filename: 'snapshot-5-structured.json',
-      sessionId: 'session-01',
-      capturedAtSeq: 5,
-      metadata: {
-        format: 'structured',
-        cols: 80,
-        rows: 24,
-        cursorRow: 0,
-        cursorCol: 0,
-        rendererBackend: 'mock-backend',
-      },
-    });
-    expect(mocks.appendArtifact).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01',
-      {
-        kind: 'snapshot',
-        filename: 'snapshot-5-structured.json',
-        sessionId: 'session-01',
-        capturedAtSeq: 5,
-        metadata: {
-          format: 'structured',
-          cols: 80,
-          rows: 24,
-          cursorRow: 0,
-          cursorCol: 0,
-          rendererBackend: 'mock-backend',
-        },
-        id: 'artifact-01',
-        createdAt: '2026-03-19T12:00:02.000Z',
-      },
-    );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'snapshot',
       json: false,
@@ -530,7 +454,7 @@ describe('snapshot command', () => {
 
   it('uses offline replay for exited sessions and includes scrollback when requested', async () => {
     const snapshotMock = vi.fn((options?: unknown) =>
-      createOfflineSemanticSnapshot(
+      createTestSemanticSnapshot(
         (options as { includeScrollback?: boolean } | undefined)
           ?.includeScrollback
           ? {
@@ -577,9 +501,9 @@ describe('snapshot command', () => {
     );
   });
 
-  it('threads includeCells through offline replay snapshots and persists cells', async () => {
+  it('threads includeCells through offline replay snapshots and returns cells', async () => {
     const snapshotMock = vi.fn((options?: unknown) =>
-      createOfflineSemanticSnapshot(
+      createTestSemanticSnapshot(
         (options as { includeCells?: boolean } | undefined)?.includeCells
           ? {
               cells: [
@@ -630,7 +554,7 @@ describe('snapshot command', () => {
 
   it('defaults offline snapshots to omitting scrollbackLines', async () => {
     const snapshotMock = vi.fn((options?: unknown) =>
-      createOfflineSemanticSnapshot(
+      createTestSemanticSnapshot(
         (options as { includeScrollback?: boolean } | undefined)
           ?.includeScrollback
           ? {

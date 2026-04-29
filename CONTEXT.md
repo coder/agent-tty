@@ -36,6 +36,19 @@ _Avoid_: Deletable session
 **Destroyed Status Check**:
 A convenience policy predicate for the single `destroyed` **Session Status** value. It is not a separate lifecycle classification.
 
+**Semantic Snapshot**:
+A renderer-produced semantic description of a **Session** at a captured event-log sequence.
+
+**Snapshot Result**:
+A public snapshot payload returned to a caller after deriving structured or text output from a **Semantic Snapshot**.
+
+**Snapshot Artifact**:
+A persisted JSON artifact containing exactly the **Snapshot Result** returned to the caller.
+
+**Snapshot Capture**:
+The operation that derives a **Snapshot Result** from a **Semantic Snapshot** and records the matching **Snapshot Artifact**.
+_Avoid_: Renderer capture
+
 ## Relationships
 
 - A **Session** has exactly one **Session Status** at a time.
@@ -46,11 +59,16 @@ A convenience policy predicate for the single `destroyed` **Session Status** val
 
 - A **Session** has one **Event Log**.
 - An **Offline Replay Eligible Session** is reconstructed from its persisted **Event Log** and manifest.
+- A **Snapshot Result** is derived from exactly one **Semantic Snapshot**.
+- A **Snapshot Artifact** contains exactly the **Snapshot Result** emitted to the caller.
 
 ## Example dialogue
 
 > **Dev:** "Can garbage collection remove a **destroying** **Session**?"
 > **Domain expert:** "No. It is still an **Active Session**, even though renderer inspection should use **Offline Replay** instead of the live host."
+
+> **Dev:** "Does **Snapshot Capture** ask the renderer for terminal state?"
+> **Domain expert:** "No — the renderer first produces a **Semantic Snapshot**; **Snapshot Capture** derives and records the public result from that snapshot."
 
 ## Flagged ambiguities
 

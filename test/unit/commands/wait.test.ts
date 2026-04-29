@@ -39,6 +39,7 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
   socketPath: mocks.socketPath,
 }));
 
+import { createTestSemanticSnapshot } from '../../helpers.js';
 import { runWaitCommand } from '../../../src/cli/commands/wait.js';
 import { createLogger } from '../../../src/util/logger.js';
 
@@ -93,29 +94,8 @@ function createOptions(
   };
 }
 
-function createOfflineSemanticSnapshot(
-  overrides: Partial<{
-    capturedAtSeq: number;
-    cursorRow: number;
-    cursorCol: number;
-    visibleLines: { row: number; text: string }[];
-  }> = {},
-) {
-  return {
-    sessionId: 'session-01',
-    capturedAtSeq: 5,
-    cols: 80,
-    rows: 24,
-    cursorRow: 0,
-    cursorCol: 0,
-    isAltScreen: false,
-    visibleLines: [{ row: 0, text: 'offline output' }],
-    ...overrides,
-  };
-}
-
 function mockOfflineReplaySnapshot(
-  snapshotOverrides: Parameters<typeof createOfflineSemanticSnapshot>[0] = {},
+  snapshotOverrides: Parameters<typeof createTestSemanticSnapshot>[0] = {},
 ): void {
   mocks.withOfflineReplayRenderer.mockImplementation(
     async (
@@ -130,7 +110,7 @@ function mockOfflineReplaySnapshot(
     ) => {
       const mockBackend = {
         snapshot: vi.fn(() =>
-          Promise.resolve(createOfflineSemanticSnapshot(snapshotOverrides)),
+          Promise.resolve(createTestSemanticSnapshot(snapshotOverrides)),
         ),
       };
 

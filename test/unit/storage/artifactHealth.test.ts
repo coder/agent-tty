@@ -1,8 +1,8 @@
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { writeFile } from 'node:fs/promises';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+import { createTemporarySessionDir } from '../../helpers.js';
 
 import type {
   ArtifactEntry,
@@ -16,22 +16,11 @@ import {
   ensureArtifactsDir,
 } from '../../../src/storage/artifactPaths.js';
 
-const temporaryDirectories: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(
-    temporaryDirectories
-      .splice(0)
-      .map((directory) => rm(directory, { recursive: true, force: true })),
-  );
-});
-
 async function createSessionDir(sessionId = 'session-01'): Promise<string> {
-  const home = await realpath(
-    await mkdtemp(join(tmpdir(), 'agent-tty-artifact-health-')),
+  return await createTemporarySessionDir(
+    'agent-tty-artifact-health-',
+    sessionId,
   );
-  temporaryDirectories.push(home);
-  return join(home, sessionId);
 }
 
 function createArtifactEntry(

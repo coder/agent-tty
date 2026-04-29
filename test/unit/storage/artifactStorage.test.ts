@@ -1,15 +1,10 @@
-import {
-  access,
-  mkdtemp,
-  readFile,
-  realpath,
-  rm,
-  writeFile,
-} from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { access, readFile, writeFile } from 'node:fs/promises';
+
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+
+import { createTemporarySessionDir } from '../../helpers.js';
 
 import type {
   ArtifactEntry,
@@ -30,21 +25,8 @@ import {
   videoFilename,
 } from '../../../src/storage/artifactPaths.js';
 
-const temporaryDirectories: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(
-    temporaryDirectories
-      .splice(0)
-      .map((directory) => rm(directory, { recursive: true, force: true })),
-  );
-});
-
 async function createSessionDir(sessionId = 'session-01'): Promise<string> {
-  // prettier-ignore
-  const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-artifacts-')));
-  temporaryDirectories.push(home);
-  return join(home, sessionId);
+  return await createTemporarySessionDir('agent-tty-artifacts-', sessionId);
 }
 
 function createArtifactEntry(
