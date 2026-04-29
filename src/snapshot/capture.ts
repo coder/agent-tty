@@ -15,13 +15,16 @@ import {
 import { writeTextFileAtomic } from '../storage/manifests.js';
 import { invariant } from '../util/assert.js';
 
-type SnapshotFormat = NonNullable<SnapshotParams['format']>;
+export type SnapshotFormat = NonNullable<SnapshotParams['format']>;
 
-function parseSnapshotResult(rawResult: unknown): SnapshotResult {
+export function parseSnapshotResult(
+  rawResult: unknown,
+  message = 'Unexpected response from host',
+): SnapshotResult {
   const parsedResult = SnapshotResultSchema.safeParse(rawResult);
   if (!parsedResult.success) {
     throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
-      message: 'Unexpected response from host',
+      message,
       details: { issues: parsedResult.error.issues },
     });
   }
@@ -52,7 +55,10 @@ export function createSnapshotResult(
           text: textLines.join('\n'),
         };
 
-  return parseSnapshotResult(snapshotResult);
+  return parseSnapshotResult(
+    snapshotResult,
+    'Snapshot result validation failed.',
+  );
 }
 
 export interface PersistSnapshotArtifactOptions {
@@ -160,10 +166,16 @@ export async function captureSnapshotResult(
   options: CaptureSnapshotResultOptions,
 ): Promise<SnapshotResult> {
   if (options.expectedSessionId !== undefined) {
-    invariant(
-      options.snapshot.sessionId === options.expectedSessionId,
-      'renderer snapshot sessionId must match expected sessionId',
-    );
+    const actualSessionId = options.snapshot.sessionId;
+    if (actualSessionId !== options.expectedSessionId) {
+      throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
+        message: 'Snapshot sessionId mismatch.',
+        details: {
+          expectedSessionId: options.expectedSessionId,
+          actualSessionId,
+        },
+      });
+    }
   }
 
   const result = createSnapshotResult(options.snapshot, options.format);

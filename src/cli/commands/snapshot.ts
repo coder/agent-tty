@@ -1,7 +1,5 @@
-import type {
-  SnapshotParams,
-  SnapshotResult,
-} from '../../protocol/messages.js';
+import type { SnapshotResult } from '../../protocol/messages.js';
+import type { SnapshotFormat } from '../../snapshot/capture.js';
 import type { SemanticSnapshot } from '../../renderer/types.js';
 
 import { CliError } from '../../cli/errors.js';
@@ -10,10 +8,12 @@ import type { CommandContext } from '../context.js';
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { SnapshotParamsSchema } from '../../protocol/messages.js';
-import { SnapshotResultSchema } from '../../protocol/schemas.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
-import { captureSnapshotResult } from '../../snapshot/capture.js';
+import {
+  captureSnapshotResult,
+  parseSnapshotResult,
+} from '../../snapshot/capture.js';
 import { invariant } from '../../util/assert.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
@@ -23,8 +23,6 @@ import {
 } from '../../storage/sessionPaths.js';
 
 const DEFAULT_SNAPSHOT_FORMAT = 'structured';
-
-type SnapshotFormat = NonNullable<SnapshotParams['format']>;
 
 interface CommandOptions {
   context: CommandContext;
@@ -81,18 +79,6 @@ function resolveIncludeCells(includeCells: boolean | undefined): boolean {
     'includeCells must be boolean',
   );
   return effectiveIncludeCells;
-}
-
-function parseSnapshotResult(rawResult: unknown): SnapshotResult {
-  const parsedResult = SnapshotResultSchema.safeParse(rawResult);
-  if (!parsedResult.success) {
-    throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
-      message: 'Unexpected response from host',
-      details: { issues: parsedResult.error.issues },
-    });
-  }
-
-  return parsedResult.data;
 }
 
 async function runRpcSnapshot(

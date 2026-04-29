@@ -1,9 +1,20 @@
 import { spawnSync } from 'node:child_process';
-import { readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 
-import { expect } from 'vitest';
+import { afterEach, expect } from 'vitest';
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
 
 const DEFAULT_CLI_TIMEOUT_MS = 30_000;
 
@@ -52,6 +63,15 @@ export interface EventRecord {
 export interface WaitResult {
   exitCode?: number;
   timedOut: boolean;
+}
+
+export async function createTemporarySessionDir(
+  prefix: string,
+  sessionId = 'session-01',
+): Promise<string> {
+  const home = await realpath(await mkdtemp(join(tmpdir(), prefix)));
+  temporaryDirectories.push(home);
+  return join(home, sessionId);
 }
 
 export function runCli(

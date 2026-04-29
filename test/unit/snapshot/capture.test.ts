@@ -1,15 +1,8 @@
-import {
-  access,
-  mkdir,
-  mkdtemp,
-  readFile,
-  realpath,
-  rm,
-} from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { access, mkdir, readFile } from 'node:fs/promises';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+
+import { createTemporarySessionDir } from '../../helpers.js';
 
 import type { SemanticSnapshot } from '../../../src/renderer/types.js';
 
@@ -40,21 +33,11 @@ function createSemanticSnapshot(
   };
 }
 
-const temporaryDirectories: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(
-    temporaryDirectories
-      .splice(0)
-      .map((directory) => rm(directory, { recursive: true, force: true })),
-  );
-});
-
 async function createSessionDir(sessionId = 'session-01'): Promise<string> {
-  // prettier-ignore
-  const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-snapshot-capture-')));
-  temporaryDirectories.push(home);
-  return join(home, sessionId);
+  return await createTemporarySessionDir(
+    'agent-tty-snapshot-capture-',
+    sessionId,
+  );
 }
 
 describe('snapshot capture', () => {
@@ -114,9 +97,14 @@ describe('snapshot capture', () => {
         rendererBackend: 'test-backend',
         expectedSessionId: 'other-session',
       }),
-    ).rejects.toThrow(
-      /renderer snapshot sessionId must match expected sessionId/u,
-    );
+    ).rejects.toMatchObject({
+      code: 'PROTOCOL_ERROR',
+      message: 'Snapshot sessionId mismatch.',
+      details: {
+        expectedSessionId: 'other-session',
+        actualSessionId: 'session-01',
+      },
+    });
 
     await expect(
       access(artifactPath(sessionDirectory, snapshotFilename(5, 'structured'))),
@@ -223,6 +211,51 @@ describe('snapshot capture', () => {
     const manifest = await readArtifactManifest(sessionDirectory);
     expect(manifest.artifacts[0]?.metadata).toEqual({
       format: 'structured',
+      rendererBackend: 'test-backend',
+      cols: 80,
+      rows: 24,
+      cursorRow: 1,
+      cursorCol: 2,
+    });
+  });
+
+  it('captures text snapshot results without scrollback metadata when scrollback is absent', async () => {
+    const sessionDirectory = await createSessionDir();
+    const snapshot = createSemanticSnapshot({
+      visibleLines: [
+        { row: 0, text: 'first visible line' },
+        { row: 1, text: 'second visible line' },
+      ],
+    });
+
+    const result = await captureSnapshotResult({
+      sessionDir: sessionDirectory,
+      format: 'text',
+      snapshot,
+      rendererBackend: 'test-backend',
+      expectedSessionId: 'session-01',
+    });
+
+    expect(result).toEqual({
+      format: 'text',
+      sessionId: 'session-01',
+      capturedAtSeq: 5,
+      cols: 80,
+      rows: 24,
+      cursorRow: 1,
+      cursorCol: 2,
+      text: 'first visible line\nsecond visible line',
+    });
+
+    const filename = snapshotFilename(5, 'text');
+    await expect(
+      readFile(artifactPath(sessionDirectory, filename), 'utf8'),
+    ).resolves.toBe(`${JSON.stringify(result, null, 2)}\n`);
+
+    const manifest = await readArtifactManifest(sessionDirectory);
+    expect(manifest.artifacts).toHaveLength(1);
+    expect(manifest.artifacts[0]?.metadata).toEqual({
+      format: 'text',
       rendererBackend: 'test-backend',
       cols: 80,
       rows: 24,
