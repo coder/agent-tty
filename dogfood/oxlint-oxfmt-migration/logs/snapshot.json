@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-04-29T14:35:36.500Z",
+  "result": {
+    "format": "text",
+    "sessionId": "01KQCTN015XDZD9N58QXFDKRN7",
+    "capturedAtSeq": 34,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 23,
+    "cursorCol": 15,
+    "text": "Finished in 729ms on 200 files with 162 rules using 96 threads.\n\n> agent-tty@0.1.1-beta.4 typecheck\n> tsc -p tsconfig.json --noEmit\n\n\n> agent-tty@0.1.1-beta.4 build\n> tsc -p tsconfig.build.json && node ./scripts/copy-renderer-assets.mjs\n\n\n> agent-tty@0.1.1-beta.4 smoke:install\n> node ./scripts/smoke-install.mjs --skip-build\n\nPacking release tarball into /tmp/agent-tty-install-smoke-bpaHNc/tarball...\nInstalling built tarball into isolated prefix...\nSkipping git dependency install route; tarball install is the supported packagin\ng path.\nPackaging smoke passed: tarball route succeeded.\nOXC_MIGRATION_DOGFOOD_DONE\ncoder in 🌐 aaaaaaa in linter-formatter-xpba on  linter-formatter-xpba:main [$✘\n!?⇣] is 📦 v0.1.1-beta.4 via  v25.9.0 on ☁   took 9s\ncoder in 🌐 aaaaaaa in linter-formatter-xpba on  linter-formatter-xpba:main [$✘\n!?⇣] is 📦 v0.1.1-beta.4 via  v25.9.0 on ☁\n⬢ [Docker] XY"
+  }
+}

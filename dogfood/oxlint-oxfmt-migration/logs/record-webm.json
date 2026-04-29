@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-04-29T14:35:41.651Z",
+  "result": {
+    "sessionId": "01KQCTN015XDZD9N58QXFDKRN7",
+    "format": "webm",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/linter-formatter-xpba/dogfood/oxlint-oxfmt-migration/artifacts/validation.webm",
+    "bytes": 178974,
+    "sha256": "56ab64b95eac6e0df52fd1b5e63891403c8752fdc9770f9acef8d63f912a0f65",
+    "capturedAtSeq": 34,
+    "durationMs": 10891,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d",
+      "timingMode": "max-speed",
+      "rendererBackend": "ghostty-web",
+      "outputEventCount": 33,
+      "resizeEventCount": 0
+    }
+  }
+}

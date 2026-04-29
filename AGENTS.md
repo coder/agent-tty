@@ -27,7 +27,7 @@ The current implementation is a TypeScript/Node v1 with these main building bloc
 - **node-pty** for PTY/process lifecycle.
 - **Zod** for protocol, manifest, and artifact validation.
 - **ghostty-web + Playwright** as the reference renderer for screenshot, wait, snapshot, and replay/export flows.
-- **Vitest, ESLint, Prettier, and TypeScript** for quality gates.
+- **Vitest, Oxlint, Oxfmt, and TypeScript** for quality gates.
 - **mise** as the canonical task runner in CI.
 
 Session state is stored under `~/.agent-tty` by default. In tests and automation, prefer an isolated absolute `AGENT_TTY_HOME` instead of writing into the real home directory.
@@ -190,7 +190,7 @@ If validation cannot run, state why and name the next best check.
 
 - Follow the repo defaults: 2-space indentation, single quotes, trailing commas, semicolons, LF endings.
 - This is strict TypeScript with `NodeNext` modules and ESM imports that include `.js` file extensions from TypeScript source.
-- Prefer `import type` for type-only imports; ESLint enforces this.
+- Prefer `import type` for type-only imports; Oxlint enforces this.
 - Keep schemas strict (`z.object(...).strict()`) and prefer existing helper/assertion utilities over duplicated validation code.
 - Match the existing style of small helpers, explicit invariants, and straightforward control flow. Avoid introducing abstraction layers without a concrete need.
 

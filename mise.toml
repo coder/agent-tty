@@ -53,7 +53,8 @@ run = "npm run lint"
 sources = [
   "src/**/*.ts",
   "test/**/*.ts",
-  "eslint.config.mjs",
+  ".oxlintrc.json",
+  "tsconfig.json",
   "vitest.config.ts",
   "package.json",
 ]
@@ -68,6 +69,7 @@ run = "npm run format:check"
 sources = [
   "src/**/*.ts",
   "test/**/*.ts",
+  ".oxfmtrc.json",
   "*.json",
   "mise.lock",
   "*.mjs",

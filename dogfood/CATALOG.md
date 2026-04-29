@@ -30,6 +30,7 @@ Paths below are relative to the repository root.
 | `dogfood/20260325-week8-bundle-validation/`    | Validation of proof-bundle conventions.                                                                                    |
 | `dogfood/20260325-week8-capability-inventory/` | Runtime capability inventory/reporting evidence.                                                                           |
 | `dogfood/20260325-week8-inspect-runtime/`      | `inspect --json` runtime reporting review.                                                                                 |
+| `dogfood/oxlint-oxfmt-migration/`              | Oxc lint/format migration proof with migrated checks, screenshot, asciicast, and WebM recording.                           |
 | `dogfood/token-usage-phase5-proof/`            | Phase 5 eval DX token-usage proof bundle (commit `91a571de`) with screenshot, WebM recording, snapshot, and replay script. |
 | `dogfood/20260323-week5-platform-closure/`     | Platform/documentation closeout evidence from the earlier hardening phase.                                                 |
 

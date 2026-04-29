@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-04-29T14:35:38.954Z",
+  "result": {
+    "sessionId": "01KQCTN015XDZD9N58QXFDKRN7",
+    "format": "asciicast",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/linter-formatter-xpba/dogfood/oxlint-oxfmt-migration/artifacts/validation.cast",
+    "bytes": 3173,
+    "sha256": "35f336622e219df527b1d2e9efaf44b2ab17d27cf9a2b8f1bc3a03d00054e4e9",
+    "capturedAtSeq": 34,
+    "durationMs": 10891,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "title": "01KQCTN015XDZD9N58QXFDKRN7",
+      "timestamp": 1777473323,
+      "outputEventCount": 33,
+      "resizeEventCount": 0,
+      "markerCount": 0
+    }
+  }
+}

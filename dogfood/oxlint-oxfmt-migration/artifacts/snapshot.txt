@@ -1,0 +1,24 @@
+Finished in 729ms on 200 files with 162 rules using 96 threads.
+
+> agent-tty@0.1.1-beta.4 typecheck
+> tsc -p tsconfig.json --noEmit
+
+
+> agent-tty@0.1.1-beta.4 build
+> tsc -p tsconfig.build.json && node ./scripts/copy-renderer-assets.mjs
+
+
+> agent-tty@0.1.1-beta.4 smoke:install
+> node ./scripts/smoke-install.mjs --skip-build
+
+Packing release tarball into /tmp/agent-tty-install-smoke-bpaHNc/tarball...
+Installing built tarball into isolated prefix...
+Skipping git dependency install route; tarball install is the supported packagin
+g path.
+Packaging smoke passed: tarball route succeeded.
+OXC_MIGRATION_DOGFOOD_DONE
+coder in 🌐 aaaaaaa in linter-formatter-xpba on  linter-formatter-xpba:main [$✘
+!?⇣] is 📦 v0.1.1-beta.4 via  v25.9.0 on ☁   took 9s
+coder in 🌐 aaaaaaa in linter-formatter-xpba on  linter-formatter-xpba:main [$✘
+!?⇣] is 📦 v0.1.1-beta.4 via  v25.9.0 on ☁
+⬢ [Docker] XY
