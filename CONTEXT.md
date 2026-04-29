@@ -23,6 +23,10 @@ _Avoid_: Finished session
 **Commandable Session**:
 A **Session** that can still accept user input and control commands.
 
+**Command Target**:
+The **Commandable Session** selected and verified as eligible to receive an input or control command.
+_Avoid_: Running Session Target
+
 **Waited Run**:
 A run request where the caller asks `agent-tty` to wait until the command's completion signal is observed.
 _Avoid_: Blocking run
@@ -78,6 +82,7 @@ The tag-triggered automation that validates, packages, and publishes a release a
 - An **Offline Replay Eligible Session** is reconstructed from its persisted **Event Log** and manifest.
 - A **Snapshot Result** is derived from exactly one **Semantic Snapshot**.
 - A **Snapshot Artifact** contains exactly the **Snapshot Result** emitted to the caller.
+- A **Command Target** is exactly one **Commandable Session** selected by an input or control command.
 - A **Commandable Session** can accept a **Waited Run**.
 - A **Waited Run** may produce one **Run Completion**, time out for its caller, or be interrupted by **Session** exit.
 - Caller timeout does not cancel the underlying **Run Completion**; it may still be observed later to keep internal completion bytes out of artifacts.
@@ -93,7 +98,10 @@ The tag-triggered automation that validates, packages, and publishes a release a
 > **Domain expert:** "No. It is still an **Active Session**, even though renderer inspection should use **Offline Replay** instead of the live host."
 
 > **Dev:** "Does **Snapshot Capture** ask the renderer for terminal state?"
-> **Domain expert:** "No — the renderer first produces a **Semantic Snapshot**; **Snapshot Capture** derives and records the public result from that snapshot."
+> **Domain expert:** "No. The renderer first produces a **Semantic Snapshot**; **Snapshot Capture** derives and records the public result from that snapshot."
+
+> **Dev:** "Should `snapshot` resolve a **Command Target**?"
+> **Domain expert:** "No. A **Command Target** is for commands that must send input or control to a **Commandable Session**, not inspection or replay operations."
 
 > **Dev:** "If a **Waited Run** times out, did the command finish?"
 > **Domain expert:** "No. The caller stopped waiting, but the **Run Completion** may still arrive later and must still be recognized."
@@ -101,3 +109,4 @@ The tag-triggered automation that validates, packages, and publishes a release a
 ## Flagged ambiguities
 
 - "Active" and "offline replay eligible" are independent classifications: `destroying` is both **Active** and **Offline Replay Eligible**.
+- "Running Session Target" was used during design discussion, but the canonical term is **Command Target** because commandability is the policy being resolved.

@@ -20,7 +20,7 @@ vi.mock('../../../src/host/rpcClient.js', () => ({
   sendRpc: mocks.sendRpc,
 }));
 
-import { runMarkCommand } from '../../../src/cli/commands/mark.js';
+import { runSignalCommand } from '../../../src/cli/commands/signal.js';
 import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
@@ -42,19 +42,18 @@ const COMMAND_TARGET = {
   manifest: { status: 'running' },
 };
 
-describe('mark command', () => {
+describe('signal command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.resolveCommandTarget.mockResolvedValue(COMMAND_TARGET);
-    mocks.sendRpc.mockResolvedValue({ seq: 12 });
   });
 
-  it('sends the mark RPC for a command target and emits the committed seq', async () => {
-    await runMarkCommand({
+  it('sends an allowed signal to a command target and emits delivery', async () => {
+    await runSignalCommand({
       context: TEST_CONTEXT,
       json: false,
       sessionId: 'session-01',
-      label: 'checkpoint',
+      signal: 'SIGUSR1',
     });
 
     expect(mocks.resolveCommandTarget).toHaveBeenCalledWith({
@@ -63,72 +62,35 @@ describe('mark command', () => {
     });
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-tty/sockets/session-01.sock',
-      'mark',
-      { label: 'checkpoint' },
+      'signal',
+      { signal: 'SIGUSR1' },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
-      command: 'mark',
+      command: 'signal',
       json: false,
-      result: { seq: 12 },
-      lines: ['Marker set at seq 12.'],
+      result: { signal: 'SIGUSR1', delivered: true },
+      lines: ['Signal SIGUSR1 delivered to session.'],
     });
   });
 
-  it('accepts an empty label', async () => {
-    mocks.sendRpc.mockResolvedValue({ seq: 7 });
-
-    await runMarkCommand({
-      context: TEST_CONTEXT,
-      json: false,
-      sessionId: 'session-01',
-      label: '',
-    });
-
-    expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sockets/session-01.sock',
-      'mark',
-      { label: '' },
-    );
-    expect(mocks.emitSuccess).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: 'mark',
-        result: { seq: 7 },
-      }),
-    );
-  });
-
-  it('preserves JSON mode and includes seq in the result envelope', async () => {
-    mocks.sendRpc.mockResolvedValue({ seq: 99 });
-
-    await runMarkCommand({
-      context: TEST_CONTEXT,
-      json: true,
-      sessionId: 'session-01',
-      label: 'json-marker',
-    });
-
-    expect(mocks.emitSuccess).toHaveBeenCalledWith({
-      command: 'mark',
-      json: true,
-      result: { seq: 99 },
-      lines: ['Marker set at seq 99.'],
-    });
-  });
-
-  it('rejects PROTOCOL_ERROR responses without sending success output', async () => {
-    mocks.sendRpc.mockResolvedValueOnce({ unexpected: true });
-
+  it('rejects invalid signals after resolving the command target', async () => {
     await expect(
-      runMarkCommand({
+      runSignalCommand({
         context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
-        label: 'broken',
+        signal: 'BAD',
       }),
     ).rejects.toMatchObject({
-      code: ERROR_CODES.PROTOCOL_ERROR,
-      message: 'Unexpected response from host',
+      code: ERROR_CODES.INVALID_SIGNAL,
+      message:
+        'Signal must be one of: SIGTERM, SIGINT, SIGKILL, SIGHUP, SIGUSR1, SIGUSR2.',
     });
-    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+
+    expect(mocks.resolveCommandTarget).toHaveBeenCalledWith({
+      home: '/tmp/agent-tty',
+      sessionId: 'session-01',
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
 });

@@ -1,18 +1,12 @@
 import type { CommandContext } from '../context.js';
 
+import { resolveCommandTarget } from '../commandTarget.js';
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import type { RunResult } from '../../protocol/messages.js';
 import { RunResultSchema } from '../../protocol/messages.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
-import { readManifestIfExists } from '../../storage/manifests.js';
-import {
-  manifestPath,
-  sessionDir,
-  socketPath,
-} from '../../storage/sessionPaths.js';
 import { resolveCommandInputText } from './inputSource.js';
-import { assertSessionCommandable } from '../sessionGuards.js';
 
 interface CommandOptions {
   context: CommandContext;
@@ -31,15 +25,6 @@ export async function runRunCommand(options: CommandOptions): Promise<void> {
     file: options.file,
   });
 
-  if (command.length === 0) {
-    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-      message: 'Command text must not be empty.',
-      details: {
-        command,
-      },
-    });
-  }
-
   if (!Number.isFinite(options.timeout) || options.timeout <= 0) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {
       message: 'Timeout must be a positive integer in milliseconds',
@@ -49,22 +34,10 @@ export async function runRunCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  const home = options.context.home;
-  const sessionDirectory = sessionDir(home, options.sessionId);
-  const manifestFile = manifestPath(sessionDirectory);
-  const manifest = await readManifestIfExists(manifestFile);
-
-  if (manifest === null) {
-    throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
-      message: `Session "${options.sessionId}" was not found.`,
-      details: {
-        sessionId: options.sessionId,
-        manifestPath: manifestFile,
-      },
-    });
-  }
-
-  assertSessionCommandable(manifest, options.sessionId);
+  const target = await resolveCommandTarget({
+    home: options.context.home,
+    sessionId: options.sessionId,
+  });
 
   const noWait = !options.wait;
   const rpcParams: Record<string, unknown> = {
@@ -78,7 +51,7 @@ export async function runRunCommand(options: CommandOptions): Promise<void> {
 
   const rpcTimeoutMs = noWait ? 10_000 : options.timeout + 10_000;
   const rawResult = await sendRpc(
-    socketPath(sessionDirectory),
+    target.socketPath,
     'run',
     rpcParams,
     rpcTimeoutMs,

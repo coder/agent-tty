@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-04-29T19:39:28.672Z",
+  "result": {
+    "format": "text",
+    "sessionId": "01KQDC1A7M9FN8EVETNKPJBDDT",
+    "capturedAtSeq": 14,
+    "cols": 100,
+    "rows": 30,
+    "cursorRow": 6,
+    "cursorCol": 10,
+    "text": "bash-5.1$ printf 'hello issue 63\\n'\nhello issue 63\nbash-5.1$ echo typed issue 63\ntyped issue 63\nbash-5.1$ echo pasted issue 63\npasted issue 63\nbash-5.1$\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  }
+}

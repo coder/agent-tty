@@ -313,6 +313,55 @@ describe('CLI integration', () => {
     expect(envelope.error.message).toContain('mutually exclusive');
   });
 
+  it('returns SESSION_NOT_FOUND for resize before validating dimensions', () => {
+    const result = runCli(
+      ['resize', 'missing-session', '--cols', '0', '--rows', '0', '--json'],
+      testEnv(),
+    );
+
+    expect(result.status).toBe(3);
+    expect(result.stderr).toBe('');
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe('resize');
+    expect(envelope.error.code).toBe('SESSION_NOT_FOUND');
+    expect(envelope.error.message).toBe(
+      'Session "missing-session" was not found.',
+    );
+  });
+
+  it('returns SESSION_NOT_FOUND for signal before validating the signal name', () => {
+    const result = runCli(
+      ['signal', 'missing-session', 'BAD', '--json'],
+      testEnv(),
+    );
+
+    expect(result.status).toBe(3);
+    expect(result.stderr).toBe('');
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe('signal');
+    expect(envelope.error.code).toBe('SESSION_NOT_FOUND');
+    expect(envelope.error.message).toBe(
+      'Session "missing-session" was not found.',
+    );
+  });
+
+  it('rejects empty run text before resolving the command target', () => {
+    const result = runCli(['run', 'missing-session', '', '--json'], testEnv());
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe('');
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe('run');
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.message).toBe('Text must not be empty.');
+  });
+
   it('prints a JSON envelope for doctor including the new health checks', () => {
     const result = runCli(['doctor', '--json'], testEnv());
     expect(result.status).toBe(0);

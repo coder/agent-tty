@@ -1,15 +1,9 @@
 import type { CommandContext } from '../context.js';
 
+import { resolveCommandTarget } from '../commandTarget.js';
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
-import { readManifestIfExists } from '../../storage/manifests.js';
-import {
-  manifestPath,
-  sessionDir,
-  socketPath,
-} from '../../storage/sessionPaths.js';
-import { assertSessionCommandable } from '../sessionGuards.js';
 
 const ALLOWED_SIGNALS = [
   'SIGTERM',
@@ -33,22 +27,10 @@ interface CommandOptions {
 }
 
 export async function runSignalCommand(options: CommandOptions): Promise<void> {
-  const home = options.context.home;
-  const sessionDirectory = sessionDir(home, options.sessionId);
-  const manifestFile = manifestPath(sessionDirectory);
-  const manifest = await readManifestIfExists(manifestFile);
-
-  if (manifest === null) {
-    throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
-      message: `Session "${options.sessionId}" was not found.`,
-      details: {
-        sessionId: options.sessionId,
-        manifestPath: manifestFile,
-      },
-    });
-  }
-
-  assertSessionCommandable(manifest, options.sessionId);
+  const target = await resolveCommandTarget({
+    home: options.context.home,
+    sessionId: options.sessionId,
+  });
 
   if (
     !ALLOWED_SIGNALS.includes(
@@ -63,7 +45,7 @@ export async function runSignalCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  await sendRpc(socketPath(sessionDirectory), 'signal', {
+  await sendRpc(target.socketPath, 'signal', {
     signal: options.signal,
   });
 

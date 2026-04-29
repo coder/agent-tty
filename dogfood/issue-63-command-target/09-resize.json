@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "command": "resize",
+  "timestamp": "2026-04-29T19:39:23.025Z",
+  "result": {
+    "cols": 100,
+    "rows": 30
+  }
+}

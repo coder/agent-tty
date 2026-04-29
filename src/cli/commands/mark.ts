@@ -1,17 +1,11 @@
 import type { CommandContext } from '../context.js';
 import type { MarkResult } from '../../protocol/messages.js';
 
+import { resolveCommandTarget } from '../commandTarget.js';
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { MarkResultSchema } from '../../protocol/messages.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
-import { readManifestIfExists } from '../../storage/manifests.js';
-import {
-  manifestPath,
-  sessionDir,
-  socketPath,
-} from '../../storage/sessionPaths.js';
-import { assertSessionCommandable } from '../sessionGuards.js';
 
 export type { MarkResult } from '../../protocol/messages.js';
 
@@ -23,30 +17,14 @@ interface CommandOptions {
 }
 
 export async function runMarkCommand(options: CommandOptions): Promise<void> {
-  const home = options.context.home;
-  const sessionDirectory = sessionDir(home, options.sessionId);
-  const manifestFile = manifestPath(sessionDirectory);
-  const manifest = await readManifestIfExists(manifestFile);
+  const target = await resolveCommandTarget({
+    home: options.context.home,
+    sessionId: options.sessionId,
+  });
 
-  if (manifest === null) {
-    throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
-      message: `Session "${options.sessionId}" was not found.`,
-      details: {
-        sessionId: options.sessionId,
-        manifestPath: manifestFile,
-      },
-    });
-  }
-
-  assertSessionCommandable(manifest, options.sessionId);
-
-  const rawResult: unknown = await sendRpc(
-    socketPath(sessionDirectory),
-    'mark',
-    {
-      label: options.label,
-    },
-  );
+  const rawResult: unknown = await sendRpc(target.socketPath, 'mark', {
+    label: options.label,
+  });
   const parsedResult = MarkResultSchema.safeParse(rawResult);
   if (!parsedResult.success) {
     throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
