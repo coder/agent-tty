@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 
 import {
+  assertRunMarker,
   buildRunCompleteSignalSentinel,
   RUN_MARKER_PATTERN,
   RunCompletionPostambleEchoSanitizer,
@@ -23,38 +24,35 @@ interface RunCompletionWaiter {
   resolve: (result: RunCompletionWaitResult) => void;
 }
 
+/** Wait result delivered by the underlying run-completion observer. */
 type RunCompletionWaitResult =
   | { kind: 'completed'; seq: number }
   | { kind: 'exited' };
 
-export type RunCompletionWaitOutcome =
+/** Public waited-run wait result after applying the caller timeout. */
+export type TimedRunCompletionWaitResult =
   | RunCompletionWaitResult
   | { kind: 'timeout' };
 
+/** Appends replayable run-completion events in the host's serialized PTY ingestion queue. */
 export interface RunCompletionEventAppender {
   appendOutput(data: string): Promise<void>;
   appendRunComplete(payload: {
     marker: string;
-    inputRunSeq?: number;
+    inputRunSeq: number;
   }): Promise<number>;
 }
 
+/** Marker prepared before `input_run` is appended for a waited run. */
 export interface PreparedWaitedRun {
   marker: string;
 }
 
+/** Registered completion state returned after `input_run` appends successfully. */
 export interface RegisteredWaitedRunCompletion {
   postamble: string;
   sentinel: string;
-  wait(timeoutMs: number): Promise<RunCompletionWaitOutcome>;
-}
-
-function assertRunMarker(marker: string): void {
-  invariant(typeof marker === 'string', 'run marker must be a string');
-  invariant(
-    RUN_MARKER_PATTERN.test(marker),
-    'run marker must match expected format',
-  );
+  wait(timeoutMs: number): Promise<TimedRunCompletionWaitResult>;
 }
 
 function shellOctalEscapedBytes(value: string): string {
@@ -79,7 +77,10 @@ function generateRunCompleteSignalSentinel(): string {
 
 function buildRunCompletePostamble(marker: string, sentinel: string): string {
   const markerMatch = RUN_MARKER_PATTERN.exec(marker);
-  invariant(markerMatch !== null, 'run marker must match expected format');
+  invariant(
+    markerMatch !== null,
+    'run marker must match expected format (__AT_MARKER_<32hex>__)',
+  );
   invariant(
     typeof sentinel === 'string' && sentinel.length > 0,
     'sentinel must be non-empty',
@@ -116,6 +117,14 @@ function buildRunCompletePostamble(marker: string, sentinel: string): string {
   return `${postamble}\n`;
 }
 
+/**
+ * Coordinates waited-run completion markers, hidden sentinels, waiters, and
+ * `run_complete` appends for a single host.
+ *
+ * `ingestPtyData()` and `flushPtyDataOnExit()` must be called serially by the
+ * host's PTY ingestion queue. Concurrent ingestion would break event-log order
+ * and can race scanner/sanitizer state.
+ */
 export class RunCompletionCoordinator {
   readonly #appender: RunCompletionEventAppender;
   #sentinelScanner = new RunCompletionSentinelScanner();
@@ -136,16 +145,21 @@ export class RunCompletionCoordinator {
     this.#appender = appender;
   }
 
+  /** Creates the marker that will be recorded on the pending `input_run`. */
   public prepareWaitedRun(): PreparedWaitedRun {
     const marker = `__AT_MARKER_${crypto.randomUUID().replace(/-/g, '')}__`;
     invariant(
       RUN_MARKER_PATTERN.test(marker),
-      'generated run marker must match expected format',
+      'generated run marker must match expected format (__AT_MARKER_<32hex>__)',
     );
 
     return { marker };
   }
 
+  /**
+   * Registers the marker after `input_run` appends and returns the shell
+   * postamble to write. The returned `wait()` function is single-use.
+   */
   public registerWaitedRun(params: {
     inputRunSeq: number;
     marker: string;
@@ -176,7 +190,7 @@ export class RunCompletionCoordinator {
     return {
       postamble,
       sentinel,
-      wait: (timeoutMs: number): Promise<RunCompletionWaitOutcome> => {
+      wait: (timeoutMs: number): Promise<TimedRunCompletionWaitResult> => {
         invariant(
           !waitStarted,
           'run completion wait must only be started once',
@@ -187,18 +201,21 @@ export class RunCompletionCoordinator {
     };
   }
 
+  /** Ingests one PTY output chunk; callers must serialize calls. */
   public async ingestPtyData(data: string): Promise<void> {
     invariant(typeof data === 'string', 'PTY data must be a string');
 
     await this.#appendSentinelPieces(this.#sentinelScanner.feed(data));
   }
 
+  /** Flushes scanner/sanitizer tails on PTY exit; callers must serialize calls. */
   public async flushPtyDataOnExit(): Promise<void> {
     await this.#appendSentinelPieces(this.#sentinelScanner.flush());
     await this.#appendFlushedPostambleEchoOutput();
   }
 
-  public resolvePendingWaitersForExit(): void {
+  /** Resolves pending waiters as exited and clears no-longer-observable state. */
+  public resetForExit(): void {
     const waiters = [...this.#runCompletionWaiters.values()];
     this.#runCompletionWaiters.clear();
     this.#activeRunCompletions.clear();
@@ -238,7 +255,7 @@ export class RunCompletionCoordinator {
     marker: string,
     completionPromise: Promise<RunCompletionWaitResult>,
     timeoutMs: number,
-  ): Promise<RunCompletionWaitOutcome> {
+  ): Promise<TimedRunCompletionWaitResult> {
     assertRunMarker(marker);
     invariant(
       Number.isInteger(timeoutMs) && timeoutMs > 0,
@@ -246,7 +263,7 @@ export class RunCompletionCoordinator {
     );
 
     const { promise, reject, resolve } =
-      Promise.withResolvers<RunCompletionWaitOutcome>();
+      Promise.withResolvers<TimedRunCompletionWaitResult>();
     let resolved = false;
     const timeoutHandle = setTimeout(() => {
       if (resolved) {

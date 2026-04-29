@@ -451,7 +451,7 @@ export async function runHost(sessionId: string): Promise<void> {
       try {
         await eventLog.append('exit', { exitCode, exitSignal });
       } finally {
-        runCompletion.resolvePendingWaitersForExit();
+        runCompletion.resetForExit();
         try {
           await writeManifest(mPath, state.snapshot());
         } finally {

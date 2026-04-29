@@ -78,6 +78,33 @@ describe('RunCompletionCoordinator', () => {
     ]);
   });
 
+  it('strips echoed postamble bytes before appending visible output', async () => {
+    const { appender, events } = createFakeAppender();
+    const coordinator = new RunCompletionCoordinator(appender);
+    const prepared = coordinator.prepareWaitedRun();
+    const completion = coordinator.registerWaitedRun({
+      marker: prepared.marker,
+      inputRunSeq: 8,
+    });
+    const waitPromise = completion.wait(1_000);
+    const echoedPostamble = completion.postamble.replace(/\n$/u, '\r\n');
+
+    await coordinator.ingestPtyData(
+      `prompt${echoedPostamble}visible${completion.sentinel}`,
+    );
+
+    await expect(waitPromise).resolves.toEqual({ kind: 'completed', seq: 100 });
+    expect(events).toEqual([
+      { type: 'output', data: 'promptvisible' },
+      {
+        type: 'run_complete',
+        marker: prepared.marker,
+        inputRunSeq: 8,
+        seq: 100,
+      },
+    ]);
+  });
+
   it('completes multiple active waited runs out of order', async () => {
     const { appender, events } = createFakeAppender();
     const coordinator = new RunCompletionCoordinator(appender);
@@ -185,7 +212,7 @@ describe('RunCompletionCoordinator', () => {
     const waitPromise = completion.wait(1_000);
 
     await coordinator.flushPtyDataOnExit();
-    coordinator.resolvePendingWaitersForExit();
+    coordinator.resetForExit();
 
     await expect(waitPromise).resolves.toEqual({ kind: 'exited' });
     expect(events).toEqual([]);
@@ -203,7 +230,7 @@ describe('RunCompletionCoordinator', () => {
       });
       const waitPromise = completion.wait(100);
 
-      coordinator.resolvePendingWaitersForExit();
+      coordinator.resetForExit();
 
       await expect(waitPromise).resolves.toEqual({ kind: 'exited' });
       await vi.advanceTimersByTimeAsync(100);
