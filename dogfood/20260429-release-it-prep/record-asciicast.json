@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-04-29T14:55:04.124Z",
+  "result": {
+    "sessionId": "01KQCVRM4DVXT7SNARBG8YNFTC",
+    "format": "asciicast",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/release-vnvc/dogfood/20260429-release-it-prep/release-it-prep.cast",
+    "bytes": 24810,
+    "sha256": "aed0c0b52b98bc623fb11899ab34ed8adffb347bec72155a4c4aa733d3e270be",
+    "capturedAtSeq": 183,
+    "durationMs": 4459,
+    "metadata": {
+      "width": 120,
+      "height": 40,
+      "title": "01KQCVRM4DVXT7SNARBG8YNFTC",
+      "timestamp": 1777474491,
+      "outputEventCount": 182,
+      "resizeEventCount": 0,
+      "markerCount": 0
+    }
+  }
+}

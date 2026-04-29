@@ -87,100 +87,111 @@ That command produces the same tarball, checksum, and metadata shape that the Gi
 
 ## Release flow overview
 
-Because `main` is pull-request-only, the correct release flow is:
+Because `main` is pull-request-only, the release process has three named parts:
 
-1. create a release branch from `main`,
-2. bump the version **without creating a tag yet**,
-3. open and merge a PR,
-4. tag the merged `main` commit,
-5. let the `Release` workflow publish the GitHub Release assets and npm package.
+1. **Release Prep Workflow**: prepare a reviewable release branch and one local release-prep commit.
+2. **Release Finalization Step**: after the release PR merges, create and push the matching annotated release tag from clean, synced `main`.
+3. **Publish Pipeline**: let the tag-triggered `Release` workflow publish GitHub assets and npm.
 
 Do **not** run `npm version ...` on `main` and then push `HEAD --follow-tags`; GitHub will reject the protected-branch push but still accept the tag, which can start a release from an unmerged commit.
 
+The primary commands are project-owned wrappers:
+
+```bash
+npm run release:prep -- --version <exact-semver> --changelog local|ci
+npm run release:finalize
+```
+
+`release-it` is an implementation detail of the prep command only. Do not call raw `release-it` for agent-tty releases.
+
 ## Prepare the version-bump PR
 
-Start from an up-to-date `main` checkout:
+Start from a clean, up-to-date `main` checkout:
 
 ```bash
 git checkout main
 git pull origin main
 ```
 
-### Stable release examples
+Choose the exact release version. Increment aliases such as `patch`, `prepatch`, and `prerelease` are intentionally not part of the first scripted workflow; pass the exact semantic version instead.
 
-Create a release branch and bump the version **without tagging**:
+Stable release example:
 
 ```bash
-git switch -c release/0.1.1
-npm version patch --no-git-tag-version
+npm run release:prep -- --version 0.1.1 --changelog ci
 ```
 
-You can also choose the exact stable version explicitly:
+Prerelease example:
 
 ```bash
-npm version 0.1.1 --no-git-tag-version
-```
-
-### Prerelease examples
-
-First beta on the next patch line:
-
-```bash
-git switch -c release/0.1.1-beta.0
-npm version prepatch --preid beta --no-git-tag-version
-```
-
-Next beta on the same line:
-
-```bash
-npm version prerelease --preid beta --no-git-tag-version
-```
-
-Release candidate with an exact version:
-
-```bash
-npm version 0.1.1-rc.0 --no-git-tag-version
+npm run release:prep -- --version 0.1.1-beta.0 --changelog ci
 ```
 
 Versions containing a hyphen, such as `-beta.0` or `-rc.0`, are published by the workflow as GitHub prereleases and published to the matching npm dist-tag (`beta`, `rc`, and so on).
 
-### Open the release PR
+### Changelog mode
 
-Release branches named `release/*` are watched by the `Release Changelog` workflow. The default path is to commit only the version bump, then let that workflow add `CHANGELOG.md` if needed:
+Use `--changelog ci` for the default maintainer path. The prep commit will contain only `package.json` and `package-lock.json`; the `Release Changelog` workflow will update `CHANGELOG.md` on the release branch when needed.
 
 ```bash
-git add package.json package-lock.json
-git commit -m "chore(release): <version>"
+npm run release:prep -- --version <version> --changelog ci
 ```
 
-When `package.json` changes the package version and `CHANGELOG.md` does not already contain that version, the workflow runs:
+Use `--changelog local` only when you want to inspect the Communique changelog before opening the PR and have the required local credentials/tooling available:
+
+```bash
+npm run release:prep -- --version <version> --changelog local
+```
+
+Local changelog generation requires either `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`; when using only `OPENAI_API_KEY`, set `COMMUNIQUE_MODEL`. It also requires `communique` on `PATH` and GitHub API auth through `GITHUB_TOKEN` or an authenticated `gh` session. If those prerequisites are unavailable, rerun with `--changelog ci`.
+
+Add `--verify` when you want the prep script to run the full local validation bar after creating the release-prep commit:
+
+```bash
+npm run release:prep -- --version <version> --changelog ci --verify
+```
+
+The prep script validates release-specific invariants, creates `release/<version>` locally, updates the version files through pinned release-it configuration, optionally updates `CHANGELOG.md`, stages only allowlisted release-prep files, and creates exactly one commit:
+
+```text
+chore(release): <version>
+```
+
+It does not push the branch or open the pull request. After it succeeds, push and open the PR with the commands printed by the script:
+
+```bash
+git push -u origin release/<version>
+gh pr create --base main --head release/<version> --title "chore(release): <version>"
+```
+
+Release branches named `release/*` are watched by the `Release Changelog` workflow. When `package.json` changes the package version and `CHANGELOG.md` does not already contain that version, the workflow runs:
 
 ```bash
 communique generate "v<version>" --changelog --repo coder/agent-tty
 ```
 
-and commits the resulting `CHANGELOG.md` update back to the release branch.
-When it pushes that bot commit, it dispatches the CI and skill-validation
-workflows for the updated release branch so protected-branch checks can run
-against the new head commit.
+and commits the resulting `CHANGELOG.md` update back to the release branch. When it pushes that bot commit, it dispatches the CI and skill-validation workflows for the updated release branch so protected-branch checks can run against the new head commit.
 
-If you want to inspect or update the changelog before opening the PR, run the same command locally after `npm version ... --no-git-tag-version` and include `CHANGELOG.md` in the release commit instead:
+### Manual prep fallback
+
+If the scripted prep path is blocked, use the manual fallback only from a clean, up-to-date `main` checkout:
 
 ```bash
-VERSION=$(node --input-type=module -e "import pkg from './package.json' with { type: 'json' }; process.stdout.write(pkg.version)")
-communique generate "v${VERSION}" --changelog --repo coder/agent-tty
+git switch -c release/<version>
+npm version <version> --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "chore(release): <version>"
+git push -u origin release/<version>
+gh pr create --base main --head release/<version> --title "chore(release): <version>"
+```
+
+For the local changelog variant, run Communique after `npm version ... --no-git-tag-version` and include `CHANGELOG.md` in the same commit:
+
+```bash
+communique generate "v<version>" --changelog --repo coder/agent-tty
 git add package.json package-lock.json CHANGELOG.md
-git commit -m "chore(release): ${VERSION}"
+git commit -m "chore(release): <version>"
 ```
-
-After committing either the default version bump or the local changelog variant:
-
-```bash
-git push -u origin <release-branch>
-gh pr create --base main --head <release-branch> --title "chore(release): <version>"
-```
-
-Run the normal PR checks, get approval as needed, and merge the PR.
 
 ## Wait for CI and merge the release PR
 
@@ -204,21 +215,21 @@ Use `--admin` sparingly and only after confirming the required release checks su
 
 ## Tag the merged `main` commit
 
-After the release PR has merged:
+After the release PR has merged, use the Release Finalization Step from clean, synced `main`:
 
 ```bash
 git checkout main
 git pull origin main
-git tag -a vX.Y.Z -m "vX.Y.Z"
-git push origin vX.Y.Z
+npm run release:finalize
 ```
 
-For prereleases, use the full prerelease tag name, for example:
+Add `--verify` when you want to run the full local validation bar immediately before tagging:
 
 ```bash
-git tag -a v0.1.1-beta.0 -m "v0.1.1-beta.0"
-git push origin v0.1.1-beta.0
+npm run release:finalize -- --verify
 ```
+
+The finalize script verifies that `package.json` and `package-lock.json` agree, derives the release tag as `v${package.json.version}`, rejects pre-existing local or remote tags, creates an annotated tag, and pushes only that tag.
 
 The tag must match `package.json` exactly:
 
@@ -229,6 +240,16 @@ or:
 
 - `package.json`: `0.1.1-beta.0`
 - tag: `v0.1.1-beta.0`
+
+### Manual tag fallback
+
+If the scripted finalization path is blocked after the release PR has merged, run the equivalent manual commands from clean, synced `main`:
+
+```bash
+VERSION=$(node --input-type=module -e "import pkg from './package.json' with { type: 'json' }; process.stdout.write(pkg.version)")
+git tag -a "v${VERSION}" -m "v${VERSION}"
+git push origin "v${VERSION}"
+```
 
 ### GitHub CLI alternative: create the tag and release in one step
 
@@ -339,16 +360,31 @@ npm install -g --prefix "$INSTALL_PREFIX" "$DOWNLOAD_DIR/$RELEASE_TGZ"
 For private releases, authenticated download is the expected verification route.
 If you are testing a public release and the direct asset URL is reachable in your environment, you can also verify the hosted install path directly with `npm install -g <release-asset-url>`.
 
-## Recover from an accidental tag push
+## Failure and recovery
 
-If you accidentally push a release tag before the version-bump PR is merged:
+### Release prep fails after creating a branch
 
-1. cancel the in-progress workflow run,
-2. delete the remote tag,
-3. delete the local tag,
-4. redo the release through the PR-first flow above.
+If `npm run release:prep` fails after creating `release/<version>`, inspect the local branch before deleting anything:
 
-Example cleanup:
+```bash
+git status
+git log --oneline --decorate --max-count=5
+```
+
+If there is no work worth preserving, return to `main`, delete the local release branch, and rerun from clean, synced `main`:
+
+```bash
+git switch main
+git branch -D release/<version>
+git pull origin main
+npm run release:prep -- --version <version> --changelog ci
+```
+
+### Release finalization pushes a tag but the Release workflow fails before publishing
+
+If `npm run release:finalize` pushes the tag but the workflow fails before any GitHub Release or npm publish, fix the underlying issue on `main`. Delete and recreate the failed tag only if maintainers explicitly decide it is safe, and document the action.
+
+Example tag cleanup, only after that explicit decision:
 
 ```bash
 gh run cancel <run-id>
@@ -356,7 +392,25 @@ git push origin :refs/tags/vX.Y.Z
 git tag -d vX.Y.Z
 ```
 
-Then create or update the release branch PR, merge it, and tag the merged `main` commit.
+Then rerun the Release Finalization Step from clean, synced `main`.
+
+### npm publish succeeds
+
+If npm publish succeeds, never reuse the same version, even if later GitHub Release asset creation or verification fails. Repair forward with a new version, or complete missing release assets manually according to maintainer policy.
+
+### GitHub Release exists but npm publish fails
+
+If the GitHub Release exists but npm publish fails, treat the release as partial. Verify which assets and npm state exist, then follow maintainer policy before deleting assets, deleting tags, or retrying publish automation.
+
+### Accidental tag before merge
+
+If a release tag is accidentally pushed before the version-bump PR is merged, cancel the in-progress workflow, delete the remote tag, delete the local tag, and redo the release through the PR-first flow above.
+
+```bash
+gh run cancel <run-id>
+git push origin :refs/tags/vX.Y.Z
+git tag -d vX.Y.Z
+```
 
 ## Proof expectations
 

@@ -1,0 +1,164 @@
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrelease-vnvc[0m on [1;35m release-vnvc:main[0m [1;31m[$!+?⇣][0m is [1;38;5;208m📦 v0.1.1-beta.4[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kprintf 'DOGFOOD: release-it prep/finalize flow\n'
+[?2004lDOGFOOD: release-it prep/finalize flow
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrelease-vnvc[0m on [1;35m release-vnvc:main[0m [1;31m[$!+?⇣][0m is [1;38;5;208m📦 v0.1.1-beta.4[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kprintf 'source=%s\n' "$SOURCE_ROOT"
+[?2004lsource=/home/coder/.mux/src/agent-terminal/release-vnvc
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrelease-vnvc[0m on [1;35m release-vnvc:main[0m [1;31m[$!+?⇣][0m is [1;38;5;208m📦 v0.1.1-beta.4[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [KWORK_ROOT=$(mktemp -d)
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrelease-vnvc[0m on [1;35m release-vnvc:main[0m [1;31m[$!+?⇣][0m is [1;38;5;208m📦 v0.1.1-beta.4[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m printf 'work-root=%s\n' "$WORK_ROOT"
+[?2004lwork-root=/tmp/tmp.3okHVBj5Yw
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrelease-vnvc[0m on [1;35m release-vnvc:main[0m [1;31m[$!+?⇣][0m is [1;38;5;208m📦 v0.1.1-beta.4[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [KORIGIN="$WORK_ROOT/origin.git"
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrelease-vnvc[0m on [1;35m release-vnvc:main[0m [1;31m[$!+?⇣][0m is [1;38;5;208m📦 v0.1.1-beta.4[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [KREPO="$WORK_ROOT/repo"
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrelease-vnvc[0m on [1;35m release-vnvc:main[0m [1;31m[$!+?⇣][0m is [1;38;5;208m📦 v0.1.1-beta.4[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m git init -q --bare "$ORIGIN"
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrelease-vnvc[0m on [1;35m release-vnvc:main[0m [1;31m[$!+?⇣][0m is [1;38;5;208m📦 v0.1.1-beta.4[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kgit init -q -b main "$REPO"
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrelease-vnvc[0m on [1;35m release-vnvc:main[0m [1;31m[$!+?⇣][0m is [1;38;5;208m📦 v0.1.1-beta.4[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kcd "$REPO"
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m on [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m git remote add origin "$ORIGIN"
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m on [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kgit config user.name 'Agent TTY Dogfood'
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m on [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kgit config user.email 'agent-tty-dogfood@example.invalid'
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m on [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kexport SOURCE_ROOT
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m on [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m node --input-type=module <<'EOF_NODE'
+[?2004l[?2004h[90m∙[0m [Kimport { writeFileSync } from 'node:fs';
+[?2004l[?2004h[90m∙[0m [Kconst sourceRoot = process.env.SOURCE_ROOT;
+[?2004l[?2004h[90m∙[0m [Kif (!sourceRoot) throw new Error('SOURCE_ROOT missing');
+[?2004l[?2004h[90m∙[0m [KwriteFileSync('package.json', `${JSON.stringify({
+[?2004l[?2004h[90m∙[0m [K  name: 'agent-tty',
+[?2004l[?2004h[90m∙[0m [K  version: '0.1.1-beta.4',
+[?2004l[?2004h[90m∙[0m [K  type: 'module',
+[?2004l[?2004h[90m∙[0m [K  private: true,
+[?2004l[?2004h[90m∙[0m [K  scripts: {
+[?2004l[?2004h[90m∙[0m [K    'release:prep': `node ${sourceRoot}/scripts/release-prep.mjs`,
+[?2004l[?2004h[90m∙[0m [K    'release:finalize': `node ${sourceRoot}/scripts/release-finalize.mjs`,
+[?2004l[?2004h[90m∙[0m [K  },
+[?2004l[?2004h[90m∙[0m })}\n`);
+[?2004l[?2004h[90m∙[0m writeFileSync('package-lock.json', `${JSON.stringify({
+[?2004l[?2004h[90m∙[0m [K  name: 'agent-tty',
+[?2004l[?2004h[90m∙[0m [K  version: '0.1.1-beta.4',
+[?2004l[?2004h[90m∙[0m [K  lockfileVersion: 3,
+[?2004l[?2004h[90m∙[0m [K  requires: true,
+[?2004l[?2004h[90m∙[0m [K  packages: {
+[?2004l[?2004h[90m∙[0m [K    '': {
+[?2004l[?2004h[90m∙[0m       name: 'agent-tty',
+[?2004l[?2004h[90m∙[0m [K      version: '0.1.1-beta.4',
+[?2004l[?2004h[90m∙[0m [K      license: 'Apache-2.0',
+[?2004l[?2004h[90m∙[0m [K    },
+[?2004l[?2004h[90m∙[0m   },
+[?2004l[?2004h[90m∙[0m })}\n`);
+[?2004l[?2004h[90m∙[0m writeFileSync('CHANGELOG.md', '# Changelog\n');
+[?2004l[?2004h[90m∙[0m [KEOF_NODE
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m [1;31m[?][0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m git add package.json package-lock.json CHANGELOG.md
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m [1;31m[+][0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kgit commit -q -m init
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m git push -q -u origin main
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kprintf '\nDOGFOOD: initial graph\n'
+[?2004l
+DOGFOOD: initial graph
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kgit log --oneline --decorate --graph --all
+[?2004l* 2b347e2 (HEAD -> main, origin/main) init
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kprintf '\nDOGFOOD: release prep\n'
+[?2004l
+DOGFOOD: release prep
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Knpm run release:prep -- --version 999.0.0-dogfood.0 --changelog ci
+[?2004l
+> agent-tty@0.1.1-beta.4 release:prep
+> node /home/coder/.mux/src/agent-terminal/release-vnvc/scripts/release-prep.mjs --version 999.0.0-dogfood.0 --changelog ci
+
+Switched to a new branch 'release/999.0.0-dogfood.0'
+🚀 Let's release agent-tty (0.1.1-beta.4...999.0.0-dogfood.0)
+Changelog:
+* init (2b347e2)
+- npm version
+✔ npm version
+🏁 Done (in 0s.)
+[release/999.0.0-dogfood.0 c36f3e6] chore(release): 999.0.0-dogfood.0
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+Release prep commit created on release/999.0.0-dogfood.0.
+
+Next commands:
+git push -u origin release/999.0.0-dogfood.0
+gh pr create --base main --head release/999.0.0-dogfood.0 --title "chore(release): 999.0.0-dogfood.0"
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m release/999.0.0-dogfood.0[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kprintf '\nDOGFOOD: after prep\n'
+[?2004l
+DOGFOOD: after prep
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m release/999.0.0-dogfood.0[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kprintf 'branch=%s\n' "$(git branch --show-current)"
+[?2004lbranch=release/999.0.0-dogfood.0
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m release/999.0.0-dogfood.0[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kprintf 'status=%s\n' "$(git status --short)"
+[?2004lstatus=
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m release/999.0.0-dogfood.0[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kprintf 'commit-count=%s\n' "$(git rev-list --count origin/main..HEAD)"
+[?2004lcommit-count=1
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m release/999.0.0-dogfood.0[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kprintf 'changed-files=%s\n' "$(git diff --name-only HEAD^..HEAD | paste -sd ',' -)"
+[?2004lchanged-files=package-lock.json,package.json
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m release/999.0.0-dogfood.0[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Knode -e "const p=require('./package.json'); const l=require('./package-lock.json'); console.log('versiions=' + [p.version,l.version,l.packages[''].version].join(','))"
+[?2004lversions=999.0.0-dogfood.0,999.0.0-dogfood.0,999.0.0-dogfood.0
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m release/999.0.0-dogfood.0[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kprintf '\nDOGFOOD: merge prep to main and finalize\n'
+[?2004l
+DOGFOOD: merge prep to main and finalize
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m release/999.0.0-dogfood.0[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kgit push -q -u origin release/999.0.0-dogfood.0
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m release/999.0.0-dogfood.0[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kgit switch -q main
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m git merge -q --ff-only release/999.0.0-dogfood.0
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m [1;31m[⇡][0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kgit push -q origin main
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m npm run release:finalize
+[?2004l
+> agent-tty@999.0.0-dogfood.0 release:finalize
+> node /home/coder/.mux/src/agent-terminal/release-vnvc/scripts/release-finalize.mjs
+
+To /tmp/tmp.3okHVBj5Yw/origin.git
+ * [new tag]         v999.0.0-dogfood.0 -> v999.0.0-dogfood.0
+Release tag v999.0.0-dogfood.0 pushed.
+The tag-triggered Release workflow should now publish GitHub assets and npm.
+Watch the workflow and verify npm/GitHub release assets using docs/RELEASE-PROCESS.md.
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m printf '\nDOGFOOD: final graph\n'
+[?2004l
+DOGFOOD: final graph
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kgit log --oneline --decorate --graph --all
+[?2004l* c36f3e6 (HEAD -> main, tag: v999.0.0-dogfood.0, origin/release/999.0.0-dogfood.0, origin/main, release/999.0.0-dogfood.0) chore(release): 999.0.0-dogfood.0
+* 2b347e2 init
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kprintf '\nDOGFOOD: remote tags\n'
+[?2004l
+DOGFOOD: remote tags
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kgit ls-remote --tags origin
+[?2004l5ac7f56d043e731a52c26794c135fc951950602c	refs/tags/v999.0.0-dogfood.0
+c36f3e60c50f17bc608b5463fd028975f8869e90	refs/tags/v999.0.0-dogfood.0^{}
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [Kprintf '\nDOGFOOD: success\n'
+[?2004l
+DOGFOOD: success
+[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [K
+[?2004l[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m printf '\033\137\141\164\065\062\123\062\146\101\033\134'
+[?2004l_at52S2fA\[?2004h[1;33mcoder[0m in [1;2;32m🌐 aaaaaaa[0m in [1;36mrepo[0m on [1;35m main[0m via [1;32m v25.9.0 [0mon [1;34m☁️  [0m 
+[1;2;31m⬢ [Docker][0m [1;32mXY[0m [K[?2004l[?2004h[?2004l

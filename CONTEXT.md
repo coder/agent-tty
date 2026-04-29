@@ -57,6 +57,15 @@ A persisted JSON artifact containing exactly the **Snapshot Result** returned to
 The operation that derives a **Snapshot Result** from a **Semantic Snapshot** and records the matching **Snapshot Artifact**.
 _Avoid_: Renderer capture
 
+**Release Prep Workflow**:
+The maintainer-facing process for choosing the next release version and preparing release changes for review before they land on the default branch.
+
+**Release Finalization Step**:
+The post-merge process that creates and publishes the release tag from the default branch after release prep changes have landed.
+
+**Publish Pipeline**:
+The tag-triggered automation that validates, packages, and publishes a release after the **Release Finalization Step**.
+
 ## Relationships
 
 - A **Session** has exactly one **Session Status** at a time.
@@ -73,6 +82,10 @@ _Avoid_: Renderer capture
 - A **Waited Run** may produce one **Run Completion**, time out for its caller, or be interrupted by **Session** exit.
 - Caller timeout does not cancel the underlying **Run Completion**; it may still be observed later to keep internal completion bytes out of artifacts.
 - After **Session** exit, an unobserved **Run Completion** can no longer arrive.
+- A **Release Prep Workflow** produces local, reviewable release changes before any release tag exists.
+- A **Release Finalization Step** happens after the **Release Prep Workflow** has landed on the default branch.
+- A **Release Finalization Step** produces the release tag consumed by the **Publish Pipeline**.
+- A **Publish Pipeline** starts from the release tag and owns release packaging and publishing.
 
 ## Example dialogue
 

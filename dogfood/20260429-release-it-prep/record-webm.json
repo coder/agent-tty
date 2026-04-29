@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-04-29T14:55:13.425Z",
+  "result": {
+    "sessionId": "01KQCVRM4DVXT7SNARBG8YNFTC",
+    "format": "webm",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/release-vnvc/dogfood/20260429-release-it-prep/release-it-prep.webm",
+    "bytes": 762533,
+    "sha256": "12be4adba153df241aa7042e00a42853a08c8fe1d9dcafcee0ba8ac75b3d0b8f",
+    "capturedAtSeq": 183,
+    "durationMs": 4459,
+    "metadata": {
+      "width": 120,
+      "height": 40,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d",
+      "timingMode": "accelerated",
+      "rendererBackend": "ghostty-web",
+      "outputEventCount": 182,
+      "resizeEventCount": 0
+    }
+  }
+}

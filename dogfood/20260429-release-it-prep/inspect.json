@@ -1,0 +1,60 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-04-29T14:55:14.466Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KQCVRM4DVXT7SNARBG8YNFTC",
+      "createdAt": "2026-04-29T14:54:50.511Z",
+      "updatedAt": "2026-04-29T14:54:51.225Z",
+      "status": "running",
+      "command": ["/bin/bash"],
+      "cwd": "/home/coder/.mux/src/agent-terminal/release-vnvc",
+      "name": "release-it-prep-dogfood",
+      "shell": "/bin/bash",
+      "term": "xterm-256color",
+      "cols": 120,
+      "rows": 40,
+      "creationCols": 120,
+      "creationRows": 40,
+      "hostPid": 3293408,
+      "childPid": 3293792,
+      "exitCode": null,
+      "exitSignal": null
+    },
+    "eventCount": 184,
+    "uptime": 23946,
+    "lastEventSeq": 183,
+    "terminationCategory": "running",
+    "artifacts": {
+      "total": 4,
+      "byKind": {
+        "snapshot": 1,
+        "screenshot": 1,
+        "recording": 1,
+        "video": 1
+      },
+      "missingCount": 2,
+      "health": "missing-artifacts",
+      "missing": [
+        {
+          "id": "01KQCVS1DRAQ3AMPMDC5ZYVWSZ",
+          "kind": "recording",
+          "filename": "release-it-prep.cast"
+        },
+        {
+          "id": "01KQCVSAGB599913MFE26T2Q0V",
+          "kind": "video",
+          "filename": "release-it-prep.webm"
+        }
+      ]
+    },
+    "usedOfflineReplay": false,
+    "rendererRuntime": {
+      "backend": "ghostty-web",
+      "mode": "live-host",
+      "status": "healthy"
+    }
+  }
+}

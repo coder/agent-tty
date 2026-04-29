@@ -25,6 +25,7 @@ Paths below are relative to the repository root.
 | Bundle                                         | Why it matters                                                                                                             |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `dogfood/20260326-week9-release-readiness/`    | Current release-signoff bundle for the `0.1.0` bar.                                                                        |
+| `dogfood/20260429-release-it-prep/`            | Disposable-origin proof for `release:prep` / `release:finalize` guardrails, screenshot, transcript, and WebM recording.    |
 | `dogfood/20260410-release-tarball/`            | Local proof of the shared release tarball packer, checksum, and install flow used by the GitHub release workflow.          |
 | `dogfood/20260325-week8-contract-locks/`       | Contract-lock and reporting review evidence.                                                                               |
 | `dogfood/20260325-week8-bundle-validation/`    | Validation of proof-bundle conventions.                                                                                    |

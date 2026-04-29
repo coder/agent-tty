@@ -1,0 +1,20 @@
+{
+  "git": {
+    "commit": false,
+    "tag": false,
+    "push": false,
+    "requireBranch": false,
+    "requireCleanWorkingDir": false,
+    "requireCommits": false,
+    "requireUpstream": false
+  },
+  "npm": {
+    "publish": false
+  },
+  "github": {
+    "release": false
+  },
+  "gitlab": {
+    "release": false
+  }
+}
