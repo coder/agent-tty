@@ -305,6 +305,24 @@ describe('RunCompletionCoordinator', () => {
     await expect(waitPromise).resolves.toEqual({ kind: 'completed', seq: 100 });
   });
 
+  it('flushes pending partial postamble echo bytes as output on exit', async () => {
+    const { appender, events } = createFakeAppender();
+    const coordinator = new RunCompletionCoordinator(appender);
+    const prepared = coordinator.prepareWaitedRun();
+    const completion = coordinator.registerWaitedRun({
+      marker: prepared.marker,
+      inputRunSeq: 19,
+    });
+    const partialPostamble = completion.postamble.slice(0, 8);
+
+    await coordinator.ingestPtyData(partialPostamble);
+    expect(events).toEqual([]);
+
+    await coordinator.flushPtyDataOnExit();
+
+    expect(events).toEqual([{ type: 'output', data: partialPostamble }]);
+  });
+
   it('flushes pending non-completed sentinel bytes as output on exit', async () => {
     const { appender, events } = createFakeAppender();
     const coordinator = new RunCompletionCoordinator(appender);

@@ -139,7 +139,7 @@ export class RunCompletionCoordinator {
     );
     invariant(
       typeof appender.appendRunComplete === 'function',
-      'run-completion completion appender must be a function',
+      'run_complete event appender must be a function',
     );
 
     this.#appender = appender;
@@ -259,7 +259,7 @@ export class RunCompletionCoordinator {
     assertRunMarker(marker);
     invariant(
       Number.isInteger(timeoutMs) && timeoutMs > 0,
-      'timeoutMs must be positive',
+      'timeoutMs must be a positive integer',
     );
 
     const { promise, reject, resolve } =
