@@ -52,11 +52,11 @@ interface ActivePostambleEcho {
   echoes: readonly string[];
 }
 
-function assertRunMarker(marker: string): void {
+export function assertRunMarker(marker: string): void {
   invariant(typeof marker === 'string', 'marker must be a string');
   invariant(
     RUN_MARKER_PATTERN.test(marker),
-    'run marker must match expected format',
+    'run marker must match expected format (__AT_MARKER_<32hex>__)',
   );
 }
 

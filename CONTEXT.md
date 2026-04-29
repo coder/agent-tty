@@ -23,6 +23,14 @@ _Avoid_: Finished session
 **Commandable Session**:
 A **Session** that can still accept user input and control commands.
 
+**Waited Run**:
+A run request where the caller asks `agent-tty` to wait until the command's completion signal is observed.
+_Avoid_: Blocking run
+
+**Run Completion**:
+The host-observed end point for a **Waited Run**, distinct from **Session** exit and caller timeout.
+_Avoid_: Command finish, session completion
+
 **Live Host Eligible Session**:
 A **Session** where callers should ask the live session host for fresh state.
 
@@ -61,6 +69,10 @@ _Avoid_: Renderer capture
 - An **Offline Replay Eligible Session** is reconstructed from its persisted **Event Log** and manifest.
 - A **Snapshot Result** is derived from exactly one **Semantic Snapshot**.
 - A **Snapshot Artifact** contains exactly the **Snapshot Result** emitted to the caller.
+- A **Commandable Session** can accept a **Waited Run**.
+- A **Waited Run** may produce one **Run Completion**, time out for its caller, or be interrupted by **Session** exit.
+- Caller timeout does not cancel the underlying **Run Completion**; it may still be observed later to keep internal completion bytes out of artifacts.
+- After **Session** exit, an unobserved **Run Completion** can no longer arrive.
 
 ## Example dialogue
 
@@ -69,6 +81,9 @@ _Avoid_: Renderer capture
 
 > **Dev:** "Does **Snapshot Capture** ask the renderer for terminal state?"
 > **Domain expert:** "No — the renderer first produces a **Semantic Snapshot**; **Snapshot Capture** derives and records the public result from that snapshot."
+
+> **Dev:** "If a **Waited Run** times out, did the command finish?"
+> **Domain expert:** "No. The caller stopped waiting, but the **Run Completion** may still arrive later and must still be recognized."
 
 ## Flagged ambiguities
 
