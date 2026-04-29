@@ -58,6 +58,7 @@ describe('snapshot capture', () => {
       }),
     ).rejects.toMatchObject({
       code: 'PROTOCOL_ERROR',
+      message: 'Snapshot result validation failed.',
       details: { issues: expect.any(Array) as unknown },
     });
 
