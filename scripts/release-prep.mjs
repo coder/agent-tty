@@ -60,7 +60,10 @@ export function releasePrep(argv = process.argv.slice(2), env = process.env) {
     ]);
     stageFiles(root, [...VERSION_FILES, 'CHANGELOG.md']);
   } else {
-    const changedFiles = assertAllowedChangedFiles(root, VERSION_FILES);
+    const changedFiles = assertAllowedChangedFiles(root, [
+      ...VERSION_FILES,
+      'CHANGELOG.md',
+    ]);
     if (changedFiles.includes('CHANGELOG.md')) {
       throw new Error('CHANGELOG.md must not change when using --changelog ci');
     }

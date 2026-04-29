@@ -1,7 +1,14 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -149,6 +156,34 @@ function withoutLocalChangelogCredentials(): NodeJS.ProcessEnv {
   return env;
 }
 
+function withFakeMise(root: string): {
+  env: NodeJS.ProcessEnv;
+  marker: string;
+} {
+  const bin = join(root, 'bin');
+  const marker = join(root, 'mise-called.txt');
+  mkdirSync(bin);
+  const misePath = join(bin, 'mise');
+  writeFileSync(
+    misePath,
+    [
+      '#!/usr/bin/env sh',
+      `printf '%s\n' "$*" >> '${marker}'`,
+      'exit 0',
+      '',
+    ].join('\n'),
+  );
+  chmodSync(misePath, 0o755);
+
+  return {
+    env: {
+      ...process.env,
+      PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
+    },
+    marker,
+  };
+}
+
 describe('release scripts', () => {
   afterEach(() => {
     while (tempRoots.length > 0) {
@@ -230,6 +265,189 @@ describe('release scripts', () => {
     expect(runGit(repo, ['branch', '--show-current'])).toBe('main');
   });
 
+  it('refuses to prepare a release from a non-main branch', () => {
+    const { repo } = createTempRepo();
+    runGit(repo, ['switch', '-c', 'feature/not-main']);
+
+    const result = runReleasePrep(repo, [
+      '--version',
+      '0.1.1-beta.5',
+      '--changelog',
+      'ci',
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('release automation must run from main');
+    expect(runGit(repo, ['branch', '--show-current'])).toBe('feature/not-main');
+  });
+
+  it('refuses to prepare a release when local main is stale', () => {
+    const { repo } = createTempRepo();
+    writeFileSync(join(repo, 'remote-only.txt'), 'remote change\n');
+    runGit(repo, ['add', 'remote-only.txt']);
+    runGit(repo, ['commit', '-q', '-m', 'advance remote']);
+    runGit(repo, ['push', '-q', 'origin', 'main']);
+    runGit(repo, ['reset', '--hard', 'HEAD~1']);
+
+    const result = runReleasePrep(repo, [
+      '--version',
+      '0.1.1-beta.5',
+      '--changelog',
+      'ci',
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'local main must be up to date with origin/main',
+    );
+    expect(runGit(repo, ['branch', '--show-current'])).toBe('main');
+  });
+
+  it('refuses to prepare a release when the local release branch already exists', () => {
+    const { repo } = createTempRepo();
+    runGit(repo, ['branch', 'release/0.1.1-beta.5']);
+
+    const result = runReleasePrep(repo, [
+      '--version',
+      '0.1.1-beta.5',
+      '--changelog',
+      'ci',
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'local release branch already exists: release/0.1.1-beta.5',
+    );
+    expect(runGit(repo, ['branch', '--show-current'])).toBe('main');
+  });
+
+  it('refuses to prepare a release when the remote release branch already exists', () => {
+    const { repo } = createTempRepo();
+    runGit(repo, ['branch', 'release/0.1.1-beta.5']);
+    runGit(repo, ['push', '-q', 'origin', 'release/0.1.1-beta.5']);
+    runGit(repo, ['branch', '-D', 'release/0.1.1-beta.5']);
+
+    const result = runReleasePrep(repo, [
+      '--version',
+      '0.1.1-beta.5',
+      '--changelog',
+      'ci',
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'remote release branch already exists: origin/release/0.1.1-beta.5',
+    );
+    expect(runGit(repo, ['branch', '--show-current'])).toBe('main');
+  });
+
+  it('refuses same or lower release prep target versions', () => {
+    const sameVersionRepo = createTempRepo();
+    const sameResult = runReleasePrep(sameVersionRepo.repo, [
+      '--version',
+      '0.1.1-beta.4',
+      '--changelog',
+      'ci',
+    ]);
+
+    expect(sameResult.status).toBe(1);
+    expect(sameResult.stderr).toContain(
+      'target version 0.1.1-beta.4 matches current package version',
+    );
+    expect(runGit(sameVersionRepo.repo, ['branch', '--show-current'])).toBe(
+      'main',
+    );
+
+    const lowerVersionRepo = createTempRepo();
+    const lowerResult = runReleasePrep(lowerVersionRepo.repo, [
+      '--version',
+      '0.1.1-beta.3',
+      '--changelog',
+      'ci',
+    ]);
+
+    expect(lowerResult.status).toBe(1);
+    expect(lowerResult.stderr).toContain(
+      'target version 0.1.1-beta.3 must be greater than current package version 0.1.1-beta.4',
+    );
+    expect(runGit(lowerVersionRepo.repo, ['branch', '--show-current'])).toBe(
+      'main',
+    );
+  });
+
+  it('handles semver prerelease edge precedence before release prep side effects', () => {
+    const alphaRepo = createTempRepo('1.0.0-alpha.1');
+    const alphaResult = runReleasePrep(alphaRepo.repo, [
+      '--version',
+      '1.0.0-alpha',
+      '--changelog',
+      'ci',
+    ]);
+
+    expect(alphaResult.status).toBe(1);
+    expect(alphaResult.stderr).toContain(
+      'target version 1.0.0-alpha must be greater than current package version 1.0.0-alpha.1',
+    );
+    expect(runGit(alphaRepo.repo, ['branch', '--show-current'])).toBe('main');
+
+    const numericRepo = createTempRepo('1.0.0-alpha.10');
+    const numericResult = runReleasePrep(numericRepo.repo, [
+      '--version',
+      '1.0.0-alpha.2',
+      '--changelog',
+      'ci',
+    ]);
+
+    expect(numericResult.status).toBe(1);
+    expect(numericResult.stderr).toContain(
+      'target version 1.0.0-alpha.2 must be greater than current package version 1.0.0-alpha.10',
+    );
+    expect(runGit(numericRepo.repo, ['branch', '--show-current'])).toBe('main');
+
+    const stableRepo = createTempRepo('1.0.0');
+    const stableResult = runReleasePrep(stableRepo.repo, [
+      '--version',
+      '1.0.0-rc.1',
+      '--changelog',
+      'ci',
+    ]);
+
+    expect(stableResult.status).toBe(1);
+    expect(stableResult.stderr).toContain(
+      'target version 1.0.0-rc.1 must be greater than current package version 1.0.0',
+    );
+    expect(runGit(stableRepo.repo, ['branch', '--show-current'])).toBe('main');
+
+    const buildMetadataRepo = createTempRepo();
+    const buildMetadataResult = runReleasePrep(buildMetadataRepo.repo, [
+      '--version',
+      '0.1.1-beta.5+build.1',
+      '--changelog',
+      'ci',
+    ]);
+
+    expect(buildMetadataResult.status).toBe(1);
+    expect(buildMetadataResult.stderr).toContain('contains build metadata');
+    expect(runGit(buildMetadataRepo.repo, ['branch', '--show-current'])).toBe(
+      'main',
+    );
+  });
+
+  it('runs verification during release prep when requested', () => {
+    const { root, repo } = createTempRepo();
+    const { env, marker } = withFakeMise(root);
+
+    const result = runReleasePrep(
+      repo,
+      ['--version', '0.1.1-beta.5', '--changelog', 'ci', '--verify'],
+      env,
+    );
+
+    expect(result.status).toBe(0);
+    expect(readFileSync(marker, 'utf8')).toBe('run ci\n');
+    expect(runGit(repo, ['status', '--short'])).toBe('');
+  });
+
   it('finalizes by creating and pushing the exact release tag', () => {
     const { repo } = createTempRepo('0.1.1-beta.5');
 
@@ -246,6 +464,52 @@ describe('release scripts', () => {
         'refs/tags/v0.1.1-beta.5',
       ]),
     ).toContain('refs/tags/v0.1.1-beta.5');
+  });
+
+  it('refuses to finalize from a dirty tree', () => {
+    const { repo } = createTempRepo('0.1.1-beta.5');
+    writeFileSync(join(repo, 'CHANGELOG.md'), '# Changelog\n\nDirty work\n');
+
+    const result = runReleaseFinalize(repo);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('working tree must be clean');
+    expect(runGit(repo, ['tag', '--list'])).toBe('');
+  });
+
+  it('refuses to finalize from a non-main branch', () => {
+    const { repo } = createTempRepo('0.1.1-beta.5');
+    runGit(repo, ['switch', '-c', 'feature/not-main']);
+
+    const result = runReleaseFinalize(repo);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('release automation must run from main');
+    expect(runGit(repo, ['tag', '--list'])).toBe('');
+  });
+
+  it('refuses to finalize when the local release tag already exists', () => {
+    const { repo } = createTempRepo('0.1.1-beta.5');
+    runGit(repo, ['tag', '-a', 'v0.1.1-beta.5', '-m', 'v0.1.1-beta.5']);
+
+    const result = runReleaseFinalize(repo);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'local release tag already exists: v0.1.1-beta.5',
+    );
+    expect(runGit(repo, ['ls-remote', '--tags', 'origin'])).toBe('');
+  });
+
+  it('runs verification during release finalization when requested', () => {
+    const { root, repo } = createTempRepo('0.1.1-beta.5');
+    const { env, marker } = withFakeMise(root);
+
+    const result = runReleaseFinalize(repo, ['--verify'], env);
+
+    expect(result.status).toBe(0);
+    expect(readFileSync(marker, 'utf8')).toBe('run ci\n');
+    expect(runGit(repo, ['tag', '--list'])).toBe('v0.1.1-beta.5');
   });
 
   it('refuses to finalize when the remote release tag already exists', () => {

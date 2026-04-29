@@ -13,7 +13,6 @@ import {
   exitWithError,
   parseFinalizeArgs,
   parseSemver,
-  readPackageVersions,
   runGit,
   runVerification,
 } from './release-helpers.mjs';
