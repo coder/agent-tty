@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 
+import type { SemanticSnapshot } from '../src/renderer/types.js';
+
 import { afterEach, expect } from 'vitest';
 
 const temporaryDirectories: string[] = [];
@@ -63,6 +65,22 @@ export interface EventRecord {
 export interface WaitResult {
   exitCode?: number;
   timedOut: boolean;
+}
+
+export function createTestSemanticSnapshot(
+  overrides: Partial<SemanticSnapshot> = {},
+): SemanticSnapshot {
+  return {
+    sessionId: 'session-01',
+    capturedAtSeq: 5,
+    cols: 80,
+    rows: 24,
+    cursorRow: 0,
+    cursorCol: 0,
+    isAltScreen: false,
+    visibleLines: [{ row: 0, text: 'offline output' }],
+    ...overrides,
+  };
 }
 
 export async function createTemporarySessionDir(

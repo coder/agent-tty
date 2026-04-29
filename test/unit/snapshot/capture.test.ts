@@ -2,9 +2,10 @@ import { access, mkdir, readFile } from 'node:fs/promises';
 
 import { describe, expect, it } from 'vitest';
 
-import { createTemporarySessionDir } from '../../helpers.js';
-
-import type { SemanticSnapshot } from '../../../src/renderer/types.js';
+import {
+  createTemporarySessionDir,
+  createTestSemanticSnapshot,
+} from '../../helpers.js';
 
 import {
   captureSnapshotResult,
@@ -17,22 +18,6 @@ import {
   snapshotFilename,
 } from '../../../src/storage/artifactPaths.js';
 
-function createSemanticSnapshot(
-  overrides: Partial<SemanticSnapshot> = {},
-): SemanticSnapshot {
-  return {
-    sessionId: 'session-01',
-    capturedAtSeq: 5,
-    cols: 80,
-    rows: 24,
-    cursorRow: 1,
-    cursorCol: 2,
-    isAltScreen: false,
-    visibleLines: [{ row: 0, text: 'visible output' }],
-    ...overrides,
-  };
-}
-
 async function createSessionDir(sessionId = 'session-01'): Promise<string> {
   return await createTemporarySessionDir(
     'agent-tty-snapshot-capture-',
@@ -42,7 +27,7 @@ async function createSessionDir(sessionId = 'session-01'): Promise<string> {
 
 describe('snapshot capture', () => {
   it('creates structured snapshot results without changing the semantic snapshot shape', () => {
-    const snapshot = createSemanticSnapshot({
+    const snapshot = createTestSemanticSnapshot({
       cells: [
         {
           lineNumber: 0,
@@ -59,7 +44,7 @@ describe('snapshot capture', () => {
 
   it('fails validation before writing snapshot artifacts', async () => {
     const sessionDirectory = await createSessionDir();
-    const invalidSnapshot = createSemanticSnapshot({
+    const invalidSnapshot = createTestSemanticSnapshot({
       rows: 0,
     });
 
@@ -93,7 +78,7 @@ describe('snapshot capture', () => {
       captureSnapshotResult({
         sessionDir: sessionDirectory,
         format: 'structured',
-        snapshot: createSemanticSnapshot(),
+        snapshot: createTestSemanticSnapshot(),
         rendererBackend: 'test-backend',
         expectedSessionId: 'other-session',
       }),
@@ -118,7 +103,7 @@ describe('snapshot capture', () => {
 
   it('rejects inconsistent artifact persistence inputs before writing', async () => {
     const sessionDirectory = await createSessionDir();
-    const snapshot = createSemanticSnapshot();
+    const snapshot = createTestSemanticSnapshot();
     const result = createSnapshotResult(snapshot, 'structured');
 
     await expect(
@@ -138,7 +123,7 @@ describe('snapshot capture', () => {
 
   it('does not append a manifest entry when artifact writing fails', async () => {
     const sessionDirectory = await createSessionDir();
-    const snapshot = createSemanticSnapshot();
+    const snapshot = createTestSemanticSnapshot();
     const result = createSnapshotResult(snapshot, 'structured');
     const filename = snapshotFilename(5, 'structured');
     await mkdir(artifactPath(sessionDirectory, filename), { recursive: true });
@@ -167,7 +152,7 @@ describe('snapshot capture', () => {
       captureSnapshotResult({
         sessionDir: sessionDirectory,
         format: 'structured',
-        snapshot: createSemanticSnapshot(),
+        snapshot: createTestSemanticSnapshot(),
         rendererBackend: '',
       }),
     ).rejects.toThrow(/rendererBackend must be a non-empty string/u);
@@ -181,7 +166,7 @@ describe('snapshot capture', () => {
 
   it('persists structured cells and omits scrollback metadata when scrollback is absent', async () => {
     const sessionDirectory = await createSessionDir();
-    const snapshot = createSemanticSnapshot({
+    const snapshot = createTestSemanticSnapshot({
       cells: [
         {
           lineNumber: 0,
@@ -214,14 +199,14 @@ describe('snapshot capture', () => {
       rendererBackend: 'test-backend',
       cols: 80,
       rows: 24,
-      cursorRow: 1,
-      cursorCol: 2,
+      cursorRow: 0,
+      cursorCol: 0,
     });
   });
 
   it('captures text snapshot results without scrollback metadata when scrollback is absent', async () => {
     const sessionDirectory = await createSessionDir();
-    const snapshot = createSemanticSnapshot({
+    const snapshot = createTestSemanticSnapshot({
       visibleLines: [
         { row: 0, text: 'first visible line' },
         { row: 1, text: 'second visible line' },
@@ -242,8 +227,8 @@ describe('snapshot capture', () => {
       capturedAtSeq: 5,
       cols: 80,
       rows: 24,
-      cursorRow: 1,
-      cursorCol: 2,
+      cursorRow: 0,
+      cursorCol: 0,
       text: 'first visible line\nsecond visible line',
     });
 
@@ -259,14 +244,14 @@ describe('snapshot capture', () => {
       rendererBackend: 'test-backend',
       cols: 80,
       rows: 24,
-      cursorRow: 1,
-      cursorCol: 2,
+      cursorRow: 0,
+      cursorCol: 0,
     });
   });
 
   it('captures text snapshot results and persists matching artifacts with scrollback metadata', async () => {
     const sessionDirectory = await createSessionDir();
-    const snapshot = createSemanticSnapshot({
+    const snapshot = createTestSemanticSnapshot({
       scrollbackLines: [
         { row: 0, text: 'scrolled' },
         { row: 1, text: 'away' },
@@ -288,8 +273,8 @@ describe('snapshot capture', () => {
       capturedAtSeq: 5,
       cols: 80,
       rows: 24,
-      cursorRow: 1,
-      cursorCol: 2,
+      cursorRow: 0,
+      cursorCol: 0,
       text: 'scrolled\naway\nvisible output',
     });
 
@@ -310,8 +295,8 @@ describe('snapshot capture', () => {
         rendererBackend: 'test-backend',
         cols: 80,
         rows: 24,
-        cursorRow: 1,
-        cursorCol: 2,
+        cursorRow: 0,
+        cursorCol: 0,
         scrollbackLineCount: 2,
       },
     });
