@@ -528,12 +528,6 @@ describe('wait command', () => {
   });
 
   it('rejects unsafe regexes before contacting the host or offline replay', async () => {
-    mocks.sendRpc.mockRejectedValue(
-      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
-        message: 'Session host is unreachable.',
-      }),
-    );
-
     const promise = runWaitCommand(createOptions({ regex: '(a+)+' }));
 
     await expect(promise).rejects.toMatchObject({
@@ -548,12 +542,6 @@ describe('wait command', () => {
   });
 
   it('rejects malformed regexes before contacting the host or offline replay', async () => {
-    mocks.sendRpc.mockRejectedValue(
-      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
-        message: 'Session host is unreachable.',
-      }),
-    );
-
     const promise = runWaitCommand(createOptions({ regex: '[' }));
 
     await expect(promise).rejects.toMatchObject({

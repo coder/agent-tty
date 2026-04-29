@@ -837,7 +837,7 @@ export async function runHost(sessionId: string): Promise<void> {
         rendererName: requestedRendererName,
       } = params as WaitForRenderParams;
 
-      const waitCondition = prepareRenderWaitCondition({
+      const preparedCondition = prepareRenderWaitCondition({
         text,
         regex,
         screenStableMs,
@@ -894,9 +894,13 @@ export async function runHost(sessionId: string): Promise<void> {
                 lastTextChangeAt = now;
               }
 
-              const match = matchRenderWaitSnapshot(waitCondition, snapshot, {
-                stableForMs: now - lastTextChangeAt,
-              });
+              const match = matchRenderWaitSnapshot(
+                preparedCondition,
+                snapshot,
+                {
+                  stableForMs: now - lastTextChangeAt,
+                },
+              );
 
               if (match.matched) {
                 clearInterval(checkInterval);

@@ -28,7 +28,7 @@ export interface PreparedRenderWaitCondition extends RenderWaitCondition {
   readonly compiledRegex?: RegExp;
 }
 
-export interface RenderWaitSnapshotMatch {
+interface RenderWaitSnapshotMatch {
   readonly matched: boolean;
   readonly textMatched: boolean;
   readonly cursorMatched: boolean;
@@ -150,6 +150,10 @@ export function safeRegexExec(
   return regex.exec(limitedText);
 }
 
+/**
+ * Validate a render-wait condition and compile its regex once for repeated
+ * snapshot matching. User-invalid conditions throw CliError(INVALID_INPUT).
+ */
 export function prepareRenderWaitCondition(
   condition: RenderWaitCondition,
 ): PreparedRenderWaitCondition {
@@ -179,7 +183,7 @@ export function prepareRenderWaitCondition(
     (text.length < 1 || text.length > MAX_WAIT_FOR_RENDER_TEXT_LENGTH)
   ) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-      message: `text must be between 1 and ${String(MAX_WAIT_FOR_RENDER_TEXT_LENGTH)} characters`,
+      message: `Wait text must be between 1 and ${String(MAX_WAIT_FOR_RENDER_TEXT_LENGTH)} characters`,
     });
   }
 
@@ -187,7 +191,7 @@ export function prepareRenderWaitCondition(
   if (regex !== undefined) {
     if (regex.length < 1 || regex.length > MAX_WAIT_FOR_RENDER_REGEX_LENGTH) {
       throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-        message: `regex pattern must be between 1 and ${String(MAX_WAIT_FOR_RENDER_REGEX_LENGTH)} characters`,
+        message: `Wait regex pattern must be between 1 and ${String(MAX_WAIT_FOR_RENDER_REGEX_LENGTH)} characters`,
       });
     }
 
@@ -244,11 +248,26 @@ export function prepareRenderWaitCondition(
   };
 }
 
+/**
+ * Evaluate one SemanticSnapshot against a prepared condition without tracking
+ * time internally. Omit stableForMs when elapsed screen stability cannot be
+ * proven; contentAndCursorMatched lets offline fallback distinguish that from
+ * content/cursor mismatches.
+ */
 export function matchRenderWaitSnapshot(
   condition: PreparedRenderWaitCondition,
   snapshot: SemanticSnapshot,
   options: MatchOptions = {},
 ): RenderWaitSnapshotMatch {
+  invariant(
+    condition.regex === undefined || condition.compiledRegex instanceof RegExp,
+    'PreparedRenderWaitCondition with regex must have compiledRegex; use prepareRenderWaitCondition()',
+  );
+  invariant(
+    condition.compiledRegex === undefined ||
+      (!condition.compiledRegex.global && !condition.compiledRegex.sticky),
+    'prepared regex must not use stateful global or sticky flags',
+  );
   invariant(
     Array.isArray(snapshot.visibleLines),
     'snapshot visibleLines must exist',

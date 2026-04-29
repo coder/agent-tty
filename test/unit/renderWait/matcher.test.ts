@@ -108,6 +108,47 @@ describe('render wait matcher', () => {
     ).toThrow(expect.objectContaining({ code: ERROR_CODES.INVALID_INPUT }));
   });
 
+  it.each([
+    [{}, 'at least one of'],
+    [{ screenStableMs: -1 }, 'positive integer'],
+    [{ cursorRow: -1 }, 'non-negative integer'],
+    [{ cursorCol: -1 }, 'non-negative integer'],
+  ])('rejects invalid condition %j', (condition, expectedMessage) => {
+    expect(() => prepareRenderWaitCondition(condition)).toThrow(
+      expect.objectContaining({
+        code: ERROR_CODES.INVALID_INPUT,
+        message: expect.stringContaining(expectedMessage) as string,
+      }),
+    );
+  });
+
+  it('accepts text and regex boundary lengths', () => {
+    expect(() => prepareRenderWaitCondition({ text: 'a' })).not.toThrow();
+    expect(() =>
+      prepareRenderWaitCondition({ text: 'a'.repeat(1000) }),
+    ).not.toThrow();
+    expect(() => prepareRenderWaitCondition({ regex: 'a' })).not.toThrow();
+    expect(() =>
+      prepareRenderWaitCondition({ regex: 'a'.repeat(200) }),
+    ).not.toThrow();
+  });
+
+  it('fails fast when a prepared regex condition is malformed internally', () => {
+    const snapshot = createTestSemanticSnapshot({
+      visibleLines: [{ row: 0, text: 'not matching' }],
+    });
+
+    expect(() =>
+      matchRenderWaitSnapshot({ regex: 'matching' }, snapshot),
+    ).toThrow(/must have compiledRegex/u);
+    expect(() =>
+      matchRenderWaitSnapshot(
+        { regex: 'not', compiledRegex: /not/g },
+        snapshot,
+      ),
+    ).toThrow(/stateful global or sticky flags/u);
+  });
+
   it('searches regexes only against the first 50KB of visible text', () => {
     const underLimitText = `${'a'.repeat(100)}Z`;
     const withinLimitBoundaryText = `${'a'.repeat(MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH - 1)}Z`;
