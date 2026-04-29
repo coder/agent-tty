@@ -5,24 +5,25 @@ import {
   constants as fsConstants,
   existsSync,
   readFileSync,
+  realpathSync,
 } from 'node:fs';
 import { delimiter, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-export const toolRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const projectRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 const SEMVER_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$/u;
 const NUMERIC_IDENTIFIER_PATTERN = /^(0|[1-9]\d*)$/u;
 const RELEASE_IT_BIN = join(
-  toolRoot,
+  projectRoot,
   'node_modules',
   'release-it',
   'bin',
   'release-it.js',
 );
-const RELEASE_IT_CONFIG = join(toolRoot, '.release-it.json');
+const RELEASE_IT_CONFIG = join(projectRoot, '.release-it.json');
 
 export function assertString(value, description) {
   assert.equal(typeof value, 'string', `${description} must be a string`);
@@ -325,6 +326,7 @@ export function run(command, args, options = {}) {
     env = process.env,
     expectedStatus = 0,
     stdio = 'pipe',
+    timeoutMs = 30 * 60 * 1000,
   } = options;
   assertString(cwd, 'cwd');
   assert(env !== null && typeof env === 'object', 'env must be an object');
@@ -333,15 +335,26 @@ export function run(command, args, options = {}) {
     'expected status must be an integer',
   );
   assert(stdio === 'pipe' || stdio === 'inherit', 'unsupported stdio mode');
+  assert(
+    Number.isInteger(timeoutMs) && timeoutMs > 0,
+    'timeout must be a positive integer',
+  );
 
   const result = spawnSync(command, args, {
     cwd,
     env,
     encoding: 'utf8',
     stdio,
+    timeout: timeoutMs,
   });
 
   if (result.error !== undefined) {
+    if (result.error.code === 'ETIMEDOUT') {
+      throw new Error(
+        `command timed out after ${String(timeoutMs)}ms: ${formatCommand(command, args)}`,
+        { cause: result.error },
+      );
+    }
     throw new Error(`failed to start ${command}: ${result.error.message}`, {
       cause: result.error,
     });
@@ -351,12 +364,16 @@ export function run(command, args, options = {}) {
   const stderr = typeof result.stderr === 'string' ? result.stderr : '';
 
   if (result.status !== expectedStatus) {
+    const exitInfo =
+      result.status === null
+        ? `killed by signal: ${String(result.signal)}`
+        : `actual exit code: ${String(result.status)}`;
     throw new Error(
       [
         `command failed: ${formatCommand(command, args)}`,
         `cwd: ${cwd}`,
         `expected exit code: ${String(expectedStatus)}`,
-        `actual exit code: ${String(result.status)}`,
+        exitInfo,
         stdout.length === 0 ? '' : `stdout:\n${stdout}`,
         stderr.length === 0 ? '' : `stderr:\n${stderr}`,
       ]
@@ -369,12 +386,22 @@ export function run(command, args, options = {}) {
 }
 
 function tryRun(command, args, options = {}) {
-  const { cwd = process.cwd(), env = process.env, stdio = 'pipe' } = options;
+  const {
+    cwd = process.cwd(),
+    env = process.env,
+    stdio = 'pipe',
+    timeoutMs = 30 * 60 * 1000,
+  } = options;
+  assert(
+    Number.isInteger(timeoutMs) && timeoutMs > 0,
+    'timeout must be a positive integer',
+  );
   const result = spawnSync(command, args, {
     cwd,
     env,
     encoding: 'utf8',
     stdio,
+    timeout: timeoutMs,
   });
 
   return {
@@ -397,11 +424,10 @@ export function assertRepoRoot(root = process.cwd()) {
   ]).stdout.trim();
   assertString(topLevel, 'git top-level');
   assert.equal(
-    resolve(topLevel),
-    resolvedRoot,
+    realpathSync(resolve(topLevel)),
+    realpathSync(resolvedRoot),
     'release scripts must run at the repo root',
   );
-  assertPackageVersionsMatch(resolvedRoot);
   return resolvedRoot;
 }
 
@@ -489,7 +515,15 @@ export function localBranchExists(root, branchName) {
       },
     );
   }
-  return result.status === 0;
+  if (result.status === 0) {
+    return true;
+  }
+  if (result.status === 1) {
+    return false;
+  }
+  throw new Error(
+    `failed to inspect local branch ${branchName} (exit ${String(result.status)})`,
+  );
 }
 
 export function remoteBranchExists(root, branchName) {
@@ -539,7 +573,15 @@ export function localTagExists(root, tagName) {
       },
     );
   }
-  return result.status === 0;
+  if (result.status === 0) {
+    return true;
+  }
+  if (result.status === 1) {
+    return false;
+  }
+  throw new Error(
+    `failed to inspect local tag ${tagName} (exit ${String(result.status)})`,
+  );
 }
 
 export function remoteTagExists(root, tagName) {
@@ -757,6 +799,14 @@ export function assertLocalChangelogPrerequisites(
 export function runReleaseIt(root, version, env = process.env) {
   assertString(root, 'root');
   assertString(version, 'version');
+  parseSemver(version);
+  const packageJson = assertPackageLike(
+    readJsonFile(join(root, 'package.json'), 'package.json'),
+    'package.json',
+  );
+  if (Object.hasOwn(packageJson, 'release-it')) {
+    throw new Error('package.json must not contain a release-it key');
+  }
   if (!existsSync(RELEASE_IT_BIN)) {
     throw new Error(
       `release-it binary is missing at ${RELEASE_IT_BIN}; run npm install first`,

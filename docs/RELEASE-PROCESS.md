@@ -380,6 +380,15 @@ git pull origin main
 npm run release:prep -- --version <version> --changelog ci
 ```
 
+### Release finalization fails to push the tag
+
+If `npm run release:finalize` creates the local tag but fails before pushing it, delete the local tag, fix the underlying issue, and retry from clean, synced `main`:
+
+```bash
+git tag -d v<version>
+npm run release:finalize
+```
+
 ### Release finalization pushes a tag but the Release workflow fails before publishing
 
 If `npm run release:finalize` pushes the tag but the workflow fails before any GitHub Release or npm publish, fix the underlying issue on `main`. Delete and recreate the failed tag only if maintainers explicitly decide it is safe, and document the action.
@@ -394,7 +403,7 @@ git tag -d vX.Y.Z
 
 Then rerun the Release Finalization Step from clean, synced `main`.
 
-### npm publish succeeds
+### npm published but GitHub Release or verification fails
 
 If npm publish succeeds, never reuse the same version, even if later GitHub Release asset creation or verification fails. Repair forward with a new version, or complete missing release assets manually according to maintainer policy.
 

@@ -5,15 +5,20 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
 const releasePrepScript = resolve('scripts/release-prep.mjs');
 const releaseFinalizeScript = resolve('scripts/release-finalize.mjs');
+const releaseHelpersUrl = pathToFileURL(
+  resolve('scripts/release-helpers.mjs'),
+).href;
 
 interface CommandResult {
   status: number;
@@ -229,6 +234,25 @@ describe('release scripts', () => {
     ]);
   });
 
+  it('prepares a release from a repo root reached through a symlink', () => {
+    const { root, repo } = createTempRepo();
+    const linkedRepo = join(root, 'repo-link');
+    symlinkSync(repo, linkedRepo, 'dir');
+
+    const result = runReleasePrep(linkedRepo, [
+      '--version',
+      '0.1.1-beta.5',
+      '--changelog',
+      'ci',
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(runGit(repo, ['branch', '--show-current'])).toBe(
+      'release/0.1.1-beta.5',
+    );
+    expect(runGit(repo, ['status', '--short'])).toBe('');
+  });
+
   it('fails local changelog prep before creating a branch when credentials are missing', () => {
     const { repo } = createTempRepo();
 
@@ -247,6 +271,49 @@ describe('release scripts', () => {
     );
     expect(runGit(repo, ['branch', '--show-current'])).toBe('main');
     expect(runGit(repo, ['status', '--short'])).toBe('');
+  });
+
+  it('rejects missing and invalid release prep arguments before side effects', () => {
+    const missingVersionRepo = createTempRepo();
+    const missingVersion = runReleasePrep(missingVersionRepo.repo, [
+      '--changelog',
+      'ci',
+    ]);
+    expect(missingVersion.status).toBe(1);
+    expect(missingVersion.stderr).toContain(
+      '--version <exact-semver> is required',
+    );
+    expect(runGit(missingVersionRepo.repo, ['branch', '--show-current'])).toBe(
+      'main',
+    );
+
+    const missingChangelogRepo = createTempRepo();
+    const missingChangelog = runReleasePrep(missingChangelogRepo.repo, [
+      '--version',
+      '0.1.1-beta.5',
+    ]);
+    expect(missingChangelog.status).toBe(1);
+    expect(missingChangelog.stderr).toContain(
+      '--changelog local|ci is required',
+    );
+    expect(
+      runGit(missingChangelogRepo.repo, ['branch', '--show-current']),
+    ).toBe('main');
+
+    const invalidVersionRepo = createTempRepo();
+    const invalidVersion = runReleasePrep(invalidVersionRepo.repo, [
+      '--version',
+      'not-semver',
+      '--changelog',
+      'ci',
+    ]);
+    expect(invalidVersion.status).toBe(1);
+    expect(invalidVersion.stderr).toContain(
+      'version not-semver is not an exact semantic version',
+    );
+    expect(runGit(invalidVersionRepo.repo, ['branch', '--show-current'])).toBe(
+      'main',
+    );
   });
 
   it('refuses to prepare a release from a dirty tree', () => {
@@ -433,6 +500,58 @@ describe('release scripts', () => {
     );
   });
 
+  it('keeps the ci changelog-mode guard reachable', () => {
+    const { repo } = createTempRepo();
+    writePackageFiles(repo, '0.1.1-beta.5');
+    writeFileSync(join(repo, 'CHANGELOG.md'), '# Changelog\n\nUnexpected\n');
+
+    const result = run(process.execPath, [
+      '--input-type=module',
+      '-e',
+      `import { assertAllowedChangedFiles } from ${JSON.stringify(releaseHelpersUrl)};
+const changedFiles = assertAllowedChangedFiles(process.argv[1], ['package.json', 'package-lock.json', 'CHANGELOG.md']);
+if (changedFiles.includes('CHANGELOG.md')) {
+  throw new Error('CHANGELOG.md must not change when using --changelog ci');
+}`,
+      repo,
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'CHANGELOG.md must not change when using --changelog ci',
+    );
+  });
+
+  it('refuses release-it package.json config injection', () => {
+    const { repo } = createTempRepo();
+    const packageJson = JSON.parse(
+      readFileSync(join(repo, 'package.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    packageJson['release-it'] = { hooks: { 'before:init': 'echo unsafe' } };
+    writeFileSync(
+      join(repo, 'package.json'),
+      `${JSON.stringify(packageJson)}\n`,
+    );
+    runGit(repo, ['add', 'package.json']);
+    runGit(repo, ['commit', '-q', '-m', 'add release-it config']);
+    runGit(repo, ['push', '-q', 'origin', 'main']);
+
+    const result = runReleasePrep(repo, [
+      '--version',
+      '0.1.1-beta.5',
+      '--changelog',
+      'ci',
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'package.json must not contain a release-it key',
+    );
+    expect(runGit(repo, ['branch', '--show-current'])).toBe(
+      'release/0.1.1-beta.5',
+    );
+  });
+
   it('runs verification during release prep when requested', () => {
     const { root, repo } = createTempRepo();
     const { env, marker } = withFakeMise(root);
@@ -485,6 +604,23 @@ describe('release scripts', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('release automation must run from main');
+    expect(runGit(repo, ['tag', '--list'])).toBe('');
+  });
+
+  it('refuses to finalize when local main is stale', () => {
+    const { repo } = createTempRepo('0.1.1-beta.5');
+    writeFileSync(join(repo, 'remote-only.txt'), 'remote change\n');
+    runGit(repo, ['add', 'remote-only.txt']);
+    runGit(repo, ['commit', '-q', '-m', 'advance remote']);
+    runGit(repo, ['push', '-q', 'origin', 'main']);
+    runGit(repo, ['reset', '--hard', 'HEAD~1']);
+
+    const result = runReleaseFinalize(repo);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'local main must be up to date with origin/main',
+    );
     expect(runGit(repo, ['tag', '--list'])).toBe('');
   });
 

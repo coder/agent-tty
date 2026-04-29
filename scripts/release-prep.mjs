@@ -18,7 +18,6 @@ import {
   createCommit,
   exitWithError,
   parsePrepArgs,
-  readPackageVersions,
   runCommunique,
   runGit,
   runReleaseIt,
@@ -26,12 +25,15 @@ import {
   stageFiles,
 } from './release-helpers.mjs';
 
-const VERSION_FILES = ['package.json', 'package-lock.json'];
+const VERSION_FILE_PATHS = Object.freeze(['package.json', 'package-lock.json']);
 
+// The env override is intentionally scoped to external release tools
+// (release-it, Communique, and verification). Git operations use process.env
+// because the supported entrypoint is spawning this script with the desired env.
 export function releasePrep(argv = process.argv.slice(2), env = process.env) {
   const options = parsePrepArgs(argv);
   const root = assertRepoRoot(process.cwd());
-  const { packageVersion } = readPackageVersions(root);
+  const { packageVersion } = assertPackageVersionsMatch(root);
   assertTargetVersionIsGreater(packageVersion, options.version);
 
   if (options.changelog === 'local') {
@@ -51,24 +53,24 @@ export function releasePrep(argv = process.argv.slice(2), env = process.env) {
   if (options.changelog === 'local') {
     runCommunique(root, options.version, env);
     const changedFiles = assertAllowedChangedFiles(root, [
-      ...VERSION_FILES,
+      ...VERSION_FILE_PATHS,
       'CHANGELOG.md',
     ]);
     assertExpectedFilesChanged(changedFiles, [
-      ...VERSION_FILES,
+      ...VERSION_FILE_PATHS,
       'CHANGELOG.md',
     ]);
-    stageFiles(root, [...VERSION_FILES, 'CHANGELOG.md']);
+    stageFiles(root, [...VERSION_FILE_PATHS, 'CHANGELOG.md']);
   } else {
     const changedFiles = assertAllowedChangedFiles(root, [
-      ...VERSION_FILES,
+      ...VERSION_FILE_PATHS,
       'CHANGELOG.md',
     ]);
     if (changedFiles.includes('CHANGELOG.md')) {
       throw new Error('CHANGELOG.md must not change when using --changelog ci');
     }
-    assertExpectedFilesChanged(changedFiles, VERSION_FILES);
-    stageFiles(root, VERSION_FILES);
+    assertExpectedFilesChanged(changedFiles, VERSION_FILE_PATHS);
+    stageFiles(root, VERSION_FILE_PATHS);
   }
 
   createCommit(root, `chore(release): ${options.version}`);

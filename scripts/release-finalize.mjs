@@ -17,6 +17,9 @@ import {
   runVerification,
 } from './release-helpers.mjs';
 
+// The env override is intentionally scoped to external verification. Git
+// operations use process.env because the supported entrypoint is spawning this
+// script with the desired env.
 export function releaseFinalize(
   argv = process.argv.slice(2),
   env = process.env,

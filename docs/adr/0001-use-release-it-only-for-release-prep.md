@@ -14,6 +14,8 @@ The manual release-prep path still had friction: maintainers had to create the r
 
 Use a pinned `release-it` dependency only behind project-specific Release Prep Workflow commands. The release-it config disables commit, tag, push, npm publish, GitHub Release, and GitLab Release side effects. The wrapper script owns repository-specific guardrails, branch creation, changelog mode, allowlisted staging, and the single local release-prep commit.
 
+This is an intentional dependency tradeoff. For the first slice, release-it is only the pinned version-file engine, so a repo-owned `npm version <version> --no-git-tag-version` wrapper would be functionally smaller. We still keep release-it because the release-prep command is the project boundary: it can later grow exact release-it-supported version calculation features, while the wrapper and config keep finalization and publish side effects outside release-it. If the dependency cost stops being worth that future option, the project-owned command surface can keep the same behavior and swap the version-file engine back to plain `npm version`.
+
 The Release Finalization Step does not use release-it. It uses repository-specific checks plus plain `git tag -a` and `git push origin <tag>` after the release-prep PR has landed on `main`.
 
 The existing Publish Pipeline remains authoritative for packaging, GitHub Release assets, release notes, npm trusted publishing, and prerelease dist-tags.
