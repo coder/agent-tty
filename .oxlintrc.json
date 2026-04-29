@@ -7,9 +7,16 @@
   "ignorePatterns": ["coverage/**", "dist/**", "node_modules/**"],
   "env": {
     "builtin": true,
-    "node": true,
-    "vitest": true
+    "node": true
   },
+  "overrides": [
+    {
+      "files": ["test/**/*.ts", "vitest.config.ts"],
+      "env": {
+        "vitest": true
+      }
+    }
+  ],
   "options": {
     "maxWarnings": 0,
     "typeAware": true
@@ -33,6 +40,7 @@
     "typescript/no-explicit-any": "error",
     "typescript/no-extraneous-class": "error",
     "no-fallthrough": "error",
+    "typescript/no-floating-promises": "error",
     "typescript/no-invalid-void-type": "error",
     "typescript/no-misused-promises": "error",
     "typescript/no-mixed-enums": "error",

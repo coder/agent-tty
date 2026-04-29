@@ -23,7 +23,7 @@ npm run smoke:install -- --skip-build
 echo "OXC_MIGRATION_DOGFOOD_DONE"
 ```
 
-The full repository test suite was also run outside the dogfood session during final validation because it takes roughly 80 seconds and is already captured in the validation logs for this migration.
+The full repository test suite was run locally and by PR CI outside the dogfood session. The recorded dogfood session intentionally keeps to the shorter static, build, and install-smoke checks so the screenshot and recordings stay small and reviewable.
 
 ## Timing summary
 
@@ -43,6 +43,7 @@ After migration:
 - Screenshot: `artifacts/validation-screenshot.png`.
 - Asciicast recording: `artifacts/validation.cast`.
 - WebM recording: `artifacts/validation.webm`.
+- Safety-rule parity evidence: `logs/safety-parity.txt`.
 - JSON command logs: `logs/*.json`.
 
 The snapshot and recordings end with `OXC_MIGRATION_DOGFOOD_DONE` after the migrated checks pass.

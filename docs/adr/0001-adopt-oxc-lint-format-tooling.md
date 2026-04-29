@@ -10,7 +10,7 @@ Accepted
 
 The repository previously used ESLint with `typescript-eslint` strict type-checked rules for linting and Prettier for repository-wide formatting. The migration goal was performance without a correctness regression, not rule churn for its own sake.
 
-Baseline timings in this workspace before changing dependencies were:
+Baseline timings were taken in this Mux cloud dev container before changing dependencies. The absolute numbers are environment-specific; the replacement ratios were the decision input:
 
 | Check        | Previous command                                                     | Wall time |
 | ------------ | -------------------------------------------------------------------- | --------: |
@@ -49,7 +49,7 @@ The Oxlint config keeps the repo's important safety checks enabled, including:
 - strict type-aware unsafe-value checks such as `no-unsafe-assignment`, `no-unsafe-call`, `no-unsafe-member-access`, and `no-unsafe-return`,
 - promise misuse and unnecessary-condition checks.
 
-A temporary fixture under `test/` was checked with both tools before removal. ESLint and Oxlint both rejected the fixture for the migration-critical cases:
+A temporary fixture under `test/` was checked with both tools before removal. The reproduced output is preserved in `dogfood/oxlint-oxfmt-migration/logs/safety-parity.txt`. ESLint and Oxlint both rejected the fixture for the migration-critical cases:
 
 - `consistent-type-imports`,
 - `no-floating-promises`,
@@ -57,10 +57,13 @@ A temporary fixture under `test/` was checked with both tools before removal. ES
 - `no-confusing-void-expression`,
 - `require-await`.
 
-Two former ESLint checks are intentionally not direct Oxlint blockers:
+A few rule/configuration details are intentionally documented rather than left implicit:
 
+- `typescript/no-floating-promises` is listed explicitly in `.oxlintrc.json` even though the `correctness` category also enables it, because it is a migration-critical guarantee.
+- `typescript/ban-ts-comment` keeps `minimumDescriptionLength: 10` from the captured ESLint `--print-config` output.
 - `no-octal` is not an Oxlint rule, but TypeScript rejects legacy octal literals during parsing/typechecking.
 - `no-useless-assignment` produced Oxlint false positives in existing integration-test cleanup patterns and is non-safety-oriented, so it is disabled in `.oxlintrc.json`.
+- `unicorn/no-new-array` is disabled because `test/unit/host/eventLog.test.ts` intentionally uses `new Array(MAX_EVENT_BUFFER_ENTRIES)` to pre-allocate the event buffer in a bounded-buffer test.
 
 ## Formatter churn
 
@@ -79,5 +82,6 @@ Running Oxfmt did not require a source formatting churn diff beyond the tooling/
 
 - Lint and format checks are materially faster for local and CI workflows.
 - Native Oxc packages are now part of the install surface. The lockfile includes Linux and macOS packages used by the repository's CI platforms.
+- `oxfmt` is still pre-1.0; future formatter upgrades should be treated as intentional formatting-change reviews because a minor-version bump may change formatting behavior.
 - ESLint and Prettier remain absent from required checks; keeping a permanent hybrid lint setup was rejected because it would preserve the old slow path and undermine the migration goal.
 - Historical dogfood artifacts that mention ESLint or Prettier remain archival records and are not rewritten.
