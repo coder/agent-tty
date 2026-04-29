@@ -111,8 +111,11 @@ describe('render wait matcher', () => {
   it.each([
     [{}, 'at least one of'],
     [{ screenStableMs: -1 }, 'positive integer'],
+    [{ screenStableMs: 0.5 }, 'positive integer'],
     [{ cursorRow: -1 }, 'non-negative integer'],
+    [{ cursorRow: 1.5 }, 'non-negative integer'],
     [{ cursorCol: -1 }, 'non-negative integer'],
+    [{ cursorCol: 1.5 }, 'non-negative integer'],
   ])('rejects invalid condition %j', (condition, expectedMessage) => {
     expect(() => prepareRenderWaitCondition(condition)).toThrow(
       expect.objectContaining({
