@@ -13,88 +13,73 @@ import {
 import type { SessionStatus } from '../../../src/protocol/schemas.js';
 import { SessionStatusSchema } from '../../../src/protocol/schemas.js';
 
-const EXPECTED_POLICIES = {
-  running: {
-    active: true,
-    terminal: false,
-    commandable: true,
-    liveHostEligible: true,
-    offlineReplayEligible: false,
-    collectable: false,
-    destroyed: false,
-  },
-  exiting: {
-    active: true,
-    terminal: false,
-    commandable: false,
-    liveHostEligible: true,
-    offlineReplayEligible: false,
-    collectable: false,
-    destroyed: false,
-  },
-  exited: {
-    active: false,
-    terminal: true,
-    commandable: false,
-    liveHostEligible: false,
-    offlineReplayEligible: true,
-    collectable: true,
-    destroyed: false,
-  },
-  failed: {
-    active: false,
-    terminal: true,
-    commandable: false,
-    liveHostEligible: false,
-    offlineReplayEligible: true,
-    collectable: true,
-    destroyed: false,
-  },
-  destroying: {
-    active: true,
-    terminal: false,
-    commandable: false,
-    liveHostEligible: false,
-    offlineReplayEligible: true,
-    collectable: false,
-    destroyed: false,
-  },
-  destroyed: {
-    active: false,
-    terminal: true,
-    commandable: false,
-    liveHostEligible: false,
-    offlineReplayEligible: true,
-    collectable: true,
-    destroyed: true,
-  },
-} satisfies Record<SessionStatus, ReturnType<typeof getSessionStatusPolicy>>;
+const POLICY_FIELDS = [
+  'active',
+  'terminal',
+  'commandable',
+  'liveHostEligible',
+  'offlineReplayEligible',
+  'collectable',
+  'destroyed',
+] as const;
+
+const EXPECTED_STATUS_SETS = {
+  active: ['running', 'exiting', 'destroying'],
+  terminal: ['exited', 'failed', 'destroyed'],
+  commandable: ['running'],
+  liveHostEligible: ['running', 'exiting'],
+  offlineReplayEligible: ['exited', 'failed', 'destroying', 'destroyed'],
+  collectable: ['exited', 'failed', 'destroyed'],
+  destroyed: ['destroyed'],
+} satisfies Record<(typeof POLICY_FIELDS)[number], readonly SessionStatus[]>;
+
+function expectStatuses(
+  predicate: (status: SessionStatus) => boolean,
+  expectedStatuses: readonly SessionStatus[],
+): void {
+  expect(SessionStatusSchema.options.filter(predicate).toSorted()).toEqual(
+    expectedStatuses.toSorted(),
+  );
+}
 
 describe('session status policy', () => {
-  it('classifies every session status explicitly', () => {
-    expect(Object.keys(EXPECTED_POLICIES).sort()).toEqual(
-      [...SessionStatusSchema.options].sort(),
+  it('classifies every session status into documented status sets', () => {
+    expectStatuses(isActiveSessionStatus, EXPECTED_STATUS_SETS.active);
+    expectStatuses(isTerminalSessionStatus, EXPECTED_STATUS_SETS.terminal);
+    expectStatuses(
+      isCommandableSessionStatus,
+      EXPECTED_STATUS_SETS.commandable,
     );
-
-    for (const status of SessionStatusSchema.options) {
-      expect(getSessionStatusPolicy(status)).toEqual(EXPECTED_POLICIES[status]);
-    }
+    expectStatuses(
+      isLiveHostEligibleSessionStatus,
+      EXPECTED_STATUS_SETS.liveHostEligible,
+    );
+    expectStatuses(
+      isOfflineReplayEligibleSessionStatus,
+      EXPECTED_STATUS_SETS.offlineReplayEligible,
+    );
+    expectStatuses(
+      isCollectableSessionStatus,
+      EXPECTED_STATUS_SETS.collectable,
+    );
+    expectStatuses(isDestroyedSessionStatus, EXPECTED_STATUS_SETS.destroyed);
   });
 
-  it('exposes named predicates for callers', () => {
+  it('returns complete policy objects that agree with the named predicates', () => {
     for (const status of SessionStatusSchema.options) {
-      const expected = EXPECTED_POLICIES[status];
-      expect(isActiveSessionStatus(status)).toBe(expected.active);
-      expect(isTerminalSessionStatus(status)).toBe(expected.terminal);
-      expect(isCommandableSessionStatus(status)).toBe(expected.commandable);
-      expect(isLiveHostEligibleSessionStatus(status)).toBe(
-        expected.liveHostEligible,
+      const policy = getSessionStatusPolicy(status);
+      expect(Object.keys(policy).toSorted()).toEqual(POLICY_FIELDS.toSorted());
+      expect(policy.active).toBe(isActiveSessionStatus(status));
+      expect(policy.terminal).toBe(isTerminalSessionStatus(status));
+      expect(policy.commandable).toBe(isCommandableSessionStatus(status));
+      expect(policy.liveHostEligible).toBe(
+        isLiveHostEligibleSessionStatus(status),
       );
-      expect(isOfflineReplayEligibleSessionStatus(status)).toBe(
-        expected.offlineReplayEligible,
+      expect(policy.offlineReplayEligible).toBe(
+        isOfflineReplayEligibleSessionStatus(status),
       );
-      expect(isCollectableSessionStatus(status)).toBe(expected.collectable);
-      expect(isDestroyedSessionStatus(status)).toBe(expected.destroyed);
+      expect(policy.collectable).toBe(isCollectableSessionStatus(status));
+      expect(policy.destroyed).toBe(isDestroyedSessionStatus(status));
     }
   });
 

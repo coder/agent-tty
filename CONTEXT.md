@@ -30,6 +30,9 @@ A **Session** where callers should reconstruct renderer state from persisted rep
 A **Terminal Session** whose persisted directory may be removed by garbage collection.
 _Avoid_: Deletable session
 
+**Destroyed Status Check**:
+A convenience policy predicate for the single `destroyed` **Session Status** value. It is not a separate lifecycle classification.
+
 ## Relationships
 
 - A **Session** has exactly one **Session Status** at a time.

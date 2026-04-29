@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ERROR_CODES } from '../../../src/protocol/errors.js';
+
 const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
   sendRpc: vi.fn(),
@@ -47,7 +49,7 @@ const TEST_CONTEXT = {
 } as const;
 
 function createSessionRecord(
-  status: 'running' | 'exiting' | 'exited' = 'running',
+  status: 'running' | 'exiting' | 'exited' | 'destroyed' = 'running',
 ) {
   return {
     version: 1,
@@ -179,5 +181,28 @@ describe('type command', () => {
       'type',
       { text: '\n' },
     );
+  });
+
+  it('throws SESSION_ALREADY_DESTROYED when the session is destroyed', async () => {
+    mocks.readManifestIfExists.mockResolvedValue(
+      createSessionRecord('destroyed'),
+    );
+
+    await expect(
+      runTypeCommand({
+        context: TEST_CONTEXT,
+        json: false,
+        sessionId: 'session-01',
+        text: 'hello',
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.SESSION_ALREADY_DESTROYED,
+      message: 'Session "session-01" is already destroyed.',
+      details: {
+        sessionId: 'session-01',
+        status: 'destroyed',
+      },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
 });

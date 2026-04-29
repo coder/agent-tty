@@ -13,6 +13,7 @@ import { countEventLogEntries } from '../../host/eventLog.js';
 import { reconcileSession } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import {
+  isCommandableSessionStatus,
   isLiveHostEligibleSessionStatus,
   isOfflineReplayEligibleSessionStatus,
 } from '../../protocol/sessionStatusPolicy.js';
@@ -36,8 +37,10 @@ interface CommandOptions {
 
 function computeUptime(session: SessionRecord): number {
   const createdAt = Date.parse(session.createdAt);
-  const endAt =
-    session.status === 'running' ? Date.now() : Date.parse(session.updatedAt);
+  // Matches pre-existing behavior: only running sessions show live uptime.
+  const endAt = isCommandableSessionStatus(session.status)
+    ? Date.now()
+    : Date.parse(session.updatedAt);
 
   return Math.max(0, endAt - createdAt);
 }

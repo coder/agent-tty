@@ -5,16 +5,13 @@ import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { MarkResultSchema } from '../../protocol/messages.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
-import {
-  isCommandableSessionStatus,
-  isDestroyedSessionStatus,
-} from '../../protocol/sessionStatusPolicy.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
   manifestPath,
   sessionDir,
   socketPath,
 } from '../../storage/sessionPaths.js';
+import { assertSessionCommandable } from '../sessionGuards.js';
 
 export type { MarkResult } from '../../protocol/messages.js';
 
@@ -41,25 +38,7 @@ export async function runMarkCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  if (isDestroyedSessionStatus(manifest.status)) {
-    throw makeCliError(ERROR_CODES.SESSION_ALREADY_DESTROYED, {
-      message: `Session "${options.sessionId}" is already destroyed.`,
-      details: {
-        sessionId: options.sessionId,
-        status: manifest.status,
-      },
-    });
-  }
-
-  if (!isCommandableSessionStatus(manifest.status)) {
-    throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
-      message: `Session "${options.sessionId}" is not running.`,
-      details: {
-        sessionId: options.sessionId,
-        status: manifest.status,
-      },
-    });
-  }
+  assertSessionCommandable(manifest, options.sessionId);
 
   const rawResult: unknown = await sendRpc(
     socketPath(sessionDirectory),

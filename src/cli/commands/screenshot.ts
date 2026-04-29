@@ -255,6 +255,9 @@ export async function runScreenshotCommand(
   let rawResult: unknown;
   let invalidResultMessage = 'Unexpected response from host';
 
+  // Snapshot and screenshot intentionally keep their narrower legacy live-RPC
+  // gate. `exiting` sessions are live-host eligible for inspect, but these
+  // commands preserve their existing offline-replay capture behavior.
   if (manifest.status === 'running') {
     try {
       rawResult = await sendRpc(socketPath(sessionDirectory), 'screenshot', {

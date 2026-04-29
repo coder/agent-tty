@@ -2,6 +2,8 @@ import type { SessionStatus } from './schemas.js';
 
 import { invariant } from '../util/assert.js';
 
+// Canonical truth table for session lifecycle classifications.
+// See CONTEXT.md for the vocabulary these predicates implement.
 export interface SessionStatusPolicy {
   readonly active: boolean;
   readonly terminal: boolean;
@@ -71,6 +73,10 @@ const SESSION_STATUS_POLICIES = {
 
 for (const [status, policy] of Object.entries(SESSION_STATUS_POLICIES)) {
   invariant(
+    policy.active !== policy.terminal,
+    `${status} sessions must be exactly one of active or terminal`,
+  );
+  invariant(
     !policy.collectable || policy.terminal,
     `${status} collectable sessions must be terminal`,
   );
@@ -79,8 +85,8 @@ for (const [status, policy] of Object.entries(SESSION_STATUS_POLICIES)) {
     `${status} commandable sessions must be active`,
   );
   invariant(
-    !(policy.liveHostEligible && policy.offlineReplayEligible),
-    `${status} sessions cannot use live-host and offline-replay rendering at once`,
+    policy.liveHostEligible !== policy.offlineReplayEligible,
+    `${status} sessions must use exactly one renderer state source`,
   );
 }
 

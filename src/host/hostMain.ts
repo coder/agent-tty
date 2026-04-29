@@ -123,8 +123,18 @@ function normalizeExitSignal(signal: number | null): string | null {
   return signal === null || signal === 0 ? null : String(signal);
 }
 
-function isSessionRunning(state: SessionState): boolean {
+function isSessionCommandable(state: SessionState): boolean {
   return isCommandableSessionStatus(state.snapshot().status);
+}
+
+function assertSessionCommandable(state: SessionState): void {
+  if (!isSessionCommandable(state)) {
+    throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
+      // Preserve the legacy RPC wire contract: errors include only code and
+      // message, so this host-side guard remains message-only.
+      message: 'Session is not running.',
+    });
+  }
 }
 
 function rethrowAsync(error: unknown): void {
@@ -598,7 +608,7 @@ export async function runHost(sessionId: string): Promise<void> {
   const startIdlePolling = (): void => {
     if (
       idleTimeoutMs <= 0 ||
-      !isSessionRunning(state) ||
+      !isSessionCommandable(state) ||
       idleTimeoutHandle !== null
     ) {
       return;
@@ -606,7 +616,7 @@ export async function runHost(sessionId: string): Promise<void> {
 
     const checkIntervalMs = Math.min(idleTimeoutMs, IDLE_CHECK_CAP_MS);
     idleTimeoutHandle = setInterval(() => {
-      if (!isSessionRunning(state)) {
+      if (!isSessionCommandable(state)) {
         clearIdleTimeout();
         return;
       }
@@ -627,7 +637,7 @@ export async function runHost(sessionId: string): Promise<void> {
     shutdownPromise = (async () => {
       try {
         clearIdleTimeout();
-        if (isSessionRunning(state)) {
+        if (isSessionCommandable(state)) {
           pty.kill();
           state.requestDestroy();
           await writeManifest(mPath, state.snapshot());
@@ -903,11 +913,7 @@ export async function runHost(sessionId: string): Promise<void> {
     type: async (params: unknown) => {
       const { text } = params as TypeParams;
 
-      if (!isSessionRunning(state)) {
-        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
-          message: 'Session is not running.',
-        });
-      }
+      assertSessionCommandable(state);
 
       invariant(typeof text === 'string', 'type text must be a string');
       pty.write(text);
@@ -918,11 +924,7 @@ export async function runHost(sessionId: string): Promise<void> {
     mark: async (params: unknown) => {
       const { label } = params as MarkParams;
 
-      if (!isSessionRunning(state)) {
-        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
-          message: 'Session is not running.',
-        });
-      }
+      assertSessionCommandable(state);
 
       invariant(typeof label === 'string', 'mark label must be a string');
       lastActivityAt = Date.now();
@@ -932,11 +934,7 @@ export async function runHost(sessionId: string): Promise<void> {
     paste: async (params: unknown) => {
       const { text } = params as PasteParams;
 
-      if (!isSessionRunning(state)) {
-        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
-          message: 'Session is not running.',
-        });
-      }
+      assertSessionCommandable(state);
 
       invariant(
         typeof text === 'string' && text.length > 0,
@@ -951,11 +949,7 @@ export async function runHost(sessionId: string): Promise<void> {
     run: async (params: unknown) => {
       const { command, noWait, timeoutMs } = params as RunParams;
 
-      if (!isSessionRunning(state)) {
-        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
-          message: 'Session is not running.',
-        });
-      }
+      assertSessionCommandable(state);
 
       invariant(
         typeof command === 'string' && command.length > 0,
@@ -1048,11 +1042,7 @@ export async function runHost(sessionId: string): Promise<void> {
     sendKeys: async (params: unknown) => {
       const { keys } = params as SendKeysParams;
 
-      if (!isSessionRunning(state)) {
-        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
-          message: 'Session is not running.',
-        });
-      }
+      assertSessionCommandable(state);
 
       invariant(
         Array.isArray(keys) && keys.length > 0,
@@ -1099,11 +1089,7 @@ export async function runHost(sessionId: string): Promise<void> {
     resize: async (params: unknown) => {
       const { cols, rows } = params as ResizeParams;
 
-      if (!isSessionRunning(state)) {
-        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
-          message: 'Session is not running.',
-        });
-      }
+      assertSessionCommandable(state);
 
       invariant(
         Number.isInteger(cols) && cols > 0,
@@ -1124,11 +1110,7 @@ export async function runHost(sessionId: string): Promise<void> {
     signal: async (params: unknown) => {
       const { signal } = params as SignalParams;
 
-      if (!isSessionRunning(state)) {
-        throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
-          message: 'Session is not running.',
-        });
-      }
+      assertSessionCommandable(state);
 
       invariant(
         typeof signal === 'string' && signal.length > 0,
@@ -1210,11 +1192,7 @@ export async function runHost(sessionId: string): Promise<void> {
           return result;
         });
       } else {
-        if (!isSessionRunning(state)) {
-          throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
-            message: 'Session is not running.',
-          });
-        }
+        assertSessionCommandable(state);
 
         const idleDuration = idleMs ?? 0;
         invariant(
@@ -1538,7 +1516,7 @@ export async function runHost(sessionId: string): Promise<void> {
     await writeManifest(mPath, state.snapshot());
     await mkdir(dirname(sPath), { recursive: true });
 
-    if (!isSessionRunning(state)) {
+    if (!isSessionCommandable(state)) {
       await initiateShutdown();
       return;
     }
@@ -1546,7 +1524,7 @@ export async function runHost(sessionId: string): Promise<void> {
     rpcListenPromise = rpcServer.listen();
     await rpcListenPromise;
 
-    if (!isSessionRunning(state)) {
+    if (!isSessionCommandable(state)) {
       await initiateShutdown();
     }
   } catch (error) {

@@ -5,10 +5,6 @@ import { sendRpc } from '../../host/rpcClient.js';
 import type { RunResult } from '../../protocol/messages.js';
 import { RunResultSchema } from '../../protocol/messages.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
-import {
-  isCommandableSessionStatus,
-  isDestroyedSessionStatus,
-} from '../../protocol/sessionStatusPolicy.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
   manifestPath,
@@ -16,6 +12,7 @@ import {
   socketPath,
 } from '../../storage/sessionPaths.js';
 import { resolveCommandInputText } from './inputSource.js';
+import { assertSessionCommandable } from '../sessionGuards.js';
 
 interface CommandOptions {
   context: CommandContext;
@@ -67,25 +64,7 @@ export async function runRunCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  if (isDestroyedSessionStatus(manifest.status)) {
-    throw makeCliError(ERROR_CODES.SESSION_ALREADY_DESTROYED, {
-      message: `Session "${options.sessionId}" is already destroyed.`,
-      details: {
-        sessionId: options.sessionId,
-        status: manifest.status,
-      },
-    });
-  }
-
-  if (!isCommandableSessionStatus(manifest.status)) {
-    throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
-      message: `Session "${options.sessionId}" is not running.`,
-      details: {
-        sessionId: options.sessionId,
-        status: manifest.status,
-      },
-    });
-  }
+  assertSessionCommandable(manifest, options.sessionId);
 
   const noWait = !options.wait;
   const rpcParams: Record<string, unknown> = {

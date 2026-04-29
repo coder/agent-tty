@@ -6,7 +6,10 @@ import type { CommandContext } from '../context.js';
 import { emitSuccess } from '../output.js';
 import { reconcileSession } from '../../host/lifecycle.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
-import { isCollectableSessionStatus } from '../../protocol/sessionStatusPolicy.js';
+import {
+  isCollectableSessionStatus,
+  isTerminalSessionStatus,
+} from '../../protocol/sessionStatusPolicy.js';
 import type { SessionRecord } from '../../protocol/schemas.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import { manifestPath, sessionDir } from '../../storage/sessionPaths.js';
@@ -144,8 +147,8 @@ function wasReconciledFromStaleHost(
   manifestAfter: SessionRecord,
 ): boolean {
   return (
-    !isCollectableSessionStatus(manifestBefore.status) &&
-    isCollectableSessionStatus(manifestAfter.status)
+    !isTerminalSessionStatus(manifestBefore.status) &&
+    isTerminalSessionStatus(manifestAfter.status)
   );
 }
 
