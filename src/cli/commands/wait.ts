@@ -2,6 +2,7 @@ import type {
   WaitForRenderResult,
   WaitResult,
 } from '../../protocol/messages.js';
+import type { PreparedRenderWaitCondition } from '../../renderWait/matcher.js';
 import type { SemanticSnapshot } from '../../renderer/types.js';
 
 import { CliError } from '../errors.js';
@@ -14,6 +15,10 @@ import {
   WaitForRenderResultSchema,
   WaitResultSchema,
 } from '../../protocol/schemas.js';
+import {
+  matchRenderWaitSnapshot,
+  prepareRenderWaitCondition,
+} from '../../renderWait/matcher.js';
 import { isTerminalSessionStatus } from '../../protocol/sessionStatusPolicy.js';
 import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
@@ -94,64 +99,22 @@ function renderWaitLines(result: WaitForRenderResult): string[] {
   return lines;
 }
 
-const MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH = 50_000;
-
-function compileOfflineWaitRegex(pattern: string): RegExp {
-  try {
-    return new RegExp(pattern);
-  } catch (error) {
-    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-      message: `Invalid regex pattern: ${error instanceof Error ? error.message : String(error)}`,
-      cause: error,
-    });
-  }
-}
-
 function buildOfflineRenderWaitResult(
+  preparedCondition: PreparedRenderWaitCondition,
   snapshot: SemanticSnapshot,
-  options: Pick<
-    CommandOptions,
-    'text' | 'regex' | 'screenStableMs' | 'cursorRow' | 'cursorCol'
-  >,
 ): WaitForRenderResult {
-  const visibleText = snapshot.visibleLines.map((line) => line.text).join('\n');
-  const limitedVisibleText =
-    visibleText.length > MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH
-      ? visibleText.slice(0, MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH)
-      : visibleText;
+  const match = matchRenderWaitSnapshot(preparedCondition, snapshot);
 
-  let matchedText: string | undefined;
-  let textMatched = false;
-  if (options.text !== undefined) {
-    if (visibleText.includes(options.text)) {
-      textMatched = true;
-      matchedText = options.text;
-    }
-  } else if (options.regex !== undefined) {
-    const regex = compileOfflineWaitRegex(options.regex);
-    const match = regex.exec(limitedVisibleText);
-    if (match !== null) {
-      textMatched = true;
-      matchedText = match[0];
-    }
-  } else {
-    textMatched = true;
-  }
-
-  const cursorMatched =
-    (options.cursorRow === undefined ||
-      snapshot.cursorRow === options.cursorRow) &&
-    (options.cursorCol === undefined ||
-      snapshot.cursorCol === options.cursorCol);
-
-  if (textMatched && cursorMatched) {
+  if (match.contentAndCursorMatched) {
     return {
-      matched: options.screenStableMs === undefined,
+      matched: match.matched,
       timedOut: false,
-      ...(matchedText === undefined ? {} : { matchedText }),
-      cursorRow: snapshot.cursorRow,
-      cursorCol: snapshot.cursorCol,
-      capturedAtSeq: snapshot.capturedAtSeq,
+      ...(match.matchedText === undefined
+        ? {}
+        : { matchedText: match.matchedText }),
+      cursorRow: match.cursorRow,
+      cursorCol: match.cursorCol,
+      capturedAtSeq: match.capturedAtSeq,
     };
   }
 
@@ -159,15 +122,15 @@ function buildOfflineRenderWaitResult(
     message:
       'Session host became unreachable during render wait, and the latest offline snapshot did not satisfy the requested wait condition.',
     details: {
-      text: options.text,
-      regex: options.regex,
-      screenStableMs: options.screenStableMs,
-      expectedCursorRow: options.cursorRow,
-      expectedCursorCol: options.cursorCol,
-      capturedAtSeq: snapshot.capturedAtSeq,
-      cursorRow: snapshot.cursorRow,
-      cursorCol: snapshot.cursorCol,
-      visibleLines: snapshot.visibleLines.map((line) => line.text),
+      text: preparedCondition.text,
+      regex: preparedCondition.regex,
+      screenStableMs: preparedCondition.screenStableMs,
+      expectedCursorRow: preparedCondition.cursorRow,
+      expectedCursorCol: preparedCondition.cursorCol,
+      capturedAtSeq: match.capturedAtSeq,
+      cursorRow: match.cursorRow,
+      cursorCol: match.cursorCol,
+      visibleLines: match.visibleLines,
     },
   });
 }
@@ -175,16 +138,13 @@ function buildOfflineRenderWaitResult(
 async function runOfflineRenderWait(
   sessionDirectory: string,
   rendererName: CommandContext['rendererDefault'],
-  options: Pick<
-    CommandOptions,
-    'text' | 'regex' | 'screenStableMs' | 'cursorRow' | 'cursorCol'
-  >,
+  preparedCondition: PreparedRenderWaitCondition,
 ): Promise<WaitForRenderResult> {
   return await withOfflineReplayRenderer(
     { sessionDir: sessionDirectory, rendererName },
     async ({ backend }) => {
       const snapshot = await backend.snapshot({ includeScrollback: false });
-      return buildOfflineRenderWaitResult(snapshot, options);
+      return buildOfflineRenderWaitResult(preparedCondition, snapshot);
     },
   );
 }
@@ -265,6 +225,14 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       });
     }
 
+    const preparedCondition = prepareRenderWaitCondition({
+      text: options.text,
+      regex: options.regex,
+      screenStableMs: options.screenStableMs,
+      cursorRow: options.cursorRow,
+      cursorCol: options.cursorCol,
+    });
+
     const effectiveTimeout = options.timeout ?? DEFAULT_WAIT_TIMEOUT_MS;
     const params = {
       text: options.text,
@@ -292,7 +260,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
         rawResult = await runOfflineRenderWait(
           sessionDirectory,
           options.context.rendererDefault,
-          options,
+          preparedCondition,
         );
       } else {
         throw error;

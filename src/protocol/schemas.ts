@@ -1,10 +1,17 @@
 import { z } from 'zod';
 
+import {
+  MAX_WAIT_FOR_RENDER_REGEX_LENGTH,
+  MAX_WAIT_FOR_RENDER_TEXT_LENGTH,
+} from '../renderWait/limits.js';
 import { RendererNameSchema } from '../renderer/names.js';
 
 const NonEmptyStringSchema = z.string().min(1);
-const TextMatchSchema = z.string().min(1).max(1000);
-const RegexPatternSchema = z.string().min(1).max(200);
+const TextMatchSchema = z.string().min(1).max(MAX_WAIT_FOR_RENDER_TEXT_LENGTH);
+const RegexPatternSchema = z
+  .string()
+  .min(1)
+  .max(MAX_WAIT_FOR_RENDER_REGEX_LENGTH);
 const ProfileNameSchema = z.string().min(1).max(100);
 const PositiveIntSchema = z.number().int().positive();
 const NonNegativeIntSchema = z.number().int().nonnegative();

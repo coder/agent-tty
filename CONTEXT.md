@@ -31,6 +31,14 @@ _Avoid_: Blocking run
 The host-observed end point for a **Waited Run**, distinct from **Session** exit and caller timeout.
 _Avoid_: Command finish, session completion
 
+**Render Wait**:
+A wait request whose condition is evaluated against renderer-produced **Semantic Snapshots**.
+_Avoid_: Visual wait, snapshot wait
+
+**Screen Stability**:
+A render condition where the visible text content of a **Semantic Snapshot** has remained unchanged for a requested duration.
+_Avoid_: Settled screen
+
 **Live Host Eligible Session**:
 A **Session** where callers should ask the live session host for fresh state.
 
@@ -70,6 +78,9 @@ _Avoid_: Renderer capture
 - A **Snapshot Result** is derived from exactly one **Semantic Snapshot**.
 - A **Snapshot Artifact** contains exactly the **Snapshot Result** emitted to the caller.
 - A **Commandable Session** can accept a **Waited Run**.
+- A **Render Wait** may include text, regex, cursor, or **Screen Stability** conditions.
+- A **Render Wait** may be evaluated by live host polling for a **Live Host Eligible Session** or by offline replay fallback for an **Offline Replay Eligible Session**.
+- Offline replay fallback can evaluate snapshot content and cursor position, but cannot prove elapsed **Screen Stability** duration from a single latest **Semantic Snapshot**.
 - A **Waited Run** may produce one **Run Completion**, time out for its caller, or be interrupted by **Session** exit.
 - Caller timeout does not cancel the underlying **Run Completion**; it may still be observed later to keep internal completion bytes out of artifacts.
 - After **Session** exit, an unobserved **Run Completion** can no longer arrive.
@@ -84,6 +95,9 @@ _Avoid_: Renderer capture
 
 > **Dev:** "If a **Waited Run** times out, did the command finish?"
 > **Domain expert:** "No. The caller stopped waiting, but the **Run Completion** may still arrive later and must still be recognized."
+
+> **Dev:** "If offline replay finds the requested text, did a **Screen Stability** **Render Wait** match?"
+> **Domain expert:** "No. Offline replay can show the latest **Semantic Snapshot**, but only live polling can prove the visible content stayed unchanged for the requested duration."
 
 ## Flagged ambiguities
 

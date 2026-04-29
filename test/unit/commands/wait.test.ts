@@ -527,6 +527,80 @@ describe('wait command', () => {
     });
   });
 
+  it('rejects unsafe regexes before contacting the host or offline replay', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'Session host is unreachable.',
+      }),
+    );
+
+    const promise = runWaitCommand(createOptions({ regex: '(a+)+' }));
+
+    await expect(promise).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+    });
+    await expect(promise).rejects.toHaveProperty(
+      'message',
+      expect.stringContaining('nested quantifiers'),
+    );
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+    expect(mocks.withOfflineReplayRenderer).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed regexes before contacting the host or offline replay', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'Session host is unreachable.',
+      }),
+    );
+
+    const promise = runWaitCommand(createOptions({ regex: '[' }));
+
+    await expect(promise).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+    });
+    await expect(promise).rejects.toHaveProperty(
+      'message',
+      expect.stringContaining('Invalid regex pattern'),
+    );
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+    expect(mocks.withOfflineReplayRenderer).not.toHaveBeenCalled();
+  });
+
+  it('preserves offline stability fallback state when elapsed stability is unverifiable', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'Session host is unreachable.',
+      }),
+    );
+    mockOfflineReplaySnapshot({
+      capturedAtSeq: 17,
+      visibleLines: [{ row: 0, text: 'offline Ready output' }],
+      cursorRow: 2,
+      cursorCol: 3,
+    });
+
+    await runWaitCommand(createOptions({ text: 'Ready', screenStableMs: 500 }));
+
+    expect(mocks.emitSuccess).toHaveBeenCalledWith({
+      command: 'wait',
+      json: false,
+      result: {
+        matched: false,
+        timedOut: false,
+        matchedText: 'Ready',
+        cursorRow: 2,
+        cursorCol: 3,
+        capturedAtSeq: 17,
+      },
+      lines: [
+        'Host became unreachable before the wait condition could be fully verified; returning the latest offline snapshot state.',
+        'Cursor: row 2, col 3',
+        'capturedAtSeq: 17',
+      ],
+    });
+  });
+
   it('returns a descriptive error when the offline snapshot does not satisfy the wait condition', async () => {
     mocks.sendRpc.mockRejectedValue(
       makeCliError(ERROR_CODES.HOST_UNREACHABLE, {

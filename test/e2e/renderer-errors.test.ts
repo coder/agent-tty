@@ -162,7 +162,7 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
     );
 
     expect(envelope.command).toBe('wait');
-    expect(envelope.error.code).toBe(ERROR_CODES.RPC_ERROR);
+    expect(envelope.error.code).toBe(ERROR_CODES.INVALID_INPUT);
     expect(envelope.error.message).toContain('1000');
     expect(envelope.error.message).toContain('text');
   });
@@ -178,7 +178,7 @@ describe('renderer error paths e2e', { timeout: 120_000 }, () => {
     );
 
     expect(envelope.command).toBe('wait');
-    expect(envelope.error.code).toBe(ERROR_CODES.RPC_ERROR);
+    expect(envelope.error.code).toBe(ERROR_CODES.INVALID_INPUT);
     expect(envelope.error.message).toContain('200');
     expect(envelope.error.message).toContain('regex');
   });

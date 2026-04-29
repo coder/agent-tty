@@ -4,6 +4,10 @@ import process from 'node:process';
 
 import { ulid } from 'ulid';
 
+import {
+  matchRenderWaitSnapshot,
+  prepareRenderWaitCondition,
+} from '../renderWait/matcher.js';
 import { EventLog } from './eventLog.js';
 import { buildReplayInput } from './replay.js';
 import { HostRendererManager } from './renderer.js';
@@ -67,13 +71,10 @@ const ALLOWED_SIGNALS = [
 ] as const;
 
 const DEFAULT_RENDER_PROFILE_NAME = 'reference-dark';
-const MAX_WAIT_FOR_RENDER_REGEX_LENGTH = 200;
-export const MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH = 50_000;
 export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
 // Idle-timeout enforcement is polling-based: actual idle duration before kill
 // may exceed idleTimeoutMs by up to checkIntervalMs (bounded by this cap).
 const IDLE_CHECK_CAP_MS = 5_000;
-const BRACED_QUANTIFIER_PATTERN = /^\{(?:\d+|\d+,\d*)\}/;
 
 type WaitOutcome = {
   exitCode?: number;
@@ -121,108 +122,6 @@ function resolveHostRendererName(input: string | undefined): RendererName {
       cause: error,
     });
   }
-}
-
-function isRegexQuantifierAt(pattern: string, index: number): boolean {
-  const nextChar = pattern[index];
-  if (nextChar === '*' || nextChar === '+' || nextChar === '?') {
-    return true;
-  }
-
-  if (nextChar !== '{') {
-    return false;
-  }
-
-  return BRACED_QUANTIFIER_PATTERN.test(pattern.slice(index));
-}
-
-/**
- * Reject regex patterns with obvious ReDoS-prone constructs:
- * - Nested quantifiers: (x+)+, (x*)+, (x+)*, (x?){n}, etc.
- * - Star-height > 1 patterns
- *
- * This is a heuristic check, not a full regex analysis.
- * It catches the most common catastrophic backtracking patterns.
- */
-export function hasNestedQuantifiers(pattern: string): boolean {
-  invariant(typeof pattern === 'string', 'regex pattern must be a string');
-
-  const groupHasQuantifierStack: boolean[] = [];
-  let inCharacterClass = false;
-
-  for (let index = 0; index < pattern.length; index += 1) {
-    const char = pattern[index];
-    invariant(char !== undefined, 'regex pattern character must exist');
-
-    if (char === '\\') {
-      index += 1;
-      continue;
-    }
-
-    if (char === '[') {
-      inCharacterClass = true;
-      continue;
-    }
-
-    if (char === ']' && inCharacterClass) {
-      inCharacterClass = false;
-      continue;
-    }
-
-    if (inCharacterClass) {
-      continue;
-    }
-
-    if (char === '(') {
-      groupHasQuantifierStack.push(false);
-      continue;
-    }
-
-    if (char === ')') {
-      const groupHasQuantifier = groupHasQuantifierStack.pop() ?? false;
-      const groupIsQuantified = isRegexQuantifierAt(pattern, index + 1);
-      if (groupHasQuantifier && groupIsQuantified) {
-        return true;
-      }
-
-      const parentGroupIndex = groupHasQuantifierStack.length - 1;
-      if (parentGroupIndex >= 0 && (groupHasQuantifier || groupIsQuantified)) {
-        groupHasQuantifierStack[parentGroupIndex] = true;
-      }
-
-      continue;
-    }
-
-    const currentGroupIndex = groupHasQuantifierStack.length - 1;
-    if (currentGroupIndex < 0) {
-      continue;
-    }
-
-    if (char === '*' || char === '+' || char === '?') {
-      const previousChar = pattern[index - 1];
-      if (previousChar !== '(') {
-        groupHasQuantifierStack[currentGroupIndex] = true;
-      }
-      continue;
-    }
-
-    if (char === '{' && isRegexQuantifierAt(pattern, index)) {
-      groupHasQuantifierStack[currentGroupIndex] = true;
-    }
-  }
-
-  return false;
-}
-
-export function safeRegexExec(
-  regex: RegExp,
-  text: string,
-): RegExpExecArray | null {
-  const limitedText =
-    text.length > MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH
-      ? text.slice(0, MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH)
-      : text;
-  return regex.exec(limitedText);
 }
 
 export async function runHost(sessionId: string): Promise<void> {
@@ -938,63 +837,18 @@ export async function runHost(sessionId: string): Promise<void> {
         rendererName: requestedRendererName,
       } = params as WaitForRenderParams;
 
-      invariant(
-        text !== undefined ||
-          regex !== undefined ||
-          screenStableMs !== undefined ||
-          cursorRow !== undefined ||
-          cursorCol !== undefined,
-        'waitForRender requires at least one of text, regex, screenStableMs, cursorRow, or cursorCol',
-      );
-      invariant(
-        !(text !== undefined && regex !== undefined),
-        'waitForRender text and regex filters are mutually exclusive',
-      );
-      if (screenStableMs !== undefined) {
-        invariant(
-          Number.isInteger(screenStableMs) && screenStableMs > 0,
-          'screenStableMs must be a positive integer',
-        );
-      }
-      if (cursorRow !== undefined) {
-        invariant(
-          Number.isInteger(cursorRow) && cursorRow >= 0,
-          'cursorRow must be a non-negative integer',
-        );
-      }
-      if (cursorCol !== undefined) {
-        invariant(
-          Number.isInteger(cursorCol) && cursorCol >= 0,
-          'cursorCol must be a non-negative integer',
-        );
-      }
+      const waitCondition = prepareRenderWaitCondition({
+        text,
+        regex,
+        screenStableMs,
+        cursorRow,
+        cursorCol,
+      });
       if (timeoutMs !== undefined) {
         invariant(
           Number.isInteger(timeoutMs) && timeoutMs > 0,
           'timeoutMs must be a positive integer',
         );
-      }
-
-      let compiledRegex: RegExp | undefined;
-      if (regex !== undefined) {
-        invariant(
-          regex.length <= MAX_WAIT_FOR_RENDER_REGEX_LENGTH,
-          `regex pattern must not exceed ${String(MAX_WAIT_FOR_RENDER_REGEX_LENGTH)} characters`,
-        );
-        if (hasNestedQuantifiers(regex)) {
-          throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-            message:
-              'Regex pattern contains nested quantifiers which may cause catastrophic backtracking. Simplify the pattern.',
-          });
-        }
-        try {
-          compiledRegex = new RegExp(regex);
-        } catch (error) {
-          throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-            message: `Invalid regex pattern: ${error instanceof Error ? error.message : String(error)}`,
-            cause: error,
-          });
-        }
       }
 
       const rendererName = resolveHostRendererName(requestedRendererName);
@@ -1040,40 +894,20 @@ export async function runHost(sessionId: string): Promise<void> {
                 lastTextChangeAt = now;
               }
 
-              let textMatched = false;
-              let matchedText: string | undefined;
-              if (text !== undefined) {
-                if (visibleText.includes(text)) {
-                  textMatched = true;
-                  matchedText = text;
-                }
-              } else if (compiledRegex !== undefined) {
-                const match = safeRegexExec(compiledRegex, visibleText);
-                if (match !== null) {
-                  textMatched = true;
-                  matchedText = match[0];
-                }
-              } else {
-                textMatched = true;
-              }
+              const match = matchRenderWaitSnapshot(waitCondition, snapshot, {
+                stableForMs: now - lastTextChangeAt,
+              });
 
-              let stableMatched = true;
-              if (screenStableMs !== undefined) {
-                stableMatched = now - lastTextChangeAt >= screenStableMs;
-              }
-
-              const cursorMatched =
-                (cursorRow === undefined || snapshot.cursorRow === cursorRow) &&
-                (cursorCol === undefined || snapshot.cursorCol === cursorCol);
-
-              if (textMatched && stableMatched && cursorMatched) {
+              if (match.matched) {
                 clearInterval(checkInterval);
                 resolve({
                   matched: true,
                   timedOut: false,
-                  ...(matchedText === undefined ? {} : { matchedText }),
-                  cursorRow: snapshot.cursorRow,
-                  cursorCol: snapshot.cursorCol,
+                  ...(match.matchedText === undefined
+                    ? {}
+                    : { matchedText: match.matchedText }),
+                  cursorRow: match.cursorRow,
+                  cursorCol: match.cursorCol,
                   capturedAtSeq,
                 });
               }

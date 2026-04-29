@@ -123,6 +123,23 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     testHome = '';
   }, HOOK_TIMEOUT_MS);
 
+  it('rejects unsafe regexes through direct waitForRender RPC', async () => {
+    const promise = sendRpc(
+      rpcSocketPath,
+      'waitForRender',
+      { regex: '(a+)+', timeoutMs: 5_000 },
+      10_000,
+    );
+
+    await expect(promise).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
+    await expect(promise).rejects.toHaveProperty(
+      'message',
+      expect.stringContaining('nested quantifiers'),
+    );
+  });
+
   it('matches text via waitForRender RPC', async () => {
     const result = (await sendRpc(
       rpcSocketPath,
