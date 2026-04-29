@@ -39,10 +39,10 @@ Session state is stored under `~/.agent-tty` by default. In tests and automation
 - `src/cli/main.ts` — public CLI contract and command registration.
 - `src/cli/commands/*.ts` — command implementations; most behavior changes start here.
 - `src/host/hostMain.ts` — per-session host orchestration for PTY, renderer, RPC, waits, and artifacts.
-- `src/host/eventLog.ts` — append-only `events.jsonl` writer/reader; sequence numbers must stay contiguous.
-- `src/host/replay.ts` — validated replay loader; keep its event-log assumptions aligned with `src/host/eventLog.ts`.
+- `src/host/eventLog.ts` — append-only `events.jsonl` writer; append-time sequence numbers must stay contiguous.
+- `src/host/replay.ts` — validated replay-input builder for manifest, dimensions, and target sequence semantics.
 - `src/protocol/schemas.ts` and `src/protocol/messages.ts` — machine-facing schemas and result shapes.
-- `src/storage/` — path guards, home/session resolution, manifest I/O, and artifact manifests.
+- `src/storage/` — path guards, home/session resolution, manifest I/O, artifact manifests, and the persisted event-log codec.
 - `src/renderer/ghosttyWeb/backend.ts` — reference renderer and Playwright browser harness.
 - `src/export/asciicast.ts` and `src/export/webm.ts` — recording export logic.
 - `src/util/assert.ts` — shared fail-fast assertion helpers.
@@ -156,8 +156,8 @@ If validation cannot run, state why and name the next best check.
 - Treat the event log as canonical execution truth.
 - New snapshot, screenshot, wait, or export features should flow through replayable event/state data.
 - Do not add one-off state that only live PTY code can see.
-- Keep `src/host/eventLog.ts` and `src/host/replay.ts` assumptions aligned.
-- If you change the 50 MB event-log limit, update both `src/host/eventLog.ts` and `src/host/replay.ts`.
+- Keep persisted event-log size limits, JSONL parsing, schema validation, and sequence validation centralized in `src/storage/eventLogCodec.ts`.
+- If you change the 50 MB event-log limit, update `src/storage/eventLogCodec.ts` as the single source of truth.
 
 ## CI And Generated Files
 

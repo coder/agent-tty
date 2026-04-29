@@ -16,7 +16,7 @@ import {
   EventLog,
   MAX_EVENT_BUFFER_ENTRIES,
 } from '../../../src/host/eventLog.js';
-import { MAX_EVENT_LOG_SIZE } from '../../../src/host/replay.js';
+import { MAX_EVENT_LOG_SIZE } from '../../../src/storage/eventLogCodec.js';
 
 let tempDir = '';
 let eventLogPath = '';

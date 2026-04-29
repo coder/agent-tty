@@ -1,0 +1,10 @@
+{"seq":0,"ts":"2026-04-29T12:42:19.675Z","type":"output","payload":{"data":"$ "}}
+{"seq":1,"ts":"2026-04-29T12:42:20.888Z","type":"input_text","payload":{"data":"printf 'hello from codec dogfood\\n'"}}
+{"seq":2,"ts":"2026-04-29T12:42:20.888Z","type":"output","payload":{"data":"printf 'hello from codec dogfood\\n'"}}
+{"seq":3,"ts":"2026-04-29T12:42:21.992Z","type":"input_keys","payload":{"keys":["ENTER"]}}
+{"seq":4,"ts":"2026-04-29T12:42:21.992Z","type":"output","payload":{"data":"\r\nhello from codec dogfood\r\n$ "}}
+{"seq":5,"ts":"2026-04-29T12:42:24.663Z","type":"input_text","payload":{"data":"exit"}}
+{"seq":6,"ts":"2026-04-29T12:42:24.663Z","type":"output","payload":{"data":"exit"}}
+{"seq":7,"ts":"2026-04-29T12:42:25.657Z","type":"input_keys","payload":{"keys":["ENTER"]}}
+{"seq":8,"ts":"2026-04-29T12:42:25.658Z","type":"output","payload":{"data":"\r\n"}}
+{"seq":9,"ts":"2026-04-29T12:42:25.659Z","type":"exit","payload":{"exitCode":0,"exitSignal":null}}

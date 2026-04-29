@@ -15,6 +15,10 @@ import {
   type MarkerEventPayload,
   type RunCompleteEventPayload,
 } from '../protocol/schemas.js';
+import {
+  assertEventLogSize,
+  parseEventLogContent,
+} from '../storage/eventLogCodec.js';
 import { invariant } from '../util/assert.js';
 
 const OutputEventPayloadSchema = z
@@ -98,9 +102,6 @@ type EventLogPayload =
   | ExitEventPayload
   | MarkerEventPayload;
 
-// Keep this in sync with the replay loader's event-log size limit.
-const MAX_EVENT_LOG_SIZE = 50 * 1024 * 1024;
-
 /**
  * Maximum number of events retained in the in-memory buffer.
  * At ~200 bytes per event object, 250k events ≈ 50MB — consistent with the file size limit.
@@ -167,56 +168,6 @@ function validatePayload(
       return result.data;
     }
   }
-}
-
-function parseEventLogLine(line: string, lineNumber: number): EventRecord {
-  let parsedLine: unknown;
-  try {
-    parsedLine = JSON.parse(line) as unknown;
-  } catch {
-    invariant(false, `event log line ${String(lineNumber)} must be valid JSON`);
-  }
-
-  const parsedRecord = EventRecordSchema.safeParse(parsedLine);
-  invariant(
-    parsedRecord.success,
-    `event log line ${String(lineNumber)} must match EventRecordSchema`,
-  );
-
-  return parsedRecord.data;
-}
-
-function assertContiguousSequence(records: EventRecord[]): void {
-  if (records.length === 0) {
-    return;
-  }
-
-  invariant(records[0]?.seq === 0, 'first event log seq must be 0');
-
-  for (let index = 1; index < records.length; index += 1) {
-    const previous = records[index - 1];
-    const current = records[index];
-
-    invariant(previous !== undefined, 'previous event record must exist');
-    invariant(current !== undefined, 'current event record must exist');
-    invariant(
-      current.seq === previous.seq + 1,
-      'event log seq values must increase by 1 without gaps',
-    );
-  }
-}
-
-function parseEventLogContent(content: string): EventRecord[] {
-  const lines = content
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-
-  const records = lines.map((line, index) =>
-    parseEventLogLine(line, index + 1),
-  );
-  assertContiguousSequence(records);
-  return records;
 }
 
 function deriveNextSeq(records: readonly EventRecord[]): number {
@@ -291,10 +242,7 @@ export class EventLog {
     const fileHandle = await open(filePath, 'a');
     try {
       const fileStats = await fileHandle.stat();
-      invariant(
-        fileStats.size <= MAX_EVENT_LOG_SIZE,
-        `event log file exceeds size limit (${String(fileStats.size)} bytes, max ${String(MAX_EVENT_LOG_SIZE)})`,
-      );
+      assertEventLogSize(fileStats.size);
 
       let eventBuffer: EventRecord[] = [];
       let nextSeq = 0;

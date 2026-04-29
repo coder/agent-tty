@@ -1,6 +1,7 @@
 import { basename, isAbsolute, resolve } from 'node:path';
 
-import { buildReplayInput, readEventLogRecords } from '../host/replay.js';
+import { buildReplayInput } from '../host/replay.js';
+import { readEventLogRecords } from '../storage/eventLogCodec.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import type { EventRecord, SessionRecord } from '../protocol/schemas.js';
 import type { RendererBackend } from '../renderer/backend.js';

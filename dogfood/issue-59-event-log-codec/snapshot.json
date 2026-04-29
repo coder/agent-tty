@@ -1,0 +1,113 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-04-29T12:42:28.225Z",
+  "result": {
+    "format": "structured",
+    "sessionId": "01KQCM5YXV7201SPAN58AGD96S",
+    "capturedAtSeq": 9,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 3,
+    "cursorCol": 0,
+    "isAltScreen": false,
+    "visibleLines": [
+      {
+        "row": 0,
+        "text": "$ printf 'hello from codec dogfood\\n'"
+      },
+      {
+        "row": 1,
+        "text": "hello from codec dogfood"
+      },
+      {
+        "row": 2,
+        "text": "$ exit"
+      },
+      {
+        "row": 3,
+        "text": ""
+      },
+      {
+        "row": 4,
+        "text": ""
+      },
+      {
+        "row": 5,
+        "text": ""
+      },
+      {
+        "row": 6,
+        "text": ""
+      },
+      {
+        "row": 7,
+        "text": ""
+      },
+      {
+        "row": 8,
+        "text": ""
+      },
+      {
+        "row": 9,
+        "text": ""
+      },
+      {
+        "row": 10,
+        "text": ""
+      },
+      {
+        "row": 11,
+        "text": ""
+      },
+      {
+        "row": 12,
+        "text": ""
+      },
+      {
+        "row": 13,
+        "text": ""
+      },
+      {
+        "row": 14,
+        "text": ""
+      },
+      {
+        "row": 15,
+        "text": ""
+      },
+      {
+        "row": 16,
+        "text": ""
+      },
+      {
+        "row": 17,
+        "text": ""
+      },
+      {
+        "row": 18,
+        "text": ""
+      },
+      {
+        "row": 19,
+        "text": ""
+      },
+      {
+        "row": 20,
+        "text": ""
+      },
+      {
+        "row": 21,
+        "text": ""
+      },
+      {
+        "row": 22,
+        "text": ""
+      },
+      {
+        "row": 23,
+        "text": ""
+      }
+    ]
+  }
+}

@@ -1,14 +1,6 @@
-import { mkdtemp, open, realpath, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-
-import {
-  MAX_EVENT_LOG_SIZE,
-  buildReplayInput,
-  readEventLogRecords,
-} from '../../../src/host/replay.js';
+import { buildReplayInput } from '../../../src/host/replay.js';
 import type {
   EventRecord,
   SessionRecord,
@@ -73,22 +65,7 @@ function createEventsWithMarker(): EventRecord[] {
   ];
 }
 
-let tempDir = '';
-let eventLogPath = '';
-
 describe('replay helpers', () => {
-  beforeEach(async () => {
-    // prettier-ignore
-    tempDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-replay-')));
-    eventLogPath = join(tempDir, 'events.jsonl');
-  });
-
-  afterEach(async () => {
-    if (tempDir.length > 0) {
-      await rm(tempDir, { recursive: true, force: true });
-    }
-  });
-
   it('buildReplayInput constructs a replay input from manifest and events', () => {
     const replayInput = buildReplayInput(
       'session-01',
@@ -179,7 +156,7 @@ describe('replay helpers', () => {
           payload: { data: 'world' },
         },
       ]),
-    ).toThrow('replay events must have contiguous seq values');
+    ).toThrow('event log seq values must increase by 1 without gaps');
   });
 
   it('buildReplayInput rejects invalid session identifiers and dimensions', () => {
@@ -193,93 +170,5 @@ describe('replay helpers', () => {
         createEvents(),
       ),
     ).toThrow('manifest must match SessionRecordSchema');
-  });
-
-  it('readEventLogRecords rejects event logs larger than 50 MB', async () => {
-    const fileHandle = await open(eventLogPath, 'w');
-
-    try {
-      await fileHandle.truncate(MAX_EVENT_LOG_SIZE + 1);
-    } finally {
-      await fileHandle.close();
-    }
-
-    await expect(readEventLogRecords(eventLogPath)).rejects.toThrow(
-      `event log file exceeds 50 MB size limit (${String(MAX_EVENT_LOG_SIZE + 1)} bytes)`,
-    );
-  });
-
-  it('readEventLogRecords rejects malformed JSONL lines', async () => {
-    await writeFile(
-      eventLogPath,
-      `${JSON.stringify(createEvents()[0])}\n{"seq":1`,
-      'utf8',
-    );
-
-    await expect(readEventLogRecords(eventLogPath)).rejects.toThrow(
-      'event log line 2 must be valid JSON',
-    );
-  });
-
-  it('readEventLogRecords parses legacy JSONL logs without run_complete events', async () => {
-    const legacyEvents: EventRecord[] = [
-      {
-        seq: 0,
-        ts: '2026-03-19T12:00:02.000Z',
-        type: 'output',
-        payload: { data: 'legacy output' },
-      },
-      {
-        seq: 1,
-        ts: '2026-03-19T12:00:03.000Z',
-        type: 'input_run',
-        payload: {
-          command: 'echo done',
-          marker: '__AT_MARKER_legacy__',
-          noWait: false,
-        },
-      },
-      {
-        seq: 2,
-        ts: '2026-03-19T12:00:04.000Z',
-        type: 'exit',
-        payload: { exitCode: 0, exitSignal: null },
-      },
-    ];
-    await writeFile(
-      eventLogPath,
-      legacyEvents
-        .map((event) => JSON.stringify(event))
-        .concat('')
-        .join('\n'),
-      'utf8',
-    );
-
-    await expect(readEventLogRecords(eventLogPath)).resolves.toEqual(
-      legacyEvents,
-    );
-    expect(
-      buildReplayInput('session-01', createManifest(), legacyEvents),
-    ).toEqual({
-      sessionId: 'session-01',
-      initialCols: 80,
-      initialRows: 24,
-      events: legacyEvents,
-      targetSeq: 2,
-    });
-  });
-
-  it('readEventLogRecords parses and validates JSONL event logs', async () => {
-    await writeFile(
-      eventLogPath,
-      createEvents()
-        .map((event) => JSON.stringify(event))
-        .concat('')
-        .join('\n'),
-      'utf8',
-    );
-
-    const events = await readEventLogRecords(eventLogPath);
-    expect(events).toEqual(createEvents());
   });
 });

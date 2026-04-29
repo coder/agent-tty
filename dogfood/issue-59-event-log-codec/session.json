@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "sessionId": "01KQCM5YXV7201SPAN58AGD96S",
+  "createdAt": "2026-04-29T12:42:18.942Z",
+  "updatedAt": "2026-04-29T12:42:25.659Z",
+  "status": "exited",
+  "command": ["/bin/sh"],
+  "cwd": "/home/coder/.mux/src/agent-terminal/grill-docs-cyte",
+  "shell": "/bin/bash",
+  "term": "xterm-256color",
+  "cols": 80,
+  "rows": 24,
+  "creationCols": 80,
+  "creationRows": 24,
+  "hostPid": 1834170,
+  "childPid": 1834218,
+  "exitCode": 0,
+  "exitSignal": null
+}

@@ -34,7 +34,7 @@ vi.mock('../../../src/cli/output.js', () => ({
   emitSuccess: mocks.emitSuccess,
 }));
 
-vi.mock('../../../src/host/replay.js', () => ({
+vi.mock('../../../src/storage/eventLogCodec.js', () => ({
   readEventLogRecords: mocks.readEventLogRecords,
 }));
 
