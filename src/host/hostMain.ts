@@ -44,6 +44,7 @@ import {
 } from '../renderer/names.js';
 import { resolveProfile } from '../renderer/profiles.js';
 import { createRendererBackend } from '../renderer/registry.js';
+import { captureSnapshotResult } from '../snapshot/capture.js';
 import {
   appendArtifact,
   createArtifactEntry,
@@ -52,14 +53,9 @@ import {
   artifactPath,
   ensureArtifactsDir,
   screenshotFilename,
-  snapshotFilename,
 } from '../storage/artifactPaths.js';
 import { resolveHome } from '../storage/home.js';
-import {
-  readManifest,
-  writeManifest,
-  writeTextFileAtomic,
-} from '../storage/manifests.js';
+import { readManifest, writeManifest } from '../storage/manifests.js';
 import {
   eventLogPath,
   manifestPath,
@@ -739,65 +735,13 @@ export async function runHost(sessionId: string): Promise<void> {
         includeScrollback,
         includeCells,
       });
-      const snapshotText = [
-        ...(snapshot.scrollbackLines ?? []),
-        ...snapshot.visibleLines,
-      ]
-        .map((line) => line.text)
-        .join('\n');
-
-      invariant(
-        snapshot.sessionId === sessionId,
-        'renderer snapshot sessionId must match host sessionId',
-      );
-
-      const snapshotResult =
-        format === 'structured'
-          ? { format: 'structured' as const, ...snapshot }
-          : {
-              format: 'text' as const,
-              sessionId: snapshot.sessionId,
-              capturedAtSeq: snapshot.capturedAtSeq,
-              cols: snapshot.cols,
-              rows: snapshot.rows,
-              cursorRow: snapshot.cursorRow,
-              cursorCol: snapshot.cursorCol,
-              text: snapshotText,
-            };
-
-      await ensureArtifactsDir(sessDir);
-      const filename = snapshotFilename(snapshot.capturedAtSeq, format);
-      const snapshotArtifactPath = artifactPath(sessDir, filename);
-
-      await writeTextFileAtomic({
-        path: snapshotArtifactPath,
-        pathLabel: 'snapshot artifact path',
-        contents: `${JSON.stringify(snapshotResult, null, 2)}\n`,
-        writeErrorMessage: `Failed to write snapshot artifact at ${snapshotArtifactPath}.`,
+      return await captureSnapshotResult({
+        sessionDir: sessDir,
+        format,
+        snapshot,
+        rendererBackend: backend.rendererBackend,
+        expectedSessionId: sessionId,
       });
-
-      await appendArtifact(
-        sessDir,
-        createArtifactEntry({
-          kind: 'snapshot',
-          filename,
-          sessionId: snapshot.sessionId,
-          capturedAtSeq: snapshot.capturedAtSeq,
-          metadata: {
-            format,
-            rendererBackend: backend.rendererBackend,
-            cols: snapshot.cols,
-            rows: snapshot.rows,
-            cursorRow: snapshot.cursorRow,
-            cursorCol: snapshot.cursorCol,
-            ...(snapshot.scrollbackLines === undefined
-              ? {}
-              : { scrollbackLineCount: snapshot.scrollbackLines.length }),
-          },
-        }),
-      );
-
-      return snapshotResult;
     },
     screenshot: async (params: unknown) => {
       const {

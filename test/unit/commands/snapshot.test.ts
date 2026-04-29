@@ -444,7 +444,7 @@ describe('snapshot command', () => {
     });
   });
 
-  it('uses offline replay for exited sessions and persists the artifact', async () => {
+  it('uses offline replay for exited sessions', async () => {
     const snapshot = createOfflineSemanticSnapshot();
     const result = {
       format: 'structured' as const,
@@ -466,50 +466,6 @@ describe('snapshot command', () => {
         rendererName: 'ghostty-web',
       },
       expect.any(Function),
-    );
-    expect(mocks.ensureArtifactsDir).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01',
-    );
-    expect(mocks.snapshotFilename).toHaveBeenCalledWith(5, 'structured');
-    expect(mocks.writeTextFileAtomic).toHaveBeenCalledWith({
-      path: '/artifacts/snapshot-5-structured.json',
-      pathLabel: 'snapshot artifact path',
-      contents: `${JSON.stringify(result, null, 2)}\n`,
-      writeErrorMessage:
-        'Failed to write snapshot artifact at /artifacts/snapshot-5-structured.json.',
-    });
-    expect(mocks.createArtifactEntry).toHaveBeenCalledWith({
-      kind: 'snapshot',
-      filename: 'snapshot-5-structured.json',
-      sessionId: 'session-01',
-      capturedAtSeq: 5,
-      metadata: {
-        format: 'structured',
-        cols: 80,
-        rows: 24,
-        cursorRow: 0,
-        cursorCol: 0,
-        rendererBackend: 'mock-backend',
-      },
-    });
-    expect(mocks.appendArtifact).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01',
-      {
-        kind: 'snapshot',
-        filename: 'snapshot-5-structured.json',
-        sessionId: 'session-01',
-        capturedAtSeq: 5,
-        metadata: {
-          format: 'structured',
-          cols: 80,
-          rows: 24,
-          cursorRow: 0,
-          cursorCol: 0,
-          rendererBackend: 'mock-backend',
-        },
-        id: 'artifact-01',
-        createdAt: '2026-03-19T12:00:02.000Z',
-      },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'snapshot',
@@ -577,7 +533,7 @@ describe('snapshot command', () => {
     );
   });
 
-  it('threads includeCells through offline replay snapshots and persists cells', async () => {
+  it('threads includeCells through offline replay snapshots and returns cells', async () => {
     const snapshotMock = vi.fn((options?: unknown) =>
       createOfflineSemanticSnapshot(
         (options as { includeCells?: boolean } | undefined)?.includeCells

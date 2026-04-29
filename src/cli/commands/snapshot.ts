@@ -13,20 +13,9 @@ import { SnapshotParamsSchema } from '../../protocol/messages.js';
 import { SnapshotResultSchema } from '../../protocol/schemas.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
-import {
-  appendArtifact,
-  createArtifactEntry,
-} from '../../storage/artifactManifest.js';
+import { captureSnapshotResult } from '../../snapshot/capture.js';
 import { invariant } from '../../util/assert.js';
-import {
-  readManifestIfExists,
-  writeTextFileAtomic,
-} from '../../storage/manifests.js';
-import {
-  artifactPath,
-  ensureArtifactsDir,
-  snapshotFilename,
-} from '../../storage/artifactPaths.js';
+import { readManifestIfExists } from '../../storage/manifests.js';
 import {
   manifestPath,
   sessionDir,
@@ -106,77 +95,6 @@ function parseSnapshotResult(rawResult: unknown): SnapshotResult {
   return parsedResult.data;
 }
 
-function createSnapshotResult(
-  snapshot: SemanticSnapshot,
-  format: SnapshotFormat,
-): SnapshotResult {
-  const textLines = [
-    ...(snapshot.scrollbackLines ?? []).map((line) => line.text),
-    ...snapshot.visibleLines.map((line) => line.text),
-  ];
-
-  const snapshotResult: SnapshotResult =
-    format === 'structured'
-      ? { format: 'structured' as const, ...snapshot }
-      : {
-          format: 'text' as const,
-          sessionId: snapshot.sessionId,
-          capturedAtSeq: snapshot.capturedAtSeq,
-          cols: snapshot.cols,
-          rows: snapshot.rows,
-          cursorRow: snapshot.cursorRow,
-          cursorCol: snapshot.cursorCol,
-          text: textLines.join('\n'),
-        };
-
-  return parseSnapshotResult(snapshotResult);
-}
-
-async function persistSnapshotArtifact(
-  sessionDirectory: string,
-  format: SnapshotFormat,
-  snapshot: SemanticSnapshot,
-  snapshotResult: SnapshotResult,
-  rendererBackend?: string,
-): Promise<void> {
-  invariant(
-    rendererBackend === undefined || rendererBackend.length > 0,
-    'rendererBackend must be a non-empty string when provided',
-  );
-
-  await ensureArtifactsDir(sessionDirectory);
-  const filename = snapshotFilename(snapshot.capturedAtSeq, format);
-  const snapshotArtifactPath = artifactPath(sessionDirectory, filename);
-
-  await writeTextFileAtomic({
-    path: snapshotArtifactPath,
-    pathLabel: 'snapshot artifact path',
-    contents: `${JSON.stringify(snapshotResult, null, 2)}\n`,
-    writeErrorMessage: `Failed to write snapshot artifact at ${snapshotArtifactPath}.`,
-  });
-
-  await appendArtifact(
-    sessionDirectory,
-    createArtifactEntry({
-      kind: 'snapshot',
-      filename,
-      sessionId: snapshot.sessionId,
-      capturedAtSeq: snapshot.capturedAtSeq,
-      metadata: {
-        format,
-        cols: snapshot.cols,
-        rows: snapshot.rows,
-        cursorRow: snapshot.cursorRow,
-        cursorCol: snapshot.cursorCol,
-        ...(rendererBackend === undefined ? {} : { rendererBackend }),
-        ...(snapshot.scrollbackLines === undefined
-          ? {}
-          : { scrollbackLineCount: snapshot.scrollbackLines.length }),
-      },
-    }),
-  );
-}
-
 async function runRpcSnapshot(
   sessionDirectory: string,
   rendererName: CommandContext['rendererDefault'],
@@ -207,20 +125,18 @@ async function runOfflineSnapshot(
 ): Promise<SnapshotResult> {
   return withOfflineReplayRenderer(
     { sessionDir: sessionDirectory, rendererName },
-    async ({ backend }) => {
+    async ({ backend, manifest }) => {
       const snapshot: SemanticSnapshot = await backend.snapshot({
         includeScrollback,
         includeCells,
       });
-      const snapshotResult = createSnapshotResult(snapshot, format);
-      await persistSnapshotArtifact(
-        sessionDirectory,
+      return await captureSnapshotResult({
+        sessionDir: sessionDirectory,
         format,
         snapshot,
-        snapshotResult,
-        backend.rendererBackend,
-      );
-      return snapshotResult;
+        rendererBackend: backend.rendererBackend,
+        expectedSessionId: manifest.sessionId,
+      });
     },
   );
 }
