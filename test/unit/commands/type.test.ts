@@ -1,37 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ERROR_CODES } from '../../../src/protocol/errors.js';
-
 const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
-  sendRpc: vi.fn(),
-  readManifestIfExists: vi.fn(),
-  sessionDir: vi.fn(),
-  manifestPath: vi.fn(),
-  socketPath: vi.fn(),
+  resolveCommandTarget: vi.fn(),
   resolveCommandInputText: vi.fn(),
+  sendRpc: vi.fn(),
+}));
+
+vi.mock('../../../src/cli/commandTarget.js', () => ({
+  resolveCommandTarget: mocks.resolveCommandTarget,
 }));
 
 vi.mock('../../../src/cli/output.js', () => ({
   emitSuccess: mocks.emitSuccess,
 }));
 
-vi.mock('../../../src/host/rpcClient.js', () => ({
-  sendRpc: mocks.sendRpc,
-}));
-
-vi.mock('../../../src/storage/manifests.js', () => ({
-  readManifestIfExists: mocks.readManifestIfExists,
-}));
-
-vi.mock('../../../src/storage/sessionPaths.js', () => ({
-  sessionDir: mocks.sessionDir,
-  manifestPath: mocks.manifestPath,
-  socketPath: mocks.socketPath,
-}));
-
 vi.mock('../../../src/cli/commands/inputSource.js', () => ({
   resolveCommandInputText: mocks.resolveCommandInputText,
+}));
+
+vi.mock('../../../src/host/rpcClient.js', () => ({
+  sendRpc: mocks.sendRpc,
 }));
 
 import { runTypeCommand } from '../../../src/cli/commands/type.js';
@@ -48,42 +37,18 @@ const TEST_CONTEXT = {
   configFile: null,
 } as const;
 
-function createSessionRecord(
-  status: 'running' | 'exiting' | 'exited' | 'destroyed' = 'running',
-) {
-  return {
-    version: 1,
-    sessionId: 'session-01',
-    createdAt: '2026-03-19T12:00:00.000Z',
-    updatedAt: '2026-03-19T12:00:01.000Z',
-    status,
-    command: ['/bin/sh'],
-    cwd: '/tmp/workspace',
-    cols: 80,
-    rows: 24,
-    hostPid: status === 'running' ? 123 : null,
-    childPid: status === 'running' ? 456 : null,
-    exitCode: status === 'exited' ? 0 : null,
-    exitSignal: null,
-  };
-}
+const COMMAND_TARGET = {
+  sessionId: 'session-01',
+  sessionDirectory: '/tmp/agent-tty/sessions/session-01',
+  manifestPath: '/tmp/agent-tty/sessions/session-01/session.json',
+  socketPath: '/tmp/agent-tty/sockets/session-01.sock',
+  manifest: { status: 'running' },
+};
 
 describe('type command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.sessionDir.mockImplementation(
-      (_home: string, sessionId: string) =>
-        `/tmp/agent-tty/sessions/${sessionId}`,
-    );
-    mocks.manifestPath.mockImplementation(
-      (sessionDirectory: string) => `${sessionDirectory}/session.json`,
-    );
-    mocks.socketPath.mockImplementation(
-      (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
-    );
-    mocks.readManifestIfExists.mockResolvedValue(
-      createSessionRecord('running'),
-    );
+    mocks.resolveCommandTarget.mockResolvedValue(COMMAND_TARGET);
     mocks.resolveCommandInputText.mockResolvedValue('hello');
   });
 
@@ -101,11 +66,21 @@ describe('type command', () => {
       text: 'hello',
       file: undefined,
     });
+    expect(mocks.resolveCommandTarget).toHaveBeenCalledWith({
+      home: '/tmp/agent-tty',
+      sessionId: 'session-01',
+    });
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sockets/session-01.sock',
       'type',
       { text: 'hello\n' },
     );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith({
+      command: 'type',
+      json: false,
+      result: {},
+      lines: ['Typed text into session.'],
+    });
   });
 
   it('appends exactly one newline to file-backed text when requested', async () => {
@@ -126,7 +101,7 @@ describe('type command', () => {
       file: '/tmp/input.txt',
     });
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sockets/session-01.sock',
       'type',
       { text: 'from-file\n' },
     );
@@ -144,7 +119,7 @@ describe('type command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sockets/session-01.sock',
       'type',
       { text: 'hello\n\n' },
     );
@@ -159,13 +134,13 @@ describe('type command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sockets/session-01.sock',
       'type',
       { text: 'hello' },
     );
   });
 
-  it('allows empty resolved text when appendNewline is enabled', async () => {
+  it('forwards an empty resolved string when appendNewline is enabled', async () => {
     mocks.resolveCommandInputText.mockResolvedValueOnce('');
 
     await runTypeCommand({
@@ -177,32 +152,25 @@ describe('type command', () => {
     });
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sockets/session-01.sock',
       'type',
       { text: '\n' },
     );
   });
 
-  it('throws SESSION_ALREADY_DESTROYED when the session is destroyed', async () => {
-    mocks.readManifestIfExists.mockResolvedValue(
-      createSessionRecord('destroyed'),
-    );
-
-    await expect(
-      runTypeCommand({
-        context: TEST_CONTEXT,
-        json: false,
-        sessionId: 'session-01',
-        text: 'hello',
-      }),
-    ).rejects.toMatchObject({
-      code: ERROR_CODES.SESSION_ALREADY_DESTROYED,
-      message: 'Session "session-01" is already destroyed.',
-      details: {
-        sessionId: 'session-01',
-        status: 'destroyed',
-      },
+  it('preserves JSON mode in the success envelope', async () => {
+    await runTypeCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      text: 'hello',
     });
-    expect(mocks.sendRpc).not.toHaveBeenCalled();
+
+    expect(mocks.emitSuccess).toHaveBeenCalledWith({
+      command: 'type',
+      json: true,
+      result: {},
+      lines: ['Typed text into session.'],
+    });
   });
 });

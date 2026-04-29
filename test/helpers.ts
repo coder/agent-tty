@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 
+import type { SessionRecord as ProtocolSessionRecord } from '../src/protocol/schemas.js';
 import type { SemanticSnapshot } from '../src/renderer/types.js';
 
 import { afterEach, expect } from 'vitest';
@@ -79,6 +80,27 @@ export function createTestSemanticSnapshot(
     cursorCol: 0,
     isAltScreen: false,
     visibleLines: [{ row: 0, text: 'offline output' }],
+    ...overrides,
+  };
+}
+
+export function createTestSessionRecord(
+  overrides: Partial<ProtocolSessionRecord> = {},
+): ProtocolSessionRecord {
+  return {
+    version: 1,
+    sessionId: 'session-01',
+    createdAt: '2026-03-19T12:00:00.000Z',
+    updatedAt: '2026-03-19T12:00:01.000Z',
+    status: 'running',
+    command: ['/bin/sh'],
+    cwd: '/tmp/workspace',
+    cols: 80,
+    rows: 24,
+    hostPid: 123,
+    childPid: 456,
+    exitCode: null,
+    exitSignal: null,
     ...overrides,
   };
 }

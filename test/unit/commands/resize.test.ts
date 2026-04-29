@@ -20,7 +20,7 @@ vi.mock('../../../src/host/rpcClient.js', () => ({
   sendRpc: mocks.sendRpc,
 }));
 
-import { runMarkCommand } from '../../../src/cli/commands/mark.js';
+import { runResizeCommand } from '../../../src/cli/commands/resize.js';
 import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
@@ -42,19 +42,19 @@ const COMMAND_TARGET = {
   manifest: { status: 'running' },
 };
 
-describe('mark command', () => {
+describe('resize command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.resolveCommandTarget.mockResolvedValue(COMMAND_TARGET);
-    mocks.sendRpc.mockResolvedValue({ seq: 12 });
   });
 
-  it('sends the mark RPC for a command target and emits the committed seq', async () => {
-    await runMarkCommand({
+  it('sends resize dimensions to a command target and emits dimensions', async () => {
+    await runResizeCommand({
       context: TEST_CONTEXT,
       json: false,
       sessionId: 'session-01',
-      label: 'checkpoint',
+      cols: 100,
+      rows: 30,
     });
 
     expect(mocks.resolveCommandTarget).toHaveBeenCalledWith({
@@ -63,72 +63,35 @@ describe('mark command', () => {
     });
     expect(mocks.sendRpc).toHaveBeenCalledWith(
       '/tmp/agent-tty/sockets/session-01.sock',
-      'mark',
-      { label: 'checkpoint' },
+      'resize',
+      { cols: 100, rows: 30 },
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
-      command: 'mark',
+      command: 'resize',
       json: false,
-      result: { seq: 12 },
-      lines: ['Marker set at seq 12.'],
+      result: { cols: 100, rows: 30 },
+      lines: ['Resized session to 100x30.'],
     });
   });
 
-  it('accepts an empty label', async () => {
-    mocks.sendRpc.mockResolvedValue({ seq: 7 });
-
-    await runMarkCommand({
-      context: TEST_CONTEXT,
-      json: false,
-      sessionId: 'session-01',
-      label: '',
-    });
-
-    expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sockets/session-01.sock',
-      'mark',
-      { label: '' },
-    );
-    expect(mocks.emitSuccess).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: 'mark',
-        result: { seq: 7 },
-      }),
-    );
-  });
-
-  it('preserves JSON mode and includes seq in the result envelope', async () => {
-    mocks.sendRpc.mockResolvedValue({ seq: 99 });
-
-    await runMarkCommand({
-      context: TEST_CONTEXT,
-      json: true,
-      sessionId: 'session-01',
-      label: 'json-marker',
-    });
-
-    expect(mocks.emitSuccess).toHaveBeenCalledWith({
-      command: 'mark',
-      json: true,
-      result: { seq: 99 },
-      lines: ['Marker set at seq 99.'],
-    });
-  });
-
-  it('rejects PROTOCOL_ERROR responses without sending success output', async () => {
-    mocks.sendRpc.mockResolvedValueOnce({ unexpected: true });
-
+  it('rejects invalid dimensions after resolving the command target', async () => {
     await expect(
-      runMarkCommand({
+      runResizeCommand({
         context: TEST_CONTEXT,
         json: false,
         sessionId: 'session-01',
-        label: 'broken',
+        cols: 0,
+        rows: 30,
       }),
     ).rejects.toMatchObject({
-      code: ERROR_CODES.PROTOCOL_ERROR,
-      message: 'Unexpected response from host',
+      code: ERROR_CODES.INVALID_DIMENSIONS,
+      message: 'Resize dimensions must be positive integers.',
     });
-    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+
+    expect(mocks.resolveCommandTarget).toHaveBeenCalledWith({
+      home: '/tmp/agent-tty',
+      sessionId: 'session-01',
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
 });

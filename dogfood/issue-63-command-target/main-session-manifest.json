@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "sessionId": "01KQDC1A7M9FN8EVETNKPJBDDT",
+  "createdAt": "2026-04-29T19:39:12.504Z",
+  "updatedAt": "2026-04-29T19:39:23.022Z",
+  "status": "running",
+  "command": ["/bin/bash", "--noprofile", "--norc"],
+  "cwd": "/home/coder/.mux/src/agent-terminal/agent-tty-8wce",
+  "name": "issue-63-command-target",
+  "shell": "/bin/bash",
+  "term": "xterm-256color",
+  "cols": 100,
+  "rows": 30,
+  "creationCols": 80,
+  "creationRows": 24,
+  "hostPid": 306096,
+  "childPid": 306109,
+  "exitCode": null,
+  "exitSignal": null
+}

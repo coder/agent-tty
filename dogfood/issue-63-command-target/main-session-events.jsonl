@@ -1,0 +1,15 @@
+{"seq":0,"ts":"2026-04-29T19:39:13.301Z","type":"output","payload":{"data":"\u001b[?2004hbash-5.1$ "}}
+{"seq":1,"ts":"2026-04-29T19:39:14.497Z","type":"input_run","payload":{"command":"printf 'hello issue 63\\n'","marker":"__AT_MARKER_b90108d5edac4369a6f43da422783394__","noWait":false}}
+{"seq":2,"ts":"2026-04-29T19:39:14.500Z","type":"output","payload":{"data":"printf 'hello issue 63\\n'\r\n\u001b[?2004l\r"}}
+{"seq":3,"ts":"2026-04-29T19:39:14.501Z","type":"output","payload":{"data":"hello issue 63\r\n\u001b[?2004hbash-5.1$ \u001b[?2004l\r"}}
+{"seq":4,"ts":"2026-04-29T19:39:14.501Z","type":"run_complete","payload":{"marker":"__AT_MARKER_b90108d5edac4369a6f43da422783394__","inputRunSeq":1}}
+{"seq":5,"ts":"2026-04-29T19:39:14.502Z","type":"output","payload":{"data":"\u001b[?2004hbash-5.1$ "}}
+{"seq":6,"ts":"2026-04-29T19:39:15.989Z","type":"input_text","payload":{"data":"echo typed issue 63\n"}}
+{"seq":7,"ts":"2026-04-29T19:39:15.989Z","type":"output","payload":{"data":"echo typed issue 63\r\n\u001b[?2004l\rtyped issue 63\r\n\u001b[?2004hbash-5.1$ "}}
+{"seq":8,"ts":"2026-04-29T19:39:18.394Z","type":"input_paste","payload":{"data":"\u001b[200~echo pasted issue 63\u001b[201~"}}
+{"seq":9,"ts":"2026-04-29T19:39:18.395Z","type":"output","payload":{"data":"\u001b[7mecho pasted issue 63\u001b[27m"}}
+{"seq":10,"ts":"2026-04-29T19:39:19.568Z","type":"input_keys","payload":{"keys":["Enter"]}}
+{"seq":11,"ts":"2026-04-29T19:39:19.569Z","type":"output","payload":{"data":"\rbash-5.1$ echo pasted issue 63\r\n\u001b[?2004l\rpasted issue 63\r\n\u001b[?2004hbash-5.1$ "}}
+{"seq":12,"ts":"2026-04-29T19:39:21.911Z","type":"marker","payload":{"label":"issue-63-proof"}}
+{"seq":13,"ts":"2026-04-29T19:39:23.023Z","type":"output","payload":{"data":"\r\u001b[Kbash-5.1$ "}}
+{"seq":14,"ts":"2026-04-29T19:39:23.024Z","type":"resize","payload":{"cols":100,"rows":30}}

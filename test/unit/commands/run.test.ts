@@ -2,34 +2,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
-  sendRpc: vi.fn(),
-  readManifestIfExists: vi.fn(),
-  sessionDir: vi.fn(),
-  manifestPath: vi.fn(),
-  socketPath: vi.fn(),
+  resolveCommandTarget: vi.fn(),
   resolveCommandInputText: vi.fn(),
+  sendRpc: vi.fn(),
+}));
+
+vi.mock('../../../src/cli/commandTarget.js', () => ({
+  resolveCommandTarget: mocks.resolveCommandTarget,
 }));
 
 vi.mock('../../../src/cli/output.js', () => ({
   emitSuccess: mocks.emitSuccess,
 }));
 
-vi.mock('../../../src/host/rpcClient.js', () => ({
-  sendRpc: mocks.sendRpc,
-}));
-
-vi.mock('../../../src/storage/manifests.js', () => ({
-  readManifestIfExists: mocks.readManifestIfExists,
-}));
-
-vi.mock('../../../src/storage/sessionPaths.js', () => ({
-  sessionDir: mocks.sessionDir,
-  manifestPath: mocks.manifestPath,
-  socketPath: mocks.socketPath,
-}));
-
 vi.mock('../../../src/cli/commands/inputSource.js', () => ({
   resolveCommandInputText: mocks.resolveCommandInputText,
+}));
+
+vi.mock('../../../src/host/rpcClient.js', () => ({
+  sendRpc: mocks.sendRpc,
 }));
 
 import { runRunCommand } from '../../../src/cli/commands/run.js';
@@ -47,25 +38,13 @@ const TEST_CONTEXT = {
   configFile: null,
 } as const;
 
-function createSessionRecord(
-  status: 'running' | 'exited' | 'destroyed' = 'running',
-) {
-  return {
-    version: 1,
-    sessionId: 'session-01',
-    createdAt: '2026-03-19T12:00:00.000Z',
-    updatedAt: '2026-03-19T12:00:01.000Z',
-    status,
-    command: ['/bin/sh'],
-    cwd: '/tmp/workspace',
-    cols: 80,
-    rows: 24,
-    hostPid: status === 'running' ? 123 : null,
-    childPid: status === 'running' ? 456 : null,
-    exitCode: status === 'exited' ? 0 : null,
-    exitSignal: null,
-  };
-}
+const COMMAND_TARGET = {
+  sessionId: 'session-01',
+  sessionDirectory: '/tmp/agent-tty/sessions/session-01',
+  manifestPath: '/tmp/agent-tty/sessions/session-01/session.json',
+  socketPath: '/tmp/agent-tty/sockets/session-01.sock',
+  manifest: { status: 'running' },
+};
 
 type RunCommandOptions = Parameters<typeof runRunCommand>[0];
 
@@ -86,19 +65,7 @@ function createOptions(
 describe('run command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.sessionDir.mockImplementation(
-      (_home: string, sessionId: string) =>
-        `/tmp/agent-tty/sessions/${sessionId}`,
-    );
-    mocks.manifestPath.mockImplementation(
-      (sessionDirectory: string) => `${sessionDirectory}/session.json`,
-    );
-    mocks.socketPath.mockImplementation(
-      (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
-    );
-    mocks.readManifestIfExists.mockResolvedValue(
-      createSessionRecord('running'),
-    );
+    mocks.resolveCommandTarget.mockResolvedValue(COMMAND_TARGET);
     mocks.resolveCommandInputText.mockResolvedValue('echo hello');
     mocks.sendRpc.mockResolvedValue({
       accepted: true,
@@ -114,7 +81,7 @@ describe('run command', () => {
     await runRunCommand(createOptions());
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sockets/session-01.sock',
       'run',
       {
         command: 'echo hello',
@@ -147,7 +114,7 @@ describe('run command', () => {
     await runRunCommand(createOptions({ wait: false }));
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sockets/session-01.sock',
       'run',
       {
         command: 'echo hello',
@@ -166,11 +133,38 @@ describe('run command', () => {
     });
   });
 
+  it('reports the timed-out branch when the host signals a timeout', async () => {
+    mocks.sendRpc.mockResolvedValueOnce({
+      accepted: true,
+      completed: false,
+      timedOut: true,
+      seq: 17,
+      durationMs: 30_000,
+      marker: 'test-marker',
+    });
+
+    await runRunCommand(createOptions());
+
+    expect(mocks.emitSuccess).toHaveBeenCalledWith({
+      command: 'run',
+      json: false,
+      result: {
+        accepted: true,
+        completed: false,
+        timedOut: true,
+        seq: 17,
+        durationMs: 30_000,
+        marker: 'test-marker',
+      },
+      lines: ['Command timed out after 30000ms (seq=17).'],
+    });
+  });
+
   it('uses the provided timeout for wait mode', async () => {
     await runRunCommand(createOptions({ timeout: 5_000 }));
 
     expect(mocks.sendRpc).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      '/tmp/agent-tty/sockets/session-01.sock',
       'run',
       {
         command: 'echo hello',
@@ -189,44 +183,7 @@ describe('run command', () => {
       code: ERROR_CODES.INVALID_INPUT,
       message: 'Timeout must be a positive integer in milliseconds',
     });
-    expect(mocks.readManifestIfExists).not.toHaveBeenCalled();
-    expect(mocks.sendRpc).not.toHaveBeenCalled();
-  });
-
-  it('throws SESSION_NOT_FOUND when the session does not exist', async () => {
-    mocks.readManifestIfExists.mockResolvedValueOnce(null);
-
-    await expect(runRunCommand(createOptions())).rejects.toMatchObject({
-      name: 'CliError',
-      code: ERROR_CODES.SESSION_NOT_FOUND,
-      message: 'Session "session-01" was not found.',
-    });
-    expect(mocks.sendRpc).not.toHaveBeenCalled();
-  });
-
-  it('throws SESSION_NOT_RUNNING when the session is not running', async () => {
-    mocks.readManifestIfExists.mockResolvedValueOnce(
-      createSessionRecord('exited'),
-    );
-
-    await expect(runRunCommand(createOptions())).rejects.toMatchObject({
-      name: 'CliError',
-      code: ERROR_CODES.SESSION_NOT_RUNNING,
-      message: 'Session "session-01" is not running.',
-    });
-    expect(mocks.sendRpc).not.toHaveBeenCalled();
-  });
-
-  it('throws SESSION_ALREADY_DESTROYED when the session is destroyed', async () => {
-    mocks.readManifestIfExists.mockResolvedValueOnce(
-      createSessionRecord('destroyed'),
-    );
-
-    await expect(runRunCommand(createOptions())).rejects.toMatchObject({
-      name: 'CliError',
-      code: ERROR_CODES.SESSION_ALREADY_DESTROYED,
-      message: 'Session "session-01" is already destroyed.',
-    });
+    expect(mocks.resolveCommandTarget).not.toHaveBeenCalled();
     expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
 
