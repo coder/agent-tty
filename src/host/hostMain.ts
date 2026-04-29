@@ -21,6 +21,7 @@ import { createPty } from '../pty/createPty.js';
 import { encodeKey } from '../pty/keyEncoder.js';
 import { encodePaste } from '../pty/pasteEncoder.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
+import { isCommandableSessionStatus } from '../protocol/sessionStatusPolicy.js';
 import type {
   MarkParams,
   PasteParams,
@@ -123,7 +124,7 @@ function normalizeExitSignal(signal: number | null): string | null {
 }
 
 function isSessionRunning(state: SessionState): boolean {
-  return state.snapshot().status === 'running';
+  return isCommandableSessionStatus(state.snapshot().status);
 }
 
 function rethrowAsync(error: unknown): void {

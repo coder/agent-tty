@@ -5,6 +5,10 @@ import { sendRpc } from '../../host/rpcClient.js';
 import type { RunResult } from '../../protocol/messages.js';
 import { RunResultSchema } from '../../protocol/messages.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
+import {
+  isCommandableSessionStatus,
+  isDestroyedSessionStatus,
+} from '../../protocol/sessionStatusPolicy.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
   manifestPath,
@@ -63,7 +67,7 @@ export async function runRunCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  if (manifest.status === 'destroyed') {
+  if (isDestroyedSessionStatus(manifest.status)) {
     throw makeCliError(ERROR_CODES.SESSION_ALREADY_DESTROYED, {
       message: `Session "${options.sessionId}" is already destroyed.`,
       details: {
@@ -73,7 +77,7 @@ export async function runRunCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  if (manifest.status !== 'running') {
+  if (!isCommandableSessionStatus(manifest.status)) {
     throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
       message: `Session "${options.sessionId}" is not running.`,
       details: {

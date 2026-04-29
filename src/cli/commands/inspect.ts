@@ -12,6 +12,10 @@ import type { CommandContext } from '../context.js';
 import { countEventLogEntries } from '../../host/eventLog.js';
 import { reconcileSession } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
+import {
+  isLiveHostEligibleSessionStatus,
+  isOfflineReplayEligibleSessionStatus,
+} from '../../protocol/sessionStatusPolicy.js';
 import { deriveTerminationCategory } from '../../protocol/terminationCategory.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { emitSuccess } from '../output.js';
@@ -54,23 +58,6 @@ function formatArtifactKinds(byKind: Record<string, number>): string {
 
 const RENDERER_BACKEND = 'ghostty-web';
 
-function usesOfflineReplay(sessionStatus: SessionStatus): boolean {
-  switch (sessionStatus) {
-    case 'running':
-    case 'exiting':
-      return false;
-    case 'exited':
-    case 'failed':
-    case 'destroying':
-    case 'destroyed':
-      return true;
-    default: {
-      const exhaustiveStatus: never = sessionStatus;
-      throw new Error(`unexpected session status: ${String(exhaustiveStatus)}`);
-    }
-  }
-}
-
 function deriveRendererRuntimeSummary(options: {
   usedOfflineReplay: boolean;
   sessionStatus: SessionStatus;
@@ -84,7 +71,7 @@ function deriveRendererRuntimeSummary(options: {
     };
   }
 
-  if (usesOfflineReplay(options.sessionStatus)) {
+  if (isOfflineReplayEligibleSessionStatus(options.sessionStatus)) {
     return {
       backend: RENDERER_BACKEND,
       mode: 'offline-replay',
@@ -146,8 +133,7 @@ function formatSessionLines(result: InspectResult): string[] {
   );
 
   if (
-    session.status !== 'running' &&
-    session.status !== 'exiting' &&
+    !isLiveHostEligibleSessionStatus(session.status) &&
     result.terminationCategory !== undefined
   ) {
     lines.push(`Termination: ${result.terminationCategory}`);
@@ -181,8 +167,8 @@ export async function runInspectCommand(
     });
   }
 
-  const isOffline = usesOfflineReplay(session.status);
-  if (!isOffline) {
+  const isLiveHostEligible = isLiveHostEligibleSessionStatus(session.status);
+  if (isLiveHostEligible) {
     try {
       const rawResult: unknown = await sendRpc(
         socketPath(sessionDirectory),

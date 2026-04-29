@@ -8,6 +8,11 @@ import { ulid } from 'ulid';
 
 import { CliError } from '../cli/errors.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
+import {
+  isActiveSessionStatus,
+  isDestroyedSessionStatus,
+  isTerminalSessionStatus,
+} from '../protocol/sessionStatusPolicy.js';
 import type { FailureOrigin, SessionRecord } from '../protocol/schemas.js';
 import { ensureHome, resolveHome } from '../storage/home.js';
 import {
@@ -139,22 +144,6 @@ function assertStringRecord(
   }
 }
 
-function isSessionTerminal(record: SessionRecord): boolean {
-  return (
-    record.status === 'exited' ||
-    record.status === 'failed' ||
-    record.status === 'destroyed'
-  );
-}
-
-function isSessionActive(record: SessionRecord): boolean {
-  return (
-    record.status === 'running' ||
-    record.status === 'exiting' ||
-    record.status === 'destroying'
-  );
-}
-
 function isProcessAlive(pid: number | null): boolean {
   if (pid === null) {
     return false;
@@ -270,7 +259,7 @@ async function waitForTerminalManifest(
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const manifest = await readManifest(manifestFile);
 
-    if (isSessionTerminal(manifest)) {
+    if (isTerminalSessionStatus(manifest.status)) {
       return manifest;
     }
 
@@ -477,14 +466,14 @@ export async function destroySession(
     getSessionPaths(sessionId);
   const manifest = await readSessionManifestOrThrow(sessionId, manifestFile);
 
-  if (manifest.status === 'destroyed') {
+  if (isDestroyedSessionStatus(manifest.status)) {
     throw makeCliError(ERROR_CODES.SESSION_ALREADY_DESTROYED, {
       message: `Session "${sessionId}" is already destroyed.`,
       details: { sessionId },
     });
   }
 
-  if (isSessionTerminal(manifest)) {
+  if (isTerminalSessionStatus(manifest.status)) {
     const destroyedManifest: SessionRecord = {
       ...manifest,
       status: 'destroyed',
@@ -511,7 +500,7 @@ export async function destroySession(
       sessionId,
       manifestFile,
     );
-    if (isSessionTerminal(reconciledManifest)) {
+    if (isTerminalSessionStatus(reconciledManifest.status)) {
       return;
     }
 
@@ -539,7 +528,7 @@ export async function destroySession(
       sessionId,
       manifestFile,
     );
-    if (isSessionTerminal(reconciledManifest)) {
+    if (isTerminalSessionStatus(reconciledManifest.status)) {
       return;
     }
 
@@ -556,7 +545,7 @@ export async function destroySession(
     sessionId,
     manifestFile,
   );
-  if (isSessionTerminal(reconciledManifest)) {
+  if (isTerminalSessionStatus(reconciledManifest.status)) {
     return;
   }
 
@@ -604,7 +593,7 @@ export async function listSessions(
       continue;
     }
 
-    if (isSessionActive(manifest)) {
+    if (isActiveSessionStatus(manifest.status)) {
       try {
         await reconcileSession(sessionDirectory);
         manifest = await readManifestIfExists(manifestFile);
@@ -617,7 +606,7 @@ export async function listSessions(
       }
     }
 
-    if (all !== true && isSessionTerminal(manifest)) {
+    if (all !== true && isTerminalSessionStatus(manifest.status)) {
       continue;
     }
 
@@ -640,7 +629,7 @@ export async function reconcileSession(
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
 
-  if (manifest === null || isSessionTerminal(manifest)) {
+  if (manifest === null || isTerminalSessionStatus(manifest.status)) {
     return;
   }
 
