@@ -161,7 +161,10 @@ function withoutLocalChangelogCredentials(): NodeJS.ProcessEnv {
   return env;
 }
 
-function withFakeMise(root: string): {
+function withFakeMise(
+  root: string,
+  exitCode = 0,
+): {
   env: NodeJS.ProcessEnv;
   marker: string;
 } {
@@ -174,7 +177,7 @@ function withFakeMise(root: string): {
     [
       '#!/usr/bin/env sh',
       `printf '%s\n' "$*" >> '${marker}'`,
-      'exit 0',
+      `exit ${String(exitCode)}`,
       '',
     ].join('\n'),
   );
@@ -186,6 +189,21 @@ function withFakeMise(root: string): {
       PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
     },
     marker,
+  };
+}
+
+function withoutGitIdentity(root: string): NodeJS.ProcessEnv {
+  const home = join(root, 'empty-home');
+  const xdgConfigHome = join(root, 'empty-xdg-config');
+  mkdirSync(home);
+  mkdirSync(xdgConfigHome);
+
+  return {
+    ...process.env,
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: join(root, 'missing-gitconfig'),
+    HOME: home,
+    XDG_CONFIG_HOME: xdgConfigHome,
   };
 }
 
@@ -366,6 +384,24 @@ describe('release scripts', () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
       'local main must be up to date with origin/main',
+    );
+    expect(runGit(repo, ['branch', '--show-current'])).toBe('main');
+  });
+
+  it('refuses release prep when git identity is missing', () => {
+    const { root, repo } = createTempRepo();
+    runGit(repo, ['config', '--unset', 'user.name']);
+    runGit(repo, ['config', '--unset', 'user.email']);
+
+    const result = runReleasePrep(
+      repo,
+      ['--version', '0.1.1-beta.5', '--changelog', 'ci'],
+      withoutGitIdentity(root),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'git user.name and user.email must be configured before creating the release-prep commit',
     );
     expect(runGit(repo, ['branch', '--show-current'])).toBe('main');
   });
@@ -575,6 +611,7 @@ if (changedFiles.includes('CHANGELOG.md')) {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('Release tag v0.1.1-beta.5 pushed.');
     expect(runGit(repo, ['tag', '--list'])).toBe('v0.1.1-beta.5');
+    expect(runGit(repo, ['cat-file', '-t', 'v0.1.1-beta.5'])).toBe('tag');
     expect(
       runGit(repo, [
         'ls-remote',
@@ -646,6 +683,19 @@ if (changedFiles.includes('CHANGELOG.md')) {
     expect(result.status).toBe(0);
     expect(readFileSync(marker, 'utf8')).toBe('run ci\n');
     expect(runGit(repo, ['tag', '--list'])).toBe('v0.1.1-beta.5');
+  });
+
+  it('does not create a release tag when finalization verification fails', () => {
+    const { root, repo } = createTempRepo('0.1.1-beta.5');
+    const { env, marker } = withFakeMise(root, 1);
+
+    const result = runReleaseFinalize(repo, ['--verify'], env);
+
+    expect(result.status).toBe(1);
+    expect(readFileSync(marker, 'utf8')).toBe('run ci\n');
+    expect(result.stderr).toContain('command failed: mise run ci');
+    expect(runGit(repo, ['tag', '--list'])).toBe('');
+    expect(runGit(repo, ['ls-remote', '--tags', 'origin'])).toBe('');
   });
 
   it('refuses to finalize when the remote release tag already exists', () => {
