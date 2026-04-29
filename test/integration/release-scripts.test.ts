@@ -644,6 +644,20 @@ if (changedFiles.includes('CHANGELOG.md')) {
     expect(runGit(repo, ['tag', '--list'])).toBe('');
   });
 
+  it('refuses to finalize when git identity is missing', () => {
+    const { root, repo } = createTempRepo('0.1.1-beta.5');
+    runGit(repo, ['config', '--unset', 'user.name']);
+    runGit(repo, ['config', '--unset', 'user.email']);
+
+    const result = runReleaseFinalize(repo, [], withoutGitIdentity(root));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'git user.name and user.email must be configured before creating the release tag',
+    );
+    expect(runGit(repo, ['tag', '--list'])).toBe('');
+  });
+
   it('refuses to finalize when local main is stale', () => {
     const { repo } = createTempRepo('0.1.1-beta.5');
     writeFileSync(join(repo, 'remote-only.txt'), 'remote change\n');
