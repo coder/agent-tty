@@ -644,6 +644,17 @@ if (changedFiles.includes('CHANGELOG.md')) {
     expect(runGit(repo, ['tag', '--list'])).toBe('');
   });
 
+  it('refuses to finalize package versions with build metadata before tagging', () => {
+    const { repo } = createTempRepo('0.1.1-beta.5+build.1');
+
+    const result = runReleaseFinalize(repo);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('contains build metadata');
+    expect(runGit(repo, ['tag', '--list'])).toBe('');
+    expect(runGit(repo, ['ls-remote', '--tags', 'origin'])).toBe('');
+  });
+
   it('refuses to finalize when git identity is missing', () => {
     const { root, repo } = createTempRepo('0.1.1-beta.5');
     runGit(repo, ['config', '--unset', 'user.name']);
