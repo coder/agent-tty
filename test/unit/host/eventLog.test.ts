@@ -23,7 +23,7 @@ let eventLogPath = '';
 
 describe('countEventLogEntries', () => {
   beforeEach(async () => {
-    // prettier-ignore
+    // oxfmt-ignore
     tempDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-event-log-')));
     eventLogPath = join(tempDir, 'events.jsonl');
   });
@@ -62,7 +62,7 @@ describe('countEventLogEntries', () => {
 
 describe('EventLog', () => {
   beforeEach(async () => {
-    // prettier-ignore
+    // oxfmt-ignore
     tempDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-event-log-')));
     eventLogPath = join(tempDir, 'events.jsonl');
     await writeFile(eventLogPath, '', 'utf8');

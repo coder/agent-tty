@@ -167,7 +167,7 @@ async function createSessionFixture(options?: {
   includeEventLog?: boolean;
   manifestOverrides?: Partial<SessionRecord>;
 }): Promise<{ sessionDir: string; sessionId: string }> {
-  // prettier-ignore
+  // oxfmt-ignore
   const sessionDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-offline-replay-')));
   tempDirs.push(sessionDir);
 

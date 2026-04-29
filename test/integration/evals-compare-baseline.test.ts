@@ -41,7 +41,7 @@ function readJsonFile(filePath: string): unknown {
 }
 
 function expectPerCaseComparisonShape(comparison: PerCaseComparison): void {
-  /* eslint-disable @typescript-eslint/no-unsafe-assignment -- expect.any() and expect.objectContaining() return any */
+  /* oxlint-disable typescript/no-unsafe-assignment -- expect.any() and expect.objectContaining() return any */
   expect(comparison).toEqual(
     expect.objectContaining({
       caseId: expect.any(String),
@@ -76,7 +76,7 @@ function expectPerCaseComparisonShape(comparison: PerCaseComparison): void {
       verdict: expect.any(String),
     }),
   );
-  /* eslint-enable @typescript-eslint/no-unsafe-assignment */
+  /* oxlint-enable typescript/no-unsafe-assignment */
 }
 
 let testRoot = '';
@@ -88,7 +88,7 @@ describe(
   },
   () => {
     beforeEach(() => {
-      // prettier-ignore
+      // oxfmt-ignore
       testRoot = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tty-evals-compare-baseline-')));
     });
 

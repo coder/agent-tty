@@ -100,7 +100,7 @@ describe('doctor command', () => {
   beforeEach(async () => {
     originalHome = process.env.HOME;
     originalPlaywrightBrowsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
-    // prettier-ignore
+    // oxfmt-ignore
     testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-doctor-home-')));
     process.env.AGENT_TTY_HOME = testHome;
   });

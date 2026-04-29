@@ -92,7 +92,7 @@ function testEnv(): Record<string, string> {
 
 describe('run command integration', { timeout: 45_000 }, () => {
   beforeEach(() => {
-    // prettier-ignore
+    // oxfmt-ignore
     testHome = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tty-run-home-')));
   });
 

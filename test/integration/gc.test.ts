@@ -38,7 +38,7 @@ let testHome = '';
 
 describe('gc integration', { timeout: 30000 }, () => {
   beforeEach(async () => {
-    // prettier-ignore
+    // oxfmt-ignore
     testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-gc-')));
   });
 

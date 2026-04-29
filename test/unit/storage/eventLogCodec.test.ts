@@ -48,7 +48,7 @@ let eventLogPath = '';
 
 describe('event log codec', () => {
   beforeEach(async () => {
-    // prettier-ignore
+    // oxfmt-ignore
     tempDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-event-log-codec-')));
     eventLogPath = join(tempDir, 'events.jsonl');
   });

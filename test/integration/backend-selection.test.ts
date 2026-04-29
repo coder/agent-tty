@@ -24,7 +24,7 @@ describe('backend selection integration', () => {
   let sessionId = '';
 
   beforeEach(async () => {
-    // prettier-ignore
+    // oxfmt-ignore
     testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-backend-selection-')));
   });
 

@@ -49,7 +49,7 @@ const SEMVER_WITH_OPTIONAL_PRERELEASE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 describe('CLI integration', () => {
   beforeEach(() => {
-    // prettier-ignore
+    // oxfmt-ignore
     testHome = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tty-cli-home-')));
   });
 
@@ -354,7 +354,7 @@ describe('CLI integration', () => {
   });
 
   it('uses --home instead of AGENT_TTY_HOME', () => {
-    // prettier-ignore
+    // oxfmt-ignore
     const overrideHome = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tty-cli-override-')));
 
     try {

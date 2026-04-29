@@ -24,7 +24,7 @@ import {
 const tempDirs: string[] = [];
 
 async function createTempDir(): Promise<string> {
-  // prettier-ignore
+  // oxfmt-ignore
   const directory = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-review-bundle-')));
   tempDirs.push(directory);
   return directory;

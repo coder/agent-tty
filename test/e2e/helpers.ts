@@ -37,7 +37,7 @@ function withJsonFlag(args: string[]): string[] {
   ];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- typed JSON helper keeps call sites concise in test code.
+// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- typed JSON helper keeps call sites concise in test code.
 export function runCliJson<TResult>(
   args: string[],
   env: Record<string, string>,
@@ -54,7 +54,7 @@ export function normalizeTerminalOutput(output: string): string {
 }
 
 export async function createIsolatedHome(): Promise<string> {
-  // prettier-ignore
+  // oxfmt-ignore
   const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-e2e-home-')));
   return home;
 }

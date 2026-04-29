@@ -330,7 +330,7 @@ describe('GhosttyWebBackend unit guards', () => {
 
   it('returns screenshot metadata including png dimensions and hashes', async () => {
     const backend = createBackend();
-    // prettier-ignore
+    // oxfmt-ignore
     const temporaryDirectory = await realpath(await mkdtemp(join(tmpdir(), 'ghostty-web-backend-')));
     const outputPath = join(temporaryDirectory, 'screenshot.png');
     const pngBuffer = createPngBuffer(800, 600);
@@ -397,7 +397,7 @@ describe('GhosttyWebBackend unit guards', () => {
 
   it('uses initial caret capture when showCursor is enabled', async () => {
     const backend = createBackend();
-    // prettier-ignore
+    // oxfmt-ignore
     const temporaryDirectory = await realpath(await mkdtemp(join(tmpdir(), 'ghostty-web-backend-cursor-')));
     const outputPath = join(temporaryDirectory, 'screenshot.png');
     const pngBuffer = createPngBuffer(640, 480);

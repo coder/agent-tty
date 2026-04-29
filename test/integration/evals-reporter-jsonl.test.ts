@@ -125,7 +125,7 @@ describe(
   { timeout: DEFAULT_EVAL_TIMEOUT_MS },
   () => {
     beforeEach(() => {
-      // prettier-ignore
+      // oxfmt-ignore
       testRoot = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tty-evals-reporter-jsonl-')));
     });
 

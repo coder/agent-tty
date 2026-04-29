@@ -12,7 +12,7 @@ import {
 const temporaryHomes: string[] = [];
 
 async function createTemporaryHome(): Promise<string> {
-  // prettier-ignore
+  // oxfmt-ignore
   const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-config-')));
   temporaryHomes.push(home);
   return home;

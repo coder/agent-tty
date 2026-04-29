@@ -72,7 +72,7 @@ export interface ReviewBundlePageModel {
   allArtifacts: BundleArtifact[];
 }
 
-/* eslint-disable @typescript-eslint/no-deprecated -- review-bundle intentionally uses passthrough manifests to keep legacy dogfood bundles readable. */
+/* oxlint-disable typescript/no-deprecated -- review-bundle intentionally uses passthrough manifests to keep legacy dogfood bundles readable. */
 const COMMAND_ENTRY_SCHEMA = z
   .union([
     z.string(),
@@ -122,7 +122,7 @@ export const BundleManifestSchema = z
       .optional(),
   })
   .passthrough();
-/* eslint-enable @typescript-eslint/no-deprecated */
+/* oxlint-enable typescript/no-deprecated */
 
 const NOTE_FILE_NAMES = new Set([
   'README.md',

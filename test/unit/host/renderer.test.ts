@@ -179,7 +179,7 @@ describe('HostRendererManager', () => {
   let backendFactory: ReturnType<typeof vi.fn<BackendFactory>>;
 
   beforeEach(async () => {
-    // prettier-ignore
+    // oxfmt-ignore
     sessionDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-')));
     backends = [];
     backendFactory = vi.fn(() => {

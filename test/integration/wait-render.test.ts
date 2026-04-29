@@ -106,7 +106,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
   let rpcSocketPath = '';
 
   beforeEach(async () => {
-    // prettier-ignore
+    // oxfmt-ignore
     testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-wait-render-')));
     sessionId = createSession(testHome, [...SESSION_COMMAND]);
     await waitForOutputMarker(testHome, sessionId, 'booting');

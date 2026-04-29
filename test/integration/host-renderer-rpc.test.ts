@@ -82,7 +82,7 @@ describe(
     let sessDir = '';
 
     beforeEach(async () => {
-      // prettier-ignore
+      // oxfmt-ignore
       testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-host-renderer-')));
       sessionId = createSession(testHome, [
         '/bin/sh',

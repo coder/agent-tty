@@ -112,7 +112,7 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
   });
 
   it('resolves the browser cache from the original HOME when HOME is isolated before boot', async () => {
-    // prettier-ignore
+    // oxfmt-ignore
     const isolatedHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-home-')));
     const previousHome = process.env.HOME;
     const previousBrowsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
@@ -373,7 +373,7 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
         payload: { data: `${expectedText}\r\n` },
       },
     ]);
-    // prettier-ignore
+    // oxfmt-ignore
     const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-restart-')));
     const screenshotAPath = join(outputDir, 'renderer-a.png');
     const screenshotBPath = join(outputDir, 'renderer-b.png');
@@ -443,7 +443,7 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       ]),
     );
 
-    // prettier-ignore
+    // oxfmt-ignore
     const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-shot-')));
     const outputPath = join(outputDir, 'renderer.png');
 

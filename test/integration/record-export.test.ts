@@ -83,7 +83,7 @@ describe('record export integration', { timeout: 120_000 }, () => {
   let testHome = '';
 
   beforeEach(async () => {
-    // prettier-ignore
+    // oxfmt-ignore
     testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-record-export-')));
   });
 
