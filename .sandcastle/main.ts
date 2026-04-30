@@ -323,6 +323,7 @@ async function runTriageAgent(
     const { createSandbox, claudeCode } = await import('@ai-hero/sandcastle');
     const coderOptions: CoderOptions = {
       template: 'coder',
+      preset: 'falkenstein',
       workspaceName,
       onClose: 'delete',
     };
