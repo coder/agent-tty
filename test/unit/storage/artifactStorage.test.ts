@@ -208,6 +208,32 @@ describe('artifact manifest storage', () => {
     ).resolves.toMatch(/\n$/u);
   });
 
+  it('preserves all entries when many concurrent appendArtifact() calls race for the same session', async () => {
+    const sessionDir = await createSessionDir();
+    const concurrentAppends = 20;
+
+    await Promise.all(
+      Array.from({ length: concurrentAppends }, (_value, index) =>
+        appendArtifact(
+          sessionDir,
+          createArtifactEntry({
+            id: `01JQ${String(index).padStart(22, '0')}`,
+            filename: `snapshot-${String(index)}-structured.json`,
+            capturedAtSeq: index,
+          }),
+        ),
+      ),
+    );
+
+    const manifest = await readArtifactManifest(sessionDir);
+
+    expect(manifest.artifacts).toHaveLength(concurrentAppends);
+    const seenSeqs = manifest.artifacts.map((entry) => entry.capturedAtSeq);
+    expect([...seenSeqs].sort((a, b) => a - b)).toEqual(
+      Array.from({ length: concurrentAppends }, (_value, index) => index),
+    );
+  });
+
   it('rejects invalid manifest contents and mismatched entries', async () => {
     const sessionDir = await createSessionDir();
 

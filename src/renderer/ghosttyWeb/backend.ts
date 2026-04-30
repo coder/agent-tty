@@ -24,6 +24,10 @@ import {
   createProcessLogger,
   type LogLevel,
 } from '../../util/logger.js';
+import {
+  ResourceScope,
+  ResourceScopeCloseError,
+} from '../../util/resourceScope.js';
 import type {
   ReplayTimingOptions,
   ScreenshotOptions,
@@ -1270,6 +1274,11 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   private initialReplayRows: number | null = null;
   private lastAppliedSeq = -1;
   private page: Page | null = null;
+  // Per-lifecycle scope: a fresh ResourceScope is created at the start of every
+  // bootInternal() and closed during boot-failure rollback or dispose(). This
+  // matches the existing contract of supporting a second boot() after dispose()
+  // (see test/integration/renderer-backend.test.ts).
+  private resourceScope: ResourceScope | null = null;
   private server: Server | null = null;
   private serverOrigin: string | null = null;
 
@@ -1979,11 +1988,15 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   }
 
   private async bootInternal(): Promise<void> {
+    const scope = new ResourceScope();
+    this.resourceScope = scope;
+
     try {
       const servedAssets = await getServedAssets();
       const { origin, server } = await this.startServer(servedAssets);
       this.server = server;
       this.serverOrigin = origin;
+      scope.add('server', () => closeServer(server));
 
       // Set PLAYWRIGHT_BROWSERS_PATH in process.env so downstream Playwright calls
       // find the browser cache even when HOME has been changed for isolation.
@@ -1999,16 +2012,18 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         );
       }
 
-      this.browser = await chromium.launch({
+      const browser = await chromium.launch({
         headless: true,
       });
-      this.browser.on('disconnected', () => {
+      this.browser = browser;
+      scope.add('browser', () => browser.close());
+      browser.on('disconnected', () => {
         this.recordUnexpectedFailure(
           new Error('ghostty-web browser disconnected unexpectedly'),
         );
       });
 
-      this.browserContext = await this.browser.newContext({
+      const browserContext = await browser.newContext({
         deviceScaleFactor: 1,
         viewport: this.videoOptions?.size
           ? {
@@ -2025,7 +2040,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
             }
           : {}),
       });
-      await this.browserContext.route('**/*', async (route) => {
+      this.browserContext = browserContext;
+      scope.add('browserContext', () => browserContext.close());
+      await browserContext.route('**/*', async (route) => {
         if (this.isAllowedBrowserRequest(route.request().url())) {
           await route.continue();
           return;
@@ -2034,8 +2051,14 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         await route.abort('blockedbyclient');
       });
 
-      this.page = await this.browserContext.newPage();
-      await this.page.exposeFunction(
+      const page = await browserContext.newPage();
+      this.page = page;
+      scope.add('page', async () => {
+        if (!page.isClosed()) {
+          await page.close();
+        }
+      });
+      await page.exposeFunction(
         '__agentTtyLog',
         (level: unknown, message: unknown, detail?: unknown) => {
           assertLogLevel(level, 'ghostty-web harness log level must be valid');
@@ -2068,7 +2091,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           }
         },
       );
-      this.page.on('close', () => {
+      page.on('close', () => {
         if (this.disposePromise !== null || this.expectedPageClosure) {
           return;
         }
@@ -2077,19 +2100,19 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           new Error('ghostty-web page closed unexpectedly'),
         );
       });
-      this.page.on('crash', () => {
+      page.on('crash', () => {
         this.recordUnexpectedFailure(new Error('ghostty-web page crashed'));
       });
-      this.page.on('pageerror', (error) => {
+      page.on('pageerror', (error) => {
         this.recordUnexpectedFailure(
           normalizeError(error, 'ghostty-web page error'),
         );
       });
 
-      await this.page.goto(this.buildHarnessUrl(origin), {
+      await page.goto(this.buildHarnessUrl(origin), {
         waitUntil: 'domcontentloaded',
       });
-      await this.page.waitForFunction(
+      await page.waitForFunction(
         () => {
           const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
           return (
@@ -2102,7 +2125,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         { timeout: 30_000 },
       );
 
-      const bridgeReady = await this.page.evaluate(() => {
+      const bridgeReady = await page.evaluate(() => {
         const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
         return (
           bridge !== undefined &&
@@ -2121,7 +2144,14 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         'failed to boot GhosttyWebBackend',
       );
       this.failureReason = bootError;
-      await this.cleanupHandles();
+      await this.closeResourceScopeAndLog(scope);
+      this.resourceScope = null;
+      this.page = null;
+      this.browserContext = null;
+      this.browser = null;
+      this.server = null;
+      this.serverOrigin = null;
+      this.isBooted = false;
       this.bootPromise = null;
       throw bootError;
     }
@@ -2134,58 +2164,40 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     return `${origin}/harness.html?${searchParams.toString()}`;
   }
 
-  private async cleanupHandles(): Promise<void> {
-    const page = this.page;
-    const browserContext = this.browserContext;
-    const browser = this.browser;
-    const server = this.server;
-
-    this.page = null;
-    this.browserContext = null;
-    this.browser = null;
-    this.server = null;
-    this.serverOrigin = null;
-    this.isBooted = false;
-
-    if (page !== null) {
-      try {
-        if (!page.isClosed()) {
-          await page.close();
+  private async closeResourceScopeAndLog(scope: ResourceScope): Promise<void> {
+    try {
+      await scope.close();
+    } catch (error) {
+      if (error instanceof ResourceScopeCloseError) {
+        for (const failure of error.failures) {
+          this.logger.warn('ghostty-web renderer cleanup failure', {
+            name: failure.name,
+            error: failure.error,
+          });
         }
-      } catch {
-        // Keep unwinding remaining resources even if a close operation fails.
+        return;
       }
-    }
-
-    if (browserContext !== null) {
-      try {
-        await browserContext.close();
-      } catch {
-        // Keep unwinding remaining resources even if a close operation fails.
-      }
-    }
-
-    if (browser !== null) {
-      try {
-        await browser.close();
-      } catch {
-        // Keep unwinding remaining resources even if a close operation fails.
-      }
-    }
-
-    if (server !== null) {
-      try {
-        await closeServer(server);
-      } catch {
-        // Keep unwinding remaining resources even if a close operation fails.
-      }
+      // Defensive: scope.close() should only ever reject with ResourceScopeCloseError.
+      this.logger.warn(
+        'ghostty-web renderer cleanup unexpected error during scope close',
+        error,
+      );
     }
   }
 
   private async disposeInternal(): Promise<void> {
+    const scope = this.resourceScope;
     try {
-      await this.cleanupHandles();
+      if (scope !== null) {
+        await this.closeResourceScopeAndLog(scope);
+      }
     } finally {
+      this.resourceScope = null;
+      this.page = null;
+      this.browserContext = null;
+      this.browser = null;
+      this.server = null;
+      this.serverOrigin = null;
       this.bootPromise = null;
       this.currentCols = null;
       this.currentRows = null;

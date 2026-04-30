@@ -9,6 +9,8 @@ import type { ReplayInput } from '../../../src/renderer/types.js';
 import { BUNDLED_FONT_ASSETS } from '../../../src/renderer/bundledFont.js';
 import { hashProfile, resolveProfile } from '../../../src/renderer/profiles.js';
 import { GhosttyWebBackend } from '../../../src/renderer/ghosttyWeb/index.js';
+import { Logger } from '../../../src/util/logger.js';
+import { ResourceScope } from '../../../src/util/resourceScope.js';
 
 const PROFILE = resolveProfile('reference-dark');
 
@@ -462,5 +464,48 @@ describe('GhosttyWebBackend unit guards', () => {
     } finally {
       await rm(temporaryDirectory, { force: true, recursive: true });
     }
+  });
+
+  it('logs each release failure via logger.warn and still resolves dispose() successfully', async () => {
+    const logger = new Logger('debug');
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const backend = new GhosttyWebBackend(
+      'renderer-unit-session',
+      PROFILE,
+      undefined,
+      logger,
+    );
+    const scope = new ResourceScope();
+    const browserError = new Error('browser close failed');
+    const serverError = new Error('server close failed');
+
+    scope.add('server', () => {
+      throw serverError;
+    });
+    scope.add('browser', () => {
+      throw browserError;
+    });
+
+    Object.assign(backend as object, { resourceScope: scope });
+
+    await expect(backend.dispose()).resolves.toBeUndefined();
+
+    const warnedNames = warnSpy.mock.calls.map((args) => {
+      const detail = args[1];
+      return typeof detail === 'object' && detail !== null && 'name' in detail
+        ? (detail as { name: unknown }).name
+        : null;
+    });
+    expect(warnedNames).toEqual(expect.arrayContaining(['browser', 'server']));
+
+    const warnedErrors = warnSpy.mock.calls.map((args) => {
+      const detail = args[1];
+      return typeof detail === 'object' && detail !== null && 'error' in detail
+        ? (detail as { error: unknown }).error
+        : null;
+    });
+    expect(warnedErrors).toEqual(
+      expect.arrayContaining([browserError, serverError]),
+    );
   });
 });
