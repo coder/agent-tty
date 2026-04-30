@@ -1,6 +1,11 @@
 # Dependencies
 node_modules/
 
+# Sandcastle (per-issue host worktrees and run-local state)
+.sandcastle/worktrees/
+.sandcastle/.env
+.sandcastle/logs/
+
 # Build output
 dist/
 out/
