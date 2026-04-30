@@ -58,18 +58,6 @@ export function runJson<T>(
   return schema.parse(parsed);
 }
 
-/**
- * Backwards-compatible thin wrapper around {@link runJson} for callers that
- * specifically execute `gh` and want the historical error-message label.
- */
-export function runGhJson<T>(
-  args: readonly string[],
-  schema: z.ZodType<T>,
-  runner: CommandRunner = runGh,
-): T {
-  return runJson('gh', args, schema, runner);
-}
-
 function runCommand(command: string, args: readonly string[]): CommandResult {
   invariant(
     Array.isArray(args) && args.every((arg) => typeof arg === 'string'),

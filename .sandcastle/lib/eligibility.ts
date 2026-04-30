@@ -91,12 +91,29 @@ function latestAfkMarkerCreatedAt(
   return markerTimestamps.at(-1);
 }
 
+/**
+ * GitHub Apps emit comments under logins suffixed `[bot]` (dependabot[bot],
+ * github-actions[bot], codecov[bot], etc.). For idempotency these must
+ * NOT count as reporter activity, otherwise routine bot noise on a
+ * `needs-info` issue would re-trigger triage every batch and create a
+ * Coder workspace per false positive.
+ */
+function isBotComment(comment: TriageComment): boolean {
+  const login = comment.author?.login;
+  return typeof login === 'string' && login.endsWith('[bot]');
+}
+
 function latestNonAfkActivity(
   issueNumber: number,
   comments: readonly TriageComment[],
 ): number | undefined {
   const timestamps = comments
     .filter((comment) => {
+      // Skip bot comments so dependabot/github-actions/codecov noise on a
+      // needs-info issue does not falsely re-eligibilize it.
+      if (isBotComment(comment)) {
+        return false;
+      }
       const marker = parseAfkMarker(comment.body);
       return marker === null || marker.issue !== issueNumber;
     })

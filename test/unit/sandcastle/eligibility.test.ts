@@ -82,4 +82,35 @@ describe('classifyIssueForTriage', () => {
       reason: 'issue does not have needs-triage or needs-info',
     });
   });
+
+  it('does not count GitHub App bot comments as reporter activity', () => {
+    // Bot comments (login ending in `[bot]`) on a needs-info issue should
+    // never re-trigger triage; otherwise dependabot/github-actions noise
+    // would create a Coder workspace per batch for no effect.
+    expect(
+      classifyIssueForTriage({
+        number: 123,
+        labels: ['needs-info'],
+        comments: [
+          {
+            body: '<!-- afk-triage:v1 issue=123 outcome=needs-info run=20260430T141500Z -->',
+            createdAt: '2026-04-30T14:15:00Z',
+          },
+          {
+            body: 'Bumps `vite` from 8.0.7 to 8.0.10.',
+            createdAt: '2026-04-30T15:00:00Z',
+            author: { login: 'dependabot[bot]' },
+          },
+          {
+            body: 'CI is green now.',
+            createdAt: '2026-04-30T15:01:00Z',
+            author: { login: 'github-actions[bot]' },
+          },
+        ],
+      }),
+    ).toEqual({
+      eligible: false,
+      reason: 'needs-info has no activity newer than the latest AFK marker',
+    });
+  });
 });

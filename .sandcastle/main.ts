@@ -331,11 +331,13 @@ function uniqueIssueFilter(): (issue: TriageIssue) => boolean {
   };
 }
 
-// Tracks sandboxes that have been created but not yet closed. Signal
-// handlers (see installSignalHandlers) iterate this set to call close()
-// on each so SIGINT/SIGTERM does not leave orphaned `agent-tty-triage-*`
-// Coder workspaces blocking future runs.
-const activeSandboxes = new Set<Sandbox>();
+// Tracks sandboxes that have been created but not yet closed, indexed by
+// the issue number that owns them. Signal handlers iterate this map to
+// call close() on each so SIGINT/SIGTERM does not leave orphaned
+// `agent-tty-triage-*` Coder workspaces blocking future runs. Storing the
+// issue number lets cleanup logs name the workspace's owner instead of an
+// opaque object reference.
+const activeSandboxes = new Map<Sandbox, number>();
 
 async function runTriageAgent(
   issue: TriageIssue,
@@ -378,7 +380,7 @@ async function runTriageAgent(
         },
       },
     });
-    activeSandboxes.add(sandbox);
+    activeSandboxes.set(sandbox, issue.number);
 
     await sandbox.run({
       agent: claudeCode('claude-opus-4-6'),
@@ -408,7 +410,16 @@ async function runTriageAgent(
       message: conciseErrorMessage(error),
     };
   } finally {
-    if (sandbox !== undefined) {
+    // Skip close when the sandbox was already cleaned up by the signal
+    // handler (closeActiveSandboxes). Otherwise we would call `coder
+    // delete` twice on the same workspace; the second call fails because
+    // the workspace is gone, the catch fires, and a successful triage
+    // gets silently overwritten with a misleading `close failed: workspace
+    // not found` message. Membership in `activeSandboxes` is the
+    // single-owner protocol that disambiguates "still ours to close"
+    // from "signal handler took it".
+    if (sandbox !== undefined && activeSandboxes.has(sandbox)) {
+      activeSandboxes.delete(sandbox);
       try {
         await sandbox.close();
       } catch (closeError) {
@@ -426,8 +437,6 @@ async function runTriageAgent(
               ? closeMessage
               : `${result.message ?? `original status: ${result.status}`}; ${closeMessage}`,
         };
-      } finally {
-        activeSandboxes.delete(sandbox);
       }
     }
   }
@@ -449,6 +458,11 @@ function pad(value: number): string {
   return String(value).padStart(2, '0');
 }
 
+function signalExitCode(signal: NodeJS.Signals): number {
+  // 128 + signal number convention. SIGINT=2 → 130, SIGTERM=15 → 143.
+  return signal === 'SIGINT' ? 130 : 143;
+}
+
 /**
  * Best-effort cleanup of every Coder workspace that has been created but
  * not yet closed. Used by signal handlers so SIGINT/SIGTERM during a batch
@@ -456,27 +470,58 @@ function pad(value: number): string {
  * runs (the per-issue workspace name acts as a lock, so an orphaned
  * workspace permanently blocks the corresponding issue until manual
  * `coder delete` or template TTL expiry).
+ *
+ * Logs each per-sandbox close result keyed by issue number so the operator
+ * can see exactly which workspaces are stranded after a forced shutdown.
  */
 async function closeActiveSandboxes(): Promise<void> {
-  const sandboxes = Array.from(activeSandboxes);
+  const entries = Array.from(activeSandboxes.entries());
   activeSandboxes.clear();
-  await Promise.allSettled(sandboxes.map((sandbox) => sandbox.close()));
+
+  const results = await Promise.allSettled(
+    entries.map(async ([sandbox, issueNumber]) => {
+      await sandbox.close();
+      return issueNumber;
+    }),
+  );
+
+  for (const [index, settled] of results.entries()) {
+    const entry = entries[index];
+    if (entry === undefined) {
+      continue;
+    }
+    const [, issueNumber] = entry;
+    if (settled.status === 'fulfilled') {
+      console.error(`[issue ${issueNumber}] sandbox closed during shutdown`);
+    } else {
+      console.error(
+        `[issue ${issueNumber}] sandbox close failed during shutdown — workspace may be stranded:`,
+        settled.reason,
+      );
+    }
+  }
 }
 
 function installSignalHandlers(): void {
   let signalled = false;
   const handle = (signal: NodeJS.Signals): void => {
+    // Second signal during cleanup forces immediate exit. The operator
+    // already decided to kill the process; the Coder template's
+    // `default_ttl` is the safety net for any sandboxes whose close()
+    // calls did not finish. Without this escape hatch a hung
+    // `coder delete` would make the process unkillable without `kill -9`.
     if (signalled) {
-      return;
+      console.error(
+        `[afk-triage] second ${signal}; force-exiting (cleanup in progress; remaining sandboxes will rely on template TTL)`,
+      );
+      process.exit(signalExitCode(signal));
     }
     signalled = true;
     console.error(
-      `[afk-triage] received ${signal}; closing ${activeSandboxes.size} active sandboxes`,
+      `[afk-triage] received ${signal}; closing ${activeSandboxes.size} active sandboxes (send ${signal} again to force-exit)`,
     );
     closeActiveSandboxes().finally(() => {
-      // 128 + signal number convention. SIGINT=2, SIGTERM=15.
-      const code = signal === 'SIGINT' ? 130 : 143;
-      process.exit(code);
+      process.exit(signalExitCode(signal));
     });
   };
 
@@ -485,11 +530,15 @@ function installSignalHandlers(): void {
 }
 
 async function main(): Promise<void> {
-  const args = parseRunnerArgs(process.argv.slice(2), process.env);
   process.env['CODER_WORKSPACE_USE_PARAMETER_DEFAULTS'] = 'true';
   installSignalHandlers();
 
   try {
+    // parseRunnerArgs is inside the try so an `--parallelism abc` typo or
+    // any other invariant failure produces a structured JSON summary via
+    // printSummary instead of escaping main() with a raw stack trace,
+    // matching the contract every other batch-level failure already follows.
+    const args = parseRunnerArgs(process.argv.slice(2), process.env);
     const summary = await runBatch(args);
     printSummary(summary);
   } catch (error) {
