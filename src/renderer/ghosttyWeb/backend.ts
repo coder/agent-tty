@@ -2394,9 +2394,20 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       return;
     }
 
+    // DEREM-18: only clear bootPromise once boot has fully succeeded. Doing
+    // this during an in-flight boot would let a concurrent dispose() see
+    // bootPromise === null in disposeAfterBoot(), skip its bootPromise
+    // wait, and start tearing down the scope while bootInternal is still
+    // suspended in waitForFunction. After a successful boot the promise is
+    // resolved already, so clearing it lets a future boot() call re-run
+    // bootInternal cleanly; bootInternal's own catch nulls it on the
+    // mid-boot failure path.
+    const wasBooted = this.isBooted;
     this.failureReason = error;
     this.isBooted = false;
-    this.bootPromise = null;
+    if (wasBooted) {
+      this.bootPromise = null;
+    }
   }
 
   private requireOperationalPage(methodName: string): Page {

@@ -509,4 +509,64 @@ describe('GhosttyWebBackend unit guards', () => {
       },
     ]);
   });
+
+  it('still resolves dispose() when logger.warn itself throws (DEREM-19, EPIPE during shutdown)', async () => {
+    const logger = new Logger('debug');
+    vi.spyOn(logger, 'warn').mockImplementation(() => {
+      // Simulate stderr broken pipe during process shutdown.
+      throw new Error('write EPIPE');
+    });
+
+    const backend = new GhosttyWebBackend(
+      'renderer-unit-session',
+      PROFILE,
+      undefined,
+      logger,
+    );
+    const scope = new ResourceScope();
+    scope.add('browser', () => {
+      throw new Error('browser close failed');
+    });
+    Object.assign(backend as object, { resourceScope: scope });
+
+    // ADR 0003 contract: dispose() resolves successfully even when
+    // cleanup logging itself fails.
+    await expect(backend.dispose()).resolves.toBeUndefined();
+  });
+
+  it('does not log the same scope close failures twice when called concurrently (DEREM-20, loggedScopes dedup)', async () => {
+    const logger = new Logger('debug');
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    const backend = new GhosttyWebBackend(
+      'renderer-unit-session',
+      PROFILE,
+      undefined,
+      logger,
+    );
+    const scope = new ResourceScope();
+    const browserError = new Error('browser close failed');
+    scope.add('browser', () => {
+      throw browserError;
+    });
+
+    // Drive the private helper twice on the same scope, simulating the
+    // boot-failure-rollback racing a concurrent dispose() before the
+    // narrowed gap can be reached in practice. The WeakSet dedup must
+    // log only one warning total.
+    const closeAndLog = (
+      backend as unknown as {
+        closeResourceScopeAndLog: (s: ResourceScope) => Promise<void>;
+      }
+    ).closeResourceScopeAndLog.bind(backend);
+
+    await closeAndLog(scope);
+    await closeAndLog(scope);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'ghostty-web renderer cleanup failure: browser',
+      browserError,
+    );
+  });
 });
