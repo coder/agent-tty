@@ -315,79 +315,76 @@ describe('screenshot capture', () => {
     expect(observed).toEqual([]);
   });
 
-  it('rejects renderer results that violate the shared invariants', async () => {
-    const cases: Array<{
-      name: string;
-      overrides: Partial<ScreenshotResult>;
-      pattern: RegExp;
-    }> = [
-      {
-        name: 'sessionId mismatch',
-        overrides: { sessionId: 'other-session' },
-        pattern: /sessionId must match expected sessionId/u,
-      },
-      {
-        name: 'profileName mismatch',
-        overrides: { profileName: 'reference-light' },
-        pattern: /profileName must match the requested profile/u,
-      },
-      {
-        name: 'non-positive pngSizeBytes',
-        // pngSizeBytes is asserted before the schema runs, so passing 0
-        // exercises the runtime invariant the same way a buggy backend would.
-        overrides: { pngSizeBytes: 0 },
-        pattern: /pngSizeBytes must be positive/u,
-      },
-      {
-        name: 'mismatched artifactPath',
-        overrides: { artifactPath: '/wrong/path.png' },
-        pattern: /path must match the requested output path/u,
-      },
-      {
-        name: 'missing sha256',
-        overrides: { sha256: undefined },
-        pattern: /must produce sha256/u,
-      },
-    ];
-
-    for (const testCase of cases) {
-      const sessionDirectory = await createSessionDir(
-        `session-inv-${testCase.name.replace(/\W+/gu, '-')}`,
-      );
+  // Each invariant gets its own test so that a single failure does not
+  // mask the others. Using `it.each` keeps the table-driven readability
+  // while reporting one independent test per row.
+  it.each([
+    {
+      name: 'sessionId mismatch',
+      overrides: { sessionId: 'other-session' } as Partial<ScreenshotResult>,
+      pattern: /sessionId must match expected sessionId/u,
+    },
+    {
+      name: 'profileName mismatch',
+      overrides: {
+        profileName: 'reference-light',
+      } as Partial<ScreenshotResult>,
+      pattern: /profileName must match the requested profile/u,
+    },
+    {
+      // pngSizeBytes is asserted before the schema runs, so passing 0
+      // exercises the runtime invariant the same way a buggy backend would.
+      name: 'non-positive pngSizeBytes',
+      overrides: { pngSizeBytes: 0 } as Partial<ScreenshotResult>,
+      pattern: /pngSizeBytes must be positive/u,
+    },
+    {
+      name: 'mismatched artifactPath',
+      overrides: {
+        artifactPath: '/wrong/path.png',
+      } as Partial<ScreenshotResult>,
+      pattern: /path must match the requested output path/u,
+    },
+    {
+      name: 'missing sha256',
+      overrides: { sha256: undefined } as Partial<ScreenshotResult>,
+      pattern: /must produce sha256/u,
+    },
+  ])(
+    'rejects $name and removes the temp file before any persistence',
+    async ({ name, overrides, pattern }) => {
+      const sessionId = `session-inv-${name.replace(/\W+/gu, '-')}`;
+      const sessionDirectory = await createSessionDir(sessionId);
       let observedTempPath: string | undefined;
       const backend = createFakeBackend({
         resultOverrides: {
-          ...testCase.overrides,
-          sessionId:
-            testCase.overrides.sessionId ??
-            `session-inv-${testCase.name.replace(/\W+/gu, '-')}`,
+          ...overrides,
+          sessionId: overrides.sessionId ?? sessionId,
         },
         onScreenshot: (outputPath) => {
           observedTempPath = outputPath;
         },
       });
-      const expectedSessionId = `session-inv-${testCase.name.replace(/\W+/gu, '-')}`;
 
       await expect(
         captureScreenshotResult({
           backend,
           sessionDir: sessionDirectory,
           profileName: 'reference-dark',
-          expectedSessionId,
+          expectedSessionId: sessionId,
         }),
-      ).rejects.toThrow(testCase.pattern);
+      ).rejects.toThrow(pattern);
 
       const manifest = await readArtifactManifest(sessionDirectory);
-      expect(manifest.artifacts, `case: ${testCase.name}`).toEqual([]);
+      expect(manifest.artifacts).toEqual([]);
       // The temp file written by the fake backend should have been removed.
-      expect(observedTempPath, `case: ${testCase.name}`).toMatch(
+      expect(observedTempPath).toMatch(
         /\/artifacts\/\.tmp-screenshot-.*\.png$/u,
       );
       if (observedTempPath !== undefined) {
-        await expect(
-          access(observedTempPath),
-          `case: ${testCase.name} (temp removed)`,
-        ).rejects.toMatchObject({ code: 'ENOENT' });
+        await expect(access(observedTempPath)).rejects.toMatchObject({
+          code: 'ENOENT',
+        });
       }
       // The final filename should not exist either since rename never ran.
       await expect(
@@ -398,8 +395,8 @@ describe('screenshot capture', () => {
           ),
         ),
       ).rejects.toMatchObject({ code: 'ENOENT' });
-    }
-  });
+    },
+  );
 
   it('rejects malformed public results before rename or manifest append', async () => {
     const sessionDirectory = await createSessionDir();
