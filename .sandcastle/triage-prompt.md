@@ -20,8 +20,6 @@ Read these files before taking action:
 - `docs/agents/triage-labels.md` defines the canonical label vocabulary for this repo.
 - `docs/agents/issue-tracker.md` defines `gh` CLI usage notes.
 
-Shell markers like ``!`...` `` are instructions for you to run or read them; sandcastle does not execute them automatically.
-
 ## Fetch the issue
 
 Fetch the canonical issue input:
