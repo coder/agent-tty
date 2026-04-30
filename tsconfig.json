@@ -24,6 +24,7 @@
     "src/**/*.ts",
     "test/**/*.ts",
     "evals/**/*.ts",
+    ".sandcastle/**/*.ts",
     "vitest.config.ts"
   ],
   "exclude": ["dist", "coverage", "node_modules"]
