@@ -510,6 +510,44 @@ describe('GhosttyWebBackend unit guards', () => {
     ]);
   });
 
+  it('waits for an in-flight boot to settle before disposing (DEREM-24, disposeAfterBoot bootPromise wait)', async () => {
+    const backend = new GhosttyWebBackend('renderer-unit-session', PROFILE);
+    const events: string[] = [];
+
+    let resolveBootGate!: () => void;
+    const bootGate = new Promise<void>((resolve) => {
+      resolveBootGate = resolve;
+    });
+
+    const scope = new ResourceScope();
+    scope.add('resource', () => {
+      events.push('released');
+    });
+
+    Object.assign(backend as object, {
+      bootPromise: bootGate.then(() => {
+        events.push('boot-settled');
+      }),
+      resourceScope: scope,
+    });
+
+    const disposePromise = backend.dispose();
+
+    // Yield several microtasks so disposeAfterBoot has every chance to
+    // observe a still-pending bootPromise. With the DEREM-5 fix in place,
+    // the release closure must NOT have run yet because dispose is parked
+    // on bootPromise.
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+    expect(events).toEqual([]);
+
+    resolveBootGate();
+    await disposePromise;
+
+    expect(events).toEqual(['boot-settled', 'released']);
+  });
+
   it('still resolves dispose() when logger.warn itself throws (DEREM-19, EPIPE during shutdown)', async () => {
     const logger = new Logger('debug');
     vi.spyOn(logger, 'warn').mockImplementation(() => {
@@ -534,7 +572,7 @@ describe('GhosttyWebBackend unit guards', () => {
     await expect(backend.dispose()).resolves.toBeUndefined();
   });
 
-  it('does not log the same scope close failures twice when called concurrently (DEREM-20, loggedScopes dedup)', async () => {
+  it('does not log the same scope close failures twice when closeResourceScopeAndLog is called twice on the same scope (DEREM-20, loggedScopes dedup)', async () => {
     const logger = new Logger('debug');
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
@@ -550,10 +588,12 @@ describe('GhosttyWebBackend unit guards', () => {
       throw browserError;
     });
 
-    // Drive the private helper twice on the same scope, simulating the
-    // boot-failure-rollback racing a concurrent dispose() before the
-    // narrowed gap can be reached in practice. The WeakSet dedup must
-    // log only one warning total.
+    // DEREM-25: drive the private helper twice on the same scope to prove
+    // the loggedScopes WeakSet dedup itself: the second call observes the
+    // memoized rejection from the first scope.close() and must short-circuit
+    // before re-iterating failures. The mechanism behaves the same when
+    // the two callers are sequential or concurrent (ResourceScope.close()
+    // is memoized).
     const closeAndLog = (
       backend as unknown as {
         closeResourceScopeAndLog: (s: ResourceScope) => Promise<void>;
