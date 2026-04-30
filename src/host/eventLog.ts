@@ -215,12 +215,11 @@ export async function countEventLogEntries(filePath: string): Promise<number> {
 }
 
 export class EventLog {
-  // Intentional: the writeQueue is poisoned on rejection. Once any append
+  // The writeQueue is intentionally poisoned on rejection. Once any append
   // fails, every subsequent queued write inherits that rejection so that
   // downstream code observes the failure and the event log remains the
   // canonical execution truth without sequence gaps. Do not refactor this
-  // into a generic per-key serializer that recovers between operations -
-  // see CONTEXT.md and the ResourceScope/KeyedSerializer ADR.
+  // into a generic per-key serializer that recovers between operations.
   private writeQueue: Promise<void> = Promise.resolve();
 
   private eventBuffer: EventRecord[] = [];

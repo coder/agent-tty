@@ -227,9 +227,12 @@ describe('artifact manifest storage', () => {
 
     const manifest = await readArtifactManifest(sessionDir);
 
+    // DEREM-12: KeyedSerializer guarantees sequential execution in
+    // submission order, so assert the persisted order directly rather
+    // than collapsing to set membership via sort.
     expect(manifest.artifacts).toHaveLength(concurrentAppends);
     const seenSeqs = manifest.artifacts.map((entry) => entry.capturedAtSeq);
-    expect([...seenSeqs].sort((a, b) => a - b)).toEqual(
+    expect(seenSeqs).toEqual(
       Array.from({ length: concurrentAppends }, (_value, index) => index),
     );
   });

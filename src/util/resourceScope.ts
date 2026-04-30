@@ -22,7 +22,7 @@ interface ResourceRegistration {
 }
 
 export class ResourceScope {
-  private readonly releases: ResourceRegistration[] = [];
+  private readonly registrations: ResourceRegistration[] = [];
   private closePromise: Promise<void> | null = null;
 
   public add(name: string, release: () => Promise<void> | void): void {
@@ -38,7 +38,7 @@ export class ResourceScope {
       typeof release === 'function',
       'ResourceScope.add() release must be a function',
     );
-    this.releases.push({ name, release });
+    this.registrations.push({ name, release });
   }
 
   public close(): Promise<void> {
@@ -48,11 +48,7 @@ export class ResourceScope {
 
   private async runReleases(): Promise<void> {
     const failures: ResourceScopeFailure[] = [];
-    for (let i = this.releases.length - 1; i >= 0; i--) {
-      const registration = this.releases[i];
-      if (registration === undefined) {
-        continue;
-      }
+    for (const registration of this.registrations.toReversed()) {
       try {
         await registration.release();
       } catch (error) {

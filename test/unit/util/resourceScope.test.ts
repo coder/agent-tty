@@ -6,6 +6,10 @@ import {
 } from '../../../src/util/resourceScope.js';
 
 describe('ResourceScope', () => {
+  it('resolves close() successfully when no resources are registered', async () => {
+    await expect(new ResourceScope().close()).resolves.toBeUndefined();
+  });
+
   it('runs the registered release callback when close() is called', async () => {
     const scope = new ResourceScope();
     let released = false;

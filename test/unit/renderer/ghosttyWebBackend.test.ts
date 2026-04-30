@@ -466,7 +466,7 @@ describe('GhosttyWebBackend unit guards', () => {
     }
   });
 
-  it('logs each release failure via logger.warn and still resolves dispose() successfully', async () => {
+  it('logs each release failure via logger.warn in LIFO order with the original Error attached, and resolves dispose() successfully', async () => {
     const logger = new Logger('debug');
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     const backend = new GhosttyWebBackend(
@@ -490,22 +490,23 @@ describe('GhosttyWebBackend unit guards', () => {
 
     await expect(backend.dispose()).resolves.toBeUndefined();
 
-    const warnedNames = warnSpy.mock.calls.map((args) => {
-      const detail = args[1];
-      return typeof detail === 'object' && detail !== null && 'name' in detail
-        ? (detail as { name: unknown }).name
-        : null;
-    });
-    expect(warnedNames).toEqual(expect.arrayContaining(['browser', 'server']));
-
-    const warnedErrors = warnSpy.mock.calls.map((args) => {
-      const detail = args[1];
-      return typeof detail === 'object' && detail !== null && 'error' in detail
-        ? (detail as { error: unknown }).error
-        : null;
-    });
-    expect(warnedErrors).toEqual(
-      expect.arrayContaining([browserError, serverError]),
-    );
+    // DEREM-16: LIFO release means 'browser' fails first, 'server' second.
+    // DEREM-2: failure.error is passed as the second logger.warn arg so
+    //          formatLogDetail's `instanceof Error` branch keeps the
+    //          original Error instance instead of stringifying it to '{}'.
+    const warnCalls = warnSpy.mock.calls.map((args) => ({
+      message: args[0],
+      detail: args[1],
+    }));
+    expect(warnCalls).toEqual([
+      {
+        message: 'ghostty-web renderer cleanup failure: browser',
+        detail: browserError,
+      },
+      {
+        message: 'ghostty-web renderer cleanup failure: server',
+        detail: serverError,
+      },
+    ]);
   });
 });
