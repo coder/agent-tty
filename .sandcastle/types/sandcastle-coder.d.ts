@@ -38,12 +38,15 @@ declare module '@ai-hero/sandcastle/sandboxes/coder' {
         readonly workdir?: string;
       };
 
-  // Sandcastle's IsolatedSandboxProvider is opaque to consumers; re-declare it
-  // narrowly so the runner can type the return value without importing the
-  // private internal symbol.
-  export type IsolatedSandboxProvider = unknown & {
-    readonly __coderProvider: unique symbol;
-  };
+  import type { CreateSandboxOptions } from '@ai-hero/sandcastle';
 
-  export function coder(options: CoderSandboxOptions): IsolatedSandboxProvider;
+  type PublishedSandboxProvider = CreateSandboxOptions['sandbox'];
+  type PublishedIsolatedSandboxProvider = Extract<
+    PublishedSandboxProvider,
+    { readonly tag: 'isolated' }
+  >;
+
+  export function coder(
+    options: CoderSandboxOptions,
+  ): PublishedIsolatedSandboxProvider;
 }
