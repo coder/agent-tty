@@ -88,6 +88,28 @@ The post-merge process that creates and publishes the release tag from the defau
 **Publish Pipeline**:
 The tag-triggered automation that validates, packages, and publishes a release after the **Release Finalization Step**.
 
+### Triage operations
+
+**AFK Triage**:
+A non-interactive run of the `triage` skill, driven by sandcastle inside a **Coder workspace**, that applies labels and posts comments directly without a maintainer in the loop. Routes low-confidence outcomes to `needs-info` instead of waiting.
+_Avoid_: "automated triage", "bot triage"
+
+**Triage Batch**:
+The set of issues processed by one parent-script invocation of **AFK Triage**. Spawns one **Coder workspace** and one **Triage Agent** per issue, bounded by a configurable parallelism cap.
+_Avoid_: "triage round", "triage wave"
+
+**Triage Agent**:
+A Claude Code instance executing **AFK Triage** on exactly one issue. Distinct from a **Coder workspace agent**.
+_Avoid_: bare "agent" (overloaded — see Flagged ambiguities)
+
+**Coder workspace**:
+A remote development environment provisioned by [Coder](https://coder.com) that hosts exactly one **Triage Agent** and its repo checkout. External concept owned by Coder; always qualify as "Coder workspace" to keep this project's **Session** terminology unambiguous.
+_Avoid_: bare "workspace", "Coder VM", "Coder sandbox"
+
+**Coder workspace agent**:
+The daemon Coder runs inside a **Coder workspace** that the Coder control plane connects to for SSH/exec. Distinct from a **Triage Agent**.
+_Avoid_: bare "agent", "Coder agent"
+
 ## Relationships
 
 - A **Session** has exactly one **Session Status** at a time.
@@ -115,6 +137,12 @@ The tag-triggered automation that validates, packages, and publishes a release a
 - A **Release Finalization Step** produces the release tag consumed by the **Publish Pipeline**.
 - A **Publish Pipeline** starts from the release tag and owns release packaging and publishing.
 
+- A **Triage Batch** processes one or more `needs-triage` issues, plus `needs-info` issues with new reporter activity since their last triage notes.
+- A **Triage Batch** spawns exactly one **Coder workspace** and one **Triage Agent** per issue it processes, capped by `TRIAGE_PARALLELISM`.
+- A **Coder workspace** hosts exactly one **Triage Agent** and is destroyed when that agent's run ends (success, failure, or timeout).
+- A **Triage Agent** has a checkout of this repo inside its **Coder workspace** and may attempt reproduction (for bug issues) before producing an agent brief or routing to `needs-info`.
+- An **AFK Triage** outcome moves the issue to `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`, or leaves it at `needs-triage` with notes — never silent.
+
 ## Example dialogue
 
 > **Dev:** "Can garbage collection remove a **destroying** **Session**?"
@@ -132,7 +160,14 @@ The tag-triggered automation that validates, packages, and publishes a release a
 > **Dev:** "If offline replay finds the requested text, did a **Screen Stability** **Render Wait** match?"
 > **Domain expert:** "No. Offline replay can show the latest **Semantic Snapshot**, but only live polling can prove the visible content stayed unchanged for the requested duration."
 
+> **Dev:** "Two **Triage Batches** kicked off five minutes apart — what happens to issue #142?"
+> **Domain expert:** "The first creates `agent-tty-triage-142`, processes it, and deletes the **Coder workspace**. The second starts five minutes later, sees `coder create agent-tty-triage-142` succeed because the first batch already cleaned up, queries the issue, finds it no longer carries `needs-triage`, and exits without action."
+
+> **Dev:** "If an **AFK Triage** can't reproduce a bug, what does it write?"
+> **Domain expert:** "Not a `ready-for-agent` brief. It posts a `needs-info` comment listing exactly what it tried, what failed, and the specific details it needs from the reporter; applies the `needs-info` label; and exits. The next **Triage Batch** picks the issue up after the reporter replies."
+
 ## Flagged ambiguities
 
 - "Active" and "offline replay eligible" are independent classifications: `destroying` is both **Active** and **Offline Replay Eligible**.
 - "Running Session Target" was used during design discussion, but the canonical term is **Command Target** because commandability is the policy being resolved.
+- "agent" is overloaded across three referents: this project's **Triage Agent** (a Claude Code instance), Coder's **Coder workspace agent** (the SSH/exec daemon), and a generic AFK implementation agent (the actor on `ready-for-agent` issues — Phase 2 of the triage pipeline). Always qualify in code comments and docs.
