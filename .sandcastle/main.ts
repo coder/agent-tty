@@ -408,6 +408,7 @@ function pad(value: number): string {
 
 async function main(): Promise<void> {
   const args = parseRunnerArgs(process.argv.slice(2), process.env);
+  process.env["CODER_WORKSPACE_USE_PARAMETER_DEFAULTS"] = "true";
 
   try {
     const summary = await runBatch(args);
