@@ -40,6 +40,12 @@ Comment body...
 - Use `onClose: 'delete'` on every sandbox so a successful or failed run removes the workspace.
 - The Coder template `coder` on `dev.coder.com` should set a short `default_ttl` (~1h) so a parent crash does not leave workspaces blocking future triage runs.
 
+## Dependency workarounds
+
+- `@ai-hero/sandcastle@0.5.6` depends on `@effect/platform-node@0.105.0`, whose non-optional peers include `@effect/cluster`, `@effect/rpc`, and `@effect/sql`.
+- The AFK triage runner imports `createSandbox` and `claudeCode` from `@ai-hero/sandcastle` at module load time, so ESM eagerly loads `@effect/platform-node`. Its top-level `export * as NodeClusterHttp from './NodeClusterHttp.js'` path imports `@effect/cluster/HttpRunner`, which fails under aube unless those peers are declared by this repo.
+- Keep `@effect/cluster`, `@effect/rpc`, and `@effect/sql` in `devDependencies` until sandcastle ships either (a) a release that exports `./sandboxes/coder` so the local vendor can be deleted and dependencies can be re-evaluated, or (b) a release whose pinned `@effect/platform-node` marks those peers optional or no longer eagerly re-exports `NodeClusterHttp`.
+
 ## Security model
 
 - Issue bodies and comments are untrusted input; the prompt must say so.
