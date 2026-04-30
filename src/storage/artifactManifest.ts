@@ -7,6 +7,7 @@ import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { readValidatedJsonFile, writeValidatedJsonFile } from './manifests.js';
 import { artifactPath } from './artifactPaths.js';
 import { invariant } from '../util/assert.js';
+import { KeyedSerializer } from '../util/keyedSerializer.js';
 
 const ARTIFACT_MANIFEST_FILENAME = 'manifest.json';
 const NonEmptyStringSchema = z.string().min(1);
@@ -52,7 +53,7 @@ export const ArtifactManifestSchema = z
   .strict();
 export type ArtifactManifest = z.infer<typeof ArtifactManifestSchema>;
 
-const appendQueues = new Map<string, Promise<void>>();
+const appendSerializer = new KeyedSerializer<string>();
 
 function artifactManifestPath(sessionDir: string): string {
   return artifactPath(sessionDir, ARTIFACT_MANIFEST_FILENAME);
@@ -178,25 +179,13 @@ export async function appendArtifact(
   const expectedSessionId = sessionIdFromSessionDir(resolvedSessionDir);
   const validatedEntry = validateArtifactEntry(entry, expectedSessionId);
 
-  const previousWrite =
-    appendQueues.get(resolvedSessionDir) ?? Promise.resolve();
-
-  const queuedWrite = previousWrite
-    .then(async () => {
-      const manifest = await readArtifactManifest(resolvedSessionDir);
-      await writeArtifactManifest(resolvedSessionDir, {
-        ...manifest,
-        artifacts: [...manifest.artifacts, validatedEntry],
-      });
-    })
-    .finally(() => {
-      if (appendQueues.get(resolvedSessionDir) === queuedWrite) {
-        appendQueues.delete(resolvedSessionDir);
-      }
+  await appendSerializer.run(resolvedSessionDir, async () => {
+    const manifest = await readArtifactManifest(resolvedSessionDir);
+    await writeArtifactManifest(resolvedSessionDir, {
+      ...manifest,
+      artifacts: [...manifest.artifacts, validatedEntry],
     });
-
-  appendQueues.set(resolvedSessionDir, queuedWrite);
-  await queuedWrite;
+  });
 }
 
 export function createArtifactEntry(

@@ -233,6 +233,13 @@ export async function runHost(sessionId: string): Promise<void> {
     );
   };
 
+  // PTY ingestion recovers after a failure: the .then(operation, operation)
+  // shape runs the next queued operation regardless of whether the
+  // predecessor fulfilled or rejected, and the chain is resumed with
+  // .catch(() => undefined) so subsequent ingestion work is not gated on
+  // past rejections. Do not refactor this into a generic per-key
+  // serializer that cascades rejections - that would silently drop later
+  // PTY data after a single ingestion error.
   const enqueuePtyIngestion = (
     operation: () => Promise<void>,
   ): Promise<void> => {

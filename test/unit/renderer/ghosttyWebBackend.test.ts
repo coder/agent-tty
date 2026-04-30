@@ -9,6 +9,8 @@ import type { ReplayInput } from '../../../src/renderer/types.js';
 import { BUNDLED_FONT_ASSETS } from '../../../src/renderer/bundledFont.js';
 import { hashProfile, resolveProfile } from '../../../src/renderer/profiles.js';
 import { GhosttyWebBackend } from '../../../src/renderer/ghosttyWeb/index.js';
+import { Logger } from '../../../src/util/logger.js';
+import { ResourceScope } from '../../../src/util/resourceScope.js';
 
 const PROFILE = resolveProfile('reference-dark');
 
@@ -462,5 +464,188 @@ describe('GhosttyWebBackend unit guards', () => {
     } finally {
       await rm(temporaryDirectory, { force: true, recursive: true });
     }
+  });
+
+  it('logs each release failure via logger.warn in LIFO order with the original Error attached, and resolves dispose() successfully', async () => {
+    const logger = new Logger('debug');
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const backend = new GhosttyWebBackend(
+      'renderer-unit-session',
+      PROFILE,
+      undefined,
+      logger,
+    );
+    const scope = new ResourceScope();
+    const browserError = new Error('browser close failed');
+    const serverError = new Error('server close failed');
+
+    scope.add('server', () => {
+      throw serverError;
+    });
+    scope.add('browser', () => {
+      throw browserError;
+    });
+
+    Object.assign(backend as object, { resourceScope: scope });
+
+    await expect(backend.dispose()).resolves.toBeUndefined();
+
+    // DEREM-16: LIFO release means 'browser' fails first, 'server' second.
+    // DEREM-2: failure.error is passed as the second logger.warn arg so
+    //          formatLogDetail's `instanceof Error` branch keeps the
+    //          original Error instance instead of stringifying it to '{}'.
+    const warnCalls = warnSpy.mock.calls.map((args) => ({
+      message: args[0],
+      detail: args[1],
+    }));
+    expect(warnCalls).toEqual([
+      {
+        message: 'ghostty-web renderer cleanup failure: browser',
+        detail: browserError,
+      },
+      {
+        message: 'ghostty-web renderer cleanup failure: server',
+        detail: serverError,
+      },
+    ]);
+  });
+
+  it('waits for an in-flight boot to settle before disposing (DEREM-24, disposeAfterBoot bootPromise wait)', async () => {
+    const backend = new GhosttyWebBackend('renderer-unit-session', PROFILE);
+    const events: string[] = [];
+
+    let resolveBootGate!: () => void;
+    const bootGate = new Promise<void>((resolve) => {
+      resolveBootGate = resolve;
+    });
+
+    const scope = new ResourceScope();
+    scope.add('resource', () => {
+      events.push('released');
+    });
+
+    Object.assign(backend as object, {
+      bootPromise: bootGate.then(() => {
+        events.push('boot-settled');
+      }),
+      resourceScope: scope,
+    });
+
+    const disposePromise = backend.dispose();
+
+    // Yield several microtasks so disposeAfterBoot has every chance to
+    // observe a still-pending bootPromise. With the DEREM-5 fix in place,
+    // the release closure must NOT have run yet because dispose is parked
+    // on bootPromise.
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+    expect(events).toEqual([]);
+
+    resolveBootGate();
+    await disposePromise;
+
+    expect(events).toEqual(['boot-settled', 'released']);
+  });
+
+  it('still resolves dispose() when an in-flight boot rejects (DEREM-26, disposeAfterBoot swallows boot failure)', async () => {
+    const backend = new GhosttyWebBackend('renderer-unit-session', PROFILE);
+    const events: string[] = [];
+
+    let rejectBootGate!: (reason: Error) => void;
+    const bootGate = new Promise<void>((_resolve, reject) => {
+      rejectBootGate = reject;
+    });
+
+    const scope = new ResourceScope();
+    scope.add('resource', () => {
+      events.push('released');
+    });
+
+    Object.assign(backend as object, {
+      bootPromise: bootGate.catch((error: unknown) => {
+        events.push('boot-rejected');
+        throw error;
+      }),
+      resourceScope: scope,
+    });
+
+    const disposePromise = backend.dispose();
+
+    // Yield several microtasks so disposeAfterBoot is parked on the
+    // pending bootPromise. Once we reject it, the try/catch must swallow
+    // the boot rejection and disposeInternal must run cleanly so the
+    // ADR 0003 contract (dispose resolves successfully) holds.
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+    expect(events).toEqual([]);
+
+    rejectBootGate(new Error('boot failed'));
+
+    await expect(disposePromise).resolves.toBeUndefined();
+    expect(events).toEqual(['boot-rejected', 'released']);
+  });
+
+  it('still resolves dispose() when logger.warn itself throws (DEREM-19, EPIPE during shutdown)', async () => {
+    const logger = new Logger('debug');
+    vi.spyOn(logger, 'warn').mockImplementation(() => {
+      // Simulate stderr broken pipe during process shutdown.
+      throw new Error('write EPIPE');
+    });
+
+    const backend = new GhosttyWebBackend(
+      'renderer-unit-session',
+      PROFILE,
+      undefined,
+      logger,
+    );
+    const scope = new ResourceScope();
+    scope.add('browser', () => {
+      throw new Error('browser close failed');
+    });
+    Object.assign(backend as object, { resourceScope: scope });
+
+    // ADR 0003 contract: dispose() resolves successfully even when
+    // cleanup logging itself fails.
+    await expect(backend.dispose()).resolves.toBeUndefined();
+  });
+
+  it('does not log the same scope close failures twice when closeResourceScopeAndLog is called twice on the same scope (DEREM-20, loggedScopes dedup)', async () => {
+    const logger = new Logger('debug');
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    const backend = new GhosttyWebBackend(
+      'renderer-unit-session',
+      PROFILE,
+      undefined,
+      logger,
+    );
+    const scope = new ResourceScope();
+    const browserError = new Error('browser close failed');
+    scope.add('browser', () => {
+      throw browserError;
+    });
+
+    // DEREM-25: drive the private helper twice on the same scope to prove
+    // the loggedScopes WeakSet dedup itself: the second call observes the
+    // memoized rejection from the first scope.close() and must short-circuit
+    // before re-iterating failures. The mechanism behaves the same when
+    // the two callers are sequential or concurrent (ResourceScope.close()
+    // is memoized).
+    const closeAndLog = (
+      backend as unknown as {
+        closeResourceScopeAndLog: (s: ResourceScope) => Promise<void>;
+      }
+    ).closeResourceScopeAndLog.bind(backend);
+
+    await closeAndLog(scope);
+    await closeAndLog(scope);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'ghostty-web renderer cleanup failure: browser',
+      browserError,
+    );
   });
 });

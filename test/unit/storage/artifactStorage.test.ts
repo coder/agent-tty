@@ -208,6 +208,35 @@ describe('artifact manifest storage', () => {
     ).resolves.toMatch(/\n$/u);
   });
 
+  it('preserves all entries when many concurrent appendArtifact() calls race for the same session', async () => {
+    const sessionDir = await createSessionDir();
+    const concurrentAppends = 20;
+
+    await Promise.all(
+      Array.from({ length: concurrentAppends }, (_value, index) =>
+        appendArtifact(
+          sessionDir,
+          createArtifactEntry({
+            id: `01JQ${String(index).padStart(22, '0')}`,
+            filename: `snapshot-${String(index)}-structured.json`,
+            capturedAtSeq: index,
+          }),
+        ),
+      ),
+    );
+
+    const manifest = await readArtifactManifest(sessionDir);
+
+    // DEREM-12: KeyedSerializer guarantees sequential execution in
+    // submission order, so assert the persisted order directly rather
+    // than collapsing to set membership via sort.
+    expect(manifest.artifacts).toHaveLength(concurrentAppends);
+    const seenSeqs = manifest.artifacts.map((entry) => entry.capturedAtSeq);
+    expect(seenSeqs).toEqual(
+      Array.from({ length: concurrentAppends }, (_value, index) => index),
+    );
+  });
+
   it('rejects invalid manifest contents and mismatched entries', async () => {
     const sessionDir = await createSessionDir();
 

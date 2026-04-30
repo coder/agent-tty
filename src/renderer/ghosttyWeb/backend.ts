@@ -24,6 +24,10 @@ import {
   createProcessLogger,
   type LogLevel,
 } from '../../util/logger.js';
+import {
+  ResourceScope,
+  ResourceScopeCloseError,
+} from '../../util/resourceScope.js';
 import type {
   ReplayTimingOptions,
   ScreenshotOptions,
@@ -1266,10 +1270,25 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   private disposePromise: Promise<void> | null = null;
   private expectedPageClosure = false;
   private failureReason: Error | null = null;
+  // True once finalizeVideo() has manually closed page + browserContext.
+  // Release closures in the per-lifecycle ResourceScope check this flag so
+  // dispose() does not call .close() a second time on those externally
+  // closed handles. Reset at the start of every bootInternal() and on
+  // disposeInternal() state nulling.
+  private pageAndContextReleasedExternally = false;
+  // Memoizes which scopes have already had their failures logged. Prevents
+  // duplicate warnings if both bootInternal()'s catch and a concurrent
+  // dispose() race on the same scope.
+  private readonly loggedScopes = new WeakSet<ResourceScope>();
   private initialReplayCols: number | null = null;
   private initialReplayRows: number | null = null;
   private lastAppliedSeq = -1;
   private page: Page | null = null;
+  // Per-lifecycle scope: a fresh ResourceScope is created at the start of every
+  // bootInternal() and closed during boot-failure rollback or dispose(). This
+  // matches the existing contract of supporting a second boot() after dispose()
+  // (see test/integration/renderer-backend.test.ts).
+  private resourceScope: ResourceScope | null = null;
   private server: Server | null = null;
   private serverOrigin: string | null = null;
 
@@ -1936,6 +1955,10 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     try {
       await page.close();
       await browserContext.close();
+      // DEREM-6: tell the per-lifecycle ResourceScope's release closures
+      // that page + browserContext are already released, so dispose() does
+      // not call .close() a second time on these handles.
+      this.pageAndContextReleasedExternally = true;
     } finally {
       this.expectedPageClosure = false;
     }
@@ -1974,16 +1997,46 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       return;
     }
 
-    this.disposePromise = this.disposeInternal();
-    await this.disposePromise;
+    // Symmetric with boot()'s wait on disposePromise: avoid racing with an
+    // in-flight bootInternal() so cleanup does not try to close partially
+    // acquired resources mid-acquisition. Boot-failure rollback owns its
+    // own scope close; we swallow its rejection here.
+    this.disposePromise = this.disposeAfterBoot();
+    try {
+      await this.disposePromise;
+    } finally {
+      // DEREM-4: clear here, not inside disposeInternal()'s finally. When
+      // disposeInternal runs synchronously (no scope to close), its finally
+      // would otherwise execute before the outer assignment lands and leave
+      // a stale resolved Promise pinned on this.disposePromise.
+      this.disposePromise = null;
+    }
+  }
+
+  private async disposeAfterBoot(): Promise<void> {
+    if (this.bootPromise !== null) {
+      try {
+        await this.bootPromise;
+      } catch {
+        // Boot-failure rollback already cleaned up. Ignore.
+      }
+    }
+    await this.disposeInternal();
   }
 
   private async bootInternal(): Promise<void> {
+    // Fresh per-lifecycle scope; reset the externally-released flag so a
+    // re-boot after a video-finalized session uses unguarded releases.
+    this.pageAndContextReleasedExternally = false;
+    const scope = new ResourceScope();
+    this.resourceScope = scope;
+
     try {
       const servedAssets = await getServedAssets();
       const { origin, server } = await this.startServer(servedAssets);
       this.server = server;
       this.serverOrigin = origin;
+      scope.add('server', () => closeServer(server));
 
       // Set PLAYWRIGHT_BROWSERS_PATH in process.env so downstream Playwright calls
       // find the browser cache even when HOME has been changed for isolation.
@@ -1999,16 +2052,18 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         );
       }
 
-      this.browser = await chromium.launch({
+      const browser = await chromium.launch({
         headless: true,
       });
-      this.browser.on('disconnected', () => {
+      this.browser = browser;
+      scope.add('browser', () => browser.close());
+      browser.on('disconnected', () => {
         this.recordUnexpectedFailure(
           new Error('ghostty-web browser disconnected unexpectedly'),
         );
       });
 
-      this.browserContext = await this.browser.newContext({
+      const browserContext = await browser.newContext({
         deviceScaleFactor: 1,
         viewport: this.videoOptions?.size
           ? {
@@ -2025,7 +2080,17 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
             }
           : {}),
       });
-      await this.browserContext.route('**/*', async (route) => {
+      this.browserContext = browserContext;
+      scope.add('browserContext', async () => {
+        // DEREM-6: finalizeVideo() closes the browser context manually as
+        // part of saving the video. BrowserContext lacks an isClosed()
+        // probe, so rely on a backend flag to skip the second close.
+        if (this.pageAndContextReleasedExternally) {
+          return;
+        }
+        await browserContext.close();
+      });
+      await browserContext.route('**/*', async (route) => {
         if (this.isAllowedBrowserRequest(route.request().url())) {
           await route.continue();
           return;
@@ -2034,8 +2099,20 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         await route.abort('blockedbyclient');
       });
 
-      this.page = await this.browserContext.newPage();
-      await this.page.exposeFunction(
+      const page = await browserContext.newPage();
+      this.page = page;
+      scope.add('page', async () => {
+        // DEREM-6: when finalizeVideo() has already closed the page, skip
+        // the redundant close. The isClosed() probe still guards the
+        // common dispose-only path.
+        if (this.pageAndContextReleasedExternally) {
+          return;
+        }
+        if (!page.isClosed()) {
+          await page.close();
+        }
+      });
+      await page.exposeFunction(
         '__agentTtyLog',
         (level: unknown, message: unknown, detail?: unknown) => {
           assertLogLevel(level, 'ghostty-web harness log level must be valid');
@@ -2068,7 +2145,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           }
         },
       );
-      this.page.on('close', () => {
+      page.on('close', () => {
         if (this.disposePromise !== null || this.expectedPageClosure) {
           return;
         }
@@ -2077,19 +2154,19 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           new Error('ghostty-web page closed unexpectedly'),
         );
       });
-      this.page.on('crash', () => {
+      page.on('crash', () => {
         this.recordUnexpectedFailure(new Error('ghostty-web page crashed'));
       });
-      this.page.on('pageerror', (error) => {
+      page.on('pageerror', (error) => {
         this.recordUnexpectedFailure(
           normalizeError(error, 'ghostty-web page error'),
         );
       });
 
-      await this.page.goto(this.buildHarnessUrl(origin), {
+      await page.goto(this.buildHarnessUrl(origin), {
         waitUntil: 'domcontentloaded',
       });
-      await this.page.waitForFunction(
+      await page.waitForFunction(
         () => {
           const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
           return (
@@ -2102,7 +2179,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         { timeout: 30_000 },
       );
 
-      const bridgeReady = await this.page.evaluate(() => {
+      const bridgeReady = await page.evaluate(() => {
         const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
         return (
           bridge !== undefined &&
@@ -2120,8 +2197,20 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         pageError === null ? error : new Error(pageError),
         'failed to boot GhosttyWebBackend',
       );
+      // DEREM-3: null state and clear isBooted synchronously BEFORE
+      // awaiting scope close. Release closures captured local resource
+      // variables, so they are unaffected. Any concurrent operation that
+      // checks requireOperationalPage() now fails immediately on a clear
+      // invariant rather than acting on a tearing-down resource.
+      this.resourceScope = null;
+      this.page = null;
+      this.browserContext = null;
+      this.browser = null;
+      this.server = null;
+      this.serverOrigin = null;
+      this.isBooted = false;
       this.failureReason = bootError;
-      await this.cleanupHandles();
+      await this.closeResourceScopeAndLog(scope);
       this.bootPromise = null;
       throw bootError;
     }
@@ -2134,12 +2223,60 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     return `${origin}/harness.html?${searchParams.toString()}`;
   }
 
-  private async cleanupHandles(): Promise<void> {
-    const page = this.page;
-    const browserContext = this.browserContext;
-    const browser = this.browser;
-    const server = this.server;
+  private async closeResourceScopeAndLog(scope: ResourceScope): Promise<void> {
+    try {
+      await scope.close();
+    } catch (error) {
+      // DEREM-8: skip duplicate logging if another caller already drained
+      // and logged this scope's failures (e.g., bootInternal()'s catch
+      // racing with a concurrent dispose() on the same scope reference).
+      if (this.loggedScopes.has(scope)) {
+        return;
+      }
+      this.loggedScopes.add(scope);
 
+      // DEREM-7: ADR 0003 promises dispose() resolves successfully even on
+      // cleanup failure. Wrap each logger.warn so a broken stderr (EPIPE
+      // during process shutdown) cannot reject this method and propagate
+      // through dispose().
+      if (error instanceof ResourceScopeCloseError) {
+        for (const failure of error.failures) {
+          // DEREM-2: pass the failure error directly so formatLogDetail
+          // hits its `instanceof Error` branch instead of stringifying an
+          // Error wrapper into `{}`.
+          this.safeWarn(
+            `ghostty-web renderer cleanup failure: ${failure.name}`,
+            failure.error,
+          );
+        }
+        return;
+      }
+      // Defensive: scope.close() should only ever reject with
+      // ResourceScopeCloseError, but log defensively if not.
+      this.safeWarn(
+        'ghostty-web renderer cleanup unexpected error during scope close',
+        error,
+      );
+    }
+  }
+
+  private safeWarn(message: string, detail: unknown): void {
+    try {
+      this.logger.warn(message, detail);
+    } catch {
+      // Logging through stderr can throw EPIPE during shutdown. Swallow
+      // so dispose() honors its best-effort contract (ADR 0003).
+    }
+  }
+
+  private async disposeInternal(): Promise<void> {
+    // DEREM-3: capture the scope reference and null state synchronously
+    // BEFORE awaiting scope close. Release closures captured locals at
+    // registration time, so they are unaffected. Concurrent operations
+    // that check requireOperationalPage() see isBooted=false / page=null
+    // immediately rather than racing with a tearing-down resource.
+    const scope = this.resourceScope;
+    this.resourceScope = null;
     this.page = null;
     this.browserContext = null;
     this.browser = null;
@@ -2147,54 +2284,23 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     this.serverOrigin = null;
     this.isBooted = false;
 
-    if (page !== null) {
-      try {
-        if (!page.isClosed()) {
-          await page.close();
-        }
-      } catch {
-        // Keep unwinding remaining resources even if a close operation fails.
-      }
-    }
-
-    if (browserContext !== null) {
-      try {
-        await browserContext.close();
-      } catch {
-        // Keep unwinding remaining resources even if a close operation fails.
-      }
-    }
-
-    if (browser !== null) {
-      try {
-        await browser.close();
-      } catch {
-        // Keep unwinding remaining resources even if a close operation fails.
-      }
-    }
-
-    if (server !== null) {
-      try {
-        await closeServer(server);
-      } catch {
-        // Keep unwinding remaining resources even if a close operation fails.
-      }
-    }
-  }
-
-  private async disposeInternal(): Promise<void> {
     try {
-      await this.cleanupHandles();
+      if (scope !== null) {
+        await this.closeResourceScopeAndLog(scope);
+      }
     } finally {
       this.bootPromise = null;
       this.currentCols = null;
       this.currentRows = null;
-      this.disposePromise = null;
+      // DEREM-4: disposePromise is reset by dispose() after this awaits,
+      // not here. Resetting here would race with the outer assignment in
+      // dispose() when this method runs synchronously (no scope to
+      // close), pinning a stale resolved Promise.
       this.failureReason = null;
       this.initialReplayCols = null;
       this.initialReplayRows = null;
-      this.isBooted = false;
       this.lastAppliedSeq = -1;
+      this.pageAndContextReleasedExternally = false;
     }
   }
 
@@ -2288,9 +2394,20 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       return;
     }
 
+    // DEREM-18: only clear bootPromise once boot has fully succeeded. Doing
+    // this during an in-flight boot would let a concurrent dispose() see
+    // bootPromise === null in disposeAfterBoot(), skip its bootPromise
+    // wait, and start tearing down the scope while bootInternal is still
+    // suspended in waitForFunction. After a successful boot the promise is
+    // resolved already, so clearing it lets a future boot() call re-run
+    // bootInternal cleanly; bootInternal's own catch nulls it on the
+    // mid-boot failure path.
+    const wasBooted = this.isBooted;
     this.failureReason = error;
     this.isBooted = false;
-    this.bootPromise = null;
+    if (wasBooted) {
+      this.bootPromise = null;
+    }
   }
 
   private requireOperationalPage(methodName: string): Page {
