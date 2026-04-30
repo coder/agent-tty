@@ -363,38 +363,9 @@ describe('screenshot command', () => {
       },
       expect.any(Function),
     );
-    expect(mocks.rename).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/artifacts\/\.tmp-screenshot-.*\.png$/),
-      '/artifacts/screenshot-5-reference-dark.png',
-    );
-    expect(mocks.createArtifactEntry).toHaveBeenCalledWith({
-      kind: 'screenshot',
-      filename: 'screenshot-5-reference-dark.png',
-      sessionId: 'session-01',
-      capturedAtSeq: 5,
-      sha256: TEST_SCREENSHOT_SHA256,
-      metadata: {
-        profileName: 'reference-dark',
-        cols: 80,
-        rows: 24,
-        pngSizeBytes: 2048,
-        cursorVisible: false,
-        rendererBackend: 'ghostty-web',
-        pixelWidth: 800,
-        pixelHeight: 600,
-        renderProfileHash: TEST_RENDER_PROFILE_HASH,
-      },
-    });
-    expect(mocks.appendArtifact).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01',
-      expect.objectContaining({
-        kind: 'screenshot',
-        filename: 'screenshot-5-reference-dark.png',
-        sessionId: 'session-01',
-        capturedAtSeq: 5,
-        sha256: TEST_SCREENSHOT_SHA256,
-      }),
-    );
+    // Rename, manifest-entry construction, and manifest append are exercised
+    // by `test/unit/screenshot/capture.test.ts`. Here we only check the
+    // routing-level surface of the offline path.
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'screenshot',
       json: false,
@@ -462,14 +433,9 @@ describe('screenshot command', () => {
       expect.stringMatching(/^\/artifacts\/\.tmp-screenshot-.*\.png$/),
       { showCursor: true },
     );
-    expect(mocks.createArtifactEntry).toHaveBeenCalled();
-    const artifactEntryArg = mocks.createArtifactEntry.mock.calls.at(
-      -1,
-    )?.[0] as {
-      metadata?: { cursorVisible?: boolean };
-    };
-    expect(artifactEntryArg.metadata?.cursorVisible).toBe(true);
-
+    // Manifest-entry metadata for `cursorVisible` is exercised by
+    // `test/unit/screenshot/capture.test.ts`; here we only check that the
+    // command-level result reflects the requested `showCursor` value.
     expect(mocks.emitSuccess).toHaveBeenCalled();
     const emitSuccessArg = mocks.emitSuccess.mock.calls.at(-1)?.[0] as {
       result?: { cursorVisible?: boolean };

@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-04-30T07:53:03.114Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "live screenshot fixture",
+    "cursorRow": 1,
+    "cursorCol": 0,
+    "capturedAtSeq": 0
+  }
+}

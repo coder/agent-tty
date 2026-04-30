@@ -1,8 +1,6 @@
-import { mkdir, rename, rm } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import process from 'node:process';
-
-import { ulid } from 'ulid';
 
 import {
   matchRenderWaitSnapshot,
@@ -41,16 +39,8 @@ import {
 } from '../renderer/names.js';
 import { resolveProfile } from '../renderer/profiles.js';
 import { createRendererBackend } from '../renderer/registry.js';
+import { captureScreenshotResult } from '../screenshot/capture.js';
 import { captureSnapshotResult } from '../snapshot/capture.js';
-import {
-  appendArtifact,
-  createArtifactEntry,
-} from '../storage/artifactManifest.js';
-import {
-  artifactPath,
-  ensureArtifactsDir,
-  screenshotFilename,
-} from '../storage/artifactPaths.js';
 import { resolveHome } from '../storage/home.js';
 import { readManifest, writeManifest } from '../storage/manifests.js';
 import {
@@ -436,83 +426,14 @@ export async function runHost(sessionId: string): Promise<void> {
         profile,
         replayInput,
       );
-      await ensureArtifactsDir(sessDir);
-      const temporaryOutputPath = artifactPath(
-        sessDir,
-        `.tmp-screenshot-${ulid()}.png`,
-      );
 
-      try {
-        const result = await backend.screenshot(
-          temporaryOutputPath,
-          showCursor === undefined ? undefined : { showCursor },
-        );
-
-        invariant(
-          result.sessionId === sessionId,
-          'renderer screenshot sessionId must match host sessionId',
-        );
-        invariant(
-          result.profileName === profile.name,
-          'renderer screenshot profileName must match the requested profile',
-        );
-        invariant(
-          result.artifactPath === temporaryOutputPath,
-          'renderer screenshot path must match the requested output path',
-        );
-        invariant(
-          result.pngSizeBytes > 0,
-          'renderer screenshot pngSizeBytes must be positive',
-        );
-
-        const filename = screenshotFilename(
-          result.capturedAtSeq,
-          result.profileName,
-        );
-        const finalArtifactPath = artifactPath(sessDir, filename);
-
-        await rename(temporaryOutputPath, finalArtifactPath);
-        await appendArtifact(
-          sessDir,
-          createArtifactEntry({
-            kind: 'screenshot',
-            filename,
-            sessionId: result.sessionId,
-            capturedAtSeq: result.capturedAtSeq,
-            sha256: result.sha256,
-            metadata: {
-              profileName: result.profileName,
-              cols: result.cols,
-              rows: result.rows,
-              pngSizeBytes: result.pngSizeBytes,
-              cursorVisible: result.cursorVisible,
-              rendererBackend: result.rendererBackend,
-              pixelWidth: result.pixelWidth,
-              pixelHeight: result.pixelHeight,
-              renderProfileHash: result.renderProfileHash,
-            },
-          }),
-        );
-
-        return {
-          sessionId: result.sessionId,
-          capturedAtSeq: result.capturedAtSeq,
-          profileName: result.profileName,
-          cols: result.cols,
-          rows: result.rows,
-          artifactPath: finalArtifactPath,
-          pngSizeBytes: result.pngSizeBytes,
-          cursorVisible: result.cursorVisible,
-          rendererBackend: result.rendererBackend,
-          pixelWidth: result.pixelWidth,
-          pixelHeight: result.pixelHeight,
-          sha256: result.sha256,
-          renderProfileHash: result.renderProfileHash,
-        };
-      } catch (error) {
-        await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
-        throw error;
-      }
+      return await captureScreenshotResult({
+        backend,
+        sessionDir: sessDir,
+        profileName: profile.name,
+        expectedSessionId: sessionId,
+        ...(showCursor === undefined ? {} : { showCursor }),
+      });
     },
     type: async (params: unknown) => {
       const { text } = params as TypeParams;

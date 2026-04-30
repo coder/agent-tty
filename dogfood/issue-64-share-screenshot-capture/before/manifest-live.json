@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "sessionId": "01KQEP3C9F2CMDX15SQWFTW9MK",
+  "artifacts": [
+    {
+      "id": "01KQEP3FYJCBS7P29WTCM3BCNQ",
+      "kind": "screenshot",
+      "filename": "screenshot-0-reference-dark.png",
+      "sessionId": "01KQEP3C9F2CMDX15SQWFTW9MK",
+      "capturedAtSeq": 0,
+      "createdAt": "2026-04-30T07:54:24.082Z",
+      "sha256": "a658e720e18b2943fd6203e8947a9fe4e60fa0759cb5d0f9c74668abfe267ceb",
+      "metadata": {
+        "profileName": "reference-dark",
+        "cols": 80,
+        "rows": 24,
+        "pngSizeBytes": 3790,
+        "cursorVisible": false,
+        "rendererBackend": "ghostty-web",
+        "pixelWidth": 640,
+        "pixelHeight": 384,
+        "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d"
+      }
+    },
+    {
+      "id": "01KQEP3HA9GE8KJW8CYQMBEDC1",
+      "kind": "screenshot",
+      "filename": "screenshot-0-reference-dark.png",
+      "sessionId": "01KQEP3C9F2CMDX15SQWFTW9MK",
+      "capturedAtSeq": 0,
+      "createdAt": "2026-04-30T07:54:25.481Z",
+      "sha256": "a658e720e18b2943fd6203e8947a9fe4e60fa0759cb5d0f9c74668abfe267ceb",
+      "metadata": {
+        "profileName": "reference-dark",
+        "cols": 80,
+        "rows": 24,
+        "pngSizeBytes": 3790,
+        "cursorVisible": true,
+        "rendererBackend": "ghostty-web",
+        "pixelWidth": 640,
+        "pixelHeight": 384,
+        "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d"
+      }
+    }
+  ]
+}
