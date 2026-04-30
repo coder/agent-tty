@@ -69,6 +69,16 @@ A persisted JSON artifact containing exactly the **Snapshot Result** returned to
 The operation that derives a **Snapshot Result** from a **Semantic Snapshot** and records the matching **Snapshot Artifact**.
 _Avoid_: Renderer capture
 
+**Screenshot Result**:
+A public screenshot payload returned to a caller describing the rendered PNG of a **Session** at a captured event-log sequence.
+
+**Screenshot Artifact**:
+A persisted PNG file plus its manifest entry recording the **Screenshot Result** for a **Session** at a captured event-log sequence.
+
+**Screenshot Capture**:
+The operation that invokes the renderer to produce the PNG, builds the **Screenshot Result**, and records the matching **Screenshot Artifact**.
+_Avoid_: Renderer capture
+
 **Release Prep Workflow**:
 The maintainer-facing process for choosing the next release version and preparing release changes for review before they land on the default branch.
 
@@ -90,6 +100,8 @@ The tag-triggered automation that validates, packages, and publishes a release a
 - An **Offline Replay Eligible Session** is reconstructed from its persisted **Event Log** and manifest.
 - A **Snapshot Result** is derived from exactly one **Semantic Snapshot**.
 - A **Snapshot Artifact** contains exactly the **Snapshot Result** emitted to the caller.
+- A **Screenshot Capture** produces exactly one **Screenshot Result** and exactly one **Screenshot Artifact** for the same captured event-log sequence.
+- A **Screenshot Artifact** is the persisted PNG plus its manifest entry that the **Screenshot Result** describes to the caller.
 - A **Command Target** is exactly one **Commandable Session** selected by an input or control command.
 - A **Commandable Session** can accept a **Waited Run**.
 - A **Render Wait** may include text, regex, cursor, or **Screen Stability** conditions.

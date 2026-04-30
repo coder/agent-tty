@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "command": "destroy",
+  "timestamp": "2026-04-30T07:54:44.132Z",
+  "result": {
+    "sessionId": "01KQEP3JANHPG9CKX3X9B2B15K",
+    "destroyed": true
+  }
+}

@@ -1,0 +1,152 @@
+Running with label: after
+Repo HEAD: b2d506802110a97ebd4cc8b985970a19211fd36b
++ npx tsx src/cli/main.ts create --json --name issue-64-live -- /bin/sh -c printf\ \"live\ screenshot\ fixture\\n\"\;\ sleep\ 60
+{
+  "ok": true,
+  "command": "create",
+  "timestamp": "2026-04-30T07:53:01.428Z",
+  "result": {
+    "sessionId": "01KQEP0YDSTXK6A7EB7ABAK8SS",
+    "createdAt": "2026-04-30T07:53:00.604Z",
+    "cols": 80,
+    "rows": 24,
+    "shell": "/bin/bash"
+  }
+}
+
++ npx tsx src/cli/main.ts wait 01KQEP0YDSTXK6A7EB7ABAK8SS --text live\ screenshot\ fixture --timeout 5000 --json
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-04-30T07:53:03.114Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "live screenshot fixture",
+    "cursorRow": 1,
+    "cursorCol": 0,
+    "capturedAtSeq": 0
+  }
+}
+
++ npx tsx src/cli/main.ts screenshot 01KQEP0YDSTXK6A7EB7ABAK8SS --json
+{
+  "ok": true,
+  "command": "screenshot",
+  "timestamp": "2026-04-30T07:53:04.412Z",
+  "result": {
+    "sessionId": "01KQEP0YDSTXK6A7EB7ABAK8SS",
+    "capturedAtSeq": 0,
+    "profileName": "reference-dark",
+    "cols": 80,
+    "rows": 24,
+    "artifactPath": "/tmp/tmp.p97cQahYjP/sessions/01KQEP0YDSTXK6A7EB7ABAK8SS/artifacts/screenshot-0-reference-dark.png",
+    "pngSizeBytes": 3790,
+    "cursorVisible": false,
+    "rendererBackend": "ghostty-web",
+    "pixelWidth": 640,
+    "pixelHeight": 384,
+    "sha256": "a658e720e18b2943fd6203e8947a9fe4e60fa0759cb5d0f9c74668abfe267ceb",
+    "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d"
+  }
+}
+
++ npx tsx src/cli/main.ts screenshot 01KQEP0YDSTXK6A7EB7ABAK8SS --show-cursor --json
+{
+  "ok": true,
+  "command": "screenshot",
+  "timestamp": "2026-04-30T07:53:05.670Z",
+  "result": {
+    "sessionId": "01KQEP0YDSTXK6A7EB7ABAK8SS",
+    "capturedAtSeq": 0,
+    "profileName": "reference-dark",
+    "cols": 80,
+    "rows": 24,
+    "artifactPath": "/tmp/tmp.p97cQahYjP/sessions/01KQEP0YDSTXK6A7EB7ABAK8SS/artifacts/screenshot-0-reference-dark.png",
+    "pngSizeBytes": 3790,
+    "cursorVisible": true,
+    "rendererBackend": "ghostty-web",
+    "pixelWidth": 640,
+    "pixelHeight": 384,
+    "sha256": "a658e720e18b2943fd6203e8947a9fe4e60fa0759cb5d0f9c74668abfe267ceb",
+    "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d"
+  }
+}
+
++ npx tsx src/cli/main.ts create --json --name issue-64-offline -- /bin/sh -c printf\ \"offline\ screenshot\ fixture\\n\"
+{
+  "ok": true,
+  "command": "create",
+  "timestamp": "2026-04-30T07:53:07.504Z",
+  "result": {
+    "sessionId": "01KQEP14EXSSGJX9RRSTAVYGK2",
+    "createdAt": "2026-04-30T07:53:06.784Z",
+    "cols": 80,
+    "rows": 24,
+    "shell": "/bin/bash"
+  }
+}
+
++ npx tsx src/cli/main.ts wait 01KQEP14EXSSGJX9RRSTAVYGK2 --exit --timeout 10000 --json
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-04-30T07:53:08.644Z",
+  "result": {
+    "timedOut": false,
+    "exitCode": 0
+  }
+}
+
++ npx tsx src/cli/main.ts screenshot 01KQEP14EXSSGJX9RRSTAVYGK2 --json
+{
+  "ok": true,
+  "command": "screenshot",
+  "timestamp": "2026-04-30T07:53:10.283Z",
+  "result": {
+    "sessionId": "01KQEP14EXSSGJX9RRSTAVYGK2",
+    "capturedAtSeq": 1,
+    "profileName": "reference-dark",
+    "cols": 80,
+    "rows": 24,
+    "artifactPath": "/tmp/tmp.p97cQahYjP/sessions/01KQEP14EXSSGJX9RRSTAVYGK2/artifacts/screenshot-1-reference-dark.png",
+    "pngSizeBytes": 3749,
+    "cursorVisible": false,
+    "rendererBackend": "ghostty-web",
+    "pixelWidth": 640,
+    "pixelHeight": 384,
+    "sha256": "993fb5f9fe5b9ec7ed456b4005ec40478f5ee6bc3c6d5a65f6dbc78fbd60406d",
+    "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d"
+  }
+}
+
++ npx tsx src/cli/main.ts screenshot 01KQEP14EXSSGJX9RRSTAVYGK2 --show-cursor --json
+{
+  "ok": true,
+  "command": "screenshot",
+  "timestamp": "2026-04-30T07:53:16.766Z",
+  "result": {
+    "sessionId": "01KQEP14EXSSGJX9RRSTAVYGK2",
+    "capturedAtSeq": 1,
+    "profileName": "reference-dark",
+    "cols": 80,
+    "rows": 24,
+    "artifactPath": "/tmp/tmp.p97cQahYjP/sessions/01KQEP14EXSSGJX9RRSTAVYGK2/artifacts/screenshot-1-reference-dark.png",
+    "pngSizeBytes": 3749,
+    "cursorVisible": true,
+    "rendererBackend": "ghostty-web",
+    "pixelWidth": 640,
+    "pixelHeight": 384,
+    "sha256": "993fb5f9fe5b9ec7ed456b4005ec40478f5ee6bc3c6d5a65f6dbc78fbd60406d",
+    "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d"
+  }
+}
+
+screenshot-live-default.png:
+a658e720e18b2943fd6203e8947a9fe4e60fa0759cb5d0f9c74668abfe267ceb
+screenshot-live-show-cursor.png:
+a658e720e18b2943fd6203e8947a9fe4e60fa0759cb5d0f9c74668abfe267ceb
+screenshot-offline-default.png:
+993fb5f9fe5b9ec7ed456b4005ec40478f5ee6bc3c6d5a65f6dbc78fbd60406d
+screenshot-offline-show-cursor.png:
+993fb5f9fe5b9ec7ed456b4005ec40478f5ee6bc3c6d5a65f6dbc78fbd60406d

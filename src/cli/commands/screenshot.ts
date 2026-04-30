@@ -1,7 +1,3 @@
-import { rename, rm } from 'node:fs/promises';
-
-import { ulid } from 'ulid';
-
 import type { ScreenshotResult } from '../../protocol/messages.js';
 
 import type { CommandContext } from '../context.js';
@@ -10,25 +6,18 @@ import { emitSuccess } from '../output.js';
 import { CliError } from '../../cli/errors.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ScreenshotParamsSchema } from '../../protocol/messages.js';
-import { ScreenshotResultSchema } from '../../protocol/schemas.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
 import {
-  appendArtifact,
-  createArtifactEntry,
-} from '../../storage/artifactManifest.js';
-import {
-  artifactPath,
-  ensureArtifactsDir,
-  screenshotFilename,
-} from '../../storage/artifactPaths.js';
+  captureScreenshotResult,
+  parseScreenshotResult,
+} from '../../screenshot/capture.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
   manifestPath,
   sessionDir,
   socketPath,
 } from '../../storage/sessionPaths.js';
-import { invariant } from '../../util/assert.js';
 
 const DEFAULT_SCREENSHOT_PROFILE = 'reference-dark';
 
@@ -113,21 +102,6 @@ function formatScreenshotLines(result: ScreenshotResult): string[] {
   return lines;
 }
 
-function parseScreenshotResult(
-  rawResult: unknown,
-  invalidResultMessage: string,
-): ScreenshotResult {
-  const parsedResult = ScreenshotResultSchema.safeParse(rawResult);
-  if (!parsedResult.success) {
-    throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
-      message: invalidResultMessage,
-      details: { issues: parsedResult.error.issues },
-    });
-  }
-
-  return parsedResult.data;
-}
-
 async function runOfflineScreenshot(
   sessionDirectory: string,
   rendererName: CommandContext['rendererDefault'],
@@ -136,83 +110,14 @@ async function runOfflineScreenshot(
 ): Promise<ScreenshotResult> {
   return withOfflineReplayRenderer(
     { sessionDir: sessionDirectory, profileName: profile, rendererName },
-    async ({ backend, manifest }) => {
-      await ensureArtifactsDir(sessionDirectory);
-      const temporaryOutputPath = artifactPath(
-        sessionDirectory,
-        `.tmp-screenshot-${ulid()}.png`,
-      );
-
-      try {
-        const result = await backend.screenshot(
-          temporaryOutputPath,
-          showCursor === undefined ? undefined : { showCursor },
-        );
-        invariant(
-          result.sessionId === manifest.sessionId,
-          'offline screenshot sessionId must match the manifest sessionId',
-        );
-        invariant(
-          result.profileName === profile,
-          'offline screenshot profileName must match the requested profile',
-        );
-        invariant(
-          result.pngSizeBytes > 0,
-          'offline screenshot pngSizeBytes must be positive',
-        );
-        invariant(
-          result.sha256 !== undefined,
-          'offline screenshot must produce sha256',
-        );
-
-        const filename = screenshotFilename(
-          result.capturedAtSeq,
-          result.profileName,
-        );
-        const finalArtifactPath = artifactPath(sessionDirectory, filename);
-        await rename(temporaryOutputPath, finalArtifactPath);
-        await appendArtifact(
-          sessionDirectory,
-          createArtifactEntry({
-            kind: 'screenshot',
-            filename,
-            sessionId: result.sessionId,
-            capturedAtSeq: result.capturedAtSeq,
-            sha256: result.sha256,
-            metadata: {
-              profileName: result.profileName,
-              cols: result.cols,
-              rows: result.rows,
-              pngSizeBytes: result.pngSizeBytes,
-              cursorVisible: result.cursorVisible,
-              rendererBackend: result.rendererBackend,
-              pixelWidth: result.pixelWidth,
-              pixelHeight: result.pixelHeight,
-              renderProfileHash: result.renderProfileHash,
-            },
-          }),
-        );
-
-        return {
-          sessionId: result.sessionId,
-          capturedAtSeq: result.capturedAtSeq,
-          profileName: result.profileName,
-          cols: result.cols,
-          rows: result.rows,
-          artifactPath: finalArtifactPath,
-          pngSizeBytes: result.pngSizeBytes,
-          cursorVisible: result.cursorVisible,
-          rendererBackend: result.rendererBackend,
-          pixelWidth: result.pixelWidth,
-          pixelHeight: result.pixelHeight,
-          sha256: result.sha256,
-          renderProfileHash: result.renderProfileHash,
-        };
-      } catch (error) {
-        await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
-        throw error;
-      }
-    },
+    async ({ backend, manifest }) =>
+      captureScreenshotResult({
+        backend,
+        sessionDir: sessionDirectory,
+        profileName: profile,
+        expectedSessionId: manifest.sessionId,
+        ...(showCursor === undefined ? {} : { showCursor }),
+      }),
   );
 }
 
@@ -252,19 +157,26 @@ export async function runScreenshotCommand(
     });
   }
 
-  let rawResult: unknown;
-  let invalidResultMessage = 'Unexpected response from host';
+  let result: ScreenshotResult;
 
   // Snapshot and screenshot intentionally keep their narrower legacy live-RPC
   // gate. `exiting` sessions are live-host eligible for inspect, but these
   // commands preserve their existing offline-replay capture behavior.
   if (manifest.status === 'running') {
     try {
-      rawResult = await sendRpc(socketPath(sessionDirectory), 'screenshot', {
-        profile,
-        rendererName: options.context.rendererDefault,
-        ...(showCursor === undefined ? {} : { showCursor }),
-      });
+      const rawResult = await sendRpc(
+        socketPath(sessionDirectory),
+        'screenshot',
+        {
+          profile,
+          rendererName: options.context.rendererDefault,
+          ...(showCursor === undefined ? {} : { showCursor }),
+        },
+      );
+      result = parseScreenshotResult(
+        rawResult,
+        'Unexpected response from host',
+      );
     } catch (error) {
       if (
         !(error instanceof CliError) ||
@@ -273,25 +185,21 @@ export async function runScreenshotCommand(
         throw error;
       }
 
-      rawResult = await runOfflineScreenshot(
+      result = await runOfflineScreenshot(
         sessionDirectory,
         options.context.rendererDefault,
         profile,
         showCursor,
       );
-      invalidResultMessage = 'Unexpected screenshot result from offline replay';
     }
   } else {
-    rawResult = await runOfflineScreenshot(
+    result = await runOfflineScreenshot(
       sessionDirectory,
       options.context.rendererDefault,
       profile,
       showCursor,
     );
-    invalidResultMessage = 'Unexpected screenshot result from offline replay';
   }
-
-  const result = parseScreenshotResult(rawResult, invalidResultMessage);
 
   emitSuccess({
     command: 'screenshot',
