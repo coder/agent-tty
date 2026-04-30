@@ -1,17 +1,13 @@
 import { invariant } from '../../src/util/assert.js';
 import type { TriageState } from './afkMarker.js';
-import { isTriageState } from './afkMarker.js';
+import { isTriageState, TRIAGE_STATES } from './afkMarker.js';
 
 export type TriageCategory = 'bug' | 'enhancement';
 
 const CATEGORY_LABELS = new Set<TriageCategory>(['bug', 'enhancement']);
-const STATE_LABELS = new Set<TriageState>([
-  'needs-info',
-  'ready-for-agent',
-  'ready-for-human',
-  'wontfix',
-  'needs-triage',
-]);
+// Reuse afkMarker.ts's TRIAGE_STATES so the validator and the type guard
+// cannot drift if a state is added in only one of the two places.
+const STATE_LABELS: ReadonlySet<TriageState> = TRIAGE_STATES;
 
 export type LabelTransitionResult =
   | {

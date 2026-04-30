@@ -9,7 +9,12 @@ export type TriageState =
   | 'wontfix'
   | 'needs-triage';
 
-const TRIAGE_STATES = new Set<TriageState>([
+/**
+ * Canonical set of valid AFK Triage state labels. Exported so dependent
+ * modules (e.g. `labelInvariants.ts`) can reuse the single source of truth
+ * instead of duplicating the membership check.
+ */
+export const TRIAGE_STATES = new Set<TriageState>([
   'needs-info',
   'ready-for-agent',
   'ready-for-human',
@@ -70,7 +75,7 @@ export function parseAfkMarker(comment: string): AfkMarker | null {
     return null;
   }
 
-  if (!assertRunIdOrNull(runRaw)) {
+  if (!isValidRunId(runRaw)) {
     return null;
   }
 
@@ -81,7 +86,7 @@ export function parseAfkMarker(comment: string): AfkMarker | null {
   };
 }
 
-function assertRunIdOrNull(value: string): boolean {
+function isValidRunId(value: string): boolean {
   try {
     assertRunId(value);
     return true;

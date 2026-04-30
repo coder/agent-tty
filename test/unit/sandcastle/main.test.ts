@@ -7,12 +7,12 @@ import {
 } from '../../../.sandcastle/main.js';
 
 describe('pLimit', () => {
-  it('does not exceed the configured concurrency', async () => {
+  it('does not exceed the configured concurrency and returns each task result', async () => {
     const limit = pLimit(2);
     let active = 0;
     let maxActive = 0;
 
-    await Promise.all(
+    const results = await Promise.all(
       Array.from({ length: 5 }, (_, index) =>
         limit(async () => {
           active += 1;
@@ -25,6 +25,26 @@ describe('pLimit', () => {
     );
 
     expect(maxActive).toBeLessThanOrEqual(2);
+    // Guard against a regression where `limit` resolves with `undefined`,
+    // which would silently break runBatch's `Promise.all` of
+    // `TriageIssueSummary` records.
+    expect(results).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('rejects when the limited task throws synchronously', async () => {
+    const limit = pLimit(1);
+    // A non-async function that throws synchronously must surface as a
+    // rejection, not crash the runner. Without the wrapping
+    // `Promise.resolve().then(task)`, the `.finally()` decrement would
+    // be skipped and the concurrency slot would leak permanently.
+    await expect(
+      limit((() => {
+        throw new Error('sync throw');
+      }) as unknown as () => Promise<unknown>),
+    ).rejects.toThrow('sync throw');
+
+    // The slot must be released so subsequent tasks can run.
+    await expect(limit(() => Promise.resolve('ok'))).resolves.toBe('ok');
   });
 });
 

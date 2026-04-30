@@ -44,16 +44,16 @@ export function classifyIssueForTriage(issue: TriageIssue): IssueEligibility {
     };
   }
 
-  const latestMarkerRun = latestAfkMarkerRun(issueNumber, issue.comments);
-  if (latestMarkerRun === undefined) {
+  const latestMarkerCreatedAt = latestAfkMarkerCreatedAt(
+    issueNumber,
+    issue.comments,
+  );
+  if (latestMarkerCreatedAt === undefined) {
     return { eligible: true, reason: 'needs-info-with-new-activity' };
   }
 
   const latestActivity = latestNonAfkActivity(issueNumber, issue.comments);
-  if (
-    latestActivity !== undefined &&
-    latestActivity > runIdToEpochMs(latestMarkerRun)
-  ) {
+  if (latestActivity !== undefined && latestActivity > latestMarkerCreatedAt) {
     return { eligible: true, reason: 'needs-info-with-new-activity' };
   }
 
@@ -63,20 +63,32 @@ export function classifyIssueForTriage(issue: TriageIssue): IssueEligibility {
   };
 }
 
-function latestAfkMarkerRun(
+/**
+ * Epoch-ms `createdAt` of the most recent AFK-marker comment for this issue.
+ *
+ * Compared to the previous implementation, which used the marker's embedded
+ * `run` ID as the cutoff: that ID encodes the batch start time on the
+ * orchestrator host, but the marker comment is posted minutes later, after
+ * workspace creation, agent startup, and triage. Reporter comments arriving
+ * between batch-start and marker-posted were misclassified as "new
+ * activity" and triggered unnecessary re-triage. Using the marker comment's
+ * GitHub `createdAt` is a single time source on the same clock as the
+ * comments we compare against.
+ */
+function latestAfkMarkerCreatedAt(
   issueNumber: number,
   comments: readonly TriageComment[],
-): string | undefined {
-  const runs = comments
-    .map((comment) => parseAfkMarker(comment.body))
-    .filter(
-      (marker): marker is NonNullable<typeof marker> =>
-        marker !== null && marker.issue === issueNumber,
-    )
-    .map((marker) => marker.run)
-    .sort();
+): number | undefined {
+  const markerTimestamps = comments
+    .filter((comment) => {
+      const marker = parseAfkMarker(comment.body);
+      return marker !== null && marker.issue === issueNumber;
+    })
+    .map((comment) => Date.parse(comment.createdAt))
+    .filter((timestamp) => Number.isFinite(timestamp))
+    .sort((left, right) => left - right);
 
-  return runs.at(-1);
+  return markerTimestamps.at(-1);
 }
 
 function latestNonAfkActivity(
@@ -93,21 +105,4 @@ function latestNonAfkActivity(
     .sort((left, right) => left - right);
 
   return timestamps.at(-1);
-}
-
-function runIdToEpochMs(runId: string): number {
-  const year = Number(runId.slice(0, 4));
-  const month = Number(runId.slice(4, 6));
-  const day = Number(runId.slice(6, 8));
-  const hour = Number(runId.slice(9, 11));
-  const minute = Number(runId.slice(11, 13));
-  const second = Number(runId.slice(13, 15));
-  const timestamp = Date.UTC(year, month - 1, day, hour, minute, second);
-
-  invariant(
-    Number.isFinite(timestamp),
-    'AFK marker run ID must parse to a date',
-  );
-
-  return timestamp;
 }

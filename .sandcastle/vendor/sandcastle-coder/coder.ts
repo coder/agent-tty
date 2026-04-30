@@ -661,14 +661,29 @@ const buildOpenSshArgs = (
   remoteCommand,
 ];
 
+// POSIX env-name pattern: starts with letter or underscore, followed by
+// letters/digits/underscores. Both buildEnvPrefix and buildSshArgs require
+// this; buildEnvPrefix interpolates the key into a shell string, so a key
+// containing $(cmd), backticks, or ;cmd would otherwise become shell
+// injection on the remote workspace (which holds the GitHub External Auth
+// token). buildSshArgs uses argv (no shell context) but still rejects the
+// same shape so both paths fail closed on the same input.
+const POSIX_ENV_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/u;
+
+const assertSshEnvKey = (key: string): void => {
+  assertNonEmptyString(key, 'Coder SSH env key');
+  if (!POSIX_ENV_NAME.test(key)) {
+    throw new Error(
+      `Coder SSH env key must match POSIX env-name pattern [a-zA-Z_][a-zA-Z0-9_]*: ${key}`,
+    );
+  }
+};
+
 const buildEnvPrefix = (sandboxEnv: Record<string, string>): string => {
   const entries = Object.entries(sandboxEnv);
   if (entries.length === 0) return '';
   for (const [key] of entries) {
-    assertNonEmptyString(key, 'Coder SSH env key');
-    if (key.includes('=')) {
-      throw new Error(`Coder SSH env key must not contain '=': ${key}`);
-    }
+    assertSshEnvKey(key);
   }
   return `${entries.map(([key, value]) => `${key}=${shellQuote(value)}`).join(' ')} `;
 };
@@ -680,10 +695,7 @@ const buildSshArgs = (
 ): string[] => {
   const args = ['ssh'];
   for (const [key, value] of Object.entries(sandboxEnv)) {
-    assertNonEmptyString(key, 'Coder SSH env key');
-    if (key.includes('=')) {
-      throw new Error(`Coder SSH env key must not contain '=': ${key}`);
-    }
+    assertSshEnvKey(key);
     args.push('--env', `${key}=${value}`);
   }
   args.push(sshRef, '--', ...remoteArgs);

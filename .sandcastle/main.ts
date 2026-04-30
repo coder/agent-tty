@@ -12,9 +12,28 @@ import {
   type TriageComment,
   type TriageIssue,
 } from './lib/eligibility.js';
-import { runCoder, runGhJson } from './lib/gh.js';
+import { conciseErrorMessage, isLockError } from './lib/errorMessage.js';
+import { runCoder, runGh, runJson } from './lib/gh.js';
 import { parseParallelism } from './lib/parallelism.js';
 import { workspaceNameForIssue } from './lib/workspaceName.js';
+
+// Triage Agent's idle timeout inside the sandbox. 1800s = 30 minutes,
+// long enough for repro attempts and slow Coder workspace cold starts but
+// short enough to bound a single agent's resource use.
+const TRIAGE_AGENT_IDLE_TIMEOUT_SECONDS = 1800;
+
+// `gh issue list` defaults to --limit 30, which would silently drop excess
+// eligible issues. The plan calls for "no hard batch cap: process all eligible
+// issues, but only N at once", so cap at a high upper bound that exceeds any
+// realistic triage backlog. (See `runJson`/`runCommand` for the matching
+// `spawnSync` `maxBuffer` setting that pairs with this limit.)
+const GH_ISSUE_LIST_LIMIT = 500;
+
+// All gh CLI calls in the orchestrator must target this repo explicitly so
+// the orchestrator works from CI, a worktree with a different remote, or a
+// directory without `.git`, never silently querying the wrong repo via
+// implicit cwd-based `.git/config` resolution.
+const GH_REPO_ARGS: readonly string[] = ['--repo', 'coder/agent-tty'];
 
 export type TriageIssueStatus = 'success' | 'locked' | 'failed' | 'skipped';
 
@@ -91,7 +110,13 @@ export function pLimit(concurrency: number) {
 
     return new Promise<T>((resolve, reject) => {
       const run = (): void => {
-        task()
+        // Wrap `task()` in `Promise.resolve().then(...)` so a synchronous
+        // throw inside a non-async caller still becomes a rejection. Without
+        // this, a sync throw would skip the `.finally()` decrement, leaking
+        // a concurrency slot permanently and stalling the batch after
+        // `concurrency` such failures.
+        Promise.resolve()
+          .then(task)
           .then(resolve, reject)
           .finally(() => {
             active -= 1;
@@ -130,7 +155,7 @@ export function buildTriageBatchSummary(
   return {
     runId: checkedRunId,
     totals,
-    perIssue: [...perIssue].sort(
+    perIssue: perIssue.toSorted(
       (left, right) => left.issueNumber - right.issueNumber,
     ),
     ...(message === undefined ? {} : { message }),
@@ -234,20 +259,10 @@ async function runBatch(args: RunnerArgs): Promise<TriageBatchSummary> {
 }
 
 function preflightCoder(): void {
-  const result = runCoder(['whoami', '-o', 'json']);
-  if (result.status !== 0) {
-    const detail = result.stderr.trim() || `exit status ${result.status}`;
-    throw new Error(`coder whoami -o json failed: ${detail}`);
-  }
-
-  try {
-    JSON.parse(result.stdout);
-  } catch (error) {
-    throw new Error(
-      `coder whoami -o json returned invalid JSON: ${errorMessage(error)}`,
-      { cause: error },
-    );
-  }
+  // Reuse runJson so coder-CLI preflight inherits the same status/JSON
+  // diagnostics path as the gh-CLI calls. Schema is permissive (`unknown`)
+  // because we only verify that whoami responded with valid JSON.
+  runJson('coder', ['whoami', '-o', 'json'], z.unknown(), runCoder);
 }
 
 function listCandidateIssues(includeNeedsInfo: boolean): GhIssue[] {
@@ -259,17 +274,13 @@ function listCandidateIssues(includeNeedsInfo: boolean): GhIssue[] {
   return issues.flat();
 }
 
-// `gh issue list` defaults to --limit 30, which would silently drop excess
-// eligible issues. The plan calls for "no hard batch cap: process all eligible
-// issues, but only N at once", so cap at a high upper bound that exceeds any
-// realistic triage backlog.
-const GH_ISSUE_LIST_LIMIT = 500;
-
 function listIssuesByLabel(label: string): GhIssue[] {
-  return runGhJson(
+  return runJson(
+    'gh',
     [
       'issue',
       'list',
+      ...GH_REPO_ARGS,
       '--label',
       label,
       '--state',
@@ -280,6 +291,7 @@ function listIssuesByLabel(label: string): GhIssue[] {
       'number,labels,comments,author,createdAt',
     ],
     ghIssueListSchema,
+    runGh,
   );
 }
 
@@ -319,6 +331,12 @@ function uniqueIssueFilter(): (issue: TriageIssue) => boolean {
   };
 }
 
+// Tracks sandboxes that have been created but not yet closed. Signal
+// handlers (see installSignalHandlers) iterate this set to call close()
+// on each so SIGINT/SIGTERM does not leave orphaned `agent-tty-triage-*`
+// Coder workspaces blocking future runs.
+const activeSandboxes = new Set<Sandbox>();
+
 async function runTriageAgent(
   issue: TriageIssue,
   runId: string,
@@ -326,7 +344,7 @@ async function runTriageAgent(
   // workspaceName is computed inside the try so an assertIssueNumber
   // failure (malformed gh response, future caller passing an unvalidated
   // number) is caught per-issue instead of aborting the whole batch via
-  // Promise.all in runTriageBatch.
+  // Promise.all in runBatch.
   let workspaceName: string | undefined;
   let sandbox: Sandbox | undefined;
   let result: TriageIssueSummary | undefined;
@@ -349,11 +367,18 @@ async function runTriageAgent(
         sandbox: {
           onSandboxReady: [
             { command: 'gh auth status' },
+            // Sandcastle syncs git-tracked files only, so node_modules/ is
+            // absent inside the workspace. Per the plan's resolved design
+            // ("v1 should run `npm ci` in the workspace before triage"),
+            // run a deterministic install before the agent starts so bug
+            // reproductions can execute the project's tools.
+            { command: 'npm ci' },
             { command: 'npm install -g @anthropic-ai/claude-code' },
           ],
         },
       },
     });
+    activeSandboxes.add(sandbox);
 
     await sandbox.run({
       agent: claudeCode('claude-opus-4-6'),
@@ -361,7 +386,7 @@ async function runTriageAgent(
       promptArgs: {
         ISSUE_NUMBER: String(issue.number),
       },
-      idleTimeoutSeconds: 1800,
+      idleTimeoutSeconds: TRIAGE_AGENT_IDLE_TIMEOUT_SECONDS,
     });
 
     result = {
@@ -369,6 +394,11 @@ async function runTriageAgent(
       status: 'success',
     };
   } catch (error) {
+    // Print the full, multi-line error to stderr before truncating to a
+    // first-line summary for `TriageIssueSummary.message`. Without this,
+    // root causes that live on line 2+ (Coder create stack traces, sync
+    // failures, agent crashes) are permanently destroyed.
+    console.error(`[issue ${issue.number}]`, error);
     result = {
       issueNumber: issue.number,
       status:
@@ -381,39 +411,28 @@ async function runTriageAgent(
     if (sandbox !== undefined) {
       try {
         await sandbox.close();
-      } catch (error) {
+      } catch (closeError) {
+        // Preserve the original triage signal: if `result` is already a
+        // success, downgrade to 'failed' but keep the original message and
+        // append the close failure. If `result` is already a failure, do
+        // the same so we never silently lose the root cause.
+        console.error(`[issue ${issue.number}] close failed`, closeError);
+        const closeMessage = `close failed: ${conciseErrorMessage(closeError)}`;
         result = {
           issueNumber: issue.number,
           status: 'failed',
-          message: `close failed: ${conciseErrorMessage(error)}`,
+          message:
+            result === undefined
+              ? closeMessage
+              : `${result.message ?? `original status: ${result.status}`}; ${closeMessage}`,
         };
+      } finally {
+        activeSandboxes.delete(sandbox);
       }
     }
   }
 
   return result;
-}
-
-function isLockError(error: unknown, workspaceName: string): boolean {
-  // Match Coder CLI's workspace-name conflict, which looks like:
-  //   Error: A workspace named "<name>" already exists ...
-  // Require both the workspace name and "already exists" so that
-  // unrelated SSH/network/cleanup failures (which may incidentally
-  // mention the workspace name) are not silently classified as locks
-  // and dropped from retry consideration.
-  const message = conciseErrorMessage(error).toLowerCase();
-  return (
-    message.includes(workspaceName.toLowerCase()) &&
-    message.includes('already exists')
-  );
-}
-
-function conciseErrorMessage(error: unknown): string {
-  return errorMessage(error).split('\n')[0]?.trim() || 'unknown error';
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function createRunId(date = new Date()): string {
@@ -430,14 +449,51 @@ function pad(value: number): string {
   return String(value).padStart(2, '0');
 }
 
+/**
+ * Best-effort cleanup of every Coder workspace that has been created but
+ * not yet closed. Used by signal handlers so SIGINT/SIGTERM during a batch
+ * does not leave orphaned `agent-tty-triage-*` workspaces blocking future
+ * runs (the per-issue workspace name acts as a lock, so an orphaned
+ * workspace permanently blocks the corresponding issue until manual
+ * `coder delete` or template TTL expiry).
+ */
+async function closeActiveSandboxes(): Promise<void> {
+  const sandboxes = Array.from(activeSandboxes);
+  activeSandboxes.clear();
+  await Promise.allSettled(sandboxes.map((sandbox) => sandbox.close()));
+}
+
+function installSignalHandlers(): void {
+  let signalled = false;
+  const handle = (signal: NodeJS.Signals): void => {
+    if (signalled) {
+      return;
+    }
+    signalled = true;
+    console.error(
+      `[afk-triage] received ${signal}; closing ${activeSandboxes.size} active sandboxes`,
+    );
+    closeActiveSandboxes().finally(() => {
+      // 128 + signal number convention. SIGINT=2, SIGTERM=15.
+      const code = signal === 'SIGINT' ? 130 : 143;
+      process.exit(code);
+    });
+  };
+
+  process.on('SIGINT', handle);
+  process.on('SIGTERM', handle);
+}
+
 async function main(): Promise<void> {
   const args = parseRunnerArgs(process.argv.slice(2), process.env);
   process.env['CODER_WORKSPACE_USE_PARAMETER_DEFAULTS'] = 'true';
+  installSignalHandlers();
 
   try {
     const summary = await runBatch(args);
     printSummary(summary);
   } catch (error) {
+    console.error('[afk-triage] batch failed', error);
     const runId = createRunId();
     const summary = buildTriageBatchSummary(
       runId,
