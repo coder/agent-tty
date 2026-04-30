@@ -259,6 +259,12 @@ function listCandidateIssues(includeNeedsInfo: boolean): GhIssue[] {
   return issues.flat();
 }
 
+// `gh issue list` defaults to --limit 30, which would silently drop excess
+// eligible issues. The plan calls for "no hard batch cap: process all eligible
+// issues, but only N at once", so cap at a high upper bound that exceeds any
+// realistic triage backlog.
+const GH_ISSUE_LIST_LIMIT = 500;
+
 function listIssuesByLabel(label: string): GhIssue[] {
   return runGhJson(
     [
@@ -268,6 +274,8 @@ function listIssuesByLabel(label: string): GhIssue[] {
       label,
       '--state',
       'open',
+      '--limit',
+      String(GH_ISSUE_LIST_LIMIT),
       '--json',
       'number,labels,comments,author,createdAt',
     ],
@@ -315,11 +323,16 @@ async function runTriageAgent(
   issue: TriageIssue,
   runId: string,
 ): Promise<TriageIssueSummary> {
-  const workspaceName = workspaceNameForIssue(issue.number);
+  // workspaceName is computed inside the try so an assertIssueNumber
+  // failure (malformed gh response, future caller passing an unvalidated
+  // number) is caught per-issue instead of aborting the whole batch via
+  // Promise.all in runTriageBatch.
+  let workspaceName: string | undefined;
   let sandbox: Sandbox | undefined;
   let result: TriageIssueSummary | undefined;
 
   try {
+    workspaceName = workspaceNameForIssue(issue.number);
     const { createSandbox, claudeCode } = await import('@ai-hero/sandcastle');
     const coderOptions: CoderOptions = {
       template: 'coder',
@@ -358,7 +371,10 @@ async function runTriageAgent(
   } catch (error) {
     result = {
       issueNumber: issue.number,
-      status: isLockError(error, workspaceName) ? 'locked' : 'failed',
+      status:
+        workspaceName !== undefined && isLockError(error, workspaceName)
+          ? 'locked'
+          : 'failed',
       message: conciseErrorMessage(error),
     };
   } finally {
@@ -379,11 +395,16 @@ async function runTriageAgent(
 }
 
 function isLockError(error: unknown, workspaceName: string): boolean {
+  // Match Coder CLI's workspace-name conflict, which looks like:
+  //   Error: A workspace named "<name>" already exists ...
+  // Require both the workspace name and "already exists" so that
+  // unrelated SSH/network/cleanup failures (which may incidentally
+  // mention the workspace name) are not silently classified as locks
+  // and dropped from retry consideration.
   const message = conciseErrorMessage(error).toLowerCase();
   return (
-    message.includes('coder create') ||
-    message.includes('already exists') ||
-    message.includes(workspaceName.toLowerCase())
+    message.includes(workspaceName.toLowerCase()) &&
+    message.includes('already exists')
   );
 }
 

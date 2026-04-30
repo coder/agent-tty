@@ -30,6 +30,18 @@ export function isTriageState(value: string): value is TriageState {
   return TRIAGE_STATES.has(value as TriageState);
 }
 
+/**
+ * Round-trip companion to {@link parseAfkMarker}.
+ *
+ * At runtime AFK markers are emitted by the in-workspace Claude agent, which
+ * follows `MARKER_PATTERN` from the triage prompt. This formatter is the
+ * canonical machine-generated form and exists primarily to give
+ * `parseAfkMarker` a partner the test suite can round-trip against, so the
+ * regex and the prompt's documented format cannot drift apart silently.
+ * Keep it exported so external tooling (future AFK-triage reapers, dogfood
+ * scripts) can reuse the same canonical form when it eventually needs to
+ * post markers without going through Claude.
+ */
 export function formatAfkMarker(input: AfkMarker): string {
   const issue = assertIssueNumber(input.issue);
   invariant(isTriageState(input.outcome), 'AFK marker outcome is invalid');
