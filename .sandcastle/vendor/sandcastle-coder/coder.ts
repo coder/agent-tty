@@ -14,6 +14,9 @@
 // importing this vendored module does not eagerly load Sandcastle's main entry
 // during dry-run/test paths.
 //
+// - Added a `waitForSshReady` probe before `ensureRemoteDirectory` to avoid a
+//   prebuild-claim ssh race; see vendor README.
+//
 // Delete this directory and switch the runner back to
 // `import { coder } from '@ai-hero/sandcastle/sandboxes/coder';`
 // once the upstream PR ships in a released @ai-hero/sandcastle version.
@@ -445,6 +448,9 @@ const selectWorkspaceAgent = (
 const WORKSPACE_AGENT_POLL_ATTEMPTS = 60;
 const WORKSPACE_AGENT_POLL_INTERVAL_MS = 1_000;
 
+const SSH_READY_POLL_ATTEMPTS = 30;
+const SSH_READY_POLL_INTERVAL_MS = 2_000;
+
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -492,6 +498,34 @@ const waitForWorkspaceAgents = async (
   }
 
   return workspace;
+};
+
+const waitForSshReady = async (
+  env: NodeJS.ProcessEnv,
+  sshRef: string,
+): Promise<void> => {
+  assertNonEmptyString(sshRef, 'Coder SSH ref');
+
+  for (let attempt = 0; attempt < SSH_READY_POLL_ATTEMPTS; attempt++) {
+    const result = await runCoder(
+      buildSshArgs(sshRef, {}, remoteShell('printf ready')),
+      { env },
+    );
+
+    if (result.exitCode === 0 && result.stdout.trim().endsWith('ready')) {
+      return;
+    }
+
+    if (attempt === SSH_READY_POLL_ATTEMPTS - 1) {
+      throw new Error(
+        `Coder SSH ${sshRef} was not ready after waiting ${SSH_READY_POLL_ATTEMPTS * SSH_READY_POLL_INTERVAL_MS}ms; last exit code ${result.exitCode}\nstderr:\n${result.stderr}\nstdout:\n${result.stdout}`,
+      );
+    }
+
+    await sleep(SSH_READY_POLL_INTERVAL_MS);
+  }
+
+  throw new Error(`Coder SSH ${sshRef} readiness loop did not run`);
 };
 
 const getBuildStatus = (workspace: CoderWorkspace): string | undefined =>
@@ -654,6 +688,7 @@ const resolveCoderWorkspace = async (
   const agent = selectWorkspaceAgent(workspace, options.workspaceAgent);
   const sshRef = `${workspaceRef}.${agent.name}`;
   const sshHostname = buildSshHostname(workspaceRef, agent.name);
+  await waitForSshReady(env, sshRef);
   const worktreePath = await resolveWorktreePath(env, options, sshRef, agent);
   await ensureRemoteDirectory(env, sshRef, worktreePath);
 
