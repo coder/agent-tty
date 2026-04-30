@@ -55,6 +55,7 @@ The `run` value MUST be the **compact UTC** form `YYYYMMDDTHHMMSSZ` — no dashe
 - Do not run destructive commands (`rm -rf`, credential edits, `gh auth logout`, `coder delete`) unless they are part of an explicitly reviewed, project-local repro and sandbox-safe.
 - The workspace's GitHub identity is personal via Coder External Auth in v1. Comments and labels appear under that personal account.
 - Scheduled unattended production use is OUT OF SCOPE for v1. This overlay supports controlled/manual dogfood only. A bot/GitHub App identity is the long-term replacement.
+- **Marker forgery (v1 known limitation)**: any GitHub user who can comment on an issue can post a syntactically valid `<!-- afk-triage:v1 ... -->` marker; without an author allow-list the eligibility check trusts it. Attack surface is narrow (only `needs-info` issues, attacker must time the marker after the reporter's reply, a single new reporter comment re-enables eligibility, template TTL bounds operational cost), so this is acceptable for v1 controlled dogfood. For unattended production set `AFK_TRIAGE_TRUSTED_MARKER_AUTHORS=triage-bot[,…]` so only markers from the dedicated bot identity gate idempotency. See `latestAfkMarkerCreatedAt` in `.sandcastle/lib/eligibility.ts`.
 
 ## Resuming `needs-info` issues
 

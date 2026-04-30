@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { runJson } from '../../../.sandcastle/lib/gh.js';
+import { runCommand, runJson } from '../../../.sandcastle/lib/gh.js';
 
 const schema = z
   .object({
@@ -73,5 +73,33 @@ describe('runJson', () => {
         status: 0,
       })),
     ).toThrow(/expected string.*received number/iu);
+  });
+});
+
+// DEREM-34 regression: spawnSync returns undefined stdout/stderr when the
+// binary is missing (ENOENT). Guard against `Cannot read properties of
+// undefined (reading 'length')` and the silent CommandResult contract
+// violation by exercising the real spawn path against a deliberately
+// missing binary.
+describe('runCommand ENOENT handling', () => {
+  const missingBinary = 'agent-tty-nonexistent-binary-for-test';
+
+  it('returns a string-typed CommandResult when the binary is missing', () => {
+    const result = runCommand(missingBinary, []);
+    expect(typeof result.stdout).toBe('string');
+    expect(typeof result.stderr).toBe('string');
+    expect(typeof result.status).toBe('number');
+    expect(result.status).not.toBe(0);
+    // The spawn-error message must surface in stderr so operators see the
+    // real diagnostic instead of an empty payload.
+    expect(result.stderr.length).toBeGreaterThan(0);
+  });
+
+  it('runJson surfaces a structured error when the binary is missing', () => {
+    expect(() =>
+      runJson('coder', ['whoami'], schema, (args) =>
+        runCommand(missingBinary, args),
+      ),
+    ).toThrow(/coder whoami failed: /u);
   });
 });

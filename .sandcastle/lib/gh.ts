@@ -58,7 +58,15 @@ export function runJson<T>(
   return schema.parse(parsed);
 }
 
-function runCommand(command: string, args: readonly string[]): CommandResult {
+/**
+ * Spawn `command` with `args` synchronously and normalize the result into a
+ * CommandResult. Exported so `runJson` and the targeted ENOENT regression
+ * test can both exercise the same normalization path.
+ */
+export function runCommand(
+  command: string,
+  args: readonly string[],
+): CommandResult {
   invariant(
     Array.isArray(args) && args.every((arg) => typeof arg === 'string'),
     `${command} arguments must be strings`,
@@ -69,10 +77,21 @@ function runCommand(command: string, args: readonly string[]): CommandResult {
     maxBuffer: SPAWN_SYNC_MAX_BUFFER,
   });
 
+  // When the binary is not on PATH (ENOENT) or the spawn itself otherwise
+  // fails before the child runs, spawnSync returns `undefined` for both
+  // `stdout` and `stderr`. Default both to '' so:
+  //   - `result.stderr.length` does not throw `Cannot read properties of
+  //     undefined`,
+  //   - the CommandResult contract (`stdout: string`) is honored,
+  //   - `runJson` gets a parseable empty payload that funnels into the
+  //     'invalid JSON' diagnostic with the spawn-error message attached
+  //     via the `result.error?.message` fallback below.
+  const stdout = result.stdout ?? '';
+  const stderr = result.stderr ?? '';
+
   return {
-    stdout: result.stdout,
-    stderr:
-      result.stderr.length > 0 ? result.stderr : (result.error?.message ?? ''),
+    stdout,
+    stderr: stderr.length > 0 ? stderr : (result.error?.message ?? ''),
     status: result.status === null ? 1 : result.status,
   };
 }

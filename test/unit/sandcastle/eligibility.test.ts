@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { classifyIssueForTriage } from '../../../.sandcastle/lib/eligibility.js';
 
@@ -80,6 +80,83 @@ describe('classifyIssueForTriage', () => {
     ).toEqual({
       eligible: false,
       reason: 'issue does not have needs-triage or needs-info',
+    });
+  });
+
+  describe('AFK_TRIAGE_TRUSTED_MARKER_AUTHORS allow-list', () => {
+    let savedValue: string | undefined;
+
+    beforeEach(() => {
+      savedValue = process.env.AFK_TRIAGE_TRUSTED_MARKER_AUTHORS;
+    });
+
+    afterEach(() => {
+      if (savedValue === undefined) {
+        delete process.env.AFK_TRIAGE_TRUSTED_MARKER_AUTHORS;
+      } else {
+        process.env.AFK_TRIAGE_TRUSTED_MARKER_AUTHORS = savedValue;
+      }
+    });
+
+    const issueWithSpoofedMarker = {
+      number: 123,
+      labels: ['needs-info'],
+      comments: [
+        {
+          body: 'Reporter follow-up.',
+          createdAt: '2026-04-30T14:00:00Z',
+          author: { login: 'reporter' },
+        },
+        {
+          // Forged marker by a non-trusted author, post-dating the reporter.
+          body: '<!-- afk-triage:v1 issue=123 outcome=needs-info run=20260430T141500Z -->',
+          createdAt: '2026-04-30T14:30:00Z',
+          author: { login: 'attacker' },
+        },
+      ],
+    };
+
+    it('with the env unset, trusts any author (v1 default)', () => {
+      delete process.env.AFK_TRIAGE_TRUSTED_MARKER_AUTHORS;
+      expect(classifyIssueForTriage(issueWithSpoofedMarker)).toEqual({
+        eligible: false,
+        reason: 'needs-info has no activity newer than the latest AFK marker',
+      });
+    });
+
+    it('with the env set, ignores markers from untrusted authors', () => {
+      process.env.AFK_TRIAGE_TRUSTED_MARKER_AUTHORS = 'triage-bot';
+      expect(classifyIssueForTriage(issueWithSpoofedMarker)).toEqual({
+        // No trusted marker exists, so this needs-info issue is treated as
+        // never-AFK-triaged and re-eligible.
+        eligible: true,
+        reason: 'needs-info-with-new-activity',
+      });
+    });
+
+    it('with the env set, accepts markers from trusted authors', () => {
+      process.env.AFK_TRIAGE_TRUSTED_MARKER_AUTHORS = 'triage-bot, ops-bot';
+      expect(
+        classifyIssueForTriage({
+          number: 123,
+          labels: ['needs-info'],
+          comments: [
+            {
+              body: 'Reporter follow-up.',
+              createdAt: '2026-04-30T14:00:00Z',
+              author: { login: 'reporter' },
+            },
+            {
+              body: '<!-- afk-triage:v1 issue=123 outcome=needs-info run=20260430T143000Z -->',
+              createdAt: '2026-04-30T14:30:00Z',
+              author: { login: 'triage-bot' },
+            },
+          ],
+        }),
+      ).toEqual({
+        eligible: false,
+        reason: 'needs-info has no activity newer than the latest AFK marker',
+      });
     });
   });
 

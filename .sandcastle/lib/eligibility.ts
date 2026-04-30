@@ -2,6 +2,31 @@ import { invariant } from '../../src/util/assert.js';
 import { parseAfkMarker } from './afkMarker.js';
 import { assertIssueNumber } from './issueNumber.js';
 
+/**
+ * Optional comma-separated allow-list of trusted GitHub authors whose
+ * AFK-triage markers count for idempotency. When unset (the v1 default),
+ * any author can post a syntactically valid `<!-- afk-triage:v1 ... -->`
+ * marker and the eligibility module trusts it; this is acceptable for v1
+ * controlled dogfood because the attack surface is narrow (marker must
+ * post-date the reporter's reply on a `needs-info` issue, a single new
+ * reporter comment re-enables eligibility, and the Coder template TTL
+ * bounds operational cost). Production deployments should set
+ * `AFK_TRIAGE_TRUSTED_MARKER_AUTHORS=triage-bot` (or similar) so only
+ * markers from the dedicated bot identity gate idempotency.
+ */
+const TRUSTED_MARKER_AUTHORS_ENV = 'AFK_TRIAGE_TRUSTED_MARKER_AUTHORS';
+
+function trustedMarkerAuthors(): readonly string[] | undefined {
+  const raw = process.env[TRUSTED_MARKER_AUTHORS_ENV]?.trim();
+  if (raw === undefined || raw === '') {
+    return undefined;
+  }
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
 export interface TriageComment {
   readonly body: string;
   readonly createdAt: string;
@@ -74,15 +99,29 @@ export function classifyIssueForTriage(issue: TriageIssue): IssueEligibility {
  * activity" and triggered unnecessary re-triage. Using the marker comment's
  * GitHub `createdAt` is a single time source on the same clock as the
  * comments we compare against.
+ *
+ * Author trust: when `AFK_TRIAGE_TRUSTED_MARKER_AUTHORS` is set, only
+ * markers whose `author.login` is on that list count. When it is unset
+ * (v1 default for controlled dogfood), all syntactically valid markers
+ * count — see {@link TRUSTED_MARKER_AUTHORS_ENV} for the documented
+ * trade-off.
  */
 function latestAfkMarkerCreatedAt(
   issueNumber: number,
   comments: readonly TriageComment[],
 ): number | undefined {
+  const trusted = trustedMarkerAuthors();
   const markerTimestamps = comments
     .filter((comment) => {
       const marker = parseAfkMarker(comment.body);
-      return marker !== null && marker.issue === issueNumber;
+      if (marker === null || marker.issue !== issueNumber) {
+        return false;
+      }
+      if (trusted === undefined) {
+        return true;
+      }
+      const login = comment.author?.login;
+      return typeof login === 'string' && trusted.includes(login);
     })
     .map((comment) => Date.parse(comment.createdAt))
     .filter((timestamp) => Number.isFinite(timestamp))
