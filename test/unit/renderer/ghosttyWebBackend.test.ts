@@ -548,6 +548,45 @@ describe('GhosttyWebBackend unit guards', () => {
     expect(events).toEqual(['boot-settled', 'released']);
   });
 
+  it('still resolves dispose() when an in-flight boot rejects (DEREM-26, disposeAfterBoot swallows boot failure)', async () => {
+    const backend = new GhosttyWebBackend('renderer-unit-session', PROFILE);
+    const events: string[] = [];
+
+    let rejectBootGate!: (reason: Error) => void;
+    const bootGate = new Promise<void>((_resolve, reject) => {
+      rejectBootGate = reject;
+    });
+
+    const scope = new ResourceScope();
+    scope.add('resource', () => {
+      events.push('released');
+    });
+
+    Object.assign(backend as object, {
+      bootPromise: bootGate.catch((error: unknown) => {
+        events.push('boot-rejected');
+        throw error;
+      }),
+      resourceScope: scope,
+    });
+
+    const disposePromise = backend.dispose();
+
+    // Yield several microtasks so disposeAfterBoot is parked on the
+    // pending bootPromise. Once we reject it, the try/catch must swallow
+    // the boot rejection and disposeInternal must run cleanly so the
+    // ADR 0003 contract (dispose resolves successfully) holds.
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+    expect(events).toEqual([]);
+
+    rejectBootGate(new Error('boot failed'));
+
+    await expect(disposePromise).resolves.toBeUndefined();
+    expect(events).toEqual(['boot-rejected', 'released']);
+  });
+
   it('still resolves dispose() when logger.warn itself throws (DEREM-19, EPIPE during shutdown)', async () => {
     const logger = new Logger('debug');
     vi.spyOn(logger, 'warn').mockImplementation(() => {
