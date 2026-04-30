@@ -250,6 +250,67 @@ describe('screenshot capture', () => {
 
     expect(observed.at(-1)?.options).toEqual({ showCursor: true });
     expect(cursorResult.cursorVisible).toBe(true);
+
+    // showCursor: false must be threaded through as a distinct value (not
+    // collapsed to undefined). Guards against the ternary regressing to a
+    // truthy-only check.
+    const sessionDirectoryFalse = await createSessionDir('session-03');
+    const backendShowFalse = createFakeBackend({
+      onScreenshot: (outputPath, screenshotOptions) => {
+        observed.push({ outputPath, options: screenshotOptions });
+      },
+      resultOverrides: { sessionId: 'session-03' },
+    });
+
+    const falseResult = await captureScreenshotResult({
+      backend: backendShowFalse,
+      sessionDir: sessionDirectoryFalse,
+      profileName: 'reference-dark',
+      expectedSessionId: 'session-03',
+      showCursor: false,
+    });
+
+    expect(observed.at(-1)?.options).toEqual({ showCursor: false });
+    expect(falseResult.cursorVisible).toBe(false);
+  });
+
+  it('rejects empty sessionDir, profileName, or expectedSessionId before invoking the backend', async () => {
+    const sessionDirectory = await createSessionDir();
+    const observed: Array<string> = [];
+    const backend = createFakeBackend({
+      onScreenshot: (outputPath) => {
+        observed.push(outputPath);
+      },
+    });
+
+    await expect(
+      captureScreenshotResult({
+        backend,
+        sessionDir: '',
+        profileName: 'reference-dark',
+        expectedSessionId: 'session-01',
+      }),
+    ).rejects.toThrow(/sessionDir must be a non-empty string/u);
+
+    await expect(
+      captureScreenshotResult({
+        backend,
+        sessionDir: sessionDirectory,
+        profileName: '',
+        expectedSessionId: 'session-01',
+      }),
+    ).rejects.toThrow(/profileName must be a non-empty string/u);
+
+    await expect(
+      captureScreenshotResult({
+        backend,
+        sessionDir: sessionDirectory,
+        profileName: 'reference-dark',
+        expectedSessionId: '',
+      }),
+    ).rejects.toThrow(/expectedSessionId must be a non-empty string/u);
+
+    expect(observed).toEqual([]);
   });
 
   it('rejects renderer results that violate the shared invariants', async () => {
@@ -292,12 +353,16 @@ describe('screenshot capture', () => {
       const sessionDirectory = await createSessionDir(
         `session-inv-${testCase.name.replace(/\W+/gu, '-')}`,
       );
+      let observedTempPath: string | undefined;
       const backend = createFakeBackend({
         resultOverrides: {
           ...testCase.overrides,
           sessionId:
             testCase.overrides.sessionId ??
             `session-inv-${testCase.name.replace(/\W+/gu, '-')}`,
+        },
+        onScreenshot: (outputPath) => {
+          observedTempPath = outputPath;
         },
       });
       const expectedSessionId = `session-inv-${testCase.name.replace(/\W+/gu, '-')}`;
@@ -313,8 +378,17 @@ describe('screenshot capture', () => {
 
       const manifest = await readArtifactManifest(sessionDirectory);
       expect(manifest.artifacts, `case: ${testCase.name}`).toEqual([]);
-      // The temp file should have been cleaned up; final filename should not
-      // exist either since rename never ran.
+      // The temp file written by the fake backend should have been removed.
+      expect(observedTempPath, `case: ${testCase.name}`).toMatch(
+        /\/artifacts\/\.tmp-screenshot-.*\.png$/u,
+      );
+      if (observedTempPath !== undefined) {
+        await expect(
+          access(observedTempPath),
+          `case: ${testCase.name} (temp removed)`,
+        ).rejects.toMatchObject({ code: 'ENOENT' });
+      }
+      // The final filename should not exist either since rename never ran.
       await expect(
         access(
           artifactPath(
@@ -425,8 +499,11 @@ describe('screenshot capture', () => {
       }),
     ).rejects.toMatchObject({ code: 'MANIFEST_VALIDATION_ERROR' });
 
-    // Final PNG remains as a documented G1 orphan — there is no rollback
-    // for the rename when the manifest append fails afterwards.
+    // The final PNG survives because cleanup only removes the temp file,
+    // not the already-renamed artifact. This is intentional: the rename
+    // succeeded, so the PNG is valid; only the manifest entry is missing.
+    // Adding rename rollback is explicitly out of scope for this refactor
+    // and is tracked as a follow-up.
     await expect(access(finalPath)).resolves.toBeUndefined();
     if (observedTempPath !== undefined) {
       await expect(access(observedTempPath)).rejects.toMatchObject({

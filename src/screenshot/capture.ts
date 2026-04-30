@@ -18,8 +18,24 @@ import {
 } from '../storage/artifactPaths.js';
 import { invariant } from '../util/assert.js';
 
+/**
+ * The narrow renderer surface the capture helper needs. Accepting only
+ * `screenshot()` makes it impossible for future edits to reach for unrelated
+ * lifecycle methods (`boot`, `replayTo`, `dispose`, etc.) from inside the
+ * capture seam. Callers already hold a full `RendererBackend`, which is
+ * structurally assignable to this `Pick<...>`.
+ */
+export type CaptureScreenshotBackend = Pick<RendererBackend, 'screenshot'>;
+
+/**
+ * The shared capture path enforces `sha256` as a runtime invariant on every
+ * successful screenshot. We refine the public schema's optional `sha256` to
+ * `string` here so callers — and TypeScript — see that guarantee directly.
+ */
+export type CapturedScreenshotResult = ScreenshotResult & { sha256: string };
+
 export interface CaptureScreenshotResultOptions {
-  backend: RendererBackend;
+  backend: CaptureScreenshotBackend;
   sessionDir: string;
   profileName: string;
   expectedSessionId: string;
@@ -43,7 +59,7 @@ export function parseScreenshotResult(
 
 export async function captureScreenshotResult(
   options: CaptureScreenshotResultOptions,
-): Promise<ScreenshotResult> {
+): Promise<CapturedScreenshotResult> {
   invariant(
     options.sessionDir.length > 0,
     'sessionDir must be a non-empty string',
@@ -96,24 +112,28 @@ export async function captureScreenshotResult(
     );
     const finalArtifactPath = artifactPath(options.sessionDir, filename);
 
+    // Mirror `src/snapshot/capture.ts` by building a typed intermediate
+    // before validation. A misspelled field name surfaces at compile time
+    // here rather than only at Zod runtime.
+    const publicResultCandidate: CapturedScreenshotResult = {
+      sessionId: rendererResult.sessionId,
+      capturedAtSeq: rendererResult.capturedAtSeq,
+      profileName: rendererResult.profileName,
+      cols: rendererResult.cols,
+      rows: rendererResult.rows,
+      artifactPath: finalArtifactPath,
+      pngSizeBytes: rendererResult.pngSizeBytes,
+      cursorVisible: rendererResult.cursorVisible,
+      rendererBackend: rendererResult.rendererBackend,
+      pixelWidth: rendererResult.pixelWidth,
+      pixelHeight: rendererResult.pixelHeight,
+      sha256,
+      renderProfileHash: rendererResult.renderProfileHash,
+    };
     const publicResult = parseScreenshotResult(
-      {
-        sessionId: rendererResult.sessionId,
-        capturedAtSeq: rendererResult.capturedAtSeq,
-        profileName: rendererResult.profileName,
-        cols: rendererResult.cols,
-        rows: rendererResult.rows,
-        artifactPath: finalArtifactPath,
-        pngSizeBytes: rendererResult.pngSizeBytes,
-        cursorVisible: rendererResult.cursorVisible,
-        rendererBackend: rendererResult.rendererBackend,
-        pixelWidth: rendererResult.pixelWidth,
-        pixelHeight: rendererResult.pixelHeight,
-        sha256,
-        renderProfileHash: rendererResult.renderProfileHash,
-      },
+      publicResultCandidate,
       'Screenshot result validation failed.',
-    );
+    ) as CapturedScreenshotResult;
 
     await rename(temporaryOutputPath, finalArtifactPath);
     await appendArtifact(
