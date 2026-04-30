@@ -3,9 +3,9 @@ import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 
 import type { Sandbox } from '@ai-hero/sandcastle';
-import type { coder as coderProvider } from '@ai-hero/sandcastle/sandboxes/coder';
 
 import { invariant } from '../src/util/assert.js';
+import { coder, type CoderOptions } from './vendor/sandcastle-coder/coder.js';
 import { branchNameForIssue, assertRunId } from './lib/branchName.js';
 import {
   classifyIssueForTriage,
@@ -320,22 +320,17 @@ async function runTriageAgent(
   let result: TriageIssueSummary | undefined;
 
   try {
-    const coderModuleName = '@ai-hero/sandcastle/sandboxes/coder';
-    const [{ createSandbox, claudeCode }, { coder }] = await Promise.all([
-      import('@ai-hero/sandcastle'),
-      import(/* @vite-ignore */ coderModuleName) as Promise<{
-        readonly coder: typeof coderProvider;
-      }>,
-    ]);
+    const { createSandbox, claudeCode } = await import('@ai-hero/sandcastle');
+    const coderOptions: CoderOptions = {
+      template: 'coder',
+      workspaceName,
+      onClose: 'delete',
+    };
 
     sandbox = await createSandbox({
       branch: branchNameForIssue(issue.number, runId),
       baseBranch: 'origin/main',
-      sandbox: coder({
-        template: 'coder',
-        workspaceName,
-        onClose: 'delete',
-      }),
+      sandbox: coder(coderOptions),
       hooks: {
         sandbox: {
           onSandboxReady: [{ command: 'gh auth status' }],
