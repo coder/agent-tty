@@ -16,6 +16,10 @@
 //
 // - Added a `waitForSshReady` probe before `ensureRemoteDirectory` to avoid a
 //   prebuild-claim ssh race; see vendor README.
+// - Routed `exec()` calls with stdin through OpenSSH (sandcastle's existing
+//   `coder ssh --stdio` ProxyCommand path) so `claude --print -p -` receives
+//   stdin EOF; `coder ssh` does not propagate EOF and stalls the agent. See
+//   vendor README.
 //
 // Delete this directory and switch the runner back to
 // `import { coder } from '@ai-hero/sandcastle/sandboxes/coder';`
@@ -161,6 +165,9 @@ const shellQuote = (value: string): string => {
 const displayCommand = (args: readonly string[]): string =>
   ['coder', ...args].map((arg) => shellQuote(arg)).join(' ');
 
+const displayOpenSshCommand = (args: readonly string[]): string =>
+  ['ssh', ...args].map((arg) => shellQuote(arg)).join(' ');
+
 const coderEnv = (options: CoderOptions): NodeJS.ProcessEnv => {
   const env: NodeJS.ProcessEnv = { ...process.env };
   if (options.url !== undefined) {
@@ -220,6 +227,67 @@ const runCoder = (
     proc.on('error', (error: Error) => {
       reject(
         new Error(`Failed to start ${displayCommand(args)}: ${error.message}`),
+      );
+    });
+
+    proc.on('close', (code: number | null) => {
+      resolve({
+        stdout: stdoutChunks.join(options.onStdoutLine ? '\n' : ''),
+        stderr: stderrChunks.join(''),
+        exitCode: code ?? 0,
+      });
+    });
+  });
+};
+
+const runOpenSsh = (
+  args: readonly string[],
+  options: {
+    readonly env: NodeJS.ProcessEnv;
+    readonly stdin?: string;
+    readonly onStdoutLine?: (line: string) => void;
+  },
+): Promise<CoderCommandResult> => {
+  if (args.length === 0) {
+    throw new Error('runOpenSsh requires at least one CLI argument');
+  }
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn('ssh', [...args], {
+      env: options.env,
+      stdio: [options.stdin !== undefined ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+    });
+
+    if (options.stdin !== undefined) {
+      proc.stdin!.write(options.stdin);
+      proc.stdin!.end();
+    }
+
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
+
+    if (options.onStdoutLine) {
+      const onStdoutLine = options.onStdoutLine;
+      const rl = createInterface({ input: proc.stdout! });
+      rl.on('line', (line) => {
+        stdoutChunks.push(line);
+        onStdoutLine(line);
+      });
+    } else {
+      proc.stdout!.on('data', (chunk: Buffer) => {
+        stdoutChunks.push(chunk.toString());
+      });
+    }
+
+    proc.stderr!.on('data', (chunk: Buffer) => {
+      stderrChunks.push(chunk.toString());
+    });
+
+    proc.on('error', (error: Error) => {
+      reject(
+        new Error(
+          `Failed to start ${displayOpenSshCommand(args)}: ${error.message}`,
+        ),
       );
     });
 
@@ -593,6 +661,18 @@ const buildOpenSshArgs = (
   remoteCommand,
 ];
 
+const buildEnvPrefix = (sandboxEnv: Record<string, string>): string => {
+  const entries = Object.entries(sandboxEnv);
+  if (entries.length === 0) return '';
+  for (const [key] of entries) {
+    assertNonEmptyString(key, 'Coder SSH env key');
+    if (key.includes('=')) {
+      throw new Error(`Coder SSH env key must not contain '=': ${key}`);
+    }
+  }
+  return `${entries.map(([key, value]) => `${key}=${shellQuote(value)}`).join(' ')} `;
+};
+
 const buildSshArgs = (
   sshRef: string,
   sandboxEnv: Record<string, string>,
@@ -942,15 +1022,31 @@ const createHandle = (
     assertNonEmptyString(command, 'Coder exec command');
     const cwd = opts?.cwd ?? resolved.worktreePath;
     const effectiveCommand = opts?.sudo ? `sudo ${command}` : command;
+    const remoteShellArg = `cd ${shellQuote(cwd)} && ${effectiveCommand}`;
+
+    if (opts?.stdin !== undefined) {
+      // OpenSSH path: needed because `coder ssh` does not propagate stdin EOF
+      // to the remote process, which makes `claude --print -p -` hang waiting
+      // for input that already arrived. OpenSSH (via ProxyCommand=coder ssh
+      // --stdio) handles stdin EOF correctly.
+      const envPrefix = buildEnvPrefix(sandboxEnv);
+      return runOpenSsh(
+        buildOpenSshArgs(
+          resolved.sshHostname,
+          `${envPrefix}sh -c ${shellQuote(remoteShellArg)}`,
+        ),
+        {
+          env,
+          stdin: opts.stdin,
+          ...(opts.onLine === undefined ? {} : { onStdoutLine: opts.onLine }),
+        },
+      );
+    }
+
     return runCoder(
-      buildSshArgs(
-        resolved.sshRef,
-        sandboxEnv,
-        remoteShell(`cd ${shellQuote(cwd)} && ${effectiveCommand}`),
-      ),
+      buildSshArgs(resolved.sshRef, sandboxEnv, remoteShell(remoteShellArg)),
       {
         env,
-        ...(opts?.stdin === undefined ? {} : { stdin: opts.stdin }),
         ...(opts?.onLine === undefined ? {} : { onStdoutLine: opts.onLine }),
       },
     );

@@ -16,7 +16,8 @@ This directory vendors the unreleased `@ai-hero/sandcastle/sandboxes/coder` prov
 - Added `.sandcastle/vendor/**` to Oxlint ignores because the upstream file intentionally contains style-only patterns that violate local rules such as `typescript/no-non-null-assertion`, `typescript/no-base-to-string`, and `typescript/no-unnecessary-type-assertion`.
 - Ran the project formatter (`npm run format`) after import, so quote/trailing-comma/style differences from upstream are formatter-only changes.
 - Added `waitForSshReady(env, sshRef)` and constants `SSH_READY_POLL_ATTEMPTS`/`SSH_READY_POLL_INTERVAL_MS`, called from `resolveCoderWorkspace` immediately before `resolveWorktreePath`. Reason: workspaces created from a Coder prebuild can transition `agent.status` to `'connected'` before the prior agent has fully disconnected; the first `coder ssh -- ...` then fails with `error: agent is shutting down`. Waiting until a no-op `coder ssh -- printf ready` succeeds eliminates the race. Removal: this can be reverted if upstream sandcastle adopts an equivalent ssh-readiness gate.
-- Aside from the ssh-readiness gate above, no behavior changes were made.
+- Routed stdin-bearing `exec()` calls through OpenSSH using sandcastle's existing `coder ssh --stdio` ProxyCommand path. Reason: `coder ssh` does not forward stdin EOF reliably, so `claude --print -p -` hangs waiting for input that already arrived. Removal: revert when upstream Sandcastle uses OpenSSH+ProxyCommand for stdin-bearing exec, or when `coder ssh` propagates EOF reliably.
+- Aside from the ssh-readiness gate and stdin EOF routing above, no behavior changes were made.
 
 ## Removal criteria
 
