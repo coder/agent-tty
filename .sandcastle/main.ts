@@ -334,7 +334,10 @@ async function runTriageAgent(
       sandbox: coder(coderOptions),
       hooks: {
         sandbox: {
-          onSandboxReady: [{ command: 'gh auth status' }],
+          onSandboxReady: [
+            { command: 'gh auth status' },
+            { command: 'npm install -g @anthropic-ai/claude-code' },
+          ],
         },
       },
     });
