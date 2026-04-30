@@ -60,17 +60,11 @@ export function parseScreenshotResult(
 export async function captureScreenshotResult(
   options: CaptureScreenshotResultOptions,
 ): Promise<CapturedScreenshotResult> {
-  invariant(
-    options.sessionDir.length > 0,
-    'sessionDir must be a non-empty string',
-  );
-  invariant(
-    options.profileName.length > 0,
-    'profileName must be a non-empty string',
-  );
+  invariant(options.sessionDir.length > 0, 'sessionDir must be non-empty');
+  invariant(options.profileName.length > 0, 'profileName must be non-empty');
   invariant(
     options.expectedSessionId.length > 0,
-    'expectedSessionId must be a non-empty string',
+    'expectedSessionId must be non-empty',
   );
 
   await ensureArtifactsDir(options.sessionDir);
@@ -130,10 +124,22 @@ export async function captureScreenshotResult(
       sha256,
       renderProfileHash: rendererResult.renderProfileHash,
     };
-    const publicResult = parseScreenshotResult(
+    const parsedResult = parseScreenshotResult(
       publicResultCandidate,
       'Screenshot result validation failed.',
-    ) as CapturedScreenshotResult;
+    );
+    // Re-narrow `sha256` after the parse instead of asserting through a
+    // type cast. If `ScreenshotResultSchema` is ever changed to strip or
+    // transform `sha256`, this invariant catches it instead of silently
+    // hiding the regression.
+    invariant(
+      parsedResult.sha256 !== undefined,
+      'parsed screenshot result must preserve sha256',
+    );
+    const publicResult: CapturedScreenshotResult = {
+      ...parsedResult,
+      sha256: parsedResult.sha256,
+    };
 
     await rename(temporaryOutputPath, finalArtifactPath);
     await appendArtifact(

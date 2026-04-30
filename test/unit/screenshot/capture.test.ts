@@ -25,6 +25,10 @@ import {
 
 const TEST_SHA256 = 'a'.repeat(64);
 const TEST_RENDER_PROFILE_HASH = 'b'.repeat(64);
+// First four bytes of the PNG magic signature (0x89 'P' 'N' 'G'). Enough to
+// satisfy the test that we wrote/read the same buffer; the renderer
+// produces a real PNG, but these unit tests do not validate the format.
+const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
 
 interface FakeBackendOptions {
   resultOverrides?: Partial<ScreenshotResult>;
@@ -76,7 +80,7 @@ function createFakeBackend(options: FakeBackendOptions = {}): RendererBackend {
           throw options.fail;
         }
         if (writePng) {
-          await writeFile(outputPath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+          await writeFile(outputPath, PNG_HEADER);
         }
         return {
           sessionId: 'session-01',
@@ -185,9 +189,7 @@ describe('screenshot capture', () => {
     });
 
     await expect(access(expectedPath)).resolves.toBeUndefined();
-    await expect(readFile(expectedPath)).resolves.toEqual(
-      Buffer.from([0x89, 0x50, 0x4e, 0x47]),
-    );
+    await expect(readFile(expectedPath)).resolves.toEqual(PNG_HEADER);
 
     const manifest = await readArtifactManifest(sessionDirectory);
     expect(manifest.artifacts).toHaveLength(1);
@@ -290,7 +292,7 @@ describe('screenshot capture', () => {
         profileName: 'reference-dark',
         expectedSessionId: 'session-01',
       }),
-    ).rejects.toThrow(/sessionDir must be a non-empty string/u);
+    ).rejects.toThrow(/sessionDir must be non-empty/u);
 
     await expect(
       captureScreenshotResult({
@@ -299,7 +301,7 @@ describe('screenshot capture', () => {
         profileName: '',
         expectedSessionId: 'session-01',
       }),
-    ).rejects.toThrow(/profileName must be a non-empty string/u);
+    ).rejects.toThrow(/profileName must be non-empty/u);
 
     await expect(
       captureScreenshotResult({
@@ -308,7 +310,7 @@ describe('screenshot capture', () => {
         profileName: 'reference-dark',
         expectedSessionId: '',
       }),
-    ).rejects.toThrow(/expectedSessionId must be a non-empty string/u);
+    ).rejects.toThrow(/expectedSessionId must be non-empty/u);
 
     expect(observed).toEqual([]);
   });
@@ -331,10 +333,9 @@ describe('screenshot capture', () => {
       },
       {
         name: 'non-positive pngSizeBytes',
-        // pngSizeBytes is asserted before the schema runs, so the loose cast is
-        // intentional to exercise the runtime invariant the same way a buggy
-        // backend would surface.
-        overrides: { pngSizeBytes: 0 } as unknown as Partial<ScreenshotResult>,
+        // pngSizeBytes is asserted before the schema runs, so passing 0
+        // exercises the runtime invariant the same way a buggy backend would.
+        overrides: { pngSizeBytes: 0 },
         pattern: /pngSizeBytes must be positive/u,
       },
       {
@@ -405,7 +406,7 @@ describe('screenshot capture', () => {
     const backend = createFakeBackend({
       // cols=0 passes the runtime invariants but trips the strict
       // ScreenshotResultSchema PositiveIntSchema validation.
-      resultOverrides: { cols: 0 } as unknown as Partial<ScreenshotResult>,
+      resultOverrides: { cols: 0 },
     });
 
     await expect(
@@ -502,8 +503,8 @@ describe('screenshot capture', () => {
     // The final PNG survives because cleanup only removes the temp file,
     // not the already-renamed artifact. This is intentional: the rename
     // succeeded, so the PNG is valid; only the manifest entry is missing.
-    // Adding rename rollback is explicitly out of scope for this refactor
-    // and is tracked as a follow-up.
+    // Adding rename rollback is not addressed in this refactor; the
+    // follow-up is tracked in #79.
     await expect(access(finalPath)).resolves.toBeUndefined();
     if (observedTempPath !== undefined) {
       await expect(access(observedTempPath)).rejects.toMatchObject({

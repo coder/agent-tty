@@ -15,10 +15,11 @@ set -euo pipefail
 # offline paths field-by-field. Run twice — once on the refactor branch and
 # once on the parent commit — to compare before/after parity:
 #
-#   bash dogfood/issue-64-share-screenshot-capture/commands.sh refactor
-#   bash dogfood/issue-64-share-screenshot-capture/commands.sh main
+#   bash dogfood/issue-64-share-screenshot-capture/commands.sh after
+#   bash dogfood/issue-64-share-screenshot-capture/commands.sh before
 #
-# Each invocation writes to the corresponding sub-directory under the bundle.
+# Each invocation writes to the corresponding sub-directory under the bundle
+# (`after/` or `before/`). The label argument defaults to `after` if omitted.
 
 BUNDLE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$BUNDLE/../.." && pwd)"
