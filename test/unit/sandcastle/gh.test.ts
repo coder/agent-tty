@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { runCommand, runJson } from '../../../.sandcastle/lib/gh.js';
+import {
+  runCommand,
+  runCommandAsync,
+  runJson,
+} from '../../../.sandcastle/lib/gh.js';
 
 const schema = z
   .object({
@@ -101,5 +105,63 @@ describe('runCommand ENOENT handling', () => {
         runCommand(missingBinary, args),
       ),
     ).toThrow(/coder whoami failed: /u);
+  });
+});
+
+// DEREM-37: `runCommandAsync` must yield to the event loop while the child
+// runs so a second SIGINT/SIGTERM can be delivered to the signal-handler
+// force-quit path. Smoke-test that it returns a CommandResult with the
+// expected shape for both success and ENOENT, matching `runCommand`.
+describe('runCommandAsync', () => {
+  it('captures stdout from a successful command', async () => {
+    const result = await runCommandAsync('node', [
+      '-e',
+      'process.stdout.write("ok")',
+    ]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('ok');
+    expect(result.stderr).toBe('');
+  });
+
+  it('captures stderr and a non-zero status from a failing command', async () => {
+    const result = await runCommandAsync('node', [
+      '-e',
+      'process.stderr.write("boom"); process.exit(2);',
+    ]);
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('boom');
+  });
+
+  it('returns a string-typed CommandResult when the binary is missing', async () => {
+    const result = await runCommandAsync(
+      'agent-tty-nonexistent-binary-for-async-test',
+      [],
+    );
+    expect(typeof result.stdout).toBe('string');
+    expect(typeof result.stderr).toBe('string');
+    expect(typeof result.status).toBe('number');
+    expect(result.status).not.toBe(0);
+    expect(result.stderr.length).toBeGreaterThan(0);
+  });
+
+  it('keeps the event loop responsive while the child runs', async () => {
+    // A timer interval fires every 5ms. A 100ms blocking spawn would
+    // miss many ticks if it blocked the event loop. With async spawn,
+    // the timer fires repeatedly during the wait. Assertion: at least
+    // 5 ticks were observed during the 100ms child sleep.
+    let ticks = 0;
+    const interval = setInterval(() => {
+      ticks += 1;
+    }, 5);
+    try {
+      await runCommandAsync('node', [
+        '-e',
+        'setTimeout(() => process.exit(0), 100);',
+      ]);
+    } finally {
+      clearInterval(interval);
+    }
+    expect(ticks).toBeGreaterThanOrEqual(5);
   });
 });

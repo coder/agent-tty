@@ -13,7 +13,7 @@ import {
   type TriageIssue,
 } from './lib/eligibility.js';
 import { conciseErrorMessage, isLockError } from './lib/errorMessage.js';
-import { runCoder, runGh, runJson } from './lib/gh.js';
+import { runCoder, runCoderAsync, runGh, runJson } from './lib/gh.js';
 import { parseParallelism } from './lib/parallelism.js';
 import { workspaceNameForIssue } from './lib/workspaceName.js';
 
@@ -533,9 +533,16 @@ async function closeActiveSandboxes(): Promise<void> {
   // instance for us to close via the normal path. Direct
   // `coder delete <name> --yes` is the closest equivalent to the
   // `onClose: 'delete'` semantics for the `Sandbox.close()` path.
+  //
+  // Use the async runCoderAsync (spawn) variant rather than the sync
+  // runCoder (spawnSync) one: the synchronous variant blocks the event
+  // loop, which would prevent a second SIGINT from being delivered to
+  // the force-exit branch of installSignalHandlers while a hung
+  // `coder delete` is in progress. The async variant yields between
+  // chunks so that escape hatch keeps working.
   const pendingResults = await Promise.allSettled(
     pendingEntries.map(([workspaceName]) =>
-      Promise.resolve(runCoder(['delete', workspaceName, '--yes'])),
+      runCoderAsync(['delete', workspaceName, '--yes']),
     ),
   );
 

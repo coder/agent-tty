@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 import { invariant } from '../../src/util/assert.js';
 import type { z } from 'zod';
@@ -25,6 +25,21 @@ export function runGh(args: readonly string[]): CommandResult {
 
 export function runCoder(args: readonly string[]): CommandResult {
   return runCommand('coder', args);
+}
+
+/**
+ * Async counterpart to {@link runCoder}.
+ *
+ * The synchronous variant blocks the entire Node event loop, which prevents
+ * a second SIGINT/SIGTERM from being delivered until the child exits. The
+ * AFK-triage signal handler relies on async `sandbox.close()` calls that
+ * yield to the event loop precisely so a second signal can force-quit a
+ * hung cleanup; calling `runCoder()` synchronously inside that handler
+ * (e.g. for the in-flight workspace reap path) breaks that invariant. Use
+ * this async variant in the signal-handler cleanup path.
+ */
+export function runCoderAsync(args: readonly string[]): Promise<CommandResult> {
+  return runCommandAsync('coder', args);
 }
 
 /**
@@ -94,4 +109,63 @@ export function runCommand(
     stderr: stderr.length > 0 ? stderr : (result.error?.message ?? ''),
     status: result.status === null ? 1 : result.status,
   };
+}
+
+/**
+ * Async sibling of {@link runCommand} that uses the streaming `spawn` API
+ * so the Node event loop remains responsive while the child runs. Used by
+ * signal-handler cleanup paths so a second SIGINT/SIGTERM can force-exit
+ * even if the child hangs.
+ */
+export function runCommandAsync(
+  command: string,
+  args: readonly string[],
+): Promise<CommandResult> {
+  invariant(
+    Array.isArray(args) && args.every((arg) => typeof arg === 'string'),
+    `${command} arguments must be strings`,
+  );
+
+  return new Promise<CommandResult>((resolve) => {
+    const child = spawn(command, [...args], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let spawnError: Error | undefined;
+
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => {
+      stdout += chunk;
+      // Safety: cap accumulated buffer at the same ceiling as spawnSync.
+      if (stdout.length > SPAWN_SYNC_MAX_BUFFER) {
+        child.kill('SIGKILL');
+      }
+    });
+
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (chunk: string) => {
+      stderr += chunk;
+      if (stderr.length > SPAWN_SYNC_MAX_BUFFER) {
+        child.kill('SIGKILL');
+      }
+    });
+
+    child.on('error', (error) => {
+      spawnError = error;
+    });
+
+    child.on('close', (code) => {
+      const finalStderr =
+        stderr.length > 0 ? stderr : (spawnError?.message ?? '');
+      resolve({
+        stdout,
+        stderr: finalStderr,
+        // null means the process was killed via signal; treat the same as
+        // spawnSync's null === 1 fallback so callers see a non-zero status.
+        status: code === null ? 1 : code,
+      });
+    });
+  });
 }
