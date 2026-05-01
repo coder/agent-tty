@@ -64,12 +64,14 @@ export function latestAfkMarkerCreatedAt(
 }
 
 /**
- * Latest reporter-side activity on the issue: non-bot, non-AFK-marker
- * comments. AFK markers for *other* issue numbers count as activity here
- * because they are not the local AFK noise the eligibility check is
- * trying to ignore.
+ * Latest human-side activity on the issue, returned as a millisecond
+ * timestamp. "Human" here means any non-bot author whose comment is not
+ * an AFK marker for *this* issue: the issue reporter, the maintainer, and
+ * any third-party participant all count. AFK markers for *other* issue
+ * numbers also count, because they are not the local AFK noise the
+ * eligibility check is trying to filter out.
  */
-export function latestReporterActivity(
+export function latestHumanActivityAt(
   issueNumber: number,
   comments: readonly TriageComment[],
 ): number | undefined {

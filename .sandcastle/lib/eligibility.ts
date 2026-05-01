@@ -2,7 +2,7 @@ import { invariant } from '../../src/util/assert.js';
 import { assertIssueNumber } from './afkIdentity.js';
 import {
   latestAfkMarkerCreatedAt,
-  latestReporterActivity,
+  latestHumanActivityAt,
   loadTrustedMarkerAuthors,
   type ActivityFilters,
 } from './commentActivity.js';
@@ -65,7 +65,7 @@ export function classifyIssueForTriage(
     return { eligible: true, reason: 'needs-info-with-new-activity' };
   }
 
-  const latestActivity = latestReporterActivity(issueNumber, issue.comments);
+  const latestActivity = latestHumanActivityAt(issueNumber, issue.comments);
   if (latestActivity !== undefined && latestActivity > latestMarkerCreatedAt) {
     return { eligible: true, reason: 'needs-info-with-new-activity' };
   }

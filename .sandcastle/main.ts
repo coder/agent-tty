@@ -175,8 +175,9 @@ function installSignalHandlers(batchRunner: TriageBatchRunner): void {
       `[afk-triage] received ${signal}; closing ${status.active} active sandboxes and ${status.pending} in-flight workspaces (send ${signal} again to force-exit)`,
     );
     // requestShutdown sets the runner's shutdown flag synchronously before
-    // any await, then resolves once cleanup finishes; the .finally() exit
-    // mirrors the previous closeActiveSandboxes().finally() semantics.
+    // any await, then resolves once cleanup finishes. The .finally() exit
+    // ensures the process terminates with the right signal-based code
+    // regardless of whether cleanup succeeded.
     batchRunner.requestShutdown().finally(() => {
       process.exit(signalExitCode(signal));
     });

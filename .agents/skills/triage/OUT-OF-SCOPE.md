@@ -53,8 +53,6 @@ interface ThemeConfig {
 - #87 — "Night theme for accessibility"
 - #134 — "Dark theme option"
 
-```
-
 ### Naming the file
 
 Use a short, descriptive kebab-case name for the concept: `dark-mode.md`, `plugin-system.md`, `graphql-api.md`. The name should be recognizable enough that someone browsing the directory understands what was rejected without opening the file.
@@ -101,4 +99,3 @@ If the maintainer changes their mind about a previously rejected concept:
 - Delete the `.out-of-scope/` file
 - The skill does not need to reopen old issues — they're historical records
 - The new issue that triggered the reconsideration proceeds through normal triage
-```

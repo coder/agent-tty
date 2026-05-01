@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   latestAfkMarkerCreatedAt,
-  latestReporterActivity,
+  latestHumanActivityAt,
   loadTrustedMarkerAuthors,
 } from '../../../.sandcastle/lib/commentActivity.js';
 import type { TriageComment } from '../../../.sandcastle/lib/eligibility.js';
@@ -119,7 +119,7 @@ describe('latestAfkMarkerCreatedAt', () => {
   });
 });
 
-describe('latestReporterActivity', () => {
+describe('latestHumanActivityAt', () => {
   it('ignores comments authored by GitHub Apps (login ending in [bot])', () => {
     const botComment: TriageComment = {
       body: 'Bumps `vite`.',
@@ -127,7 +127,7 @@ describe('latestReporterActivity', () => {
       author: { login: 'dependabot[bot]' },
     };
 
-    expect(latestReporterActivity(ISSUE, [botComment])).toBeUndefined();
+    expect(latestHumanActivityAt(ISSUE, [botComment])).toBeUndefined();
   });
 
   it('ignores AFK markers for the same issue', () => {
@@ -136,7 +136,7 @@ describe('latestReporterActivity', () => {
       createdAt: '2026-04-30T15:00:00Z',
     };
 
-    expect(latestReporterActivity(ISSUE, [localMarker])).toBeUndefined();
+    expect(latestHumanActivityAt(ISSUE, [localMarker])).toBeUndefined();
   });
 
   it('counts AFK markers for a different issue as activity', () => {
@@ -145,7 +145,7 @@ describe('latestReporterActivity', () => {
       createdAt: '2026-04-30T15:00:00Z',
     };
 
-    expect(latestReporterActivity(ISSUE, [otherIssueMarker])).toBe(
+    expect(latestHumanActivityAt(ISSUE, [otherIssueMarker])).toBe(
       Date.parse('2026-04-30T15:00:00Z'),
     );
   });
@@ -173,7 +173,7 @@ describe('latestReporterActivity', () => {
       },
     ];
 
-    expect(latestReporterActivity(ISSUE, comments)).toBe(
+    expect(latestHumanActivityAt(ISSUE, comments)).toBe(
       Date.parse('2026-04-30T15:30:00Z'),
     );
   });

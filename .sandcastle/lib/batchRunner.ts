@@ -1,3 +1,4 @@
+import { invariant } from '../../src/util/assert.js';
 import { branchNameForIssue, workspaceNameForIssue } from './afkIdentity.js';
 import {
   createCoderProvisioner,
@@ -96,21 +97,28 @@ export function createTriageBatchRunner(
 
       // Re-check shutdownRequested after provision() resolves. SIGINT can
       // arrive while provisioning a Coder workspace (which takes minutes);
-      // requestShutdown() snapshots pendingWorkspaceNames synchronously and
-      // dispatches deleteWorkspace() against our entry. If we did not
-      // re-check here, the just-resolved agent would land in the cleared
+      // requestShutdown() runs synchronously, snapshots
+      // pendingWorkspaceNames (which still includes our entry — pending is
+      // populated before the await above), and dispatches
+      // deleteWorkspace() against our workspace name. Without this
+      // re-check, the just-resolved agent would land in the cleared
       // activeAgents map, agent.run() would race against the workspace
       // delete, and a graceful skip would be misclassified as 'failed'.
-      // Close the agent best-effort (so onClose: 'delete' still runs if
-      // the workspace was not yet reaped) and return 'skipped' without
-      // registering it.
+      //
+      // Do NOT call agent.close() here: the workspace is already in the
+      // queue requestShutdown owns. Calling close() in parallel would race
+      // the dispatched deleteWorkspace and cause a spurious "workspace may
+      // be stranded" log line in the second-to-finish call. Returning
+      // 'skipped' without close lets requestShutdown's reap path log the
+      // single, correct outcome.
+      //
+      // oxlint cannot see across the await boundary that shutdownRequested
+      // is mutated by requestShutdown, so it narrows it to `false` after
+      // the entry-time check and flags this as `no-unnecessary-condition`.
+      // The check is semantically required (without it, DEREM-3
+      // reintroduces the race); suppress the warning rather than delete it.
+      // oxlint-disable-next-line typescript/no-unnecessary-condition
       if (shutdownRequested) {
-        try {
-          await agent.close();
-        } catch {
-          // Workspace may already have been reaped by requestShutdown's
-          // deleteWorkspace dispatch; double-delete failures are expected.
-        }
         return {
           issueNumber: issue.number,
           status: 'skipped',
@@ -151,13 +159,16 @@ export function createTriageBatchRunner(
           await agent.close();
         } catch (closeError) {
           errorLogger(`[issue ${issue.number}] close failed`, closeError);
-          // result is always defined here: agent in activeAgents implies
-          // provision() resolved, which means execution either reached the
-          // success result assignment or threw and was caught above.
+          // Agent is in activeAgents only if provision() resolved, which
+          // means runOne already reached either the success-result
+          // assignment or the catch block (both of which assign result).
+          // Assert rather than branch.
+          invariant(
+            result !== undefined,
+            'result must be defined when closing an active agent',
+          );
           const original =
-            result === undefined
-              ? `original status: failed`
-              : (result.message ?? `original status: ${result.status}`);
+            result.message ?? `original status: ${result.status}`;
           result = {
             issueNumber: issue.number,
             status: 'failed',

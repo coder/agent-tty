@@ -244,18 +244,20 @@ describe('createTriageBatchRunner', () => {
     expect(fakes.provision).not.toHaveBeenCalled();
   });
 
-  it('skips and best-effort closes when shutdown fires while provision() is in flight', async () => {
+  it('skips without double-closing when shutdown fires while provision() is in flight', async () => {
     // Exercises the post-provision shutdownRequested re-check in runOne.
-    // The fake provision() awaits a hook that calls requestShutdown(), then
+    // The fake provision() fires requestShutdown() synchronously and then
     // resolves with a real agent. Without the post-provision re-check,
     // the agent would be registered in activeAgents (already cleared by
     // requestShutdown), `agent.run()` would race against the in-flight
     // workspace delete, and the result would be 'failed' instead of
-    // 'skipped'.
+    // 'skipped'. The post-provision branch must NOT call agent.close(): the
+    // workspace is already in requestShutdown's deleteWorkspace queue, and
+    // a parallel close would race with that dispatch and produce a
+    // spurious "workspace may be stranded" log line.
     const runnerRef: {
       current: ReturnType<typeof createTriageBatchRunner> | undefined;
     } = { current: undefined };
-    const closedAgents: number[] = [];
     const baseFakes = makeFakeProvisioner({
       agentFactory: (issueNumber) => ({
         id: issueNumber,
@@ -264,10 +266,7 @@ describe('createTriageBatchRunner', () => {
             new Error('agent.run must not fire after post-provision shutdown'),
           ),
         ),
-        close: vi.fn(() => {
-          closedAgents.push(issueNumber);
-          return Promise.resolve();
-        }),
+        close: vi.fn(() => Promise.resolve()),
       }),
     });
     const provisioner: CoderProvisioner = {
@@ -296,9 +295,44 @@ describe('createTriageBatchRunner', () => {
     expect(result).toEqual([
       { issueNumber: 4, status: 'skipped', message: 'shutdown requested' },
     ]);
-    // The just-resolved agent was closed best-effort and never reached run().
-    expect(closedAgents).toEqual([4]);
+    // The post-provision skip path must not call run() OR close(); the
+    // workspace is reaped by requestShutdown's deleteWorkspace queue.
     expect(baseFakes.agents.get(4)?.run).not.toHaveBeenCalled();
+    expect(baseFakes.agents.get(4)?.close).not.toHaveBeenCalled();
+    expect(baseFakes.deleteWorkspace).toHaveBeenCalledWith(
+      'agent-tty-triage-4',
+    );
+  });
+
+  it('composes run-fail and close-fail messages in the close-error path', async () => {
+    // Exercises the run-fail + close-fail double-failure path: agent.run()
+    // rejects (result becomes failed) and the subsequent agent.close() in
+    // runOne's finally also throws, producing the composed message
+    // `<run-error>; close failed: <close-error>`.
+    const fakes = makeFakeProvisioner({
+      agentFactory: (issueNumber) => ({
+        id: issueNumber,
+        run: vi.fn(() => Promise.reject(new Error('agent crashed'))),
+        close: vi.fn(() => Promise.reject(new Error('coder delete refused'))),
+      }),
+    });
+    const runner = createTriageBatchRunner({
+      coderProvisioner: fakes.provisioner,
+      errorLogger: vi.fn(),
+    });
+
+    const result = await runner.run([makeIssue(13)], {
+      runId: RUN_ID,
+      parallelism: 1,
+    });
+
+    expect(result).toEqual([
+      {
+        issueNumber: 13,
+        status: 'failed',
+        message: 'agent crashed; close failed: coder delete refused',
+      },
+    ]);
   });
 
   it('closes active agents via requestShutdown while agent.run() is mid-flight', async () => {
