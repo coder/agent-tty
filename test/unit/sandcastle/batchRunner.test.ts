@@ -49,7 +49,11 @@ function asProvisionedAgent(agent: FakeAgent): ProvisionedAgent {
 function makeFakeProvisioner(
   config: FakeProvisionerConfig = {},
 ): FakeProvisioner {
-  let pendingReject: ((error: unknown) => void) | undefined;
+  // Stores one rejector per hung provision() call so multi-issue tests
+  // using `hangProvision: true` can settle every issue. A single mutable
+  // slot would silently overwrite earlier rejectors and Promise.all
+  // would hang on the unsettled ones.
+  const pendingRejects: ((error: unknown) => void)[] = [];
 
   const agentFactory = config.agentFactory ?? defaultAgent;
   const agents = new Map<number, FakeAgent>();
@@ -62,7 +66,7 @@ function makeFakeProvisioner(
       const issueNumber = ctx.issue.number;
       if (config.hangProvision === true) {
         return new Promise<ProvisionedAgent>((_resolve, reject) => {
-          pendingReject = reject;
+          pendingRejects.push(reject);
         });
       }
       const agent = agentFactory(issueNumber);
@@ -87,17 +91,39 @@ function makeFakeProvisioner(
     deleteWorkspace,
     agents,
     rejectProvision: (error) => {
-      if (pendingReject === undefined) {
+      if (pendingRejects.length === 0) {
         throw new Error('provision is not pending');
       }
-      pendingReject(error);
-      pendingReject = undefined;
+      // Drain all so multi-issue hung tests can settle every issue.
+      for (const reject of pendingRejects.splice(0)) {
+        reject(error);
+      }
     },
   };
 }
 
 function makeIssue(number: number): TriageIssue {
   return { number, labels: [], comments: [] };
+}
+
+/**
+ * Spin until `predicate()` is truthy or `timeoutMs` elapses, throwing a
+ * descriptive error on timeout. Polls the runner's status counters so
+ * we can synchronize on observable lifecycle state without hanging the
+ * whole test on vitest's global timeout.
+ */
+async function waitFor(
+  predicate: () => boolean,
+  description: string,
+  timeoutMs = 1000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error(`waitFor timed out after ${timeoutMs}ms: ${description}`);
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+  }
 }
 
 describe('createTriageBatchRunner', () => {
@@ -364,9 +390,10 @@ describe('createTriageBatchRunner', () => {
     });
 
     // Wait until the agent is registered and agent.run() is in flight.
-    while (runner.status.active === 0) {
-      await new Promise((resolve) => setImmediate(resolve));
-    }
+    await waitFor(
+      () => runner.status.active > 0,
+      'runner.status.active to advance after provision()',
+    );
     expect(runner.status.active).toBe(1);
     expect(runner.status.pending).toBe(0);
 
@@ -395,9 +422,10 @@ describe('createTriageBatchRunner', () => {
     });
 
     // Wait until the runner has registered the in-flight workspace.
-    while (runner.status.pending === 0) {
-      await new Promise((resolve) => setImmediate(resolve));
-    }
+    await waitFor(
+      () => runner.status.pending > 0,
+      'runner.status.pending to advance after pendingWorkspaceNames.set',
+    );
     expect(runner.status.pending).toBe(1);
 
     await runner.requestShutdown();
@@ -407,6 +435,99 @@ describe('createTriageBatchRunner', () => {
     fakes.rejectProvision(new Error('cancelled'));
     const summaries = await runPromise;
     expect(summaries[0]?.status).toBe('failed');
+  });
+
+  it('logs "workspace may be stranded" when active-agent close throws during shutdown', async () => {
+    // Exercises the active-agent close-fail branch in requestShutdown:
+    // an agent registered in activeAgents whose close() throws should
+    // surface the per-issue "sandbox close failed during shutdown —
+    // workspace may be stranded" log line so operators know to clean up
+    // the workspace manually. A regression that silences this log or
+    // drops the error reason would defeat that contract.
+    const errorLogger = vi.fn();
+    const runHang: { resolve: () => void; promise: Promise<void> } = {
+      resolve: () => undefined,
+      promise: Promise.resolve(),
+    };
+    runHang.promise = new Promise<void>((resolve) => {
+      runHang.resolve = resolve;
+    });
+    const closeError = new Error('coder delete refused during shutdown');
+    const fakes = makeFakeProvisioner({
+      agentFactory: (issueNumber) => ({
+        id: issueNumber,
+        run: vi.fn(() => runHang.promise),
+        close: vi.fn(() => Promise.reject(closeError)),
+      }),
+    });
+    const runner = createTriageBatchRunner({
+      coderProvisioner: fakes.provisioner,
+      errorLogger,
+    });
+
+    const runPromise = runner.run([makeIssue(91)], {
+      runId: RUN_ID,
+      parallelism: 1,
+    });
+    await waitFor(
+      () => runner.status.active > 0,
+      'agent registered in activeAgents',
+    );
+
+    await runner.requestShutdown();
+
+    expect(errorLogger).toHaveBeenCalledWith(
+      '[issue 91] sandbox close failed during shutdown — workspace may be stranded:',
+      closeError,
+    );
+
+    runHang.resolve();
+    await runPromise;
+  });
+
+  it('logs "workspace may be stranded" when in-flight deleteWorkspace exits non-zero during shutdown', async () => {
+    // Exercises the pending-delete-fail branch in requestShutdown: when
+    // deleteWorkspace returns { outcome: 'failed', status, stderr } for
+    // an in-flight workspace, the runner emits a per-issue "in-flight
+    // workspace ... delete failed during shutdown (status N) — workspace
+    // may be stranded: <stderr>" log line. Operators rely on this for
+    // manual cleanup of stranded Coder workspaces.
+    const errorLogger = vi.fn();
+    const baseFakes = makeFakeProvisioner({ hangProvision: true });
+    const failedDelete = vi.fn(
+      (_name: string): Promise<WorkspaceDeleteResult> =>
+        Promise.resolve({
+          outcome: 'failed',
+          status: 7,
+          stderr: 'workspace not found  \n',
+        }),
+    );
+    const provisioner: CoderProvisioner = {
+      provision: (ctx) => baseFakes.provisioner.provision(ctx),
+      deleteWorkspace: (name) => failedDelete(name),
+    };
+    const runner = createTriageBatchRunner({
+      coderProvisioner: provisioner,
+      errorLogger,
+    });
+
+    const runPromise = runner.run([makeIssue(92)], {
+      runId: RUN_ID,
+      parallelism: 1,
+    });
+    await waitFor(
+      () => runner.status.pending > 0,
+      'workspace registered in pendingWorkspaceNames',
+    );
+
+    await runner.requestShutdown();
+
+    expect(errorLogger).toHaveBeenCalledWith(
+      '[issue 92] in-flight workspace agent-tty-triage-92 delete failed during shutdown (status 7) — workspace may be stranded: workspace not found',
+    );
+
+    baseFakes.rejectProvision(new Error('cancelled'));
+    await runPromise;
   });
 
   it('exposes status counts that drop back to zero after run completes', async () => {
