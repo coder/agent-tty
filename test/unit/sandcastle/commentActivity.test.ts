@@ -48,10 +48,14 @@ describe('loadTrustedMarkerAuthors', () => {
     ).toEqual(['triage-bot', 'ops-bot']);
   });
 
-  it('returns undefined when only commas remain after trimming', () => {
+  it('returns the empty allow-list when only commas remain after trimming', () => {
+    // A non-empty env value that yields no usable entries is "trust no
+    // author" — the secure default for an opt-in allow-list. Returning
+    // `undefined` here would silently mean "trust everyone" and invert
+    // the security posture for a malformed env value.
     expect(
       loadTrustedMarkerAuthors({ AFK_TRIAGE_TRUSTED_MARKER_AUTHORS: ' , , ' }),
-    ).toBeUndefined();
+    ).toEqual([]);
   });
 });
 

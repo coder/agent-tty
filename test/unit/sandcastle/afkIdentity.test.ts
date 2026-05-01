@@ -131,6 +131,22 @@ Needs reporter input.`),
     ).toBeNull();
   });
 
+  it('returns null when the issue capture is zero', () => {
+    expect(
+      parseAfkMarker(
+        '<!-- afk-triage:v1 issue=0 outcome=needs-info run=20260430T141500Z -->',
+      ),
+    ).toBeNull();
+  });
+
+  it('returns null when the run ID is not compact UTC format', () => {
+    expect(
+      parseAfkMarker(
+        '<!-- afk-triage:v1 issue=123 outcome=needs-info run=2026-04-30T14:15:00Z -->',
+      ),
+    ).toBeNull();
+  });
+
   it('rejects an invalid run ID when formatting', () => {
     expect(() =>
       formatAfkMarker({

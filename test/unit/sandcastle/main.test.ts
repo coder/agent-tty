@@ -1,9 +1,9 @@
 import { CommanderError } from 'commander';
 import { describe, expect, it } from 'vitest';
 
+import { pLimit } from '../../../.sandcastle/lib/pLimit.js';
 import {
   buildTriageBatchSummary,
-  pLimit,
   parseRunnerArgs,
 } from '../../../.sandcastle/main.js';
 

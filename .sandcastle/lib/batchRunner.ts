@@ -82,23 +82,6 @@ export function createTriageBatchRunner(
       workspaceName = workspaceNameForIssue(issue.number);
       const branchName = branchNameForIssue(issue.number, runId);
 
-      // Yield once to the microtask queue, then re-check shutdownRequested.
-      // This replaces the pre-extraction `await import('@ai-hero/sandcastle')`
-      // yield: a SIGINT during this microtask sets shutdownRequested = true
-      // and snapshots empty maps. Without this re-check the resumed task
-      // would still call provision() and orphan the resulting Coder
-      // workspace when process.exit() fires, because there are no further
-      // await points between the pendingWorkspaceNames.set() call and the
-      // provision() call.
-      await Promise.resolve();
-      if (shutdownRequested) {
-        return {
-          issueNumber: issue.number,
-          status: 'skipped',
-          message: 'shutdown requested',
-        };
-      }
-
       pendingWorkspaceNames.set(workspaceName, issue.number);
       try {
         agent = await provisioner.provision({
@@ -107,10 +90,35 @@ export function createTriageBatchRunner(
           workspaceName,
           branchName,
         });
-        activeAgents.set(agent, issue.number);
       } finally {
         pendingWorkspaceNames.delete(workspaceName);
       }
+
+      // Re-check shutdownRequested after provision() resolves. SIGINT can
+      // arrive while provisioning a Coder workspace (which takes minutes);
+      // requestShutdown() snapshots pendingWorkspaceNames synchronously and
+      // dispatches deleteWorkspace() against our entry. If we did not
+      // re-check here, the just-resolved agent would land in the cleared
+      // activeAgents map, agent.run() would race against the workspace
+      // delete, and a graceful skip would be misclassified as 'failed'.
+      // Close the agent best-effort (so onClose: 'delete' still runs if
+      // the workspace was not yet reaped) and return 'skipped' without
+      // registering it.
+      if (shutdownRequested) {
+        try {
+          await agent.close();
+        } catch {
+          // Workspace may already have been reaped by requestShutdown's
+          // deleteWorkspace dispatch; double-delete failures are expected.
+        }
+        return {
+          issueNumber: issue.number,
+          status: 'skipped',
+          message: 'shutdown requested',
+        };
+      }
+
+      activeAgents.set(agent, issue.number);
 
       await agent.run();
 
@@ -143,14 +151,17 @@ export function createTriageBatchRunner(
           await agent.close();
         } catch (closeError) {
           errorLogger(`[issue ${issue.number}] close failed`, closeError);
-          const closeMessage = `close failed: ${conciseErrorMessage(closeError)}`;
+          // result is always defined here: agent in activeAgents implies
+          // provision() resolved, which means execution either reached the
+          // success result assignment or threw and was caught above.
+          const original =
+            result === undefined
+              ? `original status: failed`
+              : (result.message ?? `original status: ${result.status}`);
           result = {
             issueNumber: issue.number,
             status: 'failed',
-            message:
-              result === undefined
-                ? closeMessage
-                : `${result.message ?? `original status: ${result.status}`}; ${closeMessage}`,
+            message: `${original}; close failed: ${conciseErrorMessage(closeError)}`,
           };
         }
       }
@@ -216,6 +227,11 @@ export function createTriageBatchRunner(
       }
       const [workspaceName, issueNumber] = entry;
       if (settled.status === 'rejected') {
+        // Defensive: the production CoderProvisioner.deleteWorkspace
+        // always resolves (spawn errors map to outcome:'failed'), so this
+        // branch is unreachable for the real provisioner. Kept so that
+        // an injected provisioner that violates the resolve-only contract
+        // produces a useful log line instead of an unhandled rejection.
         errorLogger(
           `[issue ${issueNumber}] in-flight workspace ${workspaceName} delete threw during shutdown — workspace may be stranded:`,
           settled.reason,

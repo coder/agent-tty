@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   createCoderProvisioner,
+  type CoderFactory,
   type ProvisionContext,
   type SandcastleImports,
 } from '../../../.sandcastle/lib/coderProvisioner.js';
@@ -43,22 +44,68 @@ function makeProvisionContext(issueNumber: number): ProvisionContext {
   };
 }
 
+// The vendored `coder()` factory hides template, preset, onClose, and
+// workspaceName inside its closure — they never appear on the returned
+// provider. To pin those production knobs, tests inject a fake factory
+// and assert on the args passed to it.
+const FAKE_PROVIDER = {
+  tag: 'isolated' as const,
+  name: 'coder',
+  env: {} as Record<string, string>,
+  create: () => Promise.resolve({} as never),
+};
+
+function fakeCoderFactory(): {
+  readonly factory: CoderFactory;
+  readonly mock: ReturnType<typeof vi.fn>;
+} {
+  const mock = vi.fn(() => FAKE_PROVIDER);
+  return {
+    factory: mock as unknown as CoderFactory,
+    mock,
+  };
+}
+
+const noopRunCoderAsync = vi.fn(() =>
+  Promise.resolve<CommandResult>({ stdout: '', stderr: '', status: 0 }),
+);
+
 describe('createCoderProvisioner.provision', () => {
-  it('builds coderOptions with production template, preset, and onClose', async () => {
+  it('passes production template, preset, onClose, and workspaceName to the coder() factory', async () => {
     const sandbox: FakeSandbox = {
       run: vi.fn(() => Promise.resolve()),
       close: vi.fn(() => Promise.resolve()),
     };
     const fakes = makeFakeSandcastle(sandbox);
+    const coderFactory = fakeCoderFactory();
     const provisioner = createCoderProvisioner({
       importSandcastle: fakes.importFn,
-      runCoderAsync: vi.fn(() =>
-        Promise.resolve<CommandResult>({
-          stdout: '',
-          stderr: '',
-          status: 0,
-        }),
-      ),
+      runCoderAsync: noopRunCoderAsync,
+      coderFactory: coderFactory.factory,
+    });
+
+    await provisioner.provision(makeProvisionContext(42));
+
+    expect(coderFactory.mock).toHaveBeenCalledTimes(1);
+    expect(coderFactory.mock).toHaveBeenCalledWith({
+      template: 'coder',
+      preset: 'Falkenstein',
+      workspaceName: 'agent-tty-triage-42',
+      onClose: 'delete',
+    });
+  });
+
+  it('forwards the provider produced by coder() and the AFK ready-hooks to createSandbox', async () => {
+    const sandbox: FakeSandbox = {
+      run: vi.fn(() => Promise.resolve()),
+      close: vi.fn(() => Promise.resolve()),
+    };
+    const fakes = makeFakeSandcastle(sandbox);
+    const coderFactory = fakeCoderFactory();
+    const provisioner = createCoderProvisioner({
+      importSandcastle: fakes.importFn,
+      runCoderAsync: noopRunCoderAsync,
+      coderFactory: coderFactory.factory,
     });
 
     await provisioner.provision(makeProvisionContext(42));
@@ -66,14 +113,13 @@ describe('createCoderProvisioner.provision', () => {
     expect(fakes.createSandbox).toHaveBeenCalledTimes(1);
     const call = fakes.createSandbox.mock.calls[0]?.[0] as {
       readonly branch: string;
-      readonly sandbox: { readonly tag: string };
+      readonly sandbox: typeof FAKE_PROVIDER;
       readonly hooks: {
         readonly sandbox: { readonly onSandboxReady: readonly unknown[] };
       };
     };
     expect(call.branch).toBe('afk-triage/42-20260430T141500Z');
-    // The vendored coder() factory returns an isolated provider with tag 'isolated'.
-    expect(call.sandbox.tag).toBe('isolated');
+    expect(call.sandbox).toBe(FAKE_PROVIDER);
     expect(call.hooks.sandbox.onSandboxReady).toEqual([
       { command: 'gh auth status' },
       { command: 'npm ci' },
@@ -87,15 +133,11 @@ describe('createCoderProvisioner.provision', () => {
       close: vi.fn(() => Promise.resolve()),
     };
     const fakes = makeFakeSandcastle(sandbox);
+    const coderFactory = fakeCoderFactory();
     const provisioner = createCoderProvisioner({
       importSandcastle: fakes.importFn,
-      runCoderAsync: vi.fn(() =>
-        Promise.resolve<CommandResult>({
-          stdout: '',
-          stderr: '',
-          status: 0,
-        }),
-      ),
+      runCoderAsync: noopRunCoderAsync,
+      coderFactory: coderFactory.factory,
     });
 
     const agent = await provisioner.provision(makeProvisionContext(123));
@@ -119,15 +161,11 @@ describe('createCoderProvisioner.provision', () => {
       close: vi.fn(() => Promise.resolve()),
     };
     const fakes = makeFakeSandcastle(sandbox);
+    const coderFactory = fakeCoderFactory();
     const provisioner = createCoderProvisioner({
       importSandcastle: fakes.importFn,
-      runCoderAsync: vi.fn(() =>
-        Promise.resolve<CommandResult>({
-          stdout: '',
-          stderr: '',
-          status: 0,
-        }),
-      ),
+      runCoderAsync: noopRunCoderAsync,
+      coderFactory: coderFactory.factory,
     });
 
     const agent = await provisioner.provision(makeProvisionContext(7));

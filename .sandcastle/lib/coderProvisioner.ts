@@ -60,15 +60,28 @@ export interface CoderProvisioner {
 
   /**
    * Reap a workspace whose `provision()` never resolved a ProvisionedAgent
-   * (in-flight workspace creates during shutdown). May reject for spawn
-   * errors; non-zero exits resolve as { outcome: 'failed', status, stderr }.
+   * (in-flight workspace creates during shutdown). Always resolves: spawn
+   * errors and non-zero exits both surface as
+   * `{ outcome: 'failed', status, stderr }` (the underlying
+   * `runCoderAsync` captures spawn errors via `child.on('error')` and
+   * resolves on `child.on('close')`, so the returned promise itself
+   * never rejects).
    */
   deleteWorkspace(workspaceName: string): Promise<WorkspaceDeleteResult>;
 }
 
+export type CoderFactory = typeof coder;
+
 export interface CoderProvisionerDeps {
   readonly importSandcastle?: () => Promise<SandcastleImports>;
   readonly runCoderAsync?: typeof runCoderAsync;
+  /**
+   * Override the vendored `coder()` provider factory. Tests use this to
+   * pin the production knobs (template, preset, onClose, workspaceName)
+   * by asserting on the call args instead of inspecting the opaque
+   * `IsolatedSandboxProvider` returned by the real factory.
+   */
+  readonly coderFactory?: CoderFactory;
 }
 
 export function createCoderProvisioner(
@@ -78,6 +91,7 @@ export function createCoderProvisioner(
     deps.importSandcastle ??
     (() => import('@ai-hero/sandcastle') as Promise<SandcastleImports>);
   const runCoderAsyncImpl = deps.runCoderAsync ?? runCoderAsync;
+  const coderFactoryImpl = deps.coderFactory ?? coder;
 
   return {
     async provision(ctx: ProvisionContext): Promise<ProvisionedAgent> {
@@ -93,7 +107,7 @@ export function createCoderProvisioner(
       // Use sandcastle's HEAD default for the base branch so AFK triage sees this checkout.
       const sandbox = await createSandbox({
         branch: ctx.branchName,
-        sandbox: coder(coderOptions),
+        sandbox: coderFactoryImpl(coderOptions),
         hooks: {
           sandbox: {
             onSandboxReady: [...SANDBOX_READY_HOOKS],

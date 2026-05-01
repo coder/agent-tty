@@ -31,7 +31,10 @@ export type IssueEligibility =
       readonly reason: string;
     };
 
-export function classifyIssueForTriage(issue: TriageIssue): IssueEligibility {
+export function classifyIssueForTriage(
+  issue: TriageIssue,
+  env: NodeJS.ProcessEnv = process.env,
+): IssueEligibility {
   const issueNumber = assertIssueNumber(issue.number);
   invariant(Array.isArray(issue.labels), 'issue labels must be an array');
   invariant(Array.isArray(issue.comments), 'issue comments must be an array');
@@ -49,7 +52,7 @@ export function classifyIssueForTriage(issue: TriageIssue): IssueEligibility {
     };
   }
 
-  const trusted = loadTrustedMarkerAuthors(process.env);
+  const trusted = loadTrustedMarkerAuthors(env);
   const filters: ActivityFilters =
     trusted === undefined ? {} : { trustedMarkerAuthors: trusted };
 

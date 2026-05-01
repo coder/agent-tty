@@ -13,6 +13,12 @@ export interface ActivityFilters {
  * Returns `undefined` when unset or empty so callers can default to "trust
  * any author" (the v1 behavior). The function never reads `process.env`
  * itself; callers pass an env object so tests do not need to mutate globals.
+ *
+ * A non-empty env value that yields no usable entries (for example
+ * `AFK_TRIAGE_TRUSTED_MARKER_AUTHORS=","`) returns the empty allow-list
+ * `[]` rather than `undefined`. This matches the pre-refactor behavior:
+ * empty allow-list means "trust no author", which is the secure default
+ * for an opt-in allow-list.
  */
 export function loadTrustedMarkerAuthors(
   env: NodeJS.ProcessEnv,
@@ -21,11 +27,10 @@ export function loadTrustedMarkerAuthors(
   if (raw === undefined || raw === '') {
     return undefined;
   }
-  const entries = raw
+  return raw
     .split(',')
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
-  return entries.length === 0 ? undefined : entries;
 }
 
 /**

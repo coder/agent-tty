@@ -16,12 +16,6 @@ import { runCoder, runJson } from './lib/gh.js';
 import { listCandidateIssues } from './lib/issueSource.js';
 import { parseParallelism } from './lib/parallelism.js';
 
-export { pLimit } from './lib/pLimit.js';
-export type {
-  TriageIssueStatus,
-  TriageIssueSummary,
-} from './lib/batchRunner.js';
-
 export interface TriageBatchSummary {
   readonly runId: string;
   readonly totals: Record<TriageIssueStatus, number>;

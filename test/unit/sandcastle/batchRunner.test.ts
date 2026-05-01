@@ -219,15 +219,18 @@ describe('createTriageBatchRunner', () => {
     ]);
   });
 
-  it('skips dequeued issues when shutdown is requested before provision() is invoked', async () => {
+  it('skips queued issues when shutdown is requested before runOne dispatches', async () => {
+    // Exercises the entry-time `if (shutdownRequested)` check in runOne.
+    // pLimit schedules runOne via Promise.resolve().then(...). When
+    // requestShutdown() runs synchronously before that microtask fires,
+    // shutdownRequested is true by the time runOne starts and the entry
+    // check returns 'skipped' immediately, never calling provision().
     const fakes = makeFakeProvisioner();
     const runner = createTriageBatchRunner({
       coderProvisioner: fakes.provisioner,
       errorLogger: vi.fn(),
     });
 
-    // Trigger shutdown synchronously after run() schedules but before the
-    // post-yield re-check inside runOne fires.
     const runPromise = runner.run([makeIssue(4)], {
       runId: RUN_ID,
       parallelism: 1,
@@ -239,6 +242,110 @@ describe('createTriageBatchRunner', () => {
       { issueNumber: 4, status: 'skipped', message: 'shutdown requested' },
     ]);
     expect(fakes.provision).not.toHaveBeenCalled();
+  });
+
+  it('skips and best-effort closes when shutdown fires while provision() is in flight', async () => {
+    // Exercises the post-provision shutdownRequested re-check in runOne.
+    // The fake provision() awaits a hook that calls requestShutdown(), then
+    // resolves with a real agent. Without the post-provision re-check,
+    // the agent would be registered in activeAgents (already cleared by
+    // requestShutdown), `agent.run()` would race against the in-flight
+    // workspace delete, and the result would be 'failed' instead of
+    // 'skipped'.
+    const runnerRef: {
+      current: ReturnType<typeof createTriageBatchRunner> | undefined;
+    } = { current: undefined };
+    const closedAgents: number[] = [];
+    const baseFakes = makeFakeProvisioner({
+      agentFactory: (issueNumber) => ({
+        id: issueNumber,
+        run: vi.fn(() =>
+          Promise.reject(
+            new Error('agent.run must not fire after post-provision shutdown'),
+          ),
+        ),
+        close: vi.fn(() => {
+          closedAgents.push(issueNumber);
+          return Promise.resolve();
+        }),
+      }),
+    });
+    const provisioner: CoderProvisioner = {
+      provision: async (ctx) => {
+        if (runnerRef.current !== undefined) {
+          // Synchronously flip shutdownRequested = true. We do NOT await
+          // requestShutdown() here so that provision() resolves to its
+          // agent first; the runOne flow then re-checks the flag.
+          void runnerRef.current.requestShutdown();
+        }
+        return baseFakes.provisioner.provision(ctx);
+      },
+      deleteWorkspace: (name) => baseFakes.provisioner.deleteWorkspace(name),
+    };
+    const runner = createTriageBatchRunner({
+      coderProvisioner: provisioner,
+      errorLogger: vi.fn(),
+    });
+    runnerRef.current = runner;
+
+    const result = await runner.run([makeIssue(4)], {
+      runId: RUN_ID,
+      parallelism: 1,
+    });
+
+    expect(result).toEqual([
+      { issueNumber: 4, status: 'skipped', message: 'shutdown requested' },
+    ]);
+    // The just-resolved agent was closed best-effort and never reached run().
+    expect(closedAgents).toEqual([4]);
+    expect(baseFakes.agents.get(4)?.run).not.toHaveBeenCalled();
+  });
+
+  it('closes active agents via requestShutdown while agent.run() is mid-flight', async () => {
+    // Exercises the single-owner close protocol: an agent registered in
+    // activeAgents is closed by requestShutdown(), and runOne's finally
+    // sees activeAgents.has(agent) === false and skips the second close.
+    const runHang: { resolve: () => void; promise: Promise<void> } = {
+      resolve: () => undefined,
+      promise: Promise.resolve(),
+    };
+    runHang.promise = new Promise<void>((resolve) => {
+      runHang.resolve = resolve;
+    });
+    const fakes = makeFakeProvisioner({
+      agentFactory: (issueNumber) => ({
+        id: issueNumber,
+        run: vi.fn(() => runHang.promise),
+        close: vi.fn(() => Promise.resolve()),
+      }),
+    });
+    const runner = createTriageBatchRunner({
+      coderProvisioner: fakes.provisioner,
+      errorLogger: vi.fn(),
+    });
+
+    const runPromise = runner.run([makeIssue(8)], {
+      runId: RUN_ID,
+      parallelism: 1,
+    });
+
+    // Wait until the agent is registered and agent.run() is in flight.
+    while (runner.status.active === 0) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    expect(runner.status.active).toBe(1);
+    expect(runner.status.pending).toBe(0);
+
+    await runner.requestShutdown();
+
+    // Single-owner protocol: requestShutdown closed the agent exactly once.
+    expect(fakes.agents.get(8)?.close).toHaveBeenCalledTimes(1);
+
+    // Let agent.run() resolve; runOne's finally must not double-close.
+    runHang.resolve();
+    const summaries = await runPromise;
+    expect(summaries[0]?.status).toBe('success');
+    expect(fakes.agents.get(8)?.close).toHaveBeenCalledTimes(1);
   });
 
   it('reaps in-flight workspaces via provisioner.deleteWorkspace during shutdown', async () => {
