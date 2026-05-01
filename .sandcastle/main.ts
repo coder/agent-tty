@@ -67,14 +67,18 @@ const ghAuthorSchema = z.looseObject({
 const ghCommentSchema = z.looseObject({
   body: z.string(),
   createdAt: z.string(),
-  author: ghAuthorSchema.optional(),
+  // `gh --json` returns `"author": null` for deleted / ghost accounts, so
+  // accept both null and undefined. Downstream code already uses optional
+  // chaining (`comment.author?.login`) so the runtime path tolerates both.
+  author: ghAuthorSchema.nullish(),
 });
 
 const ghIssueSchema = z.looseObject({
   number: z.number(),
   labels: z.array(ghLabelSchema),
   comments: z.array(ghCommentSchema).default([]),
-  author: ghAuthorSchema.optional(),
+  // Same as ghCommentSchema.author: GitHub returns null for deleted users.
+  author: ghAuthorSchema.nullish(),
   createdAt: z.string().optional(),
 });
 
