@@ -1,3 +1,4 @@
+import { CommanderError } from 'commander';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -132,6 +133,16 @@ describe('ghIssueSchema null-author handling', () => {
 });
 
 describe('parseRunnerArgs', () => {
+  it('returns defaults when no flags or env are set', () => {
+    // 5 is `DEFAULT_PARALLELISM` from .sandcastle/lib/parallelism.ts; if
+    // that constant moves the test should fail loudly.
+    expect(parseRunnerArgs([], {})).toEqual({
+      parallelism: 5,
+      includeNeedsInfo: true,
+      dryRun: false,
+    });
+  });
+
   it('parses CLI flags and env defaults', () => {
     expect(parseRunnerArgs(['--dry-run'], { TRIAGE_PARALLELISM: '7' })).toEqual(
       {
@@ -148,5 +159,43 @@ describe('parseRunnerArgs', () => {
       includeNeedsInfo: false,
       dryRun: false,
     });
+  });
+
+  it('accepts space-separated --parallelism N (commander default)', () => {
+    // Commander accepts both `--parallelism=3` and `--parallelism 3` for
+    // any `<n>` arg. Pin both forms so a future option-shape change cannot
+    // silently regress the space-separated form documented in the help.
+    expect(parseRunnerArgs(['--parallelism', '3'], {})).toEqual({
+      parallelism: 3,
+      includeNeedsInfo: true,
+      dryRun: false,
+    });
+  });
+
+  it('CLI --parallelism overrides TRIAGE_PARALLELISM env', () => {
+    // Documents the precedence: explicit CLI flag wins over env default.
+    expect(
+      parseRunnerArgs(['--parallelism=4'], { TRIAGE_PARALLELISM: '9' }),
+    ).toEqual({
+      parallelism: 4,
+      includeNeedsInfo: true,
+      dryRun: false,
+    });
+  });
+
+  it('throws a CommanderError for unknown flags', () => {
+    // The previous hand-rolled parser threw a plain Error('unknown
+    // argument: ...'); commander throws a typed CommanderError with a
+    // 'commander.unknownOption' code. main() relies on `instanceof
+    // CommanderError` to set exit code 2 instead of printing a JSON batch
+    // summary, so the error TYPE — not just the throw — is part of the
+    // contract.
+    expect(() => parseRunnerArgs(['--bogus'], {})).toThrow(CommanderError);
+  });
+
+  it('throws a CommanderError when --parallelism is missing its value', () => {
+    expect(() => parseRunnerArgs(['--parallelism'], {})).toThrow(
+      CommanderError,
+    );
   });
 });

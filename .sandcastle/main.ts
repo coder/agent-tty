@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 
+import { Command, CommanderError } from 'commander';
 import { z } from 'zod';
 
 import type { Sandbox } from '@ai-hero/sandcastle';
@@ -168,53 +169,65 @@ export function buildTriageBatchSummary(
   };
 }
 
+/**
+ * Build the commander program for the AFK triage runner.
+ *
+ * Extracted into its own function so {@link parseRunnerArgs} stays a pure
+ * argv-in/RunnerArgs-out parser the unit tests can drive without touching
+ * `process` state. Matches the commander style used in `src/cli/main.ts`:
+ * `exitOverride()` so commander throws `CommanderError` instead of calling
+ * `process.exit()`, and `configureOutput` redirected to stderr so help/usage
+ * text never contaminates the JSON summary that `printSummary` writes to
+ * stdout.
+ */
+function buildRunnerProgram(): Command {
+  return new Command()
+    .name('afk-triage')
+    .description(
+      'Fan out Claude Code triage agents across needs-triage / needs-info issues',
+    )
+    .option(
+      '--parallelism <n>',
+      'Concurrent triage agents (overrides TRIAGE_PARALLELISM env, default 5)',
+    )
+    .option(
+      '--no-include-needs-info',
+      'Exclude needs-info issues from triage (included by default)',
+    )
+    .option(
+      '--dry-run',
+      'List eligible issues without provisioning Coder workspaces',
+    )
+    .exitOverride()
+    .configureOutput({
+      writeOut: (str) => process.stderr.write(str),
+      writeErr: (str) => process.stderr.write(str),
+    });
+}
+
 export function parseRunnerArgs(
   argv: readonly string[],
   env: NodeJS.ProcessEnv,
 ): RunnerArgs {
-  let rawParallelism: string | undefined;
-  let includeNeedsInfo = true;
-  let dryRun = false;
+  const program = buildRunnerProgram();
+  // `from: 'user'` tells commander the array contains user-supplied flags
+  // only, with no leading node/script entries, matching the
+  // `process.argv.slice(2)` shape every caller passes.
+  program.parse([...argv], { from: 'user' });
 
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    invariant(arg !== undefined, 'argument must exist while parsing argv');
-
-    if (arg === '--parallelism') {
-      const value = argv[index + 1];
-      invariant(value !== undefined, '--parallelism requires a value');
-      rawParallelism = value;
-      index += 1;
-      continue;
-    }
-
-    if (arg.startsWith('--parallelism=')) {
-      rawParallelism = arg.slice('--parallelism='.length);
-      continue;
-    }
-
-    if (arg === '--include-needs-info') {
-      includeNeedsInfo = true;
-      continue;
-    }
-
-    if (arg === '--no-include-needs-info') {
-      includeNeedsInfo = false;
-      continue;
-    }
-
-    if (arg === '--dry-run') {
-      dryRun = true;
-      continue;
-    }
-
-    throw new Error(`unknown argument: ${arg}`);
-  }
+  const opts = program.opts<{
+    parallelism?: string;
+    includeNeedsInfo?: boolean;
+    dryRun?: boolean;
+  }>();
 
   return {
-    parallelism: parseParallelism(rawParallelism ?? env.TRIAGE_PARALLELISM),
-    includeNeedsInfo,
-    dryRun,
+    parallelism: parseParallelism(opts.parallelism ?? env.TRIAGE_PARALLELISM),
+    // commander's `--no-include-needs-info` pattern defaults
+    // `opts.includeNeedsInfo` to `true` and flips it to `false` when the
+    // negated flag is passed, so any non-`false` value means "include".
+    includeNeedsInfo: opts.includeNeedsInfo !== false,
+    dryRun: opts.dryRun === true,
   };
 }
 
@@ -661,6 +674,20 @@ async function main(): Promise<void> {
     const summary = await runBatch(args);
     printSummary(summary);
   } catch (error) {
+    if (error instanceof CommanderError) {
+      // commander already wrote the help text or usage error to stderr via
+      // `configureOutput`. Mirror src/cli/main.ts: exit 0 for `--help`,
+      // exit 2 for unknown options / missing required values. We do NOT
+      // emit a JSON batch summary here because no batch was attempted —
+      // emitting one would falsely advertise "0 success" as a successful
+      // empty batch, indistinguishable from "no eligible issues".
+      process.exitCode =
+        error.code === 'commander.helpDisplayed' ||
+        error.code === 'commander.version'
+          ? 0
+          : 2;
+      return;
+    }
     console.error('[afk-triage] batch failed', error);
     const runId = createRunId();
     const summary = buildTriageBatchSummary(
