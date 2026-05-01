@@ -339,6 +339,15 @@ function uniqueIssueFilter(): (issue: TriageIssue) => boolean {
 // opaque object reference.
 const activeSandboxes = new Map<Sandbox, number>();
 
+// Tracks workspace names whose `createSandbox` is in flight. The Coder
+// control plane has already provisioned the workspace (the `coder create`
+// HTTP request is in progress) but `createSandbox` has not yet resolved a
+// `Sandbox` instance for us to close, so the workspace cannot be cleaned
+// up via `Sandbox.close()`. The signal handler reaps these names via
+// `coder delete <name> --yes` directly. The map is keyed by workspace name
+// so we can also de-duplicate concurrent attempts on the same issue.
+const pendingWorkspaceNames = new Map<string, number>();
+
 async function runTriageAgent(
   issue: TriageIssue,
   runId: string,
@@ -361,26 +370,40 @@ async function runTriageAgent(
       onClose: 'delete',
     };
 
-    // Use sandcastle's HEAD default for the base branch so AFK triage sees this checkout.
-    sandbox = await createSandbox({
-      branch: branchNameForIssue(issue.number, runId),
-      sandbox: coder(coderOptions),
-      hooks: {
-        sandbox: {
-          onSandboxReady: [
-            { command: 'gh auth status' },
-            // Sandcastle syncs git-tracked files only, so node_modules/ is
-            // absent inside the workspace. Per the plan's resolved design
-            // ("v1 should run `npm ci` in the workspace before triage"),
-            // run a deterministic install before the agent starts so bug
-            // reproductions can execute the project's tools.
-            { command: 'npm ci' },
-            { command: 'npm install -g @anthropic-ai/claude-code' },
-          ],
+    // Track the in-flight workspace name so a SIGINT during the
+    // `coder create` window can still reap the workspace via
+    // `coder delete <name> --yes`. Removed once createSandbox resolves
+    // (sandbox object now in activeSandboxes) or rejects (no workspace).
+    pendingWorkspaceNames.set(workspaceName, issue.number);
+    try {
+      // Use sandcastle's HEAD default for the base branch so AFK triage sees this checkout.
+      sandbox = await createSandbox({
+        branch: branchNameForIssue(issue.number, runId),
+        sandbox: coder(coderOptions),
+        hooks: {
+          sandbox: {
+            onSandboxReady: [
+              { command: 'gh auth status' },
+              // Sandcastle syncs git-tracked files only, so node_modules/ is
+              // absent inside the workspace. Per the plan's resolved design
+              // ("v1 should run `npm ci` in the workspace before triage"),
+              // run a deterministic install before the agent starts so bug
+              // reproductions can execute the project's tools.
+              { command: 'npm ci' },
+              { command: 'npm install -g @anthropic-ai/claude-code' },
+            ],
+          },
         },
-      },
-    });
-    activeSandboxes.set(sandbox, issue.number);
+      });
+      activeSandboxes.set(sandbox, issue.number);
+    } finally {
+      // Remove from pending whether createSandbox resolved or rejected.
+      // On resolve, ownership transfers to activeSandboxes (above). On
+      // reject, the Coder control plane should have rolled back the
+      // workspace; if it did not, the per-issue workspace name lock plus
+      // template TTL remain the safety net.
+      pendingWorkspaceNames.delete(workspaceName);
+    }
 
     await sandbox.run({
       agent: claudeCode('claude-opus-4-6'),
@@ -464,29 +487,33 @@ function signalExitCode(signal: NodeJS.Signals): number {
 }
 
 /**
- * Best-effort cleanup of every Coder workspace that has been created but
- * not yet closed. Used by signal handlers so SIGINT/SIGTERM during a batch
- * does not leave orphaned `agent-tty-triage-*` workspaces blocking future
- * runs (the per-issue workspace name acts as a lock, so an orphaned
- * workspace permanently blocks the corresponding issue until manual
- * `coder delete` or template TTL expiry).
+ * Best-effort cleanup of every Coder workspace this process is responsible
+ * for, both fully-created (`activeSandboxes`) and in-flight (`pendingWorkspaceNames`,
+ * for the window between `coder create` accepting the request and
+ * `createSandbox` resolving a `Sandbox` instance). Used by signal handlers
+ * so SIGINT/SIGTERM during a batch does not leave orphaned
+ * `agent-tty-triage-*` workspaces blocking future runs (the per-issue
+ * workspace name acts as a lock, so an orphan permanently blocks the
+ * corresponding issue until manual `coder delete` or template TTL expiry).
  *
- * Logs each per-sandbox close result keyed by issue number so the operator
- * can see exactly which workspaces are stranded after a forced shutdown.
+ * Logs each per-workspace close result keyed by issue number so the
+ * operator can see exactly which workspaces are stranded after a forced
+ * shutdown.
  */
 async function closeActiveSandboxes(): Promise<void> {
-  const entries = Array.from(activeSandboxes.entries());
+  const sandboxEntries = Array.from(activeSandboxes.entries());
+  const pendingEntries = Array.from(pendingWorkspaceNames.entries());
   activeSandboxes.clear();
+  pendingWorkspaceNames.clear();
 
-  const results = await Promise.allSettled(
-    entries.map(async ([sandbox, issueNumber]) => {
+  const sandboxResults = await Promise.allSettled(
+    sandboxEntries.map(async ([sandbox]) => {
       await sandbox.close();
-      return issueNumber;
     }),
   );
 
-  for (const [index, settled] of results.entries()) {
-    const entry = entries[index];
+  for (const [index, settled] of sandboxResults.entries()) {
+    const entry = sandboxEntries[index];
     if (entry === undefined) {
       continue;
     }
@@ -497,6 +524,41 @@ async function closeActiveSandboxes(): Promise<void> {
       console.error(
         `[issue ${issueNumber}] sandbox close failed during shutdown — workspace may be stranded:`,
         settled.reason,
+      );
+    }
+  }
+
+  // Reap any workspaces whose `coder create` returned a workspace on the
+  // control plane but whose `createSandbox` did not yet resolve a Sandbox
+  // instance for us to close via the normal path. Direct
+  // `coder delete <name> --yes` is the closest equivalent to the
+  // `onClose: 'delete'` semantics for the `Sandbox.close()` path.
+  const pendingResults = await Promise.allSettled(
+    pendingEntries.map(([workspaceName]) =>
+      Promise.resolve(runCoder(['delete', workspaceName, '--yes'])),
+    ),
+  );
+
+  for (const [index, settled] of pendingResults.entries()) {
+    const entry = pendingEntries[index];
+    if (entry === undefined) {
+      continue;
+    }
+    const [workspaceName, issueNumber] = entry;
+    if (settled.status === 'rejected') {
+      console.error(
+        `[issue ${issueNumber}] in-flight workspace ${workspaceName} delete threw during shutdown — workspace may be stranded:`,
+        settled.reason,
+      );
+      continue;
+    }
+    if (settled.value.status === 0) {
+      console.error(
+        `[issue ${issueNumber}] in-flight workspace ${workspaceName} deleted during shutdown`,
+      );
+    } else {
+      console.error(
+        `[issue ${issueNumber}] in-flight workspace ${workspaceName} delete failed during shutdown (status ${settled.value.status}) — workspace may be stranded: ${settled.value.stderr.trim()}`,
       );
     }
   }
@@ -518,7 +580,7 @@ function installSignalHandlers(): void {
     }
     signalled = true;
     console.error(
-      `[afk-triage] received ${signal}; closing ${activeSandboxes.size} active sandboxes (send ${signal} again to force-exit)`,
+      `[afk-triage] received ${signal}; closing ${activeSandboxes.size} active sandboxes and ${pendingWorkspaceNames.size} in-flight workspaces (send ${signal} again to force-exit)`,
     );
     closeActiveSandboxes().finally(() => {
       process.exit(signalExitCode(signal));
