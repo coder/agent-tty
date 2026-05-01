@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildTriageBatchSummary,
+  ghCommentSchema,
+  ghIssueSchema,
   pLimit,
   parseRunnerArgs,
 } from '../../../.sandcastle/main.js';
@@ -72,6 +74,60 @@ describe('buildTriageBatchSummary', () => {
         { issueNumber: 4, status: 'locked', message: 'exists' },
       ],
     });
+  });
+});
+
+// DEREM-39 / DEREM-40: GitHub returns `author: null` for deleted/ghost
+// accounts; the schema must accept that without throwing, otherwise a
+// single such comment aborts the entire batch.
+describe('ghCommentSchema null-author handling', () => {
+  it('accepts comments with null author (ghost/deleted accounts)', () => {
+    expect(() =>
+      ghCommentSchema.parse({
+        body: 'comment from a ghost account',
+        createdAt: '2026-04-30T14:15:00Z',
+        author: null,
+      }),
+    ).not.toThrow();
+  });
+
+  it('accepts comments with undefined author', () => {
+    expect(() =>
+      ghCommentSchema.parse({
+        body: 'comment with no author key',
+        createdAt: '2026-04-30T14:15:00Z',
+      }),
+    ).not.toThrow();
+  });
+
+  it('accepts comments with a normal author object', () => {
+    expect(() =>
+      ghCommentSchema.parse({
+        body: 'normal comment',
+        createdAt: '2026-04-30T14:15:00Z',
+        author: { login: 'alice' },
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe('ghIssueSchema null-author handling', () => {
+  it('accepts issues with null author and a comment whose author is null', () => {
+    expect(() =>
+      ghIssueSchema.parse({
+        number: 42,
+        labels: [{ name: 'needs-triage' }],
+        author: null,
+        createdAt: '2026-04-30T12:00:00Z',
+        comments: [
+          {
+            body: 'orphaned comment',
+            createdAt: '2026-04-30T13:00:00Z',
+            author: null,
+          },
+        ],
+      }),
+    ).not.toThrow();
   });
 });
 

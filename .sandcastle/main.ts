@@ -64,7 +64,9 @@ const ghAuthorSchema = z.looseObject({
   login: z.string().optional(),
 });
 
-const ghCommentSchema = z.looseObject({
+// Exported for direct schema-level regression tests; runtime callers use
+// these only via runJson + ghIssueListSchema.
+export const ghCommentSchema = z.looseObject({
   body: z.string(),
   createdAt: z.string(),
   // `gh --json` returns `"author": null` for deleted / ghost accounts, so
@@ -73,7 +75,7 @@ const ghCommentSchema = z.looseObject({
   author: ghAuthorSchema.nullish(),
 });
 
-const ghIssueSchema = z.looseObject({
+export const ghIssueSchema = z.looseObject({
   number: z.number(),
   labels: z.array(ghLabelSchema),
   comments: z.array(ghCommentSchema).default([]),
@@ -396,6 +398,22 @@ async function runTriageAgent(
       workspaceName,
       onClose: 'delete',
     };
+
+    // Re-check the shutdown flag after the `await import(...)` yield.
+    // Even on a module-cache hit, dynamic import yields once to the
+    // microtask queue; a SIGINT during that microtask sets
+    // `shutdownRequested = true` and snapshots empty maps. Without this
+    // re-check the resumed task would still call createSandbox below
+    // and orphan the resulting workspace when `process.exit()` fires,
+    // because there are no further await points between the
+    // pendingWorkspaceNames.set() call and the createSandbox call.
+    if (shutdownRequested) {
+      return {
+        issueNumber: issue.number,
+        status: 'skipped',
+        message: 'shutdown requested',
+      };
+    }
 
     // Track the in-flight workspace name so a SIGINT during the
     // `coder create` window can still reap the workspace via
