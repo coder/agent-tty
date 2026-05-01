@@ -348,6 +348,15 @@ const activeSandboxes = new Map<Sandbox, number>();
 // so we can also de-duplicate concurrent attempts on the same issue.
 const pendingWorkspaceNames = new Map<string, number>();
 
+// Set synchronously by the signal handler before any await. Checked at
+// the top of `runTriageAgent` so any task pLimit dequeues during cleanup
+// (in-flight runs completing as their sandboxes are closed cause queued
+// tasks to start) returns early without provisioning a new workspace.
+// Without this, those late-starting tasks would populate the maps that
+// `closeActiveSandboxes` already snapshotted, and the new workspaces
+// would be orphaned when `process.exit()` fires.
+let shutdownRequested = false;
+
 async function runTriageAgent(
   issue: TriageIssue,
   runId: string,
@@ -359,6 +368,20 @@ async function runTriageAgent(
   let workspaceName: string | undefined;
   let sandbox: Sandbox | undefined;
   let result: TriageIssueSummary | undefined;
+
+  // Skip queued tasks that pLimit dequeues after a shutdown signal. The
+  // signal handler sets `shutdownRequested` synchronously before the
+  // first await in closeActiveSandboxes; any task that starts here after
+  // that point would otherwise call `createSandbox()`, populate the
+  // already-snapshotted maps, and orphan a workspace when
+  // `process.exit()` fires.
+  if (shutdownRequested) {
+    return {
+      issueNumber: issue.number,
+      status: 'skipped',
+      message: 'shutdown requested',
+    };
+  }
 
   try {
     workspaceName = workspaceNameForIssue(issue.number);
@@ -586,6 +609,11 @@ function installSignalHandlers(): void {
       process.exit(signalExitCode(signal));
     }
     signalled = true;
+    // Set the shutdown flag SYNCHRONOUSLY before any await so queued
+    // pLimit tasks that get dequeued during cleanup (in-flight runs
+    // completing as their sandboxes are closed) see it and skip
+    // provisioning new workspaces.
+    shutdownRequested = true;
     console.error(
       `[afk-triage] received ${signal}; closing ${activeSandboxes.size} active sandboxes and ${pendingWorkspaceNames.size} in-flight workspaces (send ${signal} again to force-exit)`,
     );
