@@ -1,20 +1,11 @@
 import { invariant } from '../../src/util/assert.js';
-import { parseAfkMarker } from './afkMarker.js';
-import { assertIssueNumber } from './issueNumber.js';
-
-// Unset trusts any marker; set this for bot-only idempotency.
-const TRUSTED_MARKER_AUTHORS_ENV = 'AFK_TRIAGE_TRUSTED_MARKER_AUTHORS';
-
-function trustedMarkerAuthors(): readonly string[] | undefined {
-  const raw = process.env[TRUSTED_MARKER_AUTHORS_ENV]?.trim();
-  if (raw === undefined || raw === '') {
-    return undefined;
-  }
-  return raw
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
-}
+import { assertIssueNumber } from './afkIdentity.js';
+import {
+  latestAfkMarkerCreatedAt,
+  latestReporterActivity,
+  loadTrustedMarkerAuthors,
+  type ActivityFilters,
+} from './commentActivity.js';
 
 export interface TriageComment {
   readonly body: string;
@@ -58,15 +49,20 @@ export function classifyIssueForTriage(issue: TriageIssue): IssueEligibility {
     };
   }
 
+  const trusted = loadTrustedMarkerAuthors(process.env);
+  const filters: ActivityFilters =
+    trusted === undefined ? {} : { trustedMarkerAuthors: trusted };
+
   const latestMarkerCreatedAt = latestAfkMarkerCreatedAt(
     issueNumber,
     issue.comments,
+    filters,
   );
   if (latestMarkerCreatedAt === undefined) {
     return { eligible: true, reason: 'needs-info-with-new-activity' };
   }
 
-  const latestActivity = latestNonAfkActivity(issueNumber, issue.comments);
+  const latestActivity = latestReporterActivity(issueNumber, issue.comments);
   if (latestActivity !== undefined && latestActivity > latestMarkerCreatedAt) {
     return { eligible: true, reason: 'needs-info-with-new-activity' };
   }
@@ -75,54 +71,4 @@ export function classifyIssueForTriage(issue: TriageIssue): IssueEligibility {
     eligible: false,
     reason: 'needs-info has no activity newer than the latest AFK marker',
   };
-}
-
-// Use the marker comment timestamp, not the embedded batch-start run ID.
-function latestAfkMarkerCreatedAt(
-  issueNumber: number,
-  comments: readonly TriageComment[],
-): number | undefined {
-  const trusted = trustedMarkerAuthors();
-  const markerTimestamps = comments
-    .filter((comment) => {
-      const marker = parseAfkMarker(comment.body);
-      if (marker === null || marker.issue !== issueNumber) {
-        return false;
-      }
-      if (trusted === undefined) {
-        return true;
-      }
-      const login = comment.author?.login;
-      return typeof login === 'string' && trusted.includes(login);
-    })
-    .map((comment) => Date.parse(comment.createdAt))
-    .filter((timestamp) => Number.isFinite(timestamp))
-    .sort((left, right) => left - right);
-
-  return markerTimestamps.at(-1);
-}
-
-// GitHub App noise must not re-eligibilize needs-info issues.
-function isBotComment(comment: TriageComment): boolean {
-  const login = comment.author?.login;
-  return typeof login === 'string' && login.endsWith('[bot]');
-}
-
-function latestNonAfkActivity(
-  issueNumber: number,
-  comments: readonly TriageComment[],
-): number | undefined {
-  const timestamps = comments
-    .filter((comment) => {
-      if (isBotComment(comment)) {
-        return false;
-      }
-      const marker = parseAfkMarker(comment.body);
-      return marker === null || marker.issue !== issueNumber;
-    })
-    .map((comment) => Date.parse(comment.createdAt))
-    .filter((timestamp) => Number.isFinite(timestamp))
-    .sort((left, right) => left - right);
-
-  return timestamps.at(-1);
 }
