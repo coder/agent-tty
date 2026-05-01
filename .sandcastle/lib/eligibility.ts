@@ -2,18 +2,7 @@ import { invariant } from '../../src/util/assert.js';
 import { parseAfkMarker } from './afkMarker.js';
 import { assertIssueNumber } from './issueNumber.js';
 
-/**
- * Optional comma-separated allow-list of trusted GitHub authors whose
- * AFK-triage markers count for idempotency. When unset (the v1 default),
- * any author can post a syntactically valid `<!-- afk-triage:v1 ... -->`
- * marker and the eligibility module trusts it; this is acceptable for v1
- * controlled dogfood because the attack surface is narrow (marker must
- * post-date the reporter's reply on a `needs-info` issue, a single new
- * reporter comment re-enables eligibility, and the Coder template TTL
- * bounds operational cost). Production deployments should set
- * `AFK_TRIAGE_TRUSTED_MARKER_AUTHORS=triage-bot` (or similar) so only
- * markers from the dedicated bot identity gate idempotency.
- */
+// Unset trusts any marker; set this for bot-only idempotency.
 const TRUSTED_MARKER_AUTHORS_ENV = 'AFK_TRIAGE_TRUSTED_MARKER_AUTHORS';
 
 function trustedMarkerAuthors(): readonly string[] | undefined {
@@ -88,24 +77,7 @@ export function classifyIssueForTriage(issue: TriageIssue): IssueEligibility {
   };
 }
 
-/**
- * Epoch-ms `createdAt` of the most recent AFK-marker comment for this issue.
- *
- * Compared to the previous implementation, which used the marker's embedded
- * `run` ID as the cutoff: that ID encodes the batch start time on the
- * orchestrator host, but the marker comment is posted minutes later, after
- * workspace creation, agent startup, and triage. Reporter comments arriving
- * between batch-start and marker-posted were misclassified as "new
- * activity" and triggered unnecessary re-triage. Using the marker comment's
- * GitHub `createdAt` is a single time source on the same clock as the
- * comments we compare against.
- *
- * Author trust: when `AFK_TRIAGE_TRUSTED_MARKER_AUTHORS` is set, only
- * markers whose `author.login` is on that list count. When it is unset
- * (v1 default for controlled dogfood), all syntactically valid markers
- * count — see {@link TRUSTED_MARKER_AUTHORS_ENV} for the documented
- * trade-off.
- */
+// Use the marker comment timestamp, not the embedded batch-start run ID.
 function latestAfkMarkerCreatedAt(
   issueNumber: number,
   comments: readonly TriageComment[],
@@ -130,13 +102,7 @@ function latestAfkMarkerCreatedAt(
   return markerTimestamps.at(-1);
 }
 
-/**
- * GitHub Apps emit comments under logins suffixed `[bot]` (dependabot[bot],
- * github-actions[bot], codecov[bot], etc.). For idempotency these must
- * NOT count as reporter activity, otherwise routine bot noise on a
- * `needs-info` issue would re-trigger triage every batch and create a
- * Coder workspace per false positive.
- */
+// GitHub App noise must not re-eligibilize needs-info issues.
 function isBotComment(comment: TriageComment): boolean {
   const login = comment.author?.login;
   return typeof login === 'string' && login.endsWith('[bot]');
@@ -148,8 +114,6 @@ function latestNonAfkActivity(
 ): number | undefined {
   const timestamps = comments
     .filter((comment) => {
-      // Skip bot comments so dependabot/github-actions/codecov noise on a
-      // needs-info issue does not falsely re-eligibilize it.
       if (isBotComment(comment)) {
         return false;
       }

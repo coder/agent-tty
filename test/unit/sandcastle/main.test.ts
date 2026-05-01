@@ -28,25 +28,17 @@ describe('pLimit', () => {
     );
 
     expect(maxActive).toBeLessThanOrEqual(2);
-    // Guard against a regression where `limit` resolves with `undefined`,
-    // which would silently break runBatch's `Promise.all` of
-    // `TriageIssueSummary` records.
     expect(results).toEqual([0, 1, 2, 3, 4]);
   });
 
   it('rejects when the limited task throws synchronously', async () => {
     const limit = pLimit(1);
-    // A non-async function that throws synchronously must surface as a
-    // rejection, not crash the runner. Without the wrapping
-    // `Promise.resolve().then(task)`, the `.finally()` decrement would
-    // be skipped and the concurrency slot would leak permanently.
     await expect(
       limit((() => {
         throw new Error('sync throw');
       }) as unknown as () => Promise<unknown>),
     ).rejects.toThrow('sync throw');
 
-    // The slot must be released so subsequent tasks can run.
     await expect(limit(() => Promise.resolve('ok'))).resolves.toBe('ok');
   });
 });
@@ -78,9 +70,6 @@ describe('buildTriageBatchSummary', () => {
   });
 });
 
-// DEREM-39 / DEREM-40: GitHub returns `author: null` for deleted/ghost
-// accounts; the schema must accept that without throwing, otherwise a
-// single such comment aborts the entire batch.
 describe('ghCommentSchema null-author handling', () => {
   it('accepts comments with null author (ghost/deleted accounts)', () => {
     expect(() =>
@@ -134,8 +123,6 @@ describe('ghIssueSchema null-author handling', () => {
 
 describe('parseRunnerArgs', () => {
   it('returns defaults when no flags or env are set', () => {
-    // 5 is `DEFAULT_PARALLELISM` from .sandcastle/lib/parallelism.ts; if
-    // that constant moves the test should fail loudly.
     expect(parseRunnerArgs([], {})).toEqual({
       parallelism: 5,
       includeNeedsInfo: true,
@@ -162,9 +149,6 @@ describe('parseRunnerArgs', () => {
   });
 
   it('accepts space-separated --parallelism N (commander default)', () => {
-    // Commander accepts both `--parallelism=3` and `--parallelism 3` for
-    // any `<n>` arg. Pin both forms so a future option-shape change cannot
-    // silently regress the space-separated form documented in the help.
     expect(parseRunnerArgs(['--parallelism', '3'], {})).toEqual({
       parallelism: 3,
       includeNeedsInfo: true,
@@ -173,7 +157,6 @@ describe('parseRunnerArgs', () => {
   });
 
   it('CLI --parallelism overrides TRIAGE_PARALLELISM env', () => {
-    // Documents the precedence: explicit CLI flag wins over env default.
     expect(
       parseRunnerArgs(['--parallelism=4'], { TRIAGE_PARALLELISM: '9' }),
     ).toEqual({
@@ -184,12 +167,6 @@ describe('parseRunnerArgs', () => {
   });
 
   it('throws a CommanderError for unknown flags', () => {
-    // The previous hand-rolled parser threw a plain Error('unknown
-    // argument: ...'); commander throws a typed CommanderError with a
-    // 'commander.unknownOption' code. main() relies on `instanceof
-    // CommanderError` to set exit code 2 instead of printing a JSON batch
-    // summary, so the error TYPE — not just the throw — is part of the
-    // contract.
     expect(() => parseRunnerArgs(['--bogus'], {})).toThrow(CommanderError);
   });
 

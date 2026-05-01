@@ -18,22 +18,9 @@ import { runCoder, runCoderAsync, runGh, runJson } from './lib/gh.js';
 import { parseParallelism } from './lib/parallelism.js';
 import { workspaceNameForIssue } from './lib/workspaceName.js';
 
-// Triage Agent's idle timeout inside the sandbox. 1800s = 30 minutes,
-// long enough for repro attempts and slow Coder workspace cold starts but
-// short enough to bound a single agent's resource use.
 const TRIAGE_AGENT_IDLE_TIMEOUT_SECONDS = 1800;
-
-// `gh issue list` defaults to --limit 30, which would silently drop excess
-// eligible issues. The plan calls for "no hard batch cap: process all eligible
-// issues, but only N at once", so cap at a high upper bound that exceeds any
-// realistic triage backlog. (See `runJson`/`runCommand` for the matching
-// `spawnSync` `maxBuffer` setting that pairs with this limit.)
 const GH_ISSUE_LIST_LIMIT = 500;
-
-// All gh CLI calls in the orchestrator must target this repo explicitly so
-// the orchestrator works from CI, a worktree with a different remote, or a
-// directory without `.git`, never silently querying the wrong repo via
-// implicit cwd-based `.git/config` resolution.
+// Avoid cwd-based repo inference when running from CI or a sandcastle worktree.
 const GH_REPO_ARGS: readonly string[] = ['--repo', 'coder/agent-tty'];
 
 export type TriageIssueStatus = 'success' | 'locked' | 'failed' | 'skipped';
@@ -65,8 +52,6 @@ const ghAuthorSchema = z.looseObject({
   login: z.string().optional(),
 });
 
-// Exported for direct schema-level regression tests; runtime callers use
-// these only via runJson + ghIssueListSchema.
 export const ghCommentSchema = z.looseObject({
   body: z.string(),
   createdAt: z.string(),
@@ -169,40 +154,32 @@ export function buildTriageBatchSummary(
   };
 }
 
-/**
- * Build the commander program for the AFK triage runner.
- *
- * Extracted into its own function so {@link parseRunnerArgs} stays a pure
- * argv-in/RunnerArgs-out parser the unit tests can drive without touching
- * `process` state. Matches the commander style used in `src/cli/main.ts`:
- * `exitOverride()` so commander throws `CommanderError` instead of calling
- * `process.exit()`, and `configureOutput` redirected to stderr so help/usage
- * text never contaminates the JSON summary that `printSummary` writes to
- * stdout.
- */
 function buildRunnerProgram(): Command {
-  return new Command()
-    .name('afk-triage')
-    .description(
-      'Fan out Claude Code triage agents across needs-triage / needs-info issues',
-    )
-    .option(
-      '--parallelism <n>',
-      'Concurrent triage agents (overrides TRIAGE_PARALLELISM env, default 5)',
-    )
-    .option(
-      '--no-include-needs-info',
-      'Exclude needs-info issues from triage (included by default)',
-    )
-    .option(
-      '--dry-run',
-      'List eligible issues without provisioning Coder workspaces',
-    )
-    .exitOverride()
-    .configureOutput({
-      writeOut: (str) => process.stderr.write(str),
-      writeErr: (str) => process.stderr.write(str),
-    });
+  return (
+    new Command()
+      .name('afk-triage')
+      .description(
+        'Fan out Claude Code triage agents across needs-triage / needs-info issues',
+      )
+      .option(
+        '--parallelism <n>',
+        'Concurrent triage agents (overrides TRIAGE_PARALLELISM env, default 5)',
+      )
+      .option(
+        '--no-include-needs-info',
+        'Exclude needs-info issues from triage (included by default)',
+      )
+      .option(
+        '--dry-run',
+        'List eligible issues without provisioning Coder workspaces',
+      )
+      .exitOverride()
+      // Keep help and usage on stderr so stdout remains JSON-only.
+      .configureOutput({
+        writeOut: (str) => process.stderr.write(str),
+        writeErr: (str) => process.stderr.write(str),
+      })
+  );
 }
 
 export function parseRunnerArgs(
@@ -210,9 +187,6 @@ export function parseRunnerArgs(
   env: NodeJS.ProcessEnv,
 ): RunnerArgs {
   const program = buildRunnerProgram();
-  // `from: 'user'` tells commander the array contains user-supplied flags
-  // only, with no leading node/script entries, matching the
-  // `process.argv.slice(2)` shape every caller passes.
   program.parse([...argv], { from: 'user' });
 
   const opts = program.opts<{
@@ -223,9 +197,6 @@ export function parseRunnerArgs(
 
   return {
     parallelism: parseParallelism(opts.parallelism ?? env.TRIAGE_PARALLELISM),
-    // commander's `--no-include-needs-info` pattern defaults
-    // `opts.includeNeedsInfo` to `true` and flips it to `false` when the
-    // negated flag is passed, so any non-`false` value means "include".
     includeNeedsInfo: opts.includeNeedsInfo !== false,
     dryRun: opts.dryRun === true,
   };
@@ -278,9 +249,6 @@ async function runBatch(args: RunnerArgs): Promise<TriageBatchSummary> {
 }
 
 function preflightCoder(): void {
-  // Reuse runJson so coder-CLI preflight inherits the same status/JSON
-  // diagnostics path as the gh-CLI calls. Schema is permissive (`unknown`)
-  // because we only verify that whoami responded with valid JSON.
   runJson('coder', ['whoami', '-o', 'json'], z.unknown(), runCoder);
 }
 
@@ -350,50 +318,21 @@ function uniqueIssueFilter(): (issue: TriageIssue) => boolean {
   };
 }
 
-// Tracks sandboxes that have been created but not yet closed, indexed by
-// the issue number that owns them. Signal handlers iterate this map to
-// call close() on each so SIGINT/SIGTERM does not leave orphaned
-// `agent-tty-triage-*` Coder workspaces blocking future runs. Storing the
-// issue number lets cleanup logs name the workspace's owner instead of an
-// opaque object reference.
 const activeSandboxes = new Map<Sandbox, number>();
-
-// Tracks workspace names whose `createSandbox` is in flight. The Coder
-// control plane has already provisioned the workspace (the `coder create`
-// HTTP request is in progress) but `createSandbox` has not yet resolved a
-// `Sandbox` instance for us to close, so the workspace cannot be cleaned
-// up via `Sandbox.close()`. The signal handler reaps these names via
-// `coder delete <name> --yes` directly. The map is keyed by workspace name
-// so we can also de-duplicate concurrent attempts on the same issue.
 const pendingWorkspaceNames = new Map<string, number>();
 
-// Set synchronously by the signal handler before any await. Checked at
-// the top of `runTriageAgent` so any task pLimit dequeues during cleanup
-// (in-flight runs completing as their sandboxes are closed cause queued
-// tasks to start) returns early without provisioning a new workspace.
-// Without this, those late-starting tasks would populate the maps that
-// `closeActiveSandboxes` already snapshotted, and the new workspaces
-// would be orphaned when `process.exit()` fires.
+// Set synchronously before cleanup awaits so newly dequeued tasks do not
+// create workspaces outside the cleanup snapshot.
 let shutdownRequested = false;
 
 async function runTriageAgent(
   issue: TriageIssue,
   runId: string,
 ): Promise<TriageIssueSummary> {
-  // workspaceName is computed inside the try so an assertIssueNumber
-  // failure (malformed gh response, future caller passing an unvalidated
-  // number) is caught per-issue instead of aborting the whole batch via
-  // Promise.all in runBatch.
   let workspaceName: string | undefined;
   let sandbox: Sandbox | undefined;
   let result: TriageIssueSummary | undefined;
 
-  // Skip queued tasks that pLimit dequeues after a shutdown signal. The
-  // signal handler sets `shutdownRequested` synchronously before the
-  // first await in closeActiveSandboxes; any task that starts here after
-  // that point would otherwise call `createSandbox()`, populate the
-  // already-snapshotted maps, and orphan a workspace when
-  // `process.exit()` fires.
   if (shutdownRequested) {
     return {
       issueNumber: issue.number,
@@ -428,10 +367,6 @@ async function runTriageAgent(
       };
     }
 
-    // Track the in-flight workspace name so a SIGINT during the
-    // `coder create` window can still reap the workspace via
-    // `coder delete <name> --yes`. Removed once createSandbox resolves
-    // (sandbox object now in activeSandboxes) or rejects (no workspace).
     pendingWorkspaceNames.set(workspaceName, issue.number);
     try {
       // Use sandcastle's HEAD default for the base branch so AFK triage sees this checkout.
@@ -442,11 +377,7 @@ async function runTriageAgent(
           sandbox: {
             onSandboxReady: [
               { command: 'gh auth status' },
-              // Sandcastle syncs git-tracked files only, so node_modules/ is
-              // absent inside the workspace. Per the plan's resolved design
-              // ("v1 should run `npm ci` in the workspace before triage"),
-              // run a deterministic install before the agent starts so bug
-              // reproductions can execute the project's tools.
+              // Sandcastle syncs git-tracked files only; install deps before triage.
               { command: 'npm ci' },
               { command: 'npm install -g @anthropic-ai/claude-code' },
             ],
@@ -455,11 +386,6 @@ async function runTriageAgent(
       });
       activeSandboxes.set(sandbox, issue.number);
     } finally {
-      // Remove from pending whether createSandbox resolved or rejected.
-      // On resolve, ownership transfers to activeSandboxes (above). On
-      // reject, the Coder control plane should have rolled back the
-      // workspace; if it did not, the per-issue workspace name lock plus
-      // template TTL remain the safety net.
       pendingWorkspaceNames.delete(workspaceName);
     }
 
@@ -477,10 +403,6 @@ async function runTriageAgent(
       status: 'success',
     };
   } catch (error) {
-    // Print the full, multi-line error to stderr before truncating to a
-    // first-line summary for `TriageIssueSummary.message`. Without this,
-    // root causes that live on line 2+ (Coder create stack traces, sync
-    // failures, agent crashes) are permanently destroyed.
     console.error(`[issue ${issue.number}]`, error);
     result = {
       issueNumber: issue.number,
@@ -504,10 +426,6 @@ async function runTriageAgent(
       try {
         await sandbox.close();
       } catch (closeError) {
-        // Preserve the original triage signal: if `result` is already a
-        // success, downgrade to 'failed' but keep the original message and
-        // append the close failure. If `result` is already a failure, do
-        // the same so we never silently lose the root cause.
         console.error(`[issue ${issue.number}] close failed`, closeError);
         const closeMessage = `close failed: ${conciseErrorMessage(closeError)}`;
         result = {
@@ -540,24 +458,9 @@ function pad(value: number): string {
 }
 
 function signalExitCode(signal: NodeJS.Signals): number {
-  // 128 + signal number convention. SIGINT=2 → 130, SIGTERM=15 → 143.
   return signal === 'SIGINT' ? 130 : 143;
 }
 
-/**
- * Best-effort cleanup of every Coder workspace this process is responsible
- * for, both fully-created (`activeSandboxes`) and in-flight (`pendingWorkspaceNames`,
- * for the window between `coder create` accepting the request and
- * `createSandbox` resolving a `Sandbox` instance). Used by signal handlers
- * so SIGINT/SIGTERM during a batch does not leave orphaned
- * `agent-tty-triage-*` workspaces blocking future runs (the per-issue
- * workspace name acts as a lock, so an orphan permanently blocks the
- * corresponding issue until manual `coder delete` or template TTL expiry).
- *
- * Logs each per-workspace close result keyed by issue number so the
- * operator can see exactly which workspaces are stranded after a forced
- * shutdown.
- */
 async function closeActiveSandboxes(): Promise<void> {
   const sandboxEntries = Array.from(activeSandboxes.entries());
   const pendingEntries = Array.from(pendingWorkspaceNames.entries());
@@ -632,11 +535,7 @@ async function closeActiveSandboxes(): Promise<void> {
 function installSignalHandlers(): void {
   let signalled = false;
   const handle = (signal: NodeJS.Signals): void => {
-    // Second signal during cleanup forces immediate exit. The operator
-    // already decided to kill the process; the Coder template's
-    // `default_ttl` is the safety net for any sandboxes whose close()
-    // calls did not finish. Without this escape hatch a hung
-    // `coder delete` would make the process unkillable without `kill -9`.
+    // Let a second signal escape hung workspace cleanup.
     if (signalled) {
       console.error(
         `[afk-triage] second ${signal}; force-exiting (cleanup in progress; remaining sandboxes will rely on template TTL)`,
@@ -644,10 +543,6 @@ function installSignalHandlers(): void {
       process.exit(signalExitCode(signal));
     }
     signalled = true;
-    // Set the shutdown flag SYNCHRONOUSLY before any await so queued
-    // pLimit tasks that get dequeued during cleanup (in-flight runs
-    // completing as their sandboxes are closed) see it and skip
-    // provisioning new workspaces.
     shutdownRequested = true;
     console.error(
       `[afk-triage] received ${signal}; closing ${activeSandboxes.size} active sandboxes and ${pendingWorkspaceNames.size} in-flight workspaces (send ${signal} again to force-exit)`,
@@ -666,21 +561,11 @@ async function main(): Promise<void> {
   installSignalHandlers();
 
   try {
-    // parseRunnerArgs is inside the try so an `--parallelism abc` typo or
-    // any other invariant failure produces a structured JSON summary via
-    // printSummary instead of escaping main() with a raw stack trace,
-    // matching the contract every other batch-level failure already follows.
     const args = parseRunnerArgs(process.argv.slice(2), process.env);
     const summary = await runBatch(args);
     printSummary(summary);
   } catch (error) {
     if (error instanceof CommanderError) {
-      // commander already wrote the help text or usage error to stderr via
-      // `configureOutput`. Mirror src/cli/main.ts: exit 0 for `--help`,
-      // exit 2 for unknown options / missing required values. We do NOT
-      // emit a JSON batch summary here because no batch was attempted —
-      // emitting one would falsely advertise "0 success" as a successful
-      // empty batch, indistinguishable from "no eligible issues".
       process.exitCode =
         error.code === 'commander.helpDisplayed' ||
         error.code === 'commander.version'

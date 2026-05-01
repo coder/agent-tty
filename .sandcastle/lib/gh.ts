@@ -42,11 +42,6 @@ export function runCoderAsync(args: readonly string[]): Promise<CommandResult> {
   return runCommandAsync('coder', args);
 }
 
-/**
- * Run `<command> <args>` and parse stdout as JSON validated by `schema`.
- * Used for both `gh` and `coder` subcommands; `commandLabel` is included
- * in error messages so failures attribute correctly.
- */
 export function runJson<T>(
   commandLabel: string,
   args: readonly string[],
@@ -73,11 +68,6 @@ export function runJson<T>(
   return schema.parse(parsed);
 }
 
-/**
- * Spawn `command` with `args` synchronously and normalize the result into a
- * CommandResult. Exported so `runJson` and the targeted ENOENT regression
- * test can both exercise the same normalization path.
- */
 export function runCommand(
   command: string,
   args: readonly string[],
@@ -138,7 +128,6 @@ export function runCommandAsync(
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (chunk: string) => {
       stdout += chunk;
-      // Safety: cap accumulated buffer at the same ceiling as spawnSync.
       if (stdout.length > SPAWN_SYNC_MAX_BUFFER) {
         child.kill('SIGKILL');
       }

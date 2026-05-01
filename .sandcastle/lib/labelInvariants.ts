@@ -26,22 +26,6 @@ export interface LabelTransitionInput {
   readonly nextState: TriageState;
 }
 
-/**
- * Documents and tests the AFK-triage label invariant: after triage an issue
- * has exactly one category label (`bug` | `enhancement`) and exactly one
- * state label (one of `STATE_LABELS`). It also rejects starting states that
- * would silently overwrite conflicting labels.
- *
- * At runtime the invariant is enforced by the triage prompt and the
- * `gh label add/remove` calls Claude makes inside the workspace. This module
- * keeps a machine-checked copy of the same rules so the test suite can prove
- * the prompt's natural-language rules stay consistent with the project's
- * label vocabulary in `docs/agents/triage-labels.md`. It is intentionally
- * not wired into the orchestrator: the orchestrator does not see issue
- * labels — only the in-workspace agent does — so calling this from
- * `main.ts` would only re-validate a copy of state we trust the agent to
- * have managed correctly.
- */
 export function validateTriageLabelTransition(
   input: LabelTransitionInput,
 ): LabelTransitionResult {

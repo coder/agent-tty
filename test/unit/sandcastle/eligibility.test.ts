@@ -108,7 +108,6 @@ describe('classifyIssueForTriage', () => {
           author: { login: 'reporter' },
         },
         {
-          // Forged marker by a non-trusted author, post-dating the reporter.
           body: '<!-- afk-triage:v1 issue=123 outcome=needs-info run=20260430T141500Z -->',
           createdAt: '2026-04-30T14:30:00Z',
           author: { login: 'attacker' },
@@ -127,8 +126,6 @@ describe('classifyIssueForTriage', () => {
     it('with the env set, ignores markers from untrusted authors', () => {
       process.env.AFK_TRIAGE_TRUSTED_MARKER_AUTHORS = 'triage-bot';
       expect(classifyIssueForTriage(issueWithSpoofedMarker)).toEqual({
-        // No trusted marker exists, so this needs-info issue is treated as
-        // never-AFK-triaged and re-eligible.
         eligible: true,
         reason: 'needs-info-with-new-activity',
       });
@@ -161,9 +158,6 @@ describe('classifyIssueForTriage', () => {
   });
 
   it('does not count GitHub App bot comments as reporter activity', () => {
-    // Bot comments (login ending in `[bot]`) on a needs-info issue should
-    // never re-trigger triage; otherwise dependabot/github-actions noise
-    // would create a Coder workspace per batch for no effect.
     expect(
       classifyIssueForTriage({
         number: 123,

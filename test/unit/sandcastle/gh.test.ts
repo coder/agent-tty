@@ -55,8 +55,6 @@ describe('runJson', () => {
   });
 
   it('throws with the command label when stdout is not parseable JSON', () => {
-    // Exercises the JSON.parse catch branch that DEREM-32 flagged as
-    // never-tested. `{` triggers SyntaxError inside JSON.parse.
     expect(() =>
       runJson('gh', ['issue', 'list'], schema, () => ({
         stdout: '{',
@@ -67,9 +65,6 @@ describe('runJson', () => {
   });
 
   it('throws a Zod validation error when stdout shape does not match the schema', () => {
-    // Tighter than a bare .toThrow(): assert the error message contains
-    // the Zod-specific shape so a coincidental throw from the runner
-    // cannot satisfy this test (DEREM-33).
     expect(() =>
       runJson('gh', ['issue', 'list'], schema, () => ({
         stdout: '{"value":1}',
@@ -80,11 +75,6 @@ describe('runJson', () => {
   });
 });
 
-// DEREM-34 regression: spawnSync returns undefined stdout/stderr when the
-// binary is missing (ENOENT). Guard against `Cannot read properties of
-// undefined (reading 'length')` and the silent CommandResult contract
-// violation by exercising the real spawn path against a deliberately
-// missing binary.
 describe('runCommand ENOENT handling', () => {
   const missingBinary = 'agent-tty-nonexistent-binary-for-test';
 
@@ -94,8 +84,6 @@ describe('runCommand ENOENT handling', () => {
     expect(typeof result.stderr).toBe('string');
     expect(typeof result.status).toBe('number');
     expect(result.status).not.toBe(0);
-    // The spawn-error message must surface in stderr so operators see the
-    // real diagnostic instead of an empty payload.
     expect(result.stderr.length).toBeGreaterThan(0);
   });
 
@@ -108,10 +96,6 @@ describe('runCommand ENOENT handling', () => {
   });
 });
 
-// DEREM-37: `runCommandAsync` must yield to the event loop while the child
-// runs so a second SIGINT/SIGTERM can be delivered to the signal-handler
-// force-quit path. Smoke-test that it returns a CommandResult with the
-// expected shape for both success and ENOENT, matching `runCommand`.
 describe('runCommandAsync', () => {
   it('captures stdout from a successful command', async () => {
     const result = await runCommandAsync('node', [
@@ -146,10 +130,6 @@ describe('runCommandAsync', () => {
   });
 
   it('keeps the event loop responsive while the child runs', async () => {
-    // A timer interval fires every 5ms. A 100ms blocking spawn would
-    // miss many ticks if it blocked the event loop. With async spawn,
-    // the timer fires repeatedly during the wait. Assertion: at least
-    // 5 ticks were observed during the 100ms child sleep.
     let ticks = 0;
     const interval = setInterval(() => {
       ticks += 1;
