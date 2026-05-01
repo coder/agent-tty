@@ -566,11 +566,7 @@ async function main(): Promise<void> {
     printSummary(summary);
   } catch (error) {
     if (error instanceof CommanderError) {
-      process.exitCode =
-        error.code === 'commander.helpDisplayed' ||
-        error.code === 'commander.version'
-          ? 0
-          : 2;
+      process.exitCode = error.code === 'commander.helpDisplayed' ? 0 : 2;
       return;
     }
     console.error('[afk-triage] batch failed', error);
