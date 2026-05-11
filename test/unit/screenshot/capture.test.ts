@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 
 import { createTemporarySessionDir } from '../../helpers.js';
 
+import type { ScreenshotResult } from '../../../src/renderer/types.js';
+
 import {
   captureScreenshotResult,
   parseScreenshotResult,

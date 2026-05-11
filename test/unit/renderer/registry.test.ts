@@ -5,9 +5,7 @@ import {
   createRendererBackend,
   resolveRendererName,
 } from '../../../src/renderer/index.js';
-import type {
-  RenderProfileConfig,
-} from '../../../src/renderer/types.js';
+import type { RenderProfileConfig } from '../../../src/renderer/types.js';
 
 import { createFakeBackend } from '../../helpers/fakeBackend.js';
 

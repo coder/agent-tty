@@ -6,7 +6,11 @@ import { setImmediate as setImmediatePromise } from 'node:timers/promises';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HostRendererManager } from '../../../src/host/renderer.js';
-import type { RenderProfileConfig, ReplayInput } from '../../../src/renderer/types.js';
+import type { RendererBackend } from '../../../src/renderer/backend.js';
+import type {
+  RenderProfileConfig,
+  ReplayInput,
+} from '../../../src/renderer/types.js';
 
 import {
   createFakeBackend,

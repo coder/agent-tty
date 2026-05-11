@@ -124,7 +124,6 @@ function createNativeFixture(options: { visibleText?: string } = {}) {
   };
 }
 
-
 function createBackend(
   fixture = createNativeFixture(),
   options: Partial<ConstructorParameters<typeof LibghosttyVtBackend>[2]> = {},
