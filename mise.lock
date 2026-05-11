@@ -4,7 +4,22 @@
 version = "1.7.12"
 backend = "aqua:rhysd/actionlint"
 
+[tools.actionlint."platforms.linux-arm64"]
+checksum = "sha256:325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6"
+url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_arm64.tar.gz"
+provenance = "github-attestations"
+
+[tools.actionlint."platforms.linux-arm64-musl"]
+checksum = "sha256:325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6"
+url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_arm64.tar.gz"
+provenance = "github-attestations"
+
 [tools.actionlint."platforms.linux-x64"]
+checksum = "sha256:8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
+provenance = "github-attestations"
+
+[tools.actionlint."platforms.linux-x64-musl"]
 checksum = "sha256:8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
 url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
 provenance = "github-attestations"
@@ -19,88 +34,105 @@ checksum = "sha256:5b44c3bc2255115c9b69e30efc0fecdf498fdb63c5d58e17084fd5f16324c
 url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_darwin_amd64.tar.gz"
 provenance = "github-attestations"
 
+[tools.actionlint."platforms.windows-x64"]
+checksum = "sha256:6e7241b51e6817ea6a047693d8e6fed13b31819c9a0dd6c5a726e1592d22f6e9"
+url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_windows_amd64.zip"
+provenance = "github-attestations"
+
 [[tools.aube]]
-version = "1.4.0"
+version = "1.10.4"
 backend = "github:endevco/aube"
 
 [tools.aube."platforms.linux-arm64"]
-checksum = "sha256:91f4591c22cb2f9ab78eca70bdb39b7582154a1967d715c70ff7a930d60f032b"
-url = "https://github.com/endevco/aube/releases/download/v1.4.0/aube-v1.4.0-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/endevco/aube/releases/assets/407767270"
+checksum = "sha256:45dc6d46e69f1da58360fa8ac353d83c2b84e1ca2e31edb9be912a7729c839c1"
+url = "https://github.com/endevco/aube/releases/download/v1.10.4/aube-v1.10.4-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/endevco/aube/releases/assets/417134849"
 provenance = "github-attestations"
 
 [tools.aube."platforms.linux-arm64-musl"]
-checksum = "sha256:995022355eb64890198133f6a3b4716ba233611553c042c1d0acf09409b35aaf"
-url = "https://github.com/endevco/aube/releases/download/v1.4.0/aube-v1.4.0-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/endevco/aube/releases/assets/407767015"
+checksum = "sha256:8094e14b0906ecb2fcdb573700e7c9536abdeedc203a15051723b4fe6247237e"
+url = "https://github.com/endevco/aube/releases/download/v1.10.4/aube-v1.10.4-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/endevco/aube/releases/assets/417112128"
 provenance = "github-attestations"
 
 [tools.aube."platforms.linux-x64"]
-checksum = "sha256:1dc223280787161053a743b30c454fa6f407fe881076f511bfb1a71b911a18ce"
-url = "https://github.com/endevco/aube/releases/download/v1.4.0/aube-v1.4.0-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/endevco/aube/releases/assets/407765937"
+checksum = "sha256:234b5d01ab5818937740ebc773709595e18eb926f2c543273e36670c5c416851"
+url = "https://github.com/endevco/aube/releases/download/v1.10.4/aube-v1.10.4-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/endevco/aube/releases/assets/417115596"
 provenance = "github-attestations"
 
 [tools.aube."platforms.linux-x64-musl"]
-checksum = "sha256:c1987778081c0650335399e0eb812042d57573659b958b114380d7e2e7b138c9"
-url = "https://github.com/endevco/aube/releases/download/v1.4.0/aube-v1.4.0-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/endevco/aube/releases/assets/407766878"
+checksum = "sha256:c6bc24fa4a06f13cc8fa7fdb18bd15c55ec17b2f9ebce478c559b9664bc5abde"
+url = "https://github.com/endevco/aube/releases/download/v1.10.4/aube-v1.10.4-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/endevco/aube/releases/assets/417115736"
 provenance = "github-attestations"
 
 [tools.aube."platforms.macos-arm64"]
-checksum = "sha256:21a84f7e3f3ab2415a51728d5b11394f15b07014b121a65e41e1888cf9ed6534"
-url = "https://github.com/endevco/aube/releases/download/v1.4.0/aube-v1.4.0-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/endevco/aube/releases/assets/407768475"
+checksum = "sha256:963d276cef7f039a5750bf18d30af7c2457f6d5804fa24bd784458e22a4d1a14"
+url = "https://github.com/endevco/aube/releases/download/v1.10.4/aube-v1.10.4-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/endevco/aube/releases/assets/417151945"
 provenance = "github-attestations"
 
 [tools.aube."platforms.windows-x64"]
-checksum = "sha256:f1ce44f9f9cfd119dd1dce4033074277063108d39128ef970d04e4299d4468d1"
-url = "https://github.com/endevco/aube/releases/download/v1.4.0/aube-v1.4.0-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/endevco/aube/releases/assets/407772522"
+checksum = "sha256:631566d6802cbae88c35a54d8746ac36f56d563a0a680b6c5d882db8b9d495d5"
+url = "https://github.com/endevco/aube/releases/download/v1.10.4/aube-v1.10.4-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/endevco/aube/releases/assets/417123778"
 provenance = "github-attestations"
 
 [[tools.communique]]
-version = "1.1.2"
+version = "1.1.3"
 backend = "github:jdx/communique"
 
 [tools.communique."platforms.linux-arm64"]
-checksum = "sha256:7bb0843207fc3d7b5df2a5c0198bb10539cf13a6b247b4adfbf6b302a68f03de"
-url = "https://github.com/jdx/communique/releases/download/v1.1.2/communique-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/communique/releases/assets/405964161"
+checksum = "sha256:ed4cfaf449d75f12734be4b5508104fe4bc224e1694052c31dc78b025408a918"
+url = "https://github.com/jdx/communique/releases/download/v1.1.3/communique-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/communique/releases/assets/413754362"
 
 [tools.communique."platforms.linux-arm64-musl"]
-checksum = "sha256:b663407be77a370c209df40307b82e436f56a6bc23d4e423510d62ac6e1fedf4"
-url = "https://github.com/jdx/communique/releases/download/v1.1.2/communique-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/jdx/communique/releases/assets/405964743"
+checksum = "sha256:ece7d0bf5946b86bdead1e7fbc6dd40a41585c1c950f3b637489cb783662bf9f"
+url = "https://github.com/jdx/communique/releases/download/v1.1.3/communique-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/jdx/communique/releases/assets/413753918"
 
 [tools.communique."platforms.linux-x64"]
-checksum = "sha256:5e74ead7037f42940c7dba4f6aa4ed968920cbb55a047aa0d291b0c675c65676"
-url = "https://github.com/jdx/communique/releases/download/v1.1.2/communique-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/communique/releases/assets/405963914"
-provenance = "github-attestations"
+checksum = "sha256:61b46cf231882e0a10e0489df310ec9b875e83da0f38b60d6ac7bd67e09a15dc"
+url = "https://github.com/jdx/communique/releases/download/v1.1.3/communique-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/communique/releases/assets/413753688"
 
 [tools.communique."platforms.linux-x64-musl"]
-checksum = "sha256:01a6a8b49e635a5a209fdaf6c7b2e976374debc2db1c846c033f567fdba0d86c"
-url = "https://github.com/jdx/communique/releases/download/v1.1.2/communique-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/jdx/communique/releases/assets/405964691"
+checksum = "sha256:9c8d784d8bb91e83cd467ed0d26be6ed3290a61a482413d42b12321aee20d5c0"
+url = "https://github.com/jdx/communique/releases/download/v1.1.3/communique-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/jdx/communique/releases/assets/413753784"
 
 [tools.communique."platforms.macos-arm64"]
-checksum = "sha256:459993e31a6c4ccbd09882f5679a2bc1ea5d9068701ecefc411a00fb69ce82e6"
-url = "https://github.com/jdx/communique/releases/download/v1.1.2/communique-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/jdx/communique/releases/assets/405964098"
+checksum = "sha256:7113bdb84a75ca23cccada1acc348a0770ec16a4b12a128f7b3f6b8c7764d10c"
+url = "https://github.com/jdx/communique/releases/download/v1.1.3/communique-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/jdx/communique/releases/assets/413753891"
+provenance = "github-attestations"
 
 [tools.communique."platforms.windows-x64"]
-checksum = "sha256:3cc0e880ac2168aed3163223627bbd1eee62e07a9901cb85cb507c6c8927bc93"
-url = "https://github.com/jdx/communique/releases/download/v1.1.2/communique-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/jdx/communique/releases/assets/405964430"
+checksum = "sha256:887a39f27f86fa785fd3c27e13b4b0360d68827a9bb747cbe1929fd691708456"
+url = "https://github.com/jdx/communique/releases/download/v1.1.3/communique-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/jdx/communique/releases/assets/413755231"
 
 [[tools.node]]
 version = "25.9.0"
 backend = "core:node"
 
+[tools.node."platforms.linux-arm64"]
+checksum = "sha256:8fb4283301b8c720fc9f18bffff0f659e72cc14d0cf207a3bb411808aaa73a57"
+url = "https://nodejs.org/dist/v25.9.0/node-v25.9.0-linux-arm64.tar.gz"
+
+[tools.node."platforms.linux-arm64-musl"]
+checksum = "sha256:97f6fe125faa51f84a7bb600d0cd7aefcfaaa0e75a5f49a7c61c3df91d12d535"
+url = "https://unofficial-builds.nodejs.org/download/release/v25.9.0/node-v25.9.0-linux-arm64-musl.tar.gz"
+
 [tools.node."platforms.linux-x64"]
 checksum = "sha256:134e55b2408448a219760fe04dc44d6851f9de8a79549021ffd870e9082d9e7b"
 url = "https://nodejs.org/dist/v25.9.0/node-v25.9.0-linux-x64.tar.gz"
+
+[tools.node."platforms.linux-x64-musl"]
+checksum = "sha256:1ac44af012be6bc17f1e3723edbf12897c0baeae5d1dc75b9f97d71413e4c8f5"
+url = "https://unofficial-builds.nodejs.org/download/release/v25.9.0/node-v25.9.0-linux-x64-musl.tar.gz"
 
 [tools.node."platforms.macos-arm64"]
 checksum = "sha256:e479f3c469d3d9303a44f00a8ea37a3788395d171bb8059c48a4bbbd2e371b59"
@@ -110,32 +142,67 @@ url = "https://nodejs.org/dist/v25.9.0/node-v25.9.0-darwin-arm64.tar.gz"
 checksum = "sha256:7d737b53ce191142bfa1c17cfa5b070d96e84eebf76b8dd06d84981cbdc3f7e3"
 url = "https://nodejs.org/dist/v25.9.0/node-v25.9.0-darwin-x64.tar.gz"
 
+[tools.node."platforms.windows-x64"]
+checksum = "sha256:929552b8305effac843ba7b4270c437aefb702fc3fbd73fcd1bffd35d4ac284e"
+url = "https://nodejs.org/dist/v25.9.0/node-v25.9.0-win-x64.zip"
+
 [[tools.python]]
-version = "3.14.4"
+version = "3.14.5"
 backend = "core:python"
 
+[tools.python."platforms.linux-arm64"]
+checksum = "sha256:bea1aa66159eaf97ade1225e40b7060d709154da961aa37792bb8066d8f6af49"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260510/cpython-3.14.5+20260510-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
+provenance = "github-attestations"
+
+[tools.python."platforms.linux-arm64-musl"]
+checksum = "sha256:011e29568c2a6ed64938fba0793ca6225c99bc4d804143a26875b5f9ee3fc7fa"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260510/cpython-3.14.5+20260510-aarch64-unknown-linux-musl-install_only_stripped.tar.gz"
+provenance = "github-attestations"
+
 [tools.python."platforms.linux-x64"]
-checksum = "sha256:fe9a9c32d13870af632cbac3dfc7528ae53597e94472aa4c7d6a42e8166136cd"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260414/cpython-3.14.4+20260414-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+checksum = "sha256:dc10977b0db3bef1ee2275107fde6fe9c148135b556fa352e83c6baa67d17ed6"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260510/cpython-3.14.5+20260510-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+provenance = "github-attestations"
+
+[tools.python."platforms.linux-x64-musl"]
+checksum = "sha256:6bc02ce4575e5d5379f4533f3d3f77acfdfd5ccd9c4edf790fcdd84578a1df01"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260510/cpython-3.14.5+20260510-x86_64-unknown-linux-musl-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.macos-arm64"]
-checksum = "sha256:6f304f4ec30854611f23316578302235fb517cd970519ecdd11a8c4db87fd843"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260414/cpython-3.14.4+20260414-aarch64-apple-darwin-install_only_stripped.tar.gz"
+checksum = "sha256:1bb0b3d45448dfe7e916dc62144cfd7d7a611dc6ccf05b8bb71662cc5c2a1ad2"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260510/cpython-3.14.5+20260510-aarch64-apple-darwin-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.macos-x64"]
-checksum = "sha256:d51250a32fa5d9f0799c7bcb71720c27b10a3afd4a7de288120f96085d508a5a"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260414/cpython-3.14.4+20260414-x86_64-apple-darwin-install_only_stripped.tar.gz"
+checksum = "sha256:38662e526797db4e90b3381706b96821979fece0b536ac14b5c4e1a97e0590d5"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260510/cpython-3.14.5+20260510-x86_64-apple-darwin-install_only_stripped.tar.gz"
+provenance = "github-attestations"
+
+[tools.python."platforms.windows-x64"]
+checksum = "sha256:4d26ade49e9571ccb3bd1a88cfc72c52b11a9a9f6e204a57f38592aed137566a"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260510/cpython-3.14.5+20260510-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [[tools.zizmor]]
 version = "1.24.1"
 backend = "aqua:zizmorcore/zizmor"
 
+[tools.zizmor."platforms.linux-arm64"]
+checksum = "sha256:d66e37ef8a375fb07939c630ebf9709a6e0f20242bdc3faf672a7ed97e0b768d"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.24.1/zizmor-aarch64-unknown-linux-gnu.tar.gz"
+provenance = "github-attestations"
+
+[tools.zizmor."platforms.linux-arm64-musl"]
+provenance = "github-attestations"
+
 [tools.zizmor."platforms.linux-x64"]
 checksum = "sha256:a8000f3c683319a523d3b20df0e75457ba591f049cfcbfa98966631b56733c03"
 url = "https://github.com/zizmorcore/zizmor/releases/download/v1.24.1/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+provenance = "github-attestations"
+
+[tools.zizmor."platforms.linux-x64-musl"]
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.macos-arm64"]
@@ -146,4 +213,9 @@ provenance = "github-attestations"
 [tools.zizmor."platforms.macos-x64"]
 checksum = "sha256:721ba70d7fca753aeef1a4ee959a9bc20c55784d4faa6c56e66129a2611fd52f"
 url = "https://github.com/zizmorcore/zizmor/releases/download/v1.24.1/zizmor-x86_64-apple-darwin.tar.gz"
+provenance = "github-attestations"
+
+[tools.zizmor."platforms.windows-x64"]
+checksum = "sha256:b777ec2cb1098139ba74b32e30d11ed149c69ab692d23788c466d4a31704bd4b"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.24.1/zizmor-x86_64-pc-windows-msvc.zip"
 provenance = "github-attestations"

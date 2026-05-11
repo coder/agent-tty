@@ -1,12 +1,12 @@
 [tools]
 actionlint = "1.7.12"
-communique = "1.1.2"
+communique = "1.1.3"
 zizmor = "1.24.1"
 # CI installs with `mise install --locked`, so update mise.lock whenever tool
 # versions or supported CI platforms change.
 node = "25"
 python = "3"
-aube = "1.4.0"
+aube = "1.10.4"
 
 [tasks.bootstrap]
 description = "Install deps and Chromium for local development"

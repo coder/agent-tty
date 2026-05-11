@@ -66,7 +66,7 @@
     "version:json": "tsx src/cli/main.ts version --json"
   },
   "devDependencies": {
-    "@ai-hero/sandcastle": "^0.5.6",
+    "@ai-hero/sandcastle": "^0.5.10",
     "@effect/cluster": "^0.57.0",
     "@effect/rpc": "^0.74.0",
     "@effect/sql": "^0.50.0",
@@ -96,7 +96,9 @@
       "@coder/libghostty-vt-node": true,
       "esbuild": true,
       "fsevents": true,
-      "node-pty": true
+      "node-pty": true,
+      "@parcel/watcher": true,
+      "msgpackr-extract": true
     }
   }
 }
