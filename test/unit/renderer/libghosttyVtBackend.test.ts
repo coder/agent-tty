@@ -1,16 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { RendererBackend } from '../../../src/renderer/backend.js';
 import { LibghosttyVtBackend } from '../../../src/renderer/libghosttyVt/backend.js';
 import type { LibghosttyVtNativeModule } from '../../../src/renderer/libghosttyVt/backend.js';
 import type {
   RenderProfileConfig,
   ReplayInput,
-  ReplayState,
-  ScreenshotResult,
-  SemanticSnapshot,
 } from '../../../src/renderer/types.js';
 import { createLogger } from '../../../src/util/logger.js';
+
+import { createFakeBackend } from '../../helpers/fakeBackend.js';
 
 function createProfile(): RenderProfileConfig {
   return {
@@ -126,74 +124,6 @@ function createNativeFixture(options: { visibleText?: string } = {}) {
   };
 }
 
-function createFallbackBackend(): RendererBackend & {
-  bootMock: ReturnType<typeof vi.fn>;
-  replayToMock: ReturnType<typeof vi.fn>;
-  screenshotMock: ReturnType<typeof vi.fn>;
-  disposeMock: ReturnType<typeof vi.fn>;
-} {
-  let booted = false;
-  const bootMock = vi.fn(() => {
-    booted = true;
-    return Promise.resolve();
-  });
-  const replayToMock = vi.fn(
-    (input: ReplayInput): Promise<ReplayState> =>
-      Promise.resolve({
-        lastSeq: input.targetSeq,
-        cols: input.initialCols,
-        rows: input.initialRows,
-        cursorRow: 0,
-        cursorCol: 0,
-      }),
-  );
-  const screenshotMock = vi.fn(
-    (outputPath: string): Promise<ScreenshotResult> =>
-      Promise.resolve({
-        sessionId: 'session-01',
-        capturedAtSeq: 2,
-        profileName: 'reference-dark',
-        cols: 12,
-        rows: 5,
-        artifactPath: outputPath,
-        pngSizeBytes: 123,
-        rendererBackend: 'ghostty-web',
-      }),
-  );
-  const disposeMock = vi.fn(() => {
-    booted = false;
-    return Promise.resolve();
-  });
-
-  return {
-    rendererBackend: 'ghostty-web',
-    get isBooted() {
-      return booted;
-    },
-    boot: bootMock,
-    bootMock,
-    replayTo: replayToMock,
-    replayToMock,
-    snapshot: vi.fn(
-      (): Promise<SemanticSnapshot> =>
-        Promise.resolve({
-          sessionId: 'session-01',
-          capturedAtSeq: 2,
-          cols: 12,
-          rows: 5,
-          cursorRow: 0,
-          cursorCol: 0,
-          isAltScreen: false,
-          visibleLines: [],
-        }),
-    ),
-    screenshot: screenshotMock,
-    screenshotMock,
-    getVisibleText: vi.fn().mockResolvedValue(''),
-    dispose: disposeMock,
-    disposeMock,
-  };
-}
 
 function createBackend(
   fixture = createNativeFixture(),
@@ -357,7 +287,17 @@ describe('LibghosttyVtBackend', () => {
 
   it('uses ghostty-web fallback for screenshots and preserves fallback metadata', async () => {
     const fixture = createNativeFixture();
-    const fallback = createFallbackBackend();
+    const fallback = createFakeBackend({
+      rendererBackend: 'ghostty-web',
+      writePng: false,
+      resultOverrides: {
+        capturedAtSeq: 2,
+        cols: 12,
+        rows: 5,
+        pngSizeBytes: 123,
+        rendererBackend: 'ghostty-web',
+      },
+    });
     const backend = createBackend(fixture, {
       fallbackFactory: () => fallback,
     });
@@ -383,7 +323,17 @@ describe('LibghosttyVtBackend', () => {
 
   it('disposes native and fallback resources idempotently', async () => {
     const fixture = createNativeFixture();
-    const fallback = createFallbackBackend();
+    const fallback = createFakeBackend({
+      rendererBackend: 'ghostty-web',
+      writePng: false,
+      resultOverrides: {
+        capturedAtSeq: 2,
+        cols: 12,
+        rows: 5,
+        pngSizeBytes: 123,
+        rendererBackend: 'ghostty-web',
+      },
+    });
     const backend = createBackend(fixture, {
       fallbackFactory: () => fallback,
     });

@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { RendererBackend } from '../../../src/renderer/backend.js';
 import {
   DEFAULT_RENDERER_NAME,
   createRendererBackend,
@@ -8,11 +7,9 @@ import {
 } from '../../../src/renderer/index.js';
 import type {
   RenderProfileConfig,
-  ReplayInput,
-  ReplayState,
-  ScreenshotResult,
-  SemanticSnapshot,
 } from '../../../src/renderer/types.js';
+
+import { createFakeBackend } from '../../helpers/fakeBackend.js';
 
 function createProfile(): RenderProfileConfig {
   return {
@@ -23,51 +20,6 @@ function createProfile(): RenderProfileConfig {
     cursorStyle: 'block',
     backgroundColor: '#000000',
     foregroundColor: '#ffffff',
-  };
-}
-
-function createFakeBackend(rendererBackend: string): RendererBackend {
-  return {
-    rendererBackend,
-    isBooted: false,
-    boot: vi.fn().mockResolvedValue(undefined),
-    replayTo: vi.fn(
-      (input: ReplayInput): Promise<ReplayState> =>
-        Promise.resolve({
-          lastSeq: input.targetSeq,
-          cols: input.initialCols,
-          rows: input.initialRows,
-          cursorRow: 0,
-          cursorCol: 0,
-        }),
-    ),
-    snapshot: vi.fn(
-      (): Promise<SemanticSnapshot> =>
-        Promise.resolve({
-          sessionId: 'session-01',
-          capturedAtSeq: 0,
-          cols: 80,
-          rows: 24,
-          cursorRow: 0,
-          cursorCol: 0,
-          isAltScreen: false,
-          visibleLines: [],
-        }),
-    ),
-    screenshot: vi.fn(
-      (outputPath: string): Promise<ScreenshotResult> =>
-        Promise.resolve({
-          sessionId: 'session-01',
-          capturedAtSeq: 0,
-          profileName: 'reference-dark',
-          cols: 80,
-          rows: 24,
-          artifactPath: outputPath,
-          pngSizeBytes: 1,
-        }),
-    ),
-    getVisibleText: vi.fn().mockResolvedValue(''),
-    dispose: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -100,7 +52,7 @@ describe('renderer registry', () => {
   });
 
   it('lazy-loads the native backend module for libghostty-vt only', async () => {
-    const fakeBackend = createFakeBackend('libghostty-vt');
+    const fakeBackend = createFakeBackend({ rendererBackend: 'libghostty-vt' });
     const LibghosttyVtBackend = vi.fn(function FakeLibghosttyVtBackend() {
       return fakeBackend;
     });

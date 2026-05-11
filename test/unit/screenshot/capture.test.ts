@@ -1,17 +1,9 @@
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { createTemporarySessionDir } from '../../helpers.js';
-
-import type { RendererBackend } from '../../../src/renderer/backend.js';
-import type { ScreenshotResult } from '../../../src/protocol/messages.js';
-import type {
-  ReplayInput,
-  ReplayState,
-  SemanticSnapshot,
-} from '../../../src/renderer/types.js';
 
 import {
   captureScreenshotResult,
@@ -23,87 +15,14 @@ import {
   screenshotFilename,
 } from '../../../src/storage/artifactPaths.js';
 
+import { createFakeBackend } from '../../helpers/fakeBackend.js';
+
 const TEST_SHA256 = 'a'.repeat(64);
 const TEST_RENDER_PROFILE_HASH = 'b'.repeat(64);
 // First four bytes of the PNG magic signature (0x89 'P' 'N' 'G'). Enough to
 // satisfy the test that we wrote/read the same buffer; the renderer
 // produces a real PNG, but these unit tests do not validate the format.
 const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
-
-interface FakeBackendOptions {
-  resultOverrides?: Partial<ScreenshotResult>;
-  writePng?: boolean;
-  fail?: Error;
-  onScreenshot?: (
-    outputPath: string,
-    options?: { showCursor?: boolean },
-  ) => void;
-}
-
-function createFakeBackend(options: FakeBackendOptions = {}): RendererBackend {
-  const writePng = options.writePng ?? true;
-
-  return {
-    rendererBackend: 'fake-renderer',
-    isBooted: false,
-    boot: vi.fn().mockResolvedValue(undefined),
-    replayTo: vi.fn(
-      (input: ReplayInput): Promise<ReplayState> =>
-        Promise.resolve({
-          lastSeq: input.targetSeq,
-          cols: input.initialCols,
-          rows: input.initialRows,
-          cursorRow: 0,
-          cursorCol: 0,
-        }),
-    ),
-    snapshot: vi.fn(
-      (): Promise<SemanticSnapshot> =>
-        Promise.resolve({
-          sessionId: 'session-01',
-          capturedAtSeq: 0,
-          cols: 80,
-          rows: 24,
-          cursorRow: 0,
-          cursorCol: 0,
-          isAltScreen: false,
-          visibleLines: [],
-        }),
-    ),
-    screenshot: vi.fn(
-      async (
-        outputPath: string,
-        screenshotOptions?: { showCursor?: boolean },
-      ): Promise<ScreenshotResult> => {
-        options.onScreenshot?.(outputPath, screenshotOptions);
-        if (options.fail !== undefined) {
-          throw options.fail;
-        }
-        if (writePng) {
-          await writeFile(outputPath, PNG_HEADER);
-        }
-        return {
-          sessionId: 'session-01',
-          capturedAtSeq: 5,
-          profileName: 'reference-dark',
-          cols: 80,
-          rows: 24,
-          artifactPath: outputPath,
-          pngSizeBytes: 4,
-          cursorVisible: screenshotOptions?.showCursor === true,
-          rendererBackend: 'fake-renderer',
-          pixelWidth: 800,
-          pixelHeight: 600,
-          sha256: TEST_SHA256,
-          renderProfileHash: TEST_RENDER_PROFILE_HASH,
-          ...options.resultOverrides,
-        };
-      },
-    ),
-    getVisibleText: vi.fn().mockResolvedValue(''),
-    dispose: vi.fn().mockResolvedValue(undefined),
-  };
-}
 
 async function createSessionDir(sessionId = 'session-01'): Promise<string> {
   return await createTemporarySessionDir(

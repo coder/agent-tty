@@ -6,26 +6,12 @@ import { setImmediate as setImmediatePromise } from 'node:timers/promises';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HostRendererManager } from '../../../src/host/renderer.js';
-import type { RendererBackend } from '../../../src/renderer/backend.js';
-import type {
-  RenderProfileConfig,
-  ReplayInput,
-  ReplayState,
-  ScreenshotResult,
-  SemanticSnapshot,
-} from '../../../src/renderer/types.js';
+import type { RenderProfileConfig, ReplayInput } from '../../../src/renderer/types.js';
 
-type MockFn = ReturnType<typeof vi.fn>;
-
-type FakeRendererBackend = RendererBackend & {
-  bootMock: MockFn;
-  replayToMock: MockFn;
-  snapshotMock: MockFn;
-  screenshotMock: MockFn;
-  getVisibleTextMock: MockFn;
-  disposeMock: MockFn;
-  setBooted: (value: boolean) => void;
-};
+import {
+  createFakeBackend,
+  type FakeRendererBackend,
+} from '../../helpers/fakeBackend.js';
 
 function createProfile(name = 'default'): RenderProfileConfig {
   return {
@@ -54,84 +40,6 @@ function createReplayInput(overrides: Partial<ReplayInput> = {}): ReplayInput {
     ],
     targetSeq: 0,
     ...overrides,
-  };
-}
-
-function createFakeBackend(
-  options: {
-    bootImplementation?: () => Promise<void>;
-  } = {},
-): FakeRendererBackend {
-  let booted = false;
-  const bootMock = vi.fn((): Promise<void> => {
-    if (options.bootImplementation !== undefined) {
-      return options.bootImplementation();
-    }
-
-    booted = true;
-    return Promise.resolve();
-  });
-  const replayToMock = vi.fn(
-    (input: ReplayInput): Promise<ReplayState> =>
-      Promise.resolve({
-        lastSeq: input.targetSeq,
-        cols: input.initialCols,
-        rows: input.initialRows,
-        cursorRow: 0,
-        cursorCol: 0,
-      }),
-  );
-  const snapshotMock = vi.fn(
-    (): Promise<SemanticSnapshot> =>
-      Promise.resolve({
-        sessionId: 'session-01',
-        capturedAtSeq: 0,
-        cols: 80,
-        rows: 24,
-        cursorRow: 0,
-        cursorCol: 0,
-        isAltScreen: false,
-        visibleLines: [],
-      }),
-  );
-  const screenshotMock = vi.fn(
-    (outputPath: string): Promise<ScreenshotResult> =>
-      Promise.resolve({
-        sessionId: 'session-01',
-        capturedAtSeq: 0,
-        profileName: 'default',
-        cols: 80,
-        rows: 24,
-        artifactPath: outputPath,
-        pngSizeBytes: 1,
-      }),
-  );
-  const getVisibleTextMock = vi.fn((): Promise<string> => Promise.resolve(''));
-  const disposeMock = vi.fn((): Promise<void> => {
-    booted = false;
-    return Promise.resolve();
-  });
-
-  return {
-    rendererBackend: 'fake-renderer',
-    boot: bootMock,
-    bootMock,
-    replayTo: replayToMock,
-    replayToMock,
-    snapshot: snapshotMock,
-    snapshotMock,
-    screenshot: screenshotMock,
-    screenshotMock,
-    getVisibleText: getVisibleTextMock,
-    getVisibleTextMock,
-    dispose: disposeMock,
-    disposeMock,
-    get isBooted() {
-      return booted;
-    },
-    setBooted(value: boolean) {
-      booted = value;
-    },
   };
 }
 
