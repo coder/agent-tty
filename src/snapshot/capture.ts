@@ -3,6 +3,7 @@ import type { SemanticSnapshot } from '../renderer/types.js';
 
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { SnapshotResultSchema } from '../protocol/schemas.js';
+import { parseValidatedResult } from '../protocol/validation.js';
 import {
   appendArtifact,
   createArtifactEntry,
@@ -21,15 +22,7 @@ export function parseSnapshotResult(
   rawResult: unknown,
   message = 'Unexpected response from host',
 ): SnapshotResult {
-  const parsedResult = SnapshotResultSchema.safeParse(rawResult);
-  if (!parsedResult.success) {
-    throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
-      message,
-      details: { issues: parsedResult.error.issues },
-    });
-  }
-
-  return parsedResult.data;
+  return parseValidatedResult(SnapshotResultSchema, rawResult, message);
 }
 
 export function createSnapshotResult(

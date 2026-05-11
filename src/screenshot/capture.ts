@@ -5,8 +5,8 @@ import { ulid } from 'ulid';
 import type { ScreenshotResult } from '../protocol/messages.js';
 import type { RendererBackend } from '../renderer/backend.js';
 
-import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { ScreenshotResultSchema } from '../protocol/schemas.js';
+import { parseValidatedResult } from '../protocol/validation.js';
 import {
   appendArtifact,
   createArtifactEntry,
@@ -46,15 +46,7 @@ export function parseScreenshotResult(
   rawResult: unknown,
   message = 'Unexpected response from host',
 ): ScreenshotResult {
-  const parsedResult = ScreenshotResultSchema.safeParse(rawResult);
-  if (!parsedResult.success) {
-    throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
-      message,
-      details: { issues: parsedResult.error.issues },
-    });
-  }
-
-  return parsedResult.data;
+  return parseValidatedResult(ScreenshotResultSchema, rawResult, message);
 }
 
 export async function captureScreenshotResult(
