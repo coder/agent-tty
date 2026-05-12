@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   eventLogPath: vi.fn(),
   writeTextFileAtomic: vi.fn(),
   appendArtifactWithRollback: vi.fn(),
+  // Test-internal delegate used by the appendArtifactWithRollback mock.
   appendArtifact: vi.fn(),
   createArtifactEntry: vi.fn(),
   ensureArtifactsDir: vi.fn(),
@@ -292,15 +293,24 @@ describe('record export command', () => {
         markerCount: 1,
       },
     });
-    expect(mocks.appendArtifact).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01',
-      expect.objectContaining({
-        kind: 'recording',
-        filename: 'recording-2-asciicast.cast',
-        sha256: expectedSha256,
-        bytes: Buffer.byteLength(expectedContents, 'utf8'),
-      }),
-    );
+    const appendCall = mocks.appendArtifactWithRollback.mock.calls.at(-1) as [
+      {
+        sessionDir: string;
+        entry: Record<string, unknown>;
+        rollbackArtifactPath?: string;
+      },
+    ];
+    expect(appendCall[0]).toMatchObject({
+      sessionDir: '/tmp/agent-tty/sessions/session-01',
+      rollbackArtifactPath:
+        '/tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast',
+    });
+    expect(appendCall[0].entry).toMatchObject({
+      kind: 'recording',
+      filename: 'recording-2-asciicast.cast',
+      sha256: expectedSha256,
+      bytes: Buffer.byteLength(expectedContents, 'utf8'),
+    });
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'record export',
       json: true,

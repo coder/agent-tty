@@ -381,6 +381,9 @@ export async function runRecordExportCommand(
       metadata: artifactMetadata,
     });
 
+    // Explicit --out files belong to the user and are valid without a
+    // manifest entry; only clean up default in-session artifacts that would
+    // otherwise be orphaned.
     await appendArtifactWithRollback({
       sessionDir: sessionDirectory,
       entry: artifactEntry,

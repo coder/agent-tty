@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   socketPath: vi.fn(),
   withOfflineReplayRenderer: vi.fn(),
   appendArtifactWithRollback: vi.fn(),
+  // Test-internal delegate used by the appendArtifactWithRollback mock.
   appendArtifact: vi.fn(),
   createArtifactEntry: vi.fn(),
   ensureArtifactsDir: vi.fn(),

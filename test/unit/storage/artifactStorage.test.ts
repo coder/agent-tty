@@ -208,7 +208,7 @@ describe('artifact manifest storage', () => {
     ).resolves.toMatch(/\n$/u);
   });
 
-  it('preserves all entries when many concurrent appendArtifact() calls race for the same session', async () => {
+  it('preserves all entries when many concurrent appendArtifactWithRollback() calls race for the same session', async () => {
     const sessionDir = await createSessionDir();
     const concurrentAppends = 20;
 
@@ -329,6 +329,8 @@ describe('artifact manifest storage', () => {
       'utf8',
     );
 
+    // The second append never runs because KeyedSerializer propagates the
+    // first rejection without calling queued callbacks.
     const results = await Promise.allSettled([
       appendArtifactWithRollback({
         sessionDir,
