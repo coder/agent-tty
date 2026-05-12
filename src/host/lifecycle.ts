@@ -25,11 +25,26 @@ import {
   sessionDir,
   socketPath,
 } from '../storage/sessionPaths.js';
+import { throwIfAborted } from '../util/abort.js';
 import { invariant } from '../util/assert.js';
 import { sendRpc } from './rpcClient.js';
 
 const DESTROY_POLL_INTERVAL_MS = 100;
 const DESTROY_MAX_ATTEMPTS = 50;
+
+interface PollOptions {
+  readonly signal?: AbortSignal;
+}
+
+function pollOptions(signal?: AbortSignal): PollOptions {
+  return signal === undefined ? {} : { signal };
+}
+
+function delayOptions(
+  signal?: AbortSignal,
+): { signal: AbortSignal } | undefined {
+  return signal === undefined ? undefined : { signal };
+}
 
 interface NodeError extends Error {
   code?: string;
@@ -246,6 +261,7 @@ async function waitForTerminalManifest(
   manifestFile: string,
   maxAttempts: number = DESTROY_MAX_ATTEMPTS,
   intervalMs: number = DESTROY_POLL_INTERVAL_MS,
+  options: PollOptions = {},
 ): Promise<SessionRecord | null> {
   invariant(
     Number.isInteger(maxAttempts) && maxAttempts > 0,
@@ -256,7 +272,11 @@ async function waitForTerminalManifest(
     'intervalMs must be a non-negative integer',
   );
 
+  const { signal } = options;
+  throwIfAborted(signal);
+
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    throwIfAborted(signal);
     const manifest = await readManifest(manifestFile);
 
     if (isTerminalSessionStatus(manifest.status)) {
@@ -264,7 +284,7 @@ async function waitForTerminalManifest(
     }
 
     if (attempt + 1 < maxAttempts) {
-      await delay(intervalMs);
+      await delay(intervalMs, undefined, delayOptions(signal));
     }
   }
 
@@ -277,6 +297,7 @@ async function waitForProcessAndSocketShutdown(
   socketFile: string,
   maxAttempts: number = DESTROY_MAX_ATTEMPTS,
   intervalMs: number = DESTROY_POLL_INTERVAL_MS,
+  options: PollOptions = {},
 ): Promise<boolean> {
   invariant(
     Number.isInteger(maxAttempts) && maxAttempts > 0,
@@ -287,7 +308,11 @@ async function waitForProcessAndSocketShutdown(
     'intervalMs must be a non-negative integer',
   );
 
+  const { signal } = options;
+  throwIfAborted(signal);
+
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    throwIfAborted(signal);
     const hostAlive = isProcessAlive(hostPid);
     const childAlive = isProcessAlive(childPid);
     const socketPresent = await pathExists(socketFile);
@@ -297,7 +322,7 @@ async function waitForProcessAndSocketShutdown(
     }
 
     if (attempt + 1 < maxAttempts) {
-      await delay(intervalMs);
+      await delay(intervalMs, undefined, delayOptions(signal));
     }
   }
 
@@ -458,10 +483,17 @@ export function launchHost(config: LaunchHostConfig): number {
   return child.pid;
 }
 
+export interface DestroySessionOptions {
+  readonly signal?: AbortSignal;
+}
+
 export async function destroySession(
   sessionId: string,
   force?: boolean,
+  options: DestroySessionOptions = {},
 ): Promise<void> {
+  const { signal } = options;
+  throwIfAborted(signal);
   const { sessionDirectory, manifestFile, socketFile } =
     getSessionPaths(sessionId);
   const manifest = await readSessionManifestOrThrow(sessionId, manifestFile);
@@ -493,6 +525,9 @@ export async function destroySession(
       manifest.hostPid,
       manifest.childPid,
       socketFile,
+      DESTROY_MAX_ATTEMPTS,
+      DESTROY_POLL_INTERVAL_MS,
+      pollOptions(signal),
     );
     await reconcileSession(sessionDirectory);
 
@@ -514,7 +549,8 @@ export async function destroySession(
   }
 
   try {
-    await sendRpc(socketFile, 'destroy');
+    throwIfAborted(signal);
+    await sendRpc(socketFile, 'destroy', undefined, undefined, signal);
   } catch (error) {
     if (
       !(error instanceof CliError) ||
@@ -535,7 +571,12 @@ export async function destroySession(
     throw error;
   }
 
-  const terminalManifest = await waitForTerminalManifest(manifestFile);
+  const terminalManifest = await waitForTerminalManifest(
+    manifestFile,
+    DESTROY_MAX_ATTEMPTS,
+    DESTROY_POLL_INTERVAL_MS,
+    pollOptions(signal),
+  );
   if (terminalManifest !== null) {
     return;
   }

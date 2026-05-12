@@ -13,7 +13,13 @@ import {
   RpcResponseSchema,
   type RpcMethod,
 } from '../protocol/messages.js';
+import {
+  addAbortListener,
+  makeAbortError,
+  throwIfAborted,
+} from '../util/abort.js';
 import { invariant } from '../util/assert.js';
+import { ResourceScope } from '../util/resourceScope.js';
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_RPC_BUFFER_BYTES = 1_048_576;
@@ -95,7 +101,9 @@ export async function sendRpc(
   method: string,
   params?: Record<string, unknown>,
   timeoutMs?: number,
+  signal?: AbortSignal,
 ): Promise<unknown> {
+  throwIfAborted(signal);
   const effectiveTimeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
   invariant(
     Number.isFinite(effectiveTimeoutMs) && effectiveTimeoutMs >= 0,
@@ -116,6 +124,10 @@ export async function sendRpc(
 
   return await new Promise<unknown>((resolve, reject) => {
     const socket = net.connect({ path: socketPath });
+    const scope = new ResourceScope();
+    scope.add('rpc client socket', () => {
+      socket.destroy();
+    });
     let settled = false;
     let responseHandled = false;
     let buffer = '';
@@ -126,8 +138,9 @@ export async function sendRpc(
       }
 
       settled = true;
-      socket.destroy();
-      reject(error);
+      void scope.close().then(() => {
+        reject(error);
+      }, reject);
     };
 
     const rejectWithTransportError = (error: unknown): void => {
@@ -142,9 +155,23 @@ export async function sendRpc(
       }
 
       settled = true;
-      socket.destroy();
-      resolve(result);
+      void scope.close().then(() => {
+        resolve(result);
+      }, reject);
     };
+
+    if (signal !== undefined) {
+      addAbortListener(scope, 'rpc client abort listener', signal, () => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        void scope.close().then(() => {
+          reject(makeAbortError(signal));
+        }, reject);
+      });
+    }
 
     socket.setEncoding('utf8');
     socket.setTimeout(effectiveTimeoutMs);

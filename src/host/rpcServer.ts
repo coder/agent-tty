@@ -10,14 +10,24 @@ import {
   type RpcMethod,
   type RpcResponse,
 } from '../protocol/messages.js';
+import { makeAbortError } from '../util/abort.js';
 import { invariant } from '../util/assert.js';
+import { ResourceScope } from '../util/resourceScope.js';
 
 const MAX_UNIX_SOCKET_PATH = 104;
 const MAX_RPC_BUFFER_BYTES = 1_048_576;
 
+const SOCKET_LIVENESS_PROBE_TIMEOUT_MS = 1_000;
 const UNKNOWN_REQUEST_ID = 'unknown';
 
-export type MethodHandler = (params: unknown) => Promise<unknown>;
+export interface MethodContext {
+  readonly signal: AbortSignal;
+}
+
+export type MethodHandler = (
+  params: unknown,
+  context: MethodContext,
+) => Promise<unknown>;
 
 function isKnownRpcMethod(method: string): method is RpcMethod {
   return Object.hasOwn(RpcMethodSchemas, method);
@@ -46,22 +56,53 @@ async function socketPathExists(socketPath: string): Promise<boolean> {
 
 async function probeSocketLiveness(socketPath: string): Promise<boolean> {
   return await new Promise<boolean>((resolve, reject) => {
+    const scope = new ResourceScope();
     const probe = net.connect({ path: socketPath });
+    let settled = false;
 
-    probe.once('connect', () => {
-      probe.end();
-      resolve(true);
-    });
-
-    probe.once('error', (error: NodeJS.ErrnoException) => {
-      probe.destroy();
-
-      if (error.code === 'ECONNREFUSED' || error.code === 'ENOENT') {
-        resolve(false);
+    const resolveWithValue = (value: boolean): void => {
+      if (settled) {
         return;
       }
 
-      reject(error);
+      settled = true;
+      void scope.close().then(() => {
+        resolve(value);
+      }, reject);
+    };
+
+    const rejectWithError = (error: unknown): void => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      void scope.close().then(() => {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }, reject);
+    };
+
+    scope.add('rpc liveness probe socket', () => {
+      probe.destroy();
+    });
+    const timeoutHandle = setTimeout(() => {
+      rejectWithError(new Error(`Timed out probing RPC socket: ${socketPath}`));
+    }, SOCKET_LIVENESS_PROBE_TIMEOUT_MS);
+    scope.add('rpc liveness probe timeout', () => {
+      clearTimeout(timeoutHandle);
+    });
+
+    probe.once('connect', () => {
+      resolveWithValue(true);
+    });
+
+    probe.once('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'ECONNREFUSED' || error.code === 'ENOENT') {
+        resolveWithValue(false);
+        return;
+      }
+
+      rejectWithError(error);
     });
   });
 }
@@ -368,8 +409,24 @@ export class RpcServer {
       return;
     }
 
+    const requestScope = new ResourceScope();
+    const requestAbortController = new AbortController();
+    const abortRequest = (): void => {
+      requestAbortController.abort(makeAbortError());
+    };
+    socket.once('close', abortRequest);
+    requestScope.add('rpc request close listener', () => {
+      socket.off('close', abortRequest);
+    });
+
     try {
-      const result = await handler(paramsResult.data);
+      const result = await handler(paramsResult.data, {
+        signal: requestAbortController.signal,
+      });
+      if (requestAbortController.signal.aborted) {
+        return;
+      }
+
       const resultResult =
         RpcMethodSchemas[request.method].result.safeParse(result);
 
@@ -386,6 +443,10 @@ export class RpcServer {
         buildSuccessResponse(request.id, resultResult.data),
       );
     } catch (error) {
+      if (requestAbortController.signal.aborted) {
+        return;
+      }
+
       this.sendResponse(
         socket,
         error instanceof CliError
@@ -398,6 +459,8 @@ export class RpcServer {
               ),
             ),
       );
+    } finally {
+      await requestScope.close();
     }
   }
 

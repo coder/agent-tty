@@ -8,7 +8,9 @@ import {
   RunCompletionSentinelScanner,
   type SentinelPiece,
 } from './runCompletionSentinel.js';
+import { addAbortListener, makeAbortError } from '../util/abort.js';
 import { invariant } from '../util/assert.js';
+import { ResourceScope } from '../util/resourceScope.js';
 
 const RUN_COMPLETION_POSTAMBLE_ECHO_PREFIX = String.raw`printf '\033\137`;
 const RUN_COMPLETION_SIGNAL_TOKEN_BYTES = 4;
@@ -49,10 +51,17 @@ export interface PreparedWaitedRun {
 }
 
 /** Registered completion state returned after `input_run` appends successfully. */
+export interface RunCompletionWaitOptions {
+  readonly signal?: AbortSignal;
+}
+
 export interface RegisteredWaitedRunCompletion {
   postamble: string;
   sentinel: string;
-  wait(timeoutMs: number): Promise<TimedRunCompletionWaitResult>;
+  wait(
+    timeoutMs: number,
+    options?: RunCompletionWaitOptions,
+  ): Promise<TimedRunCompletionWaitResult>;
 }
 
 function shellOctalEscapedBytes(value: string): string {
@@ -190,13 +199,21 @@ export class RunCompletionCoordinator {
     return {
       postamble,
       sentinel,
-      wait: (timeoutMs: number): Promise<TimedRunCompletionWaitResult> => {
+      wait: (
+        timeoutMs: number,
+        options: RunCompletionWaitOptions = {},
+      ): Promise<TimedRunCompletionWaitResult> => {
         invariant(
           !waitStarted,
           'run completion wait must only be started once',
         );
         waitStarted = true;
-        return this.#waitForRunCompletion(marker, completionPromise, timeoutMs);
+        return this.#waitForRunCompletion(
+          marker,
+          completionPromise,
+          timeoutMs,
+          options,
+        );
       },
     };
   }
@@ -255,6 +272,7 @@ export class RunCompletionCoordinator {
     marker: string,
     completionPromise: Promise<RunCompletionWaitResult>,
     timeoutMs: number,
+    options: RunCompletionWaitOptions,
   ): Promise<TimedRunCompletionWaitResult> {
     assertRunMarker(marker);
     invariant(
@@ -262,41 +280,60 @@ export class RunCompletionCoordinator {
       'timeoutMs must be a positive integer',
     );
 
+    const { signal } = options;
+    if (signal?.aborted === true) {
+      this.#runCompletionWaiters.delete(marker);
+      throw makeAbortError(signal);
+    }
+
+    const scope = new ResourceScope();
     const { promise, reject, resolve } =
       Promise.withResolvers<TimedRunCompletionWaitResult>();
     let resolved = false;
-    const timeoutHandle = setTimeout(() => {
+
+    const rejectWithError = (error: unknown): void => {
       if (resolved) {
         return;
       }
 
       resolved = true;
+      void scope.close().then(() => {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }, reject);
+    };
+
+    const resolveWithResult = (result: TimedRunCompletionWaitResult): void => {
+      if (resolved) {
+        return;
+      }
+
+      resolved = true;
+      void scope.close().then(() => {
+        resolve(result);
+      }, reject);
+    };
+
+    const timeoutHandle = setTimeout(() => {
       // Keep sentinel/postamble registrations active after timeout so the
       // eventual internal completion bytes are still hidden from artifacts.
       this.#runCompletionWaiters.delete(marker);
-      resolve({ kind: 'timeout' });
+      resolveWithResult({ kind: 'timeout' });
     }, timeoutMs);
+    scope.add('run completion timeout', () => {
+      clearTimeout(timeoutHandle);
+    });
 
-    void completionPromise.then(
-      (result) => {
-        if (resolved) {
-          return;
-        }
+    if (signal !== undefined) {
+      addAbortListener(scope, 'run completion abort listener', signal, () => {
+        // Match timeout behavior: stop waiting for a client response but keep
+        // sentinel/postamble registrations active so eventual completion bytes
+        // remain hidden and replayable.
+        this.#runCompletionWaiters.delete(marker);
+        rejectWithError(makeAbortError(signal));
+      });
+    }
 
-        resolved = true;
-        clearTimeout(timeoutHandle);
-        resolve(result);
-      },
-      (error: unknown) => {
-        if (resolved) {
-          return;
-        }
-
-        resolved = true;
-        clearTimeout(timeoutHandle);
-        reject(error instanceof Error ? error : new Error(String(error)));
-      },
-    );
+    void completionPromise.then(resolveWithResult, rejectWithError);
 
     return await promise;
   }
