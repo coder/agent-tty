@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   manifestPath: vi.fn(),
   eventLogPath: vi.fn(),
   writeTextFileAtomic: vi.fn(),
+  appendArtifactWithRollback: vi.fn(),
   appendArtifact: vi.fn(),
   createArtifactEntry: vi.fn(),
   ensureArtifactsDir: vi.fn(),
@@ -62,6 +63,7 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 }));
 
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
+  appendArtifactWithRollback: mocks.appendArtifactWithRollback,
   appendArtifact: mocks.appendArtifact,
   createArtifactEntry: mocks.createArtifactEntry,
 }));
@@ -180,6 +182,22 @@ describe('record export command', () => {
         `${sessionDirectory}/artifacts/${filename}`,
     );
     mocks.writeTextFileAtomic.mockResolvedValue(undefined);
+    mocks.appendArtifactWithRollback.mockImplementation(
+      async (options: {
+        sessionDir: string;
+        artifactPath: string;
+        createEntry: () => unknown;
+      }) => {
+        try {
+          await mocks.appendArtifact(options.sessionDir, options.createEntry());
+        } catch (error) {
+          await rm(options.artifactPath, { force: true }).catch(
+            () => undefined,
+          );
+          throw error;
+        }
+      },
+    );
     mocks.appendArtifact.mockResolvedValue(undefined);
     mocks.createArtifactEntry.mockImplementation((entry: unknown) => ({
       id: 'artifact-01',
