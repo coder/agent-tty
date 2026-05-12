@@ -389,8 +389,8 @@ describe('screenshot capture', () => {
     const finalFilename = screenshotFilename(5, 'reference-dark');
     const finalPath = artifactPath(sessionDirectory, finalFilename);
     // Pre-write a manifest whose sessionId does not match the directory so
-    // `appendArtifact` raises a MANIFEST_VALIDATION_ERROR after the temp file
-    // has already been renamed into place.
+    // `appendArtifactWithRollback` raises a MANIFEST_VALIDATION_ERROR after
+    // the temp file has already been renamed into place.
     const manifestFilePath = artifactPath(sessionDirectory, 'manifest.json');
     const unrelatedManifest = {
       version: 1,
