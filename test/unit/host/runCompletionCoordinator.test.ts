@@ -174,6 +174,43 @@ describe('RunCompletionCoordinator', () => {
     }
   });
 
+  it('aborts an active wait and clears its timeout while preserving hidden completion bytes', async () => {
+    vi.useFakeTimers();
+    try {
+      const { appender, events } = createFakeAppender();
+      const coordinator = new RunCompletionCoordinator(appender);
+      const prepared = coordinator.prepareWaitedRun();
+      const completion = coordinator.registerWaitedRun({
+        marker: prepared.marker,
+        inputRunSeq: 13,
+      });
+      const controller = new AbortController();
+      const abortReason = new Error('caller disconnected');
+      const waitPromise = completion.wait(1_000, { signal: controller.signal });
+
+      controller.abort(abortReason);
+
+      await expect(waitPromise).rejects.toThrow('caller disconnected');
+      expect(vi.getTimerCount()).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await coordinator.ingestPtyData(`before${completion.sentinel}after`);
+
+      expect(events).toEqual([
+        { type: 'output', data: 'before' },
+        {
+          type: 'run_complete',
+          marker: prepared.marker,
+          inputRunSeq: 13,
+          seq: 100,
+        },
+        { type: 'output', data: 'after' },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('fails ingestion loudly when a timed-out completion later cannot append run_complete', async () => {
     vi.useFakeTimers();
     try {

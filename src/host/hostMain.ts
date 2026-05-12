@@ -49,7 +49,14 @@ import {
   sessionDir,
   socketPath,
 } from '../storage/sessionPaths.js';
+import {
+  addAbortListener,
+  makeAbortReason,
+  throwIfAborted,
+  waitForScopedOperation,
+} from '../util/abort.js';
 import { invariant } from '../util/assert.js';
+import { ResourceScope } from '../util/resourceScope.js';
 
 const ALLOWED_SIGNALS = [
   'SIGTERM',
@@ -169,7 +176,8 @@ export async function runHost(sessionId: string): Promise<void> {
   let ptyHasExited = false;
   let lastOutputAt = Date.now();
   let lastActivityAt = lastOutputAt;
-  let idleTimeoutHandle: ReturnType<typeof setInterval> | null = null;
+  const hostAbortController = new AbortController();
+  let idleTimeoutScope: ResourceScope | null = null;
   let rpcListenPromise: Promise<void> | null = null;
   let shutdownPromise: Promise<void> | null = null;
   let markPtyExited: () => void = () => {
@@ -184,6 +192,10 @@ export async function runHost(sessionId: string): Promise<void> {
   });
   let ptyIngestionQueue: Promise<void> = Promise.resolve();
 
+  // Per-client wait-exit callbacks, cleaned up individually via ResourceScope.
+  // Using ptyExitPromise.then() would permanently attach to the shared promise.
+  const ptyExitWaiters = new Set<() => void>();
+
   const ptyExitPromise = new Promise<void>((resolve) => {
     markPtyExited = (): void => {
       if (ptyHasExited) {
@@ -192,6 +204,11 @@ export async function runHost(sessionId: string): Promise<void> {
 
       ptyHasExited = true;
       resolve();
+      const waiters = [...ptyExitWaiters];
+      ptyExitWaiters.clear();
+      for (const waiter of waiters) {
+        waiter();
+      }
     };
   });
 
@@ -250,25 +267,36 @@ export async function runHost(sessionId: string): Promise<void> {
 
   const clearIdleTimeout = (): void => {
     // Idempotent: safe to call multiple times during shutdown and PTY exit.
-    if (idleTimeoutHandle === null) {
+    const scope = idleTimeoutScope;
+    idleTimeoutScope = null;
+    if (scope === null) {
       return;
     }
 
-    clearInterval(idleTimeoutHandle);
-    idleTimeoutHandle = null;
+    void scope.close().catch(rethrowAsync);
   };
 
   const startIdlePolling = (): void => {
     if (
       idleTimeoutMs <= 0 ||
       !isSessionCommandable(state) ||
-      idleTimeoutHandle !== null
+      idleTimeoutScope !== null
     ) {
       return;
     }
 
+    throwIfAborted(hostAbortController.signal);
+
+    const scope = new ResourceScope();
+    idleTimeoutScope = scope;
     const checkIntervalMs = Math.min(idleTimeoutMs, IDLE_CHECK_CAP_MS);
+    let idleTimeoutHandle: ReturnType<typeof setInterval> | null = null;
     idleTimeoutHandle = setInterval(() => {
+      if (hostAbortController.signal.aborted) {
+        clearIdleTimeout();
+        return;
+      }
+
       if (!isSessionCommandable(state)) {
         clearIdleTimeout();
         return;
@@ -280,6 +308,20 @@ export async function runHost(sessionId: string): Promise<void> {
         pty.kill();
       }
     }, checkIntervalMs);
+    scope.add('idle timeout interval', () => {
+      if (idleTimeoutHandle !== null) {
+        clearInterval(idleTimeoutHandle);
+        idleTimeoutHandle = null;
+      }
+    });
+    addAbortListener(
+      scope,
+      'idle timeout abort listener',
+      hostAbortController.signal,
+      () => {
+        clearIdleTimeout();
+      },
+    );
   };
 
   const initiateShutdown = (): Promise<void> => {
@@ -289,6 +331,7 @@ export async function runHost(sessionId: string): Promise<void> {
 
     shutdownPromise = (async () => {
       try {
+        hostAbortController.abort(makeAbortReason('Host is shutting down.'));
         clearIdleTimeout();
         if (isSessionCommandable(state)) {
           pty.kill();
@@ -355,6 +398,15 @@ export async function runHost(sessionId: string): Promise<void> {
         }
       }
     })().catch(rethrowAsync);
+  };
+
+  const makeWaitExitOutcome = (): WaitOutcome => {
+    const snapshot = state.snapshot();
+    const result: WaitOutcome = { timedOut: false };
+    if (snapshot.exitCode !== null) {
+      result.exitCode = snapshot.exitCode;
+    }
+    return result;
   };
 
   const handlers: Record<string, MethodHandler> = {
@@ -478,9 +530,11 @@ export async function runHost(sessionId: string): Promise<void> {
       await eventLog.append('input_paste', { data: encoded });
       return {};
     },
-    run: async (params: unknown) => {
+    run: async (params: unknown, context) => {
       const { command, noWait, timeoutMs } = params as RunParams;
+      const { signal } = context;
 
+      throwIfAborted(signal);
       assertSessionCommandable(state);
 
       invariant(
@@ -527,7 +581,7 @@ export async function runHost(sessionId: string): Promise<void> {
       pty.write(injectedText);
       lastActivityAt = Date.now();
 
-      const waitResult = await completion.wait(effectiveTimeoutMs);
+      const waitResult = await completion.wait(effectiveTimeoutMs, { signal });
       const durationMs = Date.now() - startTime;
 
       if (waitResult.kind === 'completed') {
@@ -656,11 +710,13 @@ export async function runHost(sessionId: string): Promise<void> {
       await eventLog.append('signal', { signal });
       return {};
     },
-    wait: async (params: unknown) => {
+    wait: async (params: unknown, context) => {
       const { exit, idleMs, timeoutMs } = params as WaitParams;
+      const { signal } = context;
       const hasExit = exit === true;
       const hasIdle = idleMs !== undefined;
 
+      throwIfAborted(signal);
       if (hasExit === hasIdle) {
         throw makeCliError(ERROR_CODES.INVALID_DURATION, {
           message: 'Specify exactly one of exit or idleMs.',
@@ -680,26 +736,22 @@ export async function runHost(sessionId: string): Promise<void> {
         );
       }
 
+      const waitScope = new ResourceScope();
       let waitCondition: Promise<WaitOutcome>;
-      let clearWaitCondition: (() => void) | null = null;
 
       if (hasExit) {
         if (ptyHasExited) {
-          const snapshot = state.snapshot();
-          const result: WaitOutcome = { timedOut: false };
-          if (snapshot.exitCode !== null) {
-            result.exitCode = snapshot.exitCode;
-          }
-          return result;
+          return makeWaitExitOutcome();
         }
 
-        waitCondition = ptyExitPromise.then(() => {
-          const snapshot = state.snapshot();
-          const result: WaitOutcome = { timedOut: false };
-          if (snapshot.exitCode !== null) {
-            result.exitCode = snapshot.exitCode;
-          }
-          return result;
+        waitCondition = new Promise<WaitOutcome>((resolve) => {
+          const waiter = (): void => {
+            resolve(makeWaitExitOutcome());
+          };
+          ptyExitWaiters.add(waiter);
+          waitScope.add('wait exit waiter', () => {
+            ptyExitWaiters.delete(waiter);
+          });
         });
       } else {
         assertSessionCommandable(state);
@@ -714,13 +766,16 @@ export async function runHost(sessionId: string): Promise<void> {
         waitCondition = new Promise<WaitOutcome>((resolve) => {
           const checkInterval = setInterval(
             () => {
+              if (signal.aborted) {
+                return;
+              }
+
               const effectiveLastOutput = Math.max(lastOutputAt, idleAnchor);
               const elapsed = Date.now() - effectiveLastOutput;
               if (elapsed < idleDuration) {
                 return;
               }
 
-              clearInterval(checkInterval);
               const snapshot = state.snapshot();
               const result: WaitOutcome = { timedOut: false };
               if (snapshot.exitCode !== null) {
@@ -731,30 +786,26 @@ export async function runHost(sessionId: string): Promise<void> {
             Math.min(idleDuration / 2, 100),
           );
 
-          clearWaitCondition = (): void => {
+          waitScope.add('wait idle poll interval', () => {
             clearInterval(checkInterval);
-          };
+          });
         });
       }
 
-      if (timeoutMs === undefined) {
-        return await waitCondition;
-      }
-
-      return await new Promise<WaitOutcome>((resolve) => {
-        const timeoutHandle = setTimeout(() => {
-          clearWaitCondition?.();
-          resolve({ timedOut: true });
-        }, timeoutMs);
-
-        void waitCondition.then((result) => {
-          clearTimeout(timeoutHandle);
-          clearWaitCondition?.();
-          resolve(result);
-        });
+      return await waitForScopedOperation({
+        operationName: 'wait',
+        operation: waitCondition,
+        scope: waitScope,
+        signal,
+        ...(timeoutMs === undefined
+          ? {}
+          : {
+              timeoutMs,
+              timeoutResult: () => ({ timedOut: true }),
+            }),
       });
     },
-    waitForRender: async (params: unknown) => {
+    waitForRender: async (params: unknown, context) => {
       const {
         text,
         regex,
@@ -764,7 +815,9 @@ export async function runHost(sessionId: string): Promise<void> {
         timeoutMs,
         rendererName: requestedRendererName,
       } = params as WaitForRenderParams;
+      const { signal } = context;
 
+      throwIfAborted(signal);
       const preparedCondition = prepareRenderWaitCondition({
         text,
         regex,
@@ -782,30 +835,33 @@ export async function runHost(sessionId: string): Promise<void> {
       const rendererName = resolveHostRendererName(requestedRendererName);
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
       const pollIntervalMs = 200;
+      const waitScope = new ResourceScope();
       let lastVisibleText: string | undefined;
       let lastTextChangeAt = Date.now();
       let latestCapturedAtSeq = 0;
-      let clearWaitPoll: (() => void) | null = null;
 
       const pollCondition = new Promise<WaitForRenderResult>((resolve) => {
         let pollInFlight = false;
         let consecutiveFailures = 0;
 
         const checkInterval = setInterval(() => {
-          if (pollInFlight) {
+          if (signal.aborted || pollInFlight) {
             return;
           }
 
           pollInFlight = true;
           void (async () => {
             try {
+              throwIfAborted(signal);
               const replayInput = loadReplayInput();
               const backend = await rendererManager.getBackend(
                 rendererName,
                 profile,
                 replayInput,
               );
+              throwIfAborted(signal);
               const snapshot = await backend.snapshot();
+              throwIfAborted(signal);
               const visibleText = snapshot.visibleLines
                 .map((line) => line.text)
                 .join('\n');
@@ -831,7 +887,6 @@ export async function runHost(sessionId: string): Promise<void> {
               );
 
               if (match.matched) {
-                clearInterval(checkInterval);
                 resolve({
                   matched: true,
                   timedOut: false,
@@ -844,10 +899,13 @@ export async function runHost(sessionId: string): Promise<void> {
                 });
               }
             } catch (pollError) {
+              if (signal.aborted) {
+                return;
+              }
+
               void pollError;
               consecutiveFailures += 1;
               if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
-                clearInterval(checkInterval);
                 resolve({
                   matched: false,
                   timedOut: true,
@@ -862,47 +920,35 @@ export async function runHost(sessionId: string): Promise<void> {
           })();
         }, pollIntervalMs);
 
-        clearWaitPoll = (): void => {
+        waitScope.add('waitForRender poll interval', () => {
           clearInterval(checkInterval);
-        };
+        });
       });
 
-      if (timeoutMs === undefined) {
-        return await pollCondition;
-      }
+      return await waitForScopedOperation({
+        operationName: 'waitForRender',
+        operation: pollCondition,
+        scope: waitScope,
+        signal,
+        ...(timeoutMs === undefined
+          ? {}
+          : {
+              timeoutMs,
+              timeoutResult: () => {
+                try {
+                  const replayInput = loadReplayInput();
+                  latestCapturedAtSeq = replayInput?.targetSeq ?? 0;
+                } catch {
+                  // Best-effort snapshot for timeout reporting.
+                }
 
-      return await new Promise<WaitForRenderResult>((resolve) => {
-        let resolved = false;
-        const timeoutHandle = setTimeout(() => {
-          if (resolved) {
-            return;
-          }
-          resolved = true;
-          clearWaitPoll?.();
-
-          try {
-            const replayInput = loadReplayInput();
-            latestCapturedAtSeq = replayInput?.targetSeq ?? 0;
-          } catch {
-            // Best-effort snapshot for timeout reporting.
-          }
-
-          resolve({
-            matched: false,
-            timedOut: true,
-            capturedAtSeq: latestCapturedAtSeq,
-          });
-        }, timeoutMs);
-
-        void pollCondition.then((result) => {
-          if (resolved) {
-            return;
-          }
-          resolved = true;
-          clearTimeout(timeoutHandle);
-          clearWaitPoll?.();
-          resolve(result);
-        });
+                return {
+                  matched: false,
+                  timedOut: true,
+                  capturedAtSeq: latestCapturedAtSeq,
+                };
+              },
+            }),
       });
     },
     destroy: () => {

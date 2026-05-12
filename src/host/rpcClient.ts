@@ -13,7 +13,14 @@ import {
   RpcResponseSchema,
   type RpcMethod,
 } from '../protocol/messages.js';
+import {
+  addAbortListener,
+  createResourceScopedSettlers,
+  makeAbortError,
+  throwIfAborted,
+} from '../util/abort.js';
 import { invariant } from '../util/assert.js';
+import { ResourceScope } from '../util/resourceScope.js';
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_RPC_BUFFER_BYTES = 1_048_576;
@@ -95,7 +102,9 @@ export async function sendRpc(
   method: string,
   params?: Record<string, unknown>,
   timeoutMs?: number,
+  signal?: AbortSignal,
 ): Promise<unknown> {
+  throwIfAborted(signal);
   const effectiveTimeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
   invariant(
     Number.isFinite(effectiveTimeoutMs) && effectiveTimeoutMs >= 0,
@@ -116,35 +125,25 @@ export async function sendRpc(
 
   return await new Promise<unknown>((resolve, reject) => {
     const socket = net.connect({ path: socketPath });
-    let settled = false;
+    const scope = new ResourceScope();
+    scope.add('rpc client socket', () => {
+      socket.destroy();
+    });
+    const settlers = createResourceScopedSettlers(scope, resolve, reject);
     let responseHandled = false;
     let buffer = '';
 
-    const rejectWithCliError = (error: CliError): void => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      socket.destroy();
-      reject(error);
-    };
-
     const rejectWithTransportError = (error: unknown): void => {
-      rejectWithCliError(
+      settlers.reject(
         toTransportCliError(error, socketPath, method, effectiveTimeoutMs),
       );
     };
 
-    const resolveWithResult = (result: unknown): void => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      socket.destroy();
-      resolve(result);
-    };
+    if (signal !== undefined) {
+      addAbortListener(scope, 'rpc client abort listener', signal, () => {
+        settlers.reject(makeAbortError(signal));
+      });
+    }
 
     socket.setEncoding('utf8');
     socket.setTimeout(effectiveTimeoutMs);
@@ -154,7 +153,7 @@ export async function sendRpc(
     });
 
     socket.on('timeout', () => {
-      rejectWithCliError(
+      settlers.reject(
         makeCliError(ERROR_CODES.HOST_TIMEOUT, {
           message: `RPC request timed out after ${String(effectiveTimeoutMs)}ms.`,
           details: {
@@ -176,7 +175,7 @@ export async function sendRpc(
       }
 
       if (buffer.length + chunk.length > MAX_RPC_BUFFER_BYTES) {
-        rejectWithCliError(
+        settlers.reject(
           makeCliError(ERROR_CODES.RPC_ERROR, {
             message: 'RPC response exceeds maximum buffer size.',
             details: { method, socketPath },
@@ -200,7 +199,7 @@ export async function sendRpc(
         const responseResult = RpcResponseSchema.safeParse(rawResponse);
 
         if (!responseResult.success) {
-          rejectWithCliError(
+          settlers.reject(
             makeCliError(ERROR_CODES.RPC_ERROR, {
               message: 'RPC response failed schema validation.',
               details: {
@@ -216,7 +215,7 @@ export async function sendRpc(
         const response = responseResult.data;
 
         if (response.id !== request.id) {
-          rejectWithCliError(
+          settlers.reject(
             makeCliError(ERROR_CODES.RPC_ERROR, {
               message: `RPC response id mismatch for method "${method}".`,
               details: {
@@ -237,7 +236,7 @@ export async function sendRpc(
             );
 
             if (!resultResult.success) {
-              rejectWithCliError(
+              settlers.reject(
                 makeCliError(ERROR_CODES.RPC_ERROR, {
                   message: `RPC result failed validation for method "${method}".`,
                   details: {
@@ -250,19 +249,19 @@ export async function sendRpc(
               return;
             }
 
-            resolveWithResult(resultResult.data);
+            settlers.resolve(resultResult.data);
             return;
           }
 
-          resolveWithResult(response.result);
+          settlers.resolve(response.result);
           return;
         }
 
-        rejectWithCliError(
+        settlers.reject(
           toResponseCliError(response.error.code, response.error.message),
         );
       } catch (error) {
-        rejectWithCliError(
+        settlers.reject(
           makeCliError(ERROR_CODES.RPC_ERROR, {
             message: toErrorMessage(
               error,
@@ -279,11 +278,11 @@ export async function sendRpc(
     });
 
     socket.on('end', () => {
-      if (settled || responseHandled) {
+      if (settlers.isSettled() || responseHandled) {
         return;
       }
 
-      rejectWithCliError(
+      settlers.reject(
         makeCliError(ERROR_CODES.RPC_ERROR, {
           message: `RPC connection closed before a complete response was received for method "${method}".`,
           details: {

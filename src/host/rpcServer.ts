@@ -10,14 +10,33 @@ import {
   type RpcMethod,
   type RpcResponse,
 } from '../protocol/messages.js';
+import {
+  createResourceScopedSettlers,
+  makeAbortReason,
+} from '../util/abort.js';
 import { invariant } from '../util/assert.js';
+import { ResourceScope } from '../util/resourceScope.js';
 
 const MAX_UNIX_SOCKET_PATH = 104;
 const MAX_RPC_BUFFER_BYTES = 1_048_576;
 
+const SOCKET_LIVENESS_PROBE_TIMEOUT_MS = 1_000;
 const UNKNOWN_REQUEST_ID = 'unknown';
 
-export type MethodHandler = (params: unknown) => Promise<unknown>;
+/**
+ * Per-request context passed to RPC method handlers.
+ *
+ * `signal` aborts when the client socket closes, indicating the caller is no
+ * longer waiting for a response.
+ */
+export interface MethodContext {
+  readonly signal: AbortSignal;
+}
+
+export type MethodHandler = (
+  params: unknown,
+  context: MethodContext,
+) => Promise<unknown>;
 
 function isKnownRpcMethod(method: string): method is RpcMethod {
   return Object.hasOwn(RpcMethodSchemas, method);
@@ -46,22 +65,33 @@ async function socketPathExists(socketPath: string): Promise<boolean> {
 
 async function probeSocketLiveness(socketPath: string): Promise<boolean> {
   return await new Promise<boolean>((resolve, reject) => {
+    const scope = new ResourceScope();
     const probe = net.connect({ path: socketPath });
+    const settlers = createResourceScopedSettlers(scope, resolve, reject);
+
+    scope.add('rpc liveness probe socket', () => {
+      probe.destroy();
+    });
+    const timeoutHandle = setTimeout(() => {
+      // If connect neither succeeds nor fails promptly, treat the socket path as
+      // stale rather than blocking host startup indefinitely.
+      settlers.resolve(false);
+    }, SOCKET_LIVENESS_PROBE_TIMEOUT_MS);
+    scope.add('rpc liveness probe timeout', () => {
+      clearTimeout(timeoutHandle);
+    });
 
     probe.once('connect', () => {
-      probe.end();
-      resolve(true);
+      settlers.resolve(true);
     });
 
     probe.once('error', (error: NodeJS.ErrnoException) => {
-      probe.destroy();
-
       if (error.code === 'ECONNREFUSED' || error.code === 'ENOENT') {
-        resolve(false);
+        settlers.resolve(false);
         return;
       }
 
-      reject(error);
+      settlers.reject(error);
     });
   });
 }
@@ -368,8 +398,26 @@ export class RpcServer {
       return;
     }
 
+    const requestScope = new ResourceScope();
+    const requestAbortController = new AbortController();
+    const abortRequest = (): void => {
+      requestAbortController.abort(
+        makeAbortReason('RPC client socket closed.'),
+      );
+    };
+    socket.once('close', abortRequest);
+    requestScope.add('rpc request close listener', () => {
+      socket.off('close', abortRequest);
+    });
+
     try {
-      const result = await handler(paramsResult.data);
+      const result = await handler(paramsResult.data, {
+        signal: requestAbortController.signal,
+      });
+      if (requestAbortController.signal.aborted) {
+        return;
+      }
+
       const resultResult =
         RpcMethodSchemas[request.method].result.safeParse(result);
 
@@ -386,6 +434,10 @@ export class RpcServer {
         buildSuccessResponse(request.id, resultResult.data),
       );
     } catch (error) {
+      if (requestAbortController.signal.aborted) {
+        return;
+      }
+
       this.sendResponse(
         socket,
         error instanceof CliError
@@ -398,6 +450,12 @@ export class RpcServer {
               ),
             ),
       );
+    } finally {
+      try {
+        await requestScope.close();
+      } catch (error) {
+        console.debug('RPC request ResourceScope cleanup failed:', error);
+      }
     }
   }
 
