@@ -370,19 +370,22 @@ export async function runRecordExportCommand(
       sha256 = await computeFileHash(artifactOutputPath);
     }
 
+    const artifactEntry = createArtifactEntry({
+      kind: artifactKind,
+      filename: basename(artifactOutputPath),
+      sessionId: manifest.sessionId,
+      capturedAtSeq,
+      sha256,
+      bytes,
+      metadata: artifactMetadata,
+    });
+
     await appendArtifactWithRollback({
       sessionDir: sessionDirectory,
-      artifactPath: artifactOutputPath,
-      createEntry: () =>
-        createArtifactEntry({
-          kind: artifactKind,
-          filename: basename(artifactOutputPath),
-          sessionId: manifest.sessionId,
-          capturedAtSeq,
-          sha256,
-          bytes,
-          metadata: artifactMetadata,
-        }),
+      entry: artifactEntry,
+      ...(options.out === undefined
+        ? { rollbackArtifactPath: artifactOutputPath }
+        : {}),
     });
 
     const rawResult = {

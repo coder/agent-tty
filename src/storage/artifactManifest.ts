@@ -174,42 +174,60 @@ export async function writeArtifactManifest(
 
 export interface AppendArtifactWithRollbackOptions {
   sessionDir: string;
-  artifactPath: string;
-  createEntry: () => ArtifactEntry;
+  entry: ArtifactEntry;
+  rollbackArtifactPath?: string;
 }
 
-export async function appendArtifact(
+async function appendArtifact(
   sessionDir: string,
   entry: ArtifactEntry,
+  rollbackArtifactPath: string | undefined,
 ): Promise<void> {
   const resolvedSessionDir = resolve(sessionDir);
   const expectedSessionId = sessionIdFromSessionDir(resolvedSessionDir);
   const validatedEntry = validateArtifactEntry(entry, expectedSessionId);
 
   await appendSerializer.run(resolvedSessionDir, async () => {
-    const manifest = await readArtifactManifest(resolvedSessionDir);
-    await writeArtifactManifest(resolvedSessionDir, {
-      ...manifest,
-      artifacts: [...manifest.artifacts, validatedEntry],
-    });
+    try {
+      const manifest = await readArtifactManifest(resolvedSessionDir);
+      await writeArtifactManifest(resolvedSessionDir, {
+        ...manifest,
+        artifacts: [...manifest.artifacts, validatedEntry],
+      });
+    } catch (error) {
+      if (rollbackArtifactPath !== undefined) {
+        // Best-effort: swallow rm errors so the original manifest failure propagates.
+        await rm(rollbackArtifactPath, { force: true }).catch(() => undefined);
+      }
+      throw error;
+    }
   });
 }
 
+/**
+ * Append an artifact entry to the session manifest, removing the artifact file
+ * at `rollbackArtifactPath` if the append fails. Rollback is best-effort: rm
+ * errors are swallowed so the original manifest error propagates.
+ */
 export async function appendArtifactWithRollback(
   options: AppendArtifactWithRollbackOptions,
 ): Promise<void> {
-  invariant(
-    options.artifactPath.length > 0,
-    'artifactPath must be a non-empty string',
-  );
-  invariant(isAbsolute(options.artifactPath), 'artifactPath must be absolute');
-
-  try {
-    await appendArtifact(options.sessionDir, options.createEntry());
-  } catch (error) {
-    await rm(options.artifactPath, { force: true }).catch(() => undefined);
-    throw error;
+  if (options.rollbackArtifactPath !== undefined) {
+    invariant(
+      options.rollbackArtifactPath.length > 0,
+      'rollbackArtifactPath must be a non-empty string',
+    );
+    invariant(
+      isAbsolute(options.rollbackArtifactPath),
+      'rollbackArtifactPath must be absolute',
+    );
   }
+
+  await appendArtifact(
+    options.sessionDir,
+    options.entry,
+    options.rollbackArtifactPath,
+  );
 }
 
 export function createArtifactEntry(

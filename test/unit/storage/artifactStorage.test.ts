@@ -1,4 +1,4 @@
-import { access, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { join } from 'node:path';
 
@@ -11,7 +11,7 @@ import type {
   ArtifactManifest,
 } from '../../../src/storage/artifactManifest.js';
 import {
-  appendArtifact,
+  appendArtifactWithRollback,
   ArtifactEntrySchema,
   readArtifactManifest,
   writeArtifactManifest,
@@ -158,9 +158,9 @@ describe('artifact manifest storage', () => {
       artifacts: [],
     });
 
-    await appendArtifact(
+    await appendArtifactWithRollback({
       sessionDir,
-      createArtifactEntry({
+      entry: createArtifactEntry({
         id: '01JQ0000000000000000000001',
         kind: 'screenshot',
         filename: 'screenshot-4-reference-dark.png',
@@ -171,7 +171,7 @@ describe('artifact manifest storage', () => {
           pngSizeBytes: 2048,
         },
       }),
-    );
+    });
 
     await expect(readArtifactManifest(sessionDir)).resolves.toEqual({
       version: 1,
@@ -214,14 +214,14 @@ describe('artifact manifest storage', () => {
 
     await Promise.all(
       Array.from({ length: concurrentAppends }, (_value, index) =>
-        appendArtifact(
+        appendArtifactWithRollback({
           sessionDir,
-          createArtifactEntry({
+          entry: createArtifactEntry({
             id: `01JQ${String(index).padStart(22, '0')}`,
             filename: `snapshot-${String(index)}-structured.json`,
             capturedAtSeq: index,
           }),
-        ),
+        }),
       ),
     );
 
@@ -235,6 +235,148 @@ describe('artifact manifest storage', () => {
     expect(seenSeqs).toEqual(
       Array.from({ length: concurrentAppends }, (_value, index) => index),
     );
+  });
+
+  it('removes rollback artifact paths when manifest append fails', async () => {
+    const sessionDir = await createSessionDir();
+    const artifactFile = artifactPath(sessionDir, 'orphan.json');
+
+    await ensureArtifactsDir(sessionDir);
+    await writeFile(artifactFile, 'artifact', 'utf8');
+    await writeFile(
+      artifactPath(sessionDir, 'manifest.json'),
+      `${JSON.stringify({
+        version: 1,
+        sessionId: 'other-session',
+        artifacts: [],
+      })}\n`,
+      'utf8',
+    );
+
+    await expect(
+      appendArtifactWithRollback({
+        sessionDir,
+        entry: createArtifactEntry({ filename: 'orphan.json' }),
+        rollbackArtifactPath: artifactFile,
+      }),
+    ).rejects.toMatchObject({ code: 'MANIFEST_VALIDATION_ERROR' });
+
+    await expect(access(artifactFile)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('preserves artifact paths when rollback is not requested', async () => {
+    const sessionDir = await createSessionDir();
+    const artifactFile = artifactPath(sessionDir, 'explicit-out.cast');
+
+    await ensureArtifactsDir(sessionDir);
+    await writeFile(artifactFile, 'artifact', 'utf8');
+    await writeFile(
+      artifactPath(sessionDir, 'manifest.json'),
+      `${JSON.stringify({
+        version: 1,
+        sessionId: 'other-session',
+        artifacts: [],
+      })}\n`,
+      'utf8',
+    );
+
+    await expect(
+      appendArtifactWithRollback({
+        sessionDir,
+        entry: createArtifactEntry({ filename: 'explicit-out.cast' }),
+      }),
+    ).rejects.toMatchObject({ code: 'MANIFEST_VALIDATION_ERROR' });
+
+    await expect(access(artifactFile)).resolves.toBeUndefined();
+  });
+
+  it('asserts rollback paths are non-empty and absolute', async () => {
+    const sessionDir = await createSessionDir();
+
+    await expect(
+      appendArtifactWithRollback({
+        sessionDir,
+        entry: createArtifactEntry(),
+        rollbackArtifactPath: '',
+      }),
+    ).rejects.toThrow(/rollbackArtifactPath must be a non-empty string/u);
+    await expect(
+      appendArtifactWithRollback({
+        sessionDir,
+        entry: createArtifactEntry(),
+        rollbackArtifactPath: 'relative-artifact.json',
+      }),
+    ).rejects.toThrow(/rollbackArtifactPath must be absolute/u);
+  });
+
+  it('does not remove queued rollback paths when an earlier append fails', async () => {
+    const sessionDir = await createSessionDir();
+    const firstArtifact = artifactPath(sessionDir, 'first-orphan.json');
+    const secondArtifact = artifactPath(sessionDir, 'second-orphan.json');
+
+    await ensureArtifactsDir(sessionDir);
+    await writeFile(firstArtifact, 'first', 'utf8');
+    await writeFile(secondArtifact, 'second', 'utf8');
+    await writeFile(
+      artifactPath(sessionDir, 'manifest.json'),
+      `${JSON.stringify({
+        version: 1,
+        sessionId: 'other-session',
+        artifacts: [],
+      })}\n`,
+      'utf8',
+    );
+
+    const results = await Promise.allSettled([
+      appendArtifactWithRollback({
+        sessionDir,
+        entry: createArtifactEntry({ filename: 'first-orphan.json' }),
+        rollbackArtifactPath: firstArtifact,
+      }),
+      appendArtifactWithRollback({
+        sessionDir,
+        entry: createArtifactEntry({ filename: 'second-orphan.json' }),
+        rollbackArtifactPath: secondArtifact,
+      }),
+    ]);
+
+    expect(results).toEqual([
+      expect.objectContaining({ status: 'rejected' }),
+      expect.objectContaining({ status: 'rejected' }),
+    ]);
+    await expect(access(firstArtifact)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    await expect(access(secondArtifact)).resolves.toBeUndefined();
+  });
+
+  it('does not mask the manifest error when rollback removal fails', async () => {
+    const sessionDir = await createSessionDir();
+    const blockedPath = artifactPath(sessionDir, 'blocked-artifact');
+
+    await ensureArtifactsDir(sessionDir);
+    await writeFile(
+      artifactPath(sessionDir, 'manifest.json'),
+      `${JSON.stringify({
+        version: 1,
+        sessionId: 'other-session',
+        artifacts: [],
+      })}\n`,
+      'utf8',
+    );
+    await mkdir(blockedPath);
+    await writeFile(join(blockedPath, 'child'), 'artifact', 'utf8');
+
+    await expect(
+      appendArtifactWithRollback({
+        sessionDir,
+        entry: createArtifactEntry({ filename: 'blocked-artifact' }),
+        rollbackArtifactPath: blockedPath,
+      }),
+    ).rejects.toMatchObject({ code: 'MANIFEST_VALIDATION_ERROR' });
+    await expect(access(join(blockedPath, 'child'))).resolves.toBeUndefined();
   });
 
   it('rejects invalid manifest contents and mismatched entries', async () => {
@@ -255,12 +397,12 @@ describe('artifact manifest storage', () => {
       code: 'MANIFEST_VALIDATION_ERROR',
     });
     await expect(
-      appendArtifact(
+      appendArtifactWithRollback({
         sessionDir,
-        createArtifactEntry({
+        entry: createArtifactEntry({
           sessionId: 'other-session',
         }),
-      ),
+      }),
     ).rejects.toMatchObject({
       code: 'MANIFEST_VALIDATION_ERROR',
     });

@@ -133,29 +133,30 @@ export async function captureScreenshotResult(
       sha256: parsedResult.sha256,
     };
 
+    const artifactEntry = createArtifactEntry({
+      kind: 'screenshot',
+      filename,
+      sessionId: publicResult.sessionId,
+      capturedAtSeq: publicResult.capturedAtSeq,
+      sha256,
+      metadata: {
+        profileName: publicResult.profileName,
+        cols: publicResult.cols,
+        rows: publicResult.rows,
+        pngSizeBytes: publicResult.pngSizeBytes,
+        cursorVisible: publicResult.cursorVisible,
+        rendererBackend: publicResult.rendererBackend,
+        pixelWidth: publicResult.pixelWidth,
+        pixelHeight: publicResult.pixelHeight,
+        renderProfileHash: publicResult.renderProfileHash,
+      },
+    });
+
     await rename(temporaryOutputPath, finalArtifactPath);
     await appendArtifactWithRollback({
       sessionDir: options.sessionDir,
-      artifactPath: finalArtifactPath,
-      createEntry: () =>
-        createArtifactEntry({
-          kind: 'screenshot',
-          filename,
-          sessionId: publicResult.sessionId,
-          capturedAtSeq: publicResult.capturedAtSeq,
-          sha256,
-          metadata: {
-            profileName: publicResult.profileName,
-            cols: publicResult.cols,
-            rows: publicResult.rows,
-            pngSizeBytes: publicResult.pngSizeBytes,
-            cursorVisible: publicResult.cursorVisible,
-            rendererBackend: publicResult.rendererBackend,
-            pixelWidth: publicResult.pixelWidth,
-            pixelHeight: publicResult.pixelHeight,
-            renderProfileHash: publicResult.renderProfileHash,
-          },
-        }),
+      entry: artifactEntry,
+      rollbackArtifactPath: finalArtifactPath,
     });
 
     return publicResult;

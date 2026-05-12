@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
   withOfflineReplayRenderer: vi.fn(),
+  appendArtifactWithRollback: vi.fn(),
   appendArtifact: vi.fn(),
   createArtifactEntry: vi.fn(),
   ensureArtifactsDir: vi.fn(),
@@ -52,6 +53,7 @@ vi.mock('../../../src/replay/offlineReplay.js', () => ({
 }));
 
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
+  appendArtifactWithRollback: mocks.appendArtifactWithRollback,
   appendArtifact: mocks.appendArtifact,
   createArtifactEntry: mocks.createArtifactEntry,
 }));
@@ -193,6 +195,11 @@ describe('screenshot command', () => {
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
     );
     mocks.readManifestIfExists.mockResolvedValue(createRunningSessionRecord());
+    mocks.appendArtifactWithRollback.mockImplementation(
+      async (options: { sessionDir: string; entry: unknown }) => {
+        await mocks.appendArtifact(options.sessionDir, options.entry);
+      },
+    );
     mocks.appendArtifact.mockResolvedValue(undefined);
     mocks.createArtifactEntry.mockImplementation((entry: unknown) => ({
       id: 'artifact-01',

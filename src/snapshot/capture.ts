@@ -126,6 +126,24 @@ export async function persistSnapshotArtifact(
   );
   const snapshotArtifactPath = artifactPath(options.sessionDir, filename);
 
+  const artifactEntry = createArtifactEntry({
+    kind: 'snapshot',
+    filename,
+    sessionId: options.snapshot.sessionId,
+    capturedAtSeq: options.snapshot.capturedAtSeq,
+    metadata: {
+      format: options.format,
+      rendererBackend: options.rendererBackend,
+      cols: options.snapshot.cols,
+      rows: options.snapshot.rows,
+      cursorRow: options.snapshot.cursorRow,
+      cursorCol: options.snapshot.cursorCol,
+      ...(options.snapshot.scrollbackLines === undefined
+        ? {}
+        : { scrollbackLineCount: options.snapshot.scrollbackLines.length }),
+    },
+  });
+
   await writeTextFileAtomic({
     path: snapshotArtifactPath,
     pathLabel: 'snapshot artifact path',
@@ -135,25 +153,8 @@ export async function persistSnapshotArtifact(
 
   await appendArtifactWithRollback({
     sessionDir: options.sessionDir,
-    artifactPath: snapshotArtifactPath,
-    createEntry: () =>
-      createArtifactEntry({
-        kind: 'snapshot',
-        filename,
-        sessionId: options.snapshot.sessionId,
-        capturedAtSeq: options.snapshot.capturedAtSeq,
-        metadata: {
-          format: options.format,
-          rendererBackend: options.rendererBackend,
-          cols: options.snapshot.cols,
-          rows: options.snapshot.rows,
-          cursorRow: options.snapshot.cursorRow,
-          cursorCol: options.snapshot.cursorCol,
-          ...(options.snapshot.scrollbackLines === undefined
-            ? {}
-            : { scrollbackLineCount: options.snapshot.scrollbackLines.length }),
-        },
-      }),
+    entry: artifactEntry,
+    rollbackArtifactPath: snapshotArtifactPath,
   });
 }
 
