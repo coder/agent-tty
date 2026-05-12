@@ -45,7 +45,7 @@ The design keeps rendering behind an adapter so future native renderers can be a
 
 ## Quick Start
 
-`agent-tty` requires Node `>=24 <26`.
+`agent-tty` requires Node `>=24 <27`.
 Renderer-backed screenshots and WebM export also require a discoverable Playwright Chromium install.
 
 ```bash

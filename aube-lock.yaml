@@ -250,8 +250,8 @@ time:
   picocolors@1.1.1: 2024-10-16T18:20:03.921Z
   picomatch@4.0.4: 2026-03-23T20:39:47.960Z
   pkg-types@2.3.1: 2026-04-27T10:24:15.497Z
-  playwright-core@1.58.2: 2026-02-06T16:42:47.596Z
-  playwright@1.58.2: 2026-02-06T16:42:40.029Z
+  playwright-core@1.60.0: 2026-05-11T19:09:40.047Z
+  playwright@1.60.0: 2026-05-11T19:09:33.114Z
   postcss@8.5.14: 2026-05-04T16:43:35.284Z
   powershell-utils@0.1.0: 2025-11-15T08:10:24.411Z
   powershell-utils@0.2.0: 2026-01-25T03:39:53.218Z
@@ -339,8 +339,8 @@ importers:
         specifier: 1.1.0
         version: 1.1.0
       playwright:
-        specifier: 1.58.2
-        version: 1.58.2
+        specifier: 1.60.0
+        version: 1.60.0
       ulid:
         specifier: 3.0.2
         version: 3.0.2
@@ -377,7 +377,7 @@ importers:
         version: 0.22.1
       release-it:
         specifier: 20.0.1
-        version: 20.0.1
+        version: 20.0.1(@octokit/core@7.0.6)(@types/node@25.5.0)(picomatch@4.0.4)(quickjs-wasi@0.0.1)
       rimraf:
         specifier: 6.1.3
         version: 6.1.3
@@ -1710,13 +1710,13 @@ packages:
   pkg-types@2.3.1:
     resolution: {integrity: sha512-y+ichcgc2LrADuhLNAx8DFjVfgz91pRxfZdI3UDhxHvcVEZsenLO+7XaU5vOp0u/7V/wZ+plyuQxtrDlZJ+yeg==}
 
-  playwright-core@1.58.2:
-    resolution: {integrity: sha512-yZkEtftgwS8CsfYo7nm0KE8jsvm6i/PTgVtB8DL726wNf6H2IMsDuxCpJj59KDaxCtSnrWan2AeDqM7JBaultg==}
+  playwright-core@1.60.0:
+    resolution: {integrity: sha512-9bW6zvX/m0lEbgTKJ6YppOKx8H3VOPBMOCFh2irXFOT4BbHgrx5hPjwJYLT40Lu+4qtD36qKc/Hn56StUW57IA==}
     engines: {node: '>=18'}
     hasBin: true
 
-  playwright@1.58.2:
-    resolution: {integrity: sha512-vA30H8Nvkq/cPBnNw4Q8TWz1EJyqgpuinBcHET0YVJVFldr8JDNiU9LaWAE1KqSkRYazuaBhTpB5ZzShOezQ6A==}
+  playwright@1.60.0:
+    resolution: {integrity: sha512-hheHdokM8cdqCb0lcE3s+zT4t4W+vvjpGxsZlDnikarzx8tSzMebh3UiFtgqwFwnTnjYQcsyMF8ei2mCO/tpeA==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -2326,7 +2326,7 @@ snapshots:
       json-with-bigint: 3.5.8
       universal-user-agent: 7.0.3
 
-  '@octokit/rest@22.0.1':
+  '@octokit/rest@22.0.1(@octokit/core@7.0.6)':
     dependencies:
       '@octokit/core': 7.0.6
       '@octokit/plugin-paginate-rest': 14.0.0(@octokit/core@7.0.6)
@@ -2934,7 +2934,7 @@ snapshots:
       '@oxlint/binding-win32-arm64-msvc': 1.62.0
       '@oxlint/binding-win32-x64-msvc': 1.62.0
 
-  pac-proxy-agent@8.0.0:
+  pac-proxy-agent@8.0.0(quickjs-wasi@0.0.1):
     dependencies:
       agent-base: 8.0.0
       debug: 4.4.3
@@ -2981,11 +2981,11 @@ snapshots:
       exsolve: 1.0.8
       pathe: 2.0.3
 
-  playwright-core@1.58.2: {}
+  playwright-core@1.60.0: {}
 
-  playwright@1.58.2:
+  playwright@1.60.0:
     dependencies:
-      playwright-core: 1.58.2
+      playwright-core: 1.60.0
     optionalDependencies:
       fsevents: 2.3.2
 
@@ -3001,14 +3001,14 @@ snapshots:
 
   protocols@2.0.2: {}
 
-  proxy-agent@7.0.0:
+  proxy-agent@7.0.0(quickjs-wasi@0.0.1):
     dependencies:
       agent-base: 8.0.0
       debug: 4.4.3
       http-proxy-agent: 8.0.0
       https-proxy-agent: 8.0.0
       lru-cache: 7.18.3
-      pac-proxy-agent: 8.0.0
+      pac-proxy-agent: 8.0.0(quickjs-wasi@0.0.1)
       proxy-from-env: 1.1.0
       socks-proxy-agent: 9.0.0
 
@@ -3025,10 +3025,10 @@ snapshots:
 
   readdirp@5.0.0: {}
 
-  release-it@20.0.1:
+  release-it@20.0.1(@octokit/core@7.0.6)(@types/node@25.5.0)(picomatch@4.0.4)(quickjs-wasi@0.0.1):
     dependencies:
       '@inquirer/prompts': 8.4.2(@types/node@25.5.0)
-      '@octokit/rest': 22.0.1
+      '@octokit/rest': 22.0.1(@octokit/core@7.0.6)
       '@phun-ky/typeof': 2.0.3
       async-retry: 1.3.3
       c12: 3.3.3
@@ -3043,9 +3043,9 @@ snapshots:
       open: 11.0.0
       ora: 9.3.0
       os-name: 7.0.0
-      proxy-agent: 7.0.0
+      proxy-agent: 7.0.0(quickjs-wasi@0.0.1)
       semver: 7.7.4
-      tinyglobby: 0.2.15
+      tinyglobby: 0.2.15(picomatch@4.0.4)
       undici: 7.24.5
       url-join: 5.0.0
       wildcard-match: 5.1.4
@@ -3126,12 +3126,12 @@ snapshots:
 
   tinyexec@1.1.2: {}
 
-  tinyglobby@0.2.15:
+  tinyglobby@0.2.15(picomatch@4.0.4):
     dependencies:
       fdir: 6.5.0(picomatch@4.0.4)
       picomatch: 4.0.4
 
-  tinyglobby@0.2.16:
+  tinyglobby@0.2.16(picomatch@4.0.4):
     dependencies:
       fdir: 6.5.0(picomatch@4.0.4)
       picomatch: 4.0.4
@@ -3176,7 +3176,7 @@ snapshots:
       picomatch: 4.0.4
       postcss: 8.5.14
       rolldown: 1.0.0-rc.18
-      tinyglobby: 0.2.16
+      tinyglobby: 0.2.16(picomatch@4.0.4)
       tsx: 4.21.0
       yaml: 2.8.4
     optionalDependencies:
@@ -3201,7 +3201,7 @@ snapshots:
       std-env: 4.1.0
       tinybench: 2.9.0
       tinyexec: 1.1.2
-      tinyglobby: 0.2.15
+      tinyglobby: 0.2.15(picomatch@4.0.4)
       tinyrainbow: 3.1.0
       vite: 8.0.11(@types/node@25.5.0)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.8.4)
       why-is-node-running: 2.3.0
