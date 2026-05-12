@@ -65,7 +65,6 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
   appendArtifactWithRollback: mocks.appendArtifactWithRollback,
-  appendArtifact: mocks.appendArtifact,
   createArtifactEntry: mocks.createArtifactEntry,
 }));
 

@@ -185,10 +185,9 @@ async function appendArtifact(
 ): Promise<void> {
   const resolvedSessionDir = resolve(sessionDir);
   const expectedSessionId = sessionIdFromSessionDir(resolvedSessionDir);
-  const validatedEntry = validateArtifactEntry(entry, expectedSessionId);
-
   await appendSerializer.run(resolvedSessionDir, async () => {
     try {
+      const validatedEntry = validateArtifactEntry(entry, expectedSessionId);
       const manifest = await readArtifactManifest(resolvedSessionDir);
       await writeArtifactManifest(resolvedSessionDir, {
         ...manifest,

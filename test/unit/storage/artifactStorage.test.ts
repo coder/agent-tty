@@ -266,6 +266,29 @@ describe('artifact manifest storage', () => {
     });
   });
 
+  it('removes rollback artifact paths when artifact entry validation fails', async () => {
+    const sessionDir = await createSessionDir();
+    const artifactFile = artifactPath(sessionDir, 'invalid-entry.json');
+
+    await ensureArtifactsDir(sessionDir);
+    await writeFile(artifactFile, 'artifact', 'utf8');
+
+    await expect(
+      appendArtifactWithRollback({
+        sessionDir,
+        entry: createArtifactEntry({
+          filename: 'invalid-entry.json',
+          sessionId: 'other-session',
+        }),
+        rollbackArtifactPath: artifactFile,
+      }),
+    ).rejects.toMatchObject({ code: 'MANIFEST_VALIDATION_ERROR' });
+
+    await expect(access(artifactFile)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
   it('preserves artifact paths when rollback is not requested', async () => {
     const sessionDir = await createSessionDir();
     const artifactFile = artifactPath(sessionDir, 'explicit-out.cast');

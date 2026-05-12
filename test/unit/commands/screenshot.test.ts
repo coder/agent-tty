@@ -55,7 +55,6 @@ vi.mock('../../../src/replay/offlineReplay.js', () => ({
 
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
   appendArtifactWithRollback: mocks.appendArtifactWithRollback,
-  appendArtifact: mocks.appendArtifact,
   createArtifactEntry: mocks.createArtifactEntry,
 }));
 
@@ -544,7 +543,7 @@ describe('screenshot command', () => {
       { force: true },
     );
     expect(mocks.rename).not.toHaveBeenCalled();
-    expect(mocks.appendArtifact).not.toHaveBeenCalled();
+    expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 

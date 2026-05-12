@@ -36,7 +36,6 @@ vi.mock('../../../src/replay/offlineReplay.js', () => ({
 
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
   appendArtifactWithRollback: mocks.appendArtifactWithRollback,
-  appendArtifact: mocks.appendArtifact,
   createArtifactEntry: mocks.createArtifactEntry,
 }));
 
