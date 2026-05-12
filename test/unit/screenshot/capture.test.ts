@@ -384,7 +384,7 @@ describe('screenshot capture', () => {
     expect(manifest.artifacts).toEqual([]);
   });
 
-  it('preserves the renamed final PNG when manifest append fails after rename', async () => {
+  it('removes the renamed final PNG when manifest append fails after rename', async () => {
     const sessionDirectory = await createSessionDir();
     const finalFilename = screenshotFilename(5, 'reference-dark');
     const finalPath = artifactPath(sessionDirectory, finalFilename);
@@ -418,12 +418,9 @@ describe('screenshot capture', () => {
       }),
     ).rejects.toMatchObject({ code: 'MANIFEST_VALIDATION_ERROR' });
 
-    // The final PNG survives because cleanup only removes the temp file,
-    // not the already-renamed artifact. This is intentional: the rename
-    // succeeded, so the PNG is valid; only the manifest entry is missing.
-    // Adding rename rollback is not addressed in this refactor; the
-    // follow-up is tracked in #79.
-    await expect(access(finalPath)).resolves.toBeUndefined();
+    // The temp file has already been renamed, so rollback must remove the
+    // final artifact path to avoid leaving an unmanifested PNG behind.
+    await expect(access(finalPath)).rejects.toMatchObject({ code: 'ENOENT' });
     if (observedTempPath !== undefined) {
       await expect(access(observedTempPath)).rejects.toMatchObject({
         code: 'ENOENT',

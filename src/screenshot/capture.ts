@@ -65,6 +65,8 @@ export async function captureScreenshotResult(
     `.tmp-screenshot-${ulid()}.png`,
   );
 
+  let renamedArtifactPath: string | undefined;
+
   try {
     const rendererResult = await options.backend.screenshot(
       temporaryOutputPath,
@@ -134,6 +136,7 @@ export async function captureScreenshotResult(
     };
 
     await rename(temporaryOutputPath, finalArtifactPath);
+    renamedArtifactPath = finalArtifactPath;
     await appendArtifact(
       options.sessionDir,
       createArtifactEntry({
@@ -159,6 +162,9 @@ export async function captureScreenshotResult(
     return publicResult;
   } catch (error) {
     await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
+    if (renamedArtifactPath !== undefined) {
+      await rm(renamedArtifactPath, { force: true }).catch(() => undefined);
+    }
     throw error;
   }
 }

@@ -1,3 +1,5 @@
+import { rm } from 'node:fs/promises';
+
 import type { SnapshotParams, SnapshotResult } from '../protocol/messages.js';
 import type { SemanticSnapshot } from '../renderer/types.js';
 
@@ -126,33 +128,43 @@ export async function persistSnapshotArtifact(
   );
   const snapshotArtifactPath = artifactPath(options.sessionDir, filename);
 
-  await writeTextFileAtomic({
-    path: snapshotArtifactPath,
-    pathLabel: 'snapshot artifact path',
-    contents: `${JSON.stringify(options.result, null, 2)}\n`,
-    writeErrorMessage: `Failed to write snapshot artifact at ${snapshotArtifactPath}.`,
-  });
+  let wroteArtifact = false;
 
-  await appendArtifact(
-    options.sessionDir,
-    createArtifactEntry({
-      kind: 'snapshot',
-      filename,
-      sessionId: options.snapshot.sessionId,
-      capturedAtSeq: options.snapshot.capturedAtSeq,
-      metadata: {
-        format: options.format,
-        rendererBackend: options.rendererBackend,
-        cols: options.snapshot.cols,
-        rows: options.snapshot.rows,
-        cursorRow: options.snapshot.cursorRow,
-        cursorCol: options.snapshot.cursorCol,
-        ...(options.snapshot.scrollbackLines === undefined
-          ? {}
-          : { scrollbackLineCount: options.snapshot.scrollbackLines.length }),
-      },
-    }),
-  );
+  try {
+    await writeTextFileAtomic({
+      path: snapshotArtifactPath,
+      pathLabel: 'snapshot artifact path',
+      contents: `${JSON.stringify(options.result, null, 2)}\n`,
+      writeErrorMessage: `Failed to write snapshot artifact at ${snapshotArtifactPath}.`,
+    });
+    wroteArtifact = true;
+
+    await appendArtifact(
+      options.sessionDir,
+      createArtifactEntry({
+        kind: 'snapshot',
+        filename,
+        sessionId: options.snapshot.sessionId,
+        capturedAtSeq: options.snapshot.capturedAtSeq,
+        metadata: {
+          format: options.format,
+          rendererBackend: options.rendererBackend,
+          cols: options.snapshot.cols,
+          rows: options.snapshot.rows,
+          cursorRow: options.snapshot.cursorRow,
+          cursorCol: options.snapshot.cursorCol,
+          ...(options.snapshot.scrollbackLines === undefined
+            ? {}
+            : { scrollbackLineCount: options.snapshot.scrollbackLines.length }),
+        },
+      }),
+    );
+  } catch (error) {
+    if (wroteArtifact) {
+      await rm(snapshotArtifactPath, { force: true }).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 export async function captureSnapshotResult(

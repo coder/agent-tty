@@ -1,4 +1,5 @@
-import { access, mkdir, readFile } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -144,6 +145,39 @@ describe('snapshot capture', () => {
       sessionId: 'session-01',
       artifacts: [],
     });
+  });
+
+  it('removes the snapshot artifact when manifest append fails after write', async () => {
+    const sessionDirectory = await createSessionDir();
+    const snapshot = createTestSemanticSnapshot();
+    const result = createSnapshotResult(snapshot, 'structured');
+    const filename = snapshotFilename(5, 'structured');
+    const snapshotPath = artifactPath(sessionDirectory, filename);
+    const manifestFilePath = artifactPath(sessionDirectory, 'manifest.json');
+    const unrelatedManifest = {
+      version: 1,
+      sessionId: 'unrelated-session',
+      artifacts: [],
+    };
+    await mkdir(dirname(manifestFilePath), { recursive: true });
+    await writeFile(manifestFilePath, `${JSON.stringify(unrelatedManifest)}\n`);
+
+    await expect(
+      persistSnapshotArtifact({
+        sessionDir: sessionDirectory,
+        format: 'structured',
+        snapshot,
+        result,
+        rendererBackend: 'test-backend',
+      }),
+    ).rejects.toMatchObject({ code: 'MANIFEST_VALIDATION_ERROR' });
+
+    await expect(access(snapshotPath)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    await expect(readFile(manifestFilePath, 'utf8')).resolves.toBe(
+      `${JSON.stringify(unrelatedManifest)}\n`,
+    );
   });
 
   it('requires renderer backend metadata before writing artifacts', async () => {
