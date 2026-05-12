@@ -1,5 +1,3 @@
-import { rm } from 'node:fs/promises';
-
 import type { SnapshotParams, SnapshotResult } from '../protocol/messages.js';
 import type { SemanticSnapshot } from '../renderer/types.js';
 
@@ -7,7 +5,7 @@ import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { SnapshotResultSchema } from '../protocol/schemas.js';
 import { parseValidatedResult } from '../protocol/validation.js';
 import {
-  appendArtifact,
+  appendArtifactWithRollback,
   createArtifactEntry,
 } from '../storage/artifactManifest.js';
 import {
@@ -128,19 +126,17 @@ export async function persistSnapshotArtifact(
   );
   const snapshotArtifactPath = artifactPath(options.sessionDir, filename);
 
-  let wroteArtifact = false;
+  await writeTextFileAtomic({
+    path: snapshotArtifactPath,
+    pathLabel: 'snapshot artifact path',
+    contents: `${JSON.stringify(options.result, null, 2)}\n`,
+    writeErrorMessage: `Failed to write snapshot artifact at ${snapshotArtifactPath}.`,
+  });
 
-  try {
-    await writeTextFileAtomic({
-      path: snapshotArtifactPath,
-      pathLabel: 'snapshot artifact path',
-      contents: `${JSON.stringify(options.result, null, 2)}\n`,
-      writeErrorMessage: `Failed to write snapshot artifact at ${snapshotArtifactPath}.`,
-    });
-    wroteArtifact = true;
-
-    await appendArtifact(
-      options.sessionDir,
+  await appendArtifactWithRollback({
+    sessionDir: options.sessionDir,
+    artifactPath: snapshotArtifactPath,
+    createEntry: () =>
       createArtifactEntry({
         kind: 'snapshot',
         filename,
@@ -158,13 +154,7 @@ export async function persistSnapshotArtifact(
             : { scrollbackLineCount: options.snapshot.scrollbackLines.length }),
         },
       }),
-    );
-  } catch (error) {
-    if (wroteArtifact) {
-      await rm(snapshotArtifactPath, { force: true }).catch(() => undefined);
-    }
-    throw error;
-  }
+  });
 }
 
 export async function captureSnapshotResult(

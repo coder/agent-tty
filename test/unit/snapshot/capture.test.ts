@@ -154,6 +154,9 @@ describe('snapshot capture', () => {
     const filename = snapshotFilename(5, 'structured');
     const snapshotPath = artifactPath(sessionDirectory, filename);
     const manifestFilePath = artifactPath(sessionDirectory, 'manifest.json');
+    // Pre-write a manifest whose sessionId does not match the directory so
+    // `appendArtifact` raises a MANIFEST_VALIDATION_ERROR after the snapshot
+    // artifact has already been written.
     const unrelatedManifest = {
       version: 1,
       sessionId: 'unrelated-session',

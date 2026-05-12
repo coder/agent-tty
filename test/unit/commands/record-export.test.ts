@@ -1,14 +1,22 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import process from 'node:process';
 
 import type * as FsPromises from 'node:fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ERROR_CODES } from '../../../src/protocol/errors.js';
+import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 
 const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
@@ -440,6 +448,107 @@ describe('record export command', () => {
     );
     expect(emitSuccessArgs.result.metadata.rendererBackend).toBe('ghostty-web');
     expect(emitSuccessArgs.result.durationMs).toBe(1_500);
+  });
+
+  it('removes asciicast artifacts when manifest append fails after write', async () => {
+    const sessionDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-append-asciicast-',
+    );
+    const artifactFile = join(
+      sessionDirectory,
+      'artifacts',
+      'recording-2-asciicast.cast',
+    );
+    const manifestError = makeCliError(ERROR_CODES.MANIFEST_VALIDATION_ERROR, {
+      message: 'artifact manifest append failed',
+    });
+
+    mocks.sessionDir.mockReturnValue(sessionDirectory);
+    mocks.manifestPath.mockReturnValue(join(sessionDirectory, 'session.json'));
+    mocks.eventLogPath.mockReturnValue(join(sessionDirectory, 'events.jsonl'));
+    mocks.ensureArtifactsDir.mockResolvedValue(
+      join(sessionDirectory, 'artifacts'),
+    );
+    mocks.recordingFilename.mockReturnValue('recording-2-asciicast.cast');
+    mocks.writeTextFileAtomic.mockImplementation(
+      async (options: { path: string; contents: string }) => {
+        await mkdir(dirname(options.path), { recursive: true });
+        await writeFile(options.path, options.contents, 'utf8');
+      },
+    );
+    mocks.appendArtifact.mockRejectedValue(manifestError);
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'asciicast',
+      }),
+    ).rejects.toBe(manifestError);
+
+    await expect(access(artifactFile)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('removes webm artifacts when manifest append fails after export', async () => {
+    const sessionDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-append-webm-',
+    );
+    const artifactFile = join(
+      sessionDirectory,
+      'artifacts',
+      'recording-1-webm.webm',
+    );
+    const webmBytes = 12_345;
+    const webmContent = Buffer.alloc(webmBytes, 0x42);
+    const manifestError = makeCliError(ERROR_CODES.MANIFEST_VALIDATION_ERROR, {
+      message: 'artifact manifest append failed',
+    });
+
+    mocks.sessionDir.mockReturnValue(sessionDirectory);
+    mocks.manifestPath.mockReturnValue(join(sessionDirectory, 'session.json'));
+    mocks.eventLogPath.mockReturnValue(join(sessionDirectory, 'events.jsonl'));
+    mocks.ensureArtifactsDir.mockResolvedValue(
+      join(sessionDirectory, 'artifacts'),
+    );
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+    mocks.generateWebmExport.mockImplementation(
+      async (options: { outputPath: string }) => {
+        await mkdir(dirname(options.outputPath), { recursive: true });
+        await writeFile(options.outputPath, webmContent);
+        return {
+          capturedAtSeq: 1,
+          durationMs: 1_500,
+          outputEventCount: 1,
+          resizeEventCount: 1,
+          cols: 80,
+          rows: 24,
+          profileName: 'reference-dark',
+          timingMode: 'accelerated',
+          rendererBackend: 'ghostty-web',
+        };
+      },
+    );
+    mocks.stat.mockResolvedValue({ size: webmBytes });
+    mocks.readFile.mockResolvedValue(webmContent);
+    mocks.appendArtifact.mockRejectedValue(manifestError);
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'webm',
+      }),
+    ).rejects.toBe(manifestError);
+
+    await expect(access(artifactFile)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
   it('resolves WebM profile from command option, context default, and builtin fallback', async () => {

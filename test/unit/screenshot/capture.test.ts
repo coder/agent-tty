@@ -392,15 +392,13 @@ describe('screenshot capture', () => {
     // `appendArtifact` raises a MANIFEST_VALIDATION_ERROR after the temp file
     // has already been renamed into place.
     const manifestFilePath = artifactPath(sessionDirectory, 'manifest.json');
+    const unrelatedManifest = {
+      version: 1,
+      sessionId: 'unrelated-session',
+      artifacts: [],
+    };
     await mkdir(dirname(manifestFilePath), { recursive: true });
-    await writeFile(
-      manifestFilePath,
-      `${JSON.stringify({
-        version: 1,
-        sessionId: 'unrelated-session',
-        artifacts: [],
-      })}\n`,
-    );
+    await writeFile(manifestFilePath, `${JSON.stringify(unrelatedManifest)}\n`);
 
     let observedTempPath: string | undefined;
     const backend = createFakeBackend({
@@ -426,6 +424,9 @@ describe('screenshot capture', () => {
         code: 'ENOENT',
       });
     }
+    await expect(readFile(manifestFilePath, 'utf8')).resolves.toBe(
+      `${JSON.stringify(unrelatedManifest)}\n`,
+    );
   });
 
   it('removes the temp file and rethrows when the renderer screenshot rejects', async () => {

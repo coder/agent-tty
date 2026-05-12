@@ -24,7 +24,7 @@ import {
   type RecordExportResult,
 } from '../../protocol/messages.js';
 import {
-  appendArtifact,
+  appendArtifactWithRollback,
   createArtifactEntry,
 } from '../../storage/artifactManifest.js';
 import {
@@ -219,7 +219,6 @@ export async function runRecordExportCommand(
 
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
-
   if (manifest === null) {
     throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
       message: `Session "${options.sessionId}" was not found.`,
@@ -371,18 +370,20 @@ export async function runRecordExportCommand(
       sha256 = await computeFileHash(artifactOutputPath);
     }
 
-    await appendArtifact(
-      sessionDirectory,
-      createArtifactEntry({
-        kind: artifactKind,
-        filename: basename(artifactOutputPath),
-        sessionId: manifest.sessionId,
-        capturedAtSeq,
-        sha256,
-        bytes,
-        metadata: artifactMetadata,
-      }),
-    );
+    await appendArtifactWithRollback({
+      sessionDir: sessionDirectory,
+      artifactPath: artifactOutputPath,
+      createEntry: () =>
+        createArtifactEntry({
+          kind: artifactKind,
+          filename: basename(artifactOutputPath),
+          sessionId: manifest.sessionId,
+          capturedAtSeq,
+          sha256,
+          bytes,
+          metadata: artifactMetadata,
+        }),
+    });
 
     const rawResult = {
       sessionId: manifest.sessionId,

@@ -1,4 +1,5 @@
-import { basename, resolve } from 'node:path';
+import { rm } from 'node:fs/promises';
+import { basename, isAbsolute, resolve } from 'node:path';
 
 import { ulid } from 'ulid';
 import { z } from 'zod';
@@ -171,6 +172,12 @@ export async function writeArtifactManifest(
   });
 }
 
+export interface AppendArtifactWithRollbackOptions {
+  sessionDir: string;
+  artifactPath: string;
+  createEntry: () => ArtifactEntry;
+}
+
 export async function appendArtifact(
   sessionDir: string,
   entry: ArtifactEntry,
@@ -186,6 +193,23 @@ export async function appendArtifact(
       artifacts: [...manifest.artifacts, validatedEntry],
     });
   });
+}
+
+export async function appendArtifactWithRollback(
+  options: AppendArtifactWithRollbackOptions,
+): Promise<void> {
+  invariant(
+    options.artifactPath.length > 0,
+    'artifactPath must be a non-empty string',
+  );
+  invariant(isAbsolute(options.artifactPath), 'artifactPath must be absolute');
+
+  try {
+    await appendArtifact(options.sessionDir, options.createEntry());
+  } catch (error) {
+    await rm(options.artifactPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 export function createArtifactEntry(

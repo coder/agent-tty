@@ -8,7 +8,7 @@ import type { RendererBackend } from '../renderer/backend.js';
 import { ScreenshotResultSchema } from '../protocol/schemas.js';
 import { parseValidatedResult } from '../protocol/validation.js';
 import {
-  appendArtifact,
+  appendArtifactWithRollback,
   createArtifactEntry,
 } from '../storage/artifactManifest.js';
 import {
@@ -64,8 +64,6 @@ export async function captureScreenshotResult(
     options.sessionDir,
     `.tmp-screenshot-${ulid()}.png`,
   );
-
-  let renamedArtifactPath: string | undefined;
 
   try {
     const rendererResult = await options.backend.screenshot(
@@ -136,35 +134,33 @@ export async function captureScreenshotResult(
     };
 
     await rename(temporaryOutputPath, finalArtifactPath);
-    renamedArtifactPath = finalArtifactPath;
-    await appendArtifact(
-      options.sessionDir,
-      createArtifactEntry({
-        kind: 'screenshot',
-        filename,
-        sessionId: publicResult.sessionId,
-        capturedAtSeq: publicResult.capturedAtSeq,
-        sha256,
-        metadata: {
-          profileName: publicResult.profileName,
-          cols: publicResult.cols,
-          rows: publicResult.rows,
-          pngSizeBytes: publicResult.pngSizeBytes,
-          cursorVisible: publicResult.cursorVisible,
-          rendererBackend: publicResult.rendererBackend,
-          pixelWidth: publicResult.pixelWidth,
-          pixelHeight: publicResult.pixelHeight,
-          renderProfileHash: publicResult.renderProfileHash,
-        },
-      }),
-    );
+    await appendArtifactWithRollback({
+      sessionDir: options.sessionDir,
+      artifactPath: finalArtifactPath,
+      createEntry: () =>
+        createArtifactEntry({
+          kind: 'screenshot',
+          filename,
+          sessionId: publicResult.sessionId,
+          capturedAtSeq: publicResult.capturedAtSeq,
+          sha256,
+          metadata: {
+            profileName: publicResult.profileName,
+            cols: publicResult.cols,
+            rows: publicResult.rows,
+            pngSizeBytes: publicResult.pngSizeBytes,
+            cursorVisible: publicResult.cursorVisible,
+            rendererBackend: publicResult.rendererBackend,
+            pixelWidth: publicResult.pixelWidth,
+            pixelHeight: publicResult.pixelHeight,
+            renderProfileHash: publicResult.renderProfileHash,
+          },
+        }),
+    });
 
     return publicResult;
   } catch (error) {
     await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
-    if (renamedArtifactPath !== undefined) {
-      await rm(renamedArtifactPath, { force: true }).catch(() => undefined);
-    }
     throw error;
   }
 }
