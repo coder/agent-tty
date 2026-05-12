@@ -8,7 +8,7 @@ import {
   RunCompletionSentinelScanner,
   type SentinelPiece,
 } from './runCompletionSentinel.js';
-import { addAbortListener, makeAbortError } from '../util/abort.js';
+import { waitForScopedOperation } from '../util/abort.js';
 import { invariant } from '../util/assert.js';
 import { ResourceScope } from '../util/resourceScope.js';
 
@@ -280,62 +280,25 @@ export class RunCompletionCoordinator {
       'timeoutMs must be a positive integer',
     );
 
-    const { signal } = options;
-    if (signal?.aborted === true) {
+    const forgetWaiter = (): void => {
+      // Match timeout behavior: stop waiting for a client response but keep
+      // sentinel/postamble registrations active so eventual completion bytes
+      // remain hidden and replayable.
       this.#runCompletionWaiters.delete(marker);
-      throw makeAbortError(signal);
-    }
-
-    const scope = new ResourceScope();
-    const { promise, reject, resolve } =
-      Promise.withResolvers<TimedRunCompletionWaitResult>();
-    let resolved = false;
-
-    const rejectWithError = (error: unknown): void => {
-      if (resolved) {
-        return;
-      }
-
-      resolved = true;
-      void scope.close().then(() => {
-        reject(error instanceof Error ? error : new Error(String(error)));
-      }, reject);
     };
 
-    const resolveWithResult = (result: TimedRunCompletionWaitResult): void => {
-      if (resolved) {
-        return;
-      }
-
-      resolved = true;
-      void scope.close().then(() => {
-        resolve(result);
-      }, reject);
-    };
-
-    const timeoutHandle = setTimeout(() => {
-      // Keep sentinel/postamble registrations active after timeout so the
-      // eventual internal completion bytes are still hidden from artifacts.
-      this.#runCompletionWaiters.delete(marker);
-      resolveWithResult({ kind: 'timeout' });
-    }, timeoutMs);
-    scope.add('run completion timeout', () => {
-      clearTimeout(timeoutHandle);
+    return await waitForScopedOperation<TimedRunCompletionWaitResult>({
+      operationName: 'run completion',
+      operation: completionPromise,
+      scope: new ResourceScope(),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      timeoutMs,
+      timeoutResult: () => {
+        forgetWaiter();
+        return { kind: 'timeout' };
+      },
+      onAbort: forgetWaiter,
     });
-
-    if (signal !== undefined) {
-      addAbortListener(scope, 'run completion abort listener', signal, () => {
-        // Match timeout behavior: stop waiting for a client response but keep
-        // sentinel/postamble registrations active so eventual completion bytes
-        // remain hidden and replayable.
-        this.#runCompletionWaiters.delete(marker);
-        rejectWithError(makeAbortError(signal));
-      });
-    }
-
-    void completionPromise.then(resolveWithResult, rejectWithError);
-
-    return await promise;
   }
 
   async #appendOutput(data: string): Promise<void> {

@@ -53,6 +53,7 @@ import {
   addAbortListener,
   makeAbortError,
   throwIfAborted,
+  waitForScopedOperation,
 } from '../util/abort.js';
 import { invariant } from '../util/assert.js';
 import { ResourceScope } from '../util/resourceScope.js';
@@ -104,69 +105,6 @@ function rethrowAsync(error: unknown): void {
   process.nextTick(() => {
     throw error;
   });
-}
-
-async function waitForScopedOperation<T>(params: {
-  readonly operationName: string;
-  readonly operation: Promise<T>;
-  readonly scope: ResourceScope;
-  readonly signal: AbortSignal;
-  readonly timeoutMs?: number;
-  readonly timeoutResult?: () => T;
-}): Promise<T> {
-  const { operationName, operation, scope, signal, timeoutMs, timeoutResult } =
-    params;
-  invariant(operationName.length > 0, 'operationName must not be empty');
-  if (signal.aborted) {
-    await scope.close();
-    throw makeAbortError(signal);
-  }
-
-  const { promise, reject, resolve } = Promise.withResolvers<T>();
-  let settled = false;
-
-  const rejectWithError = (error: unknown): void => {
-    if (settled) {
-      return;
-    }
-
-    settled = true;
-    void scope.close().then(() => {
-      reject(error instanceof Error ? error : new Error(String(error)));
-    }, reject);
-  };
-
-  const resolveWithValue = (value: T): void => {
-    if (settled) {
-      return;
-    }
-
-    settled = true;
-    void scope.close().then(() => {
-      resolve(value);
-    }, reject);
-  };
-
-  if (timeoutMs !== undefined) {
-    invariant(
-      timeoutResult !== undefined,
-      'timeoutResult must be provided when timeoutMs is set',
-    );
-    const timeoutHandle = setTimeout(() => {
-      resolveWithValue(timeoutResult());
-    }, timeoutMs);
-    scope.add(`${operationName} timeout`, () => {
-      clearTimeout(timeoutHandle);
-    });
-  }
-
-  addAbortListener(scope, `${operationName} abort listener`, signal, () => {
-    rejectWithError(makeAbortError(signal));
-  });
-
-  void operation.then(resolveWithValue, rejectWithError);
-
-  return await promise;
 }
 
 function resolveHostRendererName(input: string | undefined): RendererName {

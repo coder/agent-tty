@@ -10,7 +10,7 @@ import {
   type RpcMethod,
   type RpcResponse,
 } from '../protocol/messages.js';
-import { makeAbortError } from '../util/abort.js';
+import { createResourceScopedSettlers, makeAbortError } from '../util/abort.js';
 import { invariant } from '../util/assert.js';
 import { ResourceScope } from '../util/resourceScope.js';
 
@@ -58,51 +58,31 @@ async function probeSocketLiveness(socketPath: string): Promise<boolean> {
   return await new Promise<boolean>((resolve, reject) => {
     const scope = new ResourceScope();
     const probe = net.connect({ path: socketPath });
-    let settled = false;
-
-    const resolveWithValue = (value: boolean): void => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      void scope.close().then(() => {
-        resolve(value);
-      }, reject);
-    };
-
-    const rejectWithError = (error: unknown): void => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      void scope.close().then(() => {
-        reject(error instanceof Error ? error : new Error(String(error)));
-      }, reject);
-    };
+    const settlers = createResourceScopedSettlers(scope, resolve, reject);
 
     scope.add('rpc liveness probe socket', () => {
       probe.destroy();
     });
     const timeoutHandle = setTimeout(() => {
-      rejectWithError(new Error(`Timed out probing RPC socket: ${socketPath}`));
+      // If connect neither succeeds nor fails promptly, treat the socket path as
+      // stale rather than blocking host startup indefinitely.
+      settlers.resolve(false);
     }, SOCKET_LIVENESS_PROBE_TIMEOUT_MS);
     scope.add('rpc liveness probe timeout', () => {
       clearTimeout(timeoutHandle);
     });
 
     probe.once('connect', () => {
-      resolveWithValue(true);
+      settlers.resolve(true);
     });
 
     probe.once('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'ECONNREFUSED' || error.code === 'ENOENT') {
-        resolveWithValue(false);
+        settlers.resolve(false);
         return;
       }
 
-      rejectWithError(error);
+      settlers.reject(error);
     });
   });
 }

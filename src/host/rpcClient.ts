@@ -15,6 +15,7 @@ import {
 } from '../protocol/messages.js';
 import {
   addAbortListener,
+  createResourceScopedSettlers,
   makeAbortError,
   throwIfAborted,
 } from '../util/abort.js';
@@ -128,19 +129,12 @@ export async function sendRpc(
     scope.add('rpc client socket', () => {
       socket.destroy();
     });
-    let settled = false;
+    const settlers = createResourceScopedSettlers(scope, resolve, reject);
     let responseHandled = false;
     let buffer = '';
 
     const rejectWithCliError = (error: CliError): void => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      void scope.close().then(() => {
-        reject(error);
-      }, reject);
+      settlers.reject(error);
     };
 
     const rejectWithTransportError = (error: unknown): void => {
@@ -150,26 +144,12 @@ export async function sendRpc(
     };
 
     const resolveWithResult = (result: unknown): void => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      void scope.close().then(() => {
-        resolve(result);
-      }, reject);
+      settlers.resolve(result);
     };
 
     if (signal !== undefined) {
       addAbortListener(scope, 'rpc client abort listener', signal, () => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        void scope.close().then(() => {
-          reject(makeAbortError(signal));
-        }, reject);
+        settlers.reject(makeAbortError(signal));
       });
     }
 
@@ -306,7 +286,7 @@ export async function sendRpc(
     });
 
     socket.on('end', () => {
-      if (settled || responseHandled) {
+      if (settlers.isSettled() || responseHandled) {
         return;
       }
 
