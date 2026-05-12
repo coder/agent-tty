@@ -219,6 +219,7 @@ export async function runRecordExportCommand(
 
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
+
   if (manifest === null) {
     throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
       message: `Session "${options.sessionId}" was not found.`,
