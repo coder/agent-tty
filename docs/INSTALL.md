@@ -1,6 +1,6 @@
 # Installation
 
-`agent-tty` requires Node `>=24 <26`.
+`agent-tty` requires Node `>=24 <27`.
 The recommended install path is the npm package `agent-tty`.
 GitHub Release tarballs are the registry-independent fallback, and direct git dependency installs remain best-effort because they build from source.
 

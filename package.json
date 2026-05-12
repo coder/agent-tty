@@ -21,7 +21,7 @@
   "type": "module",
   "packageManager": "aube@1.2.0",
   "engines": {
-    "node": ">=24.0.0 <26"
+    "node": ">=24.0.0 <27"
   },
   "bin": {
     "agent-tty": "./dist/cli/main.js"
@@ -84,7 +84,7 @@
     "commander": "14.0.3",
     "ghostty-web": "0.4.0",
     "node-pty": "1.1.0",
-    "playwright": "1.58.2",
+    "playwright": "1.60.0",
     "ulid": "3.0.2",
     "zod": "4.3.6"
   },
