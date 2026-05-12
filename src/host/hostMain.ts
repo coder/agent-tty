@@ -51,7 +51,7 @@ import {
 } from '../storage/sessionPaths.js';
 import {
   addAbortListener,
-  makeAbortError,
+  makeAbortReason,
   throwIfAborted,
   waitForScopedOperation,
 } from '../util/abort.js';
@@ -177,7 +177,6 @@ export async function runHost(sessionId: string): Promise<void> {
   let lastOutputAt = Date.now();
   let lastActivityAt = lastOutputAt;
   const hostAbortController = new AbortController();
-  let idleTimeoutHandle: ReturnType<typeof setInterval> | null = null;
   let idleTimeoutScope: ResourceScope | null = null;
   let rpcListenPromise: Promise<void> | null = null;
   let shutdownPromise: Promise<void> | null = null;
@@ -193,6 +192,10 @@ export async function runHost(sessionId: string): Promise<void> {
   });
   let ptyIngestionQueue: Promise<void> = Promise.resolve();
 
+  // Per-client wait-exit callbacks, cleaned up individually via ResourceScope.
+  // Using ptyExitPromise.then() would permanently attach to the shared promise.
+  const ptyExitWaiters = new Set<() => void>();
+
   const ptyExitPromise = new Promise<void>((resolve) => {
     markPtyExited = (): void => {
       if (ptyHasExited) {
@@ -201,6 +204,11 @@ export async function runHost(sessionId: string): Promise<void> {
 
       ptyHasExited = true;
       resolve();
+      const waiters = [...ptyExitWaiters];
+      ptyExitWaiters.clear();
+      for (const waiter of waiters) {
+        waiter();
+      }
     };
   });
 
@@ -282,6 +290,7 @@ export async function runHost(sessionId: string): Promise<void> {
     const scope = new ResourceScope();
     idleTimeoutScope = scope;
     const checkIntervalMs = Math.min(idleTimeoutMs, IDLE_CHECK_CAP_MS);
+    let idleTimeoutHandle: ReturnType<typeof setInterval> | null = null;
     idleTimeoutHandle = setInterval(() => {
       if (hostAbortController.signal.aborted) {
         clearIdleTimeout();
@@ -322,7 +331,7 @@ export async function runHost(sessionId: string): Promise<void> {
 
     shutdownPromise = (async () => {
       try {
-        hostAbortController.abort(makeAbortError());
+        hostAbortController.abort(makeAbortReason('Host is shutting down.'));
         clearIdleTimeout();
         if (isSessionCommandable(state)) {
           pty.kill();
@@ -389,6 +398,15 @@ export async function runHost(sessionId: string): Promise<void> {
         }
       }
     })().catch(rethrowAsync);
+  };
+
+  const makeWaitExitOutcome = (): WaitOutcome => {
+    const snapshot = state.snapshot();
+    const result: WaitOutcome = { timedOut: false };
+    if (snapshot.exitCode !== null) {
+      result.exitCode = snapshot.exitCode;
+    }
+    return result;
   };
 
   const handlers: Record<string, MethodHandler> = {
@@ -723,21 +741,17 @@ export async function runHost(sessionId: string): Promise<void> {
 
       if (hasExit) {
         if (ptyHasExited) {
-          const snapshot = state.snapshot();
-          const result: WaitOutcome = { timedOut: false };
-          if (snapshot.exitCode !== null) {
-            result.exitCode = snapshot.exitCode;
-          }
-          return result;
+          return makeWaitExitOutcome();
         }
 
-        waitCondition = ptyExitPromise.then(() => {
-          const snapshot = state.snapshot();
-          const result: WaitOutcome = { timedOut: false };
-          if (snapshot.exitCode !== null) {
-            result.exitCode = snapshot.exitCode;
-          }
-          return result;
+        waitCondition = new Promise<WaitOutcome>((resolve) => {
+          const waiter = (): void => {
+            resolve(makeWaitExitOutcome());
+          };
+          ptyExitWaiters.add(waiter);
+          waitScope.add('wait exit waiter', () => {
+            ptyExitWaiters.delete(waiter);
+          });
         });
       } else {
         assertSessionCommandable(state);

@@ -4,6 +4,7 @@ import {
   addAbortListener,
   createResourceScopedSettlers,
   makeAbortError,
+  makeAbortReason,
   throwIfAborted,
   waitForScopedOperation,
 } from '../../../src/util/abort.js';
@@ -24,6 +25,13 @@ describe('abort utilities', () => {
     const reasonError = makeAbortError(controller.signal);
     expect(reasonError.name).toBe('AbortError');
     expect(reasonError.message).toBe('client disconnected');
+  });
+
+  it('creates named abort reasons for internal controllers', () => {
+    const error = makeAbortReason('host shutdown');
+
+    expect(error.name).toBe('AbortError');
+    expect(error.message).toBe('host shutdown');
   });
 
   it('forwards Error abort reasons without wrapping them', () => {
@@ -94,6 +102,83 @@ describe('abort utilities', () => {
     });
   });
 
+  it('rejects with the close failure when resolving cannot close the scope', async () => {
+    const scope = new ResourceScope();
+    const closeFailure = new Error('close failed');
+    scope.add('failing release', () => {
+      throw closeFailure;
+    });
+    const { promise, reject, resolve } = Promise.withResolvers<string>();
+    const settlers = createResourceScopedSettlers(scope, resolve, reject);
+
+    settlers.resolve('ok');
+
+    let caught: unknown;
+    try {
+      await promise;
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(ResourceScopeCloseError);
+    expect((caught as ResourceScopeCloseError).failures).toEqual([
+      { name: 'failing release', error: closeFailure },
+    ]);
+  });
+
+  it('waitForScopedOperation resolves when the operation resolves first', async () => {
+    const releases: string[] = [];
+    const scope = new ResourceScope();
+    scope.add('release', () => {
+      releases.push('closed');
+    });
+
+    await expect(
+      waitForScopedOperation({
+        operationName: 'test operation',
+        operation: Promise.resolve('done'),
+        scope,
+      }),
+    ).resolves.toBe('done');
+    expect(releases).toEqual(['closed']);
+  });
+
+  it('waitForScopedOperation rejects when the operation rejects first', async () => {
+    const releases: string[] = [];
+    const failure = new Error('operation failed');
+    const scope = new ResourceScope();
+    scope.add('release', () => {
+      releases.push('closed');
+    });
+
+    await expect(
+      waitForScopedOperation({
+        operationName: 'test operation',
+        operation: Promise.reject(failure),
+        scope,
+      }),
+    ).rejects.toThrow(failure);
+    expect(releases).toEqual(['closed']);
+  });
+
+  it('waitForScopedOperation clears the timeout when the operation resolves first', async () => {
+    vi.useFakeTimers();
+    try {
+      const promise = waitForScopedOperation({
+        operationName: 'test operation',
+        operation: Promise.resolve('done'),
+        scope: new ResourceScope(),
+        timeoutMs: 100,
+        timeoutResult: () => 'timed out',
+      });
+
+      await expect(promise).resolves.toBe('done');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('waitForScopedOperation resolves timeout results and clears the timer', async () => {
     vi.useFakeTimers();
     try {
@@ -113,6 +198,49 @@ describe('abort utilities', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('waitForScopedOperation handles pre-aborted signals with cleanup and onAbort', async () => {
+    const controller = new AbortController();
+    const reason = new Error('already closed');
+    const releases: string[] = [];
+    const onAbort = vi.fn();
+    const scope = new ResourceScope();
+    scope.add('release', () => {
+      releases.push('closed');
+    });
+    controller.abort(reason);
+
+    await expect(
+      waitForScopedOperation({
+        operationName: 'test operation',
+        operation: Promise.resolve('late'),
+        scope,
+        signal: controller.signal,
+        onAbort,
+      }),
+    ).rejects.toThrow(reason);
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(releases).toEqual(['closed']);
+  });
+
+  it('waitForScopedOperation rejects instead of throwing from an abort callback', async () => {
+    const controller = new AbortController();
+    const callbackError = new Error('abort cleanup failed');
+    const never = new Promise<string>(() => undefined);
+    const promise = waitForScopedOperation({
+      operationName: 'test operation',
+      operation: never,
+      scope: new ResourceScope(),
+      signal: controller.signal,
+      onAbort: () => {
+        throw callbackError;
+      },
+    });
+
+    controller.abort(new Error('request closed'));
+
+    await expect(promise).rejects.toThrow(callbackError);
   });
 
   it('waitForScopedOperation aborts, runs onAbort, and clears the timeout', async () => {

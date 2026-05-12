@@ -25,7 +25,7 @@ import {
   sessionDir,
   socketPath,
 } from '../storage/sessionPaths.js';
-import { throwIfAborted } from '../util/abort.js';
+import { makeAbortError, throwIfAborted } from '../util/abort.js';
 import { invariant } from '../util/assert.js';
 import { sendRpc } from './rpcClient.js';
 
@@ -44,6 +44,20 @@ function delayOptions(
   signal?: AbortSignal,
 ): { signal: AbortSignal } | undefined {
   return signal === undefined ? undefined : { signal };
+}
+
+async function pollDelay(
+  intervalMs: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  try {
+    await delay(intervalMs, undefined, delayOptions(signal));
+  } catch (error) {
+    if (signal?.aborted === true) {
+      throw makeAbortError(signal);
+    }
+    throw error;
+  }
 }
 
 interface NodeError extends Error {
@@ -284,7 +298,7 @@ async function waitForTerminalManifest(
     }
 
     if (attempt + 1 < maxAttempts) {
-      await delay(intervalMs, undefined, delayOptions(signal));
+      await pollDelay(intervalMs, signal);
     }
   }
 
@@ -322,7 +336,7 @@ async function waitForProcessAndSocketShutdown(
     }
 
     if (attempt + 1 < maxAttempts) {
-      await delay(intervalMs, undefined, delayOptions(signal));
+      await pollDelay(intervalMs, signal);
     }
   }
 

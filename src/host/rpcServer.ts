@@ -10,7 +10,10 @@ import {
   type RpcMethod,
   type RpcResponse,
 } from '../protocol/messages.js';
-import { createResourceScopedSettlers, makeAbortError } from '../util/abort.js';
+import {
+  createResourceScopedSettlers,
+  makeAbortReason,
+} from '../util/abort.js';
 import { invariant } from '../util/assert.js';
 import { ResourceScope } from '../util/resourceScope.js';
 
@@ -20,6 +23,12 @@ const MAX_RPC_BUFFER_BYTES = 1_048_576;
 const SOCKET_LIVENESS_PROBE_TIMEOUT_MS = 1_000;
 const UNKNOWN_REQUEST_ID = 'unknown';
 
+/**
+ * Per-request context passed to RPC method handlers.
+ *
+ * `signal` aborts when the client socket closes, indicating the caller is no
+ * longer waiting for a response.
+ */
 export interface MethodContext {
   readonly signal: AbortSignal;
 }
@@ -392,7 +401,9 @@ export class RpcServer {
     const requestScope = new ResourceScope();
     const requestAbortController = new AbortController();
     const abortRequest = (): void => {
-      requestAbortController.abort(makeAbortError());
+      requestAbortController.abort(
+        makeAbortReason('RPC client socket closed.'),
+      );
     };
     socket.once('close', abortRequest);
     requestScope.add('rpc request close listener', () => {
@@ -440,7 +451,11 @@ export class RpcServer {
             ),
       );
     } finally {
-      await requestScope.close();
+      try {
+        await requestScope.close();
+      } catch (error) {
+        console.debug('RPC request ResourceScope cleanup failed:', error);
+      }
     }
   }
 

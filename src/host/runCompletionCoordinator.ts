@@ -50,11 +50,11 @@ export interface PreparedWaitedRun {
   marker: string;
 }
 
-/** Registered completion state returned after `input_run` appends successfully. */
 export interface RunCompletionWaitOptions {
   readonly signal?: AbortSignal;
 }
 
+/** Registered completion state returned after `input_run` appends successfully. */
 export interface RegisteredWaitedRunCompletion {
   postamble: string;
   sentinel: string;
@@ -291,7 +291,7 @@ export class RunCompletionCoordinator {
       operationName: 'run completion',
       operation: completionPromise,
       scope: new ResourceScope(),
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      signal: options.signal,
       timeoutMs,
       timeoutResult: () => {
         forgetWaiter();
