@@ -24,7 +24,7 @@ import {
   type RecordExportResult,
 } from '../../protocol/messages.js';
 import {
-  appendArtifact,
+  appendArtifactWithRollback,
   createArtifactEntry,
 } from '../../storage/artifactManifest.js';
 import {
@@ -371,18 +371,26 @@ export async function runRecordExportCommand(
       sha256 = await computeFileHash(artifactOutputPath);
     }
 
-    await appendArtifact(
-      sessionDirectory,
-      createArtifactEntry({
-        kind: artifactKind,
-        filename: basename(artifactOutputPath),
-        sessionId: manifest.sessionId,
-        capturedAtSeq,
-        sha256,
-        bytes,
-        metadata: artifactMetadata,
-      }),
-    );
+    const artifactEntry = createArtifactEntry({
+      kind: artifactKind,
+      filename: basename(artifactOutputPath),
+      sessionId: manifest.sessionId,
+      capturedAtSeq,
+      sha256,
+      bytes,
+      metadata: artifactMetadata,
+    });
+
+    // Explicit --out files belong to the user and are valid without a
+    // manifest entry; only clean up default in-session artifacts that would
+    // otherwise be orphaned.
+    await appendArtifactWithRollback({
+      sessionDir: sessionDirectory,
+      entry: artifactEntry,
+      ...(options.out === undefined
+        ? { rollbackArtifactPath: artifactOutputPath }
+        : {}),
+    });
 
     const rawResult = {
       sessionId: manifest.sessionId,

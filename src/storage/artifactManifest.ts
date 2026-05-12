@@ -1,4 +1,5 @@
-import { basename, resolve } from 'node:path';
+import { rm } from 'node:fs/promises';
+import { basename, isAbsolute, resolve } from 'node:path';
 
 import { ulid } from 'ulid';
 import { z } from 'zod';
@@ -171,21 +172,61 @@ export async function writeArtifactManifest(
   });
 }
 
-export async function appendArtifact(
+export interface AppendArtifactWithRollbackOptions {
+  sessionDir: string;
+  entry: ArtifactEntry;
+  rollbackArtifactPath?: string;
+}
+
+async function appendArtifact(
   sessionDir: string,
   entry: ArtifactEntry,
+  rollbackArtifactPath: string | undefined,
 ): Promise<void> {
   const resolvedSessionDir = resolve(sessionDir);
   const expectedSessionId = sessionIdFromSessionDir(resolvedSessionDir);
-  const validatedEntry = validateArtifactEntry(entry, expectedSessionId);
-
   await appendSerializer.run(resolvedSessionDir, async () => {
-    const manifest = await readArtifactManifest(resolvedSessionDir);
-    await writeArtifactManifest(resolvedSessionDir, {
-      ...manifest,
-      artifacts: [...manifest.artifacts, validatedEntry],
-    });
+    try {
+      const validatedEntry = validateArtifactEntry(entry, expectedSessionId);
+      const manifest = await readArtifactManifest(resolvedSessionDir);
+      await writeArtifactManifest(resolvedSessionDir, {
+        ...manifest,
+        artifacts: [...manifest.artifacts, validatedEntry],
+      });
+    } catch (error) {
+      if (rollbackArtifactPath !== undefined) {
+        // Best-effort: swallow rm errors so the original manifest failure propagates.
+        await rm(rollbackArtifactPath, { force: true }).catch(() => undefined);
+      }
+      throw error;
+    }
   });
+}
+
+/**
+ * Append an artifact entry to the session manifest, removing the artifact file
+ * at `rollbackArtifactPath` if the append fails. Rollback is best-effort: rm
+ * errors are swallowed so the original manifest error propagates.
+ */
+export async function appendArtifactWithRollback(
+  options: AppendArtifactWithRollbackOptions,
+): Promise<void> {
+  if (options.rollbackArtifactPath !== undefined) {
+    invariant(
+      options.rollbackArtifactPath.length > 0,
+      'rollbackArtifactPath must be a non-empty string',
+    );
+    invariant(
+      isAbsolute(options.rollbackArtifactPath),
+      'rollbackArtifactPath must be absolute',
+    );
+  }
+
+  await appendArtifact(
+    options.sessionDir,
+    options.entry,
+    options.rollbackArtifactPath,
+  );
 }
 
 export function createArtifactEntry(

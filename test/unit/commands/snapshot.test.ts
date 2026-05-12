@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
   withOfflineReplayRenderer: vi.fn(),
+  appendArtifactWithRollback: vi.fn(),
+  // Test-internal delegate used by the appendArtifactWithRollback mock.
   appendArtifact: vi.fn(),
   createArtifactEntry: vi.fn(),
   artifactPath: vi.fn(),
@@ -33,7 +35,7 @@ vi.mock('../../../src/replay/offlineReplay.js', () => ({
 }));
 
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
-  appendArtifact: mocks.appendArtifact,
+  appendArtifactWithRollback: mocks.appendArtifactWithRollback,
   createArtifactEntry: mocks.createArtifactEntry,
 }));
 
@@ -161,6 +163,11 @@ describe('snapshot command', () => {
       (seq: number, format: string) => `snapshot-${String(seq)}-${format}.json`,
     );
     mocks.ensureArtifactsDir.mockResolvedValue('/artifacts');
+    mocks.appendArtifactWithRollback.mockImplementation(
+      async (options: { sessionDir: string; entry: unknown }) => {
+        await mocks.appendArtifact(options.sessionDir, options.entry);
+      },
+    );
     mocks.appendArtifact.mockResolvedValue(undefined);
     mocks.writeTextFileAtomic.mockResolvedValue(undefined);
   });

@@ -5,7 +5,7 @@ import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { SnapshotResultSchema } from '../protocol/schemas.js';
 import { parseValidatedResult } from '../protocol/validation.js';
 import {
-  appendArtifact,
+  appendArtifactWithRollback,
   createArtifactEntry,
 } from '../storage/artifactManifest.js';
 import {
@@ -126,6 +126,24 @@ export async function persistSnapshotArtifact(
   );
   const snapshotArtifactPath = artifactPath(options.sessionDir, filename);
 
+  const artifactEntry = createArtifactEntry({
+    kind: 'snapshot',
+    filename,
+    sessionId: options.snapshot.sessionId,
+    capturedAtSeq: options.snapshot.capturedAtSeq,
+    metadata: {
+      format: options.format,
+      rendererBackend: options.rendererBackend,
+      cols: options.snapshot.cols,
+      rows: options.snapshot.rows,
+      cursorRow: options.snapshot.cursorRow,
+      cursorCol: options.snapshot.cursorCol,
+      ...(options.snapshot.scrollbackLines === undefined
+        ? {}
+        : { scrollbackLineCount: options.snapshot.scrollbackLines.length }),
+    },
+  });
+
   await writeTextFileAtomic({
     path: snapshotArtifactPath,
     pathLabel: 'snapshot artifact path',
@@ -133,26 +151,11 @@ export async function persistSnapshotArtifact(
     writeErrorMessage: `Failed to write snapshot artifact at ${snapshotArtifactPath}.`,
   });
 
-  await appendArtifact(
-    options.sessionDir,
-    createArtifactEntry({
-      kind: 'snapshot',
-      filename,
-      sessionId: options.snapshot.sessionId,
-      capturedAtSeq: options.snapshot.capturedAtSeq,
-      metadata: {
-        format: options.format,
-        rendererBackend: options.rendererBackend,
-        cols: options.snapshot.cols,
-        rows: options.snapshot.rows,
-        cursorRow: options.snapshot.cursorRow,
-        cursorCol: options.snapshot.cursorCol,
-        ...(options.snapshot.scrollbackLines === undefined
-          ? {}
-          : { scrollbackLineCount: options.snapshot.scrollbackLines.length }),
-      },
-    }),
-  );
+  await appendArtifactWithRollback({
+    sessionDir: options.sessionDir,
+    entry: artifactEntry,
+    rollbackArtifactPath: snapshotArtifactPath,
+  });
 }
 
 export async function captureSnapshotResult(

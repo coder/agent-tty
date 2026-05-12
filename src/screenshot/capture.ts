@@ -8,7 +8,7 @@ import type { RendererBackend } from '../renderer/backend.js';
 import { ScreenshotResultSchema } from '../protocol/schemas.js';
 import { parseValidatedResult } from '../protocol/validation.js';
 import {
-  appendArtifact,
+  appendArtifactWithRollback,
   createArtifactEntry,
 } from '../storage/artifactManifest.js';
 import {
@@ -133,28 +133,31 @@ export async function captureScreenshotResult(
       sha256: parsedResult.sha256,
     };
 
+    const artifactEntry = createArtifactEntry({
+      kind: 'screenshot',
+      filename,
+      sessionId: publicResult.sessionId,
+      capturedAtSeq: publicResult.capturedAtSeq,
+      sha256,
+      metadata: {
+        profileName: publicResult.profileName,
+        cols: publicResult.cols,
+        rows: publicResult.rows,
+        pngSizeBytes: publicResult.pngSizeBytes,
+        cursorVisible: publicResult.cursorVisible,
+        rendererBackend: publicResult.rendererBackend,
+        pixelWidth: publicResult.pixelWidth,
+        pixelHeight: publicResult.pixelHeight,
+        renderProfileHash: publicResult.renderProfileHash,
+      },
+    });
+
     await rename(temporaryOutputPath, finalArtifactPath);
-    await appendArtifact(
-      options.sessionDir,
-      createArtifactEntry({
-        kind: 'screenshot',
-        filename,
-        sessionId: publicResult.sessionId,
-        capturedAtSeq: publicResult.capturedAtSeq,
-        sha256,
-        metadata: {
-          profileName: publicResult.profileName,
-          cols: publicResult.cols,
-          rows: publicResult.rows,
-          pngSizeBytes: publicResult.pngSizeBytes,
-          cursorVisible: publicResult.cursorVisible,
-          rendererBackend: publicResult.rendererBackend,
-          pixelWidth: publicResult.pixelWidth,
-          pixelHeight: publicResult.pixelHeight,
-          renderProfileHash: publicResult.renderProfileHash,
-        },
-      }),
-    );
+    await appendArtifactWithRollback({
+      sessionDir: options.sessionDir,
+      entry: artifactEntry,
+      rollbackArtifactPath: finalArtifactPath,
+    });
 
     return publicResult;
   } catch (error) {

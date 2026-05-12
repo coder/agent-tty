@@ -1,14 +1,22 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import process from 'node:process';
 
 import type * as FsPromises from 'node:fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ERROR_CODES } from '../../../src/protocol/errors.js';
+import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 
 const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
@@ -19,6 +27,8 @@ const mocks = vi.hoisted(() => ({
   manifestPath: vi.fn(),
   eventLogPath: vi.fn(),
   writeTextFileAtomic: vi.fn(),
+  appendArtifactWithRollback: vi.fn(),
+  // Test-internal delegate used by the appendArtifactWithRollback mock.
   appendArtifact: vi.fn(),
   createArtifactEntry: vi.fn(),
   ensureArtifactsDir: vi.fn(),
@@ -54,7 +64,7 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 }));
 
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
-  appendArtifact: mocks.appendArtifact,
+  appendArtifactWithRollback: mocks.appendArtifactWithRollback,
   createArtifactEntry: mocks.createArtifactEntry,
 }));
 
@@ -172,6 +182,24 @@ describe('record export command', () => {
         `${sessionDirectory}/artifacts/${filename}`,
     );
     mocks.writeTextFileAtomic.mockResolvedValue(undefined);
+    mocks.appendArtifactWithRollback.mockImplementation(
+      async (options: {
+        sessionDir: string;
+        entry: unknown;
+        rollbackArtifactPath?: string;
+      }) => {
+        try {
+          await mocks.appendArtifact(options.sessionDir, options.entry);
+        } catch (error) {
+          if (options.rollbackArtifactPath !== undefined) {
+            await rm(options.rollbackArtifactPath, { force: true }).catch(
+              () => undefined,
+            );
+          }
+          throw error;
+        }
+      },
+    );
     mocks.appendArtifact.mockResolvedValue(undefined);
     mocks.createArtifactEntry.mockImplementation((entry: unknown) => ({
       id: 'artifact-01',
@@ -264,15 +292,24 @@ describe('record export command', () => {
         markerCount: 1,
       },
     });
-    expect(mocks.appendArtifact).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01',
-      expect.objectContaining({
-        kind: 'recording',
-        filename: 'recording-2-asciicast.cast',
-        sha256: expectedSha256,
-        bytes: Buffer.byteLength(expectedContents, 'utf8'),
-      }),
-    );
+    const appendCall = mocks.appendArtifactWithRollback.mock.calls.at(-1) as [
+      {
+        sessionDir: string;
+        entry: Record<string, unknown>;
+        rollbackArtifactPath?: string;
+      },
+    ];
+    expect(appendCall[0]).toMatchObject({
+      sessionDir: '/tmp/agent-tty/sessions/session-01',
+      rollbackArtifactPath:
+        '/tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast',
+    });
+    expect(appendCall[0].entry).toMatchObject({
+      kind: 'recording',
+      filename: 'recording-2-asciicast.cast',
+      sha256: expectedSha256,
+      bytes: Buffer.byteLength(expectedContents, 'utf8'),
+    });
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'record export',
       json: true,
@@ -440,6 +477,142 @@ describe('record export command', () => {
     );
     expect(emitSuccessArgs.result.metadata.rendererBackend).toBe('ghostty-web');
     expect(emitSuccessArgs.result.durationMs).toBe(1_500);
+  });
+
+  it('requests rollback for default asciicast artifacts when manifest append fails', async () => {
+    const sessionDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-append-asciicast-',
+    );
+    const artifactFile = join(
+      sessionDirectory,
+      'artifacts',
+      'recording-2-asciicast.cast',
+    );
+    const manifestError = makeCliError(ERROR_CODES.MANIFEST_VALIDATION_ERROR, {
+      message: 'artifact manifest append failed',
+    });
+
+    mocks.sessionDir.mockReturnValue(sessionDirectory);
+    mocks.manifestPath.mockReturnValue(join(sessionDirectory, 'session.json'));
+    mocks.eventLogPath.mockReturnValue(join(sessionDirectory, 'events.jsonl'));
+    mocks.ensureArtifactsDir.mockResolvedValue(
+      join(sessionDirectory, 'artifacts'),
+    );
+    mocks.recordingFilename.mockReturnValue('recording-2-asciicast.cast');
+    mocks.writeTextFileAtomic.mockImplementation(
+      async (options: { path: string; contents: string }) => {
+        await mkdir(dirname(options.path), { recursive: true });
+        await writeFile(options.path, options.contents, 'utf8');
+      },
+    );
+    mocks.appendArtifact.mockRejectedValue(manifestError);
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'asciicast',
+      }),
+    ).rejects.toBe(manifestError);
+
+    expect(mocks.appendArtifactWithRollback).toHaveBeenCalledWith(
+      expect.objectContaining({ rollbackArtifactPath: artifactFile }),
+    );
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('requests rollback for default webm artifacts when manifest append fails', async () => {
+    const sessionDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-append-webm-',
+    );
+    const artifactFile = join(
+      sessionDirectory,
+      'artifacts',
+      'recording-1-webm.webm',
+    );
+    const webmBytes = 12_345;
+    const webmContent = Buffer.alloc(webmBytes, 0x42);
+    const manifestError = makeCliError(ERROR_CODES.MANIFEST_VALIDATION_ERROR, {
+      message: 'artifact manifest append failed',
+    });
+
+    mocks.sessionDir.mockReturnValue(sessionDirectory);
+    mocks.manifestPath.mockReturnValue(join(sessionDirectory, 'session.json'));
+    mocks.eventLogPath.mockReturnValue(join(sessionDirectory, 'events.jsonl'));
+    mocks.ensureArtifactsDir.mockResolvedValue(
+      join(sessionDirectory, 'artifacts'),
+    );
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+    mocks.generateWebmExport.mockImplementation(
+      async (options: { outputPath: string }) => {
+        await mkdir(dirname(options.outputPath), { recursive: true });
+        await writeFile(options.outputPath, webmContent);
+        return {
+          capturedAtSeq: 1,
+          durationMs: 1_500,
+          outputEventCount: 1,
+          resizeEventCount: 1,
+          cols: 80,
+          rows: 24,
+          profileName: 'reference-dark',
+          timingMode: 'accelerated',
+          rendererBackend: 'ghostty-web',
+        };
+      },
+    );
+    mocks.stat.mockResolvedValue({ size: webmBytes });
+    mocks.readFile.mockResolvedValue(webmContent);
+    mocks.appendArtifact.mockRejectedValue(manifestError);
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'webm',
+      }),
+    ).rejects.toBe(manifestError);
+
+    expect(mocks.appendArtifactWithRollback).toHaveBeenCalledWith(
+      expect.objectContaining({ rollbackArtifactPath: artifactFile }),
+    );
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('preserves explicit output artifacts when manifest append fails', async () => {
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-explicit-out-',
+    );
+    const artifactFile = join(workspaceDirectory, 'custom.cast');
+    const manifestError = makeCliError(ERROR_CODES.MANIFEST_VALIDATION_ERROR, {
+      message: 'artifact manifest append failed',
+    });
+
+    mocks.writeTextFileAtomic.mockImplementation(
+      async (options: { path: string; contents: string }) => {
+        await mkdir(dirname(options.path), { recursive: true });
+        await writeFile(options.path, options.contents, 'utf8');
+      },
+    );
+    mocks.appendArtifact.mockRejectedValue(manifestError);
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'asciicast',
+        out: artifactFile,
+      }),
+    ).rejects.toBe(manifestError);
+
+    const appendCall = mocks.appendArtifactWithRollback.mock.calls.at(-1) as [
+      { rollbackArtifactPath?: string },
+    ];
+    expect(appendCall[0]).not.toHaveProperty('rollbackArtifactPath');
+    await expect(access(artifactFile)).resolves.toBeUndefined();
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
   it('resolves WebM profile from command option, context default, and builtin fallback', async () => {

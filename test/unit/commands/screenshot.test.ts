@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
   withOfflineReplayRenderer: vi.fn(),
+  appendArtifactWithRollback: vi.fn(),
+  // Test-internal delegate used by the appendArtifactWithRollback mock.
   appendArtifact: vi.fn(),
   createArtifactEntry: vi.fn(),
   ensureArtifactsDir: vi.fn(),
@@ -52,7 +54,7 @@ vi.mock('../../../src/replay/offlineReplay.js', () => ({
 }));
 
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
-  appendArtifact: mocks.appendArtifact,
+  appendArtifactWithRollback: mocks.appendArtifactWithRollback,
   createArtifactEntry: mocks.createArtifactEntry,
 }));
 
@@ -193,6 +195,11 @@ describe('screenshot command', () => {
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
     );
     mocks.readManifestIfExists.mockResolvedValue(createRunningSessionRecord());
+    mocks.appendArtifactWithRollback.mockImplementation(
+      async (options: { sessionDir: string; entry: unknown }) => {
+        await mocks.appendArtifact(options.sessionDir, options.entry);
+      },
+    );
     mocks.appendArtifact.mockResolvedValue(undefined);
     mocks.createArtifactEntry.mockImplementation((entry: unknown) => ({
       id: 'artifact-01',
@@ -536,7 +543,7 @@ describe('screenshot command', () => {
       { force: true },
     );
     expect(mocks.rename).not.toHaveBeenCalled();
-    expect(mocks.appendArtifact).not.toHaveBeenCalled();
+    expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
