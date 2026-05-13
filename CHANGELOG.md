@@ -26,6 +26,7 @@
 
 - Default-location screenshot PNGs, snapshot JSON files, and `record export` artifacts are now rolled back when the subsequent artifact-manifest append fails, so a manifest-validation failure no longer leaves an orphaned, unmanifested file under the session's `artifacts/` directory. Explicit `--out` paths supplied by the caller are preserved on failure because they belong to the user, not the session manifest ([#95](https://github.com/coder/agent-tty/pull/95), fixes [#79](https://github.com/coder/agent-tty/issues/79)).
 - `EventLog.open` now closes the underlying file handle when validation (size-limit check or existing-content parsing) fails, preventing a file-descriptor leak on rejected session host startup ([#51](https://github.com/coder/agent-tty/pull/51)).
+- `npm run release:prep` and `npm run release:finalize` now work on aube-only checkouts where `package-lock.json` does not exist. `readPackageVersions` / `assertPackageVersionsMatch` skip the lockfile-coherence assertions when `package-lock.json` is absent, and `release-prep.mjs` stages only `package.json` in that case. The npm-lockfile path is still fully supported when a `package-lock.json` is present. Without this fix, the documented release flow was broken after the `aube` migration in [#91](https://github.com/coder/agent-tty/pull/91).
 
 ### Notes
 

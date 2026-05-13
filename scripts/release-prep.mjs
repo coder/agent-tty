@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
@@ -25,7 +26,15 @@ import {
   stageFiles,
 } from './release-helpers.mjs';
 
-const VERSION_FILE_PATHS = Object.freeze(['package.json', 'package-lock.json']);
+// `package-lock.json` is included in the version-file allowlist only when it
+// actually exists. After the aube migration (PR #91) the repo no longer ships
+// one, but the npm-lockfile path is still supported for downstream consumers
+// that re-introduce `package-lock.json`.
+function resolveVersionFilePaths(root) {
+  return existsSync(join(root, 'package-lock.json'))
+    ? Object.freeze(['package.json', 'package-lock.json'])
+    : Object.freeze(['package.json']);
+}
 
 // The env override is intentionally scoped to external release tools
 // (release-it, Communique, and verification). Git operations use process.env
@@ -33,6 +42,7 @@ const VERSION_FILE_PATHS = Object.freeze(['package.json', 'package-lock.json']);
 export function releasePrep(argv = process.argv.slice(2), env = process.env) {
   const options = parsePrepArgs(argv);
   const root = assertRepoRoot(process.cwd());
+  const versionFilePaths = resolveVersionFilePaths(root);
   const { packageVersion } = assertPackageVersionsMatch(root);
   assertTargetVersionIsGreater(packageVersion, options.version);
 
@@ -53,24 +63,24 @@ export function releasePrep(argv = process.argv.slice(2), env = process.env) {
   if (options.changelog === 'local') {
     runCommunique(root, options.version, env);
     const changedFiles = assertAllowedChangedFiles(root, [
-      ...VERSION_FILE_PATHS,
+      ...versionFilePaths,
       'CHANGELOG.md',
     ]);
     assertExpectedFilesChanged(changedFiles, [
-      ...VERSION_FILE_PATHS,
+      ...versionFilePaths,
       'CHANGELOG.md',
     ]);
-    stageFiles(root, [...VERSION_FILE_PATHS, 'CHANGELOG.md']);
+    stageFiles(root, [...versionFilePaths, 'CHANGELOG.md']);
   } else {
     const changedFiles = assertAllowedChangedFiles(root, [
-      ...VERSION_FILE_PATHS,
+      ...versionFilePaths,
       'CHANGELOG.md',
     ]);
     if (changedFiles.includes('CHANGELOG.md')) {
       throw new Error('CHANGELOG.md must not change when using --changelog ci');
     }
-    assertExpectedFilesChanged(changedFiles, VERSION_FILE_PATHS);
-    stageFiles(root, VERSION_FILE_PATHS);
+    assertExpectedFilesChanged(changedFiles, versionFilePaths);
+    stageFiles(root, versionFilePaths);
   }
 
   createCommit(root, `chore(release): ${options.version}`);

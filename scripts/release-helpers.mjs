@@ -242,35 +242,48 @@ export function readPackageVersions(root = process.cwd()) {
     readJsonFile(join(resolvedRoot, 'package.json'), 'package.json'),
     'package.json',
   );
-  const packageLock = assertPackageLike(
-    readJsonFile(join(resolvedRoot, 'package-lock.json'), 'package-lock.json'),
-    'package-lock.json',
-  );
-
   const packageVersion = assertString(
     packageJson.version,
     'package.json version',
   );
-  const lockfileVersion = assertString(
-    packageLock.version,
-    'package-lock.json version',
-  );
-  const packages = assertPackageLike(
-    packageLock.packages,
-    'package-lock.json packages',
-  );
-  const rootPackage = assertPackageLike(
-    packages[''],
-    'package-lock.json packages[""]',
-  );
-  const lockRootVersion = assertString(
-    rootPackage.version,
-    'package-lock.json packages[""].version',
-  );
+
+  // `package-lock.json` is optional: after the aube migration (PR #91) this
+  // repo no longer carries one. When present, its version fields are asserted
+  // for coherence with `package.json`; when absent, only `package.json` is
+  // validated and dependency pinning is delegated to `aube-lock.yaml`.
+  const packageLockPath = join(resolvedRoot, 'package-lock.json');
+  const hasPackageLock = existsSync(packageLockPath);
+
+  let lockfileVersion = null;
+  let lockRootVersion = null;
+
+  if (hasPackageLock) {
+    const packageLock = assertPackageLike(
+      readJsonFile(packageLockPath, 'package-lock.json'),
+      'package-lock.json',
+    );
+    lockfileVersion = assertString(
+      packageLock.version,
+      'package-lock.json version',
+    );
+    const packages = assertPackageLike(
+      packageLock.packages,
+      'package-lock.json packages',
+    );
+    const rootPackage = assertPackageLike(
+      packages[''],
+      'package-lock.json packages[""]',
+    );
+    lockRootVersion = assertString(
+      rootPackage.version,
+      'package-lock.json packages[""].version',
+    );
+  }
 
   return {
     packageName: assertString(packageJson.name, 'package.json name'),
     packageVersion,
+    hasPackageLock,
     lockfileVersion,
     lockRootVersion,
   };
@@ -290,16 +303,18 @@ export function assertPackageVersionsMatch(
     'agent-tty',
     'package.json name must be agent-tty',
   );
-  assert.equal(
-    versions.lockfileVersion,
-    versions.packageVersion,
-    'package-lock.json version must match package.json version',
-  );
-  assert.equal(
-    versions.lockRootVersion,
-    versions.packageVersion,
-    'package-lock.json packages[""].version must match package.json version',
-  );
+  if (versions.hasPackageLock) {
+    assert.equal(
+      versions.lockfileVersion,
+      versions.packageVersion,
+      'package-lock.json version must match package.json version',
+    );
+    assert.equal(
+      versions.lockRootVersion,
+      versions.packageVersion,
+      'package-lock.json packages[""].version must match package.json version',
+    );
+  }
   if (expectedVersion !== null) {
     assert.equal(
       versions.packageVersion,
