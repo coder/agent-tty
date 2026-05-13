@@ -27,6 +27,10 @@
 - Default-location screenshot PNGs, snapshot JSON files, and `record export` artifacts are now rolled back when the subsequent artifact-manifest append fails, so a manifest-validation failure no longer leaves an orphaned, unmanifested file under the session's `artifacts/` directory. Explicit `--out` paths supplied by the caller are preserved on failure because they belong to the user, not the session manifest ([#95](https://github.com/coder/agent-tty/pull/95), fixes [#79](https://github.com/coder/agent-tty/issues/79)).
 - `EventLog.open` now closes the underlying file handle when validation (size-limit check or existing-content parsing) fails, preventing a file-descriptor leak on rejected session host startup ([#51](https://github.com/coder/agent-tty/pull/51)).
 
+### Notes
+
+- `protocolVersion` in the `version` envelope intentionally stays at `0.1.0`. This release is additive over the `0.1.x` envelope contract and does not change the public JSON shape; only the package version moves to `0.2.0`.
+
 ## [v0.1.1-beta.4](https://github.com/coder/agent-tty/releases/tag/v0.1.1-beta.4) - 2026-04-25
 
 ### Added

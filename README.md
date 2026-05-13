@@ -166,7 +166,7 @@ For TanStack Intent, Mux, and direct skill-copy instructions, see [`docs/AGENT-S
 
 ## Vision And Roadmap
 
-The current `0.1.x` line is centered on reliable, isolated, reviewable TUI automation through the CLI.
+The current `0.2.x` line is centered on reliable, isolated, reviewable TUI automation through the CLI.
 Future work includes native renderer adapters, broader platform parity, mouse input, richer semantic TUI automation, remote/networked control, and external control layers such as an MCP wrapper.
 
 - [`RELEASE.md`](./RELEASE.md) defines the supported release contract.
