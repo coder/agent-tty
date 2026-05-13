@@ -1,6 +1,6 @@
 # agent-tty roadmap
 
-`RELEASE.md` defines what the current `0.1.x` line supports. This roadmap tracks intentionally deferred work and post-release direction so the repository front door separates shipped scope from future scope.
+`RELEASE.md` defines what the current `0.2.x` line supports. This roadmap tracks intentionally deferred work and post-release direction so the repository front door separates shipped scope from future scope.
 For historical week-by-week planning and status context, see [`design/archive/`](./design/archive/). For the stable design overview, see [`design/ARCHITECTURE.md`](./design/ARCHITECTURE.md).
 
 ## Near-term refinements
