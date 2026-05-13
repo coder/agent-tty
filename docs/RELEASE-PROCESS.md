@@ -172,6 +172,31 @@ communique generate "v<version>" --changelog --repo coder/agent-tty
 
 and commits the resulting `CHANGELOG.md` update back to the release branch. When it pushes that bot commit, it dispatches the CI and skill-validation workflows for the updated release branch so protected-branch checks can run against the new head commit.
 
+### `[Unreleased]` heading must stay on `main`
+
+When preparing the release PR, **rename** the existing `## [Unreleased]` heading to `## [v<version>] - <date>` and **insert a fresh empty `## [Unreleased]` heading immediately above it** before pushing. Do not remove `[Unreleased]` outright.
+
+Two workflows depend on this:
+
+- `Release Changelog` (release-changelog.yml) keys off `## [v<version>]` to decide whether to run Communique on the release branch. Having `## [v<version>] - <date>` present makes the workflow skip its Communique pass and preserve the curated `[Unreleased]` content that you just renamed.
+- `Update Unreleased Changelog` (update-unreleased-changelog.yml) runs on every push to `main` and calls `communique generate HEAD --changelog`, which requires `## [Unreleased]` or `## Unreleased` to exist. If the heading is missing on `main`, every post-release merge fails this workflow until the heading is restored.
+
+So the right CHANGELOG.md state after the release-prep commit is roughly:
+
+```markdown
+# Changelog
+
+## [Unreleased]
+
+## [v<version>] - <date>
+
+### Added
+
+...
+```
+
+`release:prep --changelog ci` does not edit `CHANGELOG.md` for you, so this rename + insert must be done manually (or via `release:prep --changelog local`, which lets Communique handle both steps). After running `release:prep --changelog ci`, edit `CHANGELOG.md`, then `git add CHANGELOG.md && git commit --amend --no-edit` to fold the change into the same release-prep commit.
+
 ### Manual prep fallback
 
 If the scripted prep path is blocked, use the manual fallback only from a clean, up-to-date `main` checkout. Stage `package-lock.json` only if your checkout still has one (post-PR #91 the repo is aube-only and the file is absent):
