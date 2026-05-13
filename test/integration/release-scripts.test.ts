@@ -68,36 +68,47 @@ function runGit(repo: string, args: string[]): string {
   return run('git', args, { cwd: repo, expectedStatus: 0 }).stdout.trim();
 }
 
-function writePackageFiles(repo: string, version: string): void {
+function writePackageFiles(
+  repo: string,
+  version: string,
+  { includePackageLock = true }: { includePackageLock?: boolean } = {},
+): void {
   const packageJson = {
     name: 'agent-tty',
     version,
     type: 'module',
     private: true,
   };
-  const packageLock = {
-    name: 'agent-tty',
-    version,
-    lockfileVersion: 3,
-    requires: true,
-    packages: {
-      '': {
-        name: 'agent-tty',
-        version,
-        license: 'Apache-2.0',
-      },
-    },
-  };
 
   writeFileSync(join(repo, 'package.json'), `${JSON.stringify(packageJson)}\n`);
-  writeFileSync(
-    join(repo, 'package-lock.json'),
-    `${JSON.stringify(packageLock)}\n`,
-  );
+
+  if (includePackageLock) {
+    const packageLock = {
+      name: 'agent-tty',
+      version,
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': {
+          name: 'agent-tty',
+          version,
+          license: 'Apache-2.0',
+        },
+      },
+    };
+    writeFileSync(
+      join(repo, 'package-lock.json'),
+      `${JSON.stringify(packageLock)}\n`,
+    );
+  }
+
   writeFileSync(join(repo, 'CHANGELOG.md'), '# Changelog\n');
 }
 
-function createTempRepo(version = '0.1.1-beta.4'): TempRepo {
+function createTempRepo(
+  version = '0.1.1-beta.4',
+  { includePackageLock = true }: { includePackageLock?: boolean } = {},
+): TempRepo {
   const root = mkdtempSync(join(tmpdir(), 'agent-tty-release-scripts-'));
   tempRoots.push(root);
   const origin = join(root, 'origin.git');
@@ -108,8 +119,11 @@ function createTempRepo(version = '0.1.1-beta.4'): TempRepo {
   runGit(repo, ['remote', 'add', 'origin', origin]);
   runGit(repo, ['config', 'user.name', 'Agent TTY Test']);
   runGit(repo, ['config', 'user.email', 'agent-tty-test@example.invalid']);
-  writePackageFiles(repo, version);
-  runGit(repo, ['add', 'package.json', 'package-lock.json', 'CHANGELOG.md']);
+  writePackageFiles(repo, version, { includePackageLock });
+  const initialFiles = includePackageLock
+    ? ['package.json', 'package-lock.json', 'CHANGELOG.md']
+    : ['package.json', 'CHANGELOG.md'];
+  runGit(repo, ['add', ...initialFiles]);
   runGit(repo, ['commit', '-q', '-m', 'init']);
   runGit(repo, ['push', '-q', '-u', 'origin', 'main']);
 
@@ -250,6 +264,39 @@ describe('release scripts', () => {
       '0.1.1-beta.5',
       '0.1.1-beta.5',
     ]);
+  });
+
+  it('prepares a release on an aube-only checkout (no package-lock.json)', () => {
+    const { repo } = createTempRepo(undefined, { includePackageLock: false });
+
+    const result = runReleasePrep(repo, [
+      '--version',
+      '0.1.1-beta.5',
+      '--changelog',
+      'ci',
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      'Release prep commit created on release/0.1.1-beta.5.',
+    );
+    expect(runGit(repo, ['branch', '--show-current'])).toBe(
+      'release/0.1.1-beta.5',
+    );
+    expect(runGit(repo, ['status', '--short'])).toBe('');
+    expect(runGit(repo, ['rev-list', '--count', 'origin/main..HEAD'])).toBe(
+      '1',
+    );
+    expect(runGit(repo, ['show', '-s', '--format=%s', 'HEAD'])).toBe(
+      'chore(release): 0.1.1-beta.5',
+    );
+    expect(
+      runGit(repo, ['diff', '--name-only', 'HEAD^..HEAD']).split('\n'),
+    ).toEqual(['package.json']);
+    const packageJson = JSON.parse(
+      readFileSync(join(repo, 'package.json'), 'utf8'),
+    ) as { version: string };
+    expect(packageJson.version).toBe('0.1.1-beta.5');
   });
 
   it('prepares a release from a repo root reached through a symlink', () => {
@@ -620,6 +667,18 @@ if (changedFiles.includes('CHANGELOG.md')) {
         'refs/tags/v0.1.1-beta.5',
       ]),
     ).toContain('refs/tags/v0.1.1-beta.5');
+  });
+
+  it('finalizes on an aube-only checkout (no package-lock.json)', () => {
+    const { repo } = createTempRepo('0.1.1-beta.5', {
+      includePackageLock: false,
+    });
+
+    const result = runReleaseFinalize(repo);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Release tag v0.1.1-beta.5 pushed.');
+    expect(runGit(repo, ['tag', '--list'])).toBe('v0.1.1-beta.5');
   });
 
   it('refuses to finalize from a dirty tree', () => {

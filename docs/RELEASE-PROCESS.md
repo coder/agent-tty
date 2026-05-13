@@ -131,7 +131,7 @@ Versions containing a hyphen, such as `-beta.0` or `-rc.0`, are published by the
 
 ### Changelog mode
 
-Use `--changelog ci` for the default maintainer path. The prep commit will contain only `package.json` and `package-lock.json`; the `Release Changelog` workflow will update `CHANGELOG.md` on the release branch when needed.
+Use `--changelog ci` for the default maintainer path. The prep commit will contain only the version files — `package.json` plus `package-lock.json` when present (after PR #91 this repo uses `aube-lock.yaml` instead, so the prep commit on the default branch contains only `package.json`). The `Release Changelog` workflow will update `CHANGELOG.md` on the release branch when needed.
 
 ```bash
 npm run release:prep -- --version <version> --changelog ci
@@ -174,12 +174,13 @@ and commits the resulting `CHANGELOG.md` update back to the release branch. When
 
 ### Manual prep fallback
 
-If the scripted prep path is blocked, use the manual fallback only from a clean, up-to-date `main` checkout:
+If the scripted prep path is blocked, use the manual fallback only from a clean, up-to-date `main` checkout. Stage `package-lock.json` only if your checkout still has one (post-PR #91 the repo is aube-only and the file is absent):
 
 ```bash
 git switch -c release/<version>
 npm version <version> --no-git-tag-version
-git add package.json package-lock.json
+git add package.json
+[[ -f package-lock.json ]] && git add package-lock.json
 git commit -m "chore(release): <version>"
 git push -u origin release/<version>
 gh pr create --base main --head release/<version> --title "chore(release): <version>"
@@ -189,7 +190,8 @@ For the local changelog variant, run Communique after `npm version ... --no-git-
 
 ```bash
 communique generate "v<version>" --changelog --repo coder/agent-tty
-git add package.json package-lock.json CHANGELOG.md
+git add package.json CHANGELOG.md
+[[ -f package-lock.json ]] && git add package-lock.json
 git commit -m "chore(release): <version>"
 ```
 
