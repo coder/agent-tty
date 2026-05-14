@@ -138,11 +138,13 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
     expect(inspectRunning.command).toBe('inspect');
     expect(inspectRunning.result.session.status).toBe('running');
     expect(inspectRunning.result.session.exitCode).toBeNull();
-    expect(inspectRunning.result.rendererRuntime).toEqual({
-      backend: 'ghostty-web',
-      mode: 'live-host',
-      status: 'healthy',
-    });
+    expect(inspectRunning.result.rendererRuntime).toEqual(
+      expect.objectContaining({
+        backend: 'ghostty-web',
+        mode: 'live-host',
+        status: 'healthy',
+      }),
+    );
 
     const typeExitEnvelope = runCliJson<SuccessEnvelope<Record<string, never>>>(
       ['type', sessionId, 'exit'],

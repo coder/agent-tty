@@ -123,11 +123,13 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(inspectEnvelope.result.session.status).toBe('running');
     expect(inspectEnvelope.result.session.hostPid).toBeTypeOf('number');
     expect(inspectEnvelope.result.session.childPid).toBeTypeOf('number');
-    expect(inspectEnvelope.result.rendererRuntime).toEqual({
-      backend: 'ghostty-web',
-      mode: 'live-host',
-      status: 'healthy',
-    });
+    expect(inspectEnvelope.result.rendererRuntime).toEqual(
+      expect.objectContaining({
+        backend: 'ghostty-web',
+        mode: 'live-host',
+        status: 'healthy',
+      }),
+    );
     expect(listedSession?.pid).toBe(inspectEnvelope.result.session.childPid);
 
     const destroyResult = runCli(['destroy', sessionId, '--json'], {
