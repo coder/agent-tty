@@ -355,6 +355,38 @@ describe('HostRendererManager', () => {
     expect(manager.getCurrentProfileName()).toBeNull();
   });
 
+  it('reports isBootInFlight as true while a boot is awaiting', async () => {
+    const manager = new HostRendererManager({
+      sessionId: 'session-01',
+      sessionDir,
+      backendFactory,
+    });
+    const bootDeferred = createDeferred<undefined>();
+
+    backendFactory.mockImplementationOnce(() => {
+      const backend = createFakeBackend({
+        bootImplementation: () =>
+          bootDeferred.promise.then(() => {
+            backend.setBooted(true);
+          }),
+      });
+      backends.push(backend);
+      return backend;
+    });
+
+    const inflight = manager.getBackend('ghostty-web', createProfile(), null);
+    await flushAsyncQueue();
+
+    expect(manager.isBootInFlight()).toBe(true);
+    expect(manager.isBooted()).toBe(false);
+
+    bootDeferred.resolve(undefined);
+    await inflight;
+
+    expect(manager.isBootInFlight()).toBe(false);
+    expect(manager.isBooted()).toBe(true);
+  });
+
   it('allocates screenshot paths inside the session screenshots directory', async () => {
     const manager = new HostRendererManager({
       sessionId: 'session-01',

@@ -7,13 +7,13 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { readFile, realpath, stat } from 'node:fs/promises';
-import { join, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import process from 'node:process';
-import { pathToFileURL } from 'node:url';
 
 import { CanonicalBundleManifestSchema } from './bundleManifestSchema.js';
 import { scanBundleArtifacts } from './review-bundle.js';
 import { assertString, invariant } from '../util/assert.js';
+import { isDirectExecution } from '../util/isDirectExecution.js';
 
 const BUNDLE_VALIDATION_PROFILES = [
   'contract-reporting',
@@ -155,6 +155,20 @@ async function hashFile(filePath: string): Promise<string> {
   });
 }
 
+function isPathWithinBundle(bundleRoot: string, candidate: string): boolean {
+  const rel = relative(bundleRoot, resolve(candidate));
+  return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+}
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === code
+  );
+}
+
 async function runCanonicalChecks(
   bundleRoot: string,
 ): Promise<BundleValidationCheck[]> {
@@ -178,7 +192,7 @@ async function runCanonicalChecks(
     buildCheck(
       'manifest-exists',
       true,
-      `Read manifest.json (${String(manifestText.length)} bytes).`,
+      `Read manifest.json (${String(Buffer.byteLength(manifestText, 'utf8'))} bytes).`,
     ),
   );
 
@@ -219,29 +233,43 @@ async function runCanonicalChecks(
     ),
   );
 
+  const escapedArtifacts: string[] = [];
   const missingArtifacts: string[] = [];
+  const statErrors: string[] = [];
   const sizeMismatches: string[] = [];
   const hashMismatches: string[] = [];
+  let bytesCheckedCount = 0;
+  let hashedCount = 0;
 
   for (const artifact of manifest.artifacts) {
     const artifactPath = join(bundleRoot, artifact.path);
+    if (!isPathWithinBundle(bundleRoot, artifactPath)) {
+      escapedArtifacts.push(artifact.path);
+      continue;
+    }
     let stats;
     try {
       stats = await stat(artifactPath);
-    } catch {
-      missingArtifacts.push(artifact.path);
+    } catch (error) {
+      if (hasErrorCode(error, 'ENOENT')) {
+        missingArtifacts.push(artifact.path);
+      } else {
+        statErrors.push(`${artifact.path}: ${String(error)}`);
+      }
       continue;
     }
     if (!stats.isFile()) {
       missingArtifacts.push(artifact.path);
       continue;
     }
+    bytesCheckedCount += 1;
     if (stats.size !== artifact.bytes) {
       sizeMismatches.push(
         `${artifact.path} (manifest: ${String(artifact.bytes)}, on-disk: ${String(stats.size)})`,
       );
       continue;
     }
+    hashedCount += 1;
     const actualHash = await hashFile(artifactPath);
     if (actualHash !== artifact.sha256) {
       hashMismatches.push(
@@ -250,13 +278,30 @@ async function runCanonicalChecks(
     }
   }
 
+  const totalArtifacts = manifest.artifacts.length;
+  const presentOk =
+    missingArtifacts.length === 0 &&
+    escapedArtifacts.length === 0 &&
+    statErrors.length === 0;
+  const presentParts: string[] = [];
+  if (missingArtifacts.length > 0) {
+    presentParts.push(`Missing: ${missingArtifacts.join(', ')}`);
+  }
+  if (escapedArtifacts.length > 0) {
+    presentParts.push(
+      `Paths escape bundle root: ${escapedArtifacts.join(', ')}`,
+    );
+  }
+  if (statErrors.length > 0) {
+    presentParts.push(`stat() errors: ${statErrors.join('; ')}`);
+  }
   checks.push(
     buildCheck(
       'artifacts-present',
-      missingArtifacts.length === 0,
-      missingArtifacts.length === 0
-        ? `All ${String(manifest.artifacts.length)} artifact(s) present as regular files.`
-        : `Missing: ${missingArtifacts.join(', ')}`,
+      presentOk,
+      presentOk
+        ? `All ${String(totalArtifacts)} artifact(s) present as regular files.`
+        : presentParts.join(' | '),
     ),
   );
 
@@ -265,7 +310,7 @@ async function runCanonicalChecks(
       'artifacts-bytes-match',
       sizeMismatches.length === 0,
       sizeMismatches.length === 0
-        ? 'All artifact byte sizes match the manifest.'
+        ? `${String(bytesCheckedCount)} of ${String(totalArtifacts)} artifact byte sizes match the manifest${bytesCheckedCount === totalArtifacts ? '.' : ` (${String(totalArtifacts - bytesCheckedCount)} skipped).`}`
         : `Byte-size mismatches: ${sizeMismatches.join('; ')}`,
     ),
   );
@@ -275,20 +320,20 @@ async function runCanonicalChecks(
       'artifacts-sha256-match',
       hashMismatches.length === 0,
       hashMismatches.length === 0
-        ? 'All artifact sha256 digests match the manifest.'
+        ? `${String(hashedCount)} of ${String(totalArtifacts)} artifact sha256 digests match the manifest${hashedCount === totalArtifacts ? '.' : ` (${String(totalArtifacts - hashedCount)} skipped).`}`
         : `sha256 mismatches: ${hashMismatches.join('; ')}`,
     ),
   );
 
   const commandsShPath = join(bundleRoot, 'commands.sh');
   const reproduceShPath = join(bundleRoot, 'reproduce.sh');
-  const hasCommandsSh =
+  const hasReproduceScript =
     (await isFile(commandsShPath)) || (await isFile(reproduceShPath));
   checks.push(
     buildCheck(
-      'commands-sh-exists',
-      hasCommandsSh,
-      hasCommandsSh
+      'reproduce-script-exists',
+      hasReproduceScript,
+      hasReproduceScript
         ? 'Found commands.sh or reproduce.sh.'
         : 'Expected commands.sh or reproduce.sh in the bundle root.',
     ),
@@ -302,10 +347,18 @@ async function runCanonicalChecks(
       const lines = tsvContent.split('\n').filter((line) => line.length > 0);
       const headerColumns = lines[0]?.split('\t') ?? [];
       const hasHeader = headerColumns.length > 1;
+      // Locate the `status` column by header name; fall back to column index 1
+      // (the historical TSV layout) so existing bundles still validate.
+      const statusColumnIndex = (() => {
+        const fromHeader = headerColumns.findIndex(
+          (column) => column.trim().toLowerCase() === 'status',
+        );
+        return fromHeader >= 0 ? fromHeader : 1;
+      })();
       const dataLines = lines.slice(1);
       const failingRows = dataLines.filter((line) => {
         const columns = line.split('\t');
-        return columns.some((cell) => cell.trim() === 'fail');
+        return columns[statusColumnIndex]?.trim() === 'fail';
       });
       checks.push(
         buildCheck(
@@ -315,7 +368,7 @@ async function runCanonicalChecks(
             ? `command-status.tsv has a header and no failing rows (${String(dataLines.length)} data row(s)).`
             : !hasHeader
               ? 'command-status.tsv is missing a header row.'
-              : `command-status.tsv has ${String(failingRows.length)} failing row(s).`,
+              : `command-status.tsv has ${String(failingRows.length)} failing row(s) in the status column.`,
         ),
       );
     } else {
@@ -388,8 +441,12 @@ export async function checkCatalogParity(
       if (!stats.isDirectory()) {
         missing.push(firstSegment);
       }
-    } catch {
-      missing.push(firstSegment);
+    } catch (error) {
+      if (hasErrorCode(error, 'ENOENT')) {
+        missing.push(firstSegment);
+      } else {
+        throw error;
+      }
     }
   }
   return { ok: missing.length === 0, missing };
@@ -623,15 +680,7 @@ export async function runValidateBundleCli(
   return result.ok ? 0 : 1;
 }
 
-function isDirectExecution(): boolean {
-  const entryPoint = process.argv[1];
-  if (entryPoint === undefined) {
-    return false;
-  }
-  return import.meta.url === pathToFileURL(entryPoint).href;
-}
-
-if (isDirectExecution()) {
+if (isDirectExecution(import.meta.url)) {
   const exitCode = await runValidateBundleCli(process.argv.slice(2));
   process.exitCode = exitCode;
 }

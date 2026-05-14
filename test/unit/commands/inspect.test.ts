@@ -557,6 +557,13 @@ describe('inspect command', () => {
       booted: true,
       bootInFlight: false,
     });
+    expect(emitted.lines).toEqual(
+      expect.arrayContaining([
+        'Host CLI Version: 0.2.1',
+        'RPC Socket: /tmp/agent-tty/sessions/session-01/rpc.sock',
+        'Renderer: ghostty-web (live-host, healthy) [profile: reference-dark, booted: yes]',
+      ]),
+    );
   });
 
   it('omits host info and renderer extensions in offline-replay mode', async () => {
@@ -607,8 +614,10 @@ describe('inspect command', () => {
 
     const liveEmitted = getLastEmitSuccessPayload() as {
       result: { eventLogBytes?: number };
+      lines: string[];
     };
     expect(liveEmitted.result.eventLogBytes).toBe(4096);
+    expect(liveEmitted.lines).toContain('Event Log Bytes: 4096');
 
     const reconciledSession = createSessionRecord('exited');
     mocks.sendRpc.mockRejectedValue(

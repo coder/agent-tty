@@ -2,7 +2,7 @@ import {
   HostInspectResultSchema,
   type ArtifactHealthSummary,
   type HostInspectResult,
-  type InspectHostInfo,
+  type HostInfo,
   type InspectResult,
   type RendererRuntimeSummary,
 } from '../../protocol/messages.js';
@@ -258,7 +258,7 @@ export async function runInspectCommand(
     sessionStatus: session.status,
     ...(hostInfo !== undefined ? { hostInfo } : {}),
   });
-  const host: InspectHostInfo | undefined =
+  const host: HostInfo | undefined =
     hostInfo !== undefined &&
     hostInfo.cliVersion !== undefined &&
     hostInfo.rpcSocketPath !== undefined

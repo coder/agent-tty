@@ -6,10 +6,15 @@
  */
 
 import process from 'node:process';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-import { checkCatalogParity, validateBundle } from './validate-bundle.js';
+import {
+  checkCatalogParity,
+  validateBundle,
+  type BundleValidationResult,
+} from './validate-bundle.js';
+import { isDirectExecution } from '../util/isDirectExecution.js';
 
 const CANONICAL_BUNDLES = [
   'dogfood/20260326-week9-release-readiness',
@@ -20,12 +25,37 @@ const CANONICAL_BUNDLES = [
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
+function synthesizeCrashResult(
+  bundlePath: string,
+  error: unknown,
+): BundleValidationResult {
+  return {
+    bundleDir: bundlePath,
+    profile: 'canonical',
+    ok: false,
+    checks: [
+      {
+        name: 'validation-error',
+        ok: false,
+        message: `Bundle validation crashed: ${String(error)}`,
+      },
+    ],
+  };
+}
+
 export async function validateCanonicalBundles(): Promise<number> {
   const bundleResults = await Promise.all(
     CANONICAL_BUNDLES.map(async (relativeBundle) => {
       const bundlePath = resolve(REPO_ROOT, relativeBundle);
-      const result = await validateBundle(bundlePath, 'canonical');
-      return { relativeBundle, result };
+      try {
+        const result = await validateBundle(bundlePath, 'canonical');
+        return { relativeBundle, result };
+      } catch (error) {
+        return {
+          relativeBundle,
+          result: synthesizeCrashResult(bundlePath, error),
+        };
+      }
     }),
   );
 
@@ -44,33 +74,30 @@ export async function validateCanonicalBundles(): Promise<number> {
     }
   }
 
-  const catalogResult = await checkCatalogParity(
-    resolve(REPO_ROOT, 'dogfood/CATALOG.md'),
-    resolve(REPO_ROOT, 'dogfood'),
-  );
-  if (catalogResult.ok) {
-    process.stderr.write(
-      'catalog-parity PASS: every CATALOG.md entry resolves to a directory\n',
+  try {
+    const catalogResult = await checkCatalogParity(
+      resolve(REPO_ROOT, 'dogfood/CATALOG.md'),
+      resolve(REPO_ROOT, 'dogfood'),
     );
-  } else {
-    process.stderr.write(
-      `catalog-parity FAIL: ${String(catalogResult.missing.length)} CATALOG.md entr${catalogResult.missing.length === 1 ? 'y' : 'ies'} did not resolve: ${catalogResult.missing.join(', ')}\n`,
-    );
+    if (catalogResult.ok) {
+      process.stderr.write(
+        'catalog-parity PASS: every CATALOG.md entry resolves to a directory\n',
+      );
+    } else {
+      process.stderr.write(
+        `catalog-parity FAIL: ${String(catalogResult.missing.length)} CATALOG.md entr${catalogResult.missing.length === 1 ? 'y' : 'ies'} did not resolve: ${catalogResult.missing.join(', ')}\n`,
+      );
+      allOk = false;
+    }
+  } catch (error) {
+    process.stderr.write(`catalog-parity ERROR: ${String(error)}\n`);
     allOk = false;
   }
 
   return allOk ? 0 : 1;
 }
 
-function isDirectExecution(): boolean {
-  const entryPoint = process.argv[1];
-  if (entryPoint === undefined) {
-    return false;
-  }
-  return import.meta.url === pathToFileURL(entryPoint).href;
-}
-
-if (isDirectExecution()) {
+if (isDirectExecution(import.meta.url)) {
   const exitCode = await validateCanonicalBundles();
   process.exitCode = exitCode;
 }

@@ -182,6 +182,10 @@ function deriveNextSeq(records: readonly EventRecord[]): number {
   return lastRecord.seq + 1;
 }
 
+/**
+ * Returns the event log file size in bytes, or `undefined` when the file
+ * does not exist (ENOENT). Non-ENOENT errors propagate to the caller.
+ */
 export async function statEventLogBytes(
   filePath: string,
 ): Promise<number | undefined> {

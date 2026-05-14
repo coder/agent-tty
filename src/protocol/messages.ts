@@ -112,13 +112,13 @@ export const HostInspectResultSchema = z
   .strict();
 export type HostInspectResult = z.infer<typeof HostInspectResultSchema>;
 
-export const InspectHostInfoSchema = z
+export const HostInfoSchema = z
   .object({
     cliVersion: z.string().min(1),
     rpcSocketPath: z.string().min(1),
   })
   .strict();
-export type InspectHostInfo = z.infer<typeof InspectHostInfoSchema>;
+export type HostInfo = z.infer<typeof HostInfoSchema>;
 
 export const TerminationCategorySchema = z.enum([
   'running',
@@ -170,7 +170,7 @@ export const InspectResultSchema = z
     artifacts: ArtifactHealthSummarySchema.optional(),
     usedOfflineReplay: z.boolean().optional(),
     rendererRuntime: RendererRuntimeSummarySchema,
-    host: InspectHostInfoSchema.optional(),
+    host: HostInfoSchema.optional(),
     eventLogBytes: z.number().int().nonnegative().optional(),
   })
   .strict();

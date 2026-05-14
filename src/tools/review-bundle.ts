@@ -17,11 +17,11 @@ import {
   sep,
 } from 'node:path';
 import process from 'node:process';
-import { pathToFileURL } from 'node:url';
 
 import { z } from 'zod';
 
 import { assertString, invariant } from '../util/assert.js';
+import { isDirectExecution } from '../util/isDirectExecution.js';
 
 export type ArtifactKind =
   | 'screenshot'
@@ -1320,15 +1320,7 @@ export async function runReviewBundleCli(
   }
 }
 
-function isDirectExecution(): boolean {
-  const entryPoint = process.argv[1];
-  if (entryPoint === undefined) {
-    return false;
-  }
-  return import.meta.url === pathToFileURL(entryPoint).href;
-}
-
-if (isDirectExecution()) {
+if (isDirectExecution(import.meta.url)) {
   const exitCode = await runReviewBundleCli(process.argv.slice(2));
   process.exitCode = exitCode;
 }

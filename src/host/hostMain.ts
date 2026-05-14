@@ -154,7 +154,18 @@ export async function runHost(sessionId: string): Promise<void> {
 
   const eventLog = await EventLog.open(ePath);
 
-  const packageMetadata = await loadPackageMetadata();
+  // Lazy + tolerant: `cliVersion` is an optional inspect field, so a missing
+  // or unreadable package.json must not crash the host. Cache the first
+  // attempt for the lifetime of the host process.
+  let packageMetadataPromise:
+    | Promise<{ version: string } | undefined>
+    | undefined;
+  const getPackageMetadata = (): Promise<{ version: string } | undefined> => {
+    if (packageMetadataPromise === undefined) {
+      packageMetadataPromise = loadPackageMetadata().catch(() => undefined);
+    }
+    return packageMetadataPromise;
+  };
 
   const rendererManager = new HostRendererManager({
     sessionId,
@@ -413,16 +424,19 @@ export async function runHost(sessionId: string): Promise<void> {
   };
 
   const handlers: Record<string, MethodHandler> = {
-    inspect: () => {
+    inspect: async () => {
       const rendererProfile = rendererManager.getCurrentProfileName();
-      return Promise.resolve({
+      const packageMetadata = await getPackageMetadata();
+      return {
         session: state.snapshot(),
-        cliVersion: packageMetadata.version,
+        ...(packageMetadata !== undefined
+          ? { cliVersion: packageMetadata.version }
+          : {}),
         rpcSocketPath: sPath,
         ...(rendererProfile !== null ? { rendererProfile } : {}),
         rendererBooted: rendererManager.isBooted(),
         rendererBootInFlight: rendererManager.isBootInFlight(),
-      });
+      };
     },
     snapshot: async (params: unknown) => {
       const {

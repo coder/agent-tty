@@ -315,7 +315,7 @@ describe('validate-bundle canonical profile', () => {
     expect(findCheck(result, 'artifacts-present').ok).toBe(true);
     expect(findCheck(result, 'artifacts-bytes-match').ok).toBe(true);
     expect(findCheck(result, 'artifacts-sha256-match').ok).toBe(true);
-    expect(findCheck(result, 'commands-sh-exists').ok).toBe(true);
+    expect(findCheck(result, 'reproduce-script-exists').ok).toBe(true);
     expect(findCheck(result, 'notes-or-readme-present').ok).toBe(true);
   });
 
@@ -337,7 +337,7 @@ describe('validate-bundle canonical profile', () => {
     const result = await validateBundle(bundleRoot, 'canonical');
 
     expect(result.ok).toBe(true);
-    expect(findCheck(result, 'commands-sh-exists').ok).toBe(true);
+    expect(findCheck(result, 'reproduce-script-exists').ok).toBe(true);
     expect(findCheck(result, 'notes-or-readme-present').ok).toBe(true);
   });
 
@@ -481,7 +481,7 @@ describe('validate-bundle canonical profile', () => {
     const result = await validateBundle(bundleRoot, 'canonical');
 
     expect(result.ok).toBe(false);
-    expect(findCheck(result, 'commands-sh-exists').ok).toBe(false);
+    expect(findCheck(result, 'reproduce-script-exists').ok).toBe(false);
   });
 
   it('fails when neither notes.md nor README.md is present', async () => {
@@ -593,6 +593,147 @@ describe('validate-bundle canonical profile', () => {
     expect(
       findCheck(result, 'command-status-tsv-clean-if-pass').message,
     ).toContain('header row');
+  });
+
+  it('skips command-status.tsv check entirely for non-pass canonical bundles', async () => {
+    const bundleRoot = await writeCanonicalBundle(
+      [
+        { path: 'notes.md', description: 'narrative', content: '# Notes\n' },
+        {
+          path: 'commands.sh',
+          description: 'reproduce',
+          content: '#!/bin/sh\n',
+        },
+        {
+          path: 'envelope.json',
+          description: 'cli envelope',
+          content: '{}\n',
+        },
+      ],
+      { result: 'fail' },
+    );
+    await writeFixtureFile(
+      bundleRoot,
+      'command-status.tsv',
+      'step\tstatus\nbroken\tfail\n',
+    );
+
+    const result = await validateBundle(bundleRoot, 'canonical');
+
+    expect(
+      result.checks.some(
+        (check) => check.name === 'command-status-tsv-clean-if-pass',
+      ),
+    ).toBe(false);
+  });
+
+  it('ignores cells containing "fail" outside the status column', async () => {
+    const bundleRoot = await writeCanonicalBundle(
+      [
+        { path: 'notes.md', description: 'narrative', content: '# Notes\n' },
+        {
+          path: 'commands.sh',
+          description: 'reproduce',
+          content: '#!/bin/sh\n',
+        },
+        {
+          path: 'envelope.json',
+          description: 'cli envelope',
+          content: '{}\n',
+        },
+      ],
+      { result: 'pass' },
+    );
+    // Notes column mentions "fail" — must not trip the check.
+    await writeFixtureFile(
+      bundleRoot,
+      'command-status.tsv',
+      'step\tstatus\tnotes\n01-create\tpass\ttested fail path\n',
+    );
+
+    const result = await validateBundle(bundleRoot, 'canonical');
+
+    expect(result.ok).toBe(true);
+    expect(findCheck(result, 'command-status-tsv-clean-if-pass').ok).toBe(true);
+  });
+
+  it('rejects artifacts whose paths escape the bundle root', async () => {
+    const bundleRoot = await writeCanonicalBundle([
+      { path: 'notes.md', description: 'narrative', content: '# Notes\n' },
+      {
+        path: 'commands.sh',
+        description: 'reproduce',
+        content: '#!/bin/sh\n',
+      },
+      {
+        path: 'envelope.json',
+        description: 'cli envelope',
+        content: '{}\n',
+      },
+    ]);
+    // Hand-craft a manifest with a path-traversal entry, overwriting the
+    // helper-generated one.
+    const escapingManifest = {
+      bundle: 'fixture-bundle',
+      title: 'Escaping fixture',
+      description: 'Manifest with a path that resolves outside the bundle',
+      createdAt: '2026-05-14T00:00:00Z',
+      scenario: 'fixture-bundle',
+      result: 'pass',
+      commands: ['echo test'],
+      artifacts: [
+        {
+          path: '../escape-target',
+          description: 'evil',
+          sha256:
+            '0000000000000000000000000000000000000000000000000000000000000000',
+          bytes: 0,
+        },
+      ],
+    };
+    await writeFile(
+      join(bundleRoot, 'manifest.json'),
+      `${JSON.stringify(escapingManifest, null, 2)}\n`,
+      'utf8',
+    );
+
+    const result = await validateBundle(bundleRoot, 'canonical');
+
+    expect(result.ok).toBe(false);
+    expect(findCheck(result, 'artifacts-present').ok).toBe(false);
+    expect(findCheck(result, 'artifacts-present').message).toContain(
+      'escape bundle root',
+    );
+    expect(findCheck(result, 'artifacts-present').message).toContain(
+      '../escape-target',
+    );
+  });
+
+  it('reports byte-match counts that reflect skipped artifacts', async () => {
+    const bundleRoot = await writeCanonicalBundle([
+      { path: 'notes.md', description: 'narrative', content: '# Notes\n' },
+      {
+        path: 'commands.sh',
+        description: 'reproduce',
+        content: '#!/bin/sh\n',
+      },
+      {
+        path: 'envelope.json',
+        description: 'cli envelope',
+        content: '{}\n',
+      },
+    ]);
+    await rm(join(bundleRoot, 'envelope.json'));
+
+    const result = await validateBundle(bundleRoot, 'canonical');
+
+    expect(result.ok).toBe(false);
+    expect(findCheck(result, 'artifacts-bytes-match').message).toContain(
+      '2 of 3',
+    );
+    expect(findCheck(result, 'artifacts-sha256-match').message).toContain(
+      '2 of 3',
+    );
   });
 });
 

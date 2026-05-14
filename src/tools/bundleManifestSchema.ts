@@ -1,3 +1,16 @@
+/**
+ * Strict Zod schema for the `manifest.json` files that govern the canonical
+ * proof bundles named in `RELEASE.md`
+ * (`dogfood/20260326-week9-release-readiness/`,
+ * `dogfood/20260325-week8-contract-locks/`, `dogfood/run-command/`, and
+ * `dogfood/agent-uses-agent-tty/`).
+ *
+ * Required `sha256` + `bytes` per artifact let `validate-bundle.ts --profile
+ * canonical` recompute and compare each digest, catching any byte-level drift
+ * in a canonical bundle. Historical bundles use the permissive
+ * `BundleManifestSchema` in `review-bundle.ts` instead.
+ */
+
 import { z } from 'zod';
 
 const SHA256_HEX_REGEX = /^[0-9a-f]{64}$/;
