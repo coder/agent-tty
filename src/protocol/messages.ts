@@ -114,7 +114,10 @@ export type HostInspectResult = z.infer<typeof HostInspectResultSchema>;
 
 export const HostInfoSchema = z
   .object({
-    cliVersion: z.string().min(1),
+    // `cliVersion` is best-effort: when `package.json` is unreadable the
+    // host omits it rather than failing the inspect RPC. `rpcSocketPath`
+    // is always populated for live-host inspects.
+    cliVersion: z.string().min(1).optional(),
     rpcSocketPath: z.string().min(1),
   })
   .strict();
@@ -170,7 +173,14 @@ export const InspectResultSchema = z
     artifacts: ArtifactHealthSummarySchema.optional(),
     usedOfflineReplay: z.boolean().optional(),
     rendererRuntime: RendererRuntimeSummarySchema,
+    // Populated only when the inspect call reached a live host (i.e.
+    // `rendererRuntime.mode === 'live-host'`). Absent in offline-replay
+    // mode (`usedOfflineReplay === true` or the session is not live-host
+    // eligible).
     host: HostInfoSchema.optional(),
+    // Populated in both live and offline-replay modes from a `stat()` on the
+    // session's `events.jsonl`. Absent only when the event log file is
+    // missing on disk (e.g. a session that crashed before its first write).
     eventLogBytes: z.number().int().nonnegative().optional(),
   })
   .strict();

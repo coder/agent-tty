@@ -14,10 +14,7 @@ import type { SessionRecord } from '../../protocol/schemas.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import { manifestPath, sessionDir } from '../../storage/sessionPaths.js';
 import { invariant } from '../../util/assert.js';
-
-interface NodeError extends Error {
-  code?: string;
-}
+import { hasErrorCode } from '../../util/hasErrorCode.js';
 
 export interface GcResult {
   removedSessions: string[];
@@ -66,10 +63,6 @@ const defaultDependencies: GcDependencies = {
   reconcileSession,
   now: () => new Date(),
 };
-
-function hasErrorCode(error: unknown, code: string): boolean {
-  return error instanceof Error && (error as NodeError).code === code;
-}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.length > 0) {

@@ -27,6 +27,7 @@ import {
 } from '../storage/sessionPaths.js';
 import { makeAbortError, throwIfAborted } from '../util/abort.js';
 import { invariant } from '../util/assert.js';
+import { hasErrorCode } from '../util/hasErrorCode.js';
 import { sendRpc } from './rpcClient.js';
 
 const DESTROY_POLL_INTERVAL_MS = 100;
@@ -58,10 +59,6 @@ async function pollDelay(
     }
     throw error;
   }
-}
-
-interface NodeError extends Error {
-  code?: string;
 }
 
 export interface AllocateConfig {
@@ -96,14 +93,6 @@ export interface SessionSummary {
   createdAt: string;
   name?: string;
   pid: number | null;
-}
-
-function isNodeError(error: unknown): error is NodeError {
-  return error instanceof Error;
-}
-
-function hasErrorCode(error: unknown, code: string): boolean {
-  return isNodeError(error) && error.code === code;
 }
 
 function makeInvalidDimensionError(

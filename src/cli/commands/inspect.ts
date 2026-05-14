@@ -150,10 +150,10 @@ function formatSessionLines(result: InspectResult): string[] {
   lines.push(`Uptime: ${String(uptime)}ms`);
 
   if (result.host !== undefined) {
-    lines.push(
-      `Host CLI Version: ${result.host.cliVersion}`,
-      `RPC Socket: ${result.host.rpcSocketPath}`,
-    );
+    if (result.host.cliVersion !== undefined) {
+      lines.push(`Host CLI Version: ${result.host.cliVersion}`);
+    }
+    lines.push(`RPC Socket: ${result.host.rpcSocketPath}`);
   }
 
   if (result.artifacts !== undefined) {
@@ -259,11 +259,11 @@ export async function runInspectCommand(
     ...(hostInfo !== undefined ? { hostInfo } : {}),
   });
   const host: HostInfo | undefined =
-    hostInfo !== undefined &&
-    hostInfo.cliVersion !== undefined &&
-    hostInfo.rpcSocketPath !== undefined
+    hostInfo !== undefined && hostInfo.rpcSocketPath !== undefined
       ? {
-          cliVersion: hostInfo.cliVersion,
+          ...(hostInfo.cliVersion !== undefined
+            ? { cliVersion: hostInfo.cliVersion }
+            : {}),
           rpcSocketPath: hostInfo.rpcSocketPath,
         }
       : undefined;

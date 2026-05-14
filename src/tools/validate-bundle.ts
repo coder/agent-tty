@@ -9,10 +9,12 @@ import { createReadStream } from 'node:fs';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import process from 'node:process';
+import { pipeline } from 'node:stream/promises';
 
 import { CanonicalBundleManifestSchema } from './bundleManifestSchema.js';
 import { scanBundleArtifacts } from './review-bundle.js';
 import { assertString, invariant } from '../util/assert.js';
+import { hasErrorCode } from '../util/hasErrorCode.js';
 import { isDirectExecution } from '../util/isDirectExecution.js';
 
 const BUNDLE_VALIDATION_PROFILES = [
@@ -142,31 +144,13 @@ function summarizeValidation(result: BundleValidationResult): string[] {
 
 async function hashFile(filePath: string): Promise<string> {
   const hash = createHash('sha256');
-  return await new Promise<string>((resolvePromise, rejectPromise) => {
-    const stream = createReadStream(filePath);
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.on('end', () => {
-      resolvePromise(hash.digest('hex'));
-    });
-    stream.on('error', (error) => {
-      stream.destroy();
-      rejectPromise(error);
-    });
-  });
+  await pipeline(createReadStream(filePath), hash);
+  return hash.digest('hex');
 }
 
 function isPathWithinBundle(bundleRoot: string, candidate: string): boolean {
   const rel = relative(bundleRoot, resolve(candidate));
   return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
-}
-
-function hasErrorCode(error: unknown, code: string): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === code
-  );
 }
 
 async function runCanonicalChecks(
@@ -305,23 +289,29 @@ async function runCanonicalChecks(
     ),
   );
 
+  const bytesOk = sizeMismatches.length === 0 && bytesCheckedCount > 0;
   checks.push(
     buildCheck(
       'artifacts-bytes-match',
-      sizeMismatches.length === 0,
-      sizeMismatches.length === 0
-        ? `${String(bytesCheckedCount)} of ${String(totalArtifacts)} artifact byte sizes match the manifest${bytesCheckedCount === totalArtifacts ? '.' : ` (${String(totalArtifacts - bytesCheckedCount)} skipped).`}`
-        : `Byte-size mismatches: ${sizeMismatches.join('; ')}`,
+      bytesOk,
+      sizeMismatches.length > 0
+        ? `Byte-size mismatches: ${sizeMismatches.join('; ')}`
+        : bytesCheckedCount === 0
+          ? `No artifacts available to verify (${String(totalArtifacts)} skipped).`
+          : `${String(bytesCheckedCount)} of ${String(totalArtifacts)} artifact byte sizes match the manifest${bytesCheckedCount === totalArtifacts ? '.' : ` (${String(totalArtifacts - bytesCheckedCount)} skipped).`}`,
     ),
   );
 
+  const hashOk = hashMismatches.length === 0 && hashedCount > 0;
   checks.push(
     buildCheck(
       'artifacts-sha256-match',
-      hashMismatches.length === 0,
-      hashMismatches.length === 0
-        ? `${String(hashedCount)} of ${String(totalArtifacts)} artifact sha256 digests match the manifest${hashedCount === totalArtifacts ? '.' : ` (${String(totalArtifacts - hashedCount)} skipped).`}`
-        : `sha256 mismatches: ${hashMismatches.join('; ')}`,
+      hashOk,
+      hashMismatches.length > 0
+        ? `sha256 mismatches: ${hashMismatches.join('; ')}`
+        : hashedCount === 0
+          ? `No artifacts available to verify (${String(totalArtifacts)} skipped).`
+          : `${String(hashedCount)} of ${String(totalArtifacts)} artifact sha256 digests match the manifest${hashedCount === totalArtifacts ? '.' : ` (${String(totalArtifacts - hashedCount)} skipped).`}`,
     ),
   );
 
