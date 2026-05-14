@@ -7,6 +7,13 @@ export interface PackageMetadata {
   version: string;
 }
 
+/**
+ * Reads the root `package.json` (resolved relative to this module's disk
+ * location, not the caller's) and returns the package name and version.
+ * Throws when the file is missing or when `name` / `version` is absent or
+ * non-string. Callers that need a tolerant fallback should wrap the call in
+ * `.catch()`.
+ */
 export async function loadPackageMetadata(): Promise<PackageMetadata> {
   const packageJsonUrl = new URL('../../package.json', import.meta.url);
   const rawPackageJson = await readFile(packageJsonUrl, 'utf8');

@@ -22,6 +22,7 @@ import { z } from 'zod';
 
 import { assertString, invariant } from '../util/assert.js';
 import { isDirectExecution } from '../util/isDirectExecution.js';
+import { isWithinRoot } from '../util/isWithinRoot.js';
 
 export type ArtifactKind =
   | 'screenshot'
@@ -158,11 +159,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function normalizeSeparators(value: string): string {
   return value.split(sep).join('/');
-}
-
-function isWithinRoot(rootPath: string, candidatePath: string): boolean {
-  const relPath = relative(rootPath, candidatePath);
-  return relPath === '' || (!relPath.startsWith('..') && !isAbsolute(relPath));
 }
 
 function htmlEscape(value: string): string {

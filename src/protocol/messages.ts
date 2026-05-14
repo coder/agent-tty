@@ -103,8 +103,18 @@ export type InspectParams = z.infer<typeof InspectParamsSchema>;
 export const HostInspectResultSchema = z
   .object({
     session: SessionRecordSchema,
+    // Best-effort: the host reads `package.json` lazily on first inspect
+    // call and falls back to `undefined` when the file is missing or
+    // unreadable, rather than failing the RPC.
     cliVersion: z.string().min(1).optional(),
+    // Always populated by the live host (the socket path it accepts
+    // RPC connections on). Optional in the schema only so older hosts
+    // that predate this field still parse.
     rpcSocketPath: z.string().min(1).optional(),
+    // Renderer state captured atomically in the same synchronous tick.
+    // Populated only when the host has reached the inspect handler. An
+    // older host or one whose renderer has never bootstrapped omits
+    // these and the CLI surfaces them as absent on `rendererRuntime`.
     rendererProfile: z.string().min(1).optional(),
     rendererBooted: z.boolean().optional(),
     rendererBootInFlight: z.boolean().optional(),

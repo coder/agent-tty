@@ -1,6 +1,12 @@
 /**
- * Validates the four canonical proof bundles named in RELEASE.md against the
- * strict `canonical` profile, plus a CATALOG.md parity check.
+ * Validates the four canonical proof bundles against the strict `canonical`
+ * profile, plus a CATALOG.md parity check.
+ *
+ * RELEASE.md's validation section names the three release-signoff bundles
+ * (`20260326-week9-release-readiness`, `20260325-week8-contract-locks`,
+ * `run-command`). `agent-uses-agent-tty` is the evergreen agent demo bundle
+ * (surfaced in the README and `CHANGELOG.md` rather than `RELEASE.md`),
+ * locked here on the same schema so CI catches drift in the same place.
  *
  * Run via `npm run validate-bundle:canonical` or `mise run validate-bundles`.
  */

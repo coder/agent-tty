@@ -20,6 +20,7 @@ import {
   parseEventLogContent,
 } from '../storage/eventLogCodec.js';
 import { invariant } from '../util/assert.js';
+import { hasErrorCode } from '../util/hasErrorCode.js';
 
 const OutputEventPayloadSchema = z
   .object({
@@ -195,12 +196,7 @@ export async function statEventLogBytes(
     const stats = await stat(filePath);
     return stats.size;
   } catch (error: unknown) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
+    if (hasErrorCode(error, 'ENOENT')) {
       return undefined;
     }
 
@@ -225,12 +221,7 @@ export async function countEventLogEntries(filePath: string): Promise<number> {
       }
     }
   } catch (error: unknown) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
+    if (hasErrorCode(error, 'ENOENT')) {
       return 0;
     }
 

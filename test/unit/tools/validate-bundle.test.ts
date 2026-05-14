@@ -644,7 +644,7 @@ describe('validate-bundle canonical profile', () => {
       ],
       { result: 'pass' },
     );
-    // Notes column mentions "fail" — must not trip the check.
+    // Notes column mentions "fail"; must not trip the check.
     await writeFixtureFile(
       bundleRoot,
       'command-status.tsv',

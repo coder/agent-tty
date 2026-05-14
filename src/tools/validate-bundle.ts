@@ -7,7 +7,7 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { readFile, realpath, stat } from 'node:fs/promises';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import process from 'node:process';
 import { pipeline } from 'node:stream/promises';
 
@@ -16,6 +16,7 @@ import { scanBundleArtifacts } from './review-bundle.js';
 import { assertString, invariant } from '../util/assert.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
 import { isDirectExecution } from '../util/isDirectExecution.js';
+import { isWithinRoot } from '../util/isWithinRoot.js';
 
 const BUNDLE_VALIDATION_PROFILES = [
   'contract-reporting',
@@ -151,11 +152,6 @@ async function hashFile(filePath: string): Promise<string> {
   return hash.digest('hex');
 }
 
-function isPathWithinBundle(bundleRoot: string, candidate: string): boolean {
-  const rel = relative(bundleRoot, resolve(candidate));
-  return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
-}
-
 async function runCanonicalChecks(
   bundleRoot: string,
 ): Promise<BundleValidationCheck[]> {
@@ -230,7 +226,7 @@ async function runCanonicalChecks(
 
   for (const artifact of manifest.artifacts) {
     const artifactPath = join(bundleRoot, artifact.path);
-    if (!isPathWithinBundle(bundleRoot, artifactPath)) {
+    if (!isWithinRoot(bundleRoot, artifactPath)) {
       escapedArtifacts.push(artifact.path);
       continue;
     }
@@ -351,7 +347,7 @@ async function runCanonicalChecks(
       const dataLines = lines.slice(1);
       const failingRows = dataLines.filter((line) => {
         const columns = line.split('\t');
-        return columns[statusColumnIndex]?.trim() === 'fail';
+        return columns[statusColumnIndex]?.trim().toLowerCase() === 'fail';
       });
       checks.push(
         buildCheck(
@@ -375,14 +371,14 @@ async function runCanonicalChecks(
     }
   }
 
-  const hasNotes =
+  const hasNotesOrReadme =
     (await isFile(join(bundleRoot, 'notes.md'))) ||
     (await isFile(join(bundleRoot, 'README.md')));
   checks.push(
     buildCheck(
       'notes-or-readme-present',
-      hasNotes,
-      hasNotes
+      hasNotesOrReadme,
+      hasNotesOrReadme
         ? 'Found notes.md or README.md.'
         : 'Expected notes.md or README.md in the bundle root.',
     ),
@@ -396,6 +392,19 @@ export interface CatalogParityResult {
   missing: string[];
 }
 
+/**
+ * Confirms that every `<dogfoodRelativeName>/<bundle>/...` path mentioned in
+ * the catalog markdown resolves to an existing directory under
+ * `dogfoodRoot`. Glob-shaped historical entries (e.g.
+ * `dogfood/20260319-*`) are deliberately skipped — the regex requires a
+ * literal trailing path component so truncated globs do not register as
+ * real directories.
+ *
+ * Returns `{ ok: true, missing: [] }` on success. On failure, `missing`
+ * lists the bundle names whose directory could not be `stat()`d (or whose
+ * stat returned a non-directory). Non-ENOENT stat errors propagate to the
+ * caller via `hasErrorCode`.
+ */
 export async function checkCatalogParity(
   catalogPath: string,
   dogfoodRoot: string,
