@@ -35,6 +35,20 @@ outputs = ["dist/**/*.js", "dist/**/*.d.ts", "dist/**/*.map"]
 description = "Validate the tarball route and check the current git-install caveat"
 run = "npm run smoke:install -- --skip-build"
 
+[tasks.validate-bundles]
+description = "Validate canonical proof bundles against the canonical schema"
+run = "npm run validate-bundle:canonical"
+sources = [
+  "dogfood/CATALOG.md",
+  "dogfood/20260326-week9-release-readiness/**",
+  "dogfood/20260325-week8-contract-locks/**",
+  "dogfood/run-command/**",
+  "dogfood/agent-uses-agent-tty/**",
+  "src/tools/validate-bundle.ts",
+  "src/tools/validate-canonical-bundles.ts",
+  "src/tools/bundleManifestSchema.ts",
+]
+
 [tasks.typecheck]
 description = "Typecheck"
 run = "npm run typecheck"

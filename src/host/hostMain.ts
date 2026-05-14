@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import process from 'node:process';
 
+import { loadPackageMetadata } from '../util/packageMetadata.js';
 import {
   matchRenderWaitSnapshot,
   prepareRenderWaitCondition,
@@ -152,6 +153,8 @@ export async function runHost(sessionId: string): Promise<void> {
   state.setHostPid(process.pid);
 
   const eventLog = await EventLog.open(ePath);
+
+  const packageMetadata = await loadPackageMetadata();
 
   const rendererManager = new HostRendererManager({
     sessionId,
@@ -410,7 +413,17 @@ export async function runHost(sessionId: string): Promise<void> {
   };
 
   const handlers: Record<string, MethodHandler> = {
-    inspect: () => Promise.resolve({ session: state.snapshot() }),
+    inspect: () => {
+      const rendererProfile = rendererManager.getCurrentProfileName();
+      return Promise.resolve({
+        session: state.snapshot(),
+        cliVersion: packageMetadata.version,
+        rpcSocketPath: sPath,
+        ...(rendererProfile !== null ? { rendererProfile } : {}),
+        rendererBooted: rendererManager.isBooted(),
+        rendererBootInFlight: rendererManager.isBootInFlight(),
+      });
+    },
     snapshot: async (params: unknown) => {
       const {
         format: requestedFormat,

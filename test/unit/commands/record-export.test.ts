@@ -74,7 +74,7 @@ vi.mock('../../../src/storage/artifactPaths.js', () => ({
   recordingFilename: mocks.recordingFilename,
 }));
 
-vi.mock('../../../src/cli/commands/version.js', () => ({
+vi.mock('../../../src/util/packageMetadata.js', () => ({
   loadPackageMetadata: mocks.loadPackageMetadata,
 }));
 

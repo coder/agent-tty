@@ -39,6 +39,7 @@ export class HostRendererManager {
 
   private currentBackend: RendererBackend | null = null;
   private currentBackendKey: string | null = null;
+  private currentProfileName: string | null = null;
   private cachedInitialCols: number | null = null;
   private cachedInitialRows: number | null = null;
   private bootPromise: Promise<RendererBackend> | null = null;
@@ -137,6 +138,18 @@ export class HostRendererManager {
     });
   }
 
+  isBooted(): boolean {
+    return this.currentBackend !== null && this.currentBackend.isBooted;
+  }
+
+  isBootInFlight(): boolean {
+    return this.bootPromise !== null;
+  }
+
+  getCurrentProfileName(): string | null {
+    return this.currentProfileName;
+  }
+
   private async ensureBackend(
     rendererName: RendererName,
     profile: RenderProfileConfig,
@@ -158,6 +171,7 @@ export class HostRendererManager {
 
       this.currentBackend = backend;
       this.currentBackendKey = backendKey;
+      this.currentProfileName = profile.name;
     }
 
     invariant(this.currentBackend !== null, 'current backend must exist');
@@ -203,6 +217,7 @@ export class HostRendererManager {
 
     this.currentBackend = null;
     this.currentBackendKey = null;
+    this.currentProfileName = null;
     this.cachedInitialCols = null;
     this.cachedInitialRows = null;
     this.bootPromise = null;

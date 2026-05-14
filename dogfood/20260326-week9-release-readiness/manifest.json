@@ -23,95 +23,141 @@
   "artifacts": [
     {
       "path": "notes.md",
-      "description": "Reviewer-facing narrative explaining what Week 9 functionality was proven and what limitations were observed"
+      "description": "Reviewer-facing narrative explaining what Week 9 functionality was proven and what limitations were observed",
+      "sha256": "773200f78c0c31b649834f74edd53a68cf6c569c75129584007dfcb03ba3cac0",
+      "bytes": 5159
     },
     {
       "path": "commands.sh",
-      "description": "Reproducible capture script for recreating the Week 9 release-readiness bundle"
+      "description": "Reproducible capture script for recreating the Week 9 release-readiness bundle",
+      "sha256": "d37691e848c7073166b9a2cc8bf3bdddd2f315b428667f4270ebb828ef050292",
+      "bytes": 11047
     },
     {
       "path": "command-status.tsv",
-      "description": "Step-by-step exit-code ledger for capture, artifact copies, review-page generation, validation, and formatting checks"
+      "description": "Step-by-step exit-code ledger for capture, artifact copies, review-page generation, validation, and formatting checks",
+      "sha256": "ef1f471884714a5c6934d5c9d13fb542c8b68487e9cd321decffe53f75f3678d",
+      "bytes": 3014
     },
     {
       "path": "logs/01-doctor.json",
-      "description": "Doctor JSON envelope showing home isolation and browser cache accessibility checks under an isolated home"
+      "description": "Doctor JSON envelope showing home isolation and browser cache accessibility checks under an isolated home",
+      "sha256": "8e39a2b7eec4eb11ebe61cc0f550360f71808f8ebed175669cecaf3a9ccd7aa6",
+      "bytes": 3979
     },
     {
       "path": "snapshots/01-doctor.json",
-      "description": "Bundle-local JSON mirror of the doctor output used by validator/review tooling"
+      "description": "Bundle-local JSON mirror of the doctor output used by validator/review tooling",
+      "sha256": "8e39a2b7eec4eb11ebe61cc0f550360f71808f8ebed175669cecaf3a9ccd7aa6",
+      "bytes": 3979
     },
     {
       "path": "logs/03-create-inspect.json",
-      "description": "Initial inspect output for the isolated session immediately after creation"
+      "description": "Initial inspect output for the isolated session immediately after creation",
+      "sha256": "5b2ef102511fcf4932f1b8027b5105b933b99288a77ff27e8b441cb1b94f5f36",
+      "bytes": 1041
     },
     {
       "path": "logs/04-run-echo.json",
-      "description": "Run-command JSON envelope for the Week 9 proof banner command"
+      "description": "Run-command JSON envelope for the Week 9 proof banner command",
+      "sha256": "e6b6728ac88145f64836ff169db9d23fd793e3a07fe6c3c2a0f98de6b46e892c",
+      "bytes": 267
     },
     {
       "path": "logs/05-run-sysinfo.json",
-      "description": "Run-command JSON envelope for the in-session system-information command"
+      "description": "Run-command JSON envelope for the in-session system-information command",
+      "sha256": "18bcec421a0f54dbc6e0373b1f18287d5086a1699294e167daa79bf26101ca15",
+      "bytes": 267
     },
     {
       "path": "logs/06-wait-stable.json",
-      "description": "Renderer wait result proving the terminal frame was stable before capture"
+      "description": "Renderer wait result proving the terminal frame was stable before capture",
+      "sha256": "c90eaf0ae00e714ee418f1a9e7f67b82c9c07f8fb2dd76529750f7417b320838",
+      "bytes": 207
     },
     {
       "path": "logs/07-screenshot.json",
-      "description": "Screenshot JSON envelope for the copied PNG artifact"
+      "description": "Screenshot JSON envelope for the copied PNG artifact",
+      "sha256": "26ace7e437f72673ff415a5ae7c38477e28fa2e40e57657fdd3221a34d338173",
+      "bytes": 699
     },
     {
       "path": "screenshots/01-after-run.png",
-      "description": "Renderer screenshot captured after the two run commands completed"
+      "description": "Renderer screenshot captured after the two run commands completed",
+      "sha256": "6b07d07c3a58035b4d432d4b449fc2e5423b02be422c2aaeb4588e36ef230d1d",
+      "bytes": 22396
     },
     {
       "path": "logs/08-snapshot.json",
-      "description": "Structured snapshot JSON envelope for the same post-run terminal frame"
+      "description": "Structured snapshot JSON envelope for the same post-run terminal frame",
+      "sha256": "f18e2577dbdd4f1e1ba2d4851dbc43bc03adb50ef8f1d94f1b4ff1cb92fd94bc",
+      "bytes": 1969
     },
     {
       "path": "snapshots/02-post-run-structured.json",
-      "description": "Bundle-local JSON mirror of the structured post-run snapshot"
+      "description": "Bundle-local JSON mirror of the structured post-run snapshot",
+      "sha256": "f18e2577dbdd4f1e1ba2d4851dbc43bc03adb50ef8f1d94f1b4ff1cb92fd94bc",
+      "bytes": 1969
     },
     {
       "path": "logs/09-export-asciicast.json",
-      "description": "Asciicast export JSON envelope"
+      "description": "Asciicast export JSON envelope",
+      "sha256": "621e71afbd92115e63fd36c99007d2ea38e1334bdea6485479fdd5df5d0fa905",
+      "bytes": 686
     },
     {
       "path": "recordings/week9.cast",
-      "description": "Exported asciicast recording for the isolated Week 9 proof session"
+      "description": "Exported asciicast recording for the isolated Week 9 proof session",
+      "sha256": "073533533b48cddf4ca7c4b97de1da8e116fd0d54157c1492ea90bf9df2f1f79",
+      "bytes": 1207
     },
     {
       "path": "logs/10-export-webm.json",
-      "description": "WebM export JSON envelope"
+      "description": "WebM export JSON envelope",
+      "sha256": "342641327bfd5f89cdb074f9faff1f195b56c5ee3aa329c3c2afc6fb54911178",
+      "bytes": 746
     },
     {
       "path": "videos/week9.webm",
-      "description": "Exported WebM replay for the isolated Week 9 proof session"
+      "description": "Exported WebM replay for the isolated Week 9 proof session",
+      "sha256": "3677c43c2a4a76e9d93209ac466569f711c4d6469f3cfaab6136b02ed8d613ef",
+      "bytes": 54201
     },
     {
       "path": "logs/11-final-inspect.json",
-      "description": "Final inspect output confirming healthy artifacts and live renderer runtime before teardown"
+      "description": "Final inspect output confirming healthy artifacts and live renderer runtime before teardown",
+      "sha256": "a720a4bee3b2d0ea39bd73d8421fb509fcd4d19e98ae51d4b639aee3d3ae012d",
+      "bytes": 1135
     },
     {
       "path": "snapshots/03-final-inspect.json",
-      "description": "Bundle-local JSON mirror of the final inspect output"
+      "description": "Bundle-local JSON mirror of the final inspect output",
+      "sha256": "a720a4bee3b2d0ea39bd73d8421fb509fcd4d19e98ae51d4b639aee3d3ae012d",
+      "bytes": 1135
     },
     {
       "path": "logs/12-destroy.json",
-      "description": "Destroy output confirming the isolated session was cleaned up"
+      "description": "Destroy output confirming the isolated session was cleaned up",
+      "sha256": "740964f59859ec137d5a1c72a4a6cb97701d618805c993444127e802851f35e0",
+      "bytes": 172
     },
     {
       "path": "logs/13-review-bundle.txt",
-      "description": "Review-bundle output showing the static reviewer page generation path"
+      "description": "Review-bundle output showing the static reviewer page generation path",
+      "sha256": "5f11b2e1ae34c872d7d40aeabba57e875c956433669977334d883fc7b389ac5e",
+      "bytes": 110
     },
     {
       "path": "logs/14-validate-bundle.txt",
-      "description": "Bundle validation stdout for the interactive-renderer profile"
+      "description": "Bundle validation stdout for the interactive-renderer profile",
+      "sha256": "d455b4edd3dc16e741030547ad133e36da6649ef56640d76bad5708cd23cc989",
+      "bytes": 1052
     },
     {
       "path": "index.html",
-      "description": "Generated static review page for the complete Week 9 proof bundle"
+      "description": "Generated static review page for the complete Week 9 proof bundle",
+      "sha256": "d715ed55733a39d9a547ae94d91d5486b68858e5e300bbd53b80c1ef93c13524",
+      "bytes": 77959
     }
   ]
 }

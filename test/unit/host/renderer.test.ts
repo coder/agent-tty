@@ -328,6 +328,33 @@ describe('HostRendererManager', () => {
     expect(backendFactory).not.toHaveBeenCalled();
   });
 
+  it('exposes booted, bootInFlight, and current profile name getters', async () => {
+    const manager = new HostRendererManager({
+      sessionId: 'session-01',
+      sessionDir,
+      backendFactory,
+    });
+
+    expect(manager.isBooted()).toBe(false);
+    expect(manager.isBootInFlight()).toBe(false);
+    expect(manager.getCurrentProfileName()).toBeNull();
+
+    await manager.getBackend(
+      'ghostty-web',
+      createProfile('reference-dark'),
+      null,
+    );
+
+    expect(manager.isBooted()).toBe(true);
+    expect(manager.isBootInFlight()).toBe(false);
+    expect(manager.getCurrentProfileName()).toBe('reference-dark');
+
+    await manager.dispose();
+
+    expect(manager.isBooted()).toBe(false);
+    expect(manager.getCurrentProfileName()).toBeNull();
+  });
+
   it('allocates screenshot paths inside the session screenshots directory', async () => {
     const manager = new HostRendererManager({
       sessionId: 'session-01',

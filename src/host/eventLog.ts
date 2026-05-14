@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { open, readFile } from 'node:fs/promises';
+import { open, readFile, stat } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 
@@ -180,6 +180,28 @@ function deriveNextSeq(records: readonly EventRecord[]): number {
   invariant(lastRecord.seq >= 0, 'event log seq must be non-negative');
 
   return lastRecord.seq + 1;
+}
+
+export async function statEventLogBytes(
+  filePath: string,
+): Promise<number | undefined> {
+  assertFilePath(filePath);
+
+  try {
+    const stats = await stat(filePath);
+    return stats.size;
+  } catch (error: unknown) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return undefined;
+    }
+
+    throw error;
+  }
 }
 
 export async function countEventLogEntries(filePath: string): Promise<number> {

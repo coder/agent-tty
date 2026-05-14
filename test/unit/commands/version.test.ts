@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import * as capabilitiesModule from '../../../src/renderer/capabilities.js';
-import {
-  buildVersionResult,
-  loadPackageMetadata,
-} from '../../../src/cli/commands/version.js';
+import { buildVersionResult } from '../../../src/cli/commands/version.js';
+import { loadPackageMetadata } from '../../../src/util/packageMetadata.js';
 
 const SEMVER_WITH_OPTIONAL_PRERELEASE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 

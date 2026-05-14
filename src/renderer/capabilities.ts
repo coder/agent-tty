@@ -54,6 +54,9 @@ export const RendererRuntimeSummarySchema = z
     mode: RendererRuntimeModeSchema,
     status: RendererRuntimeStatusSchema,
     reason: z.string().optional(),
+    profile: z.string().optional(),
+    booted: z.boolean().optional(),
+    bootInFlight: z.boolean().optional(),
   })
   .strict();
 export type RendererRuntimeSummary = z.infer<

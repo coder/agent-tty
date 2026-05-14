@@ -14,31 +14,45 @@
   "artifacts": [
     {
       "path": "logs/01-golden-envelopes.json",
-      "description": "Pretty-printed Vitest JSON output for the Week 8 golden-envelope suite"
+      "description": "Pretty-printed Vitest JSON output for the Week 8 golden-envelope suite",
+      "sha256": "985c613652551c4e395b444c0256db6c5dd8e17ea952b3ea6dcf148f36af1a2a",
+      "bytes": 21655
     },
     {
       "path": "logs/01-golden-envelopes.stderr.txt",
-      "description": "Captured stderr for the JSON-reporter Vitest run"
+      "description": "Captured stderr for the JSON-reporter Vitest run",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
     },
     {
       "path": "logs/02-golden-envelopes.txt",
-      "description": "Human-readable Vitest output showing the full Week 8 golden-envelope suite passing"
+      "description": "Human-readable Vitest output showing the full Week 8 golden-envelope suite passing",
+      "sha256": "1331dd870574ac6a647882e376bc4baffa32cbdc90e6507a1e0908d4f16c3fa2",
+      "bytes": 504
     },
     {
       "path": "logs/02-golden-envelopes.stderr.txt",
-      "description": "Captured stderr for the human-readable Vitest run"
+      "description": "Captured stderr for the human-readable Vitest run",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
     },
     {
       "path": "snapshots/01-golden-envelopes.json",
-      "description": "Bundle-local JSON mirror used by the review and validation tooling"
+      "description": "Bundle-local JSON mirror used by the review and validation tooling",
+      "sha256": "985c613652551c4e395b444c0256db6c5dd8e17ea952b3ea6dcf148f36af1a2a",
+      "bytes": 21655
     },
     {
       "path": "screenshots/01-review-page.png",
-      "description": "Screenshot of the generated local review page"
+      "description": "Screenshot of the generated local review page",
+      "sha256": "74b1e45cb7c73056ed4082537a45b98281e98cc64341ca2ab7480fdde24f7650",
+      "bytes": 3866344
     },
     {
       "path": "command-status.tsv",
-      "description": "Per-step exit-code ledger for capture, review-page generation, validation, and screenshot creation"
+      "description": "Per-step exit-code ledger for capture, review-page generation, validation, and screenshot creation",
+      "sha256": "a9ac6f0c136b672582067a912f299cb52a314cdf7b2796d18d5b180251b2186a",
+      "bytes": 1362
     }
   ]
 }

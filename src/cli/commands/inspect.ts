@@ -1,6 +1,8 @@
 import {
   HostInspectResultSchema,
   type ArtifactHealthSummary,
+  type HostInspectResult,
+  type InspectHostInfo,
   type InspectResult,
   type RendererRuntimeSummary,
 } from '../../protocol/messages.js';
@@ -9,7 +11,10 @@ import type { SessionRecord, SessionStatus } from '../../protocol/schemas.js';
 import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
 
-import { countEventLogEntries } from '../../host/eventLog.js';
+import {
+  countEventLogEntries,
+  statEventLogBytes,
+} from '../../host/eventLog.js';
 import { reconcileSession } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import {
@@ -64,6 +69,7 @@ const RENDERER_BACKEND = 'ghostty-web';
 function deriveRendererRuntimeSummary(options: {
   usedOfflineReplay: boolean;
   sessionStatus: SessionStatus;
+  hostInfo?: HostInspectResult;
 }): RendererRuntimeSummary {
   if (options.usedOfflineReplay) {
     return {
@@ -83,18 +89,39 @@ function deriveRendererRuntimeSummary(options: {
     };
   }
 
+  const hostInfo = options.hostInfo;
   return {
     backend: RENDERER_BACKEND,
     mode: 'live-host',
     status: 'healthy',
+    ...(hostInfo?.rendererProfile !== undefined
+      ? { profile: hostInfo.rendererProfile }
+      : {}),
+    ...(hostInfo?.rendererBooted !== undefined
+      ? { booted: hostInfo.rendererBooted }
+      : {}),
+    ...(hostInfo?.rendererBootInFlight !== undefined
+      ? { bootInFlight: hostInfo.rendererBootInFlight }
+      : {}),
   };
 }
 
 function formatRendererRuntime(summary: RendererRuntimeSummary): string {
   const reasonSuffix =
     summary.reason === undefined ? '' : ` — ${summary.reason}`;
+  const extras: string[] = [];
+  if (summary.profile !== undefined) {
+    extras.push(`profile: ${summary.profile}`);
+  }
+  if (summary.booted !== undefined) {
+    extras.push(`booted: ${summary.booted ? 'yes' : 'no'}`);
+  }
+  if (summary.bootInFlight === true) {
+    extras.push('boot-in-flight');
+  }
+  const extrasSuffix = extras.length > 0 ? ` [${extras.join(', ')}]` : '';
 
-  return `${summary.backend} (${summary.mode}, ${summary.status}${reasonSuffix})`;
+  return `${summary.backend} (${summary.mode}, ${summary.status}${reasonSuffix})${extrasSuffix}`;
 }
 
 function formatSessionLines(result: InspectResult): string[] {
@@ -116,7 +143,18 @@ function formatSessionLines(result: InspectResult): string[] {
     lines.push(`Last Event Seq: ${String(result.lastEventSeq)}`);
   }
 
+  if (result.eventLogBytes !== undefined) {
+    lines.push(`Event Log Bytes: ${String(result.eventLogBytes)}`);
+  }
+
   lines.push(`Uptime: ${String(uptime)}ms`);
+
+  if (result.host !== undefined) {
+    lines.push(
+      `Host CLI Version: ${result.host.cliVersion}`,
+      `RPC Socket: ${result.host.rpcSocketPath}`,
+    );
+  }
 
   if (result.artifacts !== undefined) {
     lines.push(
@@ -171,6 +209,7 @@ export async function runInspectCommand(
   }
 
   const isLiveHostEligible = isLiveHostEligibleSessionStatus(session.status);
+  let hostInfo: HostInspectResult | undefined;
   if (isLiveHostEligible) {
     try {
       const rawResult: unknown = await sendRpc(
@@ -185,6 +224,7 @@ export async function runInspectCommand(
         });
       }
       session = parsedResult.data.session;
+      hostInfo = parsedResult.data;
     } catch (error) {
       if (
         error instanceof CliError &&
@@ -193,13 +233,16 @@ export async function runInspectCommand(
         await reconcileSession(sessionDirectory);
         session = await readManifest(manifestFile);
         usedOfflineReplay = true;
+        hostInfo = undefined;
       } else {
         throw error;
       }
     }
   }
 
-  const eventCount = await countEventLogEntries(eventLogPath(sessionDirectory));
+  const eventLogFile = eventLogPath(sessionDirectory);
+  const eventCount = await countEventLogEntries(eventLogFile);
+  const eventLogBytes = await statEventLogBytes(eventLogFile);
   const uptime = computeUptime(session);
   let artifacts: ArtifactHealthSummary | undefined;
   try {
@@ -213,7 +256,17 @@ export async function runInspectCommand(
   const rendererRuntime = deriveRendererRuntimeSummary({
     usedOfflineReplay,
     sessionStatus: session.status,
+    ...(hostInfo !== undefined ? { hostInfo } : {}),
   });
+  const host: InspectHostInfo | undefined =
+    hostInfo !== undefined &&
+    hostInfo.cliVersion !== undefined &&
+    hostInfo.rpcSocketPath !== undefined
+      ? {
+          cliVersion: hostInfo.cliVersion,
+          rpcSocketPath: hostInfo.rpcSocketPath,
+        }
+      : undefined;
   const result: InspectResult = {
     session,
     eventCount,
@@ -223,6 +276,8 @@ export async function runInspectCommand(
     artifacts,
     usedOfflineReplay,
     rendererRuntime,
+    ...(host !== undefined ? { host } : {}),
+    ...(eventLogBytes !== undefined ? { eventLogBytes } : {}),
   };
 
   emitSuccess({
