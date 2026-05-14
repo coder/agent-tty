@@ -425,17 +425,26 @@ export async function runHost(sessionId: string): Promise<void> {
 
   const handlers: Record<string, MethodHandler> = {
     inspect: async () => {
+      // Capture every observable in a single synchronous tick before the
+      // `await` below yields the event loop. Concurrent RPC handlers can
+      // otherwise mutate renderer state and the session snapshot between
+      // reads, producing a result that does not correspond to any real
+      // point in time.
+      const sessionSnapshot = state.snapshot();
       const rendererProfile = rendererManager.getCurrentProfileName();
+      const rendererBooted = rendererManager.isBooted();
+      const rendererBootInFlight = rendererManager.isBootInFlight();
+
       const packageMetadata = await getPackageMetadata();
       return {
-        session: state.snapshot(),
+        session: sessionSnapshot,
         ...(packageMetadata !== undefined
           ? { cliVersion: packageMetadata.version }
           : {}),
         rpcSocketPath: sPath,
         ...(rendererProfile !== null ? { rendererProfile } : {}),
-        rendererBooted: rendererManager.isBooted(),
-        rendererBootInFlight: rendererManager.isBootInFlight(),
+        rendererBooted,
+        rendererBootInFlight,
       };
     },
     snapshot: async (params: unknown) => {

@@ -75,8 +75,11 @@ export const MAX_JSON_FILE_BYTES = 50 * 1024 * 1024;
 async function isFile(filePath: string): Promise<boolean> {
   try {
     return (await stat(filePath)).isFile();
-  } catch {
-    return false;
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      return false;
+    }
+    throw error;
   }
 }
 
