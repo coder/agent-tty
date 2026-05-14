@@ -396,7 +396,7 @@ export interface CatalogParityResult {
  * Confirms that every `<dogfoodRelativeName>/<bundle>/...` path mentioned in
  * the catalog markdown resolves to an existing directory under
  * `dogfoodRoot`. Glob-shaped historical entries (e.g.
- * `dogfood/20260319-*`) are deliberately skipped — the regex requires a
+ * `dogfood/20260319-*`) are deliberately skipped; the regex requires a
  * literal trailing path component so truncated globs do not register as
  * real directories.
  *

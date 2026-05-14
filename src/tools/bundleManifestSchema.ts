@@ -1,9 +1,11 @@
 /**
  * Strict Zod schema for the `manifest.json` files that govern the canonical
- * proof bundles named in `RELEASE.md`
+ * proof bundles. `RELEASE.md` names the three release-signoff bundles
  * (`dogfood/20260326-week9-release-readiness/`,
- * `dogfood/20260325-week8-contract-locks/`, `dogfood/run-command/`, and
- * `dogfood/agent-uses-agent-tty/`).
+ * `dogfood/20260325-week8-contract-locks/`, and `dogfood/run-command/`).
+ * `dogfood/agent-uses-agent-tty/` is the evergreen agent demo bundle
+ * (surfaced in the README and `CHANGELOG.md`), locked here on the same
+ * schema so CI catches drift in the same place.
  *
  * Required `sha256` + `bytes` per artifact let `validate-bundle.ts --profile
  * canonical` recompute and compare each digest, catching any byte-level drift
