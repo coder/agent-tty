@@ -566,6 +566,44 @@ describe('inspect command', () => {
     );
   });
 
+  it('surfaces host.rpcSocketPath even when cliVersion is unavailable', async () => {
+    // Exercises the DEREM-24 fix: when `loadPackageMetadata` fails on the
+    // host, `cliVersion` is omitted from the RPC response but
+    // `rpcSocketPath` is still populated. The CLI must surface the socket
+    // path instead of dropping the entire `host` block.
+    const liveSession = createSessionRecord('running');
+    mocks.sendRpc.mockResolvedValue({
+      session: liveSession,
+      rpcSocketPath: '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      rendererBooted: false,
+      rendererBootInFlight: false,
+    });
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    const emitted = getLastEmitSuccessPayload() as {
+      result: {
+        host?: { cliVersion?: string; rpcSocketPath: string };
+      };
+      lines: string[];
+    };
+
+    expect(emitted.result.host).toEqual({
+      rpcSocketPath: '/tmp/agent-tty/sessions/session-01/rpc.sock',
+    });
+    expect(emitted.result.host?.cliVersion).toBeUndefined();
+    expect(emitted.lines).toContain(
+      'RPC Socket: /tmp/agent-tty/sessions/session-01/rpc.sock',
+    );
+    expect(emitted.lines).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/^Host CLI Version:/)]),
+    );
+  });
+
   it('omits host info and renderer extensions in offline-replay mode', async () => {
     const reconciledSession = createSessionRecord('exited');
     mocks.sendRpc.mockRejectedValue(
