@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## Added
+
+- `inspect --json` now exposes optional `host.cliVersion` and `host.rpcSocketPath` (live mode), `rendererRuntime.profile` / `rendererRuntime.booted` / `rendererRuntime.bootInFlight` (live mode), and `eventLogBytes` (both live and offline-replay). Human output gains matching `Host CLI Version`, `RPC Socket`, `Event Log Bytes` lines and a `[profile: …, booted: yes/no, boot-in-flight]` suffix on the renderer runtime line ([#104](https://github.com/coder/agent-tty/pull/104)).
+- Canonical proof-bundle schema (`CanonicalBundleManifestSchema`) requiring per-artifact `sha256` and `bytes`, a `validate-bundle --profile canonical` mode with 8 rules (including path-traversal guards and status-column-aware TSV checks), and a new `validate-bundle:canonical` npm script plus `mise run validate-bundles` task wired into the `linux-static` CI job. Catalog parity is verified against `dogfood/CATALOG.md` ([#104](https://github.com/coder/agent-tty/pull/104)).
+- Canonical manifests for the `dogfood/run-command/` and `dogfood/agent-uses-agent-tty/` bundles, with `sha256` + `bytes` per artifact ([#104](https://github.com/coder/agent-tty/pull/104)).
+
+## Changed
+
+- The `inspect` RPC handler now captures session snapshot and renderer state in a single synchronous tick before any `await`, so concurrent RPC traffic can no longer produce a result that mixes two points in time ([#104](https://github.com/coder/agent-tty/pull/104)).
+- Existing canonical manifests (`20260325-week8-contract-locks`, `20260326-week9-release-readiness`) gained `sha256` + `bytes` per artifact to conform to the new schema ([#104](https://github.com/coder/agent-tty/pull/104)).
+
+## Fixed
+
+- Restored an empty `## [Unreleased]` heading on `main` after the v0.2.0 release-prep commit so the `Update Unreleased Changelog` workflow stops failing on pushes to `main`. The release process docs now spell out the rename-and-insert rule ([#103](https://github.com/coder/agent-tty/pull/103)).
+
 ## [v0.2.0] - 2026-05-13
 
 ### Added
