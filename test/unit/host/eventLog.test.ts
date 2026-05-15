@@ -15,6 +15,7 @@ import {
   countEventLogEntries,
   EventLog,
   MAX_EVENT_BUFFER_ENTRIES,
+  statEventLogBytes,
 } from '../../../src/host/eventLog.js';
 import { MAX_EVENT_LOG_SIZE } from '../../../src/storage/eventLogCodec.js';
 
@@ -57,6 +58,55 @@ describe('countEventLogEntries', () => {
     );
 
     await expect(countEventLogEntries(eventLogPath)).resolves.toBe(2);
+  });
+});
+
+describe('statEventLogBytes', () => {
+  beforeEach(async () => {
+    // oxfmt-ignore
+    tempDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-event-log-')));
+    eventLogPath = join(tempDir, 'events.jsonl');
+  });
+
+  afterEach(async () => {
+    if (tempDir.length > 0) {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns undefined when the event log file is missing', async () => {
+    await expect(statEventLogBytes(eventLogPath)).resolves.toBeUndefined();
+  });
+
+  it('returns 0 for an empty event log file', async () => {
+    await writeFile(eventLogPath, '', 'utf8');
+
+    await expect(statEventLogBytes(eventLogPath)).resolves.toBe(0);
+  });
+
+  it('returns the byte size of a populated event log file', async () => {
+    const payload = `${JSON.stringify({ seq: 0, type: 'output' })}\n`;
+    await writeFile(eventLogPath, payload, 'utf8');
+
+    await expect(statEventLogBytes(eventLogPath)).resolves.toBe(
+      Buffer.byteLength(payload, 'utf8'),
+    );
+  });
+
+  it('rejects empty file paths', async () => {
+    await expect(statEventLogBytes('')).rejects.toThrow();
+  });
+
+  it('rethrows non-ENOENT errors so callers see them', async () => {
+    // A path whose parent is a regular file rather than a directory triggers
+    // ENOTDIR from stat(), which must propagate (only ENOENT may be swallowed).
+    const blocker = join(tempDir, 'blocker');
+    await writeFile(blocker, 'x', 'utf8');
+    const childOfFile = join(blocker, 'events.jsonl');
+
+    await expect(statEventLogBytes(childOfFile)).rejects.toMatchObject({
+      code: 'ENOTDIR',
+    });
   });
 });
 

@@ -52,6 +52,9 @@ jobs:
       - name: Typecheck
         run: mise run typecheck
 
+      - name: Validate canonical proof bundles
+        run: mise run validate-bundles
+
       - name: Build
         run: mise run build
 

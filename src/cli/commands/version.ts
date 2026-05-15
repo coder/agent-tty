@@ -1,19 +1,13 @@
-import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 
 import { emitSuccess } from '../output.js';
 import type { CapabilityEntry } from '../../renderer/capabilities.js';
 
 import { discoverCapabilities } from '../../renderer/capabilities.js';
-import { assertString } from '../../util/assert.js';
+import { loadPackageMetadata } from '../../util/packageMetadata.js';
 
 const COMMAND_NAME = 'version';
 const PROTOCOL_VERSION = '0.1.0';
-
-interface PackageMetadata {
-  name: string;
-  version: string;
-}
 
 export interface VersionResult {
   cliVersion: string;
@@ -25,25 +19,6 @@ export interface VersionResult {
     arch: string;
   };
   capabilities?: CapabilityEntry[];
-}
-
-export async function loadPackageMetadata(): Promise<PackageMetadata> {
-  const packageJsonUrl = new URL('../../../package.json', import.meta.url);
-  const rawPackageJson = await readFile(packageJsonUrl, 'utf8');
-  const parsedPackageJson = JSON.parse(rawPackageJson) as Record<
-    string,
-    unknown
-  >;
-  const packageName = parsedPackageJson.name;
-  const packageVersion = parsedPackageJson.version;
-
-  assertString(packageName, 'package.json name must be a string');
-  assertString(packageVersion, 'package.json version must be a string');
-
-  return {
-    name: packageName,
-    version: packageVersion,
-  };
 }
 
 export async function buildVersionResult(options?: {

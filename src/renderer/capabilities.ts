@@ -54,6 +54,14 @@ export const RendererRuntimeSummarySchema = z
     mode: RendererRuntimeModeSchema,
     status: RendererRuntimeStatusSchema,
     reason: z.string().optional(),
+    // `profile`, `booted`, and `bootInFlight` are only populated when
+    // `mode === 'live-host'` and the host has reached the inspect RPC
+    // handler. All three stay absent in offline-replay mode and when the
+    // host runs an older protocol version that does not surface them.
+    // `min(1)` matches the producer-side `HostInspectResultSchema`.
+    profile: z.string().min(1).optional(),
+    booted: z.boolean().optional(),
+    bootInFlight: z.boolean().optional(),
   })
   .strict();
 export type RendererRuntimeSummary = z.infer<

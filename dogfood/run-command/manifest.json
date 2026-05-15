@@ -1,0 +1,143 @@
+{
+  "bundle": "run-command",
+  "title": "Run command end-to-end proof",
+  "description": "End-to-end dogfood pass for the first-class run command: waited success, no-wait acceptance, timeout contract, run event-log evidence, and reviewable renderer artifacts.",
+  "createdAt": "2026-03-26T20:54:41Z",
+  "scenario": "run-command",
+  "result": "pass",
+  "commands": [
+    "./node_modules/.bin/tsx src/cli/main.ts create --json --home <isolated-home> -- /bin/bash",
+    "./node_modules/.bin/tsx src/cli/main.ts run <bash-session> 'echo hello-dogfood' --timeout 15000 --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts run <bash-session> 'echo async-dogfood' --no-wait --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts create --json --home <isolated-home> -- /bin/sh -c 'stty -echo; exec sleep 60'",
+    "./node_modules/.bin/tsx src/cli/main.ts run <timeout-session> 'echo will-timeout' --timeout 2000 --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts snapshot <bash-session> --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts screenshot <bash-session> --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts record export <bash-session> --format asciicast --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts record export <bash-session> --format webm --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts destroy <bash-session> --json --home <isolated-home>",
+    "./node_modules/.bin/tsx src/cli/main.ts destroy <timeout-session> --json --home <isolated-home>"
+  ],
+  "artifacts": [
+    {
+      "path": "README.md",
+      "description": "Reviewer-facing narrative explaining the run-command end-to-end proof",
+      "sha256": "e56a309b9031bec6905a8ebe80f43948822209c19edf8681b2a0dba76630299b",
+      "bytes": 2540
+    },
+    {
+      "path": "commands.sh",
+      "description": "Reproducible CLI flow used to generate the bundle",
+      "sha256": "26ebcd24a33d0cbf5e965b4a34a685c8fe4c9b2ec5455d6cdc4aa391ed9e8a6e",
+      "bytes": 1177
+    },
+    {
+      "path": "bash-session-id.txt",
+      "description": "Session identifier captured for the interactive bash proof",
+      "sha256": "346676fbab0803bdf7fbfce5b81410b9d692d24fce2149f9843e91d0dee0f220",
+      "bytes": 27
+    },
+    {
+      "path": "timeout-session-id.txt",
+      "description": "Session identifier captured for the timeout proof",
+      "sha256": "6eaf71b45cdb10218ee2c54f357a03cee2f6e68738223edb01d6822e3f8777ef",
+      "bytes": 27
+    },
+    {
+      "path": "isolated-home.txt",
+      "description": "Recorded AGENT_TERMINAL_HOME used during capture",
+      "sha256": "04afe6e09020e5aaec605bd14844b1a3491b325999746158c20a9db51aa000b6",
+      "bytes": 20
+    },
+    {
+      "path": "create-bash.json",
+      "description": "create envelope for the interactive bash proof session",
+      "sha256": "d11c2c685a122373d0609cfa00302645f72bf8f319f4dbb23e9a2c93ecdc5294",
+      "bytes": 251
+    },
+    {
+      "path": "create-timeout.json",
+      "description": "create envelope for the dedicated timeout proof session",
+      "sha256": "0869d1e8f804cf039c0e52140cbbb4e04881750268548bc8bb83e49e021af1f2",
+      "bytes": 251
+    },
+    {
+      "path": "destroy-bash.json",
+      "description": "destroy envelope for the interactive bash proof session",
+      "sha256": "95a75e55c54d4624e9d1dabff9523ad96067d90472fe45262a06fc146548b0ce",
+      "bytes": 172
+    },
+    {
+      "path": "destroy-timeout.json",
+      "description": "destroy envelope for the dedicated timeout proof session",
+      "sha256": "e307d0d3a1fc6f7a8381c4348ea7243828fcecf4f694e1939b3628c621cd492c",
+      "bytes": 172
+    },
+    {
+      "path": "waited-success.json",
+      "description": "run envelope showing waited success completion (seq 3)",
+      "sha256": "b5db52a528e6579bff4edc7f5e2866579d78bf2de4f1f52e49de599ecf42acef",
+      "bytes": 267
+    },
+    {
+      "path": "no-wait.json",
+      "description": "run envelope showing no-wait acceptance with no completion fields",
+      "sha256": "811bf5970a1ef330ce8d6de04023b75b7e58d5dd6bee09be7f05e30766cce39e",
+      "bytes": 134
+    },
+    {
+      "path": "timeout.json",
+      "description": "run envelope showing timeout contract: accepted true, completed false, timedOut true",
+      "sha256": "ea6a62a1a40b9c6eb1ce2987ea5d492cd5865cee343be00dae0b08b43c1fd99c",
+      "bytes": 268
+    },
+    {
+      "path": "input-run-events.jsonl",
+      "description": "Raw input_run event-log entries copied from both sessions",
+      "sha256": "0151861f608b04771237e7c491c66869c26d5d8d9173343a4c39c2a3a6f8b90f",
+      "bytes": 466
+    },
+    {
+      "path": "snapshot.json",
+      "description": "snapshot envelope capturing post-run terminal state",
+      "sha256": "e954495aa5fdae4cb433c6c0ca349b4d0e97653ad212ea384d576894c147d493",
+      "bytes": 1889
+    },
+    {
+      "path": "screenshot-result.json",
+      "description": "screenshot envelope referencing the renderer PNG output",
+      "sha256": "b5c104a589258a6cc89d7766c03012255a9e0c4434c113d20d22ce9a4c78a168",
+      "bytes": 681
+    },
+    {
+      "path": "screenshot.png",
+      "description": "Renderer screenshot of the interactive bash session",
+      "sha256": "aea6b8bc32d3d0907c48f645051c0889cc73f2c3644701c0dd8b07f7507e94a7",
+      "bytes": 17487
+    },
+    {
+      "path": "record-export-asciicast.json",
+      "description": "record export envelope for the asciicast recording",
+      "sha256": "74fbd7d84c1d3f2e83da3b84bc19a5ed0a988293f3e5dc56a4f796fe2c6ef732",
+      "bytes": 668
+    },
+    {
+      "path": "record-export-webm.json",
+      "description": "record export envelope for the WebM recording",
+      "sha256": "d442f3f2666c0c0c7e1c4d0dba53304a7e84df2bb3e8b306223dcbd2a25d410d",
+      "bytes": 728
+    },
+    {
+      "path": "run-command.cast",
+      "description": "Exported asciicast recording for review playback",
+      "sha256": "49b7f58cc7ef1888bcd2e10b238bbe3b95bd3460ab8415934a59bdc7b1738d36",
+      "bytes": 1063
+    },
+    {
+      "path": "run-command.webm",
+      "description": "Exported WebM recording for review playback",
+      "sha256": "49e0e3c0a6b86661eacbca9765d7a310af092f2b1b4c9344487fcea58ccb89c7",
+      "bytes": 43456
+    }
+  ]
+}

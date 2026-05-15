@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { open, readFile } from 'node:fs/promises';
+import { open, readFile, stat } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 
@@ -20,6 +20,7 @@ import {
   parseEventLogContent,
 } from '../storage/eventLogCodec.js';
 import { invariant } from '../util/assert.js';
+import { hasErrorCode } from '../util/hasErrorCode.js';
 
 const OutputEventPayloadSchema = z
   .object({
@@ -182,6 +183,27 @@ function deriveNextSeq(records: readonly EventRecord[]): number {
   return lastRecord.seq + 1;
 }
 
+/**
+ * Returns the event log file size in bytes, or `undefined` when the file
+ * does not exist (ENOENT). Non-ENOENT errors propagate to the caller.
+ */
+export async function statEventLogBytes(
+  filePath: string,
+): Promise<number | undefined> {
+  assertFilePath(filePath);
+
+  try {
+    const stats = await stat(filePath);
+    return stats.size;
+  } catch (error: unknown) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
 export async function countEventLogEntries(filePath: string): Promise<number> {
   assertFilePath(filePath);
 
@@ -199,12 +221,7 @@ export async function countEventLogEntries(filePath: string): Promise<number> {
       }
     }
   } catch (error: unknown) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
+    if (hasErrorCode(error, 'ENOENT')) {
       return 0;
     }
 

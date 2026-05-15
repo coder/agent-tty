@@ -46,7 +46,7 @@ import {
   sessionDir,
 } from '../../storage/sessionPaths.js';
 import { invariant } from '../../util/assert.js';
-import { loadPackageMetadata } from './version.js';
+import { loadPackageMetadata } from '../../util/packageMetadata.js';
 
 const RecordExportFormatSchema = z.enum(['asciicast', 'webm']);
 

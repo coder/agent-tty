@@ -5,6 +5,7 @@ import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 const mocks = vi.hoisted(() => ({
   computeArtifactHealth: vi.fn(),
   countEventLogEntries: vi.fn(),
+  statEventLogBytes: vi.fn(),
   deriveTerminationCategory: vi.fn(),
   emitSuccess: vi.fn(),
   reconcileSession: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock('../../../src/cli/output.js', () => ({
 
 vi.mock('../../../src/host/eventLog.js', () => ({
   countEventLogEntries: mocks.countEventLogEntries,
+  statEventLogBytes: mocks.statEventLogBytes,
 }));
 
 vi.mock('../../../src/host/lifecycle.js', () => ({
@@ -128,6 +130,7 @@ describe('inspect command', () => {
     );
     mocks.computeArtifactHealth.mockResolvedValue(DEFAULT_ARTIFACT_HEALTH);
     mocks.countEventLogEntries.mockResolvedValue(2);
+    mocks.statEventLogBytes.mockResolvedValue(undefined);
     mocks.deriveTerminationCategory.mockReturnValue('running');
     mocks.readManifestIfExists.mockResolvedValue(
       createSessionRecord('running'),
@@ -182,23 +185,21 @@ describe('inspect command', () => {
       lines: string[];
     };
 
-    expect(emitted).toEqual(
+    expect(emitted.command).toBe('inspect');
+    expect(emitted.json).toBe(false);
+    expect(emitted.result).toEqual(
       expect.objectContaining({
-        command: 'inspect',
-        json: false,
-        result: {
-          session: liveSession,
-          eventCount: 2,
-          uptime: 5000,
-          lastEventSeq: 1,
-          terminationCategory: 'running',
-          artifacts: DEFAULT_ARTIFACT_HEALTH,
-          usedOfflineReplay: false,
-          rendererRuntime: {
-            backend: 'ghostty-web',
-            mode: 'live-host',
-            status: 'healthy',
-          },
+        session: liveSession,
+        eventCount: 2,
+        uptime: 5000,
+        lastEventSeq: 1,
+        terminationCategory: 'running',
+        artifacts: DEFAULT_ARTIFACT_HEALTH,
+        usedOfflineReplay: false,
+        rendererRuntime: {
+          backend: 'ghostty-web',
+          mode: 'live-host',
+          status: 'healthy',
         },
       }),
     );
@@ -379,24 +380,22 @@ describe('inspect command', () => {
       lines: string[];
     };
 
-    expect(emitted).toEqual(
+    expect(emitted.command).toBe('inspect');
+    expect(emitted.json).toBe(true);
+    expect(emitted.result).toEqual(
       expect.objectContaining({
-        command: 'inspect',
-        json: true,
-        result: {
-          session: reconciledSession,
-          eventCount: 2,
-          uptime: 1000,
-          lastEventSeq: 1,
-          terminationCategory: 'clean-exit',
-          artifacts: DEFAULT_ARTIFACT_HEALTH,
-          usedOfflineReplay: true,
-          rendererRuntime: {
-            backend: 'ghostty-web',
-            mode: 'offline-replay',
-            status: 'fallback',
-            reason: 'host-unreachable',
-          },
+        session: reconciledSession,
+        eventCount: 2,
+        uptime: 1000,
+        lastEventSeq: 1,
+        terminationCategory: 'clean-exit',
+        artifacts: DEFAULT_ARTIFACT_HEALTH,
+        usedOfflineReplay: true,
+        rendererRuntime: {
+          backend: 'ghostty-web',
+          mode: 'offline-replay',
+          status: 'fallback',
+          reason: 'host-unreachable',
         },
       }),
     );
@@ -512,5 +511,170 @@ describe('inspect command', () => {
     expect(emitted.lines).not.toContain(
       expect.stringMatching(/^Last Event Seq:/),
     );
+  });
+
+  it('surfaces host info and renderer extensions in live mode', async () => {
+    const liveSession = createSessionRecord('running');
+    mocks.sendRpc.mockResolvedValue({
+      session: liveSession,
+      cliVersion: '0.2.1',
+      rpcSocketPath: '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      rendererProfile: 'reference-dark',
+      rendererBooted: true,
+      rendererBootInFlight: false,
+    });
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    const emitted = getLastEmitSuccessPayload() as {
+      result: {
+        host?: { cliVersion: string; rpcSocketPath: string };
+        rendererRuntime: {
+          backend: string;
+          mode: string;
+          status: string;
+          profile?: string;
+          booted?: boolean;
+          bootInFlight?: boolean;
+        };
+      };
+      lines: string[];
+    };
+
+    expect(emitted.result.host).toEqual({
+      cliVersion: '0.2.1',
+      rpcSocketPath: '/tmp/agent-tty/sessions/session-01/rpc.sock',
+    });
+    expect(emitted.result.rendererRuntime).toEqual({
+      backend: 'ghostty-web',
+      mode: 'live-host',
+      status: 'healthy',
+      profile: 'reference-dark',
+      booted: true,
+      bootInFlight: false,
+    });
+    expect(emitted.lines).toEqual(
+      expect.arrayContaining([
+        'Host CLI Version: 0.2.1',
+        'RPC Socket: /tmp/agent-tty/sessions/session-01/rpc.sock',
+        'Renderer: ghostty-web (live-host, healthy) [profile: reference-dark, booted: yes]',
+      ]),
+    );
+  });
+
+  it('surfaces host.rpcSocketPath even when cliVersion is unavailable', async () => {
+    // Exercises the DEREM-24 fix: when `loadPackageMetadata` fails on the
+    // host, `cliVersion` is omitted from the RPC response but
+    // `rpcSocketPath` is still populated. The CLI must surface the socket
+    // path instead of dropping the entire `host` block.
+    const liveSession = createSessionRecord('running');
+    mocks.sendRpc.mockResolvedValue({
+      session: liveSession,
+      rpcSocketPath: '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      rendererBooted: false,
+      rendererBootInFlight: false,
+    });
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    const emitted = getLastEmitSuccessPayload() as {
+      result: {
+        host?: { cliVersion?: string; rpcSocketPath: string };
+      };
+      lines: string[];
+    };
+
+    expect(emitted.result.host).toEqual({
+      rpcSocketPath: '/tmp/agent-tty/sessions/session-01/rpc.sock',
+    });
+    expect(emitted.result.host?.cliVersion).toBeUndefined();
+    expect(emitted.lines).toContain(
+      'RPC Socket: /tmp/agent-tty/sessions/session-01/rpc.sock',
+    );
+    expect(emitted.lines).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/^Host CLI Version:/)]),
+    );
+  });
+
+  it('omits host info and renderer extensions in offline-replay mode', async () => {
+    const reconciledSession = createSessionRecord('exited');
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'Session host is unreachable.',
+      }),
+    );
+    mocks.readManifest.mockResolvedValue(reconciledSession);
+    mocks.deriveTerminationCategory.mockReturnValue('clean-exit');
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    const emitted = getLastEmitSuccessPayload() as {
+      result: {
+        host?: unknown;
+        rendererRuntime: {
+          backend: string;
+          mode: string;
+          profile?: string;
+          booted?: boolean;
+          bootInFlight?: boolean;
+        };
+      };
+    };
+
+    expect(emitted.result.host).toBeUndefined();
+    expect(emitted.result.rendererRuntime.profile).toBeUndefined();
+    expect(emitted.result.rendererRuntime.booted).toBeUndefined();
+    expect(emitted.result.rendererRuntime.bootInFlight).toBeUndefined();
+  });
+
+  it('surfaces eventLogBytes in both live and offline modes', async () => {
+    const liveSession = createSessionRecord('running');
+    mocks.sendRpc.mockResolvedValue({ session: liveSession });
+    mocks.statEventLogBytes.mockResolvedValue(4096);
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    const liveEmitted = getLastEmitSuccessPayload() as {
+      result: { eventLogBytes?: number };
+      lines: string[];
+    };
+    expect(liveEmitted.result.eventLogBytes).toBe(4096);
+    expect(liveEmitted.lines).toContain('Event Log Bytes: 4096');
+
+    const reconciledSession = createSessionRecord('exited');
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'Session host is unreachable.',
+      }),
+    );
+    mocks.readManifest.mockResolvedValue(reconciledSession);
+    mocks.statEventLogBytes.mockResolvedValue(8192);
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    const offlineEmitted = getLastEmitSuccessPayload() as {
+      result: { eventLogBytes?: number };
+    };
+    expect(offlineEmitted.result.eventLogBytes).toBe(8192);
   });
 });

@@ -103,9 +103,35 @@ export type InspectParams = z.infer<typeof InspectParamsSchema>;
 export const HostInspectResultSchema = z
   .object({
     session: SessionRecordSchema,
+    // Best-effort: the host reads `package.json` lazily on first inspect
+    // call and falls back to `undefined` when the file is missing or
+    // unreadable, rather than failing the RPC.
+    cliVersion: z.string().min(1).optional(),
+    // Always populated by the live host (the socket path it accepts
+    // RPC connections on). Optional in the schema only so older hosts
+    // that predate this field still parse.
+    rpcSocketPath: z.string().min(1).optional(),
+    // Renderer state captured atomically in the same synchronous tick.
+    // Populated only when the host has reached the inspect handler. An
+    // older host or one whose renderer has never bootstrapped omits
+    // these and the CLI surfaces them as absent on `rendererRuntime`.
+    rendererProfile: z.string().min(1).optional(),
+    rendererBooted: z.boolean().optional(),
+    rendererBootInFlight: z.boolean().optional(),
   })
   .strict();
 export type HostInspectResult = z.infer<typeof HostInspectResultSchema>;
+
+export const HostInfoSchema = z
+  .object({
+    // `cliVersion` is best-effort: when `package.json` is unreadable the
+    // host omits it rather than failing the inspect RPC. `rpcSocketPath`
+    // is always populated for live-host inspects.
+    cliVersion: z.string().min(1).optional(),
+    rpcSocketPath: z.string().min(1),
+  })
+  .strict();
+export type HostInfo = z.infer<typeof HostInfoSchema>;
 
 export const TerminationCategorySchema = z.enum([
   'running',
@@ -157,6 +183,15 @@ export const InspectResultSchema = z
     artifacts: ArtifactHealthSummarySchema.optional(),
     usedOfflineReplay: z.boolean().optional(),
     rendererRuntime: RendererRuntimeSummarySchema,
+    // Populated only when the inspect call reached a live host (i.e.
+    // `rendererRuntime.mode === 'live-host'`). Absent in offline-replay
+    // mode (`usedOfflineReplay === true` or the session is not live-host
+    // eligible).
+    host: HostInfoSchema.optional(),
+    // Populated in both live and offline-replay modes from a `stat()` on the
+    // session's `events.jsonl`. Absent only when the event log file is
+    // missing on disk (e.g. a session that crashed before its first write).
+    eventLogBytes: z.number().int().nonnegative().optional(),
   })
   .strict();
 export type InspectResult = z.infer<typeof InspectResultSchema>;
