@@ -1,11 +1,14 @@
 # Promoted Hero Demo Run Summary
 
-generatedAt: 2026-05-20T22:47:12.618Z
+generatedAt: 2026-05-21T15:55:50.947Z
 debugRoot: <debug-only>
-codexModel: gpt-5.4-mini
+codexModel: gpt-5.5
 codexEffort: low
+claudeModel: claude-opus-4-7
 claudeEffort: low
-recordSeconds: 120
+recordSeconds: 180
+outerFrame: 1600x900
+outerFontSize: 14
 
 ## Tool Versions
 

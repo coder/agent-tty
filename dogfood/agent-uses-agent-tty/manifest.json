@@ -2,30 +2,30 @@
   "bundle": "agent-uses-agent-tty",
   "title": "Agents use agent-tty: Codex and Claude Hero Demo",
   "description": "README-facing Hero Demo where VHS records real Codex and Claude TUIs while agent-tty produces inner proof artifacts.",
-  "createdAt": "2026-05-20T22:47:12.634Z",
+  "createdAt": "2026-05-21T15:55:52.138Z",
   "scenario": "agent-uses-agent-tty-hero-demo",
   "result": "pass",
   "commands": [
-    "mise run demo:agent-uses-agent-tty -- --agent both --runs 3 --record-seconds 120 --promote"
+    "mise run demo:agent-uses-agent-tty -- --agent both --runs 3 --record-seconds 180 --promote"
   ],
   "artifacts": [
     {
       "path": "artifacts/codex-outer.webm",
       "description": "Outer VHS WebM recording for codex",
-      "sha256": "583fdaf554d961d31b24de53aec61acb33e6c1949d382650e9754544f6d189b1",
-      "bytes": 3672486
+      "sha256": "349c9da276ea3817d393febfb01bb76b7019cd9421e94e0361c82b6f9255186e",
+      "bytes": 4584146
     },
     {
       "path": "artifacts/codex-thumbnail.png",
       "description": "Outer VHS thumbnail for codex",
-      "sha256": "5b2304bc0cc7b3dd51863711f3429c65e414cb16c4c888268d819015d1e6910a",
-      "bytes": 309686
+      "sha256": "a2429160222b759697ac7e4dd1ebe1480c74d257c6ee22efe3feadca24a87f43",
+      "bytes": 345770
     },
     {
       "path": "artifacts/codex-outer-transcript.txt",
       "description": "Outer transcript for codex",
-      "sha256": "f400d1a6058afa398019c4a4330e7bb279fd684fc4997ad90b331c5bfce54625",
-      "bytes": 27820
+      "sha256": "b65afa738d8675ea5c419d6bfb9437a61ca3cce6c05fbd43634a0967ada627ea",
+      "bytes": 35843
     },
     {
       "path": "artifacts/codex-prompt.md",
@@ -36,14 +36,14 @@
     {
       "path": "artifacts/codex-inner-nvim.cast",
       "description": "Inner agent-tty asciicast for codex",
-      "sha256": "fef6537778a3d28fba45cc360f26366d36070db0199708fb98cd188f43b62c35",
-      "bytes": 5193
+      "sha256": "4ffb7cad68b3941654843c6fb0b7a9fea57596b66f55f8dcbaa5b3c16f5ea041",
+      "bytes": 5188
     },
     {
       "path": "artifacts/codex-inner-nvim.webm",
       "description": "Inner agent-tty WebM for codex",
-      "sha256": "fad2310a4126fe27ae6be4439805506570530e866af761f63cd4a37dc68176d8",
-      "bytes": 35215
+      "sha256": "264a3368b40d8f3e3b88351d429f23b87786babaa2e6c34ee8fe886c72f4ec63",
+      "bytes": 32978
     },
     {
       "path": "artifacts/codex-final-file-proof.txt",
@@ -54,26 +54,26 @@
     {
       "path": "artifacts/codex-demo-note.txt",
       "description": "Demo note written by codex",
-      "sha256": "650ac43515e084770bfd10c020a90ed9996bad954c854da8e456d9fe6840590c",
-      "bytes": 55
+      "sha256": "51938970ef1e8399e3cdc20c114aef56a71df0418309ab32fcc17a1ace1582ee",
+      "bytes": 56
     },
     {
       "path": "artifacts/claude-outer.webm",
       "description": "Outer VHS WebM recording for claude",
-      "sha256": "6c5fc5125bd728473acc2bbfc365cfc44f75e6b3e61a7f4008f1e59c061399a7",
-      "bytes": 1814244
+      "sha256": "e97de5e18ff3742fef9e72eee91b3f4c9c8cbd1919ad39fc0b3e1a2e2808c481",
+      "bytes": 4327998
     },
     {
       "path": "artifacts/claude-thumbnail.png",
       "description": "Outer VHS thumbnail for claude",
-      "sha256": "d1e53be545be741dec849a47b588258c5c57a7c8f6f89c42c45a94d93675e24f",
-      "bytes": 235362
+      "sha256": "70cc66a6411a9ecaac48d327ce4de1a4dfe0c84de7e95e9f981fdfc44f3d2db6",
+      "bytes": 310294
     },
     {
       "path": "artifacts/claude-outer-transcript.txt",
       "description": "Outer transcript for claude",
-      "sha256": "f4c757558dc14c52c25ed0ac5f494c8390e5092c85fa57584122ed5e8d0be286",
-      "bytes": 31008
+      "sha256": "03ca6c0569ea24359d08acedad26a4c78b616a9b761aac5c44a785573033b191",
+      "bytes": 46943
     },
     {
       "path": "artifacts/claude-prompt.md",
@@ -84,14 +84,14 @@
     {
       "path": "artifacts/claude-inner-nvim.cast",
       "description": "Inner agent-tty asciicast for claude",
-      "sha256": "f2baa0d0740a1b21fc63ee32ed8daf5f4df4d9ac0d189809c0125c5b4100df88",
-      "bytes": 2004
+      "sha256": "6f44135e3a145adddbd178ff358e75abe88dce08916ade87b0f1e0ecd1d17a61",
+      "bytes": 1982
     },
     {
       "path": "artifacts/claude-inner-nvim.webm",
       "description": "Inner agent-tty WebM for claude",
-      "sha256": "9f11edb3ed3c309f6b7aafd16280ef414da472a056c11c949b4e779bb986863d",
-      "bytes": 23426
+      "sha256": "f7d4b1a5f3c107b0ee0d80602ca19309d7a93fde3a9afeb568a7d743185ee366",
+      "bytes": 22340
     },
     {
       "path": "artifacts/claude-final-file-proof.txt",
@@ -108,8 +108,8 @@
     {
       "path": "promoted-run-summary.md",
       "description": "Promotion summary proving three successful Codex and Claude runs",
-      "sha256": "c49310fe339e503f83d6d49755a457fc848919da402b973e5027e65019ebbe83",
-      "bytes": 623
+      "sha256": "9efedb98544cfd8d4dcf1308e540913aa8b3119ba263655f3c51fcd83290ff68",
+      "bytes": 686
     },
     {
       "path": "README.md",
@@ -120,7 +120,7 @@
     {
       "path": "reproduce.sh",
       "description": "Maintainer-facing reproduction wrapper for the Hero Demo",
-      "sha256": "910f867d6f66f5d33547bced7db9cf7f54ffbf2fc5fbdaa370d45f7974cf3113",
+      "sha256": "92b69748b18cbb64b5d02c25cd98225e8cbc3f793b3d6fc7362d85d3aa8412a9",
       "bytes": 276
     }
   ]

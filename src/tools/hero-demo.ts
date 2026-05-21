@@ -21,7 +21,16 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const DEFAULT_BUNDLE_DIR = join(REPO_ROOT, 'dogfood/agent-uses-agent-tty');
 const DEFAULT_SENTENCE =
   'agent-tty nested Neovim proof from a real coding agent.';
+const DEFAULT_RECORD_SECONDS = 180;
 const AGENTS = ['codex', 'claude'] as const;
+
+const OUTER_WIDTH = 1600;
+const OUTER_HEIGHT = 900;
+const OUTER_FONT_SIZE = 14;
+const CLAUDE_VISUAL_REDACTION_FILTER =
+  'drawbox=x=0:y=0:w=iw:h=180:color=black:t=fill';
+
+const DEMO_TOOL_SPECS = ['vhs@0.11.0', 'ttyd@1.7.7', 'ffmpeg@8.1.1'];
 
 type AgentName = (typeof AGENTS)[number];
 
@@ -32,6 +41,7 @@ export interface HeroDemoOptions {
   bundleDir: string;
   codexModel: string;
   codexEffort: string;
+  claudeModel: string;
   claudeEffort: string;
   sentence: string;
   keepDebug: boolean;
@@ -56,6 +66,7 @@ export interface GeneratedRunnerInput {
   expectedText: string;
   codexModel: string;
   codexEffort: string;
+  claudeModel: string;
   claudeEffort: string;
 }
 
@@ -73,6 +84,7 @@ export interface RunRecord {
   innerWebm: string;
   finalProof: string;
   finalFile: string;
+  error?: string;
 }
 
 export interface CuratedArtifact {
@@ -108,13 +120,15 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
   let runs = 1;
   let promote = false;
   let bundleDir = DEFAULT_BUNDLE_DIR;
-  let codexModel = process.env.AGENT_TTY_HERO_CODEX_MODEL ?? 'gpt-5.4-mini';
+  let codexModel = process.env.AGENT_TTY_HERO_CODEX_MODEL ?? 'gpt-5.5';
   let codexEffort = process.env.AGENT_TTY_HERO_CODEX_EFFORT ?? 'low';
+  let claudeModel =
+    process.env.AGENT_TTY_HERO_CLAUDE_MODEL ?? 'claude-opus-4-7';
   let claudeEffort = process.env.AGENT_TTY_HERO_CLAUDE_EFFORT ?? 'low';
   const sentence = process.env.AGENT_TTY_HERO_SENTENCE ?? DEFAULT_SENTENCE;
   let keepDebug = false;
   let recordSeconds = Number(
-    process.env.AGENT_TTY_HERO_RECORD_SECONDS ?? '120',
+    process.env.AGENT_TTY_HERO_RECORD_SECONDS ?? String(DEFAULT_RECORD_SECONDS),
   );
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -153,6 +167,12 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
         const value = argv[++index];
         invariant(value !== undefined, '--codex-effort requires a value');
         codexEffort = value;
+        break;
+      }
+      case '--claude-model': {
+        const value = argv[++index];
+        invariant(value !== undefined, '--claude-model requires a value');
+        claudeModel = value;
         break;
       }
       case '--claude-effort': {
@@ -198,6 +218,7 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
     bundleDir,
     codexModel,
     codexEffort,
+    claudeModel,
     claudeEffort,
     sentence,
     keepDebug,
@@ -207,7 +228,7 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
 
 function usage(): string {
   return [
-    'Usage: npm run demo:agent-uses-agent-tty -- [--agent both|codex|claude] [--runs N] [--record-seconds N] [--promote]',
+    'Usage: npm run demo:agent-uses-agent-tty -- [--agent both|codex|claude] [--runs N] [--record-seconds N] [--codex-model MODEL] [--claude-model MODEL] [--promote]',
     '',
     'Regenerates the real-agent Hero Demo with VHS as the outer camera.',
   ].join('\n');
@@ -227,9 +248,9 @@ export function generateTape(input: GeneratedTapeInput): string {
     'Output outer.webm',
     'Output outer.ascii',
     'Set Shell bash',
-    'Set Width 1200',
-    'Set Height 900',
-    'Set FontSize 18',
+    `Set Width ${String(OUTER_WIDTH)}`,
+    `Set Height ${String(OUTER_HEIGHT)}`,
+    `Set FontSize ${String(OUTER_FONT_SIZE)}`,
     'Set TypingSpeed 10ms',
     'Set Framerate 5',
     'Set PlaybackSpeed 1.0',
@@ -289,7 +310,9 @@ export function generateRunner(input: GeneratedRunnerInput): string {
     `PROMPT="$(cat ${quote(input.promptPath)})"`,
     'unset ANTHROPIC_API_KEY',
     'export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
-    `exec claude --permission-mode bypassPermissions --dangerously-skip-permissions --effort ${quote(input.claudeEffort)} "$PROMPT"`,
+    'exec claude --permission-mode bypassPermissions --dangerously-skip-permissions ' +
+      `--model ${quote(input.claudeModel)} ` +
+      `--effort ${quote(input.claudeEffort)} "$PROMPT"`,
     '',
   ].join('\n');
 }
@@ -351,7 +374,7 @@ async function copyPromotedArtifact(
     return;
   }
   if (agent === 'claude' && relativePath.endsWith('-outer.webm')) {
-    run('ffmpeg', [
+    runDemoTool('ffmpeg', [
       '-nostdin',
       '-y',
       '-hide_banner',
@@ -360,7 +383,7 @@ async function copyPromotedArtifact(
       '-i',
       from,
       '-vf',
-      'crop=1200:470:0:430',
+      CLAUDE_VISUAL_REDACTION_FILTER,
       '-an',
       '-c:v',
       'libvpx-vp9',
@@ -377,7 +400,7 @@ async function copyPromotedArtifact(
     return;
   }
   if (agent === 'claude' && relativePath.endsWith('-thumbnail.png')) {
-    run('ffmpeg', [
+    runDemoTool('ffmpeg', [
       '-nostdin',
       '-y',
       '-hide_banner',
@@ -386,7 +409,7 @@ async function copyPromotedArtifact(
       '-i',
       from,
       '-vf',
-      'crop=1200:470:0:430',
+      CLAUDE_VISUAL_REDACTION_FILTER,
       '-frames:v',
       '1',
       to,
@@ -407,6 +430,34 @@ async function assertNonEmpty(path: string): Promise<void> {
     stats.isFile() && stats.size > 0,
     `expected non-empty file: ${path}`,
   );
+}
+
+let cachedDemoToolPathPrefix: string | undefined;
+
+function demoToolPathPrefix(): string {
+  cachedDemoToolPathPrefix ??= run('mise', ['bin-paths', ...DEMO_TOOL_SPECS])
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .join(':');
+  invariant(cachedDemoToolPathPrefix !== '', 'demo tool PATH is empty');
+  return cachedDemoToolPathPrefix;
+}
+
+function demoToolEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    PATH: `${demoToolPathPrefix()}:${process.env.PATH ?? ''}`,
+  };
+}
+
+function runDemoTool(command: string, args: string[], cwd = REPO_ROOT): string {
+  return execFileSync(command, args, {
+    cwd,
+    encoding: 'utf8',
+    env: demoToolEnv(),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 }
 
 function run(command: string, args: string[], cwd = REPO_ROOT): string {
@@ -432,12 +483,14 @@ function runLogged(
   cwd: string,
   logPath: string,
   timeoutMs: number,
+  env: NodeJS.ProcessEnv = process.env,
 ): void {
   const logFd = openSync(logPath, 'w');
   let result;
   try {
     result = spawnSync(command, args, {
       cwd,
+      env,
       stdio: ['ignore', logFd, logFd],
       timeout: timeoutMs,
     });
@@ -461,7 +514,7 @@ function ensureThumbnail(runDir: string): void {
   if (existsSync(thumbnailPath) && isNonEmptyFile(thumbnailPath)) {
     return;
   }
-  run('ffmpeg', [
+  runDemoTool('ffmpeg', [
     '-nostdin',
     '-y',
     '-hide_banner',
@@ -580,6 +633,7 @@ async function runOne(
       expectedText: options.sentence,
       codexModel: options.codexModel,
       codexEffort: options.codexEffort,
+      claudeModel: options.claudeModel,
       claudeEffort: options.claudeEffort,
     }),
   );
@@ -595,6 +649,7 @@ async function runOne(
     runDir,
     vhsLog,
     (options.recordSeconds + 180) * 1000,
+    demoToolEnv(),
   );
   ensureThumbnail(runDir);
 
@@ -643,6 +698,38 @@ async function runOne(
     innerWebm,
     finalProof: proofPath,
     finalFile,
+  };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function failedRunRecord(
+  agent: AgentName,
+  index: number,
+  runDir: string,
+  error: unknown,
+  debugRoot: string,
+): RunRecord {
+  const message = errorMessage(error)
+    .replaceAll(runDir, '<run-dir>')
+    .replaceAll(debugRoot, '<debug-root>');
+  return {
+    agent,
+    index,
+    runDir,
+    passed: false,
+    selected: false,
+    outerWebm: join(runDir, 'outer.webm'),
+    outerTranscript: join(runDir, 'outer.ascii'),
+    outerThumbnail: join(runDir, 'marker.png'),
+    prompt: join(runDir, `${agent}-prompt.md`),
+    innerCast: join(runDir, 'workspace/artifacts/inner-nvim.cast'),
+    innerWebm: join(runDir, 'workspace/artifacts/inner-nvim.webm'),
+    finalProof: join(runDir, 'final-file-proof.txt'),
+    finalFile: join(runDir, 'workspace/demo-note.txt'),
+    error: message,
   };
 }
 
@@ -779,7 +866,7 @@ async function promote(
   });
 
   const reproducePath = join(options.bundleDir, 'reproduce.sh');
-  await writeExecutable(reproducePath, renderReproduce());
+  await writeExecutable(reproducePath, renderReproduce(options));
   promotedPaths.push({
     path: 'reproduce.sh',
     description: 'Maintainer-facing reproduction wrapper for the Hero Demo',
@@ -827,7 +914,7 @@ async function promote(
   );
   const findings = buildLeakFindings(leakTexts.join('\n'));
   invariant(findings.length === 0, `leak check failed: ${findings.join(', ')}`);
-  await writeFile(join(artifactsDir, '.gitkeep'), '');
+  await writeFile(join(artifactsDir, '.gitkeep'), '\n');
 }
 
 function safeToolVersion(command: string, args: string[]): string {
@@ -843,11 +930,25 @@ function safeToolVersion(command: string, args: string[]): string {
   return output.split('\n')[0] ?? 'unavailable';
 }
 
+function safeDemoToolVersion(command: string, args: string[]): string {
+  const result = spawnSync(command, args, {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    env: demoToolEnv(),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (result.error !== undefined || result.status !== 0) {
+    return 'unavailable';
+  }
+  const output = `${result.stdout}${result.stderr}`.trim();
+  return output.split('\n')[0] ?? 'unavailable';
+}
+
 function collectToolVersions(): Array<[string, string]> {
   return [
-    ['vhs', safeToolVersion('vhs', ['--version'])],
-    ['ttyd', safeToolVersion('ttyd', ['--version'])],
-    ['ffmpeg', safeToolVersion('ffmpeg', ['-version'])],
+    ['vhs', safeDemoToolVersion('vhs', ['--version'])],
+    ['ttyd', safeDemoToolVersion('ttyd', ['--version'])],
+    ['ffmpeg', safeDemoToolVersion('ffmpeg', ['-version'])],
     ['codex', safeToolVersion('codex', ['--version'])],
     ['claude', safeToolVersion('claude', ['--version'])],
   ];
@@ -861,8 +962,11 @@ function renderSummary(options: HeroDemoOptions, records: RunRecord[]): string {
     'debugRoot: <debug-only>',
     `codexModel: ${options.codexModel}`,
     `codexEffort: ${options.codexEffort}`,
+    `claudeModel: ${options.claudeModel}`,
     `claudeEffort: ${options.claudeEffort}`,
     `recordSeconds: ${String(options.recordSeconds)}`,
+    `outerFrame: ${String(OUTER_WIDTH)}x${String(OUTER_HEIGHT)}`,
+    `outerFontSize: ${String(OUTER_FONT_SIZE)}`,
     '',
     '## Tool Versions',
     '',
@@ -872,8 +976,11 @@ function renderSummary(options: HeroDemoOptions, records: RunRecord[]): string {
     '',
   ];
   for (const record of records) {
+    const status = record.passed
+      ? 'pass'
+      : `fail - ${record.error ?? 'unknown error'}`;
     lines.push(
-      `- ${record.agent} run ${String(record.index)}: ${record.passed ? 'pass' : 'fail'}${record.selected ? ' (selected)' : ''}`,
+      `- ${record.agent} run ${String(record.index)}: ${status}${record.selected ? ' (selected)' : ''}`,
     );
   }
   lines.push(
@@ -899,14 +1006,14 @@ See [promoted-run-summary.md](./promoted-run-summary.md) for the regeneration su
 `;
 }
 
-function renderReproduce(): string {
+function renderReproduce(options: HeroDemoOptions): string {
   return [
     '#!/usr/bin/env bash',
     'set -euo pipefail',
     'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"',
     'REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"',
     'cd "$REPO_ROOT"',
-    'exec mise run demo:agent-uses-agent-tty -- --agent both --runs 3 --record-seconds 120 --promote "$@"',
+    `exec mise run demo:agent-uses-agent-tty -- --agent both --runs 3 --record-seconds ${String(options.recordSeconds)} --promote "$@"`,
     '',
   ].join('\n');
 }
@@ -918,10 +1025,29 @@ export async function runHeroDemo(options: HeroDemoOptions): Promise<void> {
   const installPrefix = await installLocalAgentTty(debugRoot);
   const records: RunRecord[] = [];
   for (const agent of selectedAgents(options.agent)) {
-    for (let index = 1; index <= options.runs; index += 1) {
-      records.push(
-        await runOne(agent, index, options, debugRoot, installPrefix),
-      );
+    let successes = 0;
+    const maxAttempts = options.promote ? options.runs * 2 : options.runs;
+    for (let index = 1; index <= maxAttempts; index += 1) {
+      if (options.promote && successes >= options.runs) {
+        break;
+      }
+      try {
+        const record = await runOne(
+          agent,
+          index,
+          options,
+          debugRoot,
+          installPrefix,
+        );
+        records.push(record);
+        successes += 1;
+      } catch (error) {
+        const runDir = join(debugRoot, `${agent}-${String(index)}`);
+        records.push(failedRunRecord(agent, index, runDir, error, debugRoot));
+        if (!options.promote) {
+          throw error;
+        }
+      }
     }
   }
   if (options.promote) {

@@ -36,6 +36,9 @@ describe('hero demo generator planning', () => {
     expect(tape).toContain(
       'Wait+Screen@120s /Do you trust|OpenAI Codex|Codex/',
     );
+    expect(tape).toContain('Set Width 1600');
+    expect(tape).toContain('Set Height 900');
+    expect(tape).toContain('Set FontSize 14');
     expect(tape).toContain('Set Framerate 5');
     expect(tape).toContain('Sleep 120s');
     expect(tape).toContain('Ctrl+C');
@@ -55,6 +58,7 @@ describe('hero demo generator planning', () => {
       expectedText: 'demo text',
       codexModel: 'gpt-demo',
       codexEffort: 'minimal',
+      claudeModel: 'claude-demo',
       claudeEffort: 'low',
     });
     expect(codexRunner).toContain("--model 'gpt-demo'");
@@ -74,8 +78,10 @@ describe('hero demo generator planning', () => {
       expectedText: 'demo text',
       codexModel: 'gpt-demo',
       codexEffort: 'minimal',
+      claudeModel: 'claude-demo',
       claudeEffort: 'medium',
     });
+    expect(claudeRunner).toContain("--model 'claude-demo'");
     expect(claudeRunner).toContain("--effort 'medium'");
     expect(claudeRunner).toContain('unset ANTHROPIC_API_KEY');
   });
