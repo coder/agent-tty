@@ -37,6 +37,7 @@ describe('hero demo generator planning', () => {
     expect(tape).toContain(
       'Wait+Screen@120s /Do you trust|OpenAI Codex|Codex/',
     );
+    expect(tape).toContain('Type "bash /tmp/run-codex.sh"');
     expect(tape).toContain('Set Width 1600');
     expect(tape).toContain('Set Height 900');
     expect(tape).toContain('Set FontSize 14');
@@ -53,6 +54,7 @@ describe('hero demo generator planning', () => {
       recordSeconds: 180,
     });
 
+    expect(tape).toContain('Type "bash /tmp/run-claude.sh"');
     expect(tape).toContain(
       'Wait+Screen@120s /Quick safety check|Claude Code|Yes, I trust|Welcome/',
     );
@@ -101,6 +103,18 @@ describe('hero demo generator planning', () => {
     });
     expect(claudeRunner).toContain("--model 'claude-demo'");
     expect(claudeRunner).toContain("--effort 'medium'");
+    for (const runner of [codexRunner, claudeRunner]) {
+      expect(runner).toContain(
+        "export HERO_FINAL_FILE='/tmp/workspace/demo-note.txt'",
+      );
+      expect(runner).toContain(
+        "export HERO_INNER_CAST='/tmp/workspace/artifacts/inner.cast'",
+      );
+      expect(runner).toContain(
+        "export HERO_INNER_WEBM='/tmp/workspace/artifacts/inner.webm'",
+      );
+      expect(runner).toContain("export HERO_EXPECTED_TEXT='demo text'");
+    }
     expect(claudeRunner).toContain('unset ANTHROPIC_API_KEY');
   });
 
