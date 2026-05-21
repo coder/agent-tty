@@ -15,6 +15,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import { invariant } from '../util/assert.js';
 import { isDirectExecution } from '../util/isDirectExecution.js';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -70,7 +71,7 @@ export interface GeneratedRunnerInput {
   claudeEffort: string;
 }
 
-export interface RunRecord {
+interface RunRecord {
   agent: AgentName;
   index: number;
   runDir: string;
@@ -87,17 +88,11 @@ export interface RunRecord {
   error?: string;
 }
 
-export interface CuratedArtifact {
+interface CuratedArtifact {
   path: string;
   description: string;
   sha256: string;
   bytes: number;
-}
-
-function invariant(condition: unknown, message: string): asserts condition {
-  if (!condition) {
-    throw new Error(message);
-  }
 }
 
 function quote(value: string): string {
@@ -1020,7 +1015,7 @@ function renderReproduce(options: HeroDemoOptions): string {
 
 export async function runHeroDemo(options: HeroDemoOptions): Promise<void> {
   const debugRoot = resolve(
-    await mkDebugRoot(options.bundleDir, `hero-demo-${Date.now().toString()}`),
+    await mkDebugRoot(`hero-demo-${Date.now().toString()}`),
   );
   const installPrefix = await installLocalAgentTty(debugRoot);
   const records: RunRecord[] = [];
@@ -1058,7 +1053,7 @@ export async function runHeroDemo(options: HeroDemoOptions): Promise<void> {
   }
 }
 
-async function mkDebugRoot(_bundleDir: string, name: string): Promise<string> {
+async function mkDebugRoot(name: string): Promise<string> {
   const root = join(tmpdir(), 'agent-tty-hero-demo', name);
   await rm(root, { recursive: true, force: true });
   await mkdir(root, { recursive: true });
