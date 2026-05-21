@@ -1,1 +1,0 @@
-Interactive claude TUI recording captured in claude-outer.cast, claude-outer-full.webm, and the trimmed review cut claude-outer.webm.

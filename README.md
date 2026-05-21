@@ -72,13 +72,13 @@ For prerelease channels, tarball installs, authenticated GitHub Release installs
 
 ## Agent Demo
 
-This dogfood bundle records Codex and Claude interactive TUIs using `agent-tty` to drive `nvim --clean`, write a file, export proof artifacts, and exit cleanly. The linked WebMs are trimmed review cuts; the bundle also keeps untrimmed outer recordings.
+This dogfood bundle uses VHS as the outer camera for real Codex and Claude interactive TUIs while each agent explores the `agent-tty` skill/CLI, drives `nvim --clean`, writes a file, and exports inner proof artifacts.
 
 | Codex                                                                                                                                              | Claude                                                                                                                                                |
 | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [![Codex agent-tty demo](./dogfood/agent-uses-agent-tty/artifacts/codex-thumbnail.png)](./dogfood/agent-uses-agent-tty/artifacts/codex-outer.webm) | [![Claude agent-tty demo](./dogfood/agent-uses-agent-tty/artifacts/claude-thumbnail.png)](./dogfood/agent-uses-agent-tty/artifacts/claude-outer.webm) |
 
-See [`dogfood/agent-uses-agent-tty/`](./dogfood/agent-uses-agent-tty/) for the reproducer, inner Neovim recordings, transcripts, and final file proofs.
+See [`dogfood/agent-uses-agent-tty/`](./dogfood/agent-uses-agent-tty/) for the Hero Demo reproducer, outer transcripts, inner Neovim recordings, and final file proofs.
 
 ## Common Usage
 
