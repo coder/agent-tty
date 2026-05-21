@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, openSync, statSync } from 'node:fs';
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  openSync,
+  statSync,
+} from 'node:fs';
 import {
   copyFile,
   mkdir,
@@ -15,21 +21,24 @@ import { basename, dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import type { CanonicalBundleArtifact } from './bundleManifestSchema.js';
+import { CanonicalBundleManifestSchema } from './bundleManifestSchema.js';
 import { invariant } from '../util/assert.js';
 import { isDirectExecution } from '../util/isDirectExecution.js';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const DEFAULT_BUNDLE_DIR = join(REPO_ROOT, 'dogfood/agent-uses-agent-tty');
-const DEFAULT_SENTENCE =
+const DEFAULT_EXPECTED_TEXT =
   'agent-tty nested Neovim proof from a real coding agent.';
-const DEFAULT_RECORD_SECONDS = 180;
+const DEFAULT_RECORD_SECONDS = 3 * 60;
+const RECORD_TIMEOUT_BUFFER_SECONDS = 3 * 60;
 const AGENTS = ['codex', 'claude'] as const;
 
 const OUTER_WIDTH = 1600;
 const OUTER_HEIGHT = 900;
 const OUTER_FONT_SIZE = 14;
-const CLAUDE_VISUAL_REDACTION_FILTER =
-  'drawbox=x=0:y=0:w=iw:h=180:color=black:t=fill';
+const CLAUDE_VISUAL_REDACTION_HEIGHT = Math.floor(OUTER_HEIGHT / 5);
+const CLAUDE_VISUAL_REDACTION_FILTER = `drawbox=x=0:y=0:w=iw:h=${String(CLAUDE_VISUAL_REDACTION_HEIGHT)}:color=black:t=fill`;
 
 const DEMO_TOOL_SPECS = ['vhs@0.11.0', 'ttyd@1.7.7', 'ffmpeg@8.1.1'];
 
@@ -44,7 +53,7 @@ export interface HeroDemoOptions {
   codexEffort: string;
   claudeModel: string;
   claudeEffort: string;
-  sentence: string;
+  expectedText: string;
   keepDebug: boolean;
   recordSeconds: number;
 }
@@ -88,13 +97,6 @@ interface RunRecord {
   error?: string;
 }
 
-interface CuratedArtifact {
-  path: string;
-  description: string;
-  sha256: string;
-  bytes: number;
-}
-
 function quote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
@@ -106,10 +108,12 @@ function assertAgent(value: string): asserts value is AgentName | 'both' {
   );
 }
 
+/** Selects the concrete coding-agent CLIs to exercise for a parsed demo request. */
 export function selectedAgents(agent: AgentName | 'both'): AgentName[] {
   return agent === 'both' ? [...AGENTS] : [agent];
 }
 
+/** Parses maintainer-facing Hero Demo generator arguments and environment defaults. */
 export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
   let agent: AgentName | 'both' = 'both';
   let runs = 1;
@@ -120,7 +124,8 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
   let claudeModel =
     process.env.AGENT_TTY_HERO_CLAUDE_MODEL ?? 'claude-opus-4-7';
   let claudeEffort = process.env.AGENT_TTY_HERO_CLAUDE_EFFORT ?? 'low';
-  const sentence = process.env.AGENT_TTY_HERO_SENTENCE ?? DEFAULT_SENTENCE;
+  const expectedText =
+    process.env.AGENT_TTY_HERO_SENTENCE ?? DEFAULT_EXPECTED_TEXT;
   let keepDebug = false;
   let recordSeconds = Number(
     process.env.AGENT_TTY_HERO_RECORD_SECONDS ?? String(DEFAULT_RECORD_SECONDS),
@@ -215,7 +220,7 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
     codexEffort,
     claudeModel,
     claudeEffort,
-    sentence,
+    expectedText,
     keepDebug,
     recordSeconds,
   };
@@ -223,12 +228,13 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
 
 function usage(): string {
   return [
-    'Usage: npm run demo:agent-uses-agent-tty -- [--agent both|codex|claude] [--runs N] [--record-seconds N] [--codex-model MODEL] [--claude-model MODEL] [--promote]',
+    'Usage: mise run demo:agent-uses-agent-tty -- [--agent both|codex|claude] [--runs N] [--record-seconds N] [--bundle-dir DIR] [--codex-model MODEL] [--codex-effort LEVEL] [--claude-model MODEL] [--claude-effort LEVEL] [--keep-debug] [--promote]',
     '',
     'Regenerates the real-agent Hero Demo with VHS as the outer camera.',
   ].join('\n');
 }
 
+/** Builds the VHS outer-camera tape for one real coding-agent run. */
 export function generateTape(input: GeneratedTapeInput): string {
   const startupRegex =
     input.agent === 'codex'
@@ -267,6 +273,7 @@ export function generateTape(input: GeneratedTapeInput): string {
   ].join('\n');
 }
 
+/** Builds the shell runner that launches the requested coding-agent CLI. */
 export function generateRunner(input: GeneratedRunnerInput): string {
   if (input.agent === 'codex') {
     const trustConfig = `projects.${JSON.stringify(input.workspace)}.trust_level="trusted"`;
@@ -312,6 +319,7 @@ export function generateRunner(input: GeneratedRunnerInput): string {
   ].join('\n');
 }
 
+/** Finds account-sensitive text patterns that must not appear in promoted artifacts. */
 export function buildLeakFindings(text: string): string[] {
   const patterns: Array<[RegExp, string]> = [
     [/\/home\/[A-Za-z0-9._-]+/g, 'absolute Linux home path'],
@@ -332,6 +340,7 @@ export function buildLeakFindings(text: string): string[] {
   }
   return [...new Set(findings)];
 }
+/** Scrubs account-sensitive text from copied text artifacts before promotion. */
 export function sanitizePromotedText(text: string): string {
   return text
     .replaceAll(/\/home\/[A-Za-z0-9._-]+/g, '<home>')
@@ -344,7 +353,7 @@ export function sanitizePromotedText(text: string): string {
     .replaceAll(/OPENAI_API_KEY/g, '<openai-credential-var>')
     .replaceAll(/.*API Usage Billing.*\n?/gi, '')
     .replaceAll(/.*Auth conflict.*\n?/gi, '')
-    .replaceAll(/.*Welcome back [^!\n]+!.*\n?/gi, '')
+    .replaceAll(/.*Welcome back [^\n]*\n?/gi, '')
     .replaceAll(/(?:sk|sess|tok)_[A-Za-z0-9_-]{16,}/g, '<token>');
 }
 
@@ -430,6 +439,9 @@ async function assertNonEmpty(path: string): Promise<void> {
 let cachedDemoToolPathPrefix: string | undefined;
 
 function demoToolPathPrefix(): string {
+  if (cachedDemoToolPathPrefix === undefined) {
+    run('mise', ['install', ...DEMO_TOOL_SPECS]);
+  }
   cachedDemoToolPathPrefix ??= run('mise', ['bin-paths', ...DEMO_TOOL_SPECS])
     .trim()
     .split('\n')
@@ -496,11 +508,16 @@ function runLogged(
   const hasRecorderOutputs =
     isNonEmptyFile(join(cwd, 'outer.webm')) &&
     isNonEmptyFile(join(cwd, 'outer.ascii'));
-  if (
-    (result.error !== undefined || result.status !== 0) &&
-    !hasRecorderOutputs
-  ) {
+  const failed = result.error !== undefined || result.status !== 0;
+  if (failed && !hasRecorderOutputs) {
     throw new Error(`${command} ${args.join(' ')} failed; see ${logPath}`);
+  }
+  if (failed) {
+    const reason = result.error?.message ?? `status ${String(result.status)}`;
+    appendFileSync(
+      logPath,
+      `\nWARNING: ${command} ${args.join(' ')} failed (${reason}); continuing because recorder outputs exist.\n`,
+    );
   }
 }
 
@@ -625,7 +642,7 @@ async function runOne(
       finalFile,
       innerCast,
       innerWebm,
-      expectedText: options.sentence,
+      expectedText: options.expectedText,
       codexModel: options.codexModel,
       codexEffort: options.codexEffort,
       claudeModel: options.claudeModel,
@@ -643,7 +660,7 @@ async function runOne(
     [basename(tapePath)],
     runDir,
     vhsLog,
-    (options.recordSeconds + 180) * 1000,
+    (options.recordSeconds + RECORD_TIMEOUT_BUFFER_SECONDS) * 1000,
     demoToolEnv(),
   );
   ensureThumbnail(runDir);
@@ -663,8 +680,8 @@ async function runOne(
   );
   const final = (await readFile(finalFile, 'utf8')).trimEnd();
   invariant(
-    final === options.sentence,
-    'final file did not match expected sentence',
+    final === options.expectedText,
+    `final file did not match expected text: expected=${JSON.stringify(options.expectedText)} actual=${JSON.stringify(final)}`,
   );
 
   const proofPath = join(runDir, 'final-file-proof.txt');
@@ -672,7 +689,7 @@ async function runOne(
     proofPath,
     [
       `agent=${agent}`,
-      `expected=${options.sentence}`,
+      `expected=${options.expectedText}`,
       `actual=${final}`,
       `sha256=${sha256Text(final)}`,
       '',
@@ -742,7 +759,7 @@ async function artifactEntry(
   bundleDir: string,
   relativePath: string,
   description: string,
-): Promise<CuratedArtifact> {
+): Promise<CanonicalBundleArtifact> {
   const fullPath = join(bundleDir, relativePath);
   const stats = await stat(fullPath);
   return {
@@ -879,7 +896,7 @@ async function promote(
       ),
     );
   }
-  const manifest = {
+  const manifest = CanonicalBundleManifestSchema.parse({
     bundle: 'agent-uses-agent-tty',
     title: 'Agents use agent-tty: Codex and Claude Hero Demo',
     description:
@@ -891,7 +908,7 @@ async function promote(
       `mise run demo:agent-uses-agent-tty -- --agent both --runs 3 --record-seconds ${String(options.recordSeconds)} --promote`,
     ],
     artifacts: manifestArtifacts,
-  };
+  });
   await writeFile(
     join(options.bundleDir, 'manifest.json'),
     `${JSON.stringify(manifest, null, 2)}\n`,
@@ -912,24 +929,15 @@ async function promote(
   await writeFile(join(artifactsDir, '.gitkeep'), '\n');
 }
 
-function safeToolVersion(command: string, args: string[]): string {
+function safeToolVersion(
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): string {
   const result = spawnSync(command, args, {
     cwd: REPO_ROOT,
     encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  if (result.error !== undefined || result.status !== 0) {
-    return 'unavailable';
-  }
-  const output = `${result.stdout}${result.stderr}`.trim();
-  return output.split('\n')[0] ?? 'unavailable';
-}
-
-function safeDemoToolVersion(command: string, args: string[]): string {
-  const result = spawnSync(command, args, {
-    cwd: REPO_ROOT,
-    encoding: 'utf8',
-    env: demoToolEnv(),
+    env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   if (result.error !== undefined || result.status !== 0) {
@@ -940,10 +948,11 @@ function safeDemoToolVersion(command: string, args: string[]): string {
 }
 
 function collectToolVersions(): Array<[string, string]> {
+  const demoEnv = demoToolEnv();
   return [
-    ['vhs', safeDemoToolVersion('vhs', ['--version'])],
-    ['ttyd', safeDemoToolVersion('ttyd', ['--version'])],
-    ['ffmpeg', safeDemoToolVersion('ffmpeg', ['-version'])],
+    ['vhs', safeToolVersion('vhs', ['--version'], demoEnv)],
+    ['ttyd', safeToolVersion('ttyd', ['--version'], demoEnv)],
+    ['ffmpeg', safeToolVersion('ffmpeg', ['-version'], demoEnv)],
     ['codex', safeToolVersion('codex', ['--version'])],
     ['claude', safeToolVersion('claude', ['--version'])],
   ];
@@ -1013,6 +1022,7 @@ function renderReproduce(options: HeroDemoOptions): string {
   ].join('\n');
 }
 
+/** Runs the live-agent Hero Demo workflow and optionally promotes passing artifacts. */
 export async function runHeroDemo(options: HeroDemoOptions): Promise<void> {
   const debugRoot = resolve(
     await mkDebugRoot(`hero-demo-${Date.now().toString()}`),

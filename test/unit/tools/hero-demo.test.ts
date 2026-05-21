@@ -24,7 +24,7 @@ describe('hero demo generator planning', () => {
     expect(selectedAgents(options.agent)).toEqual(['codex', 'claude']);
   });
 
-  it('generates a VHS tape with stable waits, a fixed review window, and cleanup', () => {
+  it('generates a Codex VHS tape with stable waits, a fixed review window, and cleanup', () => {
     const tape = generateTape({
       agent: 'codex',
       runnerPath: '/tmp/run-codex.sh',
@@ -43,6 +43,23 @@ describe('hero demo generator planning', () => {
     expect(tape).toContain('Sleep 120s');
     expect(tape).toContain('Ctrl+C');
     expect(tape).toContain('Type "/quit"');
+  });
+
+  it('generates a Claude VHS tape with Claude-specific waits and cleanup', () => {
+    const tape = generateTape({
+      agent: 'claude',
+      runnerPath: '/tmp/run-claude.sh',
+      recordSeconds: 180,
+    });
+
+    expect(tape).toContain(
+      'Wait+Screen@120s /Quick safety check|Claude Code|Yes, I trust|Welcome/',
+    );
+    expect(tape).toContain(
+      'Wait+Screen@120s /Claude Code|Welcome|esc to interrupt/',
+    );
+    expect(tape).toContain('Sleep 180s');
+    expect(tape).toContain('Type "/exit"');
   });
 
   it('generates agent-specific runners with configurable model and effort', () => {
@@ -88,7 +105,7 @@ describe('hero demo generator planning', () => {
 
   it('sanitizes promoted text before leak checking', () => {
     const sanitized = sanitizePromotedText(
-      'Welcome back Alice!\nAPI Usage Billing\n/home/alice/project\nANTHROPIC_API_KEY\n',
+      'Welcome back Alice\nAPI Usage Billing\n/home/alice/project\nANTHROPIC_API_KEY\n',
     );
     expect(sanitized).not.toContain('Alice');
     expect(sanitized).not.toContain('API Usage Billing');
