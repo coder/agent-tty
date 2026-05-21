@@ -1,6 +1,4 @@
 agent=codex
-workspace=/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/codex
-file=/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/codex/demo-note.txt
-expected=agent-tty nested Neovim proof from an AI coding agent.
-actual=agent-tty nested Neovim proof from an AI coding agent.
-sha256=818c0d5f147a79968105195e1ff627588add18fa6a9bacf8ec4ea4f3696dc2e3
+expected=agent-tty nested Neovim proof from a real coding agent.
+actual=agent-tty nested Neovim proof from a real coding agent.
+sha256=650ac43515e084770bfd10c020a90ed9996bad954c854da8e456d9fe6840590c

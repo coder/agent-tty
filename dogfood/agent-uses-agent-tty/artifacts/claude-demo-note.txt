@@ -1,1 +1,1 @@
-agent-tty nested Neovim proof from an AI coding agent.
+agent-tty nested Neovim proof from a real coding agent.

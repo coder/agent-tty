@@ -5,20 +5,20 @@ Paths below are relative to the repository root.
 
 ## Canonical scenarios
 
-| Scenario         | What it demonstrates                                                                | Bundle                                   |
-| ---------------- | ----------------------------------------------------------------------------------- | ---------------------------------------- |
-| Hello prompt     | Basic lifecycle, wait, screenshot, and recording flow                               | `dogfood/20260322-dogfood-hello-prompt/` |
-| Run command      | The higher-level `run` workflow for shell setup and command injection               | `dogfood/run-command/`                   |
-| Color rendering  | ANSI color capture and screenshot review                                            | `dogfood/20260322-dogfood-color/`        |
-| Alternate screen | Entering and leaving an alt-screen TUI while preserving the main screen             | `dogfood/20260322-dogfood-alt-screen/`   |
-| Resize           | PTY resizing and stable-screen verification                                         | `dogfood/20260322-dogfood-resize/`       |
-| Scrollback       | Scrollback-aware snapshots, screenshots, and recording export                       | `dogfood/20260322-dogfood-scrollback/`   |
-| Unicode          | Unicode rendering plus snapshot/export review                                       | `dogfood/20260322-dogfood-unicode/`      |
-| LazyVim          | A real TUI scenario that exercises editor startup and reviewer-visible artifacts    | `dogfood/20260322-lazyvim-scenario/`     |
-| Agent uses TTY   | Codex and Claude TUIs using `agent-tty` to drive Neovim and export proof artifacts  | `dogfood/agent-uses-agent-tty/`          |
-| Public skill     | The shipped `skills/agent-terminal/` workflow and documentation surface             | `dogfood/20260327-public-skill/`         |
-| Install flows    | Pre-public tarball install proof plus the current local git-install caveat evidence | `dogfood/install-flows/`                 |
-| Config parity    | Configuration/profile behavior checks that remain useful as a standing scenario     | `dogfood/week5-config-parity/`           |
+| Scenario         | What it demonstrates                                                                                          | Bundle                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Hello prompt     | Basic lifecycle, wait, screenshot, and recording flow                                                         | `dogfood/20260322-dogfood-hello-prompt/` |
+| Run command      | The higher-level `run` workflow for shell setup and command injection                                         | `dogfood/run-command/`                   |
+| Color rendering  | ANSI color capture and screenshot review                                                                      | `dogfood/20260322-dogfood-color/`        |
+| Alternate screen | Entering and leaving an alt-screen TUI while preserving the main screen                                       | `dogfood/20260322-dogfood-alt-screen/`   |
+| Resize           | PTY resizing and stable-screen verification                                                                   | `dogfood/20260322-dogfood-resize/`       |
+| Scrollback       | Scrollback-aware snapshots, screenshots, and recording export                                                 | `dogfood/20260322-dogfood-scrollback/`   |
+| Unicode          | Unicode rendering plus snapshot/export review                                                                 | `dogfood/20260322-dogfood-unicode/`      |
+| LazyVim          | A real TUI scenario that exercises editor startup and reviewer-visible artifacts                              | `dogfood/20260322-lazyvim-scenario/`     |
+| Agent uses TTY   | VHS-recorded Codex and Claude TUIs exploring `agent-tty`, driving Neovim, and exporting inner proof artifacts | `dogfood/agent-uses-agent-tty/`          |
+| Public skill     | The shipped `skills/agent-terminal/` workflow and documentation surface                                       | `dogfood/20260327-public-skill/`         |
+| Install flows    | Pre-public tarball install proof plus the current local git-install caveat evidence                           | `dogfood/install-flows/`                 |
+| Config parity    | Configuration/profile behavior checks that remain useful as a standing scenario                               | `dogfood/week5-config-parity/`           |
 
 ## Validation and release gates
 

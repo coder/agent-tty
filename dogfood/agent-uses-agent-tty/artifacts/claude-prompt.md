@@ -1,13 +1,17 @@
-You are running inside a temporary, disposable git workspace for an agent-tty dogfood proof.
+You are running inside a disposable workspace for an agent-tty Hero Demo.
 
-Run the checked helper script below immediately. Do not inspect files first and do not explain the plan before running it.
+Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
+Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
 
-The helper loads `agent-tty skills get agent-tty`, asserts the temp `agent-tty` binary, creates an isolated shell session, drives `nvim --clean -n demo-note.txt`, writes exactly `agent-tty nested Neovim proof from an AI coding agent.`, verifies the file, exports the inner asciicast/WebM artifacts, and destroys the inner session.
+Success criteria:
 
-```bash
-bash "/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/run-inner-nvim-proof.sh"
-```
+- Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
+- Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
+- Create an agent-tty session that launches nvim --clean -n demo-note.txt.
+- Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
+- Ensure the final file path in HERO_FINAL_FILE contains that exact text.
+- Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
+- Destroy the agent-tty session after exporting the proof artifacts.
+- The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
 
-Use the installed `agent-tty` binary on PATH after prepending `/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/install/bin`. Do not use repo-local `npx`, `tsx`, or `src/cli/main.ts` commands.
-
-After the helper exits, report only whether it passed and list the three generated files: `/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/demo-note.txt`, `/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/artifacts/inner-nvim.cast`, and `/var/folders/pq/ft6166r921ddfcph0dyg4skc0000gn/T/agent-uses-agent-tty.XXXXXX.Swdm3KlnG7/workspaces/claude/artifacts/inner-nvim.webm`.
+Use the HERO\_\* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.

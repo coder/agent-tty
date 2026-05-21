@@ -1,273 +1,127 @@
 {
   "bundle": "agent-uses-agent-tty",
-  "title": "Agents drive agent-tty: Codex and Claude TUIs through agent-tty",
-  "description": "Evergreen demo capturing Codex and Claude TUIs each driving nvim --clean inside an agent-tty session. Records outer and inner WebMs, asciicasts, transcripts, thumbnails, and a reproduce.sh script.",
-  "createdAt": "2026-04-24T00:00:00Z",
-  "scenario": "agent-uses-agent-tty",
+  "title": "Agents use agent-tty: Codex and Claude Hero Demo",
+  "description": "README-facing Hero Demo where VHS records real Codex and Claude TUIs while agent-tty produces inner proof artifacts.",
+  "createdAt": "2026-05-21T15:55:52.138Z",
+  "scenario": "agent-uses-agent-tty-hero-demo",
   "result": "pass",
   "commands": [
-    "./dogfood/agent-uses-agent-tty/reproduce.sh",
-    "./node_modules/.bin/tsx src/cli/main.ts create --json --home <isolated-home> -- codex ...",
-    "./node_modules/.bin/tsx src/cli/main.ts create --json --home <isolated-home> -- claude ...",
-    "./node_modules/.bin/tsx src/cli/main.ts record export <session> --format webm --json --home <isolated-home>",
-    "./node_modules/.bin/tsx src/cli/main.ts record export <session> --format asciicast --json --home <isolated-home>",
-    "./node_modules/.bin/tsx src/cli/main.ts snapshot <session> --json --home <isolated-home>",
-    "./node_modules/.bin/tsx src/cli/main.ts screenshot <session> --json --home <isolated-home>",
-    "./node_modules/.bin/tsx src/cli/main.ts wait <session> --exit --json --home <isolated-home>",
-    "./node_modules/.bin/tsx src/cli/main.ts destroy <session> --json --home <isolated-home>"
+    "mise run demo:agent-uses-agent-tty -- --agent both --runs 3 --record-seconds 180 --promote"
   ],
   "artifacts": [
     {
-      "path": "README.md",
-      "description": "Reviewer-facing demo narrative explaining the Codex and Claude TUI runs through agent-tty",
-      "sha256": "a864270255d7d55e093164a37db2a3bf5e7489c1a4bbb4f78d23d415dca62ac6",
-      "bytes": 6121
-    },
-    {
-      "path": "reproduce.sh",
-      "description": "Self-contained generator script that captures fresh outer and inner artifacts",
-      "sha256": "2c00466058d56014e24ab0422a27f37bc4c159a0416c3ed7f986a83f5073a21c",
-      "bytes": 31969
-    },
-    {
-      "path": "environment.txt",
-      "description": "Captured tool versions and runtime environment for the demo",
-      "sha256": "9de3d4b7820ea3a4be914fe31b2d5dc7469f9db74a6550fd1af86e53b552862c",
-      "bytes": 5428
-    },
-    {
-      "path": "prompts/template.md",
-      "description": "Shared inner-agent prompt template used by both Codex and Claude runs",
-      "sha256": "ee54dc471a4de94b69e8833b6fcbb2558be9b8b6f6139fb1ce2ccc56d201a3d5",
-      "bytes": 853
-    },
-    {
-      "path": "claude-outer-create.json",
-      "description": "create envelope for the outer agent-tty session driving Claude",
-      "sha256": "37bf1f75d51714dbb2d1c139efa5175809433d462c398b158bf0bb2512f276d8",
-      "bytes": 2598
-    },
-    {
-      "path": "claude-outer-destroy.json",
-      "description": "destroy envelope for the outer Claude session",
-      "sha256": "c59ac1b6b8e118280f736ca6e3c266925188f7b42388da5b8f052a3e2d85f80f",
-      "bytes": 172
-    },
-    {
-      "path": "claude-outer-record-cast.json",
-      "description": "record export envelope for the outer Claude asciicast",
-      "sha256": "84f93d7dc6eeb8acf54c1311a69db353bfe94691ada349c4891ce88fdc738adb",
-      "bytes": 675
-    },
-    {
-      "path": "claude-outer-record-webm.json",
-      "description": "record export envelope for the outer Claude WebM recording",
-      "sha256": "b15189385fc78691057e04792d003a7952c95e6612d0948503ba994b6d21faca",
-      "bytes": 783
-    },
-    {
-      "path": "claude-outer-screenshot.json",
-      "description": "screenshot envelope for the outer Claude session",
-      "sha256": "681c7c93ea8c457c60eda49455980a3f2231b5273018b748a839911a605f508e",
-      "bytes": 781
-    },
-    {
-      "path": "claude-outer-snapshot.json",
-      "description": "snapshot envelope for the outer Claude session",
-      "sha256": "1154292a7692336013c39baf7923938bc489207036e7fce42ab3de124cbf2fe8",
-      "bytes": 13041
-    },
-    {
-      "path": "claude-outer-wait-exit.json",
-      "description": "wait envelope for the outer Claude session exit",
-      "sha256": "6933fa9d8d84bdba959cf93ce1d5a48d419ef24e3046168d3a4841e7fba791a1",
-      "bytes": 141
-    },
-    {
-      "path": "codex-outer-create.json",
-      "description": "create envelope for the outer agent-tty session driving Codex",
-      "sha256": "e4d8829f23ef89bade3c55b6671988058755f2a4d098afa15b5c444ed4907843",
-      "bytes": 2597
-    },
-    {
-      "path": "codex-outer-destroy.json",
-      "description": "destroy envelope for the outer Codex session",
-      "sha256": "eae666b9ac04df46e544fba1b24853dcaa83618212377be4af880f0898b3504b",
-      "bytes": 172
-    },
-    {
-      "path": "codex-outer-record-cast.json",
-      "description": "record export envelope for the outer Codex asciicast",
-      "sha256": "9c2b81d346566e72be3b6340a3881121b7a80e12abb6dc9bd071233bda9de943",
-      "bytes": 677
-    },
-    {
-      "path": "codex-outer-record-webm.json",
-      "description": "record export envelope for the outer Codex WebM recording",
-      "sha256": "0d767af1e890d0a3568c376f8debb7ac36e2de038dedd84e88dd6691a4a3e096",
-      "bytes": 784
-    },
-    {
-      "path": "codex-outer-screenshot.json",
-      "description": "screenshot envelope for the outer Codex session",
-      "sha256": "3efa2c4608826b5b50172347dcad174169a0894b3a510f4fb130745b54805e3f",
-      "bytes": 783
-    },
-    {
-      "path": "codex-outer-snapshot.json",
-      "description": "snapshot envelope for the outer Codex session",
-      "sha256": "3debc5db124454a2da9a8d003193070840d42de4a391d2b62288c17b41a7e3f6",
-      "bytes": 4981
-    },
-    {
-      "path": "codex-outer-wait-exit.json",
-      "description": "wait envelope for the outer Codex session exit",
-      "sha256": "c0e9672799b724148e0b6c2280e2bdb66e6709e583af4ce6242b61430a76c8f8",
-      "bytes": 141
-    },
-    {
-      "path": "artifacts/claude-agent-transcript.txt",
-      "description": "Inner Claude agent transcript captured during the run",
-      "sha256": "03ecb9043fc1d012002971b0db8ed3e4380aa7ac5091665a4e13304ef0f2153f",
-      "bytes": 12169
-    },
-    {
-      "path": "artifacts/claude-demo-note.txt",
-      "description": "Inner Claude demo note produced by the agent",
-      "sha256": "818c0d5f147a79968105195e1ff627588add18fa6a9bacf8ec4ea4f3696dc2e3",
-      "bytes": 55
-    },
-    {
-      "path": "artifacts/claude-final-file-proof.txt",
-      "description": "Proof of the final file written by Claude inside the inner nvim",
-      "sha256": "2dcbfad2baa1ae9389f5715357488ea8926ec5d1b2516e5b687c08197d487031",
-      "bytes": 452
-    },
-    {
-      "path": "artifacts/claude-inner-nvim.cast",
-      "description": "Inner asciicast of Claude driving nvim --clean",
-      "sha256": "a75b1d85fe13dc3e58aa8aa673336ab9262afbc0cac40a7e91316b00713dd86a",
-      "bytes": 14067
-    },
-    {
-      "path": "artifacts/claude-inner-nvim.webm",
-      "description": "Inner WebM of Claude driving nvim --clean",
-      "sha256": "5816cda8e4293547075ce8031b0e041e062db025b52765229f5756d5cffb4cd4",
-      "bytes": 318282
-    },
-    {
-      "path": "artifacts/claude-outer.cast",
-      "description": "Outer asciicast of agent-tty driving Claude",
-      "sha256": "fb72cf32c6e81a1d81ce5f264c344dff6c33bd02466584a940e9d81000147bd0",
-      "bytes": 88486
-    },
-    {
-      "path": "artifacts/claude-outer.webm",
-      "description": "Outer WebM of agent-tty driving Claude",
-      "sha256": "d4cdcca13c03a0ba6f727165aa87442847044398e35473713c4bb4d77ffdab19",
-      "bytes": 960568
-    },
-    {
-      "path": "artifacts/claude-outer-full.webm",
-      "description": "Full outer WebM of agent-tty driving Claude including setup",
-      "sha256": "c2e660bf1ecc999c0c2ef7d9a0b9005067b7679627ddba7e6635a7f279805034",
-      "bytes": 1776039
-    },
-    {
-      "path": "artifacts/claude-outer-snapshot.txt",
-      "description": "Text snapshot of the outer Claude session",
-      "sha256": "03ecb9043fc1d012002971b0db8ed3e4380aa7ac5091665a4e13304ef0f2153f",
-      "bytes": 12169
-    },
-    {
-      "path": "artifacts/claude-prompt.md",
-      "description": "Resolved prompt used by the Claude inner agent",
-      "sha256": "e802e58efde89381ac0cd52e4ee7cd937fad15dd5659b6158788e1db0323031d",
-      "bytes": 1420
-    },
-    {
-      "path": "artifacts/claude-recording-summary.txt",
-      "description": "Reviewer summary of the Claude recording set",
-      "sha256": "b3c176d1f5d982f7fbd123de3bedb29b3c2c886b7cdb26cfd4c3806fe2abf7dd",
-      "bytes": 134
-    },
-    {
-      "path": "artifacts/claude-thumbnail.png",
-      "description": "Thumbnail still frame for the Claude recording",
-      "sha256": "7d3d04a2827d386f287ad506615139614e25c199fd73e2a8a06c440a37bcdb41",
-      "bytes": 87418
-    },
-    {
-      "path": "artifacts/codex-agent-transcript.txt",
-      "description": "Inner Codex agent transcript captured during the run",
-      "sha256": "ec218396afcac7c2218ba6a93d72f205291282c5e92ce41b3ed083219be350eb",
-      "bytes": 4605
-    },
-    {
-      "path": "artifacts/codex-demo-note.txt",
-      "description": "Inner Codex demo note produced by the agent",
-      "sha256": "818c0d5f147a79968105195e1ff627588add18fa6a9bacf8ec4ea4f3696dc2e3",
-      "bytes": 55
-    },
-    {
-      "path": "artifacts/codex-final-file-proof.txt",
-      "description": "Proof of the final file written by Codex inside the inner nvim",
-      "sha256": "340f9b4ce59bc36e878b3a378e54be5ecc07c07eb8bc90cf442f16616c9cea1c",
-      "bytes": 449
-    },
-    {
-      "path": "artifacts/codex-inner-nvim.cast",
-      "description": "Inner asciicast of Codex driving nvim --clean",
-      "sha256": "4ed823ae9b1b61452f6c2ed9102f3b56214588f88f24b1690a8084434acce290",
-      "bytes": 14774
-    },
-    {
-      "path": "artifacts/codex-inner-nvim.webm",
-      "description": "Inner WebM of Codex driving nvim --clean",
-      "sha256": "544426727ca466115b5bafe5fd17d70ba3c5f1e9904d568e6c4b57ecb4b03304",
-      "bytes": 318019
-    },
-    {
-      "path": "artifacts/codex-outer.cast",
-      "description": "Outer asciicast of agent-tty driving Codex",
-      "sha256": "53aac241471c1a9a81826c5eb335d02afe17495174cee80868f967174387b988",
-      "bytes": 390553
-    },
-    {
       "path": "artifacts/codex-outer.webm",
-      "description": "Outer WebM of agent-tty driving Codex",
-      "sha256": "0e2a6b39634a54efbdbcb1f81a637896beeb65384f4564748bb067e88d9084ed",
-      "bytes": 315697
-    },
-    {
-      "path": "artifacts/codex-outer-full.webm",
-      "description": "Full outer WebM of agent-tty driving Codex including setup",
-      "sha256": "591448b68cf14480119c61b8a630069f2ebf562636df5f0f20498d4dcf9544d1",
-      "bytes": 2133094
-    },
-    {
-      "path": "artifacts/codex-outer-snapshot.txt",
-      "description": "Text snapshot of the outer Codex session",
-      "sha256": "ec218396afcac7c2218ba6a93d72f205291282c5e92ce41b3ed083219be350eb",
-      "bytes": 4605
-    },
-    {
-      "path": "artifacts/codex-prompt.md",
-      "description": "Resolved prompt used by the Codex inner agent",
-      "sha256": "5e0db2cd1eefcc8e332bce4690a4b9c741f72be5e32c01c760e7c36ac4d4be85",
-      "bytes": 1416
-    },
-    {
-      "path": "artifacts/codex-recording-summary.txt",
-      "description": "Reviewer summary of the Codex recording set",
-      "sha256": "20c6aa049ad6528577c01a68a876167c3dbb418de046e58e43397db9f2e5ff51",
-      "bytes": 130
+      "description": "Outer VHS WebM recording for codex",
+      "sha256": "349c9da276ea3817d393febfb01bb76b7019cd9421e94e0361c82b6f9255186e",
+      "bytes": 4584146
     },
     {
       "path": "artifacts/codex-thumbnail.png",
-      "description": "Thumbnail still frame for the Codex recording",
-      "sha256": "cb35e7261a0bcb762031e01a01acf125740823e6e0cd1bdfa4d25afea35e738a",
-      "bytes": 108115
+      "description": "Outer VHS thumbnail for codex",
+      "sha256": "a2429160222b759697ac7e4dd1ebe1480c74d257c6ee22efe3feadca24a87f43",
+      "bytes": 345770
+    },
+    {
+      "path": "artifacts/codex-outer-transcript.txt",
+      "description": "Outer transcript for codex",
+      "sha256": "b65afa738d8675ea5c419d6bfb9437a61ca3cce6c05fbd43634a0967ada627ea",
+      "bytes": 35843
+    },
+    {
+      "path": "artifacts/codex-prompt.md",
+      "description": "Prompt used for codex",
+      "sha256": "025f6c8c8f374aadcb1f3bbe39cff5669ebb58157b990f0a9a92b56ee84a3c3f",
+      "bytes": 1128
+    },
+    {
+      "path": "artifacts/codex-inner-nvim.cast",
+      "description": "Inner agent-tty asciicast for codex",
+      "sha256": "4ffb7cad68b3941654843c6fb0b7a9fea57596b66f55f8dcbaa5b3c16f5ea041",
+      "bytes": 5188
+    },
+    {
+      "path": "artifacts/codex-inner-nvim.webm",
+      "description": "Inner agent-tty WebM for codex",
+      "sha256": "264a3368b40d8f3e3b88351d429f23b87786babaa2e6c34ee8fe886c72f4ec63",
+      "bytes": 32978
+    },
+    {
+      "path": "artifacts/codex-final-file-proof.txt",
+      "description": "Final file proof for codex",
+      "sha256": "b4ac26444ba23a027cf06c1588ce9508a4a50888458a0fb4329ac70732f075a1",
+      "bytes": 212
+    },
+    {
+      "path": "artifacts/codex-demo-note.txt",
+      "description": "Demo note written by codex",
+      "sha256": "51938970ef1e8399e3cdc20c114aef56a71df0418309ab32fcc17a1ace1582ee",
+      "bytes": 56
+    },
+    {
+      "path": "artifacts/claude-outer.webm",
+      "description": "Outer VHS WebM recording for claude",
+      "sha256": "e97de5e18ff3742fef9e72eee91b3f4c9c8cbd1919ad39fc0b3e1a2e2808c481",
+      "bytes": 4327998
+    },
+    {
+      "path": "artifacts/claude-thumbnail.png",
+      "description": "Outer VHS thumbnail for claude",
+      "sha256": "70cc66a6411a9ecaac48d327ce4de1a4dfe0c84de7e95e9f981fdfc44f3d2db6",
+      "bytes": 310294
+    },
+    {
+      "path": "artifacts/claude-outer-transcript.txt",
+      "description": "Outer transcript for claude",
+      "sha256": "03ca6c0569ea24359d08acedad26a4c78b616a9b761aac5c44a785573033b191",
+      "bytes": 46943
+    },
+    {
+      "path": "artifacts/claude-prompt.md",
+      "description": "Prompt used for claude",
+      "sha256": "025f6c8c8f374aadcb1f3bbe39cff5669ebb58157b990f0a9a92b56ee84a3c3f",
+      "bytes": 1128
+    },
+    {
+      "path": "artifacts/claude-inner-nvim.cast",
+      "description": "Inner agent-tty asciicast for claude",
+      "sha256": "6f44135e3a145adddbd178ff358e75abe88dce08916ade87b0f1e0ecd1d17a61",
+      "bytes": 1982
+    },
+    {
+      "path": "artifacts/claude-inner-nvim.webm",
+      "description": "Inner agent-tty WebM for claude",
+      "sha256": "f7d4b1a5f3c107b0ee0d80602ca19309d7a93fde3a9afeb568a7d743185ee366",
+      "bytes": 22340
+    },
+    {
+      "path": "artifacts/claude-final-file-proof.txt",
+      "description": "Final file proof for claude",
+      "sha256": "609cc86f4be0f91e1fd82fc471d6ce421cac9a7a387c9fa74cf8e4bfac38b0f3",
+      "bytes": 213
+    },
+    {
+      "path": "artifacts/claude-demo-note.txt",
+      "description": "Demo note written by claude",
+      "sha256": "51938970ef1e8399e3cdc20c114aef56a71df0418309ab32fcc17a1ace1582ee",
+      "bytes": 56
+    },
+    {
+      "path": "promoted-run-summary.md",
+      "description": "Promotion summary proving three successful Codex and Claude runs",
+      "sha256": "9efedb98544cfd8d4dcf1308e540913aa8b3119ba263655f3c51fcd83290ff68",
+      "bytes": 686
+    },
+    {
+      "path": "README.md",
+      "description": "Hero Demo bundle README",
+      "sha256": "dac35e0a5702cd749f726428ececc4905183c89cb4b3580e666c39bcb444fc8b",
+      "bytes": 1406
+    },
+    {
+      "path": "reproduce.sh",
+      "description": "Maintainer-facing reproduction wrapper for the Hero Demo",
+      "sha256": "92b69748b18cbb64b5d02c25cd98225e8cbc3f793b3d6fc7362d85d3aa8412a9",
+      "bytes": 276
     }
   ]
 }

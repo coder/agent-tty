@@ -1,0 +1,1045 @@
+>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/run-codex.sh
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/run-codex.sh
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+> You are in /tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace
+
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the directory allows
+  project-local config, hooks, and exec policies to load.
+
+› 1. Yes, continue
+  2. No, quit
+
+  Press enter to continue
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+> You are in /tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace
+
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the directory allows
+  project-local config, hooks, and exec policies to load.
+
+› 1. Yes, continue
+  2. No, quit
+
+  Press enter to continue
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+> You are in /tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace
+
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the directory allows
+  project-local config, hooks, and exec policies to load.
+
+› 1. Yes, continue
+  2. No, quit
+
+  Press enter to continue
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+
+╭───────────────────────────────────────────────────────────────╮
+│ ✨ Update available! 0.130.0 -> 0.132.0                       │
+│ See https://github.com/openai/codex for installation options. │
+│                                                               │
+│ See full release notes:                                       │
+│ https://github.com/openai/codex/releases/latest               │
+╰───────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.130.0)                  │
+│                                             │
+│ model:       gpt-5.5 low   /model to change │
+│ directory:   /tmp/…/codex-1/workspace       │
+│ permissions: YOLO mode                      │
+╰─────────────────────────────────────────────╯
+
+  Tip: New Build faster with Codex.
+
+
+› You are running inside a disposable workspace for an agent-tty Hero Demo.
+
+  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
+  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
+
+  Success criteria:
+  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
+  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
+  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
+  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
+  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
+  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
+  - Destroy the agent-tty session after exporting the proof artifacts.
+  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
+
+  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
+
+
+
+› Run /review on my current changes
+
+  gpt-5.5 low · /tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+
+╭───────────────────────────────────────────────────────────────╮
+│ ✨ Update available! 0.130.0 -> 0.132.0                       │
+│ See https://github.com/openai/codex for installation options. │
+│                                                               │
+│ See full release notes:                                       │
+│ https://github.com/openai/codex/releases/latest               │
+╰───────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.130.0)                  │
+│                                             │
+│ model:       gpt-5.5 low   /model to change │
+│ directory:   /tmp/…/codex-1/workspace       │
+│ permissions: YOLO mode                      │
+╰─────────────────────────────────────────────╯
+
+  Tip: New Build faster with Codex.
+
+
+› You are running inside a disposable workspace for an agent-tty Hero Demo.
+
+  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
+  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
+
+  Success criteria:
+  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
+  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
+  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
+  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
+  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
+  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
+  - Destroy the agent-tty session after exporting the proof artifacts.
+  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
+
+  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
+
+
+• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
+
+• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
+  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
+    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
+    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
+    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
+    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
+
+• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
+────────────────────────────────────────────────────────────────────────────────
+
+╭───────────────────────────────────────────────────────────────╮
+│ ✨ Update available! 0.130.0 -> 0.132.0                       │
+│ See https://github.com/openai/codex for installation options. │
+│                                                               │
+│ See full release notes:                                       │
+│ https://github.com/openai/codex/releases/latest               │
+╰───────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.130.0)                  │
+│                                             │
+│ model:       gpt-5.5 low   /model to change │
+│ directory:   /tmp/…/codex-1/workspace       │
+│ permissions: YOLO mode                      │
+╰─────────────────────────────────────────────╯
+
+  Tip: New Build faster with Codex.
+
+
+› You are running inside a disposable workspace for an agent-tty Hero Demo.
+
+  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
+  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
+
+  Success criteria:
+  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
+  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
+  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
+  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
+  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
+  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
+  - Destroy the agent-tty session after exporting the proof artifacts.
+  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
+
+  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
+
+
+• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
+
+• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
+  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
+    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
+    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
+    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
+    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
+
+• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
+────────────────────────────────────────────────────────────────────────────────
+
+╭───────────────────────────────────────────────────────────────╮
+│ ✨ Update available! 0.130.0 -> 0.132.0                       │
+│ See https://github.com/openai/codex for installation options. │
+│                                                               │
+│ See full release notes:                                       │
+│ https://github.com/openai/codex/releases/latest               │
+╰───────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.130.0)                  │
+│                                             │
+│ model:       gpt-5.5 low   /model to change │
+│ directory:   /tmp/…/codex-1/workspace       │
+│ permissions: YOLO mode                      │
+╰─────────────────────────────────────────────╯
+
+  Tip: New Build faster with Codex.
+
+
+› You are running inside a disposable workspace for an agent-tty Hero Demo.
+
+  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
+  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
+
+  Success criteria:
+  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
+  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
+  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
+  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
+  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
+  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
+  - Destroy the agent-tty session after exporting the proof artifacts.
+  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
+
+  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
+
+
+• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
+
+• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
+  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
+    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
+    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
+    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
+    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
+
+• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
+────────────────────────────────────────────────────────────────────────────────
+
+╭───────────────────────────────────────────────────────────────╮
+│ ✨ Update available! 0.130.0 -> 0.132.0                       │
+│ See https://github.com/openai/codex for installation options. │
+│                                                               │
+│ See full release notes:                                       │
+│ https://github.com/openai/codex/releases/latest               │
+╰───────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.130.0)                  │
+│                                             │
+│ model:       gpt-5.5 low   /model to change │
+│ directory:   /tmp/…/codex-1/workspace       │
+│ permissions: YOLO mode                      │
+╰─────────────────────────────────────────────╯
+
+  Tip: New Build faster with Codex.
+
+
+› You are running inside a disposable workspace for an agent-tty Hero Demo.
+
+  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
+  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
+
+  Success criteria:
+  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
+  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
+  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
+  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
+  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
+  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
+  - Destroy the agent-tty session after exporting the proof artifacts.
+  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
+
+  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
+
+
+• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
+
+• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
+  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
+    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
+    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
+    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
+    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
+
+• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
+────────────────────────────────────────────────────────────────────────────────
+
+╭───────────────────────────────────────────────────────────────╮
+│ ✨ Update available! 0.130.0 -> 0.132.0                       │
+│ See https://github.com/openai/codex for installation options. │
+│                                                               │
+│ See full release notes:                                       │
+│ https://github.com/openai/codex/releases/latest               │
+╰───────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.130.0)                  │
+│                                             │
+│ model:       gpt-5.5 low   /model to change │
+│ directory:   /tmp/…/codex-1/workspace       │
+│ permissions: YOLO mode                      │
+╰─────────────────────────────────────────────╯
+
+  Tip: New Build faster with Codex.
+
+
+› You are running inside a disposable workspace for an agent-tty Hero Demo.
+
+  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
+  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
+
+  Success criteria:
+  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
+  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
+  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
+  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
+  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
+  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
+  - Destroy the agent-tty session after exporting the proof artifacts.
+  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
+
+  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
+
+
+• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
+
+• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
+  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
+    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
+    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
+    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
+    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
+
+• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
+────────────────────────────────────────────────────────────────────────────────
+
+╭───────────────────────────────────────────────────────────────╮
+│ ✨ Update available! 0.130.0 -> 0.132.0                       │
+│ See https://github.com/openai/codex for installation options. │
+│                                                               │
+│ See full release notes:                                       │
+│ https://github.com/openai/codex/releases/latest               │
+╰───────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.130.0)                  │
+│                                             │
+│ model:       gpt-5.5 low   /model to change │
+│ directory:   /tmp/…/codex-1/workspace       │
+│ permissions: YOLO mode                      │
+╰─────────────────────────────────────────────╯
+
+  Tip: New Build faster with Codex.
+
+
+› You are running inside a disposable workspace for an agent-tty Hero Demo.
+
+  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
+  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
+
+  Success criteria:
+  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
+  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
+  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
+  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
+  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
+  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
+  - Destroy the agent-tty session after exporting the proof artifacts.
+  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
+
+  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
+
+
+• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
+
+• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
+  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
+    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
+    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
+    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
+    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
+
+• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
+────────────────────────────────────────────────────────────────────────────────
+
+╭───────────────────────────────────────────────────────────────╮
+│ ✨ Update available! 0.130.0 -> 0.132.0                       │
+│ See https://github.com/openai/codex for installation options. │
+│                                                               │
+│ See full release notes:                                       │
+│ https://github.com/openai/codex/releases/latest               │
+╰───────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.130.0)                  │
+│                                             │
+│ model:       gpt-5.5 low   /model to change │
+│ directory:   /tmp/…/codex-1/workspace       │
+│ permissions: YOLO mode                      │
+╰─────────────────────────────────────────────╯
+
+  Tip: New Build faster with Codex.
+
+
+› You are running inside a disposable workspace for an agent-tty Hero Demo.
+
+  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
+  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
+
+  Success criteria:
+  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
+  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
+  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
+  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
+  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
+  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
+  - Destroy the agent-tty session after exporting the proof artifacts.
+  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
+
+  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
+
+
+• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
+
+• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
+  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
+    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
+    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
+    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
+    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
+
+• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
+────────────────────────────────────────────────────────────────────────────────
+
+╭───────────────────────────────────────────────────────────────╮
+│ ✨ Update available! 0.130.0 -> 0.132.0                       │
+│ See https://github.com/openai/codex for installation options. │
+│                                                               │
+│ See full release notes:                                       │
+│ https://github.com/openai/codex/releases/latest               │
+╰───────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.130.0)                  │
+│                                             │
+│ model:       gpt-5.5 low   /model to change │
+│ directory:   /tmp/…/codex-1/workspace       │
+│ permissions: YOLO mode                      │
+╰─────────────────────────────────────────────╯
+
+  Tip: New Build faster with Codex.
+
+
+› You are running inside a disposable workspace for an agent-tty Hero Demo.
+
+  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
+  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
+
+  Success criteria:
+  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
+  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
+  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
+  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
+  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
+  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
+  - Destroy the agent-tty session after exporting the proof artifacts.
+  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
+
+  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
+
+
+• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
+
+• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
+  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
+    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
+    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
+    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
+    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
+
+• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
+────────────────────────────────────────────────────────────────────────────────
