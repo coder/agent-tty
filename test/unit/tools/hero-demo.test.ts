@@ -6,6 +6,7 @@ import {
   generateRunner,
   generateTape,
   parseHeroDemoArgs,
+  selectPromotionRuns,
   selectedAgents,
 } from '../../../src/tools/hero-demo.js';
 
@@ -103,6 +104,36 @@ describe('hero demo generator planning', () => {
     expect(claudeRunner).toContain('unset ANTHROPIC_API_KEY');
   });
 
+  it('selects the first passing promoted run per agent', () => {
+    expect(
+      selectPromotionRuns([
+        { agent: 'codex', index: 1, passed: false },
+        { agent: 'codex', index: 2, passed: true },
+        { agent: 'codex', index: 3, passed: true },
+        { agent: 'codex', index: 4, passed: true },
+        { agent: 'claude', index: 1, passed: true },
+        { agent: 'claude', index: 2, passed: false },
+        { agent: 'claude', index: 3, passed: true },
+        { agent: 'claude', index: 4, passed: true },
+      ]),
+    ).toEqual([
+      { agent: 'codex', index: 2 },
+      { agent: 'claude', index: 1 },
+    ]);
+  });
+
+  it('rejects promotion when either agent has too few passing runs', () => {
+    expect(() =>
+      selectPromotionRuns([
+        { agent: 'codex', index: 1, passed: true },
+        { agent: 'codex', index: 2, passed: true },
+        { agent: 'claude', index: 1, passed: true },
+        { agent: 'claude', index: 2, passed: true },
+        { agent: 'claude', index: 3, passed: true },
+      ]),
+    ).toThrow('codex only had 2 successful run(s)');
+  });
+
   it('sanitizes promoted text before leak checking', () => {
     const sanitized = sanitizePromotedText(
       'Welcome back Alice\nAPI Usage Billing\n/home/alice/project\nANTHROPIC_API_KEY\n',
@@ -111,6 +142,26 @@ describe('hero demo generator planning', () => {
     expect(sanitized).not.toContain('API Usage Billing');
     expect(sanitized).not.toContain('/home/alice');
     expect(buildLeakFindings(sanitized)).toEqual([]);
+  });
+
+  it('covers every account-sensitive leak pattern', () => {
+    expect(
+      buildLeakFindings(
+        [
+          '/Users/alice/project',
+          'alice@example.invalid',
+          'OPENAI_API_KEY',
+          'Auth conflict detected',
+          'tok_abcdefghijklmnop',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      'absolute macOS home path',
+      'email address',
+      'OpenAI credential variable',
+      'auth warning',
+      'token-like secret',
+    ]);
   });
 
   it('flags account-sensitive leakage but allows generic update text', () => {

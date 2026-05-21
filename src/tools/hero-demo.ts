@@ -80,6 +80,17 @@ export interface GeneratedRunnerInput {
   claudeEffort: string;
 }
 
+export interface PromotionRunInput {
+  agent: AgentName;
+  index: number;
+  passed: boolean;
+}
+
+export interface PromotionSelection {
+  agent: AgentName;
+  index: number;
+}
+
 interface RunRecord {
   agent: AgentName;
   index: number;
@@ -584,25 +595,30 @@ function renderPrompt(): string {
   ].join('\n');
 }
 
+async function missingFiles(paths: string[]): Promise<string[]> {
+  const checks = await Promise.all(
+    paths.map(async (path) => {
+      try {
+        const stats = await stat(path);
+        return stats.isFile() && stats.size > 0 ? undefined : path;
+      } catch {
+        return path;
+      }
+    }),
+  );
+  return checks.filter((path): path is string => path !== undefined);
+}
+
 async function waitForProofFiles(paths: string[]): Promise<void> {
   const deadline = Date.now() + 300_000;
   while (Date.now() < deadline) {
-    const results = await Promise.all(
-      paths.map(async (path) => {
-        try {
-          const stats = await stat(path);
-          return stats.isFile() && stats.size > 0;
-        } catch {
-          return false;
-        }
-      }),
-    );
-    if (results.every(Boolean)) {
+    if ((await missingFiles(paths)).length === 0) {
       return;
     }
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 1000));
   }
-  throw new Error(`timed out waiting for proof files: ${paths.join(', ')}`);
+  const missing = await missingFiles(paths);
+  throw new Error(`timed out waiting for proof files: ${missing.join(', ')}`);
 }
 
 async function runOne(
@@ -781,28 +797,37 @@ async function cleanBundle(bundleDir: string): Promise<void> {
   await mkdir(join(bundleDir, 'artifacts'), { recursive: true });
 }
 
+/** Selects the first passing run per agent after enforcing the promotion bar. */
+export function selectPromotionRuns(
+  records: PromotionRunInput[],
+): PromotionSelection[] {
+  return AGENTS.map((agent) => {
+    const passing = records.filter(
+      (record) => record.agent === agent && record.passed,
+    );
+    invariant(
+      passing.length >= 3,
+      `${agent} only had ${String(passing.length)} successful run(s)`,
+    );
+    const selected = passing[0];
+    invariant(selected !== undefined, `no selected run for ${agent}`);
+    return { agent, index: selected.index };
+  });
+}
+
 async function promote(
   options: HeroDemoOptions,
   records: RunRecord[],
 ): Promise<void> {
-  const byAgent = new Map<AgentName, RunRecord[]>();
-  for (const agent of AGENTS) {
-    byAgent.set(
-      agent,
-      records.filter((record) => record.agent === agent && record.passed),
+  const selected = selectPromotionRuns(records).map((selection) => {
+    const run = records.find(
+      (record) =>
+        record.agent === selection.agent && record.index === selection.index,
     );
-  }
-  for (const agent of AGENTS) {
-    const count = byAgent.get(agent)?.length ?? 0;
     invariant(
-      count >= 3,
-      `${agent} only had ${String(count)} successful run(s)`,
+      run !== undefined && run.passed,
+      `selected run missing for ${selection.agent} ${String(selection.index)}`,
     );
-  }
-
-  const selected = AGENTS.map((agent) => {
-    const run = byAgent.get(agent)?.[0];
-    invariant(run !== undefined, `no selected run for ${agent}`);
     run.selected = true;
     return run;
   });
@@ -1027,6 +1052,9 @@ export async function runHeroDemo(options: HeroDemoOptions): Promise<void> {
   const debugRoot = resolve(
     await mkDebugRoot(`hero-demo-${Date.now().toString()}`),
   );
+  if (!options.promote || options.keepDebug) {
+    process.stderr.write(`debugRoot: ${debugRoot}\n`);
+  }
   const installPrefix = await installLocalAgentTty(debugRoot);
   const records: RunRecord[] = [];
   for (const agent of selectedAgents(options.agent)) {
