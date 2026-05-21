@@ -109,7 +109,7 @@ interface RunRecord {
 }
 
 function quote(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function assertAgent(value: string): asserts value is AgentName | 'both' {

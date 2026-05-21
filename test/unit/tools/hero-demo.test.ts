@@ -134,6 +134,26 @@ describe('hero demo generator planning', () => {
     ).toThrow('codex only had 2 successful run(s)');
   });
 
+  it('shell-quotes paths containing apostrophes in generated runners', () => {
+    const runner = generateRunner({
+      agent: 'claude',
+      workspace: "/tmp/it's-fine",
+      promptPath: '/tmp/prompt.md',
+      installPrefix: '/tmp/install',
+      innerHome: '/tmp/inner-home',
+      finalFile: '/tmp/final.txt',
+      innerCast: '/tmp/inner.cast',
+      innerWebm: '/tmp/inner.webm',
+      expectedText: 'demo text',
+      codexModel: 'gpt-demo',
+      codexEffort: 'minimal',
+      claudeModel: 'claude-demo',
+      claudeEffort: 'medium',
+    });
+
+    expect(runner).toContain("cd '/tmp/it'\\''s-fine'");
+  });
+
   it('sanitizes promoted text before leak checking', () => {
     const sanitized = sanitizePromotedText(
       'Welcome back Alice\nAPI Usage Billing\n/home/alice/project\nANTHROPIC_API_KEY\n',
