@@ -205,8 +205,8 @@ _Avoid_: bare "agent", "Coder agent"
 - An **Exploratory Hero Demo** is the preferred **Hero Demo** scenario because it shows the coding-agent TUI discovering the `agent-tty` skill and CLI before producing inner `agent-tty` proof artifacts.
 - A **Curated Hero Artifact Set** is what README and reviewer docs link to; raw recorder logs remain local/debug artifacts unless explicitly promoted.
 - The **Hero Demo Promotion Bar** for real Codex and Claude recordings is three successful local regenerations per agent, plus visual and secret-leakage review.
-- VHS, ttyd, and ffmpeg are pinned as repo tools for named demo tasks, but ordinary CI does not regenerate real-agent **Hero Demo** artifacts.
-- The **Hero Demo Generator** relies on repo-pinned VHS, ttyd, and ffmpeg tools rather than transient unpinned local installations.
+- VHS, ttyd, and ffmpeg are pinned in the named demo task, but ordinary CI does not install those live-demo-only recorder tools or regenerate real-agent **Hero Demo** artifacts.
+- The **Hero Demo Generator** relies on task-pinned VHS, ttyd, and ffmpeg tools rather than transient unpinned local installations.
 - The refactor to a **Promoted Hero Demo** is intended to land as one coherent change: generator, tool pins, promoted artifacts, README/catalog updates, manifest updates, and recursive-bundle deletion.
 - A **Hero Demo Promotion Command** is exposed as a named mise task and delegates to the Node/TypeScript **Hero Demo Generator**.
 - The **Hero Demo Generator** has default Codex/Claude model and effort settings, supports overrides, and records the resolved versions and settings in the **Promoted Hero Run Summary**.

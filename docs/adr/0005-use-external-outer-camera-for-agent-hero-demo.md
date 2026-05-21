@@ -26,7 +26,7 @@ Concretely:
 - The scenario is an **Exploratory Hero Demo**: the real agent loads the `agent-tty` skill, inspects the CLI as needed, chooses its own command flow, drives Neovim through `agent-tty`, and exports inner artifacts to required paths.
 - A Node/TypeScript **Hero Demo Generator** prepares workspaces, prompts, runner scripts, and raw VHS tapes; invokes VHS as the **Outer Camera**; validates artifacts; performs automated leak checks; and writes the run summary.
 - The generated VHS tape owns startup waits, a configurable fixed review window, and exit keypresses during recording. Raw tapes, logs, and disposable workspaces stay debug-only and ignored by default.
-- VHS, ttyd, and ffmpeg are pinned as repo tools for named demo tasks, not used to regenerate real-agent artifacts in ordinary CI.
+- VHS, ttyd, and ffmpeg are pinned in the named demo task, not installed by ordinary CI or used to regenerate real-agent artifacts there.
 - The refactor lands as one coherent change: generator, tool pins, promoted artifacts, README/catalog updates, manifest updates, and recursive-bundle deletion.
 - Regeneration is exposed through a named mise demo task that delegates to the Node/TypeScript generator.
 - Codex/Claude model and effort settings have defaults, support maintainer overrides, and are recorded with tool versions in the promoted run summary.

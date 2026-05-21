@@ -2,9 +2,8 @@
 actionlint = "1.7.12"
 communique = "1.1.3"
 zizmor = "1.24.1"
-vhs = "0.11.0"
-ttyd = "1.7.7"
-ffmpeg = "8.1.1"
+# CI installs these tools with `mise install --locked`; keep live-demo-only tools
+# out of this table so ordinary CI stays credential- and recorder-tool-free.
 # CI installs with `mise install --locked`, so update mise.lock whenever tool
 # versions or supported CI platforms change.
 node = "26"
@@ -40,7 +39,7 @@ run = "npm run smoke:install -- --skip-build"
 
 [tasks."demo:agent-uses-agent-tty"]
 description = "Regenerate the real-agent Hero Demo proof bundle"
-run = "npx tsx src/tools/hero-demo.ts"
+run = "mise x vhs@0.11.0 ttyd@1.7.7 ffmpeg@8.1.1 -- npx tsx src/tools/hero-demo.ts"
 
 [tasks.validate-bundles]
 description = "Validate canonical proof bundles against the canonical schema"

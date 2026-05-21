@@ -114,10 +114,6 @@ checksum = "sha256:887a39f27f86fa785fd3c27e13b4b0360d68827a9bb747cbe1929fd691708
 url = "https://github.com/jdx/communique/releases/download/v1.1.3/communique-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/jdx/communique/releases/assets/413755231"
 
-[[tools.ffmpeg]]
-version = "8.1.1"
-backend = "asdf:mise-plugins/mise-ffmpeg"
-
 [[tools.node]]
 version = "26.1.0"
 backend = "core:node"
@@ -188,57 +184,6 @@ provenance = "github-attestations"
 checksum = "sha256:4d26ade49e9571ccb3bd1a88cfc72c52b11a9a9f6e204a57f38592aed137566a"
 url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260510/cpython-3.14.5+20260510-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
 provenance = "github-attestations"
-
-[[tools.ttyd]]
-version = "1.7.7"
-backend = "aqua:tsl0922/ttyd"
-
-[tools.ttyd."platforms.linux-arm64"]
-url = "https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.aarch64"
-
-[tools.ttyd."platforms.linux-arm64-musl"]
-url = "https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.aarch64"
-
-[tools.ttyd."platforms.linux-x64"]
-url = "https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64"
-
-[tools.ttyd."platforms.linux-x64-musl"]
-url = "https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64"
-
-[tools.ttyd."platforms.windows-x64"]
-url = "https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.win32.exe"
-
-[[tools.vhs]]
-version = "0.11.0"
-backend = "aqua:charmbracelet/vhs"
-
-[tools.vhs."platforms.linux-arm64"]
-checksum = "sha256:af782cddbf844a377df6ea41c0e72339393fa021be3f6cb70a2f47d48675d92b"
-url = "https://github.com/charmbracelet/vhs/releases/download/v0.11.0/vhs_0.11.0_Linux_arm64.tar.gz"
-
-[tools.vhs."platforms.linux-arm64-musl"]
-checksum = "sha256:af782cddbf844a377df6ea41c0e72339393fa021be3f6cb70a2f47d48675d92b"
-url = "https://github.com/charmbracelet/vhs/releases/download/v0.11.0/vhs_0.11.0_Linux_arm64.tar.gz"
-
-[tools.vhs."platforms.linux-x64"]
-checksum = "sha256:99cb634587eaae0473c1ea377db80c3a048c27f99fe0a7febb1a1e8cb7ee5009"
-url = "https://github.com/charmbracelet/vhs/releases/download/v0.11.0/vhs_0.11.0_Linux_x86_64.tar.gz"
-
-[tools.vhs."platforms.linux-x64-musl"]
-checksum = "sha256:99cb634587eaae0473c1ea377db80c3a048c27f99fe0a7febb1a1e8cb7ee5009"
-url = "https://github.com/charmbracelet/vhs/releases/download/v0.11.0/vhs_0.11.0_Linux_x86_64.tar.gz"
-
-[tools.vhs."platforms.macos-arm64"]
-checksum = "sha256:eec91ee450ba50b6d4fce2800593b2ac5fdd88a73056367d2c3b870ee44de3f7"
-url = "https://github.com/charmbracelet/vhs/releases/download/v0.11.0/vhs_0.11.0_Darwin_arm64.tar.gz"
-
-[tools.vhs."platforms.macos-x64"]
-checksum = "sha256:dd5c86c1cec1cf9ebd5ac6cf8119efcb731f055bbe7c7010408c741ee7770f64"
-url = "https://github.com/charmbracelet/vhs/releases/download/v0.11.0/vhs_0.11.0_Darwin_x86_64.tar.gz"
-
-[tools.vhs."platforms.windows-x64"]
-checksum = "sha256:e3d87403b25e1e88addec6548bdbfdbee772a5c313c9f6f96c495b8e163f18ba"
-url = "https://github.com/charmbracelet/vhs/releases/download/v0.11.0/vhs_0.11.0_Windows_x86_64.zip"
 
 [[tools.zizmor]]
 version = "1.24.1"

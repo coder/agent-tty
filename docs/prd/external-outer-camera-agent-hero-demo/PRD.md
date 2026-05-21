@@ -89,7 +89,7 @@ The existing recursive bundle is removed once the new Hero Demo is promoted. The
 - Delete the old recursive `agent-tty`-records-the-agent flow after the new Hero Demo is promoted.
 - Narrow the README claim through the **Hero Claim Boundary**: the outer TUI is presentation, and the inner `agent-tty` artifact set is the product proof.
 - Expose regeneration through a named mise task that delegates to the generator.
-- Pin VHS, ttyd, and ffmpeg as repo tools for named demo tasks, but do not make live-agent regeneration part of ordinary CI.
+- Pin VHS, ttyd, and ffmpeg in the named demo task, but do not install live-demo-only recorder tools or run live-agent regeneration in ordinary CI.
 - Provide smoke/debug modes for one-off agent runs and a promotion mode that requires the full **Hero Demo Promotion Bar**.
 - Require three successful local regenerations for Codex and three successful local regenerations for Claude Code before promotion.
 - Treat a **Hero Demo Partial Pass** as a failed promotion. Both agents must pass before README, catalog, manifest, or promoted artifacts are replaced.
