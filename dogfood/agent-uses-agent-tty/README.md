@@ -3,6 +3,8 @@
 This bundle is the README-facing **Hero Demo** for real coding-agent TUIs using `agent-tty`.
 VHS records the outer Codex and Claude Code TUIs as the presentation layer. The product proof is the inner `agent-tty` artifact set produced while each real agent explores the skill and CLI, drives Neovim, and exports recordings.
 
+GitHub may show checked-in WebM files as raw downloads; see [VIDEO_PLAYBACK.md](./VIDEO_PLAYBACK.md) for the H.264 attachment flow used to turn these thumbnails into GitHub video-player links.
+
 | Agent  | Outer Hero Demo                                                                        | Inner proof artifacts                                                                  | File proof                                       |
 | ------ | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | Codex  | [![Codex Hero Demo](./artifacts/codex-thumbnail.png)](./artifacts/codex-outer.webm)    | [cast](./artifacts/codex-inner-nvim.cast), [WebM](./artifacts/codex-inner-nvim.webm)   | [proof](./artifacts/codex-final-file-proof.txt)  |

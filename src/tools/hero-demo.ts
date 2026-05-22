@@ -21,13 +21,14 @@ import { basename, dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import type { CanonicalBundleArtifact } from './bundleManifestSchema.js';
 import { CanonicalBundleManifestSchema } from './bundleManifestSchema.js';
+import { canonicalBundleArtifactEntry } from './canonicalBundleArtifacts.js';
 import { invariant } from '../util/assert.js';
 import { isDirectExecution } from '../util/isDirectExecution.js';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const DEFAULT_BUNDLE_DIR = join(REPO_ROOT, 'dogfood/agent-uses-agent-tty');
+const VIDEO_PLAYBACK_DOC = 'VIDEO_PLAYBACK.md';
 const DEFAULT_EXPECTED_TEXT =
   'agent-tty nested Neovim proof from a real coding agent.';
 const DEFAULT_RECORD_SECONDS = 3 * 60;
@@ -39,8 +40,6 @@ const OUTER_HEIGHT = 900;
 const OUTER_FONT_SIZE = 14;
 const CLAUDE_VISUAL_REDACTION_HEIGHT = Math.floor(OUTER_HEIGHT / 5);
 const CLAUDE_VISUAL_REDACTION_FILTER = `drawbox=x=0:y=0:w=iw:h=${String(CLAUDE_VISUAL_REDACTION_HEIGHT)}:color=black:t=fill`;
-
-const DEMO_TOOL_SPECS = ['vhs@0.11.0', 'ttyd@1.7.7', 'ffmpeg@8.1.1'];
 
 type AgentName = (typeof AGENTS)[number];
 
@@ -447,33 +446,10 @@ async function assertNonEmpty(path: string): Promise<void> {
   );
 }
 
-let cachedDemoToolPathPrefix: string | undefined;
-
-function demoToolPathPrefix(): string {
-  if (cachedDemoToolPathPrefix === undefined) {
-    run('mise', ['install', ...DEMO_TOOL_SPECS]);
-  }
-  cachedDemoToolPathPrefix ??= run('mise', ['bin-paths', ...DEMO_TOOL_SPECS])
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .join(':');
-  invariant(cachedDemoToolPathPrefix !== '', 'demo tool PATH is empty');
-  return cachedDemoToolPathPrefix;
-}
-
-function demoToolEnv(): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    PATH: `${demoToolPathPrefix()}:${process.env.PATH ?? ''}`,
-  };
-}
-
 function runDemoTool(command: string, args: string[], cwd = REPO_ROOT): string {
   return execFileSync(command, args, {
     cwd,
     encoding: 'utf8',
-    env: demoToolEnv(),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
@@ -677,7 +653,6 @@ async function runOne(
     runDir,
     vhsLog,
     (options.recordSeconds + RECORD_TIMEOUT_BUFFER_SECONDS) * 1000,
-    demoToolEnv(),
   );
   ensureThumbnail(runDir);
 
@@ -765,29 +740,8 @@ function sha256Text(text: string): string {
   return createHash('sha256').update(text).digest('hex');
 }
 
-async function sha256File(path: string): Promise<string> {
-  return createHash('sha256')
-    .update(await readFile(path))
-    .digest('hex');
-}
-
-async function artifactEntry(
-  bundleDir: string,
-  relativePath: string,
-  description: string,
-): Promise<CanonicalBundleArtifact> {
-  const fullPath = join(bundleDir, relativePath);
-  const stats = await stat(fullPath);
-  return {
-    path: relativePath,
-    description,
-    sha256: await sha256File(fullPath),
-    bytes: stats.size,
-  };
-}
-
 async function cleanBundle(bundleDir: string): Promise<void> {
-  const keep = new Set(['.gitignore']);
+  const keep = new Set(['.gitignore', VIDEO_PLAYBACK_DOC]);
   for (const entry of await readdir(bundleDir, { withFileTypes: true })) {
     if (keep.has(entry.name)) {
       continue;
@@ -901,6 +855,10 @@ async function promote(
     path: 'README.md',
     description: 'Hero Demo bundle README',
   });
+  promotedPaths.push({
+    path: VIDEO_PLAYBACK_DOC,
+    description: 'GitHub video playback guidance for the Hero Demo',
+  });
 
   const reproducePath = join(options.bundleDir, 'reproduce.sh');
   await writeExecutable(reproducePath, renderReproduce(options));
@@ -914,7 +872,7 @@ async function promote(
   const manifestArtifacts = [];
   for (const promoted of promotedPaths) {
     manifestArtifacts.push(
-      await artifactEntry(
+      await canonicalBundleArtifactEntry(
         options.bundleDir,
         promoted.path,
         promoted.description,
@@ -973,11 +931,10 @@ function safeToolVersion(
 }
 
 function collectToolVersions(): Array<[string, string]> {
-  const demoEnv = demoToolEnv();
   return [
-    ['vhs', safeToolVersion('vhs', ['--version'], demoEnv)],
-    ['ttyd', safeToolVersion('ttyd', ['--version'], demoEnv)],
-    ['ffmpeg', safeToolVersion('ffmpeg', ['-version'], demoEnv)],
+    ['vhs', safeToolVersion('vhs', ['--version'])],
+    ['ttyd', safeToolVersion('ttyd', ['--version'])],
+    ['ffmpeg', safeToolVersion('ffmpeg', ['-version'])],
     ['codex', safeToolVersion('codex', ['--version'])],
     ['claude', safeToolVersion('claude', ['--version'])],
   ];
@@ -1025,6 +982,8 @@ function renderReadme(): string {
 
 This bundle is the README-facing **Hero Demo** for real coding-agent TUIs using \`agent-tty\`.
 VHS records the outer Codex and Claude Code TUIs as the presentation layer. The product proof is the inner \`agent-tty\` artifact set produced while each real agent explores the skill and CLI, drives Neovim, and exports recordings.
+
+GitHub may show checked-in WebM files as raw downloads; see [${VIDEO_PLAYBACK_DOC}](./${VIDEO_PLAYBACK_DOC}) for the H.264 attachment flow used to turn these thumbnails into GitHub video-player links.
 
 | Agent | Outer Hero Demo | Inner proof artifacts | File proof |
 | --- | --- | --- | --- |

@@ -2,7 +2,6 @@
 actionlint = "1.7.12"
 communique = "1.1.3"
 zizmor = "1.24.1"
-# Live-demo-only recorder tools are pinned inside src/tools/hero-demo.ts so ordinary CI stays credential- and recorder-tool-free.
 # CI installs [tools] with `mise install --locked`; update mise.lock whenever tool versions or supported CI platforms change.
 node = "26"
 python = "3"
@@ -37,7 +36,38 @@ run = "npm run smoke:install -- --skip-build"
 
 [tasks."demo:agent-uses-agent-tty"]
 description = "Regenerate the real-agent Hero Demo proof bundle"
-run = "npx tsx src/tools/hero-demo.ts"
+run = '''
+PATH="$(mise bin-paths vhs@0.11.0 ttyd@1.7.7 ffmpeg@8.1.1 | paste -sd: -):$PATH" \
+  npx tsx src/tools/hero-demo.ts
+'''
+tools.ffmpeg = "8.1.1"
+tools.vhs = "0.11.0"
+tools.ttyd = "1.7.7"
+
+[tasks."demo:agent-uses-agent-tty:upload-assets"]
+description = "Prepare H.264 MP4 upload assets for the Hero Demo"
+run = '''
+HERO_VIDEO_FFMPEG="$(mise which ffmpeg --tool ffmpeg@8.1.1)" \
+HERO_VIDEO_FFPROBE="$(mise which ffprobe --tool ffmpeg@8.1.1)" \
+  npx tsx src/tools/hero-video-playback.ts prepare-upload-assets
+'''
+tools.ffmpeg = "8.1.1"
+sources = [
+  "dogfood/agent-uses-agent-tty/artifacts/codex-outer.webm",
+  "dogfood/agent-uses-agent-tty/artifacts/claude-outer.webm",
+  "src/tools/hero-video-playback.ts",
+]
+outputs = ["dogfood/agent-uses-agent-tty/.debug/video-upload/*"]
+
+[tasks."demo:agent-uses-agent-tty:apply-video-urls"]
+description = "Apply GitHub user-attachment video URLs to the Hero Demo READMEs"
+run = "npx tsx src/tools/hero-video-playback.ts apply-video-urls"
+sources = [
+  "README.md",
+  "dogfood/agent-uses-agent-tty/README.md",
+  "dogfood/agent-uses-agent-tty/manifest.json",
+  "src/tools/hero-video-playback.ts",
+]
 
 [tasks.validate-bundles]
 description = "Validate canonical proof bundles against the canonical schema"

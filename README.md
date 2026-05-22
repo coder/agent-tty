@@ -78,6 +78,8 @@ This dogfood bundle uses VHS as the outer camera for real Codex and Claude inter
 | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [![Codex agent-tty demo](./dogfood/agent-uses-agent-tty/artifacts/codex-thumbnail.png)](./dogfood/agent-uses-agent-tty/artifacts/codex-outer.webm) | [![Claude agent-tty demo](./dogfood/agent-uses-agent-tty/artifacts/claude-thumbnail.png)](./dogfood/agent-uses-agent-tty/artifacts/claude-outer.webm) |
 
+GitHub may show these checked-in WebM proof files as raw downloads. See [`VIDEO_PLAYBACK.md`](./dogfood/agent-uses-agent-tty/VIDEO_PLAYBACK.md) for the upload-ready H.264 MP4 flow that turns the thumbnails into GitHub video-player links.
+
 See [`dogfood/agent-uses-agent-tty/`](./dogfood/agent-uses-agent-tty/) for the Hero Demo reproducer, outer transcripts, inner Neovim recordings, and final file proofs.
 
 ## Common Usage
