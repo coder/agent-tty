@@ -22,12 +22,19 @@ const page = await browser.newPage({
 await page.goto(pathToFileURL(htmlPath).href);
 await page.evaluate(() => document.fonts.ready);
 await page.waitForTimeout(150);
-await page.screenshot({ path: hiResPath, clip: { x: 0, y: 0, width: W, height: H } });
+await page.screenshot({
+  path: hiResPath,
+  clip: { x: 0, y: 0, width: W, height: H },
+});
 await browser.close();
 
 // Downscale 2400x1260 -> 1200x630 (sips is built into macOS).
-execFileSync('sips', ['--resampleHeightWidth', String(H), String(W), hiResPath, '--out', outPath], {
-  stdio: 'ignore',
-});
+execFileSync(
+  'sips',
+  ['--resampleHeightWidth', String(H), String(W), hiResPath, '--out', outPath],
+  {
+    stdio: 'ignore',
+  },
+);
 rmSync(hiResPath, { force: true });
 console.log(`wrote ${outPath} (${W}x${H})`);

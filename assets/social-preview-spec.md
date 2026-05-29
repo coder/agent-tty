@@ -4,7 +4,7 @@ This is the image GitHub shows when `github.com/coder/agent-tty` is shared on
 Hacker News, X, Slack, LinkedIn, etc. The repo currently has **no custom image**
 (`usesCustomOpenGraphImage: false`), so it falls back to GitHub's auto-generated
 avatar+stats card. Replacing it is the single highest-leverage pre-launch task —
-it's what people see *before* they click.
+it's what people see _before_ they click.
 
 Target output: **`assets/social-preview.png`** (generated — see "How to produce"
 below) → upload via **repo Settings → General → Social preview → Edit → Upload an
@@ -12,12 +12,12 @@ image**.
 
 ## Hard specs
 
-| Property | Value |
-| --- | --- |
-| Dimensions | **1200 × 630 px** (universal OG 1.91:1 — passes opengraph.xyz; GitHub also accepts it. GitHub's own rec is 1280×640, but 1200×630 is the safer cross-platform card for X/Slack/LinkedIn) |
-| File size | **< 1 MB** (a flat dark bg + text exports well under this; run `pngquant` if needed) |
-| Format | PNG, sRGB (JPG/GIF also accepted) |
-| Min accepted | 640 × 320 px |
+| Property     | Value                                                                                                                                                                                    |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dimensions   | **1200 × 630 px** (universal OG 1.91:1 — passes opengraph.xyz; GitHub also accepts it. GitHub's own rec is 1280×640, but 1200×630 is the safer cross-platform card for X/Slack/LinkedIn) |
+| File size    | **< 1 MB** (a flat dark bg + text exports well under this; run `pngquant` if needed)                                                                                                     |
+| Format       | PNG, sRGB (JPG/GIF also accepted)                                                                                                                                                        |
+| Min accepted | 640 × 320 px                                                                                                                                                                             |
 
 **Safe area:** keep the wordmark and tagline inside a centered **~1120 × 500**
 region (≈80 px side / ≈70 px top-bottom margins). X/LinkedIn/Facebook re-crop to
@@ -60,7 +60,7 @@ region (≈80 px side / ≈70 px top-bottom margins). X/LinkedIn/Facebook re-cro
 ## Do / Don't
 
 - ✅ Flat dark terminal aesthetic, monospace, a real command + a snippet of captured screen.
-- ✅ Let the *artifact* (a text snapshot of a real screen) be the visual idea.
+- ✅ Let the _artifact_ (a text snapshot of a real screen) be the visual idea.
 - ❌ Gradient hero blobs, neon glows, glassmorphism, "pulsing live" pills, emoji, 3D shapes, stock dev illustrations. These read as AI-generated "slop" and HN calls them out within minutes — the image must not undercut a launch built on "honest, inspectable tooling."
 
 ## How to produce it

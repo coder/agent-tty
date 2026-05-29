@@ -48,14 +48,14 @@ More workflows in [`docs/USAGE.md`](./docs/USAGE.md). Other install paths (tarba
 
 ## Why not just tmux, expect, asciinema, or Playwright?
 
-Those tools are good, and you can get partway with any of them. `agent-tty` exists because driving a terminal *and* getting reviewable evidence back is awkward with each one:
+Those tools are good, and you can get partway with any of them. `agent-tty` exists because driving a terminal _and_ getting reviewable evidence back is awkward with each one:
 
-| If you reach for… | You get | What `agent-tty` adds |
-| --- | --- | --- |
-| `tmux` + `send-keys` / `capture-pane` | drive a pane, scrape raw bytes | a `wait`-for-condition primitive (stop sleeping and grepping), semantic snapshots, and PNG / `.cast` / WebM artifacts a process or human can review |
-| `expect` | scripted input/output matching on a byte stream | a model of the *rendered screen* (cursor, alt-screen, colors), plus shareable visual artifacts |
-| `asciinema` / VHS | a recording to watch later | programmatic drive + `wait` + inspect — act on terminal state, not just record it (and it still exports asciinema-compatible `.cast`) |
-| Playwright | this exact stateful loop, for browsers | the same drive → wait → inspect → snapshot loop, applied to terminals and TUIs |
+| If you reach for…                     | You get                                         | What `agent-tty` adds                                                                                                                               |
+| ------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tmux` + `send-keys` / `capture-pane` | drive a pane, scrape raw bytes                  | a `wait`-for-condition primitive (stop sleeping and grepping), semantic snapshots, and PNG / `.cast` / WebM artifacts a process or human can review |
+| `expect`                              | scripted input/output matching on a byte stream | a model of the _rendered screen_ (cursor, alt-screen, colors), plus shareable visual artifacts                                                      |
+| `asciinema` / VHS                     | a recording to watch later                      | programmatic drive + `wait` + inspect — act on terminal state, not just record it (and it still exports asciinema-compatible `.cast`)               |
+| Playwright                            | this exact stateful loop, for browsers          | the same drive → wait → inspect → snapshot loop, applied to terminals and TUIs                                                                      |
 
 `agent-tty` is an automation-and-inspection layer, not a tmux replacement.
 
@@ -72,7 +72,7 @@ Rendering uses Ghostty's terminal engine through two interchangeable backends (`
 - **`libghostty-vt`** — Ghostty's native VT engine, bound into Node. Fast, browser-free semantic snapshots and `wait` checks.
 - **`ghostty-web`** (default) — a headless web build of Ghostty driven by Playwright/Chromium. Adds pixel PNG screenshots and WebM video.
 
-`ghostty-web` is a *reference* renderer: it shows what a pinned Ghostty build draws, not a pixel-for-pixel guarantee of any particular native terminal window. That tradeoff is deliberate — the renderer sits behind an adapter, so native backends can be added later without changing the CLI contract.
+`ghostty-web` is a _reference_ renderer: it shows what a pinned Ghostty build draws, not a pixel-for-pixel guarantee of any particular native terminal window. That tradeoff is deliberate — the renderer sits behind an adapter, so native backends can be added later without changing the CLI contract.
 
 ## Why it exists
 

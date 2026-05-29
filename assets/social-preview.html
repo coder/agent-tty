@@ -12,14 +12,24 @@
         --dim: #6c7086;
         --green: #a6e3a1;
       }
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { width: 1200px; height: 630px; }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1200px;
+        height: 630px;
+      }
       body {
         background: var(--crust);
         color: var(--text);
-        font-family: "FiraCode Nerd Font Mono", "SF Mono", "Menlo", monospace;
+        font-family: 'FiraCode Nerd Font Mono', 'SF Mono', 'Menlo', monospace;
         font-variant-ligatures: none;
-        font-feature-settings: "liga" 0, "calt" 0;
+        font-feature-settings:
+          'liga' 0,
+          'calt' 0;
         -webkit-font-smoothing: antialiased;
       }
       .card {
@@ -39,7 +49,11 @@
         line-height: 1;
         color: var(--text);
       }
-      .word .cursor { color: var(--green); font-weight: 400; margin-left: 8px; }
+      .word .cursor {
+        color: var(--green);
+        font-weight: 400;
+        margin-left: 8px;
+      }
 
       .tag {
         margin-top: 32px;
@@ -48,14 +62,18 @@
         color: var(--subtext);
         max-width: 1048px;
       }
-      .tag .accent { color: var(--text); }
+      .tag .accent {
+        color: var(--text);
+      }
 
       .cta {
         margin-top: 40px;
         font-size: 31px;
         color: var(--text);
       }
-      .cta .p { color: var(--green); }
+      .cta .p {
+        color: var(--green);
+      }
 
       .foot {
         position: absolute;
@@ -67,7 +85,9 @@
         font-size: 22px;
         color: var(--dim);
       }
-      .foot .url { color: var(--subtext); }
+      .foot .url {
+        color: var(--subtext);
+      }
     </style>
   </head>
   <body>
@@ -75,7 +95,9 @@
       <div class="word">agent-tty<span class="cursor">▋</span></div>
       <div class="tag">
         Drive and inspect terminal sessions from the CLI —<br />
-        <span class="accent">reviewable snapshots, screenshots &amp; recordings.</span>
+        <span class="accent"
+          >reviewable snapshots, screenshots &amp; recordings.</span
+        >
       </div>
       <div class="cta"><span class="p">$</span> npm install -g agent-tty</div>
 

@@ -3,7 +3,7 @@
 # Run from the repo root:
 #     vhs assets/hero.tape            # writes assets/hero.gif
 #
-# Prereqs (vhs 0.11.0 + ffmpeg 8.1.1 are already pinned in mise.toml):
+# Prereqs (vhs 0.11.0 + jq are pinned in mise's [tools]):
 #   - `agent-tty` on PATH  (npm i -g agent-tty, or `npm run build && npm link`)
 #   - `jq`
 # It uses the fast, browser-free `libghostty-vt` renderer so the GIF stays short
@@ -77,3 +77,5 @@ Sleep 500ms
 #     ffmpeg -i demo.webm -vf "fps=12,scale=1200:-1:flags=lanczos" assets/hero.gif
 # This makes the hero GIF literally the tool's own output ("recorded by the tool
 # it documents"), at the cost of the Chromium-backed ghostty-web render path.
+# ffmpeg isn't in mise's [tools] (it can't be cross-locked on Linux via conda);
+# install it yourself for this path (brew install ffmpeg / apt-get install ffmpeg).
