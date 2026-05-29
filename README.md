@@ -1,78 +1,99 @@
 # agent-tty
 
-`agent-tty` is a CLI-first terminal automation tool for AI agents and humans.
-It creates long-lived PTY-backed sessions, lets automation drive and inspect those sessions across CLI invocations, and produces reviewable artifacts such as semantic snapshots, PNG screenshots, asciicast recordings, and WebM exports.
+Drive and inspect long-lived terminal sessions from the CLI, with reviewable snapshots, screenshots, and recordings.
 
-The goal is to make terminal and TUI automation inspectable rather than only scriptable.
-It is inspired by the `agent-browser` style of agent workflow: give an agent a stateful environment, explicit wait/inspect primitives, and evidence a human can review after the fact.
+[![npm](https://img.shields.io/npm/v/agent-tty)](https://www.npmjs.com/package/agent-tty)
+[![CI](https://github.com/coder/agent-tty/actions/workflows/ci.yml/badge.svg)](https://github.com/coder/agent-tty/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
+![Node](https://img.shields.io/node/v/agent-tty)
 
-## Why It Exists
+![agent-tty: drive a terminal session and inspect it as reviewable text](./assets/hero.gif)
 
-Most terminal automation falls back to brittle patterns: blind sleeps, long simulated keystroke streams, ad hoc screenshots, or detached `tmux` sessions that are hard for another process to inspect.
-`agent-tty` provides a tighter loop:
+`agent-tty` keeps a real PTY-backed terminal session alive across separate CLI invocations. You `run` a command in it, `wait` for the screen to reach a condition instead of sleeping, then capture what happened as a semantic text snapshot, a PNG screenshot, an asciinema-compatible `.cast`, or a WebM. The recording is the point: a human — or an AI coding agent — can replay and verify exactly what the terminal did, instead of trusting a blind script.
 
-1. create an isolated terminal session,
-2. run setup or send input,
-3. wait for observable terminal state,
-4. inspect the screen semantically,
-5. capture renderer-backed visual evidence,
-6. export replay artifacts,
-7. clean up the session.
+It started as a way to reproduce and verify TUI bug reports (see [Why it exists](#why-it-exists)), and it's equally useful for shell automation, CI smoke tests, and driving interactive CLIs.
 
-That loop is useful for AI coding agents, shell scripts, CI smoke tests, TUI dogfooding, and humans debugging terminal workflows locally.
+## Quickstart
 
-## What It Provides
-
-- Long-lived terminal sessions backed by `node-pty`.
-- A stable, machine-readable CLI surface with JSON envelopes.
-- `run`, `type`, `paste`, `send-keys`, `resize`, and `signal` controls.
-- `wait` and `snapshot` primitives for semantic inspection.
-- Renderer-backed screenshots and WebM exports using `ghostty-web` under Playwright/Chromium.
-- Append-only event logs so snapshots, screenshots, and recordings can be replayed from session history.
-- Isolated homes via `--home`, useful for agents, tests, CI, and proof bundles.
-
-## How It Works
-
-The architecture is:
-
-```text
-agent-tty CLI -> per-session host -> PTY + event log -> ghostty-web renderer -> artifacts
-```
-
-The PTY and append-only event log are the execution truth.
-`ghostty-web` is the reference renderer for semantic snapshots, screenshots, and replay video; it is not a native-terminal parity guarantee.
-The design keeps rendering behind an adapter so future native renderers can be added without changing the public CLI contract.
-
-## Quick Start
-
-`agent-tty` requires Node `>=24 <27`.
-Renderer-backed screenshots and WebM export also require a discoverable Playwright Chromium install.
+Requires Node `>=24 <27`. Screenshots and WebM export also need a Playwright Chromium install (`npx playwright install chromium`).
 
 ```bash
 npm install -g agent-tty
 
-AGENT_HOME="$(mktemp -d)"
-agent-tty --home "$AGENT_HOME" doctor --json
+# Sessions, logs, and artifacts live under ~/.agent-tty by default.
+# Optionally point AGENT_TTY_HOME at a throwaway dir for an isolated run:
+export AGENT_TTY_HOME="$(mktemp -d)"
+agent-tty doctor --json                  # check your environment
 
-SESSION_ID=$(agent-tty --home "$AGENT_HOME" create --json --name demo -- /bin/bash | jq -r '.result.sessionId')
-agent-tty --home "$AGENT_HOME" run "$SESSION_ID" 'printf "hello from agent-tty\n"' --json
-agent-tty --home "$AGENT_HOME" wait "$SESSION_ID" --text 'hello from agent-tty' --json
-agent-tty --home "$AGENT_HOME" snapshot "$SESSION_ID" --format text --json
-agent-tty --home "$AGENT_HOME" screenshot "$SESSION_ID" --json
-agent-tty --home "$AGENT_HOME" destroy "$SESSION_ID" --json
+# Open a session, do something, wait for it, look at the result.
+SID=$(agent-tty create --json -- /bin/bash | jq -r '.result.sessionId')
+agent-tty run "$SID" 'printf "hello from agent-tty\n"' --json
+agent-tty wait "$SID" --text 'hello from agent-tty' --json
+agent-tty snapshot "$SID" --format text --json
+agent-tty screenshot "$SID" --json
+agent-tty destroy "$SID" --json
 ```
 
-If Chromium is missing on a fresh machine, run:
+Driving an interactive TUI is the same loop with key chords and a stability wait:
 
 ```bash
-npx playwright install chromium
+agent-tty run "$SID" 'nvim --clean' --no-wait --json
+agent-tty wait "$SID" --screen-stable-ms 1000 --json
+agent-tty send-keys "$SID" Down Down Enter --json
+agent-tty screenshot "$SID" --json
+agent-tty record export "$SID" --format webm --json
 ```
 
-For prerelease channels, tarball installs, authenticated GitHub Release installs, and source-checkout tarballs, see [`docs/INSTALL.md`](./docs/INSTALL.md).
+More workflows in [`docs/USAGE.md`](./docs/USAGE.md). Other install paths (tarballs, prerelease channels, source checkouts) in [`docs/INSTALL.md`](./docs/INSTALL.md).
 
-## Agent Demo
+## Why not just tmux, expect, asciinema, or Playwright?
 
-This dogfood bundle uses VHS as the outer camera for real Codex and Claude interactive TUIs while each agent explores the `agent-tty` skill/CLI, drives `nvim --clean`, writes a file, and exports inner proof artifacts.
+Those tools are good, and you can get partway with any of them. `agent-tty` exists because driving a terminal _and_ getting reviewable evidence back is awkward with each one:
+
+| If you reach for…                     | You get                                         | What `agent-tty` adds                                                                                                                               |
+| ------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tmux` + `send-keys` / `capture-pane` | drive a pane, scrape raw bytes                  | a `wait`-for-condition primitive (stop sleeping and grepping), semantic snapshots, and PNG / `.cast` / WebM artifacts a process or human can review |
+| `expect`                              | scripted input/output matching on a byte stream | a model of the _rendered screen_ (cursor, alt-screen, colors), plus shareable visual artifacts                                                      |
+| `asciinema` / VHS                     | a recording to watch later                      | programmatic drive + `wait` + inspect — act on terminal state, not just record it (and it still exports asciinema-compatible `.cast`)               |
+| Playwright                            | this exact stateful loop, for browsers          | the same drive → wait → inspect → snapshot loop, applied to terminals and TUIs                                                                      |
+
+`agent-tty` is an automation-and-inspection layer, not a tmux replacement.
+
+## How it works
+
+```text
+agent-tty CLI → per-session host → PTY + append-only event log → Ghostty renderer → artifacts
+```
+
+Every session is backed by a real PTY (`node-pty`) and an append-only event log. The log is the source of truth, so snapshots, screenshots, and recordings can be regenerated deterministically by replaying it — even after the session has exited.
+
+Rendering uses Ghostty's terminal engine through two interchangeable backends (`--renderer`):
+
+- **`libghostty-vt`** — Ghostty's native VT engine, bound into Node. Fast, browser-free semantic snapshots and `wait` checks.
+- **`ghostty-web`** (default) — a headless web build of Ghostty driven by Playwright/Chromium. Adds pixel PNG screenshots and WebM video.
+
+`ghostty-web` is a _reference_ renderer: it shows what a pinned Ghostty build draws, not a pixel-for-pixel guarantee of any particular native terminal window. That tradeoff is deliberate — the renderer sits behind an adapter, so native backends can be added later without changing the CLI contract.
+
+## Why it exists
+
+I maintain [`coder/claudecode.nvim`](https://github.com/coder/claudecode.nvim) and was drowning in issues and PRs I couldn't easily reproduce — Neovim is a TUI, and "reproduce this, configure that, screenshot the result" is painful to script with sleeps and `capture-pane`. `agent-tty` lets me spin up an isolated, reproducible terminal environment, hand it to a coding agent to attempt a fix, and then verify the fix with a fresh session and a recording I can actually look at.
+
+A colleague then used `agent-tty` to build an experimental TUI for Coder agents almost entirely by letting coding agents drive it — checking the screenshots and recordings it produced instead of watching over their shoulder. That's the loop it's built for: **an agent acts, `agent-tty` captures reviewable evidence, a human (or another agent) verifies.**
+
+## Command surface
+
+Global flags: `--home <path>` (or `AGENT_TTY_HOME`; defaults to `~/.agent-tty`), `--renderer <ghostty-web|libghostty-vt>` (or `AGENT_TTY_RENDERER`), `--json`, `--timeout-ms <n>`, `--no-color`, `--log-level <level>`, `--profile <name>`.
+
+- **Environment:** `version`, `doctor`, `skills list|get|path`
+- **Lifecycle:** `create`, `list`, `inspect`, `destroy`, `gc`
+- **Input & control:** `run`, `type`, `paste`, `send-keys`, `resize`, `signal`, `mark`
+- **Observe & capture:** `wait`, `snapshot`, `screenshot`, `record export`
+
+Every user-facing command takes `--json` and returns a stable, machine-readable envelope. See [`docs/USAGE.md`](./docs/USAGE.md) for details and [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) for renderer/environment issues.
+
+## Demos
+
+Real Codex and Claude TUIs discovering the `agent-tty` skill, driving `nvim --clean`, writing a file, and exporting inner proof artifacts. (GitHub renders these as click-to-play H.264 players.)
 
 <table>
   <tr>
@@ -80,147 +101,45 @@ This dogfood bundle uses VHS as the outer camera for real Codex and Claude inter
     <th width="50%">Claude</th>
   </tr>
   <tr>
-    <td>
-      <video src="https://github.com/user-attachments/assets/27cc3b9b-9b91-4cd9-a3a5-1bbb61c33e19" controls width="100%"></video>
-    </td>
-    <td>
-      <video src="https://github.com/user-attachments/assets/36221ef7-97c4-4b06-b673-21ac623a5f0a" controls width="100%"></video>
-    </td>
+    <td><video src="https://github.com/user-attachments/assets/27cc3b9b-9b91-4cd9-a3a5-1bbb61c33e19" controls width="100%"></video></td>
+    <td><video src="https://github.com/user-attachments/assets/36221ef7-97c4-4b06-b673-21ac623a5f0a" controls width="100%"></video></td>
   </tr>
 </table>
 
-GitHub renders these as inline H.264 MP4 video players. See [`VIDEO_PLAYBACK.md`](./dogfood/agent-uses-agent-tty/VIDEO_PLAYBACK.md) for the upload flow that produces the `user-attachments` URLs; the checked-in WebM proof files remain the canonical source of truth.
+Full reproducer, transcripts, and proof bundles in [`dogfood/agent-uses-agent-tty/`](./dogfood/agent-uses-agent-tty/) and [`dogfood/CATALOG.md`](./dogfood/CATALOG.md).
 
-See [`dogfood/agent-uses-agent-tty/`](./dogfood/agent-uses-agent-tty/) for the Hero Demo reproducer, outer transcripts, inner Neovim recordings, and final file proofs.
+## Agent skills
 
-## Common Usage
-
-### Run setup inside a shell
+`agent-tty` ships a bootstrap skill so coding agents can load current usage instructions at runtime:
 
 ```bash
-AGENT_HOME="$(mktemp -d)"
-SESSION_ID=$(agent-tty --home "$AGENT_HOME" create --json -- /bin/bash | jq -r '.result.sessionId')
-
-agent-tty --home "$AGENT_HOME" run "$SESSION_ID" 'pwd && npm test' --json
-agent-tty --home "$AGENT_HOME" snapshot "$SESSION_ID" --format text --json
-agent-tty --home "$AGENT_HOME" destroy "$SESSION_ID" --json
-```
-
-### Drive an interactive CLI or TUI
-
-```bash
-AGENT_HOME="$(mktemp -d)"
-SESSION_ID=$(agent-tty --home "$AGENT_HOME" create --json -- /bin/bash | jq -r '.result.sessionId')
-
-agent-tty --home "$AGENT_HOME" run "$SESSION_ID" '<launch-command>' --no-wait --json
-agent-tty --home "$AGENT_HOME" wait "$SESSION_ID" --screen-stable-ms 1000 --json
-agent-tty --home "$AGENT_HOME" send-keys "$SESSION_ID" Down Down Enter --json
-agent-tty --home "$AGENT_HOME" screenshot "$SESSION_ID" --json
-agent-tty --home "$AGENT_HOME" destroy "$SESSION_ID" --json
-```
-
-### Export reviewer-facing proof
-
-```bash
-AGENT_HOME="$(mktemp -d)"
-SESSION_ID=$(agent-tty --home "$AGENT_HOME" create --json -- /bin/bash | jq -r '.result.sessionId')
-
-agent-tty --home "$AGENT_HOME" run "$SESSION_ID" 'printf "artifact proof\n"' --json
-agent-tty --home "$AGENT_HOME" wait "$SESSION_ID" --text 'artifact proof' --json
-agent-tty --home "$AGENT_HOME" screenshot "$SESSION_ID" --json
-agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format asciicast --json
-agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format webm --json
-agent-tty --home "$AGENT_HOME" destroy "$SESSION_ID" --json
-```
-
-For command details, examples, and workflow notes, see [`docs/USAGE.md`](./docs/USAGE.md).
-
-## Command Surface
-
-Global flags:
-
-- `--home <path>`: override the agent-tty home directory.
-- `--timeout-ms <n>`: apply a shared CLI timeout budget in milliseconds.
-- `--no-color`: disable ANSI color in human-readable output.
-- `--log-level <level>`: set log level (`debug`, `info`, `warn`, `error`).
-- `--profile <name>`: select a default render profile.
-- `--json`: available on user-facing commands for structured output.
-
-Command groups:
-
-- Environment and skills: `version`, `doctor`, `skills list|get|path`.
-- Lifecycle: `create`, `list`, `inspect`, `destroy`, `gc`.
-- Input and control: `run`, `type`, `paste`, `send-keys`, `resize`, `signal`, `mark`.
-- Observation and artifacts: `wait`, `snapshot`, `screenshot`, `record export`.
-
-## Notes And Limitations
-
-- Linux and macOS are tier-1 targets; Windows is tier-2 and not CI-tested.
-- Screenshots and WebM export depend on Playwright/Chromium and the bundled `ghostty-web` renderer.
-- `ghostty-web` provides reference visual truth, not exact parity with every native terminal emulator.
-- `run` is best for shell-oriented setup and bootstrap work. It does not capture command output as a structured result or report the child command's exit status.
-- Use `--home <path>` for isolated automation. Passing the same home to every command keeps manifests, sockets, event logs, and artifacts together.
-- Run `agent-tty --home <path> doctor --json` before screenshot or recording workflows in a new machine, CI job, or container.
-
-Troubleshooting notes live in [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md).
-
-## Agent Skills
-
-`agent-tty` ships a thin public bootstrap skill under `skills/agent-tty/` and canonical runtime skills under `skill-data/`.
-After installing the CLI, coding agents can load the current runtime instructions directly:
-
-```bash
-agent-tty skills get agent-tty
 agent-tty skills list
-agent-tty skills get dogfood-tui
+agent-tty skills get agent-tty
 ```
 
-For TanStack Intent, Mux, and direct skill-copy instructions, see [`docs/AGENT-SKILLS.md`](./docs/AGENT-SKILLS.md).
+See [`docs/AGENT-SKILLS.md`](./docs/AGENT-SKILLS.md).
 
-## Vision And Roadmap
+## Status & platform support
 
-The current `0.2.x` line is centered on reliable, isolated, reviewable TUI automation through the CLI.
-Future work includes native renderer adapters, broader platform parity, mouse input, richer semantic TUI automation, remote/networked control, and external control layers such as an MCP wrapper.
+`agent-tty` is `0.2.x` and focused on reliable, isolated, reviewable terminal/TUI automation through a stable CLI.
 
-- [`RELEASE.md`](./RELEASE.md) defines the supported release contract.
-- [`ROADMAP.md`](./ROADMAP.md) tracks intentionally deferred work and post-release direction.
-- [`design/ARCHITECTURE.md`](./design/ARCHITECTURE.md) explains the architecture and product intent in more detail.
+- Linux and macOS are tier-1; Windows is tier-2 and not CI-tested.
+- Screenshots and WebM export depend on Playwright/Chromium and the `ghostty-web` backend.
+- `run` is best for shell setup and command injection; it does not capture a child command's structured output or exit status.
+- Apache-2.0, runs entirely locally, no account or SaaS.
 
-## Local Development
+Deferred work (native renderers, mouse input, remote control, an MCP wrapper) is tracked in [`ROADMAP.md`](./ROADMAP.md). The supported contract is in [`RELEASE.md`](./RELEASE.md); the architecture is in [`design/ARCHITECTURE.md`](./design/ARCHITECTURE.md).
 
-Preferred setup uses `mise`:
+## Contributing
 
-```bash
-mise install
-mise run bootstrap
-```
-
-Fallback setup after installing `aube` directly:
+Issues and PRs welcome — see [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md) and the [`good first issue`](https://github.com/coder/agent-tty/labels/good%20first%20issue) / [`help wanted`](https://github.com/coder/agent-tty/labels/help%20wanted) labels.
 
 ```bash
-aube exec playwright install chromium
-```
-
-Useful local commands:
-
-```bash
+mise install && mise run bootstrap   # preferred
 npm run cli -- --help
 npm run verify
 ```
 
-Use `npx tsx src/cli/main.ts ...` while developing from a source checkout, and use an isolated absolute `AGENT_TTY_HOME` for tests or manual dogfooding.
-For contributor details, see [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md).
-
-## Documentation
-
-- [`docs/README.md`](./docs/README.md) — user, contributor, and maintainer docs map.
-- [`docs/INSTALL.md`](./docs/INSTALL.md) — installation paths and release tarball flows.
-- [`docs/USAGE.md`](./docs/USAGE.md) — CLI workflows and command examples.
-- [`docs/AGENT-SKILLS.md`](./docs/AGENT-SKILLS.md) — packaged agent skill guidance.
-- [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) — environment and renderer troubleshooting.
-- [`design/README.md`](./design/README.md) — architecture and design references.
-- [`dogfood/CATALOG.md`](./dogfood/CATALOG.md) — curated proof bundles and review paths.
-
 ## License
 
-`agent-tty` is licensed under the [Apache License 2.0](./LICENSE).
+[Apache License 2.0](./LICENSE).

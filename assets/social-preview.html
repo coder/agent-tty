@@ -1,0 +1,111 @@
+<!doctype html>
+<!-- Source for assets/social-preview.png (OG/social card, 1200x630).
+     Render with:  node assets/render-social-preview.mjs   -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --crust: #11111b;
+        --text: #cdd6f4;
+        --subtext: #a6adc8;
+        --dim: #6c7086;
+        --green: #a6e3a1;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1200px;
+        height: 630px;
+      }
+      body {
+        background: var(--crust);
+        color: var(--text);
+        font-family: 'FiraCode Nerd Font Mono', 'SF Mono', 'Menlo', monospace;
+        font-variant-ligatures: none;
+        font-feature-settings:
+          'liga' 0,
+          'calt' 0;
+        -webkit-font-smoothing: antialiased;
+      }
+      .card {
+        position: relative;
+        width: 1200px;
+        height: 630px;
+        padding: 76px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .word {
+        font-size: 112px;
+        font-weight: 700;
+        letter-spacing: -3px;
+        line-height: 1;
+        color: var(--text);
+      }
+      /* underscore cursor: low, with a small gap from the wordmark */
+      .word .cursor {
+        color: var(--green);
+        font-weight: 400;
+        margin-left: 14px;
+      }
+
+      .tag {
+        margin-top: 32px;
+        font-size: 32px;
+        line-height: 1.45;
+        color: var(--subtext);
+        max-width: 1048px;
+      }
+      .tag .accent {
+        color: var(--text);
+      }
+
+      .cta {
+        margin-top: 40px;
+        font-size: 31px;
+        color: var(--text);
+      }
+      .cta .p {
+        color: var(--green);
+      }
+
+      .foot {
+        position: absolute;
+        left: 76px;
+        right: 76px;
+        bottom: 52px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 22px;
+        color: var(--dim);
+      }
+      .foot .url {
+        color: var(--subtext);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="word">agent-tty<span class="cursor">_</span></div>
+      <div class="tag">
+        Drive and inspect terminal sessions from the CLI —<br />
+        <span class="accent"
+          >reviewable snapshots, screenshots &amp; recordings.</span
+        >
+      </div>
+      <div class="cta"><span class="p">$</span> npm install -g agent-tty</div>
+
+      <div class="foot">
+        <span class="url">github.com/coder/agent-tty</span>
+        <span>Apache-2.0 · powered by Ghostty's VT engine</span>
+      </div>
+    </div>
+  </body>
+</html>
