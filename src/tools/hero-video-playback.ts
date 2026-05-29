@@ -22,30 +22,24 @@ const AGENTS = ['codex', 'claude'] as const;
 type AgentName = (typeof AGENTS)[number];
 type AgentUrls = Record<AgentName, string>;
 
-const README_LINKS: Record<
-  AgentName,
-  {
-    rootAlt: string;
-    rootThumbnail: string;
-    bundleAlt: string;
-    bundleThumbnail: string;
-  }
-> = {
-  codex: {
-    rootAlt: 'Codex agent-tty demo',
-    rootThumbnail:
-      './dogfood/agent-uses-agent-tty/artifacts/codex-thumbnail.png',
-    bundleAlt: 'Codex Hero Demo',
-    bundleThumbnail: './artifacts/codex-thumbnail.png',
-  },
-  claude: {
-    rootAlt: 'Claude agent-tty demo',
-    rootThumbnail:
-      './dogfood/agent-uses-agent-tty/artifacts/claude-thumbnail.png',
-    bundleAlt: 'Claude Hero Demo',
-    bundleThumbnail: './artifacts/claude-thumbnail.png',
-  },
-};
+// GitHub strips the <video poster> attribute on render, so the curated
+// thumbnail cannot be supplied as a poster. Instead we hold the thumbnail as
+// the opening frames of the upload MP4: the video element's natural first-frame
+// still then shows the curated end-state proof rather than a blank terminal.
+const FRAME_WIDTH = 1600;
+const FRAME_HEIGHT = 900;
+const POSTER_HOLD_SECONDS = '0.3';
+const POSTER_FPS = 30;
+const POSTER_FILTER =
+  `[0:v]scale=${String(FRAME_WIDTH)}:${String(FRAME_HEIGHT)},setsar=1,fps=${String(POSTER_FPS)},format=yuv420p[intro];` +
+  `[1:v]scale=${String(FRAME_WIDTH)}:${String(FRAME_HEIGHT)},setsar=1,fps=${String(POSTER_FPS)},format=yuv420p[main];` +
+  `[intro][main]concat=n=2:v=1[v]`;
+
+// README-facing playback uses inline HTML <video> elements (one per agent, in
+// AGENTS order). Bare user-attachments URLs do not become players inside table
+// cells, and a thumbnail linked to a user-attachments URL 404s for anonymous
+// visitors, so the tables embed <video> tags whose src we rewrite here.
+const VIDEO_SRC_PATTERN = /(<video\b[^>]*\bsrc=")[^"]*(")/g;
 
 export interface PrepareHeroVideoUploadAssetsOptions {
   bundleDir?: string;
@@ -85,15 +79,23 @@ function assertAttachmentUrl(url: string, agent: AgentName): void {
   );
 }
 
-function replaceOne(
-  text: string,
-  pattern: RegExp,
-  replacement: string,
-): string {
-  const globalPattern = new RegExp(pattern.source, `${pattern.flags}g`);
-  const matches = text.match(globalPattern) ?? [];
-  invariant(matches.length === 1, `expected one match for ${pattern}`);
-  return text.replace(pattern, replacement);
+/** Rewrites the src of each inline <video> tag, in AGENTS order. */
+export function replaceVideoSrcs(text: string, urls: AgentUrls): string {
+  const matches = text.match(VIDEO_SRC_PATTERN) ?? [];
+  invariant(
+    matches.length === AGENTS.length,
+    `expected ${String(AGENTS.length)} <video> src attributes, found ${String(matches.length)}`,
+  );
+  let index = 0;
+  return text.replace(
+    VIDEO_SRC_PATTERN,
+    (_match, prefix: string, suffix: string) => {
+      const agent = AGENTS[index];
+      index += 1;
+      invariant(agent !== undefined, 'video index out of range');
+      return `${prefix}${urls[agent]}${suffix}`;
+    },
+  );
 }
 
 function readFlag(args: string[], name: string): string | undefined {
@@ -108,22 +110,6 @@ function readFlag(args: string[], name: string): string | undefined {
   );
   args.splice(index, 2);
   return value;
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function updateReadmeLink(
-  text: string,
-  alt: string,
-  thumbnailPath: string,
-  url: string,
-): string {
-  const pattern = new RegExp(
-    `(\\[!\\[${escapeRegExp(alt)}\\]\\(${escapeRegExp(thumbnailPath)}\\)\\])\\([^)]*\\)`,
-  );
-  return replaceOne(text, pattern, `$1(${url})`);
 }
 
 async function updateManifest(
@@ -159,14 +145,26 @@ export async function prepareHeroVideoUploadAssets(
   const checksumLines: string[] = [];
   for (const agent of AGENTS) {
     const inputPath = join(bundleDir, 'artifacts', `${agent}-outer.webm`);
+    const posterPath = join(bundleDir, 'artifacts', `${agent}-thumbnail.png`);
     const outputPath = join(uploadDir, `${agent}-outer-h264.mp4`);
     const probePath = join(uploadDir, `${agent}-outer-h264.ffprobe.json`);
     await assertNonEmptyFile(inputPath);
+    await assertNonEmptyFile(posterPath);
     run(toolCommand('HERO_VIDEO_FFMPEG', 'ffmpeg'), [
       '-y',
+      '-loop',
+      '1',
+      '-t',
+      POSTER_HOLD_SECONDS,
+      '-i',
+      posterPath,
       '-i',
       inputPath,
       '-an',
+      '-filter_complex',
+      POSTER_FILTER,
+      '-map',
+      '[v]',
       '-c:v',
       'libx264',
       '-pix_fmt',
@@ -218,30 +216,10 @@ export async function applyHeroVideoUrls(
     assertAttachmentUrl(options.urls[agent], agent);
   }
 
-  let rootReadme = await readFile(rootReadmePath, 'utf8');
-  for (const agent of AGENTS) {
-    const link = README_LINKS[agent];
-    rootReadme = updateReadmeLink(
-      rootReadme,
-      link.rootAlt,
-      link.rootThumbnail,
-      options.urls[agent],
-    );
+  for (const path of [rootReadmePath, join(bundleDir, 'README.md')]) {
+    const text = await readFile(path, 'utf8');
+    await writeFile(path, replaceVideoSrcs(text, options.urls));
   }
-  await writeFile(rootReadmePath, rootReadme);
-
-  const bundleReadmePath = join(bundleDir, 'README.md');
-  let bundleReadme = await readFile(bundleReadmePath, 'utf8');
-  for (const agent of AGENTS) {
-    const link = README_LINKS[agent];
-    bundleReadme = updateReadmeLink(
-      bundleReadme,
-      link.bundleAlt,
-      link.bundleThumbnail,
-      options.urls[agent],
-    );
-  }
-  await writeFile(bundleReadmePath, bundleReadme);
   await updateManifest(bundleDir, ['README.md']);
 
   process.stdout.write('Applied Hero Demo video URLs.\n');

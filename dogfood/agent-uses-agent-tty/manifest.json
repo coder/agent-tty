@@ -3,7 +3,6 @@
   "title": "Agents use agent-tty: Codex and Claude Hero Demo",
   "description": "README-facing Hero Demo where VHS records real Codex and Claude TUIs while agent-tty produces inner proof artifacts.",
   "createdAt": "2026-05-21T15:55:52.138Z",
-  "scenario": "agent-uses-agent-tty-hero-demo",
   "result": "pass",
   "commands": [
     "mise run demo:agent-uses-agent-tty -- --agent both --runs 3 --record-seconds 180 --promote"
@@ -114,14 +113,14 @@
     {
       "path": "README.md",
       "description": "Hero Demo bundle README",
-      "sha256": "d6e0d3741409d1dd677f5b6e8236548c8e82ba832e79161d14bcd40c12fb4cf5",
-      "bytes": 1600
+      "sha256": "5e884d11936bfc38343344b1dd95e4ebafb2b70f2a8e834fdb1fd97a900f6927",
+      "bytes": 1544
     },
     {
       "path": "VIDEO_PLAYBACK.md",
       "description": "GitHub video playback guidance for the Hero Demo",
-      "sha256": "0c7447a0d8f77694048eb686e5313719925ceda37c083439200fc15ffd81865c",
-      "bytes": 3315
+      "sha256": "e62744bd9dac50d97e99fb2d6377b5f09b8a8e1d4e64ada70ae537bb8c4d2f39",
+      "bytes": 4584
     },
     {
       "path": "reproduce.sh",
@@ -129,5 +128,6 @@
       "sha256": "92b69748b18cbb64b5d02c25cd98225e8cbc3f793b3d6fc7362d85d3aa8412a9",
       "bytes": 276
     }
-  ]
+  ],
+  "scenario": "agent-uses-agent-tty-hero-demo"
 }

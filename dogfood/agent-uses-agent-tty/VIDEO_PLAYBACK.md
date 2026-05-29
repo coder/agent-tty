@@ -1,17 +1,28 @@
 # Hero Demo GitHub video playback
 
-GitHub repository file pages may show checked-in video files as raw downloads instead of a player. The canonical Hero Demo recordings stay checked in as WebM proof artifacts, but README-facing playback should use GitHub-uploaded H.264 MP4 attachment URLs.
+The canonical Hero Demo recordings stay checked in as WebM proof artifacts, but
+README-facing playback uses GitHub-uploaded H.264 MP4 attachments embedded as
+inline `<video>` players.
 
-## Current recommendation
+## Why this shape
 
-1. Keep these checked-in proof artifacts as the source of truth:
-   - `artifacts/codex-outer.webm`
-   - `artifacts/claude-outer.webm`
-2. Generate upload-only H.264 MP4 copies from those WebMs.
-3. Upload the MP4 copies through GitHub's Markdown attachment flow.
-4. Replace the README thumbnail link targets with the resulting `https://github.com/user-attachments/assets/...` URLs.
+GitHub serves `user-attachments` assets only when they are embedded inline in
+rendered Markdown (it rewrites them to signed `private-user-images` URLs that
+anonymous visitors can stream). Two things follow, both verified against logged-out
+GitHub:
 
-The MP4 copies are derived playback assets, not canonical proof artifacts. They should live under `.debug/video-upload/` locally unless the project later chooses a Pages gallery or another committed-media route.
+1. **A thumbnail _linked_ to a `user-attachments` URL is broken for the public.**
+   `https://github.com/user-attachments/assets/<uuid>` returns `404` on direct
+   navigation, so `[![thumb](png)](asset-url)` lands anonymous visitors on a 404.
+   Use an inline `<video>` element instead.
+2. **GitHub strips the `<video poster>` attribute**, so a curated poster image
+   cannot be supplied as an attribute. Instead the upload MP4 holds the curated
+   thumbnail as its opening frames, so the player's natural first-frame still
+   shows the end-state proof rather than a blank startup terminal.
+
+The MP4 copies are derived playback assets, not canonical proof. They live under
+`.debug/video-upload/` (git-ignored); the checked-in `*-outer.webm` files remain
+the source of truth.
 
 ## Prepare upload assets
 
@@ -21,46 +32,73 @@ From the repository root:
 mise run demo:agent-uses-agent-tty:upload-assets
 ```
 
-The task uses the pinned `ffmpeg`/`ffprobe` from `mise.toml`, converts both outer WebMs to H.264 MP4 files, writes ffprobe metadata, and writes checksums under `.debug/video-upload/`.
+The task uses the pinned `ffmpeg`/`ffprobe` from `mise.toml`. For each agent it
+prepends ~0.3s of `artifacts/<agent>-thumbnail.png` as the opening frames, encodes
+H.264 MP4, writes ffprobe metadata, and writes checksums under `.debug/video-upload/`.
 
 Expected constraints for the promoted 2026-05-21 recordings:
 
 | Agent  | Upload file                                 | Expected codec    | Expected dimensions | Expected size |
 | ------ | ------------------------------------------- | ----------------- | ------------------- | ------------- |
-| Codex  | `.debug/video-upload/codex-outer-h264.mp4`  | H.264 / `yuv420p` | 1600x900            | ~3.3 MB       |
-| Claude | `.debug/video-upload/claude-outer-h264.mp4` | H.264 / `yuv420p` | 1600x900            | ~3.0 MB       |
+| Codex  | `.debug/video-upload/codex-outer-h264.mp4`  | H.264 / `yuv420p` | 1600x900            | ~3.5 MB       |
+| Claude | `.debug/video-upload/claude-outer-h264.mp4` | H.264 / `yuv420p` | 1600x900            | ~3.4 MB       |
 
 Both expected sizes are below GitHub's 10 MB video attachment limit for free plans.
 
 ## Upload through GitHub
 
-GitHub does not expose a supported PAT-backed API for creating `user-attachments` video URLs. Use the web Markdown editor flow:
+GitHub does not expose a supported PAT-backed API for `user-attachments` uploads:
+the endpoint authenticates with a browser `user_session` cookie, not a `gh` OAuth
+token. Two working routes:
 
-1. Open any GitHub Markdown text area with write access to `coder/agent-tty`:
-   - a draft issue body,
-   - a PR comment,
-   - or the web editor for a Markdown file.
-2. Drag `codex-outer-h264.mp4` into the text area and wait for GitHub to replace it with a `https://github.com/user-attachments/assets/...` URL.
-3. Drag `claude-outer-h264.mp4` into the text area and copy its URL too.
-4. The comment or draft does not need to be submitted if the URLs have been copied.
-5. Verify each copied URL opens a GitHub video player before editing the README.
+- **CLI (`gh-image`).** The [`drogers0/gh-image`](https://github.com/drogers0/gh-image)
+  extension uploads via the same internal endpoints, reading your logged-in browser
+  `user_session` cookie (treat that cookie like a password):
 
-## README patch after upload
+  ```bash
+  gh extension install drogers0/gh-image
+  gh image --repo coder/agent-tty .debug/video-upload/codex-outer-h264.mp4
+  gh image --repo coder/agent-tty .debug/video-upload/claude-outer-h264.mp4
+  ```
 
-Apply the copied attachment URLs with the helper task:
+  Copy only the bare `https://github.com/user-attachments/assets/...` URL from each
+  line (drop the `![](...)` Markdown wrapper).
+
+- **Manual.** Drag each MP4 into any GitHub Markdown text area (a draft issue or PR
+  comment) with write access to `coder/agent-tty`, wait for the `user-attachments`
+  URL, and copy it. The draft does not need to be submitted.
+
+## Apply the URLs
 
 ```bash
 mise run demo:agent-uses-agent-tty:apply-video-urls -- \
-  --codex-url https://github.com/user-attachments/assets/REPLACE-CODEX-H264-MP4 \
-  --claude-url https://github.com/user-attachments/assets/REPLACE-CLAUDE-H264-MP4
+  --codex-url https://github.com/user-attachments/assets/REPLACE-CODEX \
+  --claude-url https://github.com/user-attachments/assets/REPLACE-CLAUDE
 ```
 
-The task updates the root README, the bundle README, and the bundle manifest entry for `README.md`. Verify the result with:
+The task rewrites the `src` of the inline `<video>` elements (one per agent, in
+Codex/Claude order) in the root README and this bundle README, and refreshes the
+bundle manifest entry for `README.md`. Then verify:
 
 ```bash
 npm run validate-bundle:canonical
 ```
 
+## Verify in a logged-out browser
+
+This is the step that catches the failure modes above. Open the rendered README on
+the branch **while logged out of GitHub** and confirm each `<video>` plays:
+
+- `https://github.com/coder/agent-tty/blob/<branch>/README.md`
+
+Do not test by navigating directly to the `user-attachments/assets/<uuid>` URL — that
+returns 404 anonymously by design even when the inline player works. Confirm the
+embedded `<video>` element actually streams (it should show the curated thumbnail as
+its still, then play).
+
 ## Fallback
 
-If GitHub attachment URLs are rejected for maintainability, use a GitHub Pages gallery with `<video controls>` and committed H.264 MP4 playback copies. Do not point README thumbnails at committed repository videos as the primary playback path; GitHub may show those as raw downloads.
+If GitHub attachment URLs are ever rejected for maintainability, use a GitHub Pages
+gallery with `<video controls>` and committed H.264 MP4 playback copies. Do not point
+README playback at committed repository videos as the primary path; GitHub may show
+those as raw downloads.

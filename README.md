@@ -74,11 +74,22 @@ For prerelease channels, tarball installs, authenticated GitHub Release installs
 
 This dogfood bundle uses VHS as the outer camera for real Codex and Claude interactive TUIs while each agent explores the `agent-tty` skill/CLI, drives `nvim --clean`, writes a file, and exports inner proof artifacts.
 
-| Codex                                                                                                                                              | Claude                                                                                                                                                |
-| -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [![Codex agent-tty demo](./dogfood/agent-uses-agent-tty/artifacts/codex-thumbnail.png)](./dogfood/agent-uses-agent-tty/artifacts/codex-outer.webm) | [![Claude agent-tty demo](./dogfood/agent-uses-agent-tty/artifacts/claude-thumbnail.png)](./dogfood/agent-uses-agent-tty/artifacts/claude-outer.webm) |
+<table>
+  <tr>
+    <th width="50%">Codex</th>
+    <th width="50%">Claude</th>
+  </tr>
+  <tr>
+    <td>
+      <video src="https://github.com/user-attachments/assets/27cc3b9b-9b91-4cd9-a3a5-1bbb61c33e19" controls width="100%"></video>
+    </td>
+    <td>
+      <video src="https://github.com/user-attachments/assets/36221ef7-97c4-4b06-b673-21ac623a5f0a" controls width="100%"></video>
+    </td>
+  </tr>
+</table>
 
-GitHub may show these checked-in WebM proof files as raw downloads. See [`VIDEO_PLAYBACK.md`](./dogfood/agent-uses-agent-tty/VIDEO_PLAYBACK.md) for the upload-ready H.264 MP4 flow that turns the thumbnails into GitHub video-player links.
+GitHub renders these as inline H.264 MP4 video players. See [`VIDEO_PLAYBACK.md`](./dogfood/agent-uses-agent-tty/VIDEO_PLAYBACK.md) for the upload flow that produces the `user-attachments` URLs; the checked-in WebM proof files remain the canonical source of truth.
 
 See [`dogfood/agent-uses-agent-tty/`](./dogfood/agent-uses-agent-tty/) for the Hero Demo reproducer, outer transcripts, inner Neovim recordings, and final file proofs.
 
