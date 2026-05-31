@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## Added
+
+- `inspect --json` now reports `host.cliVersion`, `host.rpcSocketPath`, `rendererRuntime.profile`, `rendererRuntime.booted`, `rendererRuntime.bootInFlight` (live mode), and `eventLogBytes` (both live and offline replay). All fields are optional schema additions; existing consumers are unaffected ([#104](https://github.com/coder/agent-tty/pull/104)).
+- Canonical proof-bundle lock-down: a new `CanonicalBundleManifestSchema` requires `sha256` and `bytes` on every artifact, `npm run validate-bundle:canonical` (also wired through `mise run validate-bundles`) runs eight drift-detection rules plus catalog parity across the four canonical bundles, and the `linux-static` CI job now fails on bundle drift ([#104](https://github.com/coder/agent-tty/pull/104)).
+- Hero Demo bundle (`dogfood/agent-uses-agent-tty/`) replaced with an external Outer Camera flow: VHS records real Codex (`gpt-5.5`) and Claude (`claude-opus-4-7`) TUIs while `agent-tty` produces the inner Neovim proof artifacts. A new `mise run demo:agent-uses-agent-tty` task regenerates and promotes the demo with pinned `vhs`/`ttyd`/`ffmpeg` ([#105](https://github.com/coder/agent-tty/pull/105)).
+- Hero Demo video playback workflow: `mise run demo:agent-uses-agent-tty:upload-assets` prepares H.264 MP4 upload assets (with the curated thumbnail held as the opening frames so GitHub's natural first-frame poster shows the end-state), and `mise run demo:agent-uses-agent-tty:apply-video-urls` rewrites the inline `<video>` srcs in the root and bundle READMEs and refreshes the manifest. Full guidance lives in `dogfood/agent-uses-agent-tty/VIDEO_PLAYBACK.md` ([#106](https://github.com/coder/agent-tty/pull/106)).
+- README rebuild with one-line value prop, badge row, hero GIF, a "Why not tmux/expect/asciinema/Playwright?" comparison table, a two-backend "How it works" section (`libghostty-vt` + `ghostty-web`), and an origin story. Adds `assets/hero.{gif,tape}` and a Playwright-rendered 1200×630 social card under `assets/social-preview.*` ([#108](https://github.com/coder/agent-tty/pull/108)).
+
+## Changed
+
+- `inspect` collects renderer state and the session snapshot in a single synchronous tick before awaiting, so concurrent RPC handlers cannot interleave a mutated renderer state with a stale session snapshot ([#104](https://github.com/coder/agent-tty/pull/104)).
+- `mise` development toolchain refresh; ordinary CI remains credential-free and does not install the live-demo recorder tools ([#107](https://github.com/coder/agent-tty/pull/107)).
+
+## Fixed
+
+- Restored the empty `## [Unreleased]` heading on `main` after the v0.2.0 release-prep commit so the `Update Unreleased Changelog` workflow stops failing on every push. `docs/RELEASE-PROCESS.md` now documents the rename-and-insert rule that keeps both `[Unreleased]` and `[v<version>]` headings present after a release cut ([#103](https://github.com/coder/agent-tty/pull/103)).
+
 ## [v0.2.0] - 2026-05-13
 
 ### Added
