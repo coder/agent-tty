@@ -156,6 +156,20 @@ The post-merge process that creates and publishes the release tag from the defau
 **Publish Pipeline**:
 The tag-triggered automation that validates, packages, and publishes a release after the **Release Finalization Step**.
 
+### Dashboard and live observation
+
+**Session Dashboard**:
+The human-facing, read-only terminal surface that lists **Sessions** and presents the **Live View** of a selected **Session**. Its purpose is observation, not control.
+_Avoid_: viewer, attach UI
+
+**Live View**:
+A read-only reconstruction of a **Session**'s screen derived from its **Event Log**, updated as new events are appended. It never makes the **Session** a **Command Target** and never sends input.
+_Avoid_: mirror, attach, live screen share
+
+**Event Log Follow**:
+The operation that continuously updates a **Live View** by reading **Event Log** entries as they are appended. It treats the append-only **Event Log** as the source of truth, so it works uniformly for any **Session** regardless of whether that **Session** is **Live Host Eligible** or **Offline Replay Eligible**, and never queries the live session host. Defined by what it does, not how entries are transported (file tail today; a streaming subscribe channel is a possible future transport).
+_Avoid_: tailing, polling, attach
+
 ### Triage operations
 
 **AFK Triage**:
@@ -189,6 +203,11 @@ _Avoid_: bare "agent", "Coder agent"
 - A **Session** has one **Event Log**.
 - An **Offline Replay Eligible Session** is reconstructed from its persisted **Event Log** and manifest.
 - A **Snapshot Result** is derived from exactly one **Semantic Snapshot**.
+- A **Session Dashboard** presents a **Live View** of exactly one selected **Session** at a time.
+- A **Live View** reconstructs screen state from a **Session**'s **Event Log** and is never a **Command Target**.
+- A **Live View** is produced by **Event Log Follow**, never by querying the live session host.
+- **Event Log Follow** applies uniformly to **Live Host Eligible** and **Offline Replay Eligible** Sessions because it depends only on the append-only **Event Log**.
+- The **Session Dashboard** never resizes a **Session**; a **Live View** reflects the **Session**'s own terminal size and is clipped, panned, or shown as a lossy overview to fit the dashboard pane, never reflowed or stretched.
 - A **Snapshot Artifact** contains exactly the **Snapshot Result** emitted to the caller.
 - A **Screenshot Capture** produces exactly one **Screenshot Result** and exactly one **Screenshot Artifact** for the same captured event-log sequence.
 - A **Screenshot Artifact** is the persisted PNG plus its manifest entry that the **Screenshot Result** describes to the caller.
@@ -264,4 +283,4 @@ _Avoid_: bare "agent", "Coder agent"
 - "controller" was used during design discussion for the Hero Demo, but the canonical term is **Hero Demo Generator** because the settled design generates raw VHS tapes rather than actively proxying PTY control during recording.
 - "helper proof" was used during design discussion, but the canonical scenario is now **Exploratory Hero Demo**: success criteria and output paths are fixed, while the coding agent chooses the command flow inside a configurable fixed review window.
 - "demo" and "proof" are not interchangeable for coding-agent recordings: a **Hero Demo** optimizes for stable presentation, while a **Recursive Dogfood Proof** optimizes for self-dogfood coverage.
-- "agent" is overloaded across three referents: this project's **Triage Agent** (a Claude Code instance), Coder's **Coder workspace agent** (the SSH/exec daemon), and a generic AFK implementation agent (the actor on `ready-for-agent` issues — Phase 2 of the triage pipeline). Always qualify in code comments and docs.
+- "agent" is overloaded across four referents: this project's **Triage Agent** (a Claude Code instance), Coder's **Coder workspace agent** (the SSH/exec daemon), a generic AFK implementation agent (the actor on `ready-for-agent` issues — Phase 2 of the triage pipeline), and — in **Session Dashboard** product copy only — the external client driving a **Session** (often an AI coding agent). The last sense is deliberately **not** a domain term: the **Session Dashboard** and **Live View** are defined over **Sessions**, not agents, and the **Event Log** does not record which client sent input. Do not make the dashboard agent-aware (grouping or filtering by agent identity) without first extending the domain model. Always qualify in code comments and docs.
