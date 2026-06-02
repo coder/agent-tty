@@ -27,13 +27,14 @@ describe('version command', () => {
   it('builds the version result with runtime capabilities when requested', async () => {
     const result = await buildVersionResult({ includeCapabilities: true });
 
-    expect(result.capabilities).toHaveLength(5);
+    expect(result.capabilities).toHaveLength(6);
     expect(result.capabilities?.map((capability) => capability.name)).toEqual([
       'snapshot',
       'wait',
       'screenshot',
       'record-export-asciicast',
       'record-export-webm',
+      'dashboard',
     ]);
     expect(
       result.capabilities?.find(({ name }) => name === 'snapshot'),

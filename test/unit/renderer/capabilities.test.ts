@@ -10,21 +10,25 @@ function getCapability(
 }
 
 describe('discoverCapabilities', () => {
-  it('returns five quick capabilities without browser-launch details', async () => {
+  it('returns six quick capabilities without browser-launch details', async () => {
     const probePlaywright = vi.fn(() => Promise.resolve({ available: true }));
+    const probeLibghosttyVt = vi.fn(() => Promise.resolve({ available: true }));
 
     const capabilities = await discoverCapabilities('quick', {
       probePlaywright,
+      probeLibghosttyVt,
     });
 
     expect(probePlaywright).toHaveBeenCalledTimes(2);
-    expect(capabilities).toHaveLength(5);
+    expect(probeLibghosttyVt).toHaveBeenCalledTimes(1);
+    expect(capabilities).toHaveLength(6);
     expect(capabilities.map((capability) => capability.name)).toEqual([
       'snapshot',
       'wait',
       'screenshot',
       'record-export-asciicast',
       'record-export-webm',
+      'dashboard',
     ]);
     expect(getCapability(capabilities, 'snapshot')).toEqual({
       name: 'snapshot',
@@ -46,10 +50,34 @@ describe('discoverCapabilities', () => {
       name: 'record-export-webm',
       status: 'available',
     });
+    expect(getCapability(capabilities, 'dashboard')).toEqual({
+      name: 'dashboard',
+      status: 'available',
+    });
+  });
+
+  it('marks the quick dashboard capability unavailable when libghostty-vt is missing', async () => {
+    const capabilities = await discoverCapabilities('quick', {
+      probePlaywright: () => Promise.resolve({ available: true }),
+      probeLibghosttyVt: () =>
+        Promise.resolve({
+          available: false,
+          reason: 'libghostty-vt not installed',
+          detail: 'Cannot find package @coder/libghostty-vt-node',
+        }),
+    });
+
+    expect(getCapability(capabilities, 'dashboard')).toEqual({
+      name: 'dashboard',
+      status: 'unavailable',
+      reason: 'libghostty-vt not installed',
+      detail: 'Cannot find package @coder/libghostty-vt-node',
+    });
   });
 
   it('marks quick browser-backed capabilities unavailable when playwright is missing', async () => {
     const capabilities = await discoverCapabilities('quick', {
+      probeLibghosttyVt: () => Promise.resolve({ available: true }),
       probePlaywright: () =>
         Promise.resolve({
           available: false,
@@ -189,6 +217,40 @@ describe('discoverCapabilities', () => {
       status: 'unknown',
       reason: 'renderer checks incomplete',
       detail: 'doctor did not provide the full renderer check set',
+    });
+    expect(getCapability(capabilities, 'dashboard')).toEqual({
+      name: 'dashboard',
+      status: 'unknown',
+      reason: 'renderer checks incomplete',
+      detail: 'doctor did not provide the full renderer check set',
+    });
+  });
+
+  it('derives the full dashboard capability from the libghostty_vt_available check', async () => {
+    const available = await discoverCapabilities('full', {
+      rendererChecks: [
+        { name: 'libghostty_vt_available', status: 'pass', message: 'ok' },
+      ],
+    });
+    expect(getCapability(available, 'dashboard')).toMatchObject({
+      name: 'dashboard',
+      status: 'available',
+    });
+
+    const missing = await discoverCapabilities('full', {
+      rendererChecks: [
+        {
+          name: 'libghostty_vt_available',
+          status: 'skip',
+          message: 'libghostty-vt optional renderer not installed',
+        },
+      ],
+    });
+    expect(getCapability(missing, 'dashboard')).toEqual({
+      name: 'dashboard',
+      status: 'unavailable',
+      reason: 'libghostty-vt unavailable',
+      detail: 'libghostty-vt optional renderer not installed',
     });
   });
 });

@@ -30,6 +30,7 @@ import type { CapabilityEntry } from '../../renderer/capabilities.js';
 import { createPty } from '../../pty/createPty.js';
 import { resolveDefaultPlaywrightBrowsersPath } from '../../renderer/browserPath.js';
 import { discoverCapabilities } from '../../renderer/capabilities.js';
+import { probeLibghosttyVt } from '../../renderer/readiness.js';
 import {
   artifactPath,
   ensureArtifactsDir,
@@ -65,6 +66,7 @@ const DOCTOR_CHECK_LABELS: Readonly<Record<string, string>> = Object.freeze({
   browser_launch: 'browser',
   ghostty_web_available: 'ghostty-web',
   screenshot_viable: 'screenshot',
+  libghostty_vt_available: 'libghostty-vt',
 });
 
 let doctorResourceSequence = 0;
@@ -760,6 +762,20 @@ async function runGhosttyWebAvailableCheck(): Promise<string> {
   return 'WASM available';
 }
 
+async function runLibghosttyVtAvailableCheck(): Promise<DoctorCheckOutcome> {
+  const probe = await probeLibghosttyVt();
+  if (!probe.available) {
+    // libghostty-vt is an optional dependency; its absence makes the dashboard
+    // unavailable but does not break the rest of agent-tty, so skip (not fail).
+    return skipDoctorCheck(
+      probe.detail ??
+        probe.reason ??
+        'libghostty-vt optional renderer not installed',
+    );
+  }
+  return probe.detail ?? 'libghostty-vt available';
+}
+
 async function runScreenshotViabilityCheck(): Promise<string> {
   const chromium = await getPlaywrightChromium();
   const temporaryDirectory = await mkdtemp(join(tmpdir(), 'agent-tty-doctor-'));
@@ -831,6 +847,7 @@ export async function runDoctorChecks(): Promise<DoctorResult> {
     ['browser_launch', () => runBrowserLaunchCheck()],
     ['ghostty_web_available', () => runGhosttyWebAvailableCheck()],
     ['screenshot_viable', () => runScreenshotViabilityCheck()],
+    ['libghostty_vt_available', () => runLibghosttyVtAvailableCheck()],
   ]);
   const allChecks = [...environment, ...renderer];
   const uniqueCheckNames = new Set(allChecks.map((check) => check.name));
