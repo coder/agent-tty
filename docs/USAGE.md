@@ -132,6 +132,19 @@ agent-tty --home "$AGENT_HOME" doctor --json
 
 Avoid writing automated sessions into the default `~/.agent-tty` unless you intentionally want shared local state.
 
+## Shell Environment
+
+`create` spawns the shell with your inherited environment plus `TERM` (from `--term`) and a default `PROMPT_EOL_MARK=` (empty). The empty `PROMPT_EOL_MARK` suppresses the inverse-video `%` that `zsh` prints at the end of any output without a trailing newline; without it, agent-tty's hidden per-`run` completion marker leaves a stray `%` in snapshots, screenshots, and recordings. The variable is zsh-only and inert in other shells.
+
+Any `--env` value always wins, so you can opt back into the shell's native behavior per session:
+
+```bash
+# Restore zsh's styled default marker:
+agent-tty create --env PROMPT_EOL_MARK='%B%S%#%s%b' -- /bin/zsh
+```
+
+A lone `'%'` does **not** restore the marker (zsh treats it as a prompt escape that expands to nothing); use `'%B%S%#%s%b'` for the styled default or `'%%'` for a plain percent. The default is applied at spawn time and is not stored in the manifest, so it does not appear in `inspect`, `list`, or `create --json` output. If your `~/.zshrc` assigns `PROMPT_EOL_MARK` it runs after the environment is imported and wins, so the marker can reappear — remove that line or set the value you want via `--env`.
+
 ## Anti-Patterns
 
 - Do not reach for `tmux`, `screen`, or ad hoc PTY wrappers first when `agent-tty` can provide an isolated, inspectable session.

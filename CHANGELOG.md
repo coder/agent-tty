@@ -14,6 +14,7 @@
 
 ## Changed
 
+- Spawned shells now default `PROMPT_EOL_MARK=` (empty) in the session environment, suppressing the inverse-video `%` end-of-partial-line marker that `zsh` prints when output lacks a trailing newline. agent-tty strips a hidden completion-marker postamble after each `run`, which desynced the rendered cursor and left that `%` in snapshots, screenshots, and recordings; the default keeps captures clean. The marker is zsh-only and inert in other shells. Opt back in per session with `agent-tty create --env PROMPT_EOL_MARK='%B%S%#%s%b' -- <shell>` to restore zsh's styled default (a lone `'%'` expands to nothing), or pass any explicit `--env PROMPT_EOL_MARK=...` value. The default is applied at PTY spawn time and is not written to the manifest, so `inspect`, `list`, and `create --json` env maps are unchanged ([#114](https://github.com/coder/agent-tty/pull/114)).
 - `inspect` collects renderer state and the session snapshot in a single synchronous tick before awaiting, so concurrent RPC handlers cannot interleave a mutated renderer state with a stale session snapshot ([#104](https://github.com/coder/agent-tty/pull/104)).
 - `mise` development toolchain refresh; ordinary CI remains credential-free and does not install the live-demo recorder tools ([#107](https://github.com/coder/agent-tty/pull/107)).
 

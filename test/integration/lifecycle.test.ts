@@ -283,6 +283,53 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(allOutput).toContain('bar|qux|vt100');
   });
 
+  it('defaults PROMPT_EOL_MARK to empty in the spawned shell, overriding an inherited value', async () => {
+    // The default is injected at PTY spawn time so it never appears in the
+    // manifest; assert it by reading it back from inside the spawned shell.
+    // Export a sentinel PROMPT_EOL_MARK in the parent env so this discriminates
+    // the fix: only an active override yields an empty value in the child —
+    // without it the shell would inherit the sentinel. (`--env` precedence is
+    // covered by the resolvePtyEnv unit test; that `--env` reaches the real
+    // shell is covered by the manifest/env test above.)
+    const createResult = runCli(
+      [
+        'create',
+        '--json',
+        '--',
+        '/bin/sh',
+        '-c',
+        'printf "[%s]" "$PROMPT_EOL_MARK"; exit 0',
+      ],
+      { AGENT_TTY_HOME: testHome, PROMPT_EOL_MARK: 'inherited-sentinel' },
+    );
+    expect(createResult.status).toBe(0);
+    expect(createResult.stderr).toBe('');
+    const sessionId = (
+      JSON.parse(createResult.stdout) as SuccessEnvelope<{ sessionId: string }>
+    ).result.sessionId;
+
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 2000);
+    });
+
+    const eventContent = await readFile(
+      join(testHome, 'sessions', sessionId, 'events.jsonl'),
+      'utf8',
+    );
+    const allOutput = eventContent
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as EventRecord)
+      .filter((event) => event.type === 'output')
+      .map((event) => {
+        const data = event.payload.data;
+        return typeof data === 'string' ? data : '';
+      })
+      .join('');
+    expect(allOutput).toContain('[]');
+    expect(allOutput).not.toContain('inherited-sentinel');
+  });
+
   it('persists a provided idle timeout in the session manifest', async () => {
     const createResult = runCli(
       [
