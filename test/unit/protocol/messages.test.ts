@@ -220,6 +220,7 @@ describe('CapabilityEntrySchema', () => {
       'screenshot',
       'record-export-asciicast',
       'record-export-webm',
+      'dashboard',
     ] as const;
 
     for (const name of names) {

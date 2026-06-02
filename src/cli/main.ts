@@ -7,6 +7,7 @@ import { Command, CommanderError } from 'commander';
 import type { CommandContext } from './context.js';
 
 import { runCreateCommand } from './commands/create.js';
+import { runDashboardCommand } from './commands/dashboard.js';
 import { runDestroyCommand } from './commands/destroy.js';
 import { runDoctorCommand } from './commands/doctor.js';
 import { runGcCommand } from './commands/gc.js';
@@ -669,6 +670,35 @@ async function main(): Promise<void> {
             ...(cursorVisible === undefined
               ? {}
               : { showCursor: cursorVisible }),
+          });
+        },
+      ),
+    );
+
+  program
+    .command('dashboard')
+    .description(
+      'Watch what your agents are doing in their shells: a read-only, live dashboard of your sessions',
+    )
+    .option(
+      '--all',
+      'Start showing all sessions (active and terminal), not just active ones',
+      false,
+    )
+    .option('--session <id>', 'Preselect a session to watch on launch')
+    .action(
+      wrapAction(
+        'dashboard',
+        async (
+          options: { all: boolean; session?: string },
+          context: CommandContext,
+        ) => {
+          await runDashboardCommand({
+            context,
+            all: options.all,
+            ...(options.session === undefined
+              ? {}
+              : { session: options.session }),
           });
         },
       ),

@@ -3,6 +3,11 @@ import assert from 'node:assert/strict';
 import { z } from 'zod';
 
 import { ensurePlaywrightBrowsersPath } from './browserPath.js';
+import {
+  buildDashboardCapability,
+  probeLibghosttyVt,
+  type LibghosttyVtProbe,
+} from './readiness.js';
 
 // --- Capability vocabulary ---
 
@@ -12,6 +17,7 @@ export const CapabilityNameSchema = z.enum([
   'screenshot',
   'record-export-asciicast',
   'record-export-webm',
+  'dashboard',
 ]);
 export type CapabilityName = z.infer<typeof CapabilityNameSchema>;
 
@@ -76,6 +82,7 @@ const CAPABILITY_NAMES: ReadonlyArray<CapabilityName> = Object.freeze([
   'screenshot',
   'record-export-asciicast',
   'record-export-webm',
+  'dashboard',
 ]);
 const BUILTIN_CAPABILITY_NAMES: ReadonlyArray<CapabilityName> = Object.freeze([
   'snapshot',
@@ -99,6 +106,7 @@ interface PlaywrightProbeResult {
 
 export interface CapabilityDiscoveryDependencies {
   probePlaywright?: (mode: DiscoveryMode) => Promise<PlaywrightProbeResult>;
+  probeLibghosttyVt?: () => Promise<LibghosttyVtProbe>;
   rendererChecks?: ReadonlyArray<DiscoveryCheck>;
 }
 
@@ -362,6 +370,37 @@ async function buildPlaywrightCapability(
       };
 }
 
+async function discoverDashboardCapability(
+  mode: DiscoveryMode,
+  deps: CapabilityDiscoveryDependencies,
+): Promise<CapabilityEntry> {
+  if (mode === 'full' && deps.rendererChecks !== undefined) {
+    const check = findRendererCheck(
+      deps.rendererChecks,
+      'libghostty_vt_available',
+    );
+    if (check === undefined) {
+      return buildUnknownCapability('dashboard');
+    }
+    const probe: LibghosttyVtProbe =
+      check.status === 'pass'
+        ? {
+            available: true,
+            reason: 'libghostty-vt native module available',
+            detail: check.message,
+          }
+        : {
+            available: false,
+            reason: 'libghostty-vt unavailable',
+            detail: check.message,
+          };
+    return buildDashboardCapability(probe, mode);
+  }
+
+  const probe = await (deps.probeLibghosttyVt ?? probeLibghosttyVt)();
+  return buildDashboardCapability(probe, mode);
+}
+
 function validateDiscoveredCapabilities(
   capabilities: ReadonlyArray<CapabilityEntry>,
 ): CapabilityEntry[] {
@@ -407,6 +446,7 @@ export async function discoverCapabilities(
   capabilities.push(
     await buildPlaywrightCapability('record-export-webm', mode, deps),
   );
+  capabilities.push(await discoverDashboardCapability(mode, deps));
 
   const sortedCapabilities: CapabilityEntry[] = [];
   for (const name of CAPABILITY_NAMES) {

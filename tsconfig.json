@@ -4,6 +4,8 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["ES2024"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -22,7 +24,9 @@
   },
   "include": [
     "src/**/*.ts",
+    "src/**/*.tsx",
     "test/**/*.ts",
+    "test/**/*.tsx",
     "evals/**/*.ts",
     ".sandcastle/**/*.ts",
     "vitest.config.ts"
