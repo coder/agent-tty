@@ -81,3 +81,14 @@ or install a GitHub Release tarball as described in [`INSTALL.md`](./INSTALL.md)
 It gives repeatable artifacts for review and automation, but it does not guarantee exact native-terminal pixel parity.
 
 If a bug depends on a specific native terminal emulator, keep the `agent-tty` artifact as reference evidence and capture native-terminal evidence separately when needed.
+
+## Stray `%` at the End of Captured Output
+
+If a snapshot, screenshot, or recording shows an unexpected inverse-video `%` at the end of output that has no trailing newline, that is `zsh`'s `PROMPT_EOL_MARK` end-of-partial-line indicator. agent-tty spawns shells with `PROMPT_EOL_MARK=` (empty) by default to suppress it, so you should normally not see it.
+
+If it still appears:
+
+- A `PROMPT_EOL_MARK` assignment in your `~/.zshrc` overrides the default (rc files load after the environment is imported). Remove that line, or set the value you want explicitly with `agent-tty create --env PROMPT_EOL_MARK=... -- <shell>`.
+- The program running inside the session set the marker itself.
+
+To deliberately keep the marker, pass `--env PROMPT_EOL_MARK='%B%S%#%s%b'` (zsh's styled default) when creating the session.
