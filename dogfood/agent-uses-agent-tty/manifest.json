@@ -113,14 +113,14 @@
     {
       "path": "README.md",
       "description": "Hero Demo bundle README",
-      "sha256": "90981737469e7fcce4046ac016902f61578c80c1a66bb5af1f84cbf057c94aea",
-      "bytes": 1204
+      "sha256": "d3a08b601263c2184d239f64883c3cf7f3dd761834d71b37d4df6823d0118909",
+      "bytes": 1544
     },
     {
       "path": "VIDEO_PLAYBACK.md",
       "description": "GitHub video playback guidance for the Hero Demo",
-      "sha256": "e62744bd9dac50d97e99fb2d6377b5f09b8a8e1d4e64ada70ae537bb8c4d2f39",
-      "bytes": 4584
+      "sha256": "ac6b74aa1382252b493c625d5a58f017b643e6813eee38142c566bcfd037039d",
+      "bytes": 4808
     },
     {
       "path": "reproduce.sh",

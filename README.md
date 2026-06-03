@@ -101,8 +101,8 @@ Real Codex and Claude TUIs discovering the `agent-tty` skill, driving `nvim --cl
     <th width="50%">Claude</th>
   </tr>
   <tr>
-    <td><video src="https://github.com/user-attachments/assets/27cc3b9b-9b91-4cd9-a3a5-1bbb61c33e19" controls width="100%"></video></td>
-    <td><video src="https://github.com/user-attachments/assets/36221ef7-97c4-4b06-b673-21ac623a5f0a" controls width="100%"></video></td>
+    <td><video src="https://github.com/user-attachments/assets/f1823164-330c-4962-8adf-2b825080e06f" controls width="100%"></video></td>
+    <td><video src="https://github.com/user-attachments/assets/966bed35-9383-444e-b06a-1d103ccba49a" controls width="100%"></video></td>
   </tr>
 </table>
 
