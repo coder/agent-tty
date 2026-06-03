@@ -1454,6 +1454,26 @@ url = "https://github.com/tmux/tmux-builds/releases/download/v3.6a/tmux-3.6a-mac
 checksum = "sha256:b9b12eaeba43acf5671acf3857d947525440b544185a8db34ea557199a090251"
 url = "https://github.com/tmux/tmux-builds/releases/download/v3.6a/tmux-3.6a-macos-x86_64.tar.gz"
 
+[[tools.ttyd]]
+version = "1.7.7"
+backend = "aqua:tsl0922/ttyd"
+
+[tools.ttyd."platforms.linux-arm64"]
+checksum = "sha256:b38acadd89d1d396a0f5649aa52c539edbad07f4bc7348b27b4f4b7219dd4165"
+url = "https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.aarch64"
+
+[tools.ttyd."platforms.linux-arm64-musl"]
+checksum = "sha256:b38acadd89d1d396a0f5649aa52c539edbad07f4bc7348b27b4f4b7219dd4165"
+url = "https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.aarch64"
+
+[tools.ttyd."platforms.linux-x64"]
+checksum = "sha256:8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55"
+url = "https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64"
+
+[tools.ttyd."platforms.linux-x64-musl"]
+checksum = "sha256:8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55"
+url = "https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64"
+
 [[tools.vhs]]
 version = "0.11.0"
 backend = "aqua:charmbracelet/vhs"
