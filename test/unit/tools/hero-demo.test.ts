@@ -28,6 +28,29 @@ describe('hero demo generator planning', () => {
     expect(selectedAgents(options.agent)).toEqual(['codex', 'claude']);
   });
 
+  it('defaults to a full promote run, with --no-promote for quick test runs', () => {
+    // No flags → the canonical regeneration, so `mise run demo:agent-uses-agent-tty`
+    // (with nothing after `--`) rebuilds the bundle.
+    const defaults = parseHeroDemoArgs([]);
+    expect(defaults.promote).toBe(true);
+    expect(defaults.runs).toBe(3);
+    expect(defaults.recordSeconds).toBe(180);
+    expect(selectedAgents(defaults.agent)).toEqual(['codex', 'claude']);
+
+    // --no-promote allows a single-agent test run without tripping the promote
+    // constraints (>= 3 runs / both agents).
+    const testRun = parseHeroDemoArgs([
+      '--no-promote',
+      '--runs',
+      '1',
+      '--agent',
+      'codex',
+    ]);
+    expect(testRun.promote).toBe(false);
+    expect(testRun.runs).toBe(1);
+    expect(selectedAgents(testRun.agent)).toEqual(['codex']);
+  });
+
   it('generates a Codex VHS tape that opens on a hidden tmux split with the dashboard', () => {
     const tape = generateTape({
       agent: 'codex',

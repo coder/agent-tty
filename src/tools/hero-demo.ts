@@ -140,8 +140,10 @@ export function selectedAgents(agent: AgentName | 'both'): AgentName[] {
 /** Parses maintainer-facing Hero Demo generator arguments and environment defaults. */
 export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
   let agent: AgentName | 'both' = 'both';
-  let runs = 1;
-  let promote = false;
+  // Default to the full promote regeneration so `mise run demo:agent-uses-agent-tty`
+  // (no flags) just rebuilds the bundle. Pass --no-promote for a quick test run.
+  let runs = 3;
+  let promote = true;
   let bundleDir = DEFAULT_BUNDLE_DIR;
   let codexModel = process.env.AGENT_TTY_HERO_CODEX_MODEL ?? 'gpt-5.5';
   let codexEffort = process.env.AGENT_TTY_HERO_CODEX_EFFORT ?? 'low';
@@ -174,6 +176,9 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
       }
       case '--promote':
         promote = true;
+        break;
+      case '--no-promote':
+        promote = false;
         break;
       case '--bundle-dir': {
         const value = argv[++index];
@@ -231,8 +236,14 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
     '--record-seconds must be a positive integer',
   );
   if (promote) {
-    invariant(runs >= 3, '--promote requires --runs >= 3');
-    invariant(agent === 'both', '--promote requires --agent both');
+    invariant(
+      runs >= 3,
+      '--promote requires --runs >= 3 (pass --no-promote for a quick test run)',
+    );
+    invariant(
+      agent === 'both',
+      '--promote requires --agent both (pass --no-promote to test a single agent)',
+    );
   }
 
   return {
@@ -252,9 +263,12 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
 
 function usage(): string {
   return [
-    'Usage: mise run demo:agent-uses-agent-tty -- [--agent both|codex|claude] [--runs N] [--record-seconds N] [--bundle-dir DIR] [--codex-model MODEL] [--codex-effort LEVEL] [--claude-model MODEL] [--claude-effort LEVEL] [--keep-debug] [--promote]',
+    'Usage: mise run demo:agent-uses-agent-tty -- [--no-promote] [--agent both|codex|claude] [--runs N] [--record-seconds N] [--bundle-dir DIR] [--codex-model MODEL] [--codex-effort LEVEL] [--claude-model MODEL] [--claude-effort LEVEL] [--keep-debug]',
     '',
     'Regenerates the real-agent Hero Demo with VHS as the outer camera.',
+    'Defaults to a full promote run (--agent both --runs 3 --record-seconds 180).',
+    'Pass --no-promote (optionally with --runs 1 --agent codex) for a quick test',
+    'run that records into the debug dir without touching the bundle.',
   ].join('\n');
 }
 
@@ -1012,7 +1026,7 @@ async function promote(
     scenario: 'agent-uses-agent-tty-hero-demo',
     result: 'pass',
     commands: [
-      `mise run demo:agent-uses-agent-tty -- --agent both --runs 3 --record-seconds ${String(options.recordSeconds)} --promote`,
+      `mise run demo:agent-uses-agent-tty -- --record-seconds ${String(options.recordSeconds)}`,
     ],
     artifacts: manifestArtifacts,
   });
@@ -1126,7 +1140,7 @@ function renderReproduce(options: HeroDemoOptions): string {
     'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"',
     'REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"',
     'cd "$REPO_ROOT"',
-    `exec mise run demo:agent-uses-agent-tty -- --agent both --runs 3 --record-seconds ${String(options.recordSeconds)} --promote "$@"`,
+    `exec mise run demo:agent-uses-agent-tty -- --record-seconds ${String(options.recordSeconds)} "$@"`,
     '',
   ].join('\n');
 }
