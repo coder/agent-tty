@@ -4,7 +4,6 @@ Explore the installed agent-tty skill and CLI yourself, then use agent-tty to dr
 Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
 
 Success criteria:
-
 - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
 - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
 - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
@@ -14,4 +13,4 @@ Success criteria:
 - Destroy the agent-tty session after exporting the proof artifacts.
 - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
 
-Use the HERO\_\* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
+Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.

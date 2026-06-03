@@ -45,8 +45,7 @@ description = "Regenerate the README hero GIF (assets/hero.gif) from assets/hero
 # checkout's dev CLI (dist/cli/main.js) — the released agent-tty has no `dashboard`.
 depends = ["build"]
 run = '''
-PATH="$(mise bin-paths vhs@0.11.0 ffmpeg@8.1.1 tmux@3.6a jq@1.8.1 | paste -sd: -):$PATH" \
-  vhs assets/hero.tape
+PATH="$(mise bin-paths vhs@0.11.0 ffmpeg@8.1.1 tmux@3.6a jq@1.8.1 | paste -sd: -):$PATH" vhs assets/hero.tape
 '''
 tools.ffmpeg = "8.1.1"
 tools.vhs = "0.11.0"
@@ -59,8 +58,7 @@ description = "Regenerate the real-agent Hero Demo proof bundle"
 # higher value to also overlap an agent's own attempts, or e.g.
 # `-- --no-promote --agent codex --runs 1 --record-seconds 30` for a fast smoke test.
 run = '''
-PATH="$(mise bin-paths vhs@0.11.0 ffmpeg@8.1.1 tmux@3.6a | paste -sd: -):$PATH" \
-  npx tsx src/tools/hero-demo.ts
+PATH="$(mise bin-paths vhs@0.11.0 ffmpeg@8.1.1 tmux@3.6a | paste -sd: -):$PATH" npx tsx src/tools/hero-demo.ts
 '''
 tools.ffmpeg = "8.1.1"
 tools.vhs = "0.11.0"
