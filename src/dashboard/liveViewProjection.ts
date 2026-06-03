@@ -75,15 +75,18 @@ class SnapshotGrid {
   }
 
   cellAt(row: number, col: number): ProjectedCell {
-    // Known limitation: `SnapshotCell[]` is densely packed without a column key
-    // (the renderer drops native `col`/`width`), so we treat array index as the
-    // terminal column. A wide glyph (CJK/emoji) spans two columns but is one
-    // entry, shifting everything after it left. Shared with `snapshot`; fixing
-    // it needs `col`/`width` on the schema. See coder/agent-tty#112.
+    // `SnapshotCell[]` is column-indexed: both renderer backends emit one cell
+    // per terminal column and pad an empty spacer for the trailing column of a
+    // wide glyph (CJK/emoji), so the array index is the terminal column and the
+    // cursor-cell highlight stays aligned past a wide glyph. See
+    // coder/agent-tty#112.
     const styled = this.cellRows.get(row)?.[col];
     if (styled !== undefined) {
       return styled.char === '' ? { ...styled, char: ' ' } : styled;
     }
+    // Fallback for columns without cell data: index the text by code point.
+    // Not display-column-accurate for wide glyphs, but only reached past the
+    // last populated cell (typically trailing blanks).
     const char = Array.from(this.textRows.get(row) ?? '')[col] ?? ' ';
     return { char: char === '' ? ' ' : char };
   }

@@ -14,6 +14,7 @@ import type {
   ScreenshotOptions,
   SnapshotOptions,
 } from '../backend.js';
+import type { SnapshotCell } from '../../protocol/schemas.js';
 import { GhosttyWebBackend } from '../ghosttyWeb/backend.js';
 import type {
   RenderProfileConfig,
@@ -264,6 +265,29 @@ function copyOptionalString(
   }
 }
 
+function toStyledCell(cell: NativeSnapshotCell): SnapshotCell {
+  return {
+    char: cell.text,
+    ...(cell.foreground === undefined ? {} : { fg: cell.foreground }),
+    ...(cell.background === undefined ? {} : { bg: cell.background }),
+    ...(cell.bold === undefined ? {} : { bold: cell.bold }),
+    ...(cell.italic === undefined ? {} : { italic: cell.italic }),
+    ...(cell.underline === undefined ? {} : { underline: cell.underline }),
+  };
+}
+
+/**
+ * Pack native cell records into a **column-indexed** `SnapshotCell[]` per row,
+ * so that `cells[col]` is the cell at terminal column `col`. The native
+ * snapshot emits one record per occupied column and represents a wide glyph
+ * (CJK/emoji, `width: 2`) as a single record with no record for the trailing
+ * column. We place each record at its `col` and emit an empty spacer for every
+ * trailing column a wide glyph covers (and defensively for any gap), keeping
+ * array index aligned with the terminal column. This mirrors the `ghostty-web`
+ * backend, which already emits one cell per column, and keeps index-as-column
+ * consumers (e.g. the Session Dashboard projection and its cursor-cell
+ * highlight) correct past a wide glyph. See coder/agent-tty#112.
+ */
 function mapNativeCells(
   nativeCells: readonly NativeSnapshotCell[] | undefined,
 ): SemanticSnapshot['cells'] | undefined {
@@ -280,21 +304,25 @@ function mapNativeCells(
 
   return [...grouped.entries()]
     .sort(([leftRow], [rightRow]) => leftRow - rightRow)
-    .map(([lineNumber, rowCells]) => ({
-      lineNumber,
-      cells: rowCells
-        .sort((left, right) => left.col - right.col)
-        .map((cell) => ({
-          char: cell.text,
-          ...(cell.foreground === undefined ? {} : { fg: cell.foreground }),
-          ...(cell.background === undefined ? {} : { bg: cell.background }),
-          ...(cell.bold === undefined ? {} : { bold: cell.bold }),
-          ...(cell.italic === undefined ? {} : { italic: cell.italic }),
-          ...(cell.underline === undefined
-            ? {}
-            : { underline: cell.underline }),
-        })),
-    }));
+    .map(([lineNumber, rowCells]) => {
+      const sorted = [...rowCells].sort((left, right) => left.col - right.col);
+      const cells: SnapshotCell[] = [];
+      for (const cell of sorted) {
+        // Fill any gap so the next record lands at its true column.
+        while (cells.length < cell.col) {
+          cells.push({ char: '' });
+        }
+        const styled = toStyledCell(cell);
+        cells.push(styled);
+        // A wide glyph covers its trailing column(s): emit an empty spacer
+        // carrying the glyph's styling so the trailing half shades correctly
+        // and the array index stays aligned with the terminal column.
+        for (let span = 1; span < cell.width; span += 1) {
+          cells.push({ ...styled, char: '' });
+        }
+      }
+      return { lineNumber, cells };
+    });
 }
 
 export class LibghosttyVtBackend implements RendererBackend {

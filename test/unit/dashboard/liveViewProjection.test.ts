@@ -182,6 +182,53 @@ describe('projectLiveView', () => {
     });
   });
 
+  it('keeps cells and the cursor highlight column-aligned past a wide glyph (coder/agent-tty#112)', () => {
+    // Column-indexed cells as the renderer backends now emit them: 🚀 occupies
+    // col 7 with an empty spacer at col 8, so "done" stays at cols 10..13.
+    const packed = [
+      'r',
+      'o',
+      'c',
+      'k',
+      'e',
+      't',
+      ' ',
+      '🚀',
+      '',
+      ' ',
+      'd',
+      'o',
+      'n',
+      'e',
+    ];
+    const snapshot: SemanticSnapshot = {
+      sessionId: 'session',
+      capturedAtSeq: 0,
+      cols: packed.length,
+      rows: 1,
+      cursorRow: 0,
+      cursorCol: 10, // true terminal column of "d"
+      isAltScreen: false,
+      visibleLines: [{ row: 0, text: 'rocket 🚀 done' }],
+      cells: [{ lineNumber: 0, cells: packed.map((char) => ({ char })) }],
+    };
+
+    const view = projectLiveView({
+      snapshot,
+      pane: { cols: packed.length, rows: 1 },
+      mode: 'one-to-one',
+    });
+
+    const row = view.cells[0] ?? [];
+    expect(row[7]?.char).toBe('🚀');
+    expect(row[8]?.char).toBe(' '); // empty spacer renders as a space
+    expect(row[10]?.char).toBe('d');
+    expect(row[13]?.char).toBe('e');
+    // The cursor highlights its true column ("d"), not a left-shifted cell.
+    expect(row[10]?.cursor).toBe(true);
+    expect(row[9]?.cursor).toBeUndefined();
+  });
+
   it('falls back to visibleLines text when the snapshot carries no cells', () => {
     const snapshot = snapshotFromRows(['ab', 'cd'], { includeCells: false });
     expect(snapshot.cells).toBeUndefined();
