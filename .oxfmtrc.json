@@ -11,6 +11,10 @@
     "dist",
     "node_modules",
     "package-lock.json",
-    "aube-lock.yaml"
+    "aube-lock.yaml",
+    "dogfood/agent-uses-agent-tty/README.md",
+    "dogfood/agent-uses-agent-tty/promoted-run-summary.md",
+    "dogfood/agent-uses-agent-tty/manifest.json",
+    "dogfood/agent-uses-agent-tty/artifacts"
   ]
 }
