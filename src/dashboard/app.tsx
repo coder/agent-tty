@@ -508,8 +508,12 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
   return (
     <Box flexDirection="column" width={termCols}>
       <Box>
-        <Text backgroundColor="blue" color="white" bold>
-          {' agent-tty dashboard '}
+        {/* Bold cyan, no background: a filled `backgroundColor="blue"` bar
+            renders light-on-light (washed out) under dark themes that remap
+            ANSI blue to a light shade (e.g. Catppuccin's #89b4fa). A bold
+            foreground accent stays readable on any terminal/theme. */}
+        <Text color="cyan" bold>
+          {'agent-tty dashboard'}
         </Text>
         <Text dimColor>
           {'  read-only · '}

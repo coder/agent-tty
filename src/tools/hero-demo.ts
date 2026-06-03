@@ -25,6 +25,7 @@ import { CanonicalBundleManifestSchema } from './bundleManifestSchema.js';
 import { canonicalBundleArtifactEntry } from './canonicalBundleArtifacts.js';
 import { invariant } from '../util/assert.js';
 import { isDirectExecution } from '../util/isDirectExecution.js';
+import { LIBGHOSTTY_VT_PACKAGE } from '../renderer/readiness.js';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const DEFAULT_BUNDLE_DIR = join(REPO_ROOT, 'dogfood/agent-uses-agent-tty');
@@ -35,9 +36,15 @@ const DEFAULT_RECORD_SECONDS = 3 * 60;
 const RECORD_TIMEOUT_BUFFER_SECONDS = 3 * 60;
 const AGENTS = ['codex', 'claude'] as const;
 
-const OUTER_WIDTH = 1600;
+// 1920 wide to match the README hero's canvas; 900 tall + 14pt keeps the
+// content-heavy coding-agent TUI roomy (it gets the larger ~60% pane).
+const OUTER_WIDTH = 1920;
 const OUTER_HEIGHT = 900;
 const OUTER_FONT_SIZE = 14;
+// The recording is a tmux split: LEFT = the coding agent, RIGHT = the live
+// `agent-tty dashboard`. `-l` sizes the new (right/dashboard) pane, so a smaller
+// percentage leaves the larger half for the agent — it is the star of the demo.
+const DASHBOARD_PANE_PERCENT = 40;
 const CLAUDE_VISUAL_REDACTION_HEIGHT = Math.floor(OUTER_HEIGHT / 5);
 const CLAUDE_VISUAL_REDACTION_FILTER = `drawbox=x=0:y=0:w=iw:h=${String(CLAUDE_VISUAL_REDACTION_HEIGHT)}:color=black:t=fill`;
 
@@ -60,7 +67,14 @@ export interface HeroDemoOptions {
 export interface GeneratedTapeInput {
   agent: AgentName;
   runnerPath: string;
+  dashboardRunnerPath: string;
+  socket: string;
   recordSeconds: number;
+}
+
+export interface GeneratedDashboardRunnerInput {
+  installPrefix: string;
+  innerHome: string;
 }
 
 export interface GeneratedRunnerInput {
@@ -255,6 +269,21 @@ export function generateTape(input: GeneratedTapeInput): string {
       ? 'OpenAI Codex|Codex'
       : 'Claude Code|Welcome|esc to interrupt';
   const exitCommand = input.agent === 'codex' ? '/quit' : '/exit';
+  // `-f /dev/null` ignores any host ~/.tmux.conf (so pane 0-indexing and defaults
+  // hold); `-L <socket>` isolates this run's server so it can be reaped cleanly.
+  const tmuxNew = `tmux -f /dev/null -L ${input.socket}`;
+  // One hidden tmux command builds the whole split: pane 0 (LEFT) runs the agent
+  // directly, pane 1 (RIGHT) runs the dashboard; `split-window -d` keeps the
+  // agent pane focused, `set -g status off` drops the status bar, then `attach`.
+  // The recording opens directly on a clean two-pane split — like the README
+  // hero — instead of showing tmux plumbing or an `exec bash <runner>` line. The
+  // dashboard runner exports the same AGENT_TTY_HOME, so it auto-follows the
+  // agent's newest session.
+  const splitSetup =
+    `${tmuxNew} new-session -d -s hero 'bash ${input.runnerPath}'` +
+    ` \\; set -g status off` +
+    ` \\; split-window -h -d -l ${String(DASHBOARD_PANE_PERCENT)}% -t hero 'bash ${input.dashboardRunnerPath}'` +
+    ` \\; attach -t hero`;
   return [
     'Output outer.webm',
     'Output outer.ascii',
@@ -265,13 +294,23 @@ export function generateTape(input: GeneratedTapeInput): string {
     'Set TypingSpeed 10ms',
     'Set Framerate 5',
     'Set PlaybackSpeed 1.0',
-    `Type "bash ${input.runnerPath}"`,
+    // Build the split off-camera so the recording opens on it, not on tmux setup.
+    'Hide',
+    `Type "${splitSetup}"`,
     'Enter',
+    'Sleep 2s',
+    'Show',
+    // Now visible: the agent boots in the LEFT pane (trust prompt → accept →
+    // UI), then works for the review window while the dashboard mirrors it.
     `Wait+Screen@120s /${startupRegex}/`,
     'Sleep 1s',
     'Enter',
     `Wait+Screen@120s /${uiRegex}/`,
     `Sleep ${String(input.recordSeconds)}s`,
+    // Hidden teardown: exit the agent. Stays hidden so the GIF ends on the
+    // agent + dashboard, not on the bare shell the exit collapses tmux back to
+    // (the run's tmux server is reaped by killTmuxServer after VHS returns).
+    'Hide',
     'Ctrl+C',
     'Sleep 1s',
     `Type "${exitCommand}"`,
@@ -279,6 +318,23 @@ export function generateTape(input: GeneratedTapeInput): string {
     'Sleep 5s',
     'Ctrl+C',
     'Sleep 1s',
+    '',
+  ].join('\n');
+}
+
+/** Builds the shell runner for the RIGHT pane: the live `agent-tty dashboard`. */
+export function generateDashboardRunner(
+  input: GeneratedDashboardRunnerInput,
+): string {
+  return [
+    '#!/usr/bin/env bash',
+    'set -euo pipefail',
+    `export PATH=${quote(join(input.installPrefix, 'bin'))}:$PATH`,
+    // Same AGENT_TTY_HOME as the agent runner so the dashboard sees its sessions.
+    `export AGENT_TTY_HOME=${quote(input.innerHome)}`,
+    // --all keeps a session visible through its terminal state; the dashboard
+    // auto-selects the newest session, so it follows the agent without input.
+    'exec agent-tty dashboard --all',
     '',
   ].join('\n');
 }
@@ -462,6 +518,46 @@ function run(command: string, args: string[], cwd = REPO_ROOT): string {
   });
 }
 
+/** Tears down a run's isolated tmux server; ignores an already-gone server. */
+function killTmuxServer(socket: string): void {
+  spawnSync('tmux', ['-L', socket, 'kill-server'], { stdio: 'ignore' });
+}
+
+/**
+ * Fail fast if the installed agent-tty cannot render the dashboard. The
+ * dashboard requires the optional native renderer; when it is absent the
+ * RIGHT pane's `agent-tty dashboard` exits at startup and its tmux pane
+ * closes, leaving a single-pane recording that would otherwise pass every
+ * downstream check. Confirm the capability before spending a recording on it.
+ */
+function assertDashboardRendererInstalled(installPrefix: string): void {
+  const binary = join(installPrefix, 'bin', 'agent-tty');
+  // `doctor` exits non-zero when any check fails (e.g. Playwright), so we read
+  // stdout regardless of exit code and inspect only the dashboard capability.
+  const result = spawnSync(binary, ['doctor', '--json'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let dashboard: { status?: string } | undefined;
+  try {
+    const parsed = JSON.parse(result.stdout) as {
+      result?: { capabilities?: Array<{ name: string; status: string }> };
+    };
+    dashboard = parsed.result?.capabilities?.find(
+      (capability) => capability.name === 'dashboard',
+    );
+  } catch {
+    throw new Error(
+      'agent-tty doctor --json did not return parseable JSON; cannot confirm the dashboard renderer',
+    );
+  }
+  invariant(
+    dashboard?.status === 'available',
+    `the installed agent-tty dashboard renderer is unavailable (${LIBGHOSTTY_VT_PACKAGE}); the RIGHT recording pane would be blank. Reinstall agent-tty on a supported platform so the optional native package is fetched.`,
+  );
+}
+
 function isNonEmptyFile(path: string): boolean {
   try {
     const stats = statSync(path);
@@ -613,7 +709,11 @@ async function runOne(
   const innerWebm = join(workspaceArtifacts, 'inner-nvim.webm');
   const promptPath = join(runDir, `${agent}-prompt.md`);
   const runnerPath = join(runDir, `run-${agent}.sh`);
+  const dashboardRunnerPath = join(runDir, `run-${agent}-dashboard.sh`);
   const tapePath = join(runDir, 'record.tape');
+  // basename(debugRoot) carries a per-process timestamp, so concurrent demo
+  // invocations get distinct sockets and one run's teardown never reaps another.
+  const tmuxSocket = `hero-${agent}-${String(index)}-${basename(debugRoot)}`;
 
   await mkdir(workspaceArtifacts, { recursive: true });
   run('git', ['init', '-q'], workspace);
@@ -641,19 +741,35 @@ async function runOne(
       claudeEffort: options.claudeEffort,
     }),
   );
+  await writeExecutable(
+    dashboardRunnerPath,
+    generateDashboardRunner({ installPrefix, innerHome }),
+  );
   await writeFile(
     tapePath,
-    generateTape({ agent, runnerPath, recordSeconds: options.recordSeconds }),
+    generateTape({
+      agent,
+      runnerPath,
+      dashboardRunnerPath,
+      socket: tmuxSocket,
+      recordSeconds: options.recordSeconds,
+    }),
   );
 
   const vhsLog = join(runDir, 'vhs.log');
-  runLogged(
-    'vhs',
-    [basename(tapePath)],
-    runDir,
-    vhsLog,
-    (options.recordSeconds + RECORD_TIMEOUT_BUFFER_SECONDS) * 1000,
-  );
+  try {
+    runLogged(
+      'vhs',
+      [basename(tapePath)],
+      runDir,
+      vhsLog,
+      (options.recordSeconds + RECORD_TIMEOUT_BUFFER_SECONDS) * 1000,
+    );
+  } finally {
+    // Reap this run's isolated tmux server (best-effort: it may already be gone
+    // when the agent and dashboard panes exited at teardown).
+    killTmuxServer(tmuxSocket);
+  }
   ensureThumbnail(runDir);
 
   await assertNonEmpty(join(runDir, 'outer.webm'));
@@ -668,6 +784,14 @@ async function runOne(
   invariant(
     transcript.includes(tuiMarker),
     `outer transcript did not show ${tuiMarker}`,
+  );
+  // The whole point of the split is the live dashboard on the RIGHT. Its list
+  // header ("Sessions · <scope>") is dashboard-only chrome the agent TUI never
+  // prints, so its absence means the dashboard pane died — fail rather than
+  // promote a single-pane recording.
+  invariant(
+    transcript.includes('Sessions ·'),
+    'outer transcript did not show the dashboard pane (no "Sessions ·" header); the RIGHT pane likely failed to render',
   );
   const final = (await readFile(finalFile, 'utf8')).trimEnd();
   invariant(
@@ -933,6 +1057,7 @@ function safeToolVersion(
 function collectToolVersions(): Array<[string, string]> {
   return [
     ['vhs', safeToolVersion('vhs', ['--version'])],
+    ['tmux', safeToolVersion('tmux', ['-V'])],
     ['ttyd', safeToolVersion('ttyd', ['--version'])],
     ['ffmpeg', safeToolVersion('ffmpeg', ['-version'])],
     ['codex', safeToolVersion('codex', ['--version'])],
@@ -1015,6 +1140,7 @@ export async function runHeroDemo(options: HeroDemoOptions): Promise<void> {
     process.stderr.write(`debugRoot: ${debugRoot}\n`);
   }
   const installPrefix = await installLocalAgentTty(debugRoot);
+  assertDashboardRendererInstalled(installPrefix);
   const records: RunRecord[] = [];
   for (const agent of selectedAgents(options.agent)) {
     let successes = 0;

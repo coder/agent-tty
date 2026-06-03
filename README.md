@@ -7,7 +7,7 @@ Drive and inspect long-lived terminal sessions from the CLI, with reviewable sna
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 ![Node](https://img.shields.io/node/v/agent-tty)
 
-![agent-tty: drive a terminal session and inspect it as reviewable text](./assets/hero.gif)
+![agent-tty: drive a terminal session and watch it live in the dashboard](./assets/hero.gif)
 
 `agent-tty` keeps a real PTY-backed terminal session alive across separate CLI invocations. You `run` a command in it, `wait` for the screen to reach a condition instead of sleeping, then capture what happened as a semantic text snapshot, a PNG screenshot, an asciinema-compatible `.cast`, or a WebM. The recording is the point: a human — or an AI coding agent — can replay and verify exactly what the terminal did, instead of trusting a blind script.
 

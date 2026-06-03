@@ -5,6 +5,10 @@ communique = "1.1.3"
 jq = "1.8.1"
 node = "26"
 python = "3"
+tmux = "3.6a"
+# VHS needs ttyd, but ttyd ships no macOS binary, so it's Linux/CI-only here.
+# On macOS install it yourself: `brew install ttyd` (mise finds it on PATH).
+ttyd = { version = "1.7.7", os = ["linux"] }
 vhs = "0.11.0"
 zizmor = "1.25.2"
 
@@ -35,15 +39,28 @@ outputs = ["dist/**/*.js", "dist/**/*.d.ts", "dist/**/*.map"]
 description = "Validate the tarball route and check the current git-install caveat"
 run = "npm run smoke:install -- --skip-build"
 
+[tasks."demo:hero"]
+description = "Regenerate the README hero GIF (assets/hero.gif) from assets/hero.tape"
+# Reuse the cached `build` task so assets/hero.tape can point PATH at this
+# checkout's dev CLI (dist/cli/main.js) — the released agent-tty has no `dashboard`.
+depends = ["build"]
+run = '''
+PATH="$(mise bin-paths vhs@0.11.0 ffmpeg@8.1.1 tmux@3.6a jq@1.8.1 | paste -sd: -):$PATH" \
+  vhs assets/hero.tape
+'''
+tools.ffmpeg = "8.1.1"
+tools.vhs = "0.11.0"
+tools.tmux = "3.6a"
+
 [tasks."demo:agent-uses-agent-tty"]
 description = "Regenerate the real-agent Hero Demo proof bundle"
 run = '''
-PATH="$(mise bin-paths vhs@0.11.0 ttyd@1.7.7 ffmpeg@8.1.1 | paste -sd: -):$PATH" \
+PATH="$(mise bin-paths vhs@0.11.0 ffmpeg@8.1.1 tmux@3.6a | paste -sd: -):$PATH" \
   npx tsx src/tools/hero-demo.ts
 '''
 tools.ffmpeg = "8.1.1"
 tools.vhs = "0.11.0"
-tools.ttyd = "1.7.7"
+tools.tmux = "3.6a"
 
 [tasks."demo:agent-uses-agent-tty:upload-assets"]
 description = "Prepare H.264 MP4 upload assets for the Hero Demo"
