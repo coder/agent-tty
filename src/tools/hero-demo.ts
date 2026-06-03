@@ -46,7 +46,13 @@ const OUTER_FONT_SIZE = 14;
 // percentage leaves the larger half for the agent — it is the star of the demo.
 const DASHBOARD_PANE_PERCENT = 40;
 const CLAUDE_VISUAL_REDACTION_HEIGHT = Math.floor(OUTER_HEIGHT / 5);
-const CLAUDE_VISUAL_REDACTION_FILTER = `drawbox=x=0:y=0:w=iw:h=${String(CLAUDE_VISUAL_REDACTION_HEIGHT)}:color=black:t=fill`;
+// Redact only the LEFT (Claude) pane's header — Claude shows account info up
+// top, but the dashboard lives in the right ~DASHBOARD_PANE_PERCENT% of the
+// frame and must stay visible (a full-width box would black out its title bar).
+const CLAUDE_VISUAL_REDACTION_WIDTH = Math.floor(
+  (OUTER_WIDTH * (100 - DASHBOARD_PANE_PERCENT)) / 100,
+);
+const CLAUDE_VISUAL_REDACTION_FILTER = `drawbox=x=0:y=0:w=${String(CLAUDE_VISUAL_REDACTION_WIDTH)}:h=${String(CLAUDE_VISUAL_REDACTION_HEIGHT)}:color=black:t=fill`;
 
 type AgentName = (typeof AGENTS)[number];
 
