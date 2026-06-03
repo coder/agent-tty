@@ -51,14 +51,6 @@ const OUTER_FONT_SIZE = 14;
 // `agent-tty dashboard`. `-l` sizes the new (right/dashboard) pane, so a smaller
 // percentage leaves the larger half for the agent — it is the star of the demo.
 const DASHBOARD_PANE_PERCENT = 40;
-const CLAUDE_VISUAL_REDACTION_HEIGHT = Math.floor(OUTER_HEIGHT / 5);
-// Redact only the LEFT (Claude) pane's header — Claude shows account info up
-// top, but the dashboard lives in the right ~DASHBOARD_PANE_PERCENT% of the
-// frame and must stay visible (a full-width box would black out its title bar).
-const CLAUDE_VISUAL_REDACTION_WIDTH = Math.floor(
-  (OUTER_WIDTH * (100 - DASHBOARD_PANE_PERCENT)) / 100,
-);
-const CLAUDE_VISUAL_REDACTION_FILTER = `drawbox=x=0:y=0:w=${String(CLAUDE_VISUAL_REDACTION_WIDTH)}:h=${String(CLAUDE_VISUAL_REDACTION_HEIGHT)}:color=black:t=fill`;
 
 type AgentName = (typeof AGENTS)[number];
 
@@ -510,55 +502,11 @@ function isTextArtifact(path: string): boolean {
 async function copyPromotedArtifact(
   from: string,
   to: string,
-  agent: AgentName,
   relativePath: string,
 ): Promise<void> {
   await mkdir(dirname(to), { recursive: true });
   if (isTextArtifact(relativePath)) {
     await writeFile(to, sanitizePromotedText(await readFile(from, 'utf8')));
-    return;
-  }
-  if (agent === 'claude' && relativePath.endsWith('-outer.webm')) {
-    runDemoTool('ffmpeg', [
-      '-nostdin',
-      '-y',
-      '-hide_banner',
-      '-loglevel',
-      'error',
-      '-i',
-      from,
-      '-vf',
-      CLAUDE_VISUAL_REDACTION_FILTER,
-      '-an',
-      '-c:v',
-      'libvpx-vp9',
-      '-deadline',
-      'good',
-      '-cpu-used',
-      '4',
-      '-b:v',
-      '0',
-      '-crf',
-      '34',
-      to,
-    ]);
-    return;
-  }
-  if (agent === 'claude' && relativePath.endsWith('-thumbnail.png')) {
-    runDemoTool('ffmpeg', [
-      '-nostdin',
-      '-y',
-      '-hide_banner',
-      '-loglevel',
-      'error',
-      '-i',
-      from,
-      '-vf',
-      CLAUDE_VISUAL_REDACTION_FILTER,
-      '-frames:v',
-      '1',
-      to,
-    ]);
     return;
   }
   await copyFile(from, to);
@@ -1035,7 +983,7 @@ async function promote(
     ];
     for (const [from, relative, description] of copies) {
       const to = join(options.bundleDir, relative);
-      await copyPromotedArtifact(from, to, record.agent, relative);
+      await copyPromotedArtifact(from, to, relative);
       promotedPaths.push({ path: relative, description });
     }
   }
