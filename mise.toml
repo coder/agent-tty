@@ -54,6 +54,10 @@ tools.tmux = "3.6a"
 
 [tasks."demo:agent-uses-agent-tty"]
 description = "Regenerate the real-agent Hero Demo proof bundle"
+# Defaults to a full promote run (both agents x3, 180s each). Runs record
+# concurrently (--concurrency, default 2 = Codex + Claude overlapping); pass a
+# higher value to also overlap an agent's own attempts, or e.g.
+# `-- --no-promote --agent codex --runs 1 --record-seconds 30` for a fast smoke test.
 run = '''
 PATH="$(mise bin-paths vhs@0.11.0 ffmpeg@8.1.1 tmux@3.6a | paste -sd: -):$PATH" \
   npx tsx src/tools/hero-demo.ts

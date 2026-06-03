@@ -35,6 +35,12 @@ const DEFAULT_EXPECTED_TEXT =
 const DEFAULT_RECORD_SECONDS = 3 * 60;
 const RECORD_TIMEOUT_BUFFER_SECONDS = 3 * 60;
 const AGENTS = ['codex', 'claude'] as const;
+// Each run is mostly an idle review-window sleep, so overlapping runs is a big
+// wall-clock win. Default to 2 so the two agents record concurrently without
+// ever running two sessions of the *same* agent (same account) at once; bump
+// --concurrency higher to also overlap an agent's own attempts (costs more CPU
+// — each run drives its own headless browser + ffmpeg — and shared-account load).
+const DEFAULT_CONCURRENCY = 2;
 
 // 1920 wide to match the README hero's canvas; 900 tall + 14pt keeps the
 // content-heavy coding-agent TUI roomy (it gets the larger ~60% pane).
@@ -60,6 +66,7 @@ export interface HeroDemoOptions {
   agent: AgentName | 'both';
   runs: number;
   promote: boolean;
+  concurrency: number;
   bundleDir: string;
   codexModel: string;
   codexEffort: string;
@@ -143,6 +150,36 @@ export function selectedAgents(agent: AgentName | 'both'): AgentName[] {
   return agent === 'both' ? [...AGENTS] : [agent];
 }
 
+/**
+ * Runs `worker` over `items` with at most `limit` in flight at once, returning
+ * results in input order. Hero Demo runs are dominated by an idle review-window
+ * sleep, so overlapping them is a large wall-clock win; the cap keeps fan-out
+ * bounded (each run drives its own headless browser + ffmpeg).
+ */
+export async function mapWithConcurrency<Item, Result>(
+  items: Item[],
+  limit: number,
+  worker: (item: Item, index: number) => Promise<Result>,
+): Promise<Result[]> {
+  const results = new Array<Result>(items.length);
+  let cursor = 0;
+  const poolSize = Math.max(1, Math.min(limit, items.length));
+  const runWorker = async (): Promise<void> => {
+    for (;;) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= items.length) {
+        return;
+      }
+      const item = items[index];
+      invariant(item !== undefined, 'worker item index out of range');
+      results[index] = await worker(item, index);
+    }
+  };
+  await Promise.all(Array.from({ length: poolSize }, () => runWorker()));
+  return results;
+}
+
 /** Parses maintainer-facing Hero Demo generator arguments and environment defaults. */
 export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
   let agent: AgentName | 'both' = 'both';
@@ -161,6 +198,9 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
   let keepDebug = false;
   let recordSeconds = Number(
     process.env.AGENT_TTY_HERO_RECORD_SECONDS ?? String(DEFAULT_RECORD_SECONDS),
+  );
+  let concurrency = Number(
+    process.env.AGENT_TTY_HERO_CONCURRENCY ?? String(DEFAULT_CONCURRENCY),
   );
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -225,6 +265,12 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
         recordSeconds = Number(value);
         break;
       }
+      case '--concurrency': {
+        const value = argv[++index];
+        invariant(value !== undefined, '--concurrency requires a value');
+        concurrency = Number(value);
+        break;
+      }
       case '--help':
       case '-h':
         throw new Error(usage());
@@ -241,6 +287,10 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
     Number.isInteger(recordSeconds) && recordSeconds > 0,
     '--record-seconds must be a positive integer',
   );
+  invariant(
+    Number.isInteger(concurrency) && concurrency > 0,
+    '--concurrency must be a positive integer',
+  );
   if (promote) {
     invariant(
       runs >= 3,
@@ -256,6 +306,7 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
     agent,
     runs,
     promote,
+    concurrency,
     bundleDir,
     codexModel,
     codexEffort,
@@ -269,10 +320,14 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
 
 function usage(): string {
   return [
-    'Usage: mise run demo:agent-uses-agent-tty -- [--no-promote] [--agent both|codex|claude] [--runs N] [--record-seconds N] [--bundle-dir DIR] [--codex-model MODEL] [--codex-effort LEVEL] [--claude-model MODEL] [--claude-effort LEVEL] [--keep-debug]',
+    'Usage: mise run demo:agent-uses-agent-tty -- [--no-promote] [--agent both|codex|claude] [--runs N] [--record-seconds N] [--concurrency N] [--bundle-dir DIR] [--codex-model MODEL] [--codex-effort LEVEL] [--claude-model MODEL] [--claude-effort LEVEL] [--keep-debug]',
     '',
     'Regenerates the real-agent Hero Demo with VHS as the outer camera.',
     'Defaults to a full promote run (--agent both --runs 3 --record-seconds 180).',
+    'Runs record concurrently (--concurrency, default 2): each run is mostly an',
+    'idle review-window sleep, so overlapping them is a large wall-clock win.',
+    "Higher concurrency also overlaps an agent's own attempts but costs more CPU",
+    '(each run drives its own headless browser + ffmpeg) and shared-account load.',
     'Pass --no-promote (optionally with --runs 1 --agent codex) for a quick test',
     'run that records into the debug dir without touching the bundle.',
   ].join('\n');
@@ -1151,6 +1206,22 @@ function renderReproduce(options: HeroDemoOptions): string {
   ].join('\n');
 }
 
+/** Records one run, capturing failures as a record instead of throwing. */
+async function runOneSafe(
+  agent: AgentName,
+  index: number,
+  options: HeroDemoOptions,
+  debugRoot: string,
+  installPrefix: string,
+): Promise<RunRecord> {
+  try {
+    return await runOne(agent, index, options, debugRoot, installPrefix);
+  } catch (error) {
+    const runDir = join(debugRoot, `${agent}-${String(index)}`);
+    return failedRunRecord(agent, index, runDir, error, debugRoot);
+  }
+}
+
 /** Runs the live-agent Hero Demo workflow and optionally promotes passing artifacts. */
 export async function runHeroDemo(options: HeroDemoOptions): Promise<void> {
   const debugRoot = resolve(
@@ -1161,37 +1232,67 @@ export async function runHeroDemo(options: HeroDemoOptions): Promise<void> {
   }
   const installPrefix = await installLocalAgentTty(debugRoot);
   assertDashboardRendererInstalled(installPrefix);
+  const agents = selectedAgents(options.agent);
   const records: RunRecord[] = [];
-  for (const agent of selectedAgents(options.agent)) {
-    let successes = 0;
-    const maxAttempts = options.promote ? options.runs * 2 : options.runs;
-    for (let index = 1; index <= maxAttempts; index += 1) {
-      if (options.promote && successes >= options.runs) {
-        break;
-      }
-      try {
-        const record = await runOne(
-          agent,
-          index,
-          options,
-          debugRoot,
-          installPrefix,
-        );
-        records.push(record);
-        successes += 1;
-      } catch (error) {
-        const runDir = join(debugRoot, `${agent}-${String(index)}`);
-        records.push(failedRunRecord(agent, index, runDir, error, debugRoot));
-        if (!options.promote) {
-          throw error;
-        }
-      }
+
+  // Wave 1: the first `runs` attempts per agent, interleaved across agents so a
+  // pool of size N pairs distinct agents before doubling up on one — the default
+  // --concurrency 2 stays at one Codex + one Claude, never two of the same
+  // account at once. Runs overlap freely because each is mostly an idle sleep.
+  const firstWave: Array<{ agent: AgentName; index: number }> = [];
+  for (let index = 1; index <= options.runs; index += 1) {
+    for (const agent of agents) {
+      firstWave.push({ agent, index });
     }
   }
-  if (options.promote) {
-    await promote(options, records);
+  records.push(
+    ...(await mapWithConcurrency(firstWave, options.concurrency, (task) =>
+      runOneSafe(task.agent, task.index, options, debugRoot, installPrefix),
+    )),
+  );
+
+  if (!options.promote) {
+    // Quick-test parity with the old sequential path: surface the first failure.
+    const failure = records.find((record) => !record.passed);
+    if (failure) {
+      throw new Error(failure.error ?? `${failure.agent} run failed`);
+    }
+    return;
   }
-  if (!options.keepDebug && options.promote) {
+
+  // Top-up: any agent short of `runs` successes gets one more attempt per round
+  // (rounds run across agents in parallel), capped at runs*2 total attempts —
+  // the same adaptive retry budget as before, just batched. Same-agent retries
+  // stay serial across rounds so we never pile concurrent sessions on one account.
+  const attemptsByAgent = new Map<AgentName, number>(
+    agents.map((agent) => [agent, options.runs]),
+  );
+  const maxAttempts = options.runs * 2;
+  for (;;) {
+    const topUp: Array<{ agent: AgentName; index: number }> = [];
+    for (const agent of agents) {
+      const successes = records.filter(
+        (record) => record.agent === agent && record.passed,
+      ).length;
+      const attempts = attemptsByAgent.get(agent) ?? options.runs;
+      if (successes < options.runs && attempts < maxAttempts) {
+        const nextIndex = attempts + 1;
+        attemptsByAgent.set(agent, nextIndex);
+        topUp.push({ agent, index: nextIndex });
+      }
+    }
+    if (topUp.length === 0) {
+      break;
+    }
+    records.push(
+      ...(await mapWithConcurrency(topUp, options.concurrency, (task) =>
+        runOneSafe(task.agent, task.index, options, debugRoot, installPrefix),
+      )),
+    );
+  }
+
+  await promote(options, records);
+  if (!options.keepDebug) {
     await rm(debugRoot, { recursive: true, force: true });
   }
 }

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildLeakFindings,
+  mapWithConcurrency,
   sanitizePromotedText,
   generateDashboardRunner,
   generateRunner,
@@ -49,6 +50,49 @@ describe('hero demo generator planning', () => {
     expect(testRun.promote).toBe(false);
     expect(testRun.runs).toBe(1);
     expect(selectedAgents(testRun.agent)).toEqual(['codex']);
+  });
+
+  it('parses --concurrency with a safe default and validates it', () => {
+    // Default overlaps the two agents (one Codex + one Claude) without ever
+    // running two sessions of the same agent against one account at once.
+    expect(parseHeroDemoArgs([]).concurrency).toBe(2);
+    expect(parseHeroDemoArgs(['--concurrency', '6']).concurrency).toBe(6);
+    expect(() => parseHeroDemoArgs(['--concurrency', '0'])).toThrow(
+      '--concurrency must be a positive integer',
+    );
+    expect(() => parseHeroDemoArgs(['--concurrency', '1.5'])).toThrow(
+      '--concurrency must be a positive integer',
+    );
+  });
+
+  it('runs a bounded pool concurrently while preserving input order', async () => {
+    const items = Array.from({ length: 7 }, (_, index) => index);
+    let active = 0;
+    let maxActive = 0;
+    const results = await mapWithConcurrency(items, 3, async (item) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return item * 2;
+    });
+    // Results come back in input order regardless of completion order.
+    expect(results).toEqual([0, 2, 4, 6, 8, 10, 12]);
+    // The pool fills to the cap (3 workers start synchronously) but never past.
+    expect(maxActive).toBe(3);
+  });
+
+  it('clamps the pool size to the number of items', async () => {
+    let maxActive = 0;
+    let active = 0;
+    await mapWithConcurrency([1, 2], 10, async (item) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return item;
+    });
+    expect(maxActive).toBe(2);
   });
 
   it('generates a Codex VHS tape that opens on a hidden tmux split with the dashboard', () => {
