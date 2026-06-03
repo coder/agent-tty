@@ -20,6 +20,7 @@
 
 ## Fixed
 
+- Wide characters (CJK/emoji) no longer misalign per-cell snapshot rendering. The `libghostty-vt` backend's `mapNativeCells` packed one array entry per native cell _record_ and discarded the native `col`/`width`, so a width-2 glyph became a single entry with no spacer for its trailing column — shifting every cell after it one column to the left and offsetting the cursor-cell highlight in the Session Dashboard (which pins `libghostty-vt`). Cells are now column-indexed: each row places records at their true column and emits an empty spacer for a wide glyph's trailing column, matching the `ghostty-web` backend so `snapshot --include-cells` and the dashboard Live View stay aligned past wide glyphs. `visibleLines` text was already correct ([#112](https://github.com/coder/agent-tty/issues/112)).
 - Restored the empty `## [Unreleased]` heading on `main` after the v0.2.0 release-prep commit so the `Update Unreleased Changelog` workflow stops failing on every push. `docs/RELEASE-PROCESS.md` now documents the rename-and-insert rule that keeps both `[Unreleased]` and `[v<version>]` headings present after a release cut ([#103](https://github.com/coder/agent-tty/pull/103)).
 
 ## [v0.2.0] - 2026-05-13

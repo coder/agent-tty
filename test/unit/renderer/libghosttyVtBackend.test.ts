@@ -10,6 +10,17 @@ import { createLogger } from '../../../src/util/logger.js';
 
 import { createFakeBackend } from '../../helpers/fakeBackend.js';
 
+// Load the real optional native engine when present so we can verify the actual
+// wide-glyph cell layout (not just a mock of it). Skips where it is unavailable.
+let nativeModule: LibghosttyVtNativeModule | null = null;
+try {
+  const loaded = await import('@coder/libghostty-vt-node');
+  nativeModule = { createTerminal: loaded.createTerminal };
+} catch {
+  nativeModule = null;
+}
+const itWithNative = nativeModule ? it : it.skip;
+
 function createProfile(): RenderProfileConfig {
   return {
     name: 'reference-dark',
@@ -273,6 +284,151 @@ describe('LibghosttyVtBackend', () => {
       ],
     });
   });
+
+  it('packs wide glyphs into column-aligned cells with spacer placeholders (coder/agent-tty#112)', async () => {
+    // The native engine emits a single width-2 record for a wide glyph (CJK or
+    // emoji) and no record for its trailing column. mapNativeCells must insert
+    // a spacer there so the array index stays aligned with the terminal column
+    // and content after the glyph is not shifted left.
+    const wideSnapshot = {
+      cols: 20,
+      rows: 2,
+      cursorRow: 0,
+      cursorCol: 10, // true terminal column of the "d" in "done"
+      isAltScreen: false,
+      visibleLines: [
+        { row: 0, text: 'rocket 🚀 done' },
+        { row: 1, text: 'A漢字B' },
+      ],
+      cells: [
+        { row: 0, col: 0, text: 'r', width: 1 },
+        { row: 0, col: 1, text: 'o', width: 1 },
+        { row: 0, col: 2, text: 'c', width: 1 },
+        { row: 0, col: 3, text: 'k', width: 1 },
+        { row: 0, col: 4, text: 'e', width: 1 },
+        { row: 0, col: 5, text: 't', width: 1 },
+        { row: 0, col: 6, text: ' ', width: 1 },
+        { row: 0, col: 7, text: '🚀', width: 2 }, // wide: no record for col 8
+        { row: 0, col: 9, text: ' ', width: 1 },
+        { row: 0, col: 10, text: 'd', width: 1 },
+        { row: 0, col: 11, text: 'o', width: 1 },
+        { row: 0, col: 12, text: 'n', width: 1 },
+        { row: 0, col: 13, text: 'e', width: 1 },
+        { row: 1, col: 0, text: 'A', width: 1 },
+        { row: 1, col: 1, text: '漢', width: 2 }, // wide: no record for col 2
+        { row: 1, col: 3, text: '字', width: 2 }, // wide: no record for col 4
+        { row: 1, col: 5, text: 'B', width: 1 },
+      ],
+    };
+    const terminal = {
+      feed: vi.fn(),
+      resize: vi.fn(),
+      snapshot: vi.fn(() => wideSnapshot),
+      getVisibleText: vi.fn(() => 'rocket 🚀 done'),
+      dispose: vi.fn(),
+    };
+    const module: LibghosttyVtNativeModule = {
+      createTerminal: vi.fn(() => terminal),
+    };
+    const backend = new LibghosttyVtBackend('session-01', createProfile(), {
+      loadNative: () => Promise.resolve(module),
+      logger: createLogger('info', () => undefined),
+      initialCols: 20,
+      initialRows: 2,
+    });
+
+    await backend.boot();
+    await backend.replayTo(
+      createReplayInput({
+        initialCols: 20,
+        initialRows: 2,
+        targetSeq: 0,
+        events: [
+          {
+            seq: 0,
+            ts: '2026-03-20T12:00:00.000Z',
+            type: 'output',
+            payload: { data: 'rocket 🚀 done' },
+          },
+        ],
+      }),
+    );
+
+    const snapshot = await backend.snapshot({ includeCells: true });
+    const row0 =
+      snapshot.cells?.find((line) => line.lineNumber === 0)?.cells ?? [];
+    const row1 =
+      snapshot.cells?.find((line) => line.lineNumber === 1)?.cells ?? [];
+
+    // Emoji: glyph at its true column, empty spacer next, no left shift after.
+    expect(row0[7]?.char).toBe('🚀');
+    expect(row0[8]?.char).toBe('');
+    expect(row0[9]?.char).toBe(' ');
+    expect(row0[10]?.char).toBe('d');
+    expect(row0[13]?.char).toBe('e');
+    // The cursor column indexes the "d", not the previously-shifted "o".
+    expect(row0[snapshot.cursorCol]?.char).toBe('d');
+
+    // Two CJK wide glyphs: "B" stays at its true column 5 (was off-by-2).
+    expect(row1.map((cell) => cell.char)).toEqual([
+      'A',
+      '漢',
+      '',
+      '字',
+      '',
+      'B',
+    ]);
+  });
+
+  itWithNative(
+    'column-aligns real wide glyphs from the native engine (coder/agent-tty#112)',
+    async () => {
+      const backend = new LibghosttyVtBackend(
+        'session-native',
+        createProfile(),
+        {
+          loadNative: () =>
+            Promise.resolve(nativeModule as LibghosttyVtNativeModule),
+          logger: createLogger('info', () => undefined),
+          initialCols: 40,
+          initialRows: 4,
+        },
+      );
+
+      await backend.boot();
+      await backend.replayTo(
+        createReplayInput({
+          sessionId: 'session-native',
+          initialCols: 40,
+          initialRows: 4,
+          targetSeq: 0,
+          events: [
+            {
+              seq: 0,
+              ts: '2026-03-20T12:00:00.000Z',
+              type: 'output',
+              payload: { data: 'rocket 🚀 done' },
+            },
+          ],
+        }),
+      );
+
+      const snapshot = await backend.snapshot({ includeCells: true });
+      const chars =
+        snapshot.cells
+          ?.find((line) => line.lineNumber === 0)
+          ?.cells.map((cell) => cell.char) ?? [];
+      await backend.dispose();
+
+      // The real engine places the emoji at column 7 (after "rocket ") as a
+      // width-2 record with no record for column 8; mapNativeCells fills the
+      // spacer so "done" stays at its true columns.
+      expect(chars[7]).toBe('🚀');
+      expect(chars[8]).toBe(''); // wide-glyph spacer, not a left shift
+      expect(chars[10]).toBe('d');
+      expect(chars[13]).toBe('e');
+    },
+  );
 
   it('delegates getVisibleText to the native terminal', async () => {
     const fixture = createNativeFixture({ visibleText: 'delegated text' });
