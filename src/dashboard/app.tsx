@@ -18,12 +18,12 @@ import {
   type DashboardScope,
   type DashboardSession,
 } from './sessionScope.js';
+import { formatSessionId, listWidthFor, shortId } from './sessionListLayout.js';
 
 // reference-dark profile defaults; cells matching these are left unstyled so the
 // terminal's own theme shows through instead of repainting every cell.
 const PROFILE_BG = '#1e1e2e';
 const PROFILE_FG = '#cdd6f4';
-const LIST_WIDTH = 28;
 const FRAME_INTERVAL_MS = 33;
 const LIST_REFRESH_MS = 1500;
 const PAN_STEP = 1;
@@ -190,22 +190,20 @@ function statusDot(status: string): React.ReactNode {
   return <Text dimColor>○</Text>;
 }
 
-function shortId(sessionId: string): string {
-  return sessionId.length > 10 ? `…${sessionId.slice(-9)}` : sessionId;
-}
-
 function SessionList({
   sessions,
   selectedIndex,
   scope,
   focused,
   height,
+  width,
 }: {
   sessions: DashboardSession[];
   selectedIndex: number;
   scope: DashboardScope;
   focused: boolean;
   height: number;
+  width: number;
 }): React.ReactNode {
   // Scroll a window that keeps the selected row visible (centered when possible)
   // so navigating past the fold never hides the selection.
@@ -220,7 +218,7 @@ function SessionList({
   const windowed = sessions.slice(start, start + visible);
 
   return (
-    <Box flexDirection="column" width={LIST_WIDTH}>
+    <Box flexDirection="column" width={width}>
       <Text bold underline {...(focused ? { color: 'cyan' } : {})}>
         Sessions · {scope} ({sessions.length}){start > 0 ? ' ↑' : ''}
         {start + visible < sessions.length ? ' ↓' : ''}
@@ -232,7 +230,8 @@ function SessionList({
         return (
           <Text key={session.sessionId} inverse={selected} wrap="truncate">
             {selected ? '▸ ' : '  '}
-            {statusDot(session.status)} {shortId(session.sessionId)} {label}
+            {statusDot(session.status)}{' '}
+            {formatSessionId(session.sessionId, width)} {label}
           </Text>
         );
       })}
@@ -430,7 +429,10 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
 
   const termCols = stdout.columns;
   const termRows = stdout.rows;
-  const paneCols = Math.max(10, termCols - LIST_WIDTH - 5);
+  // The list scales with the terminal (wide screens show full session ids); the
+  // Live View takes the rest, less a small gap for the divider.
+  const listWidth = listWidthFor(termCols);
+  const paneCols = Math.max(10, termCols - listWidth - 5);
   const paneRows = Math.max(4, termRows - 5);
 
   // Clamp a candidate pan to the current screen so stored pan never drifts past
@@ -530,6 +532,7 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
           scope={scope}
           focused={focus === 'list'}
           height={paneRows}
+          width={listWidth}
         />
         <LiveView
           frame={frame}
