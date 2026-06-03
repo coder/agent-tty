@@ -357,673 +357,292 @@
 
 
 ────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/run-claude.s
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+╭─── Claude Code v2.1.161 ───────────────────────────────────────────────────────────────────────────────╮│agent-tty dashboard  read-only · no session selected
+│                                                    │ Tips for getting started                          ││Sessions · all (0)           ╭─────────────────────────────────────────────────────────╮
+│                                                    │ ───────────────────────────────────────────────── ││                             │Waiting for output…                                      │
+│                       ▐▛███▜▌                      │ What's new                                        ││                             ╰─────────────────────────────────────────────────────────╯
+│                      ▝▜█████▛▘                     │ `OTEL_RESOURCE_ATTRIBUTES` values are now includ… ││focus:list · Tab switch · ↑/↓ j/k select · a scope · z overview · q quit
+│                        ▘▘ ▝▝                       │ `claude agents` rows now show `done/total` befor… ││
+│   Opus 4.7 with max effort · Claude Enterprise ·   │ `/mcp` now collapses claude.ai connectors you've… ││
+│   Coder                                            │ /release-notes for more                           ││
+│    /…/hero-demo-1780499459706/claude-1/workspace   │                                                   ││
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯│
+                                                                                                          │
+ ⚠ 1 setup issue: MCP · /doctor                                                                           │
+                                                                                                          │
+❯ You are running inside a disposable workspace for an agent-tty Hero Demo.                               │
+                                                                                                          │
+  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim       │
+  session.                                                                                                │
+  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in   │
+  the wild.                                                                                               │
+                                                                                                          │
+  Success criteria:                                                                                       │
+  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.                │
+  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.                           │
+  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.                              │
+  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.              │
+  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.                               │
+  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.                          │
+  - Destroy the agent-tty session after exporting the proof artifacts.                                    │
+  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then     │
+  summarize what you did.                                                                                 │
+                                                                                                          │
+  Use the HERO_* environment variables for all required paths and final text. Avoid changing files        │
+  outside this disposable workspace.                                                                      │
+                                                                                                          │
+✢ Whisking… (1s)                                                                                          │
+                                                                                                          │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────│
+❯                                                                                                         │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────│
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt                                        │
+                                                                                                0 tokens  │
+                       You're now using usage credits · Your session limit resets 6:10pm (Europe/Berlin)  │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
 ────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/run-claude.sh
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+╭─── Claude Code v2.1.161 ───────────────────────────────────────────────────────────────────────────────╮│agent-tty dashboard  read-only · no session selected
+│                                                    │ Tips for getting started                          ││Sessions · all (0)           ╭─────────────────────────────────────────────────────────╮
+│                                                    │ ───────────────────────────────────────────────── ││                             │Waiting for output…                                      │
+│                       ▐▛███▜▌                      │ What's new                                        ││                             ╰─────────────────────────────────────────────────────────╯
+│                      ▝▜█████▛▘                     │ `OTEL_RESOURCE_ATTRIBUTES` values are now includ… ││focus:list · Tab switch · ↑/↓ j/k select · a scope · z overview · q quit
+│                        ▘▘ ▝▝                       │ `claude agents` rows now show `done/total` befor… ││
+│   Opus 4.7 with max effort · Claude Enterprise ·   │ `/mcp` now collapses claude.ai connectors you've… ││
+│   Coder                                            │ /release-notes for more                           ││
+│    /…/hero-demo-1780499459706/claude-1/workspace   │                                                   ││
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯│
+                                                                                                          │
+ ⚠ 1 setup issue: MCP · /doctor                                                                           │
+                                                                                                          │
+❯ You are running inside a disposable workspace for an agent-tty Hero Demo.                               │
+                                                                                                          │
+  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim       │
+  session.                                                                                                │
+  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in   │
+  the wild.                                                                                               │
+                                                                                                          │
+  Success criteria:                                                                                       │
+  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.                │
+  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.                           │
+  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.                              │
+  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.              │
+  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.                               │
+  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.                          │
+  - Destroy the agent-tty session after exporting the proof artifacts.                                    │
+  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then     │
+  summarize what you did.                                                                                 │
+                                                                                                          │
+  Use the HERO_* environment variables for all required paths and final text. Avoid changing files        │
+  outside this disposable workspace.                                                                      │
+                                                                                                          │
+✢ Whisking… (1s)                                                                                          │
+                                                                                                          │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────│
+❯                                                                                                         │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────│
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt                                        │
+                                                                                                0 tokens  │
+                       You're now using usage credits · Your session limit resets 6:10pm (Europe/Berlin)  │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
 ────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/run-claude.sh
-
-─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Accessing workspace:
-
- /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/workspace
-
- Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If not,
- take a moment to review what's in this folder first.
-
- Claude Code'll be able to read, edit, and execute files here.
-
- Security guide
-
- ❯ 1. Yes, I trust this folder
-   2. No, exit
-
- Enter to confirm · Esc to cancel
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+╭─── Claude Code v2.1.161 ───────────────────────────────────────────────────────────────────────────────╮│agent-tty dashboard  read-only · no session selected
+│                                                    │ Tips for getting started                          ││Sessions · all (0)           ╭─────────────────────────────────────────────────────────╮
+│                                                    │ ───────────────────────────────────────────────── ││                             │Waiting for output…                                      │
+│                       ▐▛███▜▌                      │ What's new                                        ││                             ╰─────────────────────────────────────────────────────────╯
+│                      ▝▜█████▛▘                     │ `OTEL_RESOURCE_ATTRIBUTES` values are now includ… ││focus:list · Tab switch · ↑/↓ j/k select · a scope · z overview · q quit
+│                        ▘▘ ▝▝                       │ `claude agents` rows now show `done/total` befor… ││
+│   Opus 4.7 with max effort · Claude Enterprise ·   │ `/mcp` now collapses claude.ai connectors you've… ││
+│   Coder                                            │ /release-notes for more                           ││
+│    /…/hero-demo-1780499459706/claude-1/workspace   │                                                   ││
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯│
+                                                                                                          │
+ ⚠ 1 setup issue: MCP · /doctor                                                                           │
+                                                                                                          │
+❯ You are running inside a disposable workspace for an agent-tty Hero Demo.                               │
+                                                                                                          │
+  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim       │
+  session.                                                                                                │
+  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in   │
+  the wild.                                                                                               │
+                                                                                                          │
+  Success criteria:                                                                                       │
+  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.                │
+  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.                           │
+  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.                              │
+  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.              │
+  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.                               │
+  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.                          │
+  - Destroy the agent-tty session after exporting the proof artifacts.                                    │
+  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then     │
+  summarize what you did.                                                                                 │
+                                                                                                          │
+  Use the HERO_* environment variables for all required paths and final text. Avoid changing files        │
+  outside this disposable workspace.                                                                      │
+                                                                                                          │
+✶ Whisking… (2s · thinking with max effort)                                                               │
+                                                                                                          │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────│
+❯                                                                                                         │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────│
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt                                        │
+                                                                                                0 tokens  │
+                       You're now using usage credits · Your session limit resets 6:10pm (Europe/Berlin)  │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
 ────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/run-claude.sh
-
-─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Accessing workspace:
-
- /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/workspace
-
- Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If not,
- take a moment to review what's in this folder first.
-
- Claude Code'll be able to read, edit, and execute files here.
-
- Security guide
-
- ❯ 1. Yes, I trust this folder
-   2. No, exit
-
- Enter to confirm · Esc to cancel
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+╭─── Claude Code v2.1.161 ───────────────────────────────────────────────────────────────────────────────╮│agent-tty dashboard  read-only · no session selected
+│                                                    │ Tips for getting started                          ││Sessions · all (0)           ╭─────────────────────────────────────────────────────────╮
+│                                                    │ ───────────────────────────────────────────────── ││                             │Waiting for output…                                      │
+│                       ▐▛███▜▌                      │ What's new                                        ││                             ╰─────────────────────────────────────────────────────────╯
+│                      ▝▜█████▛▘                     │ `OTEL_RESOURCE_ATTRIBUTES` values are now includ… ││focus:list · Tab switch · ↑/↓ j/k select · a scope · z overview · q quit
+│                        ▘▘ ▝▝                       │ `claude agents` rows now show `done/total` befor… ││
+│   Opus 4.7 with max effort · Claude Enterprise ·   │ `/mcp` now collapses claude.ai connectors you've… ││
+│   Coder                                            │ /release-notes for more                           ││
+│    /…/hero-demo-1780499459706/claude-1/workspace   │                                                   ││
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯│
+                                                                                                          │
+ ⚠ 1 setup issue: MCP · /doctor                                                                           │
+                                                                                                          │
+❯ You are running inside a disposable workspace for an agent-tty Hero Demo.                               │
+                                                                                                          │
+  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim       │
+  session.                                                                                                │
+  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in   │
+  the wild.                                                                                               │
+                                                                                                          │
+  Success criteria:                                                                                       │
+  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.                │
+  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.                           │
+  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.                              │
+  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.              │
+  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.                               │
+  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.                          │
+  - Destroy the agent-tty session after exporting the proof artifacts.                                    │
+  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then     │
+  summarize what you did.                                                                                 │
+                                                                                                          │
+  Use the HERO_* environment variables for all required paths and final text. Avoid changing files        │
+  outside this disposable workspace.                                                                      │
+                                                                                                          │
+✶ Whisking… (2s · thinking with max effort)                                                               │
+                                                                                                          │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────│
+❯                                                                                                         │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────│
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt                                        │
+                                                                                                0 tokens  │
+                       You're now using usage credits · Your session limit resets 6:10pm (Europe/Berlin)  │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
 ────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/run-claude.sh
-
-─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Accessing workspace:
-
- /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/workspace
-
- Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If not,
- take a moment to review what's in this folder first.
-
- Claude Code'll be able to read, edit, and execute files here.
-
- Security guide
-
- ❯ 1. Yes, I trust this folder
-   2. No, exit
-
- Enter to confirm · Esc to cancel
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+╭─── Claude Code v2.1.161 ───────────────────────────────────────────────────────────────────────────────╮│agent-tty dashboard  read-only · no session selected
+│                                                    │ Tips for getting started                          ││Sessions · all (0)           ╭─────────────────────────────────────────────────────────╮
+│                                                    │ ───────────────────────────────────────────────── ││                             │Waiting for output…                                      │
+│                       ▐▛███▜▌                      │ What's new                                        ││                             ╰─────────────────────────────────────────────────────────╯
+│                      ▝▜█████▛▘                     │ `OTEL_RESOURCE_ATTRIBUTES` values are now includ… ││focus:list · Tab switch · ↑/↓ j/k select · a scope · z overview · q quit
+│                        ▘▘ ▝▝                       │ `claude agents` rows now show `done/total` befor… ││
+│   Opus 4.7 with max effort · Claude Enterprise ·   │ `/mcp` now collapses claude.ai connectors you've… ││
+│   Coder                                            │ /release-notes for more                           ││
+│    /…/hero-demo-1780499459706/claude-1/workspace   │                                                   ││
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯│
+                                                                                                          │
+ ⚠ 1 setup issue: MCP · /doctor                                                                           │
+                                                                                                          │
+❯ You are running inside a disposable workspace for an agent-tty Hero Demo.                               │
+                                                                                                          │
+  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim       │
+  session.                                                                                                │
+  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in   │
+  the wild.                                                                                               │
+                                                                                                          │
+  Success criteria:                                                                                       │
+  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.                │
+  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.                           │
+  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.                              │
+  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.              │
+  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.                               │
+  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.                          │
+  - Destroy the agent-tty session after exporting the proof artifacts.                                    │
+  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then     │
+  summarize what you did.                                                                                 │
+                                                                                                          │
+  Use the HERO_* environment variables for all required paths and final text. Avoid changing files        │
+  outside this disposable workspace.                                                                      │
+                                                                                                          │
+✶ Whisking… (2s · thinking with max effort)                                                               │
+                                                                                                          │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────│
+❯                                                                                                         │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────│
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt                                        │
+                                                                                                0 tokens  │
+                       You're now using usage credits · Your session limit resets 6:10pm (Europe/Berlin)  │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
 ────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/run-claude.sh
-
-─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Accessing workspace:
-
- /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/workspace
-
- Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If not,
- take a moment to review what's in this folder first.
-
- Claude Code'll be able to read, edit, and execute files here.
-
- Security guide
-
- ❯ 1. Yes, I trust this folder
-   2. No, exit
-
- Enter to confirm · Esc to cancel
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/run-claude.sh
-╭─── Claude Code v2.1.143 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                    │ Tips for getting started                                                                                 │
-│                                                    │ ──────────────────────────────────────────────────────────────────────────────────────────────────────── │
-│                       ▐▛███▜▌                      │ What's new                                                                                               │
-│                      ▝▜█████▛▘                     │ Added `claude agents --json` to list live Claude sessions as JSON for scripting (tmux-resurrect, status… │
-│                        ▘▘ ▝▝                       │ Added `agent_id` and `parent_agent_id` attributes to `claude_code.tool` OTEL spans, and fixed trace par… │
-│   Coder                                            │ /release-notes for more                                                                                  │
-│    /…/hero-demo-1779369037179/claude-1/workspace   │                                                                                                          │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-
-❯ You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-● Bash(env | grep -E "HERO_|AGENT_TTY" | sort)
-  ⎿  AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/inner-home
-     HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-     HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/workspace/demo-note.txt
-     … +2 lines (ctrl+o to expand)
-
-● Bash(which agent-tty && agent-tty --help 2>&1 | head -50)
-  ⎿  /tmp/agent-tty-hero-demo/hero-demo-1779369037179/install/bin/agent-tty
-     MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get
-     agent-tty` before any other agent-tty command.
-     … +29 lines (ctrl+o to expand)
-
-  Listed 1 directory (ctrl+o to expand)
-
-● Bash(agent-tty skills get agent-tty 2>&1 | head -200)
-  ⎿  ---
-     name: agent-tty
-     description: Terminal and TUI automation CLI for AI agents. Use when the user needs to create a terminal session, run a command in a terminal, automate
-────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/run-claude.sh
-╭─── Claude Code v2.1.143 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                    │ Tips for getting started                                                                                 │
-│                                                    │ ──────────────────────────────────────────────────────────────────────────────────────────────────────── │
-│                       ▐▛███▜▌                      │ What's new                                                                                               │
-│                      ▝▜█████▛▘                     │ Added `claude agents --json` to list live Claude sessions as JSON for scripting (tmux-resurrect, status… │
-│                        ▘▘ ▝▝                       │ Added `agent_id` and `parent_agent_id` attributes to `claude_code.tool` OTEL spans, and fixed trace par… │
-│   Coder                                            │ /release-notes for more                                                                                  │
-│    /…/hero-demo-1779369037179/claude-1/workspace   │                                                                                                          │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-
-❯ You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-● Bash(env | grep -E "HERO_|AGENT_TTY" | sort)
-  ⎿  AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/inner-home
-     HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-     HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/workspace/demo-note.txt
-     … +2 lines (ctrl+o to expand)
-
-● Bash(which agent-tty && agent-tty --help 2>&1 | head -50)
-  ⎿  /tmp/agent-tty-hero-demo/hero-demo-1779369037179/install/bin/agent-tty
-     MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get
-     agent-tty` before any other agent-tty command.
-     … +29 lines (ctrl+o to expand)
-
-  Listed 1 directory (ctrl+o to expand)
-
-● Bash(agent-tty skills get agent-tty 2>&1 | head -200)
-  ⎿  ---
-     name: agent-tty
-     description: Terminal and TUI automation CLI for AI agents. Use when the user needs to create a terminal session, run a command in a terminal, automate
-────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/run-claude.sh
-╭─── Claude Code v2.1.143 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                    │ Tips for getting started                                                                                 │
-│                                                    │ ──────────────────────────────────────────────────────────────────────────────────────────────────────── │
-│                       ▐▛███▜▌                      │ What's new                                                                                               │
-│                      ▝▜█████▛▘                     │ Added `claude agents --json` to list live Claude sessions as JSON for scripting (tmux-resurrect, status… │
-│                        ▘▘ ▝▝                       │ Added `agent_id` and `parent_agent_id` attributes to `claude_code.tool` OTEL spans, and fixed trace par… │
-│   Coder                                            │ /release-notes for more                                                                                  │
-│    /…/hero-demo-1779369037179/claude-1/workspace   │                                                                                                          │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-
-❯ You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-● Bash(env | grep -E "HERO_|AGENT_TTY" | sort)
-  ⎿  AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/inner-home
-     HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-     HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/workspace/demo-note.txt
-     … +2 lines (ctrl+o to expand)
-
-● Bash(which agent-tty && agent-tty --help 2>&1 | head -50)
-  ⎿  /tmp/agent-tty-hero-demo/hero-demo-1779369037179/install/bin/agent-tty
-     MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get
-     agent-tty` before any other agent-tty command.
-     … +29 lines (ctrl+o to expand)
-
-  Listed 1 directory (ctrl+o to expand)
-
-● Bash(agent-tty skills get agent-tty 2>&1 | head -200)
-  ⎿  ---
-     name: agent-tty
-     description: Terminal and TUI automation CLI for AI agents. Use when the user needs to create a terminal session, run a command in a terminal, automate
-────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/run-claude.sh
-╭─── Claude Code v2.1.143 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                    │ Tips for getting started                                                                                 │
-│                                                    │ ──────────────────────────────────────────────────────────────────────────────────────────────────────── │
-│                       ▐▛███▜▌                      │ What's new                                                                                               │
-│                      ▝▜█████▛▘                     │ Added `claude agents --json` to list live Claude sessions as JSON for scripting (tmux-resurrect, status… │
-│                        ▘▘ ▝▝                       │ Added `agent_id` and `parent_agent_id` attributes to `claude_code.tool` OTEL spans, and fixed trace par… │
-│   Coder                                            │ /release-notes for more                                                                                  │
-│    /…/hero-demo-1779369037179/claude-1/workspace   │                                                                                                          │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-
-❯ You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-● Bash(env | grep -E "HERO_|AGENT_TTY" | sort)
-  ⎿  AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/inner-home
-     HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-     HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/workspace/demo-note.txt
-     … +2 lines (ctrl+o to expand)
-
-● Bash(which agent-tty && agent-tty --help 2>&1 | head -50)
-  ⎿  /tmp/agent-tty-hero-demo/hero-demo-1779369037179/install/bin/agent-tty
-     MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get
-     agent-tty` before any other agent-tty command.
-     … +29 lines (ctrl+o to expand)
-
-  Listed 1 directory (ctrl+o to expand)
-
-● Bash(agent-tty skills get agent-tty 2>&1 | head -200)
-  ⎿  ---
-     name: agent-tty
-     description: Terminal and TUI automation CLI for AI agents. Use when the user needs to create a terminal session, run a command in a terminal, automate
-────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/run-claude.sh
-╭─── Claude Code v2.1.143 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                    │ Tips for getting started                                                                                 │
-│                                                    │ ──────────────────────────────────────────────────────────────────────────────────────────────────────── │
-│                       ▐▛███▜▌                      │ What's new                                                                                               │
-│                      ▝▜█████▛▘                     │ Added `claude agents --json` to list live Claude sessions as JSON for scripting (tmux-resurrect, status… │
-│                        ▘▘ ▝▝                       │ Added `agent_id` and `parent_agent_id` attributes to `claude_code.tool` OTEL spans, and fixed trace par… │
-│   Coder                                            │ /release-notes for more                                                                                  │
-│    /…/hero-demo-1779369037179/claude-1/workspace   │                                                                                                          │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-
-❯ You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-● Bash(env | grep -E "HERO_|AGENT_TTY" | sort)
-  ⎿  AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/inner-home
-     HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-     HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/workspace/demo-note.txt
-     … +2 lines (ctrl+o to expand)
-
-● Bash(which agent-tty && agent-tty --help 2>&1 | head -50)
-  ⎿  /tmp/agent-tty-hero-demo/hero-demo-1779369037179/install/bin/agent-tty
-     MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get
-     agent-tty` before any other agent-tty command.
-     … +29 lines (ctrl+o to expand)
-
-  Listed 1 directory (ctrl+o to expand)
-
-● Bash(agent-tty skills get agent-tty 2>&1 | head -200)
-  ⎿  ---
-     name: agent-tty
-     description: Terminal and TUI automation CLI for AI agents. Use when the user needs to create a terminal session, run a command in a terminal, automate
-────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/run-claude.sh
-╭─── Claude Code v2.1.143 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                    │ Tips for getting started                                                                                 │
-│                                                    │ ──────────────────────────────────────────────────────────────────────────────────────────────────────── │
-│                       ▐▛███▜▌                      │ What's new                                                                                               │
-│                      ▝▜█████▛▘                     │ Added `claude agents --json` to list live Claude sessions as JSON for scripting (tmux-resurrect, status… │
-│                        ▘▘ ▝▝                       │ Added `agent_id` and `parent_agent_id` attributes to `claude_code.tool` OTEL spans, and fixed trace par… │
-│   Coder                                            │ /release-notes for more                                                                                  │
-│    /…/hero-demo-1779369037179/claude-1/workspace   │                                                                                                          │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-
-❯ You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-● Bash(env | grep -E "HERO_|AGENT_TTY" | sort)
-  ⎿  AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/inner-home
-     HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-     HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/workspace/demo-note.txt
-     … +2 lines (ctrl+o to expand)
-
-● Bash(which agent-tty && agent-tty --help 2>&1 | head -50)
-  ⎿  /tmp/agent-tty-hero-demo/hero-demo-1779369037179/install/bin/agent-tty
-     MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get
-     agent-tty` before any other agent-tty command.
-     … +29 lines (ctrl+o to expand)
-
-  Listed 1 directory (ctrl+o to expand)
-
-● Bash(agent-tty skills get agent-tty 2>&1 | head -200)
-  ⎿  ---
-     name: agent-tty
-     description: Terminal and TUI automation CLI for AI agents. Use when the user needs to create a terminal session, run a command in a terminal, automate
-────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/run-claude.sh
-╭─── Claude Code v2.1.143 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                    │ Tips for getting started                                                                                 │
-│                                                    │ ──────────────────────────────────────────────────────────────────────────────────────────────────────── │
-│                       ▐▛███▜▌                      │ What's new                                                                                               │
-│                      ▝▜█████▛▘                     │ Added `claude agents --json` to list live Claude sessions as JSON for scripting (tmux-resurrect, status… │
-│                        ▘▘ ▝▝                       │ Added `agent_id` and `parent_agent_id` attributes to `claude_code.tool` OTEL spans, and fixed trace par… │
-│   Coder                                            │ /release-notes for more                                                                                  │
-│    /…/hero-demo-1779369037179/claude-1/workspace   │                                                                                                          │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-
-❯ You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-● Bash(env | grep -E "HERO_|AGENT_TTY" | sort)
-  ⎿  AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/inner-home
-     HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-     HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/workspace/demo-note.txt
-     … +2 lines (ctrl+o to expand)
-
-● Bash(which agent-tty && agent-tty --help 2>&1 | head -50)
-  ⎿  /tmp/agent-tty-hero-demo/hero-demo-1779369037179/install/bin/agent-tty
-     MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get
-     agent-tty` before any other agent-tty command.
-     … +29 lines (ctrl+o to expand)
-
-  Listed 1 directory (ctrl+o to expand)
-
-● Bash(agent-tty skills get agent-tty 2>&1 | head -200)
-  ⎿  ---
-     name: agent-tty
-     description: Terminal and TUI automation CLI for AI agents. Use when the user needs to create a terminal session, run a command in a terminal, automate
-────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/run-claude.sh
-╭─── Claude Code v2.1.143 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                    │ Tips for getting started                                                                                 │
-│                                                    │ ──────────────────────────────────────────────────────────────────────────────────────────────────────── │
-│                       ▐▛███▜▌                      │ What's new                                                                                               │
-│                      ▝▜█████▛▘                     │ Added `claude agents --json` to list live Claude sessions as JSON for scripting (tmux-resurrect, status… │
-│                        ▘▘ ▝▝                       │ Added `agent_id` and `parent_agent_id` attributes to `claude_code.tool` OTEL spans, and fixed trace par… │
-│   Coder                                            │ /release-notes for more                                                                                  │
-│    /…/hero-demo-1779369037179/claude-1/workspace   │                                                                                                          │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-
-❯ You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-● Bash(env | grep -E "HERO_|AGENT_TTY" | sort)
-  ⎿  AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/inner-home
-     HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-     HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/claude-1/workspace/demo-note.txt
-     … +2 lines (ctrl+o to expand)
-
-● Bash(which agent-tty && agent-tty --help 2>&1 | head -50)
-  ⎿  /tmp/agent-tty-hero-demo/hero-demo-1779369037179/install/bin/agent-tty
-     MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get
-     agent-tty` before any other agent-tty command.
-     … +29 lines (ctrl+o to expand)
-
-  Listed 1 directory (ctrl+o to expand)
-
-● Bash(agent-tty skills get agent-tty 2>&1 | head -200)
-  ⎿  ---
-     name: agent-tty
-     description: Terminal and TUI automation CLI for AI agents. Use when the user needs to create a terminal session, run a command in a terminal, automate
+       "env": {                                                                                           │agent-tty dashboard  read-only · …M65K80AZA exited
+         "TERM": "xterm-256color"                                                                         │Sessions · all (1)           ╭─────────────────────────────────────────────────────────╮
+       },                                                                                                 │▸ ○ …M65K80AZA nvim-demo     │screen 100×30 clip →  ·  exited (code 0)                 │
+       "toolVersion": "0.2.0"                                                                             │                             │                                                         │
+     }                                                                                                    │                             │                                                         │
+     [0,"o",                                                                                              │                             │                                                         │
+     ---- webm magic ----                                                                                 │                             │                                                         │
+     00000000: 1a45 dfa3 9f42 8681 0142 f781 0142 f281  .E...B...B...B..                                  │                             │                                                         │
+     00000010: 0442 f381 0842 8284 7765 626d 4287 8102  .B...B..webmB...                                  │                             │                                                         │
+                                                                                                          │                             │                                                         │
+⏺ Both artifacts are valid (asciicast v2 header, EBML/webm magic). Now I'll destroy the session.          │                             │                                                         │
+                                                                                                          │                             │                                                         │
+⏺ Bash(SESSION_ID=$(cat /tmp/hero-session-id)                                                             │                             │                                                         │
+      agent-tty destroy "$SESSION_ID" --json 2>&1 | jq '{ok, destroyed: .result.destroyed, error}'        │                             │                                                         │
+      echo "---- remaining sessions ----"                                                                 │                             │                                                         │
+      agent-tty list --json 2>&1 | jq '.result.sessions | map({id, status})')                             │                             │                                                         │
+  ⎿  {                                                                                                    │                             │                                                         │
+       "ok": true,                                                                                        │                             │                                                         │
+       "destroyed": true,                                                                                 │                             │                                                         │
+       "error": null                                                                                      │                             │                                                         │
+     }                                                                                                    │                             │                                                         │
+     ---- remaining sessions ----                                                                         │                             │                                                         │
+     []                                                                                                   │                             │                                                         │
+                                                                                                          │                             │                                                         │
+⏺ Done. Here's what the run produced:                                                                     │                             │                                                         │
+                                                                                                          │                             │                                                         │
+  Workflow (all via agent-tty on PATH against the preset AGENT_TTY_HOME):                                 │                             │                                                         │
+  1. Loaded the packaged agent-tty skill with agent-tty skills get agent-tty (the CLI gates real commands │                             │                                                         │
+  on this).                                                                                               │                             │                                                         │
+  2. doctor --json — all environment, renderer, and PTY checks passed.                                    │                             │                                                         │
+  3. create --cols 100 --rows 30 -- nvim --clean -n demo-note.txt → session 01KT70N3N9V2VEJFTM65K80AZA.   │                             │                                                         │
+  4. Drove nvim: send-keys i → wait --text INSERT → type "$HERO_EXPECTED_TEXT" → send-keys Escape → type  │                             │                                                         │
+  :wq + send-keys Enter. Each step gated on a wait observation, not sleep.                                │                             │                                                         │
+  5. record export twice (asciicast + webm) into the HERO paths.                                          │                             ╰─────────────────────────────────────────────────────────╯
+  6. destroy — list --json confirms zero remaining sessions.                                              │focus:list · Tab switch · ↑/↓ j/k select · a scope · z overview · q quit
+                                                                                                          │
+  Proof artifacts:                                                                                        │
+  - demo-note.txt — byte-exact diff against HERO_EXPECTED_TEXT clean.                                     │
+  - artifacts/inner-nvim.cast — 12 KB, valid asciicast v2 header.                                         │
+  - artifacts/inner-nvim.webm — 40 KB, valid EBML/webm magic.                                             │
+                                                                                                          │
+✻ Churned for 1m 50s                                                                                      │
+                                                                                                          │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────│
+❯                                                                                                         │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────│
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents                              47983 tokens  │
+                                                                                                          │
 ────────────────────────────────────────────────────────────────────────────────

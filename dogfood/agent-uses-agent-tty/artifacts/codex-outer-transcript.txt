@@ -357,689 +357,297 @@
 
 
 ────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/run-codex.sh
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+> You are in /var/folders/xk/64lk216n7cd7_7yk0dsd08xw0000gn/T/agent-tty-hero-demo/hero-demo-1780499459706/│agent-tty dashboard  read-only · no session selected
+                                                                                                          │Sessions · all (0)           ╭─────────────────────────────────────────────────────────╮
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of  │no sessions                  │live view                                                │
+  prompt injection. Trusting the directory allows project-local config, hooks, and exec policies to load. │                             │Waiting for output…                                      │
+                                                                                                          │                             ╰─────────────────────────────────────────────────────────╯
+› 1. Yes, continue                                                                                        │focus:list · Tab switch · ↑/↓ j/k select · a scope · z overview · q quit
+  2. No, quit                                                                                             │
+                                                                                                          │
+  Press enter to continue                                                                                 │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
 ────────────────────────────────────────────────────────────────────────────────
-> bash /tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/run-codex.sh
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+> You are in /var/folders/xk/64lk216n7cd7_7yk0dsd08xw0000gn/T/agent-tty-hero-demo/hero-demo-1780499459706/│agent-tty dashboard  read-only · no session selected
+                                                                                                          │Sessions · all (0)           ╭─────────────────────────────────────────────────────────╮
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of  │no sessions                  │live view                                                │
+  prompt injection. Trusting the directory allows project-local config, hooks, and exec policies to load. │                             │Waiting for output…                                      │
+                                                                                                          │                             ╰─────────────────────────────────────────────────────────╯
+› 1. Yes, continue                                                                                        │focus:list · Tab switch · ↑/↓ j/k select · a scope · z overview · q quit
+  2. No, quit                                                                                             │
+                                                                                                          │
+  Press enter to continue                                                                                 │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
 ────────────────────────────────────────────────────────────────────────────────
-> You are in /tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace
-
-  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the directory allows
-  project-local config, hooks, and exec policies to load.
-
-› 1. Yes, continue
-  2. No, quit
-
-  Press enter to continue
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+> You are in /var/folders/xk/64lk216n7cd7_7yk0dsd08xw0000gn/T/agent-tty-hero-demo/hero-demo-1780499459706/│agent-tty dashboard  read-only · no session selected
+                                                                                                          │Sessions · all (0)           ╭─────────────────────────────────────────────────────────╮
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of  │no sessions                  │live view                                                │
+  prompt injection. Trusting the directory allows project-local config, hooks, and exec policies to load. │                             │Waiting for output…                                      │
+                                                                                                          │                             ╰─────────────────────────────────────────────────────────╯
+› 1. Yes, continue                                                                                        │focus:list · Tab switch · ↑/↓ j/k select · a scope · z overview · q quit
+  2. No, quit                                                                                             │
+                                                                                                          │
+  Press enter to continue                                                                                 │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
 ────────────────────────────────────────────────────────────────────────────────
-> You are in /tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace
-
-  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the directory allows
-  project-local config, hooks, and exec policies to load.
-
-› 1. Yes, continue
-  2. No, quit
-
-  Press enter to continue
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+> You are in /var/folders/xk/64lk216n7cd7_7yk0dsd08xw0000gn/T/agent-tty-hero-demo/hero-demo-1780499459706/│agent-tty dashboard  read-only · no session selected
+                                                                                                          │Sessions · all (0)           ╭─────────────────────────────────────────────────────────╮
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of  │no sessions                  │live view                                                │
+  prompt injection. Trusting the directory allows project-local config, hooks, and exec policies to load. │                             │Waiting for output…                                      │
+                                                                                                          │                             ╰─────────────────────────────────────────────────────────╯
+› 1. Yes, continue                                                                                        │focus:list · Tab switch · ↑/↓ j/k select · a scope · z overview · q quit
+  2. No, quit                                                                                             │
+                                                                                                          │
+  Press enter to continue                                                                                 │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
 ────────────────────────────────────────────────────────────────────────────────
-> You are in /tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace
-
-  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the directory allows
-  project-local config, hooks, and exec policies to load.
-
-› 1. Yes, continue
-  2. No, quit
-
-  Press enter to continue
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+                                                                                                          │agent-tty dashboard  read-only · no session selected
+╭──────────────────────────────────────────────────╮                                                      │Sessions · all (0)           ╭─────────────────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.136.0)                       │                                                      │no sessions                  │live view                                                │
+│                                                  │                                                      │                             │Waiting for output…                                      │
+│ model:       loading   /model to change          │                                                      │                             ╰─────────────────────────────────────────────────────────╯
+│ directory:   /var/folders/xk/…/codex-1/workspace │                                                      │focus:list · Tab switch · ↑/↓ j/k select · a scope · z overview · q quit
+│ permissions: YOLO mode                           │                                                      │
+╰──────────────────────────────────────────────────╯                                                      │
+                                                                                                          │
+                                                                                                          │
+› Implement {feature}                                                                                     │
+                                                                                                          │
+  gpt-5.5 default · /var/folders/xk/64lk216n7cd7_7yk0dsd08xw0000gn/T/agent-tty-hero-demo/hero-demo-178049…│
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
+                                                                                                          │
 ────────────────────────────────────────────────────────────────────────────────
-
-╭───────────────────────────────────────────────────────────────╮
-│ ✨ Update available! 0.130.0 -> 0.132.0                       │
-│ See https://github.com/openai/codex for installation options. │
-│                                                               │
-│ See full release notes:                                       │
-│ https://github.com/openai/codex/releases/latest               │
-╰───────────────────────────────────────────────────────────────╯
-
-╭─────────────────────────────────────────────╮
-│ >_ OpenAI Codex (v0.130.0)                  │
-│                                             │
-│ model:       gpt-5.5 low   /model to change │
-│ directory:   /tmp/…/codex-1/workspace       │
-│ permissions: YOLO mode                      │
-╰─────────────────────────────────────────────╯
-
-  Tip: New Build faster with Codex.
-
-
-› You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-
-
-› Run /review on my current changes
-
-  gpt-5.5 low · /tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace
-
-
-
-
-
-
-────────────────────────────────────────────────────────────────────────────────
-
-╭───────────────────────────────────────────────────────────────╮
-│ ✨ Update available! 0.130.0 -> 0.132.0                       │
-│ See https://github.com/openai/codex for installation options. │
-│                                                               │
-│ See full release notes:                                       │
-│ https://github.com/openai/codex/releases/latest               │
-╰───────────────────────────────────────────────────────────────╯
-
-╭─────────────────────────────────────────────╮
-│ >_ OpenAI Codex (v0.130.0)                  │
-│                                             │
-│ model:       gpt-5.5 low   /model to change │
-│ directory:   /tmp/…/codex-1/workspace       │
-│ permissions: YOLO mode                      │
-╰─────────────────────────────────────────────╯
-
-  Tip: New Build faster with Codex.
-
-
-› You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-
-• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
-
-• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
-  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
-    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
-    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
-    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
-
-• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
-────────────────────────────────────────────────────────────────────────────────
-
-╭───────────────────────────────────────────────────────────────╮
-│ ✨ Update available! 0.130.0 -> 0.132.0                       │
-│ See https://github.com/openai/codex for installation options. │
-│                                                               │
-│ See full release notes:                                       │
-│ https://github.com/openai/codex/releases/latest               │
-╰───────────────────────────────────────────────────────────────╯
-
-╭─────────────────────────────────────────────╮
-│ >_ OpenAI Codex (v0.130.0)                  │
-│                                             │
-│ model:       gpt-5.5 low   /model to change │
-│ directory:   /tmp/…/codex-1/workspace       │
-│ permissions: YOLO mode                      │
-╰─────────────────────────────────────────────╯
-
-  Tip: New Build faster with Codex.
-
-
-› You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-
-• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
-
-• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
-  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
-    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
-    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
-    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
-
-• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
-────────────────────────────────────────────────────────────────────────────────
-
-╭───────────────────────────────────────────────────────────────╮
-│ ✨ Update available! 0.130.0 -> 0.132.0                       │
-│ See https://github.com/openai/codex for installation options. │
-│                                                               │
-│ See full release notes:                                       │
-│ https://github.com/openai/codex/releases/latest               │
-╰───────────────────────────────────────────────────────────────╯
-
-╭─────────────────────────────────────────────╮
-│ >_ OpenAI Codex (v0.130.0)                  │
-│                                             │
-│ model:       gpt-5.5 low   /model to change │
-│ directory:   /tmp/…/codex-1/workspace       │
-│ permissions: YOLO mode                      │
-╰─────────────────────────────────────────────╯
-
-  Tip: New Build faster with Codex.
-
-
-› You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-
-• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
-
-• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
-  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
-    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
-    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
-    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
-
-• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
-────────────────────────────────────────────────────────────────────────────────
-
-╭───────────────────────────────────────────────────────────────╮
-│ ✨ Update available! 0.130.0 -> 0.132.0                       │
-│ See https://github.com/openai/codex for installation options. │
-│                                                               │
-│ See full release notes:                                       │
-│ https://github.com/openai/codex/releases/latest               │
-╰───────────────────────────────────────────────────────────────╯
-
-╭─────────────────────────────────────────────╮
-│ >_ OpenAI Codex (v0.130.0)                  │
-│                                             │
-│ model:       gpt-5.5 low   /model to change │
-│ directory:   /tmp/…/codex-1/workspace       │
-│ permissions: YOLO mode                      │
-╰─────────────────────────────────────────────╯
-
-  Tip: New Build faster with Codex.
-
-
-› You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-
-• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
-
-• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
-  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
-    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
-    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
-    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
-
-• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
-────────────────────────────────────────────────────────────────────────────────
-
-╭───────────────────────────────────────────────────────────────╮
-│ ✨ Update available! 0.130.0 -> 0.132.0                       │
-│ See https://github.com/openai/codex for installation options. │
-│                                                               │
-│ See full release notes:                                       │
-│ https://github.com/openai/codex/releases/latest               │
-╰───────────────────────────────────────────────────────────────╯
-
-╭─────────────────────────────────────────────╮
-│ >_ OpenAI Codex (v0.130.0)                  │
-│                                             │
-│ model:       gpt-5.5 low   /model to change │
-│ directory:   /tmp/…/codex-1/workspace       │
-│ permissions: YOLO mode                      │
-╰─────────────────────────────────────────────╯
-
-  Tip: New Build faster with Codex.
-
-
-› You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-
-• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
-
-• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
-  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
-    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
-    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
-    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
-
-• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
-────────────────────────────────────────────────────────────────────────────────
-
-╭───────────────────────────────────────────────────────────────╮
-│ ✨ Update available! 0.130.0 -> 0.132.0                       │
-│ See https://github.com/openai/codex for installation options. │
-│                                                               │
-│ See full release notes:                                       │
-│ https://github.com/openai/codex/releases/latest               │
-╰───────────────────────────────────────────────────────────────╯
-
-╭─────────────────────────────────────────────╮
-│ >_ OpenAI Codex (v0.130.0)                  │
-│                                             │
-│ model:       gpt-5.5 low   /model to change │
-│ directory:   /tmp/…/codex-1/workspace       │
-│ permissions: YOLO mode                      │
-╰─────────────────────────────────────────────╯
-
-  Tip: New Build faster with Codex.
-
-
-› You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-
-• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
-
-• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
-  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
-    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
-    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
-    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
-
-• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
-────────────────────────────────────────────────────────────────────────────────
-
-╭───────────────────────────────────────────────────────────────╮
-│ ✨ Update available! 0.130.0 -> 0.132.0                       │
-│ See https://github.com/openai/codex for installation options. │
-│                                                               │
-│ See full release notes:                                       │
-│ https://github.com/openai/codex/releases/latest               │
-╰───────────────────────────────────────────────────────────────╯
-
-╭─────────────────────────────────────────────╮
-│ >_ OpenAI Codex (v0.130.0)                  │
-│                                             │
-│ model:       gpt-5.5 low   /model to change │
-│ directory:   /tmp/…/codex-1/workspace       │
-│ permissions: YOLO mode                      │
-╰─────────────────────────────────────────────╯
-
-  Tip: New Build faster with Codex.
-
-
-› You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-
-• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
-
-• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
-  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
-    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
-    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
-    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
-
-• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
-────────────────────────────────────────────────────────────────────────────────
-
-╭───────────────────────────────────────────────────────────────╮
-│ ✨ Update available! 0.130.0 -> 0.132.0                       │
-│ See https://github.com/openai/codex for installation options. │
-│                                                               │
-│ See full release notes:                                       │
-│ https://github.com/openai/codex/releases/latest               │
-╰───────────────────────────────────────────────────────────────╯
-
-╭─────────────────────────────────────────────╮
-│ >_ OpenAI Codex (v0.130.0)                  │
-│                                             │
-│ model:       gpt-5.5 low   /model to change │
-│ directory:   /tmp/…/codex-1/workspace       │
-│ permissions: YOLO mode                      │
-╰─────────────────────────────────────────────╯
-
-  Tip: New Build faster with Codex.
-
-
-› You are running inside a disposable workspace for an agent-tty Hero Demo.
-
-  Explore the installed agent-tty skill and CLI yourself, then use agent-tty to drive a real Neovim session.
-  Do not run a prewritten helper script; this run is meant to show how a coding agent uses agent-tty in the wild.
-
-  Success criteria:
-  - Learn the available workflow from the packaged agent-tty skill and CLI help as needed.
-  - Use the agent-tty binary on PATH and the already configured AGENT_TTY_HOME.
-  - Create an agent-tty session that launches nvim --clean -n demo-note.txt.
-  - Interact with Neovim through agent-tty and write exactly the text in HERO_EXPECTED_TEXT.
-  - Ensure the final file path in HERO_FINAL_FILE contains that exact text.
-  - Export the inner agent-tty recording to HERO_INNER_CAST and HERO_INNER_WEBM.
-  - Destroy the agent-tty session after exporting the proof artifacts.
-  - The recorder stops after a fixed review window, so complete the proof artifacts promptly and then summarize what you did.
-
-  Use the HERO_* environment variables for all required paths and final text. Avoid changing files outside this disposable workspace.
-
-
-• I’ll inspect the local environment and the packaged agent-tty guidance first, then I’ll drive Neovim through the CLI and produce the requested artifacts.
-
-• Ran printenv | rg '^HERO_|^AGENT_TTY_HOME'
-  └ HERO_FINAL_FILE=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/demo-note.txt
-    HERO_INNER_WEBM=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.webm
-    HERO_INNER_CAST=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/workspace/artifacts/inner-nvim.cast
-    HERO_EXPECTED_TEXT=agent-tty nested Neovim proof from a real coding agent.
-    AGENT_TTY_HOME=/tmp/agent-tty-hero-demo/hero-demo-1779369037179/codex-1/inner-home
-
-• Ran rg --files <home>/.agents/skills <home>/.codex/skills 2>/dev/null | rg 'agent-tty|tty|SKILL.md'
+                                                                                                          │agent-tty dashboard  read-only · …6QEFXY2R1 exited
+• Ran SID=01KT70YCX4KMF2KYT6QEFXY2R1                                                                      │Sessions · all (1)           ╭─────────────────────────────────────────────────────────╮
+  │ agent-tty --home "$AGENT_TTY_HOME" send-keys "$SID" Escape --json                                     │▸ ○ …6QEFXY2R1 hero-inner-n… │screen 80×24 clip →  ·  exited (code 0)                  │
+  │ agent-tty --home "$AGENT_TTY_HOME" type "$SID" ':wq' --json                                           │                             │                                                         │
+  │ … +3 lines                                                                                            │                             │                                                         │
+  └ {                                                                                                     │                             │                                                         │
+      "ok": true,                                                                                         │                             │                                                         │
+    … +37 lines (ctrl + t to view transcript)                                                             │                             │                                                         │
+    FILE:agent-tty nested Neovim proof from a real coding agent.                                          │                             │                                                         │
+                                                                                                          │                             │                                                         │
+                                                                                                          │                             │                                                         │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────│                             │                                                         │
+                                                                                                          │                             │                                                         │
+• The editor exited cleanly and the target file contains the required line. I’m exporting both recording  │                             │                                                         │
+  formats to the requested artifact paths now, then I’ll destroy the session and do a final verification. │                             │                                                         │
+                                                                                                          │                             │                                                         │
+• Ran SID=01KT70YCX4KMF2KYT6QEFXY2R1                                                                      │                             │                                                         │
+  │ mkdir -p "$(dirname "$HERO_INNER_CAST")" "$(dirname "$HERO_INNER_WEBM")"                              │                             │                                                         │
+  │ agent-tty --home "$AGENT_TTY_HOME" record export "$SID" --format asciicast --out "$HERO_INNER_CAST"   │                             │                                                         │
+  │ … +18 lines                                                                                           │                             │                                                         │
+  └ {                                                                                                     │                             │                                                         │
+      "ok": true,                                                                                         │                             │                                                         │
+    … +66 lines (ctrl + t to view transcript)                                                             │                             │                                                         │
+    cast_exists_bytes True 9002                                                                           │                             │                                                         │
+    webm_exists_bytes True 35448                                                                          │                             │                                                         │
+                                                                                                          │                             │                                                         │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────│                             │                                                         │
+                                                                                                          │                             ╰─────────────────────────────────────────────────────────╯
+• Completed.                                                                                              │focus:list · Tab switch · ↑/↓ j/k select · a scope · z overview · q quit
+                                                                                                          │
+  I used the packaged agent-tty skill and CLI help, created a real agent-tty session running nvim --clean │
+  -n demo-note.txt, inserted the HERO_EXPECTED_TEXT, saved and exited Neovim, exported both proof         │
+  artifacts, then destroyed the session.                                                                  │
+                                                                                                          │
+  Verified:                                                                                               │
+                                                                                                          │
+  - Final file: demo-note.txt                                                                             │
+  - Text line matches HERO_EXPECTED_TEXT                                                                  │
+  - Cast exported: artifacts/inner-nvim.cast (9002 bytes)                                                 │
+  - WebM exported: artifacts/inner-nvim.webm (35448 bytes)                                                │
+  - agent-tty list shows no remaining sessions.                                                           │
+                                                                                                          │
+─ Worked for 1m 20s ──────────────────────────────────────────────────────────────────────────────────────│
+                                                                                                          │
+                                                                                                          │
+› Implement {feature}                                                                                     │
+                                                                                                          │
+  gpt-5.5 low · /var/folders/xk/64lk216n7cd7_7yk0dsd08xw0000gn/T/agent-tty-hero-demo/hero-demo-1780499459…│
 ────────────────────────────────────────────────────────────────────────────────

@@ -26,14 +26,20 @@ type AgentUrls = Record<AgentName, string>;
 // thumbnail cannot be supplied as a poster. Instead we hold the thumbnail as
 // the opening frames of the upload MP4: the video element's natural first-frame
 // still then shows the curated end-state proof rather than a blank terminal.
-const FRAME_WIDTH = 1600;
-const FRAME_HEIGHT = 900;
 const POSTER_HOLD_SECONDS = '0.3';
 const POSTER_FPS = 30;
-const POSTER_FILTER =
-  `[0:v]scale=${String(FRAME_WIDTH)}:${String(FRAME_HEIGHT)},setsar=1,fps=${String(POSTER_FPS)},format=yuv420p[intro];` +
-  `[1:v]scale=${String(FRAME_WIDTH)}:${String(FRAME_HEIGHT)},setsar=1,fps=${String(POSTER_FPS)},format=yuv420p[main];` +
-  `[intro][main]concat=n=2:v=1[v]`;
+
+// The poster intro and the recording must share exact dimensions for concat, so
+// target the recording's own probed dimensions. Hardcoding a frame size once
+// silently squished 1920x900 recordings down to 1600x900 on every upload.
+export function posterConcatFilter(width: number, height: number): string {
+  const normalize = `scale=${String(width)}:${String(height)},setsar=1,fps=${String(POSTER_FPS)},format=yuv420p`;
+  return (
+    `[0:v]${normalize}[intro];` +
+    `[1:v]${normalize}[main];` +
+    `[intro][main]concat=n=2:v=1[v]`
+  );
+}
 
 // README-facing playback uses inline HTML <video> elements (one per agent, in
 // AGENTS order). Bare user-attachments URLs do not become players inside table
@@ -70,6 +76,33 @@ async function assertNonEmptyFile(path: string): Promise<void> {
     stats.isFile() && stats.size > 0,
     `expected non-empty file: ${path}`,
   );
+}
+
+/** Reads the pixel dimensions of a video's first video stream via ffprobe. */
+function probeVideoDimensions(path: string): {
+  width: number;
+  height: number;
+} {
+  const json = run(toolCommand('HERO_VIDEO_FFPROBE', 'ffprobe'), [
+    '-v',
+    'error',
+    '-select_streams',
+    'v:0',
+    '-show_entries',
+    'stream=width,height',
+    '-of',
+    'json',
+    path,
+  ]);
+  const parsed = JSON.parse(json) as {
+    streams?: Array<{ width?: number; height?: number }>;
+  };
+  const stream = parsed.streams?.[0];
+  invariant(
+    stream?.width !== undefined && stream.height !== undefined,
+    `could not probe video dimensions: ${path}`,
+  );
+  return { width: stream.width, height: stream.height };
 }
 
 function assertAttachmentUrl(url: string, agent: AgentName): void {
@@ -150,6 +183,7 @@ export async function prepareHeroVideoUploadAssets(
     const probePath = join(uploadDir, `${agent}-outer-h264.ffprobe.json`);
     await assertNonEmptyFile(inputPath);
     await assertNonEmptyFile(posterPath);
+    const { width, height } = probeVideoDimensions(inputPath);
     run(toolCommand('HERO_VIDEO_FFMPEG', 'ffmpeg'), [
       '-y',
       '-loop',
@@ -162,7 +196,7 @@ export async function prepareHeroVideoUploadAssets(
       inputPath,
       '-an',
       '-filter_complex',
-      POSTER_FILTER,
+      posterConcatFilter(width, height),
       '-map',
       '[v]',
       '-c:v',

@@ -14,13 +14,13 @@ The Outer Hero Demo column embeds the uploaded H.264 MP4 recordings as inline Gi
   </tr>
   <tr>
     <td>Codex</td>
-    <td><video src="https://github.com/user-attachments/assets/27cc3b9b-9b91-4cd9-a3a5-1bbb61c33e19" controls width="320"></video></td>
+    <td><video src="https://github.com/user-attachments/assets/f1823164-330c-4962-8adf-2b825080e06f" controls width="320"></video></td>
     <td><a href="./artifacts/codex-inner-nvim.cast">cast</a>, <a href="./artifacts/codex-inner-nvim.webm">WebM</a></td>
     <td><a href="./artifacts/codex-final-file-proof.txt">proof</a></td>
   </tr>
   <tr>
     <td>Claude</td>
-    <td><video src="https://github.com/user-attachments/assets/36221ef7-97c4-4b06-b673-21ac623a5f0a" controls width="320"></video></td>
+    <td><video src="https://github.com/user-attachments/assets/966bed35-9383-444e-b06a-1d103ccba49a" controls width="320"></video></td>
     <td><a href="./artifacts/claude-inner-nvim.cast">cast</a>, <a href="./artifacts/claude-inner-nvim.webm">WebM</a></td>
     <td><a href="./artifacts/claude-final-file-proof.txt">proof</a></td>
   </tr>

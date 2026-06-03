@@ -35,13 +35,16 @@ mise run demo:agent-uses-agent-tty:upload-assets
 The task uses the pinned `ffmpeg`/`ffprobe` from `mise.toml`. For each agent it
 prepends ~0.3s of `artifacts/<agent>-thumbnail.png` as the opening frames, encodes
 H.264 MP4, writes ffprobe metadata, and writes checksums under `.debug/video-upload/`.
+The upload MP4 is encoded at the recording's own probed resolution, so it always
+preserves the source aspect ratio (no squish if the recording dimensions change).
 
-Expected constraints for the promoted 2026-05-21 recordings:
+Expected constraints for the current promoted recordings (dimensions track the
+recording resolution, currently 1920x900):
 
 | Agent  | Upload file                                 | Expected codec    | Expected dimensions | Expected size |
 | ------ | ------------------------------------------- | ----------------- | ------------------- | ------------- |
-| Codex  | `.debug/video-upload/codex-outer-h264.mp4`  | H.264 / `yuv420p` | 1600x900            | ~3.5 MB       |
-| Claude | `.debug/video-upload/claude-outer-h264.mp4` | H.264 / `yuv420p` | 1600x900            | ~3.4 MB       |
+| Codex  | `.debug/video-upload/codex-outer-h264.mp4`  | H.264 / `yuv420p` | 1920x900            | ~3.4 MB       |
+| Claude | `.debug/video-upload/claude-outer-h264.mp4` | H.264 / `yuv420p` | 1920x900            | ~4.0 MB       |
 
 Both expected sizes are below GitHub's 10 MB video attachment limit for free plans.
 

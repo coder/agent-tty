@@ -25,6 +25,7 @@ import { CanonicalBundleManifestSchema } from './bundleManifestSchema.js';
 import { canonicalBundleArtifactEntry } from './canonicalBundleArtifacts.js';
 import { invariant } from '../util/assert.js';
 import { isDirectExecution } from '../util/isDirectExecution.js';
+import { LIBGHOSTTY_VT_PACKAGE } from '../renderer/readiness.js';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const DEFAULT_BUNDLE_DIR = join(REPO_ROOT, 'dogfood/agent-uses-agent-tty');
@@ -34,12 +35,22 @@ const DEFAULT_EXPECTED_TEXT =
 const DEFAULT_RECORD_SECONDS = 3 * 60;
 const RECORD_TIMEOUT_BUFFER_SECONDS = 3 * 60;
 const AGENTS = ['codex', 'claude'] as const;
+// Each run is mostly an idle review-window sleep, so overlapping runs is a big
+// wall-clock win. Default to 2 so the two agents record concurrently without
+// ever running two sessions of the *same* agent (same account) at once; bump
+// --concurrency higher to also overlap an agent's own attempts (costs more CPU
+// — each run drives its own headless browser + ffmpeg — and shared-account load).
+const DEFAULT_CONCURRENCY = 2;
 
-const OUTER_WIDTH = 1600;
+// 1920 wide to match the README hero's canvas; 900 tall + 14pt keeps the
+// content-heavy coding-agent TUI roomy (it gets the larger ~60% pane).
+const OUTER_WIDTH = 1920;
 const OUTER_HEIGHT = 900;
 const OUTER_FONT_SIZE = 14;
-const CLAUDE_VISUAL_REDACTION_HEIGHT = Math.floor(OUTER_HEIGHT / 5);
-const CLAUDE_VISUAL_REDACTION_FILTER = `drawbox=x=0:y=0:w=iw:h=${String(CLAUDE_VISUAL_REDACTION_HEIGHT)}:color=black:t=fill`;
+// The recording is a tmux split: LEFT = the coding agent, RIGHT = the live
+// `agent-tty dashboard`. `-l` sizes the new (right/dashboard) pane, so a smaller
+// percentage leaves the larger half for the agent — it is the star of the demo.
+const DASHBOARD_PANE_PERCENT = 40;
 
 type AgentName = (typeof AGENTS)[number];
 
@@ -47,6 +58,7 @@ export interface HeroDemoOptions {
   agent: AgentName | 'both';
   runs: number;
   promote: boolean;
+  concurrency: number;
   bundleDir: string;
   codexModel: string;
   codexEffort: string;
@@ -60,7 +72,14 @@ export interface HeroDemoOptions {
 export interface GeneratedTapeInput {
   agent: AgentName;
   runnerPath: string;
+  dashboardRunnerPath: string;
+  socket: string;
   recordSeconds: number;
+}
+
+export interface GeneratedDashboardRunnerInput {
+  installPrefix: string;
+  innerHome: string;
 }
 
 export interface GeneratedRunnerInput {
@@ -123,11 +142,43 @@ export function selectedAgents(agent: AgentName | 'both'): AgentName[] {
   return agent === 'both' ? [...AGENTS] : [agent];
 }
 
+/**
+ * Runs `worker` over `items` with at most `limit` in flight at once, returning
+ * results in input order. Hero Demo runs are dominated by an idle review-window
+ * sleep, so overlapping them is a large wall-clock win; the cap keeps fan-out
+ * bounded (each run drives its own headless browser + ffmpeg).
+ */
+export async function mapWithConcurrency<Item, Result>(
+  items: Item[],
+  limit: number,
+  worker: (item: Item, index: number) => Promise<Result>,
+): Promise<Result[]> {
+  const results = new Array<Result>(items.length);
+  let cursor = 0;
+  const poolSize = Math.max(1, Math.min(limit, items.length));
+  const runWorker = async (): Promise<void> => {
+    for (;;) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= items.length) {
+        return;
+      }
+      const item = items[index];
+      invariant(item !== undefined, 'worker item index out of range');
+      results[index] = await worker(item, index);
+    }
+  };
+  await Promise.all(Array.from({ length: poolSize }, () => runWorker()));
+  return results;
+}
+
 /** Parses maintainer-facing Hero Demo generator arguments and environment defaults. */
 export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
   let agent: AgentName | 'both' = 'both';
-  let runs = 1;
-  let promote = false;
+  // Default to the full promote regeneration so `mise run demo:agent-uses-agent-tty`
+  // (no flags) just rebuilds the bundle. Pass --no-promote for a quick test run.
+  let runs = 3;
+  let promote = true;
   let bundleDir = DEFAULT_BUNDLE_DIR;
   let codexModel = process.env.AGENT_TTY_HERO_CODEX_MODEL ?? 'gpt-5.5';
   let codexEffort = process.env.AGENT_TTY_HERO_CODEX_EFFORT ?? 'low';
@@ -139,6 +190,9 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
   let keepDebug = false;
   let recordSeconds = Number(
     process.env.AGENT_TTY_HERO_RECORD_SECONDS ?? String(DEFAULT_RECORD_SECONDS),
+  );
+  let concurrency = Number(
+    process.env.AGENT_TTY_HERO_CONCURRENCY ?? String(DEFAULT_CONCURRENCY),
   );
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -160,6 +214,9 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
       }
       case '--promote':
         promote = true;
+        break;
+      case '--no-promote':
+        promote = false;
         break;
       case '--bundle-dir': {
         const value = argv[++index];
@@ -200,6 +257,12 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
         recordSeconds = Number(value);
         break;
       }
+      case '--concurrency': {
+        const value = argv[++index];
+        invariant(value !== undefined, '--concurrency requires a value');
+        concurrency = Number(value);
+        break;
+      }
       case '--help':
       case '-h':
         throw new Error(usage());
@@ -216,15 +279,26 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
     Number.isInteger(recordSeconds) && recordSeconds > 0,
     '--record-seconds must be a positive integer',
   );
+  invariant(
+    Number.isInteger(concurrency) && concurrency > 0,
+    '--concurrency must be a positive integer',
+  );
   if (promote) {
-    invariant(runs >= 3, '--promote requires --runs >= 3');
-    invariant(agent === 'both', '--promote requires --agent both');
+    invariant(
+      runs >= 3,
+      '--promote requires --runs >= 3 (pass --no-promote for a quick test run)',
+    );
+    invariant(
+      agent === 'both',
+      '--promote requires --agent both (pass --no-promote to test a single agent)',
+    );
   }
 
   return {
     agent,
     runs,
     promote,
+    concurrency,
     bundleDir,
     codexModel,
     codexEffort,
@@ -238,9 +312,16 @@ export function parseHeroDemoArgs(argv: string[]): HeroDemoOptions {
 
 function usage(): string {
   return [
-    'Usage: mise run demo:agent-uses-agent-tty -- [--agent both|codex|claude] [--runs N] [--record-seconds N] [--bundle-dir DIR] [--codex-model MODEL] [--codex-effort LEVEL] [--claude-model MODEL] [--claude-effort LEVEL] [--keep-debug] [--promote]',
+    'Usage: mise run demo:agent-uses-agent-tty -- [--no-promote] [--agent both|codex|claude] [--runs N] [--record-seconds N] [--concurrency N] [--bundle-dir DIR] [--codex-model MODEL] [--codex-effort LEVEL] [--claude-model MODEL] [--claude-effort LEVEL] [--keep-debug]',
     '',
     'Regenerates the real-agent Hero Demo with VHS as the outer camera.',
+    'Defaults to a full promote run (--agent both --runs 3 --record-seconds 180).',
+    'Runs record concurrently (--concurrency, default 2): each run is mostly an',
+    'idle review-window sleep, so overlapping them is a large wall-clock win.',
+    "Higher concurrency also overlaps an agent's own attempts but costs more CPU",
+    '(each run drives its own headless browser + ffmpeg) and shared-account load.',
+    'Pass --no-promote (optionally with --runs 1 --agent codex) for a quick test',
+    'run that records into the debug dir without touching the bundle.',
   ].join('\n');
 }
 
@@ -255,6 +336,21 @@ export function generateTape(input: GeneratedTapeInput): string {
       ? 'OpenAI Codex|Codex'
       : 'Claude Code|Welcome|esc to interrupt';
   const exitCommand = input.agent === 'codex' ? '/quit' : '/exit';
+  // `-f /dev/null` ignores any host ~/.tmux.conf (so pane 0-indexing and defaults
+  // hold); `-L <socket>` isolates this run's server so it can be reaped cleanly.
+  const tmuxNew = `tmux -f /dev/null -L ${input.socket}`;
+  // One hidden tmux command builds the whole split: pane 0 (LEFT) runs the agent
+  // directly, pane 1 (RIGHT) runs the dashboard; `split-window -d` keeps the
+  // agent pane focused, `set -g status off` drops the status bar, then `attach`.
+  // The recording opens directly on a clean two-pane split — like the README
+  // hero — instead of showing tmux plumbing or an `exec bash <runner>` line. The
+  // dashboard runner exports the same AGENT_TTY_HOME, so it auto-follows the
+  // agent's newest session.
+  const splitSetup =
+    `${tmuxNew} new-session -d -s hero 'bash ${input.runnerPath}'` +
+    ` \\; set -g status off` +
+    ` \\; split-window -h -d -l ${String(DASHBOARD_PANE_PERCENT)}% -t hero 'bash ${input.dashboardRunnerPath}'` +
+    ` \\; attach -t hero`;
   return [
     'Output outer.webm',
     'Output outer.ascii',
@@ -265,13 +361,23 @@ export function generateTape(input: GeneratedTapeInput): string {
     'Set TypingSpeed 10ms',
     'Set Framerate 5',
     'Set PlaybackSpeed 1.0',
-    `Type "bash ${input.runnerPath}"`,
+    // Build the split off-camera so the recording opens on it, not on tmux setup.
+    'Hide',
+    `Type "${splitSetup}"`,
     'Enter',
+    'Sleep 2s',
+    'Show',
+    // Now visible: the agent boots in the LEFT pane (trust prompt → accept →
+    // UI), then works for the review window while the dashboard mirrors it.
     `Wait+Screen@120s /${startupRegex}/`,
     'Sleep 1s',
     'Enter',
     `Wait+Screen@120s /${uiRegex}/`,
     `Sleep ${String(input.recordSeconds)}s`,
+    // Hidden teardown: exit the agent. Stays hidden so the GIF ends on the
+    // agent + dashboard, not on the bare shell the exit collapses tmux back to
+    // (the run's tmux server is reaped by killTmuxServer after VHS returns).
+    'Hide',
     'Ctrl+C',
     'Sleep 1s',
     `Type "${exitCommand}"`,
@@ -279,6 +385,23 @@ export function generateTape(input: GeneratedTapeInput): string {
     'Sleep 5s',
     'Ctrl+C',
     'Sleep 1s',
+    '',
+  ].join('\n');
+}
+
+/** Builds the shell runner for the RIGHT pane: the live `agent-tty dashboard`. */
+export function generateDashboardRunner(
+  input: GeneratedDashboardRunnerInput,
+): string {
+  return [
+    '#!/usr/bin/env bash',
+    'set -euo pipefail',
+    `export PATH=${quote(join(input.installPrefix, 'bin'))}:$PATH`,
+    // Same AGENT_TTY_HOME as the agent runner so the dashboard sees its sessions.
+    `export AGENT_TTY_HOME=${quote(input.innerHome)}`,
+    // --all keeps a session visible through its terminal state; the dashboard
+    // auto-selects the newest session, so it follows the agent without input.
+    'exec agent-tty dashboard --all',
     '',
   ].join('\n');
 }
@@ -379,55 +502,11 @@ function isTextArtifact(path: string): boolean {
 async function copyPromotedArtifact(
   from: string,
   to: string,
-  agent: AgentName,
   relativePath: string,
 ): Promise<void> {
   await mkdir(dirname(to), { recursive: true });
   if (isTextArtifact(relativePath)) {
     await writeFile(to, sanitizePromotedText(await readFile(from, 'utf8')));
-    return;
-  }
-  if (agent === 'claude' && relativePath.endsWith('-outer.webm')) {
-    runDemoTool('ffmpeg', [
-      '-nostdin',
-      '-y',
-      '-hide_banner',
-      '-loglevel',
-      'error',
-      '-i',
-      from,
-      '-vf',
-      CLAUDE_VISUAL_REDACTION_FILTER,
-      '-an',
-      '-c:v',
-      'libvpx-vp9',
-      '-deadline',
-      'good',
-      '-cpu-used',
-      '4',
-      '-b:v',
-      '0',
-      '-crf',
-      '34',
-      to,
-    ]);
-    return;
-  }
-  if (agent === 'claude' && relativePath.endsWith('-thumbnail.png')) {
-    runDemoTool('ffmpeg', [
-      '-nostdin',
-      '-y',
-      '-hide_banner',
-      '-loglevel',
-      'error',
-      '-i',
-      from,
-      '-vf',
-      CLAUDE_VISUAL_REDACTION_FILTER,
-      '-frames:v',
-      '1',
-      to,
-    ]);
     return;
   }
   await copyFile(from, to);
@@ -460,6 +539,46 @@ function run(command: string, args: string[], cwd = REPO_ROOT): string {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+}
+
+/** Tears down a run's isolated tmux server; ignores an already-gone server. */
+function killTmuxServer(socket: string): void {
+  spawnSync('tmux', ['-L', socket, 'kill-server'], { stdio: 'ignore' });
+}
+
+/**
+ * Fail fast if the installed agent-tty cannot render the dashboard. The
+ * dashboard requires the optional native renderer; when it is absent the
+ * RIGHT pane's `agent-tty dashboard` exits at startup and its tmux pane
+ * closes, leaving a single-pane recording that would otherwise pass every
+ * downstream check. Confirm the capability before spending a recording on it.
+ */
+function assertDashboardRendererInstalled(installPrefix: string): void {
+  const binary = join(installPrefix, 'bin', 'agent-tty');
+  // `doctor` exits non-zero when any check fails (e.g. Playwright), so we read
+  // stdout regardless of exit code and inspect only the dashboard capability.
+  const result = spawnSync(binary, ['doctor', '--json'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let dashboard: { status?: string } | undefined;
+  try {
+    const parsed = JSON.parse(result.stdout) as {
+      result?: { capabilities?: Array<{ name: string; status: string }> };
+    };
+    dashboard = parsed.result?.capabilities?.find(
+      (capability) => capability.name === 'dashboard',
+    );
+  } catch {
+    throw new Error(
+      'agent-tty doctor --json did not return parseable JSON; cannot confirm the dashboard renderer',
+    );
+  }
+  invariant(
+    dashboard?.status === 'available',
+    `the installed agent-tty dashboard renderer is unavailable (${LIBGHOSTTY_VT_PACKAGE}); the RIGHT recording pane would be blank. Reinstall agent-tty on a supported platform so the optional native package is fetched.`,
+  );
 }
 
 function isNonEmptyFile(path: string): boolean {
@@ -613,7 +732,11 @@ async function runOne(
   const innerWebm = join(workspaceArtifacts, 'inner-nvim.webm');
   const promptPath = join(runDir, `${agent}-prompt.md`);
   const runnerPath = join(runDir, `run-${agent}.sh`);
+  const dashboardRunnerPath = join(runDir, `run-${agent}-dashboard.sh`);
   const tapePath = join(runDir, 'record.tape');
+  // basename(debugRoot) carries a per-process timestamp, so concurrent demo
+  // invocations get distinct sockets and one run's teardown never reaps another.
+  const tmuxSocket = `hero-${agent}-${String(index)}-${basename(debugRoot)}`;
 
   await mkdir(workspaceArtifacts, { recursive: true });
   run('git', ['init', '-q'], workspace);
@@ -641,19 +764,35 @@ async function runOne(
       claudeEffort: options.claudeEffort,
     }),
   );
+  await writeExecutable(
+    dashboardRunnerPath,
+    generateDashboardRunner({ installPrefix, innerHome }),
+  );
   await writeFile(
     tapePath,
-    generateTape({ agent, runnerPath, recordSeconds: options.recordSeconds }),
+    generateTape({
+      agent,
+      runnerPath,
+      dashboardRunnerPath,
+      socket: tmuxSocket,
+      recordSeconds: options.recordSeconds,
+    }),
   );
 
   const vhsLog = join(runDir, 'vhs.log');
-  runLogged(
-    'vhs',
-    [basename(tapePath)],
-    runDir,
-    vhsLog,
-    (options.recordSeconds + RECORD_TIMEOUT_BUFFER_SECONDS) * 1000,
-  );
+  try {
+    runLogged(
+      'vhs',
+      [basename(tapePath)],
+      runDir,
+      vhsLog,
+      (options.recordSeconds + RECORD_TIMEOUT_BUFFER_SECONDS) * 1000,
+    );
+  } finally {
+    // Reap this run's isolated tmux server (best-effort: it may already be gone
+    // when the agent and dashboard panes exited at teardown).
+    killTmuxServer(tmuxSocket);
+  }
   ensureThumbnail(runDir);
 
   await assertNonEmpty(join(runDir, 'outer.webm'));
@@ -668,6 +807,14 @@ async function runOne(
   invariant(
     transcript.includes(tuiMarker),
     `outer transcript did not show ${tuiMarker}`,
+  );
+  // The whole point of the split is the live dashboard on the RIGHT. Its list
+  // header ("Sessions · <scope>") is dashboard-only chrome the agent TUI never
+  // prints, so its absence means the dashboard pane died — fail rather than
+  // promote a single-pane recording.
+  invariant(
+    transcript.includes('Sessions ·'),
+    'outer transcript did not show the dashboard pane (no "Sessions ·" header); the RIGHT pane likely failed to render',
   );
   const final = (await readFile(finalFile, 'utf8')).trimEnd();
   invariant(
@@ -836,7 +983,7 @@ async function promote(
     ];
     for (const [from, relative, description] of copies) {
       const to = join(options.bundleDir, relative);
-      await copyPromotedArtifact(from, to, record.agent, relative);
+      await copyPromotedArtifact(from, to, relative);
       promotedPaths.push({ path: relative, description });
     }
   }
@@ -888,7 +1035,7 @@ async function promote(
     scenario: 'agent-uses-agent-tty-hero-demo',
     result: 'pass',
     commands: [
-      `mise run demo:agent-uses-agent-tty -- --agent both --runs 3 --record-seconds ${String(options.recordSeconds)} --promote`,
+      `mise run demo:agent-uses-agent-tty -- --record-seconds ${String(options.recordSeconds)}`,
     ],
     artifacts: manifestArtifacts,
   });
@@ -933,6 +1080,7 @@ function safeToolVersion(
 function collectToolVersions(): Array<[string, string]> {
   return [
     ['vhs', safeToolVersion('vhs', ['--version'])],
+    ['tmux', safeToolVersion('tmux', ['-V'])],
     ['ttyd', safeToolVersion('ttyd', ['--version'])],
     ['ffmpeg', safeToolVersion('ffmpeg', ['-version'])],
     ['codex', safeToolVersion('codex', ['--version'])],
@@ -977,18 +1125,39 @@ function renderSummary(options: HeroDemoOptions, records: RunRecord[]): string {
   return lines.join('\n');
 }
 
-function renderReadme(): string {
+// One inline <video> per agent (Codex, then Claude — AGENTS order), which is
+// the only embed GitHub streams for logged-out visitors. The src starts as the
+// local committed WebM (a graceful default before upload); `apply-video-urls`
+// rewrites both srcs to the uploaded user-attachment URLs. Keep this in sync
+// with the hero-video-playback <video> contract — see the README test.
+export function renderReadme(): string {
   return `# Agent Uses agent-tty Hero Demo
 
 This bundle is the README-facing **Hero Demo** for real coding-agent TUIs using \`agent-tty\`.
 VHS records the outer Codex and Claude Code TUIs as the presentation layer. The product proof is the inner \`agent-tty\` artifact set produced while each real agent explores the skill and CLI, drives Neovim, and exports recordings.
 
-GitHub may show checked-in WebM files as raw downloads; see [${VIDEO_PLAYBACK_DOC}](./${VIDEO_PLAYBACK_DOC}) for the H.264 attachment flow used to turn these thumbnails into GitHub video-player links.
+The Outer Hero Demo column embeds the uploaded H.264 MP4 recordings as inline GitHub video players; see [${VIDEO_PLAYBACK_DOC}](./${VIDEO_PLAYBACK_DOC}) for the upload flow. The checked-in WebM files remain the canonical proof artifacts.
 
-| Agent | Outer Hero Demo | Inner proof artifacts | File proof |
-| --- | --- | --- | --- |
-| Codex | [![Codex Hero Demo](./artifacts/codex-thumbnail.png)](./artifacts/codex-outer.webm) | [cast](./artifacts/codex-inner-nvim.cast), [WebM](./artifacts/codex-inner-nvim.webm) | [proof](./artifacts/codex-final-file-proof.txt) |
-| Claude | [![Claude Hero Demo](./artifacts/claude-thumbnail.png)](./artifacts/claude-outer.webm) | [cast](./artifacts/claude-inner-nvim.cast), [WebM](./artifacts/claude-inner-nvim.webm) | [proof](./artifacts/claude-final-file-proof.txt) |
+<table>
+  <tr>
+    <th>Agent</th>
+    <th>Outer Hero Demo</th>
+    <th>Inner proof artifacts</th>
+    <th>File proof</th>
+  </tr>
+  <tr>
+    <td>Codex</td>
+    <td><video src="./artifacts/codex-outer.webm" controls width="320"></video></td>
+    <td><a href="./artifacts/codex-inner-nvim.cast">cast</a>, <a href="./artifacts/codex-inner-nvim.webm">WebM</a></td>
+    <td><a href="./artifacts/codex-final-file-proof.txt">proof</a></td>
+  </tr>
+  <tr>
+    <td>Claude</td>
+    <td><video src="./artifacts/claude-outer.webm" controls width="320"></video></td>
+    <td><a href="./artifacts/claude-inner-nvim.cast">cast</a>, <a href="./artifacts/claude-inner-nvim.webm">WebM</a></td>
+    <td><a href="./artifacts/claude-final-file-proof.txt">proof</a></td>
+  </tr>
+</table>
 
 See [promoted-run-summary.md](./promoted-run-summary.md) for the regeneration summary.
 `;
@@ -1001,9 +1170,25 @@ function renderReproduce(options: HeroDemoOptions): string {
     'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"',
     'REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"',
     'cd "$REPO_ROOT"',
-    `exec mise run demo:agent-uses-agent-tty -- --agent both --runs 3 --record-seconds ${String(options.recordSeconds)} --promote "$@"`,
+    `exec mise run demo:agent-uses-agent-tty -- --record-seconds ${String(options.recordSeconds)} "$@"`,
     '',
   ].join('\n');
+}
+
+/** Records one run, capturing failures as a record instead of throwing. */
+async function runOneSafe(
+  agent: AgentName,
+  index: number,
+  options: HeroDemoOptions,
+  debugRoot: string,
+  installPrefix: string,
+): Promise<RunRecord> {
+  try {
+    return await runOne(agent, index, options, debugRoot, installPrefix);
+  } catch (error) {
+    const runDir = join(debugRoot, `${agent}-${String(index)}`);
+    return failedRunRecord(agent, index, runDir, error, debugRoot);
+  }
 }
 
 /** Runs the live-agent Hero Demo workflow and optionally promotes passing artifacts. */
@@ -1015,37 +1200,68 @@ export async function runHeroDemo(options: HeroDemoOptions): Promise<void> {
     process.stderr.write(`debugRoot: ${debugRoot}\n`);
   }
   const installPrefix = await installLocalAgentTty(debugRoot);
+  assertDashboardRendererInstalled(installPrefix);
+  const agents = selectedAgents(options.agent);
   const records: RunRecord[] = [];
-  for (const agent of selectedAgents(options.agent)) {
-    let successes = 0;
-    const maxAttempts = options.promote ? options.runs * 2 : options.runs;
-    for (let index = 1; index <= maxAttempts; index += 1) {
-      if (options.promote && successes >= options.runs) {
-        break;
-      }
-      try {
-        const record = await runOne(
-          agent,
-          index,
-          options,
-          debugRoot,
-          installPrefix,
-        );
-        records.push(record);
-        successes += 1;
-      } catch (error) {
-        const runDir = join(debugRoot, `${agent}-${String(index)}`);
-        records.push(failedRunRecord(agent, index, runDir, error, debugRoot));
-        if (!options.promote) {
-          throw error;
-        }
-      }
+
+  // Wave 1: the first `runs` attempts per agent, interleaved across agents so a
+  // pool of size N pairs distinct agents before doubling up on one — the default
+  // --concurrency 2 stays at one Codex + one Claude, never two of the same
+  // account at once. Runs overlap freely because each is mostly an idle sleep.
+  const firstWave: Array<{ agent: AgentName; index: number }> = [];
+  for (let index = 1; index <= options.runs; index += 1) {
+    for (const agent of agents) {
+      firstWave.push({ agent, index });
     }
   }
-  if (options.promote) {
-    await promote(options, records);
+  records.push(
+    ...(await mapWithConcurrency(firstWave, options.concurrency, (task) =>
+      runOneSafe(task.agent, task.index, options, debugRoot, installPrefix),
+    )),
+  );
+
+  if (!options.promote) {
+    // Quick-test parity with the old sequential path: surface the first failure.
+    const failure = records.find((record) => !record.passed);
+    if (failure) {
+      throw new Error(failure.error ?? `${failure.agent} run failed`);
+    }
+    return;
   }
-  if (!options.keepDebug && options.promote) {
+
+  // Top-up: any agent short of `runs` successes gets one more attempt per round
+  // (rounds run across agents in parallel), capped at runs*2 total attempts —
+  // the same adaptive retry budget as before, just batched. Same-agent retries
+  // stay serial across rounds so we never pile concurrent sessions on one account.
+  const attemptsByAgent = new Map<AgentName, number>(
+    agents.map((agent) => [agent, options.runs]),
+  );
+  const maxAttempts = options.runs * 2;
+  for (;;) {
+    const topUp: Array<{ agent: AgentName; index: number }> = [];
+    for (const agent of agents) {
+      const successes = records.filter(
+        (record) => record.agent === agent && record.passed,
+      ).length;
+      const attempts = attemptsByAgent.get(agent) ?? options.runs;
+      if (successes < options.runs && attempts < maxAttempts) {
+        const nextIndex = attempts + 1;
+        attemptsByAgent.set(agent, nextIndex);
+        topUp.push({ agent, index: nextIndex });
+      }
+    }
+    if (topUp.length === 0) {
+      break;
+    }
+    records.push(
+      ...(await mapWithConcurrency(topUp, options.concurrency, (task) =>
+        runOneSafe(task.agent, task.index, options, debugRoot, installPrefix),
+      )),
+    );
+  }
+
+  await promote(options, records);
+  if (!options.keepDebug) {
     await rm(debugRoot, { recursive: true, force: true });
   }
 }
