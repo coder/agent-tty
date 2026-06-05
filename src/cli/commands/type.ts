@@ -1,13 +1,14 @@
 import type { CommandContext } from '../context.js';
+import type { TypeResult } from '../../protocol/messages.js';
 
 import { resolveCommandTarget } from '../commandTarget.js';
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
+import { TypeResultSchema } from '../../protocol/messages.js';
+import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { resolveCommandInputText } from './inputSource.js';
 
-export interface TypeResult {
-  [key: string]: never;
-}
+export type { TypeResult } from '../../protocol/messages.js';
 
 interface CommandOptions {
   context: CommandContext;
@@ -32,15 +33,22 @@ export async function runTypeCommand(options: CommandOptions): Promise<void> {
     sessionId: options.sessionId,
   });
 
-  await sendRpc(target.socketPath, 'type', {
+  const rawResult: unknown = await sendRpc(target.socketPath, 'type', {
     text,
   });
+  const parsedResult = TypeResultSchema.safeParse(rawResult);
+  if (!parsedResult.success) {
+    throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
+      message: 'Unexpected response from host',
+      details: { issues: parsedResult.error.issues },
+    });
+  }
 
-  const result: TypeResult = {};
+  const result: TypeResult = { seq: parsedResult.data.seq };
   emitSuccess({
     command: 'type',
     json: options.json,
     result,
-    lines: ['Typed text into session.'],
+    lines: [`Typed text into session at seq ${String(result.seq)}.`],
   });
 }

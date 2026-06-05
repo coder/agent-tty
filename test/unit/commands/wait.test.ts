@@ -90,6 +90,7 @@ function createOptions(
     screenStableMs: undefined,
     cursorRow: undefined,
     cursorCol: undefined,
+    afterSeq: undefined,
     ...overrides,
   };
 }
@@ -260,6 +261,7 @@ describe('wait command', () => {
         screenStableMs: undefined,
         cursorRow: undefined,
         cursorCol: undefined,
+        afterSeq: undefined,
         timeoutMs: undefined,
         rendererName: 'ghostty-web',
       },
@@ -396,6 +398,7 @@ describe('wait command', () => {
         screenStableMs: undefined,
         cursorRow: undefined,
         cursorCol: undefined,
+        afterSeq: undefined,
         timeoutMs: 600_000,
         rendererName: 'ghostty-web',
       },
@@ -429,6 +432,7 @@ describe('wait command', () => {
         screenStableMs: undefined,
         cursorRow: undefined,
         cursorCol: undefined,
+        afterSeq: undefined,
         timeoutMs: 600_000,
         rendererName: 'ghostty-web',
       },
@@ -465,6 +469,7 @@ describe('wait command', () => {
         screenStableMs: undefined,
         cursorRow: 3,
         cursorCol: 4,
+        afterSeq: undefined,
         timeoutMs: 600_000,
         rendererName: 'ghostty-web',
       },
@@ -476,6 +481,86 @@ describe('wait command', () => {
         result,
       }),
     );
+  });
+
+  it('threads --after-seq into the render wait RPC params', async () => {
+    const result = {
+      matched: true,
+      timedOut: false,
+      matchedText: 'hello',
+      capturedAtSeq: 12,
+    };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runWaitCommand(createOptions({ text: 'hello', afterSeq: 5 }));
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      'waitForRender',
+      {
+        text: 'hello',
+        regex: undefined,
+        screenStableMs: undefined,
+        cursorRow: undefined,
+        cursorCol: undefined,
+        afterSeq: 5,
+        timeoutMs: 600_000,
+        rendererName: 'ghostty-web',
+      },
+      605_000,
+    );
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'wait',
+        result,
+      }),
+    );
+  });
+
+  it('enters render mode for an --after-seq-only invocation and requires a match condition', async () => {
+    await expect(
+      runWaitCommand(createOptions({ afterSeq: 5 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      message:
+        'waitForRender requires at least one of text, regex, screenStableMs, cursorRow, or cursorCol',
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects negative --after-seq values', async () => {
+    await expect(
+      runWaitCommand(createOptions({ text: 'hello', afterSeq: -1 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      details: { afterSeq: -1 },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('throws a replay error offline when the snapshot is at or below the wait baseline', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'Session host is unreachable.',
+      }),
+    );
+    mockOfflineReplaySnapshot({
+      capturedAtSeq: 5,
+      visibleLines: [{ row: 0, text: 'offline hello output' }],
+    });
+
+    const promise = runWaitCommand(
+      createOptions({ text: 'hello', afterSeq: 5 }),
+    );
+
+    await expect(promise).rejects.toMatchObject({
+      code: ERROR_CODES.REPLAY_ERROR,
+      details: {
+        afterSeq: 5,
+        capturedAtSeq: 5,
+      },
+    });
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
   it('falls back to offline replay when render wait host becomes unreachable and the snapshot matches', async () => {
@@ -500,6 +585,7 @@ describe('wait command', () => {
         screenStableMs: undefined,
         cursorRow: undefined,
         cursorCol: undefined,
+        afterSeq: undefined,
         timeoutMs: 600_000,
         rendererName: 'ghostty-web',
       },

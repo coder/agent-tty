@@ -91,13 +91,15 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
       ),
     ).resolves.toContain('READY> ');
 
-    const typeEnvelope = runCliJson<SuccessEnvelope<Record<string, never>>>(
+    const typeEnvelope = runCliJson<SuccessEnvelope<{ seq: number }>>(
       ['type', sessionId, 'hello world'],
       env,
     );
     expect(typeEnvelope.ok).toBe(true);
     expect(typeEnvelope.command).toBe('type');
-    expect(typeEnvelope.result).toEqual({});
+    expect(typeEnvelope.result).toEqual(
+      expect.objectContaining({ seq: expect.any(Number) as number }),
+    );
 
     const sendKeysEnvelope = runCliJson<SuccessEnvelope<SendKeysResult>>(
       ['send-keys', sessionId, 'Enter'],
@@ -146,13 +148,15 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
       }),
     );
 
-    const typeExitEnvelope = runCliJson<SuccessEnvelope<Record<string, never>>>(
+    const typeExitEnvelope = runCliJson<SuccessEnvelope<{ seq: number }>>(
       ['type', sessionId, 'exit'],
       env,
     );
     expect(typeExitEnvelope.ok).toBe(true);
     expect(typeExitEnvelope.command).toBe('type');
-    expect(typeExitEnvelope.result).toEqual({});
+    expect(typeExitEnvelope.result).toEqual(
+      expect.objectContaining({ seq: expect.any(Number) as number }),
+    );
 
     const sendExitEnterEnvelope = runCliJson<SuccessEnvelope<SendKeysResult>>(
       ['send-keys', sessionId, 'Enter'],
@@ -234,13 +238,15 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
     );
     expect(waitForReady.result.timedOut).toBe(false);
 
-    const pasteEnvelope = runCliJson<SuccessEnvelope<Record<string, never>>>(
+    const pasteEnvelope = runCliJson<SuccessEnvelope<{ seq: number }>>(
       ['paste', sessionId, 'exit-code 42'],
       env,
     );
     expect(pasteEnvelope.ok).toBe(true);
     expect(pasteEnvelope.command).toBe('paste');
-    expect(pasteEnvelope.result).toEqual({});
+    expect(pasteEnvelope.result).toEqual(
+      expect.objectContaining({ seq: expect.any(Number) as number }),
+    );
 
     const sendKeysEnvelope = runCliJson<SuccessEnvelope<SendKeysResult>>(
       ['send-keys', sessionId, 'Enter'],

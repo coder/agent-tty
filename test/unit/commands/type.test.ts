@@ -50,6 +50,7 @@ describe('type command', () => {
     vi.clearAllMocks();
     mocks.resolveCommandTarget.mockResolvedValue(COMMAND_TARGET);
     mocks.resolveCommandInputText.mockResolvedValue('hello');
+    mocks.sendRpc.mockResolvedValue({ seq: 7 });
   });
 
   it('appends exactly one newline to positional text when requested', async () => {
@@ -78,8 +79,8 @@ describe('type command', () => {
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'type',
       json: false,
-      result: {},
-      lines: ['Typed text into session.'],
+      result: { seq: 7 },
+      lines: ['Typed text into session at seq 7.'],
     });
   });
 
@@ -169,8 +170,25 @@ describe('type command', () => {
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'type',
       json: true,
-      result: {},
-      lines: ['Typed text into session.'],
+      result: { seq: 7 },
+      lines: ['Typed text into session at seq 7.'],
     });
+  });
+
+  it('rejects malformed type RPC responses', async () => {
+    mocks.sendRpc.mockResolvedValueOnce({ seq: -1 });
+
+    await expect(
+      runTypeCommand({
+        context: TEST_CONTEXT,
+        json: false,
+        sessionId: 'session-01',
+        text: 'hello',
+      }),
+    ).rejects.toMatchObject({
+      code: 'PROTOCOL_ERROR',
+      message: 'Unexpected response from host',
+    });
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 });

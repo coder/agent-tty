@@ -6,6 +6,7 @@ import { Command, CommanderError } from 'commander';
 
 import type { CommandContext } from './context.js';
 
+import { runBatchCommand } from './commands/batch.js';
 import { runCreateCommand } from './commands/create.js';
 import { runDashboardCommand } from './commands/dashboard.js';
 import { runDestroyCommand } from './commands/destroy.js';
@@ -493,6 +494,35 @@ async function main(): Promise<void> {
     );
 
   program
+    .command('batch <session-id> [steps]')
+    .description(
+      'Run an ordered sequence of input-and-wait steps in one command',
+    )
+    .option('--file <path>', 'Read the JSON step array from a file')
+    .option('--keep-going', 'Attempt every step regardless of failures', false)
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'batch',
+        async (
+          sessionId: string,
+          steps: string | undefined,
+          options: { file?: string; keepGoing: boolean; json: boolean },
+          context: CommandContext,
+        ) => {
+          await runBatchCommand({
+            context,
+            json: options.json,
+            sessionId,
+            steps,
+            ...(options.file !== undefined ? { file: options.file } : {}),
+            keepGoing: options.keepGoing,
+          });
+        },
+      ),
+    );
+
+  program
     .command('mark <session-id> <label>')
     .description('Add a marker to a session')
     .option('--json', 'Emit a JSON command envelope', false)
@@ -776,6 +806,11 @@ async function main(): Promise<void> {
       'Wait for cursor column in rendered output (0-based)',
       parseNumberOption,
     )
+    .option(
+      '--after-seq <n>',
+      'Only match renderer snapshots produced after this Event Log sequence',
+      parseIntegerOption,
+    )
     .action(
       wrapAction(
         'wait',
@@ -791,6 +826,7 @@ async function main(): Promise<void> {
             screenStableMs?: number;
             cursorRow?: number;
             cursorCol?: number;
+            afterSeq?: number;
           },
           context: CommandContext,
         ) => {
@@ -806,6 +842,7 @@ async function main(): Promise<void> {
             screenStableMs: options.screenStableMs,
             cursorRow: options.cursorRow,
             cursorCol: options.cursorCol,
+            afterSeq: options.afterSeq,
           });
         },
       ),

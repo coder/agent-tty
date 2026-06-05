@@ -35,6 +35,16 @@ describe('CLI exit codes', () => {
     expect(exitCodeForError(ERROR_CODES.REPLAY_ERROR)).toBe(10);
   });
 
+  it('maps a render-wait timeout to a distinct exit code 11', () => {
+    expect(exitCodeForError(ERROR_CODES.WAIT_TIMEOUT)).toBe(11);
+    expect(exitCodeForError(ERROR_CODES.WAIT_TIMEOUT)).not.toBe(
+      exitCodeForError(ERROR_CODES.HOST_TIMEOUT),
+    );
+    expect(exitCodeForError(ERROR_CODES.WAIT_TIMEOUT)).not.toBe(
+      exitCodeForError(ERROR_CODES.HOST_UNREACHABLE),
+    );
+  });
+
   it('maps internal errors to the generic exit code 1', () => {
     expect(exitCodeForError(ERROR_CODES.INTERNAL_ERROR)).toBe(1);
   });

@@ -1,3 +1,4 @@
+import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
 
 interface Modifiers {
@@ -80,6 +81,39 @@ export function encodeKey(keyName: string): string {
   }
 
   invariant(false, `Unknown base key: ${baseKey}`);
+}
+
+/**
+ * Whether `encodeKey` accepts this key name. Shares one vocabulary with
+ * `encodeKey` by deferring to it, so the parser and the host never drift.
+ */
+export function isValidKeyName(key: string): boolean {
+  if (typeof key !== 'string') {
+    return false;
+  }
+
+  try {
+    encodeKey(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Assert that `encodeKey` accepts this key name, throwing INVALID_KEYS with the
+ * same message the host surfaces. Used to reject a bad key at Batch Plan parse
+ * time, before any input is sent.
+ */
+export function assertValidKeyName(key: string): void {
+  try {
+    encodeKey(key);
+  } catch (error) {
+    throw makeCliError(ERROR_CODES.INVALID_KEYS, {
+      message: error instanceof Error ? error.message : 'Invalid key sequence.',
+      cause: error,
+    });
+  }
 }
 
 function parseKeyName(keyName: string): {

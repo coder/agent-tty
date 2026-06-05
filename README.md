@@ -111,7 +111,7 @@ Full reproducer, transcripts, and proof bundles are in [`dogfood/agent-uses-agen
 
 ## Command surface
 
-Every user-facing command takes `--json` and returns a stable, machine-readable envelope. The commands cover the session lifecycle (`create`, `list`, `inspect`, `destroy`, `gc`), input and control (`run`, `type`, `paste`, `send-keys`, `resize`, `signal`, `mark`), observation and capture (`wait`, `snapshot`, `screenshot`, `record export`), the live `dashboard`, and environment checks (`version`, `doctor`, `skills`).
+Every user-facing command takes `--json` and returns a stable, machine-readable envelope. The commands cover the session lifecycle (`create`, `list`, `inspect`, `destroy`, `gc`), input and control (`run`, `type`, `paste`, `send-keys`, `batch`, `resize`, `signal`, `mark`), observation and capture (`wait`, `snapshot`, `screenshot`, `record export`), the live `dashboard`, and environment checks (`version`, `doctor`, `skills`).
 
 See [`docs/USAGE.md`](./docs/USAGE.md) for the full flag reference and [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) for renderer and environment issues.
 

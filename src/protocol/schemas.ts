@@ -403,6 +403,7 @@ export const WaitForRenderParamsSchema = z
     screenStableMs: PositiveIntSchema.optional(),
     cursorRow: NonNegativeIntSchema.optional(),
     cursorCol: NonNegativeIntSchema.optional(),
+    afterSeq: NonNegativeIntSchema.optional(),
     timeoutMs: PositiveIntSchema.optional(),
     rendererName: RendererNameSchema.optional(),
   })

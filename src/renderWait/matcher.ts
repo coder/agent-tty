@@ -21,7 +21,7 @@ const NESTED_QUANTIFIER_MESSAGE =
 
 type RenderWaitCondition = Pick<
   WaitForRenderParams,
-  'text' | 'regex' | 'screenStableMs' | 'cursorRow' | 'cursorCol'
+  'text' | 'regex' | 'screenStableMs' | 'cursorRow' | 'cursorCol' | 'afterSeq'
 >;
 
 export interface PreparedRenderWaitCondition extends RenderWaitCondition {
@@ -33,6 +33,7 @@ interface RenderWaitSnapshotMatch {
   readonly textMatched: boolean;
   readonly cursorMatched: boolean;
   readonly stabilityMatched: boolean;
+  readonly baselineMatched: boolean;
   readonly contentAndCursorMatched: boolean;
   readonly matchedText?: string;
   readonly cursorRow: number;
@@ -157,7 +158,8 @@ export function safeRegexExec(
 export function prepareRenderWaitCondition(
   condition: RenderWaitCondition,
 ): PreparedRenderWaitCondition {
-  const { text, regex, screenStableMs, cursorRow, cursorCol } = condition;
+  const { text, regex, screenStableMs, cursorRow, cursorCol, afterSeq } =
+    condition;
 
   if (
     text === undefined &&
@@ -238,12 +240,19 @@ export function prepareRenderWaitCondition(
     });
   }
 
+  if (afterSeq !== undefined && (!Number.isInteger(afterSeq) || afterSeq < 0)) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: 'afterSeq must be a non-negative integer',
+    });
+  }
+
   return {
     text,
     regex,
     screenStableMs,
     cursorRow,
     cursorCol,
+    afterSeq,
     ...(compiledRegex === undefined ? {} : { compiledRegex }),
   };
 }
@@ -322,13 +331,17 @@ export function matchRenderWaitSnapshot(
     condition.screenStableMs === undefined ||
     (options.stableForMs !== undefined &&
       options.stableForMs >= condition.screenStableMs);
+  const baselineMatched =
+    condition.afterSeq === undefined ||
+    snapshot.capturedAtSeq > condition.afterSeq;
   const contentAndCursorMatched = textMatched && cursorMatched;
 
   return {
-    matched: contentAndCursorMatched && stabilityMatched,
+    matched: contentAndCursorMatched && stabilityMatched && baselineMatched,
     textMatched,
     cursorMatched,
     stabilityMatched,
+    baselineMatched,
     contentAndCursorMatched,
     ...(matchedText === undefined ? {} : { matchedText }),
     cursorRow: snapshot.cursorRow,

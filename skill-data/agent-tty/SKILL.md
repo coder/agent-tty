@@ -49,6 +49,7 @@ agent-tty --home <path> run <session-id> 'command here' --json
 agent-tty --home <path> type <session-id> 'literal text' --json
 agent-tty --home <path> paste <session-id> 'multiline payload' --json
 agent-tty --home <path> send-keys <session-id> Enter Ctrl+C --json
+agent-tty --home <path> batch <session-id> '[{"run":"htop","noWait":true},{"wait":{"screenStableMs":1000}}]' --json
 
 # Observation and proof
 agent-tty --home <path> wait <session-id> --text 'ready' --json
@@ -71,14 +72,21 @@ agent-tty --home "$AGENT_HOME" snapshot "$SESSION_ID" --format text --json
 
 ### Drive an interactive CLI or TUI
 
+Use `batch` to run an ordered sequence of input-and-`wait` steps in one call instead of separate `run`/`wait`/`send-keys` invocations. Each `wait` step is anchored to a Wait Baseline — it only observes screen state produced _after_ the preceding input step, so the sequence cannot race ahead and match a stale screen. A batch stops at the first failed step by default (`--keep-going` attempts every step).
+
 ```bash
 AGENT_HOME="$(mktemp -d)"
 SESSION_ID=$(agent-tty --home "$AGENT_HOME" create --json -- /bin/bash | jq -r '.result.sessionId')
-agent-tty --home "$AGENT_HOME" run "$SESSION_ID" '<interactive-command>' --no-wait --json
-agent-tty --home "$AGENT_HOME" wait "$SESSION_ID" --screen-stable-ms 1000 --json
-agent-tty --home "$AGENT_HOME" send-keys "$SESSION_ID" Down Down Enter --json
+agent-tty --home "$AGENT_HOME" batch "$SESSION_ID" '[
+  { "run": "<interactive-command>", "noWait": true },
+  { "wait": { "screenStableMs": 1000 } },
+  { "sendKeys": ["Down", "Down", "Enter"] },
+  { "wait": { "text": "<expected-label>" } }
+]' --json
 agent-tty --home "$AGENT_HOME" screenshot "$SESSION_ID" --json
 ```
+
+A `wait` can still match the _echo_ of a just-typed command, so use a distinctive output token or `screenStableMs` rather than waiting for text you just typed.
 
 ### Export reviewer-facing artifacts
 

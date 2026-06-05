@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { BatchResultSchema } from '../../../src/batch/result.js';
 import { buildVersionResult } from '../../../src/cli/commands/version.js';
 import {
   SkillGetResultSchema,
@@ -635,6 +636,213 @@ const goldenResultContracts: readonly GoldenResultContractCase[] = [
       durationMs: 1500,
       marker: '__AT_MARKER_abc123__',
       exitCode: 0,
+    },
+  },
+  {
+    name: 'batch',
+    command: 'batch',
+    schema: BatchResultSchema,
+    validResult: {
+      steps: [
+        {
+          index: 0,
+          durationMs: 12,
+          kind: 'run',
+          status: 'completed',
+          seq: 4,
+          noWait: true,
+          runOutcome: 'started',
+        },
+        {
+          index: 1,
+          durationMs: 1003,
+          kind: 'wait',
+          status: 'completed',
+          waitBaseline: 4,
+          matched: true,
+          timedOut: false,
+          matchedText: 'Ready',
+          capturedAtSeq: 9,
+        },
+        {
+          index: 2,
+          durationMs: 3,
+          kind: 'type',
+          status: 'completed',
+          seq: 11,
+        },
+      ],
+      completedCount: 3,
+      failedIndices: [],
+    },
+    invalidResult: {
+      steps: [
+        {
+          index: 0,
+          durationMs: 5,
+          kind: 'frob',
+          status: 'completed',
+        },
+      ],
+      completedCount: 1,
+      failedIndices: [],
+    },
+    extraFieldResult: {
+      steps: [
+        {
+          index: 0,
+          durationMs: 5,
+          kind: 'type',
+          status: 'completed',
+          seq: 1,
+        },
+      ],
+      completedCount: 1,
+      failedIndices: [],
+      failedCount: 0,
+    },
+  },
+  {
+    name: 'batch (fail-fast)',
+    command: 'batch',
+    schema: BatchResultSchema,
+    validResult: {
+      steps: [
+        {
+          index: 0,
+          durationMs: 3,
+          kind: 'type',
+          status: 'completed',
+          seq: 2,
+        },
+        {
+          index: 1,
+          durationMs: 10_000,
+          kind: 'wait',
+          status: 'failed',
+          waitBaseline: 2,
+          matched: false,
+          timedOut: true,
+          capturedAtSeq: 5,
+          error: {
+            code: 'WAIT_TIMEOUT',
+            message:
+              'Render wait at step 1 timed out before its condition was met.',
+          },
+        },
+        {
+          index: 2,
+          durationMs: 0,
+          kind: 'sendKeys',
+          status: 'not-run',
+        },
+      ],
+      completedCount: 1,
+      failedIndices: [1],
+    },
+    invalidResult: {
+      steps: [
+        {
+          index: 1,
+          durationMs: 10,
+          kind: 'wait',
+          status: 'failed',
+          error: {
+            code: 'WAIT_TIMEOUT',
+          },
+        },
+      ],
+      completedCount: 0,
+      failedIndices: [1],
+    },
+    extraFieldResult: {
+      steps: [
+        {
+          index: 0,
+          durationMs: 3,
+          kind: 'wait',
+          status: 'failed',
+          matched: false,
+          timedOut: true,
+          capturedAtSeq: 5,
+          error: {
+            code: 'WAIT_TIMEOUT',
+            message: 'timed out',
+            retryable: false,
+          },
+        },
+      ],
+      completedCount: 0,
+      failedIndices: [0],
+    },
+  },
+  {
+    name: 'batch (keep-going)',
+    command: 'batch',
+    schema: BatchResultSchema,
+    validResult: {
+      steps: [
+        {
+          index: 0,
+          durationMs: 10_000,
+          kind: 'wait',
+          status: 'failed',
+          matched: false,
+          timedOut: true,
+          capturedAtSeq: 3,
+          error: {
+            code: 'WAIT_TIMEOUT',
+            message:
+              'Render wait at step 0 timed out before its condition was met.',
+          },
+        },
+        {
+          index: 1,
+          durationMs: 4,
+          kind: 'type',
+          status: 'completed',
+          seq: 6,
+        },
+        {
+          index: 2,
+          durationMs: 30_000,
+          kind: 'run',
+          status: 'failed',
+          seq: 8,
+          noWait: false,
+          completed: false,
+          timedOut: true,
+          runOutcome: 'timedOut',
+          error: {
+            code: 'WAIT_TIMEOUT',
+            message: 'Waited Run at step 2 timed out before completing.',
+          },
+        },
+      ],
+      completedCount: 1,
+      failedIndices: [0, 2],
+    },
+    invalidResult: {
+      steps: [],
+      completedCount: 0,
+      failedIndices: ['0'],
+    },
+    extraFieldResult: {
+      steps: [
+        {
+          index: 0,
+          durationMs: 1,
+          kind: 'type',
+          status: 'failed',
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'boom',
+          },
+        },
+      ],
+      completedCount: 0,
+      failedIndices: [0],
+      keepGoing: true,
     },
   },
   {

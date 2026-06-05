@@ -41,6 +41,7 @@ interface CommandOptions {
   screenStableMs: number | undefined;
   cursorRow: number | undefined;
   cursorCol: number | undefined;
+  afterSeq: number | undefined;
 }
 
 const DEFAULT_WAIT_TIMEOUT_MS = 600_000;
@@ -59,7 +60,8 @@ function isRenderWaitMode(options: CommandOptions): boolean {
     options.regex !== undefined ||
     options.screenStableMs !== undefined ||
     options.cursorRow !== undefined ||
-    options.cursorCol !== undefined
+    options.cursorCol !== undefined ||
+    options.afterSeq !== undefined
   );
 }
 
@@ -105,7 +107,7 @@ function buildOfflineRenderWaitResult(
 ): WaitForRenderResult {
   const match = matchRenderWaitSnapshot(preparedCondition, snapshot);
 
-  if (match.contentAndCursorMatched) {
+  if (match.contentAndCursorMatched && match.baselineMatched) {
     return {
       matched: match.matched,
       timedOut: false,
@@ -127,6 +129,7 @@ function buildOfflineRenderWaitResult(
       screenStableMs: preparedCondition.screenStableMs,
       expectedCursorRow: preparedCondition.cursorRow,
       expectedCursorCol: preparedCondition.cursorCol,
+      afterSeq: preparedCondition.afterSeq,
       capturedAtSeq: match.capturedAtSeq,
       cursorRow: match.cursorRow,
       cursorCol: match.cursorCol,
@@ -213,6 +216,16 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     }
 
     if (
+      options.afterSeq !== undefined &&
+      !isNonNegativeInteger(options.afterSeq)
+    ) {
+      throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+        message: '--after-seq must be a non-negative integer.',
+        details: { afterSeq: options.afterSeq },
+      });
+    }
+
+    if (
       options.timeout !== undefined &&
       options.timeout !== 0 &&
       !isPositiveInteger(options.timeout)
@@ -231,6 +244,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       screenStableMs: options.screenStableMs,
       cursorRow: options.cursorRow,
       cursorCol: options.cursorCol,
+      afterSeq: options.afterSeq,
     });
 
     const effectiveTimeout = options.timeout ?? DEFAULT_WAIT_TIMEOUT_MS;
@@ -240,6 +254,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       screenStableMs: options.screenStableMs,
       cursorRow: options.cursorRow,
       cursorCol: options.cursorCol,
+      afterSeq: options.afterSeq,
       timeoutMs: effectiveTimeout === 0 ? undefined : effectiveTimeout,
       rendererName: options.context.rendererDefault,
     };

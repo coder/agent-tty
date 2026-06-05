@@ -28,6 +28,7 @@ describe('render wait matcher', () => {
       textMatched: true,
       cursorMatched: true,
       stabilityMatched: true,
+      baselineMatched: true,
       contentAndCursorMatched: true,
       matchedText: 'Ready',
       cursorRow: 1,
@@ -35,6 +36,69 @@ describe('render wait matcher', () => {
       capturedAtSeq: 12,
       visibleLines: ['booting', 'Ready'],
     });
+  });
+
+  it('rejects snapshots at or below the wait baseline even when text matches', () => {
+    const condition = prepareRenderWaitCondition({
+      text: 'Ready',
+      afterSeq: 12,
+    });
+    const snapshot = createTestSemanticSnapshot({
+      visibleLines: [{ row: 0, text: 'Ready' }],
+      capturedAtSeq: 12,
+    });
+
+    expect(matchRenderWaitSnapshot(condition, snapshot)).toMatchObject({
+      matched: false,
+      textMatched: true,
+      cursorMatched: true,
+      stabilityMatched: true,
+      baselineMatched: false,
+      contentAndCursorMatched: true,
+    });
+  });
+
+  it('matches snapshots strictly beyond the wait baseline', () => {
+    const condition = prepareRenderWaitCondition({
+      text: 'Ready',
+      afterSeq: 12,
+    });
+    const snapshot = createTestSemanticSnapshot({
+      visibleLines: [{ row: 0, text: 'Ready' }],
+      capturedAtSeq: 13,
+    });
+
+    expect(matchRenderWaitSnapshot(condition, snapshot)).toMatchObject({
+      matched: true,
+      textMatched: true,
+      baselineMatched: true,
+      contentAndCursorMatched: true,
+      matchedText: 'Ready',
+    });
+  });
+
+  it('treats an undefined wait baseline as always satisfied', () => {
+    const condition = prepareRenderWaitCondition({ text: 'Ready' });
+    const snapshot = createTestSemanticSnapshot({
+      visibleLines: [{ row: 0, text: 'Ready' }],
+      capturedAtSeq: 0,
+    });
+
+    expect(matchRenderWaitSnapshot(condition, snapshot)).toMatchObject({
+      matched: true,
+      baselineMatched: true,
+    });
+  });
+
+  it('rejects non-integer afterSeq baselines', () => {
+    expect(() =>
+      prepareRenderWaitCondition({ text: 'Ready', afterSeq: 1.5 }),
+    ).toThrow(
+      expect.objectContaining({
+        code: ERROR_CODES.INVALID_INPUT,
+        message: 'afterSeq must be a non-negative integer',
+      }),
+    );
   });
 
   it('matches regexes and reports the matched substring', () => {

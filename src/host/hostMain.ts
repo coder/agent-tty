@@ -538,8 +538,8 @@ export async function runHost(sessionId: string): Promise<void> {
       invariant(typeof text === 'string', 'type text must be a string');
       pty.write(text);
       lastActivityAt = Date.now();
-      await eventLog.append('input_text', { data: text });
-      return {};
+      const seq = await eventLog.append('input_text', { data: text });
+      return { seq };
     },
     mark: async (params: unknown) => {
       const { label } = params as MarkParams;
@@ -563,8 +563,8 @@ export async function runHost(sessionId: string): Promise<void> {
       const encoded = encodePaste(text);
       pty.write(encoded);
       lastActivityAt = Date.now();
-      await eventLog.append('input_paste', { data: encoded });
-      return {};
+      const seq = await eventLog.append('input_paste', { data: encoded });
+      return { seq };
     },
     run: async (params: unknown, context) => {
       const { command, noWait, timeoutMs } = params as RunParams;
@@ -848,6 +848,7 @@ export async function runHost(sessionId: string): Promise<void> {
         screenStableMs,
         cursorRow,
         cursorCol,
+        afterSeq,
         timeoutMs,
         rendererName: requestedRendererName,
       } = params as WaitForRenderParams;
@@ -860,6 +861,7 @@ export async function runHost(sessionId: string): Promise<void> {
         screenStableMs,
         cursorRow,
         cursorCol,
+        afterSeq,
       });
       if (timeoutMs !== undefined) {
         invariant(
@@ -875,6 +877,7 @@ export async function runHost(sessionId: string): Promise<void> {
       let lastVisibleText: string | undefined;
       let lastTextChangeAt = Date.now();
       let latestCapturedAtSeq = 0;
+      let seenPostBaseline = false;
 
       const pollCondition = new Promise<WaitForRenderResult>((resolve) => {
         let pollInFlight = false;
@@ -906,13 +909,21 @@ export async function runHost(sessionId: string): Promise<void> {
               consecutiveFailures = 0;
 
               const now = Date.now();
+              const postBaseline =
+                afterSeq === undefined || capturedAtSeq > afterSeq;
+              if (!postBaseline) {
+                return;
+              }
+
               if (
+                !seenPostBaseline ||
                 lastVisibleText === undefined ||
                 visibleText !== lastVisibleText
               ) {
                 lastVisibleText = visibleText;
                 lastTextChangeAt = now;
               }
+              seenPostBaseline = true;
 
               const match = matchRenderWaitSnapshot(
                 preparedCondition,

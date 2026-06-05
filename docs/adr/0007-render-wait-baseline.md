@@ -15,9 +15,9 @@ between them. A **Render Wait** today (`waitForRender` in
 nothing about event-log position.
 
 That is fine for a human invoking `wait` once, but unsafe for steps that run
-back-to-back. A wait step can match the screen left by the *previous* step
+back-to-back. A wait step can match the screen left by the _previous_ step
 before the current step has rendered (stale-match), and a `screenStableMs` wait
-can declare that *old* screen "stable" before the new input even appears. The
+can declare that _old_ screen "stable" before the new input even appears. The
 batch then advances on a false premise and sends later keystrokes into the wrong
 state. This is the property that separates `batch` from a hand-written shell
 loop, so it has to be correct.
@@ -25,7 +25,7 @@ loop, so it has to be correct.
 ## Decision
 
 A **Render Wait** accepts an optional **Wait Baseline**: an **Event Log**
-sequence (`afterSeq`) it must observe a **Semantic Snapshot** *strictly beyond*
+sequence (`afterSeq`) it must observe a **Semantic Snapshot** _strictly beyond_
 before it may match or accrue **Screen Stability**. The `batch` executor sets
 each wait step's baseline to the **Event Log** sequence recorded after the
 preceding input **Batch Step**, so a wait only ever reflects state at or after
@@ -44,8 +44,8 @@ its own step. The standalone `wait --after-seq <n>` exposes the same gate, since
   each wait is anchored to its own step rather than racing the previous step's
   screen.
 - The **Wait Baseline** fixes **stale-match** only. It does **not** fix
-  *echo-match* — a `wait --text "foo"` matching the terminal's echo of a
-  just-typed `foo`, which renders *after* the baseline. Echo-match stays the
+  _echo-match_ — a `wait --text "foo"` matching the terminal's echo of a
+  just-typed `foo`, which renders _after_ the baseline. Echo-match stays the
   caller's concern (use a distinctive output token or `screenStableMs`), exactly
   as with the `wait` command today.
 - A small amount of protocol and matcher surface grows (one optional field plus

@@ -104,6 +104,80 @@ Useful flags:
 - `--exit`: wait for the process to exit.
 - `--timeout <ms>`: maximum wait time in milliseconds, with `0` meaning infinite.
 
+## `batch`
+
+Use `batch` to run an ordered sequence of input-and-`wait` steps against one session in a single invocation, instead of coordinating separate `run`/`type`/`paste`/`send-keys`/`wait` calls. Each `wait` step is anchored to a Wait Baseline — it only considers screen state produced _after_ the preceding input step — so a batch cannot race ahead and match a stale screen the way a hand-written shell loop can.
+
+```bash
+agent-tty batch <session-id> '[steps]' --json
+agent-tty batch <session-id> --file ./steps.json --json
+agent-tty batch <session-id> '[steps]' --keep-going --json
+```
+
+Steps are a JSON array; each step is exactly one verb. The shape mirrors the rest of the CLI:
+
+```json
+[
+  { "run": "nvim --clean", "noWait": true },
+  { "wait": { "screenStableMs": 1000 } },
+  { "sendKeys": ["i"] },
+  { "type": "hello" },
+  { "sendKeys": ["Escape"] },
+  { "type": ":wq" },
+  { "sendKeys": ["Enter"] },
+  { "wait": { "text": "written" } }
+]
+```
+
+- `type` / `paste`: a string of literal text.
+- `sendKeys`: a non-empty array of key names — individual named keys or single characters (e.g. `["Enter"]`, `["Ctrl+C"]`, `["Escape", "Enter"]`). Multi-character literal text such as `:wq` is not a key name; send it with a `type` step.
+- `run`: a command string, with optional `noWait` (fire-and-forget) and `timeout` (ms). A `run` step is a waited run by default.
+- `wait`: the same conditions as the `wait` command — `text`, `regex`, `screenStableMs`, `cursorRow`, `cursorCol`, and `timeout` (ms).
+
+Input source and flags:
+
+- A positional `[steps]` JSON array **xor** `--file <path>` — supply exactly one. Passing both, or neither, is an `INVALID_INPUT` error.
+- `--keep-going`: attempt every step regardless of failures. By default a batch is **fail-fast** — the first failed step (a timed-out `wait`, or input to a session that is no longer commandable) stops the run, and the remaining steps are recorded `not-run`. A batch is not atomic: already-applied input cannot be undone.
+- `--json`: emit a machine-readable command envelope.
+
+The `--json` result is a per-step envelope:
+
+```json
+{
+  "ok": true,
+  "command": "batch",
+  "result": {
+    "steps": [
+      {
+        "index": 0,
+        "kind": "run",
+        "status": "completed",
+        "seq": 4,
+        "noWait": true,
+        "runOutcome": "started",
+        "durationMs": 12
+      },
+      {
+        "index": 1,
+        "kind": "wait",
+        "status": "completed",
+        "waitBaseline": 4,
+        "matched": true,
+        "timedOut": false,
+        "capturedAtSeq": 9,
+        "durationMs": 1003
+      }
+    ],
+    "completedCount": 2,
+    "failedIndices": []
+  }
+}
+```
+
+Each step record carries its `index`, `kind`, `status` (`completed` | `failed` | `not-run` | `interrupted`), and `durationMs`. Input steps report the Event Log `seq` they produced; `wait` steps report the `waitBaseline` they were anchored to plus `matched` / `timedOut` / `matchedText` / `capturedAtSeq`. `completedCount` and `failedIndices` summarize the run. A fail-fast batch exits non-zero with the failed step's exit code (e.g. `11` for a `WAIT_TIMEOUT`); `--keep-going` exits `1` if any step failed. If the process is interrupted by SIGINT/SIGTERM, batch flushes the same envelope with the in-flight step marked `interrupted` and later steps `not-run`, then exits non-zero.
+
+The Wait Baseline fixes stale-match only. It does **not** fix echo-match: a `wait` can still match the terminal's echo of a just-typed command (the echo renders _after_ the baseline). Use a distinctive output token or a `screenStableMs` wait rather than waiting for text you just typed. Interrupting a batch mid-`wait` leaves that wait's command still running on the session (the wait is abandoned, not cancelled), exactly like a caller timeout on `run`.
+
 ## Screenshots And Recording Exports
 
 Screenshots and WebM export use the `ghostty-web` reference renderer through Playwright/Chromium.

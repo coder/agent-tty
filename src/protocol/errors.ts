@@ -22,6 +22,7 @@ export const ERROR_CODES = {
   EXPORT_ERROR: 'EXPORT_ERROR',
   REPLAY_ERROR: 'REPLAY_ERROR',
   SKILL_NOT_FOUND: 'SKILL_NOT_FOUND',
+  WAIT_TIMEOUT: 'WAIT_TIMEOUT',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
@@ -47,6 +48,8 @@ export const DEFAULT_ERROR_MESSAGES: Record<ProtocolErrorCode, string> = {
   [ERROR_CODES.EXPORT_ERROR]: 'Export failed.',
   [ERROR_CODES.REPLAY_ERROR]: 'Replay failed.',
   [ERROR_CODES.SKILL_NOT_FOUND]: 'Skill not found.',
+  [ERROR_CODES.WAIT_TIMEOUT]:
+    'Render wait timed out before its condition was met.',
   [ERROR_CODES.INTERNAL_ERROR]: 'Internal error.',
 };
 
