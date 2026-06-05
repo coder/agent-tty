@@ -50,6 +50,7 @@ describe('paste command', () => {
     vi.clearAllMocks();
     mocks.resolveCommandTarget.mockResolvedValue(COMMAND_TARGET);
     mocks.resolveCommandInputText.mockResolvedValue('hello from paste');
+    mocks.sendRpc.mockResolvedValue({ seq: 9 });
   });
 
   it('pastes resolved input into a command target', async () => {
@@ -77,8 +78,25 @@ describe('paste command', () => {
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'paste',
       json: false,
-      result: {},
-      lines: ['Pasted text into session.'],
+      result: { seq: 9 },
+      lines: ['Pasted text into session at seq 9.'],
     });
+  });
+
+  it('rejects malformed paste RPC responses', async () => {
+    mocks.sendRpc.mockResolvedValueOnce({ seq: -1 });
+
+    await expect(
+      runPasteCommand({
+        context: TEST_CONTEXT,
+        json: false,
+        sessionId: 'session-01',
+        text: 'hello from paste',
+      }),
+    ).rejects.toMatchObject({
+      code: 'PROTOCOL_ERROR',
+      message: 'Unexpected response from host',
+    });
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 });

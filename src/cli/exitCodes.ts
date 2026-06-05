@@ -20,6 +20,7 @@ const EXIT_CODE_BY_ERROR_CODE: Readonly<Record<string, number>> = Object.freeze(
     [ERROR_CODES.PROTOCOL_ERROR]: 9,
     [ERROR_CODES.RPC_ERROR]: 9,
     [ERROR_CODES.REPLAY_ERROR]: 10,
+    [ERROR_CODES.WAIT_TIMEOUT]: 11,
     [ERROR_CODES.INTERNAL_ERROR]: 1,
   },
 );

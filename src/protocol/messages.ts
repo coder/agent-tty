@@ -219,7 +219,9 @@ export const TypeParamsSchema = z
   .strict();
 export type TypeParams = z.infer<typeof TypeParamsSchema>;
 
-export const TypeResultSchema = EmptyObjectSchema;
+export const TypeResultSchema = z
+  .object({ seq: z.number().int().nonnegative() })
+  .strict();
 export type TypeResult = z.infer<typeof TypeResultSchema>;
 
 export const PasteParamsSchema = z
@@ -229,7 +231,9 @@ export const PasteParamsSchema = z
   .strict();
 export type PasteParams = z.infer<typeof PasteParamsSchema>;
 
-export const PasteResultSchema = EmptyObjectSchema;
+export const PasteResultSchema = z
+  .object({ seq: z.number().int().nonnegative() })
+  .strict();
 export type PasteResult = z.infer<typeof PasteResultSchema>;
 
 export const RunParamsSchema = z

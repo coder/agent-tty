@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { encodeKey } from '../../../src/pty/keyEncoder.js';
+import { assertValidKeyName, encodeKey } from '../../../src/pty/keyEncoder.js';
+import { ERROR_CODES } from '../../../src/protocol/errors.js';
 
 describe('encodeKey', () => {
   it('encodes Enter', () => {
@@ -142,4 +143,34 @@ describe('encodeKey', () => {
   it('throws on a duplicate modifier', () => {
     expect(() => encodeKey('ctrl+ctrl+a')).toThrow();
   });
+});
+
+describe('assertValidKeyName', () => {
+  const validKeys = ['Enter', 'Escape', 'Space', 'ctrl+c', 'F12', 'Up', 'a'];
+  const invalidKeys = ['BOGUS', '', 'ctrl+ctrl+a', 'ctrl+Enter'];
+
+  it('returns for a valid key name', () => {
+    expect(() => assertValidKeyName('ctrl+c')).not.toThrow();
+  });
+
+  it('throws INVALID_KEYS for an invalid key name', () => {
+    expect(() => assertValidKeyName('BOGUS')).toThrow(
+      expect.objectContaining({ code: ERROR_CODES.INVALID_KEYS }),
+    );
+  });
+
+  it.each(validKeys)('accepts valid key %s (parity with encodeKey)', (key) => {
+    expect(() => encodeKey(key)).not.toThrow();
+    expect(() => assertValidKeyName(key)).not.toThrow();
+  });
+
+  it.each(invalidKeys)(
+    'rejects invalid key %s (parity with encodeKey)',
+    (key) => {
+      expect(() => encodeKey(key)).toThrow();
+      expect(() => assertValidKeyName(key)).toThrow(
+        expect.objectContaining({ code: ERROR_CODES.INVALID_KEYS }),
+      );
+    },
+  );
 });

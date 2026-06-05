@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `agent-tty batch <session-id>`: run an ordered sequence of input-and-`wait` steps against one session in a single invocation, supplied as a positional JSON array or `--file`. Each step is one verb (`type`, `paste`, `sendKeys`, `run`, or `wait`); every `wait` is anchored to a Wait Baseline (the Event Log sequence after the preceding input step) so it cannot match a stale screen the way a hand-written `run`/`wait`/`send-keys` loop can (ADR 0007). Fail-fast by default with a non-zero exit and a per-step `--json` envelope; `--keep-going` attempts every step. SIGINT/SIGTERM flushes a partial envelope (in-flight step `interrupted`, later steps `not-run`) ([#123](https://github.com/coder/agent-tty/issues/123)).
+
 ## [v0.3.0] - 2026-06-03
 
 ### Added
