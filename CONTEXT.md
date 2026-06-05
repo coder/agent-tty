@@ -43,6 +43,18 @@ _Avoid_: Visual wait, snapshot wait
 A render condition where the visible text content of a **Semantic Snapshot** has remained unchanged for a requested duration.
 _Avoid_: Settled screen
 
+**Batch**:
+An ordered sequence of **Batch Steps** driven through one **Command Target** in a single `batch` invocation. It runs fail-fast: the first failed **Batch Step** stops the run unless the caller opts into continuing.
+_Avoid_: Pipeline, script, macro
+
+**Batch Step**:
+A single ordered action within a **Batch**: either one input or control action sent to the **Command Target** (text, paste, key chord, or a **Waited Run**), or one **Render Wait**.
+_Avoid_: Command, instruction
+
+**Wait Baseline**:
+The **Event Log** point a **Render Wait** must observe a **Semantic Snapshot** beyond before it can match, so the wait reflects screen state from that point onward rather than stale pre-step content.
+_Avoid_: afterSeq, sequence floor
+
 **Live Host Eligible Session**:
 A **Session** where callers should ask the live session host for fresh state.
 
@@ -219,6 +231,11 @@ _Avoid_: bare "agent", "Coder agent"
 - A **Waited Run** may produce one **Run Completion**, time out for its caller, or be interrupted by **Session** exit.
 - Caller timeout does not cancel the underlying **Run Completion**; it may still be observed later to keep internal completion bytes out of artifacts.
 - After **Session** exit, an unobserved **Run Completion** can no longer arrive.
+- A **Batch** is driven through exactly one **Command Target**, resolved once for the whole invocation.
+- A **Batch** is not atomic: input already applied to a **Session** cannot be undone, so a failed **Batch** leaves the **Session** in whatever state its completed **Batch Steps** produced.
+- A **Render Wait** that is a **Batch Step** is anchored to a **Wait Baseline** equal to the **Event Log** sequence recorded after the preceding input **Batch Step**, so it cannot match a **Semantic Snapshot** that predates that step.
+- A standalone **Render Wait** may be given an explicit **Wait Baseline**; without one it matches against the latest **Semantic Snapshot**.
+- A **Batch** stops at the first failed **Batch Step** — a timed-out **Render Wait**, or an input action against a **Session** that is no longer a **Command Target** — unless the caller opts into continuing.
 - A **Promoted Hero Demo** replaces the existing recursive README demo entirely; the old recursive bundle is deleted rather than maintained in parallel.
 - The **Hero Claim Boundary** narrows the README claim after that deletion: the outer TUI is presentation, while inner `agent-tty` artifacts are the product proof.
 - An **Exploratory Hero Demo** is the preferred **Hero Demo** scenario because it shows the coding-agent TUI discovering the `agent-tty` skill and CLI before producing inner `agent-tty` proof artifacts.
@@ -284,3 +301,4 @@ _Avoid_: bare "agent", "Coder agent"
 - "helper proof" was used during design discussion, but the canonical scenario is now **Exploratory Hero Demo**: success criteria and output paths are fixed, while the coding agent chooses the command flow inside a configurable fixed review window.
 - "demo" and "proof" are not interchangeable for coding-agent recordings: a **Hero Demo** optimizes for stable presentation, while a **Recursive Dogfood Proof** optimizes for self-dogfood coverage.
 - "agent" is overloaded across four referents: this project's **Triage Agent** (a Claude Code instance), Coder's **Coder workspace agent** (the SSH/exec daemon), a generic AFK implementation agent (the actor on `ready-for-agent` issues — Phase 2 of the triage pipeline), and — in **Session Dashboard** product copy only — the external client driving a **Session** (often an AI coding agent). The last sense is deliberately **not** a domain term: the **Session Dashboard** and **Live View** are defined over **Sessions**, not agents, and the **Event Log** does not record which client sent input. Do not make the dashboard agent-aware (grouping or filtering by agent identity) without first extending the domain model. Always qualify in code comments and docs.
+- "batch" is overloaded: a **Batch** (an ordered **Batch Step** sequence driven through one **Command Target** by the `batch` command) is unrelated to a **Triage Batch** (the set of issues processed by one **AFK Triage** invocation). They live in different subsystems; always rely on the qualifier.
