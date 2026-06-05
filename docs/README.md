@@ -13,7 +13,6 @@ Use this directory for focused user, contributor, and maintainer guides.
 ## Product Scope
 
 - [`../RELEASE.md`](../RELEASE.md) — supported product contract for the current release line.
-- [`../ROADMAP.md`](../ROADMAP.md) — intentionally deferred work and post-release direction.
 - [`../CHANGELOG.md`](../CHANGELOG.md) — per-release changes.
 
 ## Contributors

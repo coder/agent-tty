@@ -47,7 +47,7 @@ Session state is stored under `~/.agent-tty` by default. In tests and automation
 - `src/export/asciicast.ts` and `src/export/webm.ts` — recording export logic.
 - `src/util/assert.ts` — shared fail-fast assertion helpers.
 - `design/ARCHITECTURE.md` — stable architecture and product intent overview.
-- `ROADMAP.md` and `RELEASE.md` — shipped scope vs deferred scope at the repo root.
+- `RELEASE.md` — supported scope at the repo root.
 - `dogfood/README.md` and `dogfood/CATALOG.md` — proof-bundle navigation and reviewer-facing validation artifacts.
 
 ## Important directories
