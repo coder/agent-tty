@@ -99,7 +99,7 @@ describe('batch fixture e2e', { timeout: 30_000 }, () => {
     expect(output).toContain('BACK ON MAIN SCREEN');
   });
 
-  it('drives the hello-prompt shell fixture through one batch with a run step', async () => {
+  it('drives the hello-prompt fixture through one batch (type, sendKeys, anchored wait)', async () => {
     const env = testEnv(testHome);
     const createEnvelope = runCliJson<SuccessEnvelope<CreateResult>>(
       ['create', '--', ...fixtureCommand('hello-prompt')],
@@ -110,12 +110,14 @@ describe('batch fixture e2e', { timeout: 30_000 }, () => {
     const sessionId = createEnvelope.result.sessionId;
     createdSessionIds.push(sessionId);
 
-    // One batch on the shell fixture exercises run/type/sendKeys/wait. The
-    // final wait uses a distinctive token (not the literal typed text) so it
-    // anchors on the fixture's ECHO line rather than the echo of the keystroke
-    // itself — the documented echo-match limitation.
+    // One batch exercises type/sendKeys/wait against the prompt fixture. The
+    // leading wait matches the prompt WITHOUT its trailing space: the raw
+    // output keeps "READY> ", but the rendered snapshot trims trailing blank
+    // cells, so the grid shows "READY>". The final wait uses a distinctive
+    // token (not the literal typed text) so it anchors on the fixture's ECHO
+    // line rather than the keystroke echo — the documented echo-match limit.
     const steps = JSON.stringify([
-      { wait: { text: 'READY> ', timeout: 10_000 } },
+      { wait: { text: 'READY>', timeout: 10_000 } },
       { type: 'batchtoken9' },
       { sendKeys: ['Enter'] },
       { wait: { text: 'ECHO: batchtoken9', timeout: 10_000 } },
