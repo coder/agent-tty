@@ -21,7 +21,7 @@ This design intentionally describes a **general product**, not a Mux-specific im
 
 ## Current shipped status
 
-The current `0.2.x` line is centered on reliable, isolated, reviewable terminal and TUI automation. The shipped surface includes `run` for robust in-session command execution, renderer/browser-path handling that respects isolated-home workflows, and isolation-aware `doctor --json` diagnostics on top of lifecycle, snapshot, screenshot, and export work. Larger asks such as native renderers, mouse input, remote/network sessions, MCP wrapping, and broader semantic TUI automation remain intentionally deferred and tracked in [`../ROADMAP.md`](../ROADMAP.md).
+The current `0.3.x` line is centered on reliable, isolated, reviewable terminal and TUI automation. The shipped surface includes `run` for robust in-session command execution, renderer/browser-path handling that respects isolated-home workflows, and isolation-aware `doctor --json` diagnostics on top of lifecycle, snapshot, screenshot, and export work. Larger asks such as native renderers, mouse input, remote/network sessions, MCP wrapping, and broader semantic TUI automation remain intentionally deferred.
 
 The repository now ships the first three milestones of this design plus Weeks 4â€“7 of CLI/artifact/lifecycle hardening, config/rendering/platform closeout, contract/introspection reconciliation, and Week 7 contract/doc ratification:
 
@@ -42,7 +42,7 @@ The repository now ships the first three milestones of this design plus Weeks 4â
 
 Week 7 closed the design-synchronization pass for the shipped v1 surface. Week 8 then completed runtime capability discovery, richer renderer/session introspection, the remaining lower-priority public-envelope locks, and proof-bundle normalization/validation. Week 9 then closed the pre-`0.1.0` release-readiness milestone: isolated-environment renderer reliability is now part of the shipped contract, the higher-level in-session `run` primitive is documented and shipped, TUI-focused diagnostics/docs are in place, and the remaining large asks are intentionally deferred future-scope work rather than release blockers.
 
-The stable contract and deferred work now have dedicated homes: use [`../RELEASE.md`](../RELEASE.md) for the shipping bar, [`../ROADMAP.md`](../ROADMAP.md) for future scope, [`./README.md`](./README.md) for the design index, and [`./archive/`](./archive/) for the historical week-by-week planning/status trail.
+The stable contract has a dedicated home: use [`../RELEASE.md`](../RELEASE.md) for the shipping bar, [`./README.md`](./README.md) for the design index, and [`./archive/`](./archive/) for the historical week-by-week planning/status trail.
 
 ## Executive summary
 

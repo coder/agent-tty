@@ -31,5 +31,4 @@ Week-by-week plans and status reports now live under [`archive/`](./archive/). T
 ## Related docs
 
 - [`../RELEASE.md`](../RELEASE.md) — current shipping contract.
-- [`../ROADMAP.md`](../ROADMAP.md) — deferred work and post-release direction.
 - [`../dogfood/CATALOG.md`](../dogfood/CATALOG.md) — curated proof bundles.

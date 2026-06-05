@@ -20,12 +20,11 @@
 ## Release prerequisites
 
 1. Re-read [`../RELEASE.md`](../RELEASE.md) and confirm it still matches the shipped surface.
-2. Re-read [`../ROADMAP.md`](../ROADMAP.md) and confirm deferred work is not mixed back into the release contract.
-3. Verify the primary docs route correctly from [`../README.md`](../README.md) to release, roadmap, design, and dogfood materials.
-4. Review [`../dogfood/CATALOG.md`](../dogfood/CATALOG.md) and make sure the release-signoff bundle is current and easy to find.
-5. Confirm the published package metadata still points at `agent-tty` and the public GitHub repository.
-6. Remember that `main` is protected: release changes must land through a pull request, and the release tag must be created only after that PR is merged.
-7. Confirm release-note automation has an LLM provider secret available in GitHub Actions:
+2. Verify the primary docs route correctly from [`../README.md`](../README.md) to release, design, and dogfood materials.
+3. Review [`../dogfood/CATALOG.md`](../dogfood/CATALOG.md) and make sure the release-signoff bundle is current and easy to find.
+4. Confirm the published package metadata still points at `agent-tty` and the public GitHub repository.
+5. Remember that `main` is protected: release changes must land through a pull request, and the release tag must be created only after that PR is merged.
+6. Confirm release-note automation has an LLM provider secret available in GitHub Actions:
    - default/recommended: `ANTHROPIC_API_KEY`
    - OpenAI-compatible fallback: `OPENAI_API_KEY` plus a repository variable named `COMMUNIQUE_MODEL`
 

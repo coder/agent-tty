@@ -58,7 +58,7 @@ The current renderer/export path is:
 
 `inspect` now also exposes shipped artifact-health reporting derived from the artifact manifest plus on-disk files. That summary reports artifact totals, `byKind` counts, `missingCount`, an overall `health` value (`healthy`, `missing-artifacts`, `manifest-invalid`, `no-artifacts`, or `unknown`), and optional per-artifact `missing` details when files referenced by the manifest are absent on disk.
 
-Remaining follow-on work is now mostly about design parity and broader future-scope renderer/runtime expansion rather than missing artifact classes. The repo already ships scrollback snapshots, optional per-cell snapshot data, bundled deterministic fonts, and replay timing modes. The main still-open design items are the fuller event-log and snapshot-schema redesigns plus later native/parity work tracked in [`../../ROADMAP.md`](../../ROADMAP.md).
+Remaining follow-on work is now mostly about design parity and broader future-scope renderer/runtime expansion rather than missing artifact classes. The repo already ships scrollback snapshots, optional per-cell snapshot data, bundled deterministic fonts, and replay timing modes. The main still-open design items are the fuller event-log and snapshot-schema redesigns plus later native/parity work.
 
 ## 4. Canonical replay model
 
@@ -544,4 +544,4 @@ The remaining design-level follow-ons are now narrower:
 - whether to expand per-cell metadata beyond the currently shipped fields (for example `width`, `inverse`, `blink`, `dim`, or richer cursor metadata),
 - runtime renderer capability discovery beyond the current static backend list,
 - larger event-log and snapshot-schema redesign questions,
-- and later native renderer/parity work tracked in [`../../ROADMAP.md`](../../ROADMAP.md).
+- and later native renderer/parity work.
