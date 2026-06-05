@@ -31,6 +31,11 @@ const VERB_KEYS = ['type', 'paste', 'sendKeys', 'run', 'wait'] as const;
 
 type VerbKey = (typeof VERB_KEYS)[number];
 
+// Default for an omitted `wait` step timeout, matching the `wait` command; an
+// explicit `timeout: 0` still means infinite. Keeps an unattended Batch from
+// hanging forever on a wait whose condition never appears.
+const DEFAULT_WAIT_TIMEOUT_MS = 600_000;
+
 const TypeStepSchema = z.object({ type: z.string().min(1) }).strict();
 const PasteStepSchema = z.object({ paste: z.string().min(1) }).strict();
 const SendKeysStepSchema = z
@@ -167,7 +172,7 @@ function parseRunStep(
     kind: 'run',
     command: run,
     noWait: noWait ?? false,
-    timeoutMs: timeout === undefined ? undefined : timeout,
+    timeoutMs: timeout,
   };
 }
 
@@ -184,8 +189,13 @@ function parseWaitStep(
     cursorCol: wait.cursorCol,
   });
 
+  // Absent -> finite default; explicit 0 -> infinite.
   const timeoutMs =
-    wait.timeout === undefined || wait.timeout === 0 ? undefined : wait.timeout;
+    wait.timeout === undefined
+      ? DEFAULT_WAIT_TIMEOUT_MS
+      : wait.timeout === 0
+        ? undefined
+        : wait.timeout;
   return { kind: 'wait', condition, timeoutMs };
 }
 

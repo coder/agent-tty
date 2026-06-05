@@ -9,27 +9,20 @@ import type { BatchResult, BatchStepRecord } from '../../batch/result.js';
 
 import { resolveCommandTarget } from '../commandTarget.js';
 import { exitCodeForError } from '../exitCodes.js';
-import { emitSuccess } from '../output.js';
-import { assertSessionCommandable } from '../sessionGuards.js';
+import { emitSuccess, emitSuccessSync } from '../output.js';
 import { executeBatch } from '../../batch/executor.js';
 import { parseBatchPlan } from '../../batch/plan.js';
 import { buildPartialBatchResult } from '../../batch/result.js';
 import { createRpcStepDriver } from '../../batch/stepDriver.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
-import { readManifestIfExists } from '../../storage/manifests.js';
 import { MAX_INPUT_FILE_SIZE } from './inputSource.js';
 
-/** Fixed batch-level exit code for a keep-going run with any failed step. */
 const KEEP_GOING_FAILURE_EXIT_CODE = 1;
 
-/** Signals that flush a partial Batch envelope and exit. */
 const INTERRUPT_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
 type InterruptSignal = (typeof INTERRUPT_SIGNALS)[number];
 
-/**
- * The conventional 128 + signal-number exit code (SIGINT -> 130,
- * SIGTERM -> 143), falling back to a non-zero code if the number is unknown.
- */
+// Conventional 128 + signal-number exit code (SIGINT -> 130, SIGTERM -> 143).
 function signalExitCode(signal: InterruptSignal): number {
   const signo = osConstants.signals[signal];
   return typeof signo === 'number' ? 128 + signo : KEEP_GOING_FAILURE_EXIT_CODE;
@@ -91,12 +84,8 @@ function inputFileError(
   );
 }
 
-/**
- * Resolve the raw JSON step source from the positional argument XOR --file.
- * Mirrors the safety of resolveCommandInputText (lstat, regular-file only,
- * 10 MB cap, non-empty) but returns the raw string unchanged — it is JSON to be
- * parsed, not "text" to be typed.
- */
+// Resolve the raw JSON step source from the positional argument XOR --file,
+// with the same file safety as resolveCommandInputText (regular file, 10 MB cap).
 async function resolveBatchSource(options: CommandOptions): Promise<string> {
   if (options.steps !== undefined && options.file !== undefined) {
     throw invalidInput(
@@ -175,6 +164,9 @@ function stepOutcome(record: BatchStepRecord): string {
       ? 'failed'
       : `failed (${record.error.code})`;
   }
+  if (record.status === 'interrupted') {
+    return 'interrupted';
+  }
   switch (record.kind) {
     case 'wait':
       return record.matchedText === undefined
@@ -238,18 +230,10 @@ interface InterruptFlushOptions {
 }
 
 /**
- * Run the executor with a synchronous SIGINT/SIGTERM handler that flushes a
- * partial Batch envelope and exits, then removes the handler.
- *
- * The handler accumulates each finalized step record through `onStep`. On a
- * signal it builds a partial BatchResult from those records (the in-flight step
- * recorded `interrupted`, later steps `not-run`), writes the same envelope a
- * normal run would, and calls `process.exit`. It deliberately does NOT await
- * the in-flight RPC: a `wait` step interrupted mid-flight leaves the underlying
- * Render Wait registered and that command still RUNNING on the Session
- * (`forgetWaiter` keeps the sentinel registered), exactly like caller-timeout —
- * see CONTEXT.md ("Caller timeout does not cancel the underlying Run
- * Completion"). Already-applied input cannot be undone; a Batch is not atomic.
+ * Run the executor under SIGINT/SIGTERM handlers that flush a partial envelope
+ * (in-flight step `interrupted`, later steps `not-run`) and exit. The in-flight
+ * RPC is NOT awaited, so an interrupted Waited Run keeps running on the Session
+ * — like caller-timeout (CONTEXT.md); already-applied input cannot be undone.
  */
 async function executeWithInterruptFlush(
   options: InterruptFlushOptions,
@@ -266,7 +250,9 @@ async function executeWithInterruptFlush(
     flushed = true;
 
     const partial = buildPartialBatchResult(options.plan, records);
-    emitSuccess({
+    // Sync flush: an async write would be truncated by the process.exit below
+    // for a partial envelope larger than the OS pipe buffer.
+    emitSuccessSync({
       command: 'batch',
       json: options.json,
       result: partial,
@@ -297,9 +283,8 @@ async function executeWithInterruptFlush(
 export async function runBatchCommand(options: CommandOptions): Promise<void> {
   const raw = await resolveBatchSource(options);
 
-  // Parse precedes target resolution: a malformed plan fails fast with no live
-  // Session required, and a Batch is not atomic — nothing should be sent until
-  // the whole plan is validated.
+  // Parse before resolving the target: a malformed plan fails fast without a
+  // live Session, and nothing is sent until the whole plan validates.
   const plan = parseBatchPlan(raw);
 
   const target = await resolveCommandTarget({
@@ -312,20 +297,13 @@ export async function runBatchCommand(options: CommandOptions): Promise<void> {
     options.context.rendererDefault,
   );
 
-  // Re-read the manifest around each Render Wait so a Session that exits or is
-  // destroyed mid-Batch fails the wait step rather than racing a dead Session.
+  // Re-resolve the target around each Render Wait (fresh manifest read) so a
+  // Session that dies mid-Batch fails the wait rather than racing a dead one.
   const assertCommandable = async (): Promise<void> => {
-    const manifest = await readManifestIfExists(target.manifestPath);
-    if (manifest === null) {
-      throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
-        message: `Session "${options.sessionId}" was not found.`,
-        details: {
-          sessionId: options.sessionId,
-          manifestPath: target.manifestPath,
-        },
-      });
-    }
-    assertSessionCommandable(manifest, options.sessionId);
+    await resolveCommandTarget({
+      home: options.context.home,
+      sessionId: options.sessionId,
+    });
   };
 
   const result = await executeWithInterruptFlush(
@@ -340,9 +318,8 @@ export async function runBatchCommand(options: CommandOptions): Promise<void> {
       }),
   );
 
-  // Exit codes follow the doctor pattern: set process.exitCode, then always
-  // emitSuccess with the full BatchResult so the per-step envelope is never
-  // lost. Routing a step failure through emitFailure would discard steps[].
+  // Set process.exitCode then always emitSuccess (doctor pattern), so a failed
+  // Batch still emits the full per-step envelope instead of a bare error.
   if (result.failedIndices.length > 0) {
     if (options.keepGoing) {
       process.exitCode = KEEP_GOING_FAILURE_EXIT_CODE;

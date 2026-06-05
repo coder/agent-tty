@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  assertValidKeyName,
-  encodeKey,
-  isValidKeyName,
-} from '../../../src/pty/keyEncoder.js';
+import { assertValidKeyName, encodeKey } from '../../../src/pty/keyEncoder.js';
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
 
 describe('encodeKey', () => {
@@ -149,22 +145,10 @@ describe('encodeKey', () => {
   });
 });
 
-describe('isValidKeyName', () => {
+describe('assertValidKeyName', () => {
   const validKeys = ['Enter', 'Escape', 'Space', 'ctrl+c', 'F12', 'Up', 'a'];
   const invalidKeys = ['BOGUS', '', 'ctrl+ctrl+a', 'ctrl+Enter'];
 
-  it.each(validKeys)('agrees with encodeKey for valid key %s', (key) => {
-    expect(() => encodeKey(key)).not.toThrow();
-    expect(isValidKeyName(key)).toBe(true);
-  });
-
-  it.each(invalidKeys)('agrees with encodeKey for invalid key %s', (key) => {
-    expect(() => encodeKey(key)).toThrow();
-    expect(isValidKeyName(key)).toBe(false);
-  });
-});
-
-describe('assertValidKeyName', () => {
   it('returns for a valid key name', () => {
     expect(() => assertValidKeyName('ctrl+c')).not.toThrow();
   });
@@ -174,4 +158,19 @@ describe('assertValidKeyName', () => {
       expect.objectContaining({ code: ERROR_CODES.INVALID_KEYS }),
     );
   });
+
+  it.each(validKeys)('accepts valid key %s (parity with encodeKey)', (key) => {
+    expect(() => encodeKey(key)).not.toThrow();
+    expect(() => assertValidKeyName(key)).not.toThrow();
+  });
+
+  it.each(invalidKeys)(
+    'rejects invalid key %s (parity with encodeKey)',
+    (key) => {
+      expect(() => encodeKey(key)).toThrow();
+      expect(() => assertValidKeyName(key)).toThrow(
+        expect.objectContaining({ code: ERROR_CODES.INVALID_KEYS }),
+      );
+    },
+  );
 });

@@ -15,17 +15,10 @@ import { unreachedStepRecord } from './result.js';
 export interface ExecuteBatchOptions {
   plan: BatchPlan;
   driver: StepDriver;
-  /** When true, attempt every step regardless of failures (best-effort). */
   keepGoing: boolean;
-  /**
-   * Re-check that the Command Target is still commandable. Invoked around each
-   * Render Wait — before the wait, and again after a matched result — so a
-   * Session that exits or becomes non-commandable mid-Batch fails the wait step
-   * rather than racing a dead Session. A rejection must be a CliError; it is
-   * classified against the wait step.
-   */
+  // Re-check commandability around each Render Wait (rejecting with a CliError)
+  // so a Session that dies mid-Batch fails the wait rather than racing it.
   assertCommandable?: () => Promise<void>;
-  /** Invoked once per step, after its record is finalized. */
   onStep?: (record: BatchStepRecord) => void;
 }
 
@@ -33,12 +26,8 @@ function toBatchStepError(error: CliError): { code: string; message: string } {
   return { code: error.code, message: error.message };
 }
 
-/**
- * Reframe a thrown non-CliError (e.g. an AssertionError from a violated
- * invariant) as a synthesized INTERNAL_ERROR so the executor can record it
- * against the offending step instead of letting it escape and discard the
- * per-step BatchResult.
- */
+// Reframe a thrown non-CliError as INTERNAL_ERROR so it is recorded against the
+// step rather than escaping and discarding the per-step BatchResult.
 function reframeAsInternalError(error: unknown, index: number): CliError {
   return makeCliError(ERROR_CODES.INTERNAL_ERROR, {
     message: `Batch step ${String(index)} failed with an unexpected error.`,
@@ -70,14 +59,9 @@ function classifyRunOutcome(run: {
 }
 
 /**
- * Run an ordered Batch through the injected StepDriver, threading the Wait
- * Baseline from each input step into the following Render Wait and accumulating
- * a per-step BatchResult.
- *
- * Pure over the driver: no fs, no rpc, no real PTY/renderer. Fail-fast by
- * default — a failed Batch Step stops the loop unless `keepGoing` is set, after
- * which the remaining steps are recorded `not-run`. A failed step never throws
- * out of the executor: even a thrown non-CliError is reframed and recorded.
+ * Run an ordered Batch through the injected StepDriver, threading each input
+ * step's Wait Baseline into the following Render Wait. Pure over the driver;
+ * fail-fast unless `keepGoing`, after which later steps are recorded `not-run`.
  */
 export async function executeBatch(
   opts: ExecuteBatchOptions,
@@ -130,9 +114,10 @@ export async function executeBatch(
       record = failedRecord(step, index, Date.now() - startedAt, cliError);
     }
 
-    // An input step that completed advances the Wait Baseline; a wait never
-    // does (it observes the baseline, it does not produce one).
-    if (record.status === 'completed' && record.kind !== 'wait') {
+    // A non-wait step that produced a seq advances the Wait Baseline, even a
+    // failed Waited Run (it still injected its command), so a following wait
+    // cannot stale-match the pre-run screen under --keep-going.
+    if (record.kind !== 'wait' && record.seq !== undefined) {
       lastInputSeq = record.seq;
     }
 
@@ -214,9 +199,6 @@ async function runRunStep(
     ...(result.timedOut === undefined ? {} : { timedOut: result.timedOut }),
   });
 
-  // A no-wait run completes once accepted; a Waited Run completes only when the
-  // host observed its Run Completion. A Waited Run that timed out or was
-  // interrupted by Session exit is a failed step.
   const failed = !step.noWait && result.completed !== true;
   const base: Omit<RunStepRecord, 'error'> = {
     index,
@@ -257,9 +239,6 @@ async function runWaitStep(
   startedAt: number,
   assertCommandable: (() => Promise<void>) | undefined,
 ): Promise<WaitStepRecord> {
-  // A wait can match the screen of a Session that exited mid-Batch; gate the
-  // wait on commandability before it runs (and again after a match) so a dead
-  // Session is a failed wait step rather than a stale match.
   await assertCommandable?.();
 
   const result = await driver.wait(
@@ -297,7 +276,24 @@ async function runWaitStep(
     };
   }
 
-  await assertCommandable?.();
+  // Re-check after the match; if the Session died in that window, keep the
+  // observations on the failed record rather than emitting a bare error.
+  try {
+    await assertCommandable?.();
+  } catch (error) {
+    if (error instanceof CliError) {
+      return {
+        index,
+        durationMs: Date.now() - startedAt,
+        kind: 'wait',
+        status: 'failed',
+        ...baseline,
+        ...observations,
+        error: toBatchStepError(error),
+      };
+    }
+    throw error;
+  }
 
   return {
     index,

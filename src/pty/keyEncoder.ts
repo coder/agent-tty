@@ -84,23 +84,6 @@ export function encodeKey(keyName: string): string {
 }
 
 /**
- * Whether `encodeKey` accepts this key name. Shares one vocabulary with
- * `encodeKey` by deferring to it, so the parser and the host never drift.
- */
-export function isValidKeyName(key: string): boolean {
-  if (typeof key !== 'string') {
-    return false;
-  }
-
-  try {
-    encodeKey(key);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Assert that `encodeKey` accepts this key name, throwing INVALID_KEYS with the
  * same message the host surfaces. Used to reject a bad key at Batch Plan parse
  * time, before any input is sent.

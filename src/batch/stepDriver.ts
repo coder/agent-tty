@@ -4,7 +4,6 @@ import type { RunResult, WaitForRenderResult } from '../protocol/messages.js';
 import type { PreparedRenderWaitCondition } from '../renderWait/matcher.js';
 
 import { sendRpc } from '../host/rpcClient.js';
-import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import {
   PasteResultSchema,
   RunResultSchema,
@@ -12,15 +11,13 @@ import {
   TypeResultSchema,
   WaitForRenderResultSchema,
 } from '../protocol/messages.js';
+import { parseValidatedResult } from '../protocol/validation.js';
 import { invariant } from '../util/assert.js';
 
 /**
- * The seam the Batch executor drives. Each verb performs one Batch Step against
- * a single Command Target. Input verbs resolve the Event Log sequence the
- * action produced so the executor can anchor the following Render Wait;
- * `wait` takes that baseline back as `afterSeq`.
- *
- * Injected so the executor can be exercised without a real PTY or renderer.
+ * The seam the Batch executor drives, injected so it runs without a real PTY or
+ * renderer. Input verbs resolve the Event Log seq they produced; `wait` takes a
+ * prior seq back as `afterSeq` (the Wait Baseline).
  */
 export interface StepDriver {
   type(text: string): Promise<number>;
@@ -48,27 +45,15 @@ function parseOrThrow<T>(
   raw: unknown,
   method: string,
 ): T {
-  const parsed = schema.safeParse(raw);
-  if (!parsed.success) {
-    throw makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
-      message: `Unexpected response shape from the session host for "${method}".`,
-      details: {
-        method,
-        issues: parsed.error.issues,
-        rawResult: raw,
-      },
-    });
-  }
-  return parsed.data;
+  return parseValidatedResult(
+    schema,
+    raw,
+    `Unexpected response shape from the session host for "${method}".`,
+  );
 }
 
-/**
- * Build the `waitForRender` RPC params from a prepared condition plus the
- * executor-supplied baseline. The prepared `compiledRegex` and any `afterSeq`
- * carried on the condition are intentionally dropped: `afterSeq` here always
- * comes from the Wait Baseline argument, and the host schema is strict.
- * Undefined optional fields are omitted so the strict schema accepts the params.
- */
+// Build the strict `waitForRender` params: omit undefined optionals, drop the
+// prepared `compiledRegex`, and take `afterSeq` from the Wait Baseline argument.
 function buildWaitParams(
   condition: PreparedRenderWaitCondition,
   afterSeq: number | undefined,
@@ -94,13 +79,10 @@ function buildWaitParams(
 }
 
 /**
- * The production StepDriver: each verb is one RPC to the Command Target's
- * host socket, parsed with its result schema. Transport timeouts pad the
- * semantic timeout so the socket never trips before the host's own deadline.
- *
- * Unlike `runWaitCommand`, this driver does NOT fall back to offline replay on
- * HOST_UNREACHABLE: a dead host mid-Batch is a failed Batch Step, so the
- * CliError propagates for the executor to classify.
+ * The production StepDriver: each verb is one RPC, with transport timeouts that
+ * pad the host's own deadline. Unlike `runWaitCommand` it does NOT fall back to
+ * offline replay — a dead host mid-Batch is a failed step, so the CliError
+ * propagates for the executor to classify.
  */
 export function createRpcStepDriver(
   socketPath: string,

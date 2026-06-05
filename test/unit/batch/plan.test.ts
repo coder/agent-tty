@@ -79,9 +79,9 @@ describe('parseBatchPlan', () => {
       expect(step).toMatchObject({ kind: 'wait', timeoutMs: undefined });
     });
 
-    it('treats an absent wait timeout as undefined', () => {
+    it('defaults an absent wait timeout to 600s (parity with the wait command)', () => {
       const step = parse([{ wait: { screenStableMs: 1000 } }]).steps[0];
-      expect(step).toMatchObject({ kind: 'wait', timeoutMs: undefined });
+      expect(step).toMatchObject({ kind: 'wait', timeoutMs: 600_000 });
     });
 
     it('compiles a wait regex condition', () => {

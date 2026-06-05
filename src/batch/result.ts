@@ -4,20 +4,9 @@ import type { BatchPlan, BatchStep } from './plan.js';
 
 import { unreachable } from '../util/assert.js';
 
-/**
- * Per-step outcome in a Batch result.
- *
- * - `completed`: the Batch Step ran and succeeded.
- * - `failed`: the Batch Step ran but failed (a timed-out Render Wait, or an
- *   input action that errored — e.g. the Command Target is no longer
- *   commandable).
- * - `not-run`: a later Batch Step the executor never reached because an earlier
- *   step failed fast, or because the run was interrupted by a signal.
- * - `interrupted`: the in-flight Batch Step the executor was running when the
- *   process received SIGINT/SIGTERM. Its RPC is abandoned, not awaited, so its
- *   outcome is unknown; the executor never produces this status, only the CLI
- *   signal handler does when it flushes a partial result.
- */
+// `interrupted` is the in-flight step abandoned by a SIGINT/SIGTERM flush (its
+// RPC is not awaited, so its outcome is unknown); `not-run` is a later step the
+// executor never reached. Only the CLI signal handler produces `interrupted`.
 export const StepStatusSchema = z.enum([
   'completed',
   'failed',
@@ -36,10 +25,6 @@ export type BatchStepError = z.infer<typeof BatchStepErrorSchema>;
 
 const NonNegativeIntSchema = z.number().int().nonnegative();
 
-/**
- * A `type`, `paste`, or `sendKeys` Batch Step. `seq` is the Event Log sequence
- * the input produced; it becomes the Wait Baseline for the next `wait` step.
- */
 export const InputStepRecordSchema = z
   .object({
     index: NonNegativeIntSchema,
@@ -52,10 +37,6 @@ export const InputStepRecordSchema = z
   .strict();
 export type InputStepRecord = z.infer<typeof InputStepRecordSchema>;
 
-/**
- * A `run` Batch Step (a Waited Run unless `noWait`). `seq` is the Event Log
- * sequence of the injected run, used as the next Wait Baseline.
- */
 export const RunStepRecordSchema = z
   .object({
     index: NonNegativeIntSchema,
@@ -74,11 +55,6 @@ export const RunStepRecordSchema = z
   .strict();
 export type RunStepRecord = z.infer<typeof RunStepRecordSchema>;
 
-/**
- * A `wait` Batch Step (a Render Wait). `waitBaseline` records the Event Log
- * sequence the wait was anchored to (the prior input step's seq, or undefined
- * for a leading wait).
- */
 export const WaitStepRecordSchema = z
   .object({
     index: NonNegativeIntSchema,
@@ -111,12 +87,8 @@ export const BatchResultSchema = z
   .strict();
 export type BatchResult = z.infer<typeof BatchResultSchema>;
 
-/**
- * Shape a record for a Batch Step that never finalized — either one the
- * executor never reached (`not-run`) or the in-flight step abandoned by a
- * signal (`interrupted`). Carries no `seq`/`durationMs` work because the step
- * produced no observed outcome.
- */
+// Shape a record for a Batch Step that never finalized (`not-run` or
+// `interrupted`): no seq, zero duration, no observed outcome.
 export function unreachedStepRecord(
   step: BatchStep,
   index: number,
@@ -138,13 +110,9 @@ export function unreachedStepRecord(
 }
 
 /**
- * Build a partial BatchResult from the records finalized so far plus the
- * original plan, synthesizing records for the steps that never finalized: the
- * first unreached step (the one in flight when the signal arrived) is recorded
- * `interrupted`, and every step after it `not-run`.
- *
- * Pure: no fs, no rpc. Used by the CLI signal handler to flush a complete,
- * schema-valid envelope without awaiting the in-flight RPC.
+ * Build a partial BatchResult from the finalized records plus the plan: the
+ * first unreached step (in flight when the signal arrived) is `interrupted`,
+ * the rest `not-run`. Lets the signal handler flush without awaiting the RPC.
  */
 export function buildPartialBatchResult(
   plan: BatchPlan,
@@ -156,8 +124,6 @@ export function buildPartialBatchResult(
     if (step === undefined) {
       continue;
     }
-    // The first unreached step was in flight when the signal arrived; the rest
-    // were never started.
     const status = index === recorded.length ? 'interrupted' : 'not-run';
     steps.push(unreachedStepRecord(step, index, status));
   }

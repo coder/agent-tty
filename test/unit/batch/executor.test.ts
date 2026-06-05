@@ -496,6 +496,31 @@ describe('executeBatch', () => {
         runOutcome: 'started',
       });
     });
+
+    it('advances the Wait Baseline past a failed Waited Run under keep-going', async () => {
+      // A Waited Run that timed out still injected its command and carries the
+      // real input_run seq; under keep-going the following wait must anchor past
+      // it rather than stale-match the pre-run screen.
+      const { driver, calls } = createFakeDriver({
+        runResults: [
+          { accepted: true, seq: 7, completed: false, timedOut: true },
+        ],
+      });
+      const result = await executeBatch({
+        plan: plan([{ run: 'launch-tui' }, { wait: { text: 'ready' } }]),
+        driver,
+        keepGoing: true,
+      });
+
+      const waitCall = calls.find((call) => call.verb === 'wait');
+      expect(waitCall).toEqual({ verb: 'wait', afterSeq: 7 });
+      expect(result.failedIndices).toEqual([0]);
+      expect(result.steps[1]).toMatchObject({
+        kind: 'wait',
+        status: 'completed',
+        waitBaseline: 7,
+      });
+    });
   });
 
   describe('thrown-error handling', () => {
@@ -607,6 +632,10 @@ describe('executeBatch', () => {
       expect(result.steps[0]).toMatchObject({
         kind: 'wait',
         status: 'failed',
+        // Observations from the (real) match are preserved, not discarded, so
+        // the failed record is distinguishable from a wait that never matched.
+        matched: true,
+        capturedAtSeq: 99,
         error: { code: 'SESSION_ALREADY_DESTROYED' },
       });
       expect(assertCommandable).toHaveBeenCalledTimes(2);
