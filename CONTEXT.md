@@ -43,6 +43,10 @@ _Avoid_: Visual wait, snapshot wait
 A render condition where the visible text content of a **Semantic Snapshot** has remained unchanged for a requested duration.
 _Avoid_: Settled screen
 
+**Screen Hash**:
+A stable digest of a **Session**'s normalized visible screen text at a captured event-log sequence, used to tell whether the rendered screen content changed between two observations. It is computed from the same canonical visible text that the **Screen Stability** check and text **Render Wait** matching use, so the three never disagree.
+_Avoid_: Screen checksum, frame hash, screenshot hash
+
 **Batch**:
 An ordered sequence of **Batch Steps** driven through one **Command Target** in a single `batch` invocation. It runs fail-fast: the first failed **Batch Step** stops the run unless the caller opts into continuing.
 _Avoid_: Pipeline, script, macro
@@ -228,6 +232,9 @@ _Avoid_: bare "agent", "Coder agent"
 - A **Render Wait** may include text, regex, cursor, or **Screen Stability** conditions.
 - A **Render Wait** may be evaluated by live host polling for a **Live Host Eligible Session** or by offline replay fallback for an **Offline Replay Eligible Session**.
 - Offline replay fallback can evaluate snapshot content and cursor position, but cannot prove elapsed **Screen Stability** duration from a single latest **Semantic Snapshot**.
+- A **Screen Hash** changes exactly when the canonical visible text that the **Screen Stability** check compares changes; the two share one definition.
+- A **Screen Hash** covers visible screen text only — not scrollback, cursor position, or styles — and is distinct from the pixel `sha256` recorded on a **Screenshot Result**.
+- A **Snapshot Result** and a matched **Render Wait** result may carry the **Screen Hash** of the **Semantic Snapshot** they observed; a **Render Wait** that times out or finds the host unreachable carries none.
 - A **Waited Run** may produce one **Run Completion**, time out for its caller, or be interrupted by **Session** exit.
 - Caller timeout does not cancel the underlying **Run Completion**; it may still be observed later to keep internal completion bytes out of artifacts.
 - After **Session** exit, an unobserved **Run Completion** can no longer arrive.
