@@ -120,13 +120,15 @@ describe('resize-demo e2e', { timeout: 30_000 }, () => {
       ),
     ).resolves.toContain('SIZE: 120x40\n');
 
-    const typeQuitEnvelope = runCliJson<SuccessEnvelope<Record<string, never>>>(
+    const typeQuitEnvelope = runCliJson<SuccessEnvelope<{ seq: number }>>(
       ['type', sessionId, 'quit'],
       env,
     );
     expect(typeQuitEnvelope.ok).toBe(true);
     expect(typeQuitEnvelope.command).toBe('type');
-    expect(typeQuitEnvelope.result).toEqual({});
+    expect(typeQuitEnvelope.result).toEqual(
+      expect.objectContaining({ seq: expect.any(Number) as number }),
+    );
 
     const sendKeysEnvelope = runCliJson<SuccessEnvelope<SendKeysResult>>(
       ['send-keys', sessionId, 'Enter'],
