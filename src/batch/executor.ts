@@ -256,6 +256,9 @@ async function runWaitStep(
     timedOut: result.timedOut,
     ...matchedText,
     capturedAtSeq: result.capturedAtSeq,
+    ...(result.screenHash === undefined
+      ? {}
+      : { screenHash: result.screenHash }),
   };
 
   // A timed-out wait (equivalently an unmatched result) is not a thrown error

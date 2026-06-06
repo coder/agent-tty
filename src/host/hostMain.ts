@@ -34,6 +34,10 @@ import type {
   WaitParams,
 } from '../protocol/messages.js';
 import {
+  canonicalVisibleText,
+  computeScreenHash,
+} from '../renderer/canonicalScreen.js';
+import {
   DEFAULT_RENDERER_NAME,
   resolveRendererName,
   type RendererName,
@@ -901,9 +905,7 @@ export async function runHost(sessionId: string): Promise<void> {
               throwIfAborted(signal);
               const snapshot = await backend.snapshot();
               throwIfAborted(signal);
-              const visibleText = snapshot.visibleLines
-                .map((line) => line.text)
-                .join('\n');
+              const visibleText = canonicalVisibleText(snapshot);
               const capturedAtSeq = snapshot.capturedAtSeq;
               latestCapturedAtSeq = capturedAtSeq;
               consecutiveFailures = 0;
@@ -943,6 +945,7 @@ export async function runHost(sessionId: string): Promise<void> {
                   cursorRow: match.cursorRow,
                   cursorCol: match.cursorCol,
                   capturedAtSeq,
+                  screenHash: computeScreenHash(snapshot),
                 });
               }
             } catch (pollError) {

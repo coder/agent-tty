@@ -4,6 +4,7 @@ import {
   MarkerEventPayloadSchema,
   RichSnapshotLineSchema,
   RunCompleteEventPayloadSchema,
+  Sha256HexSchema,
   VisibleLineSchema,
   type VisibleLine,
 } from '../protocol/schemas.js';
@@ -17,12 +18,6 @@ const ThemeSchema = z.enum(['dark', 'light']);
 const HexColorSchema = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/u, 'must be a hex color like #1e1e2e');
-const Sha256HexSchema = z
-  .string()
-  .regex(
-    /^[a-f0-9]{64}$/u,
-    'must be a 64-character lowercase SHA-256 hex string',
-  );
 const BundledFontStyleSchema = z.enum(['normal', 'italic', 'oblique']);
 const RoutePathSchema = z
   .string()

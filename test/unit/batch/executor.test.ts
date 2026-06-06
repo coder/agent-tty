@@ -434,6 +434,51 @@ describe('executeBatch', () => {
     });
   });
 
+  describe('wait screenHash', () => {
+    const SCREEN_HASH = 'a'.repeat(64);
+
+    it('carries the observed screenHash onto a matched wait step', async () => {
+      const { driver } = createFakeDriver({
+        waitResults: [
+          {
+            matched: true,
+            timedOut: false,
+            capturedAtSeq: 7,
+            screenHash: SCREEN_HASH,
+          },
+        ],
+      });
+      const result = await executeBatch({
+        plan: plan([{ wait: { text: 'done' } }]),
+        driver,
+        keepGoing: false,
+      });
+
+      expect(result.steps[0]).toMatchObject({
+        kind: 'wait',
+        status: 'completed',
+        screenHash: SCREEN_HASH,
+      });
+    });
+
+    it('omits screenHash on a timed-out wait step', async () => {
+      const { driver } = createFakeDriver({
+        waitResults: [{ matched: false, timedOut: true, capturedAtSeq: 5 }],
+      });
+      const result = await executeBatch({
+        plan: plan([{ wait: { text: 'never' } }]),
+        driver,
+        keepGoing: false,
+      });
+
+      expect(result.steps[0]).toMatchObject({
+        kind: 'wait',
+        status: 'failed',
+      });
+      expect(result.steps[0]).not.toHaveProperty('screenHash');
+    });
+  });
+
   describe('run completion classification', () => {
     it('fails a Waited Run that timed out with a timedOut runOutcome', async () => {
       const { driver } = createFakeDriver({

@@ -910,6 +910,7 @@ const goldenResultContracts: readonly GoldenResultContractCase[] = [
           ],
         },
       ],
+      screenHash: 'a'.repeat(64),
     },
     invalidResult: {},
     extraFieldResult: {
@@ -1088,6 +1089,7 @@ const goldenResultContracts: readonly GoldenResultContractCase[] = [
       cursorRow: 4,
       cursorCol: 0,
       capturedAtSeq: 9,
+      screenHash: 'a'.repeat(64),
     },
     invalidResult: {
       matched: true,

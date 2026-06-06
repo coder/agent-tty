@@ -40,6 +40,7 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 }));
 
 import { createTestSemanticSnapshot } from '../../helpers.js';
+import { computeScreenHash } from '../../../src/renderer/canonicalScreen.js';
 import { runWaitCommand } from '../../../src/cli/commands/wait.js';
 import { createLogger } from '../../../src/util/logger.js';
 
@@ -608,6 +609,12 @@ describe('wait command', () => {
         cursorRow: 0,
         cursorCol: 0,
         capturedAtSeq: 15,
+        screenHash: computeScreenHash(
+          createTestSemanticSnapshot({
+            capturedAtSeq: 15,
+            visibleLines: [{ row: 0, text: 'offline hello output' }],
+          }),
+        ),
       },
       lines: ['Matched: hello', 'Cursor: row 0, col 0', 'capturedAtSeq: 15'],
     });
@@ -666,6 +673,14 @@ describe('wait command', () => {
         cursorRow: 2,
         cursorCol: 3,
         capturedAtSeq: 17,
+        screenHash: computeScreenHash(
+          createTestSemanticSnapshot({
+            capturedAtSeq: 17,
+            visibleLines: [{ row: 0, text: 'offline Ready output' }],
+            cursorRow: 2,
+            cursorCol: 3,
+          }),
+        ),
       },
       lines: [
         'Host became unreachable before the wait condition could be fully verified; returning the latest offline snapshot state.',

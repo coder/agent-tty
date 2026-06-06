@@ -13,6 +13,7 @@ import {
   createSnapshotResult,
   persistSnapshotArtifact,
 } from '../../../src/snapshot/capture.js';
+import { computeScreenHash } from '../../../src/renderer/canonicalScreen.js';
 import { readArtifactManifest } from '../../../src/storage/artifactManifest.js';
 import {
   artifactPath,
@@ -40,6 +41,7 @@ describe('snapshot capture', () => {
     expect(createSnapshotResult(snapshot, 'structured')).toEqual({
       format: 'structured',
       ...snapshot,
+      screenHash: computeScreenHash(snapshot),
     });
   });
 
@@ -223,7 +225,11 @@ describe('snapshot capture', () => {
       rendererBackend: 'test-backend',
     });
 
-    expect(result).toEqual({ format: 'structured', ...snapshot });
+    expect(result).toEqual({
+      format: 'structured',
+      ...snapshot,
+      screenHash: computeScreenHash(snapshot),
+    });
     const filename = snapshotFilename(5, 'structured');
     expect(
       JSON.parse(
@@ -268,6 +274,7 @@ describe('snapshot capture', () => {
       cursorRow: 0,
       cursorCol: 0,
       text: 'first visible line\nsecond visible line',
+      screenHash: computeScreenHash(snapshot),
     });
 
     const filename = snapshotFilename(5, 'text');
@@ -314,6 +321,7 @@ describe('snapshot capture', () => {
       cursorRow: 0,
       cursorCol: 0,
       text: 'scrolled\naway\nvisible output',
+      screenHash: computeScreenHash(snapshot),
     });
 
     const filename = snapshotFilename(5, 'text');

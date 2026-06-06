@@ -104,6 +104,14 @@ Useful flags:
 - `--exit`: wait for the process to exit.
 - `--timeout <ms>`: maximum wait time in milliseconds, with `0` meaning infinite.
 
+### Screen Hash
+
+`snapshot` results (both `--format structured` and `--format text`) and a **matched** `wait` result carry an optional `screenHash`: a lowercase 64-character hex SHA-256 of the visible screen text. Compare it across two calls to tell whether the visible screen actually changed — equal hashes mean identical visible content, even if the event-log sequence advanced on a no-op repaint.
+
+- It hashes the visible screen only. It is **not** a hash of the `--format text` output, which also includes scrollback, so the hash ignores scrollback growth.
+- It is distinct from the `screenshot` result's pixel `sha256`: `screenHash` is content identity, the screenshot `sha256` is pixel identity, and the two are not interchangeable.
+- A `wait` that times out (or finds the host unreachable with no observed screen) omits `screenHash`, so a missing hash unambiguously means "no screen was observed" rather than an error.
+
 ## `batch`
 
 Use `batch` to run an ordered sequence of input-and-`wait` steps against one session in a single invocation, instead of coordinating separate `run`/`type`/`paste`/`send-keys`/`wait` calls. Each `wait` step is anchored to a Wait Baseline — it only considers screen state produced _after_ the preceding input step — so a batch cannot race ahead and match a stale screen the way a hand-written shell loop can.
@@ -174,7 +182,7 @@ The `--json` result is a per-step envelope:
 }
 ```
 
-Each step record carries its `index`, `kind`, `status` (`completed` | `failed` | `not-run` | `interrupted`), and `durationMs`. Input steps report the Event Log `seq` they produced; `wait` steps report the `waitBaseline` they were anchored to plus `matched` / `timedOut` / `matchedText` / `capturedAtSeq`. `completedCount` and `failedIndices` summarize the run. A fail-fast batch exits non-zero with the failed step's exit code (e.g. `11` for a `WAIT_TIMEOUT`); `--keep-going` exits `1` if any step failed. If the process is interrupted by SIGINT/SIGTERM, batch flushes the same envelope with the in-flight step marked `interrupted` and later steps `not-run`, then exits non-zero.
+Each step record carries its `index`, `kind`, `status` (`completed` | `failed` | `not-run` | `interrupted`), and `durationMs`. Input steps report the Event Log `seq` they produced; `wait` steps report the `waitBaseline` they were anchored to plus `matched` / `timedOut` / `matchedText` / `capturedAtSeq`, and a matched `wait` step also carries the `screenHash` of the screen it observed (see [Screen Hash](#screen-hash)). `completedCount` and `failedIndices` summarize the run. A fail-fast batch exits non-zero with the failed step's exit code (e.g. `11` for a `WAIT_TIMEOUT`); `--keep-going` exits `1` if any step failed. If the process is interrupted by SIGINT/SIGTERM, batch flushes the same envelope with the in-flight step marked `interrupted` and later steps `not-run`, then exits non-zero.
 
 The Wait Baseline fixes stale-match only. It does **not** fix echo-match: a `wait` can still match the terminal's echo of a just-typed command (the echo renders _after_ the baseline). Use a distinctive output token or a `screenStableMs` wait rather than waiting for text you just typed. Interrupting a batch mid-`wait` leaves that wait's command still running on the session (the wait is abandoned, not cancelled), exactly like a caller timeout on `run`.
 

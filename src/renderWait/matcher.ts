@@ -2,6 +2,10 @@ import type { WaitForRenderParams } from '../protocol/messages.js';
 import type { SemanticSnapshot } from '../renderer/types.js';
 
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
+import {
+  canonicalVisibleLines,
+  canonicalVisibleText,
+} from '../renderer/canonicalScreen.js';
 import { invariant } from '../util/assert.js';
 import {
   MAX_WAIT_FOR_RENDER_REGEX_LENGTH,
@@ -301,8 +305,8 @@ export function matchRenderWaitSnapshot(
     );
   }
 
-  const visibleLines = snapshot.visibleLines.map((line) => line.text);
-  const visibleText = visibleLines.join('\n');
+  const visibleLines = canonicalVisibleLines(snapshot);
+  const visibleText = canonicalVisibleText(snapshot);
 
   let textMatched = false;
   let matchedText: string | undefined;

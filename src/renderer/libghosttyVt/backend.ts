@@ -113,6 +113,32 @@ function validateNativeVisibleLines(
   });
 }
 
+/**
+ * Pad the native visible lines to exactly `rows` entries by appending blank
+ * trailing lines (`text: ''`). The native ReadLine path already right-trims
+ * trailing ASCII spaces, expands full grapheme clusters, and renders blank
+ * cells as ' ' (terminal.cc), but it omits trailing blank rows, so only the
+ * line count needs aligning with the canonical pad-to-rows form. Each visible
+ * line's `row` is its index (native emits contiguous 0-based rows), so the
+ * appended lines continue that sequence. This converges the libghostty-vt
+ * backend's `visibleLines[].text` with the ghostty-web backend so the two
+ * agree on the Screen Hash. See docs/prd/screen-hash/PRD.md.
+ */
+function padVisibleLinesToRows(
+  lines: readonly NativeVisibleLine[],
+  rows: number,
+): NativeVisibleLine[] {
+  invariant(
+    lines.length <= rows,
+    'native visible line count must not exceed terminal rows',
+  );
+  const padded: NativeVisibleLine[] = [...lines];
+  for (let row = padded.length; row < rows; row += 1) {
+    padded.push({ row, text: '' });
+  }
+  return padded;
+}
+
 function assertNativeSnapshot(snapshot: unknown): TerminalSnapshot {
   invariant(
     snapshot !== null && typeof snapshot === 'object',
@@ -156,6 +182,10 @@ function assertNativeSnapshot(snapshot: unknown): TerminalSnapshot {
     candidate.visibleLines,
     'snapshot.visibleLines',
   );
+  // The native ReadLine path omits trailing blank rows, so it may emit fewer
+  // than `rows` visible lines; snapshot() pads the gap to exactly `rows` to
+  // match the canonical pad-to-rows form (see padVisibleLinesToRows). Only the
+  // permissive upper bound is enforced here.
   invariant(
     visibleLines.length <= candidate.rows,
     'snapshot visible line count must fit terminal rows',
@@ -543,7 +573,10 @@ export class LibghosttyVtBackend implements RendererBackend {
       cursorRow: nativeSnapshot.cursorRow,
       cursorCol: nativeSnapshot.cursorCol,
       isAltScreen: nativeSnapshot.isAltScreen,
-      visibleLines: nativeSnapshot.visibleLines,
+      visibleLines: padVisibleLinesToRows(
+        nativeSnapshot.visibleLines,
+        nativeSnapshot.rows,
+      ),
       ...(nativeSnapshot.scrollbackLines === undefined
         ? {}
         : { scrollbackLines: nativeSnapshot.scrollbackLines }),

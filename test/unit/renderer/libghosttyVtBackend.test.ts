@@ -263,9 +263,16 @@ describe('LibghosttyVtBackend', () => {
       cursorRow: 1,
       cursorCol: 2,
       isAltScreen: true,
+      // snapshot() pads visibleLines to exactly `rows` with blank trailing
+      // lines so the canonical visible text converges with the ghostty-web
+      // backend (see padVisibleLinesToRows). The native fixture emits 2 lines
+      // for rows: 5, so rows 2-4 are padded blanks.
       visibleLines: [
         { row: 0, text: 'hello world' },
         { row: 1, text: 'prompt>' },
+        { row: 2, text: '' },
+        { row: 3, text: '' },
+        { row: 4, text: '' },
       ],
       scrollbackLines: [{ row: 0, text: 'scrolled' }],
       cells: [

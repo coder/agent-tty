@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import type { BatchPlan, BatchStep } from './plan.js';
 
+import { Sha256HexSchema } from '../protocol/schemas.js';
 import { unreachable } from '../util/assert.js';
 
 // `interrupted` is the in-flight step abandoned by a SIGINT/SIGTERM flush (its
@@ -66,6 +67,7 @@ export const WaitStepRecordSchema = z
     timedOut: z.boolean().optional(),
     matchedText: z.string().optional(),
     capturedAtSeq: NonNegativeIntSchema.optional(),
+    screenHash: Sha256HexSchema.optional(),
     error: BatchStepErrorSchema.optional(),
   })
   .strict();

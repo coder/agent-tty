@@ -4,6 +4,7 @@ import type { SemanticSnapshot } from '../renderer/types.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { SnapshotResultSchema } from '../protocol/schemas.js';
 import { parseValidatedResult } from '../protocol/validation.js';
+import { computeScreenHash } from '../renderer/canonicalScreen.js';
 import {
   appendArtifactWithRollback,
   createArtifactEntry,
@@ -34,9 +35,11 @@ export function createSnapshotResult(
     ...snapshot.visibleLines.map((line) => line.text),
   ];
 
+  const screenHash = computeScreenHash(snapshot);
+
   const snapshotResult: SnapshotResult =
     format === 'structured'
-      ? { format: 'structured' as const, ...snapshot }
+      ? { format: 'structured' as const, ...snapshot, screenHash }
       : {
           format: 'text' as const,
           sessionId: snapshot.sessionId,
@@ -46,6 +49,7 @@ export function createSnapshotResult(
           cursorRow: snapshot.cursorRow,
           cursorCol: snapshot.cursorCol,
           text: textLines.join('\n'),
+          screenHash,
         };
 
   return parseSnapshotResult(

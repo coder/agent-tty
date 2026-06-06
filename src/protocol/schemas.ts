@@ -25,7 +25,7 @@ export const ReplayTimingModeSchema = z.enum([
 ]);
 export type ReplayTimingMode = z.infer<typeof ReplayTimingModeSchema>;
 const SessionEnvSchema = z.record(NonEmptyStringSchema, z.string());
-const Sha256HexSchema = z
+export const Sha256HexSchema = z
   .string()
   .regex(
     /^[a-f0-9]{64}$/u,
@@ -342,6 +342,7 @@ export const StructuredSnapshotResultSchema = z
     visibleLines: z.array(VisibleLineSchema),
     scrollbackLines: z.array(VisibleLineSchema).optional(),
     cells: z.array(RichSnapshotLineSchema).optional(),
+    screenHash: Sha256HexSchema.optional(),
   })
   .strict();
 export type StructuredSnapshotResult = z.infer<
@@ -358,6 +359,7 @@ export const TextSnapshotResultSchema = z
     cursorRow: NonNegativeIntSchema,
     cursorCol: NonNegativeIntSchema,
     text: z.string(),
+    screenHash: Sha256HexSchema.optional(),
   })
   .strict();
 export type TextSnapshotResult = z.infer<typeof TextSnapshotResultSchema>;
@@ -455,6 +457,7 @@ export const WaitForRenderResultSchema = z
     cursorRow: NonNegativeIntSchema.optional(),
     cursorCol: NonNegativeIntSchema.optional(),
     capturedAtSeq: NonNegativeIntSchema,
+    screenHash: Sha256HexSchema.optional(),
   })
   .strict();
 export const RecordExportResultSchema = z

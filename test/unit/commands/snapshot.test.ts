@@ -62,6 +62,7 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 
 import { createTestSemanticSnapshot } from '../../helpers.js';
 import { runSnapshotCommand } from '../../../src/cli/commands/snapshot.js';
+import { computeScreenHash } from '../../../src/renderer/canonicalScreen.js';
 import { createLogger } from '../../../src/util/logger.js';
 
 const TEST_CONTEXT = {
@@ -424,6 +425,7 @@ describe('snapshot command', () => {
     const result = {
       format: 'structured' as const,
       ...snapshot,
+      screenHash: computeScreenHash(snapshot),
     };
     mocks.readManifestIfExists.mockResolvedValue(createExitedSessionRecord());
     installOfflineReplaySuccessMock();
@@ -605,6 +607,7 @@ describe('snapshot command', () => {
       cursorRow: 0,
       cursorCol: 0,
       text: 'offline output',
+      screenHash: computeScreenHash(createTestSemanticSnapshot()),
     };
     mocks.sendRpc.mockRejectedValue(
       new CliError(ERROR_CODES.HOST_UNREACHABLE, 'host unreachable'),

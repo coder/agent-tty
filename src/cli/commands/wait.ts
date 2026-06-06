@@ -19,6 +19,7 @@ import {
   matchRenderWaitSnapshot,
   prepareRenderWaitCondition,
 } from '../../renderWait/matcher.js';
+import { computeScreenHash } from '../../renderer/canonicalScreen.js';
 import { isTerminalSessionStatus } from '../../protocol/sessionStatusPolicy.js';
 import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
@@ -117,6 +118,7 @@ function buildOfflineRenderWaitResult(
       cursorRow: match.cursorRow,
       cursorCol: match.cursorCol,
       capturedAtSeq: match.capturedAtSeq,
+      screenHash: computeScreenHash(snapshot),
     };
   }
 

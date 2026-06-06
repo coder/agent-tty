@@ -234,7 +234,7 @@ _Avoid_: bare "agent", "Coder agent"
 - Offline replay fallback can evaluate snapshot content and cursor position, but cannot prove elapsed **Screen Stability** duration from a single latest **Semantic Snapshot**.
 - A **Screen Hash** changes exactly when the canonical visible text that the **Screen Stability** check compares changes; the two share one definition.
 - A **Screen Hash** covers visible screen text only — not scrollback, cursor position, or styles — and is distinct from the pixel `sha256` recorded on a **Screenshot Result**.
-- A **Snapshot Result** and a matched **Render Wait** result may carry the **Screen Hash** of the **Semantic Snapshot** they observed; a **Render Wait** that times out or finds the host unreachable carries none.
+- A result carries the **Screen Hash** of the **Semantic Snapshot** it observed: a **Snapshot Result**, a matched **Render Wait** result, and the offline host-unreachable fallback that still observed a snapshot (even when it reports `matched: false` because **Screen Stability** duration could not be proven offline). The hash is keyed on whether a snapshot was observed, not on whether the wait matched; a **Render Wait** that observes no snapshot — a live timeout, a consecutive-failure giveup, or a replay error — carries none.
 - A **Waited Run** may produce one **Run Completion**, time out for its caller, or be interrupted by **Session** exit.
 - Caller timeout does not cancel the underlying **Run Completion**; it may still be observed later to keep internal completion bytes out of artifacts.
 - After **Session** exit, an unobserved **Run Completion** can no longer arrive.

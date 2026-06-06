@@ -70,6 +70,8 @@ agent-tty --home "$AGENT_HOME" run "$SESSION_ID" 'pwd && ls -la' --json
 agent-tty --home "$AGENT_HOME" snapshot "$SESSION_ID" --format text --json
 ```
 
+`snapshot` and a matched `wait` carry an optional `screenHash` (a hash of the visible screen text). Compare it across calls to tell whether the visible screen actually changed instead of diffing full text; equal hashes mean identical visible content even when the event sequence advanced.
+
 ### Drive an interactive CLI or TUI
 
 Use `batch` to run an ordered sequence of input-and-`wait` steps in one call instead of separate `run`/`wait`/`send-keys` invocations. Each `wait` step is anchored to a Wait Baseline — it only observes screen state produced _after_ the preceding input step, so the sequence cannot race ahead and match a stale screen. A batch stops at the first failed step by default (`--keep-going` attempts every step).

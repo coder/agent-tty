@@ -471,19 +471,85 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         return { cols, rows, activeBuffer, viewportY: bottomViewportY };
       }
 
+      // Strip ONLY trailing ASCII spaces (0x20). Unlike String.prototype.trimEnd
+      // this preserves other trailing whitespace (tabs, NBSP, etc.), keeping the
+      // canonical visible text aligned with the libghostty-vt backend.
+      function stripTrailingAsciiSpaces(text) {
+        let end = text.length;
+        while (end > 0 && text.charCodeAt(end - 1) === 0x20) {
+          end -= 1;
+        }
+        return end === text.length ? text : text.slice(0, end);
+      }
+
+      // Build a single canonical line by concatenating each column's FULL
+      // grapheme cluster, then right-trimming trailing ASCII spaces only.
+      // readColumn(col) returns { grapheme, width }: grapheme is the cell's
+      // full grapheme cluster; width is the cell's column span. A wide glyph's
+      // trailing spacer has width 0 and contributes NOTHING, so a row of
+      // 'A'+wide('漢')+wide('字')+'B' decodes to 'A漢字B' — matching the
+      // libghostty-vt backend's visibleLines[].text (its cells[] likewise
+      // carries the spacer as '' rather than ' '). A genuine blank interior
+      // cell decodes to a single ' ' so interior gaps survive and trailing
+      // gaps trim away. The live engine returns the NUL codepoint (U+0000) for
+      // a blank cell — getGrapheme yields [0], so getGraphemeString runs
+      // String.fromCodePoint(0) and produces a NUL, not ' ' (its empty-array
+      // ' ' fallback never fires). Those NULs would survive
+      // stripTrailingAsciiSpaces (it strips only 0x20) and diverge from the
+      // native backend, so a kept cell whose grapheme is a lone NUL is
+      // normalized to ' ' here.
+      function decodeGraphemeLine(readColumn, cols) {
+        let text = '';
+        for (let col = 0; col < cols; col += 1) {
+          const column = readColumn(col);
+          invariant(
+            column !== null && typeof column === 'object',
+            'decoded column must be an object',
+          );
+          assertStringValue(
+            column.grapheme,
+            'decoded grapheme must be a string',
+          );
+          invariant(
+            Number.isInteger(column.width) && column.width >= 0,
+            'decoded cell width must be a non-negative integer',
+          );
+          if (column.width === 0) {
+            continue;
+          }
+          text += column.grapheme === '\\u0000' ? ' ' : column.grapheme;
+        }
+        return stripTrailingAsciiSpaces(text);
+      }
+
+      // Width for a single column, used to drop wide-glyph trailing spacers.
+      // getCell() always returns a cell (out-of-range columns synthesize a
+      // blank width-1 cell), so a missing cell is treated as a blank column.
+      function readCellWidth(line, col) {
+        const cell = line?.getCell(col);
+        if (cell === undefined || cell === null) {
+          return 1;
+        }
+        const width = cell.getWidth();
+        return Number.isInteger(width) && width >= 0 ? width : 1;
+      }
+
       function decodeVisibleLines(terminal) {
         terminal.scrollToBottom();
         const { cols, rows, activeBuffer, viewportY } =
           getNormalizedViewportState(terminal);
+        const wasmTerm = terminal.wasmTerm;
+        invariant(wasmTerm, 'terminal WASM instance is unavailable');
 
         const visibleLines = [];
         for (let row = 0; row < rows; row += 1) {
           const line = activeBuffer.getLine(viewportY + row);
-          const text =
-            line === undefined ? '' : line.translateToString(true, 0, cols);
-          invariant(
-            typeof text === 'string',
-            \`decoded line \${row} must be a string\`,
+          const text = decodeGraphemeLine(
+            (col) => ({
+              grapheme: wasmTerm.getGraphemeString(row, col),
+              width: readCellWidth(line, col),
+            }),
+            cols,
           );
           visibleLines.push({ row, text });
         }
@@ -503,14 +569,18 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
           return [];
         }
 
+        const wasmTerm = terminal.wasmTerm;
+        invariant(wasmTerm, 'terminal WASM instance is unavailable');
+
         const scrollbackLines = [];
         for (let row = 0; row < viewportY; row += 1) {
           const line = activeBuffer.getLine(row);
-          const text =
-            line === undefined ? '' : line.translateToString(true, 0, cols);
-          invariant(
-            typeof text === 'string',
-            \`decoded scrollback line \${row} must be a string\`,
+          const text = decodeGraphemeLine(
+            (col) => ({
+              grapheme: wasmTerm.getScrollbackGraphemeString(row, col),
+              width: readCellWidth(line, col),
+            }),
+            cols,
           );
           scrollbackLines.push({ row, text });
         }
@@ -532,10 +602,26 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         return \`#\${colorValue.toString(16).padStart(6, '0')}\`;
       }
 
-      function decodeSnapshotCell(cell) {
+      function decodeSnapshotCell(cell, graphemeChar) {
         invariant(cell !== undefined, 'snapshot cell must be defined');
-        const char = cell.getChars();
-        assertStringValue(char, 'snapshot cell char must be a string');
+        const baseChars = cell.getChars();
+        assertStringValue(baseChars, 'snapshot cell char must be a string');
+        assertStringValue(
+          graphemeChar,
+          'snapshot cell grapheme must be a string',
+        );
+        // Deliberate, converged decision (matches the libghostty-vt backend):
+        // in cells[] a codepoint-0 cell — both a genuine blank AND a wide
+        // glyph's trailing spacer — is '', whereas in visibleLines[].text a
+        // genuine blank renders as ' ' and only the width-0 spacer is dropped
+        // (see decodeGraphemeLine). The cells[] grid is column-addressed, so a
+        // blank and a spacer are both empty placeholders there; the text line
+        // is a reading-order string, so a blank is a real space but a spacer
+        // is layout, not content. Non-empty cells use the FULL grapheme
+        // cluster so continuation codepoints (emoji ZWJ, NFD combining marks)
+        // are not dropped. The Screen Hash sources visibleLines[].text, never
+        // cells[], so this asymmetry never reaches the hash.
+        const char = baseChars === '' ? '' : graphemeChar;
 
         const isInverse = cell.isInverse() === 1;
         const fgColor = cell.getFgColor();
@@ -556,6 +642,8 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
         terminal.scrollToBottom();
         const { cols, rows, activeBuffer, viewportY } =
           getNormalizedViewportState(terminal);
+        const wasmTerm = terminal.wasmTerm;
+        invariant(wasmTerm, 'terminal WASM instance is unavailable');
         const nullCell = activeBuffer.getNullCell();
         const cells = [];
 
@@ -574,7 +662,12 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
           const line = activeBuffer.getLine(viewportY + row);
           const rowCells = [];
           for (let col = 0; col < cols; col += 1) {
-            rowCells.push(decodeSnapshotCell(line?.getCell(col) ?? nullCell));
+            rowCells.push(
+              decodeSnapshotCell(
+                line?.getCell(col) ?? nullCell,
+                wasmTerm.getGraphemeString(row, col),
+              ),
+            );
           }
 
           invariant(
@@ -830,6 +923,77 @@ const EMBEDDED_HARNESS_HTML = `<!doctype html>
 let servedAssetsPromise: Promise<
   ReadonlyMap<string, GhosttyServedAsset>
 > | null = null;
+
+/**
+ * One decoded terminal column: the cell's full grapheme cluster plus its
+ * column span. `width === 0` marks a wide glyph's trailing spacer column.
+ */
+export interface GhosttyDecodedColumn {
+  grapheme: string;
+  width: number;
+}
+
+/**
+ * Strip ONLY trailing ASCII spaces (0x20). Unlike String.prototype.trimEnd
+ * this preserves other trailing whitespace (tabs, NBSP, etc.), keeping the
+ * canonical visible text aligned with the libghostty-vt backend.
+ *
+ * Exported as the host-testable twin of the identical function embedded in
+ * EMBEDDED_HARNESS_HTML; the harness copy is the browser runtime and cannot
+ * import this module, so the two must stay byte-for-byte in sync.
+ */
+export function stripTrailingAsciiSpaces(text: string): string {
+  let end = text.length;
+  while (end > 0 && text.charCodeAt(end - 1) === 0x20) {
+    end -= 1;
+  }
+  return end === text.length ? text : text.slice(0, end);
+}
+
+/**
+ * Assemble one canonical visible line from a per-column reader, then
+ * right-trim trailing ASCII spaces. A width-0 column (a wide glyph's trailing
+ * spacer) contributes nothing, so a row of `A`+wide(`漢`)+wide(`字`)+`B`
+ * yields `A漢字B` — matching the libghostty-vt backend's visibleLines[].text.
+ * A genuine blank interior cell decodes to a single ' ', so interior gaps
+ * survive and trailing gaps trim away. Non-empty cells contribute their FULL
+ * grapheme cluster, so continuation codepoints (emoji ZWJ, NFD combining
+ * marks) are preserved instead of being truncated to the base codepoint.
+ *
+ * The live ghostty-web engine returns the NUL codepoint (U+0000) for a blank
+ * cell: getGrapheme yields `[0]`, so getGraphemeString runs
+ * `String.fromCodePoint(0)` and produces a NUL, not ' ' (its empty-array
+ * ' ' fallback never fires). Left as-is those NULs would survive
+ * stripTrailingAsciiSpaces (which strips only 0x20) and diverge from the
+ * native backend's right-trimmed ' '-blank form, so a kept cell whose grapheme
+ * is a lone NUL is normalized to ' ' here.
+ *
+ * Exported as the host-testable twin of the decodeGraphemeLine function
+ * embedded in EMBEDDED_HARNESS_HTML; keep the two in sync.
+ */
+export function assembleCanonicalLine(
+  cols: number,
+  readColumn: (col: number) => GhosttyDecodedColumn,
+): string {
+  assertNonNegativeInteger(
+    cols,
+    'canonical line cols must be a non-negative integer',
+  );
+  let text = '';
+  for (let col = 0; col < cols; col += 1) {
+    const column = readColumn(col);
+    assertString(column.grapheme, 'decoded grapheme must be a string');
+    assertNonNegativeInteger(
+      column.width,
+      'decoded cell width must be a non-negative integer',
+    );
+    if (column.width === 0) {
+      continue;
+    }
+    text += column.grapheme === '\u0000' ? ' ' : column.grapheme;
+  }
+  return stripTrailingAsciiSpaces(text);
+}
 
 function assertNonNegativeInteger(
   value: unknown,
