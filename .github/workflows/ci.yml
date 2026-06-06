@@ -84,6 +84,12 @@ jobs:
       - name: Test unit
         run: mise run test-unit
 
+  # Integration and e2e tests drive real PTY hosts and headless-browser
+  # renderers, which can transiently fail under machine load (e.g. a screenshot
+  # render or RPC hiccup) even when the code is correct. The `test:integration`
+  # and `test:e2e` npm scripts pass `--retry=2`, so a flaky attempt is retried
+  # in place instead of failing the shard; a genuine failure still fails all
+  # three attempts. Unit tests (`test:unit`) deliberately do NOT retry.
   test-integration:
     runs-on: ubuntu-latest
     timeout-minutes: 20

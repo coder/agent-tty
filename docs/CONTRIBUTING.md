@@ -46,6 +46,15 @@ If you touch the public bootstrap under `skills/` or the bundled runtime skills 
 npm run intent:validate
 ```
 
+### Flaky integration and e2e tests
+
+Integration and e2e tests drive real PTY hosts and headless-browser renderers, so an individual test can transiently fail under machine load (most often a screenshot render or host RPC hiccup) even when the code is correct. To keep these flakes from causing spurious red:
+
+- `npm run test:integration`, `npm run test:e2e`, and the combined `npm run test` retry a failing test in place (`--retry=2`, up to three attempts). A genuine failure still fails all three attempts.
+- `npm run test:unit` deliberately does **not** retry — unit tests must be deterministic, and the dedicated unit CI gate is the authority that catches real unit flakes.
+- If an integration/e2e test fails _consistently_ (not just on one attempt), treat it as a real failure and investigate; do not raise the retry count to paper over it.
+- When debugging a single browser-backed test locally, run it in isolation (`npm run test:e2e -- <file>`); the full serial suite is the heaviest load and the most flake-prone.
+
 ## Documentation and proof expectations
 
 - Keep the root docs split clear: `README.md` for overview and `RELEASE.md` for supported scope.
