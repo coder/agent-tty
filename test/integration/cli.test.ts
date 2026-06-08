@@ -184,6 +184,19 @@ describe('CLI integration', () => {
     expect(result.stderr).toContain('(Did you mean skills?)');
   });
 
+  it('resolves the `d` alias to the dashboard command', () => {
+    // `--help` exits before the action runs, so this exercises alias
+    // resolution without needing an interactive TTY or the libghostty-vt
+    // renderer that the dashboard otherwise requires.
+    const result = runCli(['d', '--help'], testEnv());
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain(
+      'Watch what your agents are doing in their shells',
+    );
+  });
+
   it('accepts --append-newline for type', () => {
     const result = runCli(
       ['type', 'session-01', 'hello', '--append-newline', '--json'],

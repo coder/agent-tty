@@ -707,6 +707,7 @@ async function main(): Promise<void> {
 
   program
     .command('dashboard')
+    .alias('d')
     .description(
       'Watch what your agents are doing in their shells: a read-only, live dashboard of your sessions',
     )
