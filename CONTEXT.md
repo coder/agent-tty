@@ -4,6 +4,10 @@
 
 ## Language
 
+**Home**:
+An agent-tty state root: an absolute directory containing a `sessions/` tree (and optional config), identified entirely by its path and relocatable via `--home` or `AGENT_TTY_HOME`. It is effectively a per-root store of **Sessions**.
+_Avoid_: session store, AGENT_TTY_HOME (that names the override variable, not the concept), OS home / `$HOME`
+
 **Session**:
 A long-lived PTY-backed terminal instance owned by `agent-tty`.
 
@@ -172,10 +176,20 @@ The post-merge process that creates and publishes the release tag from the defau
 **Publish Pipeline**:
 The tag-triggered automation that validates, packages, and publishes a release after the **Release Finalization Step**.
 
+### Home registry and discovery
+
+**Home Registry**:
+A persisted, advisory, per-machine index of **Homes** that have hosted a **Session**, used to discover and pick **Homes** for observation. The **Home** directories remain the source of truth; the **Home Registry** is a reconciled cache that may go stale and is pruned, never an authority on which **Homes** exist.
+_Avoid_: home database, home store, source of truth
+
+**Active Home**:
+A **Home** with at least one **Active Session**. It is the default scope of the **Home Registry** listing and the dashboard home picker, mirroring how `list` defaults to **Active Sessions**.
+_Avoid_: live home, running home
+
 ### Dashboard and live observation
 
 **Session Dashboard**:
-The human-facing, read-only terminal surface that lists **Sessions** and presents the **Live View** of a selected **Session**. Its purpose is observation, not control.
+The human-facing, read-only terminal surface that selects a **Home** from the **Home Registry**, lists that **Home**'s **Sessions**, and presents the **Live View** of a selected **Session**. Its purpose is observation, not control.
 _Avoid_: viewer, attach UI
 
 **Live View**:
@@ -210,6 +224,12 @@ _Avoid_: bare "agent", "Coder agent"
 
 ## Relationships
 
+- A **Home** contains a set of **Sessions**; every **Session** belongs to exactly one **Home** and is located by that **Home**'s path.
+- The **Home Registry** lists **Homes**; its default scope is **Active Homes**, and an `all` scope shows every registered **Home**, mirroring the `active`/`all` scope `list` and the **Session Dashboard** already apply to **Sessions**.
+- A **Home** enters the **Home Registry** when it first hosts a **Session**, and is pruned once its directory or **Sessions** no longer exist; the registry is always reconciled against the **Home** directories, never the reverse.
+- A **Home** directory is user-owned — its path is arbitrary via `--home`/`AGENT_TTY_HOME` — so agent-tty manages the **Sessions** inside a **Home** and that **Home**'s **Home Registry** entry, but never deletes the **Home** directory itself.
+- Deregistering a **Home** has no effect on the **Home**; a deregistered **Home** re-enters the **Home Registry** the next time it hosts a **Session**. The **Home Registry** gates nothing.
+- The **Home Registry** is per-machine: it indexes only **Homes** on the local machine, and sharing a **Home** across machines is out of scope because reconciliation and garbage collection assume local processes. (See the Home Registry ADR.)
 - A **Session** has exactly one **Session Status** at a time.
 - A `running` **Session** is **Active**, **Commandable**, and **Live Host Eligible**.
 - An `exiting` **Session** is **Active** and **Live Host Eligible**, but not **Commandable**.
@@ -219,7 +239,8 @@ _Avoid_: bare "agent", "Coder agent"
 - A **Session** has one **Event Log**.
 - An **Offline Replay Eligible Session** is reconstructed from its persisted **Event Log** and manifest.
 - A **Snapshot Result** is derived from exactly one **Semantic Snapshot**.
-- A **Session Dashboard** presents a **Live View** of exactly one selected **Session** at a time.
+- A **Session Dashboard** observes one **Home** at a time, chosen from the **Home Registry** (defaulting to the **Home** it was launched with); switching **Homes** is part of its read-only observation and sends no input.
+- A **Session Dashboard** presents a **Live View** of exactly one selected **Session** at a time within the selected **Home**.
 - A **Live View** reconstructs screen state from a **Session**'s **Event Log** and is never a **Command Target**.
 - A **Live View** is produced by **Event Log Follow**, never by querying the live session host.
 - **Event Log Follow** applies uniformly to **Live Host Eligible** and **Offline Replay Eligible** Sessions because it depends only on the append-only **Event Log**.
@@ -309,3 +330,4 @@ _Avoid_: bare "agent", "Coder agent"
 - "demo" and "proof" are not interchangeable for coding-agent recordings: a **Hero Demo** optimizes for stable presentation, while a **Recursive Dogfood Proof** optimizes for self-dogfood coverage.
 - "agent" is overloaded across four referents: this project's **Triage Agent** (a Claude Code instance), Coder's **Coder workspace agent** (the SSH/exec daemon), a generic AFK implementation agent (the actor on `ready-for-agent` issues — Phase 2 of the triage pipeline), and — in **Session Dashboard** product copy only — the external client driving a **Session** (often an AI coding agent). The last sense is deliberately **not** a domain term: the **Session Dashboard** and **Live View** are defined over **Sessions**, not agents, and the **Event Log** does not record which client sent input. Do not make the dashboard agent-aware (grouping or filtering by agent identity) without first extending the domain model. Always qualify in code comments and docs.
 - "batch" is overloaded: a **Batch** (an ordered **Batch Step** sequence driven through one **Command Target** by the `batch` command) is unrelated to a **Triage Batch** (the set of issues processed by one **AFK Triage** invocation). They live in different subsystems; always rely on the qualifier.
+- "home" is overloaded: an agent-tty **Home** (this project's state root — the `--home`/`AGENT_TTY_HOME` directory) is not the operating-system home directory (`$HOME`, `homedir()`), even though the default **Home** sits at `~/.agent-tty` inside it. Always qualify as "agent-tty Home" in prose and product copy whenever OS home is also in scope.

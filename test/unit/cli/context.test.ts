@@ -43,6 +43,7 @@ describe('CLI context resolution', () => {
     );
 
     expect(context.home).toBe(TEST_FLAG_HOME);
+    expect(context.explicitHome).toBe(true);
   });
 
   it('falls back to AGENT_TTY_HOME when --home is absent', async () => {
@@ -52,6 +53,21 @@ describe('CLI context resolution', () => {
     );
 
     expect(context.home).toBe(TEST_ENV_HOME);
+    expect(context.explicitHome).toBe(true);
+  });
+
+  it('marks the home as explicit only when --home or AGENT_TTY_HOME is set', async () => {
+    // Neither flag nor env → the default Home; gc treats this as the
+    // cross-Home sweep trigger.
+    await expect(resolveCommandContext({}, {})).resolves.toMatchObject({
+      explicitHome: false,
+    });
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME }, {}),
+    ).resolves.toMatchObject({ explicitHome: true });
+    await expect(
+      resolveCommandContext({}, { AGENT_TTY_HOME: TEST_ENV_HOME }),
+    ).resolves.toMatchObject({ explicitHome: true });
   });
 
   it('loads config files during context resolution', async () => {
@@ -208,6 +224,7 @@ describe('CLI context resolution', () => {
     const command = program.command('version');
     const cachedContext = Object.freeze({
       home: TEST_FLAG_HOME,
+      explicitHome: true,
       timeoutMs: undefined,
       colorEnabled: true,
       logLevel: 'info' as const,

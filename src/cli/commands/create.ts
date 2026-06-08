@@ -14,6 +14,7 @@ import {
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import type { SessionRecord } from '../../protocol/schemas.js';
+import { upsertHome } from '../../storage/homeRegistry.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
   manifestPath,
@@ -178,6 +179,19 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
   }
 
   const home = options.context.home;
+  // Advisory: remember this Home in the per-machine Home Registry so it can be
+  // discovered later (`home list`, dashboard picker). A registry hiccup must
+  // never fail session creation — but log it at debug so it stays diagnosable
+  // instead of vanishing.
+  await upsertHome(home).catch((error: unknown) => {
+    options.context.logger.debug(
+      'failed to register Home in the Home Registry',
+      {
+        home,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    );
+  });
   const sessionDirectory = sessionDir(home, sessionId);
   const socketFile = socketPath(sessionDirectory);
   let lastError: CliError | null = null;

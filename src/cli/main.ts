@@ -12,6 +12,8 @@ import { runDashboardCommand } from './commands/dashboard.js';
 import { runDestroyCommand } from './commands/destroy.js';
 import { runDoctorCommand } from './commands/doctor.js';
 import { runGcCommand } from './commands/gc.js';
+import { runHomeForgetCommand } from './commands/home/forget.js';
+import { runHomeListCommand } from './commands/home/list.js';
 import { runInspectCommand } from './commands/inspect.js';
 import { runListCommand } from './commands/list.js';
 import { runMarkCommand } from './commands/mark.js';
@@ -125,7 +127,7 @@ async function main(): Promise<void> {
     .exitOverride();
 
   program
-    .option('--home <path>', 'Override the agent-tty home directory')
+    .option('--home <path>', 'Override the agent-tty Home directory')
     .option(
       '--timeout-ms <n>',
       'Set a shared CLI timeout in milliseconds',
@@ -214,6 +216,50 @@ async function main(): Promise<void> {
         ) => {
           void context;
           await runSkillsPathCommand(name, options);
+        },
+      ),
+    );
+
+  const homeCommand = program
+    .command('home')
+    .description('Inspect and manage the per-machine Home Registry');
+
+  homeCommand
+    .command('list')
+    .description('List registered agent-tty Homes')
+    .option(
+      '--all',
+      'Include Homes whose Sessions are all terminal, not just Active Homes',
+      false,
+    )
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'home list',
+        async (
+          options: { all: boolean; json: boolean },
+          context: CommandContext,
+        ) => {
+          void context;
+          await runHomeListCommand(options);
+        },
+      ),
+    );
+
+  homeCommand
+    .command('forget <path>')
+    .description('Remove a Home from the registry (does not delete it on disk)')
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'home forget',
+        async (
+          path: string,
+          options: { json: boolean },
+          context: CommandContext,
+        ) => {
+          void context;
+          await runHomeForgetCommand({ json: options.json, path });
         },
       ),
     );

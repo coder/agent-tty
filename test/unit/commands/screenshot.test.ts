@@ -80,6 +80,7 @@ const TEST_CONTEXT = {
   logger: createLogger('info', () => undefined),
   profileDefault: undefined,
   rendererDefault: 'ghostty-web',
+  explicitHome: false,
   configFile: null,
 } as const;
 const TEST_SCREENSHOT_SHA256 = 'a'.repeat(64);

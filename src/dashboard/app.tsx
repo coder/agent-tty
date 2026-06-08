@@ -14,6 +14,10 @@ import {
   type ProjectedView,
 } from './liveViewProjection.js';
 import {
+  listRegisteredHomes,
+  type RegisteredHome,
+} from '../storage/homeScope.js';
+import {
   listDashboardSessions,
   type DashboardScope,
   type DashboardSession,
@@ -28,7 +32,7 @@ const FRAME_INTERVAL_MS = 33;
 const LIST_REFRESH_MS = 1500;
 const PAN_STEP = 1;
 
-type Focus = 'list' | 'live';
+type Focus = 'list' | 'live' | 'home';
 
 // ── cell-grid painting ────────────────────────────────────────────────────────
 
@@ -240,6 +244,121 @@ function SessionList({
   );
 }
 
+// ── home picker (full-screen) ─────────────────────────────────────────────────
+
+function shortHomePath(home: string): string {
+  // Show the trailing two path segments so throwaway temp Homes and
+  // ~/.agent-tty stay distinguishable without overflowing the header.
+  const segments = home.split('/').filter((segment) => segment.length > 0);
+  if (segments.length <= 2) {
+    return home;
+  }
+  return `…/${segments.slice(-2).join('/')}`;
+}
+
+function homeName(home: string): string {
+  const segments = home.split('/').filter((segment) => segment.length > 0);
+  return segments.at(-1) ?? home;
+}
+
+/** Compact "time since" for the picker's last-seen column (s/m/h/d). */
+function relativeAge(iso: string): string {
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) {
+    return '?';
+  }
+  const seconds = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (seconds < 60) {
+    return `${String(seconds)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `${String(minutes)}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${String(hours)}h`;
+  }
+  return `${String(Math.floor(hours / 24))}d`;
+}
+
+const HOME_NAME_WIDTH = 22;
+const HOME_COUNT_WIDTH = 18;
+
+/**
+ * The full-screen Home picker: a deliberate mode switch that takes over the
+ * body (both the Session list and the Live View) while choosing a Home, so it
+ * reads as "switch Home" rather than an in-place content swap. Selecting a Home
+ * returns to the normal two-pane view on that Home.
+ */
+function HomePicker({
+  homes,
+  selectedIndex,
+  scope,
+  currentHome,
+  height,
+  width,
+}: {
+  homes: RegisteredHome[];
+  selectedIndex: number;
+  scope: DashboardScope;
+  currentHome: string;
+  height: number;
+  width: number;
+}): React.ReactNode {
+  // Box border (2) + header (1) + current-Home footer (1) frame the rows.
+  const visible = Math.max(1, height - 4);
+  const start =
+    homes.length <= visible
+      ? 0
+      : Math.min(
+          Math.max(0, selectedIndex - Math.floor(visible / 2)),
+          homes.length - visible,
+        );
+  const windowed = homes.slice(start, start + visible);
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="cyan"
+      width={width}
+    >
+      <Text bold>
+        Switch Home · {scope} ({homes.length}){start > 0 ? ' ↑' : ''}
+        {start + visible < homes.length ? ' ↓' : ''}
+      </Text>
+      {homes.length === 0 ? (
+        <Text dimColor>
+          No registered Homes — create a session in one to register it.
+        </Text>
+      ) : (
+        windowed.map((home, index) => {
+          const selected = start + index === selectedIndex;
+          const isCurrent = home.path === currentHome;
+          const counts = `${String(home.activeSessions)} active / ${String(home.totalSessions)}`;
+          return (
+            <Text key={home.path} inverse={selected} wrap="truncate">
+              {selected ? '▸ ' : '  '}
+              {isCurrent ? (
+                <Text color="green">◉</Text>
+              ) : (
+                <Text dimColor>○</Text>
+              )}
+              {'  '}
+              {homeName(home.path).padEnd(HOME_NAME_WIDTH)}
+              {counts.padEnd(HOME_COUNT_WIDTH)}
+              {'last seen '}
+              {relativeAge(home.lastSeenAt)}
+            </Text>
+          );
+        })
+      )}
+      <Text dimColor>{`current: ${shortHomePath(currentHome)}`}</Text>
+    </Box>
+  );
+}
+
 // ── follower wiring (one selected session at a time) ──────────────────────────
 
 interface FollowerState {
@@ -350,6 +469,13 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
   const [pan, setPan] = useState<PanOffset>({ row: 0, col: 0 });
   const [error, setError] = useState<string | null>(null);
 
+  // The Home the dashboard currently observes. Initialized to the launched/
+  // resolved Home (additive picker); selecting another Home in the picker only
+  // changes what is observed, never restricting navigation.
+  const [home, setHome] = useState<string>(options.home);
+  const [homes, setHomes] = useState<RegisteredHome[]>([]);
+  const [homeIndex, setHomeIndex] = useState(0);
+
   const lastKnown = useRef<Map<string, DashboardSession>>(new Map());
   const frameRef = useRef<LiveViewFrame | null>(null);
   const selectedIdRef = useRef<string | null>(selectedId);
@@ -366,7 +492,7 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
       }
       refreshing = true;
       try {
-        const next = await listDashboardSessions(options.home, scope);
+        const next = await listDashboardSessions(home, scope);
         if (!alive) {
           return;
         }
@@ -417,7 +543,36 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
       alive = false;
       clearInterval(timer);
     };
-  }, [scope, options.home, options.sessionId]);
+  }, [scope, home, options.sessionId]);
+
+  // Load registered Homes whenever the picker opens or the scope changes while
+  // it is open. This is a read-only scan (no reconciliation) shared with
+  // `home list`, so browsing Homes never mutates any Session.
+  useEffect(() => {
+    if (focus !== 'home') {
+      return;
+    }
+    // Object flag (not a bare boolean) so a stale async resolution after the
+    // picker closes or the scope changes can't clobber fresh state.
+    const load = { cancelled: false };
+    void (async () => {
+      try {
+        const registered = await listRegisteredHomes(scope);
+        if (load.cancelled) {
+          return;
+        }
+        setHomes(registered);
+        setHomeIndex(0);
+      } catch (caught) {
+        if (!load.cancelled) {
+          setError(caught instanceof Error ? caught.message : String(caught));
+        }
+      }
+    })();
+    return () => {
+      load.cancelled = true;
+    };
+  }, [focus, scope]);
 
   const selectedIndex = Math.max(
     0,
@@ -474,12 +629,52 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
       exit();
       return;
     }
-    if (key.tab) {
-      setFocus((current) => (current === 'list' ? 'live' : 'list'));
+    // 'H' toggles the Home picker from anywhere; it is additive — closing it
+    // leaves the current Home and Session selection untouched.
+    if (input === 'H') {
+      setFocus((current) => (current === 'home' ? 'list' : 'home'));
       return;
     }
+    // 'a' toggles active/all scope for both the Session list and the Home
+    // picker (they share one scope), mirroring `list`/`home list`.
     if (input === 'a') {
       setScope((current) => (current === 'active' ? 'all' : 'active'));
+      return;
+    }
+
+    if (focus === 'home') {
+      if (key.escape) {
+        setFocus('list');
+        return;
+      }
+      if (key.upArrow || input === 'k') {
+        setHomeIndex((index) => Math.max(0, index - 1));
+        return;
+      }
+      if (key.downArrow || input === 'j') {
+        setHomeIndex((index) =>
+          Math.min(Math.max(0, homes.length - 1), index + 1),
+        );
+        return;
+      }
+      if (key.return) {
+        const picked = homes[homeIndex];
+        if (picked !== undefined && picked.path !== home) {
+          // Switching Home re-seeds the Session list (which reconciles on
+          // entry); clear pinned state carried over from the previous Home.
+          setHome(picked.path);
+          setSelectedId(null);
+          lastKnown.current = new Map();
+          setPan({ row: 0, col: 0 });
+        }
+        setFocus('list');
+        return;
+      }
+      return; // swallow other keys while the picker is open
+    }
+
+    if (key.tab) {
+      setFocus((current) => (current === 'list' ? 'live' : 'list'));
       return;
     }
     if (input === 'z') {
@@ -518,37 +713,57 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
           {'agent-tty dashboard'}
         </Text>
         <Text dimColor>
-          {'  read-only · '}
-          {selectedSession
-            ? `${shortId(selectedSession.sessionId)} ${selectedSession.status}`
-            : 'no session selected'}
+          {focus === 'home'
+            ? '  read-only · choosing Home…'
+            : `  read-only · ${shortHomePath(home)} · ${
+                selectedSession
+                  ? `${shortId(selectedSession.sessionId)} ${selectedSession.status}`
+                  : 'no session selected'
+              }`}
         </Text>
       </Box>
 
       <Box>
-        <SessionList
-          sessions={sessions}
-          selectedIndex={selectedIndex}
-          scope={scope}
-          focused={focus === 'list'}
-          height={paneRows}
-          width={listWidth}
-        />
-        <LiveView
-          frame={frame}
-          error={liveError}
-          pane={{ cols: paneCols, rows: paneRows }}
-          mode={mode}
-          pan={pan}
-          focused={focus === 'live'}
-        />
+        {focus === 'home' ? (
+          // Full-screen takeover: the picker replaces both panes so switching a
+          // Home reads as a deliberate mode, not an in-place content swap.
+          <HomePicker
+            homes={homes}
+            selectedIndex={homeIndex}
+            scope={scope}
+            currentHome={home}
+            height={paneRows}
+            width={termCols}
+          />
+        ) : (
+          <>
+            <SessionList
+              sessions={sessions}
+              selectedIndex={selectedIndex}
+              scope={scope}
+              focused={focus === 'list'}
+              height={paneRows}
+              width={listWidth}
+            />
+            <LiveView
+              frame={frame}
+              error={liveError}
+              pane={{ cols: paneCols, rows: paneRows }}
+              mode={mode}
+              pan={pan}
+              focused={focus === 'live'}
+            />
+          </>
+        )}
       </Box>
 
       <Box>
         <Text dimColor>
-          {`focus:${focus} · Tab switch · `}
-          {focus === 'list' ? '↑/↓ j/k select' : '↑/↓ h/j/k/l pan'}
-          {' · a scope · z overview · q quit'}
+          {focus === 'home'
+            ? '↑/↓ j/k select Home · ⏎ open · a scope · esc cancel · q quit'
+            : focus === 'list'
+              ? 'focus:list · Tab switch · ↑/↓ j/k select · a scope · H homes · z overview · q quit'
+              : 'focus:live · Tab switch · ↑/↓ h/j/k/l pan · a scope · H homes · z overview · q quit'}
           {error !== null ? ` · ERR: ${error}` : ''}
         </Text>
       </Box>

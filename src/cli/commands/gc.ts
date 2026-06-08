@@ -11,12 +11,17 @@ import {
   isTerminalSessionStatus,
 } from '../../protocol/sessionStatusPolicy.js';
 import type { SessionRecord } from '../../protocol/schemas.js';
+import {
+  forgetHome as forgetHomeDefault,
+  readHomeRegistry,
+} from '../../storage/homeRegistry.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import { manifestPath, sessionDir } from '../../storage/sessionPaths.js';
 import { invariant } from '../../util/assert.js';
 import { hasErrorCode } from '../../util/hasErrorCode.js';
 
-export interface GcResult {
+/** Per-Home collection result returned by `gcSessions`. */
+export interface GcSessionSweep {
   removedSessions: string[];
   skippedSessions: Array<{
     sessionId: string;
@@ -24,6 +29,33 @@ export interface GcResult {
   }>;
   dryRun: boolean;
   totalBytesFreed: number;
+}
+
+/** What gc did to a single Home during a (possibly cross-Home) run. */
+export interface GcHomeOutcome {
+  home: string;
+  /** Whether the Home directory existed at sweep time. */
+  existed: boolean;
+  removedSessions: string[];
+  skippedSessions: Array<{
+    sessionId: string;
+    reason: string;
+  }>;
+  totalBytesFreed: number;
+  /** Whether the Home was deregistered from the Home Registry this run (or
+   * would be, under --dry-run). Only ever true for a cross-Home sweep. */
+  deregistered: boolean;
+}
+
+/** Command-level result emitted by `gc`. Always cross-Home shaped, even when
+ * scoped to a single Home via --home/AGENT_TTY_HOME (then `homes` has one
+ * entry). */
+export interface GcResult {
+  dryRun: boolean;
+  homes: GcHomeOutcome[];
+  removedSessionCount: number;
+  totalBytesFreed: number;
+  deregisteredHomes: string[];
 }
 
 interface CommandOptions {
@@ -171,29 +203,43 @@ function buildGcLines(result: GcResult): string[] {
     : 'Estimated bytes freed';
 
   lines.push(
-    `${actionLabel} ${String(result.removedSessions.length)} session(s).`,
+    `${actionLabel} ${String(result.removedSessionCount)} session(s) across ${String(result.homes.length)} home(s).`,
   );
   lines.push(`${bytesLabel}: ${String(result.totalBytesFreed)}`);
 
-  if (result.removedSessions.length > 0) {
-    lines.push('Sessions:');
-    for (const sessionId of result.removedSessions) {
-      lines.push(`  - ${sessionId}`);
+  for (const home of result.homes) {
+    const hasActivity =
+      home.removedSessions.length > 0 ||
+      home.skippedSessions.length > 0 ||
+      home.deregistered;
+    if (!hasActivity) {
+      continue;
     }
-  }
 
-  if (result.skippedSessions.length > 0) {
-    lines.push('Skipped:');
-    for (const skippedSession of result.skippedSessions) {
-      lines.push(`  - ${skippedSession.sessionId}: ${skippedSession.reason}`);
+    lines.push(`${home.home}:`);
+    for (const sessionId of home.removedSessions) {
+      lines.push(`  - removed ${sessionId}`);
+    }
+    for (const skippedSession of home.skippedSessions) {
+      lines.push(
+        `  - skipped ${skippedSession.sessionId}: ${skippedSession.reason}`,
+      );
+    }
+    if (home.deregistered) {
+      lines.push(
+        result.dryRun
+          ? '  - would deregister (no sessions left)'
+          : '  - deregistered (no sessions left)',
+      );
     }
   }
 
   if (
-    result.removedSessions.length === 0 &&
-    result.skippedSessions.length === 0
+    result.removedSessionCount === 0 &&
+    result.deregisteredHomes.length === 0 &&
+    result.homes.every((home) => home.skippedSessions.length === 0)
   ) {
-    lines.push('No sessions found.');
+    lines.push('Nothing to collect.');
   }
 
   return lines;
@@ -231,7 +277,7 @@ export async function gcSessions(
   home: string,
   options: GcExecutionOptions,
   dependencies: GcDependencies = defaultDependencies,
-): Promise<GcResult> {
+): Promise<GcSessionSweep> {
   invariant(
     typeof home === 'string' && home.length > 0,
     'home must not be empty',
@@ -251,7 +297,7 @@ export async function gcSessions(
   invariant(now instanceof Date, 'now() must return a Date');
   invariant(Number.isFinite(now.getTime()), 'now() must return a valid Date');
 
-  const result: GcResult = {
+  const result: GcSessionSweep = {
     removedSessions: [],
     skippedSessions: [],
     dryRun: options.dryRun,
@@ -410,17 +456,137 @@ export async function gcSessions(
   return result;
 }
 
-export async function runGcCommand(options: CommandOptions): Promise<void> {
+async function homeDirectoryExists(home: string): Promise<boolean> {
+  try {
+    const stats = await stat(home);
+    return stats.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+async function homeHasSessionDirectories(home: string): Promise<boolean> {
+  try {
+    const entries = await readdir(resolve(home, 'sessions'), {
+      withFileTypes: true,
+    });
+    // Count only real Session directories; stray files (e.g. macOS .DS_Store or
+    // a lock file) must not keep an otherwise-empty Home registered.
+    return entries.some((entry) => entry.isDirectory());
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      return false; // the sessions tree is gone → no Sessions left
+    }
+    // Unreadable for another reason (e.g. EACCES): the Home directory is still
+    // the source of truth, so stay conservative and do NOT treat it as empty
+    // (which would wrongly deregister a Home over a transient permission error).
+    return true;
+  }
+}
+
+export interface GcCommandDependencies {
+  sweepHome: (
+    home: string,
+    options: GcExecutionOptions,
+  ) => Promise<GcSessionSweep>;
+  readRegistry: () => Promise<Array<{ path: string }>>;
+  forgetHome: (home: string) => Promise<unknown>;
+  homeExists: (home: string) => Promise<boolean>;
+  homeHasSessions: (home: string) => Promise<boolean>;
+}
+
+const defaultCommandDependencies: GcCommandDependencies = {
+  sweepHome: (home, options) => gcSessions(home, options),
+  readRegistry: () => readHomeRegistry(),
+  forgetHome: (home) => forgetHomeDefault(home),
+  homeExists: homeDirectoryExists,
+  homeHasSessions: homeHasSessionDirectories,
+};
+
+export async function runGcCommand(
+  options: CommandOptions,
+  dependencies: GcCommandDependencies = defaultCommandDependencies,
+): Promise<void> {
   const olderThanMs =
     options.olderThan === undefined
       ? null
       : parseDurationToMs(options.olderThan);
-  const home = options.context.home;
-  const result = await gcSessions(home, {
+  const executionOptions: GcExecutionOptions = {
     dryRun: options.dryRun,
     staleOnly: options.staleOnly,
     olderThanMs,
-  });
+  };
+
+  // An explicitly selected Home (--home / AGENT_TTY_HOME) scopes gc to that one
+  // Home and never touches the registry. Plain `gc` sweeps every registered
+  // Home and prunes dead/emptied ones. The resolved default Home is always
+  // swept too, so `gc` still collects it even before it has been registered.
+  const sweepRegistry = !options.context.explicitHome;
+  const targets: string[] = [];
+  const seen = new Set<string>();
+  const addTarget = (home: string): void => {
+    if (!seen.has(home)) {
+      seen.add(home);
+      targets.push(home);
+    }
+  };
+  addTarget(options.context.home);
+
+  const registeredPaths = new Set<string>();
+  if (sweepRegistry) {
+    const entries = await dependencies.readRegistry();
+    for (const entry of entries) {
+      registeredPaths.add(entry.path);
+      addTarget(entry.path);
+    }
+  }
+
+  const homes: GcHomeOutcome[] = [];
+  const deregisteredHomes: string[] = [];
+  for (const home of targets) {
+    const existed = await dependencies.homeExists(home);
+    const sweep = await dependencies.sweepHome(home, executionOptions);
+
+    let deregistered = false;
+    // Only ever deregister a Home that is actually registered. Emptied or gone
+    // Homes drop out so the picker/`home list` stay tidy; never delete the Home
+    // directory itself. Under --dry-run nothing is removed, so only an
+    // already-gone Home reads as a would-deregister.
+    if (sweepRegistry && registeredPaths.has(home)) {
+      const noSessionsLeft =
+        !existed || !(await dependencies.homeHasSessions(home));
+      if (noSessionsLeft) {
+        deregistered = true;
+        deregisteredHomes.push(home);
+        if (!options.dryRun) {
+          await dependencies.forgetHome(home);
+        }
+      }
+    }
+
+    homes.push({
+      home,
+      existed,
+      removedSessions: sweep.removedSessions,
+      skippedSessions: sweep.skippedSessions,
+      totalBytesFreed: sweep.totalBytesFreed,
+      deregistered,
+    });
+  }
+
+  const result: GcResult = {
+    dryRun: options.dryRun,
+    homes,
+    removedSessionCount: homes.reduce(
+      (total, home) => total + home.removedSessions.length,
+      0,
+    ),
+    totalBytesFreed: homes.reduce(
+      (total, home) => total + home.totalBytesFreed,
+      0,
+    ),
+    deregisteredHomes,
+  };
 
   emitSuccess({
     command: 'gc',

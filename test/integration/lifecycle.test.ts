@@ -45,14 +45,24 @@ interface SessionSummary {
   pid: number | null;
 }
 
-interface GcResult {
+interface GcHomeOutcome {
+  home: string;
+  existed: boolean;
   removedSessions: string[];
   skippedSessions: Array<{
     sessionId: string;
     reason: string;
   }>;
-  dryRun: boolean;
   totalBytesFreed: number;
+  deregistered: boolean;
+}
+
+interface GcResult {
+  dryRun: boolean;
+  homes: GcHomeOutcome[];
+  removedSessionCount: number;
+  totalBytesFreed: number;
+  deregisteredHomes: string[];
 }
 
 let testHome = '';
@@ -641,12 +651,17 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       gcEnvelope.command,
       'gc envelope should identify the gc command',
     ).toBe('gc');
+    // AGENT_TTY_HOME is set → gc is scoped to this one Home.
     expect(
-      gcEnvelope.result.removedSessions,
+      gcEnvelope.result.homes,
+      'gc should report exactly the scoped Home',
+    ).toHaveLength(1);
+    expect(
+      gcEnvelope.result.homes[0]?.removedSessions,
       'gc should remove the reconciled stale session directory',
     ).toEqual([sessionId]);
     expect(
-      gcEnvelope.result.skippedSessions,
+      gcEnvelope.result.homes[0]?.skippedSessions,
       'gc should not skip the reconciled stale session',
     ).toEqual([]);
     expect(

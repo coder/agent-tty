@@ -151,12 +151,46 @@ const GcSkippedSessionSchema = z
   })
   .strict();
 
-const GcResultSchema = z
+const GcHomeOutcomeSchema = z
   .object({
+    home: NonEmptyStringSchema,
+    existed: z.boolean(),
     removedSessions: z.array(NonEmptyStringSchema),
     skippedSessions: z.array(GcSkippedSessionSchema),
-    dryRun: z.boolean(),
     totalBytesFreed: z.number().nonnegative(),
+    deregistered: z.boolean(),
+  })
+  .strict();
+
+const GcResultSchema = z
+  .object({
+    dryRun: z.boolean(),
+    homes: z.array(GcHomeOutcomeSchema),
+    removedSessionCount: z.number().int().nonnegative(),
+    totalBytesFreed: z.number().nonnegative(),
+    deregisteredHomes: z.array(NonEmptyStringSchema),
+  })
+  .strict();
+
+const RegisteredHomeSchema = z
+  .object({
+    path: NonEmptyStringSchema,
+    activeSessions: z.number().int().nonnegative(),
+    totalSessions: z.number().int().nonnegative(),
+    lastSeenAt: NonEmptyStringSchema,
+  })
+  .strict();
+
+const HomeListResultSchema = z
+  .object({
+    homes: z.array(RegisteredHomeSchema),
+  })
+  .strict();
+
+const HomeForgetResultSchema = z
+  .object({
+    path: NonEmptyStringSchema,
+    forgotten: z.boolean(),
   })
   .strict();
 
@@ -560,56 +594,139 @@ const goldenResultContracts: readonly GoldenResultContractCase[] = [
     command: 'gc',
     schema: GcResultSchema,
     validResult: {
-      removedSessions: ['01J0000000TEST000000000000'],
-      skippedSessions: [
+      dryRun: false,
+      homes: [
         {
-          sessionId: '01J0000000SKIP000000000000',
-          reason: 'running',
+          home: '/home/user/.agent-tty',
+          existed: true,
+          removedSessions: ['01J0000000TEST000000000000'],
+          skippedSessions: [
+            {
+              sessionId: '01J0000000SKIP000000000000',
+              reason: 'running',
+            },
+          ],
+          totalBytesFreed: 4096,
+          deregistered: false,
         },
       ],
-      dryRun: false,
+      removedSessionCount: 1,
       totalBytesFreed: 4096,
+      deregisteredHomes: [],
     },
     invalidResult: {
-      removedSessions: ['01J0000000TEST000000000000'],
-      skippedSessions: [],
       dryRun: false,
+      homes: [],
+      removedSessionCount: 1,
       totalBytesFreed: -1,
+      deregisteredHomes: [],
     },
     extraFieldResult: {
-      removedSessions: ['01J0000000TEST000000000000'],
-      skippedSessions: [],
       dryRun: false,
-      totalBytesFreed: 4096,
+      homes: [],
+      removedSessionCount: 0,
+      totalBytesFreed: 0,
+      deregisteredHomes: [],
       removedCount: 1,
     },
   },
   {
-    name: 'gc (dry-run)',
+    name: 'gc (dry-run, cross-Home prune)',
     command: 'gc',
     schema: GcResultSchema,
     validResult: {
-      removedSessions: [],
-      skippedSessions: [],
       dryRun: true,
-      totalBytesFreed: 0,
-    },
-    invalidResult: {
-      removedSessions: [],
-      skippedSessions: [
+      homes: [
         {
-          sessionId: '01J0000000SKIP000000000000',
+          home: '/tmp/throwaway-home',
+          existed: false,
+          removedSessions: [],
+          skippedSessions: [],
+          totalBytesFreed: 0,
+          deregistered: true,
         },
       ],
-      dryRun: true,
+      removedSessionCount: 0,
       totalBytesFreed: 0,
+      deregisteredHomes: ['/tmp/throwaway-home'],
+    },
+    invalidResult: {
+      // a home outcome missing the required `existed` field
+      dryRun: true,
+      homes: [
+        {
+          home: '/tmp/throwaway-home',
+          removedSessions: [],
+          skippedSessions: [],
+          totalBytesFreed: 0,
+          deregistered: true,
+        },
+      ],
+      removedSessionCount: 0,
+      totalBytesFreed: 0,
+      deregisteredHomes: [],
     },
     extraFieldResult: {
-      removedSessions: [],
-      skippedSessions: [],
       dryRun: true,
+      homes: [],
+      removedSessionCount: 0,
       totalBytesFreed: 0,
+      deregisteredHomes: [],
       wouldRemoveSessions: [],
+    },
+  },
+  {
+    name: 'home list',
+    command: 'home list',
+    schema: HomeListResultSchema,
+    validResult: {
+      homes: [
+        {
+          path: '/home/user/.agent-tty',
+          activeSessions: 2,
+          totalSessions: 5,
+          lastSeenAt: '2026-06-08T12:00:00.000Z',
+        },
+      ],
+    },
+    invalidResult: {
+      homes: [
+        {
+          path: '/home/user/.agent-tty',
+          activeSessions: -1,
+          totalSessions: 5,
+          lastSeenAt: '2026-06-08T12:00:00.000Z',
+        },
+      ],
+    },
+    extraFieldResult: {
+      homes: [
+        {
+          path: '/home/user/.agent-tty',
+          activeSessions: 2,
+          totalSessions: 5,
+          lastSeenAt: '2026-06-08T12:00:00.000Z',
+          label: 'main',
+        },
+      ],
+    },
+  },
+  {
+    name: 'home forget',
+    command: 'home forget',
+    schema: HomeForgetResultSchema,
+    validResult: {
+      path: '/tmp/throwaway-home',
+      forgotten: true,
+    },
+    invalidResult: {
+      path: '',
+      forgotten: true,
+    },
+    extraFieldResult: {
+      path: '/tmp/throwaway-home',
+      forgotten: false,
+      existed: true,
     },
   },
   {
