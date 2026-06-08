@@ -16,7 +16,7 @@ per-**Home** socket directory at `/tmp/agent-tty/<sha256(home)[:8]>/`
 (`src/storage/sessionPaths.ts`), and that is a dead end for discovery: the name
 is a one-way hash (the **Home** path cannot be recovered from it), the directory
 is created but never removed when hosts die (`src/host/rpcServer.ts` only
-unlinks the per-**Session** socket *file*), and `/tmp` is reboot-ephemeral.
+unlinks the per-**Session** socket _file_), and `/tmp` is reboot-ephemeral.
 
 We want the **Session Dashboard** to pick a **Home** and inspect that **Home**'s
 **Sessions**, and we want a "which **Homes** am I using" listing comparable to
@@ -38,7 +38,7 @@ of **Homes** that have hosted a **Session**.
   never cached in the registry. `home list` sorts newest-`lastSeenAt`-first,
   mirroring how **Sessions** sort newest-`createdAt`-first.
 - **Source of truth is the Home directories.** The registry is reconciled
-  *against* them, never the reverse. A **Home** auto-registers when it first
+  _against_ them, never the reverse. A **Home** auto-registers when it first
   hosts a **Session** (on `create`). It is reconciled out by three layered
   mechanisms: **prune-on-read** (listings and the dashboard picker hide **Homes**
   whose directory or `sessions/` is gone), **per-Home gc deregistering** a
@@ -92,7 +92,7 @@ of **Homes** that have hosted a **Session**.
   offline replay.
 - **A machine-identity guard now** (stamp manifests with a machine id; skip
   reconcile/kill for **Sessions** whose id ≠ current). Deferred, not rejected: it
-  is the right hardening *if* shared-filesystem or remote-aggregation **Homes**
+  is the right hardening _if_ shared-filesystem or remote-aggregation **Homes**
   ever come into scope, but it is unjustified for v1 given the per-machine
   boundary and the Coder model. Tracked as follow-up.
 - **gc deletes emptied Home directories.** Rejected: `--home` is an arbitrary,

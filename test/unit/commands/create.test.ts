@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   sessionDir: vi.fn(),
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
+  upsertHome: vi.fn(),
 }));
 
 vi.mock('../../../src/cli/output.js', () => ({
@@ -39,6 +40,10 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
   socketPath: mocks.socketPath,
 }));
 
+vi.mock('../../../src/storage/homeRegistry.js', () => ({
+  upsertHome: mocks.upsertHome,
+}));
+
 import { runCreateCommand } from '../../../src/cli/commands/create.js';
 import { createLogger } from '../../../src/util/logger.js';
 
@@ -51,6 +56,7 @@ describe('create command', () => {
     logger: createLogger('info', () => undefined),
     profileDefault: undefined,
     rendererDefault: 'ghostty-web',
+    explicitHome: false,
     configFile: null,
   } as const;
   const baseOptions = {
@@ -105,6 +111,26 @@ describe('create command', () => {
     );
     mocks.socketPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
+    );
+    mocks.upsertHome.mockResolvedValue(undefined);
+  });
+
+  it('registers the resolved Home in the Home Registry on create', async () => {
+    await runCreateCommand({ ...baseOptions, context });
+
+    expect(mocks.upsertHome).toHaveBeenCalledWith(context.home);
+  });
+
+  it('still succeeds when registering the Home fails (advisory, never blocks create)', async () => {
+    mocks.upsertHome.mockRejectedValue(new Error('registry write failed'));
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).resolves.toBeUndefined();
+
+    // The Session result is still emitted despite the registry hiccup.
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({ command: 'create' }),
     );
   });
 

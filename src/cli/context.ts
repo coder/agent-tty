@@ -33,6 +33,9 @@ export interface GlobalCliOptions {
 
 export interface CommandContext {
   readonly home: string;
+  /** Whether `home` was explicitly selected (`--home`/`AGENT_TTY_HOME`) rather
+   * than defaulted. gc uses this to scope to one Home vs. sweeping the registry. */
+  readonly explicitHome: boolean;
   readonly timeoutMs: number | undefined;
   readonly colorEnabled: boolean;
   readonly logLevel: LogLevel;
@@ -124,6 +127,7 @@ export async function resolveCommandContext(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<CommandContext> {
   const configuredHome = options.home ?? env.AGENT_TTY_HOME;
+  const explicitHome = configuredHome !== undefined;
   const home =
     configuredHome === undefined
       ? resolveHome(env.AGENT_TTY_HOME)
@@ -150,6 +154,7 @@ export async function resolveCommandContext(
 
   return Object.freeze({
     home,
+    explicitHome,
     timeoutMs: options.timeoutMs,
     colorEnabled: options.color ?? true,
     logLevel,

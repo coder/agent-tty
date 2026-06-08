@@ -1,12 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
 import {
   gcSessions,
   parseDurationToMs,
+  runGcCommand,
   type GcDependencies,
+  type GcResult,
+  type GcSessionSweep,
 } from '../../../src/cli/commands/gc.js';
+import type { CommandContext } from '../../../src/cli/context.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
+import { createLogger } from '../../../src/util/logger.js';
 
 interface MockDirectoryNode {
   kind: 'dir';
@@ -483,5 +488,158 @@ describe('gc command helpers', () => {
       },
     ]);
     expect(removedPaths).toEqual([`${home}/sessions/stale-01`]);
+  });
+});
+
+describe('runGcCommand (cross-Home sweep)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function gcContext(home: string, explicitHome: boolean): CommandContext {
+    return {
+      home,
+      explicitHome,
+      timeoutMs: undefined,
+      colorEnabled: true,
+      logLevel: 'info',
+      logger: createLogger('info', () => undefined),
+      profileDefault: undefined,
+      rendererDefault: 'ghostty-web',
+      configFile: null,
+    } as const;
+  }
+
+  const emptySweep: GcSessionSweep = {
+    removedSessions: [],
+    skippedSessions: [],
+    dryRun: false,
+    totalBytesFreed: 0,
+  };
+
+  function captureEnvelopeResult(): () => GcResult {
+    const spy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    return () => {
+      const calls = spy.mock.calls as unknown[][];
+      const last = calls.at(-1)?.[0];
+      if (typeof last !== 'string') {
+        throw new Error('expected an emitted gc envelope');
+      }
+      return (JSON.parse(last) as { result: GcResult }).result;
+    };
+  }
+
+  it('scopes to a single Home and never touches the registry when explicit', async () => {
+    const readRegistry = vi.fn(() =>
+      Promise.resolve([{ path: '/registered' }]),
+    );
+    const forgetHome = vi.fn(() => Promise.resolve());
+    const sweepHome = vi.fn(() =>
+      Promise.resolve({
+        ...emptySweep,
+        removedSessions: ['s1'],
+        totalBytesFreed: 10,
+      }),
+    );
+    const readResult = captureEnvelopeResult();
+
+    await runGcCommand(
+      {
+        context: gcContext('/h/explicit', true),
+        json: true,
+        dryRun: false,
+        staleOnly: false,
+        olderThan: undefined,
+      },
+      {
+        sweepHome,
+        readRegistry,
+        forgetHome,
+        homeExists: () => Promise.resolve(true),
+        homeHasSessions: () => Promise.resolve(true),
+      },
+    );
+
+    expect(readRegistry).not.toHaveBeenCalled();
+    expect(forgetHome).not.toHaveBeenCalled();
+    const result = readResult();
+    expect(result.homes.map((home) => home.home)).toEqual(['/h/explicit']);
+    expect(result.removedSessionCount).toBe(1);
+    expect(result.totalBytesFreed).toBe(10);
+    expect(result.deregisteredHomes).toEqual([]);
+  });
+
+  it('sweeps registered Homes and deregisters emptied or gone ones', async () => {
+    const forgetHome = vi.fn((_home: string) => Promise.resolve());
+    const sweepHome = vi.fn(() => Promise.resolve(emptySweep));
+    const readResult = captureEnvelopeResult();
+
+    await runGcCommand(
+      {
+        context: gcContext('/h/default', false),
+        json: true,
+        dryRun: false,
+        staleOnly: false,
+        olderThan: undefined,
+      },
+      {
+        sweepHome,
+        readRegistry: () =>
+          Promise.resolve([
+            { path: '/h/default' },
+            { path: '/h/empty' },
+            { path: '/h/gone' },
+          ]),
+        forgetHome,
+        homeExists: (home) => Promise.resolve(home !== '/h/gone'),
+        homeHasSessions: (home) => Promise.resolve(home === '/h/default'),
+      },
+    );
+
+    // /h/empty (emptied) and /h/gone (directory gone) are deregistered;
+    // /h/default still has Sessions, so it stays registered.
+    expect(forgetHome.mock.calls.map((call) => call[0]).sort()).toEqual([
+      '/h/empty',
+      '/h/gone',
+    ]);
+    const result = readResult();
+    expect(result.homes.map((home) => home.home)).toEqual([
+      '/h/default',
+      '/h/empty',
+      '/h/gone',
+    ]);
+    expect([...result.deregisteredHomes].sort()).toEqual([
+      '/h/empty',
+      '/h/gone',
+    ]);
+  });
+
+  it('dry-run never deregisters an emptied Home, only already-gone ones', async () => {
+    const forgetHome = vi.fn(() => Promise.resolve());
+    const readResult = captureEnvelopeResult();
+
+    await runGcCommand(
+      {
+        context: gcContext('/h/default', false),
+        json: true,
+        dryRun: true,
+        staleOnly: false,
+        olderThan: undefined,
+      },
+      {
+        sweepHome: () => Promise.resolve({ ...emptySweep, dryRun: true }),
+        readRegistry: () =>
+          Promise.resolve([{ path: '/h/gone' }, { path: '/h/empty' }]),
+        forgetHome,
+        homeExists: (home) => Promise.resolve(home !== '/h/gone'),
+        // dry-run removed nothing, so a populated Home still reports Sessions.
+        homeHasSessions: () => Promise.resolve(true),
+      },
+    );
+
+    // No registry writes under --dry-run.
+    expect(forgetHome).not.toHaveBeenCalled();
+    // Only the already-gone Home is reported as a would-deregister.
+    expect(readResult().deregisteredHomes).toEqual(['/h/gone']);
   });
 });
