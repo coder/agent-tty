@@ -197,6 +197,16 @@ describe('CLI integration', () => {
     );
   });
 
+  it('resolves the `ls` alias to the list command', () => {
+    // `--help` exits before the action runs, so this exercises alias
+    // resolution without touching the Home Registry or reconciling sessions.
+    const result = runCli(['ls', '--help'], testEnv());
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('List sessions');
+  });
+
   it('accepts --append-newline for type', () => {
     const result = runCli(
       ['type', 'session-01', 'hello', '--append-newline', '--json'],

@@ -354,6 +354,7 @@ async function main(): Promise<void> {
 
   program
     .command('list')
+    .alias('ls')
     .description('List sessions')
     .option('--all', 'Include exited sessions', false)
     .option('--json', 'Emit a JSON command envelope', false)
