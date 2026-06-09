@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Text, render, useApp, useInput, useStdout } from 'ink';
+import { Box, Text, render, useApp, useInput, useStdout, type Key } from 'ink';
 
 import type { DashboardAppOptions } from '../cli/commands/dashboard.js';
 import { createRendererBackend } from '../renderer/registry.js';
@@ -22,7 +22,13 @@ import {
   type DashboardScope,
   type DashboardSession,
 } from './sessionScope.js';
-import { formatSessionId, listWidthFor, shortId } from './sessionListLayout.js';
+import {
+  PANE_BORDER,
+  PANE_LIST_GAP,
+  formatSessionId,
+  paneLayout,
+  shortId,
+} from './sessionListLayout.js';
 
 // reference-dark profile defaults; cells matching these are left unstyled so the
 // terminal's own theme shows through instead of repainting every cell.
@@ -128,6 +134,7 @@ function LiveView({
   mode,
   pan,
   focused,
+  maximized = false,
 }: {
   frame: LiveViewFrame | null;
   error: string | null;
@@ -135,6 +142,9 @@ function LiveView({
   mode: LiveViewMode;
   pan: PanOffset;
   focused: boolean;
+  // When maximized the bordered pane sits flush to the left edge and spans the
+  // full width (the list is gone); otherwise it has a 1-col gap beside the list.
+  maximized?: boolean;
 }): React.ReactNode {
   const snapshot = frame?.snapshot ?? null;
   const status = frame?.status ?? 'pending';
@@ -168,10 +178,10 @@ function LiveView({
   return (
     <Box
       flexDirection="column"
-      marginLeft={1}
+      marginLeft={maximized ? 0 : PANE_LIST_GAP}
       borderStyle="round"
       borderColor={focused ? 'cyan' : 'gray'}
-      width={pane.cols + 2}
+      width={pane.cols + PANE_BORDER}
     >
       <Text dimColor>
         {header.length > 0 ? header : 'live view'}
@@ -467,6 +477,12 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
   const [focus, setFocus] = useState<Focus>('list');
   const [mode, setMode] = useState<LiveViewMode>('one-to-one');
   const [pan, setPan] = useState<PanOffset>({ row: 0, col: 0 });
+  // When true the Live View is "maximized": it takes over the whole dashboard
+  // body (the Session list is dropped) and spans the full terminal width while
+  // staying framed by its border, so the viewport is large enough that panning
+  // is rarely needed. It is a modal layer orthogonal to `focus` — it never
+  // mutates `focus`, so Esc restores whatever was focused underneath.
+  const [maximized, setMaximized] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // The Home the dashboard currently observes. Initialized to the launched/
@@ -584,11 +600,15 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
 
   const termCols = stdout.columns;
   const termRows = stdout.rows;
-  // The list scales with the terminal (wide screens show full session ids); the
-  // Live View takes the rest, less a small gap for the divider.
-  const listWidth = listWidthFor(termCols);
-  const paneCols = Math.max(10, termCols - listWidth - 5);
-  const paneRows = Math.max(4, termRows - 5);
+  // Pane geometry (see `paneLayout`): split shares the width with the Session
+  // list; maximized drops the list to span the full width while keeping the same
+  // right edge. `paneCols` is the *effective* content width for the current
+  // mode, so clampPan, the projection, and the rendered pane all agree.
+  const { listWidth, paneCols, paneRows } = paneLayout(
+    termCols,
+    termRows,
+    maximized,
+  );
 
   // Clamp a candidate pan to the current screen so stored pan never drifts past
   // the edges (which would otherwise make pan keys feel dead after overshooting).
@@ -624,9 +644,48 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
     }
   };
 
+  // Toggle the lossy Overview projection. Pan is meaningless in Overview, so
+  // reset it (matching every other view transition).
+  const toggleOverview = (): void => {
+    setMode((current) =>
+      current === 'one-to-one' ? 'overview' : 'one-to-one',
+    );
+    setPan({ row: 0, col: 0 });
+  };
+
+  // Arrow / hjkl panning of the clipped one-to-one screen, clamped to the
+  // current pane. Shared by the focused split pane and the maximized layer.
+  const handlePanKeys = (input: string, key: Key): void => {
+    if (key.upArrow || input === 'k')
+      setPan((p) => clampPan({ row: p.row - PAN_STEP, col: p.col }));
+    if (key.downArrow || input === 'j')
+      setPan((p) => clampPan({ row: p.row + PAN_STEP, col: p.col }));
+    if (key.leftArrow || input === 'h')
+      setPan((p) => clampPan({ row: p.row, col: p.col - PAN_STEP }));
+    if (key.rightArrow || input === 'l')
+      setPan((p) => clampPan({ row: p.row, col: p.col + PAN_STEP }));
+  };
+
   useInput((input, key) => {
     if (input === 'q' || (key.ctrl && input === 'c')) {
       exit();
+      return;
+    }
+    // While maximized this layer owns input: only pan / overview / restore
+    // respond. Tab, H, 'a' and Enter are swallowed so it reads as a distinct
+    // mode. `focus` is left untouched, so Esc (restore) returns to whatever was
+    // focused underneath.
+    if (maximized) {
+      if (key.escape) {
+        setMaximized(false);
+        setPan({ row: 0, col: 0 });
+        return;
+      }
+      if (input === 'z') {
+        toggleOverview();
+        return;
+      }
+      handlePanKeys(input, key);
       return;
     }
     // 'H' toggles the Home picker from anywhere; it is additive — closing it
@@ -678,10 +737,19 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
       return;
     }
     if (input === 'z') {
-      setMode((current) =>
-        current === 'one-to-one' ? 'overview' : 'one-to-one',
-      );
-      setPan({ row: 0, col: 0 });
+      toggleOverview();
+      return;
+    }
+
+    // Enter maximizes the Live View — from the list (jump straight from
+    // browsing to a full-bleed view of the selected session) or from the pane.
+    // It is a modal layer: `focus` is left as-is, so Esc restores it. Reset pan
+    // like every other geometry change, and no-op when nothing is selected.
+    if (key.return) {
+      if (selectedSession !== undefined) {
+        setMaximized(true);
+        setPan({ row: 0, col: 0 });
+      }
       return;
     }
 
@@ -692,14 +760,7 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
     }
 
     // focus === 'live': pan the clipped screen (no-op in overview).
-    if (key.upArrow || input === 'k')
-      setPan((p) => clampPan({ row: p.row - PAN_STEP, col: p.col }));
-    if (key.downArrow || input === 'j')
-      setPan((p) => clampPan({ row: p.row + PAN_STEP, col: p.col }));
-    if (key.leftArrow || input === 'h')
-      setPan((p) => clampPan({ row: p.row, col: p.col - PAN_STEP }));
-    if (key.rightArrow || input === 'l')
-      setPan((p) => clampPan({ row: p.row, col: p.col + PAN_STEP }));
+    handlePanKeys(input, key);
   });
 
   return (
@@ -735,6 +796,19 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
             height={paneRows}
             width={termCols}
           />
+        ) : maximized ? (
+          // Maximized: the Live View takes the whole body (no list), full width
+          // but still bordered. The header and footer bars stay. It is the sole
+          // active view, so it always renders focused.
+          <LiveView
+            frame={frame}
+            error={liveError}
+            pane={{ cols: paneCols, rows: paneRows }}
+            mode={mode}
+            pan={pan}
+            focused
+            maximized
+          />
         ) : (
           <>
             <SessionList
@@ -759,11 +833,13 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
 
       <Box>
         <Text dimColor>
-          {focus === 'home'
-            ? '↑/↓ j/k select Home · ⏎ open · a scope · esc cancel · q quit'
-            : focus === 'list'
-              ? 'focus:list · Tab switch · ↑/↓ j/k select · a scope · H homes · z overview · q quit'
-              : 'focus:live · Tab switch · ↑/↓ h/j/k/l pan · a scope · H homes · z overview · q quit'}
+          {maximized
+            ? 'maximized · ↑/↓ h/j/k/l pan · z overview · esc restore · q quit'
+            : focus === 'home'
+              ? '↑/↓ j/k select Home · ⏎ open · a scope · esc cancel · q quit'
+              : focus === 'list'
+                ? 'focus:list · Tab switch · ↑/↓ j/k select · ⏎ maximize · a scope · H homes · z overview · q quit'
+                : 'focus:live · Tab switch · ↑/↓ h/j/k/l pan · ⏎ maximize · a scope · H homes · z overview · q quit'}
           {error !== null ? ` · ERR: ${error}` : ''}
         </Text>
       </Box>

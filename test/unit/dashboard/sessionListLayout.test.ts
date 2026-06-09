@@ -3,8 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_LIST_WIDTH,
   MIN_LIST_WIDTH,
+  PANE_BORDER,
+  PANE_LIST_GAP,
+  PANE_RIGHT_SLACK,
   formatSessionId,
   listWidthFor,
+  paneLayout,
   shortId,
 } from '../../../src/dashboard/sessionListLayout.js';
 
@@ -39,5 +43,43 @@ describe('session list layout', () => {
     expect(shortId(ULID)).toBe(`…${ULID.slice(-9)}`);
     expect(shortId(ULID).length).toBe(10);
     expect(shortId('bash')).toBe('bash');
+  });
+});
+
+describe('live view pane layout', () => {
+  it('maximized spans the full width; split shares it with the list + gap', () => {
+    const split = paneLayout(120, 40, false);
+    const max = paneLayout(120, 40, true);
+    expect(split.listWidth).toBe(listWidthFor(120));
+    expect(split.paneCols).toBe(
+      120 - split.listWidth - PANE_LIST_GAP - PANE_BORDER - PANE_RIGHT_SLACK,
+    );
+    expect(max.paneCols).toBe(120 - PANE_BORDER - PANE_RIGHT_SLACK);
+    expect(max.paneCols).toBeGreaterThan(split.paneCols);
+  });
+
+  it("keeps the pane's right edge on the same column across the maximize toggle", () => {
+    // Right edge = left offset + border-left + content. Split sits after the
+    // list and the gap; maximized sits flush at column 0. The shared border and
+    // right slack must make both land on the same column (termCols − slack).
+    for (const cols of [80, 120, 200]) {
+      const split = paneLayout(cols, 40, false);
+      const max = paneLayout(cols, 40, true);
+      const splitRight =
+        split.listWidth + PANE_LIST_GAP + PANE_BORDER + split.paneCols;
+      const maxRight = PANE_BORDER + max.paneCols;
+      expect(maxRight).toBe(splitRight);
+      expect(maxRight).toBe(cols - PANE_RIGHT_SLACK);
+    }
+  });
+
+  it('height is identical in both layouts and floored on tiny terminals', () => {
+    expect(paneLayout(120, 40, false).paneRows).toBe(
+      paneLayout(120, 40, true).paneRows,
+    );
+    expect(paneLayout(120, 40, false).paneRows).toBe(35); // 40 − 5 chrome rows
+    // Floors keep the pane usable even when the terminal is smaller than chrome.
+    expect(paneLayout(20, 6, false).paneRows).toBeGreaterThanOrEqual(4);
+    expect(paneLayout(20, 6, true).paneCols).toBeGreaterThanOrEqual(10);
   });
 });
