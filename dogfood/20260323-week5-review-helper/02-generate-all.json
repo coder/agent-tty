@@ -1,6 +1,0 @@
-{
-  "command": "npx tsx src/tools/review-bundle.ts --all dogfood/",
-  "exitCode": 0,
-  "stdoutPath": "logs/02-generate-all.stdout.txt",
-  "stderrPath": "logs/02-generate-all.stderr.txt"
-}

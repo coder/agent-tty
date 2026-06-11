@@ -1,4 +1,0 @@
-step	exit_code	stdout	stderr	command
-01-screenshot-show-cursor.json	0	dogfood/20260323-week5-render-cursor/01-screenshot-show-cursor.json.out	dogfood/20260323-week5-render-cursor/logs/01-screenshot-show-cursor.json.stderr.txt	npx tsx src/cli/main.ts screenshot 01W5CURSR1774283429 --show-cursor --json
-02-screenshot-hide-cursor.json	0	dogfood/20260323-week5-render-cursor/02-screenshot-hide-cursor.json.out	dogfood/20260323-week5-render-cursor/logs/02-screenshot-hide-cursor.json.stderr.txt	npx tsx src/cli/main.ts screenshot 01W5CURSR1774283429 --hide-cursor --json
-03-screenshot-default.json	0	dogfood/20260323-week5-render-cursor/03-screenshot-default.json.out	dogfood/20260323-week5-render-cursor/logs/03-screenshot-default.json.stderr.txt	npx tsx src/cli/main.ts screenshot 01W5CURSR1774283429 --json

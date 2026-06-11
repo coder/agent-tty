@@ -1,1 +1,0 @@
-Building dogfood/20260325-week6-a-cli-contract

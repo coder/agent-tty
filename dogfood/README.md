@@ -24,7 +24,3 @@ Some bundles are evergreen workflow scenarios, some are release/contract validat
 - Keep release-signoff bundles date-stamped so the evidence trail remains explicit.
 - Update [`CATALOG.md`](./CATALOG.md) whenever a bundle becomes a reviewer-facing reference point.
 - Leave one-off historical bundles in place unless they are superseded and no longer referenced.
-
-## Legacy helper scripts
-
-`generate-week3-bundles.sh` is kept as a historical helper for the earlier week-3 proof set. It is not the main starting point for new reviewers.

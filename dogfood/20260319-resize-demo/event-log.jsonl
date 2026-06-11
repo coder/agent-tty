@@ -1,3 +1,0 @@
-{"seq":0,"ts":"2026-03-19T18:02:30.129Z","type":"output","payload":{"data":"SIZE: 80x24\r\n"}}
-{"seq":1,"ts":"2026-03-19T18:02:30.973Z","type":"output","payload":{"data":"SIZE: 120x40\r\n"}}
-{"seq":2,"ts":"2026-03-19T18:02:30.974Z","type":"resize","payload":{"cols":120,"rows":40}}

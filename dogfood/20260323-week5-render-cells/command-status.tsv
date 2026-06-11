@@ -1,3 +1,0 @@
-step	exit_code	stdout	stderr	command
-01-snapshot-include-cells.json	0	dogfood/20260323-week5-render-cells/01-snapshot-include-cells.json.out	dogfood/20260323-week5-render-cells/logs/01-snapshot-include-cells.json.stderr.txt	npx tsx src/cli/main.ts snapshot 01W5CELLS1774283515 --include-cells --json
-02-snapshot-default.json	0	dogfood/20260323-week5-render-cells/02-snapshot-default.json.out	dogfood/20260323-week5-render-cells/logs/02-snapshot-default.json.stderr.txt	npx tsx src/cli/main.ts snapshot 01W5CELLS1774283515 --json

@@ -1,4 +1,0 @@
-Building dogfood/20260325-week7-d-review-normalization
-warning: Manifest artifact was not found on disk: logs/08-git-status-final.txt
-warning: Manifest artifact was not found on disk: screenshots/02-week7-d-review-page.png
-warning: Manifest artifact was not found on disk: command-status.tsv

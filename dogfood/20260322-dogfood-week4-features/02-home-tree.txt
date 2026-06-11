@@ -1,6 +1,0 @@
-/tmp/tmp.gHWn0YVbwd
-/tmp/tmp.gHWn0YVbwd/sessions
-/tmp/tmp.gHWn0YVbwd/sessions/01KMBTWDCCX4PKCK4FVQ5DN7T2
-/tmp/tmp.gHWn0YVbwd/sessions/01KMBTWDCCX4PKCK4FVQ5DN7T2/events.jsonl
-/tmp/tmp.gHWn0YVbwd/sessions/01KMBTWDCCX4PKCK4FVQ5DN7T2/session.json
-/tmp/tmp.gHWn0YVbwd/sessions/01KMBTWDCCX4PKCK4FVQ5DN7T2/host.sock

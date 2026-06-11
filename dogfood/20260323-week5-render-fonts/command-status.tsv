@@ -1,3 +1,0 @@
-step	exit_code	stdout	stderr	command
-01-screenshot-reference-dark.json	0	dogfood/20260323-week5-render-fonts/01-screenshot-reference-dark.json.out	dogfood/20260323-week5-render-fonts/logs/01-screenshot-reference-dark.json.stderr.txt	npx tsx src/cli/main.ts screenshot 01W5FONTS1774283413 --json --profile reference-dark
-02-screenshot-reference-light.json	0	dogfood/20260323-week5-render-fonts/02-screenshot-reference-light.json.out	dogfood/20260323-week5-render-fonts/logs/02-screenshot-reference-light.json.stderr.txt	npx tsx src/cli/main.ts screenshot 01W5FONTS1774283413 --json --profile reference-light
