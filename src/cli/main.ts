@@ -794,7 +794,7 @@ async function main(): Promise<void> {
     .option('--profile <name>', 'Render profile name')
     .option(
       '--timing <mode>',
-      'Replay timing mode for WebM: recorded, accelerated, max-speed',
+      'Replay timing mode for WebM: recorded (default), accelerated, max-speed',
     )
     .option('--json', 'Emit a JSON command envelope', false)
     .action(

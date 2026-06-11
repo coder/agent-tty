@@ -250,9 +250,7 @@ describe('generateWebmExport', () => {
         targetSeq: 1,
       },
       {
-        mode: 'accelerated',
-        maxGapMs: 100,
-        minFrameHoldMs: 50,
+        mode: 'recorded',
         finalFrameHoldMs: 1_000,
       },
     );
@@ -269,7 +267,7 @@ describe('generateWebmExport', () => {
       cols: 80,
       rows: 24,
       profileName: 'reference-dark',
-      timingMode: 'accelerated',
+      timingMode: 'recorded',
       rendererBackend: 'ghostty-web',
     });
   });
@@ -316,7 +314,7 @@ describe('generateWebmExport', () => {
     expect(result.rendererBackend).toBe('ghostty-web');
   });
 
-  it('passes recorded timing options when timingMode is recorded', async () => {
+  it('passes accelerated timing options when timingMode is accelerated', async () => {
     const mockBackend = createMockBackend();
 
     const result = await generateWebmExport(
@@ -326,16 +324,21 @@ describe('generateWebmExport', () => {
         manifest: createManifest(),
         events: createEvents(),
         outputPath: '/tmp/exports/recording-1-webm.webm',
-        timingMode: 'recorded',
+        timingMode: 'accelerated',
       },
       { backendFactory: () => mockBackend.backend },
     );
 
     expect(mockBackend.replayWithTiming).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'session-01' }),
-      { mode: 'recorded', finalFrameHoldMs: 1_000 },
+      {
+        mode: 'accelerated',
+        maxGapMs: 400,
+        minFrameHoldMs: 100,
+        finalFrameHoldMs: 1_000,
+      },
     );
-    expect(result.timingMode).toBe('recorded');
+    expect(result.timingMode).toBe('accelerated');
   });
 
   it('passes max-speed timing options when timingMode is max-speed', async () => {
@@ -360,7 +363,7 @@ describe('generateWebmExport', () => {
     expect(result.timingMode).toBe('max-speed');
   });
 
-  it('defaults to accelerated timing when timingMode is omitted', async () => {
+  it('defaults to recorded timing when timingMode is omitted', async () => {
     const mockBackend = createMockBackend();
 
     const result = await generateWebmExport(
@@ -376,14 +379,9 @@ describe('generateWebmExport', () => {
 
     expect(mockBackend.replayWithTiming).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'session-01' }),
-      {
-        mode: 'accelerated',
-        maxGapMs: 100,
-        minFrameHoldMs: 50,
-        finalFrameHoldMs: 1_000,
-      },
+      { mode: 'recorded', finalFrameHoldMs: 1_000 },
     );
-    expect(result.timingMode).toBe('accelerated');
+    expect(result.timingMode).toBe('recorded');
   });
 
   it('rejects empty events', async () => {
