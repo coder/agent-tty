@@ -1,7 +1,0 @@
-step	exit_code	duration_ms	stdout	stderr	command
-01-create.json	0	1785	dogfood/20260325-week6-b-artifact-health/logs/01-create.json	dogfood/20260325-week6-b-artifact-health/logs/01-create.stderr.txt	npx tsx src/cli/main.ts create --json -- node --import tsx test/fixtures/apps/color-grid/main.ts
-02-wait-exit.json	0	1224	dogfood/20260325-week6-b-artifact-health/logs/02-wait-exit.json	dogfood/20260325-week6-b-artifact-health/logs/02-wait-exit.stderr.txt	npx tsx src/cli/main.ts wait 01KMJ2RDHRZPYTZQW4WJH2717B --exit --timeout 10000 --json
-03-screenshot.json	0	6588	dogfood/20260325-week6-b-artifact-health/logs/03-screenshot.json	dogfood/20260325-week6-b-artifact-health/logs/03-screenshot.stderr.txt	npx tsx src/cli/main.ts screenshot 01KMJ2RDHRZPYTZQW4WJH2717B --json
-05-inspect-healthy.json	0	1152	dogfood/20260325-week6-b-artifact-health/logs/05-inspect-healthy.json	dogfood/20260325-week6-b-artifact-health/logs/05-inspect-healthy.stderr.txt	npx tsx src/cli/main.ts inspect 01KMJ2RDHRZPYTZQW4WJH2717B --json
-06-delete-artifact.json	0	0	dogfood/20260325-week6-b-artifact-health/logs/06-delete-artifact.json	-	rm -f /tmp/agent-terminal-week6.N8X5Dz/sessions/01KMJ2RDHRZPYTZQW4WJH2717B/artifacts/screenshot-1-reference-dark.png
-07-inspect-missing.json	0	1206	dogfood/20260325-week6-b-artifact-health/logs/07-inspect-missing.json	dogfood/20260325-week6-b-artifact-health/logs/07-inspect-missing.stderr.txt	npx tsx src/cli/main.ts inspect 01KMJ2RDHRZPYTZQW4WJH2717B --json

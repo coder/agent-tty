@@ -1,2 +1,0 @@
-{"seq":0,"ts":"2026-03-25T08:46:03.257Z","type":"output","payload":{"data":"hello\r\n"}}
-{"seq":1,"ts":"2026-03-25T08:46:08.260Z","type":"exit","payload":{"exitCode":0,"exitSignal":null}}

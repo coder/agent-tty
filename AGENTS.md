@@ -117,7 +117,6 @@ npm run version:json
 Other important scripts:
 
 ```sh
-bash dogfood/generate-week3-bundles.sh
 find dogfood -type f -name 'commands.sh' | sort
 ```
 

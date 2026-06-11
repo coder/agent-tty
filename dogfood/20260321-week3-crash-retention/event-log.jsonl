@@ -1,2 +1,0 @@
-{"seq":0,"ts":"2026-03-21T21:49:06.407Z","type":"output","payload":{"data":"crash-test-output\r\n"}}
-{"seq":1,"ts":"2026-03-21T21:49:06.408Z","type":"exit","payload":{"exitCode":42,"exitSignal":null}}

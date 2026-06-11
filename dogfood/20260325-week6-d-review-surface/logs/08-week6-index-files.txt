@@ -1,4 +1,0 @@
-dogfood/20260325-week6-a-cli-contract/index.html
-dogfood/20260325-week6-b-artifact-health/index.html
-dogfood/20260325-week6-c-failure-taxonomy/index.html
-dogfood/20260325-week6-d-review-surface/index.html

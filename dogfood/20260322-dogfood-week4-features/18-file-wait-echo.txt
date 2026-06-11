@@ -1,3 +1,0 @@
-Matched: ECHO: hello from file
-Cursor: row 4, col 7
-capturedAtSeq: 6

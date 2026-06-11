@@ -33,7 +33,6 @@ Paths below are relative to the repository root.
 | `dogfood/20260325-week8-inspect-runtime/`      | `inspect --json` runtime reporting review.                                                                                 |
 | `dogfood/oxlint-oxfmt-migration/`              | Oxc lint/format migration proof with migrated checks, screenshot, asciicast, and WebM recording.                           |
 | `dogfood/token-usage-phase5-proof/`            | Phase 5 eval DX token-usage proof bundle (commit `91a571de`) with screenshot, WebM recording, snapshot, and replay script. |
-| `dogfood/20260323-week5-platform-closure/`     | Platform/documentation closeout evidence from the earlier hardening phase.                                                 |
 
 | `dogfood/20260330-docs-navigation/` | Repository docs walkthrough with screenshots and a WebM recording of the new navigation path. |
 
@@ -44,24 +43,15 @@ Follow-up: `dogfood/token-usage-phase5-proof/` is the only dedicated eval DX pha
 | Bundle                                      | Focus                                                      |
 | ------------------------------------------- | ---------------------------------------------------------- |
 | `dogfood/20260322-dogfood-crash/`           | Crash handling, retained artifacts, and post-crash review. |
-| `dogfood/20260322-week4-failure-recovery/`  | Earlier failure-recovery flow review.                      |
 | `dogfood/20260323-week5-recovery-host/`     | Host-death and reconciliation behavior.                    |
 | `dogfood/20260323-week5-recovery-renderer/` | Renderer failure and recovery behavior.                    |
 | `dogfood/20260323-week5-recovery-replay/`   | Replay/offline recovery behavior.                          |
-| `dogfood/20260321-week3-crash-retention/`   | Historical crash-retention proof for the week-3 milestone. |
-| `dogfood/20260321-post-hardening-smoke/`    | Smoke validation after hardening work.                     |
 | `dogfood/20260323-bugfix-resize/`           | Resize regression repro/fix evidence.                      |
 | `dogfood/20260323-bugfix-scrollback/`       | Scrollback regression repro/fix evidence.                  |
 
 ## Historical bundles
 
-These bundles remain useful context, but they are mostly project-history artifacts rather than the first places a new reviewer should start:
-
-- Early lifecycle and renderer milestone bundles: `dogfood/20260319-*`, `dogfood/20260320-*`, `dogfood/20260321-*`.
-- Week-4 historical review bundles: `dogfood/20260322-dogfood-week4-features/`, `dogfood/20260322-global-cli-context/`, `dogfood/20260322-week4-cli-parity/`, `dogfood/20260322-week4-scrollback-review/`, `dogfood/20260322-week4-unicode-review/`.
-- Week-5 historical workstreams: `dogfood/20260323-week5-*` that are not listed above as canonical or recovery references.
-- Week-6 and Week-7 phased rollout bundles: `dogfood/20260325-week6-*` and `dogfood/20260325-week7-*`.
-- Font fallback investigations: `dogfood/20260326-lazyvim-nerd-font-check/`, `dogfood/20260326-lazyvim-nerd-font-check-2/`, and `dogfood/20260326-nerd-font-fallback/`.
+The date-stamped milestone bundles from the v1 build-out (weeks 1-7 status reviews, font fallback investigations, and similar one-off project-history evidence) have been removed from the working tree to keep this directory reviewer-focused. They remain available in git history if older evidence is ever needed.
 
 ## Catalog maintenance rules
 

@@ -1,8 +1,0 @@
-{
-  "command": "npx tsx src/tools/review-bundle.ts dogfood/20260322-dogfood-alt-screen",
-  "exitCode": 0,
-  "stdoutPath": "logs/01-generate-single.stdout.txt",
-  "stderrPath": "logs/01-generate-single.stderr.txt",
-  "generatedPath": "dogfood/20260322-dogfood-alt-screen/index.html",
-  "fileSizeBytes": 58876
-}

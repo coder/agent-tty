@@ -1,9 +1,0 @@
-{
-  "scenario": "resize-demo",
-  "date": "2026-03-19",
-  "sessionId": "01KM3M6RF40VCPP4WR580KDBE0",
-  "commands": ["create", "wait", "resize", "inspect", "destroy"],
-  "fixture": "resize-demo",
-  "result": "pass",
-  "knownGaps": ["renderer screenshots", "asciicast export", "gc command"]
-}
