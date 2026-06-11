@@ -25,10 +25,12 @@ import type { RenderProfileConfig, ReplayState } from '../renderer/types.js';
 import { invariant, unreachable } from '../util/assert.js';
 
 const REPLAY_TIMEOUT_MS = 5 * 60 * 1000;
-const DEFAULT_ACCELERATED_TIMING: ReplayTimingOptions = Object.freeze({
+// maxGapMs/minFrameHoldMs are tuned for watchability: shorter clamps make the
+// video flicker because every idle gap collapses to a near-instant cut.
+const ACCELERATED_TIMING: ReplayTimingOptions = Object.freeze({
   mode: 'accelerated' as const,
-  maxGapMs: 100,
-  minFrameHoldMs: 50,
+  maxGapMs: 400,
+  minFrameHoldMs: 100,
   finalFrameHoldMs: 1_000,
 });
 
@@ -37,7 +39,7 @@ function buildReplayTimingOptions(mode: ReplayTimingMode): ReplayTimingOptions {
 
   switch (validatedMode) {
     case 'accelerated':
-      return DEFAULT_ACCELERATED_TIMING;
+      return ACCELERATED_TIMING;
     case 'recorded':
       return { mode: 'recorded', finalFrameHoldMs: 1_000 };
     case 'max-speed':
@@ -172,8 +174,9 @@ export async function generateWebmExport(
         height: viewportHeight,
       },
     };
+    // Default to wall-clock timing so exported videos match the recorded pace.
     const resolvedTimingMode: ReplayTimingMode =
-      options.timingMode ?? 'accelerated';
+      options.timingMode ?? 'recorded';
     const timingOptions = buildReplayTimingOptions(resolvedTimingMode);
     const backendFactory = deps?.backendFactory ?? createDefaultBackend;
     const requestedRendererName = resolveRendererName(

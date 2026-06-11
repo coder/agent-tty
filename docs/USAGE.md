@@ -198,6 +198,8 @@ agent-tty record export <session-id> --format asciicast --out ./session.cast --j
 agent-tty record export <session-id> --format webm --timing accelerated --out ./session.webm --json
 ```
 
+WebM export replays with recorded wall-clock timing by default. Pass `--timing accelerated` (idle gaps clamped to 400ms) or `--timing max-speed` for a time-compressed video.
+
 `ghostty-web` provides reference visual truth for reviewable artifacts; it does not promise exact pixel parity with native terminals.
 
 ## Isolation

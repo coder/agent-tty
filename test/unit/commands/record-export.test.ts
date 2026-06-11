@@ -367,7 +367,7 @@ describe('record export command', () => {
       cols: 80,
       rows: 24,
       profileName: 'reference-dark',
-      timingMode: 'accelerated',
+      timingMode: 'recorded',
       rendererBackend: 'ghostty-web',
     });
     mocks.stat.mockResolvedValue({ size: webmBytes });
@@ -445,7 +445,7 @@ describe('record export command', () => {
       expectedRenderProfileHash,
     );
     expect(artifactEntry.metadata.profileName).toBe('reference-dark');
-    expect(artifactEntry.metadata.timingMode).toBe('accelerated');
+    expect(artifactEntry.metadata.timingMode).toBe('recorded');
     expect(artifactEntry.metadata.rendererBackend).toBe('ghostty-web');
 
     expect(mocks.emitSuccess).toHaveBeenCalledTimes(1);
@@ -557,7 +557,7 @@ describe('record export command', () => {
           cols: 80,
           rows: 24,
           profileName: 'reference-dark',
-          timingMode: 'accelerated',
+          timingMode: 'recorded',
           rendererBackend: 'ghostty-web',
         };
       },
@@ -626,7 +626,7 @@ describe('record export command', () => {
       cols: 80,
       rows: 24,
       profileName: 'reference-light',
-      timingMode: 'accelerated',
+      timingMode: 'recorded',
       rendererBackend: 'ghostty-web',
     });
     const webmBytes = 12_345;
@@ -752,7 +752,7 @@ describe('record export command', () => {
       cols: 80,
       rows: 24,
       profileName: 'reference-dark',
-      timingMode: 'accelerated',
+      timingMode: 'recorded',
       rendererBackend: 'ghostty-web',
     });
     const webmBytes = 12_345;
