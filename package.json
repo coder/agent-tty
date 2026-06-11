@@ -67,10 +67,6 @@
     "version:json": "tsx src/cli/main.ts version --json"
   },
   "devDependencies": {
-    "@ai-hero/sandcastle": "^0.5.10",
-    "@effect/cluster": "^0.57.0",
-    "@effect/rpc": "^0.74.0",
-    "@effect/sql": "^0.50.0",
     "@types/node": "25.5.0",
     "@types/react": "^19.2.16",
     "oxfmt": "0.47.0",

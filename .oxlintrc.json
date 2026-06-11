@@ -4,12 +4,7 @@
   "categories": {
     "correctness": "error"
   },
-  "ignorePatterns": [
-    ".sandcastle/vendor/**",
-    "coverage/**",
-    "dist/**",
-    "node_modules/**"
-  ],
+  "ignorePatterns": ["coverage/**", "dist/**", "node_modules/**"],
   "env": {
     "builtin": true,
     "node": true

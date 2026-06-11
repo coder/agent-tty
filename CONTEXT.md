@@ -203,7 +203,7 @@ _Avoid_: tailing, polling, attach
 ### Triage operations
 
 **AFK Triage**:
-A non-interactive run of the `triage` skill, driven by sandcastle inside a **Coder workspace**, that applies labels and posts comments directly without a maintainer in the loop. Routes low-confidence outcomes to `needs-info` instead of waiting.
+A non-interactive run of the `triage` skill inside a **Coder workspace** that applies labels and posts comments directly without a maintainer in the loop. Routes low-confidence outcomes to `needs-info` instead of waiting.
 _Avoid_: "automated triage", "bot triage"
 
 **Triage Batch**:
