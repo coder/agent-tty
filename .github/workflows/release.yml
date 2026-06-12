@@ -361,9 +361,13 @@ jobs:
           CHECKSUM_FILENAME: ${{ needs.prepare-release.outputs.checksum_filename }}
         run: |
           set -euo pipefail
-          create_flags=()
+          # Applied on both paths: under the release-please flow the release
+          # already exists (created at release-PR merge), so the edit path is
+          # the normal route and must keep prereleases off the Latest badge
+          # just like the create path does.
+          release_flags=()
           if [[ "$PACKAGE_VERSION" == *-* ]]; then
-            create_flags+=(--prerelease --latest=false)
+            release_flags+=(--prerelease --latest=false)
           fi
 
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -371,7 +375,8 @@ jobs:
               "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --title "$RELEASE_TITLE" \
-              --notes-file "$RELEASE_NOTES_FILE"
+              --notes-file "$RELEASE_NOTES_FILE" \
+              "${release_flags[@]}"
             gh release upload \
               "$RELEASE_TAG" \
               "$RELEASE_DIR/$TARBALL_FILENAME" \
@@ -387,7 +392,7 @@ jobs:
               --verify-tag \
               --title "$RELEASE_TITLE" \
               --notes-file "$RELEASE_NOTES_FILE" \
-              "${create_flags[@]}"
+              "${release_flags[@]}"
           fi
 
   publish-npm:
