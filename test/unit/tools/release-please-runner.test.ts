@@ -18,6 +18,7 @@ import {
   createCommuniqueChangelogNotes,
   formatChangelogSection,
   formatOutputs,
+  normalizeCommuniqueBody,
   todayIsoDate,
 } from '../../../src/tools/release-please-runner.js';
 import { writeFileSync } from 'node:fs';
@@ -108,6 +109,26 @@ describe('formatChangelogSection', () => {
     expect(formatChangelogSection('0.4.2', '2026-06-12', '  \n')).toBe(
       '## [0.4.2] - 2026-06-12\n\n- Maintenance release with no user-facing changes.',
     );
+  });
+});
+
+describe('normalizeCommuniqueBody', () => {
+  it('demotes stray H2 section headings to the house H3 style', () => {
+    // Observed in a live run: communique --concise emitted `## Changed`
+    // where the historical changelog nests `### Changed` under the version.
+    expect(normalizeCommuniqueBody('## Changed\n\n- A change.')).toBe(
+      '### Changed\n\n- A change.',
+    );
+  });
+
+  it('drops a duplicate leading version heading', () => {
+    expect(
+      normalizeCommuniqueBody('## [0.4.2] - 2026-06-12\n\n### Added\n\n- X.'),
+    ).toBe('### Added\n\n- X.');
+  });
+
+  it('leaves house-style bodies untouched', () => {
+    expect(normalizeCommuniqueBody(SAMPLE_BODY)).toBe(SAMPLE_BODY);
   });
 });
 

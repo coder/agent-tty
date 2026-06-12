@@ -118,19 +118,33 @@ export function buildCommuniqueArgs(
  * would make the merged release PR unparseable and no release would be
  * created.
  */
+/**
+ * Guards the generated section body against LLM drift: drops a leading
+ * version heading if Communique emitted one (the runner prepends its own
+ * canonical heading), and demotes stray H2 section headings to the H3 the
+ * historical CHANGELOG nests under each version (`### Added` / `### Changed`).
+ */
+export function normalizeCommuniqueBody(body: string): string {
+  return body
+    .trim()
+    .replace(/^#{2,3} \[?v?\d[^\n]*\n*/, '')
+    .replace(/^## (?!\[)/gm, '### ')
+    .trim();
+}
+
 export function formatChangelogSection(
   version: string,
   isoDate: string,
   body: string,
 ): string {
-  const trimmed = body.trim();
+  const normalized = normalizeCommuniqueBody(body);
   const content =
-    trimmed === ''
+    normalized === ''
       ? '- Maintenance release with no user-facing changes.'
-      : trimmed;
-  // No trailing newline: release-please's Changelog updater joins the entry
-  // with `\n` on both sides, so a trailing newline here would leave a double
-  // blank line above the previous section.
+      : normalized;
+  // No trailing newline: the changelog updater joins the entry with `\n\n` on
+  // both sides, so a trailing newline here would leave a double blank line
+  // above the previous section.
   return `## [${version}] - ${isoDate}\n\n${content}`;
 }
 
