@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [v0.4.1] - 2026-06-12
+
 ### Added
 
 - `agent-tty ls` is now a short alias for `agent-tty list`. Like the `d`→`dashboard` alias, it is an explicit alias (not prefix matching), so it resolves unambiguously to `list` and is unaffected by the other commands ([#135](https://github.com/coder/agent-tty/pull/135)).
