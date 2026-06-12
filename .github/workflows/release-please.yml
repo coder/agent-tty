@@ -1,0 +1,86 @@
+name: Release Please
+
+# Maintains the single release PR (version bump + Communique-written
+# CHANGELOG section) and, when that PR merges, creates the tag + GitHub
+# Release and dispatches the tag-driven Release pipeline.
+#
+# Runs release-please as a library (src/tools/release-please-runner.ts)
+# instead of googleapis/release-please-action because the stock action cannot
+# use a custom changelog generator, and this repo's changelog entries come
+# from Communique.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          install_args: --locked
+
+      - name: Install CI dependencies
+        run: mise run bootstrap-ci
+
+      - name: Run release-please with Communique notes
+        id: release_please
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          COMMUNIQUE_MODEL: ${{ vars.COMMUNIQUE_MODEL }}
+        run: npx tsx src/tools/release-please-runner.ts
+
+      # Branch pushes made with the workflow token never trigger
+      # `pull_request` workflows, so dispatch the checks explicitly — the
+      # dispatched runs report against the branch head SHA and satisfy the
+      # release PR's required status checks.
+      - name: Dispatch checks onto the release PR branch
+        if: steps.release_please.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BRANCHES: ${{ steps.release_please.outputs.pr_branches }}
+        run: |
+          set -euo pipefail
+          read -ra branches <<< "$PR_BRANCHES"
+          for branch in "${branches[@]}"; do
+            gh workflow run ci.yml --ref "$branch"
+            gh workflow run validate-skills.yml --ref "$branch"
+          done
+
+      # Tags created with the workflow token never trigger `push: tags`
+      # workflows, so start the Release pipeline (quality gates, verified
+      # tarball, GitHub Release assets, npm publish) explicitly.
+      - name: Dispatch the Release pipeline for created releases
+        if: steps.release_please.outputs.releases_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAGS: ${{ steps.release_please.outputs.release_tags }}
+        run: |
+          set -euo pipefail
+          read -ra tags <<< "$RELEASE_TAGS"
+          for tag in "${tags[@]}"; do
+            gh workflow run release.yml --field "tag=$tag"
+          done

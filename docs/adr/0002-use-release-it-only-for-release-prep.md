@@ -1,8 +1,13 @@
 ---
-status: accepted
+status: superseded by 0009
 ---
 
 # Use release-it only for release prep
+
+> **Superseded:** release prep is now owned by release-please with Communique
+> changelog notes ([ADR 0009](0009-release-please-with-communique-notes.md)).
+> The `release:prep` / `release:finalize` commands and the release-it
+> dependency were removed.
 
 ## Context
 

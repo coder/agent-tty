@@ -1,0 +1,23 @@
+# aube configuration (aube reads pnpm-workspace.yaml keys; npm ignores this
+# file, so settings here don't trigger "Unknown project config" warnings the
+# way .npmrc keys do).
+
+# Resolve optional platform dependencies for every platform devs and CI use,
+# so the lockfile is identical no matter which host regenerates it.
+supportedArchitectures:
+  os:
+    - darwin
+    - linux
+    - win32
+  cpu:
+    - x64
+    - arm64
+  libc:
+    - glibc
+    - musl
+
+trustPolicyExclude:
+  # @octokit 9.x is the last CJS line (required by release-please, which is
+  # CJS-only); octokit only publishes provenance attestations for the newer
+  # pure-ESM majors, so this exact version has no trust evidence to verify.
+  - '@octokit/endpoint@9.0.6'
