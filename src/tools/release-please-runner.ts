@@ -19,6 +19,12 @@
  * `pull_request` events) and the tag-driven Release pipeline (tags created
  * with the workflow token never trigger `push: tags` events).
  *
+ * CHANGELOG.md keeps a `## [Unreleased]` section at the top: Communique
+ * requires the heading to exist and reconciles any hand-staged draft body
+ * into the notes it generates. A custom updater (see
+ * {@link UnreleasedAwareChangelog}) therefore inserts release sections below
+ * that heading and clears the reconciled draft.
+ *
  * Run `npx tsx src/tools/release-please-runner.ts --dry-run` with
  * GITHUB_TOKEN/GITHUB_REPOSITORY and an LLM key to preview the candidate
  * release PR and releases without mutating anything on GitHub.
@@ -35,10 +41,18 @@ import {
   GitHub,
   Manifest,
   registerChangelogNotes,
+  registerReleaseType,
+  type BuildUpdatesOptions,
   type ChangelogNotes,
   type CreatedRelease,
   type PullRequest,
 } from 'release-please';
+// Deep imports: neither the Node strategy class nor the stock Changelog
+// updater is re-exported from the package root, and release-please ships no
+// `exports` map restricting subpath access.
+import { Node } from 'release-please/build/src/strategies/node.js';
+import { Changelog } from 'release-please/build/src/updaters/changelog.js';
+import type { Update } from 'release-please/build/src/update.js';
 
 import { isDirectExecution } from '../util/isDirectExecution.js';
 
@@ -179,6 +193,88 @@ export function createCommuniqueChangelogNotes(
   };
 }
 
+const UNRELEASED_HEADING_PATTERN = /^#{2,3} \[?Unreleased\]?[ \t]*$/m;
+// An H1 or H2 heading ends the Unreleased section; H3 stays inside it because
+// hand-staged drafts use Keep-a-Changelog `### Added`-style subsections.
+const NEXT_SECTION_PATTERN = /^##? /m;
+const TITLE_PATTERN = /^# .+$/m;
+
+/**
+ * Replaces release-please's stock Changelog updater, which would insert the
+ * new section at the first `\n###? v?[0-9[]` match — and `## [Unreleased]`
+ * matches that pattern, so the release section would land *above* it.
+ *
+ * The `[Unreleased]` heading must stay at the top of CHANGELOG.md: Communique
+ * refuses to run without it, and it feeds the section's body to the LLM as
+ * draft material to reconcile into the generated notes. This updater keeps
+ * the heading, drops the draft body (Communique has already folded it into
+ * `changelogEntry` by the time this runs), and inserts the new release
+ * section directly below.
+ */
+export class UnreleasedAwareChangelog {
+  readonly changelogEntry: string;
+
+  constructor(options: { changelogEntry: string }) {
+    this.changelogEntry = options.changelogEntry;
+  }
+
+  updateContent(content: string | undefined): string {
+    const existing = (content ?? '').replace(/\r\n/g, '\n');
+    const entry = this.changelogEntry.trim();
+    const heading = UNRELEASED_HEADING_PATTERN.exec(existing);
+
+    if (heading !== null) {
+      const headingEnd = heading.index + heading[0].length;
+      const head = existing.slice(0, headingEnd);
+      const tail = existing.slice(headingEnd);
+      const next = NEXT_SECTION_PATTERN.exec(tail);
+      const rest = next === null ? '' : tail.slice(next.index);
+      return joinSections(head, entry, rest);
+    }
+
+    // Self-heal a missing Unreleased anchor so Communique keeps working on
+    // the next run.
+    const title = TITLE_PATTERN.exec(existing);
+    if (title !== null) {
+      const titleEnd = title.index + title[0].length;
+      const head = `${existing.slice(0, titleEnd)}\n\n## [Unreleased]`;
+      return joinSections(head, entry, existing.slice(titleEnd));
+    }
+    return joinSections('# Changelog\n\n## [Unreleased]', entry, existing);
+  }
+}
+
+function joinSections(head: string, entry: string, rest: string): string {
+  const sections = [head.trimEnd(), entry];
+  if (rest.trim() !== '') {
+    sections.push(rest.trim());
+  }
+  return `${sections.join('\n\n')}\n`;
+}
+
+/**
+ * The stock `node` strategy with the CHANGELOG.md updater swapped for
+ * {@link UnreleasedAwareChangelog}. Registered over the builtin `node` type so
+ * `release-please-config.json` keeps the standard `"release-type": "node"`.
+ */
+export class CommuniqueNodeStrategy extends Node {
+  protected override async buildUpdates(
+    options: BuildUpdatesOptions,
+  ): Promise<Update[]> {
+    const updates = await super.buildUpdates(options);
+    return updates.map((update) =>
+      update.updater instanceof Changelog
+        ? {
+            ...update,
+            updater: new UnreleasedAwareChangelog({
+              changelogEntry: update.updater.changelogEntry,
+            }),
+          }
+        : update,
+    );
+  }
+}
+
 export interface RunnerOutputs {
   readonly prs_created: string;
   readonly pr_branches: string;
@@ -216,6 +312,26 @@ function writeGithubOutputs(outputs: RunnerOutputs): void {
   appendFileSync(outputPath, `${lines}\n`);
 }
 
+/**
+ * Dry-run aid: applies the candidate PR's CHANGELOG.md update to the local
+ * working-tree copy so the resulting file can be inspected without pushing.
+ */
+function previewChangelog(updates: readonly Update[]): string | undefined {
+  const changelogUpdate = updates.find(
+    (update) => update.updater instanceof UnreleasedAwareChangelog,
+  );
+  if (changelogUpdate === undefined) {
+    return undefined;
+  }
+  let current: string | undefined;
+  try {
+    current = readFileSync(changelogUpdate.path, 'utf8');
+  } catch {
+    current = undefined;
+  }
+  return changelogUpdate.updater.updateContent(current);
+}
+
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (value === undefined || value === '') {
@@ -234,6 +350,7 @@ async function main(): Promise<void> {
   }
 
   registerChangelogNotes('communique', () => createCommuniqueChangelogNotes());
+  registerReleaseType('node', (options) => new CommuniqueNodeStrategy(options));
 
   const github = await GitHub.create({ owner, repo, token });
   // The override exists for --dry-run debugging against a feature branch
@@ -259,6 +376,7 @@ async function main(): Promise<void> {
             headBranchName: pullRequest.headRefName,
             version: pullRequest.version?.toString(),
             body: pullRequest.body.toString(),
+            changelogPreview: previewChangelog(pullRequest.updates),
           })),
         },
         null,

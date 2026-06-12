@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-// Deep imports into release-please internals: these tests pin the two
-// compatibility contracts the runner depends on but release-please does not
-// document — (a) the merged release PR body must parse back into a version +
-// notes (otherwise no GitHub Release is created on merge), and (b) the
-// Changelog updater must insert the new section above this repo's historical
-// `## [v<version>] - <date>` headings.
-import { Changelog } from 'release-please/build/src/updaters/changelog.js';
+// Deep imports into release-please internals: these tests pin the
+// compatibility contract the runner depends on but release-please does not
+// document — the merged release PR body must parse back into a version +
+// notes, otherwise no GitHub Release is created on merge.
 import { PullRequestBody } from 'release-please/build/src/util/pull-request-body.js';
 import {
   PullRequestTitle,
@@ -15,6 +12,7 @@ import {
 import { Version } from 'release-please/build/src/version.js';
 
 import {
+  UnreleasedAwareChangelog,
   assertLlmCredentials,
   buildCommuniqueArgs,
   createCommuniqueChangelogNotes,
@@ -162,10 +160,9 @@ describe('release PR body round-trip (release-please compatibility)', () => {
   });
 });
 
-describe('CHANGELOG.md insertion (release-please compatibility)', () => {
-  const existing = [
-    '# Changelog',
-    '',
+describe('UnreleasedAwareChangelog', () => {
+  const entry = formatChangelogSection('0.4.2', '2026-06-13', SAMPLE_BODY);
+  const previousSections = [
     '## [v0.4.1] - 2026-06-12',
     '',
     '### Added',
@@ -180,27 +177,71 @@ describe('CHANGELOG.md insertion (release-please compatibility)', () => {
     '',
   ].join('\n');
 
-  it('inserts the new section above the previous v-prefixed heading', () => {
-    const updater = new Changelog({
-      version: Version.parse('0.4.2'),
-      changelogEntry: formatChangelogSection(
-        '0.4.2',
-        '2026-06-13',
-        SAMPLE_BODY,
-      ),
-    });
+  it('keeps the empty Unreleased anchor and inserts the section below it', () => {
+    const existing = `# Changelog\n\n## [Unreleased]\n\n${previousSections}`;
+    const updated = new UnreleasedAwareChangelog({
+      changelogEntry: entry,
+    }).updateContent(existing);
 
-    const updated = updater.updateContent(existing);
-
-    const newIndex = updated.indexOf('## [0.4.2] - 2026-06-13');
-    const previousIndex = updated.indexOf('## [v0.4.1] - 2026-06-12');
-    expect(newIndex).toBeGreaterThan(updated.indexOf('# Changelog'));
-    expect(newIndex).toBeGreaterThan(-1);
-    expect(previousIndex).toBeGreaterThan(newIndex);
-    // Exactly one blank line between the new section and the previous one.
-    expect(updated).toContain(
-      '--timing recorded` ([#139](https://github.com/coder/agent-tty/pull/139)).\n\n## [v0.4.1]',
+    expect(updated).toBe(
+      `# Changelog\n\n## [Unreleased]\n\n${entry}\n\n${previousSections.trim()}\n`,
     );
+  });
+
+  it('clears a hand-staged draft body, including H3 subsections', () => {
+    // Communique reconciles the draft into the generated notes before this
+    // updater runs; leaving it in place would leak it into every later
+    // release.
+    const existing = [
+      '# Changelog',
+      '',
+      '## [Unreleased]',
+      '',
+      '### Added',
+      '',
+      '- Hand-staged draft bullet.',
+      '',
+      previousSections,
+    ].join('\n');
+    const updated = new UnreleasedAwareChangelog({
+      changelogEntry: entry,
+    }).updateContent(existing);
+
+    expect(updated).not.toContain('Hand-staged draft bullet');
+    expect(updated.indexOf('## [Unreleased]')).toBeLessThan(
+      updated.indexOf('## [0.4.2] - 2026-06-13'),
+    );
+    expect(updated.indexOf('## [0.4.2] - 2026-06-13')).toBeLessThan(
+      updated.indexOf('## [v0.4.1] - 2026-06-12'),
+    );
+  });
+
+  it('accepts the bracketless Unreleased variant communique also allows', () => {
+    const existing = `# Changelog\n\n## Unreleased\n\n${previousSections}`;
+    const updated = new UnreleasedAwareChangelog({
+      changelogEntry: entry,
+    }).updateContent(existing);
+
+    expect(updated).toContain(`## Unreleased\n\n${entry}\n\n## [v0.4.1]`);
+  });
+
+  it('self-heals a missing Unreleased anchor below the title', () => {
+    const existing = `# Changelog\n\n${previousSections}`;
+    const updated = new UnreleasedAwareChangelog({
+      changelogEntry: entry,
+    }).updateContent(existing);
+
+    expect(updated).toBe(
+      `# Changelog\n\n## [Unreleased]\n\n${entry}\n\n${previousSections.trim()}\n`,
+    );
+  });
+
+  it('scaffolds a fresh changelog when the file is missing', () => {
+    const updated = new UnreleasedAwareChangelog({
+      changelogEntry: entry,
+    }).updateContent(undefined);
+
+    expect(updated).toBe(`# Changelog\n\n## [Unreleased]\n\n${entry}\n`);
   });
 });
 
