@@ -25,7 +25,7 @@ Three workflows cooperate:
 
 1. **Release Please** ([`.github/workflows/release-please.yml`](../.github/workflows/release-please.yml)) runs on every push to `main`. It executes [`src/tools/release-please-runner.ts`](../src/tools/release-please-runner.ts), which runs release-please as a library with Communique registered as the changelog generator (`"changelog-type": "communique"` in [`release-please-config.json`](../release-please-config.json)). Each run:
    - tags and creates the GitHub Release for any release PR that merged since the last run, then dispatches the **Release** workflow for that tag;
-   - opens or updates the single release PR (title `chore(release): <version>`, head branch `release-please--branches--main--components--agent-tty`), carrying the `package.json` version bump plus a new `CHANGELOG.md` section written by Communique (`communique generate HEAD <last-tag> --concise`);
+   - opens or updates the single release PR (title `chore(release): <version>`, head branch `release-please--branches--main`), carrying the `package.json` version bump plus a new `CHANGELOG.md` section written by Communique (`communique generate HEAD <last-tag> --concise`);
    - dispatches **CI** and **Validate skills** onto the release branch (pushes made with the workflow token never trigger `pull_request` workflows on their own).
 2. **Release** ([`.github/workflows/release.yml`](../.github/workflows/release.yml)) is the publish pipeline (see below). It is dispatched by Release Please after the tag exists, and still also triggers on manually pushed `v*` tags.
 3. **CI** runs on the release PR like on any other PR and gates the merge.

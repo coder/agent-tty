@@ -329,6 +329,23 @@ function joinSections(head: string, entry: string, rest: string): string {
  * `release-please-config.json` keeps the standard `"release-type": "node"`.
  */
 export class CommuniqueNodeStrategy extends Node {
+  /**
+   * The stock strategy always embeds the package name in the release branch
+   * (`release-please--branches--main--components--agent-tty`), even when
+   * `include-component-in-tag` is false. Follow the tag setting instead so
+   * this single-package repo gets the plain `release-please--branches--main`.
+   *
+   * Migration note: buildRelease() skips release creation when a merged PR's
+   * branch component does not match this value, so a release PR opened on
+   * the old component-suffixed branch must be closed — never merged — once
+   * this is live; the next push to main recreates it on the new branch.
+   */
+  override async getBranchComponent(): Promise<string | undefined> {
+    return this.includeComponentInTag
+      ? await super.getBranchComponent()
+      : undefined;
+  }
+
   protected override async buildUpdates(
     options: BuildUpdatesOptions,
   ): Promise<Update[]> {
