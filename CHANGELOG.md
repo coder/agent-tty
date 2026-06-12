@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-06-12
+
+### Changed
+
+- Releases are now driven by release-please with Communique authoring the changelog section. CHANGELOG headings for new releases drop the `v` prefix (e.g. `## [0.4.2] - ...`); the historical `## [v0.4.1]` entry is left untouched. No CLI, JSON envelope, snapshot, recording, or export behavior changes ([#143](https://github.com/coder/agent-tty/pull/143) by @ThomasK33).
+
 ## [v0.4.1] - 2026-06-12
 
 ### Added
