@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## Added
+
+- `agent-tty ls` is now a short alias for `agent-tty list`. Like the `d`→`dashboard` alias, it is an explicit alias (not prefix matching), so it resolves unambiguously to `list` and is unaffected by the other commands ([#135](https://github.com/coder/agent-tty/pull/135)).
+- Dashboard Live View can now be maximized: press `Enter` from the session list or the focused Live View to expand the selected session's Live View to the full dashboard body (dropping the session list); `Esc` restores the split. Maximize is a modal layer that never mutates `focus`, so `Esc` returns to whatever was focused underneath. Panning (`↑/↓ h/j/k/l`) and the `z` Overview toggle keep working while maximized; the header, footer, and the same right edge are preserved across the toggle so the frame never shifts. `Tab`/`H`/`a` are inert in maximized mode so it reads as a distinct mode ([#136](https://github.com/coder/agent-tty/pull/136)).
+
+## Changed
+
+- `record export --format webm` now defaults to `--timing recorded`, so exported videos play back at the recorded wall-clock pace instead of the previous `accelerated` default that clamped every idle gap to 100ms and turned most interactive sessions into ~2s flash-by clips. `accelerated` and `max-speed` remain available as explicit opt-ins, and `accelerated` has been retuned for watchability: idle gaps now clamp to 400ms (was 100ms) and each frame holds at least 100ms (was 50ms). The CLI JSON envelope shape is unchanged — only the default value of `metadata.timingMode` differs when `--timing` is omitted ([#139](https://github.com/coder/agent-tty/pull/139)).
+
 ## [v0.4.1] - 2026-06-12
 
 ### Added
