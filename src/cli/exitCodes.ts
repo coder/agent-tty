@@ -1,5 +1,6 @@
 import { ERROR_CODES } from '../protocol/errors.js';
 
+// Public contract: documented in docs/USAGE.md ("Exit Codes"). Keep in sync.
 const EXIT_CODE_BY_ERROR_CODE: Readonly<Record<string, number>> = Object.freeze(
   {
     [ERROR_CODES.INVALID_SESSION_ID]: 2,

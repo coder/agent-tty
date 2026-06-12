@@ -9,6 +9,8 @@ Give your AI agent a real terminal it can drive, and get back reviewable snapsho
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 ![Node](https://img.shields.io/node/v/agent-tty)
 
+[Quickstart](#quickstart) · [Why](#why-not-just-tmux-expect-asciinema-or-playwright) · [How it works](#how-it-works) · [Commands](#command-surface) · [Contributing](#contributing)
+
 ![agent-tty: drive a terminal session and watch it live in the dashboard](./assets/hero.gif)
 
 Tools like `tmux` or `screen` help _you_ manage your own terminal windows. `agent-tty` is for handing a real, long-lived terminal to an AI coding agent, so it can run commands, drive interactive apps like `nvim` or `htop`, and read the screen back. Because every session is recorded, you never have to take the agent's word for what happened: you (or another agent) get a plain-text snapshot, a real screenshot, or a video of the actual screen, and can replay it to check the work. It works just as well for plain shell automation and CI smoke tests with no agent involved.
@@ -48,13 +50,13 @@ npm install -g agent-tty
 export AGENT_TTY_HOME="$(mktemp -d)"
 agent-tty doctor --json                  # check your environment
 
-# Open a session, do something, wait for it, look at the result.
-SID=$(agent-tty create --json -- /bin/bash | jq -r '.result.sessionId')
-agent-tty run "$SID" 'printf "hello from agent-tty\n"' --json
-agent-tty wait "$SID" --text 'hello from agent-tty' --json
-agent-tty snapshot "$SID" --format text --json
-agent-tty screenshot "$SID" --json
-agent-tty destroy "$SID" --json
+# The canonical loop:
+SID=$(agent-tty create --json -- /bin/bash | jq -r '.result.sessionId')  # 1. open a session
+agent-tty run "$SID" 'printf "hello from agent-tty\n"' --json            # 2. type into it
+agent-tty wait "$SID" --text 'hello from agent-tty' --json               # 3. wait for the screen
+agent-tty snapshot "$SID" --format text --json                           # 4. read it back
+agent-tty screenshot "$SID" --json                                       # 5. capture proof
+agent-tty destroy "$SID" --json                                          # 6. clean up
 ```
 
 Driving an interactive TUI is the same loop, with key chords and a wait for the screen to settle:
@@ -111,9 +113,17 @@ A colleague then used `agent-tty` to build an experimental TUI for Coder agents 
 
 ## Command surface
 
-Every user-facing command takes `--json` and returns a stable, machine-readable envelope. The commands cover the session lifecycle (`create`, `list`, `inspect`, `destroy`, `gc`), input and control (`run`, `type`, `paste`, `send-keys`, `batch`, `resize`, `signal`, `mark`), observation and capture (`wait`, `snapshot`, `screenshot`, `record export`), the live `dashboard`, and environment checks (`version`, `doctor`, `skills`).
+Every user-facing command takes `--json` and returns a stable, machine-readable envelope, and exits with a stable code (`0` success, `2` usage error, `3` session not found, …) so scripts can branch without parsing output.
 
-See [`docs/USAGE.md`](./docs/USAGE.md) for the full flag reference and [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) for renderer and environment issues.
+| Group                   | Commands                                                                 |
+| ----------------------- | ------------------------------------------------------------------------ |
+| Session lifecycle       | `create`, `list`, `inspect`, `destroy`, `gc`                             |
+| Input and control       | `run`, `type`, `paste`, `send-keys`, `batch`, `resize`, `signal`, `mark` |
+| Observation and capture | `wait`, `snapshot`, `screenshot`, `record export`                        |
+| Live view               | `dashboard`                                                              |
+| Environment             | `version`, `doctor`, `skills`                                            |
+
+The CLI documents itself: `agent-tty --help` lists every command, and `agent-tty <command> --help` shows its flags. The full reference, including the exit-code table, is in [`docs/USAGE.md`](./docs/USAGE.md); renderer and environment issues are in [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md).
 
 ## Agent skills
 
