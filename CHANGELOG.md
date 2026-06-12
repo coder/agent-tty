@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-06-12
+
+### Documentation
+
+- Document the stable CLI exit-code contract (`0`–`11`) in `docs/USAGE.md`, add an exit-codes section, and clarify that a standalone `wait` timeout exits `0` with `timedOut: true` in the JSON envelope while exit code `11` (`WAIT_TIMEOUT`) only surfaces from a fail-fast `batch`. Restructure the README with anchor nav, a numbered "canonical loop" Quickstart, and a grouped command-surface table ([#150](https://github.com/coder/agent-tty/pull/150) by @ThomasK33).
+
+### Changed
+
+- Pre-1.0 versioning cadence: `feat:` commits now bump the minor version (e.g. `0.4.x` → `0.5.0`) instead of being flattened into patch releases. `fix:` still bumps patch, and breaking changes still bump minor rather than jumping to 1.0.0 — reaching 1.0.0 remains an explicit `Release-As: 1.0.0` decision ([#152](https://github.com/coder/agent-tty/pull/152) by @ThomasK33).
+
+### Fixed
+
+- Release-please standing PR branch is now `release-please--branches--main` instead of `release-please--branches--main--components--agent-tty`. The stock node strategy embedded the component name in the branch even with `include-component-in-tag: false`; `CommuniqueNodeStrategy` now overrides `getBranchComponent()` so the branch follows the tag setting. Any release PR still open on the old component-suffixed branch must be closed (not merged) — merging it would silently skip release creation due to the component mismatch in `buildRelease()` ([#147](https://github.com/coder/agent-tty/pull/147) by @ThomasK33).
+
 ## [0.4.3] - 2026-06-12
 
 ### Fixed

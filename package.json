@@ -1,6 +1,6 @@
 {
   "name": "agent-tty",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Terminal automation CLI for AI agents and humans",
   "license": "Apache-2.0",
   "keywords": [
