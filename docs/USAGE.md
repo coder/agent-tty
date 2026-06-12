@@ -104,6 +104,8 @@ Useful flags:
 - `--exit`: wait for the process to exit.
 - `--timeout <ms>`: maximum wait time in milliseconds, with `0` meaning infinite.
 
+On timeout, a standalone `wait` still exits `0` and reports `matched: false` / `timedOut: true` in the JSON result — check the envelope, not the exit code. Inside `batch`, a timed-out `wait` step is a step failure (`WAIT_TIMEOUT`, exit code `11` under fail-fast).
+
 ### Screen Hash
 
 `snapshot` results (both `--format structured` and `--format text`) and a **matched** `wait` result carry an optional `screenHash`: a lowercase 64-character hex SHA-256 of the visible screen text. Compare it across two calls to tell whether the visible screen actually changed — equal hashes mean identical visible content, even if the event-log sequence advanced on a no-op repaint.
@@ -228,6 +230,27 @@ agent-tty create --env PROMPT_EOL_MARK='%B%S%#%s%b' -- /bin/zsh
 ```
 
 A lone `'%'` does **not** restore the marker (zsh treats it as a prompt escape that expands to nothing); use `'%B%S%#%s%b'` for the styled default or `'%%'` for a plain percent. The default is applied at spawn time and is not stored in the manifest, so it does not appear in `inspect`, `list`, or `create --json` output. If your `~/.zshrc` assigns `PROMPT_EOL_MARK` it runs after the environment is imported and wins, so the marker can reappear — remove that line or set the value you want via `--env`.
+
+## Exit Codes
+
+Every command exits with a stable code, so scripts can branch without parsing output. The `--json` error envelope carries the precise `error.code` (for example `WAIT_TIMEOUT`); the exit code is a coarser, stable summary of it.
+
+| Exit code | Meaning                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`       | Success.                                                                                                                                    |
+| `1`       | Internal or unclassified error.                                                                                                             |
+| `2`       | Usage error: unknown command or flag, or an invalid argument (session ID, dimensions, keys, duration, signal, input).                       |
+| `3`       | Session not found.                                                                                                                          |
+| `4`       | Session is not running or already destroyed.                                                                                                |
+| `5`       | Session host timed out.                                                                                                                     |
+| `6`       | Session host unreachable.                                                                                                                   |
+| `7`       | Export failed.                                                                                                                              |
+| `8`       | Storage read/write or manifest validation error.                                                                                            |
+| `9`       | Protocol or RPC error.                                                                                                                      |
+| `10`      | Replay failed.                                                                                                                              |
+| `11`      | A `wait` step inside a fail-fast `batch` timed out (standalone `wait` exits `0` with `timedOut: true` in the result — see [`wait`](#wait)). |
+
+A fail-fast `batch` exits with the failed step's code (for example `11` for a wait timeout); `--keep-going` exits `1` if any step failed.
 
 ## Anti-Patterns
 
