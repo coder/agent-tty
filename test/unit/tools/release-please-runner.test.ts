@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 // compatibility contract the runner depends on but release-please does not
 // document — the merged release PR body must parse back into a version +
 // notes, otherwise no GitHub Release is created on merge.
+import { BranchName } from 'release-please/build/src/util/branch-name.js';
 import { PullRequestBody } from 'release-please/build/src/util/pull-request-body.js';
 import {
   PullRequestTitle,
@@ -12,6 +13,7 @@ import {
 import { Version } from 'release-please/build/src/version.js';
 
 import {
+  CommuniqueNodeStrategy,
   UnreleasedAwareChangelog,
   assertLlmCredentials,
   buildCommuniqueArgs,
@@ -355,6 +357,40 @@ describe('createCommuniqueChangelogNotes', () => {
         targetBranch: 'main',
       }),
     ).rejects.toThrow('ANTHROPIC_API_KEY or OPENAI_API_KEY');
+  });
+});
+
+describe('CommuniqueNodeStrategy branch component', () => {
+  // The branch component follows include-component-in-tag (the stock strategy
+  // always embeds the package name in the branch). The fake `this` works
+  // because the override only touches that flag and, on the true path, the
+  // stock implementation's `component` field.
+  it('drops the component when tags do not carry one', async () => {
+    await expect(
+      CommuniqueNodeStrategy.prototype.getBranchComponent.call({
+        includeComponentInTag: false,
+      } as unknown as CommuniqueNodeStrategy),
+    ).resolves.toBeUndefined();
+  });
+
+  it('keeps the stock component when tags carry one', async () => {
+    await expect(
+      CommuniqueNodeStrategy.prototype.getBranchComponent.call({
+        includeComponentInTag: true,
+        component: 'agent-tty',
+      } as unknown as CommuniqueNodeStrategy),
+    ).resolves.toBe('agent-tty');
+  });
+
+  it('round-trips the short branch name (release-time contract)', () => {
+    // buildRelease() parses the merged PR's branch and skips the release on a
+    // component mismatch, so the componentless name must parse back cleanly.
+    expect(BranchName.ofTargetBranch('main').toString()).toBe(
+      'release-please--branches--main',
+    );
+    const parsed = BranchName.parse('release-please--branches--main');
+    expect(parsed?.getTargetBranch()).toBe('main');
+    expect(parsed?.getComponent()).toBeUndefined();
   });
 });
 
