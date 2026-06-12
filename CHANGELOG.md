@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-06-12
+
+### Fixed
+
+- Dispatch the `release.yml` pipeline with `--ref "$tag"` so the run is attributed to the tag ref instead of `main`, restoring tag-pinned OIDC claims for npm trusted publishing and provenance ([#145](https://github.com/coder/agent-tty/pull/145) by @ThomasK33).
+
 ## [0.4.2] - 2026-06-12
 
 ### Changed
