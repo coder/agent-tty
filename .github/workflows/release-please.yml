@@ -53,12 +53,32 @@ jobs:
           COMMUNIQUE_MODEL: ${{ vars.COMMUNIQUE_MODEL }}
         run: npx tsx src/tools/release-please-runner.ts
 
+      # Tags created with the workflow token never trigger `push: tags`
+      # workflows, so start the Release pipeline (quality gates, verified
+      # tarball, GitHub Release assets, npm publish) explicitly. The
+      # `!cancelled()` guard matters: the runner writes the release outputs
+      # before it rebuilds the release PR notes, so a notes failure (e.g. an
+      # LLM outage) still dispatches the pipeline for the tag it just created
+      # — a rerun could not recover that, because the merged release PR is
+      # already labeled `autorelease: tagged`.
+      - name: Dispatch the Release pipeline for created releases
+        if: ${{ !cancelled() && steps.release_please.outputs.releases_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAGS: ${{ steps.release_please.outputs.release_tags }}
+        run: |
+          set -euo pipefail
+          read -ra tags <<< "$RELEASE_TAGS"
+          for tag in "${tags[@]}"; do
+            gh workflow run release.yml --field "tag=$tag"
+          done
+
       # Branch pushes made with the workflow token never trigger
       # `pull_request` workflows, so dispatch the checks explicitly — the
       # dispatched runs report against the branch head SHA and satisfy the
       # release PR's required status checks.
       - name: Dispatch checks onto the release PR branch
-        if: steps.release_please.outputs.prs_created == 'true'
+        if: ${{ !cancelled() && steps.release_please.outputs.prs_created == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BRANCHES: ${{ steps.release_please.outputs.pr_branches }}
@@ -68,19 +88,4 @@ jobs:
           for branch in "${branches[@]}"; do
             gh workflow run ci.yml --ref "$branch"
             gh workflow run validate-skills.yml --ref "$branch"
-          done
-
-      # Tags created with the workflow token never trigger `push: tags`
-      # workflows, so start the Release pipeline (quality gates, verified
-      # tarball, GitHub Release assets, npm publish) explicitly.
-      - name: Dispatch the Release pipeline for created releases
-        if: steps.release_please.outputs.releases_created == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAGS: ${{ steps.release_please.outputs.release_tags }}
-        run: |
-          set -euo pipefail
-          read -ra tags <<< "$RELEASE_TAGS"
-          for tag in "${tags[@]}"; do
-            gh workflow run release.yml --field "tag=$tag"
           done

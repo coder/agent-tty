@@ -31,7 +31,13 @@
  */
 
 import { execFile } from 'node:child_process';
-import { appendFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -108,6 +114,34 @@ export function buildCommuniqueArgs(
 }
 
 /**
+ * Guards the generated section body against LLM drift: drops a leading
+ * version heading if Communique emitted one (the runner prepends its own
+ * canonical heading), and demotes stray H2 section headings to the H3 the
+ * historical CHANGELOG nests under each version (`### Added` / `### Changed`).
+ * Lines inside fenced code blocks are left untouched.
+ */
+export function normalizeCommuniqueBody(body: string): string {
+  const withoutLeadingHeading = body
+    .trim()
+    .replace(/^#{2,3} \[?v?\d[^\n]*\n*/, '');
+  let inFence = false;
+  return withoutLeadingHeading
+    .split('\n')
+    .map((line) => {
+      if (FENCE_PATTERN.test(line)) {
+        inFence = !inFence;
+        return line;
+      }
+      if (!inFence && /^## (?!\[)/.test(line)) {
+        return `### ${line.slice(3)}`;
+      }
+      return line;
+    })
+    .join('\n')
+    .trim();
+}
+
+/**
  * Formats the section that becomes the CHANGELOG.md entry, the release PR
  * body, and (after merge) the GitHub Release notes.
  *
@@ -118,20 +152,6 @@ export function buildCommuniqueArgs(
  * would make the merged release PR unparseable and no release would be
  * created.
  */
-/**
- * Guards the generated section body against LLM drift: drops a leading
- * version heading if Communique emitted one (the runner prepends its own
- * canonical heading), and demotes stray H2 section headings to the H3 the
- * historical CHANGELOG nests under each version (`### Added` / `### Changed`).
- */
-export function normalizeCommuniqueBody(body: string): string {
-  return body
-    .trim()
-    .replace(/^#{2,3} \[?v?\d[^\n]*\n*/, '')
-    .replace(/^## (?!\[)/gm, '### ')
-    .trim();
-}
-
 export function formatChangelogSection(
   version: string,
   isoDate: string,
@@ -198,6 +218,11 @@ export function createCommuniqueChangelogNotes(
           model: env.COMMUNIQUE_MODEL,
         });
         await runCommunique(args, env);
+        if (!existsSync(outputFile)) {
+          throw new Error(
+            `communique exited successfully but wrote no output file at ${outputFile}`,
+          );
+        }
         const body = readFileSync(outputFile, 'utf8');
         return formatChangelogSection(options.version, todayIsoDate(), body);
       } finally {
@@ -207,11 +232,37 @@ export function createCommuniqueChangelogNotes(
   };
 }
 
-const UNRELEASED_HEADING_PATTERN = /^#{2,3} \[?Unreleased\]?[ \t]*$/m;
+const UNRELEASED_HEADING_PATTERN = /^#{2,3} \[?Unreleased\]?[ \t]*$/;
 // An H1 or H2 heading ends the Unreleased section; H3 stays inside it because
 // hand-staged drafts use Keep-a-Changelog `### Added`-style subsections.
-const NEXT_SECTION_PATTERN = /^##? /m;
-const TITLE_PATTERN = /^# .+$/m;
+const NEXT_SECTION_PATTERN = /^##? /;
+const TITLE_PATTERN = /^# .+$/;
+const FENCE_PATTERN = /^ {0,3}(?:`{3,}|~{3,})/;
+
+/**
+ * Index of the first line at or after `start` matching `predicate` outside
+ * any fenced code block, or -1. Fence state is tracked from the first line so
+ * heading-like lines inside ``` fences (a `# comment` in a bash example, a
+ * `## heading` in a markdown sample) are never mistaken for real headings.
+ */
+function findLineOutsideFences(
+  lines: readonly string[],
+  start: number,
+  predicate: (line: string) => boolean,
+): number {
+  let inFence = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] ?? '';
+    if (FENCE_PATTERN.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (!inFence && i >= start && predicate(line)) {
+      return i;
+    }
+  }
+  return -1;
+}
 
 /**
  * Replaces release-please's stock Changelog updater, which would insert the
@@ -235,24 +286,30 @@ export class UnreleasedAwareChangelog {
   updateContent(content: string | undefined): string {
     const existing = (content ?? '').replace(/\r\n/g, '\n');
     const entry = this.changelogEntry.trim();
-    const heading = UNRELEASED_HEADING_PATTERN.exec(existing);
+    const lines = existing.split('\n');
 
-    if (heading !== null) {
-      const headingEnd = heading.index + heading[0].length;
-      const head = existing.slice(0, headingEnd);
-      const tail = existing.slice(headingEnd);
-      const next = NEXT_SECTION_PATTERN.exec(tail);
-      const rest = next === null ? '' : tail.slice(next.index);
+    const unreleasedIndex = findLineOutsideFences(lines, 0, (line) =>
+      UNRELEASED_HEADING_PATTERN.test(line),
+    );
+    if (unreleasedIndex !== -1) {
+      const head = lines.slice(0, unreleasedIndex + 1).join('\n');
+      const nextIndex = findLineOutsideFences(
+        lines,
+        unreleasedIndex + 1,
+        (line) => NEXT_SECTION_PATTERN.test(line),
+      );
+      const rest = nextIndex === -1 ? '' : lines.slice(nextIndex).join('\n');
       return joinSections(head, entry, rest);
     }
 
     // Self-heal a missing Unreleased anchor so Communique keeps working on
     // the next run.
-    const title = TITLE_PATTERN.exec(existing);
-    if (title !== null) {
-      const titleEnd = title.index + title[0].length;
-      const head = `${existing.slice(0, titleEnd)}\n\n## [Unreleased]`;
-      return joinSections(head, entry, existing.slice(titleEnd));
+    const titleIndex = findLineOutsideFences(lines, 0, (line) =>
+      TITLE_PATTERN.test(line),
+    );
+    if (titleIndex !== -1) {
+      const head = `${lines.slice(0, titleIndex + 1).join('\n')}\n\n## [Unreleased]`;
+      return joinSections(head, entry, lines.slice(titleIndex + 1).join('\n'));
     }
     return joinSections('# Changelog\n\n## [Unreleased]', entry, existing);
   }
@@ -296,25 +353,31 @@ export interface RunnerOutputs {
   readonly release_tags: string;
 }
 
-export function formatOutputs(
+export function formatReleaseOutputs(
   releases: readonly (CreatedRelease | undefined)[],
-  pullRequests: readonly (PullRequest | undefined)[],
-): RunnerOutputs {
+): Pick<RunnerOutputs, 'releases_created' | 'release_tags'> {
   const tags = releases
     .filter((release): release is CreatedRelease => release !== undefined)
     .map((release) => release.tagName);
+  return {
+    releases_created: tags.length > 0 ? 'true' : 'false',
+    release_tags: tags.join(' '),
+  };
+}
+
+export function formatPullRequestOutputs(
+  pullRequests: readonly (PullRequest | undefined)[],
+): Pick<RunnerOutputs, 'prs_created' | 'pr_branches'> {
   const branches = pullRequests
     .filter((pr): pr is PullRequest => pr !== undefined)
     .map((pr) => pr.headBranchName);
   return {
     prs_created: branches.length > 0 ? 'true' : 'false',
     pr_branches: branches.join(' '),
-    releases_created: tags.length > 0 ? 'true' : 'false',
-    release_tags: tags.join(' '),
   };
 }
 
-function writeGithubOutputs(outputs: RunnerOutputs): void {
+function writeGithubOutputs(outputs: Partial<RunnerOutputs>): void {
   const outputPath = process.env.GITHUB_OUTPUT;
   const lines = Object.entries(outputs)
     .map(([key, value]) => `${key}=${value}`)
@@ -404,11 +467,18 @@ async function main(): Promise<void> {
   // triggered by a release PR merge tags that release before considering a
   // new PR for any commits that landed since.
   const releases = await manifest.createReleases();
+  // Written before createPullRequests so the workflow's `!cancelled()`
+  // dispatch steps can still start the Release pipeline for an
+  // already-created tag when the notes rebuild below fails — a rerun could
+  // not recover it (the merged PR's label has already flipped to
+  // `autorelease: tagged`).
+  const releaseOutputs = formatReleaseOutputs(releases);
+  writeGithubOutputs(releaseOutputs);
   const pullRequests = await manifest.createPullRequests();
-  const outputs = formatOutputs(releases, pullRequests);
-  writeGithubOutputs(outputs);
+  const pullRequestOutputs = formatPullRequestOutputs(pullRequests);
+  writeGithubOutputs(pullRequestOutputs);
   process.stdout.write(
-    `release-please: releases=[${outputs.release_tags}] prs=[${outputs.pr_branches}]\n`,
+    `release-please: releases=[${releaseOutputs.release_tags}] prs=[${pullRequestOutputs.pr_branches}]\n`,
   );
 }
 

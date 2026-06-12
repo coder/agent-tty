@@ -17,7 +17,8 @@ import {
   buildCommuniqueArgs,
   createCommuniqueChangelogNotes,
   formatChangelogSection,
-  formatOutputs,
+  formatPullRequestOutputs,
+  formatReleaseOutputs,
   normalizeCommuniqueBody,
   todayIsoDate,
 } from '../../../src/tools/release-please-runner.js';
@@ -129,6 +130,24 @@ describe('normalizeCommuniqueBody', () => {
 
   it('leaves house-style bodies untouched', () => {
     expect(normalizeCommuniqueBody(SAMPLE_BODY)).toBe(SAMPLE_BODY);
+  });
+
+  it('never rewrites heading-like lines inside fenced code blocks', () => {
+    const body = [
+      '## Changed',
+      '',
+      '- New install flow:',
+      '',
+      '```bash',
+      '## this is a markdown sample, not a heading',
+      '# comment',
+      'npm install -g agent-tty',
+      '```',
+    ].join('\n');
+    const normalized = normalizeCommuniqueBody(body);
+    expect(normalized).toContain('### Changed');
+    expect(normalized).toContain('## this is a markdown sample, not a heading');
+    expect(normalized).not.toContain('### this is a markdown sample');
   });
 });
 
@@ -264,6 +283,35 @@ describe('UnreleasedAwareChangelog', () => {
 
     expect(updated).toBe(`# Changelog\n\n## [Unreleased]\n\n${entry}\n`);
   });
+
+  it('ignores heading-like lines inside fenced code blocks when clearing a draft', () => {
+    // Without fence tracking, the `# comment` line would be taken as the next
+    // section boundary, half-clearing the draft and corrupting the fence.
+    const existing = [
+      '# Changelog',
+      '',
+      '## [Unreleased]',
+      '',
+      '- Draft bullet with an example:',
+      '',
+      '```bash',
+      '# comment inside a fence',
+      '## not a heading either',
+      'agent-tty ls',
+      '```',
+      '',
+      '- Trailing draft bullet.',
+      '',
+      previousSections,
+    ].join('\n');
+    const updated = new UnreleasedAwareChangelog({
+      changelogEntry: entry,
+    }).updateContent(existing);
+
+    expect(updated).not.toContain('comment inside a fence');
+    expect(updated).not.toContain('Trailing draft bullet');
+    expect(updated).toContain(`## [Unreleased]\n\n${entry}\n\n## [v0.4.1]`);
+  });
 });
 
 describe('createCommuniqueChangelogNotes', () => {
@@ -310,37 +358,40 @@ describe('createCommuniqueChangelogNotes', () => {
   });
 });
 
-describe('formatOutputs', () => {
+describe('workflow outputs', () => {
   it('maps releases and pull requests into workflow outputs', () => {
-    const outputs = formatOutputs(
-      [
+    expect(
+      formatReleaseOutputs([
         undefined,
         {
           tagName: 'v0.4.2',
-          headBranchName: 'x',
-        } as unknown as Parameters<typeof formatOutputs>[0][number],
-      ],
-      [
-        {
-          headBranchName: 'release-please--branches--main',
-        } as unknown as Parameters<typeof formatOutputs>[1][number],
-        undefined,
-      ],
-    );
-    expect(outputs).toEqual({
-      prs_created: 'true',
-      pr_branches: 'release-please--branches--main',
+        } as unknown as Parameters<typeof formatReleaseOutputs>[0][number],
+      ]),
+    ).toEqual({
       releases_created: 'true',
       release_tags: 'v0.4.2',
+    });
+    expect(
+      formatPullRequestOutputs([
+        {
+          headBranchName: 'release-please--branches--main',
+        } as unknown as Parameters<typeof formatPullRequestOutputs>[0][number],
+        undefined,
+      ]),
+    ).toEqual({
+      prs_created: 'true',
+      pr_branches: 'release-please--branches--main',
     });
   });
 
   it('reports false when nothing was created', () => {
-    expect(formatOutputs([], [undefined])).toEqual({
-      prs_created: 'false',
-      pr_branches: '',
+    expect(formatReleaseOutputs([])).toEqual({
       releases_created: 'false',
       release_tags: '',
+    });
+    expect(formatPullRequestOutputs([undefined])).toEqual({
+      prs_created: 'false',
+      pr_branches: '',
     });
   });
 });
