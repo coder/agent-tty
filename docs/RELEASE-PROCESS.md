@@ -25,7 +25,7 @@ Three workflows cooperate:
 
 1. **Release Please** ([`.github/workflows/release-please.yml`](../.github/workflows/release-please.yml)) runs on every push to `main`. It executes [`src/tools/release-please-runner.ts`](../src/tools/release-please-runner.ts), which runs release-please as a library with Communique registered as the changelog generator (`"changelog-type": "communique"` in [`release-please-config.json`](../release-please-config.json)). Each run:
    - tags and creates the GitHub Release for any release PR that merged since the last run, then dispatches the **Release** workflow for that tag;
-   - opens or updates the single release PR on branch `release-please--branches--main`, carrying the `package.json` version bump plus a new `CHANGELOG.md` section written by Communique (`communique generate HEAD <last-tag> --concise`);
+   - opens or updates the single release PR (title `chore(release): <version>`, head branch `release-please--branches--main--components--agent-tty`), carrying the `package.json` version bump plus a new `CHANGELOG.md` section written by Communique (`communique generate HEAD <last-tag> --concise`);
    - dispatches **CI** and **Validate skills** onto the release branch (pushes made with the workflow token never trigger `pull_request` workflows on their own).
 2. **Release** ([`.github/workflows/release.yml`](../.github/workflows/release.yml)) is the publish pipeline (see below). It is dispatched by Release Please after the tag exists, and still also triggers on manually pushed `v*` tags.
 3. **CI** runs on the release PR like on any other PR and gates the merge.
@@ -116,13 +116,14 @@ When skill packaging changes, also inspect `npm pack --dry-run` output to confir
 
 ## Cut a release
 
-1. Open the current release PR (head branch `release-please--branches--main`, title `chore(release): <version>`). If it is missing or stale, trigger the **Release Please** workflow manually (`gh workflow run release-please.yml`) or push to `main`.
+1. Open the current release PR (title `chore(release): <version>`). If it is missing or stale, trigger the **Release Please** workflow manually (`gh workflow run release-please.yml`) or push to `main`.
 2. Review the proposed version and the `CHANGELOG.md` section. If the version is wrong, land a `Release-As` commit (see above) rather than editing the PR. If notes are wrong, fix the source material (feature PR bodies / commit overrides) and let the next push rebuild them.
 3. Wait for the dispatched checks on the release branch to pass. If they were never dispatched (for example after a manual branch poke), dispatch them yourself:
 
    ```bash
-   gh workflow run ci.yml --ref release-please--branches--main
-   gh workflow run validate-skills.yml --ref release-please--branches--main
+   BRANCH=$(gh pr list --search 'chore(release) in:title' --state open --json headRefName --jq '.[0].headRefName')
+   gh workflow run ci.yml --ref "$BRANCH"
+   gh workflow run validate-skills.yml --ref "$BRANCH"
    ```
 
 4. Approve and merge the release PR (squash, like any other PR). The release PR is authored by the workflow bot, so a maintainer approval satisfies the required-review ruleset — no admin bypass is needed.
