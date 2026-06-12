@@ -70,7 +70,11 @@ jobs:
           set -euo pipefail
           read -ra tags <<< "$RELEASE_TAGS"
           for tag in "${tags[@]}"; do
-            gh workflow run release.yml --field "tag=$tag"
+            # Dispatch on the tag ref (not the default branch) so the run is
+            # attributed to the tag like the old `push: tags` flow, and the
+            # OIDC claims behind npm trusted publishing/provenance reference
+            # the tag instead of whatever main's head happens to be.
+            gh workflow run release.yml --ref "$tag" --field "tag=$tag"
           done
 
       # Branch pushes made with the workflow token never trigger
