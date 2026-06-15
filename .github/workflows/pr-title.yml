@@ -1,0 +1,39 @@
+name: PR Title
+
+# Enforce Conventional Commits in pull request titles. Squash merging is
+# configured to use the PR title as the commit subject (squash_merge_commit_title
+# = PR_TITLE), so the PR title becomes the commit that lands on main. A compliant
+# title is therefore what lets release-please parse the change and pick the right
+# version bump / changelog entry.
+#
+# The job also runs on merge_group as a no-op pass-through: the title is already
+# validated on the PR before it can enter the queue, and the merge_group event
+# carries no pull request payload to re-check. Running here keeps the `pr-title`
+# status check present on the merge group so it can be a required merge-queue check.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  merge_group:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  pr-title:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate PR title is a Conventional Commit
+        if: github.event_name == 'pull_request'
+        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip in merge queue (title already validated on the PR)
+        if: github.event_name == 'merge_group'
+        run: echo "PR title was validated on the pull request before it entered the queue; nothing to check here."
