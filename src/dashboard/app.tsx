@@ -672,11 +672,11 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
       return;
     }
     // While maximized this layer owns input: only pan / overview / restore
-    // respond. Tab, H, 'a' and Enter are swallowed so it reads as a distinct
-    // mode. `focus` is left untouched, so Esc (restore) returns to whatever was
-    // focused underneath.
+    // respond. Tab, H and 'a' are swallowed so it reads as a distinct mode.
+    // `focus` is left untouched, so Esc/Enter (restore) returns to whatever was
+    // focused underneath. Enter both maximizes and restores, so it toggles.
     if (maximized) {
-      if (key.escape) {
+      if (key.escape || key.return) {
         setMaximized(false);
         setPan({ row: 0, col: 0 });
         return;
@@ -834,7 +834,7 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
       <Box>
         <Text dimColor>
           {maximized
-            ? 'maximized · ↑/↓ h/j/k/l pan · z overview · esc restore · q quit'
+            ? 'maximized · ↑/↓ h/j/k/l pan · z overview · esc/⏎ restore · q quit'
             : focus === 'home'
               ? '↑/↓ j/k select Home · ⏎ open · a scope · esc cancel · q quit'
               : focus === 'list'
