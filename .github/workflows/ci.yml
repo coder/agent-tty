@@ -49,6 +49,9 @@ jobs:
       - name: Lint
         run: mise run lint
 
+      - name: Audit dependencies
+        run: mise run audit
+
       - name: Typecheck
         run: mise run typecheck
 
