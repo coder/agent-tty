@@ -107,7 +107,7 @@ Rendering uses Ghostty's terminal engine through two interchangeable backends (`
 
 ## Where it came from
 
-I maintain [`coder/claudecode.nvim`](https://github.com/coder/claudecode.nvim) and was drowning in issues and PRs I couldn't easily reproduce. Neovim is a TUI, and "reproduce this, configure that, screenshot the result" is painful to script with sleeps and `capture-pane`. `agent-tty` lets me spin up an isolated, reproducible terminal, hand it to a coding agent to attempt a fix, and then verify the fix with a fresh session and a recording I can actually look at.
+I maintain [`coder/claudecode.nvim`](https://github.com/coder/claudecode.nvim) and was drowning in issues and PRs I couldn't easily reproduce. Neovim is a TUI, and "reproduce this, configure that, screenshot the result" is painful to script with sleeps and `capture-pane`. `agent-tty` lets me spin up an isolated, reproducible terminal so an agent can first reproduce the issue reliably, turn that reproduction into a fixture, and only then attempt a fix with that fixture — plus a fresh recording — as the hard validation gate.
 
 A colleague then used `agent-tty` to build an experimental TUI for Coder agents almost entirely by letting coding agents drive it, checking the screenshots and recordings it produced instead of watching over their shoulder. That's the loop it's built for: an agent acts, `agent-tty` captures reviewable evidence, and a human (or another agent) verifies.
 
@@ -138,7 +138,7 @@ See [`docs/AGENT-SKILLS.md`](./docs/AGENT-SKILLS.md).
 
 ## Status & platform support
 
-`agent-tty` is `0.3.0` and focused on reliable, isolated, reviewable terminal and TUI automation through a stable CLI.
+`agent-tty` is `0.4.3` and focused on reliable, isolated, reviewable terminal and TUI automation through a stable CLI. <!-- x-release-please-version -->
 
 - Linux and macOS are tier-1; Windows is tier-2 and not CI-tested.
 - Screenshots and WebM video depend on Playwright/Chromium and the `ghostty-web` backend.
