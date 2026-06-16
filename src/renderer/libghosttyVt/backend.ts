@@ -24,6 +24,7 @@ import type {
   SemanticSnapshot,
 } from '../types.js';
 import { SemanticSnapshotSchema } from '../types.js';
+import { iterateInRangeReplayEvents } from '../replayEvents.js';
 import { DEFAULT_COLS, DEFAULT_ROWS } from '../../config/defaults.js';
 import { invariant, assertString, unreachable } from '../../util/assert.js';
 import { Logger, createProcessLogger } from '../../util/logger.js';
@@ -481,26 +482,11 @@ export class LibghosttyVtBackend implements RendererBackend {
       );
     }
 
-    let previousEventSeq = -1;
     let highestProcessedSeq = this.lastAppliedSeq;
-    for (const event of input.events) {
-      assertNonNegativeInteger(
-        event.seq,
-        'replay event seq must be non-negative',
-      );
-      invariant(
-        event.seq > previousEventSeq,
-        'replay events must be ordered by strictly increasing seq values',
-      );
-      previousEventSeq = event.seq;
-
-      if (event.seq <= this.lastAppliedSeq) {
-        continue;
-      }
-      if (event.seq > input.targetSeq) {
-        break;
-      }
-
+    for (const event of iterateInRangeReplayEvents(
+      input,
+      this.lastAppliedSeq,
+    )) {
       switch (event.type) {
         case 'output':
           terminal.feed(event.payload.data);
