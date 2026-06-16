@@ -1,40 +1,40 @@
 {
   "ok": true,
   "command": "snapshot",
-  "timestamp": "2026-06-16T12:03:40.697Z",
+  "timestamp": "2026-06-16T13:29:47.438Z",
   "result": {
     "format": "structured",
-    "sessionId": "01KV851DZH93PX9FQA3C199TSS",
-    "capturedAtSeq": 6,
+    "sessionId": "01KV89Z29JPZD4EG29CHER1MN8",
+    "capturedAtSeq": 5,
     "cols": 80,
     "rows": 24,
-    "cursorRow": 5,
+    "cursorRow": 2,
     "cursorCol": 7,
     "isAltScreen": false,
     "visibleLines": [
       {
         "row": 0,
-        "text": "READY> (node:2465832) [DEP0205] DeprecationWarning: `module.register()` is depre"
+        "text": "READY> Default semantic renderer proof"
       },
       {
         "row": 1,
-        "text": "cated. Use `module.registerHooks()` instead."
-      },
-      {
-        "row": 2,
-        "text": "(Use `node --trace-deprecation ...` to show where the warning was created)"
-      },
-      {
-        "row": 3,
-        "text": "Default semantic renderer proof"
-      },
-      {
-        "row": 4,
         "text": "ECHO: Default semantic renderer proof"
       },
       {
-        "row": 5,
+        "row": 2,
         "text": "READY>"
+      },
+      {
+        "row": 3,
+        "text": ""
+      },
+      {
+        "row": 4,
+        "text": ""
+      },
+      {
+        "row": 5,
+        "text": ""
       },
       {
         "row": 6,
@@ -109,6 +109,6 @@
         "text": ""
       }
     ],
-    "screenHash": "0feb80f00d88c52b4a000f6b1f718a63c6136bf8c9c2d90cc85c123cdf36f229"
+    "screenHash": "63f713a31c9ee5a4c004fba7983dab96ef5352804cd0c2de408f5c3570ea03a5"
   }
 }

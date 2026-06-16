@@ -5,10 +5,16 @@ $ npm --version
 11.13.0
 
 $ git rev-parse HEAD
-d27bb8d34e97e54019bb8f7b4dd04195ca20718c
+5b13076afa422ec9b6a0c66c20b21fd4d24d181e
 
 $ git log --oneline -n 1
-d27bb8d fix: sync README version in release PRs (#156)
+5b13076 fix: address renderer default review findings
+
+$ git status --short (before capture)
+clean
+
+$ git diff --binary | sha256sum (before capture)
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 
 $ uname -a
 Linux aaaaaaa 6.8.0-124-generic #124-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 13:00:45 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
@@ -20,7 +26,7 @@ $ npx tsx src/cli/main.ts version --json
 {
   "ok": true,
   "command": "version",
-  "timestamp": "2026-06-16T12:03:25.596Z",
+  "timestamp": "2026-06-16T13:29:31.103Z",
   "result": {
     "cliVersion": "0.4.3",
     "protocolVersion": "0.1.0",
@@ -66,7 +72,7 @@ $ npx tsx src/cli/main.ts doctor --json
 {
   "ok": true,
   "command": "doctor",
-  "timestamp": "2026-06-16T12:03:27.189Z",
+  "timestamp": "2026-06-16T13:29:32.658Z",
   "result": {
     "ok": true,
     "checks": {
@@ -92,37 +98,37 @@ $ npx tsx src/cli/main.ts doctor --json
         {
           "name": "home_isolation",
           "status": "pass",
-          "message": "agent-tty home is isolated from system home: /tmp/agent-tty-default-renderer.w26eUX",
-          "durationMs": 0
+          "message": "agent-tty home is isolated from system home: /tmp/agent-tty-default-renderer.NIhHYj",
+          "durationMs": 1
         },
         {
           "name": "home-writable",
           "status": "pass",
-          "message": "home writable: /tmp/agent-tty-default-renderer.w26eUX",
-          "durationMs": 1
+          "message": "home writable: /tmp/agent-tty-default-renderer.NIhHYj",
+          "durationMs": 3
         },
         {
           "name": "pty-spawn",
           "status": "pass",
           "message": "spawned /home/coder/.local/share/mise/installs/node/26.2.0/bin/node",
-          "durationMs": 31
+          "durationMs": 34
         },
         {
           "name": "socket-viable",
           "status": "pass",
-          "message": "socket ok: /tmp/agent-tty/9cf86873/8ea9a600aad8",
-          "durationMs": 3
+          "message": "socket ok: /tmp/agent-tty/55fb6b14/c9e2d8289d92",
+          "durationMs": 4
         },
         {
           "name": "artifact-atomicity",
           "status": "pass",
-          "message": "atomic rename ok: /tmp/agent-tty-default-renderer.w26eUX/sessions/doctor-2464044-mqglfjkn-3/artifacts",
-          "durationMs": 1
+          "message": "atomic rename ok: /tmp/agent-tty-default-renderer.NIhHYj/sessions/doctor-3125475-mqgoi9ac-3/artifacts",
+          "durationMs": 2
         },
         {
           "name": "event-log-writable",
           "status": "pass",
-          "message": "append ok: /tmp/agent-tty-default-renderer.w26eUX/sessions/doctor-2464044-mqglfjko-5/events.jsonl",
+          "message": "append ok: /tmp/agent-tty-default-renderer.NIhHYj/sessions/doctor-3125475-mqgoi9ae-5/events.jsonl",
           "durationMs": 1
         }
       ],
@@ -143,19 +149,19 @@ $ npx tsx src/cli/main.ts doctor --json
           "name": "browser_launch",
           "status": "pass",
           "message": "chromium launches",
-          "durationMs": 108
+          "durationMs": 103
         },
         {
           "name": "ghostty_web_available",
           "status": "pass",
           "message": "WASM available",
-          "durationMs": 112
+          "durationMs": 81
         },
         {
           "name": "screenshot_viable",
           "status": "pass",
           "message": "viable",
-          "durationMs": 157
+          "durationMs": 176
         },
         {
           "name": "libghostty_vt_available",

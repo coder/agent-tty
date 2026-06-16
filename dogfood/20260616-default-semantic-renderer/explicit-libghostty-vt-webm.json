@@ -1,15 +1,15 @@
 {
   "ok": true,
   "command": "record export",
-  "timestamp": "2026-06-16T12:04:00.110Z",
+  "timestamp": "2026-06-16T13:30:06.995Z",
   "result": {
-    "sessionId": "01KV851DZH93PX9FQA3C199TSS",
+    "sessionId": "01KV89Z29JPZD4EG29CHER1MN8",
     "format": "webm",
-    "artifactPath": "/tmp/agent-tty-default-renderer.w26eUX/sessions/01KV851DZH93PX9FQA3C199TSS/artifacts/recording-14-webm.webm",
-    "bytes": 49695,
-    "sha256": "26feddb53310eaf020503b6f75e73b96d731995d6fa104aa046601c3a94d0328",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/vt-impl-5ds6/dogfood/20260616-default-semantic-renderer/videos/explicit-libghostty-vt-webm.webm",
+    "bytes": 27083,
+    "sha256": "33b7fd9f3f8b00f95fd0cb26b011134a7fa405b3295035528316159b92ab7cf1",
     "capturedAtSeq": 14,
-    "durationMs": 16177,
+    "durationMs": 17608,
     "metadata": {
       "width": 80,
       "height": 24,

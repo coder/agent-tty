@@ -1,7 +1,7 @@
 {
   "ok": true,
   "command": "doctor",
-  "timestamp": "2026-06-16T12:03:30.112Z",
+  "timestamp": "2026-06-16T13:29:35.518Z",
   "result": {
     "ok": true,
     "checks": {
@@ -27,37 +27,37 @@
         {
           "name": "home_isolation",
           "status": "pass",
-          "message": "agent-tty home is isolated from system home: /tmp/agent-tty-default-renderer.w26eUX",
-          "durationMs": 1
+          "message": "agent-tty home is isolated from system home: /tmp/agent-tty-default-renderer.NIhHYj",
+          "durationMs": 0
         },
         {
           "name": "home-writable",
           "status": "pass",
-          "message": "home writable: /tmp/agent-tty-default-renderer.w26eUX",
+          "message": "home writable: /tmp/agent-tty-default-renderer.NIhHYj",
           "durationMs": 1
         },
         {
           "name": "pty-spawn",
           "status": "pass",
           "message": "spawned /home/coder/.local/share/mise/installs/node/26.2.0/bin/node",
-          "durationMs": 37
+          "durationMs": 32
         },
         {
           "name": "socket-viable",
           "status": "pass",
-          "message": "socket ok: /tmp/agent-tty/9cf86873/3806c31448a6",
-          "durationMs": 2
+          "message": "socket ok: /tmp/agent-tty/55fb6b14/95689a30d574",
+          "durationMs": 3
         },
         {
           "name": "artifact-atomicity",
           "status": "pass",
-          "message": "atomic rename ok: /tmp/agent-tty-default-renderer.w26eUX/sessions/doctor-2464905-mqglflt3-3/artifacts",
-          "durationMs": 2
+          "message": "atomic rename ok: /tmp/agent-tty-default-renderer.NIhHYj/sessions/doctor-3126662-mqgoibi9-3/artifacts",
+          "durationMs": 1
         },
         {
           "name": "event-log-writable",
           "status": "pass",
-          "message": "append ok: /tmp/agent-tty-default-renderer.w26eUX/sessions/doctor-2464905-mqglflt4-5/events.jsonl",
+          "message": "append ok: /tmp/agent-tty-default-renderer.NIhHYj/sessions/doctor-3126662-mqgoibia-5/events.jsonl",
           "durationMs": 1
         }
       ],
@@ -78,19 +78,19 @@
           "name": "browser_launch",
           "status": "pass",
           "message": "chromium launches",
-          "durationMs": 107
+          "durationMs": 109
         },
         {
           "name": "ghostty_web_available",
           "status": "pass",
           "message": "WASM available",
-          "durationMs": 131
+          "durationMs": 82
         },
         {
           "name": "screenshot_viable",
           "status": "pass",
           "message": "viable",
-          "durationMs": 165
+          "durationMs": 153
         },
         {
           "name": "libghostty_vt_available",

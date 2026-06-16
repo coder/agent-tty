@@ -1,16 +1,16 @@
 {
-  "id": "01KV851Q0MS2YQW4MTWXYNJBBD",
+  "id": "01KV89ZCN99JFHWA7DZ0FDQV3V",
   "kind": "snapshot",
-  "filename": "snapshot-6-structured.json",
-  "sessionId": "01KV851DZH93PX9FQA3C199TSS",
-  "capturedAtSeq": 6,
-  "createdAt": "2026-06-16T12:03:40.693Z",
+  "filename": "snapshot-5-structured.json",
+  "sessionId": "01KV89Z29JPZD4EG29CHER1MN8",
+  "capturedAtSeq": 5,
+  "createdAt": "2026-06-16T13:29:47.434Z",
   "metadata": {
     "format": "structured",
     "rendererBackend": "libghostty-vt",
     "cols": 80,
     "rows": 24,
-    "cursorRow": 5,
+    "cursorRow": 2,
     "cursorCol": 7
   }
 }

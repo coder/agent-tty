@@ -1,13 +1,13 @@
 {
   "ok": true,
   "command": "inspect",
-  "timestamp": "2026-06-16T12:04:02.980Z",
+  "timestamp": "2026-06-16T13:30:09.883Z",
   "result": {
     "session": {
       "version": 1,
-      "sessionId": "01KV851DZH93PX9FQA3C199TSS",
-      "createdAt": "2026-06-16T12:03:31.444Z",
-      "updatedAt": "2026-06-16T12:03:48.740Z",
+      "sessionId": "01KV89Z29JPZD4EG29CHER1MN8",
+      "createdAt": "2026-06-16T13:29:36.822Z",
+      "updatedAt": "2026-06-16T13:29:55.519Z",
       "status": "exited",
       "command": ["npx", "tsx", "test/fixtures/apps/hello-prompt/main.ts"],
       "cwd": "/home/coder/.mux/src/agent-terminal/vt-impl-5ds6",
@@ -18,13 +18,13 @@
       "rows": 24,
       "creationCols": 80,
       "creationRows": 24,
-      "hostPid": 2465597,
-      "childPid": 2465610,
+      "hostPid": 3127342,
+      "childPid": 3127397,
       "exitCode": 0,
       "exitSignal": null
     },
     "eventCount": 15,
-    "uptime": 17296,
+    "uptime": 18697,
     "lastEventSeq": 14,
     "terminationCategory": "clean-exit",
     "artifacts": {
@@ -35,8 +35,25 @@
         "video": 2,
         "recording": 1
       },
-      "missingCount": 0,
-      "health": "healthy"
+      "missingCount": 3,
+      "health": "missing-artifacts",
+      "missing": [
+        {
+          "id": "01KV89ZTJ6HD0FK5AXT6730B7P",
+          "kind": "video",
+          "filename": "default-webm.webm"
+        },
+        {
+          "id": "01KV89ZZRFB9FEM6H378JEM9PF",
+          "kind": "video",
+          "filename": "explicit-libghostty-vt-webm.webm"
+        },
+        {
+          "id": "01KV8A016HZYKE7P6KK3EANNJ6",
+          "kind": "recording",
+          "filename": "default.cast"
+        }
+      ]
     },
     "usedOfflineReplay": false,
     "rendererRuntime": {
@@ -45,6 +62,6 @@
       "status": "fallback",
       "reason": "session-not-running"
     },
-    "eventLogBytes": 1613
+    "eventLogBytes": 1414
   }
 }
