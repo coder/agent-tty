@@ -99,6 +99,7 @@ function wrapAction<Args extends unknown[]>(
       context.logger.debug(`starting ${commandName} command`, {
         logLevel: context.logLevel,
         renderer: context.rendererDefault,
+        visualRenderer: context.rendererVisualDefault,
       });
       const args = rawArgs.slice(0, -1) as Args;
       await fn(...([...args, context] as [...Args, CommandContext]));
@@ -138,7 +139,7 @@ async function main(): Promise<void> {
     .option('--profile <name>', 'Default render profile name')
     .option(
       '--renderer <name>',
-      'Renderer backend (ghostty-web or libghostty-vt)',
+      'Renderer backend override. Defaults vary by command: semantic actions prefer libghostty-vt when available; visual artifacts default to ghostty-web.',
     );
 
   program.hook('preAction', async (_thisCommand, actionCommand) => {
@@ -160,6 +161,8 @@ async function main(): Promise<void> {
       command: actionCommand.name(),
       home: context.home,
       logLevel: context.logLevel,
+      renderer: context.rendererDefault,
+      visualRenderer: context.rendererVisualDefault,
     });
   });
 

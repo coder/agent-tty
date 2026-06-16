@@ -10,6 +10,9 @@ import {
   destroySession,
   runCli,
 } from '../helpers.js';
+import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
+import { readArtifactManifest } from '../../src/storage/artifactManifest.js';
+import { sessionDir } from '../../src/storage/sessionPaths.js';
 
 interface FailureEnvelope {
   ok: false;
@@ -84,6 +87,40 @@ describe('backend selection integration', () => {
     expect(envelope.error).toMatchObject({
       code: 'INVALID_INPUT',
       message: 'Renderer must be one of: ghostty-web, libghostty-vt.',
+    });
+  });
+
+  it('defaults semantic snapshot rendering to libghostty-vt when available', async () => {
+    const expectedRenderer = (await probeLibghosttyVt()).available
+      ? 'libghostty-vt'
+      : 'ghostty-web';
+    sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      'printf default-renderer-ready; exec cat',
+    ]);
+
+    const result = runCli(
+      ['snapshot', sessionId, '--format', 'structured', '--json'],
+      { AGENT_TTY_HOME: testHome },
+      60_000,
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      ok: true,
+      result: { sessionId },
+    });
+    await expect(
+      readArtifactManifest(sessionDir(testHome, sessionId)),
+    ).resolves.toMatchObject({
+      artifacts: [
+        {
+          kind: 'snapshot',
+          metadata: { rendererBackend: expectedRenderer },
+        },
+      ],
     });
   });
 

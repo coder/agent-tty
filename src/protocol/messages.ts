@@ -115,6 +115,7 @@ export const HostInspectResultSchema = z
     // Populated only when the host has reached the inspect handler. An
     // older host or one whose renderer has never bootstrapped omits
     // these and the CLI surfaces them as absent on `rendererRuntime`.
+    rendererBackend: z.string().min(1).optional(),
     rendererProfile: z.string().min(1).optional(),
     rendererBooted: z.boolean().optional(),
     rendererBootInFlight: z.boolean().optional(),

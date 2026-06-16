@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-06-16T12:03:44.160Z",
+  "result": {
+    "format": "text",
+    "sessionId": "01KV851DZH93PX9FQA3C199TSS",
+    "capturedAtSeq": 6,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 5,
+    "cursorCol": 7,
+    "text": "READY> (node:2465832) [DEP0205] DeprecationWarning: `module.register()` is depre\ncated. Use `module.registerHooks()` instead.\n(Use `node --trace-deprecation ...` to show where the warning was created)\nDefault semantic renderer proof\nECHO: Default semantic renderer proof\nREADY>\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+    "screenHash": "0feb80f00d88c52b4a000f6b1f718a63c6136bf8c9c2d90cc85c123cdf36f229"
+  }
+}

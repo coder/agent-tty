@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-06-16T12:04:00.110Z",
+  "result": {
+    "sessionId": "01KV851DZH93PX9FQA3C199TSS",
+    "format": "webm",
+    "artifactPath": "/tmp/agent-tty-default-renderer.w26eUX/sessions/01KV851DZH93PX9FQA3C199TSS/artifacts/recording-14-webm.webm",
+    "bytes": 49695,
+    "sha256": "26feddb53310eaf020503b6f75e73b96d731995d6fa104aa046601c3a94d0328",
+    "capturedAtSeq": 14,
+    "durationMs": 16177,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "profileName": "reference-dark",
+      "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d",
+      "timingMode": "accelerated",
+      "rendererBackend": "ghostty-web",
+      "outputEventCount": 10,
+      "resizeEventCount": 0
+    }
+  }
+}

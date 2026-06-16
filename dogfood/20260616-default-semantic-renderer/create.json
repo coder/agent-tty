@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "command": "create",
+  "timestamp": "2026-06-16T12:03:32.281Z",
+  "result": {
+    "sessionId": "01KV851DZH93PX9FQA3C199TSS",
+    "createdAt": "2026-06-16T12:03:31.444Z",
+    "cols": 80,
+    "rows": 24,
+    "shell": "/bin/bash"
+  }
+}

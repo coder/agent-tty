@@ -1,0 +1,114 @@
+{
+  "ok": true,
+  "command": "snapshot",
+  "timestamp": "2026-06-16T12:03:40.697Z",
+  "result": {
+    "format": "structured",
+    "sessionId": "01KV851DZH93PX9FQA3C199TSS",
+    "capturedAtSeq": 6,
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 5,
+    "cursorCol": 7,
+    "isAltScreen": false,
+    "visibleLines": [
+      {
+        "row": 0,
+        "text": "READY> (node:2465832) [DEP0205] DeprecationWarning: `module.register()` is depre"
+      },
+      {
+        "row": 1,
+        "text": "cated. Use `module.registerHooks()` instead."
+      },
+      {
+        "row": 2,
+        "text": "(Use `node --trace-deprecation ...` to show where the warning was created)"
+      },
+      {
+        "row": 3,
+        "text": "Default semantic renderer proof"
+      },
+      {
+        "row": 4,
+        "text": "ECHO: Default semantic renderer proof"
+      },
+      {
+        "row": 5,
+        "text": "READY>"
+      },
+      {
+        "row": 6,
+        "text": ""
+      },
+      {
+        "row": 7,
+        "text": ""
+      },
+      {
+        "row": 8,
+        "text": ""
+      },
+      {
+        "row": 9,
+        "text": ""
+      },
+      {
+        "row": 10,
+        "text": ""
+      },
+      {
+        "row": 11,
+        "text": ""
+      },
+      {
+        "row": 12,
+        "text": ""
+      },
+      {
+        "row": 13,
+        "text": ""
+      },
+      {
+        "row": 14,
+        "text": ""
+      },
+      {
+        "row": 15,
+        "text": ""
+      },
+      {
+        "row": 16,
+        "text": ""
+      },
+      {
+        "row": 17,
+        "text": ""
+      },
+      {
+        "row": 18,
+        "text": ""
+      },
+      {
+        "row": 19,
+        "text": ""
+      },
+      {
+        "row": 20,
+        "text": ""
+      },
+      {
+        "row": 21,
+        "text": ""
+      },
+      {
+        "row": 22,
+        "text": ""
+      },
+      {
+        "row": 23,
+        "text": ""
+      }
+    ],
+    "screenHash": "0feb80f00d88c52b4a000f6b1f718a63c6136bf8c9c2d90cc85c123cdf36f229"
+  }
+}

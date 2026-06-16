@@ -33,6 +33,8 @@ export interface LibghosttyVtNativeModule {
   getNativeInfo?: () => NativeInfo;
 }
 
+const DEFAULT_SCROLLBACK_LIMIT = 10_000;
+
 export interface LibghosttyVtBackendOptions {
   initialCols?: number;
   initialRows?: number;
@@ -369,7 +371,7 @@ export class LibghosttyVtBackend implements RendererBackend {
   >;
   private readonly logger: Logger;
   private readonly profile: RenderProfileConfig;
-  private readonly scrollbackLimit: number | undefined;
+  private readonly scrollbackLimit: number;
   private readonly sessionId: string;
 
   private bootPromise: Promise<void> | null = null;
@@ -411,7 +413,7 @@ export class LibghosttyVtBackend implements RendererBackend {
     this.initialRows = initialRows;
     this.currentCols = initialCols;
     this.currentRows = initialRows;
-    this.scrollbackLimit = options.scrollbackLimit;
+    this.scrollbackLimit = options.scrollbackLimit ?? DEFAULT_SCROLLBACK_LIMIT;
     this.loadNative =
       options.loadNative ??
       (() =>
@@ -659,9 +661,7 @@ export class LibghosttyVtBackend implements RendererBackend {
       this.terminal = native.createTerminal({
         cols: this.initialCols,
         rows: this.initialRows,
-        ...(this.scrollbackLimit === undefined
-          ? {}
-          : { scrollbackLimit: this.scrollbackLimit }),
+        scrollbackLimit: this.scrollbackLimit,
       });
       this.assertTerminalShape(this.terminal);
       this.currentCols = this.initialCols;

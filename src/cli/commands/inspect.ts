@@ -91,7 +91,7 @@ function deriveRendererRuntimeSummary(options: {
 
   const hostInfo = options.hostInfo;
   return {
-    backend: RENDERER_BACKEND,
+    backend: hostInfo?.rendererBackend ?? RENDERER_BACKEND,
     mode: 'live-host',
     status: 'healthy',
     ...(hostInfo?.rendererProfile !== undefined

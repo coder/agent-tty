@@ -104,7 +104,7 @@ function formatScreenshotLines(result: ScreenshotResult): string[] {
 
 async function runOfflineScreenshot(
   sessionDirectory: string,
-  rendererName: CommandContext['rendererDefault'],
+  rendererName: CommandContext['rendererVisualDefault'],
   profile: string,
   showCursor: boolean | undefined,
 ): Promise<ScreenshotResult> {
@@ -169,7 +169,7 @@ export async function runScreenshotCommand(
         'screenshot',
         {
           profile,
-          rendererName: options.context.rendererDefault,
+          rendererName: options.context.rendererVisualDefault,
           ...(showCursor === undefined ? {} : { showCursor }),
         },
       );
@@ -187,7 +187,7 @@ export async function runScreenshotCommand(
 
       result = await runOfflineScreenshot(
         sessionDirectory,
-        options.context.rendererDefault,
+        options.context.rendererVisualDefault,
         profile,
         showCursor,
       );
@@ -195,7 +195,7 @@ export async function runScreenshotCommand(
   } else {
     result = await runOfflineScreenshot(
       sessionDirectory,
-      options.context.rendererDefault,
+      options.context.rendererVisualDefault,
       profile,
       showCursor,
     );

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
 import {
   cleanupHome,
   createIsolatedHome,
@@ -59,6 +60,9 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
   });
 
   it('full interaction flow', async () => {
+    const expectedRenderer = (await probeLibghosttyVt()).available
+      ? 'libghostty-vt'
+      : 'ghostty-web';
     const env = testEnv(testHome);
     const createEnvelope = runCliJson<SuccessEnvelope<CreateResult>>(
       ['create', '--', ...fixtureCommand('hello-prompt')],
@@ -142,7 +146,7 @@ describe('hello-prompt e2e', { timeout: 30_000 }, () => {
     expect(inspectRunning.result.session.exitCode).toBeNull();
     expect(inspectRunning.result.rendererRuntime).toEqual(
       expect.objectContaining({
-        backend: 'ghostty-web',
+        backend: expectedRenderer,
         mode: 'live-host',
         status: 'healthy',
       }),

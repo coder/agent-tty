@@ -84,9 +84,9 @@ const CAPABILITY_NAMES: ReadonlyArray<CapabilityName> = Object.freeze([
   'record-export-webm',
   'dashboard',
 ]);
+const SEMANTIC_RENDER_CAPABILITY_NAMES: ReadonlyArray<'snapshot' | 'wait'> =
+  Object.freeze(['snapshot', 'wait']);
 const BUILTIN_CAPABILITY_NAMES: ReadonlyArray<CapabilityName> = Object.freeze([
-  'snapshot',
-  'wait',
   'record-export-asciicast',
 ]);
 
@@ -165,9 +165,9 @@ async function probePlaywrightAvailability(
 }
 
 /**
- * Built-in capabilities (snapshot, wait, record-export-asciicast) are always
- * reported as 'available' because they depend only on the event log and
- * built-in text processing; no external renderer or browser is needed.
+ * Built-in capabilities are always reported as 'available' because they depend
+ * only on the event log and built-in text processing; no external renderer or
+ * browser is needed.
  *
  * This reflects runtime feature availability, not guaranteed success for any
  * particular session. Corrupted session data or an invalid event log will fail
@@ -213,6 +213,138 @@ function buildUnknownCapability(name: CapabilityName): CapabilityEntry {
     status: 'unknown',
     reason: 'renderer checks incomplete',
     detail: 'doctor did not provide the full renderer check set',
+  };
+}
+
+function buildSemanticUnavailableDetail(
+  libghosttyVtProbe: LibghosttyVtProbe,
+  playwrightProbe: PlaywrightProbeResult,
+): string | undefined {
+  const details = [libghosttyVtProbe.detail, playwrightProbe.detail].filter(
+    (detail): detail is string => detail !== undefined && detail.length > 0,
+  );
+  return details.length === 0 ? undefined : details.join('; ');
+}
+
+async function buildSemanticRenderCapability(
+  name: 'snapshot' | 'wait',
+  mode: DiscoveryMode,
+  deps: CapabilityDiscoveryDependencies,
+): Promise<CapabilityEntry> {
+  if (mode === 'full' && deps.rendererChecks !== undefined) {
+    return buildFullSemanticRenderCapabilityFromChecks(
+      name,
+      deps.rendererChecks,
+    );
+  }
+
+  const probeLibghostty = deps.probeLibghosttyVt ?? probeLibghosttyVt;
+  const probePlaywright = deps.probePlaywright ?? probePlaywrightAvailability;
+  const [libghosttyVtProbe, playwrightProbe] = await Promise.all([
+    probeLibghostty(),
+    probePlaywright(mode),
+  ]);
+
+  if (libghosttyVtProbe.available) {
+    return mode === 'full'
+      ? {
+          name,
+          status: 'available',
+          reason: libghosttyVtProbe.reason,
+          detail: libghosttyVtProbe.detail,
+        }
+      : { name, status: 'available' };
+  }
+
+  if (playwrightProbe.available) {
+    return mode === 'full'
+      ? {
+          name,
+          status: 'available',
+          reason: 'ghostty-web semantic fallback available',
+          detail: playwrightProbe.detail,
+        }
+      : { name, status: 'available' };
+  }
+
+  return {
+    name,
+    status: 'unavailable',
+    reason: 'semantic renderer unavailable',
+    detail: buildSemanticUnavailableDetail(libghosttyVtProbe, playwrightProbe),
+  };
+}
+
+function buildFullSemanticRenderCapabilityFromChecks(
+  name: 'snapshot' | 'wait',
+  checks: ReadonlyArray<DiscoveryCheck>,
+): CapabilityEntry {
+  const libghosttyVtCheck = findRendererCheck(
+    checks,
+    'libghostty_vt_available',
+  );
+  const playwrightCheck = findRendererCheck(checks, 'playwright_available');
+  const browserLaunchCheck = findRendererCheck(checks, 'browser_launch');
+  const ghosttyWebCheck = findRendererCheck(checks, 'ghostty_web_available');
+
+  if (libghosttyVtCheck === undefined) {
+    return buildUnknownCapability(name);
+  }
+
+  if (libghosttyVtCheck.status === 'pass') {
+    return {
+      name,
+      status: 'available',
+      reason: 'libghostty-vt semantic renderer available',
+      detail: libghosttyVtCheck.message,
+    };
+  }
+
+  if (
+    playwrightCheck === undefined ||
+    browserLaunchCheck === undefined ||
+    ghosttyWebCheck === undefined
+  ) {
+    return buildUnknownCapability(name);
+  }
+
+  if (playwrightCheck.status === 'fail') {
+    return {
+      name,
+      status: 'unavailable',
+      reason: 'semantic renderer unavailable',
+      detail: `libghostty-vt: ${libghosttyVtCheck.message}; playwright: ${playwrightCheck.message}`,
+    };
+  }
+
+  if (ghosttyWebCheck.status === 'fail') {
+    return {
+      name,
+      status: 'unavailable',
+      reason: 'semantic renderer unavailable',
+      detail: `libghostty-vt: ${libghosttyVtCheck.message}; ghostty-web: ${ghosttyWebCheck.message}`,
+    };
+  }
+
+  if (browserLaunchCheck.status === 'fail') {
+    return {
+      name,
+      status: 'unavailable',
+      reason: 'semantic renderer unavailable',
+      detail: `libghostty-vt: ${libghosttyVtCheck.message}; browser: ${browserLaunchCheck.message}`,
+    };
+  }
+
+  return {
+    name,
+    status: 'available',
+    reason: 'ghostty-web semantic fallback available',
+    detail: buildAvailableDetail([
+      libghosttyVtCheck,
+      playwrightCheck,
+      browserLaunchCheck,
+      ghosttyWebCheck,
+    ]),
   };
 }
 
@@ -437,16 +569,45 @@ export async function discoverCapabilities(
   deps: CapabilityDiscoveryDependencies = {},
 ): Promise<CapabilityEntry[]> {
   const capabilities: CapabilityEntry[] = [];
+  const baseProbePlaywright =
+    deps.probePlaywright ?? probePlaywrightAvailability;
+  const baseProbeLibghosttyVt = deps.probeLibghosttyVt ?? probeLibghosttyVt;
+  let cachedPlaywrightProbe: Promise<PlaywrightProbeResult> | undefined;
+  let cachedLibghosttyVtProbe: Promise<LibghosttyVtProbe> | undefined;
+  const cachedDeps: CapabilityDiscoveryDependencies = {
+    ...deps,
+    probePlaywright: (requestedMode) => {
+      assert.equal(
+        requestedMode,
+        mode,
+        'capability discovery probe mode must stay consistent',
+      );
+      cachedPlaywrightProbe ??= baseProbePlaywright(requestedMode);
+      return cachedPlaywrightProbe;
+    },
+    probeLibghosttyVt: () => {
+      cachedLibghosttyVtProbe ??= baseProbeLibghosttyVt();
+      return cachedLibghosttyVtProbe;
+    },
+  };
+
+  for (const name of SEMANTIC_RENDER_CAPABILITY_NAMES) {
+    capabilities.push(
+      await buildSemanticRenderCapability(name, mode, cachedDeps),
+    );
+  }
 
   for (const name of BUILTIN_CAPABILITY_NAMES) {
     capabilities.push(buildBuiltinCapability(name, mode));
   }
 
-  capabilities.push(await buildPlaywrightCapability('screenshot', mode, deps));
   capabilities.push(
-    await buildPlaywrightCapability('record-export-webm', mode, deps),
+    await buildPlaywrightCapability('screenshot', mode, cachedDeps),
   );
-  capabilities.push(await discoverDashboardCapability(mode, deps));
+  capabilities.push(
+    await buildPlaywrightCapability('record-export-webm', mode, cachedDeps),
+  );
+  capabilities.push(await discoverDashboardCapability(mode, cachedDeps));
 
   const sortedCapabilities: CapabilityEntry[] = [];
   for (const name of CAPABILITY_NAMES) {

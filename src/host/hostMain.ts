@@ -149,6 +149,7 @@ export async function runHost(sessionId: string): Promise<void> {
     'session manifest idleTimeoutMs must be a non-negative integer',
   );
 
+  const hostDefaultRendererName = resolveHostRendererName(undefined);
   const state = new SessionState(manifest);
   invariant(
     Number.isInteger(process.pid) && process.pid > 0,
@@ -435,6 +436,8 @@ export async function runHost(sessionId: string): Promise<void> {
       // reads, producing a result that does not correspond to any real
       // point in time.
       const sessionSnapshot = state.snapshot();
+      const rendererBackend =
+        rendererManager.getCurrentRendererName() ?? hostDefaultRendererName;
       const rendererProfile = rendererManager.getCurrentProfileName();
       const rendererBooted = rendererManager.isBooted();
       const rendererBootInFlight = rendererManager.isBootInFlight();
@@ -446,6 +449,7 @@ export async function runHost(sessionId: string): Promise<void> {
           ? { cliVersion: packageMetadata.version }
           : {}),
         rpcSocketPath: sPath,
+        rendererBackend,
         ...(rendererProfile !== null ? { rendererProfile } : {}),
         rendererBooted,
         rendererBootInFlight,

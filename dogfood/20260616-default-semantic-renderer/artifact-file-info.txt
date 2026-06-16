@@ -1,0 +1,5 @@
+/home/coder/.mux/src/agent-terminal/vt-impl-5ds6/dogfood/20260616-default-semantic-renderer/screenshots/default-screenshot.png:                PNG image data, 640 x 384, 8-bit/color RGB, non-interlaced
+/home/coder/.mux/src/agent-terminal/vt-impl-5ds6/dogfood/20260616-default-semantic-renderer/screenshots/explicit-libghostty-vt-screenshot.png: PNG image data, 640 x 384, 8-bit/color RGB, non-interlaced
+/home/coder/.mux/src/agent-terminal/vt-impl-5ds6/dogfood/20260616-default-semantic-renderer/videos/default-webm.webm:                WebM
+/home/coder/.mux/src/agent-terminal/vt-impl-5ds6/dogfood/20260616-default-semantic-renderer/videos/explicit-libghostty-vt-webm.webm: WebM
+/home/coder/.mux/src/agent-terminal/vt-impl-5ds6/dogfood/20260616-default-semantic-renderer/recordings/default.cast: JSON data

@@ -8,9 +8,16 @@ import { loadConfigFile, type ConfigFile } from '../config/resolveConfig.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import {
   DEFAULT_RENDERER_NAME,
+  DEFAULT_SEMANTIC_RENDERER_NAME,
+  DEFAULT_VISUAL_RENDERER_NAME,
+  RendererNameSchema,
   resolveRendererName,
   type RendererName,
 } from '../renderer/names.js';
+import {
+  probeLibghosttyVt,
+  type LibghosttyVtProbe,
+} from '../renderer/readiness.js';
 import { resolveHome } from '../storage/home.js';
 import { invariant } from '../util/assert.js';
 import {
@@ -41,8 +48,20 @@ export interface CommandContext {
   readonly logLevel: LogLevel;
   readonly logger: ReturnType<typeof createLogger>;
   readonly profileDefault: string | undefined;
+  /** Default renderer for semantic operations: snapshot, render waits, hashes. */
   readonly rendererDefault: RendererName;
+  /** Default renderer for visual artifacts: PNG screenshots and WebM exports. */
+  readonly rendererVisualDefault: RendererName;
   readonly configFile: ConfigFile | null;
+}
+
+interface RendererDefaultResolutionDeps {
+  probeLibghosttyVt?: () => Promise<LibghosttyVtProbe>;
+}
+
+interface RendererDefaults {
+  readonly semantic: RendererName;
+  readonly visual: RendererName;
 }
 
 interface CommandWithContext extends Command {
@@ -108,6 +127,61 @@ export function resolveRendererDefault(raw?: string): RendererName {
   }
 }
 
+let automaticSemanticRendererName: Promise<RendererName> | undefined;
+
+async function resolveAutomaticSemanticRenderer(
+  deps: RendererDefaultResolutionDeps,
+): Promise<RendererName> {
+  const probe = deps.probeLibghosttyVt ?? probeLibghosttyVt;
+  const resolveFromProbe = async (): Promise<RendererName> => {
+    try {
+      const probeResult = await probe();
+      return probeResult.available
+        ? DEFAULT_SEMANTIC_RENDERER_NAME
+        : DEFAULT_RENDERER_NAME;
+    } catch {
+      return DEFAULT_RENDERER_NAME;
+    }
+  };
+
+  if (deps.probeLibghosttyVt !== undefined) {
+    return resolveFromProbe();
+  }
+
+  automaticSemanticRendererName ??= resolveFromProbe();
+  return automaticSemanticRendererName;
+}
+
+export function clearRendererDefaultProbeCacheForTests(): void {
+  automaticSemanticRendererName = undefined;
+}
+
+async function resolveRendererDefaults(
+  configuredRenderer: string | undefined,
+  deps: RendererDefaultResolutionDeps,
+): Promise<RendererDefaults> {
+  if (configuredRenderer !== undefined) {
+    const renderer = resolveRendererDefault(configuredRenderer);
+    invariant(
+      RendererNameSchema.safeParse(renderer).success,
+      'configured renderer default must be a valid renderer name',
+    );
+    return { semantic: renderer, visual: renderer };
+  }
+
+  const semantic = await resolveAutomaticSemanticRenderer(deps);
+  const visual = DEFAULT_VISUAL_RENDERER_NAME;
+  invariant(
+    RendererNameSchema.safeParse(semantic).success,
+    'semantic renderer default must be a valid renderer name',
+  );
+  invariant(
+    RendererNameSchema.safeParse(visual).success,
+    'visual renderer default must be a valid renderer name',
+  );
+  return { semantic, visual };
+}
+
 export function resolveLogLevel(raw?: string): LogLevel {
   try {
     return resolveLoggerLevel(raw);
@@ -125,6 +199,7 @@ export function resolveLogLevel(raw?: string): LogLevel {
 export async function resolveCommandContext(
   options: GlobalCliOptions,
   env: NodeJS.ProcessEnv = process.env,
+  deps: RendererDefaultResolutionDeps = {},
 ): Promise<CommandContext> {
   const configuredHome = options.home ?? env.AGENT_TTY_HOME;
   const explicitHome = configuredHome !== undefined;
@@ -145,11 +220,9 @@ export async function resolveCommandContext(
     options.profile ??
     env.AGENT_TTY_PROFILE ??
     configFile?.defaultProfile;
-  const rendererDefault = resolveRendererDefault(
-    options.renderer ??
-      env.AGENT_TTY_RENDERER ??
-      configFile?.defaultRenderer ??
-      DEFAULT_RENDERER_NAME,
+  const rendererDefaults = await resolveRendererDefaults(
+    options.renderer ?? env.AGENT_TTY_RENDERER ?? configFile?.defaultRenderer,
+    deps,
   );
 
   return Object.freeze({
@@ -160,7 +233,8 @@ export async function resolveCommandContext(
     logLevel,
     logger,
     profileDefault,
-    rendererDefault,
+    rendererDefault: rendererDefaults.semantic,
+    rendererVisualDefault: rendererDefaults.visual,
     configFile,
   });
 }

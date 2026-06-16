@@ -67,6 +67,7 @@ const TEST_CONTEXT = {
   logger: createLogger('info', () => undefined),
   profileDefault: undefined,
   rendererDefault: 'ghostty-web',
+  rendererVisualDefault: 'ghostty-web',
   explicitHome: false,
   configFile: null,
 } as const;
@@ -520,6 +521,7 @@ describe('inspect command', () => {
       session: liveSession,
       cliVersion: '0.2.1',
       rpcSocketPath: '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      rendererBackend: 'libghostty-vt',
       rendererProfile: 'reference-dark',
       rendererBooted: true,
       rendererBootInFlight: false,
@@ -551,7 +553,7 @@ describe('inspect command', () => {
       rpcSocketPath: '/tmp/agent-tty/sessions/session-01/rpc.sock',
     });
     expect(emitted.result.rendererRuntime).toEqual({
-      backend: 'ghostty-web',
+      backend: 'libghostty-vt',
       mode: 'live-host',
       status: 'healthy',
       profile: 'reference-dark',
@@ -562,7 +564,7 @@ describe('inspect command', () => {
       expect.arrayContaining([
         'Host CLI Version: 0.2.1',
         'RPC Socket: /tmp/agent-tty/sessions/session-01/rpc.sock',
-        'Renderer: ghostty-web (live-host, healthy) [profile: reference-dark, booted: yes]',
+        'Renderer: libghostty-vt (live-host, healthy) [profile: reference-dark, booted: yes]',
       ]),
     );
   });

@@ -1,0 +1,5 @@
+5864fb7aed3726a2a88ca79a7ce5db53159c35fcd0ca7982b3e15c367f173af7  /home/coder/.mux/src/agent-terminal/vt-impl-5ds6/dogfood/20260616-default-semantic-renderer/screenshots/default-screenshot.png
+5864fb7aed3726a2a88ca79a7ce5db53159c35fcd0ca7982b3e15c367f173af7  /home/coder/.mux/src/agent-terminal/vt-impl-5ds6/dogfood/20260616-default-semantic-renderer/screenshots/explicit-libghostty-vt-screenshot.png
+6c1ae7c446c1df85c85027ab74ecbd270e23398e5cf48cd91c73cd37b8bfb0eb  /home/coder/.mux/src/agent-terminal/vt-impl-5ds6/dogfood/20260616-default-semantic-renderer/videos/default-webm.webm
+26feddb53310eaf020503b6f75e73b96d731995d6fa104aa046601c3a94d0328  /home/coder/.mux/src/agent-terminal/vt-impl-5ds6/dogfood/20260616-default-semantic-renderer/videos/explicit-libghostty-vt-webm.webm
+f2c09e7d3a884898e05ed1100b98c0a1063d75f0a38e9011acd51e5e2190d5dc  /home/coder/.mux/src/agent-terminal/vt-impl-5ds6/dogfood/20260616-default-semantic-renderer/recordings/default.cast

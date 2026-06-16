@@ -190,8 +190,8 @@ The Wait Baseline fixes stale-match only. It does **not** fix echo-match: a `wai
 
 ## Screenshots And Recording Exports
 
-Screenshots and WebM export use the `ghostty-web` reference renderer through Playwright/Chromium.
-Run `doctor --json` first in new environments.
+Screenshots and WebM export use the `ghostty-web` reference visual renderer through Playwright/Chromium.
+Semantic `snapshot`, screen-hash, and render-backed `wait` paths prefer `libghostty-vt` when the optional native package is available and fall back to `ghostty-web` otherwise. Run `doctor --json` first in new environments.
 
 ```bash
 agent-tty screenshot <session-id> --profile reference-dark --json
@@ -201,6 +201,8 @@ agent-tty record export <session-id> --format webm --timing accelerated --out ./
 ```
 
 WebM export replays with recorded wall-clock timing by default. Pass `--timing accelerated` (idle gaps clamped to 400ms) or `--timing max-speed` for a time-compressed video.
+
+Use `--renderer ghostty-web`, `AGENT_TTY_RENDERER=ghostty-web`, or Home `config.json` `{ "defaultRenderer": "ghostty-web" }` to force legacy all-browser rendering. Use `--renderer libghostty-vt` only when you intentionally want semantic and screenshot requests routed through the native backend; WebM requests still record `ghostty-web` as the actual video producer.
 
 `ghostty-web` provides reference visual truth for reviewable artifacts; it does not promise exact pixel parity with native terminals.
 

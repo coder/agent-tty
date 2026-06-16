@@ -1,0 +1,143 @@
+{
+  "version": 1,
+  "sessionId": "01KV851DZH93PX9FQA3C199TSS",
+  "artifacts": [
+    {
+      "id": "01KV851Q0MS2YQW4MTWXYNJBBD",
+      "kind": "snapshot",
+      "filename": "snapshot-6-structured.json",
+      "sessionId": "01KV851DZH93PX9FQA3C199TSS",
+      "capturedAtSeq": 6,
+      "createdAt": "2026-06-16T12:03:40.693Z",
+      "metadata": {
+        "format": "structured",
+        "rendererBackend": "libghostty-vt",
+        "cols": 80,
+        "rows": 24,
+        "cursorRow": 5,
+        "cursorCol": 7
+      }
+    },
+    {
+      "id": "01KV851RXQP4ZQRBXFNHHNSQTM",
+      "kind": "screenshot",
+      "filename": "screenshot-6-reference-dark.png",
+      "sessionId": "01KV851DZH93PX9FQA3C199TSS",
+      "capturedAtSeq": 6,
+      "createdAt": "2026-06-16T12:03:42.647Z",
+      "sha256": "5864fb7aed3726a2a88ca79a7ce5db53159c35fcd0ca7982b3e15c367f173af7",
+      "metadata": {
+        "profileName": "reference-dark",
+        "cols": 80,
+        "rows": 24,
+        "pngSizeBytes": 13319,
+        "cursorVisible": false,
+        "rendererBackend": "ghostty-web",
+        "pixelWidth": 640,
+        "pixelHeight": 384,
+        "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d"
+      }
+    },
+    {
+      "id": "01KV851TCV0Q3J1QS8KR93E6FS",
+      "kind": "snapshot",
+      "filename": "snapshot-6-text.json",
+      "sessionId": "01KV851DZH93PX9FQA3C199TSS",
+      "capturedAtSeq": 6,
+      "createdAt": "2026-06-16T12:03:44.156Z",
+      "metadata": {
+        "format": "text",
+        "rendererBackend": "ghostty-web",
+        "cols": 80,
+        "rows": 24,
+        "cursorRow": 5,
+        "cursorCol": 7
+      }
+    },
+    {
+      "id": "01KV851W9NV6PWW8TP0S8CH5XF",
+      "kind": "screenshot",
+      "filename": "screenshot-6-reference-dark.png",
+      "sessionId": "01KV851DZH93PX9FQA3C199TSS",
+      "capturedAtSeq": 6,
+      "createdAt": "2026-06-16T12:03:46.101Z",
+      "sha256": "5864fb7aed3726a2a88ca79a7ce5db53159c35fcd0ca7982b3e15c367f173af7",
+      "metadata": {
+        "profileName": "reference-dark",
+        "cols": 80,
+        "rows": 24,
+        "pngSizeBytes": 13319,
+        "cursorVisible": false,
+        "rendererBackend": "ghostty-web",
+        "pixelWidth": 640,
+        "pixelHeight": 384,
+        "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d"
+      }
+    },
+    {
+      "id": "01KV8524W53CY3E89V0RFESPH3",
+      "kind": "video",
+      "filename": "recording-14-webm.webm",
+      "sessionId": "01KV851DZH93PX9FQA3C199TSS",
+      "capturedAtSeq": 14,
+      "createdAt": "2026-06-16T12:03:54.886Z",
+      "sha256": "6c1ae7c446c1df85c85027ab74ecbd270e23398e5cf48cd91c73cd37b8bfb0eb",
+      "bytes": 49225,
+      "metadata": {
+        "format": "webm",
+        "outputPath": "/tmp/agent-tty-default-renderer.w26eUX/sessions/01KV851DZH93PX9FQA3C199TSS/artifacts/recording-14-webm.webm",
+        "width": 80,
+        "height": 24,
+        "profileName": "reference-dark",
+        "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d",
+        "timingMode": "accelerated",
+        "rendererBackend": "ghostty-web",
+        "outputEventCount": 10,
+        "resizeEventCount": 0
+      }
+    },
+    {
+      "id": "01KV8529Z6X3AE5GTCFX277DRE",
+      "kind": "video",
+      "filename": "recording-14-webm.webm",
+      "sessionId": "01KV851DZH93PX9FQA3C199TSS",
+      "capturedAtSeq": 14,
+      "createdAt": "2026-06-16T12:04:00.103Z",
+      "sha256": "26feddb53310eaf020503b6f75e73b96d731995d6fa104aa046601c3a94d0328",
+      "bytes": 49695,
+      "metadata": {
+        "format": "webm",
+        "outputPath": "/tmp/agent-tty-default-renderer.w26eUX/sessions/01KV851DZH93PX9FQA3C199TSS/artifacts/recording-14-webm.webm",
+        "width": 80,
+        "height": 24,
+        "profileName": "reference-dark",
+        "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d",
+        "timingMode": "accelerated",
+        "rendererBackend": "ghostty-web",
+        "outputEventCount": 10,
+        "resizeEventCount": 0
+      }
+    },
+    {
+      "id": "01KV852BE8YJKSQSWSJX6R1AVH",
+      "kind": "recording",
+      "filename": "recording-14-asciicast.cast",
+      "sessionId": "01KV851DZH93PX9FQA3C199TSS",
+      "capturedAtSeq": 14,
+      "createdAt": "2026-06-16T12:04:01.609Z",
+      "sha256": "f2c09e7d3a884898e05ed1100b98c0a1063d75f0a38e9011acd51e5e2190d5dc",
+      "bytes": 667,
+      "metadata": {
+        "format": "asciicast",
+        "outputPath": "/tmp/agent-tty-default-renderer.w26eUX/sessions/01KV851DZH93PX9FQA3C199TSS/artifacts/recording-14-asciicast.cast",
+        "width": 80,
+        "height": 24,
+        "title": "01KV851DZH93PX9FQA3C199TSS",
+        "timestamp": 1781611412,
+        "outputEventCount": 10,
+        "resizeEventCount": 0,
+        "markerCount": 0
+      }
+    }
+  ]
+}

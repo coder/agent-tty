@@ -100,10 +100,10 @@ Every session is backed by a real PTY (`node-pty`) and an append-only event log.
 
 Rendering uses Ghostty's terminal engine through two interchangeable backends (`--renderer`):
 
-- **`libghostty-vt`** — Ghostty's native VT engine, bound into Node. Fast, browser-free semantic snapshots and `wait` checks. Also powers the dashboard.
-- **`ghostty-web`** (default) — a headless web build of Ghostty driven by Playwright/Chromium. Adds pixel PNG screenshots and WebM video.
+- **`libghostty-vt`** — Ghostty's native VT engine, bound into Node. It is the default for semantic snapshots, render-backed `wait` checks, and screen hashes when the optional native package is available. It also powers the dashboard.
+- **`ghostty-web`** — a headless web build of Ghostty driven by Playwright/Chromium. It is the default for visual PNG screenshots and WebM video, and it remains the automatic semantic fallback when `libghostty-vt` is unavailable.
 
-`ghostty-web` is a _reference_ renderer: it shows what a pinned Ghostty build draws, not a pixel-for-pixel guarantee of any particular native terminal window. That tradeoff is deliberate. The renderer sits behind an adapter, so native backends can be added later without changing the CLI contract.
+`ghostty-web` is a _reference_ visual renderer: it shows what a pinned Ghostty build draws, not a pixel-for-pixel guarantee of any particular native terminal window. That tradeoff is deliberate. The renderer sits behind an adapter, so additional backends can be used without changing the CLI contract. Set `--renderer ghostty-web`, `AGENT_TTY_RENDERER=ghostty-web`, or `config.json` `defaultRenderer` to restore legacy all-`ghostty-web` behavior.
 
 ## Where it came from
 
@@ -141,6 +141,7 @@ See [`docs/AGENT-SKILLS.md`](./docs/AGENT-SKILLS.md).
 `agent-tty` is `0.4.3` and focused on reliable, isolated, reviewable terminal and TUI automation through a stable CLI. <!-- x-release-please-version -->
 
 - Linux and macOS are tier-1; Windows is tier-2 and not CI-tested.
+- Semantic snapshots and render-backed waits prefer the optional `libghostty-vt` backend when it is available, then fall back to `ghostty-web`.
 - Screenshots and WebM video depend on Playwright/Chromium and the `ghostty-web` backend.
 - `run` is best for shell setup and command injection; it does not capture a child command's structured output or exit status.
 - Apache-2.0, runs entirely locally, no account or SaaS.

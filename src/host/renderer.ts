@@ -146,6 +146,10 @@ export class HostRendererManager {
     return this.bootPromise !== null;
   }
 
+  getCurrentRendererName(): string | null {
+    return this.currentBackend?.rendererBackend ?? null;
+  }
+
   getCurrentProfileName(): string | null {
     return this.currentProfileName;
   }

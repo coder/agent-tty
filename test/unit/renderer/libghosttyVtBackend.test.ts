@@ -170,6 +170,7 @@ describe('LibghosttyVtBackend', () => {
     expect(fixture.createTerminal).toHaveBeenCalledWith({
       cols: 100,
       rows: 30,
+      scrollbackLimit: 10_000,
     });
     expect(backend.isBooted).toBe(true);
   });

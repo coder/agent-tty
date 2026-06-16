@@ -1,0 +1,11 @@
+{"version":2,"width":80,"height":24,"timestamp":1781611412,"title":"01KV851DZH93PX9FQA3C199TSS","sessionId":"01KV851DZH93PX9FQA3C199TSS","env":{"TERM":"xterm-256color"},"toolVersion":"0.4.3"}
+[0,"o","READY> "]
+[0.001,"o","(node:2465832) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\r\n(Use `node --trace-deprecation ...` to show where the warning was created)\r\n"]
+[2.492,"o","Default semantic renderer proof"]
+[3.655,"o","\r\n"]
+[3.655,"o","ECHO: Default semantic renderer proof\r\nREADY> "]
+[14.993,"o","exit"]
+[16.147,"o","\r\n"]
+[16.147,"o","BYE\r\n"]
+[16.166,"o","\\"]
+[16.167,"o","\u001b[1G\u001b[0K"]

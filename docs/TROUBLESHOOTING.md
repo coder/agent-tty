@@ -35,13 +35,14 @@ Affected commands usually include:
 
 Check `doctor --json` for:
 
+- `libghostty_vt_available` (preferred semantic renderer and dashboard)
 - `playwright_available`
 - `browser_cache_accessible`
 - `browser_launch`
-- `ghostty_web_available`
+- `ghostty_web_available` (visual renderer and semantic fallback)
 - `screenshot_viable`
 
-If these fail in CI or a container, install Chromium during setup and make sure the cache is readable by the process running `agent-tty`.
+If the browser-backed checks fail in CI or a container, install Chromium during setup and make sure the cache is readable by the process running `agent-tty`. If `libghostty_vt_available` is skipped or unavailable, semantic commands should fall back to `ghostty-web`; use `--renderer ghostty-web` to make that choice explicit.
 
 ## Isolated Homes
 
@@ -77,10 +78,9 @@ or install a GitHub Release tarball as described in [`INSTALL.md`](./INSTALL.md)
 
 ## Reference Rendering Caveat
 
-`ghostty-web` is the reference renderer for snapshots, screenshots, and replay video.
-It gives repeatable artifacts for review and automation, but it does not guarantee exact native-terminal pixel parity.
+`libghostty-vt` is the preferred default for semantic snapshots and render-backed waits when the optional native package is available. `ghostty-web` remains the reference visual renderer for screenshots and replay video, and it is the semantic fallback when native rendering is unavailable.
 
-If a bug depends on a specific native terminal emulator, keep the `agent-tty` artifact as reference evidence and capture native-terminal evidence separately when needed.
+These renderers give repeatable artifacts for review and automation, but they do not guarantee exact native-terminal pixel parity. If a bug depends on a specific native terminal emulator, keep the `agent-tty` artifact as reference evidence and capture native-terminal evidence separately when needed.
 
 ## Stray `%` at the End of Captured Output
 

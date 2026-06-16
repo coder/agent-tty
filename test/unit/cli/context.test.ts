@@ -1,9 +1,11 @@
 import { Command } from 'commander';
 import type * as ResolveConfigModule from '../../../src/config/resolveConfig.js';
+import type * as RendererReadinessModule from '../../../src/renderer/readiness.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   loadConfigFile: vi.fn(),
+  probeLibghosttyVt: vi.fn(),
 }));
 
 vi.mock('../../../src/config/resolveConfig.js', async () => {
@@ -16,7 +18,18 @@ vi.mock('../../../src/config/resolveConfig.js', async () => {
   };
 });
 
+vi.mock('../../../src/renderer/readiness.js', async () => {
+  const actual = await vi.importActual<typeof RendererReadinessModule>(
+    '../../../src/renderer/readiness.js',
+  );
+  return {
+    ...actual,
+    probeLibghosttyVt: mocks.probeLibghosttyVt,
+  };
+});
+
 import {
+  clearRendererDefaultProbeCacheForTests,
   getCommandContext,
   parseTimeoutMsOption,
   resolveCommandContext,
@@ -33,7 +46,12 @@ const TEST_FLAG_HOME = '/tmp/from-flag';
 describe('CLI context resolution', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearRendererDefaultProbeCacheForTests();
     mocks.loadConfigFile.mockResolvedValue(null);
+    mocks.probeLibghosttyVt.mockResolvedValue({
+      available: false,
+      reason: 'libghostty-vt not installed',
+    });
   });
 
   it('prefers --home over AGENT_TTY_HOME', async () => {
@@ -157,7 +175,7 @@ describe('CLI context resolution', () => {
     ).resolves.toMatchObject({ profileDefault: undefined });
   });
 
-  it('resolves rendererDefault from flag, env, config, and default precedence', async () => {
+  it('resolves explicit renderer defaults from flag, env, and config precedence', async () => {
     mocks.loadConfigFile.mockResolvedValue({
       defaultRenderer: 'libghostty-vt',
     });
@@ -167,7 +185,10 @@ describe('CLI context resolution', () => {
         { home: TEST_FLAG_HOME, renderer: 'ghostty-web' },
         {},
       ),
-    ).resolves.toMatchObject({ rendererDefault: 'ghostty-web' });
+    ).resolves.toMatchObject({
+      rendererDefault: 'ghostty-web',
+      rendererVisualDefault: 'ghostty-web',
+    });
     await expect(
       resolveCommandContext(
         { home: TEST_FLAG_HOME },
@@ -176,15 +197,58 @@ describe('CLI context resolution', () => {
           AGENT_TTY_RENDERER: 'ghostty-web',
         },
       ),
-    ).resolves.toMatchObject({ rendererDefault: 'ghostty-web' });
+    ).resolves.toMatchObject({
+      rendererDefault: 'ghostty-web',
+      rendererVisualDefault: 'ghostty-web',
+    });
     await expect(
       resolveCommandContext({ home: TEST_FLAG_HOME }, {}),
-    ).resolves.toMatchObject({ rendererDefault: 'libghostty-vt' });
+    ).resolves.toMatchObject({
+      rendererDefault: 'libghostty-vt',
+      rendererVisualDefault: 'libghostty-vt',
+    });
+  });
 
-    mocks.loadConfigFile.mockResolvedValue(null);
+  it('prefers libghostty-vt for automatic semantic defaults when available', async () => {
+    mocks.probeLibghosttyVt.mockResolvedValue({ available: true });
+
     await expect(
       resolveCommandContext({ home: TEST_FLAG_HOME }, {}),
-    ).resolves.toMatchObject({ rendererDefault: 'ghostty-web' });
+    ).resolves.toMatchObject({
+      rendererDefault: 'libghostty-vt',
+      rendererVisualDefault: 'ghostty-web',
+    });
+  });
+
+  it('falls back to ghostty-web automatic semantic defaults when libghostty-vt is unavailable', async () => {
+    mocks.probeLibghosttyVt.mockResolvedValue({ available: false });
+
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME }, {}),
+    ).resolves.toMatchObject({
+      rendererDefault: 'ghostty-web',
+      rendererVisualDefault: 'ghostty-web',
+    });
+  });
+
+  it('falls back to ghostty-web automatic semantic defaults when probing fails', async () => {
+    mocks.probeLibghosttyVt.mockRejectedValue(new Error('probe failed'));
+
+    await expect(
+      resolveCommandContext({ home: TEST_FLAG_HOME }, {}),
+    ).resolves.toMatchObject({
+      rendererDefault: 'ghostty-web',
+      rendererVisualDefault: 'ghostty-web',
+    });
+  });
+
+  it('memoizes the automatic semantic renderer probe', async () => {
+    mocks.probeLibghosttyVt.mockResolvedValue({ available: true });
+
+    await resolveCommandContext({ home: TEST_FLAG_HOME }, {});
+    await resolveCommandContext({ home: TEST_FLAG_HOME }, {});
+
+    expect(mocks.probeLibghosttyVt).toHaveBeenCalledTimes(1);
   });
 
   it('rejects invalid renderer names', async () => {
@@ -231,6 +295,7 @@ describe('CLI context resolution', () => {
       logger: createLogger('info', () => undefined),
       profileDefault: 'default-profile',
       rendererDefault: 'ghostty-web',
+      rendererVisualDefault: 'ghostty-web',
       configFile: null,
     });
     setCommandContext(command, cachedContext);

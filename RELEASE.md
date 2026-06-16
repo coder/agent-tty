@@ -9,7 +9,7 @@ For per-release changes, see [`CHANGELOG.md`](./CHANGELOG.md). For release mecha
 ## Supported capabilities
 
 - Reliable isolated session lifecycle management: `create`, `inspect`, `destroy`, and `gc` all work against isolated agent-tty homes.
-- Renderer-backed screenshots, semantic snapshots, and WebM export for reviewer-visible proof artifacts.
+- Renderer-backed screenshots, semantic snapshots, and WebM export for reviewer-visible proof artifacts; semantic operations prefer `libghostty-vt` when available, while visual artifacts use `ghostty-web`.
 - The `run` command for robust in-session command execution without having to simulate long shell setup scripts as manual keystrokes.
 - `doctor --json` with isolation-aware diagnostics for home resolution, renderer prerequisites, and screenshot viability.
 - An append-only event log that remains the canonical replay/export source of truth.
@@ -17,7 +17,7 @@ For per-release changes, see [`CHANGELOG.md`](./CHANGELOG.md). For release mecha
 
 ## Explicitly out of scope
 
-- Native renderer backends such as Ghostty native or kitty.
+- Additional native renderer backends beyond the shipped `libghostty-vt` semantic renderer, such as kitty or platform terminal automation.
 - Mouse input support.
 - Remote or networked sessions.
 - An MCP wrapper.
@@ -27,7 +27,7 @@ For per-release changes, see [`CHANGELOG.md`](./CHANGELOG.md). For release mecha
 
 ## Known limitations
 
-- The renderer is the `ghostty-web` reference backend, not a native-terminal parity guarantee.
+- Semantic operations may use `libghostty-vt`, but visual screenshots and WebM remain `ghostty-web` reference artifacts, not a native-terminal parity guarantee.
 - `run` completion detection relies on shell-visible echo of an injected boundary marker.
 - Screenshots and WebM export require Playwright/Chromium to be installed and discoverable.
 - The reviewed LazyVim workflow currently assumes Neovim `>= 0.11.2` plus its usual prerequisites; older Neovim builds are out of contract for that scenario.

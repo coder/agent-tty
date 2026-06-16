@@ -1,0 +1,50 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-06-16T12:04:02.980Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KV851DZH93PX9FQA3C199TSS",
+      "createdAt": "2026-06-16T12:03:31.444Z",
+      "updatedAt": "2026-06-16T12:03:48.740Z",
+      "status": "exited",
+      "command": ["npx", "tsx", "test/fixtures/apps/hello-prompt/main.ts"],
+      "cwd": "/home/coder/.mux/src/agent-terminal/vt-impl-5ds6",
+      "name": "default-semantic-renderer",
+      "shell": "/bin/bash",
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "creationCols": 80,
+      "creationRows": 24,
+      "hostPid": 2465597,
+      "childPid": 2465610,
+      "exitCode": 0,
+      "exitSignal": null
+    },
+    "eventCount": 15,
+    "uptime": 17296,
+    "lastEventSeq": 14,
+    "terminationCategory": "clean-exit",
+    "artifacts": {
+      "total": 7,
+      "byKind": {
+        "snapshot": 2,
+        "screenshot": 2,
+        "video": 2,
+        "recording": 1
+      },
+      "missingCount": 0,
+      "health": "healthy"
+    },
+    "usedOfflineReplay": false,
+    "rendererRuntime": {
+      "backend": "ghostty-web",
+      "mode": "offline-replay",
+      "status": "fallback",
+      "reason": "session-not-running"
+    },
+    "eventLogBytes": 1613
+  }
+}

@@ -56,6 +56,7 @@ describe('create command', () => {
     logger: createLogger('info', () => undefined),
     profileDefault: undefined,
     rendererDefault: 'ghostty-web',
+    rendererVisualDefault: 'ghostty-web',
     explicitHome: false,
     configFile: null,
   } as const;

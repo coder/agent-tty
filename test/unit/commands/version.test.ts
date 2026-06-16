@@ -19,7 +19,7 @@ describe('version command', () => {
 
     expect(result.cliVersion).toMatch(SEMVER_WITH_OPTIONAL_PRERELEASE);
     expect(result.protocolVersion).toBe('0.1.0');
-    expect(result.rendererBackends).toEqual(['ghostty-web']);
+    expect(result.rendererBackends).toEqual(['ghostty-web', 'libghostty-vt']);
     expect(result.runtime.node).toMatch(/^v\d+\.\d+\.\d+$/);
     expect('capabilities' in result).toBe(false);
   });
@@ -56,7 +56,7 @@ describe('version command', () => {
 
     expect(result.cliVersion).toMatch(SEMVER_WITH_OPTIONAL_PRERELEASE);
     expect(result.protocolVersion).toBe('0.1.0');
-    expect(result.rendererBackends).toEqual(['ghostty-web']);
+    expect(result.rendererBackends).toEqual(['ghostty-web', 'libghostty-vt']);
     expect(result.runtime.node).toMatch(/^v\d+\.\d+\.\d+$/);
     expect(result.runtime.platform).toBe(process.platform);
     expect(result.runtime.arch).toBe(process.arch);

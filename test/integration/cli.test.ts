@@ -71,7 +71,10 @@ describe('CLI integration', () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.command).toBe('version');
     expect(parsed.result.cliVersion).toMatch(SEMVER_WITH_OPTIONAL_PRERELEASE);
-    expect(parsed.result.rendererBackends).toEqual(['ghostty-web']);
+    expect(parsed.result.rendererBackends).toEqual([
+      'ghostty-web',
+      'libghostty-vt',
+    ]);
   });
 
   it('lists bundled skills in human output', () => {
