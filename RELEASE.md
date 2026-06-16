@@ -1,7 +1,7 @@
 # agent-tty release contract
 
-This document defines the supported product contract for the current `0.2.x` release line.
-The `0.1.x` beta line established the baseline for isolated, reviewable terminal automation for real TUI workflows, and `0.2.0` is the first stable cut on top of that baseline; later `0.2.x` releases may add compatible fixes and features without widening this core support contract.
+This document defines the supported product contract for the current stable release line.
+It builds on the `0.1.x` beta baseline for isolated, reviewable terminal automation of real TUI workflows; later stable releases may add compatible fixes and features without widening this core support contract.
 If a workflow depends on behavior outside this document, treat it as future-scope or best-effort rather than a guaranteed capability.
 
 For per-release changes, see [`CHANGELOG.md`](./CHANGELOG.md). For release mechanics, use [`docs/RELEASE-PROCESS.md`](./docs/RELEASE-PROCESS.md). For reviewer-facing proof bundles, start with [`dogfood/CATALOG.md`](./dogfood/CATALOG.md).
