@@ -107,7 +107,10 @@ export async function writeTextFileAtomic(
 
   try {
     await mkdir(outputDirectory, { recursive: true });
-    await writeFile(temporaryPath, options.contents, 'utf8');
+    await writeFile(temporaryPath, options.contents, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
     await rename(temporaryPath, options.path);
   } catch (error) {
     await rm(temporaryPath, { force: true }).catch(() => undefined);
