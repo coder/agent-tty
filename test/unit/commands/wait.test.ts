@@ -415,6 +415,30 @@ describe('wait command', () => {
     );
   });
 
+  it('passes the semantic renderer default to render wait RPCs', async () => {
+    const result = {
+      matched: true,
+      timedOut: false,
+      matchedText: 'hello',
+      capturedAtSeq: 7,
+    };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runWaitCommand(
+      createOptions({
+        context: { ...TEST_CONTEXT, rendererDefault: 'libghostty-vt' },
+        text: 'hello',
+      }),
+    );
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      'waitForRender',
+      expect.objectContaining({ rendererName: 'libghostty-vt' }),
+      605_000,
+    );
+  });
+
   it('routes --regex waits to the render wait RPC', async () => {
     const result = {
       matched: true,

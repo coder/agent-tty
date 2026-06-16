@@ -8,6 +8,7 @@ import {
   cleanupHome,
   createSession,
   destroySession,
+  readEvents,
   runCli,
 } from '../helpers.js';
 import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
@@ -122,6 +123,41 @@ describe('backend selection integration', () => {
         },
       ],
     });
+  });
+
+  it('does not leak automatic renderer defaults into PTY environments', async () => {
+    sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      'printf "public=%s private=%s\\n" "${AGENT_TTY_RENDERER-unset}" "${AGENT_TTY_HOST_RENDERER-unset}"; exec cat',
+    ]);
+
+    const result = runCli(
+      [
+        'wait',
+        sessionId,
+        '--text',
+        'public=unset private=unset',
+        '--timeout',
+        '10000',
+        '--json',
+      ],
+      { AGENT_TTY_HOME: testHome },
+      60_000,
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      ok: true,
+      result: { matched: true, timedOut: false },
+    });
+
+    const output = (await readEvents(testHome, sessionId))
+      .filter((event) => event.type === 'output')
+      .map((event) => event.payload.data)
+      .join('');
+    expect(output).toContain('public=unset private=unset');
   });
 
   it('threads --renderer ghostty-web through live snapshot RPC paths', () => {

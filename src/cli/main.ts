@@ -46,6 +46,7 @@ import {
   DEFAULT_ROWS,
   DEFAULT_SHELL,
   DEFAULT_TERM,
+  HOST_RENDERER_ENV_KEY,
 } from '../config/defaults.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
@@ -143,9 +144,10 @@ async function main(): Promise<void> {
     );
 
   program.hook('preAction', async (_thisCommand, actionCommand) => {
-    const context = await resolveCommandContext(
-      actionCommand.optsWithGlobals<GlobalCliOptions>(),
-    );
+    const globalOptions = actionCommand.optsWithGlobals<GlobalCliOptions>();
+    const rendererConfiguredByEnv =
+      process.env.AGENT_TTY_RENDERER !== undefined;
+    const context = await resolveCommandContext(globalOptions);
     process.env.AGENT_TTY_HOME = context.home;
     // Propagate the resolved log level to the process environment so that
     // subsystems instantiated outside the CLI context (e.g., renderer backends,
@@ -154,7 +156,16 @@ async function main(): Promise<void> {
     // and constructor is a larger refactor with no user-visible benefit, since
     // the env var is set before any command handler runs.
     process.env.AGENT_TTY_LOG_LEVEL = context.logLevel;
-    process.env.AGENT_TTY_RENDERER = context.rendererDefault;
+    process.env[HOST_RENDERER_ENV_KEY] = context.rendererDefault;
+    const rendererConfiguredExplicitly =
+      globalOptions.renderer !== undefined ||
+      rendererConfiguredByEnv ||
+      context.configFile?.defaultRenderer !== undefined;
+    if (rendererConfiguredExplicitly) {
+      process.env.AGENT_TTY_RENDERER = context.rendererDefault;
+    } else {
+      delete process.env.AGENT_TTY_RENDERER;
+    }
     setColorEnabled(context.colorEnabled);
     setCommandContext(actionCommand, context);
     context.logger.debug('resolved command context', {

@@ -373,10 +373,18 @@ describe(
         sendRpc(
           rpcSocketPath,
           'snapshot',
-          { format: 'structured' },
+          {
+            format: 'structured',
+            rendererName: expectedSemanticRenderer,
+          },
           SNAPSHOT_TIMEOUT_MS,
         ),
-        sendRpc(rpcSocketPath, 'screenshot', {}, SNAPSHOT_TIMEOUT_MS),
+        sendRpc(
+          rpcSocketPath,
+          'screenshot',
+          { rendererName: 'ghostty-web' },
+          SNAPSHOT_TIMEOUT_MS,
+        ),
       ])) as [SnapshotResult, ScreenshotResult];
       const screenshotStats = await stat(screenshot.artifactPath);
       const manifest = await readArtifactManifest(sessDir);

@@ -5,12 +5,12 @@ This bundle proves the split renderer default: semantic actions (`wait`, `snapsh
 ## What this proves
 
 - `expected-renderer.json` records the automatic semantic renderer detected in this workspace. In this capture it is `libghostty-vt`.
-- `default-wait.json` was captured without `--renderer`, exercising the automatic semantic render-wait path.
+- `default-wait.json` was captured without `--renderer`, exercising the automatic semantic render-wait path; `default-wait-inspect.json` records the live renderer runtime immediately after that wait.
 - `default-snapshot.json` was captured without `--renderer`; `default-snapshot-artifact.json` records the snapshot artifact metadata with `rendererBackend: "libghostty-vt"`.
 - `default-screenshot.json` was captured without `--renderer` and reports `result.rendererBackend: "ghostty-web"`; the PNG is copied to `screenshots/default-screenshot.png`.
 - `default-webm.json` was captured without `--renderer` and reports `result.metadata.rendererBackend: "ghostty-web"`; the WebM is copied to `videos/default-webm.webm`.
 - `explicit-ghostty-web-snapshot.json` proves the legacy override path; `explicit-ghostty-web-snapshot-artifact.json` records `rendererBackend: "ghostty-web"`.
-- `explicit-libghostty-vt-screenshot.json` proves explicit native screenshot requests still produce honest `ghostty-web` PNG metadata via fallback.
+- `explicit-libghostty-vt-screenshot.json` proves explicit native screenshot requests still produce honest `ghostty-web` PNG metadata via fallback when native support is available; in fallback-only environments the replay script writes an explicit skipped-evidence JSON instead.
 - `explicit-libghostty-vt-webm.json` proves explicit native WebM requests are accepted while the actual video producer remains `ghostty-web`.
 - `default-cast.json` and `recordings/default.cast` keep a terminal recording of the session.
 
@@ -34,12 +34,14 @@ From the repository root:
 bash dogfood/20260616-default-semantic-renderer/commands.sh
 ```
 
-The script requires `git`, `jq`, `node`, `npm`, `npx`, and the installed project dependencies. It never writes to `~/.agent-tty`; every CLI command uses the temporary `AGENT_TTY_HOME` created at startup.
+The script requires `git`, `jq`, `node`, `npm`, `npx`, and the installed project dependencies. Native `@coder/libghostty-vt-node` support is required only for the explicit native screenshot proof; when it is unavailable, the script still exercises automatic semantic fallback and writes skipped evidence for that native-only screenshot step. It never writes to `~/.agent-tty`; every CLI command uses the temporary `AGENT_TTY_HOME` created at startup.
 
 ## Reviewer checks
 
 ```bash
 jq -r '.expectedSemanticRenderer' dogfood/20260616-default-semantic-renderer/expected-renderer.json
+jq -r '.result.rendererRuntime.backend' \
+  dogfood/20260616-default-semantic-renderer/default-wait-inspect.json
 jq -r '.metadata.rendererBackend' \
   dogfood/20260616-default-semantic-renderer/default-snapshot-artifact.json \
   dogfood/20260616-default-semantic-renderer/explicit-ghostty-web-snapshot-artifact.json

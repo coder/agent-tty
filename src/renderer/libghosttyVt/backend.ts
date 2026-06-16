@@ -378,7 +378,6 @@ export class LibghosttyVtBackend implements RendererBackend {
   private currentCols: number;
   private currentRows: number;
   private disposed = false;
-  private fallbackBackend: RendererBackend | null = null;
   private initialReplayCols: number | null = null;
   private initialReplayRows: number | null = null;
   private lastAppliedSeq = -1;
@@ -605,9 +604,13 @@ export class LibghosttyVtBackend implements RendererBackend {
     );
     invariant(isAbsolute(outputPath), 'screenshot outputPath must be absolute');
 
-    const fallback = await this.ensureFallbackBackend();
-    await fallback.replayTo(this.latestReplayInput);
-    return await fallback.screenshot(outputPath, options);
+    const fallback = await this.createFallbackBackend();
+    try {
+      await fallback.replayTo(this.latestReplayInput);
+      return await fallback.screenshot(outputPath, options);
+    } finally {
+      await fallback.dispose();
+    }
   }
 
   public async getVisibleText(): Promise<string> {
@@ -618,9 +621,9 @@ export class LibghosttyVtBackend implements RendererBackend {
     return visibleText;
   }
 
-  public async dispose(): Promise<void> {
+  public dispose(): Promise<void> {
     if (this.disposed) {
-      return;
+      return Promise.resolve();
     }
 
     this.disposed = true;
@@ -630,12 +633,7 @@ export class LibghosttyVtBackend implements RendererBackend {
     if (terminal !== null) {
       terminal.dispose();
     }
-
-    const fallback = this.fallbackBackend;
-    this.fallbackBackend = null;
-    if (fallback !== null) {
-      await fallback.dispose();
-    }
+    return Promise.resolve();
   }
 
   private async bootInternal(): Promise<void> {
@@ -677,20 +675,23 @@ export class LibghosttyVtBackend implements RendererBackend {
     }
   }
 
-  private async ensureFallbackBackend(): Promise<RendererBackend> {
-    if (this.fallbackBackend === null) {
-      const fallback = this.fallbackFactory(this.sessionId, this.profile);
-      invariant(
-        fallback.rendererBackend !== this.rendererBackend,
-        'libghostty-vt screenshot fallback must use a different renderer backend',
-      );
-      this.fallbackBackend = fallback;
+  private async createFallbackBackend(): Promise<RendererBackend> {
+    const fallback = this.fallbackFactory(this.sessionId, this.profile);
+    invariant(
+      fallback.rendererBackend !== this.rendererBackend,
+      'libghostty-vt screenshot fallback must use a different renderer backend',
+    );
+    try {
+      await fallback.boot();
+      return fallback;
+    } catch (error) {
+      try {
+        await fallback.dispose();
+      } catch {
+        // Preserve the original fallback boot error; dispose is best effort.
+      }
+      throw error;
     }
-
-    if (!this.fallbackBackend.isBooted) {
-      await this.fallbackBackend.boot();
-    }
-    return this.fallbackBackend;
   }
 
   private assertNotDisposed(methodName: string): void {

@@ -226,6 +226,30 @@ function buildSemanticUnavailableDetail(
   return details.length === 0 ? undefined : details.join('; ');
 }
 
+function buildUnavailableSemanticRenderCapability(
+  name: 'snapshot' | 'wait',
+  detail: string | undefined,
+): CapabilityEntry {
+  if (name === 'wait') {
+    return {
+      name,
+      status: 'degraded',
+      reason: 'render waits unavailable',
+      detail:
+        detail === undefined
+          ? 'legacy --exit and --idle-ms wait modes remain available'
+          : `legacy --exit and --idle-ms wait modes remain available; ${detail}`,
+    };
+  }
+
+  return {
+    name,
+    status: 'unavailable',
+    reason: 'semantic renderer unavailable',
+    detail,
+  };
+}
+
 async function buildSemanticRenderCapability(
   name: 'snapshot' | 'wait',
   mode: DiscoveryMode,
@@ -267,12 +291,10 @@ async function buildSemanticRenderCapability(
       : { name, status: 'available' };
   }
 
-  return {
+  return buildUnavailableSemanticRenderCapability(
     name,
-    status: 'unavailable',
-    reason: 'semantic renderer unavailable',
-    detail: buildSemanticUnavailableDetail(libghosttyVtProbe, playwrightProbe),
-  };
+    buildSemanticUnavailableDetail(libghosttyVtProbe, playwrightProbe),
+  );
 }
 
 function buildFullSemanticRenderCapabilityFromChecks(
@@ -309,30 +331,24 @@ function buildFullSemanticRenderCapabilityFromChecks(
   }
 
   if (playwrightCheck.status === 'fail') {
-    return {
+    return buildUnavailableSemanticRenderCapability(
       name,
-      status: 'unavailable',
-      reason: 'semantic renderer unavailable',
-      detail: `libghostty-vt: ${libghosttyVtCheck.message}; playwright: ${playwrightCheck.message}`,
-    };
+      `libghostty-vt: ${libghosttyVtCheck.message}; playwright: ${playwrightCheck.message}`,
+    );
   }
 
   if (ghosttyWebCheck.status === 'fail') {
-    return {
+    return buildUnavailableSemanticRenderCapability(
       name,
-      status: 'unavailable',
-      reason: 'semantic renderer unavailable',
-      detail: `libghostty-vt: ${libghosttyVtCheck.message}; ghostty-web: ${ghosttyWebCheck.message}`,
-    };
+      `libghostty-vt: ${libghosttyVtCheck.message}; ghostty-web: ${ghosttyWebCheck.message}`,
+    );
   }
 
   if (browserLaunchCheck.status === 'fail') {
-    return {
+    return buildUnavailableSemanticRenderCapability(
       name,
-      status: 'unavailable',
-      reason: 'semantic renderer unavailable',
-      detail: `libghostty-vt: ${libghosttyVtCheck.message}; browser: ${browserLaunchCheck.message}`,
-    };
+      `libghostty-vt: ${libghosttyVtCheck.message}; browser: ${browserLaunchCheck.message}`,
+    );
   }
 
   return {

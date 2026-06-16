@@ -21,7 +21,7 @@ This design intentionally describes a **general product**, not a Mux-specific im
 
 ## Current shipped status
 
-The current `0.3.x` line is centered on reliable, isolated, reviewable terminal and TUI automation. The shipped surface includes `run` for robust in-session command execution, split semantic/visual renderer defaults, renderer/browser-path handling that respects isolated-home workflows, and isolation-aware `doctor --json` diagnostics on top of lifecycle, snapshot, screenshot, and export work. Larger asks such as additional native renderers, mouse input, remote/network sessions, MCP wrapping, and broader semantic TUI automation remain intentionally deferred.
+The current shipped line is centered on reliable, isolated, reviewable terminal and TUI automation. The shipped surface includes `run` for robust in-session command execution, split semantic/visual renderer defaults, renderer/browser-path handling that respects isolated-home workflows, and isolation-aware `doctor --json` diagnostics on top of lifecycle, snapshot, screenshot, and export work. Larger asks such as additional native renderers, mouse input, remote/network sessions, MCP wrapping, and broader semantic TUI automation remain intentionally deferred.
 
 The repository now ships the first three milestones of this design plus Weeks 4–7 of CLI/artifact/lifecycle hardening, config/rendering/platform closeout, contract/introspection reconciliation, and Week 7 contract/doc ratification:
 

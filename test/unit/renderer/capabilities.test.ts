@@ -146,10 +146,10 @@ describe('discoverCapabilities', () => {
     });
     expect(getCapability(capabilities, 'wait')).toEqual({
       name: 'wait',
-      status: 'unavailable',
-      reason: 'semantic renderer unavailable',
+      status: 'degraded',
+      reason: 'render waits unavailable',
       detail:
-        'missing optional native package; missing browser renderer package',
+        'legacy --exit and --idle-ms wait modes remain available; missing optional native package; missing browser renderer package',
     });
   });
 
@@ -206,6 +206,44 @@ describe('discoverCapabilities', () => {
       name: 'record-export-webm',
       status: 'available',
       reason: 'browser-backed export dependencies available',
+    });
+  });
+
+  it('keeps full wait degraded when render dependencies are unavailable', async () => {
+    const capabilities = await discoverCapabilities('full', {
+      rendererChecks: [
+        {
+          name: 'libghostty_vt_available',
+          status: 'skip',
+          message: 'native missing',
+        },
+        {
+          name: 'playwright_available',
+          status: 'fail',
+          message: 'playwright missing',
+        },
+        {
+          name: 'browser_launch',
+          status: 'skip',
+          message: 'not attempted',
+        },
+        {
+          name: 'ghostty_web_available',
+          status: 'skip',
+          message: 'not attempted',
+        },
+      ],
+    });
+
+    expect(getCapability(capabilities, 'snapshot')).toMatchObject({
+      name: 'snapshot',
+      status: 'unavailable',
+      reason: 'semantic renderer unavailable',
+    });
+    expect(getCapability(capabilities, 'wait')).toMatchObject({
+      name: 'wait',
+      status: 'degraded',
+      reason: 'render waits unavailable',
     });
   });
 

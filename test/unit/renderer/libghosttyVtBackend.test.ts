@@ -481,10 +481,11 @@ describe('LibghosttyVtBackend', () => {
         showCursor: true,
       },
     );
+    expect(fallback.disposeMock).toHaveBeenCalledTimes(1);
     expect(result.rendererBackend).toBe('ghostty-web');
   });
 
-  it('disposes native and fallback resources idempotently', async () => {
+  it('disposes native resources idempotently after screenshot fallback cleanup', async () => {
     const fixture = createNativeFixture();
     const fallback = createFakeBackend({
       rendererBackend: 'ghostty-web',
