@@ -2,7 +2,7 @@
 
 Give your AI agent a real terminal it can drive, and get back reviewable snapshots, screenshots, and recordings of everything it did.
 
-> It's like Playwright, but for terminal apps instead of web pages.
+> It's like `agent-browser` / Playwright, but for terminal apps instead of web pages.
 
 [![npm](https://img.shields.io/npm/v/agent-tty)](https://www.npmjs.com/package/agent-tty)
 [![CI](https://github.com/coder/agent-tty/actions/workflows/ci.yml/badge.svg)](https://github.com/coder/agent-tty/actions/workflows/ci.yml)
