@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 // document — the merged release PR body must parse back into a version +
 // notes, otherwise no GitHub Release is created on merge.
 import { BranchName } from 'release-please/build/src/util/branch-name.js';
+import { Generic } from 'release-please/build/src/updaters/generic.js';
 import { PullRequestBody } from 'release-please/build/src/util/pull-request-body.js';
 import {
   PullRequestTitle,
@@ -24,7 +25,7 @@ import {
   normalizeCommuniqueBody,
   todayIsoDate,
 } from '../../../src/tools/release-please-runner.js';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const SAMPLE_BODY = [
   '### Added',
@@ -94,6 +95,36 @@ describe('buildCommuniqueArgs', () => {
       '--output',
       '/n.md',
     ]);
+  });
+});
+
+describe('README version release-please contract', () => {
+  it('keeps the status sentence wired to release-please generic updates', () => {
+    const readme = readFileSync(
+      new URL('../../../README.md', import.meta.url),
+      'utf8',
+    );
+    const packageJson = JSON.parse(
+      readFileSync(new URL('../../../package.json', import.meta.url), 'utf8'),
+    ) as { readonly version: string };
+    const config = JSON.parse(
+      readFileSync(
+        new URL('../../../release-please-config.json', import.meta.url),
+        'utf8',
+      ),
+    ) as {
+      readonly packages: {
+        readonly '.': { readonly 'extra-files': readonly string[] };
+      };
+    };
+    const statusSentence = (version: string): string =>
+      `\`agent-tty\` is \`${version}\` and focused on reliable, isolated, reviewable terminal and TUI automation through a stable CLI. <!-- x-release-please-version -->`;
+
+    expect(config.packages['.']['extra-files']).toContain('README.md');
+    expect(readme).toContain(statusSentence(packageJson.version));
+    expect(
+      new Generic({ version: Version.parse('9.8.7') }).updateContent(readme),
+    ).toContain(statusSentence('9.8.7'));
   });
 });
 
