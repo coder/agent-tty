@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { chmod, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import process from 'node:process';
 
@@ -84,7 +84,7 @@ type WaitOutcome = {
   timedOut: boolean;
 };
 
-function normalizeExitSignal(signal: number | null): string | null {
+export function normalizeExitSignal(signal: number | null): string | null {
   invariant(
     signal === null || (Number.isInteger(signal) && signal >= 0),
     'PTY exit signal must be a non-negative integer or null',
@@ -93,11 +93,11 @@ function normalizeExitSignal(signal: number | null): string | null {
   return signal === null || signal === 0 ? null : String(signal);
 }
 
-function isSessionCommandable(state: SessionState): boolean {
+export function isSessionCommandable(state: SessionState): boolean {
   return isCommandableSessionStatus(state.snapshot().status);
 }
 
-function assertSessionCommandable(state: SessionState): void {
+export function assertSessionCommandable(state: SessionState): void {
   if (!isSessionCommandable(state)) {
     throw makeCliError(ERROR_CODES.SESSION_NOT_RUNNING, {
       // Preserve the legacy RPC wire contract: errors include only code and
@@ -113,7 +113,9 @@ function rethrowAsync(error: unknown): void {
   });
 }
 
-function resolveHostRendererName(input: string | undefined): RendererName {
+export function resolveHostRendererName(
+  input: string | undefined,
+): RendererName {
   const rawRenderer =
     input ??
     process.env[HOST_RENDERER_ENV_KEY] ??
@@ -1074,7 +1076,9 @@ export async function runHost(sessionId: string): Promise<void> {
 
   try {
     await writeManifest(mPath, state.snapshot());
-    await mkdir(dirname(sPath), { recursive: true });
+    const socketDirectory = dirname(sPath);
+    await mkdir(socketDirectory, { recursive: true });
+    await chmod(socketDirectory, 0o700);
 
     if (!isSessionCommandable(state)) {
       await initiateShutdown();

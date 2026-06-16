@@ -1,0 +1,783 @@
+export const EMBEDDED_HARNESS_HTML = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <title>agent-tty ghostty-web harness</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+
+      * {
+        animation: none !important;
+        caret-color: transparent !important;
+        transition: none !important;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: #000000;
+        display: inline-block;
+        font-synthesis: none;
+        overflow: hidden;
+      }
+
+      body[data-screenshot-cursor-visible='false'] textarea {
+        caret-color: transparent !important;
+      }
+
+      body[data-screenshot-cursor-visible='false'] .xterm-cursor,
+      body[data-screenshot-cursor-visible='false'] [data-cursor='true'] {
+        opacity: 0 !important;
+        visibility: hidden !important;
+      }
+
+      body[data-screenshot-cursor-visible='true'] textarea {
+        caret-color: auto !important;
+      }
+
+      body[data-screenshot-cursor-visible='true'] .xterm-cursor,
+      body[data-screenshot-cursor-visible='true'] [data-cursor='true'] {
+        opacity: 1 !important;
+        visibility: visible !important;
+      }
+
+      #terminal-shell {
+        display: inline-block;
+        overflow: hidden;
+      }
+
+      #terminal {
+        display: inline-block;
+        line-height: 1;
+      }
+
+      canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body data-ready="false" data-screenshot-cursor-visible="false">
+    <div id="terminal-shell">
+      <div id="terminal"></div>
+    </div>
+    <script type="module">
+      import { Terminal, init } from '/assets/ghostty-web.js';
+
+      const DEFAULT_COLS = 80;
+      const DEFAULT_ROWS = 24;
+      const PROFILE_PARAM = 'profile';
+      const terminalMount = document.getElementById('terminal');
+      const terminalShell = document.getElementById('terminal-shell');
+
+      function log(level, message, detail) {
+        if (typeof globalThis.__agentTtyLog !== 'function') {
+          return;
+        }
+
+        void globalThis.__agentTtyLog(level, message, detail);
+      }
+
+      function invariant(condition, message) {
+        if (!condition) {
+          throw new Error(message);
+        }
+      }
+
+      function assertStringValue(value, message) {
+        invariant(typeof value === 'string', message);
+      }
+
+      function assertNonEmptyString(value, message) {
+        assertStringValue(value, message);
+        invariant(value.length > 0, message);
+      }
+
+      function assertPositiveNumber(value, message) {
+        invariant(
+          typeof value === 'number' && Number.isFinite(value) && value > 0,
+          message,
+        );
+      }
+
+      function assertPositiveInteger(value, message) {
+        invariant(Number.isInteger(value) && value > 0, message);
+      }
+
+      function assertBoolean(value, message) {
+        invariant(typeof value === 'boolean', message);
+      }
+
+      function parseProfileFromLocation() {
+        const url = new URL(window.location.href);
+        const rawProfile = url.searchParams.get(PROFILE_PARAM);
+        assertNonEmptyString(rawProfile, 'missing profile query parameter');
+
+        let parsedProfile;
+        try {
+          parsedProfile = JSON.parse(rawProfile);
+        } catch (error) {
+          throw new Error(
+            \`profile query parameter is not valid JSON: \${error instanceof Error ? error.message : String(error)}\`,
+          );
+        }
+
+        invariant(
+          parsedProfile !== null && typeof parsedProfile === 'object',
+          'profile must be an object',
+        );
+
+        const profile = parsedProfile;
+        assertNonEmptyString(
+          profile.name,
+          'profile.name must be a non-empty string',
+        );
+        invariant(
+          profile.theme === 'dark' || profile.theme === 'light',
+          'profile.theme must be dark or light',
+        );
+        assertNonEmptyString(
+          profile.fontFamily,
+          'profile.fontFamily must be a non-empty string',
+        );
+        assertPositiveNumber(
+          profile.fontSize,
+          'profile.fontSize must be a positive number',
+        );
+        invariant(
+          profile.cursorStyle === 'block' ||
+            profile.cursorStyle === 'bar' ||
+            profile.cursorStyle === 'underline',
+          'profile.cursorStyle must be block, bar, or underline',
+        );
+        invariant(
+          typeof profile.backgroundColor === 'string' &&
+            /^#[0-9a-fA-F]{6}$/u.test(profile.backgroundColor),
+          'profile.backgroundColor must be a hex color',
+        );
+        invariant(
+          typeof profile.foregroundColor === 'string' &&
+            /^#[0-9a-fA-F]{6}$/u.test(profile.foregroundColor),
+          'profile.foregroundColor must be a hex color',
+        );
+        let validatedFontAssets;
+        if (
+          profile.fontAssetIdentity !== undefined &&
+          profile.fontAssetIdentity !== null
+        ) {
+          invariant(
+            typeof profile.fontAssetIdentity === 'string' &&
+              /^[a-f0-9]{64}$/u.test(profile.fontAssetIdentity),
+            'profile.fontAssetIdentity must be a 64-character lowercase SHA-256 hex string',
+          );
+        }
+        if (profile.fontAssets !== undefined) {
+          invariant(
+            Array.isArray(profile.fontAssets),
+            'profile.fontAssets must be an array when provided',
+          );
+          invariant(
+            profile.fontAssets.length > 0,
+            'profile.fontAssets must be non-empty when provided',
+          );
+
+          const seenAssetIdentities = new Set();
+          const seenRoutes = new Set();
+          validatedFontAssets = profile.fontAssets.map((fontAsset, index) => {
+            invariant(
+              fontAsset !== null && typeof fontAsset === 'object',
+              \`profile.fontAssets[\${index}] must be an object\`,
+            );
+            assertNonEmptyString(
+              fontAsset.family,
+              \`profile.fontAssets[\${index}].family must be a non-empty string\`,
+            );
+            invariant(
+              typeof fontAsset.assetIdentity === 'string' &&
+                /^[a-f0-9]{64}$/u.test(fontAsset.assetIdentity),
+              \`profile.fontAssets[\${index}].assetIdentity must be a 64-character lowercase SHA-256 hex string\`,
+            );
+            assertNonEmptyString(
+              fontAsset.route,
+              \`profile.fontAssets[\${index}].route must be a non-empty string\`,
+            );
+            invariant(
+              fontAsset.route.startsWith('/'),
+              \`profile.fontAssets[\${index}].route must be an absolute route path\`,
+            );
+            assertNonEmptyString(
+              fontAsset.weight,
+              \`profile.fontAssets[\${index}].weight must be a non-empty string\`,
+            );
+            invariant(
+              fontAsset.style === 'normal' ||
+                fontAsset.style === 'italic' ||
+                fontAsset.style === 'oblique',
+              \`profile.fontAssets[\${index}].style must be normal, italic, or oblique\`,
+            );
+            invariant(
+              !seenAssetIdentities.has(fontAsset.assetIdentity),
+              \`profile.fontAssets[\${index}].assetIdentity must be unique\`,
+            );
+            invariant(
+              !seenRoutes.has(fontAsset.route),
+              \`profile.fontAssets[\${index}].route must be unique\`,
+            );
+            seenAssetIdentities.add(fontAsset.assetIdentity);
+            seenRoutes.add(fontAsset.route);
+
+            return Object.freeze({ ...fontAsset });
+          });
+        }
+
+        return Object.freeze({
+          ...profile,
+          ...(validatedFontAssets !== undefined && {
+            fontAssets: Object.freeze(validatedFontAssets),
+          }),
+        });
+      }
+
+      const profile = parseProfileFromLocation();
+      document.documentElement.style.colorScheme = profile.theme;
+      document.body.style.background = profile.backgroundColor;
+      document.body.style.color = profile.foregroundColor;
+      document.body.style.fontFamily = profile.fontFamily;
+      document.body.style.fontSize = \`\${profile.fontSize}px\`;
+      terminalShell.style.background = profile.backgroundColor;
+      terminalShell.style.color = profile.foregroundColor;
+      terminalMount.style.background = profile.backgroundColor;
+      terminalMount.style.color = profile.foregroundColor;
+      terminalMount.style.fontFamily = profile.fontFamily;
+      terminalMount.style.fontSize = \`\${profile.fontSize}px\`;
+
+      const state = {
+        errorMessage: null,
+        ready: false,
+        terminal: null,
+      };
+
+      function getReadyTerminal() {
+        if (state.errorMessage !== null) {
+          throw new Error(state.errorMessage);
+        }
+
+        invariant(state.ready, 'ghostty-web harness is not ready');
+        invariant(state.terminal !== null, 'terminal instance is unavailable');
+        invariant(
+          state.terminal.wasmTerm,
+          'terminal WASM instance is unavailable',
+        );
+        return state.terminal;
+      }
+
+      function getDimensions(terminal) {
+        const wasmTerm = terminal.wasmTerm;
+        invariant(wasmTerm, 'terminal WASM instance is unavailable');
+
+        const dimensions = wasmTerm.getDimensions();
+        assertPositiveInteger(
+          dimensions.cols,
+          'terminal cols must be a positive integer',
+        );
+        assertPositiveInteger(
+          dimensions.rows,
+          'terminal rows must be a positive integer',
+        );
+        invariant(
+          dimensions.cols === terminal.cols,
+          'terminal cols drifted from WASM dimensions',
+        );
+        invariant(
+          dimensions.rows === terminal.rows,
+          'terminal rows drifted from WASM dimensions',
+        );
+        return dimensions;
+      }
+
+      function getNormalizedViewportState(terminal) {
+        const { cols, rows } = getDimensions(terminal);
+        const activeBuffer = terminal.buffer.active;
+        const viewportY = activeBuffer.viewportY;
+        const bufferLength = activeBuffer.length;
+        assertPositiveInteger(rows, 'visible row count must be positive');
+        invariant(
+          Number.isInteger(viewportY) && viewportY >= 0,
+          'viewportY must be a non-negative integer',
+        );
+        invariant(
+          Number.isInteger(bufferLength) && bufferLength >= rows,
+          'active buffer length must cover the visible viewport',
+        );
+
+        const bottomViewportY = bufferLength - rows;
+        invariant(
+          bottomViewportY >= 0,
+          'bottom viewportY must be non-negative',
+        );
+        invariant(
+          viewportY <= bottomViewportY,
+          'viewportY must not exceed the bottom viewport position',
+        );
+
+        return { cols, rows, activeBuffer, viewportY: bottomViewportY };
+      }
+
+      // Strip ONLY trailing ASCII spaces (0x20). Unlike String.prototype.trimEnd
+      // this preserves other trailing whitespace (tabs, NBSP, etc.), keeping the
+      // canonical visible text aligned with the libghostty-vt backend.
+      function stripTrailingAsciiSpaces(text) {
+        let end = text.length;
+        while (end > 0 && text.charCodeAt(end - 1) === 0x20) {
+          end -= 1;
+        }
+        return end === text.length ? text : text.slice(0, end);
+      }
+
+      // Build a single canonical line by concatenating each column's FULL
+      // grapheme cluster, then right-trimming trailing ASCII spaces only.
+      // readColumn(col) returns { grapheme, width }: grapheme is the cell's
+      // full grapheme cluster; width is the cell's column span. A wide glyph's
+      // trailing spacer has width 0 and contributes NOTHING, so a row of
+      // 'A'+wide('漢')+wide('字')+'B' decodes to 'A漢字B' — matching the
+      // libghostty-vt backend's visibleLines[].text (its cells[] likewise
+      // carries the spacer as '' rather than ' '). A genuine blank interior
+      // cell decodes to a single ' ' so interior gaps survive and trailing
+      // gaps trim away. The live engine returns the NUL codepoint (U+0000) for
+      // a blank cell — getGrapheme yields [0], so getGraphemeString runs
+      // String.fromCodePoint(0) and produces a NUL, not ' ' (its empty-array
+      // ' ' fallback never fires). Those NULs would survive
+      // stripTrailingAsciiSpaces (it strips only 0x20) and diverge from the
+      // native backend, so a kept cell whose grapheme is a lone NUL is
+      // normalized to ' ' here.
+      function decodeGraphemeLine(readColumn, cols) {
+        let text = '';
+        for (let col = 0; col < cols; col += 1) {
+          const column = readColumn(col);
+          invariant(
+            column !== null && typeof column === 'object',
+            'decoded column must be an object',
+          );
+          assertStringValue(
+            column.grapheme,
+            'decoded grapheme must be a string',
+          );
+          invariant(
+            Number.isInteger(column.width) && column.width >= 0,
+            'decoded cell width must be a non-negative integer',
+          );
+          if (column.width === 0) {
+            continue;
+          }
+          text += column.grapheme === '\\u0000' ? ' ' : column.grapheme;
+        }
+        return stripTrailingAsciiSpaces(text);
+      }
+
+      // Width for a single column, used to drop wide-glyph trailing spacers.
+      // getCell() always returns a cell (out-of-range columns synthesize a
+      // blank width-1 cell), so a missing cell is treated as a blank column.
+      function readCellWidth(line, col) {
+        const cell = line?.getCell(col);
+        if (cell === undefined || cell === null) {
+          return 1;
+        }
+        const width = cell.getWidth();
+        return Number.isInteger(width) && width >= 0 ? width : 1;
+      }
+
+      function decodeVisibleLines(terminal) {
+        terminal.scrollToBottom();
+        const { cols, rows, activeBuffer, viewportY } =
+          getNormalizedViewportState(terminal);
+        const wasmTerm = terminal.wasmTerm;
+        invariant(wasmTerm, 'terminal WASM instance is unavailable');
+
+        const visibleLines = [];
+        for (let row = 0; row < rows; row += 1) {
+          const line = activeBuffer.getLine(viewportY + row);
+          const text = decodeGraphemeLine(
+            (col) => ({
+              grapheme: wasmTerm.getGraphemeString(row, col),
+              width: readCellWidth(line, col),
+            }),
+            cols,
+          );
+          visibleLines.push({ row, text });
+        }
+
+        invariant(
+          visibleLines.length === rows,
+          'visible line count must match terminal rows',
+        );
+        return { cols, rows, visibleLines };
+      }
+
+      function decodeScrollbackLines(terminal) {
+        const { cols, activeBuffer, viewportY } =
+          getNormalizedViewportState(terminal);
+
+        if (viewportY === 0) {
+          return [];
+        }
+
+        const wasmTerm = terminal.wasmTerm;
+        invariant(wasmTerm, 'terminal WASM instance is unavailable');
+
+        const scrollbackLines = [];
+        for (let row = 0; row < viewportY; row += 1) {
+          const line = activeBuffer.getLine(row);
+          const text = decodeGraphemeLine(
+            (col) => ({
+              grapheme: wasmTerm.getScrollbackGraphemeString(row, col),
+              width: readCellWidth(line, col),
+            }),
+            cols,
+          );
+          scrollbackLines.push({ row, text });
+        }
+
+        invariant(
+          scrollbackLines.length === viewportY,
+          'scrollback line count must match viewportY',
+        );
+        return scrollbackLines;
+      }
+
+      function toHexColor(colorValue) {
+        invariant(
+          Number.isInteger(colorValue) &&
+            colorValue >= 0 &&
+            colorValue <= 0xffffff,
+          'cell color must be a 24-bit integer',
+        );
+        return \`#\${colorValue.toString(16).padStart(6, '0')}\`;
+      }
+
+      function decodeSnapshotCell(cell, graphemeChar) {
+        invariant(cell !== undefined, 'snapshot cell must be defined');
+        const baseChars = cell.getChars();
+        assertStringValue(baseChars, 'snapshot cell char must be a string');
+        assertStringValue(
+          graphemeChar,
+          'snapshot cell grapheme must be a string',
+        );
+        // Deliberate, converged decision (matches the libghostty-vt backend):
+        // in cells[] a codepoint-0 cell — both a genuine blank AND a wide
+        // glyph's trailing spacer — is '', whereas in visibleLines[].text a
+        // genuine blank renders as ' ' and only the width-0 spacer is dropped
+        // (see decodeGraphemeLine). The cells[] grid is column-addressed, so a
+        // blank and a spacer are both empty placeholders there; the text line
+        // is a reading-order string, so a blank is a real space but a spacer
+        // is layout, not content. Non-empty cells use the FULL grapheme
+        // cluster so continuation codepoints (emoji ZWJ, NFD combining marks)
+        // are not dropped. The Screen Hash sources visibleLines[].text, never
+        // cells[], so this asymmetry never reaches the hash.
+        const char = baseChars === '' ? '' : graphemeChar;
+
+        const isInverse = cell.isInverse() === 1;
+        const fgColor = cell.getFgColor();
+        const bgColor = cell.getBgColor();
+
+        return {
+          char,
+          fg: toHexColor(isInverse ? bgColor : fgColor),
+          bg: toHexColor(isInverse ? fgColor : bgColor),
+          ...(cell.isBold() === 1 && { bold: true }),
+          ...(cell.isItalic() === 1 && { italic: true }),
+          ...(cell.isUnderline() === 1 && { underline: true }),
+          ...(cell.isStrikethrough() === 1 && { strikethrough: true }),
+        };
+      }
+
+      function decodeVisibleCells(terminal, visibleLines) {
+        terminal.scrollToBottom();
+        const { cols, rows, activeBuffer, viewportY } =
+          getNormalizedViewportState(terminal);
+        const wasmTerm = terminal.wasmTerm;
+        invariant(wasmTerm, 'terminal WASM instance is unavailable');
+        const nullCell = activeBuffer.getNullCell();
+        const cells = [];
+
+        invariant(
+          visibleLines.length === rows,
+          'rich snapshot line count must be seeded from visible lines',
+        );
+
+        for (let row = 0; row < rows; row += 1) {
+          const lineNumber = visibleLines[row]?.row;
+          invariant(
+            Number.isInteger(lineNumber) && lineNumber >= 0,
+            \`visible line \${row} row must be a non-negative integer\`,
+          );
+
+          const line = activeBuffer.getLine(viewportY + row);
+          const rowCells = [];
+          for (let col = 0; col < cols; col += 1) {
+            rowCells.push(
+              decodeSnapshotCell(
+                line?.getCell(col) ?? nullCell,
+                wasmTerm.getGraphemeString(row, col),
+              ),
+            );
+          }
+
+          invariant(
+            rowCells.length <= cols,
+            \`decoded cell count for row \${row} must not exceed terminal width\`,
+          );
+          cells.push({ lineNumber, cells: rowCells });
+        }
+
+        invariant(
+          cells.length === rows,
+          'rich snapshot line count must match terminal rows',
+        );
+        return cells;
+      }
+
+      function getSnapshotPayload(options) {
+        invariant(
+          options === undefined ||
+            (options !== null && typeof options === 'object'),
+          'snapshot options must be an object when provided',
+        );
+        invariant(
+          options?.includeScrollback === undefined ||
+            typeof options.includeScrollback === 'boolean',
+          'snapshot includeScrollback option must be a boolean when provided',
+        );
+        invariant(
+          options?.includeCells === undefined ||
+            typeof options.includeCells === 'boolean',
+          'snapshot includeCells option must be a boolean when provided',
+        );
+
+        const terminal = getReadyTerminal();
+        const wasmTerm = terminal.wasmTerm;
+        invariant(wasmTerm, 'terminal WASM instance is unavailable');
+
+        const cursor = wasmTerm.getCursor();
+        const { cols, rows, visibleLines } = decodeVisibleLines(terminal);
+        const scrollbackLines =
+          options?.includeScrollback === true
+            ? decodeScrollbackLines(terminal)
+            : undefined;
+        const cells =
+          options?.includeCells === true
+            ? decodeVisibleCells(terminal, visibleLines)
+            : undefined;
+
+        invariant(
+          Number.isInteger(cursor.x) && cursor.x >= 0,
+          'cursor.x must be a non-negative integer',
+        );
+        invariant(
+          Number.isInteger(cursor.y) && cursor.y >= 0,
+          'cursor.y must be a non-negative integer',
+        );
+        invariant(
+          cursor.x < cols,
+          'cursor.x must be within the terminal width',
+        );
+        invariant(
+          cursor.y < rows,
+          'cursor.y must be within the terminal height',
+        );
+
+        return {
+          cols,
+          rows,
+          cursorCol: cursor.x,
+          cursorRow: cursor.y,
+          isAltScreen: wasmTerm.isAlternateScreen(),
+          visibleLines,
+          ...(scrollbackLines !== undefined && { scrollbackLines }),
+          ...(cells !== undefined && { cells }),
+        };
+      }
+
+      function updateDocumentState() {
+        if (state.terminal === null || state.terminal.wasmTerm === undefined) {
+          return;
+        }
+
+        const { cols, rows } = getDimensions(state.terminal);
+        document.body.dataset.cols = String(cols);
+        document.body.dataset.rows = String(rows);
+      }
+
+      window.__agentTty = {
+        async write(data) {
+          const terminal = getReadyTerminal();
+          assertStringValue(data, 'write() data must be a string');
+
+          await new Promise((resolve) => {
+            terminal.write(data, resolve);
+          });
+          updateDocumentState();
+        },
+        getSnapshot(options) {
+          return getSnapshotPayload(options);
+        },
+        getVisibleText() {
+          return decodeVisibleLines(getReadyTerminal())
+            .visibleLines.map((line) => line.text)
+            .join('\\n');
+        },
+        isReady() {
+          return state.ready;
+        },
+        resize(cols, rows) {
+          const terminal = getReadyTerminal();
+          assertPositiveInteger(
+            cols,
+            'resize() cols must be a positive integer',
+          );
+          assertPositiveInteger(
+            rows,
+            'resize() rows must be a positive integer',
+          );
+          terminal.resize(cols, rows);
+          updateDocumentState();
+        },
+        setCursorVisible(visible) {
+          const terminal = getReadyTerminal();
+          assertBoolean(visible, 'setCursorVisible() visible must be a boolean');
+          document.body.dataset.screenshotCursorVisible = visible ? 'true' : 'false';
+
+          if (terminal.renderer === undefined) {
+            log(
+              'warn',
+              'ghostty-web terminal renderer is unavailable; screenshot cursor visibility may be stale until the next natural render',
+            );
+            return;
+          }
+
+          try {
+            terminal.renderer.cursorVisible = visible;
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            log(
+              'warn',
+              'ghostty-web terminal cursor visibility toggle is unavailable; screenshot cursor visibility may be stale until the next natural render',
+              errorMessage,
+            );
+            return;
+          }
+
+          if (typeof terminal.requestRender === 'function') {
+            terminal.requestRender();
+          }
+        },
+      };
+
+      function getBundledFontAssets() {
+        if (Array.isArray(profile.fontAssets) && profile.fontAssets.length > 0) {
+          return profile.fontAssets;
+        }
+        if (!profile.fontAssetIdentity) {
+          return [];
+        }
+
+        return [
+          Object.freeze({
+            family: 'JetBrains Mono',
+            assetIdentity: profile.fontAssetIdentity,
+            route: '/assets/fonts/JetBrainsMono-Regular-latin.woff2',
+            style: 'normal',
+            weight: '400',
+          }),
+        ];
+      }
+
+      async function sha256Hex(buffer) {
+        const digest = await crypto.subtle.digest('SHA-256', buffer);
+        return Array.from(new Uint8Array(digest), (byte) =>
+          byte.toString(16).padStart(2, '0'),
+        ).join('');
+      }
+
+      async function loadBundledFonts() {
+        const bundledFontAssets = getBundledFontAssets();
+        for (const fontAsset of bundledFontAssets) {
+          const response = await fetch(fontAsset.route, { cache: 'no-store' });
+          invariant(
+            response.ok,
+            \`bundled font asset \${fontAsset.route} failed to load (\${response.status})\`,
+          );
+
+          const fontBuffer = await response.arrayBuffer();
+          invariant(
+            fontBuffer.byteLength > 0,
+            \`bundled font asset \${fontAsset.route} must not be empty\`,
+          );
+
+          const assetIdentity = await sha256Hex(fontBuffer);
+          invariant(
+            assetIdentity === fontAsset.assetIdentity,
+            \`bundled font asset \${fontAsset.route} identity did not match the profile descriptor\`,
+          );
+
+          const fontFaceRule = new FontFace(fontAsset.family, fontBuffer, {
+            style: fontAsset.style,
+            weight: fontAsset.weight,
+          });
+          const loadedFace = await fontFaceRule.load();
+          document.fonts.add(loadedFace);
+        }
+        await document.fonts.ready;
+      }
+
+      async function boot() {
+        await loadBundledFonts();
+        await init();
+
+        const terminal = new Terminal({
+          allowTransparency: false,
+          cols: DEFAULT_COLS,
+          convertEol: false,
+          cursorBlink: false,
+          cursorStyle: profile.cursorStyle,
+          disableStdin: true,
+          fontFamily: profile.fontFamily,
+          fontSize: profile.fontSize,
+          rows: DEFAULT_ROWS,
+          smoothScrollDuration: 0,
+          theme: {
+            background: profile.backgroundColor,
+            cursor: profile.foregroundColor,
+            cursorAccent: profile.backgroundColor,
+            foreground: profile.foregroundColor,
+          },
+        });
+
+        terminal.open(terminalMount);
+        state.terminal = terminal;
+        state.ready = true;
+        document.body.dataset.ready = 'true';
+        updateDocumentState();
+      }
+
+      void boot().catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        state.errorMessage = \`ghostty-web harness failed to initialize: \${message}\`;
+        state.ready = false;
+        document.body.dataset.error = state.errorMessage;
+        document.body.dataset.ready = 'false';
+        terminalShell.textContent = state.errorMessage;
+        log('error', state.errorMessage, message);
+      });
+    </script>
+  </body>
+</html>
+`;

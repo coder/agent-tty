@@ -127,6 +127,10 @@ sources = [
   "package.json",
 ]
 
+[tasks.audit]
+description = "Fail on high-severity dependency advisories"
+run = "aube audit --audit-level high"
+
 [tasks.format]
 description = "Format"
 run = "npm run format"
@@ -193,7 +197,7 @@ sources = [
 
 [tasks.ci]
 description = "Run CI checks"
-run = "mise run format-check && mise run workflow-lint && mise run lint && mise run typecheck && mise run test && mise run build && mise run install-smoke"
+run = "mise run format-check && mise run workflow-lint && mise run lint && mise run audit && mise run typecheck && mise run test && mise run build && mise run install-smoke"
 
 [settings]
 lockfile = true

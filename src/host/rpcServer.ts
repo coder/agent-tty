@@ -1,4 +1,4 @@
-import { stat, unlink } from 'node:fs/promises';
+import { chmod, stat, unlink } from 'node:fs/promises';
 import net from 'node:net';
 
 import { CliError } from '../cli/errors.js';
@@ -226,6 +226,8 @@ export class RpcServer {
       this.server = null;
       throw error;
     }
+
+    await chmod(this.socketPath, 0o600);
   }
 
   public async close(): Promise<void> {
