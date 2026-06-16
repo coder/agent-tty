@@ -44,6 +44,16 @@ describe('resolvePtyEnv', () => {
     expect(resolved.TERM).toBe('vt100');
   });
 
+  it('strips host-only renderer defaults from inherited env', () => {
+    const resolved = resolvePtyEnv({}, 'xterm-256color', {
+      AGENT_TTY_HOST_RENDERER: 'libghostty-vt',
+      AGENT_TTY_RENDERER: 'ghostty-web',
+    });
+
+    expect(resolved.AGENT_TTY_HOST_RENDERER).toBeUndefined();
+    expect(resolved.AGENT_TTY_RENDERER).toBe('ghostty-web');
+  });
+
   it('passes through inherited and caller env entries and drops undefined values', () => {
     const resolved = resolvePtyEnv({ FOO: 'bar' }, 'xterm-256color', {
       BAZ: 'qux',

@@ -210,6 +210,46 @@ describe('HostRendererManager', () => {
     expect(getCreatedBackend(backends, 1)).toBe(secondBackend);
   });
 
+  it('keeps a backend leased until the operation completes', async () => {
+    const manager = new HostRendererManager({
+      sessionId: 'session-01',
+      sessionDir,
+      backendFactory,
+    });
+    const operationStarted = createDeferred<undefined>();
+    const releaseOperation = createDeferred<undefined>();
+
+    const firstOperation = manager.withBackend(
+      'libghostty-vt',
+      createProfile('dark'),
+      null,
+      async () => {
+        operationStarted.resolve(undefined);
+        await releaseOperation.promise;
+        return 'leased';
+      },
+    );
+    await operationStarted.promise;
+
+    const replacementOperation = manager.withBackend(
+      'ghostty-web',
+      createProfile('dark'),
+      null,
+      (backend) => backend.rendererBackend,
+    );
+    await flushAsyncQueue();
+
+    expect(backendFactory).toHaveBeenCalledTimes(1);
+    expect(getCreatedBackend(backends, 0).disposeMock).not.toHaveBeenCalled();
+
+    releaseOperation.resolve(undefined);
+
+    await expect(firstOperation).resolves.toBe('leased');
+    await expect(replacementOperation).resolves.toBe('fake-renderer');
+    expect(backendFactory).toHaveBeenCalledTimes(2);
+    expect(getCreatedBackend(backends, 0).disposeMock).toHaveBeenCalledTimes(1);
+  });
+
   it('skips replay when the replay target sequence is -1', async () => {
     const manager = new HostRendererManager({
       sessionId: 'session-01',

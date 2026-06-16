@@ -11,6 +11,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
 import { SessionRecordSchema } from '../../src/protocol/schemas.js';
 import {
   cleanupHome,
@@ -77,7 +78,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     await cleanupHome(testHome);
   });
 
-  it('full lifecycle: create → list → inspect → destroy', () => {
+  it('full lifecycle: create → list → inspect → destroy', async () => {
     const createResult = runCli(
       ['create', '--json', '--', '/bin/sh', '-c', 'echo ready; sleep 30'],
       { AGENT_TTY_HOME: testHome },
@@ -112,6 +113,9 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(listedSession?.name).toBeUndefined();
     expect(listedSession?.pid).toBeTypeOf('number');
 
+    const expectedRenderer = (await probeLibghosttyVt()).available
+      ? 'libghostty-vt'
+      : 'ghostty-web';
     const inspectResult = runCli(['inspect', sessionId, '--json'], {
       AGENT_TTY_HOME: testHome,
     });
@@ -135,7 +139,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(inspectEnvelope.result.session.childPid).toBeTypeOf('number');
     expect(inspectEnvelope.result.rendererRuntime).toEqual(
       expect.objectContaining({
-        backend: 'ghostty-web',
+        backend: expectedRenderer,
         mode: 'live-host',
         status: 'healthy',
       }),

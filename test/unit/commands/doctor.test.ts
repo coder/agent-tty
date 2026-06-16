@@ -138,14 +138,12 @@ describe('doctor command', () => {
       'record-export-webm',
       'dashboard',
     ]);
-    expect(result.capabilities.find(({ name }) => name === 'snapshot')).toEqual(
-      {
-        name: 'snapshot',
-        status: 'available',
-        reason: 'built-in capability',
-        detail: 'available without external renderer dependencies',
-      },
-    );
+    expect(
+      result.capabilities.find(({ name }) => name === 'snapshot'),
+    ).toMatchObject({
+      name: 'snapshot',
+      status: 'available',
+    });
     expect(
       result.capabilities.find(({ name }) => name === 'screenshot'),
     ).toMatchObject({

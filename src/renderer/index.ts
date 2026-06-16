@@ -17,6 +17,8 @@ export { VisibleLineSchema } from '../protocol/schemas.js';
 export type { RendererBackend, SnapshotOptions } from './backend.js';
 export {
   DEFAULT_RENDERER_NAME,
+  DEFAULT_SEMANTIC_RENDERER_NAME,
+  DEFAULT_VISUAL_RENDERER_NAME,
   RendererNameSchema,
   resolveRendererName,
 } from './names.js';

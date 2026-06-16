@@ -1,0 +1,51 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "timestamp": "2026-06-16T13:29:44.276Z",
+  "result": {
+    "session": {
+      "version": 1,
+      "sessionId": "01KV89Z29JPZD4EG29CHER1MN8",
+      "createdAt": "2026-06-16T13:29:36.822Z",
+      "updatedAt": "2026-06-16T13:29:37.550Z",
+      "status": "running",
+      "command": ["npx", "tsx", "test/fixtures/apps/hello-prompt/main.ts"],
+      "cwd": "/home/coder/.mux/src/agent-terminal/vt-impl-5ds6",
+      "name": "default-semantic-renderer",
+      "shell": "/bin/bash",
+      "term": "xterm-256color",
+      "cols": 80,
+      "rows": 24,
+      "creationCols": 80,
+      "creationRows": 24,
+      "hostPid": 3127342,
+      "childPid": 3127397,
+      "exitCode": null,
+      "exitSignal": null
+    },
+    "eventCount": 6,
+    "uptime": 7453,
+    "lastEventSeq": 5,
+    "terminationCategory": "running",
+    "artifacts": {
+      "total": 0,
+      "byKind": {},
+      "missingCount": 0,
+      "health": "no-artifacts"
+    },
+    "usedOfflineReplay": false,
+    "rendererRuntime": {
+      "backend": "libghostty-vt",
+      "mode": "live-host",
+      "status": "healthy",
+      "profile": "reference-dark",
+      "booted": true,
+      "bootInFlight": false
+    },
+    "host": {
+      "cliVersion": "0.4.3",
+      "rpcSocketPath": "/tmp/agent-tty/55fb6b14/40123e969ae3"
+    },
+    "eventLogBytes": 616
+  }
+}

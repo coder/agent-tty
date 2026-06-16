@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "command": "wait",
+  "timestamp": "2026-06-16T13:29:42.928Z",
+  "result": {
+    "matched": true,
+    "timedOut": false,
+    "matchedText": "ECHO: Default semantic renderer proof",
+    "cursorRow": 2,
+    "cursorCol": 7,
+    "capturedAtSeq": 5,
+    "screenHash": "63f713a31c9ee5a4c004fba7983dab96ef5352804cd0c2de408f5c3570ea03a5"
+  }
+}

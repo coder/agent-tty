@@ -52,6 +52,7 @@ const TEST_CONTEXT = {
   logger: createLogger('info', () => undefined),
   profileDefault: undefined,
   rendererDefault: 'ghostty-web',
+  rendererVisualDefault: 'ghostty-web',
   explicitHome: false,
   configFile: null,
 } as const;
@@ -411,6 +412,30 @@ describe('wait command', () => {
         command: 'wait',
         result,
       }),
+    );
+  });
+
+  it('passes the semantic renderer default to render wait RPCs', async () => {
+    const result = {
+      matched: true,
+      timedOut: false,
+      matchedText: 'hello',
+      capturedAtSeq: 7,
+    };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runWaitCommand(
+      createOptions({
+        context: { ...TEST_CONTEXT, rendererDefault: 'libghostty-vt' },
+        text: 'hello',
+      }),
+    );
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      'waitForRender',
+      expect.objectContaining({ rendererName: 'libghostty-vt' }),
+      605_000,
     );
   });
 

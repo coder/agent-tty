@@ -37,6 +37,7 @@ import {
   canonicalVisibleText,
   computeScreenHash,
 } from '../renderer/canonicalScreen.js';
+import { HOST_RENDERER_ENV_KEY } from '../config/defaults.js';
 import {
   DEFAULT_RENDERER_NAME,
   resolveRendererName,
@@ -113,14 +114,17 @@ function rethrowAsync(error: unknown): void {
 }
 
 function resolveHostRendererName(input: string | undefined): RendererName {
+  const rawRenderer =
+    input ??
+    process.env[HOST_RENDERER_ENV_KEY] ??
+    process.env.AGENT_TTY_RENDERER ??
+    DEFAULT_RENDERER_NAME;
   try {
-    return resolveRendererName(
-      input ?? process.env.AGENT_TTY_RENDERER ?? DEFAULT_RENDERER_NAME,
-    );
+    return resolveRendererName(rawRenderer);
   } catch (error) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {
       message: 'Renderer must be one of: ghostty-web, libghostty-vt.',
-      details: { renderer: input ?? process.env.AGENT_TTY_RENDERER },
+      details: { renderer: rawRenderer },
       cause: error,
     });
   }
@@ -149,6 +153,7 @@ export async function runHost(sessionId: string): Promise<void> {
     'session manifest idleTimeoutMs must be a non-negative integer',
   );
 
+  const hostDefaultRendererName = resolveHostRendererName(undefined);
   const state = new SessionState(manifest);
   invariant(
     Number.isInteger(process.pid) && process.pid > 0,
@@ -256,15 +261,17 @@ export async function runHost(sessionId: string): Promise<void> {
 
     const rendererName = resolveHostRendererName(undefined);
     const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
-    const backend = await rendererManager.getBackend(
+    await rendererManager.withBackend(
       rendererName,
       profile,
       replayInput,
-    );
-    const snapshot = await backend.snapshot();
-    invariant(
-      snapshot.capturedAtSeq >= targetSeq,
-      'renderer snapshot must include the run-complete event sequence',
+      async (backend) => {
+        const snapshot = await backend.snapshot();
+        invariant(
+          snapshot.capturedAtSeq >= targetSeq,
+          'renderer snapshot must include the run-complete event sequence',
+        );
+      },
     );
   };
 
@@ -435,6 +442,8 @@ export async function runHost(sessionId: string): Promise<void> {
       // reads, producing a result that does not correspond to any real
       // point in time.
       const sessionSnapshot = state.snapshot();
+      const rendererBackend =
+        rendererManager.getCurrentRendererName() ?? hostDefaultRendererName;
       const rendererProfile = rendererManager.getCurrentProfileName();
       const rendererBooted = rendererManager.isBooted();
       const rendererBootInFlight = rendererManager.isBootInFlight();
@@ -446,6 +455,7 @@ export async function runHost(sessionId: string): Promise<void> {
           ? { cliVersion: packageMetadata.version }
           : {}),
         rpcSocketPath: sPath,
+        rendererBackend,
         ...(rendererProfile !== null ? { rendererProfile } : {}),
         rendererBooted,
         rendererBootInFlight,
@@ -475,20 +485,23 @@ export async function runHost(sessionId: string): Promise<void> {
       const rendererName = resolveHostRendererName(requestedRendererName);
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
       const replayInput = loadReplayInput();
-      const backend = await rendererManager.getBackend(
+      const { snapshot, rendererBackend } = await rendererManager.withBackend(
         rendererName,
         profile,
         replayInput,
+        async (backend) => ({
+          snapshot: await backend.snapshot({
+            includeScrollback,
+            includeCells,
+          }),
+          rendererBackend: backend.rendererBackend,
+        }),
       );
-      const snapshot = await backend.snapshot({
-        includeScrollback,
-        includeCells,
-      });
       return await captureSnapshotResult({
         sessionDir: sessDir,
         format,
         snapshot,
-        rendererBackend: backend.rendererBackend,
+        rendererBackend,
         expectedSessionId: sessionId,
       });
     },
@@ -520,19 +533,20 @@ export async function runHost(sessionId: string): Promise<void> {
 
       const rendererName = resolveHostRendererName(requestedRendererName);
       const replayInput = loadReplayInput();
-      const backend = await rendererManager.getBackend(
+
+      return await rendererManager.withBackend(
         rendererName,
         profile,
         replayInput,
+        async (backend) =>
+          await captureScreenshotResult({
+            backend,
+            sessionDir: sessDir,
+            profileName: profile.name,
+            expectedSessionId: sessionId,
+            ...(showCursor === undefined ? {} : { showCursor }),
+          }),
       );
-
-      return await captureScreenshotResult({
-        backend,
-        sessionDir: sessDir,
-        profileName: profile.name,
-        expectedSessionId: sessionId,
-        ...(showCursor === undefined ? {} : { showCursor }),
-      });
     },
     type: async (params: unknown) => {
       const { text } = params as TypeParams;
@@ -897,13 +911,15 @@ export async function runHost(sessionId: string): Promise<void> {
             try {
               throwIfAborted(signal);
               const replayInput = loadReplayInput();
-              const backend = await rendererManager.getBackend(
+              const snapshot = await rendererManager.withBackend(
                 rendererName,
                 profile,
                 replayInput,
+                async (backend) => {
+                  throwIfAborted(signal);
+                  return await backend.snapshot();
+                },
               );
-              throwIfAborted(signal);
-              const snapshot = await backend.snapshot();
               throwIfAborted(signal);
               const visibleText = canonicalVisibleText(snapshot);
               const capturedAtSeq = snapshot.capturedAtSeq;

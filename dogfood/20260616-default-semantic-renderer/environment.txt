@@ -1,0 +1,213 @@
+$ node --version
+v26.2.0
+
+$ npm --version
+11.13.0
+
+$ git rev-parse HEAD
+5b13076afa422ec9b6a0c66c20b21fd4d24d181e
+
+$ git log --oneline -n 1
+5b13076 fix: address renderer default review findings
+
+$ git status --short (before capture)
+clean
+
+$ git diff --binary | sha256sum (before capture)
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+$ uname -a
+Linux aaaaaaa 6.8.0-124-generic #124-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 13:00:45 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+$ expected semantic renderer
+libghostty-vt
+
+$ npx tsx src/cli/main.ts version --json
+{
+  "ok": true,
+  "command": "version",
+  "timestamp": "2026-06-16T13:29:31.103Z",
+  "result": {
+    "cliVersion": "0.4.3",
+    "protocolVersion": "0.1.0",
+    "rendererBackends": [
+      "ghostty-web",
+      "libghostty-vt"
+    ],
+    "runtime": {
+      "node": "v26.2.0",
+      "platform": "linux",
+      "arch": "x64"
+    },
+    "capabilities": [
+      {
+        "name": "snapshot",
+        "status": "available"
+      },
+      {
+        "name": "wait",
+        "status": "available"
+      },
+      {
+        "name": "screenshot",
+        "status": "available"
+      },
+      {
+        "name": "record-export-asciicast",
+        "status": "available"
+      },
+      {
+        "name": "record-export-webm",
+        "status": "available"
+      },
+      {
+        "name": "dashboard",
+        "status": "available"
+      }
+    ]
+  }
+}
+
+$ npx tsx src/cli/main.ts doctor --json
+{
+  "ok": true,
+  "command": "doctor",
+  "timestamp": "2026-06-16T13:29:32.658Z",
+  "result": {
+    "ok": true,
+    "checks": {
+      "environment": [
+        {
+          "name": "node-runtime",
+          "status": "pass",
+          "message": "Node 26.2.0 ok",
+          "durationMs": 0
+        },
+        {
+          "name": "cwd-access",
+          "status": "pass",
+          "message": "cwd read/write: /home/coder/.mux/src/agent-terminal/vt-impl-5ds6",
+          "durationMs": 2
+        },
+        {
+          "name": "temp-dir",
+          "status": "pass",
+          "message": "temp dir ok: /tmp",
+          "durationMs": 1
+        },
+        {
+          "name": "home_isolation",
+          "status": "pass",
+          "message": "agent-tty home is isolated from system home: /tmp/agent-tty-default-renderer.NIhHYj",
+          "durationMs": 1
+        },
+        {
+          "name": "home-writable",
+          "status": "pass",
+          "message": "home writable: /tmp/agent-tty-default-renderer.NIhHYj",
+          "durationMs": 3
+        },
+        {
+          "name": "pty-spawn",
+          "status": "pass",
+          "message": "spawned /home/coder/.local/share/mise/installs/node/26.2.0/bin/node",
+          "durationMs": 34
+        },
+        {
+          "name": "socket-viable",
+          "status": "pass",
+          "message": "socket ok: /tmp/agent-tty/55fb6b14/c9e2d8289d92",
+          "durationMs": 4
+        },
+        {
+          "name": "artifact-atomicity",
+          "status": "pass",
+          "message": "atomic rename ok: /tmp/agent-tty-default-renderer.NIhHYj/sessions/doctor-3125475-mqgoi9ac-3/artifacts",
+          "durationMs": 2
+        },
+        {
+          "name": "event-log-writable",
+          "status": "pass",
+          "message": "append ok: /tmp/agent-tty-default-renderer.NIhHYj/sessions/doctor-3125475-mqgoi9ae-5/events.jsonl",
+          "durationMs": 1
+        }
+      ],
+      "renderer": [
+        {
+          "name": "playwright_available",
+          "status": "pass",
+          "message": "available",
+          "durationMs": 1
+        },
+        {
+          "name": "browser_cache_accessible",
+          "status": "pass",
+          "message": "browser cache accessible: /home/coder/.cache/ms-playwright",
+          "durationMs": 0
+        },
+        {
+          "name": "browser_launch",
+          "status": "pass",
+          "message": "chromium launches",
+          "durationMs": 103
+        },
+        {
+          "name": "ghostty_web_available",
+          "status": "pass",
+          "message": "WASM available",
+          "durationMs": 81
+        },
+        {
+          "name": "screenshot_viable",
+          "status": "pass",
+          "message": "viable",
+          "durationMs": 176
+        },
+        {
+          "name": "libghostty_vt_available",
+          "status": "pass",
+          "message": "@coder/libghostty-vt-node exposes createTerminal()",
+          "durationMs": 1
+        }
+      ]
+    },
+    "capabilities": [
+      {
+        "name": "snapshot",
+        "status": "available",
+        "reason": "libghostty-vt semantic renderer available",
+        "detail": "@coder/libghostty-vt-node exposes createTerminal()"
+      },
+      {
+        "name": "wait",
+        "status": "available",
+        "reason": "libghostty-vt semantic renderer available",
+        "detail": "@coder/libghostty-vt-node exposes createTerminal()"
+      },
+      {
+        "name": "screenshot",
+        "status": "available",
+        "reason": "renderer smoke checks passed",
+        "detail": "playwright_available: available; browser_launch: chromium launches; ghostty_web_available: WASM available; screenshot_viable: viable"
+      },
+      {
+        "name": "record-export-asciicast",
+        "status": "available",
+        "reason": "built-in capability",
+        "detail": "available without external renderer dependencies"
+      },
+      {
+        "name": "record-export-webm",
+        "status": "available",
+        "reason": "browser-backed export dependencies available",
+        "detail": "playwright_available: available; browser_launch: chromium launches; ghostty_web_available: WASM available"
+      },
+      {
+        "name": "dashboard",
+        "status": "available",
+        "reason": "libghostty-vt native module available",
+        "detail": "@coder/libghostty-vt-node exposes createTerminal()"
+      }
+    ]
+  }
+}

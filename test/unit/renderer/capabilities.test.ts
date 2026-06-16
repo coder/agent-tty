@@ -19,7 +19,7 @@ describe('discoverCapabilities', () => {
       probeLibghosttyVt,
     });
 
-    expect(probePlaywright).toHaveBeenCalledTimes(2);
+    expect(probePlaywright).toHaveBeenCalledTimes(1);
     expect(probeLibghosttyVt).toHaveBeenCalledTimes(1);
     expect(capabilities).toHaveLength(6);
     expect(capabilities.map((capability) => capability.name)).toEqual([
@@ -100,12 +100,70 @@ describe('discoverCapabilities', () => {
     });
   });
 
+  it('uses ghostty-web as the quick semantic fallback when libghostty-vt is missing', async () => {
+    const capabilities = await discoverCapabilities('quick', {
+      probeLibghosttyVt: () =>
+        Promise.resolve({
+          available: false,
+          reason: 'libghostty-vt not installed',
+          detail: 'missing optional native package',
+        }),
+      probePlaywright: () => Promise.resolve({ available: true }),
+    });
+
+    expect(getCapability(capabilities, 'snapshot')).toEqual({
+      name: 'snapshot',
+      status: 'available',
+    });
+    expect(getCapability(capabilities, 'wait')).toEqual({
+      name: 'wait',
+      status: 'available',
+    });
+  });
+
+  it('marks quick semantic capabilities unavailable when no renderer can serve them', async () => {
+    const capabilities = await discoverCapabilities('quick', {
+      probeLibghosttyVt: () =>
+        Promise.resolve({
+          available: false,
+          reason: 'libghostty-vt not installed',
+          detail: 'missing optional native package',
+        }),
+      probePlaywright: () =>
+        Promise.resolve({
+          available: false,
+          reason: 'playwright not installed',
+          detail: 'missing browser renderer package',
+        }),
+    });
+
+    expect(getCapability(capabilities, 'snapshot')).toEqual({
+      name: 'snapshot',
+      status: 'unavailable',
+      reason: 'semantic renderer unavailable',
+      detail:
+        'missing optional native package; missing browser renderer package',
+    });
+    expect(getCapability(capabilities, 'wait')).toEqual({
+      name: 'wait',
+      status: 'degraded',
+      reason: 'render waits unavailable',
+      detail:
+        'legacy --exit and --idle-ms wait modes remain available; missing optional native package; missing browser renderer package',
+    });
+  });
+
   it('uses full doctor renderer checks without re-probing playwright', async () => {
     const probePlaywright = vi.fn(() => Promise.resolve({ available: true }));
 
     const capabilities = await discoverCapabilities('full', {
       probePlaywright,
       rendererChecks: [
+        {
+          name: 'libghostty_vt_available',
+          status: 'pass',
+          message: 'native available',
+        },
         {
           name: 'playwright_available',
           status: 'pass',
@@ -133,8 +191,8 @@ describe('discoverCapabilities', () => {
     expect(getCapability(capabilities, 'snapshot')).toEqual({
       name: 'snapshot',
       status: 'available',
-      reason: 'built-in capability',
-      detail: 'available without external renderer dependencies',
+      reason: 'libghostty-vt semantic renderer available',
+      detail: 'native available',
     });
     expect(getCapability(capabilities, 'screenshot')).toMatchObject({
       name: 'screenshot',
@@ -148,6 +206,44 @@ describe('discoverCapabilities', () => {
       name: 'record-export-webm',
       status: 'available',
       reason: 'browser-backed export dependencies available',
+    });
+  });
+
+  it('keeps full wait degraded when render dependencies are unavailable', async () => {
+    const capabilities = await discoverCapabilities('full', {
+      rendererChecks: [
+        {
+          name: 'libghostty_vt_available',
+          status: 'skip',
+          message: 'native missing',
+        },
+        {
+          name: 'playwright_available',
+          status: 'fail',
+          message: 'playwright missing',
+        },
+        {
+          name: 'browser_launch',
+          status: 'skip',
+          message: 'not attempted',
+        },
+        {
+          name: 'ghostty_web_available',
+          status: 'skip',
+          message: 'not attempted',
+        },
+      ],
+    });
+
+    expect(getCapability(capabilities, 'snapshot')).toMatchObject({
+      name: 'snapshot',
+      status: 'unavailable',
+      reason: 'semantic renderer unavailable',
+    });
+    expect(getCapability(capabilities, 'wait')).toMatchObject({
+      name: 'wait',
+      status: 'degraded',
+      reason: 'render waits unavailable',
     });
   });
 

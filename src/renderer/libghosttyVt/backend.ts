@@ -33,6 +33,8 @@ export interface LibghosttyVtNativeModule {
   getNativeInfo?: () => NativeInfo;
 }
 
+const DEFAULT_SCROLLBACK_LIMIT = 10_000;
+
 export interface LibghosttyVtBackendOptions {
   initialCols?: number;
   initialRows?: number;
@@ -369,14 +371,13 @@ export class LibghosttyVtBackend implements RendererBackend {
   >;
   private readonly logger: Logger;
   private readonly profile: RenderProfileConfig;
-  private readonly scrollbackLimit: number | undefined;
+  private readonly scrollbackLimit: number;
   private readonly sessionId: string;
 
   private bootPromise: Promise<void> | null = null;
   private currentCols: number;
   private currentRows: number;
   private disposed = false;
-  private fallbackBackend: RendererBackend | null = null;
   private initialReplayCols: number | null = null;
   private initialReplayRows: number | null = null;
   private lastAppliedSeq = -1;
@@ -411,7 +412,7 @@ export class LibghosttyVtBackend implements RendererBackend {
     this.initialRows = initialRows;
     this.currentCols = initialCols;
     this.currentRows = initialRows;
-    this.scrollbackLimit = options.scrollbackLimit;
+    this.scrollbackLimit = options.scrollbackLimit ?? DEFAULT_SCROLLBACK_LIMIT;
     this.loadNative =
       options.loadNative ??
       (() =>
@@ -603,9 +604,13 @@ export class LibghosttyVtBackend implements RendererBackend {
     );
     invariant(isAbsolute(outputPath), 'screenshot outputPath must be absolute');
 
-    const fallback = await this.ensureFallbackBackend();
-    await fallback.replayTo(this.latestReplayInput);
-    return await fallback.screenshot(outputPath, options);
+    const fallback = await this.createFallbackBackend();
+    try {
+      await fallback.replayTo(this.latestReplayInput);
+      return await fallback.screenshot(outputPath, options);
+    } finally {
+      await fallback.dispose();
+    }
   }
 
   public async getVisibleText(): Promise<string> {
@@ -616,9 +621,9 @@ export class LibghosttyVtBackend implements RendererBackend {
     return visibleText;
   }
 
-  public async dispose(): Promise<void> {
+  public dispose(): Promise<void> {
     if (this.disposed) {
-      return;
+      return Promise.resolve();
     }
 
     this.disposed = true;
@@ -628,12 +633,7 @@ export class LibghosttyVtBackend implements RendererBackend {
     if (terminal !== null) {
       terminal.dispose();
     }
-
-    const fallback = this.fallbackBackend;
-    this.fallbackBackend = null;
-    if (fallback !== null) {
-      await fallback.dispose();
-    }
+    return Promise.resolve();
   }
 
   private async bootInternal(): Promise<void> {
@@ -659,9 +659,7 @@ export class LibghosttyVtBackend implements RendererBackend {
       this.terminal = native.createTerminal({
         cols: this.initialCols,
         rows: this.initialRows,
-        ...(this.scrollbackLimit === undefined
-          ? {}
-          : { scrollbackLimit: this.scrollbackLimit }),
+        scrollbackLimit: this.scrollbackLimit,
       });
       this.assertTerminalShape(this.terminal);
       this.currentCols = this.initialCols;
@@ -677,20 +675,23 @@ export class LibghosttyVtBackend implements RendererBackend {
     }
   }
 
-  private async ensureFallbackBackend(): Promise<RendererBackend> {
-    if (this.fallbackBackend === null) {
-      const fallback = this.fallbackFactory(this.sessionId, this.profile);
-      invariant(
-        fallback.rendererBackend !== this.rendererBackend,
-        'libghostty-vt screenshot fallback must use a different renderer backend',
-      );
-      this.fallbackBackend = fallback;
+  private async createFallbackBackend(): Promise<RendererBackend> {
+    const fallback = this.fallbackFactory(this.sessionId, this.profile);
+    invariant(
+      fallback.rendererBackend !== this.rendererBackend,
+      'libghostty-vt screenshot fallback must use a different renderer backend',
+    );
+    try {
+      await fallback.boot();
+      return fallback;
+    } catch (error) {
+      try {
+        await fallback.dispose();
+      } catch {
+        // Preserve the original fallback boot error; dispose is best effort.
+      }
+      throw error;
     }
-
-    if (!this.fallbackBackend.isBooted) {
-      await this.fallbackBackend.boot();
-    }
-    return this.fallbackBackend;
   }
 
   private assertNotDisposed(methodName: string): void {

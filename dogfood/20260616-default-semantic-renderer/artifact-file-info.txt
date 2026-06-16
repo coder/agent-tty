@@ -1,0 +1,5 @@
+screenshots/default-screenshot.png:                PNG image data, 640 x 384, 8-bit/color RGB, non-interlaced
+screenshots/explicit-libghostty-vt-screenshot.png: PNG image data, 640 x 384, 8-bit/color RGB, non-interlaced
+videos/default-webm.webm:                WebM
+videos/explicit-libghostty-vt-webm.webm: WebM
+recordings/default.cast: JSON data

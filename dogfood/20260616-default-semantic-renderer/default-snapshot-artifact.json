@@ -1,0 +1,16 @@
+{
+  "id": "01KV89ZCN99JFHWA7DZ0FDQV3V",
+  "kind": "snapshot",
+  "filename": "snapshot-5-structured.json",
+  "sessionId": "01KV89Z29JPZD4EG29CHER1MN8",
+  "capturedAtSeq": 5,
+  "createdAt": "2026-06-16T13:29:47.434Z",
+  "metadata": {
+    "format": "structured",
+    "rendererBackend": "libghostty-vt",
+    "cols": 80,
+    "rows": 24,
+    "cursorRow": 2,
+    "cursorCol": 7
+  }
+}

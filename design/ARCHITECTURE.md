@@ -21,7 +21,7 @@ This design intentionally describes a **general product**, not a Mux-specific im
 
 ## Current shipped status
 
-The current `0.3.x` line is centered on reliable, isolated, reviewable terminal and TUI automation. The shipped surface includes `run` for robust in-session command execution, renderer/browser-path handling that respects isolated-home workflows, and isolation-aware `doctor --json` diagnostics on top of lifecycle, snapshot, screenshot, and export work. Larger asks such as native renderers, mouse input, remote/network sessions, MCP wrapping, and broader semantic TUI automation remain intentionally deferred.
+The current shipped line is centered on reliable, isolated, reviewable terminal and TUI automation. The shipped surface includes `run` for robust in-session command execution, split semantic/visual renderer defaults, renderer/browser-path handling that respects isolated-home workflows, and isolation-aware `doctor --json` diagnostics on top of lifecycle, snapshot, screenshot, and export work. Larger asks such as additional native renderers, mouse input, remote/network sessions, MCP wrapping, and broader semantic TUI automation remain intentionally deferred.
 
 The repository now ships the first three milestones of this design plus Weeks 4–7 of CLI/artifact/lifecycle hardening, config/rendering/platform closeout, contract/introspection reconciliation, and Week 7 contract/doc ratification:
 
@@ -53,10 +53,10 @@ The recommended v1 shape is:
 3. **TypeScript/Node** implementation
 4. **One session-host process per terminal session**, not a global daemon
 5. **`node-pty`** for PTY/process control
-6. **`ghostty-web`** as the default reference renderer
-7. **Playwright** as the screenshot / replay harness
+6. **`libghostty-vt`** as the preferred semantic renderer when available, with **`ghostty-web`** as the visual reference renderer and semantic fallback
+7. **Playwright** as the screenshot / replay-video harness
 8. **Event-log-as-truth** architecture so screenshots, snapshots, and recordings can be replayed deterministically
-9. **Renderer adapter interface** from day one so native renderers can be added later without redesigning the CLI
+9. **Renderer adapter interface** from day one so renderer defaults can evolve without redesigning the CLI
 
 ## Why this shape
 
@@ -156,29 +156,30 @@ That lets v1:
 - render videos from replay,
 - and debug failures after the fact.
 
-### 5) Reference renderer now, native renderers later
+### 5) Semantic and visual renderers stay separated
 
-V1 uses `ghostty-web` as a reference renderer for:
+V1 uses two Ghostty-backed renderer paths by default:
 
-- semantic snapshots,
-- deterministic screenshots,
-- deterministic video replay.
+- `libghostty-vt` for semantic snapshots, screen hashes, and render-backed waits when the optional native package is available,
+- `ghostty-web` for deterministic screenshots and deterministic video replay,
+- `ghostty-web` again as the semantic fallback when native rendering is unavailable.
 
-The architecture reserves native backends for later:
+The architecture still reserves additional native backends for later:
 
 - WezTerm-like native automation,
-- Ghostty native automation,
+- platform-specific terminal automation,
 - platform-specific compatibility runs.
 
 ## Tiered truth model
 
 `agent-tty` should treat terminal truth as layered rather than singular.
 
-| Layer                  | Source of truth             | What it answers                                           |
-| ---------------------- | --------------------------- | --------------------------------------------------------- |
-| Execution truth        | PTY + event log             | What bytes, signals, and resize events actually occurred? |
-| Reference visual truth | `ghostty-web` replay/render | What does a pinned reference renderer show?               |
-| Native visual truth    | Future native adapter       | What does a real platform terminal show?                  |
+| Layer                  | Source of truth                    | What it answers                                           |
+| ---------------------- | ---------------------------------- | --------------------------------------------------------- |
+| Execution truth        | PTY + event log                    | What bytes, signals, and resize events actually occurred? |
+| Semantic renderer truth | `libghostty-vt` or fallback replay | What terminal cells/text does Ghostty's VT state expose?  |
+| Reference visual truth | `ghostty-web` replay/render        | What does a pinned reference renderer show?               |
+| Native visual truth    | Future native adapter              | What does a real platform terminal show?                  |
 
 This prevents v1 from pretending reference rendering is identical to native platform rendering.
 

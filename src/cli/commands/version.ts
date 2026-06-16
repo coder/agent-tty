@@ -4,6 +4,7 @@ import { emitSuccess } from '../output.js';
 import type { CapabilityEntry } from '../../renderer/capabilities.js';
 
 import { discoverCapabilities } from '../../renderer/capabilities.js';
+import { RendererNameSchema } from '../../renderer/names.js';
 import { loadPackageMetadata } from '../../util/packageMetadata.js';
 
 const COMMAND_NAME = 'version';
@@ -43,7 +44,7 @@ export async function buildVersionResult(options?: {
   return {
     cliVersion: packageMetadata.version,
     protocolVersion: PROTOCOL_VERSION,
-    rendererBackends: ['ghostty-web'],
+    rendererBackends: [...RendererNameSchema.options],
     runtime: {
       node: process.version,
       platform: process.platform,

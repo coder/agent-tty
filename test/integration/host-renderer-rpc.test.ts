@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
 import { sendRpc } from '../../src/host/rpcClient.js';
 import type {
   ScreenshotResult,
@@ -79,11 +80,16 @@ describe(
     let testHome = '';
     let sessionId = '';
     let rpcSocketPath = '';
+    let expectedSemanticRenderer = 'ghostty-web';
+
     let sessDir = '';
 
     beforeEach(async () => {
       // oxfmt-ignore
       testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-host-renderer-')));
+      expectedSemanticRenderer = (await probeLibghosttyVt()).available
+        ? 'libghostty-vt'
+        : 'ghostty-web';
       sessionId = createSession(testHome, [
         '/bin/sh',
         '-c',
@@ -157,7 +163,7 @@ describe(
           rows: result.rows,
           cursorRow: result.cursorRow,
           cursorCol: result.cursorCol,
-          rendererBackend: 'ghostty-web',
+          rendererBackend: expectedSemanticRenderer,
         }),
       );
     });
@@ -200,7 +206,7 @@ describe(
           rows: result.rows,
           cursorRow: result.cursorRow,
           cursorCol: result.cursorCol,
-          rendererBackend: 'ghostty-web',
+          rendererBackend: expectedSemanticRenderer,
         }),
       );
     });
@@ -278,7 +284,7 @@ describe(
             rows: result.rows,
             cursorRow: result.cursorRow,
             cursorCol: result.cursorCol,
-            rendererBackend: 'ghostty-web',
+            rendererBackend: expectedSemanticRenderer,
             scrollbackLineCount: scrollbackLines.length,
           }),
         );
@@ -298,7 +304,7 @@ describe(
           rows: result.rows,
           cursorRow: result.cursorRow,
           cursorCol: result.cursorCol,
-          rendererBackend: 'ghostty-web',
+          rendererBackend: expectedSemanticRenderer,
         }),
       );
       expect(manifest.artifacts[0]?.metadata).not.toHaveProperty(
@@ -367,10 +373,18 @@ describe(
         sendRpc(
           rpcSocketPath,
           'snapshot',
-          { format: 'structured' },
+          {
+            format: 'structured',
+            rendererName: expectedSemanticRenderer,
+          },
           SNAPSHOT_TIMEOUT_MS,
         ),
-        sendRpc(rpcSocketPath, 'screenshot', {}, SNAPSHOT_TIMEOUT_MS),
+        sendRpc(
+          rpcSocketPath,
+          'screenshot',
+          { rendererName: 'ghostty-web' },
+          SNAPSHOT_TIMEOUT_MS,
+        ),
       ])) as [SnapshotResult, ScreenshotResult];
       const screenshotStats = await stat(screenshot.artifactPath);
       const manifest = await readArtifactManifest(sessDir);

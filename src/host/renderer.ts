@@ -64,8 +64,26 @@ export class HostRendererManager {
     profile: RenderProfileConfig,
     replayInput: ReplayInput | null,
   ): Promise<RendererBackend> {
+    return await this.withBackend(
+      rendererName,
+      profile,
+      replayInput,
+      (backend) => backend,
+    );
+  }
+
+  async withBackend<T>(
+    rendererName: RendererName,
+    profile: RenderProfileConfig,
+    replayInput: ReplayInput | null,
+    operation: (backend: RendererBackend) => T | Promise<T>,
+  ): Promise<T> {
     assertNonEmptyString(rendererName, 'rendererName');
     assertNonEmptyString(profile.name, 'profile name');
+    invariant(
+      typeof operation === 'function',
+      'backend operation must be a function',
+    );
 
     if (replayInput !== null) {
       invariant(
@@ -94,7 +112,7 @@ export class HostRendererManager {
         this.cachedInitialRows = replayInput.initialRows;
       }
 
-      return backend;
+      return await operation(backend);
     });
   }
 
@@ -144,6 +162,10 @@ export class HostRendererManager {
 
   isBootInFlight(): boolean {
     return this.bootPromise !== null;
+  }
+
+  getCurrentRendererName(): string | null {
+    return this.currentBackend?.rendererBackend ?? null;
   }
 
   getCurrentProfileName(): string | null {

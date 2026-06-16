@@ -5,6 +5,8 @@ import process from 'node:process';
 
 import type { IPty } from 'node-pty';
 import { spawn } from 'node-pty';
+
+import { HOST_RENDERER_ENV_KEY } from '../config/defaults.js';
 import { invariant } from '../util/assert.js';
 
 export interface PtyOptions {
@@ -82,8 +84,8 @@ const PROMPT_EOL_MARK_ENV_KEY = 'PROMPT_EOL_MARK';
 /**
  * Resolves the environment handed to the spawned PTY shell.
  *
- * Precedence, lowest to highest: the inherited process environment, then the
- * `PROMPT_EOL_MARK=''` default, then the caller-supplied `env` (so a `--env`
+ * Precedence, lowest to highest: the inherited process environment (minus
+ * host-only internals), then the `PROMPT_EOL_MARK=''` default, then the caller-supplied `env` (so a `--env`
  * value always wins — even an explicit empty one), then `TERM`. The default sits
  * after the inherited environment so it also overrides any inherited
  * `PROMPT_EOL_MARK`, keeping captures deterministic regardless of the launching
@@ -97,6 +99,9 @@ export function resolvePtyEnv(
 ): Record<string, string> {
   const resolved: Record<string, string> = {};
   for (const [key, value] of Object.entries(baseEnv)) {
+    if (key === HOST_RENDERER_ENV_KEY) {
+      continue;
+    }
     if (value !== undefined) {
       resolved[key] = value;
     }

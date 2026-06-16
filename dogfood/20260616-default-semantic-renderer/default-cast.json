@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "command": "record export",
+  "timestamp": "2026-06-16T13:30:08.471Z",
+  "result": {
+    "sessionId": "01KV89Z29JPZD4EG29CHER1MN8",
+    "format": "asciicast",
+    "artifactPath": "/home/coder/.mux/src/agent-terminal/vt-impl-5ds6/dogfood/20260616-default-semantic-renderer/recordings/default.cast",
+    "bytes": 468,
+    "sha256": "20777abc4d55e0506cc685c13f08f31a376b8dd2124f6f7c3101b5a7945c5296",
+    "capturedAtSeq": 14,
+    "durationMs": 17608,
+    "metadata": {
+      "width": 80,
+      "height": 24,
+      "title": "01KV89Z29JPZD4EG29CHER1MN8",
+      "timestamp": 1781616577,
+      "outputEventCount": 10,
+      "resizeEventCount": 0,
+      "markerCount": 0
+    }
+  }
+}

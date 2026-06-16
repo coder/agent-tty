@@ -322,7 +322,7 @@ export async function runRecordExportCommand(
           ? { profileName: webmProfileName }
           : {}),
         ...(timingMode !== undefined ? { timingMode } : {}),
-        rendererName: options.context.rendererDefault,
+        rendererName: options.context.rendererVisualDefault,
       });
 
       const resolvedProfile = resolveProfile(webmResult.profileName);

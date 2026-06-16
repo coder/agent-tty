@@ -506,6 +506,7 @@ describe('runGcCommand (cross-Home sweep)', () => {
       logger: createLogger('info', () => undefined),
       profileDefault: undefined,
       rendererDefault: 'ghostty-web',
+      rendererVisualDefault: 'ghostty-web',
       configFile: null,
     } as const;
   }

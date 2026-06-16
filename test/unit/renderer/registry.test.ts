@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   DEFAULT_RENDERER_NAME,
+  DEFAULT_SEMANTIC_RENDERER_NAME,
+  DEFAULT_VISUAL_RENDERER_NAME,
   createRendererBackend,
   resolveRendererName,
 } from '../../../src/renderer/index.js';
@@ -22,8 +24,10 @@ function createProfile(): RenderProfileConfig {
 }
 
 describe('renderer registry', () => {
-  it('resolves the default renderer name', () => {
+  it('resolves renderer default constants', () => {
     expect(DEFAULT_RENDERER_NAME).toBe('ghostty-web');
+    expect(DEFAULT_SEMANTIC_RENDERER_NAME).toBe('libghostty-vt');
+    expect(DEFAULT_VISUAL_RENDERER_NAME).toBe('ghostty-web');
     expect(resolveRendererName(undefined)).toBe('ghostty-web');
   });
 

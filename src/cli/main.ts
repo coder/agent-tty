@@ -46,6 +46,7 @@ import {
   DEFAULT_ROWS,
   DEFAULT_SHELL,
   DEFAULT_TERM,
+  HOST_RENDERER_ENV_KEY,
 } from '../config/defaults.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
@@ -99,6 +100,7 @@ function wrapAction<Args extends unknown[]>(
       context.logger.debug(`starting ${commandName} command`, {
         logLevel: context.logLevel,
         renderer: context.rendererDefault,
+        visualRenderer: context.rendererVisualDefault,
       });
       const args = rawArgs.slice(0, -1) as Args;
       await fn(...([...args, context] as [...Args, CommandContext]));
@@ -138,13 +140,14 @@ async function main(): Promise<void> {
     .option('--profile <name>', 'Default render profile name')
     .option(
       '--renderer <name>',
-      'Renderer backend (ghostty-web or libghostty-vt)',
+      'Renderer backend override. Defaults vary by command: semantic actions prefer libghostty-vt when available; visual artifacts default to ghostty-web.',
     );
 
   program.hook('preAction', async (_thisCommand, actionCommand) => {
-    const context = await resolveCommandContext(
-      actionCommand.optsWithGlobals<GlobalCliOptions>(),
-    );
+    const globalOptions = actionCommand.optsWithGlobals<GlobalCliOptions>();
+    const rendererConfiguredByEnv =
+      process.env.AGENT_TTY_RENDERER !== undefined;
+    const context = await resolveCommandContext(globalOptions);
     process.env.AGENT_TTY_HOME = context.home;
     // Propagate the resolved log level to the process environment so that
     // subsystems instantiated outside the CLI context (e.g., renderer backends,
@@ -153,13 +156,24 @@ async function main(): Promise<void> {
     // and constructor is a larger refactor with no user-visible benefit, since
     // the env var is set before any command handler runs.
     process.env.AGENT_TTY_LOG_LEVEL = context.logLevel;
-    process.env.AGENT_TTY_RENDERER = context.rendererDefault;
+    process.env[HOST_RENDERER_ENV_KEY] = context.rendererDefault;
+    const rendererConfiguredExplicitly =
+      globalOptions.renderer !== undefined ||
+      rendererConfiguredByEnv ||
+      context.configFile?.defaultRenderer !== undefined;
+    if (rendererConfiguredExplicitly) {
+      process.env.AGENT_TTY_RENDERER = context.rendererDefault;
+    } else {
+      delete process.env.AGENT_TTY_RENDERER;
+    }
     setColorEnabled(context.colorEnabled);
     setCommandContext(actionCommand, context);
     context.logger.debug('resolved command context', {
       command: actionCommand.name(),
       home: context.home,
       logLevel: context.logLevel,
+      renderer: context.rendererDefault,
+      visualRenderer: context.rendererVisualDefault,
     });
   });
 
