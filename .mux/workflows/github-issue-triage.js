@@ -36,48 +36,67 @@ export const metadata = {
 };
 
 function buildPublishPrompt(issue, attempt, lastReason) {
-  return `Please go ahead and post your triage report to the GitHub issue.
-Make sure that you lead with a note that this is an AI generated triage using 
-Mux.
+  return `Please post a concise public triage comment to the GitHub issue.
+
+Start the GitHub comment with exactly this note:
 
 \`\`\`markdown
-> [!NOTE]  
+> [!NOTE]
 > ${PUBLISHED_REPORT_NOTE}
 \`\`\`
 
-When posting to GitHub, be aware that the issue creator and folks in the
-conversation will be pinged.
-Writing in a third person might be seen as rude, so consider rephrasing section
-into a passive form.
-Do not ping people.
+Write for maintainers and issue participants. Summarize the triage outcome;
+do not describe how the triage was performed.
 
-Your triage report will be reviewed by the maintainer and is posted publicly,
-so that issue creator and the maintainers can have an open discussion.
+Editorial requirements:
+- Do not mention internal workflow mechanics.
+- Do not include workflow names, workflow run IDs, agent IDs, model names, or phrases like "the workflow concluded", "deep-research workflow", or "I ran deep-research".
+- Treat research results as supporting analysis only. Fold them into normal sections such as Findings, Recommendation, or Suggested next steps.
+- Do not include a standalone "Deep-research" section.
+- Do not include process/provenance sections unless the detail is directly needed to reproduce or evaluate the issue.
+- Do not ping people.
+- Prefer passive or neutral wording over third-person references to issue participants.
 
-If you've created files during triage, run an explore agent on each of them to
-identify if there are secrets or other sensitive information.
-Redact them, or don't post.
-If those files pass that screening, feel free to paste their contents into
-collapsible boxes, so that one can review the steps you took to reproduce the issue
-or how you conducted your investigation.
+Use this structure unless the issue clearly needs a smaller one:
 
-\`\`\`\`markdown
-<details>
+\`\`\`markdown
+> [!NOTE]
+> ${PUBLISHED_REPORT_NOTE}
 
-<summary>FILE_NAME</summary>
+## Summary
 
-### You can add a header
+1-3 bullets describing what was triaged and the outcome.
 
-You can add text within a collapsed section.
+## Findings
 
-You can add an image or a code block, too.
+Actionable repo facts, reproduction observations, or prior-art findings.
+Keep this focused on what maintainers need to know.
 
-\`\`\`ruby
-   puts "Hello World"
+## Recommendation
+
+State the recommended disposition or implementation direction.
+If there are tradeoffs, include only the important ones.
+
+## Suggested next steps
+
+Concrete follow-up items, such as tests, docs, or code paths to update.
 \`\`\`
 
-</details>
-\`\`\`\`
+For bug reports, include reproduction details only if they help a maintainer verify the issue. Prefer a short command snippet plus observed result. Avoid long logs.
+
+For feature requests or design decisions, focus on:
+- whether the request fits the repo,
+- what existing behavior or architecture supports the recommendation,
+- what gap remains,
+- and what the smallest useful next step is.
+
+If files, logs, screenshots, or generated artifacts are included, first ensure they contain no secrets or sensitive information. Only include them when they materially help review the issue. Put long supporting material in a <details> block.
+
+Before posting, self-edit the comment:
+- Remove duplicated headings.
+- Remove any "how the triage was done" prose.
+- Merge research/provenance sections into Findings or Recommendation.
+- Keep the comment concise and maintainer-actionable.
 
 Do not change issue labels. The workflow will add the done label and remove the ongoing label after it verifies the posted comment.
 
@@ -259,22 +278,8 @@ export default function workflow({
     })),
   );
 
-  const idleBeforeSend = needsPrompt.filter(
+  const needingConversation = needsPrompt.filter(
     (item, index) => actionOutput(preSendIdleResults[index]).idle,
-  );
-  const latestBeforeSendResults = runParallelActions(
-    parallelActions,
-    cfg,
-    idleBeforeSend.map((item) => ({
-      id: 'pre-send-latest-' + item.issue.safeId,
-      action: 'workspace.getLatestAssistantMessage',
-      input: { workspaceId: item.workspaceId },
-    })),
-  );
-
-  const needingConversation = idleBeforeSend.filter(
-    (item, index) =>
-      !hasAssistantText(actionOutput(latestBeforeSendResults[index])),
   );
   const conversationResults = runParallelActions(
     parallelActions,

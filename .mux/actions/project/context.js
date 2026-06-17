@@ -1,3 +1,5 @@
+const path = require('path');
+
 export const metadata = {
   version: 1,
   description: 'Resolve the current Mux project path and GitHub repository',
@@ -61,13 +63,54 @@ function repoFromRemoteUrl(url) {
   return match ? match[1] + '/' + match[2] : null;
 }
 
+function projectPathFromGitCommonDir(commonDir, baseDir) {
+  const text = cleanString(commonDir);
+  if (!text) return null;
+  const absolute = path.isAbsolute(text)
+    ? text
+    : path.resolve(baseDir || '.', text);
+  return path.basename(absolute) === '.git' ? path.dirname(absolute) : null;
+}
+
+function chooseProjectPath(envProjectPath, commonProjectPath, gitRoot, cwd) {
+  if (envProjectPath) {
+    return {
+      projectPath: envProjectPath,
+      projectPathSource: 'MUX_PROJECT_PATH',
+    };
+  }
+  if (commonProjectPath) {
+    return {
+      projectPath: commonProjectPath,
+      projectPathSource: 'git-common-dir',
+    };
+  }
+  if (gitRoot) return { projectPath: gitRoot, projectPathSource: 'git-root' };
+  if (cwd) return { projectPath: cwd, projectPathSource: 'cwd' };
+  return { projectPath: null, projectPathSource: 'unresolved' };
+}
+
 export async function execute(_input, ctx) {
   const cwd = cleanString(ctx.cwd) || (await execStdout(ctx, 'pwd', []));
   const gitRoot = await execStdout(ctx, 'git', [
     'rev-parse',
     '--show-toplevel',
   ]);
+  const gitCommonDir = await execStdout(ctx, 'git', [
+    'rev-parse',
+    '--git-common-dir',
+  ]);
   const envProjectPath = cleanString(process.env.MUX_PROJECT_PATH);
+  const commonProjectPath = projectPathFromGitCommonDir(
+    gitCommonDir,
+    gitRoot || cwd,
+  );
+  const { projectPath, projectPathSource } = chooseProjectPath(
+    envProjectPath,
+    commonProjectPath,
+    gitRoot,
+    cwd,
+  );
   const repositoryFromGh = await repoFromGh(ctx);
   const remoteUrl = repositoryFromGh
     ? null
@@ -77,14 +120,8 @@ export async function execute(_input, ctx) {
   return {
     cwd,
     gitRoot,
-    projectPath: envProjectPath || gitRoot || cwd,
-    projectPathSource: envProjectPath
-      ? 'MUX_PROJECT_PATH'
-      : gitRoot
-        ? 'git-root'
-        : cwd
-          ? 'cwd'
-          : 'unresolved',
+    projectPath,
+    projectPathSource,
     repository: repositoryFromGh || repositoryFromGit,
     repositorySource: repositoryFromGh
       ? 'gh-repo-view'
