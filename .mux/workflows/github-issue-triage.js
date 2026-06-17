@@ -627,6 +627,7 @@ function verifyPublishedReport(action, cfg, item, commentUrl, suffix) {
         repository: cfg.repository,
         number: issue.number,
         doneLabels: [cfg.doneLabel],
+        includeComments: false,
         marker: cfg.marker,
         markerKey: item.markerKey,
         promptVersion: cfg.promptVersion,

@@ -24,6 +24,7 @@ export const metadata = {
       repo: mux.schema.optional(mux.schema.string()),
       number: mux.schema.integer(),
       doneLabels: mux.schema.optional(mux.schema.array(mux.schema.string())),
+      includeComments: mux.schema.optional(mux.schema.boolean()),
       marker: mux.schema.string(),
       markerKey: mux.schema.string(),
       promptVersion: mux.schema.optional(mux.schema.string()),
@@ -56,17 +57,39 @@ export const metadata = {
   timeoutMs: 60000,
 };
 
+function labelsIncludeAll(doneLabels, labelNames) {
+  return (
+    doneLabels.length > 0 &&
+    doneLabels.every((label) => labelNames.includes(label))
+  );
+}
+
 export async function execute(rawInput, ctx) {
   const input = inputObject(rawInput);
   const repository = requiredRepository(input);
-  const parts = splitRepository(repository);
   const number = requiredIssueNumber(input.number);
   const doneLabels = stringList(input.doneLabels);
+  const includeComments = input.includeComments !== false;
+  const issuePromise = getIssueView(ctx, repository, number, ['labels']);
+
+  if (!includeComments) {
+    const issue = await issuePromise;
+    const labelNames = normalizeIssue(issue).labelNames;
+    return {
+      done: labelsIncludeAll(doneLabels, labelNames),
+      promptStarted: false,
+      reportPosted: false,
+      labelNames,
+      markerComments: [],
+    };
+  }
+
+  const parts = splitRepository(repository);
   const marker = requiredString(input.marker, 'marker');
   const markerKey = requiredString(input.markerKey, 'markerKey');
   const promptVersion = optionalString(input.promptVersion) || 'v1';
   const [issue, comments] = await Promise.all([
-    getIssueView(ctx, repository, number, ['labels']),
+    issuePromise,
     listComments(ctx, parts.owner, parts.repo, number),
   ]);
   const labelNames = normalizeIssue(issue).labelNames;
@@ -77,9 +100,7 @@ export async function execute(rawInput, ctx) {
     .map((comment) => markerStatus(comment.body))
     .filter(Boolean);
   return {
-    done:
-      doneLabels.length > 0 &&
-      doneLabels.every((label) => labelNames.includes(label)),
+    done: labelsIncludeAll(doneLabels, labelNames),
     promptStarted: statuses.includes('prompt-started'),
     reportPosted: statuses.includes('report-posted'),
     labelNames,
