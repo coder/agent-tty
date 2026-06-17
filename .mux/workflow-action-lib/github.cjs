@@ -152,22 +152,6 @@ async function listComments(ctx, owner, repo, number, options) {
   return comments;
 }
 
-async function findComment(ctx, owner, repo, number, predicate) {
-  for (let page = 1; page <= 10; page += 1) {
-    const pageComments = await fetchCommentsPage(
-      ctx,
-      owner,
-      repo,
-      number,
-      page,
-    );
-    const match = pageComments.find(predicate);
-    if (match) return match;
-    if (pageComments.length < 100) break;
-  }
-  return undefined;
-}
-
 module.exports = {
   inputObject,
   optionalString,
@@ -187,5 +171,4 @@ module.exports = {
   getIssueView,
   fetchCommentsPage,
   listComments,
-  findComment,
 };

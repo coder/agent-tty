@@ -1,4 +1,5 @@
 const s = mux.schema;
+const PUBLISHED_REPORT_NOTE = 'This triage report is AI-generated using Mux';
 
 export const metadata = {
   description:
@@ -8,6 +9,7 @@ export const metadata = {
     owner: s.optional(s.string()),
     repo: s.optional(s.string()),
     doneLabel: s.optional(s.string({ default: 'triage:done' })),
+    ongoingLabel: s.optional(s.string({ default: 'triage:ongoing' })),
     excludeLabels: s.optional(s.array(s.string(), { default: [] })),
     includeLabels: s.optional(s.array(s.string(), { default: [] })),
     projectPath: s.string(),
@@ -19,7 +21,7 @@ export const metadata = {
     model: s.optional(s.string()),
     limit: s.optional(s.integer({ default: 1000, minimum: 1, maximum: 1000 })),
     awaitTimeoutMs: s.optional(
-      s.integer({ default: 1000, minimum: 0, maximum: 21600000 }),
+      s.integer({ default: 1000, minimum: 0, maximum: 600000 }),
     ),
     preSendIdleTimeoutMs: s.optional(
       s.integer({ default: 5000, minimum: 0, maximum: 600000 }),
@@ -33,20 +35,14 @@ export const metadata = {
   }),
 };
 
-function buildPublishPrompt(
-  issue,
-  triageReport,
-  attempt,
-  lastReason,
-  doneLabel,
-) {
+function buildPublishPrompt(issue, attempt, lastReason) {
   return `Please go ahead and post your triage report to the GitHub issue.
 Make sure that you lead with a note that this is an AI generated triage using 
 Mux.
 
 \`\`\`markdown
 > [!NOTE]  
-> This triage report is AI-generated using Mux
+> ${PUBLISHED_REPORT_NOTE}
 \`\`\`
 
 When posting to GitHub, be aware that the issue creator and folks in the
@@ -83,26 +79,20 @@ You can add an image or a code block, too.
 </details>
 \`\`\`\`
 
-After you posted the report to GitHub, make sure to attach the \`${doneLabel}\` label to the issue.
-If the previous verification failure says the label is missing, do not repost the same report; attach the label and return the existing comment URL.
+Do not change issue labels. The workflow will add the done label and remove the ongoing label after it verifies the posted comment.
 
-Use the triage report from this workspace history. The workflow-observed report/output is included below for reference.
+Use the triage report from the previous assistant message in this workspace history.
+Do not ask for the report again, and do not paste/requote the report back into this chat before posting it.
 
 Issue URL: ${issue.url}
 Issue number: #${issue.number}
 Publish attempt: ${attempt}
 Previous verification failure: ${lastReason}
 
-Triage report to post:
-
-<triage_report>
-${triageReport}
-</triage_report>
-
-After posting the comment and attaching the label, finish with exactly one fenced JSON block in this shape:
+After posting the comment, finish with exactly one fenced JSON block in this shape:
 
 \`\`\`json
-{"commentUrl":"https://github.com/OWNER/REPO/issues/ISSUE_NUMBER#issuecomment-COMMENT_ID","triageDoneLabelAttached":true}
+{"commentUrl":"https://github.com/OWNER/REPO/issues/ISSUE_NUMBER#issuecomment-COMMENT_ID"}
 \`\`\``;
 }
 
@@ -121,13 +111,13 @@ If this is a bug report, then:
 - Use the agent-tty CLI to reproduce the bug.
 - Feel free to use any of the fixtures in this repo to create a report that lets us reproduce the user's bug, along with a test environment and, if required, a new fixture.
 - This is purely a reproduction task to identify a minimal reproducible example so that I, as a human, and you, as an agent, can both verify that this issue exists.
-- Later on, run a deep research investigation workflow to determine what is causing those issues and how to resolve them.
+- After reproducing the bug, explicitly run the Mux deep-research workflow (workflow name: deep-research; slash form if available: /workflow deep-research ...) with the issue URL, reproduction steps, observed behavior, and relevant repo facts. Do not substitute an ad hoc research section for running the workflow. Include the deep-research workflow findings in your final triage report. If the workflow is unavailable, state the exact error.
 
 If this is a feature request, then:
-- Perform a deep research workflow into the request.
-- Gather prior art and comparable implementations as references.
-- Assess whether the feature makes sense in the context of the Claudecode.nvim extension; some feature requests may be outside the scope of this third-party code implementation.
-- Provide a recommendation to the maintainer on whether the feature request is sensible, whether a sensible workaround already exists that can be configured in their own config files, or whether there is a documentation gap.
+- Explicitly run the Mux deep-research workflow (workflow name: deep-research; slash form if available: /workflow deep-research ...) with the issue URL, requested behavior, repo context, and prior-art questions. Do not substitute an ad hoc research section for running the workflow.
+- Gather prior art and comparable implementations from the deep-research workflow results and any supporting investigation.
+- Assess whether the feature makes sense in the context of this repo; some feature requests may be outside the scope of this implementation.
+- Provide a recommendation to the maintainer on whether the feature request is sensible, whether a sensible workaround already exists that can be configured by users, or whether there is a documentation gap.
 - Feel free to create prototypes if they help you decide on a proposal or better ground your assumptions.
 
 ---
@@ -192,6 +182,7 @@ export default function workflow({
           repository: cfg.repository,
           number: issue.number,
           doneLabels: [cfg.doneLabel],
+          ongoingLabels: [cfg.ongoingLabel],
           marker,
           markerKey,
           promptVersion: cfg.promptVersion,
@@ -284,18 +275,12 @@ export default function workflow({
     parallelActions,
     cfg,
     needingConversation.map((item) => ({
-      id: 'mark-prompt-started-' + item.issue.safeId + '-' + cfg.promptVersion,
-      action: 'github.upsertIssueComment',
+      id: 'mark-triage-ongoing-' + item.issue.safeId + '-' + cfg.promptVersion,
+      action: 'github.ensureIssueLabels',
       input: {
         repository: cfg.repository,
         number: item.issue.number,
-        marker: markerCommentNeedle(marker, item.markerKey, cfg.promptVersion),
-        body: promptStartedComment(
-          marker,
-          item.markerKey,
-          cfg.promptVersion,
-          item.workspaceId,
-        ),
+        addLabels: [cfg.ongoingLabel],
       },
     })),
   );
@@ -429,6 +414,10 @@ function resolveArgs(args) {
   const excludeLabels =
     args.excludeLabels.length > 0 ? args.excludeLabels : [args.doneLabel];
 
+  if (args.doneLabel === args.ongoingLabel) {
+    throw new Error('doneLabel and ongoingLabel must be different labels');
+  }
+
   if (!repository) {
     throw new Error(
       'repository or owner/repo is required for stable issue keys',
@@ -471,25 +460,6 @@ function issueMarkerKey(cfg, issue) {
   return cfg.repository + '#' + issue.number;
 }
 
-function markerCommentNeedle(marker, markerKey, promptVersion) {
-  return (
-    '<!-- ' + marker + ' key=' + markerKey + ' promptVersion=' + promptVersion
-  );
-}
-
-function promptStartedComment(marker, markerKey, promptVersion, workspaceId) {
-  return (
-    markerCommentNeedle(marker, markerKey, promptVersion) +
-    ' status=prompt-started workspace=' +
-    workspaceId +
-    ' -->\n\n' +
-    'Mux triage has started in workspace `' +
-    workspaceId +
-    '`.\n\n' +
-    'If no triage report appears, remove this marker comment or bump `promptVersion` before rerunning the workflow.'
-  );
-}
-
 function hasAssistantText(result) {
   return (
     result &&
@@ -530,13 +500,7 @@ function publishReportWithWorkspaceLoop(action, cfg, item, triageReport) {
         workspaceId: item.workspaceId,
         agentId: cfg.agentId,
         model: cfg.model,
-        message: buildPublishPrompt(
-          issue,
-          triageReport,
-          attempt,
-          lastReason,
-          cfg.doneLabel,
-        ),
+        message: buildPublishPrompt(issue, attempt, lastReason),
       },
     });
 
@@ -575,6 +539,14 @@ function publishReportWithWorkspaceLoop(action, cfg, item, triageReport) {
 
     if (!hasAssistantText(latest)) {
       lastReason = 'no-publish-output';
+      const recovered = findPublishedReport(
+        action,
+        cfg,
+        item,
+        'attempt-' + attempt,
+      );
+      if (recovered.completed) return recovered;
+      lastReason = recovered.reason;
       continue;
     }
 
@@ -582,6 +554,14 @@ function publishReportWithWorkspaceLoop(action, cfg, item, triageReport) {
     const published = extractPublishResult(latestText);
     if (!published) {
       lastReason = 'missing-structured-output';
+      const recovered = findPublishedReport(
+        action,
+        cfg,
+        item,
+        'attempt-' + attempt,
+      );
+      if (recovered.completed) return recovered;
+      lastReason = recovered.reason;
       continue;
     }
 
@@ -599,6 +579,29 @@ function publishReportWithWorkspaceLoop(action, cfg, item, triageReport) {
   return { completed: false, reason: 'publish-not-verified-' + lastReason };
 }
 
+function findPublishedReport(action, cfg, item, suffix) {
+  const issue = item.issue;
+  const found = actionOutput(
+    action.github.findIssueComment({
+      id: 'find-published-comment-' + issue.safeId + '-' + suffix,
+      input: {
+        repository: cfg.repository,
+        number: issue.number,
+        requiredBodyIncludes: [PUBLISHED_REPORT_NOTE],
+      },
+    }),
+  );
+
+  if (!found.found || typeof found.url !== 'string' || found.url.length === 0) {
+    return {
+      completed: false,
+      reason: 'published-comment-not-found-' + (found.reason || 'unknown'),
+    };
+  }
+
+  return verifyPublishedReport(action, cfg, item, found.url, suffix + '-found');
+}
+
 function verifyPublishedReport(action, cfg, item, commentUrl, suffix) {
   const issue = item.issue;
   const comment = actionOutput(
@@ -608,7 +611,7 @@ function verifyPublishedReport(action, cfg, item, commentUrl, suffix) {
         repository: cfg.repository,
         number: issue.number,
         url: commentUrl,
-        requiredBodyIncludes: ['This triage report is AI-generated using Mux'],
+        requiredBodyIncludes: [PUBLISHED_REPORT_NOTE],
       },
     }),
   );
@@ -620,23 +623,23 @@ function verifyPublishedReport(action, cfg, item, commentUrl, suffix) {
     };
   }
 
-  const state = actionOutput(
-    action.github.getIssueAutomationState({
-      id: 'verify-done-label-' + issue.safeId + '-' + suffix,
+  const labels = actionOutput(
+    action.github.ensureIssueLabels({
+      id: 'complete-triage-labels-' + issue.safeId + '-' + suffix,
       input: {
         repository: cfg.repository,
         number: issue.number,
-        doneLabels: [cfg.doneLabel],
-        includeComments: false,
-        marker: cfg.marker,
-        markerKey: item.markerKey,
-        promptVersion: cfg.promptVersion,
+        addLabels: [cfg.doneLabel],
+        removeLabels: [cfg.ongoingLabel],
       },
     }),
   );
 
-  if (!state.done) {
+  if (!labels.after.includes(cfg.doneLabel)) {
     return { completed: false, reason: 'done-label-missing' };
+  }
+  if (labels.after.includes(cfg.ongoingLabel)) {
+    return { completed: false, reason: 'ongoing-label-still-present' };
   }
 
   return { completed: true, commentUrl: comment.url || commentUrl };

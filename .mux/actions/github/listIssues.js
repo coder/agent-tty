@@ -77,13 +77,14 @@ export async function execute(rawInput, ctx) {
   const jsonFields =
     'number,title,url,state,labels,author,createdAt,updatedAt' +
     (includeBody ? ',body' : '');
+  const fetchLimit = excludeLabels.length > 0 ? 1000 : limit;
   const args = [
     'issue',
     'list',
     '--state',
     state,
     '--limit',
-    String(limit),
+    String(fetchLimit),
     '--json',
     jsonFields,
   ];
@@ -101,7 +102,8 @@ export async function execute(rawInput, ctx) {
     .filter((issue) =>
       excludeLabels.every((label) => !issue.labelNames.includes(label)),
     )
-    .sort((a, b) => a.number - b.number);
+    .sort((a, b) => a.number - b.number)
+    .slice(0, limit);
   return {
     repository: repository || null,
     filters: {

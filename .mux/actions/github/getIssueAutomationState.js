@@ -24,6 +24,7 @@ export const metadata = {
       repo: mux.schema.optional(mux.schema.string()),
       number: mux.schema.integer(),
       doneLabels: mux.schema.optional(mux.schema.array(mux.schema.string())),
+      ongoingLabels: mux.schema.optional(mux.schema.array(mux.schema.string())),
       includeComments: mux.schema.optional(mux.schema.boolean()),
       marker: mux.schema.string(),
       markerKey: mux.schema.string(),
@@ -57,11 +58,14 @@ export const metadata = {
   timeoutMs: 60000,
 };
 
-function labelsIncludeAll(doneLabels, labelNames) {
+function labelsIncludeAll(labels, labelNames) {
   return (
-    doneLabels.length > 0 &&
-    doneLabels.every((label) => labelNames.includes(label))
+    labels.length > 0 && labels.every((label) => labelNames.includes(label))
   );
+}
+
+function labelsIncludeAny(labels, labelNames) {
+  return labels.some((label) => labelNames.includes(label));
 }
 
 export async function execute(rawInput, ctx) {
@@ -69,6 +73,7 @@ export async function execute(rawInput, ctx) {
   const repository = requiredRepository(input);
   const number = requiredIssueNumber(input.number);
   const doneLabels = stringList(input.doneLabels);
+  const ongoingLabels = stringList(input.ongoingLabels);
   const includeComments = input.includeComments !== false;
   const issuePromise = getIssueView(ctx, repository, number, ['labels']);
 
@@ -77,7 +82,7 @@ export async function execute(rawInput, ctx) {
     const labelNames = normalizeIssue(issue).labelNames;
     return {
       done: labelsIncludeAll(doneLabels, labelNames),
-      promptStarted: false,
+      promptStarted: labelsIncludeAny(ongoingLabels, labelNames),
       reportPosted: false,
       labelNames,
       markerComments: [],
@@ -101,7 +106,9 @@ export async function execute(rawInput, ctx) {
     .filter(Boolean);
   return {
     done: labelsIncludeAll(doneLabels, labelNames),
-    promptStarted: statuses.includes('prompt-started'),
+    promptStarted:
+      labelsIncludeAny(ongoingLabels, labelNames) ||
+      statuses.includes('prompt-started'),
     reportPosted: statuses.includes('report-posted'),
     labelNames,
     markerComments: matching.map((comment) => ({
