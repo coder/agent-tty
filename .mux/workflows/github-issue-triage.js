@@ -497,9 +497,8 @@ function resolveArgs(args, context) {
     mux.utils.optionalString(args.repository) ||
     repositoryFromOwnerRepo(args.owner, args.repo) ||
     mux.utils.optionalString(context.repository);
-  const projectPath =
-    mux.utils.optionalString(args.projectPath) ||
-    mux.utils.optionalString(context.projectPath);
+  const resolvedProject = resolveProjectPath(args, context);
+  const projectPath = resolvedProject.projectPath;
   const excludeLabels =
     args.excludeLabels.length > 0 ? args.excludeLabels : [args.doneLabel];
 
@@ -528,11 +527,66 @@ function resolveArgs(args, context) {
         ? 'args.owner/repo'
         : context.repositorySource,
     projectPath,
-    projectPathSource: mux.utils.optionalString(args.projectPath)
-      ? 'args.projectPath'
-      : context.projectPathSource,
+    projectPathSource: resolvedProject.projectPathSource,
     excludeLabels,
   };
+}
+
+function resolveProjectPath(args, context) {
+  const argProjectPath = mux.utils.optionalString(args.projectPath);
+  const contextProjectPath = mux.utils.optionalString(context.projectPath);
+  if (
+    argProjectPath &&
+    contextProjectPath &&
+    shouldPreferContextProjectPath(argProjectPath, context)
+  ) {
+    return {
+      projectPath: contextProjectPath,
+      projectPathSource:
+        context.projectPathSource + ' (normalized from args.projectPath)',
+    };
+  }
+  if (argProjectPath) {
+    return {
+      projectPath: argProjectPath,
+      projectPathSource: 'args.projectPath',
+    };
+  }
+  return {
+    projectPath: contextProjectPath,
+    projectPathSource: context.projectPathSource,
+  };
+}
+
+function shouldPreferContextProjectPath(argProjectPath, context) {
+  const contextProjectPath = mux.utils.optionalString(context.projectPath);
+  if (!contextProjectPath || samePath(argProjectPath, contextProjectPath)) {
+    return false;
+  }
+
+  const source = mux.utils.optionalString(context.projectPathSource);
+  if (source !== 'git-common-dir' && source !== 'MUX_PROJECT_PATH') {
+    return false;
+  }
+
+  return (
+    samePath(argProjectPath, context.cwd) ||
+    samePath(argProjectPath, context.gitRoot)
+  );
+}
+
+function samePath(left, right) {
+  const normalizedLeft = normalizePathString(left);
+  const normalizedRight = normalizePathString(right);
+  return Boolean(
+    normalizedLeft && normalizedRight && normalizedLeft === normalizedRight,
+  );
+}
+
+function normalizePathString(value) {
+  const text = mux.utils.optionalString(value);
+  if (!text) return undefined;
+  return text.length > 1 ? text.replace(/\/+$/, '') : text;
 }
 
 function repositoryFromOwnerRepo(owner, repo) {
