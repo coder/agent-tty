@@ -12,7 +12,7 @@ export const metadata = {
     ongoingLabel: s.optional(s.string({ default: 'triage:ongoing' })),
     excludeLabels: s.optional(s.array(s.string(), { default: [] })),
     includeLabels: s.optional(s.array(s.string(), { default: [] })),
-    projectPath: s.string(),
+    projectPath: s.optional(s.string()),
     state: s.optional(s.string({ default: 'open' })),
     marker: s.optional(s.string({ default: 'mux-github-issue-triage' })),
     promptVersion: s.optional(s.string({ default: 'v1' })),
@@ -137,8 +137,26 @@ export default function workflow({
   action,
   parallelActions,
 }) {
-  const cfg = resolveArgs(args);
+  phase('resolve-context', {
+    hasRepository: Boolean(mux.utils.optionalString(args.repository)),
+    hasProjectPath: Boolean(mux.utils.optionalString(args.projectPath)),
+  });
+
+  const context = actionOutput(
+    action.project.context({
+      id: 'project-context',
+      input: {},
+    }),
+  );
+  const cfg = resolveArgs(args, context);
   const marker = cfg.marker;
+
+  log('Resolved triage context', {
+    repository: cfg.repository,
+    repositorySource: cfg.repositorySource,
+    projectPath: cfg.projectPath,
+    projectPathSource: cfg.projectPathSource,
+  });
 
   phase('fetch-issues', {
     repository: cfg.repository,
@@ -406,11 +424,14 @@ function actionOutput(result) {
   return result.output;
 }
 
-function resolveArgs(args) {
+function resolveArgs(args, context) {
   const repository =
     mux.utils.optionalString(args.repository) ||
-    repositoryFromOwnerRepo(args.owner, args.repo);
-  const projectPath = mux.utils.optionalString(args.projectPath);
+    repositoryFromOwnerRepo(args.owner, args.repo) ||
+    mux.utils.optionalString(context.repository);
+  const projectPath =
+    mux.utils.optionalString(args.projectPath) ||
+    mux.utils.optionalString(context.projectPath);
   const excludeLabels =
     args.excludeLabels.length > 0 ? args.excludeLabels : [args.doneLabel];
 
@@ -430,7 +451,20 @@ function resolveArgs(args) {
     );
   }
 
-  return { ...args, repository, projectPath, excludeLabels };
+  return {
+    ...args,
+    repository,
+    repositorySource: mux.utils.optionalString(args.repository)
+      ? 'args.repository'
+      : repositoryFromOwnerRepo(args.owner, args.repo)
+        ? 'args.owner/repo'
+        : context.repositorySource,
+    projectPath,
+    projectPathSource: mux.utils.optionalString(args.projectPath)
+      ? 'args.projectPath'
+      : context.projectPathSource,
+    excludeLabels,
+  };
 }
 
 function repositoryFromOwnerRepo(owner, repo) {
