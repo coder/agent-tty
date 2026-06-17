@@ -51,13 +51,15 @@ do not describe how the triage was performed.
 Editorial requirements:
 - Do not mention internal workflow mechanics.
 - Do not include workflow names, workflow run IDs, agent IDs, model names, or phrases like "the workflow concluded", "deep-research workflow", or "I ran deep-research".
-- Treat research results as supporting analysis only. Fold them into normal sections such as Findings, Recommendation, or Suggested next steps.
+- Treat research results as supporting analysis only. Fold them into normal sections such as Findings, Root cause, Recommendation, or Suggested next steps.
 - Do not include a standalone "Deep-research" section.
 - Do not include process/provenance sections unless the detail is directly needed to reproduce or evaluate the issue.
 - Do not ping people.
 - Prefer passive or neutral wording over third-person references to issue participants.
 
-Use this structure unless the issue clearly needs a smaller one:
+Use a structure that matches the issue type.
+
+For confirmed bug reports, prefer:
 
 \`\`\`markdown
 > [!NOTE]
@@ -65,22 +67,47 @@ Use this structure unless the issue clearly needs a smaller one:
 
 ## Summary
 
-1-3 bullets describing what was triaged and the outcome.
+1-3 bullets describing the bug and triage outcome.
 
-## Findings
+## What was reproduced
 
-Actionable repo facts, reproduction observations, or prior-art findings.
-Keep this focused on what maintainers need to know.
+The minimal reproduction, observed behavior, and important command/output evidence.
 
-## Recommendation
+## Root cause
 
-State the recommended disposition or implementation direction.
-If there are tradeoffs, include only the important ones.
+The verified cause. If not fully verified, title this section "Likely root cause" and state what remains uncertain.
+
+## Suggested direction for a fix
+
+The smallest implementation direction that addresses the cause.
+
+## How this was verified
+
+Commands, tests, fixtures, or artifacts used to verify the behavior.
 
 ## Suggested next steps
 
-Concrete follow-up items, such as tests, docs, or code paths to update.
+Concrete follow-up items.
 \`\`\`
+
+For feature requests or design decisions, prefer:
+
+\`\`\`markdown
+> [!NOTE]
+> ${PUBLISHED_REPORT_NOTE}
+
+## Summary
+
+## Findings
+
+## Recommendation
+
+## Tradeoffs
+
+## Suggested next steps
+\`\`\`
+
+Do not force every section if it would add noise. Prefer a shorter comment over a complete but repetitive template.
 
 For bug reports, include reproduction details only if they help a maintainer verify the issue. Prefer a short command snippet plus observed result. Avoid long logs.
 
@@ -95,7 +122,7 @@ If files, logs, screenshots, or generated artifacts are included, first ensure t
 Before posting, self-edit the comment:
 - Remove duplicated headings.
 - Remove any "how the triage was done" prose.
-- Merge research/provenance sections into Findings or Recommendation.
+- Merge research/provenance sections into Findings, Root cause, or Recommendation.
 - Keep the comment concise and maintainer-actionable.
 
 Do not change issue labels. The workflow will add the done label and remove the ongoing label after it verifies the posted comment.
@@ -124,20 +151,56 @@ function buildPrompt(issue, conversation) {
       ? conversation.conversationMarkdown
       : '(no issue comments)';
 
-  return `Please triage the GitHub issue below. 
+  return `Please triage the GitHub issue below.
 
 If this is a bug report, then:
-- Use the agent-tty CLI to reproduce the bug.
-- Feel free to use any of the fixtures in this repo to create a report that lets us reproduce the user's bug, along with a test environment and, if required, a new fixture.
-- This is purely a reproduction task to identify a minimal reproducible example so that I, as a human, and you, as an agent, can both verify that this issue exists.
-- After reproducing the bug, explicitly run the Mux deep-research workflow (workflow name: deep-research; slash form if available: /workflow deep-research ...) with the issue URL, reproduction steps, observed behavior, and relevant repo facts. Do not substitute an ad hoc research section for running the workflow. Include the deep-research workflow findings in your final triage report. If the workflow is unavailable, state the exact error.
+- Use the agent-tty CLI to reproduce the bug when the issue involves terminal, CLI, renderer, wait, snapshot, screenshot, replay, export, or artifact behavior.
+- Build the smallest practical reproduction. Prefer repo fixtures, temporary isolated AGENT_TTY_HOME directories, and targeted commands over broad manual exploration.
+- Capture the exact commands, observed output, exit codes, relevant files, and artifacts needed for a maintainer to verify the issue.
+- Investigate root cause after reproduction. Trace the behavior through the relevant repo code paths and tests.
+- Distinguish clearly between confirmed facts, likely root cause, hypotheses, and open questions. If root cause is not verified, call it "Likely root cause" or "Hypothesis" and explain what evidence is missing.
+- Explicitly run the Mux deep-research workflow (workflow name: deep-research; slash form if available: /workflow deep-research ...) with the issue URL, reproduction steps, observed behavior, suspected root cause, and relevant repo facts. Do not substitute an ad hoc research section for running the workflow.
+- Treat deep-research output as supporting analysis, not as a separate public section. Do not create a standalone "Deep-research workflow" section in the maintainer-facing draft.
+- If the issue cannot be reproduced, explain what was tried and what evidence is still missing.
 
-If this is a feature request, then:
+Your final triage report should be maintainer-facing and suitable for later public posting. Prefer this structure for bugs:
+
+## Summary
+
+## What was reproduced
+
+## Root cause
+
+Use "Likely root cause" if the cause is not fully verified.
+
+## Suggested direction for a fix
+
+## How this was verified
+
+## Open questions
+
+If this is a feature request or design decision, then:
 - Explicitly run the Mux deep-research workflow (workflow name: deep-research; slash form if available: /workflow deep-research ...) with the issue URL, requested behavior, repo context, and prior-art questions. Do not substitute an ad hoc research section for running the workflow.
 - Gather prior art and comparable implementations from the deep-research workflow results and any supporting investigation.
-- Assess whether the feature makes sense in the context of this repo; some feature requests may be outside the scope of this implementation.
-- Provide a recommendation to the maintainer on whether the feature request is sensible, whether a sensible workaround already exists that can be configured by users, or whether there is a documentation gap.
+- Assess whether the request fits this repo; some requests may be outside the supported scope.
+- Identify the current behavior or architecture that matters for the request.
+- Provide a recommendation on whether the request is sensible, whether a workaround already exists, or whether there is a documentation gap.
+- Include tradeoffs and the smallest useful next step.
 - Feel free to create prototypes if they help you decide on a proposal or better ground your assumptions.
+
+Your final triage report should be maintainer-facing and suitable for later public posting. Prefer this structure for feature requests or design decisions:
+
+## Summary
+
+## Current behavior / repo context
+
+## Prior art or comparable behavior
+
+## Recommendation
+
+## Tradeoffs
+
+## Suggested next steps
 
 ---
 
