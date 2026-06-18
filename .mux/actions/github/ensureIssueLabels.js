@@ -1,0 +1,76 @@
+const {
+  getIssueView,
+  inputObject,
+  normalizeIssue,
+  repositoryFromInput,
+  requiredIssueNumber,
+  stringList,
+} = require('../../workflow-action-lib/github.cjs');
+
+export const metadata = {
+  version: 1,
+  description: 'Idempotently add and remove GitHub issue labels',
+  effect: 'external',
+  inputSchema: mux.schema.object(
+    {
+      repository: mux.schema.optional(mux.schema.string()),
+      owner: mux.schema.optional(mux.schema.string()),
+      repo: mux.schema.optional(mux.schema.string()),
+      number: mux.schema.integer(),
+      addLabels: mux.schema.optional(mux.schema.array(mux.schema.string())),
+      removeLabels: mux.schema.optional(mux.schema.array(mux.schema.string())),
+    },
+    { additionalProperties: false },
+  ),
+  outputSchema: mux.schema.object(
+    {
+      changed: mux.schema.boolean(),
+      before: mux.schema.array(mux.schema.string()),
+      after: mux.schema.array(mux.schema.string()),
+      added: mux.schema.array(mux.schema.string()),
+      removed: mux.schema.array(mux.schema.string()),
+    },
+    { additionalProperties: false },
+  ),
+  permissions: [
+    { kind: 'command', command: 'gh issue edit' },
+    { kind: 'command', command: 'gh issue view' },
+  ],
+  timeoutMs: 60000,
+};
+
+async function getLabelNames(ctx, repository, number) {
+  const issue = await getIssueView(ctx, repository, number, ['labels']);
+  return normalizeIssue(issue).labelNames;
+}
+
+export async function execute(rawInput, ctx) {
+  const input = inputObject(rawInput);
+  const repository = repositoryFromInput(input);
+  const number = requiredIssueNumber(input.number);
+  const addLabels = stringList(input.addLabels);
+  const removeLabels = stringList(input.removeLabels);
+  const before = await getLabelNames(ctx, repository, number);
+  const missingAddLabels = addLabels.filter((label) => !before.includes(label));
+  const presentRemoveLabels = removeLabels.filter((label) =>
+    before.includes(label),
+  );
+  if (missingAddLabels.length === 0 && presentRemoveLabels.length === 0) {
+    return { changed: false, before, after: before, added: [], removed: [] };
+  }
+  const args = ['issue', 'edit', String(number)];
+  if (repository) args.push('--repo', repository);
+  for (const label of missingAddLabels) args.push('--add-label', label);
+  for (const label of presentRemoveLabels) args.push('--remove-label', label);
+  await ctx.execChecked('gh', args);
+  const after = await getLabelNames(ctx, repository, number);
+  return {
+    changed: true,
+    before,
+    after,
+    added: missingAddLabels,
+    removed: presentRemoveLabels,
+  };
+}
+
+export const reconcile = execute;
