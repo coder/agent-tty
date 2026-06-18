@@ -148,9 +148,14 @@ async function fetchCommentsPage(ctx, owner, repo, number, page) {
   ]);
 }
 
+function commentLimit(options) {
+  if (options && options.limit === 'all') return Number.MAX_SAFE_INTEGER;
+  return boundedLimit(options && options.limit, 1000);
+}
+
 async function listComments(ctx, owner, repo, number, options) {
   const comments = [];
-  const limit = boundedLimit(options && options.limit, 1000);
+  const limit = commentLimit(options);
   for (let page = 1; page <= Math.ceil(limit / 100); page += 1) {
     const pageComments = await fetchCommentsPage(
       ctx,
@@ -188,5 +193,6 @@ module.exports = {
   commentAuthorLogin,
   getIssueView,
   fetchCommentsPage,
+  commentLimit,
   listComments,
 };

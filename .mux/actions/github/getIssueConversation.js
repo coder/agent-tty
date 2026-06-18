@@ -1,6 +1,7 @@
 const {
   boundedCharBudget,
   boundedLimit,
+  commentAuthorLogin,
   getIssueView,
   inputObject,
   listComments,
@@ -24,6 +25,7 @@ export const metadata = {
       maxComments: mux.schema.optional(mux.schema.integer()),
       issueBodyCharBudget: mux.schema.optional(mux.schema.integer()),
       bodyCharBudget: mux.schema.optional(mux.schema.integer()),
+      conversationCharBudget: mux.schema.optional(mux.schema.integer()),
       commentBodyCharBudget: mux.schema.optional(mux.schema.integer()),
     },
     { additionalProperties: false },
@@ -53,6 +55,8 @@ export const metadata = {
           maxComments: mux.schema.integer(),
           issueBodyBudget: mux.schema.integer(),
           commentBodyBudget: mux.schema.integer(),
+          conversationBudget: mux.schema.integer(),
+          hasTruncatedConversation: mux.schema.boolean(),
           hasOmittedComments: mux.schema.boolean(),
         },
         { additionalProperties: false },
@@ -82,21 +86,30 @@ function repositoryPartsForComments(repository, issue) {
   return { owner: match[1], repo: match[2] };
 }
 
-function formatConversation(comments, commentBodyBudget, hasOmittedComments) {
+function formatConversation(
+  comments,
+  commentBodyBudget,
+  hasOmittedComments,
+  conversationBudget,
+) {
   const visibleComments = Array.isArray(comments) ? comments : [];
-  if (visibleComments.length === 0) return '(no issue comments)';
-  const markdown = visibleComments
-    .map(
-      (comment) =>
-        '### Comment by ' +
-        ((comment.author && comment.author.login) || 'unknown') +
-        '\n\n' +
-        truncateText(comment.body || '', commentBodyBudget),
-    )
-    .join('\n\n---\n\n');
-  return hasOmittedComments
-    ? markdown + '\n\n[omitted additional comments]'
-    : markdown;
+  if (visibleComments.length === 0)
+    return { markdown: '(no issue comments)', truncated: false };
+  const markdown =
+    visibleComments
+      .map(
+        (comment) =>
+          '### Comment by ' +
+          (commentAuthorLogin(comment) || 'unknown') +
+          '\n\n' +
+          truncateText(comment.body || '', commentBodyBudget),
+      )
+      .join('\n\n---\n\n') +
+    (hasOmittedComments ? '\n\n[omitted additional comments]' : '');
+  return {
+    markdown: truncateText(markdown, conversationBudget),
+    truncated: markdown.length > conversationBudget,
+  };
 }
 
 export async function execute(rawInput, ctx) {
@@ -112,6 +125,10 @@ export async function execute(rawInput, ctx) {
     input.commentBodyCharBudget,
     10000,
   );
+  const conversationBudget = boundedCharBudget(
+    input.conversationCharBudget,
+    50000,
+  );
   const issueFields = [
     'number',
     'title',
@@ -119,6 +136,8 @@ export async function execute(rawInput, ctx) {
     'state',
     'body',
     'author',
+    'createdAt',
+    'updatedAt',
     'labels',
   ];
   let issue;
@@ -141,6 +160,12 @@ export async function execute(rawInput, ctx) {
   const visibleComments = comments.slice(0, maxComments);
   const hasOmittedComments = comments.length > visibleComments.length;
   const normalizedIssue = normalizeIssue(issue);
+  const conversation = formatConversation(
+    visibleComments,
+    commentBodyBudget,
+    hasOmittedComments,
+    conversationBudget,
+  );
   return {
     repository: repository || null,
     number,
@@ -148,16 +173,14 @@ export async function execute(rawInput, ctx) {
       ...normalizedIssue,
       body: truncateText(normalizedIssue.body, issueBodyBudget),
     },
-    conversationMarkdown: formatConversation(
-      visibleComments,
-      commentBodyBudget,
-      hasOmittedComments,
-    ),
+    conversationMarkdown: conversation.markdown,
     limits: {
       maxComments,
       issueBodyBudget,
       commentBodyBudget,
-      hasOmittedComments,
+      conversationBudget,
+      hasTruncatedConversation: conversation.truncated,
+      hasOmittedComments: hasOmittedComments || conversation.truncated,
     },
   };
 }

@@ -70,7 +70,9 @@ export async function execute(rawInput, ctx) {
     };
   }
 
-  const comments = await listComments(ctx, parts.owner, parts.repo, number);
+  const comments = await listComments(ctx, parts.owner, parts.repo, number, {
+    limit: 'all',
+  });
   const match = comments
     .slice()
     .reverse()

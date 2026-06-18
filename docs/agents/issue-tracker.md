@@ -13,6 +13,16 @@ Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all op
 
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
 
+## GitHub issue triage workflow setup
+
+Before running the `github-issue-triage` workflow, verify the repository has the automation-state labels documented in `docs/agents/triage-labels.md`:
+
+```sh
+gh label list --search 'triage:'
+```
+
+The workflow defaults to open issues labelled `needs-triage`, claims work with `triage:ongoing`, and skips issues labelled `triage:done`. Use an explicit `repository` and `projectPath` when running it outside a normal checked-out project context.
+
 ## When a skill says "publish to the issue tracker"
 
 Create a GitHub issue.
