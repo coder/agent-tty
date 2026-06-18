@@ -41,6 +41,9 @@ export const metadata = {
         },
         { additionalProperties: false },
       ),
+      fetchedCount: mux.schema.integer(),
+      eligibleCount: mux.schema.integer(),
+      truncated: mux.schema.boolean(),
       issues: mux.schema.array(
         mux.schema.object(
           {
@@ -90,20 +93,21 @@ export async function execute(rawInput, ctx) {
   ];
   if (repository) args.push('--repo', repository);
   for (const label of includeLabels) args.push('--label', label);
-  const issues = (await ctx.execJson('gh', args))
+  const fetchedIssues = (await ctx.execJson('gh', args))
     .map(normalizeIssue)
     .map((issue) => ({
       ...issue,
       body: includeBody ? truncateText(issue.body, bodyCharBudget) : '',
-    }))
+    }));
+  const eligibleIssues = fetchedIssues
     .filter((issue) =>
       includeLabels.every((label) => issue.labelNames.includes(label)),
     )
     .filter((issue) =>
       excludeLabels.every((label) => !issue.labelNames.includes(label)),
     )
-    .sort((a, b) => a.number - b.number)
-    .slice(0, limit);
+    .sort((a, b) => a.number - b.number);
+  const issues = eligibleIssues.slice(0, limit);
   return {
     repository: repository || null,
     filters: {
@@ -114,6 +118,9 @@ export async function execute(rawInput, ctx) {
       includeBody,
       bodyCharBudget,
     },
+    fetchedCount: fetchedIssues.length,
+    eligibleCount: eligibleIssues.length,
+    truncated: fetchedIssues.length >= fetchLimit && excludeLabels.length > 0,
     issues,
   };
 }

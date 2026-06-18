@@ -57,10 +57,10 @@ async function repoFromGh(ctx) {
 function repoFromRemoteUrl(url) {
   const text = cleanString(url);
   if (!text) return null;
-  const match = text.match(
-    /(?:github\.com[:/])([^/]+)\/([^/.]+)(?:\.git)?(?:\/?$)/,
-  );
-  return match ? match[1] + '/' + match[2] : null;
+  const match = text.match(/(?:github\.com[:/])([^/]+)\/([^/?#]+)(?:\/?$)/);
+  if (!match) return null;
+  const repo = match[2].replace(/\.git$/, '');
+  return match[1] && repo ? match[1] + '/' + repo : null;
 }
 
 function projectPathFromGitCommonDir(commonDir, baseDir) {

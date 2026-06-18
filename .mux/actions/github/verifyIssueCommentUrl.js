@@ -1,5 +1,8 @@
 const {
+  commentAuthorLogin,
+  currentUserLogin,
   inputObject,
+  optionalString,
   requiredIssueNumber,
   requiredRepository,
   requiredString,
@@ -19,6 +22,8 @@ export const metadata = {
       repo: mux.schema.optional(mux.schema.string()),
       number: mux.schema.integer(),
       url: mux.schema.string(),
+      expectedAuthor: mux.schema.optional(mux.schema.string()),
+      requireAuthenticatedAuthor: mux.schema.optional(mux.schema.boolean()),
       requiredBodyIncludes: mux.schema.optional(
         mux.schema.array(mux.schema.string()),
       ),
@@ -55,6 +60,41 @@ function parseCommentUrl(url) {
     : null;
 }
 
+function parseIssueApiUrl(url) {
+  const match = String(url || '').match(
+    /^https:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)\/issues\/(\d+)$/,
+  );
+  return match
+    ? { owner: match[1], repo: match[2], number: Number(match[3]) }
+    : null;
+}
+
+function sameRepositoryPart(left, right) {
+  return String(left || '').toLowerCase() === String(right || '').toLowerCase();
+}
+
+function sameIssue(parts, number, parsed) {
+  return Boolean(
+    parsed &&
+    sameRepositoryPart(parsed.owner, parts.owner) &&
+    sameRepositoryPart(parsed.repo, parts.repo) &&
+    parsed.number === number,
+  );
+}
+
+function commentBelongsToIssue(comment, parts, number) {
+  if (sameIssue(parts, number, parseIssueApiUrl(comment.issue_url)))
+    return true;
+  return sameIssue(parts, number, parseCommentUrl(comment.html_url));
+}
+
+async function expectedAuthor(input, ctx) {
+  const explicit = optionalString(input.expectedAuthor);
+  if (explicit) return explicit;
+  if (input.requireAuthenticatedAuthor === false) return '';
+  return await currentUserLogin(ctx);
+}
+
 export async function execute(rawInput, ctx) {
   const input = inputObject(rawInput);
   const repository = requiredRepository(input);
@@ -63,8 +103,8 @@ export async function execute(rawInput, ctx) {
   const parsed = parseCommentUrl(requiredString(input.url, 'url'));
   if (
     !parsed ||
-    parsed.owner !== parts.owner ||
-    parsed.repo !== parts.repo ||
+    !sameRepositoryPart(parsed.owner, parts.owner) ||
+    !sameRepositoryPart(parsed.repo, parts.repo) ||
     parsed.number !== number
   ) {
     return { verified: false, reason: 'comment-url-does-not-match-issue' };
@@ -78,6 +118,33 @@ export async function execute(rawInput, ctx) {
       '/issues/comments/' +
       parsed.commentId,
   ]);
+  if (!commentBelongsToIssue(comment, parts, number)) {
+    return {
+      verified: false,
+      reason: 'fetched-comment-does-not-belong-to-issue',
+      url: comment.html_url || input.url,
+      commentId: comment.id || parsed.commentId,
+    };
+  }
+
+  const author = await expectedAuthor(input, ctx);
+  if (input.requireAuthenticatedAuthor !== false && !author) {
+    return {
+      verified: false,
+      reason: 'authenticated-author-unavailable',
+      url: comment.html_url || input.url,
+      commentId: comment.id || parsed.commentId,
+    };
+  }
+  if (author && commentAuthorLogin(comment) !== author) {
+    return {
+      verified: false,
+      reason: 'comment-author-mismatch',
+      url: comment.html_url || input.url,
+      commentId: comment.id || parsed.commentId,
+    };
+  }
+
   const includes = stringList(input.requiredBodyIncludes);
   const missing = includes.filter(
     (text) => typeof comment.body !== 'string' || !comment.body.includes(text),

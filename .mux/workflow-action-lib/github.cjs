@@ -112,6 +112,22 @@ function markerStatus(body) {
   return match ? match[1] : '';
 }
 
+async function currentUserLogin(ctx) {
+  try {
+    const user = await ctx.execJson('gh', ['api', 'user']);
+    return user && typeof user.login === 'string' && user.login.length > 0
+      ? user.login
+      : '';
+  } catch {
+    return '';
+  }
+}
+
+function commentAuthorLogin(comment) {
+  const user = comment && (comment.user || comment.author);
+  return user && typeof user.login === 'string' ? user.login : '';
+}
+
 async function getIssueView(ctx, repository, number, fields) {
   const args = ['issue', 'view', String(number), '--json', fields.join(',')];
   if (repository) args.push('--repo', repository);
@@ -168,6 +184,8 @@ module.exports = {
   markerCommentNeedle,
   isMatchingMarker,
   markerStatus,
+  currentUserLogin,
+  commentAuthorLogin,
   getIssueView,
   fetchCommentsPage,
   listComments,

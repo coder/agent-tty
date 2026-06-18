@@ -1,6 +1,9 @@
 const {
+  commentAuthorLogin,
+  currentUserLogin,
   inputObject,
   listComments,
+  optionalString,
   requiredIssueNumber,
   requiredRepository,
   splitRepository,
@@ -17,9 +20,9 @@ export const metadata = {
       owner: mux.schema.optional(mux.schema.string()),
       repo: mux.schema.optional(mux.schema.string()),
       number: mux.schema.integer(),
-      requiredBodyIncludes: mux.schema.optional(
-        mux.schema.array(mux.schema.string()),
-      ),
+      expectedAuthor: mux.schema.optional(mux.schema.string()),
+      requireAuthenticatedAuthor: mux.schema.optional(mux.schema.boolean()),
+      requiredBodyIncludes: mux.schema.array(mux.schema.string()),
     },
     { additionalProperties: false },
   ),
@@ -39,6 +42,13 @@ export const metadata = {
   timeoutMs: 60000,
 };
 
+async function expectedAuthor(input, ctx) {
+  const explicit = optionalString(input.expectedAuthor);
+  if (explicit) return explicit;
+  if (input.requireAuthenticatedAuthor === false) return '';
+  return await currentUserLogin(ctx);
+}
+
 export async function execute(rawInput, ctx) {
   const input = inputObject(rawInput);
   const repository = requiredRepository(input);
@@ -49,12 +59,24 @@ export async function execute(rawInput, ctx) {
     throw new Error('requiredBodyIncludes must include at least one string');
   }
 
+  const author = await expectedAuthor(input, ctx);
+  if (input.requireAuthenticatedAuthor !== false && !author) {
+    return {
+      found: false,
+      reason: 'authenticated-author-unavailable',
+      url: null,
+      commentId: null,
+      updatedAt: null,
+    };
+  }
+
   const comments = await listComments(ctx, parts.owner, parts.repo, number);
   const match = comments
     .slice()
     .reverse()
     .find(
       (comment) =>
+        (!author || commentAuthorLogin(comment) === author) &&
         typeof comment.body === 'string' &&
         includes.every((text) => comment.body.includes(text)),
     );
