@@ -37,20 +37,27 @@ export const metadata = {
 
 export default function workflow({ args, phase, log, agent, parallelAgents }) {
   const requested = normalizeArgs(args || {});
+  const repositoryFromArgs =
+    requested.repository ||
+    repositoryFromOwnerRepo(requested.owner, requested.repo);
 
-  phase('resolve-context', { hasRepository: Boolean(requested.repository) });
+  let context = {};
+  if (!repositoryFromArgs) {
+    phase('resolve-context', { hasRepository: false });
 
-  const context = runAgent(agent, {
-    id: 'resolve-context',
-    title: 'Resolve GitHub context',
-    agentId: DEFAULT_TRIAGE_AGENT_ID,
-    isolation: 'none',
-    prompt: buildContextPrompt(requested),
-    outputSchema: contextSchema(),
-  });
-  if (!context.ok) throw new Error(context.reason);
+    const contextResult = runAgent(agent, {
+      id: 'resolve-context',
+      title: 'Resolve GitHub context',
+      agentId: DEFAULT_TRIAGE_AGENT_ID,
+      isolation: 'none',
+      prompt: buildContextPrompt(requested),
+      outputSchema: contextSchema(),
+    });
+    if (!contextResult.ok) throw new Error(contextResult.reason);
+    context = contextResult.output;
+  }
 
-  const cfg = resolveConfig(requested, context.output);
+  const cfg = resolveConfig(requested, context);
   log('Resolved read-only triage context', {
     repository: cfg.repository,
     repositorySource: cfg.repositorySource,

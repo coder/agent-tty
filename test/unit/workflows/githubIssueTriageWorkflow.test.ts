@@ -235,6 +235,33 @@ function issue(
 }
 
 describe('github issue triage workflow', () => {
+  it('skips context resolution when repository args are explicit', () => {
+    const explicitRepository = runWorkflow({
+      args: { repository: 'coder/agent-tty' },
+    });
+
+    expect(explicitRepository.agentSpecs.map((spec) => spec.id)).toEqual([
+      'fetch-issues',
+    ]);
+
+    const explicitOwnerRepo = runWorkflow({
+      args: { owner: 'coder', repo: 'agent-tty' },
+    });
+
+    expect(explicitOwnerRepo.agentSpecs.map((spec) => spec.id)).toEqual([
+      'fetch-issues',
+    ]);
+  });
+
+  it('resolves context when repository args are missing', () => {
+    const { agentSpecs } = runWorkflow({ args: {} });
+
+    expect(agentSpecs.map((spec) => spec.id)).toEqual([
+      'resolve-context',
+      'fetch-issues',
+    ]);
+  });
+
   it('re-filters model-listed issues before drafting reports', () => {
     const { result, parallelSpecs } = runWorkflow({
       args: {
