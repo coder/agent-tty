@@ -1,10 +1,10 @@
 {
   "ok": true,
   "command": "create",
-  "timestamp": "2026-06-21T20:57:18.597Z",
+  "timestamp": "2026-06-21T21:32:50.061Z",
   "result": {
-    "sessionId": "01KVNZJCMXXB3CYKGF5E2Q0WKD",
-    "createdAt": "2026-06-21T20:57:17.729Z",
+    "sessionId": "01KVP1KE8N58K2BNW5K6M3N6SF",
+    "createdAt": "2026-06-21T21:32:49.304Z",
     "cols": 80,
     "rows": 24,
     "shell": "/bin/bash"

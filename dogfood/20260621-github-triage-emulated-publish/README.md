@@ -4,7 +4,7 @@ This bundle proves the deterministic GitHub issue triage publisher can run again
 
 ## Scenario
 
-`commands.sh` starts a local GitHub emulator, seeds `octocat/triage-sandbox`, creates two issues, computes the publisher conversation hashes through a small `gh`-compatible wrapper, and runs `scripts/github-issue-triage-publish.mjs` with base64 publish plans.
+`commands.sh` starts a pinned local GitHub emulator, seeds `octocat/triage-sandbox`, creates two issues, computes the publisher conversation hashes through a small `gh`-compatible wrapper, and runs `scripts/github-issue-triage-publish.mjs` with base64 publish plans. The bundle proves the companion publisher script against the emulator; workflow-owned agent orchestration remains covered by unit tests.
 
 Assertions captured in the outputs:
 

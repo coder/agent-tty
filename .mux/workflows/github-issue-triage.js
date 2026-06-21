@@ -866,14 +866,10 @@ function publishResultFailureReason(plan, output) {
     return 'invalid-publisher-result';
   }
   if (output.status === 'deferred') {
-    if (output.commentUrl !== null) return 'invalid-publisher-result';
-    if (!stringListsEqual(output.labelsAdded, [])) {
-      return 'invalid-publisher-result';
-    }
-    if (!stringListsEqual(output.labelsRemoved, [])) {
-      return 'invalid-publisher-result';
-    }
     if (!optionalString(output.reason)) return 'invalid-publisher-result';
+    if (!deferredPublisherResultMatchesPlan(plan, output)) {
+      return 'invalid-publisher-result';
+    }
     return '';
   }
   if (optionalString(output.reason)) return 'invalid-publisher-result';
@@ -887,12 +883,50 @@ function publishResultFailureReason(plan, output) {
     if (!['published', 'already_published'].includes(output.status)) {
       return 'invalid-publisher-result';
     }
-    if (!optionalString(output.commentUrl)) return 'invalid-publisher-result';
+    if (!commentUrlMatchesPlan(plan, output.commentUrl)) {
+      return 'invalid-publisher-result';
+    }
   } else {
     if (output.status !== 'labeled') return 'invalid-publisher-result';
     if (output.commentUrl !== null) return 'invalid-publisher-result';
   }
   return '';
+}
+
+function deferredPublisherResultMatchesPlan(plan, output) {
+  if (plan.kind !== 'triage-comment' && output.commentUrl !== null)
+    return false;
+  if (
+    plan.kind === 'triage-comment' &&
+    output.commentUrl !== null &&
+    !commentUrlMatchesPlan(plan, output.commentUrl)
+  ) {
+    return false;
+  }
+  return (
+    stringListIsSubset(output.labelsAdded, plan.labelsToAdd) &&
+    stringListIsSubset(output.labelsRemoved, plan.labelsToRemove)
+  );
+}
+
+function commentUrlMatchesPlan(plan, value) {
+  const commentUrl = optionalString(value);
+  if (!commentUrl) return false;
+  const needle =
+    '/' + repositoryKey(plan.repository) + '/issues/' + String(plan.issue);
+  const lowerUrl = commentUrl.toLowerCase();
+  const index = lowerUrl.indexOf(needle);
+  if (index === -1) return false;
+  const next = lowerUrl.charAt(index + needle.length);
+  return next === '' || next === '#' || next === '?' || next === '/';
+}
+
+function stringListIsSubset(values, allowed) {
+  const allowedKeys = new Set(stringList(allowed).map(labelKey));
+  for (const value of stringList(values)) {
+    if (!allowedKeys.has(labelKey(value))) return false;
+  }
+  return true;
 }
 
 function publishSpecId(plan) {

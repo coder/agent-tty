@@ -116,10 +116,14 @@ async function publishPlan(plan) {
       ignoreAbsentLabels: plan.labelsToAdd,
     });
     if (retryFailure) return deferredResult(plan, retryFailure);
-    await applyLabels(plan);
-    const after = await readIssueState(plan);
-    const labelFailure = labelVerificationFailure(plan, after.labels);
-    if (labelFailure) return deferredResult(plan, labelFailure);
+    try {
+      await applyLabels(plan);
+      const after = await readIssueState(plan);
+      const labelFailure = labelVerificationFailure(plan, after.labels);
+      if (labelFailure) return deferredResult(plan, labelFailure);
+    } catch {
+      return deferredResult(plan, 'partial-publish-requires-manual-recovery');
+    }
     return successResult(plan, 'labeled', null);
   }
 
@@ -131,7 +135,12 @@ async function publishPlan(plan) {
   );
   if (existing) {
     if (!plannedLabelsApplied(plan, before.labels)) {
-      return deferredResult(plan, 'partial-publish-requires-manual-recovery');
+      return partialPublishResult(
+        plan,
+        'partial-publish-requires-manual-recovery',
+        before,
+        existing,
+      );
     }
     return successResult(plan, 'already_published', existing.url || null);
   }
@@ -139,15 +148,77 @@ async function publishPlan(plan) {
   const preconditionFailure = await publishPreconditionFailure(plan, before);
   if (preconditionFailure) return deferredResult(plan, preconditionFailure);
 
-  await commentIssue(plan);
-  await applyLabels(plan);
-  const after = await readIssueState(plan);
+  try {
+    await commentIssue(plan);
+    await applyLabels(plan);
+  } catch {
+    return await readPartialPublishResult(
+      plan,
+      publisherLogin,
+      'partial-publish-requires-manual-recovery',
+    );
+  }
+  let after;
+  try {
+    after = await readIssueState(plan);
+  } catch {
+    return deferredResult(plan, 'partial-publish-requires-manual-recovery');
+  }
   const posted = findMarkerComment(after.comments, plan.marker, publisherLogin);
-  if (!posted)
-    return deferredResult(plan, 'published-comment-marker-not-found');
+  if (!posted) {
+    return partialPublishResult(
+      plan,
+      'published-comment-marker-not-found',
+      after,
+      null,
+    );
+  }
   const labelFailure = labelVerificationFailure(plan, after.labels);
-  if (labelFailure) return deferredResult(plan, labelFailure);
+  if (labelFailure) {
+    return partialPublishResult(
+      plan,
+      'partial-publish-requires-manual-recovery',
+      after,
+      posted,
+    );
+  }
   return successResult(plan, 'published', posted.url || null);
+}
+
+async function readPartialPublishResult(plan, publisherLogin, reason) {
+  try {
+    const current = await readIssueState(plan);
+    const posted = findMarkerComment(
+      current.comments,
+      plan.marker,
+      publisherLogin,
+    );
+    return partialPublishResult(plan, reason, current, posted);
+  } catch {
+    return deferredResult(plan, reason);
+  }
+}
+
+function partialPublishResult(plan, reason, issueState, markerComment) {
+  return deferredResult(plan, reason, {
+    commentUrl: markerComment?.url || null,
+    labelsAdded: plannedPresentLabels(plan.labelsToAdd, issueState?.labels),
+    labelsRemoved: plannedAbsentLabels(plan.labelsToRemove, issueState?.labels),
+  });
+}
+
+function plannedPresentLabels(planned, actual) {
+  const actualLabels = new Set(
+    normalizeLabelNames(actual).map((label) => label.toLowerCase()),
+  );
+  return planned.filter((label) => actualLabels.has(label.toLowerCase()));
+}
+
+function plannedAbsentLabels(planned, actual) {
+  const actualLabels = new Set(
+    normalizeLabelNames(actual).map((label) => label.toLowerCase()),
+  );
+  return planned.filter((label) => !actualLabels.has(label.toLowerCase()));
 }
 
 function successResult(plan, status, commentUrl) {
@@ -410,7 +481,7 @@ function assertObject(value, name) {
   }
 }
 
-function deferredResult(plan, reason) {
+function deferredResult(plan, reason, evidence = {}) {
   const kind =
     plan && ['triage-comment', 'risk-stop'].includes(plan.kind)
       ? plan.kind
@@ -419,9 +490,13 @@ function deferredResult(plan, reason) {
     issue: plan && Number.isInteger(plan.issue) ? plan.issue : 0,
     kind,
     status: 'deferred',
-    commentUrl: null,
-    labelsAdded: [],
-    labelsRemoved: [],
+    commentUrl: evidence.commentUrl || null,
+    labelsAdded: Array.isArray(evidence.labelsAdded)
+      ? evidence.labelsAdded
+      : [],
+    labelsRemoved: Array.isArray(evidence.labelsRemoved)
+      ? evidence.labelsRemoved
+      : [],
     reason,
   };
 }

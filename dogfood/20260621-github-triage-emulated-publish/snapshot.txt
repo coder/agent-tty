@@ -1,4 +1,4 @@
-coder in 🌐 aaaaaaa in triage-workflow-6nm5 on  triage-workflow-6nm5 [?⇡] is 📦
+coder in 🌐 aaaaaaa in triage-workflow-6nm5 on  triage-workflow-6nm5 [!⇡] is 📦
 ⬢ [Docker] XY ./dogfood/20260621-github-triage-emulated-publish/commands.sh
 == emulated github triage publish dogfood ==age-emulated-publish/commands.sh
 repo: octocat/triage-sandbox
@@ -27,8 +27,10 @@ hecks, rate limit
     "needs-triage"
   ]
 }
-{"issue1":"91e9bc43938b6ed488ca4eaaeb79940192263c241693a5cb104d1d972ed5d652","is
-sue2":"108cf9a3f9cb8d01f73d567881bf64e87921c0dae39067905fb11ec378da1362"}
+{
+  "issue1": "5c99e5616a43b8314c3c54c752fa908ae61432739ab860860f38e1c9d81a4314",
+  "issue2": "90ac308d4f78118332a0c55bbb3a3edf1ba1063472990e8430328b5867e2da91"
+}
 
 == publish triage comment ==
 {
@@ -75,15 +77,31 @@ ent-1",
 }
 
 == final issue states ==
-{"state":"open","labels":["needs-triage","ready-for-agent","triage:done"],"comme
-nts":["<!-- agent-tty-triage:octocat/triage-sandbox#1 -->\n> [!NOTE]\n> This tri
-age report is AI-generated using Mux\n\nEmulated publisher dogfood comment."]}
-{"state":"open","labels":["needs-triage","triage:stopped","risk:high"],"comments
-":[]}
+{
+  "state": "open",
+  "labels": [
+    "needs-triage",
+    "ready-for-agent",
+    "triage:done"
+  ],
+  "comments": [
+    "<!-- agent-tty-triage:octocat/triage-sandbox#1 -->\n> [!NOTE]\n> This triag
+e report is AI-generated using Mux\n\nEmulated publisher dogfood comment."
+  ]
+}
+{
+  "state": "open",
+  "labels": [
+    "needs-triage",
+    "triage:stopped",
+    "risk:high"
+  ],
+  "comments": []
+}
 
 DOGFOOD_EMULATED_PUBLISH_OK
-coder in 🌐 aaaaaaa in triage-workflow-6nm5 on  triage-workflow-6nm5 [?⇡] is 📦
+coder in 🌐 aaaaaaa in triage-workflow-6nm5 on  triage-workflow-6nm5 [!⇡] is 📦
  v0.4.3 via  v26.2.0 on ☁️   took 4s
-coder in 🌐 aaaaaaa in triage-workflow-6nm5 on  triage-workflow-6nm5 [?⇡] is 📦
+coder in 🌐 aaaaaaa in triage-workflow-6nm5 on  triage-workflow-6nm5 [!⇡] is 📦
  v0.4.3 via  v26.2.0 on ☁️
 ⬢ [Docker] XY

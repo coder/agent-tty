@@ -1,20 +1,20 @@
 {
   "ok": true,
   "command": "screenshot",
-  "timestamp": "2026-06-21T20:57:29.803Z",
+  "timestamp": "2026-06-21T21:33:00.985Z",
   "result": {
-    "sessionId": "01KVNZJCMXXB3CYKGF5E2Q0WKD",
+    "sessionId": "01KVP1KE8N58K2BNW5K6M3N6SF",
     "capturedAtSeq": 23,
     "profileName": "reference-dark",
     "cols": 80,
     "rows": 24,
-    "artifactPath": "/tmp/tmp.tepisGdUN8/sessions/01KVNZJCMXXB3CYKGF5E2Q0WKD/artifacts/screenshot-23-reference-dark.png",
-    "pngSizeBytes": 45854,
+    "artifactPath": "/tmp/tmp.YFDIskU5IF/sessions/01KVP1KE8N58K2BNW5K6M3N6SF/artifacts/screenshot-23-reference-dark.png",
+    "pngSizeBytes": 40646,
     "cursorVisible": false,
     "rendererBackend": "ghostty-web",
     "pixelWidth": 640,
     "pixelHeight": 384,
-    "sha256": "1b7be92686de8f686338023a87a3a615514bf28270af6b647a02e2d2d63e238f",
+    "sha256": "e234e7b788d167bd09cf7b4955b2ca76b0a366c388e7932691377cd2c8e5c6ce",
     "renderProfileHash": "8ffed6af301ec7c0e6b69599c3be0d1d12096f9fcdfc59d0bbb4cc474d64c53d"
   }
 }

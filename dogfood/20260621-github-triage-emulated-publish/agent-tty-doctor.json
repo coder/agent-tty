@@ -1,7 +1,7 @@
 {
   "ok": true,
   "command": "doctor",
-  "timestamp": "2026-06-21T20:57:16.518Z",
+  "timestamp": "2026-06-21T21:32:48.151Z",
   "result": {
     "ok": true,
     "checks": {
@@ -10,7 +10,7 @@
           "name": "node-runtime",
           "status": "pass",
           "message": "Node 26.2.0 ok",
-          "durationMs": 1
+          "durationMs": 0
         },
         {
           "name": "cwd-access",
@@ -27,14 +27,14 @@
         {
           "name": "home_isolation",
           "status": "pass",
-          "message": "agent-tty home is isolated from system home: /tmp/tmp.tepisGdUN8",
+          "message": "agent-tty home is isolated from system home: /tmp/tmp.YFDIskU5IF",
           "durationMs": 0
         },
         {
           "name": "home-writable",
           "status": "pass",
-          "message": "home writable: /tmp/tmp.tepisGdUN8",
-          "durationMs": 2
+          "message": "home writable: /tmp/tmp.YFDIskU5IF",
+          "durationMs": 1
         },
         {
           "name": "pty-spawn",
@@ -45,19 +45,19 @@
         {
           "name": "socket-viable",
           "status": "pass",
-          "message": "socket ok: /tmp/agent-tty/246a5d20/a2758c086586",
-          "durationMs": 4
+          "message": "socket ok: /tmp/agent-tty/9e478a8c/412fe79bcd90",
+          "durationMs": 3
         },
         {
           "name": "artifact-atomicity",
           "status": "pass",
-          "message": "atomic rename ok: /tmp/tmp.tepisGdUN8/sessions/doctor-1808791-mqo9pavq-3/artifacts",
+          "message": "atomic rename ok: /tmp/tmp.YFDIskU5IF/sessions/doctor-1920296-mqoayzp9-3/artifacts",
           "durationMs": 2
         },
         {
           "name": "event-log-writable",
           "status": "pass",
-          "message": "append ok: /tmp/tmp.tepisGdUN8/sessions/doctor-1808791-mqo9pavs-5/events.jsonl",
+          "message": "append ok: /tmp/tmp.YFDIskU5IF/sessions/doctor-1920296-mqoayzpb-5/events.jsonl",
           "durationMs": 1
         }
       ],
@@ -72,31 +72,31 @@
           "name": "browser_cache_accessible",
           "status": "pass",
           "message": "browser cache accessible: /home/coder/.cache/ms-playwright",
-          "durationMs": 0
+          "durationMs": 1
         },
         {
           "name": "browser_launch",
           "status": "pass",
           "message": "chromium launches",
-          "durationMs": 107
+          "durationMs": 108
         },
         {
           "name": "ghostty_web_available",
           "status": "pass",
           "message": "WASM available",
-          "durationMs": 121
+          "durationMs": 71
         },
         {
           "name": "screenshot_viable",
           "status": "pass",
           "message": "viable",
-          "durationMs": 166
+          "durationMs": 159
         },
         {
           "name": "libghostty_vt_available",
           "status": "pass",
           "message": "@coder/libghostty-vt-node exposes createTerminal()",
-          "durationMs": 0
+          "durationMs": 1
         }
       ]
     },

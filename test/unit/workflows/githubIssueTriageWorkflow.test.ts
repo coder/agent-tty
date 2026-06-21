@@ -1237,6 +1237,71 @@ describe('github issue triage workflow', () => {
     ]);
   });
 
+  it('rejects publisher success URLs for the wrong issue or repository', () => {
+    for (const commentUrl of [
+      'https://github.com/coder/agent-tty/issues/10#issuecomment-1',
+      'https://github.com/coder/other-repo/issues/1#issuecomment-1',
+    ]) {
+      const { result } = runWorkflow({
+        args: { repository: 'coder/agent-tty', publishMode: 'publish' },
+        issues: [issue(1, ['needs-triage'])],
+        publishOutputs: {
+          1: {
+            issue: 1,
+            kind: 'triage-comment',
+            status: 'published',
+            commentUrl,
+            labelsAdded: ['ready-for-agent', 'triage:done'],
+            labelsRemoved: [],
+            reason: '',
+          },
+        },
+      });
+
+      expect(result.structuredOutput.published[0]).toMatchObject({
+        issue: 1,
+        kind: 'triage-comment',
+        status: 'deferred',
+        commentUrl: null,
+        labelsAdded: [],
+        labelsRemoved: [],
+        reason: 'invalid-publisher-result',
+      });
+    }
+  });
+
+  it('preserves plan-compatible partial publisher evidence', () => {
+    const { result } = runWorkflow({
+      args: { repository: 'coder/agent-tty', publishMode: 'publish' },
+      issues: [issue(1, ['needs-triage'])],
+      publishOutputs: {
+        1: {
+          issue: 1,
+          kind: 'triage-comment',
+          status: 'deferred',
+          commentUrl:
+            'https://github.com/coder/agent-tty/issues/1#issuecomment-1',
+          labelsAdded: ['ready-for-agent'],
+          labelsRemoved: [],
+          reason: 'partial-publish-requires-manual-recovery',
+        },
+      },
+    });
+
+    expect(result.structuredOutput.published).toEqual([
+      {
+        issue: 1,
+        kind: 'triage-comment',
+        status: 'deferred',
+        commentUrl:
+          'https://github.com/coder/agent-tty/issues/1#issuecomment-1',
+        labelsAdded: ['ready-for-agent'],
+        labelsRemoved: [],
+        reason: 'partial-publish-requires-manual-recovery',
+      },
+    ]);
+  });
+
   it('round-trips unicode publish plans for non-default repositories', () => {
     const { result, parallelSpecs } = runWorkflow({
       args: { repository: 'example/unicode-repo', publishMode: 'publish' },

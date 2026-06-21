@@ -94,6 +94,8 @@ async function runPublisher(plan: PublishPlan, scenario: string) {
         status: string;
         reason: string;
         commentUrl: string | null;
+        labelsAdded: string[];
+        labelsRemoved: string[];
       },
       calls: callsText
         .trim()
@@ -143,6 +145,10 @@ if (args[0] === 'api' && args[1] === 'user') {
   writeFileSync(commentPath, '1');
   console.log('{}');
 } else if (args[0] === 'issue' && args[1] === 'edit') {
+  if (scenario === 'edit-fails-after-comment') {
+    console.error('edit failed after comment');
+    process.exit(1);
+  }
   writeFileSync(editPath, '1');
   console.log('{}');
 } else {
@@ -205,11 +211,35 @@ describe('github issue triage publisher', () => {
 
     expect(result).toMatchObject({
       status: 'deferred',
+      commentUrl: 'https://example.test/bot',
+      labelsAdded: [],
+      labelsRemoved: [],
       reason: 'partial-publish-requires-manual-recovery',
     });
     expect(
       calls.some((call) => call[0] === 'issue' && call[1] === 'edit'),
     ).toBe(false);
+  });
+
+  it('reports partial evidence when label application fails after posting', async () => {
+    const { result, calls } = await runPublisher(
+      triagePlan(),
+      'edit-fails-after-comment',
+    );
+
+    expect(result).toMatchObject({
+      status: 'deferred',
+      commentUrl: 'https://example.test/bot',
+      labelsAdded: [],
+      labelsRemoved: [],
+      reason: 'partial-publish-requires-manual-recovery',
+    });
+    expect(
+      calls.some((call) => call[0] === 'issue' && call[1] === 'comment'),
+    ).toBe(true);
+    expect(
+      calls.some((call) => call[0] === 'issue' && call[1] === 'edit'),
+    ).toBe(true);
   });
 
   it('defers without mutation when the conversation hash changed', async () => {

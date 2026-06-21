@@ -35,7 +35,7 @@ Paths below are relative to the repository root.
 | `dogfood/oxlint-oxfmt-migration/`              | Oxc lint/format migration proof with migrated checks, screenshot, asciicast, and WebM recording.                           |
 | `dogfood/token-usage-phase5-proof/`            | Phase 5 eval DX token-usage proof bundle (commit `91a571de`) with screenshot, WebM recording, snapshot, and replay script. |
 
-| `dogfood/20260621-github-triage-emulated-publish/` | Local GitHub emulator proof for direct triage publisher comments, labels, idempotency, and risk-stop behavior. |
+| `dogfood/20260621-github-triage-emulated-publish/` | Local GitHub emulator proof for the companion triage publisher script's comments, labels, idempotency, and risk-stop behavior. |
 | `dogfood/20260330-docs-navigation/` | Repository docs walkthrough with screenshots and a WebM recording of the new navigation path. |
 
 Follow-up: `dogfood/token-usage-phase5-proof/` is the only dedicated eval DX phase bundle currently cataloged. Dedicated proof bundles for the authoring façade, reporter lifecycle, and workspace-preset phases (Phases 1-4) are not currently present under `dogfood/`; reviewers who need fresh artifacts for those phases should capture a local proof bundle.

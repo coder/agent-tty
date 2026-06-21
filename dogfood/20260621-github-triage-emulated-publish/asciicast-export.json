@@ -1,20 +1,20 @@
 {
   "ok": true,
   "command": "record export",
-  "timestamp": "2026-06-21T20:57:31.139Z",
+  "timestamp": "2026-06-21T21:33:02.274Z",
   "result": {
-    "sessionId": "01KVNZJCMXXB3CYKGF5E2Q0WKD",
+    "sessionId": "01KVP1KE8N58K2BNW5K6M3N6SF",
     "format": "asciicast",
     "artifactPath": "/home/coder/.mux/src/agent-terminal/triage-workflow-6nm5/dogfood/20260621-github-triage-emulated-publish/session.cast",
-    "bytes": 4210,
-    "sha256": "24bfbd80e1f90bf9fca2931469d02f39612f25b6954c3662cdef12745638895f",
+    "bytes": 4352,
+    "sha256": "d41e53a0de1df94b732510a2b4b881a9f26aaf07e89d57d0f63b6d465faac456",
     "capturedAtSeq": 23,
-    "durationMs": 5232,
+    "durationMs": 5119,
     "metadata": {
       "width": 80,
       "height": 24,
-      "title": "01KVNZJCMXXB3CYKGF5E2Q0WKD",
-      "timestamp": 1782075438,
+      "title": "01KVP1KE8N58K2BNW5K6M3N6SF",
+      "timestamp": 1782077570,
       "outputEventCount": 22,
       "resizeEventCount": 0,
       "markerCount": 0

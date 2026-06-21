@@ -11,6 +11,8 @@ GH_WRAPPER="$BUNDLE/fake-gh-emulate.mjs"
 PUBLISHER="$ROOT/scripts/github-issue-triage-publish.mjs"
 LOG="$BUNDLE/emulate.log"
 
+EMULATE_PACKAGE="emulate@0.7.0"
+
 export EMULATE_GITHUB_BASE_URL="$BASE"
 export EMULATE_GITHUB_TOKEN="$TOKEN"
 export AGENT_TTY_TRIAGE_PUBLISH_GH="$GH_WRAPPER"
@@ -51,13 +53,15 @@ publish_plan() {
 printf '== emulated github triage publish dogfood ==\n'
 printf 'repo: %s\nbase: %s\n' "$REPO" "$BASE"
 printf '\n== emulator cli ==\n'
-npx --yes emulate list | sed -n '/github/,+2p'
+npx --yes "$EMULATE_PACKAGE" list | sed -n '/github/,+2p'
 
-npx --yes emulate start --service github --port "$DOGFOOD_PORT" --seed "$BUNDLE/emulate.config.yaml" >"$LOG" 2>&1 &
+pkill -f "emulate start --service github --port ${DOGFOOD_PORT}" >/dev/null 2>&1 || true
+npx --yes "$EMULATE_PACKAGE" start --service github --port "$DOGFOOD_PORT" --seed "$BUNDLE/emulate.config.yaml" >"$LOG" 2>&1 &
 EMULATE_PID=$!
 cleanup() {
   kill "$EMULATE_PID" >/dev/null 2>&1 || true
   wait "$EMULATE_PID" >/dev/null 2>&1 || true
+  pkill -f "emulate start --service github --port ${DOGFOOD_PORT}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -85,7 +89,8 @@ curl_json -X POST "$BASE/repos/$REPO/issues" \
 
 HASH1="$(conversation_hash 1)"
 HASH2="$(conversation_hash 2)"
-printf '{"issue1":"%s","issue2":"%s"}\n' "$HASH1" "$HASH2" | tee "$BUNDLE/conversation-hashes.json"
+jq -n --arg issue1 "$HASH1" --arg issue2 "$HASH2" '{issue1:$issue1,issue2:$issue2}' \
+  | tee "$BUNDLE/conversation-hashes.json"
 
 cat > "$BUNDLE/triage-comment-plan.json" <<JSON
 {
@@ -127,17 +132,53 @@ JSON
 
 printf '\n== publish triage comment ==\n'
 publish_plan "$BUNDLE/triage-comment-plan.json" | tee "$BUNDLE/triage-comment-result.json"
+jq -e '
+  .status == "published"
+  and .commentUrl != null
+  and (.labelsAdded == ["ready-for-agent", "triage:done"])
+  and (.labelsRemoved == [])
+  and (.reason == "")
+' "$BUNDLE/triage-comment-result.json" >/dev/null
 
 printf '\n== publish triage comment again for idempotency ==\n'
 publish_plan "$BUNDLE/triage-comment-plan.json" | tee "$BUNDLE/triage-comment-idempotent-result.json"
+jq -e '
+  .status == "already_published"
+  and .commentUrl != null
+  and (.labelsAdded == ["ready-for-agent", "triage:done"])
+  and (.labelsRemoved == [])
+  and (.reason == "")
+' "$BUNDLE/triage-comment-idempotent-result.json" >/dev/null
 
 printf '\n== publish risk-stop labels ==\n'
 publish_plan "$BUNDLE/risk-stop-plan.json" | tee "$BUNDLE/risk-stop-result.json"
+jq -e '
+  .status == "labeled"
+  and .commentUrl == null
+  and (.labelsAdded == ["triage:stopped", "risk:high"])
+  and (.labelsRemoved == [])
+  and (.reason == "")
+' "$BUNDLE/risk-stop-result.json" >/dev/null
 
 printf '\n== final issue states ==\n'
 "$GH_WRAPPER" issue view 1 --repo "$REPO" --comments --json comments,labels,state --jq '{state,labels:[.labels[].name],comments:[.comments[].body]}' \
+  | jq . \
   | tee "$BUNDLE/issue-1-after.json"
 "$GH_WRAPPER" issue view 2 --repo "$REPO" --comments --json comments,labels,state --jq '{state,labels:[.labels[].name],comments:[.comments[].body]}' \
+  | jq . \
   | tee "$BUNDLE/issue-2-after.json"
+jq -e '
+  (.labels | index("needs-triage"))
+  and (.labels | index("ready-for-agent"))
+  and (.labels | index("triage:done"))
+  and (.comments | length == 1)
+  and (.comments[0] | contains("agent-tty-triage:octocat/triage-sandbox#1"))
+' "$BUNDLE/issue-1-after.json" >/dev/null
+jq -e '
+  (.labels | index("needs-triage"))
+  and (.labels | index("triage:stopped"))
+  and (.labels | index("risk:high"))
+  and (.comments | length == 0)
+' "$BUNDLE/issue-2-after.json" >/dev/null
 
 printf '\nDOGFOOD_EMULATED_PUBLISH_OK\n'
