@@ -1,0 +1,24 @@
+{
+  "kind": "risk-stop",
+  "repository": "octocat/triage-sandbox",
+  "issue": 2,
+  "marker": "",
+  "commentBody": "",
+  "labelsToAdd": ["triage:stopped", "risk:high"],
+  "labelsToRemove": [],
+  "allowedLabels": [
+    "needs-triage",
+    "ready-for-agent",
+    "triage:done",
+    "triage:ongoing",
+    "triage:stopped",
+    "risk:medium",
+    "risk:high"
+  ],
+  "preconditions": {
+    "state": "open",
+    "requiredLabels": ["needs-triage"],
+    "absentLabels": ["triage:done", "triage:ongoing", "triage:stopped"],
+    "conversationHash": "108cf9a3f9cb8d01f73d567881bf64e87921c0dae39067905fb11ec378da1362"
+  }
+}

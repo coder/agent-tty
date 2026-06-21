@@ -1,0 +1,89 @@
+coder in 🌐 aaaaaaa in triage-workflow-6nm5 on  triage-workflow-6nm5 [?⇡] is 📦
+⬢ [Docker] XY ./dogfood/20260621-github-triage-emulated-publish/commands.sh
+== emulated github triage publish dogfood ==age-emulated-publish/commands.sh
+repo: octocat/triage-sandbox
+base: http://localhost:4011
+
+== emulator cli ==
+  github    GitHub REST API emulator
+            Endpoints: users, repos, issues, PRs, comments, reviews, labels, mil
+estones, branches, git data, orgs, teams, releases, webhooks, search, actions, c
+hecks, rate limit
+
+{
+  "login": "admin"
+}
+{
+  "number": 1,
+  "title": "Publish-mode dogfood",
+  "labels": [
+    "needs-triage"
+  ]
+}
+{
+  "number": 2,
+  "title": "Risk-stop dogfood",
+  "labels": [
+    "needs-triage"
+  ]
+}
+{"issue1":"91e9bc43938b6ed488ca4eaaeb79940192263c241693a5cb104d1d972ed5d652","is
+sue2":"108cf9a3f9cb8d01f73d567881bf64e87921c0dae39067905fb11ec378da1362"}
+
+== publish triage comment ==
+{
+  "issue": 1,
+  "kind": "triage-comment",
+  "status": "published",
+  "commentUrl": "http://localhost:4011/octocat/triage-sandbox/issues/1#issuecomm
+ent-1",
+  "labelsAdded": [
+    "ready-for-agent",
+    "triage:done"
+  ],
+  "labelsRemoved": [],
+  "reason": ""
+}
+
+== publish triage comment again for idempotency ==
+{
+  "issue": 1,
+  "kind": "triage-comment",
+  "status": "already_published",
+  "commentUrl": "http://localhost:4011/octocat/triage-sandbox/issues/1#issuecomm
+ent-1",
+  "labelsAdded": [
+    "ready-for-agent",
+    "triage:done"
+  ],
+  "labelsRemoved": [],
+  "reason": ""
+}
+
+== publish risk-stop labels ==
+{
+  "issue": 2,
+  "kind": "risk-stop",
+  "status": "labeled",
+  "commentUrl": null,
+  "labelsAdded": [
+    "triage:stopped",
+    "risk:high"
+  ],
+  "labelsRemoved": [],
+  "reason": ""
+}
+
+== final issue states ==
+{"state":"open","labels":["needs-triage","ready-for-agent","triage:done"],"comme
+nts":["<!-- agent-tty-triage:octocat/triage-sandbox#1 -->\n> [!NOTE]\n> This tri
+age report is AI-generated using Mux\n\nEmulated publisher dogfood comment."]}
+{"state":"open","labels":["needs-triage","triage:stopped","risk:high"],"comments
+":[]}
+
+DOGFOOD_EMULATED_PUBLISH_OK
+coder in 🌐 aaaaaaa in triage-workflow-6nm5 on  triage-workflow-6nm5 [?⇡] is 📦
+ v0.4.3 via  v26.2.0 on ☁️   took 4s
+coder in 🌐 aaaaaaa in triage-workflow-6nm5 on  triage-workflow-6nm5 [?⇡] is 📦
+ v0.4.3 via  v26.2.0 on ☁️
+⬢ [Docker] XY

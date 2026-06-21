@@ -1,0 +1,142 @@
+{
+  "ok": true,
+  "command": "doctor",
+  "timestamp": "2026-06-21T20:57:16.518Z",
+  "result": {
+    "ok": true,
+    "checks": {
+      "environment": [
+        {
+          "name": "node-runtime",
+          "status": "pass",
+          "message": "Node 26.2.0 ok",
+          "durationMs": 1
+        },
+        {
+          "name": "cwd-access",
+          "status": "pass",
+          "message": "cwd read/write: /home/coder/.mux/src/agent-terminal/triage-workflow-6nm5",
+          "durationMs": 2
+        },
+        {
+          "name": "temp-dir",
+          "status": "pass",
+          "message": "temp dir ok: /tmp",
+          "durationMs": 1
+        },
+        {
+          "name": "home_isolation",
+          "status": "pass",
+          "message": "agent-tty home is isolated from system home: /tmp/tmp.tepisGdUN8",
+          "durationMs": 0
+        },
+        {
+          "name": "home-writable",
+          "status": "pass",
+          "message": "home writable: /tmp/tmp.tepisGdUN8",
+          "durationMs": 2
+        },
+        {
+          "name": "pty-spawn",
+          "status": "pass",
+          "message": "spawned /home/coder/.local/share/mise/installs/node/26.2.0/bin/node",
+          "durationMs": 32
+        },
+        {
+          "name": "socket-viable",
+          "status": "pass",
+          "message": "socket ok: /tmp/agent-tty/246a5d20/a2758c086586",
+          "durationMs": 4
+        },
+        {
+          "name": "artifact-atomicity",
+          "status": "pass",
+          "message": "atomic rename ok: /tmp/tmp.tepisGdUN8/sessions/doctor-1808791-mqo9pavq-3/artifacts",
+          "durationMs": 2
+        },
+        {
+          "name": "event-log-writable",
+          "status": "pass",
+          "message": "append ok: /tmp/tmp.tepisGdUN8/sessions/doctor-1808791-mqo9pavs-5/events.jsonl",
+          "durationMs": 1
+        }
+      ],
+      "renderer": [
+        {
+          "name": "playwright_available",
+          "status": "pass",
+          "message": "available",
+          "durationMs": 1
+        },
+        {
+          "name": "browser_cache_accessible",
+          "status": "pass",
+          "message": "browser cache accessible: /home/coder/.cache/ms-playwright",
+          "durationMs": 0
+        },
+        {
+          "name": "browser_launch",
+          "status": "pass",
+          "message": "chromium launches",
+          "durationMs": 107
+        },
+        {
+          "name": "ghostty_web_available",
+          "status": "pass",
+          "message": "WASM available",
+          "durationMs": 121
+        },
+        {
+          "name": "screenshot_viable",
+          "status": "pass",
+          "message": "viable",
+          "durationMs": 166
+        },
+        {
+          "name": "libghostty_vt_available",
+          "status": "pass",
+          "message": "@coder/libghostty-vt-node exposes createTerminal()",
+          "durationMs": 0
+        }
+      ]
+    },
+    "capabilities": [
+      {
+        "name": "snapshot",
+        "status": "available",
+        "reason": "libghostty-vt semantic renderer available",
+        "detail": "@coder/libghostty-vt-node exposes createTerminal()"
+      },
+      {
+        "name": "wait",
+        "status": "available",
+        "reason": "libghostty-vt semantic renderer available",
+        "detail": "@coder/libghostty-vt-node exposes createTerminal()"
+      },
+      {
+        "name": "screenshot",
+        "status": "available",
+        "reason": "renderer smoke checks passed",
+        "detail": "playwright_available: available; browser_launch: chromium launches; ghostty_web_available: WASM available; screenshot_viable: viable"
+      },
+      {
+        "name": "record-export-asciicast",
+        "status": "available",
+        "reason": "built-in capability",
+        "detail": "available without external renderer dependencies"
+      },
+      {
+        "name": "record-export-webm",
+        "status": "available",
+        "reason": "browser-backed export dependencies available",
+        "detail": "playwright_available: available; browser_launch: chromium launches; ghostty_web_available: WASM available"
+      },
+      {
+        "name": "dashboard",
+        "status": "available",
+        "reason": "libghostty-vt native module available",
+        "detail": "@coder/libghostty-vt-node exposes createTerminal()"
+      }
+    ]
+  }
+}

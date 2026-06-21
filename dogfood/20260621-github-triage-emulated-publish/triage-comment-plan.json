@@ -1,0 +1,24 @@
+{
+  "kind": "triage-comment",
+  "repository": "octocat/triage-sandbox",
+  "issue": 1,
+  "marker": "<!-- agent-tty-triage:octocat/triage-sandbox#1 -->",
+  "commentBody": "<!-- agent-tty-triage:octocat/triage-sandbox#1 -->\n> [!NOTE]\n> This triage report is AI-generated using Mux\n\nEmulated publisher dogfood comment.",
+  "labelsToAdd": ["ready-for-agent", "triage:done"],
+  "labelsToRemove": [],
+  "allowedLabels": [
+    "needs-triage",
+    "ready-for-agent",
+    "triage:done",
+    "triage:ongoing",
+    "triage:stopped",
+    "risk:medium",
+    "risk:high"
+  ],
+  "preconditions": {
+    "state": "open",
+    "requiredLabels": ["needs-triage"],
+    "absentLabels": ["triage:done", "triage:ongoing", "triage:stopped"],
+    "conversationHash": "91e9bc43938b6ed488ca4eaaeb79940192263c241693a5cb104d1d972ed5d652"
+  }
+}

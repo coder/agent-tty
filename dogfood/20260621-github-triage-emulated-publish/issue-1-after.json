@@ -1,0 +1,7 @@
+{
+  "state": "open",
+  "labels": ["needs-triage", "ready-for-agent", "triage:done"],
+  "comments": [
+    "<!-- agent-tty-triage:octocat/triage-sandbox#1 -->\n> [!NOTE]\n> This triage report is AI-generated using Mux\n\nEmulated publisher dogfood comment."
+  ]
+}

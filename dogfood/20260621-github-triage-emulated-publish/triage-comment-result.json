@@ -1,0 +1,9 @@
+{
+  "issue": 1,
+  "kind": "triage-comment",
+  "status": "published",
+  "commentUrl": "http://localhost:4011/octocat/triage-sandbox/issues/1#issuecomment-1",
+  "labelsAdded": ["ready-for-agent", "triage:done"],
+  "labelsRemoved": [],
+  "reason": ""
+}
