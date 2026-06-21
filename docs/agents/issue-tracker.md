@@ -21,7 +21,7 @@ Before running the `github-issue-triage` workflow, verify the repository has the
 gh label list --search 'triage:'
 ```
 
-The workflow defaults to open issues labelled `needs-triage`, skips issues labelled `triage:done`, and defers issues labelled `triage:ongoing`. It investigates candidates in isolated agent workspaces so bug reports can be reproduced or prototyped before producing maintainer-reviewable triage reports. The default `publishMode` is `draft`, which does not mutate GitHub; explicit `publishMode: "publish"` posts the validated triage comment and applies only allowed labels plus `triage:done`. Use an explicit `repository` when running it outside a normal checked-out project context.
+The workflow defaults to open issues labelled `needs-triage`, skips issues labelled `triage:done`, and defers issues labelled `triage:ongoing`. It investigates candidates in isolated agent workspaces so bug reports can be reproduced or prototyped before producing maintainer-reviewable triage reports, public-comment drafts, and allowlisted label plans. It does not mutate GitHub directly; posting comments and applying labels require an external deterministic publisher that verifies the target issue, comment marker, author, and final labels. Use an explicit `repository` when running it outside a normal checked-out project context.
 
 ## When a skill says "publish to the issue tracker"
 

@@ -42,30 +42,21 @@ type AnalysisOutput = {
   status: 'ready' | 'deferred' | 'skipped_done';
   reason: string;
   triageReport: string | null;
-  publishableComment?: string | null;
-  recommendedLabels?: string[];
-  reproductionStatus?:
+  publishableComment: string | null;
+  recommendedLabels: string[];
+  reproductionStatus:
     | 'reproduced'
     | 'not_reproduced'
     | 'not_applicable'
     | 'deferred';
-  commandsRun?: string[];
-  observedBehavior?: string | null;
-  expectedBehavior?: string | null;
-  rootCause?: string | null;
-  prototypeSummary?: string | null;
-  confidence?: 'high' | 'medium' | 'low';
+  commandsRun: string[];
+  observedBehavior: string | null;
+  expectedBehavior: string | null;
+  rootCause: string | null;
+  prototypeSummary: string | null;
+  confidence: 'high' | 'medium' | 'low';
   labelNames: string[];
   summary: string;
-};
-
-type PublishOutput = {
-  issue: number;
-  status: 'published' | 'already_published' | 'deferred';
-  reason: string;
-  commentUrl: string | null;
-  labelsAdded: string[];
-  labelsRemoved: string[];
 };
 
 type WorkflowReturn = {
@@ -90,17 +81,6 @@ type WorkflowReturn = {
       confidence: string;
       summary: string;
     }>;
-    published: Array<{
-      issue: number;
-      commentUrl: string;
-      status: string;
-      labelsAdded: string[];
-      labelsRemoved: string[];
-    }>;
-    publishDeferred: Array<{
-      issue?: number;
-      reason: string;
-    }>;
     deferred: Array<{
       issue?: number;
       reason: string;
@@ -118,6 +98,14 @@ type WorkflowReturn = {
     truncated: boolean;
     publishMode: string;
   };
+};
+
+type ListedFilterOverrides = {
+  state?: string;
+  includeLabels?: string[];
+  excludeLabels?: string[];
+  limit?: number;
+  fetchLimit?: number;
 };
 
 type WorkflowModule = {
@@ -174,56 +162,100 @@ const fakeSchema = {
   }),
 };
 
+function resultFor(spec: AgentSpec, structuredOutput: unknown): AgentResult {
+  validateSchema(spec.outputSchema as JsonSchema, structuredOutput, spec.id);
+  return { structuredOutput };
+}
+
+function validateSchema(
+  schema: JsonSchema,
+  value: unknown,
+  path: string,
+): void {
+  if (schema.enum) {
+    if (!schema.enum.includes(value as string)) {
+      throw new Error(path + ' must be one of ' + schema.enum.join(', '));
+    }
+    return;
+  }
+
+  const type = schema.type;
+  if (Array.isArray(type) && type.includes('null') && value === null) return;
+
+  if (type === 'string' && typeof value !== 'string') {
+    throw new Error(path + ' must be string');
+  }
+  if (type === 'integer' && !Number.isInteger(value)) {
+    throw new Error(path + ' must be integer');
+  }
+  if (type === 'boolean' && typeof value !== 'boolean') {
+    throw new Error(path + ' must be boolean');
+  }
+  if (type === 'array') {
+    if (!Array.isArray(value)) throw new Error(path + ' must be array');
+    for (let index = 0; index < value.length; index += 1) {
+      validateSchema(
+        schema.items as JsonSchema,
+        value[index],
+        `${path}[${index}]`,
+      );
+    }
+  }
+  if (type === 'object') {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(path + ' must be object');
+    }
+    const record = value as Record<string, unknown>;
+    for (const key of schema.required ?? []) {
+      if (!(key in record)) throw new Error(path + '.' + key + ' is required');
+    }
+    for (const [key, child] of Object.entries(schema.properties ?? {})) {
+      if (key in record) validateSchema(child, record[key], path + '.' + key);
+    }
+  }
+}
+
 function runWorkflow(options: {
   args?: Record<string, unknown>;
   issues?: Issue[];
   analyses?: Record<number, AnalysisOutput>;
-  publications?: Record<number, PublishOutput>;
   listed?: {
     repository?: string;
     fetchedCount?: number;
     eligibleCount?: number;
     truncated?: boolean;
+    filters?: ListedFilterOverrides;
   };
 }) {
   const module = loadWorkflow();
+  const workflowArgs = options.args ?? { repository: 'coder/agent-tty' };
   const issues = options.issues ?? [];
   const agentSpecs: AgentSpec[] = [];
   const parallelSpecs: AgentSpec[] = [];
 
   const result = module.workflow({
-    args: options.args ?? { repository: 'coder/agent-tty' },
+    args: workflowArgs,
     phase: () => {},
     log: () => {},
     agent: (spec) => {
       agentSpecs.push(spec);
       if (spec.id === 'resolve-context') {
-        return {
-          structuredOutput: {
-            cwd: null,
-            gitRoot: null,
-            repository: 'coder/agent-tty',
-            repositorySource: 'test',
-          },
-        };
+        return resultFor(spec, {
+          cwd: null,
+          gitRoot: null,
+          repository: 'coder/agent-tty',
+          repositorySource: 'test',
+        });
       }
       if (spec.id === 'fetch-issues') {
-        return {
-          structuredOutput: {
-            repository: options.listed?.repository ?? 'coder/agent-tty',
-            filters: {
-              state: 'open',
-              includeLabels: ['needs-triage'],
-              excludeLabels: ['triage:done'],
-              limit: 1000,
-              fetchLimit: 1000,
-            },
-            fetchedCount: options.listed?.fetchedCount ?? issues.length,
-            eligibleCount: options.listed?.eligibleCount ?? issues.length,
-            truncated: options.listed?.truncated ?? false,
-            issues,
-          },
-        };
+        return resultFor(spec, {
+          repository: options.listed?.repository ?? 'coder/agent-tty',
+          filters: listedFilters(workflowArgs, options.listed?.filters),
+          fetchedCount: options.listed?.fetchedCount ?? issues.length,
+          eligibleCount: options.listed?.eligibleCount ?? issues.length,
+          truncated: options.listed?.truncated ?? false,
+          issues,
+        });
       }
       throw new Error('unexpected agent spec: ' + spec.id);
     },
@@ -232,14 +264,7 @@ function runWorkflow(options: {
       parallelSpecs.push(...specs);
       return specs.map((spec) => {
         const issue = Number(spec.id.match(/issue-(\d+)/)?.[1]);
-        if (spec.id.startsWith('publish-issue-')) {
-          return {
-            structuredOutput: publishOutputByIssue(issue),
-          };
-        }
-        return {
-          structuredOutput: optionsByIssue(options, issue),
-        };
+        return resultFor(spec, optionsByIssue(options, issue));
       });
     },
   });
@@ -254,39 +279,59 @@ function runWorkflow(options: {
     _parallelOptions: { maxParallel: number },
     issue: number,
   ): AnalysisOutput {
-    return (
-      options.analyses?.[issue] ?? {
-        issue,
-        status: 'ready',
-        reason: '',
-        triageReport: `Draft report for #${issue}`,
-        publishableComment: `Public comment for #${issue}`,
-        recommendedLabels: ['ready-for-agent'],
-        reproductionStatus: 'reproduced',
-        commandsRun: ['npm test -- example'],
-        observedBehavior: 'Observed behavior.',
-        expectedBehavior: 'Expected behavior.',
-        rootCause: 'Likely root cause.',
-        prototypeSummary: null,
-        confidence: 'high',
-        labelNames: ['needs-triage'],
-        summary: `Drafted #${issue}`,
-      }
-    );
+    return options.analyses?.[issue] ?? analysisOutput(issue);
   }
+}
 
-  function publishOutputByIssue(issue: number): PublishOutput {
-    return (
-      options.publications?.[issue] ?? {
-        issue,
-        status: 'published',
-        reason: '',
-        commentUrl: `https://github.com/coder/agent-tty/issues/${issue}#issuecomment-1`,
-        labelsAdded: ['ready-for-agent', 'triage:done'],
-        labelsRemoved: ['triage:ongoing'],
-      }
-    );
-  }
+function listedFilters(
+  args: Record<string, unknown>,
+  overrides: ListedFilterOverrides | undefined,
+) {
+  return {
+    state:
+      overrides?.state ??
+      (typeof args.state === 'string' ? args.state.toLowerCase() : 'open'),
+    includeLabels:
+      overrides?.includeLabels ??
+      stringList(args.includeLabels, ['needs-triage']),
+    excludeLabels:
+      overrides?.excludeLabels ?? stringList(args.excludeLabels, []),
+    limit:
+      overrides?.limit ?? (typeof args.limit === 'number' ? args.limit : 1000),
+    fetchLimit: overrides?.fetchLimit ?? 1000,
+  };
+}
+
+function stringList(value: unknown, fallback: string[]): string[] {
+  return Array.isArray(value) ? value.filter(isString) : fallback;
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+function analysisOutput(
+  issue: number,
+  overrides: Partial<AnalysisOutput> = {},
+): AnalysisOutput {
+  return {
+    issue,
+    status: 'ready',
+    reason: '',
+    triageReport: `Draft report for #${issue}`,
+    publishableComment: `Public comment for #${issue}`,
+    recommendedLabels: ['ready-for-agent'],
+    reproductionStatus: 'reproduced',
+    commandsRun: ['npm test -- example'],
+    observedBehavior: 'Observed behavior.',
+    expectedBehavior: 'Expected behavior.',
+    rootCause: 'Likely root cause.',
+    prototypeSummary: null,
+    confidence: 'high',
+    labelNames: ['needs-triage'],
+    summary: `Drafted #${issue}`,
+    ...overrides,
+  };
 }
 
 function issue(
@@ -334,6 +379,16 @@ describe('github issue triage workflow', () => {
       'resolve-context',
       'fetch-issues',
     ]);
+  });
+
+  it('rejects issue listings whose filters do not match the request', () => {
+    expect(() =>
+      runWorkflow({
+        args: { repository: 'coder/agent-tty', excludeLabels: ['blocked'] },
+        listed: { filters: { excludeLabels: [] } },
+        issues: [issue(1, ['needs-triage'])],
+      }),
+    ).toThrow(/issue listing filters mismatch: excludeLabels/);
   });
 
   it('re-filters model-listed issues before drafting reports', () => {
@@ -490,38 +545,27 @@ describe('github issue triage workflow', () => {
         issue(4, ['needs-triage']),
       ],
       analyses: {
-        1: {
-          issue: 1,
-          status: 'ready',
-          reason: '',
+        1: analysisOutput(1, {
           triageReport: 'Should be skipped.',
           labelNames: ['needs-triage', 'TRIAGE:DONE'],
           summary: 'Done after final read.',
-        },
-        2: {
-          issue: 2,
-          status: 'ready',
-          reason: '',
+        }),
+        2: analysisOutput(2, {
           triageReport: 'Should be deferred.',
           labelNames: ['needs-triage', 'TRIAGE:ONGOING'],
           summary: 'Ongoing after final read.',
-        },
-        3: {
-          issue: 3,
-          status: 'ready',
-          reason: '',
+        }),
+        3: analysisOutput(3, {
           triageReport: 'Ready draft.',
           labelNames: ['needs-triage'],
           summary: 'Still ready.',
-        },
-        4: {
-          issue: 4,
+        }),
+        4: analysisOutput(4, {
           status: 'skipped_done',
-          reason: '',
           triageReport: null,
           labelNames: ['needs-triage'],
           summary: 'Mismatched skipped done.',
-        },
+        }),
       },
     });
 
@@ -595,22 +639,18 @@ describe('github issue triage workflow', () => {
     ).toThrow(/prototype investigation requires agentId exec/);
   });
 
-  it('rejects unsafe publish configuration before analysis', () => {
+  it('rejects unsupported publish modes before analysis', () => {
     expect(() =>
       runWorkflow({
         args: { repository: 'coder/agent-tty', publishMode: 'auto' },
       }),
-    ).toThrow(/publishMode must be draft or publish/);
+    ).toThrow(/publishMode must be draft or plan/);
 
     expect(() =>
       runWorkflow({
-        args: {
-          repository: 'coder/agent-tty',
-          publishMode: 'publish',
-          publishAgentId: 'explore',
-        },
+        args: { repository: 'coder/agent-tty', publishMode: 'publish' },
       }),
-    ).toThrow(/publishMode publish requires publishAgentId exec/);
+    ).toThrow(/publishMode must be draft or plan/);
   });
 
   it('rejects contradictory label filters', () => {
@@ -663,12 +703,11 @@ describe('github issue triage workflow', () => {
       'analyze-issue-1-v1',
     ]);
     expect(result.structuredOutput.publishMode).toBe('draft');
-    expect(result.structuredOutput.published).toEqual([]);
     expect(result.structuredOutput.drafted[0]).toMatchObject({
       issue: 1,
       recommendedLabels: ['ready-for-agent'],
       labelsToAdd: ['ready-for-agent', 'triage:done'],
-      labelsToRemove: ['triage:ongoing'],
+      labelsToRemove: [],
       reproductionStatus: 'reproduced',
       confidence: 'high',
     });
@@ -677,42 +716,12 @@ describe('github issue triage workflow', () => {
     );
   });
 
-  it('publishes comments and labels only in explicit publish mode', () => {
+  it('flags labels outside the allowlist in the publish plan', () => {
     const { result, parallelSpecs } = runWorkflow({
-      args: { repository: 'coder/agent-tty', publishMode: 'publish' },
-      issues: [issue(1, ['needs-triage'])],
-    });
-
-    expect(parallelSpecs.map((spec) => spec.id)).toEqual([
-      'analyze-issue-1-v1',
-      'publish-issue-1-v1',
-    ]);
-    const publishSpec = parallelSpecs[1];
-    expect(publishSpec?.agentId).toBe('exec');
-    expect(publishSpec?.isolation).toBe('fork');
-    expect(publishSpec?.prompt).toContain('gh issue comment');
-    expect(publishSpec?.prompt).toContain('gh issue edit');
-    expect(result.structuredOutput.published).toEqual([
-      {
-        issue: 1,
-        commentUrl:
-          'https://github.com/coder/agent-tty/issues/1#issuecomment-1',
-        status: 'published',
-        labelsAdded: ['ready-for-agent', 'triage:done'],
-        labelsRemoved: ['triage:ongoing'],
-      },
-    ]);
-  });
-
-  it('does not publish when analysis recommends labels outside the allowlist', () => {
-    const { result, parallelSpecs } = runWorkflow({
-      args: { repository: 'coder/agent-tty', publishMode: 'publish' },
+      args: { repository: 'coder/agent-tty' },
       issues: [issue(1, ['needs-triage'])],
       analyses: {
-        1: {
-          issue: 1,
-          status: 'ready',
-          reason: '',
+        1: analysisOutput(1, {
           triageReport: 'Ready draft.',
           publishableComment: 'Ready public comment.',
           recommendedLabels: ['security-review'],
@@ -721,11 +730,9 @@ describe('github issue triage workflow', () => {
           observedBehavior: null,
           expectedBehavior: null,
           rootCause: null,
-          prototypeSummary: null,
           confidence: 'medium',
-          labelNames: ['needs-triage'],
           summary: 'Ready with disallowed label.',
-        },
+        }),
       },
     });
 
@@ -735,13 +742,9 @@ describe('github issue triage workflow', () => {
     expect(result.structuredOutput.drafted[0]?.rejectedLabels).toEqual([
       'security-review',
     ]);
-    expect(result.structuredOutput.publishDeferred).toEqual([
-      {
-        issue: 1,
-        reason: 'recommended-label-not-allowed-security-review',
-      },
+    expect(result.structuredOutput.drafted[0]?.labelsToAdd).toEqual([
+      'triage:done',
     ]);
-    expect(result.structuredOutput.published).toEqual([]);
   });
 
   it('keeps mutation commands out of investigation prompts', () => {
