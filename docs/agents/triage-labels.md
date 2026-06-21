@@ -14,10 +14,10 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 
 The `github-issue-triage` workflow also uses two automation-state labels that are separate from the canonical triage roles:
 
-| Label            | Meaning                                                                                               |
-| ---------------- | ----------------------------------------------------------------------------------------------------- |
-| `triage:ongoing` | Manual or external automation in-progress marker; the read-only workflow defers and never removes it. |
-| `triage:done`    | Maintainer-applied marker telling the read-only workflow to skip future reconciles.                   |
+| Label            | Meaning                                                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `triage:ongoing` | Manual or external automation in-progress marker; the workflow defers issues carrying it and only removes it as successful publish cleanup. |
+| `triage:done`    | Completion marker; publish mode applies it after posting a verified triage comment, and future reconciles skip it.                          |
 
 Create these labels before running the workflow in a repository that does not already have them, for example:
 

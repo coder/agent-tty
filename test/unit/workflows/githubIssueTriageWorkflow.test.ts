@@ -42,8 +42,30 @@ type AnalysisOutput = {
   status: 'ready' | 'deferred' | 'skipped_done';
   reason: string;
   triageReport: string | null;
+  publishableComment?: string | null;
+  recommendedLabels?: string[];
+  reproductionStatus?:
+    | 'reproduced'
+    | 'not_reproduced'
+    | 'not_applicable'
+    | 'deferred';
+  commandsRun?: string[];
+  observedBehavior?: string | null;
+  expectedBehavior?: string | null;
+  rootCause?: string | null;
+  prototypeSummary?: string | null;
+  confidence?: 'high' | 'medium' | 'low';
   labelNames: string[];
   summary: string;
+};
+
+type PublishOutput = {
+  issue: number;
+  status: 'published' | 'already_published' | 'deferred';
+  reason: string;
+  commentUrl: string | null;
+  labelsAdded: string[];
+  labelsRemoved: string[];
 };
 
 type WorkflowReturn = {
@@ -54,7 +76,30 @@ type WorkflowReturn = {
       title: string;
       url: string;
       triageReport: string;
+      publishableComment: string;
+      recommendedLabels: string[];
+      rejectedLabels: string[];
+      labelsToAdd: string[];
+      labelsToRemove: string[];
+      reproductionStatus: string;
+      commandsRun: string[];
+      observedBehavior: string | null;
+      expectedBehavior: string | null;
+      rootCause: string | null;
+      prototypeSummary: string | null;
+      confidence: string;
       summary: string;
+    }>;
+    published: Array<{
+      issue: number;
+      commentUrl: string;
+      status: string;
+      labelsAdded: string[];
+      labelsRemoved: string[];
+    }>;
+    publishDeferred: Array<{
+      issue?: number;
+      reason: string;
     }>;
     deferred: Array<{
       issue?: number;
@@ -71,6 +116,7 @@ type WorkflowReturn = {
       labelNames: string[];
     }>;
     truncated: boolean;
+    publishMode: string;
   };
 };
 
@@ -132,6 +178,7 @@ function runWorkflow(options: {
   args?: Record<string, unknown>;
   issues?: Issue[];
   analyses?: Record<number, AnalysisOutput>;
+  publications?: Record<number, PublishOutput>;
   listed?: {
     repository?: string;
     fetchedCount?: number;
@@ -185,6 +232,11 @@ function runWorkflow(options: {
       parallelSpecs.push(...specs);
       return specs.map((spec) => {
         const issue = Number(spec.id.match(/issue-(\d+)/)?.[1]);
+        if (spec.id.startsWith('publish-issue-')) {
+          return {
+            structuredOutput: publishOutputByIssue(issue),
+          };
+        }
         return {
           structuredOutput: optionsByIssue(options, issue),
         };
@@ -208,8 +260,30 @@ function runWorkflow(options: {
         status: 'ready',
         reason: '',
         triageReport: `Draft report for #${issue}`,
+        publishableComment: `Public comment for #${issue}`,
+        recommendedLabels: ['ready-for-agent'],
+        reproductionStatus: 'reproduced',
+        commandsRun: ['npm test -- example'],
+        observedBehavior: 'Observed behavior.',
+        expectedBehavior: 'Expected behavior.',
+        rootCause: 'Likely root cause.',
+        prototypeSummary: null,
+        confidence: 'high',
         labelNames: ['needs-triage'],
         summary: `Drafted #${issue}`,
+      }
+    );
+  }
+
+  function publishOutputByIssue(issue: number): PublishOutput {
+    return (
+      options.publications?.[issue] ?? {
+        issue,
+        status: 'published',
+        reason: '',
+        commentUrl: `https://github.com/coder/agent-tty/issues/${issue}#issuecomment-1`,
+        labelsAdded: ['ready-for-agent', 'triage:done'],
+        labelsRemoved: ['triage:ongoing'],
       }
     );
   }
@@ -279,7 +353,8 @@ describe('github issue triage workflow', () => {
     });
 
     expect(parallelSpecs).toHaveLength(1);
-    expect(parallelSpecs[0]?.agentId).toBe('explore');
+    expect(parallelSpecs[0]?.agentId).toBe('exec');
+    expect(parallelSpecs[0]?.isolation).toBe('fork');
     expect(parallelSpecs[0]?.prompt).not.toMatch(
       /gh issue (edit|comment)|--add-label|--remove-label/,
     );
@@ -505,9 +580,37 @@ describe('github issue triage workflow', () => {
 
     expect(() =>
       runWorkflow({
-        args: { repository: 'coder/agent-tty', agentId: 'exec' },
+        args: { repository: 'coder/agent-tty', agentId: 'desktop' },
       }),
-    ).toThrow(/agentId must be explore/);
+    ).toThrow(/agentId must be explore or exec/);
+
+    expect(() =>
+      runWorkflow({
+        args: {
+          repository: 'coder/agent-tty',
+          agentId: 'explore',
+          investigationMode: 'prototype',
+        },
+      }),
+    ).toThrow(/prototype investigation requires agentId exec/);
+  });
+
+  it('rejects unsafe publish configuration before analysis', () => {
+    expect(() =>
+      runWorkflow({
+        args: { repository: 'coder/agent-tty', publishMode: 'auto' },
+      }),
+    ).toThrow(/publishMode must be draft or publish/);
+
+    expect(() =>
+      runWorkflow({
+        args: {
+          repository: 'coder/agent-tty',
+          publishMode: 'publish',
+          publishAgentId: 'explore',
+        },
+      }),
+    ).toThrow(/publishMode publish requires publishAgentId exec/);
   });
 
   it('rejects contradictory label filters', () => {
@@ -550,11 +653,105 @@ describe('github issue triage workflow', () => {
     ).toThrow(/includeLabels and excludeLabels must not overlap/);
   });
 
-  it('does not contain mutating GitHub command prompts', () => {
-    const source = readFileSync(workflowUrl, 'utf8');
+  it('keeps draft mode non-publishing while preserving publish plans', () => {
+    const { result, parallelSpecs } = runWorkflow({
+      args: { repository: 'coder/agent-tty' },
+      issues: [issue(1, ['needs-triage'])],
+    });
 
-    expect(source).not.toMatch(/publishAgentId|gh issue edit|gh issue comment/);
-    expect(source).not.toMatch(/--add-label|--remove-label/);
-    expect(source).not.toMatch(/deep-research/);
+    expect(parallelSpecs.map((spec) => spec.id)).toEqual([
+      'analyze-issue-1-v1',
+    ]);
+    expect(result.structuredOutput.publishMode).toBe('draft');
+    expect(result.structuredOutput.published).toEqual([]);
+    expect(result.structuredOutput.drafted[0]).toMatchObject({
+      issue: 1,
+      recommendedLabels: ['ready-for-agent'],
+      labelsToAdd: ['ready-for-agent', 'triage:done'],
+      labelsToRemove: ['triage:ongoing'],
+      reproductionStatus: 'reproduced',
+      confidence: 'high',
+    });
+    expect(result.structuredOutput.drafted[0]?.publishableComment).toContain(
+      'This triage report is AI-generated using Mux',
+    );
+  });
+
+  it('publishes comments and labels only in explicit publish mode', () => {
+    const { result, parallelSpecs } = runWorkflow({
+      args: { repository: 'coder/agent-tty', publishMode: 'publish' },
+      issues: [issue(1, ['needs-triage'])],
+    });
+
+    expect(parallelSpecs.map((spec) => spec.id)).toEqual([
+      'analyze-issue-1-v1',
+      'publish-issue-1-v1',
+    ]);
+    const publishSpec = parallelSpecs[1];
+    expect(publishSpec?.agentId).toBe('exec');
+    expect(publishSpec?.isolation).toBe('fork');
+    expect(publishSpec?.prompt).toContain('gh issue comment');
+    expect(publishSpec?.prompt).toContain('gh issue edit');
+    expect(result.structuredOutput.published).toEqual([
+      {
+        issue: 1,
+        commentUrl:
+          'https://github.com/coder/agent-tty/issues/1#issuecomment-1',
+        status: 'published',
+        labelsAdded: ['ready-for-agent', 'triage:done'],
+        labelsRemoved: ['triage:ongoing'],
+      },
+    ]);
+  });
+
+  it('does not publish when analysis recommends labels outside the allowlist', () => {
+    const { result, parallelSpecs } = runWorkflow({
+      args: { repository: 'coder/agent-tty', publishMode: 'publish' },
+      issues: [issue(1, ['needs-triage'])],
+      analyses: {
+        1: {
+          issue: 1,
+          status: 'ready',
+          reason: '',
+          triageReport: 'Ready draft.',
+          publishableComment: 'Ready public comment.',
+          recommendedLabels: ['security-review'],
+          reproductionStatus: 'not_applicable',
+          commandsRun: [],
+          observedBehavior: null,
+          expectedBehavior: null,
+          rootCause: null,
+          prototypeSummary: null,
+          confidence: 'medium',
+          labelNames: ['needs-triage'],
+          summary: 'Ready with disallowed label.',
+        },
+      },
+    });
+
+    expect(parallelSpecs.map((spec) => spec.id)).toEqual([
+      'analyze-issue-1-v1',
+    ]);
+    expect(result.structuredOutput.drafted[0]?.rejectedLabels).toEqual([
+      'security-review',
+    ]);
+    expect(result.structuredOutput.publishDeferred).toEqual([
+      {
+        issue: 1,
+        reason: 'recommended-label-not-allowed-security-review',
+      },
+    ]);
+    expect(result.structuredOutput.published).toEqual([]);
+  });
+
+  it('keeps mutation commands out of investigation prompts', () => {
+    const { parallelSpecs } = runWorkflow({
+      args: { repository: 'coder/agent-tty' },
+      issues: [issue(1, ['needs-triage'])],
+    });
+
+    expect(parallelSpecs[0]?.prompt).not.toMatch(/gh issue (edit|comment)/);
+    expect(parallelSpecs[0]?.prompt).not.toMatch(/--add-label|--remove-label/);
+    expect(parallelSpecs[0]?.prompt).not.toContain('deep-research');
   });
 });
