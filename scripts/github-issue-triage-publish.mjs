@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 
+import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
-import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const MAX_COMMENT_CHARS = 12000;
+const MAX_MARKER_COMMENTS = 100;
+const MAX_MARKER_BODY_CHARS = 1024;
 
 async function main() {
   let plan;
@@ -54,6 +57,7 @@ function validatePlan(plan) {
     plan.allowedLabels,
     'labelsToRemove',
   );
+  validatePreconditions(plan.preconditions);
   if (plan.kind === 'triage-comment') {
     if (
       typeof plan.commentBody !== 'string' ||
@@ -67,67 +71,136 @@ function validatePlan(plan) {
     if (typeof plan.marker !== 'string' || plan.marker.trim() === '') {
       throw new Error('missing marker');
     }
+    if (!plan.commentBody.includes(plan.marker)) {
+      throw new Error('comment body missing marker');
+    }
   }
-  if (plan.kind === 'risk-stop' && plan.commentBody) {
-    throw new Error('risk-stop plans must not include comment bodies');
+  if (plan.kind === 'risk-stop') {
+    if (plan.commentBody)
+      throw new Error('risk-stop plans must not include comment bodies');
+    if (plan.marker)
+      throw new Error('risk-stop plans must not include markers');
+  }
+}
+
+function validatePreconditions(preconditions) {
+  assertObject(preconditions, 'preconditions');
+  if (
+    preconditions.state !== null &&
+    preconditions.state !== undefined &&
+    typeof preconditions.state !== 'string'
+  ) {
+    throw new Error('preconditions.state must be string or null');
+  }
+  validateLabelList(
+    preconditions.requiredLabels,
+    'preconditions.requiredLabels',
+  );
+  validateLabelList(preconditions.absentLabels, 'preconditions.absentLabels');
+  if (
+    typeof preconditions.conversationHash !== 'string' ||
+    preconditions.conversationHash.trim() === ''
+  ) {
+    throw new Error('preconditions.conversationHash must be non-empty string');
   }
 }
 
 async function publishPlan(plan) {
+  const before = await readIssueState(plan);
+
   if (plan.kind === 'risk-stop') {
+    if (plannedLabelsApplied(plan, before.labels)) {
+      return successResult(plan, 'labeled', null);
+    }
+    const retryFailure = await publishPreconditionFailure(plan, before, {
+      ignoreAbsentLabels: plan.labelsToAdd,
+    });
+    if (retryFailure) return deferredResult(plan, retryFailure);
     await applyLabels(plan);
-    const after = await viewIssue(plan);
+    const after = await readIssueState(plan);
     const labelFailure = labelVerificationFailure(plan, after.labels);
     if (labelFailure) return deferredResult(plan, labelFailure);
-    return {
-      issue: plan.issue,
-      kind: plan.kind,
-      status: 'labeled',
-      commentUrl: null,
-      labelsAdded: plan.labelsToAdd,
-      labelsRemoved: plan.labelsToRemove,
-      reason: '',
-    };
+    return successResult(plan, 'labeled', null);
   }
 
-  const before = await viewIssue(plan);
-  const existing = findMarkerComment(before.comments, plan.marker);
+  const publisherLogin = await readPublisherLogin();
+  const existing = findMarkerComment(
+    before.comments,
+    plan.marker,
+    publisherLogin,
+  );
   if (existing) {
-    await applyLabels(plan);
-    const after = await viewIssue(plan);
-    const labelFailure = labelVerificationFailure(plan, after.labels);
-    if (labelFailure) return deferredResult(plan, labelFailure);
-    return {
-      issue: plan.issue,
-      kind: plan.kind,
-      status: 'already_published',
-      commentUrl: existing.url || null,
-      labelsAdded: plan.labelsToAdd,
-      labelsRemoved: plan.labelsToRemove,
-      reason: '',
-    };
+    if (!plannedLabelsApplied(plan, before.labels)) {
+      return deferredResult(plan, 'partial-publish-requires-manual-recovery');
+    }
+    return successResult(plan, 'already_published', existing.url || null);
   }
+
+  const preconditionFailure = await publishPreconditionFailure(plan, before);
+  if (preconditionFailure) return deferredResult(plan, preconditionFailure);
 
   await commentIssue(plan);
   await applyLabels(plan);
-  const after = await viewIssue(plan);
-  const posted = findMarkerComment(after.comments, plan.marker);
+  const after = await readIssueState(plan);
+  const posted = findMarkerComment(after.comments, plan.marker, publisherLogin);
   if (!posted)
     return deferredResult(plan, 'published-comment-marker-not-found');
   const labelFailure = labelVerificationFailure(plan, after.labels);
   if (labelFailure) return deferredResult(plan, labelFailure);
+  return successResult(plan, 'published', posted.url || null);
+}
+
+function successResult(plan, status, commentUrl) {
   return {
     issue: plan.issue,
     kind: plan.kind,
-    status: 'published',
-    commentUrl: posted && posted.url ? posted.url : null,
+    status,
+    commentUrl,
     labelsAdded: plan.labelsToAdd,
     labelsRemoved: plan.labelsToRemove,
     reason: '',
   };
 }
 
-async function viewIssue(plan) {
+async function publishPreconditionFailure(plan, issueState, options = {}) {
+  const preconditions = plan.preconditions;
+  const ignoredAbsentLabels = new Set(
+    (options.ignoreAbsentLabels || []).map((label) => label.toLowerCase()),
+  );
+  const expectedState = optionalLower(preconditions.state);
+  if (
+    expectedState &&
+    expectedState !== 'all' &&
+    optionalLower(issueState.state) !== expectedState
+  ) {
+    return 'state-precondition-mismatch';
+  }
+
+  const currentLabels = new Set(
+    issueState.labels.map((label) => label.toLowerCase()),
+  );
+  for (const label of preconditions.requiredLabels) {
+    if (!currentLabels.has(label.toLowerCase())) {
+      return 'missing-required-label-' + label;
+    }
+  }
+  for (const label of preconditions.absentLabels) {
+    const key = label.toLowerCase();
+    if (!ignoredAbsentLabels.has(key) && currentLabels.has(key)) {
+      return 'unexpected-label-' + label;
+    }
+  }
+
+  if (!options.skipConversationHash) {
+    const hash = await readConversationHash(plan);
+    if (hash !== preconditions.conversationHash) {
+      return 'conversation-changed-after-classification';
+    }
+  }
+  return '';
+}
+
+async function readIssueState(plan) {
   const { stdout } = await gh([
     'issue',
     'view',
@@ -136,11 +209,70 @@ async function viewIssue(plan) {
     plan.repository,
     '--comments',
     '--json',
-    'comments,labels',
+    'comments,labels,state',
     '--jq',
-    '{comments: ((.comments // []) | map({body, url})), labels: ((.labels // []) | map(.name))}',
+    issueStateJq(),
   ]);
-  return JSON.parse(stdout || '{}');
+  const parsed = JSON.parse(stdout || '{}');
+  return {
+    state: optionalLower(parsed.state),
+    labels: normalizeLabelNames(parsed.labels),
+    comments: normalizeComments(parsed.comments),
+  };
+}
+
+async function readConversationHash(plan) {
+  const { stdout } = await gh(
+    [
+      'issue',
+      'view',
+      String(plan.issue),
+      '--repo',
+      plan.repository,
+      '--comments',
+      '--json',
+      'number,title,url,state,body,author,createdAt,updatedAt,labels,comments',
+      '--jq',
+      issueHashJq(),
+    ],
+    { maxBuffer: 50 * 1024 * 1024 },
+  );
+  return createHash('sha256')
+    .update(stripOneTrailingNewline(stdout), 'utf8')
+    .digest('hex');
+}
+
+async function readPublisherLogin() {
+  const { stdout } = await gh(['api', 'user', '--jq', '.login']);
+  const login = stdout.trim();
+  if (!login) throw new Error('publisher login unavailable');
+  return login;
+}
+
+function issueStateJq() {
+  return [
+    '{',
+    'state,',
+    'labels: ((.labels // []) | map(.name // .)),',
+    'comments: (((.comments // [])[-' + MAX_MARKER_COMMENTS + ':]) | map({',
+    'author, url,',
+    'body: ((.body // "") | .[0:' + MAX_MARKER_BODY_CHARS + '])',
+    '}))',
+    '}',
+  ].join(' ');
+}
+
+function issueHashJq() {
+  return [
+    '{',
+    'number, title, url, state, author, createdAt, updatedAt, labels,',
+    'body: (.body // ""),',
+    'comments: ((.comments // []) | map({',
+    'author, authorAssociation, createdAt, updatedAt, url,',
+    'body: (.body // "")',
+    '}))',
+    '}',
+  ].join(' ');
 }
 
 async function commentIssue(plan) {
@@ -169,25 +301,68 @@ async function applyLabels(plan) {
   if (argv.length > 5) await gh(argv);
 }
 
-async function gh(args) {
+async function gh(args, options = {}) {
   return await execFileAsync(
     process.env.AGENT_TTY_TRIAGE_PUBLISH_GH || 'gh',
     args,
     {
       encoding: 'utf8',
-      maxBuffer: 1024 * 1024,
+      maxBuffer: options.maxBuffer || 1024 * 1024,
     },
   );
 }
 
-function findMarkerComment(comments, marker) {
+function findMarkerComment(comments, marker, publisherLogin) {
   if (!Array.isArray(comments)) return null;
+  const expectedLogin = publisherLogin.toLowerCase();
   return (
-    comments.find(
-      (comment) =>
-        typeof comment?.body === 'string' && comment.body.includes(marker),
-    ) || null
+    comments.find((comment) => {
+      return (
+        typeof comment?.body === 'string' &&
+        comment.body.includes(marker) &&
+        commentAuthorLogin(comment).toLowerCase() === expectedLogin
+      );
+    }) || null
   );
+}
+
+function commentAuthorLogin(comment) {
+  const author = comment && comment.author;
+  if (typeof author === 'string') return author;
+  if (author && typeof author === 'object') {
+    return optionalString(author.login) || optionalString(author.name) || '';
+  }
+  return '';
+}
+
+function normalizeComments(comments) {
+  if (!Array.isArray(comments)) return [];
+  return comments.map((comment) => ({
+    body: typeof comment?.body === 'string' ? comment.body : '',
+    url: typeof comment?.url === 'string' ? comment.url : '',
+    author: comment?.author || null,
+  }));
+}
+
+function normalizeLabelNames(labels) {
+  if (!Array.isArray(labels)) return [];
+  return labels
+    .map((label) => {
+      if (typeof label === 'string') return label;
+      if (
+        label &&
+        typeof label === 'object' &&
+        typeof label.name === 'string'
+      ) {
+        return label.name;
+      }
+      return '';
+    })
+    .filter(Boolean);
+}
+
+function plannedLabelsApplied(plan, labels) {
+  return labelVerificationFailure(plan, labels) === '';
 }
 
 function labelVerificationFailure(plan, labels) {
@@ -249,6 +424,20 @@ function deferredResult(plan, reason) {
     labelsRemoved: [],
     reason,
   };
+}
+
+function optionalString(value) {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : undefined;
+}
+
+function optionalLower(value) {
+  return typeof value === 'string' ? value.toLowerCase() : '';
+}
+
+function stripOneTrailingNewline(value) {
+  return String(value).replace(/\r?\n$/, '');
 }
 
 function compactReason(error) {
