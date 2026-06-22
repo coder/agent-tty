@@ -1,9 +1,0 @@
-{
-  "issue": 2,
-  "kind": "risk-stop",
-  "status": "labeled",
-  "commentUrl": null,
-  "labelsAdded": ["triage:stopped", "risk:high"],
-  "labelsRemoved": [],
-  "reason": ""
-}
