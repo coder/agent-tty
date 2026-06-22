@@ -126,6 +126,34 @@ describe('screen hash integration', { timeout: 120_000 }, () => {
   });
 
   it('agrees on screenHash between structured and text snapshots of the same screen', () => {
+    // Settle the rendered screen: wait until `Ready` is visible AND the screen
+    // has been stable, so the two independent snapshot captures below observe
+    // the SAME screen. Without this, the structured capture can land before the
+    // 1s `Ready` print and the text capture after it, yielding two correct-but-
+    // different hashes (see SESSION_COMMAND).
+    const settle = runCli(
+      [
+        'wait',
+        sessionId,
+        '--text',
+        'Ready',
+        '--screen-stable-ms',
+        '500',
+        '--timeout',
+        '15000',
+        '--json',
+      ],
+      { AGENT_TTY_HOME: testHome },
+      20_000,
+    );
+    expect(settle.status).toBe(0);
+    const settleEnvelope = JSON.parse(
+      settle.stdout,
+    ) as SuccessEnvelope<WaitForRenderResult>;
+    expect(settleEnvelope.ok).toBe(true);
+    expect(settleEnvelope.result.matched).toBe(true);
+    expect(settleEnvelope.result.timedOut).toBe(false);
+
     const structured = runCli(
       ['snapshot', sessionId, '--format', 'structured', '--json'],
       { AGENT_TTY_HOME: testHome },
