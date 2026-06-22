@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Text, render, useApp, useInput, useStdout, type Key } from 'ink';
+import {
+  Box,
+  Text,
+  render,
+  useApp,
+  useInput,
+  useWindowSize,
+  type Key,
+} from 'ink';
 
 import type { DashboardAppOptions } from '../cli/commands/dashboard.js';
 import { createRendererBackend } from '../renderer/registry.js';
@@ -467,7 +475,6 @@ function useFollower(session: DashboardSession | undefined): FollowerState {
 
 function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
   const { exit } = useApp();
-  const { stdout } = useStdout();
 
   const [sessions, setSessions] = useState<DashboardSession[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -598,8 +605,10 @@ function App({ options }: { options: DashboardAppOptions }): React.ReactNode {
   const { frame, error: liveError } = useFollower(selectedSession);
   frameRef.current = frame;
 
-  const termCols = stdout.columns;
-  const termRows = stdout.rows;
+  // `useWindowSize` (not `useStdout().columns`) re-renders the dashboard when the
+  // terminal resizes, so tmux maximize/minimize redraws the panes at once instead
+  // of lagging until the next live-view frame or the ~1.5s session-list refresh.
+  const { columns: termCols, rows: termRows } = useWindowSize();
   // Pane geometry (see `paneLayout`): split shares the width with the Session
   // list; maximized drops the list to span the full width while keeping the same
   // right edge. `paneCols` is the *effective* content width for the current
