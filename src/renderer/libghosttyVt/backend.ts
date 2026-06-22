@@ -72,19 +72,6 @@ function assertNonNegativeInteger(
   );
 }
 
-function cloneReplayInput(input: ReplayInput): ReplayInput {
-  return {
-    sessionId: input.sessionId,
-    initialCols: input.initialCols,
-    initialRows: input.initialRows,
-    targetSeq: input.targetSeq,
-    events: input.events.map((event) => ({
-      ...event,
-      payload: { ...event.payload },
-    })) as ReplayInput['events'],
-  };
-}
-
 function validateNativeVisibleLines(
   lines: unknown,
   label: string,
@@ -524,7 +511,7 @@ export class LibghosttyVtBackend implements RendererBackend {
       highestProcessedSeq = input.targetSeq;
     }
     this.lastAppliedSeq = highestProcessedSeq;
-    this.latestReplayInput = cloneReplayInput(input);
+    this.latestReplayInput = input;
 
     const snapshot = assertNativeSnapshot(terminal.snapshot());
     this.assertSnapshotDimensions(snapshot);

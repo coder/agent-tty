@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdir, readdir, stat, unlink } from 'node:fs/promises';
+import { chmod, mkdir, readdir, stat, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -378,6 +378,9 @@ export async function allocateSession(
   const home = await ensureHome(config.home);
   const sessionDirectory = sessionDir(home, sessionId);
   await mkdir(sessionDirectory, { recursive: true });
+  // Owner-only: this directory holds the event log and all artifacts, so 0o700
+  // here protects every per-session file regardless of each file's own mode.
+  await chmod(sessionDirectory, 0o700);
 
   const resolvedCwd = resolve(config.cwd);
   try {

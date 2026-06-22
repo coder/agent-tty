@@ -14,8 +14,9 @@ function assertNonEmptyString(value: string, message: string): void {
 export function buildReplayInput(
   sessionId: string,
   manifest: SessionRecord,
-  events: EventRecord[],
+  events: readonly EventRecord[],
   targetSeq?: number,
+  options?: { readonly trustValidated?: boolean },
 ): ReplayInput {
   assertNonEmptyString(sessionId, 'sessionId must be a non-empty string');
 
@@ -38,7 +39,17 @@ export function buildReplayInput(
   invariant(initialCols > 0, 'initial cols must be positive');
   invariant(initialRows > 0, 'initial rows must be positive');
 
-  const validatedEvents = validateEventRecords(events);
+  // Live-host events come straight from EventLog, which already
+  // EventRecordSchema-validated each record and assigned contiguous seqs on
+  // append (see eventLog.ts append()). On that trusted path, skip the
+  // redundant per-event Zod re-parse and take one cheap shallow copy instead —
+  // seq ordering is still enforced downstream by iterateInRangeReplayEvents
+  // during replay. Disk-/caller-sourced events (offline replay, webm export)
+  // pass no option and remain fully validated here.
+  const validatedEvents =
+    options?.trustValidated === true
+      ? events.slice()
+      : validateEventRecords(events);
 
   let lastSeq = -1;
   if (validatedEvents.length > 0) {

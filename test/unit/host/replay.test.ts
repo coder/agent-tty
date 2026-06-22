@@ -171,4 +171,66 @@ describe('replay helpers', () => {
       ),
     ).toThrow('manifest must match SessionRecordSchema');
   });
+
+  it('buildReplayInput trusted path returns equal result to default path', () => {
+    const base = buildReplayInput(
+      'session-01',
+      createManifest(),
+      createEvents(),
+    );
+    const trusted = buildReplayInput(
+      'session-01',
+      createManifest(),
+      createEvents(),
+      undefined,
+      { trustValidated: true },
+    );
+    expect(trusted).toEqual(base);
+  });
+
+  it('buildReplayInput trusted path returns a fresh array not aliasing the input', () => {
+    const input = createEvents();
+    const result = buildReplayInput(
+      'session-01',
+      createManifest(),
+      input,
+      undefined,
+      { trustValidated: true },
+    );
+    expect(result.events).not.toBe(input); // fresh array — does not alias the live buffer
+    expect(result.events).toEqual(input); // same contents
+  });
+
+  it('buildReplayInput trusted path still enforces targetSeq invariants', () => {
+    expect(() =>
+      buildReplayInput('session-01', createManifest(), createEvents(), 5, {
+        trustValidated: true,
+      }),
+    ).toThrow('targetSeq must not exceed the last event seq');
+  });
+
+  it('buildReplayInput trusted path intentionally skips contiguity validation', () => {
+    const nonContiguous: EventRecord[] = [
+      {
+        seq: 0,
+        ts: '2026-03-19T12:00:02.000Z',
+        type: 'output',
+        payload: { data: 'a' },
+      },
+      {
+        seq: 3,
+        ts: '2026-03-19T12:00:03.000Z',
+        type: 'output',
+        payload: { data: 'b' },
+      },
+    ];
+    expect(() =>
+      buildReplayInput('session-01', createManifest(), nonContiguous),
+    ).toThrow('event log seq values must increase by 1 without gaps'); // default: validated
+    expect(
+      buildReplayInput('session-01', createManifest(), nonContiguous, 3, {
+        trustValidated: true,
+      }).events,
+    ).toHaveLength(2); // trusted: accepted as-is
+  });
 });
