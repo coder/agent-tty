@@ -33,7 +33,7 @@ some machines and green on others, with no code change between them, trains
 maintainers to ignore failures and is latent CI breakage.
 
 The failure is **not** a production bug. The test's own comment and `CONTEXT.md`
-say structured and text snapshots of the *same* screen must produce the same
+say structured and text snapshots of the _same_ screen must produce the same
 `screenHash`, and the production code upholds that: `computeScreenHash` derives
 the hash from one snapshot's `visibleLines` only, and a single `snapshot` call
 hashes exactly one captured screen. The bug is in the **test**: it takes **two
@@ -67,49 +67,49 @@ const SESSION_COMMAND = [
 "booting", a full second before "Ready" appears:
 
 ```ts
-  beforeEach(async () => {
-    // oxfmt-ignore
-    testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-screen-hash-')));
-    sessionId = createSession(testHome, [...SESSION_COMMAND]);
-    await waitForOutputMarker(testHome, sessionId, 'booting');
-  }, HOOK_TIMEOUT_MS);
+beforeEach(async () => {
+  // oxfmt-ignore
+  testHome = await realpath(
+    await mkdtemp(join(tmpdir(), 'agent-tty-screen-hash-')),
+  );
+  sessionId = createSession(testHome, [...SESSION_COMMAND]);
+  await waitForOutputMarker(testHome, sessionId, 'booting');
+}, HOOK_TIMEOUT_MS);
 ```
 
 (`waitForOutputMarker`, defined at `:38-76`, waits for a `wait --idle-ms 200`
 and then polls the **event log** for the marker text — it does not settle the
-*rendered* screen, and it returns as soon as "booting" is in the log.)
+_rendered_ screen, and it returns as soon as "booting" is in the log.)
 
 ### The failing test — two captures, no settle
 
 `test/integration/screen-hash.test.ts:128-153`:
 
 ```ts
-  it('agrees on screenHash between structured and text snapshots of the same screen', () => {
-    const structured = runCli(
-      ['snapshot', sessionId, '--format', 'structured', '--json'],
-      { AGENT_TTY_HOME: testHome },
-      20_000,
-    );
-    const text = runCli(
-      ['snapshot', sessionId, '--format', 'text', '--json'],
-      { AGENT_TTY_HOME: testHome },
-      20_000,
-    );
+it('agrees on screenHash between structured and text snapshots of the same screen', () => {
+  const structured = runCli(
+    ['snapshot', sessionId, '--format', 'structured', '--json'],
+    { AGENT_TTY_HOME: testHome },
+    20_000,
+  );
+  const text = runCli(
+    ['snapshot', sessionId, '--format', 'text', '--json'],
+    { AGENT_TTY_HOME: testHome },
+    20_000,
+  );
 
-    expect(structured.status).toBe(0);
-    expect(text.status).toBe(0);
-    const structuredEnvelope = JSON.parse(
-      structured.stdout,
-    ) as SuccessEnvelope<StructuredSnapshot>;
-    const textEnvelope = JSON.parse(
-      text.stdout,
-    ) as SuccessEnvelope<TextSnapshot>;
+  expect(structured.status).toBe(0);
+  expect(text.status).toBe(0);
+  const structuredEnvelope = JSON.parse(
+    structured.stdout,
+  ) as SuccessEnvelope<StructuredSnapshot>;
+  const textEnvelope = JSON.parse(text.stdout) as SuccessEnvelope<TextSnapshot>;
 
-    expect(structuredEnvelope.result.screenHash).toMatch(SHA_256_HEX);
-    expect(textEnvelope.result.screenHash).toBe(
-      structuredEnvelope.result.screenHash,
-    );
-  });
+  expect(structuredEnvelope.result.screenHash).toMatch(SHA_256_HEX);
+  expect(textEnvelope.result.screenHash).toBe(
+    structuredEnvelope.result.screenHash,
+  );
+});
 ```
 
 The two `runCli` calls are separate `agent-tty` processes run back-to-back. If
@@ -119,13 +119,13 @@ their `visibleLines` differ → their hashes differ → the `toBe` at `:150` fai
 ### Why this is a test bug, not a renderer bug (do not "fix" the renderer)
 
 - `src/cli/commands/snapshot.ts` has **no flag to pin a capture to an event-log
-  sequence**; every `snapshot` captures the *latest* screen at call time.
+  sequence**; every `snapshot` captures the _latest_ screen at call time.
 - The same command passes `options.context.rendererDefault` for **both** formats
   (`snapshot.ts:84-103` and `:182-253`) — the format does **not** select a
   different renderer backend, so this is not a cross-backend divergence.
 - `src/snapshot/capture.ts:38` computes **one** `screenHash` per capture, and
   `src/renderer/canonicalScreen.ts:39-41` derives it from `visibleLines` text
-  only. Structured vs. text of the *same* captured snapshot are therefore equal
+  only. Structured vs. text of the _same_ captured snapshot are therefore equal
   by construction. The only way two hashes differ is two **different captured
   screens** — i.e. the screen changed between the two CLI calls.
 
@@ -144,13 +144,13 @@ mutually exclusive, and render flags must not be mixed with the legacy
 
 ## Commands you will need
 
-| Purpose         | Command                                                      | Expected on success |
-| --------------- | ------------------------------------------------------------ | ------------------- |
-| Install deps    | `aube install`                                               | exit 0              |
-| Typecheck       | `npm run typecheck`                                          | exit 0, no errors   |
-| Lint            | `npm run lint`                                               | exit 0              |
-| Format (fix)    | `npm run format`                                             | exit 0              |
-| The one test    | `npx vitest run --maxWorkers=1 test/integration/screen-hash.test.ts` | all pass (incl. the agreement test) — do NOT use `npm run test`/`test:integration` (they add `--retry=2`, which masks flakiness) |
+| Purpose      | Command                                                              | Expected on success                                                                                                              |
+| ------------ | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Install deps | `aube install`                                                       | exit 0                                                                                                                           |
+| Typecheck    | `npm run typecheck`                                                  | exit 0, no errors                                                                                                                |
+| Lint         | `npm run lint`                                                       | exit 0                                                                                                                           |
+| Format (fix) | `npm run format`                                                     | exit 0                                                                                                                           |
+| The one test | `npx vitest run --maxWorkers=1 test/integration/screen-hash.test.ts` | all pass (incl. the agreement test) — do NOT use `npm run test`/`test:integration` (they add `--retry=2`, which masks flakiness) |
 
 (`aube` is the package manager — do not use `npm install`.)
 
@@ -200,40 +200,41 @@ identical — guaranteeing both subsequent captures observe the same `visibleLin
 Insert at the top of the test body (before `const structured = ...`):
 
 ```ts
-    // Settle the rendered screen: wait until `Ready` is visible AND the screen
-    // has been stable, so the two independent snapshot captures below observe
-    // the SAME screen. Without this, the structured capture can land before the
-    // 1s `Ready` print and the text capture after it, yielding two correct-but-
-    // different hashes (see SESSION_COMMAND).
-    const settle = runCli(
-      [
-        'wait',
-        sessionId,
-        '--text',
-        'Ready',
-        '--screen-stable-ms',
-        '500',
-        '--timeout',
-        '15000',
-        '--json',
-      ],
-      { AGENT_TTY_HOME: testHome },
-      20_000,
-    );
-    expect(settle.status).toBe(0);
-    const settleEnvelope = JSON.parse(
-      settle.stdout,
-    ) as SuccessEnvelope<WaitForRenderResult>;
-    expect(settleEnvelope.ok).toBe(true);
-    expect(settleEnvelope.result.matched).toBe(true);
-    expect(settleEnvelope.result.timedOut).toBe(false);
+// Settle the rendered screen: wait until `Ready` is visible AND the screen
+// has been stable, so the two independent snapshot captures below observe
+// the SAME screen. Without this, the structured capture can land before the
+// 1s `Ready` print and the text capture after it, yielding two correct-but-
+// different hashes (see SESSION_COMMAND).
+const settle = runCli(
+  [
+    'wait',
+    sessionId,
+    '--text',
+    'Ready',
+    '--screen-stable-ms',
+    '500',
+    '--timeout',
+    '15000',
+    '--json',
+  ],
+  { AGENT_TTY_HOME: testHome },
+  20_000,
+);
+expect(settle.status).toBe(0);
+const settleEnvelope = JSON.parse(
+  settle.stdout,
+) as SuccessEnvelope<WaitForRenderResult>;
+expect(settleEnvelope.ok).toBe(true);
+expect(settleEnvelope.result.matched).toBe(true);
+expect(settleEnvelope.result.timedOut).toBe(false);
 ```
 
 Notes for the executor:
+
 - `WaitForRenderResult` and `SuccessEnvelope` are already imported at the top of
   this file (`:7-22`) — no new imports needed. If `WaitForRenderResult` is not in
   the existing import list, add it to the `import type { … } from
-  '../../src/protocol/messages.js'` block.
+'../../src/protocol/messages.js'` block.
 - Leave the rest of the test (the two `snapshot` calls and the hash assertions at
   `:149-152`) unchanged. With the screen settled, `:150`'s `toBe` now holds.
 
@@ -268,7 +269,7 @@ criterion).
 
 ## Test plan
 
-This plan *is* a test fix; no new test file. The verification is that the existing
+This plan _is_ a test fix; no new test file. The verification is that the existing
 suite — specifically the agreement test — passes deterministically:
 
 - `npx vitest run --maxWorkers=1 test/integration/screen-hash.test.ts` passes
@@ -314,10 +315,10 @@ Stop and report back (do not improvise) if:
 ## Maintenance notes
 
 - A reviewer should confirm the change is **test-only** and that the fix settles
-  the *rendered* screen (a render `wait` with `--screen-stable-ms`), not just the
+  the _rendered_ screen (a render `wait` with `--screen-stable-ms`), not just the
   event log (the old `waitForOutputMarker` helper polls the log and does not prove
   the rendered screen stopped changing).
-- Root cause to remember: `snapshot` always captures the *latest* screen and has
+- Root cause to remember: `snapshot` always captures the _latest_ screen and has
   no sequence-pinning flag, so any test comparing two independent captures must
   first settle the screen. If a future test compares captures across formats or
   renderers, apply the same settle-first pattern.

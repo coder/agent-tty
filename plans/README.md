@@ -17,17 +17,17 @@ The advisor never edits source; only files under `plans/` were created.
 
 ## Execution order & status
 
-| Plan | Title                                                         | Priority | Effort | Risk | Depends on | Status |
-| ---- | ------------------------------------------------------------- | -------- | ------ | ---- | ---------- | ------ |
-| 001  | Harden local socket + state-file permissions                  | P1       | S–M    | LOW  | —          | DONE   |
-| 002  | CI dependency-audit gate + clear current advisories           | P1       | S–M    | LOW  | —          | DONE   |
-| 003  | Fix stale "0.2.x" claim in RELEASE.md                         | P2       | S      | LOW  | —          | DONE   |
-| 004  | Characterize hostMain decision helpers + idle-timeout         | P2       | M      | LOW  | —          | DONE   |
-| 005  | Share replay-event iteration across renderer backends         | P2       | M      | MED  | —          | DONE   |
-| 006  | Extract harness HTML + decoding from the ghostty-web god file | P3       | L      | MED  | —          | DONE   |
-| 007  | Restrict event log + Home/session dir permissions             | P1       | S      | LOW  | —          | DONE   |
-| 008  | Fix the deterministically-red screen-hash agreement test      | P1       | S      | LOW  | —          | DONE   |
-| 009  | Trim redundant replay-input copies on snapshot/wait           | P2       | S–M    | LOW–MED | —       | DONE   |
+| Plan | Title                                                         | Priority | Effort | Risk    | Depends on | Status |
+| ---- | ------------------------------------------------------------- | -------- | ------ | ------- | ---------- | ------ |
+| 001  | Harden local socket + state-file permissions                  | P1       | S–M    | LOW     | —          | DONE   |
+| 002  | CI dependency-audit gate + clear current advisories           | P1       | S–M    | LOW     | —          | DONE   |
+| 003  | Fix stale "0.2.x" claim in RELEASE.md                         | P2       | S      | LOW     | —          | DONE   |
+| 004  | Characterize hostMain decision helpers + idle-timeout         | P2       | M      | LOW     | —          | DONE   |
+| 005  | Share replay-event iteration across renderer backends         | P2       | M      | MED     | —          | DONE   |
+| 006  | Extract harness HTML + decoding from the ghostty-web god file | P3       | L      | MED     | —          | DONE   |
+| 007  | Restrict event log + Home/session dir permissions             | P1       | S      | LOW     | —          | DONE   |
+| 008  | Fix the deterministically-red screen-hash agreement test      | P1       | S      | LOW     | —          | DONE   |
+| 009  | Trim redundant replay-input copies on snapshot/wait           | P2       | S–M    | LOW–MED | —          | DONE   |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale).
@@ -207,8 +207,8 @@ the ones explicitly checked and dropped.)
   Each input handler (`type`/`paste`/`sendKeys`/`run`) does a single synchronous
   `pty.write()` of the full payload before any `await`
   (`hostMain.ts:559/584/610/637/688`; the comment at `:683` confirms writes queue
-  synchronously). On Node's single thread, bytes cannot interleave *within* a
-  command; only the order *between* independent concurrent commands to one shared
+  synchronously). On Node's single thread, bytes cannot interleave _within_ a
+  command; only the order _between_ independent concurrent commands to one shared
   terminal is nondeterministic, which is inherent and by-design (the event log
   doesn't even record which client sent input — `CONTEXT.md:331`). No corruption.
 - **`visibleLines` null-safety in `capture.ts`** — rejected; `SemanticSnapshotSchema.parse`

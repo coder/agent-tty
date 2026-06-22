@@ -24,7 +24,7 @@
 ## Why this matters
 
 `agent-tty` records the **full terminal byte stream** of every session into an
-append-only event log (`events.jsonl`): all program output *and* every keystroke,
+append-only event log (`events.jsonl`): all program output _and_ every keystroke,
 paste, and `run` command the caller injects. That stream can contain secrets —
 a token printed to the screen, a password typed into a prompt, an API key in a
 command line.
@@ -77,9 +77,9 @@ export async function ensureHome(
 `import { mkdir, readdir, stat, unlink } from 'node:fs/promises';`):
 
 ```ts
-  const home = await ensureHome(config.home);
-  const sessionDirectory = sessionDir(home, sessionId);
-  await mkdir(sessionDirectory, { recursive: true });
+const home = await ensureHome(config.home);
+const sessionDirectory = sessionDir(home, sessionId);
+await mkdir(sessionDirectory, { recursive: true });
 ```
 
 `sessionId` is a fresh `ulid()` (line 375), so the session directory is always
@@ -160,16 +160,16 @@ on it). It already asserts `(stat(...).mode & 0o777) === 0o700` / `0o600`.
 
 ## Commands you will need
 
-| Purpose         | Command                                                          | Expected on success |
-| --------------- | ---------------------------------------------------------------- | ------------------- |
-| Install deps    | `aube install`                                                   | exit 0              |
-| Typecheck       | `npm run typecheck`                                              | exit 0, no errors   |
-| Lint            | `npm run lint`                                                   | exit 0              |
-| Format (fix)    | `npm run format`                                                 | exit 0              |
-| Format check    | `npm run format:check`                                           | exit 0              |
-| Run one test    | `npx vitest run test/integration/state-permissions.test.ts`      | all pass            |
-| Permission set  | `npx vitest run test/integration/socket-permissions.test.ts`     | all pass            |
-| Integration set | `npm run test:integration`                                       | all pass            |
+| Purpose         | Command                                                      | Expected on success |
+| --------------- | ------------------------------------------------------------ | ------------------- |
+| Install deps    | `aube install`                                               | exit 0              |
+| Typecheck       | `npm run typecheck`                                          | exit 0, no errors   |
+| Lint            | `npm run lint`                                               | exit 0              |
+| Format (fix)    | `npm run format`                                             | exit 0              |
+| Format check    | `npm run format:check`                                       | exit 0              |
+| Run one test    | `npx vitest run test/integration/state-permissions.test.ts`  | all pass            |
+| Permission set  | `npx vitest run test/integration/socket-permissions.test.ts` | all pass            |
+| Integration set | `npm run test:integration`                                   | all pass            |
 
 (Exact commands from this repo, verified during recon. `aube` is the package
 manager — do **not** use `npm install`. If `mise` is available, `mise run
@@ -253,11 +253,11 @@ In `src/host/lifecycle.ts`:
    unconditional here:
 
 ```ts
-  const sessionDirectory = sessionDir(home, sessionId);
-  await mkdir(sessionDirectory, { recursive: true });
-  // Owner-only: this directory holds the event log and all artifacts, so 0o700
-  // here protects every per-session file regardless of each file's own mode.
-  await chmod(sessionDirectory, 0o700);
+const sessionDirectory = sessionDir(home, sessionId);
+await mkdir(sessionDirectory, { recursive: true });
+// Owner-only: this directory holds the event log and all artifacts, so 0o700
+// here protects every per-session file regardless of each file's own mode.
+await chmod(sessionDirectory, 0o700);
 ```
 
 **Verify**: `npm run typecheck` → exit 0.
@@ -313,7 +313,9 @@ Cover these cases (one `it`, or split as you prefer):
   creates it (do NOT use the bare `mkdtemp` dir — `mkdtemp` already returns
   `0o700`, which would pass without exercising the new chmod). E.g.:
   ```ts
-  const base = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-perms-')));
+  const base = await realpath(
+    await mkdtemp(join(tmpdir(), 'agent-tty-perms-')),
+  );
   const home = join(base, 'home'); // does not exist yet
   const sessionId = createSession(home, ['/bin/sh', '-c', 'exec cat']);
   const homeStat = await stat(home);

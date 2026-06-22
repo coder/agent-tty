@@ -45,7 +45,7 @@ the **entire** event log up to **three** times:
    it was buffered.
 3. **Deep clone** — the libghostty-vt backend's `replayTo` does
    `this.latestReplayInput = cloneReplayInput(input)`, deep-copying every event
-   and its payload on *every* replay, purely to keep a copy around for the
+   and its payload on _every_ replay, purely to keep a copy around for the
    occasional screenshot fallback (which reads it read-only).
 
 The event log is capped at 250k events / 50MB. A `wait` polls at ~200ms
@@ -65,16 +65,16 @@ unchanged; the seq-ordering safety net still runs during replay.
 ### 1. The spread — `src/host/hostMain.ts:188-197`
 
 ```ts
-  const loadReplayInput = (targetSeq?: number) => {
-    const events = [...eventLog.getEvents()];
-    const replayInput = buildReplayInput(
-      sessionId,
-      state.snapshot(),
-      events,
-      targetSeq,
-    );
-    return replayInput.targetSeq === -1 ? null : replayInput;
-  };
+const loadReplayInput = (targetSeq?: number) => {
+  const events = [...eventLog.getEvents()];
+  const replayInput = buildReplayInput(
+    sessionId,
+    state.snapshot(),
+    events,
+    targetSeq,
+  );
+  return replayInput.targetSeq === -1 ? null : replayInput;
+};
 ```
 
 `eventLog.getEvents()` returns `readonly EventRecord[]` (the live internal
@@ -124,7 +124,10 @@ export function validateEventRecords(
 ): EventRecord[] {
   const records = events.map((event, index) => {
     const parsedEvent = EventRecordSchema.safeParse(event);
-    invariant(parsedEvent.success, `event log record ${String(index)} must match EventRecordSchema`);
+    invariant(
+      parsedEvent.success,
+      `event log record ${String(index)} must match EventRecordSchema`,
+    );
     return parsedEvent.data;
   });
   assertContiguousSequence(records);
@@ -134,6 +137,7 @@ export function validateEventRecords(
 
 It already accepts `readonly unknown[]`, and it returns a **fresh** array
 (`events.map(...)`). The three `buildReplayInput` callers are:
+
 - `src/host/hostMain.ts:190` — **live host** (events from `eventLog.getEvents()`,
   already validated on append). **This is the hot path we optimize.**
 - `src/replay/offlineReplay.ts:111` — offline replay (events from
@@ -169,8 +173,8 @@ function cloneReplayInput(input: ReplayInput): ReplayInput {
 Its only call site (`:527`, inside `replayTo`):
 
 ```ts
-    this.lastAppliedSeq = highestProcessedSeq;
-    this.latestReplayInput = cloneReplayInput(input);
+this.lastAppliedSeq = highestProcessedSeq;
+this.latestReplayInput = cloneReplayInput(input);
 ```
 
 `this.latestReplayInput` is consumed only by the screenshot fallback (`:595`):
@@ -179,7 +183,7 @@ Its only call site (`:527`, inside `replayTo`):
 read-only — it iterates via `iterateInRangeReplayEvents(input, …)`
 (`src/renderer/ghosttyWeb/backend.ts:428`) and reads `event.payload`/`event.seq`
 without ever reassigning them (its `replayWithTiming` at `:656` is likewise
-read-only). This matters specifically for *this* change: once the clone is
+read-only). This matters specifically for _this_ change: once the clone is
 dropped, `latestReplayInput.events` shares object references with the live
 `EventLog` buffer (see "Object aliasing" below), so a fallback that mutated an
 event in place would corrupt the stored buffer. Verified it does not — if that
@@ -193,23 +197,23 @@ ever changes, STOP condition #2 below fires.
   /`initialRows` (`:472-474`). It never mutates `input` or `input.events`.
 - `iterateInRangeReplayEvents` (`src/renderer/replayEvents.ts:20-28`) asserts, **on
   every event during replay**, that each `seq` is a non-negative integer and
-  **strictly increasing**. Note this enforces *ordering*, not *contiguity* — it
+  **strictly increasing**. Note this enforces _ordering_, not _contiguity_ — it
   does **not** detect seq gaps the way `validateEventRecords` →
   `assertContiguousSequence` does. On the trusted path the no-gaps guarantee comes
   solely from `EventLog.append`, which assigns `seq === eventBuffer.length` and
   rejects anything else (`src/host/eventLog.ts:345-353`). So skipping
-  `validateEventRecords` is safe *because append already guarantees contiguity*,
+  `validateEventRecords` is safe _because append already guarantees contiguity_,
   not because a downstream check re-verifies it.
 - **Array aliasing.** On the trusted path `buildReplayInput` produces
   `ReplayInput.events` via `events.slice()` — a **fresh array** — so the live
   buffer growing (append) or shrinking (rollback truncation,
   `src/host/eventLog.ts:391`) never changes an already-built
   `latestReplayInput.events`. At the **array** level this matches the old
-  `[...eventLog.getEvents()]` semantics (`getEvents()` returns the buffer *by
-  reference* — `eventLog.ts:395-397` — so a fresh outer array was always
-  required). At the **object** level it does *not*: the old path deep-cloned the
+  `[...eventLog.getEvents()]` semantics (`getEvents()` returns the buffer _by
+  reference_ — `eventLog.ts:395-397` — so a fresh outer array was always
+  required). At the **object** level it does _not_: the old path deep-cloned the
   event objects, the new path shares them — see the next bullet.
-- **Object aliasing.** `.slice()` is **shallow**, so the event *objects* inside
+- **Object aliasing.** `.slice()` is **shallow**, so the event _objects_ inside
   `latestReplayInput.events` are the **same references** held by the live
   `EventLog` buffer (the clone used to deep-copy them; now they are shared). This
   is safe **only because event records are never mutated in place**: `append`
@@ -223,17 +227,17 @@ ever changes, STOP condition #2 below fires.
 
 ## Commands you will need
 
-| Purpose          | Command                                                       | Expected on success |
-| ---------------- | ------------------------------------------------------------- | ------------------- |
-| Install deps     | `aube install`                                                | exit 0              |
-| Typecheck        | `npm run typecheck`                                           | exit 0, no errors   |
-| Lint             | `npm run lint`                                                | exit 0              |
-| Format (fix)     | `npm run format`                                              | exit 0              |
-| Format (check)   | `npm run format:check`                                        | exit 0              |
-| Replay unit test | `npx vitest run test/unit/host/replay.test.ts`                | all pass            |
-| Unit suite       | `npm run test:unit`                                           | all pass            |
-| Renderer e2e     | `npm run test:e2e`                                            | all pass            |
-| Integration set  | `npm run test:integration`                                    | all pass            |
+| Purpose          | Command                                        | Expected on success |
+| ---------------- | ---------------------------------------------- | ------------------- |
+| Install deps     | `aube install`                                 | exit 0              |
+| Typecheck        | `npm run typecheck`                            | exit 0, no errors   |
+| Lint             | `npm run lint`                                 | exit 0              |
+| Format (fix)     | `npm run format`                               | exit 0              |
+| Format (check)   | `npm run format:check`                         | exit 0              |
+| Replay unit test | `npx vitest run test/unit/host/replay.test.ts` | all pass            |
+| Unit suite       | `npm run test:unit`                            | all pass            |
+| Renderer e2e     | `npm run test:e2e`                             | all pass            |
+| Integration set  | `npm run test:integration`                     | all pass            |
 
 (`aube` is the package manager — do not use `npm install`.)
 
@@ -326,7 +330,9 @@ In `src/host/replay.ts`:
    // during replay. Disk-/caller-sourced events (offline replay, webm export)
    // pass no option and remain fully validated here.
    const validatedEvents =
-     options?.trustValidated === true ? events.slice() : validateEventRecords(events);
+     options?.trustValidated === true
+       ? events.slice()
+       : validateEventRecords(events);
    ```
    `events.slice()` on a `readonly EventRecord[]` returns a fresh, mutable
    `EventRecord[]` — assignable to `ReplayInput['events']` exactly as the old
@@ -342,16 +348,16 @@ In `src/host/hostMain.ts`, rewrite `loadReplayInput` (`:188-197`) to drop the
 spread and trust the events:
 
 ```ts
-  const loadReplayInput = (targetSeq?: number) => {
-    const replayInput = buildReplayInput(
-      sessionId,
-      state.snapshot(),
-      eventLog.getEvents(),
-      targetSeq,
-      { trustValidated: true },
-    );
-    return replayInput.targetSeq === -1 ? null : replayInput;
-  };
+const loadReplayInput = (targetSeq?: number) => {
+  const replayInput = buildReplayInput(
+    sessionId,
+    state.snapshot(),
+    eventLog.getEvents(),
+    targetSeq,
+    { trustValidated: true },
+  );
+  return replayInput.targetSeq === -1 ? null : replayInput;
+};
 ```
 
 (`eventLog.getEvents()` returns `readonly EventRecord[]`, now accepted by the
@@ -380,56 +386,82 @@ difference. Two layers:
    `EventRecord` type. Model the new `it(...)` blocks on the happy-path test at
    `test/unit/host/replay.test.ts:69` and the explicit-target-seq test at `:130`.
    Add:
-
    - **Parity (happy path).** For the same input, trusted and default calls return
      equal results:
      ```ts
-     const base = buildReplayInput('session-01', createManifest(), createEvents());
+     const base = buildReplayInput(
+       'session-01',
+       createManifest(),
+       createEvents(),
+     );
      const trusted = buildReplayInput(
-       'session-01', createManifest(), createEvents(), undefined, { trustValidated: true },
+       'session-01',
+       createManifest(),
+       createEvents(),
+       undefined,
+       { trustValidated: true },
      );
      expect(trusted).toEqual(base);
      ```
    - **Non-aliasing (proves the `.slice()` copy).** The returned `events` is a
-     *distinct* array from the one passed in, with identical contents:
+     _distinct_ array from the one passed in, with identical contents:
      ```ts
      const input = createEvents();
      const result = buildReplayInput(
-       'session-01', createManifest(), input, undefined, { trustValidated: true },
+       'session-01',
+       createManifest(),
+       input,
+       undefined,
+       { trustValidated: true },
      );
      expect(result.events).not.toBe(input); // fresh array — does not alias the live buffer
-     expect(result.events).toEqual(input);  // same contents
+     expect(result.events).toEqual(input); // same contents
      ```
-   - **`targetSeq` invariants still fire on the trusted path** (they live *after*
+   - **`targetSeq` invariants still fire on the trusted path** (they live _after_
      the validation line, so the skip does not affect them). `createEvents()` has
      last `seq` `1`, so an out-of-range target still throws:
      ```ts
      expect(() =>
-       buildReplayInput('session-01', createManifest(), createEvents(), 5, { trustValidated: true }),
+       buildReplayInput('session-01', createManifest(), createEvents(), 5, {
+         trustValidated: true,
+       }),
      ).toThrow('targetSeq must not exceed the last event seq');
      ```
    - **Characterization — the trusted path INTENTIONALLY skips contiguity.** This
      is the one observable behavior difference; pin it so it can't regress silently.
-     The same non-contiguous input the default path *rejects* is *accepted* when
+     The same non-contiguous input the default path _rejects_ is _accepted_ when
      trusted:
      ```ts
      const nonContiguous: EventRecord[] = [
-       { seq: 0, ts: '2026-03-19T12:00:02.000Z', type: 'output', payload: { data: 'a' } },
-       { seq: 3, ts: '2026-03-19T12:00:03.000Z', type: 'output', payload: { data: 'b' } },
+       {
+         seq: 0,
+         ts: '2026-03-19T12:00:02.000Z',
+         type: 'output',
+         payload: { data: 'a' },
+       },
+       {
+         seq: 3,
+         ts: '2026-03-19T12:00:03.000Z',
+         type: 'output',
+         payload: { data: 'b' },
+       },
      ];
-     expect(() => buildReplayInput('session-01', createManifest(), nonContiguous))
-       .toThrow('event log seq values must increase by 1 without gaps'); // default: validated
+     expect(() =>
+       buildReplayInput('session-01', createManifest(), nonContiguous),
+     ).toThrow('event log seq values must increase by 1 without gaps'); // default: validated
      expect(
-       buildReplayInput('session-01', createManifest(), nonContiguous, 3, { trustValidated: true }).events,
+       buildReplayInput('session-01', createManifest(), nonContiguous, 3, {
+         trustValidated: true,
+       }).events,
      ).toHaveLength(2); // trusted: accepted as-is
      ```
 
    **DO NOT** parametrize the existing `rejects out-of-order sequences` test
    (`test/unit/host/replay.test.ts:141`) with `trustValidated: true` expecting it to
-   throw. That test exercises contiguity validation — *exactly* what the trusted
+   throw. That test exercises contiguity validation — _exactly_ what the trusted
    path skips — so on the trusted path that input does **not** throw (it is accepted;
    see the characterization case above). Only happy-path cases and the
-   `sessionId`/manifest/`targetSeq` checks (which run *before* or *after* the
+   `sessionId`/manifest/`targetSeq` checks (which run _before_ or _after_ the
    validation line) behave identically on both paths.
 
 2. **Behavior parity — e2e.** `npm run test:e2e` must pass unchanged. The e2e
@@ -474,9 +506,9 @@ Stop and report back (do not improvise) if:
 - You find **any** code path that mutates an event record object in place after it
   is appended to the `EventLog` buffer (e.g. reassigning `event.payload` or
   `event.seq`, or a redaction/scrub pass over `getEvents()` results). The no-clone
-  + shallow-`.slice()` design shares those objects between the live buffer and
-  `latestReplayInput`, so in-place mutation would corrupt the stored replay input.
-  Keep the deep clone and report instead.
+  - shallow-`.slice()` design shares those objects between the live buffer and
+    `latestReplayInput`, so in-place mutation would corrupt the stored replay input.
+    Keep the deep clone and report instead.
 - `npm run test:e2e` fails after any step — that signals the clone removal or the
   validation skip changed observable rendering/screenshot behavior. Do **not**
   loosen assertions or re-add partial copies to force a pass; report which test
@@ -497,7 +529,7 @@ Stop and report back (do not improvise) if:
 - The safety argument rests on three facts, any of which a future change could
   break: (a) `EventLog.append` schema-validates **and** assigns contiguous seqs
   (`seq === eventBuffer.length`) before buffering, so `getEvents()` is trusted and
-  gap-free; (b) `iterateInRangeReplayEvents` re-checks seq *ordering* during replay
+  gap-free; (b) `iterateInRangeReplayEvents` re-checks seq _ordering_ during replay
   — but **not** contiguity, so gap detection is genuinely dropped on the trusted
   path and relies entirely on (a); and (c) event records are immutable once
   appended, so sharing object references between the live buffer and
