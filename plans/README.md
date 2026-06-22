@@ -5,6 +5,12 @@ Execute in the order below unless dependencies say otherwise. Each executor:
 read the plan fully before starting, honor its STOP conditions, and update your
 row when done.
 
+**Second round — 2026-06-22, against commit `5cb9a20`.** A follow-up `improve`
+run added plans **007–009** (security gap left open by 001, a deterministically
+red test, and a hot-path perf cleanup). They are independent of 001–006 and of
+each other. New "considered and rejected" and "direction" items from that round
+are appended to those sections below.
+
 These plans were written for an executor with **zero context** from the audit
 session — every plan is self-contained (paths, excerpts, commands, conventions).
 The advisor never edits source; only files under `plans/` were created.
@@ -19,6 +25,9 @@ The advisor never edits source; only files under `plans/` were created.
 | 004  | Characterize hostMain decision helpers + idle-timeout         | P2       | M      | LOW  | —          | DONE   |
 | 005  | Share replay-event iteration across renderer backends         | P2       | M      | MED  | —          | DONE   |
 | 006  | Extract harness HTML + decoding from the ghostty-web god file | P3       | L      | MED  | —          | DONE   |
+| 007  | Restrict event log + Home/session dir permissions             | P1       | S      | LOW  | —          | DONE   |
+| 008  | Fix the deterministically-red screen-hash agreement test      | P1       | S      | LOW  | —          | DONE   |
+| 009  | Trim redundant replay-input copies on snapshot/wait           | P2       | S–M    | LOW–MED | —       | DONE   |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale).
@@ -35,6 +44,83 @@ on clean `c11e2e2` with byte-identical hashes `440ffd…`/`c23b75…`, 3/3 runs)
 plan-independent; lane 005/006 produce identical hashes, proving the renderer
 refactor preserved behavior. The branch was not pushed and `main` was not
 modified.
+
+**Plan 007 executed and verified on 2026-06-22** (dispatched executor + reviewer
+re-verification) in an isolated worktree, branch `advisor/007-restrict-state-permissions`,
+commit `15c76a6` on base `5cb9a20`
+(`.claude/worktrees/agent-a5658ccea002ec494`). Diff: 4 files, +102/−3 —
+`src/storage/home.ts` (chmod Home `0o700` only when `mkdir` created it),
+`src/host/lifecycle.ts` (chmod session dir `0o700`), `src/host/eventLog.ts`
+(`fileHandle.chmod(0o600)` first inside the `try`), and new
+`test/integration/state-permissions.test.ts` (asserts Home `0o700`, session dir
+`0o700`, `events.jsonl` `0o600`, and owner can still drive the session).
+Reviewer re-ran the gates: typecheck, lint, format:check all exit 0; the new
+test passes 1/1; integration **188/189**. The single failure is the
+**pre-existing** `screen-hash.test.ts:150` structured-vs-text divergence
+(byte-identical documented hashes `440ffd…`/`c23b75…`, retried ×2) — the subject
+of plan **008**, not a regression (a permission bit cannot affect a content
+hash, and the screen-hash code was never touched). **Cherry-picked onto `main`
+as `d10db58` on 2026-06-22** at the maintainer's request (source worktree commit
+`15c76a6`); not pushed to any remote.
+
+**Plan 008 executed and verified on 2026-06-22** (dispatched executor + reviewer
+re-verification) in an isolated worktree, branch
+`advisor/008-fix-screen-hash-agreement-test`, commit `f345b44` on base `5cb9a20`
+(`.claude/worktrees/agent-a42f941745ac54b61`). Diff: **1 file, +28/−0**, only
+`test/integration/screen-hash.test.ts` — a settle block (`wait --text Ready
+--screen-stable-ms 500 --timeout 15000 --json`, asserting `ok`/`matched:true`/
+`timedOut:false`) inserted at the top of the "agrees on screenHash…" test before
+the two captures; the rest of the test and the other 5 tests unchanged. **No
+production code touched** (no renderer/snapshot edits, no `--at-seq` flag — the
+fix is settle-then-freeze: after `Ready` the session runs `exec cat`, so both
+back-to-back captures observe identical `visibleLines`). Reviewer re-ran every
+done criterion in the worktree: typecheck, lint, `format:check` all exit 0; the
+file passes **3/3 raw-vitest runs** (`--maxWorkers=1`, no `--retry` masking),
+6/6 tests each; PTY host reachable (no `HOST_UNREACHABLE`). Caveat: this machine's
+spawn timing is on the "lucky" side, so the pre-fix red could not be reproduced
+here — the flake is deterministic only where spawn latency straddles the 1s
+`booting`→`Ready` transition; the fix is sound by construction regardless. This
+**retires the recurring `screen-hash.test.ts:150` "pre-existing failure"** footnote
+from the 001–006 and 007 writeups above. **Cherry-picked onto `main` as `40f3829`
+on 2026-06-22** at the maintainer's request (source worktree commit `f345b44`);
+re-verified green on the main tree (6/6 tests, 1/1 run). Not pushed to any remote.
+
+**Plan 009 executed and verified on 2026-06-22** (dispatched `sonnet` executor +
+reviewer re-verification) in an isolated worktree, branch
+`advisor/009-trim-replay-input-copies`, commit `cb1b597` on base `5cb9a20`
+(`.claude/worktrees/agent-afc3758d07869410f`). Diff: **4 files, +78/−18**, all
+in-scope — `src/renderer/libghosttyVt/backend.ts` (removed the `cloneReplayInput`
+deep-clone helper; `replayTo` now stores the input by reference),
+`src/host/replay.ts` (`events` param widened to `readonly EventRecord[]`; new
+optional `{ trustValidated }` arg that takes a cheap `events.slice()` instead of
+re-running `validateEventRecords`), `src/host/hostMain.ts` (drops the
+`[...eventLog.getEvents()]` spread, passes the buffer directly with
+`{ trustValidated: true }`), and `test/unit/host/replay.test.ts` (+4 cases:
+trusted/default parity, non-aliasing `.slice()`, `targetSeq` invariant on the
+trusted path, and the intentional contiguity-skip characterization). Both
+drift checks were clean — in-scope files byte-identical to `5cb9a20`; the only
+safety-invariant-file change since then is plan 007's +5-line
+`fileHandle.chmod(0o600)` in `eventLog.ts`, which does not touch `append`'s schema
+validation, contiguous-seq assignment, or record immutability, so the
+"Why dropping these is safe" facts still hold (not a STOP condition). Reviewer
+re-ran every done criterion in the worktree: typecheck, lint, `format:check` all
+exit 0; the `cloneReplayInput`/spread greps return no matches and `trustValidated`
+is defined + passed `true`; targeted replay test 11/11; **full unit suite
+1333/1333**; **e2e 33/33** — the real behavior-parity gate, since it drives
+snapshots/screenshots through the libghostty-vt → ghostty-web screenshot fallback
+that consumes the `latestReplayInput` whose clone was dropped. Integration was
+**187/188**: the lone failure is `screen-hash.test.ts:150` (the plan-008
+deterministic flake), which is **absent from this worktree's base** — it branched
+from `5cb9a20`, which predates plan 008's `40f3829` settle-fix. Confirmed
+**plan-009-independent**: plan 009 touches no rendering/snapshot/hash code, and
+the same test passes **6/6 on the main tree** (which carries 008's fix) in the
+same environment. **Cherry-picked onto `main` as `b1cf0de` on 2026-06-22** at the
+maintainer's request (source worktree commit `cb1b597`; clean apply — the 4 files
+were byte-identical between `5cb9a20` and the then-current main `49de1ac`).
+Re-verified green on the main tree after the cherry-pick: typecheck exit 0, full
+unit 1333/1333, and `screen-hash.test.ts` 6/6 (main now carries both plan 008's
+settle-fix and plan 009, proving they coexist and 009 does not reintroduce the
+flake). Not pushed to any remote.
 
 ## Recommended order & dependency notes
 
@@ -55,6 +141,15 @@ recommended priority (security + quick wins first), not a dependency chain:
     the behavior gate.
 
 If running non-interactively, do them in numeric order.
+
+**Second-round plans (007–009)** are likewise all independent — no dependency
+chain, do in any order. Recommended priority: **007** (security; closes the event
+log + container-dir exposure that 001 left open — `events.jsonl` holds the full
+terminal byte stream) and **008** (removes a deterministically-failing test) are
+P1 quick wins with clean verification; **009** (perf cleanup on the snapshot/wait
+hot path) is P2 and wants the e2e suite runnable as its behavior-parity gate.
+008's verification needs a real TTY/renderer (it may report `HOST_UNREACHABLE` in
+a sandbox); 009's e2e gate needs Playwright/Chromium.
 
 ## Notes for executors
 
@@ -106,6 +201,28 @@ the ones explicitly checked and dropped.)
   (`AGENTS.md` exists and is comprehensive), **`intent:validate` not in `verify`**
   (it isn't in CI either; low value) — all low-leverage; not worth plans.
 
+### Second round (2026-06-22, commit `5cb9a20`) — checked and dropped
+
+- **Concurrent PTY-write interleaving** (reported HIGH-confidence) — **rejected.**
+  Each input handler (`type`/`paste`/`sendKeys`/`run`) does a single synchronous
+  `pty.write()` of the full payload before any `await`
+  (`hostMain.ts:559/584/610/637/688`; the comment at `:683` confirms writes queue
+  synchronously). On Node's single thread, bytes cannot interleave *within* a
+  command; only the order *between* independent concurrent commands to one shared
+  terminal is nondeterministic, which is inherent and by-design (the event log
+  doesn't even record which client sent input — `CONTEXT.md:331`). No corruption.
+- **`visibleLines` null-safety in `capture.ts`** — rejected; `SemanticSnapshotSchema.parse`
+  validates the snapshot upstream (`libghosttyVt/backend.ts:575`), so a defensive
+  invariant in `createSnapshotResult` adds nothing.
+- **`consecutiveFailures` race in `waitForRender`** — rejected; guarded by
+  `pollInFlight`, single-threaded, theoretical only.
+- **Idle-timeout polling → event-driven rework** — not worth it; the 5s-capped
+  poll is intentional (commented), one timer per session is negligible, and the
+  rework carries MED risk for no real gain.
+- **Screen-hash "divergence" as a renderer/backend bug** — rejected as a renderer
+  bug; the real issue is test design (both formats use the same renderer; the hash
+  is single-sourced). Planned as a test fix instead — see 008.
+
 ## Direction findings (not selected for plans this round)
 
 Surfaced as options for the maintainer; no plan written (the user opted to plan
@@ -119,3 +236,13 @@ only the findings above). Grounded in `design/ARCHITECTURE.md` / `RELEASE.md`:
   with a stable JSON contract, worth re-weighing. (`RELEASE.md` lists it under
   "Explicitly out of scope" — revisit means amending that decision, not ignoring
   it.)
+
+**Second round (2026-06-22)** — new option surfaced, no plan written:
+
+- **Dashboard `ghostty-web` fallback** — the `dashboard` requires `libghostty-vt`
+  (ADR 0006), but the offline-replay/`ghostty-web` stack already renders snapshots
+  (`wait` uses it). A periodic-snapshot fallback would unlock the dashboard on
+  Windows/CI/Codespaces where the native binding is absent. MED confidence, M
+  effort; degrades to ~1–2s-behind periodic refresh instead of live Event Log
+  Follow. The two re-surfaced options from the first round (event-log
+  `validate`/`repair`; renderer-backend extension guide) still stand.
