@@ -14,6 +14,7 @@ import { RpcServer, type MethodHandler } from './rpcServer.js';
 import { RunCompletionCoordinator } from './runCompletionCoordinator.js';
 import { SessionState } from './sessionState.js';
 import { createPty } from '../pty/createPty.js';
+import { TerminalQueryResponder } from '../pty/terminalQueryResponder.js';
 import { encodeKey } from '../pty/keyEncoder.js';
 import { encodePaste } from '../pty/pasteEncoder.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
@@ -251,6 +252,19 @@ export async function runHost(sessionId: string): Promise<void> {
     'PTY child PID must be a positive integer',
   );
   state.setChildPid(pty.pid);
+
+  // Answer the terminal-capability queries programs emit at startup (OSC 10/11
+  // color probes, the `ESC [ 5 n` DSR sentinel). The colors mirror the default
+  // render profile so a program's light/dark choice matches a default-profile
+  // capture; the probe is answered once here, before any capture profile is
+  // known, so a capture later requested with a different `--profile` can still
+  // diverge. Without this, programs like Neovim time out waiting for a reply and
+  // print a warning (E1568) into the very output agent-tty captures.
+  const defaultProfile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
+  const terminalQueryResponder = new TerminalQueryResponder({
+    backgroundColor: defaultProfile.backgroundColor,
+    foregroundColor: defaultProfile.foregroundColor,
+  });
 
   const replayRendererThroughSeq = async (targetSeq: number): Promise<void> => {
     invariant(
@@ -1043,6 +1057,16 @@ export async function runHost(sessionId: string): Promise<void> {
       // the log can no longer be trusted to drive waits or replay artifacts.
       rethrowAsync(error);
     });
+    // Reply to terminal-capability queries (OSC 10/11, DSR) in this chunk. This
+    // runs after queuing ingestion so the canonical output path is never gated
+    // on the reply. The reply is written to the child as input and is not
+    // appended to the event log, so it is absent from snapshots/recordings;
+    // programs that emit these queries put the terminal in raw mode, so the
+    // reply is consumed rather than echoed back into the output stream.
+    const queryReply = terminalQueryResponder.consume(data);
+    if (queryReply.length > 0) {
+      pty.write(queryReply);
+    }
   });
 
   pty.onExit(({ exitCode, signal }) => {
