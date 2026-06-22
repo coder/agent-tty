@@ -186,12 +186,12 @@ export async function runHost(sessionId: string): Promise<void> {
   });
 
   const loadReplayInput = (targetSeq?: number) => {
-    const events = [...eventLog.getEvents()];
     const replayInput = buildReplayInput(
       sessionId,
       state.snapshot(),
-      events,
+      eventLog.getEvents(),
       targetSeq,
+      { trustValidated: true },
     );
     return replayInput.targetSeq === -1 ? null : replayInput;
   };
