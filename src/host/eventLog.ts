@@ -263,6 +263,11 @@ export class EventLog {
 
     const fileHandle = await open(filePath, 'a');
     try {
+      // Defense in depth: even though the session directory is 0o700, lock the
+      // event log itself to owner-only — it holds the full terminal byte stream
+      // (output plus injected input, which can include secrets).
+      await fileHandle.chmod(0o600);
+
       const fileStats = await fileHandle.stat();
       assertEventLogSize(fileStats.size);
 

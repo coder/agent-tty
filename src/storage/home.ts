@@ -1,5 +1,5 @@
 import { realpathSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { chmod, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, normalize } from 'node:path';
 import process from 'node:process';
@@ -46,7 +46,13 @@ export async function ensureHome(
 ): Promise<string> {
   const home = resolveHome(configuredHome);
 
-  await mkdir(home, { recursive: true });
+  const created = await mkdir(home, { recursive: true });
+  if (created !== undefined) {
+    // Owner-only: the Home lists session directories and the Home Registry.
+    // chmod (not mkdir mode) guarantees 0o700 regardless of umask. Only when we
+    // created it — never re-mode a Home the user set up themselves.
+    await chmod(home, 0o700);
+  }
 
   return home;
 }
