@@ -14,6 +14,29 @@ This workflow assumes the `agent-tty` core skill is already loaded.
 If it is not, load it first with `agent-tty skills get agent-tty`.
 Use this skill as the specialized QA layer on top of the core terminal automation workflow.
 
+## Choose the Evidence Instrument
+
+Open an `agent-tty` session when the question needs runtime terminal evidence:
+crashes, input routing, focus/navigation behavior, resize behavior, alt-screen or
+screen-lifecycle cleanup, animation, transient corruption, or a reviewer-facing
+recording of a real interaction.
+
+Prefer source reading, focused unit tests, or layout tests before opening a
+session for questions about layout math, string width/alignment, style mapping,
+or static rendering logic. A session can still corroborate the result, but it
+should not be the first or only instrument for source-answerable questions.
+
+Treat `snapshot --format text` as searchable terminal text evidence, not as an
+authoritative column-width oracle. For CJK, emoji, and other wide-glyph content,
+text snapshots serialize the visible characters and can hide width/column
+ambiguity. If a text snapshot disagrees with source or layout tests on wide-glyph
+alignment, trust the source/tests first and use screenshots as visual
+corroboration.
+
+Sessions cost time and setup overhead. Use one when the bug class requires live
+interaction or reviewable runtime proof, not as the default first move for every
+visual question.
+
 ## Dogfooding Workflow
 
 1. **Create an isolated home** so artifacts and session state stay reviewable and do not pollute the real user environment.
@@ -28,7 +51,7 @@ Use this skill as the specialized QA layer on top of the core terminal automatio
    - `--screen-stable-ms` when the UI is animating or repainting.
    - `--idle-ms` when command completion matters more than screen text.
 6. **Capture the current screen state** with `snapshot --format text --json` for searchable text evidence.
-7. **Capture visual proof** with `screenshot --json` whenever layout, color, cursor, or rendering quality matters.
+7. **Capture visual proof** with `screenshot --json` when runtime layout, color, cursor, or rendering quality needs visual corroboration.
 8. **Export motion proof** with `record export --format webm --json` when the issue involves navigation, animation, resize behavior, focus handling, or transient corruption.
 9. **Repeat the loop** for every meaningful scenario: startup, first-run prompts, resize, help flows, error handling, and teardown.
 10. **Destroy the session** when the investigation is complete.
