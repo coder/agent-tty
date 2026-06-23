@@ -1,7 +1,8 @@
 ---
 name: agent-tty
 description: Terminal and TUI automation CLI for AI agents. Use when the user needs to create a terminal session, run a command in a terminal, automate an interactive CLI or TUI, wait for terminal output, capture a TUI screenshot, export a terminal recording, or test a CLI workflow with reviewable artifacts.
-advertise: true
+metadata:
+  advertise: 'true'
 ---
 
 `agent-tty` is a terminal and TUI automation CLI that creates inspectable sessions and reviewable artifacts for agents.
