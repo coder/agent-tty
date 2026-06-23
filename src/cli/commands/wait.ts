@@ -5,9 +5,12 @@ import type {
 import type { PreparedRenderWaitCondition } from '../../renderWait/matcher.js';
 import type { SemanticSnapshot } from '../../renderer/types.js';
 
+import process from 'node:process';
+
 import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
 
+import { exitCodeForError } from '../exitCodes.js';
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
@@ -100,6 +103,12 @@ function renderWaitLines(result: WaitForRenderResult): string[] {
   }
   lines.push(`capturedAtSeq: ${String(result.capturedAtSeq)}`);
   return lines;
+}
+
+function setWaitTimeoutExitCode(result: { timedOut: boolean }): void {
+  if (result.timedOut) {
+    process.exitCode = exitCodeForError(ERROR_CODES.WAIT_TIMEOUT);
+  }
 }
 
 function buildOfflineRenderWaitResult(
@@ -298,6 +307,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       result,
       lines: renderWaitLines(result),
     });
+    setWaitTimeoutExitCode(result);
     return;
   }
 
@@ -379,4 +389,5 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     result,
     lines: waitLines(result),
   });
+  setWaitTimeoutExitCode(result);
 }

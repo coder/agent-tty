@@ -104,7 +104,7 @@ Useful flags:
 - `--exit`: wait for the process to exit.
 - `--timeout <ms>`: maximum wait time in milliseconds, with `0` meaning infinite.
 
-On timeout, a standalone `wait` still exits `0` and reports `matched: false` / `timedOut: true` in the JSON result — check the envelope, not the exit code. Inside `batch`, a timed-out `wait` step is a step failure (`WAIT_TIMEOUT`, exit code `11` under fail-fast).
+On timeout, a standalone `wait` exits `11` (`WAIT_TIMEOUT`) while preserving a success JSON envelope with `timedOut: true` in the result (`matched: false` for render waits). Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast.
 
 ### Screen Hash
 
@@ -235,22 +235,22 @@ A lone `'%'` does **not** restore the marker (zsh treats it as a prompt escape t
 
 ## Exit Codes
 
-Every command exits with a stable code, so scripts can branch without parsing output. The `--json` error envelope carries the precise `error.code` (for example `WAIT_TIMEOUT`); the exit code is a coarser, stable summary of it.
+Every command exits with a stable code, so scripts can branch without parsing output. The `--json` error envelope carries the precise `error.code` when a command fails before producing a result. Commands that preserve an observable result for a failed predicate, such as timed-out `wait` and fail-fast `batch`, still emit a success envelope while exiting non-zero.
 
-| Exit code | Meaning                                                                                                                                     |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`       | Success.                                                                                                                                    |
-| `1`       | Internal or unclassified error.                                                                                                             |
-| `2`       | Usage error: unknown command or flag, or an invalid argument (session ID, dimensions, keys, duration, signal, input).                       |
-| `3`       | Session not found.                                                                                                                          |
-| `4`       | Session is not running or already destroyed.                                                                                                |
-| `5`       | Session host timed out.                                                                                                                     |
-| `6`       | Session host unreachable.                                                                                                                   |
-| `7`       | Export failed.                                                                                                                              |
-| `8`       | Storage read/write or manifest validation error.                                                                                            |
-| `9`       | Protocol or RPC error.                                                                                                                      |
-| `10`      | Replay failed.                                                                                                                              |
-| `11`      | A `wait` step inside a fail-fast `batch` timed out (standalone `wait` exits `0` with `timedOut: true` in the result — see [`wait`](#wait)). |
+| Exit code | Meaning                                                                                                                     |
+| --------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `0`       | Success.                                                                                                                    |
+| `1`       | Internal or unclassified error.                                                                                             |
+| `2`       | Usage error: unknown command or flag, or an invalid argument (session ID, dimensions, keys, duration, signal, input).       |
+| `3`       | Session not found.                                                                                                          |
+| `4`       | Session is not running or already destroyed.                                                                                |
+| `5`       | Session host timed out.                                                                                                     |
+| `6`       | Session host unreachable.                                                                                                   |
+| `7`       | Export failed.                                                                                                              |
+| `8`       | Storage read/write or manifest validation error.                                                                            |
+| `9`       | Protocol or RPC error.                                                                                                      |
+| `10`      | Replay failed.                                                                                                              |
+| `11`      | A standalone `wait` timed out, or a `wait` step inside a fail-fast `batch` timed out (`WAIT_TIMEOUT`; see [`wait`](#wait)). |
 
 A fail-fast `batch` exits with the failed step's code (for example `11` for a wait timeout); `--keep-going` exits `1` if any step failed.
 

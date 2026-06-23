@@ -1,5 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import process from 'node:process';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { exitCodeForError } from '../../../src/cli/exitCodes.js';
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 
 const mocks = vi.hoisted(() => ({
@@ -142,6 +145,10 @@ describe('wait command', () => {
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
     );
     mocks.readManifestIfExists.mockResolvedValue(createSessionRecord());
+  });
+
+  afterEach(() => {
+    process.exitCode = undefined;
   });
 
   it('rejects --text and --regex together', async () => {
@@ -379,6 +386,40 @@ describe('wait command', () => {
         result,
       }),
     );
+  });
+
+  it('sets WAIT_TIMEOUT exit code for legacy wait timeouts while preserving success output', async () => {
+    const result = { timedOut: true };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runWaitCommand(createOptions({ waitForExit: true, timeout: 1000 }));
+
+    expect(process.exitCode).toBe(exitCodeForError(ERROR_CODES.WAIT_TIMEOUT));
+    expect(mocks.emitSuccess).toHaveBeenCalledWith({
+      command: 'wait',
+      json: false,
+      result,
+      lines: ['Wait timed out.'],
+    });
+  });
+
+  it('sets WAIT_TIMEOUT exit code for render wait timeouts while preserving success output', async () => {
+    const result = {
+      matched: false,
+      timedOut: true,
+      capturedAtSeq: 7,
+    };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runWaitCommand(createOptions({ text: 'missing', timeout: 1000 }));
+
+    expect(process.exitCode).toBe(exitCodeForError(ERROR_CODES.WAIT_TIMEOUT));
+    expect(mocks.emitSuccess).toHaveBeenCalledWith({
+      command: 'wait',
+      json: false,
+      result,
+      lines: ['Wait timed out. (capturedAtSeq: 7)'],
+    });
   });
 
   it('routes --text waits to the render wait RPC', async () => {

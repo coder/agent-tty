@@ -137,7 +137,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
         { AGENT_TTY_HOME: testHome },
         30000,
       );
-      expect(waitResult.status).toBe(0);
+      expect(waitResult.status).toBe(11);
       expect(waitResult.stderr).toBe('');
 
       const envelope = JSON.parse(

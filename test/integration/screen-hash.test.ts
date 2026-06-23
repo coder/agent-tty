@@ -213,7 +213,7 @@ describe('screen hash integration', { timeout: 120_000 }, () => {
       15_000,
     );
 
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(11);
     expect(result.stderr).toBe('');
     const envelope = JSON.parse(
       result.stdout,
