@@ -113,7 +113,7 @@ A colleague then used `agent-tty` to build an experimental TUI for Coder agents 
 
 ## Command surface
 
-Every user-facing command takes `--json` and returns a stable, machine-readable envelope, and exits with a stable code (`0` success, `2` usage error, `3` session not found, …) so scripts can branch without parsing output.
+Every user-facing command takes `--json` and returns a stable, machine-readable envelope, and exits with a stable code (`0` success, `2` usage error, `3` session not found, `11` wait timeout, …) so scripts can branch without parsing output.
 
 | Group                   | Commands                                                                 |
 | ----------------------- | ------------------------------------------------------------------------ |
