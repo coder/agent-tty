@@ -2,6 +2,39 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-23
+
+### Added
+
+- Default semantic actions (`wait`, `snapshot`, screen hash, batch render-wait, host replay) now use `libghostty-vt` when the optional native package is installed, with automatic `ghostty-web` fallback otherwise. Visual artifacts (`screenshot`, `record export --format webm`) still default to `ghostty-web`. Explicit `--renderer`, `AGENT_TTY_RENDERER`, and `config.json.defaultRenderer` overrides keep precedence. ([#157](https://github.com/coder/agent-tty/pull/157))
+- The host now answers terminal capability queries on the live PTY: **OSC 10** (foreground), **OSC 11** (background), and **DSR `ESC[5n`** (status). Eliminates the Neovim 0.12+ `E1568` startup warning leaking into captures. Replies are written as child input and are not appended to the event log, so snapshots, screenshots, and recordings are unaffected. ([#163](https://github.com/coder/agent-tty/pull/163))
+- Dashboard: pressing **Enter** in a maximized view now restores it, mirroring **Esc**. Footer hint updated to `esc/⏎ restore`. ([#153](https://github.com/coder/agent-tty/pull/153))
+- CLI exit-code contract documented in `docs/USAGE.md` (full `0`–`11` mapping plus `batch` fail-fast / `--keep-going` semantics), with a new top-of-README anchor nav and grouped command-surface table. ([#150](https://github.com/coder/agent-tty/pull/150))
+
+### Changed
+
+- **Standalone `wait` now exits `11` (`WAIT_TIMEOUT`) on timeout** while still emitting the existing `ok: true` envelope with `timedOut: true` / `matched: false`. Makes shell composition fail closed (`agent-tty wait … && next-step`). Closes [#151](https://github.com/coder/agent-tty/issues/151). ([#165](https://github.com/coder/agent-tty/pull/165))
+- Local-state hardening: the per-session RPC socket directory is now `0o700`, the socket file `0o600`, and persisted state files (session manifests, Home Registry) `0o600`, regardless of umask. The Home and session directories are also locked to `0o700` and `events.jsonl` to `0o600`, so the full terminal byte stream (which can contain secrets) is no longer world-readable. ([#158](https://github.com/coder/agent-tty/pull/158), [#161](https://github.com/coder/agent-tty/pull/161))
+- Snapshot/wait performance: dropped a redundant deep clone of the event log in the `libghostty-vt` backend and skipped per-event Zod re-validation on the trusted live-host replay path (seq ordering is still enforced). ([#161](https://github.com/coder/agent-tty/pull/161))
+- Dependency audit gate: `aube audit --audit-level high` now runs in CI; transitive `esbuild`, `vite`, `ws`, and `brace-expansion` advisories were cleared via `package.json` overrides. ([#158](https://github.com/coder/agent-tty/pull/158))
+- Pre-1.0 versioning: `feat:` commits now bump the **minor** version (e.g. `0.4.x → 0.5.0`) instead of being flattened into patches. Breaking changes still bump minor; `1.0.0` remains an explicit `Release-As:` decision. ([#152](https://github.com/coder/agent-tty/pull/152))
+
+### Fixed
+
+- Dashboard redraws immediately on terminal/tmux pane resize. Previously, panes kept stale geometry for up to ~1.5s on idle sessions; now they track the new size on the first post-resize frame. Also removes a latent `NaN`-width path on non-TTY stdout. ([#162](https://github.com/coder/agent-tty/pull/162))
+- The standing release-please PR is now opened on `release-please--branches--main` (the package-name component suffix is gone). ([#147](https://github.com/coder/agent-tty/pull/147))
+- The README status-version badge is now wired into release-please `extra-files` and bumps with each release PR. ([#156](https://github.com/coder/agent-tty/pull/156))
+
+### Docs
+
+- README tagline mentions `agent-browser` alongside Playwright. ([#155](https://github.com/coder/agent-tty/pull/155))
+- `RELEASE.md` support contract reworded to be version-agnostic so release-please bumps no longer stale it. ([#158](https://github.com/coder/agent-tty/pull/158))
+- `dogfood-tui` skill clarifies when to use live terminal evidence vs source/tests, and that text snapshots are not authoritative for CJK/emoji column-width questions. ([#164](https://github.com/coder/agent-tty/pull/164))
+
+### CI
+
+- PR titles are validated as Conventional Commits via `amannn/action-semantic-pull-request`, so the squash-merge subject that lands on `main` always parses cleanly for release-please. ([#154](https://github.com/coder/agent-tty/pull/154))
+
 ## [0.4.3] - 2026-06-12
 
 ### Fixed

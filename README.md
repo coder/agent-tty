@@ -138,7 +138,7 @@ See [`docs/AGENT-SKILLS.md`](./docs/AGENT-SKILLS.md).
 
 ## Status & platform support
 
-`agent-tty` is `0.4.3` and focused on reliable, isolated, reviewable terminal and TUI automation through a stable CLI. <!-- x-release-please-version -->
+`agent-tty` is `0.5.0` and focused on reliable, isolated, reviewable terminal and TUI automation through a stable CLI. <!-- x-release-please-version -->
 
 - Linux and macOS are tier-1; Windows is tier-2 and not CI-tested.
 - Semantic snapshots and render-backed waits prefer the optional `libghostty-vt` backend when it is available, then fall back to `ghostty-web`.
