@@ -64,4 +64,24 @@ describe('resolvePtyEnv', () => {
     expect(resolved.BAZ).toBe('qux');
     expect(Object.prototype.hasOwnProperty.call(resolved, 'EMPTY')).toBe(false);
   });
+
+  it('unconditionally sets AGENT_TTY_ACTIVE to true', () => {
+    const resolved = resolvePtyEnv({}, 'xterm-256color', {});
+    expect(resolved.AGENT_TTY_ACTIVE).toBe('true');
+  });
+
+  it('sets AGENT_TTY_SESSION_ID when sessionId is provided', () => {
+    const resolved = resolvePtyEnv(
+      {},
+      'xterm-256color',
+      {},
+      'test-session-123',
+    );
+    expect(resolved.AGENT_TTY_SESSION_ID).toBe('test-session-123');
+  });
+
+  it('does not set AGENT_TTY_SESSION_ID when sessionId is not provided', () => {
+    const resolved = resolvePtyEnv({}, 'xterm-256color', {});
+    expect(resolved.AGENT_TTY_SESSION_ID).toBeUndefined();
+  });
 });
