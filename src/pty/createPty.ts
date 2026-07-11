@@ -16,6 +16,7 @@ export interface PtyOptions {
   rows: number;
   env: Record<string, string>;
   term: string;
+  sessionId?: string;
 }
 
 const EXECUTABLE_PERMISSION_MASK = 0o111;
@@ -96,6 +97,7 @@ export function resolvePtyEnv(
   env: Record<string, string>,
   term: string,
   baseEnv: Record<string, string | undefined> = process.env,
+  sessionId?: string,
 ): Record<string, string> {
   const resolved: Record<string, string> = {};
   for (const [key, value] of Object.entries(baseEnv)) {
@@ -113,6 +115,12 @@ export function resolvePtyEnv(
 
   Object.assign(resolved, env);
   resolved.TERM = term;
+
+  resolved.AGENT_TTY_ACTIVE = 'true';
+  if (sessionId) {
+    resolved.AGENT_TTY_SESSION_ID = sessionId;
+  }
+
   return resolved;
 }
 
@@ -144,6 +152,6 @@ export function createPty(options: PtyOptions): IPty {
     cwd,
     cols,
     rows,
-    env: resolvePtyEnv(env, term),
+    env: resolvePtyEnv(env, term, process.env, options.sessionId),
   });
 }
