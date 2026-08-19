@@ -225,6 +225,7 @@
         packages = [
           pkgs.nodejs_26
           pkgs.aube
+          pkgs.zig_0_15
           pkgs.python3
           pkgs.stdenv.cc
           pkgs.gnumake
