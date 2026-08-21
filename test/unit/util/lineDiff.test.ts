@@ -67,9 +67,14 @@ describe('diffLines', () => {
     ]);
   });
 
-  it('rejects inputs beyond the line limit', () => {
-    const big = new Array<string>(100_001).fill('x');
-    expect(() => diffLines(big, [])).toThrow(/must not exceed 100000 lines/);
+  it('accepts arbitrarily large single-sided inputs linearly', () => {
+    // No per-side cap: a one-sided diff needs no DP table and must not throw.
+    const big = new Array<string>(150_000).fill('x');
+
+    const entries = diffLines(big, []);
+
+    expect(entries).toHaveLength(150_000);
+    expect(entries.every((entry) => entry.op === 'delete')).toBe(true);
   });
 
   it('matches large common prefixes and suffixes without a quadratic table', () => {

@@ -16,12 +16,11 @@ export interface LineDiffEntry {
   readonly bRow?: number;
 }
 
-const MAX_DIFF_LINES = 100_000;
 // Bounds the DP table's cell count (each cell is one JS number), keeping
 // worst-case memory in the tens of megabytes. When the middle section (after
 // common prefix/suffix trimming) would exceed this, the diff degrades to a
 // non-minimal delete-then-add block instead of failing: every valid screen
-// pair diffs successfully.
+// pair diffs successfully, so no input size is rejected.
 const MAX_DIFF_CELLS = 4_000_000;
 
 function lcsEntries(
@@ -114,18 +113,13 @@ function fallbackEntries(
  * emitted first. Common prefix and suffix lines are matched directly, so the
  * quadratic DP table only covers the differing middle; if that middle is
  * still larger than MAX_DIFF_CELLS the middle degrades to a non-minimal
- * delete-then-add block rather than failing. Terminal screens are far below
- * every limit in practice.
+ * delete-then-add block rather than failing. Every input size is accepted:
+ * work and memory outside the capped DP table are linear in the inputs.
  */
 export function diffLines(
   a: readonly string[],
   b: readonly string[],
 ): LineDiffEntry[] {
-  invariant(
-    a.length <= MAX_DIFF_LINES && b.length <= MAX_DIFF_LINES,
-    `diffLines inputs must not exceed ${String(MAX_DIFF_LINES)} lines`,
-  );
-
   let prefix = 0;
   while (prefix < a.length && prefix < b.length && a[prefix] === b[prefix]) {
     prefix += 1;
