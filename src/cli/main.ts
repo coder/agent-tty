@@ -854,6 +854,10 @@ async function main(): Promise<void> {
     .option('--text <string>', 'Wait for text to appear in rendered output')
     .option('--regex <pattern>', 'Wait for regex match in rendered output')
     .option(
+      '--scope <scope>',
+      "Match scope for --text/--regex: 'screen' (default) or 'cursor-line' (cursor row only)",
+    )
+    .option(
       '--screen-stable-ms <ms>',
       'Wait for screen to be stable for given ms',
       parseIntegerOption,
@@ -885,6 +889,7 @@ async function main(): Promise<void> {
             json: boolean;
             text?: string;
             regex?: string;
+            scope?: string;
             screenStableMs?: number;
             cursorRow?: number;
             cursorCol?: number;
@@ -901,6 +906,7 @@ async function main(): Promise<void> {
             timeout: options.timeout,
             text: options.text,
             regex: options.regex,
+            scope: options.scope,
             screenStableMs: options.screenStableMs,
             cursorRow: options.cursorRow,
             cursorCol: options.cursorCol,

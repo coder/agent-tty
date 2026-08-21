@@ -398,10 +398,14 @@ export const ScreenshotResultSchema = z
   .strict();
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;
 
+export const RenderWaitScopeSchema = z.enum(['screen', 'cursor-line']);
+export type RenderWaitScope = z.infer<typeof RenderWaitScopeSchema>;
+
 export const WaitForRenderParamsSchema = z
   .object({
     text: TextMatchSchema.optional(),
     regex: RegexPatternSchema.optional(),
+    scope: RenderWaitScopeSchema.optional(),
     screenStableMs: PositiveIntSchema.optional(),
     cursorRow: NonNegativeIntSchema.optional(),
     cursorCol: NonNegativeIntSchema.optional(),
@@ -436,6 +440,14 @@ export const WaitForRenderParamsSchema = z
         code: 'custom',
         message: 'text and regex are mutually exclusive.',
         path: ['regex'],
+      });
+    }
+
+    if (value.scope === 'cursor-line' && !hasText && !hasRegex) {
+      ctx.addIssue({
+        code: 'custom',
+        message: "scope 'cursor-line' requires a text or regex condition.",
+        path: ['scope'],
       });
     }
   });
