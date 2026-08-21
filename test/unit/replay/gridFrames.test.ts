@@ -370,6 +370,42 @@ describe('captureGridFrames', () => {
     },
   );
 
+  it('fails fast when distinct frames exceed the retained-cell budget', async () => {
+    // Three distinct 4x2 frames retain 8 cells each; a 20-cell budget admits
+    // two frames and must trip on the third instead of exhausting memory.
+    const events: EventRecord[] = [
+      { seq: 0, ts: isoAt(0), type: 'output', payload: { data: 'a' } },
+      { seq: 1, ts: isoAt(1_000), type: 'output', payload: { data: 'b' } },
+      { seq: 2, ts: isoAt(2_000), type: 'output', payload: { data: 'c' } },
+    ];
+    const backend = new FakeGridBackend(
+      new Map([
+        [0, 'a'],
+        [1, 'ab'],
+        [2, 'abc'],
+      ]),
+    );
+
+    await expect(
+      captureGridFrames(
+        {
+          sessionId: SESSION_ID,
+          manifest: createSessionRecord(),
+          events,
+          profile: PROFILE,
+          mode: 'timeline',
+          maxGridCells: 20,
+        },
+        { backendFactory: () => backend },
+      ),
+    ).rejects.toMatchObject({
+      code: 'EXPORT_ERROR',
+      message:
+        'Recording has too many distinct frames for animated SVG export. Use a still SVG export (drop --animate) or a WebM export instead.',
+    });
+    expect(backend.disposed).toBe(true);
+  });
+
   it('synthesizes a blank frame for an empty event log without a backend', async () => {
     const capture = await captureGridFrames(
       {

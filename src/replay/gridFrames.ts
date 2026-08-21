@@ -17,6 +17,18 @@ import { invariant } from '../util/assert.js';
 /** Matches the recorded-timing WebM export's final frame hold. */
 const DEFAULT_FINAL_FRAME_HOLD_MS = 1_000;
 
+/**
+ * Upper bound on the total styled cells retained across all captured frames
+ * (cols x rows summed per distinct frame). Animated capture keeps every
+ * distinct frame's dense grid in memory until rendering, so an unbounded
+ * recording — the 50 MB event-log limit permits far more distinct frames
+ * than fit on a reasonable heap — must fail fast instead of exhausting
+ * memory. 20M cells is ~10k distinct 80x24 frames and adapts to terminal
+ * size; exceeding it raises EXPORT_ERROR rather than silently dropping
+ * frames, because exported artifacts are evidence.
+ */
+export const MAX_ANIMATED_GRID_CELLS = 20_000_000;
+
 export type GridFrameMode = 'final' | 'timeline';
 
 export interface GridFrame {
@@ -38,6 +50,8 @@ export interface CaptureGridFramesOptions {
   /** `final` captures only the last frame; `timeline` captures every boundary. */
   mode: GridFrameMode;
   finalFrameHoldMs?: number;
+  /** Retained-cell budget override; defaults to MAX_ANIMATED_GRID_CELLS. */
+  maxGridCells?: number;
 }
 
 export interface GridFrameCapture {
@@ -217,6 +231,11 @@ export async function captureGridFrames(
     Number.isInteger(finalFrameHoldMs) && finalFrameHoldMs > 0,
     'finalFrameHoldMs must be a positive integer',
   );
+  const maxGridCells = options.maxGridCells ?? MAX_ANIMATED_GRID_CELLS;
+  invariant(
+    Number.isInteger(maxGridCells) && maxGridCells > 0,
+    'maxGridCells must be a positive integer',
+  );
 
   const replayInput = buildReplayInput(
     options.sessionId,
@@ -331,6 +350,7 @@ export async function captureGridFrames(
     }
 
     const frames: GridFrame[] = [];
+    let retainedGridCells = 0;
     let previousContentKey: string | null = null;
     // Event cursor: each boundary replay feeds only the not-yet-applied event
     // suffix. Passing the full validated array per boundary would rescan from
@@ -375,6 +395,17 @@ export async function captureGridFrames(
         invariant(previousFrame !== undefined, 'previous frame must exist');
         previousFrame.holdMs += holdMs;
         continue;
+      }
+      retainedGridCells += frame.cols * frame.rows;
+      if (retainedGridCells > maxGridCells) {
+        throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
+          message:
+            'Recording has too many distinct frames for animated SVG export. Use a still SVG export (drop --animate) or a WebM export instead.',
+          details: {
+            maxGridCells,
+            capturedFrames: frames.length,
+          },
+        });
       }
       frames.push(frame);
       previousContentKey = contentKey;
