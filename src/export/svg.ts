@@ -50,6 +50,8 @@ export interface SvgRenderOptions {
   animate: boolean;
 }
 
+type GlyphFace = 'latin' | 'fallback';
+
 interface StyleRun {
   startCol: number;
   cellCount: number;
@@ -59,6 +61,7 @@ interface StyleRun {
   bold: boolean;
   italic: boolean;
   underline: boolean;
+  face: GlyphFace;
 }
 
 /**
@@ -126,6 +129,23 @@ function isCoveredByPrimaryLatinSubset(codePoint: number): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Classify which embedded face renders a glyph: the primary latin subset or
+ * the symbols/fallback path. Glyphs covered by neither bundled face (CJK
+ * etc.) classify as 'fallback' too — both resolve past the latin face in the
+ * font stack, so they share advance behavior distinct from latin glyphs.
+ */
+function classifyGlyphFace(char: string): GlyphFace {
+  for (const character of char) {
+    const codePoint = character.codePointAt(0);
+    invariant(codePoint !== undefined, 'iterated character must exist');
+    if (!isCoveredByPrimaryLatinSubset(codePoint)) {
+      return 'fallback';
+    }
+  }
+  return 'latin';
 }
 
 function framesContainNonLatinGlyph(frames: readonly SvgGridFrame[]): boolean {
@@ -244,12 +264,16 @@ function styleMatches(run: StyleRun, cell: SnapshotCell): boolean {
  * fallback font whose wide-glyph advance ratio differs would shift interior
  * glyphs off their columns — within a homogeneous-width run a monospace
  * fallback has equal natural advances and every glyph lands exactly on its
- * column. Every OTHER empty cell — zero-style gap padding for untouched
- * columns (e.g. ESC[NC) and styled empties such as colored field padding —
- * breaks the current run so the next glyph re-anchors at its true column:
- * merging an empty cell would stretch the run's glyphs across its column.
- * Backgrounds are grouped independently (see groupRowIntoBackgroundRuns), so
- * a styled empty cell still shades its column.
+ * column. Runs also split at FONT-FACE boundaries (latin subset vs the
+ * symbols/fallback path, see classifyGlyphFace): the two faces have
+ * different natural advances, so a mixed-face run would drift interior
+ * glyphs exactly like a mixed-width one. Every OTHER empty cell — zero-style
+ * gap padding for untouched columns (e.g. ESC[NC) and styled empties such as
+ * colored field padding — breaks the current run so the next glyph
+ * re-anchors at its true column: merging an empty cell would stretch the
+ * run's glyphs across its column. Backgrounds are grouped independently (see
+ * groupRowIntoBackgroundRuns), so a styled empty cell still shades its
+ * column.
  */
 export function groupRowIntoStyleRuns(
   cells: readonly SnapshotCell[],
@@ -285,7 +309,13 @@ export function groupRowIntoStyleRuns(
       Number.isInteger(width) && width >= 1,
       'snapshot cell width must be a positive integer when provided',
     );
-    if (width === 1 && current !== null && styleMatches(current, cell)) {
+    const face = classifyGlyphFace(cell.char);
+    if (
+      width === 1 &&
+      current !== null &&
+      current.face === face &&
+      styleMatches(current, cell)
+    ) {
       current.cellCount += 1;
       current.text += cell.char;
     } else {
@@ -298,6 +328,7 @@ export function groupRowIntoStyleRuns(
         bold: cell.bold ?? false,
         italic: cell.italic ?? false,
         underline: cell.underline ?? false,
+        face,
       };
       runs.push(current);
     }

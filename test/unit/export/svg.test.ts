@@ -136,6 +136,45 @@ describe('renderGridFramesToSvg', () => {
     );
   });
 
+  it('splits text runs at font-face boundaries', () => {
+    // U+E0A0 renders from the symbols face while A/B render from the latin
+    // subset; the faces have different natural advances, so a merged run
+    // would drift interior glyphs off their columns under uniform scaling.
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [makeFrame({ lines: [[cell('A'), cell('\ue0a0'), cell('B')]] })],
+      animate: false,
+    });
+
+    expect(svg).toContain(
+      '<text x="0" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">A</text>',
+    );
+    expect(svg).toContain(
+      '<text x="8.4" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">\ue0a0</text>',
+    );
+    expect(svg).toContain(
+      '<text x="16.8" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">B</text>',
+    );
+    expect(svg).not.toContain('>A\ue0a0</text>');
+    expect(svg).not.toContain('>\ue0a0B</text>');
+  });
+
+  it('merges consecutive same-face symbol glyphs into one run', () => {
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [
+        makeFrame({
+          lines: [[cell('\ue0a0'), cell('\ue0a1'), cell('\ue0a2')]],
+        }),
+      ],
+      animate: false,
+    });
+
+    expect(svg).toContain(
+      '<text x="0" y="14" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">\ue0a0\ue0a1\ue0a2</text>',
+    );
+  });
+
   it('breaks text runs at styled empty cells while shading their columns', () => {
     // Colored field padding: a bg-styled empty cell between same-style glyphs
     // must not join the text run (B would drift off column 2), but its
