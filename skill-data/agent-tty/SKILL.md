@@ -53,6 +53,7 @@ agent-tty --home <path> batch <session-id> '[{"run":"htop","noWait":true},{"wait
 
 # Observation and proof
 agent-tty --home <path> wait <session-id> --text 'ready' --json
+agent-tty --home <path> wait <session-id> --regex 'READY>$' --scope cursor-line --json
 agent-tty --home <path> wait <session-id> --screen-stable-ms 1000 --json
 agent-tty --home <path> snapshot <session-id> --format text --json
 agent-tty --home <path> screenshot <session-id> --json
@@ -88,7 +89,7 @@ agent-tty --home "$AGENT_HOME" batch "$SESSION_ID" '[
 agent-tty --home "$AGENT_HOME" screenshot "$SESSION_ID" --json
 ```
 
-A `wait` can still match the _echo_ of a just-typed command, so use a distinctive output token or `screenStableMs` rather than waiting for text you just typed.
+A `wait` can still match the _echo_ of a just-typed command. Add `"scope": "cursor-line"` to a wait step (or `--scope cursor-line` on a standalone `wait`) to restrict `text`/`regex` matching to the row the cursor is on — once Enter is pressed the cursor moves past the echoed line, so the echo cannot match. This is ideal for prompts, which render at the cursor; rendered lines are right-trimmed of trailing spaces, so anchor a prompt displayed as `READY> ` with `READY>$`. For output that scrolls past the cursor, use a distinctive output token or `screenStableMs`.
 
 ### Export reviewer-facing artifacts
 
