@@ -48,7 +48,11 @@ export interface GridFrameCapture {
   rendererBackend: string;
   outputEventCount: number;
   resizeEventCount: number;
-  /** Sum of frame holds; the recorded visual timeline plus the final hold. */
+  /**
+   * Sum of frame holds; in timeline mode this is the full recorded event-log
+   * span (first event ts to last event ts, any event type) plus the final
+   * viewing hold.
+   */
   timelineDurationMs: number;
 }
 
@@ -81,20 +85,24 @@ function parseTimestamp(value: string, label: string): number {
  */
 function collectFrameBoundaries(input: ReplayInput): {
   boundaries: FrameBoundary[];
+  /** Index into `input.events` of the first visual event, or null if none. */
+  firstVisualEventIndex: number | null;
   outputEventCount: number;
   resizeEventCount: number;
 } {
   const boundaries: FrameBoundary[] = [];
+  let firstVisualEventIndex: number | null = null;
   let outputEventCount = 0;
   let resizeEventCount = 0;
 
-  for (const event of input.events) {
+  for (const [eventIndex, event] of input.events.entries()) {
     if (event.seq > input.targetSeq) {
       break;
     }
     if (event.type !== 'output' && event.type !== 'resize') {
       continue;
     }
+    firstVisualEventIndex ??= eventIndex;
     if (event.type === 'output') {
       outputEventCount += 1;
     } else {
@@ -119,7 +127,12 @@ function collectFrameBoundaries(input: ReplayInput): {
     boundaries.push({ seq: event.seq, tsMs });
   }
 
-  return { boundaries, outputEventCount, resizeEventCount };
+  return {
+    boundaries,
+    firstVisualEventIndex,
+    outputEventCount,
+    resizeEventCount,
+  };
 }
 
 function toGridFrame(snapshot: SemanticSnapshot, holdMs: number): GridFrame {
@@ -210,19 +223,66 @@ export async function captureGridFrames(
   );
   invariant(replayInput.targetSeq >= 0, 'grid capture requires >=1 event');
 
-  const { boundaries, outputEventCount, resizeEventCount } =
-    collectFrameBoundaries(replayInput);
-  // Sessions without visual events still have a (blank) grid; capture it at
-  // the final target seq.
-  const captureBoundaries: FrameBoundary[] =
-    options.mode === 'timeline' && boundaries.length > 0
-      ? boundaries
-      : [
-          {
-            seq: replayInput.targetSeq,
-            tsMs: boundaries.at(-1)?.tsMs ?? 0,
-          },
-        ];
+  const {
+    boundaries,
+    firstVisualEventIndex,
+    outputEventCount,
+    resizeEventCount,
+  } = collectFrameBoundaries(replayInput);
+
+  // Timing model: the animated timeline spans the FULL event log — from the
+  // first event's timestamp to the last event's timestamp, whatever the event
+  // types — plus the final viewing hold. A leading gap before the first
+  // visual event (e.g. an input_run followed by silence) is represented by a
+  // pre-visual frame (the still-blank grid) held for that gap; a trailing gap
+  // after the last visual event extends the final frame's hold to the last
+  // event's timestamp. Both derive purely from recorded timestamps, so output
+  // stays deterministic.
+  const firstEvent = replayInput.events[0];
+  const lastEvent = replayInput.events.at(-1);
+  invariant(
+    firstEvent !== undefined && lastEvent !== undefined,
+    'grid capture requires >=1 event',
+  );
+  const timelineStartMs = parseTimestamp(firstEvent.ts, 'events[0].ts');
+  const timelineEndMs = parseTimestamp(lastEvent.ts, 'events[last].ts');
+  invariant(
+    timelineEndMs >= timelineStartMs,
+    'last event timestamp must not precede the first event timestamp',
+  );
+
+  let captureBoundaries: FrameBoundary[];
+  if (options.mode === 'timeline' && boundaries.length > 0) {
+    captureBoundaries = boundaries;
+    const firstBoundary = boundaries[0];
+    invariant(firstBoundary !== undefined, 'first boundary must exist');
+    if (
+      firstBoundary.tsMs > timelineStartMs &&
+      firstVisualEventIndex !== null &&
+      firstVisualEventIndex > 0
+    ) {
+      const preVisualEvent = replayInput.events[firstVisualEventIndex - 1];
+      invariant(
+        preVisualEvent !== undefined,
+        'pre-visual event must exist before the first visual event',
+      );
+      captureBoundaries = [
+        { seq: preVisualEvent.seq, tsMs: timelineStartMs },
+        ...boundaries,
+      ];
+    }
+  } else {
+    // Sessions without visual events still have a (blank) grid; capture it at
+    // the final target seq. In timeline mode the blank frame spans the whole
+    // recorded range via the trailing-gap extension below; in final mode only
+    // the final viewing hold applies.
+    captureBoundaries = [
+      {
+        seq: replayInput.targetSeq,
+        tsMs: options.mode === 'timeline' ? timelineStartMs : timelineEndMs,
+      },
+    ];
+  }
 
   const backend = await createLibghosttyVtBackend(
     options.sessionId,
@@ -265,9 +325,12 @@ export async function captureGridFrames(
 
     for (const [index, boundary] of captureBoundaries.entries()) {
       const nextBoundary = captureBoundaries[index + 1];
+      // The final frame holds for the trailing recorded gap (time between the
+      // last visual boundary and the last event of any type) plus the final
+      // viewing hold.
       const holdMs =
         nextBoundary === undefined
-          ? finalFrameHoldMs
+          ? timelineEndMs - boundary.tsMs + finalFrameHoldMs
           : nextBoundary.tsMs - boundary.tsMs;
       invariant(holdMs > 0, 'frame hold duration must be positive');
 

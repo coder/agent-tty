@@ -271,6 +271,66 @@ describe('captureGridFrames', () => {
     },
   );
 
+  it('represents leading and trailing non-visual event-log gaps', async () => {
+    // Timing model under test: the timeline spans the full event log (first
+    // event ts to last event ts, any type) plus the 1s final viewing hold.
+    // input_run at t=0 followed by 10s of silence must surface as a blank
+    // initial frame held 10s; the trailing input at t=20s extends the final
+    // frame's hold to the end of the recorded range.
+    const events: EventRecord[] = [
+      {
+        seq: 0,
+        ts: isoAt(0),
+        type: 'input_run',
+        payload: { command: 'slow-task', noWait: true },
+      },
+      { seq: 1, ts: isoAt(10_000), type: 'output', payload: { data: 'a' } },
+      { seq: 2, ts: isoAt(11_000), type: 'output', payload: { data: 'b' } },
+      { seq: 3, ts: isoAt(20_000), type: 'input_text', payload: { data: 'x' } },
+    ];
+    const backend = new FakeGridBackend(
+      new Map([
+        [0, ''],
+        [1, 'a'],
+        [2, 'ab'],
+      ]),
+    );
+
+    const capture = await captureGridFrames(
+      {
+        sessionId: SESSION_ID,
+        manifest: createSessionRecord(),
+        events,
+        profile: PROFILE,
+        mode: 'timeline',
+      },
+      { backendFactory: () => backend },
+    );
+
+    // Pre-visual boundary at seq 0 (blank grid), visual boundaries at seqs
+    // 1 and 2, then the trailing flush to targetSeq 3.
+    expect(backend.replayTargetSeqs).toEqual([0, 1, 2, 3]);
+
+    expect(capture.frames).toHaveLength(3);
+    // Leading gap: blank frame held from t=0 until the first output at t=10s.
+    expect(capture.frames[0]).toMatchObject({
+      capturedAtSeq: 0,
+      holdMs: 10_000,
+    });
+    expect(capture.frames[1]).toMatchObject({
+      capturedAtSeq: 1,
+      holdMs: 1_000,
+    });
+    // Trailing gap: 9s from the last output (t=11s) to the last event
+    // (t=20s), plus the 1s final viewing hold.
+    expect(capture.frames[2]).toMatchObject({
+      capturedAtSeq: 2,
+      holdMs: 10_000,
+    });
+    // 20s recorded range + 1s final viewing hold.
+    expect(capture.timelineDurationMs).toBe(21_000);
+  });
+
   maybeIt(
     'spans default-style wide glyphs across their full width through the native backend',
     async () => {

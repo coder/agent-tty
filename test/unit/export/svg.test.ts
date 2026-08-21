@@ -184,13 +184,24 @@ describe('renderGridFramesToSvg', () => {
     expect(svg).toContain('SIL Open Font License 1.1');
   });
 
-  it('embeds the Symbols Nerd Font only when a Private Use Area glyph is rendered', () => {
+  it('embeds the Symbols Nerd Font only when a glyph escapes the latin subset', () => {
     const plainSvg = renderGridFramesToSvg({
       profile: PROFILE,
       frames: [makeFrame({ lines: [[cell('x')]] })],
       animate: false,
     });
     expect(plainSvg).not.toContain('data:font/ttf');
+
+    // U+26A1 HIGH VOLTAGE SIGN: covered by Symbols Nerd Font Mono but not by
+    // the latin-only primary subset.
+    const symbolSvg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [makeFrame({ lines: [[cell('\u26a1')]] })],
+      animate: false,
+    });
+    expect(symbolSvg).toContain(
+      '@font-face{font-family:"Symbols Nerd Font Mono";src:url(data:font/ttf;base64,',
+    );
 
     // U+E0A0 (powerline branch glyph) sits in the BMP Private Use Area.
     const puaSvg = renderGridFramesToSvg({
@@ -269,6 +280,16 @@ describe('renderGridFramesToSvg', () => {
     expect(svg).toContain(
       '<rect x="16.8" y="18" width="8.4" height="18" fill="#cdd6f4" fill-opacity="0.35"/>',
     );
+  });
+
+  it('skips the cursor block when the frame reports a hidden cursor', () => {
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [makeFrame({ cursorRow: 1, cursorCol: 2, cursorVisible: false })],
+      animate: false,
+    });
+
+    expect(svg).not.toContain('fill-opacity');
   });
 
   it('renders only the final frame for still exports', () => {

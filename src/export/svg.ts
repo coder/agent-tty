@@ -29,6 +29,13 @@ export interface SvgGridFrame {
   cursorRow: number;
   cursorCol: number;
   /**
+   * Whether the cursor block should be drawn (DECTCEM). Defaults to visible.
+   * The libghostty-vt native snapshot does not currently expose cursor
+   * visibility, so captured frames leave this unset; the renderer honors it
+   * when a producer can supply it.
+   */
+  cursorVisible?: boolean;
+  /**
    * Dense visible grid: `lines[row]` lists cells by column. Rows and trailing
    * columns without content may be shorter than `rows`/`cols`.
    */
@@ -60,30 +67,66 @@ interface StyleRun {
  * attribution as an XML comment.
  */
 const FONT_LICENSE_COMMENT =
-  '<!-- Embedded fonts (SIL Open Font License 1.1): JetBrains Mono by JetBrains s.r.o. (https://github.com/JetBrains/JetBrainsMono); Symbols Nerd Font Mono by the Nerd Fonts contributors (https://github.com/ryanoasis/nerd-fonts), embedded only when Nerd Font glyphs are present. -->';
+  '<!-- Embedded fonts (SIL Open Font License 1.1): JetBrains Mono by JetBrains s.r.o. (https://github.com/JetBrains/JetBrainsMono); Symbols Nerd Font Mono by the Nerd Fonts contributors (https://github.com/ryanoasis/nerd-fonts), embedded only when glyphs outside the latin subset are present. -->';
 
 /**
- * Nerd Font glyphs live in the Unicode Private Use Areas: the BMP PUA
- * (U+E000-U+F8FF) plus the supplementary PUA-A/PUA-B planes.
+ * Exact cmap coverage of the pinned JetBrainsMono-Regular-latin.woff2 asset
+ * (dumped offline from the checked-in file's format-4 cmap: 229 code points).
+ * The asset is hash-pinned via bundledFont.ts, so these ranges are stable.
+ * Any rendered code point outside this coverage triggers embedding of the
+ * Symbols Nerd Font Mono fallback face. That over-embeds for glyphs covered
+ * by neither face (e.g. CJK), which is acceptable: it keeps the predicate a
+ * simple, deterministic function of rendered content.
  */
-function isPrivateUseCodePoint(codePoint: number): boolean {
-  return (
-    (codePoint >= 0xe000 && codePoint <= 0xf8ff) ||
-    (codePoint >= 0xf0000 && codePoint <= 0xffffd) ||
-    (codePoint >= 0x100000 && codePoint <= 0x10fffd)
-  );
+const PRIMARY_LATIN_SUBSET_RANGES: ReadonlyArray<readonly [number, number]> = [
+  [0x0d, 0x0d],
+  [0x20, 0x7e],
+  [0xa0, 0xff],
+  [0x102, 0x102],
+  [0x131, 0x131],
+  [0x152, 0x153],
+  [0x2bc, 0x2bc],
+  [0x2c6, 0x2c6],
+  [0x2da, 0x2da],
+  [0x2dc, 0x2dc],
+  [0x300, 0x301],
+  [0x303, 0x304],
+  [0x308, 0x309],
+  [0x323, 0x323],
+  [0x2013, 0x2014],
+  [0x2018, 0x201a],
+  [0x201c, 0x201e],
+  [0x2022, 0x2022],
+  [0x2026, 0x2026],
+  [0x2032, 0x2033],
+  [0x2039, 0x203a],
+  [0x2044, 0x2044],
+  [0x20ac, 0x20ac],
+  [0x2122, 0x2122],
+  [0x2191, 0x2191],
+  [0x2193, 0x2193],
+  [0x2212, 0x2212],
+  [0x2215, 0x2215],
+  [0xfeff, 0xfeff],
+];
+
+function isCoveredByPrimaryLatinSubset(codePoint: number): boolean {
+  for (const [start, end] of PRIMARY_LATIN_SUBSET_RANGES) {
+    if (codePoint >= start && codePoint <= end) {
+      return true;
+    }
+  }
+  return false;
 }
 
-function framesContainPrivateUseGlyph(
-  frames: readonly SvgGridFrame[],
-): boolean {
+function framesContainNonLatinGlyph(frames: readonly SvgGridFrame[]): boolean {
   for (const frame of frames) {
     for (const cells of frame.lines) {
       for (const cell of cells) {
         for (const character of cell.char) {
           const codePoint = character.codePointAt(0);
           invariant(codePoint !== undefined, 'iterated character must exist');
-          if (isPrivateUseCodePoint(codePoint)) {
+          if (!isCoveredByPrimaryLatinSubset(codePoint)) {
             return true;
           }
         }
@@ -103,13 +146,13 @@ function renderFontFace(asset: BundledFontAsset, format: string): string {
  * Standalone SVGs must carry their fonts so glyphs render identically without
  * locally installed fonts. The 21 KB JetBrains Mono latin subset is always
  * embedded; the 2.5 MB Symbols Nerd Font is embedded only when a rendered
- * frame actually contains a Private Use Area glyph, keeping ordinary exports
- * small. Both are base64 of checked-in asset bytes, so output stays
- * deterministic.
+ * frame contains a code point outside that latin subset's coverage, keeping
+ * ordinary exports small. Both are base64 of checked-in asset bytes, so
+ * output stays deterministic.
  */
 function renderFontStyleElement(frames: readonly SvgGridFrame[]): string {
   const fontFaces = [renderFontFace(BUNDLED_PRIMARY_FONT_ASSET, 'woff2')];
-  if (framesContainPrivateUseGlyph(frames)) {
+  if (framesContainNonLatinGlyph(frames)) {
     fontFaces.push(renderFontFace(BUNDLED_SYMBOLS_FONT_ASSET, 'truetype'));
   }
   return `<style>${fontFaces.join('\n')}</style>`;
@@ -357,7 +400,11 @@ function renderFrameElements(
     }
   }
 
-  return [...backgrounds, ...texts, renderCursor(frame, profile)];
+  // Honor DECTCEM when the frame producer supplies visibility; unset means
+  // visible (the native snapshot does not expose cursor visibility yet).
+  const cursor =
+    frame.cursorVisible === false ? [] : [renderCursor(frame, profile)];
+  return [...backgrounds, ...texts, ...cursor];
 }
 
 function renderVisibilityAnimation(
