@@ -60,6 +60,14 @@ function parseNumberOption(value: string): number {
   return Number(value);
 }
 
+// Strict integer-token parser: empty, whitespace-only, fractional, or
+// partially numeric tokens (e.g. "", "1.5", "2junk") yield NaN so command
+// validation rejects them instead of silently truncating.
+function parseIntegerTokenOption(value: string): number {
+  const token = value.trim();
+  return /^[+-]?\d+$/.test(token) ? Number.parseInt(token, 10) : Number.NaN;
+}
+
 function collectStringOption(value: string, previous: string[] = []): string[] {
   return [...previous, value];
 }
@@ -807,12 +815,12 @@ async function main(): Promise<void> {
     .option(
       '--at-seq-a <seq>',
       'Replay session A up to this Event Log sequence (default: latest)',
-      parseNumberOption,
+      parseIntegerTokenOption,
     )
     .option(
       '--at-seq-b <seq>',
       'Replay session B up to this Event Log sequence (default: latest)',
-      parseNumberOption,
+      parseIntegerTokenOption,
     )
     .option('--json', 'Emit a JSON command envelope', false)
     .action(

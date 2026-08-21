@@ -203,7 +203,7 @@ describe('record diff integration', { timeout: 120_000 }, () => {
     const sessionA = createSession(testHome, command);
     waitForExit(testHome, sessionA);
 
-    for (const token of ['1.5', '2junk']) {
+    for (const token of ['1.5', '2junk', '', '   ']) {
       const result = runRecordDiff(testHome, [
         sessionA,
         sessionA,
