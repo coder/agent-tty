@@ -231,14 +231,14 @@ describe('runRecordDiffCommand', () => {
           identical: true,
           a: {
             sessionId: 'session-a',
-            capturedAtSeq: 0,
+            capturedAtSeq: -1,
             cols: 80,
             rows: 24,
             screenHash: blankHash,
           },
           b: {
             sessionId: 'session-b',
-            capturedAtSeq: 0,
+            capturedAtSeq: -1,
             cols: 80,
             rows: 24,
             screenHash: blankHash,

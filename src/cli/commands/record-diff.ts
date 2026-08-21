@@ -90,6 +90,7 @@ async function replayScreen(
           // The session has not emitted any events yet, so its screen is the
           // valid initial blank grid. Backends reject snapshot() before the
           // first replayed event, so synthesize the blank screen directly.
+          // capturedAtSeq -1 mirrors targetSeq: no event was replayed.
           const blankLines = Array.from(
             { length: replayInput.initialRows },
             () => '',
@@ -97,7 +98,7 @@ async function replayScreen(
           return {
             side: {
               sessionId,
-              capturedAtSeq: 0,
+              capturedAtSeq: -1,
               cols: replayInput.initialCols,
               rows: replayInput.initialRows,
               screenHash: computeScreenHash({

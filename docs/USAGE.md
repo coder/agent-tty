@@ -216,7 +216,7 @@ agent-tty record diff <session-id> <session-id> --at-seq-a 0 --json
 ```
 
 - `--at-seq-a <seq>` / `--at-seq-b <seq>`: replay each side up to an Event Log sequence (default: latest). Diffing a session against itself at an earlier sequence shows how its screen evolved.
-- The JSON result carries `identical`, per-side `sessionId`/`capturedAtSeq`/`cols`/`rows`/`screenHash`, and a `diff` array of `{ op: equal | delete | add, text, aRow?, bRow? }` entries over the visible screen lines (0-based rows, no trimming or normalization — the same canonical lines that `screenHash` hashes).
+- The JSON result carries `identical`, per-side `sessionId`/`capturedAtSeq`/`cols`/`rows`/`screenHash`, and a `diff` array of `{ op: equal | delete | add, text, aRow?, bRow? }` entries over the visible screen lines (0-based rows, no trimming or normalization — the same canonical lines that `screenHash` hashes). A side with an empty event log reports the pre-event blank screen with `capturedAtSeq: -1` (no event was replayed).
 - Human output is a unified-style diff with `---`/`+++` headers naming each side's session, sequence, and hash prefix.
 - The command works entirely offline from `events.jsonl`; sessions may be running or exited. The exit code is `0` whether or not the screens differ — automation should read `identical` from the JSON result.
 

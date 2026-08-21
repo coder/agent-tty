@@ -503,7 +503,9 @@ export type RecordDiffLine = z.infer<typeof RecordDiffLineSchema>;
 export const RecordDiffSideSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntSchema,
+    // -1 mirrors ReplayInput.targetSeq for an empty event log: the side is
+    // the pre-event blank screen and no event sequence was replayed.
+    capturedAtSeq: z.number().int().gte(-1),
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
     screenHash: Sha256HexSchema,
