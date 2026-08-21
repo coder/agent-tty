@@ -235,35 +235,21 @@ function styleMatches(run: StyleRun, cell: SnapshotCell): boolean {
 }
 
 /**
- * Untouched grid columns (e.g. after an ESC[NC cursor-forward) surface as
- * empty cells carrying no style at all. They render nothing and must never
- * merge into a text run: merging would re-anchor the run at the gap's first
- * column and stretch the following glyphs across the gap via `textLength`.
- */
-function isZeroStyleGapCell(cell: SnapshotCell): boolean {
-  return (
-    cell.char === '' &&
-    cell.fg === undefined &&
-    cell.bg === undefined &&
-    !(cell.bold ?? false) &&
-    !(cell.italic ?? false) &&
-    !(cell.underline ?? false)
-  );
-}
-
-/**
- * Group one row's cells into consecutive same-style runs of HOMOGENEOUS cell
- * width. Width-1 glyphs with matching style merge as before. A wide glyph
- * (leading cell's `width` >= 2) always forms its own single-glyph run whose
- * cell count spans its trailing spacer cells (`char: ''`), regardless of the
- * spacers' styling. Mixed-width runs are deliberately split: `textLength`
- * scaling with `lengthAdjust="spacingAndGlyphs"` distributes advances
- * uniformly, so a fallback font whose wide-glyph advance ratio differs would
- * shift interior glyphs off their columns — within a homogeneous-width run a
- * monospace fallback has equal natural advances and every glyph lands exactly
- * on its column. Zero-style empty cells NOT covered by a preceding wide glyph
- * are gap padding for untouched columns (e.g. ESC[NC): they break the current
- * run so the next glyph anchors at its true column.
+ * Group one row's cells into consecutive same-style TEXT runs of HOMOGENEOUS
+ * cell width. Width-1 glyphs with matching style merge. A wide glyph (leading
+ * cell's `width` >= 2) always forms its own single-glyph run whose cell count
+ * spans its trailing spacer cells (`char: ''`), regardless of the spacers'
+ * styling. Mixed-width runs are deliberately split: `textLength` scaling with
+ * `lengthAdjust="spacingAndGlyphs"` distributes advances uniformly, so a
+ * fallback font whose wide-glyph advance ratio differs would shift interior
+ * glyphs off their columns — within a homogeneous-width run a monospace
+ * fallback has equal natural advances and every glyph lands exactly on its
+ * column. Every OTHER empty cell — zero-style gap padding for untouched
+ * columns (e.g. ESC[NC) and styled empties such as colored field padding —
+ * breaks the current run so the next glyph re-anchors at its true column:
+ * merging an empty cell would stretch the run's glyphs across its column.
+ * Backgrounds are grouped independently (see groupRowIntoBackgroundRuns), so
+ * a styled empty cell still shades its column.
  */
 export function groupRowIntoStyleRuns(
   cells: readonly SnapshotCell[],
@@ -290,7 +276,7 @@ export function groupRowIntoStyleRuns(
       }
       continue;
     }
-    if (isZeroStyleGapCell(cell)) {
+    if (cell.char === '') {
       current = null;
       continue;
     }
@@ -334,10 +320,42 @@ export function groupRowIntoStyleRuns(
   return runs;
 }
 
-function renderRunBackground(run: StyleRun, row: number): string | null {
-  if (run.bg === undefined) {
-    return null;
+interface BackgroundRun {
+  startCol: number;
+  cellCount: number;
+  bg: string;
+}
+
+/**
+ * Group one row's cells into consecutive same-background runs, independent of
+ * text-run grouping: styled empty cells (colored field padding, wide-glyph
+ * spacers) shade their columns even though they never join a text run, and
+ * adjacent cells sharing a background merge into one rect regardless of any
+ * other styling differences.
+ */
+export function groupRowIntoBackgroundRuns(
+  cells: readonly SnapshotCell[],
+): BackgroundRun[] {
+  const runs: BackgroundRun[] = [];
+  let current: BackgroundRun | null = null;
+
+  for (const [col, cell] of cells.entries()) {
+    if (cell.bg === undefined) {
+      current = null;
+      continue;
+    }
+    if (current !== null && current.bg === cell.bg) {
+      current.cellCount += 1;
+      continue;
+    }
+    current = { startCol: col, cellCount: 1, bg: cell.bg };
+    runs.push(current);
   }
+
+  return runs;
+}
+
+function renderRunBackground(run: BackgroundRun, row: number): string {
   const x = formatSvgNumber(run.startCol * SVG_CELL_WIDTH);
   const y = formatSvgNumber(row * SVG_CELL_HEIGHT);
   const width = formatSvgNumber(run.cellCount * SVG_CELL_WIDTH);
@@ -413,11 +431,10 @@ function renderFrameElements(
       cells.length <= frame.cols,
       'frame row cells must fit within frame cols',
     );
+    for (const backgroundRun of groupRowIntoBackgroundRuns(cells)) {
+      backgrounds.push(renderRunBackground(backgroundRun, row));
+    }
     for (const run of groupRowIntoStyleRuns(cells)) {
-      const background = renderRunBackground(run, row);
-      if (background !== null) {
-        backgrounds.push(background);
-      }
       const text = renderRunText(run, row);
       if (text !== null) {
         texts.push(text);

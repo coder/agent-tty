@@ -121,19 +121,51 @@ describe('renderGridFramesToSvg', () => {
       animate: false,
     });
 
-    // The wide glyph's own run covers its spacer: 2 x 8.4 = 16.8; the
+    // Backgrounds group independently of text runs: one continuous rect
+    // covers all three same-bg cells (3 x 8.4 = 25.2).
+    expect(svg).toContain(
+      '<rect x="0" y="0" width="25.2" height="18" fill="#00ff00"/>',
+    );
+    // The wide glyph's own text run covers its spacer: 2 x 8.4 = 16.8; the
     // following width-1 glyph starts a separate run at col 2.
-    expect(svg).toContain(
-      '<rect x="0" y="0" width="16.8" height="18" fill="#00ff00"/>',
-    );
-    expect(svg).toContain(
-      '<rect x="16.8" y="0" width="8.4" height="18" fill="#00ff00"/>',
-    );
     expect(svg).toContain(
       '<text x="0" y="14" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">字</text>',
     );
     expect(svg).toContain(
       '<text x="16.8" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">!</text>',
+    );
+  });
+
+  it('breaks text runs at styled empty cells while shading their columns', () => {
+    // Colored field padding: a bg-styled empty cell between same-style glyphs
+    // must not join the text run (B would drift off column 2), but its
+    // background must still shade the middle column.
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [
+        makeFrame({
+          lines: [
+            [
+              cell('A', { bg: '#0000ff' }),
+              cell('', { bg: '#0000ff' }),
+              cell('B', { bg: '#0000ff' }),
+            ],
+          ],
+        }),
+      ],
+      animate: false,
+    });
+
+    expect(svg).toContain(
+      '<text x="0" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">A</text>',
+    );
+    expect(svg).toContain(
+      '<text x="16.8" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">B</text>',
+    );
+    expect(svg).not.toContain('>AB</text>');
+    // Continuous background coverage across all three cells.
+    expect(svg).toContain(
+      '<rect x="0" y="0" width="25.2" height="18" fill="#0000ff"/>',
     );
   });
 
