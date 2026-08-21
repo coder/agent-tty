@@ -520,6 +520,18 @@ describe('RPC message schemas', () => {
     ).toBe(true);
     expect(
       SnapshotCellSchema.safeParse({
+        char: '漢',
+        width: 2,
+      }).success,
+    ).toBe(true);
+    expect(
+      SnapshotCellSchema.safeParse({
+        char: 'A',
+        width: 1,
+      }).success,
+    ).toBe(false);
+    expect(
+      SnapshotCellSchema.safeParse({
         char: 'A',
         extra: true,
       }).success,
@@ -703,6 +715,21 @@ describe('RPC message schemas', () => {
         sha256: 'abc123',
         capturedAtSeq: 7,
         metadata: {},
+      }).success,
+    ).toBe(true);
+    expect(
+      RecordExportResultSchema.safeParse({
+        sessionId: 'session-01',
+        format: 'svg',
+        artifactPath: '/tmp/session-01/artifacts/recording-7-svg.svg',
+        bytes: 4096,
+        sha256: 'abc123',
+        capturedAtSeq: 7,
+        durationMs: 0,
+        metadata: {
+          animated: false,
+          frameCount: 1,
+        },
       }).success,
     ).toBe(true);
   });

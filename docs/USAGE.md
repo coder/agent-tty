@@ -60,6 +60,7 @@ agent-tty --home <path> snapshot <session-id> --format text --json
 agent-tty --home <path> screenshot <session-id> --json
 agent-tty --home <path> record export <session-id> --format asciicast --json
 agent-tty --home <path> record export <session-id> --format webm --json
+agent-tty --home <path> record export <session-id> --format svg --json
 ```
 
 ## `run`
@@ -198,9 +199,17 @@ agent-tty screenshot <session-id> --profile reference-dark --json
 agent-tty screenshot <session-id> --show-cursor --json
 agent-tty record export <session-id> --format asciicast --out ./session.cast --json
 agent-tty record export <session-id> --format webm --timing accelerated --out ./session.webm --json
+agent-tty record export <session-id> --format svg --json
+agent-tty record export <session-id> --format svg --animate --out ./session.svg --json
 ```
 
 WebM export replays with recorded wall-clock timing by default. Pass `--timing accelerated` (idle gaps clamped to 400ms) or `--timing max-speed` for a time-compressed video.
+
+SVG export renders styled grid frames from the event log through the native `libghostty-vt` backend with no browser and no ffmpeg, so it requires the optional `@coder/libghostty-vt-node` package (there is no `ghostty-web` fallback). The output is deterministic: exporting the same session twice produces byte-identical, diffable SVG. `--format svg` writes a still image of the final screen; add `--animate` for an animated SVG of de-duplicated frames replayed with recorded event-log timing (`--timing` is not supported with SVG).
+
+Animated SVG capture retains every distinct frame's styled grid in memory, so it is bounded by a total-cell budget (20M cells, roughly 10,000 distinct 80x24 frames, adapting to terminal size); recordings that exceed it fail with a clear error suggesting a still SVG or WebM export instead.
+
+SVG exports always embed the pinned JetBrains Mono latin subset and additionally embed the Symbols Nerd Font Mono face when the rendered content needs it. Glyphs outside both faces (notably CJK and most emoji) render via the viewer's monospace fallback, mirroring the reference renderer's own system-font fallback for the same glyphs. Text content and layout metrics stay deterministic even when fallback glyph shapes vary: every text run is pinned to the terminal grid via `textLength`, so columns never shift.
 
 Use `--renderer ghostty-web`, `AGENT_TTY_RENDERER=ghostty-web`, or Home `config.json` `{ "defaultRenderer": "ghostty-web" }` to force legacy all-browser rendering. Use `--renderer libghostty-vt` only when you intentionally want semantic and screenshot requests routed through the native backend; WebM requests still record `ghostty-web` as the actual video producer.
 

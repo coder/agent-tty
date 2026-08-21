@@ -14,6 +14,17 @@ import {
   type WaitResult,
 } from '../helpers.js';
 
+// SVG export requires the optional native libghostty-vt package; skip the
+// svg happy-path cases cleanly when it is unavailable.
+let nativeAvailable = false;
+try {
+  await import('@coder/libghostty-vt-node');
+  nativeAvailable = true;
+} catch {
+  nativeAvailable = false;
+}
+const maybeIt = nativeAvailable ? it : it.skip;
+
 interface ErrorEnvelope {
   ok: false;
   command: string;
@@ -27,7 +38,7 @@ interface ErrorEnvelope {
 
 interface RecordExportResult {
   sessionId: string;
-  format: 'asciicast' | 'webm';
+  format: 'asciicast' | 'webm' | 'svg';
   artifactPath: string;
   bytes: number;
   sha256: string;
@@ -361,6 +372,359 @@ describe('record export integration', { timeout: 120_000 }, () => {
     );
   });
 
+  maybeIt(
+    'exports deterministic svg artifacts with expected visible text',
+    async () => {
+      const sessionId = createSession(testHome, [
+        '/bin/sh',
+        '-c',
+        "printf 'ready svg\\n'; exec cat",
+      ]);
+
+      waitForIdle(testHome, sessionId);
+
+      const exportResult = runCli(
+        ['record', 'export', sessionId, '--format', 'svg', '--json'],
+        { AGENT_TTY_HOME: testHome },
+        30_000,
+      );
+      expect(exportResult.status).toBe(0);
+      expect(exportResult.stderr).toBe('');
+
+      const envelope = JSON.parse(
+        exportResult.stdout,
+      ) as SuccessEnvelope<RecordExportResult>;
+      expect(envelope.ok).toBe(true);
+      expect(envelope.command).toBe('record export');
+      expect(envelope.result.sessionId).toBe(sessionId);
+      expect(envelope.result.format).toBe('svg');
+      expect(envelope.result.artifactPath.endsWith('.svg')).toBe(true);
+      expect(envelope.result.capturedAtSeq).toBeGreaterThanOrEqual(0);
+      expect(envelope.result.durationMs).toBe(0);
+      expect(envelope.result.metadata).toMatchObject({
+        profileName: 'reference-dark',
+        rendererBackend: 'libghostty-vt',
+        animated: false,
+        frameCount: 1,
+      });
+
+      const contents = await readFile(envelope.result.artifactPath, 'utf8');
+      expect(
+        contents.startsWith('<svg xmlns="http://www.w3.org/2000/svg"'),
+      ).toBe(true);
+      expect(contents).toContain('ready svg');
+      expect(envelope.result.bytes).toBe(Buffer.byteLength(contents, 'utf8'));
+      expect(envelope.result.sha256).toBe(
+        createHash('sha256')
+          .update(Buffer.from(contents, 'utf8'))
+          .digest('hex'),
+      );
+
+      // Determinism: repeated exports of the same session are byte-identical.
+      const repeatSha256s: string[] = [];
+      for (const outName of ['repeat-1.svg', 'repeat-2.svg']) {
+        const repeatOut = join(testHome, outName);
+        const repeatResult = runCli(
+          [
+            'record',
+            'export',
+            sessionId,
+            '--format',
+            'svg',
+            '--out',
+            repeatOut,
+            '--json',
+          ],
+          { AGENT_TTY_HOME: testHome },
+          30_000,
+        );
+        expect(repeatResult.status).toBe(0);
+        const repeatContents = await readFile(repeatOut);
+        repeatSha256s.push(
+          createHash('sha256').update(repeatContents).digest('hex'),
+        );
+      }
+      expect(repeatSha256s[0]).toBe(repeatSha256s[1]);
+
+      const artifactManifest = await readJsonFile<{
+        artifacts: Array<{
+          kind: string;
+          filename: string;
+          sha256?: string;
+          bytes?: number;
+          capturedAtSeq: number;
+        }>;
+      }>(join(testHome, 'sessions', sessionId, 'artifacts', 'manifest.json'));
+      const svgEntries = artifactManifest.artifacts.filter((entry) =>
+        entry.filename.endsWith('.svg'),
+      );
+      expect(svgEntries.length).toBeGreaterThanOrEqual(1);
+      expect(svgEntries[0]).toEqual(
+        expect.objectContaining({
+          kind: 'recording',
+          filename: basename(envelope.result.artifactPath),
+          sha256: envelope.result.sha256,
+          bytes: envelope.result.bytes,
+          capturedAtSeq: envelope.result.capturedAtSeq,
+        }),
+      );
+
+      destroySession(testHome, sessionId);
+    },
+  );
+
+  maybeIt(
+    'writes distinct default files for still and animated svg exports',
+    async () => {
+      const sessionId = createSession(testHome, [
+        '/bin/sh',
+        '-c',
+        "printf 'collide check\\n'; sleep 0.3; printf 'second\\n'; exit 0",
+      ]);
+
+      waitForExit(testHome, sessionId);
+
+      const stillResult = runCli(
+        ['record', 'export', sessionId, '--format', 'svg', '--json'],
+        { AGENT_TTY_HOME: testHome },
+        30_000,
+      );
+      expect(stillResult.status).toBe(0);
+      const stillEnvelope = JSON.parse(
+        stillResult.stdout,
+      ) as SuccessEnvelope<RecordExportResult>;
+
+      const animatedResult = runCli(
+        [
+          'record',
+          'export',
+          sessionId,
+          '--format',
+          'svg',
+          '--animate',
+          '--json',
+        ],
+        { AGENT_TTY_HOME: testHome },
+        30_000,
+      );
+      expect(animatedResult.status).toBe(0);
+      const animatedEnvelope = JSON.parse(
+        animatedResult.stdout,
+      ) as SuccessEnvelope<RecordExportResult>;
+
+      // Distinct default filenames: the animated export must not overwrite
+      // the still artifact file.
+      expect(animatedEnvelope.result.artifactPath).not.toBe(
+        stillEnvelope.result.artifactPath,
+      );
+      expect(
+        basename(animatedEnvelope.result.artifactPath).includes('animated'),
+      ).toBe(true);
+
+      const stillContents = await readFile(stillEnvelope.result.artifactPath);
+      const animatedContents = await readFile(
+        animatedEnvelope.result.artifactPath,
+      );
+      expect(createHash('sha256').update(stillContents).digest('hex')).toBe(
+        stillEnvelope.result.sha256,
+      );
+      expect(createHash('sha256').update(animatedContents).digest('hex')).toBe(
+        animatedEnvelope.result.sha256,
+      );
+
+      const artifactManifest = await readJsonFile<{
+        artifacts: Array<{
+          kind: string;
+          filename: string;
+          sha256?: string;
+          bytes?: number;
+          metadata: Record<string, unknown>;
+        }>;
+      }>(join(testHome, 'sessions', sessionId, 'artifacts', 'manifest.json'));
+      const svgEntries = artifactManifest.artifacts.filter((entry) =>
+        entry.filename.endsWith('.svg'),
+      );
+      expect(svgEntries).toHaveLength(2);
+
+      const stillEntry = svgEntries.find(
+        (entry) =>
+          entry.filename === basename(stillEnvelope.result.artifactPath),
+      );
+      const animatedEntry = svgEntries.find(
+        (entry) =>
+          entry.filename === basename(animatedEnvelope.result.artifactPath),
+      );
+      expect(stillEntry).toMatchObject({
+        sha256: stillEnvelope.result.sha256,
+        bytes: stillEnvelope.result.bytes,
+        metadata: expect.objectContaining({ animated: false }) as unknown,
+      });
+      expect(animatedEntry).toMatchObject({
+        sha256: animatedEnvelope.result.sha256,
+        bytes: animatedEnvelope.result.bytes,
+        metadata: expect.objectContaining({ animated: true }) as unknown,
+      });
+    },
+  );
+
+  maybeIt(
+    'writes distinct default files per render profile for svg exports',
+    async () => {
+      const sessionId = createSession(testHome, [
+        '/bin/sh',
+        '-c',
+        "printf 'profile collide check\\n'; exit 0",
+      ]);
+
+      waitForExit(testHome, sessionId);
+
+      const envelopes: Array<SuccessEnvelope<RecordExportResult>> = [];
+      for (const profile of ['reference-dark', 'reference-light']) {
+        const result = runCli(
+          [
+            'record',
+            'export',
+            sessionId,
+            '--format',
+            'svg',
+            '--profile',
+            profile,
+            '--json',
+          ],
+          { AGENT_TTY_HOME: testHome },
+          30_000,
+        );
+        expect(result.status).toBe(0);
+        envelopes.push(
+          JSON.parse(result.stdout) as SuccessEnvelope<RecordExportResult>,
+        );
+      }
+      const [darkEnvelope, lightEnvelope] = envelopes;
+      expect(darkEnvelope).toBeDefined();
+      expect(lightEnvelope).toBeDefined();
+
+      // Distinct default filenames per profile: neither overwrites the other.
+      expect(lightEnvelope?.result.artifactPath).not.toBe(
+        darkEnvelope?.result.artifactPath,
+      );
+      expect(
+        basename(darkEnvelope?.result.artifactPath ?? '').includes(
+          'reference-dark',
+        ),
+      ).toBe(true);
+      expect(
+        basename(lightEnvelope?.result.artifactPath ?? '').includes(
+          'reference-light',
+        ),
+      ).toBe(true);
+
+      const artifactManifest = await readJsonFile<{
+        artifacts: Array<{
+          filename: string;
+          sha256?: string;
+          bytes?: number;
+          metadata: Record<string, unknown>;
+        }>;
+      }>(join(testHome, 'sessions', sessionId, 'artifacts', 'manifest.json'));
+      const entriesByFilename = new Map(
+        artifactManifest.artifacts.map((entry) => [entry.filename, entry]),
+      );
+
+      const hashes: unknown[] = [];
+      for (const envelope of envelopes) {
+        const artifactFilePath = envelope.result.artifactPath;
+        const contents = await readFile(artifactFilePath);
+        expect(createHash('sha256').update(contents).digest('hex')).toBe(
+          envelope.result.sha256,
+        );
+        const entry = entriesByFilename.get(basename(artifactFilePath));
+        expect(entry).toMatchObject({
+          sha256: envelope.result.sha256,
+          bytes: envelope.result.bytes,
+          metadata: expect.objectContaining({
+            profileName: envelope.result.metadata.profileName,
+            renderProfileHash: envelope.result.metadata.renderProfileHash,
+          }) as unknown,
+        });
+        hashes.push(envelope.result.metadata.renderProfileHash);
+      }
+      // Different profiles produce different render profile hashes.
+      expect(hashes[0]).toBeTruthy();
+      expect(hashes[0]).not.toBe(hashes[1]);
+    },
+  );
+
+  maybeIt('exports animated svg with recorded timing', async () => {
+    const sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      "printf 'first\\n'; sleep 0.3; printf 'second\\n'; exit 0",
+    ]);
+
+    waitForExit(testHome, sessionId);
+
+    const exportResult = runCli(
+      ['record', 'export', sessionId, '--format', 'svg', '--animate', '--json'],
+      { AGENT_TTY_HOME: testHome },
+      30_000,
+    );
+    expect(exportResult.status).toBe(0);
+    expect(exportResult.stderr).toBe('');
+
+    const envelope = JSON.parse(
+      exportResult.stdout,
+    ) as SuccessEnvelope<RecordExportResult>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.format).toBe('svg');
+    expect(envelope.result.metadata.animated).toBe(true);
+    expect(
+      envelope.result.metadata.frameCount as number,
+    ).toBeGreaterThanOrEqual(2);
+    expect(envelope.result.durationMs ?? 0).toBeGreaterThan(0);
+
+    const contents = await readFile(envelope.result.artifactPath, 'utf8');
+    expect(contents).toContain('<animate attributeName="visibility"');
+    expect(contents).toContain('second');
+  });
+
+  it('exports blank svg for a running-but-silent session', async () => {
+    // /bin/sleep produces no output, so the event log stays empty. The blank
+    // initial grid is synthesized from the manifest without booting a
+    // renderer backend, so this needs no native gating.
+    const sessionId = createSession(testHome, ['/bin/sleep', '60']);
+
+    const exportResult = runCli(
+      ['record', 'export', sessionId, '--format', 'svg', '--json'],
+      { AGENT_TTY_HOME: testHome },
+      30_000,
+    );
+    expect(exportResult.status).toBe(0);
+    expect(exportResult.stderr).toBe('');
+
+    const envelope = JSON.parse(
+      exportResult.stdout,
+    ) as SuccessEnvelope<RecordExportResult>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.format).toBe('svg');
+    expect(envelope.result.capturedAtSeq).toBe(0);
+    expect(envelope.result.metadata).toMatchObject({
+      frameCount: 1,
+      animated: false,
+      outputEventCount: 0,
+      resizeEventCount: 0,
+    });
+
+    const contents = await readFile(envelope.result.artifactPath, 'utf8');
+    expect(contents.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(
+      true,
+    );
+    expect(contents).toContain(
+      '<rect width="100%" height="100%" fill="#1e1e2e"/>',
+    );
+
+    destroySession(testHome, sessionId);
+  });
+
   it('rejects invalid export formats', () => {
     const result = runCli(
       ['record', 'export', 'session-01', '--format', 'bogus', '--json'],
@@ -374,5 +738,54 @@ describe('record export integration', { timeout: 120_000 }, () => {
     expect(envelope.ok).toBe(false);
     expect(envelope.command).toBe('record export');
     expect(envelope.error.code).toBe('INVALID_INPUT');
+  });
+
+  it('rejects --animate with non-svg formats', () => {
+    const result = runCli(
+      [
+        'record',
+        'export',
+        'session-01',
+        '--format',
+        'asciicast',
+        '--animate',
+        '--json',
+      ],
+      { AGENT_TTY_HOME: testHome },
+      15_000,
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toBe('');
+    const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe('record export');
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.message).toContain('--animate');
+  });
+
+  it('rejects --timing with svg exports', () => {
+    const result = runCli(
+      [
+        'record',
+        'export',
+        'session-01',
+        '--format',
+        'svg',
+        '--timing',
+        'recorded',
+        '--json',
+      ],
+      { AGENT_TTY_HOME: testHome },
+      15_000,
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toBe('');
+    const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe('record export');
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.message).toContain('--timing');
   });
 });
