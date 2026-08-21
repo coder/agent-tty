@@ -846,6 +846,25 @@ describe('RPC message schemas', () => {
     ).toBe(false);
   });
 
+  it('bounds record diff side dimensions', () => {
+    const side = {
+      sessionId: 'session-01',
+      capturedAtSeq: -1,
+      cols: 80,
+      rows: 100_001,
+      screenHash: 'a'.repeat(64),
+    };
+    // Oversized rows fail schema validation before any blank-screen hashing.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: side,
+        b: side,
+        diff: [],
+      }).success,
+    ).toBe(false);
+  });
+
   it('requires pre-event record diff sides to hash to a blank screen', () => {
     const blank = {
       sessionId: 'session-01',

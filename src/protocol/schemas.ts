@@ -501,14 +501,20 @@ export const RecordDiffLineSchema = z.discriminatedUnion('op', [
 ]);
 export type RecordDiffLine = z.infer<typeof RecordDiffLineSchema>;
 
+// Generous ceiling on diffable screen dimensions; real terminals are far
+// below it. Bounding rows keeps validation-time work (e.g. hashing the
+// blank pre-event screen) proportional to a schema-checked limit instead of
+// attacker-controlled input.
+const MAX_RECORD_DIFF_DIMENSION = 100_000;
+
 export const RecordDiffSideSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
     // -1 mirrors ReplayInput.targetSeq for an empty event log: the side is
     // the pre-event blank screen and no event sequence was replayed.
     capturedAtSeq: z.number().int().gte(-1),
-    cols: PositiveIntSchema,
-    rows: PositiveIntSchema,
+    cols: PositiveIntSchema.lte(MAX_RECORD_DIFF_DIMENSION),
+    rows: PositiveIntSchema.lte(MAX_RECORD_DIFF_DIMENSION),
     screenHash: Sha256HexSchema,
   })
   .strict();
