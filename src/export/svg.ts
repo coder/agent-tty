@@ -111,9 +111,31 @@ function styleMatches(run: StyleRun, cell: SnapshotCell): boolean {
 }
 
 /**
+ * Untouched grid columns (e.g. after an ESC[NC cursor-forward) surface as
+ * empty cells carrying no style at all. They render nothing and must never
+ * merge into a text run: merging would re-anchor the run at the gap's first
+ * column and stretch the following glyphs across the gap via `textLength`.
+ */
+function isZeroStyleGapCell(cell: SnapshotCell): boolean {
+  return (
+    cell.char === '' &&
+    cell.fg === undefined &&
+    cell.bg === undefined &&
+    !(cell.bold ?? false) &&
+    !(cell.italic ?? false) &&
+    !(cell.underline ?? false)
+  );
+}
+
+/**
  * Group one row's cells into consecutive same-style runs. Wide-glyph spacer
- * cells (`char: ''`) extend the covered cell count without adding text, so a
- * run's `textLength` still spans every column the glyphs occupy.
+ * cells (`char: ''` carrying the glyph's style) extend the covered cell count
+ * without adding text, so a run's `textLength` still spans every column the
+ * glyphs occupy. Zero-style empty cells are gap padding for untouched
+ * columns: they break the current run so the next glyph anchors at its true
+ * column. A completely unstyled wide glyph's trailing spacer is
+ * indistinguishable from gap padding and is treated as a break too — the
+ * glyph then spans a single cell, but every subsequent column stays correct.
  */
 export function groupRowIntoStyleRuns(
   cells: readonly SnapshotCell[],
@@ -122,6 +144,10 @@ export function groupRowIntoStyleRuns(
   let current: StyleRun | null = null;
 
   for (const [col, cell] of cells.entries()) {
+    if (isZeroStyleGapCell(cell)) {
+      current = null;
+      continue;
+    }
     if (current !== null && styleMatches(current, cell)) {
       current.cellCount += 1;
       current.text += cell.char;
@@ -139,6 +165,19 @@ export function groupRowIntoStyleRuns(
     };
     runs.push(current);
   }
+
+  let previousEndCol = 0;
+  for (const run of runs) {
+    invariant(
+      run.startCol >= previousEndCol,
+      'style runs must cover strictly advancing, non-overlapping columns',
+    );
+    previousEndCol = run.startCol + run.cellCount;
+  }
+  invariant(
+    previousEndCol <= cells.length,
+    'style runs must not extend past the row cells',
+  );
 
   return runs;
 }

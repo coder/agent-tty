@@ -16,8 +16,20 @@ import type {
   SessionRecord,
 } from '../../../src/protocol/schemas.js';
 
+import { renderGridFramesToSvg } from '../../../src/export/svg.js';
 import { captureGridFrames } from '../../../src/replay/gridFrames.js';
 import { resolveProfile } from '../../../src/renderer/profiles.js';
+
+// The cursor-forward column test replays through the real libghostty-vt
+// backend; skip it cleanly when the optional native package is unavailable.
+let nativeAvailable = false;
+try {
+  await import('@coder/libghostty-vt-node');
+  nativeAvailable = true;
+} catch {
+  nativeAvailable = false;
+}
+const maybeIt = nativeAvailable ? it : it.skip;
 
 const SESSION_ID = 'session-01';
 const PROFILE = resolveProfile('reference-dark');
@@ -219,6 +231,40 @@ describe('captureGridFrames', () => {
     expect(capture.capturedAtSeq).toBe(4);
     expect(backend.disposed).toBe(true);
   });
+
+  maybeIt(
+    'renders cursor-forward gaps at their true columns through the native backend',
+    async () => {
+      // ESC[10C moves the cursor forward over 10 untouched columns; the 'X'
+      // must land at col 10 (x = 10 * 8.4 = 84) with a single-cell textLength.
+      const events: EventRecord[] = [
+        {
+          seq: 0,
+          ts: isoAt(0),
+          type: 'output',
+          payload: { data: '\u001b[10CX' },
+        },
+      ];
+
+      const capture = await captureGridFrames({
+        sessionId: SESSION_ID,
+        manifest: createSessionRecord(),
+        events,
+        profile: PROFILE,
+        mode: 'final',
+      });
+      const svg = renderGridFramesToSvg({
+        profile: PROFILE,
+        frames: capture.frames,
+        animate: false,
+      });
+
+      expect(capture.rendererBackend).toBe('libghostty-vt');
+      expect(svg).toMatch(
+        /<text x="84" y="14" textLength="8\.4"[^>]*>X<\/text>/u,
+      );
+    },
+  );
 
   it('fails with a clear export error when the native backend cannot boot', async () => {
     const backend = new FakeGridBackend(createGrids());

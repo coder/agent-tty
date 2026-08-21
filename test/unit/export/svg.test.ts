@@ -125,6 +125,47 @@ describe('renderGridFramesToSvg', () => {
     expect(svg).toContain('textLength="25.2"');
   });
 
+  it('preserves columns across zero-style gap padding cells', () => {
+    // Cursor-forward gaps (e.g. ESC[10C) surface as unstyled empty cells; the
+    // glyph after the gap must render at its true column, not stretched from
+    // the gap's first column.
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [
+        makeFrame({
+          cols: 16,
+          lines: [[...Array.from({ length: 10 }, () => cell('')), cell('X')]],
+        }),
+      ],
+      animate: false,
+    });
+
+    // Col 10 x 8.4 = 84; a single cell spans 8.4.
+    expect(svg).toContain(
+      '<text x="84" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">X</text>',
+    );
+  });
+
+  it('breaks runs at interior gaps between same-style glyphs', () => {
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [
+        makeFrame({
+          lines: [[cell('A'), cell(''), cell(''), cell('B')]],
+        }),
+      ],
+      animate: false,
+    });
+
+    expect(svg).toContain(
+      '<text x="0" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">A</text>',
+    );
+    // Col 3 x 8.4 = 25.2.
+    expect(svg).toContain(
+      '<text x="25.2" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">B</text>',
+    );
+  });
+
   it('escapes XML special characters and strips control characters', () => {
     const svg = renderGridFramesToSvg({
       profile: PROFILE,
