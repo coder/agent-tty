@@ -541,6 +541,16 @@ export const RecordDiffResultSchema = z
       });
     }
 
+    // Equal screen hashes imply equal canonical line sequences, which have
+    // one line per padded visible row.
+    if (value.identical && value.a.rows !== value.b.rows) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'identical results must have equal side row counts.',
+        path: ['b', 'rows'],
+      });
+    }
+
     if (!value.identical && !value.diff.some((entry) => entry.op !== 'equal')) {
       ctx.addIssue({
         code: 'custom',

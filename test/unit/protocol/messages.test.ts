@@ -929,6 +929,16 @@ describe('RPC message schemas', () => {
         diff: [{ op: 'equal', text: 'x', aRow: 0, bRow: 0 }],
       }).success,
     ).toBe(false);
+    // identical: true with mismatched row counts (equal hashes imply equal
+    // canonical line counts).
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: side,
+        b: { ...side, rows: 2 },
+        diff: [],
+      }).success,
+    ).toBe(false);
   });
 
   it('accepts valid record export results', () => {
