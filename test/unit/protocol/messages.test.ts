@@ -655,7 +655,7 @@ describe('RPC message schemas', () => {
     ).toBe(true);
     expect(
       WaitForRenderParamsSchema.safeParse({
-        regex: 'READY> $',
+        regex: 'READY>$',
         scope: 'cursor-line',
       }).success,
     ).toBe(true);

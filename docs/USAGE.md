@@ -90,7 +90,7 @@ Use `wait` to synchronize on terminal state:
 ```bash
 agent-tty wait <session-id> --text 'ready' --json
 agent-tty wait <session-id> --regex 'READY|DONE' --json
-agent-tty wait <session-id> --regex 'READY> $' --scope cursor-line --json
+agent-tty wait <session-id> --regex 'READY>$' --scope cursor-line --json
 agent-tty wait <session-id> --screen-stable-ms 1000 --json
 agent-tty wait <session-id> --idle-ms 500 --json
 agent-tty wait <session-id> --exit --json
@@ -113,8 +113,10 @@ On timeout, a standalone `wait` exits `11` (`WAIT_TIMEOUT`) while preserving a s
 A whole-screen `wait` can be satisfied by the terminal's **echo of a just-typed command**: `run <sid> 'echo Done'` followed by `wait --text Done` matches the echoed command line itself, not the command's output. Use `--scope cursor-line` to restrict `--text`/`--regex` matching to the row the cursor is currently on. Once Enter is pressed the cursor moves past the echoed line, so a cursor-line wait cannot match the echo. It is ideal for waiting on prompts, which render exactly at the cursor:
 
 ```bash
-agent-tty wait <session-id> --regex 'READY> $' --scope cursor-line --json
+agent-tty wait <session-id> --regex 'READY>$' --scope cursor-line --json
 ```
+
+Rendered lines are right-trimmed of trailing ASCII spaces, so anchor prompt regexes without the trailing space: a prompt displayed as `READY> ` matches `READY>$`, not `READY> $`.
 
 For waiting on output text that scrolls past the cursor, prefer a distinctive output token or combine `--text` with `--screen-stable-ms`.
 

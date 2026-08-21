@@ -122,6 +122,28 @@ describe('render wait matcher', () => {
     });
   });
 
+  it('matches an end-anchored prompt regex against the right-trimmed cursor row', () => {
+    // Backends right-trim trailing ASCII spaces from visibleLines[].text, so a
+    // prompt displayed as 'READY> ' must be anchored without the space.
+    const condition = prepareRenderWaitCondition({
+      regex: 'READY>$',
+      scope: 'cursor-line',
+    });
+    const snapshot = createTestSemanticSnapshot({
+      visibleLines: [
+        { row: 0, text: 'booting' },
+        { row: 1, text: 'READY>' },
+      ],
+      cursorRow: 1,
+      cursorCol: 7,
+    });
+
+    expect(matchRenderWaitSnapshot(condition, snapshot)).toMatchObject({
+      matched: true,
+      matchedText: 'READY>',
+    });
+  });
+
   it('does not match echoed command text above the cursor with cursor-line scope', () => {
     // Echo-match scenario: the just-typed command is visible on row 0, but the
     // cursor has already moved to row 1. A whole-screen wait would match the
