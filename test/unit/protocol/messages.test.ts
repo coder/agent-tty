@@ -717,6 +717,7 @@ describe('RPC message schemas', () => {
       rows: 24,
       screenHash: 'a'.repeat(64),
     };
+    const otherSide = { ...side, screenHash: 'b'.repeat(64) };
     expect(
       RecordDiffResultSchema.safeParse({
         identical: true,
@@ -729,7 +730,7 @@ describe('RPC message schemas', () => {
       RecordDiffResultSchema.safeParse({
         identical: false,
         a: side,
-        b: side,
+        b: otherSide,
         diff: [{ op: 'replace', text: 'x' }],
       }).success,
     ).toBe(false);
@@ -737,7 +738,94 @@ describe('RPC message schemas', () => {
       RecordDiffResultSchema.safeParse({
         identical: false,
         a: side,
+        b: otherSide,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('requires per-op row fields on record diff entries', () => {
+    const side = {
+      sessionId: 'session-01',
+      capturedAtSeq: 7,
+      cols: 80,
+      rows: 24,
+      screenHash: 'a'.repeat(64),
+    };
+    const base = {
+      identical: false,
+      a: side,
+      b: { ...side, screenHash: 'b'.repeat(64) },
+    };
+    // equal entries require both rows; delete only aRow; add only bRow.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        ...base,
+        diff: [
+          { op: 'equal', text: 'x' },
+          { op: 'delete', text: 'old', aRow: 1 },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordDiffResultSchema.safeParse({
+        ...base,
+        diff: [{ op: 'delete', text: 'old', aRow: 1, bRow: 0 }],
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordDiffResultSchema.safeParse({
+        ...base,
+        diff: [{ op: 'add', text: 'new', aRow: 0, bRow: 1 }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects record diff results with contradictory identity invariants', () => {
+    const side = {
+      sessionId: 'session-01',
+      capturedAtSeq: 7,
+      cols: 80,
+      rows: 24,
+      screenHash: 'a'.repeat(64),
+    };
+    const otherSide = { ...side, screenHash: 'b'.repeat(64) };
+    // identical: true with differing hashes.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: side,
+        b: otherSide,
+        diff: [],
+      }).success,
+    ).toBe(false);
+    // identical: true with a non-empty diff.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: side,
         b: side,
+        diff: [{ op: 'equal', text: 'x', aRow: 0, bRow: 0 }],
+      }).success,
+    ).toBe(false);
+    // identical: false with equal hashes.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: false,
+        a: side,
+        b: side,
+        diff: [
+          { op: 'delete', text: 'old', aRow: 0 },
+          { op: 'add', text: 'new', bRow: 0 },
+        ],
+      }).success,
+    ).toBe(false);
+    // identical: false without any delete/add entry.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: false,
+        a: side,
+        b: otherSide,
+        diff: [{ op: 'equal', text: 'x', aRow: 0, bRow: 0 }],
       }).success,
     ).toBe(false);
   });

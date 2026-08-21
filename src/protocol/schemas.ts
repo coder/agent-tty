@@ -474,14 +474,30 @@ export const RecordExportResultSchema = z
   .strict();
 export type RecordExportResult = z.infer<typeof RecordExportResultSchema>;
 
-export const RecordDiffLineSchema = z
-  .object({
-    op: z.enum(['equal', 'delete', 'add']),
-    text: z.string(),
-    aRow: NonNegativeIntSchema.optional(),
-    bRow: NonNegativeIntSchema.optional(),
-  })
-  .strict();
+export const RecordDiffLineSchema = z.discriminatedUnion('op', [
+  z
+    .object({
+      op: z.literal('equal'),
+      text: z.string(),
+      aRow: NonNegativeIntSchema,
+      bRow: NonNegativeIntSchema,
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal('delete'),
+      text: z.string(),
+      aRow: NonNegativeIntSchema,
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal('add'),
+      text: z.string(),
+      bRow: NonNegativeIntSchema,
+    })
+    .strict(),
+]);
 export type RecordDiffLine = z.infer<typeof RecordDiffLineSchema>;
 
 export const RecordDiffSideSchema = z
@@ -502,7 +518,35 @@ export const RecordDiffResultSchema = z
     b: RecordDiffSideSchema,
     diff: z.array(RecordDiffLineSchema),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    const hashesEqual = value.a.screenHash === value.b.screenHash;
+    if (value.identical !== hashesEqual) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'identical must be true exactly when both screen hashes are equal.',
+        path: ['identical'],
+      });
+    }
+
+    if (value.identical && value.diff.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'identical results must carry an empty diff.',
+        path: ['diff'],
+      });
+    }
+
+    if (!value.identical && !value.diff.some((entry) => entry.op !== 'equal')) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'non-identical results must carry at least one delete or add entry.',
+        path: ['diff'],
+      });
+    }
+  });
 export type RecordDiffResult = z.infer<typeof RecordDiffResultSchema>;
 
 export type WaitForRenderResult = z.infer<typeof WaitForRenderResultSchema>;
