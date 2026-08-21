@@ -846,6 +846,34 @@ describe('RPC message schemas', () => {
     ).toBe(false);
   });
 
+  it('requires pre-event record diff sides to hash to a blank screen', () => {
+    const blank = {
+      sessionId: 'session-01',
+      capturedAtSeq: -1,
+      cols: 80,
+      rows: 3,
+      screenHash: sha256Hex('\n\n'),
+    };
+    // A pre-event side with the correct blank hash parses.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: blank,
+        b: { ...blank, sessionId: 'session-02' },
+        diff: [],
+      }).success,
+    ).toBe(true);
+    // A pre-event side whose hash is not the blank-screen hash is rejected.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: { ...blank, screenHash: sha256Hex('not blank\n\n') },
+        b: { ...blank, screenHash: sha256Hex('not blank\n\n') },
+        diff: [],
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects record diff results whose hashes contradict the diff text', () => {
     const side = {
       sessionId: 'session-01',

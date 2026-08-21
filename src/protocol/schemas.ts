@@ -551,6 +551,23 @@ export const RecordDiffResultSchema = z
       });
     }
 
+    // capturedAtSeq -1 marks the pre-event blank screen, so such a side must
+    // hash to `rows` empty canonical lines.
+    for (const sideKey of ['a', 'b'] as const) {
+      const side = value[sideKey];
+      if (
+        side.capturedAtSeq === -1 &&
+        side.screenHash !== sha256Hex('\n'.repeat(side.rows - 1))
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'a pre-event side (capturedAtSeq -1) must hash to a blank screen.',
+          path: [sideKey, 'screenHash'],
+        });
+      }
+    }
+
     if (!value.identical && !value.diff.some((entry) => entry.op !== 'equal')) {
       ctx.addIssue({
         code: 'custom',
