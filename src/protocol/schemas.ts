@@ -548,6 +548,25 @@ export const RecordDiffResultSchema = z
         path: ['diff'],
       });
     }
+
+    // Diff rows index the padded visible screens, so they are bounded by
+    // each side's row count.
+    for (const [index, entry] of value.diff.entries()) {
+      if (entry.op !== 'add' && entry.aRow >= value.a.rows) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'aRow must be less than side a rows.',
+          path: ['diff', index, 'aRow'],
+        });
+      }
+      if (entry.op !== 'delete' && entry.bRow >= value.b.rows) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'bRow must be less than side b rows.',
+          path: ['diff', index, 'bRow'],
+        });
+      }
+    }
   });
 export type RecordDiffResult = z.infer<typeof RecordDiffResultSchema>;
 
