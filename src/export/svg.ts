@@ -317,10 +317,15 @@ function styleMatches(run: StyleRun, cell: SnapshotCell): boolean {
  * fallback font whose wide-glyph advance ratio differs would shift interior
  * glyphs off their columns — within a homogeneous-width run a monospace
  * fallback has equal natural advances and every glyph lands exactly on its
- * column. Runs also split at FONT-FACE boundaries (latin subset vs the
- * symbols/fallback path, see classifyGlyphFace): the two faces have
- * different natural advances, so a mixed-face run would drift interior
- * glyphs exactly like a mixed-width one. Every OTHER empty cell — zero-style
+ * column. Runs also split at FONT-FACE boundaries (see classifyGlyphFace):
+ * different faces have different natural advances, so a mixed-face run would
+ * drift interior glyphs exactly like a mixed-width one. Guarantee: every run
+ * is homogeneous in (style, width, face), and system-fallback glyphs are
+ * ALWAYS singleton runs — their face identity is viewer-dependent (adjacent
+ * scripts can resolve to different system fonts), so each one is pinned
+ * individually via its own x + textLength. Latin and symbols runs keep
+ * merging because each is a single known monospace face with uniform
+ * advances. Every OTHER empty cell — zero-style
  * gap padding for untouched columns (e.g. ESC[NC) and styled empties such as
  * colored field padding — breaks the current run so the next glyph
  * re-anchors at its true column: merging an empty cell would stretch the
@@ -365,6 +370,7 @@ export function groupRowIntoStyleRuns(
     const face = classifyGlyphFace(cell.char);
     if (
       width === 1 &&
+      face !== 'system' &&
       current !== null &&
       current.face === face &&
       styleMatches(current, cell)
@@ -386,6 +392,12 @@ export function groupRowIntoStyleRuns(
       runs.push(current);
     }
     pendingSpacers = width - 1;
+    if (face === 'system' && pendingSpacers === 0) {
+      // System-fallback glyphs are singleton runs: close immediately so the
+      // next glyph starts fresh (wide system glyphs are closed by the spacer
+      // branch once their trailing columns are consumed).
+      current = null;
+    }
   }
 
   let previousEndCol = 0;

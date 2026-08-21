@@ -179,7 +179,11 @@ describe('renderGridFramesToSvg', () => {
     expect(svg).not.toContain('>\u03b1\u26a1</text>');
   });
 
-  it('merges consecutive system-fallback glyphs into one run', () => {
+  it('positions system-fallback glyphs individually', () => {
+    // Adjacent system-fallback glyphs can resolve to DIFFERENT system fonts
+    // per script (e.g. Greek vs Hebrew), so even a same-bucket merged run
+    // would scale unequal natural advances together. Each system glyph is a
+    // singleton run pinned via its own x + textLength.
     const svg = renderGridFramesToSvg({
       profile: PROFILE,
       frames: [makeFrame({ lines: [[cell('\u03b1'), cell('\u03b2')]] })],
@@ -187,8 +191,12 @@ describe('renderGridFramesToSvg', () => {
     });
 
     expect(svg).toContain(
-      '<text x="0" y="14" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">\u03b1\u03b2</text>',
+      '<text x="0" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">\u03b1</text>',
     );
+    expect(svg).toContain(
+      '<text x="8.4" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">\u03b2</text>',
+    );
+    expect(svg).not.toContain('>\u03b1\u03b2</text>');
   });
 
   it('merges consecutive same-face symbol glyphs into one run', () => {
