@@ -5,6 +5,7 @@ import {
   MAX_WAIT_FOR_RENDER_TEXT_LENGTH,
 } from '../renderWait/limits.js';
 import { RendererNameSchema } from '../renderer/names.js';
+import { sha256Hex } from '../util/hash.js';
 
 const NonEmptyStringSchema = z.string().min(1);
 const TextMatchSchema = z.string().min(1).max(MAX_WAIT_FOR_RENDER_TEXT_LENGTH);
@@ -485,6 +486,181 @@ export const RecordExportResultSchema = z
   })
   .strict();
 export type RecordExportResult = z.infer<typeof RecordExportResultSchema>;
+
+export const RecordDiffLineSchema = z.discriminatedUnion('op', [
+  z
+    .object({
+      op: z.literal('equal'),
+      text: z.string(),
+      aRow: NonNegativeIntSchema,
+      bRow: NonNegativeIntSchema,
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal('delete'),
+      text: z.string(),
+      aRow: NonNegativeIntSchema,
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal('add'),
+      text: z.string(),
+      bRow: NonNegativeIntSchema,
+    })
+    .strict(),
+]);
+export type RecordDiffLine = z.infer<typeof RecordDiffLineSchema>;
+
+// Work bound for validation-time blank-screen hashing only. Dimensions are
+// deliberately NOT capped (the session contract accepts any positive size);
+// above this row count the pre-event blank-hash equality check is skipped so
+// safeParse never performs unbounded work on attacker-controlled input.
+const MAX_BLANK_HASH_ROWS = 100_000;
+
+export const RecordDiffSideSchema = z
+  .object({
+    sessionId: NonEmptyStringSchema,
+    // -1 mirrors ReplayInput.targetSeq for an empty event log: the side is
+    // the pre-event blank screen and no event sequence was replayed.
+    capturedAtSeq: z.number().int().gte(-1),
+    cols: PositiveIntSchema,
+    rows: PositiveIntSchema,
+    screenHash: Sha256HexSchema,
+  })
+  .strict();
+export type RecordDiffSide = z.infer<typeof RecordDiffSideSchema>;
+
+export const RecordDiffResultSchema = z
+  .object({
+    identical: z.boolean(),
+    a: RecordDiffSideSchema,
+    b: RecordDiffSideSchema,
+    diff: z.array(RecordDiffLineSchema),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const hashesEqual = value.a.screenHash === value.b.screenHash;
+    if (value.identical !== hashesEqual) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'identical must be true exactly when both screen hashes are equal.',
+        path: ['identical'],
+      });
+    }
+
+    if (value.identical && value.diff.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'identical results must carry an empty diff.',
+        path: ['diff'],
+      });
+    }
+
+    // Equal screen hashes imply equal canonical line sequences, which have
+    // one line per padded visible row.
+    if (value.identical && value.a.rows !== value.b.rows) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'identical results must have equal side row counts.',
+        path: ['b', 'rows'],
+      });
+    }
+
+    // capturedAtSeq -1 marks the pre-event blank screen, so such a side must
+    // hash to `rows` empty canonical lines. Skipped above the work bound so
+    // validation cost stays bounded for arbitrarily large (but contract-
+    // valid) dimensions.
+    for (const sideKey of ['a', 'b'] as const) {
+      const side = value[sideKey];
+      if (
+        side.capturedAtSeq === -1 &&
+        side.rows <= MAX_BLANK_HASH_ROWS &&
+        side.screenHash !== sha256Hex('\n'.repeat(side.rows - 1))
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'a pre-event side (capturedAtSeq -1) must hash to a blank screen.',
+          path: [sideKey, 'screenHash'],
+        });
+      }
+    }
+
+    if (!value.identical && !value.diff.some((entry) => entry.op !== 'equal')) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'non-identical results must carry at least one delete or add entry.',
+        path: ['diff'],
+      });
+    }
+
+    // The diff is a complete traversal of both padded visible screens:
+    // participating A coordinates (equal/delete) and B coordinates
+    // (equal/add) must each enumerate 0..rows-1 exactly once, in order, so
+    // consumers can reconstruct either side by filtering operations.
+    if (!value.identical) {
+      const aLines: string[] = [];
+      const bLines: string[] = [];
+      for (const [index, entry] of value.diff.entries()) {
+        if (entry.op !== 'add') {
+          if (entry.aRow !== aLines.length) {
+            ctx.addIssue({
+              code: 'custom',
+              message: `aRow must enumerate side a rows in order (expected ${String(aLines.length)}).`,
+              path: ['diff', index, 'aRow'],
+            });
+            return;
+          }
+          aLines.push(entry.text);
+        }
+        if (entry.op !== 'delete') {
+          if (entry.bRow !== bLines.length) {
+            ctx.addIssue({
+              code: 'custom',
+              message: `bRow must enumerate side b rows in order (expected ${String(bLines.length)}).`,
+              path: ['diff', index, 'bRow'],
+            });
+            return;
+          }
+          bLines.push(entry.text);
+        }
+      }
+      if (aLines.length !== value.a.rows || bLines.length !== value.b.rows) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'diff must cover every row of both sides exactly once (0..rows-1).',
+          path: ['diff'],
+        });
+        return;
+      }
+
+      // The reconstructed sides must hash to the declared screen hashes, so
+      // the diff, the hashes, and `identical` can never contradict each
+      // other after successful validation.
+      if (sha256Hex(aLines.join('\n')) !== value.a.screenHash) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'side a screenHash must match the screen reconstructed from the diff.',
+          path: ['a', 'screenHash'],
+        });
+      }
+      if (sha256Hex(bLines.join('\n')) !== value.b.screenHash) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'side b screenHash must match the screen reconstructed from the diff.',
+          path: ['b', 'screenHash'],
+        });
+      }
+    }
+  });
+export type RecordDiffResult = z.infer<typeof RecordDiffResultSchema>;
 
 export type WaitForRenderResult = z.infer<typeof WaitForRenderResultSchema>;
 

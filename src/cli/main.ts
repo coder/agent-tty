@@ -19,6 +19,7 @@ import { runListCommand } from './commands/list.js';
 import { runMarkCommand } from './commands/mark.js';
 import { runPasteCommand } from './commands/paste.js';
 import { runRunCommand } from './commands/run.js';
+import { runRecordDiffCommand } from './commands/record-diff.js';
 import { runRecordExportCommand } from './commands/record-export.js';
 import { runResizeCommand } from './commands/resize.js';
 import { runScreenshotCommand } from './commands/screenshot.js';
@@ -57,6 +58,18 @@ function parseIntegerOption(value: string): number {
 
 function parseNumberOption(value: string): number {
   return Number(value);
+}
+
+// Strict integer-token parser: empty, whitespace-only, fractional, partially
+// numeric (e.g. "", "1.5", "2junk"), or unsafe-magnitude tokens yield NaN so
+// command validation rejects them instead of silently truncating or rounding.
+function parseIntegerTokenOption(value: string): number {
+  const token = value.trim();
+  if (!/^[+-]?\d+$/.test(token)) {
+    return Number.NaN;
+  }
+  const parsed = Number.parseInt(token, 10);
+  return Number.isSafeInteger(parsed) ? parsed : Number.NaN;
 }
 
 function collectStringOption(value: string, previous: string[] = []): string[] {
@@ -799,6 +812,45 @@ async function main(): Promise<void> {
   const recordCommand = program
     .command('record')
     .description('Manage recorded session artifacts');
+
+  recordCommand
+    .command('diff <session-id-a> <session-id-b>')
+    .description('Diff the replayed visible screens of two recorded sessions')
+    .option(
+      '--at-seq-a <seq>',
+      'Replay session A up to this Event Log sequence (default: latest)',
+      parseIntegerTokenOption,
+    )
+    .option(
+      '--at-seq-b <seq>',
+      'Replay session B up to this Event Log sequence (default: latest)',
+      parseIntegerTokenOption,
+    )
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'record diff',
+        async (
+          sessionIdA: string,
+          sessionIdB: string,
+          options: {
+            atSeqA?: number;
+            atSeqB?: number;
+            json: boolean;
+          },
+          context: CommandContext,
+        ) => {
+          await runRecordDiffCommand({
+            context,
+            json: options.json,
+            sessionIdA,
+            sessionIdB,
+            atSeqA: options.atSeqA,
+            atSeqB: options.atSeqB,
+          });
+        },
+      ),
+    );
 
   recordCommand
     .command('export <session-id>')

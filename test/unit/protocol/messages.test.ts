@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { sha256Hex } from '../../../src/util/hash.js';
+
 import {
   CapabilityEntrySchema,
   DestroyParamsSchema,
@@ -11,6 +13,7 @@ import {
   MarkResultSchema,
   PasteParamsSchema,
   SendKeysResultSchema,
+  RecordDiffResultSchema,
   RecordExportResultSchema,
   ReplayTimingModeSchema,
   ResizeResultSchema,
@@ -708,6 +711,317 @@ describe('RPC message schemas', () => {
         capturedAtSeq: 7,
       }).success,
     ).toBe(true);
+  });
+
+  it('accepts valid record diff results', () => {
+    const side = {
+      sessionId: 'session-01',
+      capturedAtSeq: 7,
+      cols: 80,
+      rows: 2,
+      screenHash: 'a'.repeat(64),
+    };
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: side,
+        b: { ...side, sessionId: 'session-02' },
+        diff: [],
+      }).success,
+    ).toBe(true);
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: false,
+        a: { ...side, screenHash: sha256Hex('shared\nold') },
+        b: {
+          ...side,
+          sessionId: 'session-02',
+          screenHash: sha256Hex('shared\nnew'),
+        },
+        diff: [
+          { op: 'equal', text: 'shared', aRow: 0, bRow: 0 },
+          { op: 'delete', text: 'old', aRow: 1 },
+          { op: 'add', text: 'new', bRow: 1 },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects invalid record diff results', () => {
+    const side = {
+      sessionId: 'session-01',
+      capturedAtSeq: 7,
+      cols: 80,
+      rows: 24,
+      screenHash: 'a'.repeat(64),
+    };
+    const otherSide = { ...side, screenHash: 'b'.repeat(64) };
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: { ...side, screenHash: 'not-a-hash' },
+        b: side,
+        diff: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: false,
+        a: side,
+        b: otherSide,
+        diff: [{ op: 'replace', text: 'x' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: false,
+        a: side,
+        b: otherSide,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('requires per-op row fields on record diff entries', () => {
+    const side = {
+      sessionId: 'session-01',
+      capturedAtSeq: 7,
+      cols: 80,
+      rows: 24,
+      screenHash: 'a'.repeat(64),
+    };
+    const base = {
+      identical: false,
+      a: side,
+      b: { ...side, screenHash: 'b'.repeat(64) },
+    };
+    // equal entries require both rows; delete only aRow; add only bRow.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        ...base,
+        diff: [
+          { op: 'equal', text: 'x' },
+          { op: 'delete', text: 'old', aRow: 1 },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordDiffResultSchema.safeParse({
+        ...base,
+        diff: [{ op: 'delete', text: 'old', aRow: 1, bRow: 0 }],
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordDiffResultSchema.safeParse({
+        ...base,
+        diff: [{ op: 'add', text: 'new', aRow: 0, bRow: 1 }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('requires record diff rows to enumerate both screens in order', () => {
+    const side = {
+      sessionId: 'session-01',
+      capturedAtSeq: 7,
+      cols: 80,
+      rows: 2,
+      screenHash: 'a'.repeat(64),
+    };
+    const base = {
+      identical: false,
+      a: { ...side, screenHash: sha256Hex('shared\nold') },
+      b: { ...side, screenHash: sha256Hex('shared\nnew') },
+    };
+    // Complete ordered enumeration of both 2-row screens parses.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        ...base,
+        diff: [
+          { op: 'equal', text: 'shared', aRow: 0, bRow: 0 },
+          { op: 'delete', text: 'old', aRow: 1 },
+          { op: 'add', text: 'new', bRow: 1 },
+        ],
+      }).success,
+    ).toBe(true);
+    // Missing rows (screens not fully covered) are rejected.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        ...base,
+        diff: [
+          { op: 'delete', text: 'old', aRow: 0 },
+          { op: 'add', text: 'new', bRow: 0 },
+        ],
+      }).success,
+    ).toBe(false);
+    // Out-of-order coordinates are rejected.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        ...base,
+        diff: [
+          { op: 'delete', text: 'old', aRow: 1 },
+          { op: 'delete', text: 'older', aRow: 0 },
+          { op: 'add', text: 'new', bRow: 0 },
+          { op: 'add', text: 'newer', bRow: 1 },
+        ],
+      }).success,
+    ).toBe(false);
+    // Duplicate coordinates are rejected.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        ...base,
+        diff: [
+          { op: 'delete', text: 'old', aRow: 0 },
+          { op: 'delete', text: 'older', aRow: 0 },
+          { op: 'add', text: 'new', bRow: 0 },
+          { op: 'add', text: 'newer', bRow: 1 },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts huge session dimensions without unbounded validation work', () => {
+    // Dimensions accepted by the session contract must validate here too;
+    // above the work bound the blank-hash equality check is skipped, so this
+    // parses quickly regardless of the declared hash.
+    const side = {
+      sessionId: 'session-01',
+      capturedAtSeq: -1,
+      cols: 80,
+      rows: 1_000_000_000,
+      screenHash: 'a'.repeat(64),
+    };
+    const started = Date.now();
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: side,
+        b: side,
+        diff: [],
+      }).success,
+    ).toBe(true);
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  it('requires pre-event record diff sides to hash to a blank screen', () => {
+    const blank = {
+      sessionId: 'session-01',
+      capturedAtSeq: -1,
+      cols: 80,
+      rows: 3,
+      screenHash: sha256Hex('\n\n'),
+    };
+    // A pre-event side with the correct blank hash parses.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: blank,
+        b: { ...blank, sessionId: 'session-02' },
+        diff: [],
+      }).success,
+    ).toBe(true);
+    // A pre-event side whose hash is not the blank-screen hash is rejected.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: { ...blank, screenHash: sha256Hex('not blank\n\n') },
+        b: { ...blank, screenHash: sha256Hex('not blank\n\n') },
+        diff: [],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects record diff results whose hashes contradict the diff text', () => {
+    const side = {
+      sessionId: 'session-01',
+      capturedAtSeq: 7,
+      cols: 80,
+      rows: 1,
+      screenHash: sha256Hex('same'),
+    };
+    // Reconstructing both sides yields 'same', so differing declared hashes
+    // (and identical: false) contradict the diff content.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: false,
+        a: side,
+        b: { ...side, screenHash: 'b'.repeat(64) },
+        diff: [
+          { op: 'delete', text: 'same', aRow: 0 },
+          { op: 'add', text: 'same', bRow: 0 },
+        ],
+      }).success,
+    ).toBe(false);
+    // Consistent hashes for genuinely different one-row screens parse.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: false,
+        a: { ...side, screenHash: sha256Hex('old') },
+        b: { ...side, screenHash: sha256Hex('new') },
+        diff: [
+          { op: 'delete', text: 'old', aRow: 0 },
+          { op: 'add', text: 'new', bRow: 0 },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects record diff results with contradictory identity invariants', () => {
+    const side = {
+      sessionId: 'session-01',
+      capturedAtSeq: 7,
+      cols: 80,
+      rows: 1,
+      screenHash: 'a'.repeat(64),
+    };
+    const otherSide = { ...side, screenHash: 'b'.repeat(64) };
+    // identical: true with differing hashes.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: side,
+        b: otherSide,
+        diff: [],
+      }).success,
+    ).toBe(false);
+    // identical: true with a non-empty diff.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: side,
+        b: side,
+        diff: [{ op: 'equal', text: 'x', aRow: 0, bRow: 0 }],
+      }).success,
+    ).toBe(false);
+    // identical: false with equal hashes.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: false,
+        a: side,
+        b: side,
+        diff: [
+          { op: 'delete', text: 'old', aRow: 0 },
+          { op: 'add', text: 'new', bRow: 0 },
+        ],
+      }).success,
+    ).toBe(false);
+    // identical: false without any delete/add entry.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: false,
+        a: side,
+        b: otherSide,
+        diff: [{ op: 'equal', text: 'x', aRow: 0, bRow: 0 }],
+      }).success,
+    ).toBe(false);
+    // identical: true with mismatched row counts (equal hashes imply equal
+    // canonical line counts).
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: side,
+        b: { ...side, rows: 2 },
+        diff: [],
+      }).success,
+    ).toBe(false);
   });
 
   it('accepts valid record export results', () => {
