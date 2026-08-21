@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-21
+
+### Added
+
+- `wait --scope cursor-line` (and matching `scope` field on batch `wait` steps and the `waitForRender` RPC) restricts `--text`/`--regex` matches to the cursor's row, so post-command waits can no longer be satisfied by the terminal echoing the command that was just typed. `scope` defaults to `screen` and is byte-identical to prior behavior; `cursor-line` requires a `text` or `regex` condition ([#169](https://github.com/coder/agent-tty/pull/169)).
+- `agent-tty record diff <session-a> <session-b>` replays both sessions offline from their `events.jsonl` logs and emits an LCS line diff over `canonicalVisibleLines` (the exact rows `screenHash` hashes). `--at-seq-a`/`--at-seq-b` diff either side at an intermediate Event Log sequence (including a session against its own earlier state). `--json` returns `{ identical, a, b, diff }` validated by a new `RecordDiffResultSchema`; human mode prints a unified-style diff ([#170](https://github.com/coder/agent-tty/pull/170)).
+
+### Fixed
+
+- CI setup restored after the upstream `aube` repository moved from `endevco/aube` to `jdx/aube`: `mise.lock` and `aube-lock.yaml` were regenerated (artifact sha256 checksums unchanged, so pinned binaries are byte-identical) and dev-dependency overrides bumped to clear eight high-severity advisories in `brace-expansion`, `js-yaml`, `nanoid`, and `postcss` ([#168](https://github.com/coder/agent-tty/pull/168)).
+
 ## [0.5.0] - 2026-06-23
 
 ### Added
