@@ -356,9 +356,16 @@ describe('captureGridFrames', () => {
         animate: false,
       });
 
-      // A(1) + 漢(2) + B(1) = one default-style run spanning 4 cells: 33.6.
+      // Runs split at wide-glyph boundaries: A at col 0, 漢 spanning cols
+      // 1-2 (16.8), B at col 3 (x = 25.2).
       expect(svg).toMatch(
-        /<text x="0" y="14" textLength="33\.6"[^>]*>A漢B<\/text>/u,
+        /<text x="0" y="14" textLength="8\.4"[^>]*>A<\/text>/u,
+      );
+      expect(svg).toMatch(
+        /<text x="8\.4" y="14" textLength="16\.8"[^>]*>漢<\/text>/u,
+      );
+      expect(svg).toMatch(
+        /<text x="25\.2" y="14" textLength="8\.4"[^>]*>B<\/text>/u,
       );
     },
   );

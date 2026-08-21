@@ -246,13 +246,18 @@ function isZeroStyleGapCell(cell: SnapshotCell): boolean {
 }
 
 /**
- * Group one row's cells into consecutive same-style runs. A wide glyph
- * declares its span via the leading cell's `width`; its trailing spacer cells
- * (`char: ''`) extend the run's covered cell count without adding text —
- * regardless of styling — so `textLength` spans every column the glyph
- * occupies. Zero-style empty cells NOT covered by a preceding wide glyph are
- * gap padding for untouched columns (e.g. ESC[NC): they break the current run
- * so the next glyph anchors at its true column.
+ * Group one row's cells into consecutive same-style runs of HOMOGENEOUS cell
+ * width. Width-1 glyphs with matching style merge as before. A wide glyph
+ * (leading cell's `width` >= 2) always forms its own single-glyph run whose
+ * cell count spans its trailing spacer cells (`char: ''`), regardless of the
+ * spacers' styling. Mixed-width runs are deliberately split: `textLength`
+ * scaling with `lengthAdjust="spacingAndGlyphs"` distributes advances
+ * uniformly, so a fallback font whose wide-glyph advance ratio differs would
+ * shift interior glyphs off their columns — within a homogeneous-width run a
+ * monospace fallback has equal natural advances and every glyph lands exactly
+ * on its column. Zero-style empty cells NOT covered by a preceding wide glyph
+ * are gap padding for untouched columns (e.g. ESC[NC): they break the current
+ * run so the next glyph anchors at its true column.
  */
 export function groupRowIntoStyleRuns(
   cells: readonly SnapshotCell[],
@@ -272,6 +277,11 @@ export function groupRowIntoStyleRuns(
       );
       invariant(current !== null, 'wide glyph run must exist for its spacers');
       current.cellCount += 1;
+      if (pendingSpacers === 0) {
+        // The wide glyph's single-glyph run is complete; the next glyph must
+        // start its own run.
+        current = null;
+      }
       continue;
     }
     if (isZeroStyleGapCell(cell)) {
@@ -283,7 +293,7 @@ export function groupRowIntoStyleRuns(
       Number.isInteger(width) && width >= 1,
       'snapshot cell width must be a positive integer when provided',
     );
-    if (current !== null && styleMatches(current, cell)) {
+    if (width === 1 && current !== null && styleMatches(current, cell)) {
       current.cellCount += 1;
       current.text += cell.char;
     } else {

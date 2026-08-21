@@ -104,7 +104,7 @@ describe('renderGridFramesToSvg', () => {
     );
   });
 
-  it('merges background runs into one rect and spans wide-glyph spacers', () => {
+  it('splits wide glyphs into their own runs spanning their spacers', () => {
     const svg = renderGridFramesToSvg({
       profile: PROFILE,
       frames: [
@@ -121,18 +121,26 @@ describe('renderGridFramesToSvg', () => {
       animate: false,
     });
 
-    // One run covering 3 cells: width 3 x 8.4 = 25.2.
+    // The wide glyph's own run covers its spacer: 2 x 8.4 = 16.8; the
+    // following width-1 glyph starts a separate run at col 2.
     expect(svg).toContain(
-      '<rect x="0" y="0" width="25.2" height="18" fill="#00ff00"/>',
+      '<rect x="0" y="0" width="16.8" height="18" fill="#00ff00"/>',
     );
-    // The wide glyph's spacer contributes width but no text.
-    expect(svg).toContain('>字!</text>');
-    expect(svg).toContain('textLength="25.2"');
+    expect(svg).toContain(
+      '<rect x="16.8" y="0" width="8.4" height="18" fill="#00ff00"/>',
+    );
+    expect(svg).toContain(
+      '<text x="0" y="14" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">字</text>',
+    );
+    expect(svg).toContain(
+      '<text x="16.8" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">!</text>',
+    );
   });
 
-  it('spans default-style wide glyphs across their full width', () => {
-    // Default-style CJK: the width-2 leading cell claims its trailing spacer
-    // even though the spacer is indistinguishable from gap padding by style.
+  it('splits mixed-width content at wide-glyph boundaries', () => {
+    // A single merged run would scale advances uniformly, so a fallback font
+    // with a different CJK advance ratio would shift interior glyphs off
+    // their columns; homogeneous-width runs pin every glyph exactly.
     const svg = renderGridFramesToSvg({
       profile: PROFILE,
       frames: [
@@ -143,10 +151,16 @@ describe('renderGridFramesToSvg', () => {
       animate: false,
     });
 
-    // One default-style run over 4 cells: textLength 4 x 8.4 = 33.6.
     expect(svg).toContain(
-      '<text x="0" y="14" textLength="33.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">A漢B</text>',
+      '<text x="0" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">A</text>',
     );
+    expect(svg).toContain(
+      '<text x="8.4" y="14" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">漢</text>',
+    );
+    expect(svg).toContain(
+      '<text x="25.2" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">B</text>',
+    );
+    expect(svg).not.toContain('>A漢B</text>');
   });
 
   it('anchors styled glyphs after a default-style wide glyph correctly', () => {
