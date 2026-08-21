@@ -102,6 +102,7 @@ Useful flags:
 - `--regex <pattern>`: wait for a regex match in rendered output.
 - `--scope <scope>`: where `--text`/`--regex` match — `screen` (default, whole visible screen) or `cursor-line` (only the row the cursor is on). See [Echo-Match](#echo-match).
 - `--screen-stable-ms <ms>`: wait for the rendered screen to be stable.
+- `--after-seq <n>`: only match renderer snapshots produced after this Event Log sequence — thread an input command's returned `seq` here so the wait cannot match pre-input screen state.
 - `--idle-ms <ms>`: wait for output idleness.
 - `--exit`: wait for the process to exit.
 - `--timeout <ms>`: maximum wait time in milliseconds, with `0` meaning infinite.
@@ -117,6 +118,13 @@ agent-tty wait <session-id> --regex 'READY>$' --scope cursor-line --json
 ```
 
 Rendered lines are right-trimmed of trailing ASCII spaces, so anchor prompt regexes without the trailing space: a prompt displayed as `READY> ` matches `READY>$`, not `READY> $`.
+
+A standalone cursor-line wait issued right after an input command (`type`, `send-keys`, `run --no-wait`) can still match the **pre-input screen**: input commands return once the input is logged, before the application's response is necessarily rendered. If the cursor row already matched before the input — for example a repeated prompt in an echo-disabled application — the wait returns without the application having responded. Thread the input command's returned `seq` into `--after-seq` so the wait only observes screen state produced after the input; inside `batch`, wait steps get this anchoring automatically from the Wait Baseline:
+
+```bash
+SEQ=$(agent-tty send-keys <session-id> Enter --json | jq -r '.result.seq')
+agent-tty wait <session-id> --regex 'READY>$' --scope cursor-line --after-seq "$SEQ" --json
+```
 
 For waiting on output text that scrolls past the cursor, prefer a distinctive output token or combine `--text` with `--screen-stable-ms`.
 
