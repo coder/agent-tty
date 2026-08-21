@@ -1,0 +1,245 @@
+import { describe, expect, it } from 'vitest';
+
+import type {
+  RendererBackend,
+  ScreenshotOptions,
+  SnapshotOptions,
+} from '../../../src/renderer/backend.js';
+import type {
+  ReplayInput,
+  ReplayState,
+  ScreenshotResult,
+  SemanticSnapshot,
+} from '../../../src/renderer/types.js';
+import type {
+  EventRecord,
+  SessionRecord,
+} from '../../../src/protocol/schemas.js';
+
+import { captureGridFrames } from '../../../src/replay/gridFrames.js';
+import { resolveProfile } from '../../../src/renderer/profiles.js';
+
+const SESSION_ID = 'session-01';
+const PROFILE = resolveProfile('reference-dark');
+const BASE_TS_MS = Date.parse('2026-03-19T12:00:02.000Z');
+
+function isoAt(offsetMs: number): string {
+  return new Date(BASE_TS_MS + offsetMs).toISOString();
+}
+
+function createSessionRecord(): SessionRecord {
+  return {
+    version: 1,
+    sessionId: SESSION_ID,
+    createdAt: '2026-03-19T12:00:00.000Z',
+    updatedAt: '2026-03-19T12:00:01.000Z',
+    status: 'running',
+    command: ['/bin/sh'],
+    cwd: '/tmp/workspace',
+    cols: 80,
+    rows: 24,
+    hostPid: 123,
+    childPid: 456,
+    exitCode: null,
+    exitSignal: null,
+  };
+}
+
+/**
+ * Deterministic in-memory backend: the visible row-0 text is looked up from a
+ * seq -> text table keyed by the last applied target seq.
+ */
+class FakeGridBackend implements RendererBackend {
+  public readonly rendererBackend = 'fake-grid';
+  public isBooted = false;
+  public replayTargetSeqs: number[] = [];
+  public snapshotCalls: Array<SnapshotOptions | undefined> = [];
+  public disposed = false;
+
+  private lastSeq = -1;
+
+  public constructor(private readonly gridBySeq: Map<number, string>) {}
+
+  public boot(): Promise<void> {
+    this.isBooted = true;
+    return Promise.resolve();
+  }
+
+  public replayTo(input: ReplayInput): Promise<ReplayState> {
+    this.replayTargetSeqs.push(input.targetSeq);
+    this.lastSeq = input.targetSeq;
+    return Promise.resolve({
+      lastSeq: input.targetSeq,
+      cols: 4,
+      rows: 2,
+      cursorRow: 0,
+      cursorCol: 0,
+    });
+  }
+
+  public snapshot(options?: SnapshotOptions): Promise<SemanticSnapshot> {
+    this.snapshotCalls.push(options);
+    const text = this.gridBySeq.get(this.lastSeq);
+    expect(text).toBeDefined();
+    return Promise.resolve({
+      sessionId: SESSION_ID,
+      capturedAtSeq: this.lastSeq,
+      cols: 4,
+      rows: 2,
+      cursorRow: 0,
+      cursorCol: Math.min(text?.length ?? 0, 3),
+      isAltScreen: false,
+      visibleLines: [
+        { row: 0, text: text ?? '' },
+        { row: 1, text: '' },
+      ],
+      cells: [
+        {
+          lineNumber: 0,
+          cells: (text ?? '').split('').map((char) => ({ char })),
+        },
+      ],
+    });
+  }
+
+  public screenshot(
+    _outputPath: string,
+    _options?: ScreenshotOptions,
+  ): Promise<ScreenshotResult> {
+    throw new Error('screenshot must not be used by grid capture');
+  }
+
+  public getVisibleText(): Promise<string> {
+    return Promise.resolve(this.gridBySeq.get(this.lastSeq) ?? '');
+  }
+
+  public dispose(): Promise<void> {
+    this.disposed = true;
+    return Promise.resolve();
+  }
+}
+
+function createEvents(): EventRecord[] {
+  return [
+    { seq: 0, ts: isoAt(0), type: 'output', payload: { data: 'a' } },
+    // Same instant as seq 0: coalesced into one frame boundary.
+    { seq: 1, ts: isoAt(0), type: 'output', payload: { data: 'b' } },
+    { seq: 2, ts: isoAt(500), type: 'output', payload: { data: 'c' } },
+    // Non-visual event: never a frame boundary.
+    { seq: 3, ts: isoAt(700), type: 'marker', payload: { label: 'mark' } },
+    // Produces a grid identical to seq 2's: de-duplicated into held frame.
+    { seq: 4, ts: isoAt(800), type: 'output', payload: { data: '' } },
+  ];
+}
+
+function createGrids(): Map<number, string> {
+  return new Map([
+    [1, 'ab'],
+    [2, 'abc'],
+    [4, 'abc'],
+  ]);
+}
+
+describe('captureGridFrames', () => {
+  it('captures coalesced, de-duplicated timeline frames with recorded holds', async () => {
+    const backend = new FakeGridBackend(createGrids());
+
+    const capture = await captureGridFrames(
+      {
+        sessionId: SESSION_ID,
+        manifest: createSessionRecord(),
+        events: createEvents(),
+        profile: PROFILE,
+        mode: 'timeline',
+      },
+      { backendFactory: () => backend },
+    );
+
+    // Boundaries: seq 1 (coalesced 0+1), seq 2, seq 4 (marker skipped).
+    expect(backend.replayTargetSeqs).toEqual([1, 2, 4]);
+    expect(backend.snapshotCalls).toEqual([
+      { includeCells: true },
+      { includeCells: true },
+      { includeCells: true },
+    ]);
+    expect(backend.disposed).toBe(true);
+
+    // Frame 'abc' at seq 4 deduplicates into the seq-2 frame, merging its
+    // 300ms hold with the 1000ms final hold.
+    expect(capture.frames).toHaveLength(2);
+    expect(capture.frames[0]).toMatchObject({
+      capturedAtSeq: 1,
+      holdMs: 500,
+    });
+    expect(capture.frames[0]?.lines[0]?.map((cell) => cell.char)).toEqual([
+      'a',
+      'b',
+    ]);
+    expect(capture.frames[1]).toMatchObject({
+      capturedAtSeq: 2,
+      holdMs: 1_300,
+    });
+    expect(capture.frames[1]?.lines[0]?.map((cell) => cell.char)).toEqual([
+      'a',
+      'b',
+      'c',
+    ]);
+
+    expect(capture).toMatchObject({
+      capturedAtSeq: 4,
+      cols: 4,
+      rows: 2,
+      rendererBackend: 'fake-grid',
+      outputEventCount: 4,
+      resizeEventCount: 0,
+      timelineDurationMs: 1_800,
+    });
+  });
+
+  it('captures only the final frame in final mode', async () => {
+    const backend = new FakeGridBackend(createGrids());
+
+    const capture = await captureGridFrames(
+      {
+        sessionId: SESSION_ID,
+        manifest: createSessionRecord(),
+        events: createEvents(),
+        profile: PROFILE,
+        mode: 'final',
+      },
+      { backendFactory: () => backend },
+    );
+
+    expect(backend.replayTargetSeqs).toEqual([4]);
+    expect(capture.frames).toHaveLength(1);
+    expect(capture.frames[0]).toMatchObject({
+      capturedAtSeq: 4,
+      holdMs: 1_000,
+    });
+    expect(capture.capturedAtSeq).toBe(4);
+    expect(backend.disposed).toBe(true);
+  });
+
+  it('fails with a clear export error when the native backend cannot boot', async () => {
+    const backend = new FakeGridBackend(createGrids());
+    backend.boot = () =>
+      Promise.reject(new Error('Cannot find module @coder/libghostty-vt-node'));
+
+    await expect(
+      captureGridFrames(
+        {
+          sessionId: SESSION_ID,
+          manifest: createSessionRecord(),
+          events: createEvents(),
+          profile: PROFILE,
+          mode: 'final',
+        },
+        { backendFactory: () => backend },
+      ),
+    ).rejects.toMatchObject({
+      code: 'EXPORT_ERROR',
+      message: expect.stringContaining('@coder/libghostty-vt-node') as string,
+    });
+    expect(backend.disposed).toBe(true);
+  });
+});

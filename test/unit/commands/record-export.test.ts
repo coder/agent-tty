@@ -35,6 +35,8 @@ const mocks = vi.hoisted(() => ({
   artifactPath: vi.fn(),
   recordingFilename: vi.fn(),
   generateWebmExport: vi.fn(),
+  captureGridFrames: vi.fn(),
+  renderGridFramesToSvg: vi.fn(),
   loadPackageMetadata: vi.fn(),
   readFile: vi.fn(),
   stat: vi.fn(),
@@ -80,6 +82,14 @@ vi.mock('../../../src/util/packageMetadata.js', () => ({
 
 vi.mock('../../../src/export/webm.js', () => ({
   generateWebmExport: mocks.generateWebmExport,
+}));
+
+vi.mock('../../../src/replay/gridFrames.js', () => ({
+  captureGridFrames: mocks.captureGridFrames,
+}));
+
+vi.mock('../../../src/export/svg.js', () => ({
+  renderGridFramesToSvg: mocks.renderGridFramesToSvg,
 }));
 
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -479,6 +489,224 @@ describe('record export command', () => {
     );
     expect(emitSuccessArgs.result.metadata.rendererBackend).toBe('ghostty-web');
     expect(emitSuccessArgs.result.durationMs).toBe(1_500);
+  });
+
+  it('exports still svg artifacts via captureGridFrames', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-1-svg.svg');
+
+    const svgContents = '<svg>still</svg>\n';
+    const svgSha256 = createHash('sha256')
+      .update(Buffer.from(svgContents, 'utf8'))
+      .digest('hex');
+    const expectedRenderProfileHash = hashProfile(
+      resolveProfile('reference-dark'),
+    );
+    const gridFrame = {
+      capturedAtSeq: 1,
+      cols: 80,
+      rows: 24,
+      cursorRow: 0,
+      cursorCol: 0,
+      lines: [[{ char: 'h' }]],
+      holdMs: 1_000,
+    };
+
+    mocks.captureGridFrames.mockResolvedValue({
+      frames: [gridFrame],
+      capturedAtSeq: 1,
+      cols: 80,
+      rows: 24,
+      rendererBackend: 'libghostty-vt',
+      outputEventCount: 1,
+      resizeEventCount: 1,
+      timelineDurationMs: 2_500,
+    });
+    mocks.renderGridFramesToSvg.mockReturnValue(svgContents);
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'svg',
+    });
+
+    expect(mocks.captureGridFrames).toHaveBeenCalledTimes(1);
+    const captureCall = mocks.captureGridFrames.mock.calls[0] as [
+      {
+        sessionId: string;
+        manifest: ReturnType<typeof createSessionRecord>;
+        events: unknown[];
+        profile: { name: string };
+        mode: string;
+      },
+    ];
+    const [captureArgs] = captureCall;
+
+    expect(captureArgs.sessionId).toBe('session-01');
+    expect(captureArgs.manifest).toEqual(createSessionRecord());
+    expect(captureArgs.events).toHaveLength(2);
+    expect(captureArgs.profile.name).toBe('reference-dark');
+    expect(captureArgs.mode).toBe('final');
+
+    expect(mocks.renderGridFramesToSvg).toHaveBeenCalledWith({
+      profile: expect.objectContaining({ name: 'reference-dark' }) as unknown,
+      frames: [gridFrame],
+      animate: false,
+    });
+    expect(mocks.writeTextFileAtomic).toHaveBeenCalledWith({
+      path: '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-svg.svg',
+      pathLabel: 'record export path',
+      contents: svgContents,
+      writeErrorMessage:
+        'Failed to write record export artifact at /tmp/agent-tty/sessions/session-01/artifacts/recording-1-svg.svg.',
+    });
+
+    expect(mocks.createArtifactEntry).toHaveBeenCalledWith({
+      kind: 'recording',
+      filename: 'recording-1-svg.svg',
+      sessionId: 'session-01',
+      capturedAtSeq: 1,
+      sha256: svgSha256,
+      bytes: Buffer.byteLength(svgContents, 'utf8'),
+      metadata: {
+        format: 'svg',
+        outputPath:
+          '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-svg.svg',
+        width: 80,
+        height: 24,
+        profileName: 'reference-dark',
+        renderProfileHash: expectedRenderProfileHash,
+        rendererBackend: 'libghostty-vt',
+        animated: false,
+        frameCount: 1,
+        outputEventCount: 1,
+        resizeEventCount: 1,
+      },
+    });
+
+    expect(mocks.emitSuccess).toHaveBeenCalledTimes(1);
+    const emitSuccessCall = mocks.emitSuccess.mock.calls[0] as [
+      {
+        result: {
+          format: string;
+          bytes: number;
+          sha256: string;
+          capturedAtSeq: number;
+          durationMs?: number;
+          metadata: Record<string, unknown>;
+        };
+      },
+    ];
+    const [emitSuccessArgs] = emitSuccessCall;
+
+    expect(emitSuccessArgs.result.format).toBe('svg');
+    expect(emitSuccessArgs.result.bytes).toBe(
+      Buffer.byteLength(svgContents, 'utf8'),
+    );
+    expect(emitSuccessArgs.result.sha256).toBe(svgSha256);
+    expect(emitSuccessArgs.result.capturedAtSeq).toBe(1);
+    // Still exports represent an instant, not a playback timeline.
+    expect(emitSuccessArgs.result.durationMs).toBe(0);
+    expect(emitSuccessArgs.result.metadata.animated).toBe(false);
+    expect(mocks.generateWebmExport).not.toHaveBeenCalled();
+  });
+
+  it('exports animated svg with the recorded timeline duration', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-1-svg.svg');
+    mocks.captureGridFrames.mockResolvedValue({
+      frames: [
+        {
+          capturedAtSeq: 0,
+          cols: 80,
+          rows: 24,
+          cursorRow: 0,
+          cursorCol: 0,
+          lines: [],
+          holdMs: 1_500,
+        },
+        {
+          capturedAtSeq: 1,
+          cols: 80,
+          rows: 24,
+          cursorRow: 0,
+          cursorCol: 0,
+          lines: [],
+          holdMs: 1_000,
+        },
+      ],
+      capturedAtSeq: 1,
+      cols: 80,
+      rows: 24,
+      rendererBackend: 'libghostty-vt',
+      outputEventCount: 1,
+      resizeEventCount: 1,
+      timelineDurationMs: 2_500,
+    });
+    mocks.renderGridFramesToSvg.mockReturnValue('<svg>animated</svg>\n');
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'svg',
+      animate: true,
+    });
+
+    const captureCall = mocks.captureGridFrames.mock.calls[0] as [
+      { mode: string },
+    ];
+    expect(captureCall[0].mode).toBe('timeline');
+    expect(mocks.renderGridFramesToSvg).toHaveBeenCalledWith(
+      expect.objectContaining({ animate: true }),
+    );
+
+    const emitSuccessCall = mocks.emitSuccess.mock.calls[0] as [
+      {
+        result: {
+          durationMs?: number;
+          metadata: Record<string, unknown>;
+        };
+      },
+    ];
+    const [emitSuccessArgs] = emitSuccessCall;
+    expect(emitSuccessArgs.result.durationMs).toBe(2_500);
+    expect(emitSuccessArgs.result.metadata.animated).toBe(true);
+    expect(emitSuccessArgs.result.metadata.frameCount).toBe(2);
+  });
+
+  it('rejects --animate for non-svg formats', async () => {
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'asciicast',
+        animate: true,
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      message: '--animate is only supported with --format svg.',
+    });
+    expect(mocks.captureGridFrames).not.toHaveBeenCalled();
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('rejects --timing for svg exports', async () => {
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'svg',
+        timing: 'recorded',
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      message:
+        '--timing is not supported with --format svg; animated SVG always uses recorded timing.',
+    });
+    expect(mocks.captureGridFrames).not.toHaveBeenCalled();
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
   it('requests rollback for default asciicast artifacts when manifest append fails', async () => {

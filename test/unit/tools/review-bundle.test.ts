@@ -119,6 +119,7 @@ describe('review-bundle helpers', () => {
       'videos/demo.webm',
     ]);
     expect(classifyBundlePath('screenshots/primary.png')).toBe('screenshot');
+    expect(classifyBundlePath('screenshots/demo.svg')).toBe('screenshot');
     expect(classifyBundlePath('videos/demo.webm')).toBe('video');
     expect(classifyBundlePath('recordings/demo.cast')).toBe('recording');
     expect(classifyBundlePath('notes.md')).toBe('notes');

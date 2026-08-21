@@ -705,6 +705,21 @@ describe('RPC message schemas', () => {
         metadata: {},
       }).success,
     ).toBe(true);
+    expect(
+      RecordExportResultSchema.safeParse({
+        sessionId: 'session-01',
+        format: 'svg',
+        artifactPath: '/tmp/session-01/artifacts/recording-7-svg.svg',
+        bytes: 4096,
+        sha256: 'abc123',
+        capturedAtSeq: 7,
+        durationMs: 0,
+        metadata: {
+          animated: false,
+          frameCount: 1,
+        },
+      }).success,
+    ).toBe(true);
   });
 
   it('rejects invalid record export results', () => {

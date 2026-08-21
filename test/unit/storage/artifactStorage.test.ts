@@ -76,6 +76,10 @@ describe('artifact paths', () => {
     expect(recordingFilename(7, 'webm')).toBe('recording-7-webm.webm');
   });
 
+  it('generates recording filenames for svg format', () => {
+    expect(recordingFilename(7, 'svg')).toBe('recording-7-svg.svg');
+  });
+
   it('asserts on unsupported recording formats', () => {
     expect(() => recordingFilename(7, 'trace')).toThrow(
       /unsupported recording format: trace/u,
