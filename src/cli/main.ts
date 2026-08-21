@@ -807,12 +807,12 @@ async function main(): Promise<void> {
     .option(
       '--at-seq-a <seq>',
       'Replay session A up to this Event Log sequence (default: latest)',
-      parseIntegerOption,
+      parseNumberOption,
     )
     .option(
       '--at-seq-b <seq>',
       'Replay session B up to this Event Log sequence (default: latest)',
-      parseIntegerOption,
+      parseNumberOption,
     )
     .option('--json', 'Emit a JSON command envelope', false)
     .action(

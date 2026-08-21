@@ -71,4 +71,14 @@ describe('diffLines', () => {
     const big = new Array<string>(10_001).fill('x');
     expect(() => diffLines(big, [])).toThrow(/must not exceed 10000 lines/);
   });
+
+  it('rejects input pairs whose DP table would exceed the cell limit', () => {
+    // Each side passes the per-side limit, but the product (2002^2 cells)
+    // exceeds the 4M-cell table bound.
+    const a = new Array<string>(2_001).fill('a');
+    const b = new Array<string>(2_001).fill('b');
+    expect(() => diffLines(a, b)).toThrow(
+      /product must not exceed 4000000 table cells/,
+    );
+  });
 });

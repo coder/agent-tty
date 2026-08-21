@@ -54,14 +54,17 @@ interface SnapshotFixture {
   capturedAtSeq: number;
 }
 
+interface MockReplayContext {
+  backend: { snapshot: () => Promise<unknown> };
+  replayInput: { targetSeq: number; initialCols: number; initialRows: number };
+}
+
 function mockReplaySnapshots(fixtures: SnapshotFixture[]): void {
   let call = 0;
   mocks.withOfflineReplayRenderer.mockImplementation(
     async (
       _options: unknown,
-      run: (context: {
-        backend: { snapshot: () => Promise<unknown> };
-      }) => Promise<unknown>,
+      run: (context: MockReplayContext) => Promise<unknown>,
     ) => {
       const fixture = fixtures[call];
       call += 1;
@@ -72,6 +75,30 @@ function mockReplaySnapshots(fixtures: SnapshotFixture[]): void {
         backend: {
           snapshot: () => Promise.resolve(createTestSemanticSnapshot(fixture)),
         },
+        replayInput: {
+          targetSeq: fixture.capturedAtSeq,
+          initialCols: 80,
+          initialRows: 24,
+        },
+      });
+    },
+  );
+}
+
+function mockEmptyLogReplay(rows: number, cols: number): void {
+  mocks.withOfflineReplayRenderer.mockImplementation(
+    async (
+      _options: unknown,
+      run: (context: MockReplayContext) => Promise<unknown>,
+    ) => {
+      return await run({
+        backend: {
+          snapshot: () =>
+            Promise.reject(
+              new Error('snapshot() must not be called for an empty log'),
+            ),
+        },
+        replayInput: { targetSeq: -1, initialCols: cols, initialRows: rows },
       });
     },
   );
@@ -185,6 +212,55 @@ describe('runRecordDiffCommand', () => {
         ],
       }),
     );
+  });
+
+  it('synthesizes blank screens for sessions with empty event logs', async () => {
+    // A running session that has not emitted its first event yet replays to
+    // targetSeq -1; the command must report the valid initial blank screen
+    // instead of calling snapshot() (which backends reject before replay).
+    mockEmptyLogReplay(24, 80);
+
+    await runRecordDiffCommand(createOptions());
+
+    const blankHash = computeScreenHash({
+      visibleLines: Array.from({ length: 24 }, () => ({ text: '' })),
+    });
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: {
+          identical: true,
+          a: {
+            sessionId: 'session-a',
+            capturedAtSeq: 0,
+            cols: 80,
+            rows: 24,
+            screenHash: blankHash,
+          },
+          b: {
+            sessionId: 'session-b',
+            capturedAtSeq: 0,
+            cols: 80,
+            rows: 24,
+            screenHash: blankHash,
+          },
+          diff: [],
+        },
+      }),
+    );
+  });
+
+  it('rejects non-integer --at-seq values including NaN', async () => {
+    await expect(
+      runRecordDiffCommand(createOptions({ atSeqA: 1.5 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+    });
+    await expect(
+      runRecordDiffCommand(createOptions({ atSeqB: Number.NaN })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+    });
+    expect(mocks.withOfflineReplayRenderer).not.toHaveBeenCalled();
   });
 
   it('passes --at-seq targets through to offline replay', async () => {

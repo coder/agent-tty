@@ -85,7 +85,29 @@ async function replayScreen(
         rendererName: context.rendererDefault,
         ...(targetSeq === undefined ? {} : { targetSeq }),
       },
-      async ({ backend }) => {
+      async ({ backend, replayInput }) => {
+        if (replayInput.targetSeq < 0) {
+          // The session has not emitted any events yet, so its screen is the
+          // valid initial blank grid. Backends reject snapshot() before the
+          // first replayed event, so synthesize the blank screen directly.
+          const blankLines = Array.from(
+            { length: replayInput.initialRows },
+            () => '',
+          );
+          return {
+            side: {
+              sessionId,
+              capturedAtSeq: 0,
+              cols: replayInput.initialCols,
+              rows: replayInput.initialRows,
+              screenHash: computeScreenHash({
+                visibleLines: blankLines.map((text) => ({ text })),
+              }),
+            },
+            visibleLines: blankLines,
+          };
+        }
+
         const snapshot = await backend.snapshot({ includeScrollback: false });
         return {
           side: {

@@ -152,6 +152,47 @@ describe('record diff integration', { timeout: 120_000 }, () => {
     ).toContain('second');
   });
 
+  it('reports identical blank screens for running sessions with no events yet', () => {
+    // A freshly created quiet process has an empty event log; record diff must
+    // synthesize the valid initial blank screen instead of failing replay.
+    const sessionId = createSession(testHome, ['/bin/sleep', '60']);
+
+    const result = runRecordDiff(testHome, [sessionId, sessionId]);
+
+    expect(result.status).toBe(0);
+    const envelope = JSON.parse(
+      result.stdout,
+    ) as SuccessEnvelope<RecordDiffResult>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.identical).toBe(true);
+    expect(envelope.result.diff).toEqual([]);
+
+    const destroyResult = runCli(['destroy', sessionId, '--force', '--json'], {
+      AGENT_TTY_HOME: testHome,
+    });
+    expect(destroyResult.status).toBe(0);
+  });
+
+  it('rejects malformed --at-seq tokens instead of truncating them', () => {
+    const command = ['/bin/sh', '-c', "printf 'x\\n'"];
+    const sessionA = createSession(testHome, command);
+    waitForExit(testHome, sessionA);
+
+    for (const token of ['1.5', '2junk']) {
+      const result = runRecordDiff(testHome, [
+        sessionA,
+        sessionA,
+        '--at-seq-a',
+        token,
+      ]);
+
+      expect(result.status).not.toBe(0);
+      const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+      expect(envelope.ok).toBe(false);
+      expect(envelope.error.code).toBe('INVALID_INPUT');
+    }
+  });
+
   it('fails with SESSION_NOT_FOUND for unknown sessions', () => {
     const command = ['/bin/sh', '-c', "printf 'x\\n'"];
     const sessionA = createSession(testHome, command);

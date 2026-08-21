@@ -17,12 +17,16 @@ export interface LineDiffEntry {
 }
 
 const MAX_DIFF_LINES = 10_000;
+// Bounds the DP table's cell count (each cell is one JS number), so worst-case
+// memory stays in the tens of megabytes instead of scaling to
+// MAX_DIFF_LINES^2 cells.
+const MAX_DIFF_CELLS = 4_000_000;
 
 /**
  * LCS line diff of two ordered line arrays via dynamic programming.
  * Deterministic: when a delete and an add are both possible, the delete is
- * emitted first. Inputs are bounded to keep the O(a.length * b.length) table
- * cheap; terminal screens are far below the limit.
+ * emitted first. Inputs are bounded per side and by the product of their
+ * lengths (the DP table size); terminal screens are far below both limits.
  */
 export function diffLines(
   a: readonly string[],
@@ -31,6 +35,10 @@ export function diffLines(
   invariant(
     a.length <= MAX_DIFF_LINES && b.length <= MAX_DIFF_LINES,
     `diffLines inputs must not exceed ${String(MAX_DIFF_LINES)} lines`,
+  );
+  invariant(
+    (a.length + 1) * (b.length + 1) <= MAX_DIFF_CELLS,
+    `diffLines input product must not exceed ${String(MAX_DIFF_CELLS)} table cells`,
   );
 
   // lcs[i][j] = LCS length of a[i..] and b[j..].
