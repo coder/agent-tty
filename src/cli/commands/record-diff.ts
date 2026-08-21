@@ -169,11 +169,16 @@ export async function runRecordDiffCommand(
     options.sessionIdA,
     options.atSeqA,
   );
-  const b = await replayScreen(
-    options.context,
-    options.sessionIdB,
-    options.atSeqB,
-  );
+  // When both selectors are identical, reuse the first replay instead of
+  // re-reading the event log: a running session may append output between the
+  // two reads, which would make `record diff <id> <id>` spuriously
+  // non-identical.
+  const sameSelector =
+    options.sessionIdA === options.sessionIdB &&
+    options.atSeqA === options.atSeqB;
+  const b = sameSelector
+    ? a
+    : await replayScreen(options.context, options.sessionIdB, options.atSeqB);
 
   const identical = a.side.screenHash === b.side.screenHash;
   const diff = identical ? [] : diffLines(a.visibleLines, b.visibleLines);

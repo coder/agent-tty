@@ -68,17 +68,46 @@ describe('diffLines', () => {
   });
 
   it('rejects inputs beyond the line limit', () => {
-    const big = new Array<string>(10_001).fill('x');
-    expect(() => diffLines(big, [])).toThrow(/must not exceed 10000 lines/);
+    const big = new Array<string>(100_001).fill('x');
+    expect(() => diffLines(big, [])).toThrow(/must not exceed 100000 lines/);
   });
 
-  it('rejects input pairs whose DP table would exceed the cell limit', () => {
-    // Each side passes the per-side limit, but the product (2002^2 cells)
-    // exceeds the 4M-cell table bound.
-    const a = new Array<string>(2_001).fill('a');
-    const b = new Array<string>(2_001).fill('b');
-    expect(() => diffLines(a, b)).toThrow(
-      /product must not exceed 4000000 table cells/,
+  it('matches large common prefixes and suffixes without a quadratic table', () => {
+    // 40k shared lines on each side would need a ~1.6G-cell DP table; the
+    // prefix/suffix trim must reduce the middle to the single changed line.
+    const shared = Array.from(
+      { length: 40_000 },
+      (_, i) => `line ${String(i)}`,
     );
+    const a = [...shared, 'OLD', ...shared];
+    const b = [...shared, 'NEW', ...shared];
+
+    const entries = diffLines(a, b);
+
+    const changed = entries.filter((entry) => entry.op !== 'equal');
+    expect(changed).toEqual([
+      { op: 'delete', text: 'OLD', aRow: 40_000 },
+      { op: 'add', text: 'NEW', bRow: 40_000 },
+    ]);
+    expect(entries).toHaveLength(a.length + 1);
+  });
+
+  it('degrades to a delete-then-add block when the middle exceeds the cell budget', () => {
+    // Fully distinct 3000-line sides leave a middle whose DP table (~9M
+    // cells) exceeds the 4M budget; the diff must degrade, not fail.
+    const a = Array.from({ length: 3_000 }, (_, i) => `a ${String(i)}`);
+    const b = Array.from({ length: 3_000 }, (_, i) => `b ${String(i)}`);
+
+    const entries = diffLines(a, b);
+
+    expect(entries).toHaveLength(6_000);
+    expect(
+      entries.slice(0, 3_000).every((entry) => entry.op === 'delete'),
+    ).toBe(true);
+    expect(entries.slice(3_000).every((entry) => entry.op === 'add')).toBe(
+      true,
+    );
+    expect(entries[0]).toEqual({ op: 'delete', text: 'a 0', aRow: 0 });
+    expect(entries[5_999]).toEqual({ op: 'add', text: 'b 2999', bRow: 2_999 });
   });
 });

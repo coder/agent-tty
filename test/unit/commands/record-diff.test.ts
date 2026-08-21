@@ -263,6 +263,30 @@ describe('runRecordDiffCommand', () => {
     expect(mocks.withOfflineReplayRenderer).not.toHaveBeenCalled();
   });
 
+  it('replays only once when both selectors are identical', async () => {
+    // Diffing a running session against itself must not read the event log
+    // twice: output appended between the reads would make the result
+    // spuriously non-identical.
+    const lines = [{ row: 0, text: 'busy output' }];
+    mockReplaySnapshots([
+      { sessionId: 'session-a', visibleLines: lines, capturedAtSeq: 3 },
+    ]);
+
+    await runRecordDiffCommand(
+      createOptions({ sessionIdA: 'session-a', sessionIdB: 'session-a' }),
+    );
+
+    expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledTimes(1);
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: expect.objectContaining({
+          identical: true,
+          diff: [],
+        }) as Record<string, unknown>,
+      }),
+    );
+  });
+
   it('passes --at-seq targets through to offline replay', async () => {
     const lines = [{ row: 0, text: 'x' }];
     mockReplaySnapshots([
