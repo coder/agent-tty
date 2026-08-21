@@ -443,6 +443,23 @@ describe('renderGridFramesToSvg', () => {
     }
   });
 
+  it('renders very large frame counts without exhausting argument limits', () => {
+    // Math.max(...spread)/push(...spread) over per-frame arrays throw a
+    // RangeError past V8's argument limit (~125k); 200k frames must work.
+    const frames: SvgGridFrame[] = Array.from({ length: 200_000 }, () =>
+      makeFrame({ cols: 1, rows: 1, holdMs: 1, lines: [] }),
+    );
+
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames,
+      animate: false,
+    });
+
+    // 1 col x 8.4 = 8.4, 1 row x 18 = 18.
+    expect(svg).toContain('viewBox="0 0 8.4 18"');
+  });
+
   it('renders a single animated frame as static content', () => {
     const svg = renderGridFramesToSvg({
       profile: PROFILE,

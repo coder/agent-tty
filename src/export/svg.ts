@@ -554,8 +554,18 @@ export function renderGridFramesToSvg(options: SvgRenderOptions): string {
     );
   }
 
-  const canvasCols = Math.max(...frames.map((frame) => frame.cols));
-  const canvasRows = Math.max(...frames.map((frame) => frame.rows));
+  // Loop instead of Math.max(...spread): argument-spreading a large frame
+  // array (long recordings) exceeds V8's argument limit and throws.
+  let canvasCols = 0;
+  let canvasRows = 0;
+  for (const frame of frames) {
+    canvasCols = Math.max(canvasCols, frame.cols);
+    canvasRows = Math.max(canvasRows, frame.rows);
+  }
+  invariant(
+    canvasCols > 0 && canvasRows > 0,
+    'svg canvas dimensions must be positive',
+  );
   const width = formatSvgNumber(canvasCols * SVG_CELL_WIDTH);
   const height = formatSvgNumber(canvasRows * SVG_CELL_HEIGHT);
 
@@ -566,10 +576,14 @@ export function renderGridFramesToSvg(options: SvgRenderOptions): string {
     `<rect width="100%" height="100%" fill="${escapeXml(profile.backgroundColor)}"/>`,
   ];
 
+  // Element lists are appended one-by-one rather than push(...spread): a
+  // dense frame can produce enough elements to exceed V8's argument limit.
   if (!animate || frames.length === 1) {
     const finalFrame = frames.at(-1);
     invariant(finalFrame !== undefined, 'final frame must exist');
-    lines.push(...renderFrameElements(finalFrame, profile));
+    for (const element of renderFrameElements(finalFrame, profile)) {
+      lines.push(element);
+    }
   } else {
     const totalMs = frames.reduce((sum, frame) => sum + frame.holdMs, 0);
     invariant(totalMs > 0, 'animated svg requires a positive total duration');
@@ -587,9 +601,11 @@ export function renderGridFramesToSvg(options: SvgRenderOptions): string {
           endMs,
           totalMs,
         ),
-        ...renderFrameElements(frame, profile),
-        '</g>',
       );
+      for (const element of renderFrameElements(frame, profile)) {
+        lines.push(element);
+      }
+      lines.push('</g>');
       offsetMs = endMs;
     }
   }
