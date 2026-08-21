@@ -354,7 +354,7 @@ export function classifyBundlePath(relativePath: string): ArtifactKind {
   if (SCRIPT_FILE_NAMES.has(fileName)) {
     return 'script';
   }
-  if (lowerFileName.endsWith('.png')) {
+  if (lowerFileName.endsWith('.png') || lowerFileName.endsWith('.svg')) {
     return 'screenshot';
   }
   if (lowerFileName.endsWith('.webm')) {

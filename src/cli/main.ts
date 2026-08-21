@@ -803,12 +803,20 @@ async function main(): Promise<void> {
   recordCommand
     .command('export <session-id>')
     .description('Export a recorded session artifact')
-    .requiredOption('--format <format>', "Export format: 'asciicast' or 'webm'")
+    .requiredOption(
+      '--format <format>',
+      "Export format: 'asciicast', 'webm', or 'svg'",
+    )
     .option('--out <path>', 'Explicit output path')
     .option('--profile <name>', 'Render profile name')
     .option(
       '--timing <mode>',
       'Replay timing mode for WebM: recorded (default), accelerated, max-speed',
+    )
+    .option(
+      '--animate',
+      'Animate the SVG export with recorded timing (only with --format svg)',
+      false,
     )
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
@@ -821,6 +829,7 @@ async function main(): Promise<void> {
             out?: string;
             profile?: string;
             timing?: string;
+            animate: boolean;
             json: boolean;
           },
           context: CommandContext,
@@ -830,6 +839,7 @@ async function main(): Promise<void> {
             json: options.json,
             sessionId,
             format: options.format,
+            animate: options.animate,
             ...(options.out !== undefined ? { out: options.out } : {}),
             ...(options.profile !== undefined
               ? { profile: options.profile }

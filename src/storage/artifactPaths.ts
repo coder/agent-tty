@@ -79,10 +79,10 @@ export function snapshotFilename(
 
 function recordingExtension(format: string): string {
   invariant(
-    format === 'asciicast' || format === 'webm',
+    format === 'asciicast' || format === 'webm' || format === 'svg',
     `unsupported recording format: ${format}`,
   );
-  return format === 'asciicast' ? 'cast' : 'webm';
+  return format === 'asciicast' ? 'cast' : format;
 }
 
 export function recordingFilename(seq: number, format: string): string {

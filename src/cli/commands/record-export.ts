@@ -10,10 +10,12 @@ import type { CommandContext } from '../context.js';
 
 import { emitSuccess } from '../output.js';
 import { generateAsciicast } from '../../export/asciicast.js';
+import { renderGridFramesToSvg } from '../../export/svg.js';
 import {
   generateWebmExport,
   type WebmExportResult,
 } from '../../export/webm.js';
+import { captureGridFrames } from '../../replay/gridFrames.js';
 import { readEventLogRecords } from '../../storage/eventLogCodec.js';
 import { hashProfile, resolveProfile } from '../../renderer/profiles.js';
 import { CliError } from '../errors.js';
@@ -48,7 +50,7 @@ import {
 import { invariant } from '../../util/assert.js';
 import { loadPackageMetadata } from '../../util/packageMetadata.js';
 
-const RecordExportFormatSchema = z.enum(['asciicast', 'webm']);
+const RecordExportFormatSchema = z.enum(['asciicast', 'webm', 'svg']);
 
 type RecordExportFormat = z.infer<typeof RecordExportFormatSchema>;
 
@@ -62,6 +64,7 @@ interface CommandOptions {
   out?: string;
   profile?: string;
   timing?: string;
+  animate?: boolean;
 }
 
 function resolveRecordExportFormat(
@@ -71,7 +74,7 @@ function resolveRecordExportFormat(
 
   if (!formatResult.success) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-      message: 'Record export format must be one of: asciicast, webm.',
+      message: 'Record export format must be one of: asciicast, webm, svg.',
       details: {
         format,
       },
@@ -105,7 +108,7 @@ function resolveReplayTimingMode(
   return timingResult.data;
 }
 
-function resolveWebmProfileName(
+function resolveRenderProfileName(
   commandProfile: string | undefined,
   contextProfileDefault: string | undefined,
 ): string | undefined {
@@ -201,6 +204,29 @@ export async function runRecordExportCommand(
   options: CommandOptions,
 ): Promise<void> {
   const format = resolveRecordExportFormat(options.format);
+
+  if (options.animate === true && format !== 'svg') {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: '--animate is only supported with --format svg.',
+      details: {
+        format,
+      },
+    });
+  }
+
+  // Animated SVG always replays with recorded event-log timing; there is no
+  // timing mode to choose.
+  if (format === 'svg' && options.timing !== undefined) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message:
+        '--timing is not supported with --format svg; animated SVG always uses recorded timing.',
+      details: {
+        format,
+        timing: options.timing,
+      },
+    });
+  }
+
   const timingMode = resolveReplayTimingMode(options.timing);
   const home = options.context.home;
   let sessionDirectory: string;
@@ -305,8 +331,78 @@ export async function runRecordExportCommand(
       bytes = contentsBuffer.byteLength;
       invariant(bytes > 0, 'asciicast export artifact must not be empty');
       sha256 = createHash('sha256').update(contentsBuffer).digest('hex');
+    } else if (format === 'svg') {
+      const svgProfileName =
+        resolveRenderProfileName(
+          options.profile,
+          options.context.profileDefault,
+        ) ?? 'reference-dark';
+      const resolvedProfile = resolveProfile(svgProfileName);
+      const renderProfileHash = hashProfile(resolvedProfile);
+      const animate = options.animate === true;
+
+      invariant(events.length > 0, 'svg export requires at least one event');
+      const capture = await captureGridFrames({
+        sessionId: options.sessionId,
+        manifest,
+        events,
+        profile: resolvedProfile,
+        mode: animate ? 'timeline' : 'final',
+      });
+      const svgContents = renderGridFramesToSvg({
+        profile: resolvedProfile,
+        frames: capture.frames,
+        animate,
+      });
+      const contentsBuffer = Buffer.from(svgContents, 'utf8');
+
+      capturedAtSeq = capture.capturedAtSeq;
+      durationMs = animate ? capture.timelineDurationMs : 0;
+      artifactKind = 'recording';
+      artifactMetadata = {
+        format,
+        outputPath: artifactOutputPath,
+        width: capture.cols,
+        height: capture.rows,
+        profileName: svgProfileName,
+        renderProfileHash,
+        rendererBackend: capture.rendererBackend,
+        animated: animate,
+        frameCount: capture.frames.length,
+        outputEventCount: capture.outputEventCount,
+        resizeEventCount: capture.resizeEventCount,
+      };
+      resultMetadata = {
+        width: capture.cols,
+        height: capture.rows,
+        profileName: svgProfileName,
+        renderProfileHash,
+        rendererBackend: capture.rendererBackend,
+        animated: animate,
+        frameCount: capture.frames.length,
+        outputEventCount: capture.outputEventCount,
+        resizeEventCount: capture.resizeEventCount,
+      };
+
+      if (options.out === undefined) {
+        invariant(
+          capturedAtSeq === defaultCapturedAtSeq,
+          'default svg artifact path seq must match exported seq',
+        );
+      }
+
+      await writeTextFileAtomic({
+        path: artifactOutputPath,
+        pathLabel: 'record export path',
+        contents: svgContents,
+        writeErrorMessage: `Failed to write record export artifact at ${artifactOutputPath}.`,
+      });
+
+      bytes = contentsBuffer.byteLength;
+      invariant(bytes > 0, 'svg export artifact must not be empty');
+      sha256 = createHash('sha256').update(contentsBuffer).digest('hex');
     } else {
-      const webmProfileName = resolveWebmProfileName(
+      const webmProfileName = resolveRenderProfileName(
         options.profile,
         options.context.profileDefault,
       );

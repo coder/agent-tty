@@ -463,7 +463,7 @@ export const WaitForRenderResultSchema = z
 export const RecordExportResultSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
-    format: z.enum(['asciicast', 'webm']),
+    format: z.enum(['asciicast', 'webm', 'svg']),
     artifactPath: NonEmptyStringSchema,
     bytes: PositiveIntSchema,
     sha256: NonEmptyStringSchema,

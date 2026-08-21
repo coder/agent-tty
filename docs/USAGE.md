@@ -60,6 +60,7 @@ agent-tty --home <path> snapshot <session-id> --format text --json
 agent-tty --home <path> screenshot <session-id> --json
 agent-tty --home <path> record export <session-id> --format asciicast --json
 agent-tty --home <path> record export <session-id> --format webm --json
+agent-tty --home <path> record export <session-id> --format svg --json
 ```
 
 ## `run`
@@ -198,9 +199,13 @@ agent-tty screenshot <session-id> --profile reference-dark --json
 agent-tty screenshot <session-id> --show-cursor --json
 agent-tty record export <session-id> --format asciicast --out ./session.cast --json
 agent-tty record export <session-id> --format webm --timing accelerated --out ./session.webm --json
+agent-tty record export <session-id> --format svg --json
+agent-tty record export <session-id> --format svg --animate --out ./session.svg --json
 ```
 
 WebM export replays with recorded wall-clock timing by default. Pass `--timing accelerated` (idle gaps clamped to 400ms) or `--timing max-speed` for a time-compressed video.
+
+SVG export renders styled grid frames from the event log through the native `libghostty-vt` backend with no browser and no ffmpeg, so it requires the optional `@coder/libghostty-vt-node` package (there is no `ghostty-web` fallback). The output is deterministic: exporting the same session twice produces byte-identical, diffable SVG. `--format svg` writes a still image of the final screen; add `--animate` for an animated SVG of de-duplicated frames replayed with recorded event-log timing (`--timing` is not supported with SVG).
 
 Use `--renderer ghostty-web`, `AGENT_TTY_RENDERER=ghostty-web`, or Home `config.json` `{ "defaultRenderer": "ghostty-web" }` to force legacy all-browser rendering. Use `--renderer libghostty-vt` only when you intentionally want semantic and screenshot requests routed through the native backend; WebM requests still record `ghostty-web` as the actual video producer.
 
