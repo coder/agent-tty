@@ -293,6 +293,9 @@ function toStyledCell(cell: NativeSnapshotCell): SnapshotCell {
     ...(cell.bold === undefined ? {} : { bold: cell.bold }),
     ...(cell.italic === undefined ? {} : { italic: cell.italic }),
     ...(cell.underline === undefined ? {} : { underline: cell.underline }),
+    // Preserve the native wide-glyph span on the leading cell so consumers
+    // can distinguish trailing spacers from untouched-column gap padding.
+    ...(cell.width > 1 ? { width: cell.width } : {}),
   };
 }
 
@@ -336,9 +339,11 @@ function mapNativeCells(
         cells.push(styled);
         // A wide glyph covers its trailing column(s): emit an empty spacer
         // carrying the glyph's styling so the trailing half shades correctly
-        // and the array index stays aligned with the terminal column.
+        // and the array index stays aligned with the terminal column. The
+        // spacer carries no `width` of its own — only the leading cell does.
         for (let span = 1; span < cell.width; span += 1) {
-          cells.push({ ...styled, char: '' });
+          const { width: _leadingWidth, ...spacerStyle } = styled;
+          cells.push({ ...spacerStyle, char: '' });
         }
       }
       return { lineNumber, cells };

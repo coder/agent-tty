@@ -370,7 +370,10 @@ describe('LibghosttyVtBackend', () => {
 
     // Emoji: glyph at its true column, empty spacer next, no left shift after.
     expect(row0[7]?.char).toBe('🚀');
+    // The leading cell carries the native span; its spacer does not.
+    expect(row0[7]?.width).toBe(2);
     expect(row0[8]?.char).toBe('');
+    expect(row0[8]?.width).toBeUndefined();
     expect(row0[9]?.char).toBe(' ');
     expect(row0[10]?.char).toBe('d');
     expect(row0[13]?.char).toBe('e');

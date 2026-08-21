@@ -520,6 +520,18 @@ describe('RPC message schemas', () => {
     ).toBe(true);
     expect(
       SnapshotCellSchema.safeParse({
+        char: '漢',
+        width: 2,
+      }).success,
+    ).toBe(true);
+    expect(
+      SnapshotCellSchema.safeParse({
+        char: 'A',
+        width: 1,
+      }).success,
+    ).toBe(false);
+    expect(
+      SnapshotCellSchema.safeParse({
         char: 'A',
         extra: true,
       }).success,

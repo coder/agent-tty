@@ -66,6 +66,7 @@ class FakeGridBackend implements RendererBackend {
   public isBooted = false;
   public replayTargetSeqs: number[] = [];
   public snapshotCalls: Array<SnapshotOptions | undefined> = [];
+  public eventsFed = 0;
   public disposed = false;
 
   private lastSeq = -1;
@@ -79,6 +80,7 @@ class FakeGridBackend implements RendererBackend {
 
   public replayTo(input: ReplayInput): Promise<ReplayState> {
     this.replayTargetSeqs.push(input.targetSeq);
+    this.eventsFed += input.events.length;
     this.lastSeq = input.targetSeq;
     return Promise.resolve({
       lastSeq: input.targetSeq,
@@ -169,6 +171,9 @@ describe('captureGridFrames', () => {
 
     // Boundaries: seq 1 (coalesced 0+1), seq 2, seq 4 (marker skipped).
     expect(backend.replayTargetSeqs).toEqual([1, 2, 4]);
+    // Event cursor: each of the 5 events is fed to the backend exactly once
+    // across all incremental replays (no per-boundary full-array rescans).
+    expect(backend.eventsFed).toBe(5);
     expect(backend.snapshotCalls).toEqual([
       { includeCells: true },
       { includeCells: true },
@@ -262,6 +267,38 @@ describe('captureGridFrames', () => {
       expect(capture.rendererBackend).toBe('libghostty-vt');
       expect(svg).toMatch(
         /<text x="84" y="14" textLength="8\.4"[^>]*>X<\/text>/u,
+      );
+    },
+  );
+
+  maybeIt(
+    'spans default-style wide glyphs across their full width through the native backend',
+    async () => {
+      const events: EventRecord[] = [
+        {
+          seq: 0,
+          ts: isoAt(0),
+          type: 'output',
+          payload: { data: 'A漢B' },
+        },
+      ];
+
+      const capture = await captureGridFrames({
+        sessionId: SESSION_ID,
+        manifest: createSessionRecord(),
+        events,
+        profile: PROFILE,
+        mode: 'final',
+      });
+      const svg = renderGridFramesToSvg({
+        profile: PROFILE,
+        frames: capture.frames,
+        animate: false,
+      });
+
+      // A(1) + 漢(2) + B(1) = one default-style run spanning 4 cells: 33.6.
+      expect(svg).toMatch(
+        /<text x="0" y="14" textLength="33\.6"[^>]*>A漢B<\/text>/u,
       );
     },
   );

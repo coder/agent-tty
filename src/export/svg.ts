@@ -1,5 +1,10 @@
 import type { SnapshotCell } from '../protocol/schemas.js';
 import type { RenderProfileConfig } from '../renderer/types.js';
+import {
+  BUNDLED_PRIMARY_FONT_ASSET,
+  BUNDLED_SYMBOLS_FONT_ASSET,
+  type BundledFontAsset,
+} from '../renderer/bundledFont.js';
 import { invariant } from '../util/assert.js';
 
 /**
@@ -47,6 +52,67 @@ interface StyleRun {
   bold: boolean;
   italic: boolean;
   underline: boolean;
+}
+
+/**
+ * Both bundled fonts are licensed under the SIL Open Font License 1.1 (see
+ * src/renderer/ghosttyWeb/assets/FONT-LICENSE.txt); embedded SVGs carry this
+ * attribution as an XML comment.
+ */
+const FONT_LICENSE_COMMENT =
+  '<!-- Embedded fonts (SIL Open Font License 1.1): JetBrains Mono by JetBrains s.r.o. (https://github.com/JetBrains/JetBrainsMono); Symbols Nerd Font Mono by the Nerd Fonts contributors (https://github.com/ryanoasis/nerd-fonts), embedded only when Nerd Font glyphs are present. -->';
+
+/**
+ * Nerd Font glyphs live in the Unicode Private Use Areas: the BMP PUA
+ * (U+E000-U+F8FF) plus the supplementary PUA-A/PUA-B planes.
+ */
+function isPrivateUseCodePoint(codePoint: number): boolean {
+  return (
+    (codePoint >= 0xe000 && codePoint <= 0xf8ff) ||
+    (codePoint >= 0xf0000 && codePoint <= 0xffffd) ||
+    (codePoint >= 0x100000 && codePoint <= 0x10fffd)
+  );
+}
+
+function framesContainPrivateUseGlyph(
+  frames: readonly SvgGridFrame[],
+): boolean {
+  for (const frame of frames) {
+    for (const cells of frame.lines) {
+      for (const cell of cells) {
+        for (const character of cell.char) {
+          const codePoint = character.codePointAt(0);
+          invariant(codePoint !== undefined, 'iterated character must exist');
+          if (isPrivateUseCodePoint(codePoint)) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function renderFontFace(asset: BundledFontAsset, format: string): string {
+  invariant(asset.buffer.byteLength > 0, 'bundled font asset must have bytes');
+  const dataUri = `data:${asset.contentType};base64,${asset.buffer.toString('base64')}`;
+  return `@font-face{font-family:"${asset.family}";src:url(${dataUri}) format("${format}");font-weight:${asset.weight};font-style:${asset.style};}`;
+}
+
+/**
+ * Standalone SVGs must carry their fonts so glyphs render identically without
+ * locally installed fonts. The 21 KB JetBrains Mono latin subset is always
+ * embedded; the 2.5 MB Symbols Nerd Font is embedded only when a rendered
+ * frame actually contains a Private Use Area glyph, keeping ordinary exports
+ * small. Both are base64 of checked-in asset bytes, so output stays
+ * deterministic.
+ */
+function renderFontStyleElement(frames: readonly SvgGridFrame[]): string {
+  const fontFaces = [renderFontFace(BUNDLED_PRIMARY_FONT_ASSET, 'woff2')];
+  if (framesContainPrivateUseGlyph(frames)) {
+    fontFaces.push(renderFontFace(BUNDLED_SYMBOLS_FONT_ASSET, 'truetype'));
+  }
+  return `<style>${fontFaces.join('\n')}</style>`;
 }
 
 const XML_ESCAPES: Record<string, string> = {
@@ -128,42 +194,60 @@ function isZeroStyleGapCell(cell: SnapshotCell): boolean {
 }
 
 /**
- * Group one row's cells into consecutive same-style runs. Wide-glyph spacer
- * cells (`char: ''` carrying the glyph's style) extend the covered cell count
- * without adding text, so a run's `textLength` still spans every column the
- * glyphs occupy. Zero-style empty cells are gap padding for untouched
- * columns: they break the current run so the next glyph anchors at its true
- * column. A completely unstyled wide glyph's trailing spacer is
- * indistinguishable from gap padding and is treated as a break too — the
- * glyph then spans a single cell, but every subsequent column stays correct.
+ * Group one row's cells into consecutive same-style runs. A wide glyph
+ * declares its span via the leading cell's `width`; its trailing spacer cells
+ * (`char: ''`) extend the run's covered cell count without adding text —
+ * regardless of styling — so `textLength` spans every column the glyph
+ * occupies. Zero-style empty cells NOT covered by a preceding wide glyph are
+ * gap padding for untouched columns (e.g. ESC[NC): they break the current run
+ * so the next glyph anchors at its true column.
  */
 export function groupRowIntoStyleRuns(
   cells: readonly SnapshotCell[],
 ): StyleRun[] {
   const runs: StyleRun[] = [];
   let current: StyleRun | null = null;
+  let pendingSpacers = 0;
 
   for (const [col, cell] of cells.entries()) {
+    if (pendingSpacers > 0) {
+      // Column covered by the preceding wide glyph: extend that glyph's run
+      // whatever the spacer's styling looks like.
+      pendingSpacers -= 1;
+      invariant(
+        cell.char === '',
+        'wide-glyph trailing cell must be an empty spacer',
+      );
+      invariant(current !== null, 'wide glyph run must exist for its spacers');
+      current.cellCount += 1;
+      continue;
+    }
     if (isZeroStyleGapCell(cell)) {
       current = null;
       continue;
     }
+    const width = cell.width ?? 1;
+    invariant(
+      Number.isInteger(width) && width >= 1,
+      'snapshot cell width must be a positive integer when provided',
+    );
     if (current !== null && styleMatches(current, cell)) {
       current.cellCount += 1;
       current.text += cell.char;
-      continue;
+    } else {
+      current = {
+        startCol: col,
+        cellCount: 1,
+        text: cell.char,
+        fg: cell.fg,
+        bg: cell.bg,
+        bold: cell.bold ?? false,
+        italic: cell.italic ?? false,
+        underline: cell.underline ?? false,
+      };
+      runs.push(current);
     }
-    current = {
-      startCol: col,
-      cellCount: 1,
-      text: cell.char,
-      fg: cell.fg,
-      bg: cell.bg,
-      bold: cell.bold ?? false,
-      italic: cell.italic ?? false,
-      underline: cell.underline ?? false,
-    };
-    runs.push(current);
+    pendingSpacers = width - 1;
   }
 
   let previousEndCol = 0;
@@ -335,6 +419,8 @@ export function renderGridFramesToSvg(options: SvgRenderOptions): string {
 
   const lines: string[] = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="${escapeXml(profile.fontFamily)}" font-size="${formatSvgNumber(profile.fontSize)}" fill="${escapeXml(profile.foregroundColor)}">`,
+    FONT_LICENSE_COMMENT,
+    renderFontStyleElement(frames),
     `<rect width="100%" height="100%" fill="${escapeXml(profile.backgroundColor)}"/>`,
   ];
 

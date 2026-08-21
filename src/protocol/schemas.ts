@@ -307,6 +307,12 @@ export const SnapshotCellSchema = z
     italic: z.boolean().optional(),
     underline: z.boolean().optional(),
     strikethrough: z.boolean().optional(),
+    /**
+     * Terminal cell span of this glyph. Only present on the leading cell of a
+     * wide glyph (width >= 2); the trailing column(s) follow as `char: ''`
+     * spacer cells without a width.
+     */
+    width: z.number().int().min(2).optional(),
   })
   .strict();
 export type SnapshotCell = z.infer<typeof SnapshotCellSchema>;

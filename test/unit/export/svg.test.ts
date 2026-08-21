@@ -28,6 +28,11 @@ function countOccurrences(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1;
 }
 
+/** Drop the embedded font payload (base64 can contain any digits/letters). */
+function stripFontAssets(svg: string): string {
+  return svg.replace(/<style>[\s\S]*?<\/style>/u, '');
+}
+
 describe('renderGridFramesToSvg', () => {
   it('produces byte-identical output for repeated renders of the same input', () => {
     const frames = [
@@ -106,7 +111,7 @@ describe('renderGridFramesToSvg', () => {
         makeFrame({
           lines: [
             [
-              cell('字', { bg: '#00ff00' }),
+              cell('字', { bg: '#00ff00', width: 2 }),
               cell('', { bg: '#00ff00' }),
               cell('!', { bg: '#00ff00' }),
             ],
@@ -123,6 +128,79 @@ describe('renderGridFramesToSvg', () => {
     // The wide glyph's spacer contributes width but no text.
     expect(svg).toContain('>字!</text>');
     expect(svg).toContain('textLength="25.2"');
+  });
+
+  it('spans default-style wide glyphs across their full width', () => {
+    // Default-style CJK: the width-2 leading cell claims its trailing spacer
+    // even though the spacer is indistinguishable from gap padding by style.
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [
+        makeFrame({
+          lines: [[cell('A'), cell('漢', { width: 2 }), cell(''), cell('B')]],
+        }),
+      ],
+      animate: false,
+    });
+
+    // One default-style run over 4 cells: textLength 4 x 8.4 = 33.6.
+    expect(svg).toContain(
+      '<text x="0" y="14" textLength="33.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">A漢B</text>',
+    );
+  });
+
+  it('anchors styled glyphs after a default-style wide glyph correctly', () => {
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [
+        makeFrame({
+          lines: [
+            [cell('漢', { width: 2 }), cell(''), cell('B', { bold: true })],
+          ],
+        }),
+      ],
+      animate: false,
+    });
+
+    // The wide glyph spans 2 cells (16.8); B starts at col 2 (x = 16.8).
+    expect(svg).toContain(
+      '<text x="0" y="14" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">漢</text>',
+    );
+    expect(svg).toContain(
+      '<text x="16.8" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">B</text>',
+    );
+  });
+
+  it('embeds the JetBrains Mono latin subset as a woff2 data URI', () => {
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [makeFrame({ lines: [[cell('x')]] })],
+      animate: false,
+    });
+
+    expect(svg).toContain(
+      '@font-face{font-family:"JetBrains Mono";src:url(data:font/woff2;base64,',
+    );
+    expect(svg).toContain('SIL Open Font License 1.1');
+  });
+
+  it('embeds the Symbols Nerd Font only when a Private Use Area glyph is rendered', () => {
+    const plainSvg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [makeFrame({ lines: [[cell('x')]] })],
+      animate: false,
+    });
+    expect(plainSvg).not.toContain('data:font/ttf');
+
+    // U+E0A0 (powerline branch glyph) sits in the BMP Private Use Area.
+    const puaSvg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [makeFrame({ lines: [[cell('\ue0a0')]] })],
+      animate: false,
+    });
+    expect(puaSvg).toContain(
+      '@font-face{font-family:"Symbols Nerd Font Mono";src:url(data:font/ttf;base64,',
+    );
   });
 
   it('preserves columns across zero-style gap padding cells', () => {
@@ -255,7 +333,10 @@ describe('renderGridFramesToSvg', () => {
       animate: true,
     });
 
-    expect(svg).not.toContain(String(new Date().getFullYear()));
-    expect(svg).not.toContain('id=');
+    // Base64 font payloads can contain arbitrary digit/letter sequences;
+    // assert on the document markup only.
+    const markup = stripFontAssets(svg);
+    expect(markup).not.toContain(String(new Date().getFullYear()));
+    expect(markup).not.toContain('id=');
   });
 });

@@ -166,6 +166,7 @@ function frameContentKey(frame: GridFrame): string {
         cell.bold ?? false,
         cell.italic ?? false,
         cell.underline ?? false,
+        cell.width ?? 1,
       ]),
     ),
   ]);
@@ -243,6 +244,25 @@ export async function captureGridFrames(
 
     const frames: GridFrame[] = [];
     let previousContentKey: string | null = null;
+    // Event cursor: each boundary replay feeds only the not-yet-applied event
+    // suffix. Passing the full validated array per boundary would rescan from
+    // index 0 every time (O(boundaries x events)). The backend skips events at
+    // or below its last applied seq, so a contiguous suffix slice of the
+    // already-validated events is equivalent.
+    let nextEventIndex = 0;
+    const sliceEventsThrough = (targetSeq: number) => {
+      const startIndex = nextEventIndex;
+      while (nextEventIndex < replayInput.events.length) {
+        const event = replayInput.events[nextEventIndex];
+        invariant(event !== undefined, 'event cursor index must be in range');
+        if (event.seq > targetSeq) {
+          break;
+        }
+        nextEventIndex += 1;
+      }
+      return replayInput.events.slice(startIndex, nextEventIndex);
+    };
+
     for (const [index, boundary] of captureBoundaries.entries()) {
       const nextBoundary = captureBoundaries[index + 1];
       const holdMs =
@@ -251,7 +271,11 @@ export async function captureGridFrames(
           : nextBoundary.tsMs - boundary.tsMs;
       invariant(holdMs > 0, 'frame hold duration must be positive');
 
-      await backend.replayTo({ ...replayInput, targetSeq: boundary.seq });
+      await backend.replayTo({
+        ...replayInput,
+        events: sliceEventsThrough(boundary.seq),
+        targetSeq: boundary.seq,
+      });
       const snapshot = await backend.snapshot({ includeCells: true });
       const frame = toGridFrame(snapshot, holdMs);
       const contentKey = frameContentKey(frame);
@@ -267,7 +291,11 @@ export async function captureGridFrames(
 
     // Apply any trailing non-visual events so capturedAtSeq covers the log.
     if (replayInput.targetSeq > (captureBoundaries.at(-1)?.seq ?? -1)) {
-      await backend.replayTo(replayInput);
+      await backend.replayTo({
+        ...replayInput,
+        events: sliceEventsThrough(replayInput.targetSeq),
+        targetSeq: replayInput.targetSeq,
+      });
     }
 
     const finalFrame = frames.at(-1);
