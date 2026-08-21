@@ -346,6 +346,32 @@ describe('renderGridFramesToSvg', () => {
     );
   });
 
+  it('keeps keyTimes strictly increasing for tiny holds in long timelines', () => {
+    // A 1ms hold inside a 10^9 ms timeline needs more than 6 decimals: with
+    // coarser rounding both boundaries collapse to the same keyTime and the
+    // frame's recorded transition is dropped.
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [
+        makeFrame({ lines: [[cell('a')]], holdMs: 1 }),
+        makeFrame({ lines: [[cell('b')]], holdMs: 999_999_999 }),
+      ],
+      animate: true,
+    });
+
+    expect(svg).toContain('keyTimes="0;0.000000001"');
+    const keyTimesLists = [...svg.matchAll(/keyTimes="([^"]+)"/gu)].map(
+      (match) => match[1] ?? '',
+    );
+    expect(keyTimesLists.length).toBeGreaterThan(0);
+    for (const list of keyTimesLists) {
+      const values = list.split(';').map(Number);
+      for (let index = 1; index < values.length; index += 1) {
+        expect(values[index]).toBeGreaterThan(values[index - 1] ?? Number.NaN);
+      }
+    }
+  });
+
   it('renders a single animated frame as static content', () => {
     const svg = renderGridFramesToSvg({
       profile: PROFILE,

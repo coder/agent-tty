@@ -135,6 +135,9 @@ function collectFrameBoundaries(input: ReplayInput): {
   };
 }
 
+// Captured frames omit cursorVisible because the native snapshot exposes no
+// DECTCEM visibility field; the renderer's hidden-cursor branch is exercised
+// only by direct frame producers today.
 function toGridFrame(snapshot: SemanticSnapshot, holdMs: number): GridFrame {
   invariant(
     snapshot.cells !== undefined,

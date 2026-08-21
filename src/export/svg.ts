@@ -207,13 +207,19 @@ function formatSvgNumber(value: number): string {
   return trimmed === '-0' ? '0' : trimmed;
 }
 
+/**
+ * Serialize a keyTime with enough precision that a 1 ms hold stays distinct:
+ * 12 decimals resolve millisecond boundaries for timelines up to 10^12 ms
+ * (~31 years), far beyond any recordable session. Trailing zeros are trimmed
+ * so output stays canonical and deterministic.
+ */
 function formatKeyTime(offsetMs: number, totalMs: number): string {
   invariant(totalMs > 0, 'animation total duration must be positive');
   invariant(
     offsetMs >= 0 && offsetMs <= totalMs,
     'animation key time offset must lie within the total duration',
   );
-  const fixed = (offsetMs / totalMs).toFixed(6);
+  const fixed = (offsetMs / totalMs).toFixed(12);
   const trimmed = fixed.replace(/0+$/u, '').replace(/\.$/u, '');
   return trimmed.length > 0 ? trimmed : '0';
 }
@@ -439,17 +445,39 @@ function renderVisibilityAnimation(
   );
   invariant(startMs < endMs, 'frame window must be non-empty');
 
+  // A positive hold must survive serialization: rounded keyTimes that
+  // collapse to the same value would give the frame a zero-length interval
+  // and silently drop a recorded transition.
+  const startKeyTime = formatKeyTime(startMs, totalMs);
+  const endKeyTime = formatKeyTime(endMs, totalMs);
+  invariant(
+    Number(startKeyTime) < Number(endKeyTime),
+    'serialized frame keyTimes must be strictly increasing for positive holds',
+  );
+
   let values: string;
   let keyTimes: string;
   if (frameIndex === 0) {
     values = 'visible;hidden';
-    keyTimes = `0;${formatKeyTime(endMs, totalMs)}`;
+    invariant(
+      Number(endKeyTime) > 0,
+      'first frame end keyTime must be positive',
+    );
+    keyTimes = `0;${endKeyTime}`;
   } else if (frameIndex === frameCount - 1) {
     values = 'hidden;visible';
-    keyTimes = `0;${formatKeyTime(startMs, totalMs)}`;
+    invariant(
+      Number(startKeyTime) > 0,
+      'last frame start keyTime must be positive',
+    );
+    keyTimes = `0;${startKeyTime}`;
   } else {
     values = 'hidden;visible;hidden';
-    keyTimes = `0;${formatKeyTime(startMs, totalMs)};${formatKeyTime(endMs, totalMs)}`;
+    invariant(
+      Number(startKeyTime) > 0,
+      'interior frame start keyTime must be positive',
+    );
+    keyTimes = `0;${startKeyTime};${endKeyTime}`;
   }
 
   return `<animate attributeName="visibility" values="${values}" keyTimes="${keyTimes}" dur="${formatSvgNumber(totalMs)}ms" calcMode="discrete" repeatCount="indefinite"/>`;
