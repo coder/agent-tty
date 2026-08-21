@@ -159,6 +159,38 @@ describe('renderGridFramesToSvg', () => {
     expect(svg).not.toContain('>\ue0a0B</text>');
   });
 
+  it('splits symbol glyphs from system-fallback glyphs', () => {
+    // α (U+03B1) is covered by neither bundled face (system fallback) while
+    // ⚡ (U+26A1) resolves to the embedded symbols face: different real
+    // fonts, different natural advances — merging them into one aggregate
+    // textLength run would drift interior glyphs.
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [makeFrame({ lines: [[cell('\u03b1'), cell('\u26a1')]] })],
+      animate: false,
+    });
+
+    expect(svg).toContain(
+      '<text x="0" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">\u03b1</text>',
+    );
+    expect(svg).toContain(
+      '<text x="8.4" y="14" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">\u26a1</text>',
+    );
+    expect(svg).not.toContain('>\u03b1\u26a1</text>');
+  });
+
+  it('merges consecutive system-fallback glyphs into one run', () => {
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [makeFrame({ lines: [[cell('\u03b1'), cell('\u03b2')]] })],
+      animate: false,
+    });
+
+    expect(svg).toContain(
+      '<text x="0" y="14" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">\u03b1\u03b2</text>',
+    );
+  });
+
   it('merges consecutive same-face symbol glyphs into one run', () => {
     const svg = renderGridFramesToSvg({
       profile: PROFILE,
@@ -269,7 +301,7 @@ describe('renderGridFramesToSvg', () => {
     expect(svg).toContain('SIL Open Font License 1.1');
   });
 
-  it('embeds the Symbols Nerd Font only when a glyph escapes the latin subset', () => {
+  it('embeds the Symbols Nerd Font only for glyphs its face covers', () => {
     const plainSvg = renderGridFramesToSvg({
       profile: PROFILE,
       frames: [makeFrame({ lines: [[cell('x')]] })],
@@ -288,7 +320,7 @@ describe('renderGridFramesToSvg', () => {
       '@font-face{font-family:"Symbols Nerd Font Mono";src:url(data:font/ttf;base64,',
     );
 
-    // U+E0A0 (powerline branch glyph) sits in the BMP Private Use Area.
+    // U+E0A0 (powerline branch glyph) is in the symbols face's PUA coverage.
     const puaSvg = renderGridFramesToSvg({
       profile: PROFILE,
       frames: [makeFrame({ lines: [[cell('\ue0a0')]] })],
@@ -297,6 +329,15 @@ describe('renderGridFramesToSvg', () => {
     expect(puaSvg).toContain(
       '@font-face{font-family:"Symbols Nerd Font Mono";src:url(data:font/ttf;base64,',
     );
+
+    // CJK is covered by neither bundled face (system fallback renders it),
+    // so embedding the symbols face would add 2.5 MB for nothing.
+    const cjkSvg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [makeFrame({ lines: [[cell('漢', { width: 2 }), cell('')]] })],
+      animate: false,
+    });
+    expect(cjkSvg).not.toContain('data:font/ttf');
   });
 
   it('preserves columns across zero-style gap padding cells', () => {

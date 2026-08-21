@@ -50,7 +50,7 @@ export interface SvgRenderOptions {
   animate: boolean;
 }
 
-type GlyphFace = 'latin' | 'fallback';
+type GlyphFace = 'latin' | 'symbols' | 'system';
 
 interface StyleRun {
   startCol: number;
@@ -70,16 +70,12 @@ interface StyleRun {
  * attribution as an XML comment.
  */
 const FONT_LICENSE_COMMENT =
-  '<!-- Embedded fonts (SIL Open Font License 1.1): JetBrains Mono by JetBrains s.r.o. (https://github.com/JetBrains/JetBrainsMono); Symbols Nerd Font Mono by the Nerd Fonts contributors (https://github.com/ryanoasis/nerd-fonts), embedded only when glyphs outside the latin subset are present. -->';
+  '<!-- Embedded fonts (SIL Open Font License 1.1): JetBrains Mono by JetBrains s.r.o. (https://github.com/JetBrains/JetBrainsMono); Symbols Nerd Font Mono by the Nerd Fonts contributors (https://github.com/ryanoasis/nerd-fonts), embedded only when glyphs covered by the symbols face are present. -->';
 
 /**
  * Exact cmap coverage of the pinned JetBrainsMono-Regular-latin.woff2 asset
  * (dumped offline from the checked-in file's format-4 cmap: 229 code points).
  * The asset is hash-pinned via bundledFont.ts, so these ranges are stable.
- * Any rendered code point outside this coverage triggers embedding of the
- * Symbols Nerd Font Mono fallback face. That over-embeds for glyphs covered
- * by neither face (e.g. CJK), which is acceptable: it keeps the predicate a
- * simple, deterministic function of rendered content.
  *
  * Explicit boundary: glyphs outside BOTH bundled faces — notably CJK and
  * most emoji — render via the viewer's monospace fallback. This is kept
@@ -132,32 +128,89 @@ function isCoveredByPrimaryLatinSubset(codePoint: number): boolean {
 }
 
 /**
- * Classify which embedded face renders a glyph: the primary latin subset or
- * the symbols/fallback path. Glyphs covered by neither bundled face (CJK
- * etc.) classify as 'fallback' too — both resolve past the latin face in the
- * font stack, so they share advance behavior distinct from latin glyphs.
+ * Exact cmap coverage of the pinned SymbolsNerdFontMono-Regular.ttf asset
+ * (dumped offline from the checked-in file's format-12 cmap: 10,410 code
+ * points in 28 contiguous ranges). The asset is hash-pinned via
+ * bundledFont.ts, so these ranges are stable. To regenerate: parse the TTF
+ * table directory for the `cmap` table, pick the format-12 subtable, and
+ * collapse its sequential map groups into [start, end] pairs.
+ */
+const SYMBOLS_FACE_RANGES: ReadonlyArray<readonly [number, number]> = [
+  [0x23fb, 0x23fe],
+  [0x2630, 0x2630],
+  [0x2665, 0x2665],
+  [0x26a1, 0x26a1],
+  [0x276c, 0x2771],
+  [0x2b58, 0x2b58],
+  [0xe000, 0xe00a],
+  [0xe0a0, 0xe0a3],
+  [0xe0b0, 0xe0c8],
+  [0xe0ca, 0xe0ca],
+  [0xe0cc, 0xe0d2],
+  [0xe0d4, 0xe0d4],
+  [0xe0d6, 0xe0d7],
+  [0xe200, 0xe2a9],
+  [0xe300, 0xe3e3],
+  [0xe5fa, 0xe6b8],
+  [0xe700, 0xe8ef],
+  [0xea60, 0xea88],
+  [0xea8a, 0xea8c],
+  [0xea8f, 0xeac7],
+  [0xeac9, 0xeac9],
+  [0xeacc, 0xeb09],
+  [0xeb0b, 0xeb4e],
+  [0xeb50, 0xec1e],
+  [0xed00, 0xefce],
+  [0xf000, 0xf381],
+  [0xf400, 0xf533],
+  [0xf0001, 0xf1af0],
+];
+
+function isCoveredBySymbolsFace(codePoint: number): boolean {
+  for (const [start, end] of SYMBOLS_FACE_RANGES) {
+    if (codePoint >= start && codePoint <= end) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Classify which face actually renders a glyph: the primary latin subset,
+ * the embedded symbols face, or the viewer's system monospace fallback
+ * (glyphs covered by neither bundled face, e.g. CJK and most emoji). The
+ * three resolve to different real fonts with different natural advances, so
+ * run grouping must not mix them. A cluster containing any system-fallback
+ * code point classifies as 'system' since the fallback font shapes it.
  */
 function classifyGlyphFace(char: string): GlyphFace {
+  let sawSymbolsGlyph = false;
   for (const character of char) {
     const codePoint = character.codePointAt(0);
     invariant(codePoint !== undefined, 'iterated character must exist');
-    if (!isCoveredByPrimaryLatinSubset(codePoint)) {
-      return 'fallback';
+    if (isCoveredByPrimaryLatinSubset(codePoint)) {
+      continue;
     }
+    if (isCoveredBySymbolsFace(codePoint)) {
+      sawSymbolsGlyph = true;
+      continue;
+    }
+    return 'system';
   }
-  return 'latin';
+  return sawSymbolsGlyph ? 'symbols' : 'latin';
 }
 
-function framesContainNonLatinGlyph(frames: readonly SvgGridFrame[]): boolean {
+/**
+ * The symbols face is embedded only when a rendered glyph actually resolves
+ * to it; 'system' glyphs (covered by neither bundled face) gain nothing from
+ * embedding, so they no longer trigger the 2.5 MB payload.
+ */
+function framesContainSymbolsGlyph(frames: readonly SvgGridFrame[]): boolean {
   for (const frame of frames) {
     for (const cells of frame.lines) {
       for (const cell of cells) {
-        for (const character of cell.char) {
-          const codePoint = character.codePointAt(0);
-          invariant(codePoint !== undefined, 'iterated character must exist');
-          if (!isCoveredByPrimaryLatinSubset(codePoint)) {
-            return true;
-          }
+        if (classifyGlyphFace(cell.char) === 'symbols') {
+          return true;
         }
       }
     }
@@ -175,13 +228,13 @@ function renderFontFace(asset: BundledFontAsset, format: string): string {
  * Standalone SVGs must carry their fonts so glyphs render identically without
  * locally installed fonts. The 21 KB JetBrains Mono latin subset is always
  * embedded; the 2.5 MB Symbols Nerd Font is embedded only when a rendered
- * frame contains a code point outside that latin subset's coverage, keeping
- * ordinary exports small. Both are base64 of checked-in asset bytes, so
- * output stays deterministic.
+ * frame contains a glyph the symbols face actually covers, keeping ordinary
+ * exports small. Both are base64 of checked-in asset bytes, so output stays
+ * deterministic.
  */
 function renderFontStyleElement(frames: readonly SvgGridFrame[]): string {
   const fontFaces = [renderFontFace(BUNDLED_PRIMARY_FONT_ASSET, 'woff2')];
-  if (framesContainNonLatinGlyph(frames)) {
+  if (framesContainSymbolsGlyph(frames)) {
     fontFaces.push(renderFontFace(BUNDLED_SYMBOLS_FONT_ASSET, 'truetype'));
   }
   return `<style>${fontFaces.join('\n')}</style>`;
