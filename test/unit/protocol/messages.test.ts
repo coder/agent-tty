@@ -846,15 +846,18 @@ describe('RPC message schemas', () => {
     ).toBe(false);
   });
 
-  it('bounds record diff side dimensions', () => {
+  it('accepts huge session dimensions without unbounded validation work', () => {
+    // Dimensions accepted by the session contract must validate here too;
+    // above the work bound the blank-hash equality check is skipped, so this
+    // parses quickly regardless of the declared hash.
     const side = {
       sessionId: 'session-01',
       capturedAtSeq: -1,
       cols: 80,
-      rows: 100_001,
+      rows: 1_000_000_000,
       screenHash: 'a'.repeat(64),
     };
-    // Oversized rows fail schema validation before any blank-screen hashing.
+    const started = Date.now();
     expect(
       RecordDiffResultSchema.safeParse({
         identical: true,
@@ -862,7 +865,8 @@ describe('RPC message schemas', () => {
         b: side,
         diff: [],
       }).success,
-    ).toBe(false);
+    ).toBe(true);
+    expect(Date.now() - started).toBeLessThan(1_000);
   });
 
   it('requires pre-event record diff sides to hash to a blank screen', () => {

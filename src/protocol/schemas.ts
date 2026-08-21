@@ -501,11 +501,11 @@ export const RecordDiffLineSchema = z.discriminatedUnion('op', [
 ]);
 export type RecordDiffLine = z.infer<typeof RecordDiffLineSchema>;
 
-// Generous ceiling on diffable screen dimensions; real terminals are far
-// below it. Bounding rows keeps validation-time work (e.g. hashing the
-// blank pre-event screen) proportional to a schema-checked limit instead of
-// attacker-controlled input.
-const MAX_RECORD_DIFF_DIMENSION = 100_000;
+// Work bound for validation-time blank-screen hashing only. Dimensions are
+// deliberately NOT capped (the session contract accepts any positive size);
+// above this row count the pre-event blank-hash equality check is skipped so
+// safeParse never performs unbounded work on attacker-controlled input.
+const MAX_BLANK_HASH_ROWS = 100_000;
 
 export const RecordDiffSideSchema = z
   .object({
@@ -513,8 +513,8 @@ export const RecordDiffSideSchema = z
     // -1 mirrors ReplayInput.targetSeq for an empty event log: the side is
     // the pre-event blank screen and no event sequence was replayed.
     capturedAtSeq: z.number().int().gte(-1),
-    cols: PositiveIntSchema.lte(MAX_RECORD_DIFF_DIMENSION),
-    rows: PositiveIntSchema.lte(MAX_RECORD_DIFF_DIMENSION),
+    cols: PositiveIntSchema,
+    rows: PositiveIntSchema,
     screenHash: Sha256HexSchema,
   })
   .strict();
@@ -558,11 +558,14 @@ export const RecordDiffResultSchema = z
     }
 
     // capturedAtSeq -1 marks the pre-event blank screen, so such a side must
-    // hash to `rows` empty canonical lines.
+    // hash to `rows` empty canonical lines. Skipped above the work bound so
+    // validation cost stays bounded for arbitrarily large (but contract-
+    // valid) dimensions.
     for (const sideKey of ['a', 'b'] as const) {
       const side = value[sideKey];
       if (
         side.capturedAtSeq === -1 &&
+        side.rows <= MAX_BLANK_HASH_ROWS &&
         side.screenHash !== sha256Hex('\n'.repeat(side.rows - 1))
       ) {
         ctx.addIssue({
