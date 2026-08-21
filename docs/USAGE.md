@@ -207,6 +207,8 @@ WebM export replays with recorded wall-clock timing by default. Pass `--timing a
 
 SVG export renders styled grid frames from the event log through the native `libghostty-vt` backend with no browser and no ffmpeg, so it requires the optional `@coder/libghostty-vt-node` package (there is no `ghostty-web` fallback). The output is deterministic: exporting the same session twice produces byte-identical, diffable SVG. `--format svg` writes a still image of the final screen; add `--animate` for an animated SVG of de-duplicated frames replayed with recorded event-log timing (`--timing` is not supported with SVG).
 
+SVG exports always embed the pinned JetBrains Mono latin subset and additionally embed the Symbols Nerd Font Mono face when the rendered content needs it. Glyphs outside both faces (notably CJK and most emoji) render via the viewer's monospace fallback, mirroring the reference renderer's own system-font fallback for the same glyphs. Text content and layout metrics stay deterministic even when fallback glyph shapes vary: every text run is pinned to the terminal grid via `textLength`, so columns never shift.
+
 Use `--renderer ghostty-web`, `AGENT_TTY_RENDERER=ghostty-web`, or Home `config.json` `{ "defaultRenderer": "ghostty-web" }` to force legacy all-browser rendering. Use `--renderer libghostty-vt` only when you intentionally want semantic and screenshot requests routed through the native backend; WebM requests still record `ghostty-web` as the actual video producer.
 
 `ghostty-web` provides reference visual truth for reviewable artifacts; it does not promise exact pixel parity with native terminals.

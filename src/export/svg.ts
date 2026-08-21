@@ -77,6 +77,15 @@ const FONT_LICENSE_COMMENT =
  * Symbols Nerd Font Mono fallback face. That over-embeds for glyphs covered
  * by neither face (e.g. CJK), which is acceptable: it keeps the predicate a
  * simple, deterministic function of rendered content.
+ *
+ * Explicit boundary: glyphs outside BOTH bundled faces — notably CJK and
+ * most emoji — render via the viewer's monospace fallback. This is kept
+ * deliberately: the pinned render profiles bundle no CJK face (a suitable
+ * one is tens of MB), and converting glyphs to paths would require a
+ * font-shaping dependency. The reference ghostty-web PNG/WebM path has the
+ * same boundary (same two faces, then Chromium/system-font fallback). Layout
+ * stays deterministic regardless: text runs are pinned to the terminal grid
+ * via textLength, so fallback glyph shapes vary but columns never shift.
  */
 const PRIMARY_LATIN_SUBSET_RANGES: ReadonlyArray<readonly [number, number]> = [
   [0x0d, 0x0d],
