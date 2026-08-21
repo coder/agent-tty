@@ -1,4 +1,4 @@
-import { mkdtemp, realpath } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -216,6 +216,26 @@ describe('record diff integration', { timeout: 120_000 }, () => {
       expect(envelope.ok).toBe(false);
       expect(envelope.error.code).toBe('INVALID_INPUT');
     }
+  });
+
+  it('fails with REPLAY_ERROR when the canonical event log was deleted', async () => {
+    const sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      "printf 'x\\n'",
+    ]);
+    waitForExit(testHome, sessionId);
+
+    // Simulate a lost recording: the manifest survives but events.jsonl is
+    // gone. record diff must not fabricate a blank-screen result.
+    await rm(join(testHome, 'sessions', sessionId, 'events.jsonl'));
+
+    const result = runRecordDiff(testHome, [sessionId, sessionId]);
+
+    expect(result.status).not.toBe(0);
+    const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('REPLAY_ERROR');
   });
 
   it('fails with SESSION_NOT_FOUND for unknown sessions', () => {

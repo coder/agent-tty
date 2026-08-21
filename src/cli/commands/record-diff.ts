@@ -1,3 +1,5 @@
+import { access } from 'node:fs/promises';
+
 import type { CommandContext } from '../context.js';
 import type {
   RecordDiffResult,
@@ -14,7 +16,11 @@ import {
 } from '../../renderer/canonicalScreen.js';
 import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
-import { manifestPath, sessionDir } from '../../storage/sessionPaths.js';
+import {
+  eventLogPath,
+  manifestPath,
+  sessionDir,
+} from '../../storage/sessionPaths.js';
 import { diffLines } from '../../util/lineDiff.js';
 import { invariant } from '../../util/assert.js';
 
@@ -68,6 +74,22 @@ async function resolveSessionDirectory(
   return sessionDirectory;
 }
 
+async function assertEventLogExists(
+  sessionDirectory: string,
+  sessionId: string,
+): Promise<void> {
+  const eventsFile = eventLogPath(sessionDirectory);
+  try {
+    await access(eventsFile);
+  } catch (error) {
+    throw makeCliError(ERROR_CODES.REPLAY_ERROR, {
+      message: `Session "${sessionId}" has no event log; the canonical log was deleted or never written.`,
+      details: { sessionId, eventLogPath: eventsFile },
+      cause: error,
+    });
+  }
+}
+
 async function replayScreen(
   context: CommandContext,
   sessionId: string,
@@ -91,6 +113,12 @@ async function replayScreen(
           // valid initial blank grid. Backends reject snapshot() before the
           // first replayed event, so synthesize the blank screen directly.
           // capturedAtSeq -1 mirrors targetSeq: no event was replayed.
+          //
+          // The host creates events.jsonl at startup, so an empty replay is
+          // only authoritative when the (zero-length) log file exists; a
+          // missing file means the canonical log was deleted or never
+          // written and must not be reported as a blank screen.
+          await assertEventLogExists(sessionDirectory, sessionId);
           const blankLines = Array.from(
             { length: replayInput.initialRows },
             () => '',

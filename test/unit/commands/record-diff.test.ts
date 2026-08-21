@@ -7,7 +7,13 @@ const mocks = vi.hoisted(() => ({
   readManifestIfExists: vi.fn(),
   sessionDir: vi.fn(),
   manifestPath: vi.fn(),
+  eventLogPath: vi.fn(),
+  access: vi.fn(),
   withOfflineReplayRenderer: vi.fn(),
+}));
+
+vi.mock('node:fs/promises', () => ({
+  access: mocks.access,
 }));
 
 vi.mock('../../../src/cli/output.js', () => ({
@@ -25,6 +31,7 @@ vi.mock('../../../src/storage/manifests.js', () => ({
 vi.mock('../../../src/storage/sessionPaths.js', () => ({
   sessionDir: mocks.sessionDir,
   manifestPath: mocks.manifestPath,
+  eventLogPath: mocks.eventLogPath,
 }));
 
 import { runRecordDiffCommand } from '../../../src/cli/commands/record-diff.js';
@@ -135,6 +142,10 @@ describe('runRecordDiffCommand', () => {
       (sessionDirectory: string) => `${sessionDirectory}/session.json`,
     );
     mocks.readManifestIfExists.mockResolvedValue(createTestSessionRecord());
+    mocks.eventLogPath.mockImplementation(
+      (sessionDirectory: string) => `${sessionDirectory}/events.jsonl`,
+    );
+    mocks.access.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -255,6 +266,21 @@ describe('runRecordDiffCommand', () => {
         },
       }),
     );
+  });
+
+  it('fails with REPLAY_ERROR when the event log file is missing', async () => {
+    // An empty replay is only authoritative when the zero-length log exists;
+    // a deleted or never-written log must not synthesize a blank screen.
+    mockEmptyLogReplay(24, 80);
+    mocks.access.mockRejectedValue(
+      Object.assign(new Error('ENOENT'), { code: 'ENOENT' }),
+    );
+
+    await expect(runRecordDiffCommand(createOptions())).rejects.toMatchObject({
+      code: ERROR_CODES.REPLAY_ERROR,
+      message: expect.stringContaining('has no event log') as string,
+    });
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
   it('rejects non-integer --at-seq values including NaN', async () => {
