@@ -646,6 +646,38 @@ describe('RPC message schemas', () => {
     ).toBe(true);
   });
 
+  it('accepts waitForRender scope with a text or regex condition', () => {
+    expect(
+      WaitForRenderParamsSchema.safeParse({
+        text: 'Ready',
+        scope: 'cursor-line',
+      }).success,
+    ).toBe(true);
+    expect(
+      WaitForRenderParamsSchema.safeParse({
+        regex: 'READY>$',
+        scope: 'cursor-line',
+      }).success,
+    ).toBe(true);
+    expect(
+      WaitForRenderParamsSchema.safeParse({ text: 'Ready', scope: 'screen' })
+        .success,
+    ).toBe(true);
+  });
+
+  it('rejects invalid waitForRender scopes', () => {
+    expect(
+      WaitForRenderParamsSchema.safeParse({ text: 'Ready', scope: 'line' })
+        .success,
+    ).toBe(false);
+    expect(
+      WaitForRenderParamsSchema.safeParse({
+        screenStableMs: 250,
+        scope: 'cursor-line',
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects invalid waitForRender params', () => {
     expect(WaitForRenderParamsSchema.safeParse({}).success).toBe(false);
     expect(
