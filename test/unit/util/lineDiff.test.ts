@@ -92,6 +92,24 @@ describe('diffLines', () => {
     expect(entries).toHaveLength(a.length + 1);
   });
 
+  it('handles very large distinct middles without exceeding argument limits', () => {
+    // Two fully distinct 63k-line screens produce a 126k-entry fallback
+    // middle; appending it must not use argument spreading, which would throw
+    // RangeError past V8's function-argument limit.
+    const a = Array.from({ length: 63_000 }, (_, i) => `a ${String(i)}`);
+    const b = Array.from({ length: 63_000 }, (_, i) => `b ${String(i)}`);
+
+    const entries = diffLines(a, b);
+
+    expect(entries).toHaveLength(126_000);
+    expect(entries[0]).toEqual({ op: 'delete', text: 'a 0', aRow: 0 });
+    expect(entries[125_999]).toEqual({
+      op: 'add',
+      text: 'b 62999',
+      bRow: 62_999,
+    });
+  });
+
   it('degrades to a delete-then-add block when the middle exceeds the cell budget', () => {
     // Fully distinct 3000-line sides leave a middle whose DP table (~9M
     // cells) exceeds the 4M budget; the diff must degrade, not fail.

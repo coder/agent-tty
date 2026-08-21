@@ -150,11 +150,14 @@ export function diffLines(
   const bMiddle = b.slice(prefix, b.length - suffix);
   const withinBudget =
     (aMiddle.length + 1) * (bMiddle.length + 1) <= MAX_DIFF_CELLS;
-  entries.push(
-    ...(withinBudget
-      ? lcsEntries(aMiddle, bMiddle, prefix, prefix)
-      : fallbackEntries(aMiddle, bMiddle, prefix, prefix)),
-  );
+  const middleEntries = withinBudget
+    ? lcsEntries(aMiddle, bMiddle, prefix, prefix)
+    : fallbackEntries(aMiddle, bMiddle, prefix, prefix);
+  // Append iteratively: spreading into push() would exceed V8's
+  // function-argument limit for very large middles.
+  for (const entry of middleEntries) {
+    entries.push(entry);
+  }
 
   for (let k = 0; k < suffix; k += 1) {
     const aRow = a.length - suffix + k;
