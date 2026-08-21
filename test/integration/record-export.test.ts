@@ -473,6 +473,100 @@ describe('record export integration', { timeout: 120_000 }, () => {
     },
   );
 
+  maybeIt(
+    'writes distinct default files for still and animated svg exports',
+    async () => {
+      const sessionId = createSession(testHome, [
+        '/bin/sh',
+        '-c',
+        "printf 'collide check\\n'; sleep 0.3; printf 'second\\n'; exit 0",
+      ]);
+
+      waitForExit(testHome, sessionId);
+
+      const stillResult = runCli(
+        ['record', 'export', sessionId, '--format', 'svg', '--json'],
+        { AGENT_TTY_HOME: testHome },
+        30_000,
+      );
+      expect(stillResult.status).toBe(0);
+      const stillEnvelope = JSON.parse(
+        stillResult.stdout,
+      ) as SuccessEnvelope<RecordExportResult>;
+
+      const animatedResult = runCli(
+        [
+          'record',
+          'export',
+          sessionId,
+          '--format',
+          'svg',
+          '--animate',
+          '--json',
+        ],
+        { AGENT_TTY_HOME: testHome },
+        30_000,
+      );
+      expect(animatedResult.status).toBe(0);
+      const animatedEnvelope = JSON.parse(
+        animatedResult.stdout,
+      ) as SuccessEnvelope<RecordExportResult>;
+
+      // Distinct default filenames: the animated export must not overwrite
+      // the still artifact file.
+      expect(animatedEnvelope.result.artifactPath).not.toBe(
+        stillEnvelope.result.artifactPath,
+      );
+      expect(
+        basename(animatedEnvelope.result.artifactPath).includes('animated'),
+      ).toBe(true);
+
+      const stillContents = await readFile(stillEnvelope.result.artifactPath);
+      const animatedContents = await readFile(
+        animatedEnvelope.result.artifactPath,
+      );
+      expect(createHash('sha256').update(stillContents).digest('hex')).toBe(
+        stillEnvelope.result.sha256,
+      );
+      expect(createHash('sha256').update(animatedContents).digest('hex')).toBe(
+        animatedEnvelope.result.sha256,
+      );
+
+      const artifactManifest = await readJsonFile<{
+        artifacts: Array<{
+          kind: string;
+          filename: string;
+          sha256?: string;
+          bytes?: number;
+          metadata: Record<string, unknown>;
+        }>;
+      }>(join(testHome, 'sessions', sessionId, 'artifacts', 'manifest.json'));
+      const svgEntries = artifactManifest.artifacts.filter((entry) =>
+        entry.filename.endsWith('.svg'),
+      );
+      expect(svgEntries).toHaveLength(2);
+
+      const stillEntry = svgEntries.find(
+        (entry) =>
+          entry.filename === basename(stillEnvelope.result.artifactPath),
+      );
+      const animatedEntry = svgEntries.find(
+        (entry) =>
+          entry.filename === basename(animatedEnvelope.result.artifactPath),
+      );
+      expect(stillEntry).toMatchObject({
+        sha256: stillEnvelope.result.sha256,
+        bytes: stillEnvelope.result.bytes,
+        metadata: expect.objectContaining({ animated: false }) as unknown,
+      });
+      expect(animatedEntry).toMatchObject({
+        sha256: animatedEnvelope.result.sha256,
+        bytes: animatedEnvelope.result.bytes,
+        metadata: expect.objectContaining({ animated: true }) as unknown,
+      });
+    },
+  );
+
   maybeIt('exports animated svg with recorded timing', async () => {
     const sessionId = createSession(testHome, [
       '/bin/sh',

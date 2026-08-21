@@ -85,11 +85,22 @@ function recordingExtension(format: string): string {
   return format === 'asciicast' ? 'cast' : format;
 }
 
-export function recordingFilename(seq: number, format: string): string {
+export function recordingFilename(
+  seq: number,
+  format: string,
+  variant?: string,
+): string {
   assertNonNegativeInteger(seq, 'seq');
   const sanitizedFormat = sanitizeFilenameComponent(format, 'format');
   const extension = recordingExtension(sanitizedFormat);
-  return `recording-${String(seq)}-${sanitizedFormat}.${extension}`;
+  // A variant label distinguishes default filenames for exports of the same
+  // format and seq that produce different content (e.g. animated vs still
+  // SVG), so one cannot silently overwrite the other's artifact file.
+  const variantSuffix =
+    variant === undefined
+      ? ''
+      : `-${sanitizeFilenameComponent(variant, 'variant')}`;
+  return `recording-${String(seq)}-${sanitizedFormat}${variantSuffix}.${extension}`;
 }
 
 export function videoFilename(seq: number, profileName: string): string {

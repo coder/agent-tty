@@ -140,12 +140,13 @@ async function resolveOutputPath(
   capturedAtSeq: number,
   format: RecordExportFormat,
   outputPath: string | undefined,
+  filenameVariant?: string,
 ): Promise<string> {
   if (outputPath === undefined) {
     await ensureArtifactsDir(sessionDirectory);
     return artifactPath(
       sessionDirectory,
-      recordingFilename(capturedAtSeq, format),
+      recordingFilename(capturedAtSeq, format, filenameVariant),
     );
   }
 
@@ -260,11 +261,16 @@ export async function runRecordExportCommand(
     const eventsFile = eventLogPath(sessionDirectory);
     const events = await readEventLogRecords(eventsFile);
     const defaultCapturedAtSeq = resolveCapturedAtSeq(events);
+    // Animated and still SVG at the same seq produce different content, so
+    // their default filenames must not collide.
+    const filenameVariant =
+      format === 'svg' && options.animate === true ? 'animated' : undefined;
     const artifactOutputPath = await resolveOutputPath(
       sessionDirectory,
       defaultCapturedAtSeq,
       format,
       options.out,
+      filenameVariant,
     );
 
     invariant(

@@ -80,6 +80,15 @@ describe('artifact paths', () => {
     expect(recordingFilename(7, 'svg')).toBe('recording-7-svg.svg');
   });
 
+  it('generates distinct recording filenames per variant', () => {
+    expect(recordingFilename(7, 'svg', 'animated')).toBe(
+      'recording-7-svg-animated.svg',
+    );
+    expect(recordingFilename(7, 'svg', 'animated')).not.toBe(
+      recordingFilename(7, 'svg'),
+    );
+  });
+
   it('asserts on unsupported recording formats', () => {
     expect(() => recordingFilename(7, 'trace')).toThrow(
       /unsupported recording format: trace/u,
