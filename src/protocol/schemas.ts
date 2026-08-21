@@ -5,6 +5,7 @@ import {
   MAX_WAIT_FOR_RENDER_TEXT_LENGTH,
 } from '../renderWait/limits.js';
 import { RendererNameSchema } from '../renderer/names.js';
+import { sha256Hex } from '../util/hash.js';
 
 const NonEmptyStringSchema = z.string().min(1);
 const TextMatchSchema = z.string().min(1).max(MAX_WAIT_FOR_RENDER_TEXT_LENGTH);
@@ -554,38 +555,59 @@ export const RecordDiffResultSchema = z
     // (equal/add) must each enumerate 0..rows-1 exactly once, in order, so
     // consumers can reconstruct either side by filtering operations.
     if (!value.identical) {
-      let nextARow = 0;
-      let nextBRow = 0;
+      const aLines: string[] = [];
+      const bLines: string[] = [];
       for (const [index, entry] of value.diff.entries()) {
         if (entry.op !== 'add') {
-          if (entry.aRow !== nextARow) {
+          if (entry.aRow !== aLines.length) {
             ctx.addIssue({
               code: 'custom',
-              message: `aRow must enumerate side a rows in order (expected ${String(nextARow)}).`,
+              message: `aRow must enumerate side a rows in order (expected ${String(aLines.length)}).`,
               path: ['diff', index, 'aRow'],
             });
             return;
           }
-          nextARow += 1;
+          aLines.push(entry.text);
         }
         if (entry.op !== 'delete') {
-          if (entry.bRow !== nextBRow) {
+          if (entry.bRow !== bLines.length) {
             ctx.addIssue({
               code: 'custom',
-              message: `bRow must enumerate side b rows in order (expected ${String(nextBRow)}).`,
+              message: `bRow must enumerate side b rows in order (expected ${String(bLines.length)}).`,
               path: ['diff', index, 'bRow'],
             });
             return;
           }
-          nextBRow += 1;
+          bLines.push(entry.text);
         }
       }
-      if (nextARow !== value.a.rows || nextBRow !== value.b.rows) {
+      if (aLines.length !== value.a.rows || bLines.length !== value.b.rows) {
         ctx.addIssue({
           code: 'custom',
           message:
             'diff must cover every row of both sides exactly once (0..rows-1).',
           path: ['diff'],
+        });
+        return;
+      }
+
+      // The reconstructed sides must hash to the declared screen hashes, so
+      // the diff, the hashes, and `identical` can never contradict each
+      // other after successful validation.
+      if (sha256Hex(aLines.join('\n')) !== value.a.screenHash) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'side a screenHash must match the screen reconstructed from the diff.',
+          path: ['a', 'screenHash'],
+        });
+      }
+      if (sha256Hex(bLines.join('\n')) !== value.b.screenHash) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'side b screenHash must match the screen reconstructed from the diff.',
+          path: ['b', 'screenHash'],
         });
       }
     }

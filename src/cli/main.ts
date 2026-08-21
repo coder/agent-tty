@@ -60,12 +60,16 @@ function parseNumberOption(value: string): number {
   return Number(value);
 }
 
-// Strict integer-token parser: empty, whitespace-only, fractional, or
-// partially numeric tokens (e.g. "", "1.5", "2junk") yield NaN so command
-// validation rejects them instead of silently truncating.
+// Strict integer-token parser: empty, whitespace-only, fractional, partially
+// numeric (e.g. "", "1.5", "2junk"), or unsafe-magnitude tokens yield NaN so
+// command validation rejects them instead of silently truncating or rounding.
 function parseIntegerTokenOption(value: string): number {
   const token = value.trim();
-  return /^[+-]?\d+$/.test(token) ? Number.parseInt(token, 10) : Number.NaN;
+  if (!/^[+-]?\d+$/.test(token)) {
+    return Number.NaN;
+  }
+  const parsed = Number.parseInt(token, 10);
+  return Number.isSafeInteger(parsed) ? parsed : Number.NaN;
 }
 
 function collectStringOption(value: string, previous: string[] = []): string[] {

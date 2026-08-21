@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { sha256Hex } from '../../../src/util/hash.js';
+
 import {
   CapabilityEntrySchema,
   DestroyParamsSchema,
@@ -698,8 +700,12 @@ describe('RPC message schemas', () => {
     expect(
       RecordDiffResultSchema.safeParse({
         identical: false,
-        a: side,
-        b: { ...side, screenHash: 'b'.repeat(64) },
+        a: { ...side, screenHash: sha256Hex('shared\nold') },
+        b: {
+          ...side,
+          sessionId: 'session-02',
+          screenHash: sha256Hex('shared\nnew'),
+        },
         diff: [
           { op: 'equal', text: 'shared', aRow: 0, bRow: 0 },
           { op: 'delete', text: 'old', aRow: 1 },
@@ -790,8 +796,8 @@ describe('RPC message schemas', () => {
     };
     const base = {
       identical: false,
-      a: side,
-      b: { ...side, screenHash: 'b'.repeat(64) },
+      a: { ...side, screenHash: sha256Hex('shared\nold') },
+      b: { ...side, screenHash: sha256Hex('shared\nnew') },
     };
     // Complete ordered enumeration of both 2-row screens parses.
     expect(
@@ -838,6 +844,41 @@ describe('RPC message schemas', () => {
         ],
       }).success,
     ).toBe(false);
+  });
+
+  it('rejects record diff results whose hashes contradict the diff text', () => {
+    const side = {
+      sessionId: 'session-01',
+      capturedAtSeq: 7,
+      cols: 80,
+      rows: 1,
+      screenHash: sha256Hex('same'),
+    };
+    // Reconstructing both sides yields 'same', so differing declared hashes
+    // (and identical: false) contradict the diff content.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: false,
+        a: side,
+        b: { ...side, screenHash: 'b'.repeat(64) },
+        diff: [
+          { op: 'delete', text: 'same', aRow: 0 },
+          { op: 'add', text: 'same', bRow: 0 },
+        ],
+      }).success,
+    ).toBe(false);
+    // Consistent hashes for genuinely different one-row screens parse.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: false,
+        a: { ...side, screenHash: sha256Hex('old') },
+        b: { ...side, screenHash: sha256Hex('new') },
+        diff: [
+          { op: 'delete', text: 'old', aRow: 0 },
+          { op: 'add', text: 'new', bRow: 0 },
+        ],
+      }).success,
+    ).toBe(true);
   });
 
   it('rejects record diff results with contradictory identity invariants', () => {
