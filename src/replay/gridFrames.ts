@@ -57,6 +57,11 @@ export interface CaptureGridFramesOptions {
 export interface GridFrameCapture {
   frames: GridFrame[];
   capturedAtSeq: number;
+  /**
+   * Canvas dimensions: per-frame maxima of cols/rows across all captured
+   * frames, matching the viewBox the SVG renderer sizes from. For a
+   * recording that resizes down, these exceed the final frame's grid.
+   */
   cols: number;
   rows: number;
   rendererBackend: string;
@@ -423,11 +428,24 @@ export async function captureGridFrames(
     const finalFrame = frames.at(-1);
     invariant(finalFrame !== undefined, 'grid capture must produce >=1 frame');
 
+    // Report the same per-frame maxima the SVG renderer sizes its canvas
+    // from, so CLI JSON / manifest width+height match the rendered viewBox.
+    let maxCols = 0;
+    let maxRows = 0;
+    for (const frame of frames) {
+      maxCols = Math.max(maxCols, frame.cols);
+      maxRows = Math.max(maxRows, frame.rows);
+    }
+    invariant(
+      maxCols > 0 && maxRows > 0,
+      'capture dimensions must be positive',
+    );
+
     return {
       frames,
       capturedAtSeq: replayInput.targetSeq,
-      cols: finalFrame.cols,
-      rows: finalFrame.rows,
+      cols: maxCols,
+      rows: maxRows,
       rendererBackend: backend.rendererBackend,
       outputEventCount,
       resizeEventCount,

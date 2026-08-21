@@ -71,11 +71,18 @@ class FakeGridBackend implements RendererBackend {
 
   private lastSeq = -1;
 
-  public constructor(private readonly gridBySeq: Map<number, string>) {}
+  public constructor(
+    private readonly gridBySeq: Map<number, string>,
+    private readonly dimsBySeq?: Map<number, { cols: number; rows: number }>,
+  ) {}
 
   public boot(): Promise<void> {
     this.isBooted = true;
     return Promise.resolve();
+  }
+
+  private dims(): { cols: number; rows: number } {
+    return this.dimsBySeq?.get(this.lastSeq) ?? { cols: 4, rows: 2 };
   }
 
   public replayTo(input: ReplayInput): Promise<ReplayState> {
@@ -84,8 +91,7 @@ class FakeGridBackend implements RendererBackend {
     this.lastSeq = input.targetSeq;
     return Promise.resolve({
       lastSeq: input.targetSeq,
-      cols: 4,
-      rows: 2,
+      ...this.dims(),
       cursorRow: 0,
       cursorCol: 0,
     });
@@ -98,8 +104,7 @@ class FakeGridBackend implements RendererBackend {
     return Promise.resolve({
       sessionId: SESSION_ID,
       capturedAtSeq: this.lastSeq,
-      cols: 4,
-      rows: 2,
+      ...this.dims(),
       cursorRow: 0,
       cursorCol: Math.min(text?.length ?? 0, 3),
       isAltScreen: false,
@@ -369,6 +374,50 @@ describe('captureGridFrames', () => {
       );
     },
   );
+
+  it('reports per-frame maxima dimensions for recordings that resize down', async () => {
+    // The SVG renderer sizes its canvas to the per-frame maxima, so the
+    // capture must report those — not the smaller final grid — to keep CLI
+    // JSON / manifest width+height consistent with the rendered viewBox.
+    const events: EventRecord[] = [
+      { seq: 0, ts: isoAt(0), type: 'output', payload: { data: 'big' } },
+      {
+        seq: 1,
+        ts: isoAt(1_000),
+        type: 'resize',
+        payload: { cols: 80, rows: 24 },
+      },
+      { seq: 2, ts: isoAt(2_000), type: 'output', payload: { data: 'small' } },
+    ];
+    const backend = new FakeGridBackend(
+      new Map([
+        [0, 'big'],
+        [1, 'big'],
+        [2, 'small'],
+      ]),
+      new Map([
+        [0, { cols: 100, rows: 30 }],
+        [1, { cols: 80, rows: 24 }],
+        [2, { cols: 80, rows: 24 }],
+      ]),
+    );
+
+    const capture = await captureGridFrames(
+      {
+        sessionId: SESSION_ID,
+        manifest: createSessionRecord(),
+        events,
+        profile: PROFILE,
+        mode: 'timeline',
+      },
+      { backendFactory: () => backend },
+    );
+
+    // Final frame is 80x24, but the canvas spans the largest frame.
+    expect(capture.frames.at(-1)).toMatchObject({ cols: 80, rows: 24 });
+    expect(capture.cols).toBe(100);
+    expect(capture.rows).toBe(30);
+  });
 
   it('fails fast when distinct frames exceed the retained-cell budget', async () => {
     // Three distinct 4x2 frames retain 8 cells each; a 20-cell budget admits
