@@ -19,6 +19,7 @@ import { runListCommand } from './commands/list.js';
 import { runMarkCommand } from './commands/mark.js';
 import { runPasteCommand } from './commands/paste.js';
 import { runRunCommand } from './commands/run.js';
+import { runRecordDiffCommand } from './commands/record-diff.js';
 import { runRecordExportCommand } from './commands/record-export.js';
 import { runResizeCommand } from './commands/resize.js';
 import { runScreenshotCommand } from './commands/screenshot.js';
@@ -799,6 +800,45 @@ async function main(): Promise<void> {
   const recordCommand = program
     .command('record')
     .description('Manage recorded session artifacts');
+
+  recordCommand
+    .command('diff <session-id-a> <session-id-b>')
+    .description('Diff the replayed visible screens of two recorded sessions')
+    .option(
+      '--at-seq-a <seq>',
+      'Replay session A up to this Event Log sequence (default: latest)',
+      parseIntegerOption,
+    )
+    .option(
+      '--at-seq-b <seq>',
+      'Replay session B up to this Event Log sequence (default: latest)',
+      parseIntegerOption,
+    )
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'record diff',
+        async (
+          sessionIdA: string,
+          sessionIdB: string,
+          options: {
+            atSeqA?: number;
+            atSeqB?: number;
+            json: boolean;
+          },
+          context: CommandContext,
+        ) => {
+          await runRecordDiffCommand({
+            context,
+            json: options.json,
+            sessionIdA,
+            sessionIdB,
+            atSeqA: options.atSeqA,
+            atSeqB: options.atSeqB,
+          });
+        },
+      ),
+    );
 
   recordCommand
     .command('export <session-id>')

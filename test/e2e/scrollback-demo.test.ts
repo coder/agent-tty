@@ -3,6 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type {
+  RecordDiffResult,
   ScreenshotResult,
   SnapshotResult,
 } from '../../src/protocol/messages.js';
@@ -128,12 +129,25 @@ describe('scrollback-demo e2e', { timeout: 60_000 }, () => {
     expect(scrollbackLines).toBeDefined();
     expect(scrollbackLines?.length).toBeGreaterThan(0);
 
-    const visibleText = structuredSnapshotEnvelope.result.visibleLines
-      .map((line) => line.text)
-      .join('\n');
-
-    expect(visibleText).toContain('SCROLLBACK COMPLETE');
-    expect(visibleText).not.toContain('LINE 001');
+    // `record diff` against the session's own first event proves the viewport
+    // scrolled: the final screen (equal + add entries) gained the completion
+    // marker and no longer shows the first line.
+    const diffEnvelope = runCliJson<SuccessEnvelope<RecordDiffResult>>(
+      ['record', 'diff', sessionId, sessionId, '--at-seq-a', '0'],
+      env,
+    );
+    expect(diffEnvelope.ok).toBe(true);
+    expect(diffEnvelope.command).toBe('record diff');
+    expect(diffEnvelope.result.identical).toBe(false);
+    const finalScreenLines = diffEnvelope.result.diff
+      .filter((entry) => entry.op !== 'delete')
+      .map((entry) => entry.text);
+    expect(
+      finalScreenLines.some((line) => line.includes('SCROLLBACK COMPLETE')),
+    ).toBe(true);
+    expect(finalScreenLines.some((line) => line.includes('LINE 001'))).toBe(
+      false,
+    );
 
     const screenshotEnvelope = runCliJson<SuccessEnvelope<ScreenshotResult>>(
       ['screenshot', sessionId],

@@ -474,6 +474,37 @@ export const RecordExportResultSchema = z
   .strict();
 export type RecordExportResult = z.infer<typeof RecordExportResultSchema>;
 
+export const RecordDiffLineSchema = z
+  .object({
+    op: z.enum(['equal', 'delete', 'add']),
+    text: z.string(),
+    aRow: NonNegativeIntSchema.optional(),
+    bRow: NonNegativeIntSchema.optional(),
+  })
+  .strict();
+export type RecordDiffLine = z.infer<typeof RecordDiffLineSchema>;
+
+export const RecordDiffSideSchema = z
+  .object({
+    sessionId: NonEmptyStringSchema,
+    capturedAtSeq: NonNegativeIntSchema,
+    cols: PositiveIntSchema,
+    rows: PositiveIntSchema,
+    screenHash: Sha256HexSchema,
+  })
+  .strict();
+export type RecordDiffSide = z.infer<typeof RecordDiffSideSchema>;
+
+export const RecordDiffResultSchema = z
+  .object({
+    identical: z.boolean(),
+    a: RecordDiffSideSchema,
+    b: RecordDiffSideSchema,
+    diff: z.array(RecordDiffLineSchema),
+  })
+  .strict();
+export type RecordDiffResult = z.infer<typeof RecordDiffResultSchema>;
+
 export type WaitForRenderResult = z.infer<typeof WaitForRenderResultSchema>;
 
 // --- Week 8: Capability and renderer-runtime schemas ---

@@ -11,6 +11,7 @@ import {
   MarkResultSchema,
   PasteParamsSchema,
   SendKeysResultSchema,
+  RecordDiffResultSchema,
   RecordExportResultSchema,
   ReplayTimingModeSchema,
   ResizeResultSchema,
@@ -676,6 +677,69 @@ describe('RPC message schemas', () => {
         capturedAtSeq: 7,
       }).success,
     ).toBe(true);
+  });
+
+  it('accepts valid record diff results', () => {
+    const side = {
+      sessionId: 'session-01',
+      capturedAtSeq: 7,
+      cols: 80,
+      rows: 24,
+      screenHash: 'a'.repeat(64),
+    };
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: side,
+        b: { ...side, sessionId: 'session-02' },
+        diff: [],
+      }).success,
+    ).toBe(true);
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: false,
+        a: side,
+        b: { ...side, screenHash: 'b'.repeat(64) },
+        diff: [
+          { op: 'equal', text: 'shared', aRow: 0, bRow: 0 },
+          { op: 'delete', text: 'old', aRow: 1 },
+          { op: 'add', text: 'new', bRow: 1 },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects invalid record diff results', () => {
+    const side = {
+      sessionId: 'session-01',
+      capturedAtSeq: 7,
+      cols: 80,
+      rows: 24,
+      screenHash: 'a'.repeat(64),
+    };
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: true,
+        a: { ...side, screenHash: 'not-a-hash' },
+        b: side,
+        diff: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: false,
+        a: side,
+        b: side,
+        diff: [{ op: 'replace', text: 'x' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordDiffResultSchema.safeParse({
+        identical: false,
+        a: side,
+        b: side,
+      }).success,
+    ).toBe(false);
   });
 
   it('accepts valid record export results', () => {
