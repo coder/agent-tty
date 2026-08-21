@@ -549,21 +549,43 @@ export const RecordDiffResultSchema = z
       });
     }
 
-    // Diff rows index the padded visible screens, so they are bounded by
-    // each side's row count.
-    for (const [index, entry] of value.diff.entries()) {
-      if (entry.op !== 'add' && entry.aRow >= value.a.rows) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'aRow must be less than side a rows.',
-          path: ['diff', index, 'aRow'],
-        });
+    // The diff is a complete traversal of both padded visible screens:
+    // participating A coordinates (equal/delete) and B coordinates
+    // (equal/add) must each enumerate 0..rows-1 exactly once, in order, so
+    // consumers can reconstruct either side by filtering operations.
+    if (!value.identical) {
+      let nextARow = 0;
+      let nextBRow = 0;
+      for (const [index, entry] of value.diff.entries()) {
+        if (entry.op !== 'add') {
+          if (entry.aRow !== nextARow) {
+            ctx.addIssue({
+              code: 'custom',
+              message: `aRow must enumerate side a rows in order (expected ${String(nextARow)}).`,
+              path: ['diff', index, 'aRow'],
+            });
+            return;
+          }
+          nextARow += 1;
+        }
+        if (entry.op !== 'delete') {
+          if (entry.bRow !== nextBRow) {
+            ctx.addIssue({
+              code: 'custom',
+              message: `bRow must enumerate side b rows in order (expected ${String(nextBRow)}).`,
+              path: ['diff', index, 'bRow'],
+            });
+            return;
+          }
+          nextBRow += 1;
+        }
       }
-      if (entry.op !== 'delete' && entry.bRow >= value.b.rows) {
+      if (nextARow !== value.a.rows || nextBRow !== value.b.rows) {
         ctx.addIssue({
           code: 'custom',
-          message: 'bRow must be less than side b rows.',
-          path: ['diff', index, 'bRow'],
+          message:
+            'diff must cover every row of both sides exactly once (0..rows-1).',
+          path: ['diff'],
         });
       }
     }

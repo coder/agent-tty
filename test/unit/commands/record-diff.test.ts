@@ -71,9 +71,17 @@ function mockReplaySnapshots(fixtures: SnapshotFixture[]): void {
       if (fixture === undefined) {
         throw new Error('unexpected extra replay call');
       }
+      // Production snapshots pad visibleLines to exactly `rows`; mirror that
+      // so the emitted diff enumerates complete screens.
       return await run({
         backend: {
-          snapshot: () => Promise.resolve(createTestSemanticSnapshot(fixture)),
+          snapshot: () =>
+            Promise.resolve(
+              createTestSemanticSnapshot({
+                ...fixture,
+                rows: fixture.visibleLines.length,
+              }),
+            ),
         },
         replayInput: {
           targetSeq: fixture.capturedAtSeq,
@@ -155,14 +163,14 @@ describe('runRecordDiffCommand', () => {
             sessionId: 'session-a',
             capturedAtSeq: 4,
             cols: 80,
-            rows: 24,
+            rows: 2,
             screenHash: expectedHash,
           },
           b: {
             sessionId: 'session-b',
             capturedAtSeq: 9,
             cols: 80,
-            rows: 24,
+            rows: 2,
             screenHash: expectedHash,
           },
           diff: [],

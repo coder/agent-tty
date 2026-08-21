@@ -684,7 +684,7 @@ describe('RPC message schemas', () => {
       sessionId: 'session-01',
       capturedAtSeq: 7,
       cols: 80,
-      rows: 24,
+      rows: 2,
       screenHash: 'a'.repeat(64),
     };
     expect(
@@ -780,12 +780,12 @@ describe('RPC message schemas', () => {
     ).toBe(false);
   });
 
-  it('rejects record diff entries with out-of-bounds row coordinates', () => {
+  it('requires record diff rows to enumerate both screens in order', () => {
     const side = {
       sessionId: 'session-01',
       capturedAtSeq: 7,
       cols: 80,
-      rows: 24,
+      rows: 2,
       screenHash: 'a'.repeat(64),
     };
     const base = {
@@ -793,32 +793,51 @@ describe('RPC message schemas', () => {
       a: side,
       b: { ...side, screenHash: 'b'.repeat(64) },
     };
-    // aRow == a.rows is out of bounds for the padded visible screen.
-    expect(
-      RecordDiffResultSchema.safeParse({
-        ...base,
-        diff: [{ op: 'delete', text: 'old', aRow: 24 }],
-      }).success,
-    ).toBe(false);
+    // Complete ordered enumeration of both 2-row screens parses.
     expect(
       RecordDiffResultSchema.safeParse({
         ...base,
         diff: [
-          { op: 'equal', text: 'x', aRow: 0, bRow: 24 },
+          { op: 'equal', text: 'shared', aRow: 0, bRow: 0 },
+          { op: 'delete', text: 'old', aRow: 1 },
+          { op: 'add', text: 'new', bRow: 1 },
+        ],
+      }).success,
+    ).toBe(true);
+    // Missing rows (screens not fully covered) are rejected.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        ...base,
+        diff: [
+          { op: 'delete', text: 'old', aRow: 0 },
           { op: 'add', text: 'new', bRow: 0 },
         ],
       }).success,
     ).toBe(false);
-    // In-bounds rows parse.
+    // Out-of-order coordinates are rejected.
     expect(
       RecordDiffResultSchema.safeParse({
         ...base,
         diff: [
-          { op: 'delete', text: 'old', aRow: 23 },
-          { op: 'add', text: 'new', bRow: 23 },
+          { op: 'delete', text: 'old', aRow: 1 },
+          { op: 'delete', text: 'older', aRow: 0 },
+          { op: 'add', text: 'new', bRow: 0 },
+          { op: 'add', text: 'newer', bRow: 1 },
         ],
       }).success,
-    ).toBe(true);
+    ).toBe(false);
+    // Duplicate coordinates are rejected.
+    expect(
+      RecordDiffResultSchema.safeParse({
+        ...base,
+        diff: [
+          { op: 'delete', text: 'old', aRow: 0 },
+          { op: 'delete', text: 'older', aRow: 0 },
+          { op: 'add', text: 'new', bRow: 0 },
+          { op: 'add', text: 'newer', bRow: 1 },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects record diff results with contradictory identity invariants', () => {
@@ -826,7 +845,7 @@ describe('RPC message schemas', () => {
       sessionId: 'session-01',
       capturedAtSeq: 7,
       cols: 80,
-      rows: 24,
+      rows: 1,
       screenHash: 'a'.repeat(64),
     };
     const otherSide = { ...side, screenHash: 'b'.repeat(64) };
