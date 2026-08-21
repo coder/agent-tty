@@ -77,6 +77,27 @@ describe('diffLines', () => {
     expect(entries.every((entry) => entry.op === 'delete')).toBe(true);
   });
 
+  it('handles a huge one-sided middle without allocating the DP table', () => {
+    // 3M distinct rows vs one shared row: the trimmed middle is one-sided,
+    // which must bypass the table (3M one-element rows would be ~hundreds of
+    // MiB) and complete quickly.
+    const a = Array.from({ length: 3_000_000 }, (_, i) => `row ${String(i)}`);
+    const b = ['row 0'];
+
+    const started = Date.now();
+    const entries = diffLines(a, b);
+
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(entries).toHaveLength(3_000_000);
+    expect(entries[0]).toEqual({
+      op: 'equal',
+      text: 'row 0',
+      aRow: 0,
+      bRow: 0,
+    });
+    expect(entries.slice(1).every((entry) => entry.op === 'delete')).toBe(true);
+  });
+
   it('matches large common prefixes and suffixes without a quadratic table', () => {
     // 40k shared lines on each side would need a ~1.6G-cell DP table; the
     // prefix/suffix trim must reduce the middle to the single changed line.

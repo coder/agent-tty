@@ -29,6 +29,12 @@ function lcsEntries(
   aOffset: number,
   bOffset: number,
 ): LineDiffEntry[] {
+  // An empty side needs no LCS comparisons; skip the table so one-sided
+  // middles stay linear in memory as well as time.
+  if (a.length === 0 || b.length === 0) {
+    return fallbackEntries(a, b, aOffset, bOffset);
+  }
+
   // lcs[i][j] = LCS length of a[i..] and b[j..].
   const lcs: number[][] = Array.from({ length: a.length + 1 }, () =>
     new Array<number>(b.length + 1).fill(0),
