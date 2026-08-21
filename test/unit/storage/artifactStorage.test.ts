@@ -81,11 +81,17 @@ describe('artifact paths', () => {
   });
 
   it('generates distinct recording filenames per variant', () => {
-    expect(recordingFilename(7, 'svg', 'animated')).toBe(
-      'recording-7-svg-animated.svg',
+    expect(recordingFilename(7, 'svg', 'reference-dark')).toBe(
+      'recording-7-svg-reference-dark.svg',
     );
-    expect(recordingFilename(7, 'svg', 'animated')).not.toBe(
-      recordingFilename(7, 'svg'),
+    expect(recordingFilename(7, 'svg', 'reference-dark-animated')).toBe(
+      'recording-7-svg-reference-dark-animated.svg',
+    );
+    expect(recordingFilename(7, 'svg', 'reference-light')).not.toBe(
+      recordingFilename(7, 'svg', 'reference-dark'),
+    );
+    expect(recordingFilename(7, 'svg', 'reference-dark-animated')).not.toBe(
+      recordingFilename(7, 'svg', 'reference-dark'),
     );
   });
 

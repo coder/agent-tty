@@ -567,6 +567,93 @@ describe('record export integration', { timeout: 120_000 }, () => {
     },
   );
 
+  maybeIt(
+    'writes distinct default files per render profile for svg exports',
+    async () => {
+      const sessionId = createSession(testHome, [
+        '/bin/sh',
+        '-c',
+        "printf 'profile collide check\\n'; exit 0",
+      ]);
+
+      waitForExit(testHome, sessionId);
+
+      const envelopes: Array<SuccessEnvelope<RecordExportResult>> = [];
+      for (const profile of ['reference-dark', 'reference-light']) {
+        const result = runCli(
+          [
+            'record',
+            'export',
+            sessionId,
+            '--format',
+            'svg',
+            '--profile',
+            profile,
+            '--json',
+          ],
+          { AGENT_TTY_HOME: testHome },
+          30_000,
+        );
+        expect(result.status).toBe(0);
+        envelopes.push(
+          JSON.parse(result.stdout) as SuccessEnvelope<RecordExportResult>,
+        );
+      }
+      const [darkEnvelope, lightEnvelope] = envelopes;
+      expect(darkEnvelope).toBeDefined();
+      expect(lightEnvelope).toBeDefined();
+
+      // Distinct default filenames per profile: neither overwrites the other.
+      expect(lightEnvelope?.result.artifactPath).not.toBe(
+        darkEnvelope?.result.artifactPath,
+      );
+      expect(
+        basename(darkEnvelope?.result.artifactPath ?? '').includes(
+          'reference-dark',
+        ),
+      ).toBe(true);
+      expect(
+        basename(lightEnvelope?.result.artifactPath ?? '').includes(
+          'reference-light',
+        ),
+      ).toBe(true);
+
+      const artifactManifest = await readJsonFile<{
+        artifacts: Array<{
+          filename: string;
+          sha256?: string;
+          bytes?: number;
+          metadata: Record<string, unknown>;
+        }>;
+      }>(join(testHome, 'sessions', sessionId, 'artifacts', 'manifest.json'));
+      const entriesByFilename = new Map(
+        artifactManifest.artifacts.map((entry) => [entry.filename, entry]),
+      );
+
+      const hashes: unknown[] = [];
+      for (const envelope of envelopes) {
+        const artifactFilePath = envelope.result.artifactPath;
+        const contents = await readFile(artifactFilePath);
+        expect(createHash('sha256').update(contents).digest('hex')).toBe(
+          envelope.result.sha256,
+        );
+        const entry = entriesByFilename.get(basename(artifactFilePath));
+        expect(entry).toMatchObject({
+          sha256: envelope.result.sha256,
+          bytes: envelope.result.bytes,
+          metadata: expect.objectContaining({
+            profileName: envelope.result.metadata.profileName,
+            renderProfileHash: envelope.result.metadata.renderProfileHash,
+          }) as unknown,
+        });
+        hashes.push(envelope.result.metadata.renderProfileHash);
+      }
+      // Different profiles produce different render profile hashes.
+      expect(hashes[0]).toBeTruthy();
+      expect(hashes[0]).not.toBe(hashes[1]);
+    },
+  );
+
   maybeIt('exports animated svg with recorded timing', async () => {
     const sessionId = createSession(testHome, [
       '/bin/sh',

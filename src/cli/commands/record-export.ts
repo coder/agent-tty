@@ -261,10 +261,22 @@ export async function runRecordExportCommand(
     const eventsFile = eventLogPath(sessionDirectory);
     const events = await readEventLogRecords(eventsFile);
     const defaultCapturedAtSeq = resolveCapturedAtSeq(events);
-    // Animated and still SVG at the same seq produce different content, so
-    // their default filenames must not collide.
+    // SVG exports at the same seq produce different content per render
+    // profile and animation mode, so those must be part of the default
+    // filename to keep exports from overwriting each other.
+    const svgProfileName =
+      format === 'svg'
+        ? (resolveRenderProfileName(
+            options.profile,
+            options.context.profileDefault,
+          ) ?? 'reference-dark')
+        : undefined;
     const filenameVariant =
-      format === 'svg' && options.animate === true ? 'animated' : undefined;
+      svgProfileName === undefined
+        ? undefined
+        : options.animate === true
+          ? `${svgProfileName}-animated`
+          : svgProfileName;
     const artifactOutputPath = await resolveOutputPath(
       sessionDirectory,
       defaultCapturedAtSeq,
@@ -338,11 +350,10 @@ export async function runRecordExportCommand(
       invariant(bytes > 0, 'asciicast export artifact must not be empty');
       sha256 = createHash('sha256').update(contentsBuffer).digest('hex');
     } else if (format === 'svg') {
-      const svgProfileName =
-        resolveRenderProfileName(
-          options.profile,
-          options.context.profileDefault,
-        ) ?? 'reference-dark';
+      invariant(
+        svgProfileName !== undefined,
+        'svg profile name must be resolved before the svg export branch',
+      );
       const resolvedProfile = resolveProfile(svgProfileName);
       const renderProfileHash = hashProfile(resolvedProfile);
       const animate = options.animate === true;

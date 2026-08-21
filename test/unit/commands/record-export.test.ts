@@ -547,8 +547,12 @@ describe('record export command', () => {
     expect(captureArgs.events).toHaveLength(2);
     expect(captureArgs.profile.name).toBe('reference-dark');
     expect(captureArgs.mode).toBe('final');
-    // Still svg keeps the variant-free default filename.
-    expect(mocks.recordingFilename).toHaveBeenCalledWith(1, 'svg', undefined);
+    // Still svg carries the resolved profile in its default filename.
+    expect(mocks.recordingFilename).toHaveBeenCalledWith(
+      1,
+      'svg',
+      'reference-dark',
+    );
 
     expect(mocks.renderGridFramesToSvg).toHaveBeenCalledWith({
       profile: expect.objectContaining({ name: 'reference-dark' }) as unknown,
@@ -661,9 +665,13 @@ describe('record export command', () => {
     expect(mocks.renderGridFramesToSvg).toHaveBeenCalledWith(
       expect.objectContaining({ animate: true }),
     );
-    // Animated svg gets a distinct default filename so it cannot overwrite
-    // the still export at the same seq.
-    expect(mocks.recordingFilename).toHaveBeenCalledWith(1, 'svg', 'animated');
+    // Animated svg gets a distinct profile-bearing default filename so it
+    // cannot overwrite the still export at the same seq.
+    expect(mocks.recordingFilename).toHaveBeenCalledWith(
+      1,
+      'svg',
+      'reference-dark-animated',
+    );
 
     const emitSuccessCall = mocks.emitSuccess.mock.calls[0] as [
       {
