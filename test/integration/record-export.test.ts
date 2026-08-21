@@ -506,6 +506,44 @@ describe('record export integration', { timeout: 120_000 }, () => {
     expect(contents).toContain('second');
   });
 
+  it('exports blank svg for a running-but-silent session', async () => {
+    // /bin/sleep produces no output, so the event log stays empty. The blank
+    // initial grid is synthesized from the manifest without booting a
+    // renderer backend, so this needs no native gating.
+    const sessionId = createSession(testHome, ['/bin/sleep', '60']);
+
+    const exportResult = runCli(
+      ['record', 'export', sessionId, '--format', 'svg', '--json'],
+      { AGENT_TTY_HOME: testHome },
+      30_000,
+    );
+    expect(exportResult.status).toBe(0);
+    expect(exportResult.stderr).toBe('');
+
+    const envelope = JSON.parse(
+      exportResult.stdout,
+    ) as SuccessEnvelope<RecordExportResult>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.format).toBe('svg');
+    expect(envelope.result.capturedAtSeq).toBe(0);
+    expect(envelope.result.metadata).toMatchObject({
+      frameCount: 1,
+      animated: false,
+      outputEventCount: 0,
+      resizeEventCount: 0,
+    });
+
+    const contents = await readFile(envelope.result.artifactPath, 'utf8');
+    expect(contents.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(
+      true,
+    );
+    expect(contents).toContain(
+      '<rect width="100%" height="100%" fill="#1e1e2e"/>',
+    );
+
+    destroySession(testHome, sessionId);
+  });
+
   it('rejects invalid export formats', () => {
     const result = runCli(
       ['record', 'export', 'session-01', '--format', 'bogus', '--json'],

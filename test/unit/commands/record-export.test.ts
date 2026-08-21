@@ -674,6 +674,64 @@ describe('record export command', () => {
     expect(emitSuccessArgs.result.metadata.frameCount).toBe(2);
   });
 
+  it('exports blank svg artifacts for silent sessions with empty event logs', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-0-svg.svg');
+    mocks.readEventLogRecords.mockResolvedValue([]);
+
+    const blankFrame = {
+      capturedAtSeq: 0,
+      cols: 80,
+      rows: 24,
+      cursorRow: 0,
+      cursorCol: 0,
+      lines: [],
+      holdMs: 1_000,
+    };
+    mocks.captureGridFrames.mockResolvedValue({
+      frames: [blankFrame],
+      capturedAtSeq: 0,
+      cols: 80,
+      rows: 24,
+      rendererBackend: 'none',
+      outputEventCount: 0,
+      resizeEventCount: 0,
+      timelineDurationMs: 1_000,
+    });
+    mocks.renderGridFramesToSvg.mockReturnValue('<svg>blank</svg>\n');
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'svg',
+    });
+
+    const captureCall = mocks.captureGridFrames.mock.calls[0] as [
+      { events: unknown[]; mode: string },
+    ];
+    expect(captureCall[0].events).toEqual([]);
+    expect(captureCall[0].mode).toBe('final');
+
+    const emitSuccessCall = mocks.emitSuccess.mock.calls[0] as [
+      {
+        result: {
+          format: string;
+          capturedAtSeq: number;
+          metadata: Record<string, unknown>;
+        };
+      },
+    ];
+    const [emitSuccessArgs] = emitSuccessCall;
+    expect(emitSuccessArgs.result.format).toBe('svg');
+    expect(emitSuccessArgs.result.capturedAtSeq).toBe(0);
+    expect(emitSuccessArgs.result.metadata).toMatchObject({
+      frameCount: 1,
+      animated: false,
+      outputEventCount: 0,
+      resizeEventCount: 0,
+    });
+  });
+
   it('rejects --animate for non-svg formats', async () => {
     await expect(
       runRecordExportCommand({

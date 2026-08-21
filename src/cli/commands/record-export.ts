@@ -341,7 +341,8 @@ export async function runRecordExportCommand(
       const renderProfileHash = hashProfile(resolvedProfile);
       const animate = options.animate === true;
 
-      invariant(events.length > 0, 'svg export requires at least one event');
+      // An empty event log (running-but-silent session) is valid: it exports
+      // the manifest-defined blank initial grid.
       const capture = await captureGridFrames({
         sessionId: options.sessionId,
         manifest,

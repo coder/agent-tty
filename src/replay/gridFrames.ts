@@ -208,7 +208,6 @@ export async function captureGridFrames(
   deps?: GridFrameDeps,
 ): Promise<GridFrameCapture> {
   invariant(options.sessionId.length > 0, 'sessionId is required');
-  invariant(options.events.length > 0, 'grid capture requires >=1 event');
   const finalFrameHoldMs =
     options.finalFrameHoldMs ?? DEFAULT_FINAL_FRAME_HOLD_MS;
   invariant(
@@ -221,7 +220,33 @@ export async function captureGridFrames(
     options.manifest,
     options.events,
   );
-  invariant(replayInput.targetSeq >= 0, 'grid capture requires >=1 event');
+
+  // A running-but-silent session has a valid empty event log. The manifest's
+  // initial dimensions define its reproducible blank grid, so synthesize a
+  // single blank frame directly — renderer backends reject snapshot() before
+  // the first replayed event, so no backend is booted. capturedAtSeq follows
+  // the record-export empty-log convention (0, same as asciicast).
+  if (replayInput.targetSeq < 0) {
+    const blankFrame: GridFrame = {
+      capturedAtSeq: 0,
+      cols: replayInput.initialCols,
+      rows: replayInput.initialRows,
+      cursorRow: 0,
+      cursorCol: 0,
+      lines: [],
+      holdMs: finalFrameHoldMs,
+    };
+    return {
+      frames: [blankFrame],
+      capturedAtSeq: 0,
+      cols: blankFrame.cols,
+      rows: blankFrame.rows,
+      rendererBackend: 'none',
+      outputEventCount: 0,
+      resizeEventCount: 0,
+      timelineDurationMs: finalFrameHoldMs,
+    };
+  }
 
   const {
     boundaries,

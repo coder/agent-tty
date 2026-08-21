@@ -363,6 +363,43 @@ describe('captureGridFrames', () => {
     },
   );
 
+  it('synthesizes a blank frame for an empty event log without a backend', async () => {
+    const capture = await captureGridFrames(
+      {
+        sessionId: SESSION_ID,
+        manifest: createSessionRecord(),
+        events: [],
+        profile: PROFILE,
+        mode: 'timeline',
+      },
+      {
+        backendFactory: () => {
+          throw new Error('empty-log capture must not boot a backend');
+        },
+      },
+    );
+
+    expect(capture.frames).toHaveLength(1);
+    expect(capture.frames[0]).toEqual({
+      capturedAtSeq: 0,
+      cols: 80,
+      rows: 24,
+      cursorRow: 0,
+      cursorCol: 0,
+      lines: [],
+      holdMs: 1_000,
+    });
+    expect(capture).toMatchObject({
+      capturedAtSeq: 0,
+      cols: 80,
+      rows: 24,
+      rendererBackend: 'none',
+      outputEventCount: 0,
+      resizeEventCount: 0,
+      timelineDurationMs: 1_000,
+    });
+  });
+
   it('fails with a clear export error when the native backend cannot boot', async () => {
     const backend = new FakeGridBackend(createGrids());
     backend.boot = () =>
