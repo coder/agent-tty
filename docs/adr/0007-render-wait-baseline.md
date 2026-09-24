@@ -47,7 +47,8 @@ its own step. The standalone `wait --after-seq <n>` exposes the same gate, since
   _echo-match_ — a `wait --text "foo"` matching the terminal's echo of a
   just-typed `foo`, which renders _after_ the baseline. Echo-match stays the
   caller's concern (use a distinctive output token or `screenStableMs`), exactly
-  as with the `wait` command today.
+  as with the `wait` command today. _Amended by ADR 0010: render waits now
+  accept a `cursor-line` scope as a first-class echo-match remedy._
 - A small amount of protocol and matcher surface grows (one optional field plus
   a `capturedAtSeq > afterSeq` gate in the live poll and the offline matcher).
   Offline replay can only apply the floor against the single latest snapshot it

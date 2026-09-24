@@ -25,7 +25,13 @@ const NESTED_QUANTIFIER_MESSAGE =
 
 type RenderWaitCondition = Pick<
   WaitForRenderParams,
-  'text' | 'regex' | 'screenStableMs' | 'cursorRow' | 'cursorCol' | 'afterSeq'
+  | 'text'
+  | 'regex'
+  | 'scope'
+  | 'screenStableMs'
+  | 'cursorRow'
+  | 'cursorCol'
+  | 'afterSeq'
 >;
 
 export interface PreparedRenderWaitCondition extends RenderWaitCondition {
@@ -162,8 +168,14 @@ export function safeRegexExec(
 export function prepareRenderWaitCondition(
   condition: RenderWaitCondition,
 ): PreparedRenderWaitCondition {
-  const { text, regex, screenStableMs, cursorRow, cursorCol, afterSeq } =
+  const { text, regex, scope, screenStableMs, cursorRow, cursorCol, afterSeq } =
     condition;
+
+  if (scope === 'cursor-line' && text === undefined && regex === undefined) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: "scope 'cursor-line' requires a text or regex condition",
+    });
+  }
 
   if (
     text === undefined &&
@@ -253,6 +265,7 @@ export function prepareRenderWaitCondition(
   return {
     text,
     regex,
+    scope,
     screenStableMs,
     cursorRow,
     cursorCol,
@@ -307,16 +320,23 @@ export function matchRenderWaitSnapshot(
 
   const visibleLines = canonicalVisibleLines(snapshot);
   const visibleText = canonicalVisibleText(snapshot);
+  // Scope 'cursor-line' restricts text/regex matching to the row the cursor is
+  // currently on, so a wait cannot be satisfied by the echo of a just-typed
+  // command (the cursor moves past the echoed line once Enter is pressed).
+  const matchTarget =
+    condition.scope === 'cursor-line'
+      ? (visibleLines[snapshot.cursorRow] ?? '')
+      : visibleText;
 
   let textMatched = false;
   let matchedText: string | undefined;
   if (condition.text !== undefined) {
-    if (visibleText.includes(condition.text)) {
+    if (matchTarget.includes(condition.text)) {
       textMatched = true;
       matchedText = condition.text;
     }
   } else if (condition.compiledRegex !== undefined) {
-    const match = safeRegexExec(condition.compiledRegex, visibleText);
+    const match = safeRegexExec(condition.compiledRegex, matchTarget);
     if (match !== null) {
       textMatched = true;
       matchedText = match[0];

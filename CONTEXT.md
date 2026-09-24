@@ -263,6 +263,7 @@ _Avoid_: bare "agent", "Coder agent"
 - A **Batch** is not atomic: input already applied to a **Session** cannot be undone, so a failed **Batch** leaves the **Session** in whatever state its completed **Batch Steps** produced.
 - A **Render Wait** that is a **Batch Step** is anchored to a **Wait Baseline** equal to the **Event Log** sequence recorded after the preceding input **Batch Step**, so it cannot match a **Semantic Snapshot** that predates that step.
 - A standalone **Render Wait** may be given an explicit **Wait Baseline**; without one it matches against the latest **Semantic Snapshot**.
+- A **Render Wait** text/regex condition may be scoped to the cursor row (`cursor-line`) instead of the whole visible screen, so a prompt wait cannot match the echo of a just-typed command. (See ADR 0010.)
 - A **Batch** stops at the first failed **Batch Step** — a timed-out **Render Wait**, or an input action against a **Session** that is no longer a **Command Target** — unless the caller opts into continuing.
 - A **Promoted Hero Demo** replaces the existing recursive README demo entirely; the old recursive bundle is deleted rather than maintained in parallel.
 - The **Hero Claim Boundary** narrows the README claim after that deletion: the outer TUI is presentation, while inner `agent-tty` artifacts are the product proof.

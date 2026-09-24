@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
 import type {
+  RecordDiffLine as RecordDiffLineType,
+  RecordDiffResult as RecordDiffResultType,
+  RecordDiffSide as RecordDiffSideType,
   RecordExportResult as RecordExportResultType,
   ReplayTimingMode as ReplayTimingModeType,
   RichSnapshotLine as RichSnapshotLineType,
@@ -20,6 +23,9 @@ import {
 } from './schemas.js';
 
 export {
+  RecordDiffLineSchema,
+  RecordDiffResultSchema,
+  RecordDiffSideSchema,
   RecordExportResultSchema,
   ReplayTimingModeSchema,
   RichSnapshotLineSchema,
@@ -212,6 +218,12 @@ export type ScreenshotParams = z.infer<typeof ScreenshotParamsSchema>;
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;
 
 export type RecordExportResult = RecordExportResultType;
+
+export type RecordDiffLine = RecordDiffLineType;
+
+export type RecordDiffSide = RecordDiffSideType;
+
+export type RecordDiffResult = RecordDiffResultType;
 
 export const TypeParamsSchema = z
   .object({

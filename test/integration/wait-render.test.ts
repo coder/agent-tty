@@ -308,6 +308,92 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     expect(envelope.result.matchedText).toBe('3 items');
   });
 
+  it('does not match text above the cursor with CLI --scope cursor-line', () => {
+    // 'Ready' is printed followed by a newline, so once it is visible the
+    // cursor sits on the row below it. A whole-screen wait matches; a
+    // cursor-line wait must not — this is the echo-match fix.
+    const screenResult = runCli(
+      ['wait', sessionId, '--text', 'Ready', '--timeout', '15000', '--json'],
+      { AGENT_TTY_HOME: testHome },
+      20_000,
+    );
+    expect(screenResult.exitCode).toBe(0);
+
+    const cursorLineResult = runCli(
+      [
+        'wait',
+        sessionId,
+        '--text',
+        'Ready',
+        '--scope',
+        'cursor-line',
+        '--timeout',
+        '2500',
+        '--json',
+      ],
+      { AGENT_TTY_HOME: testHome },
+      20_000,
+    );
+
+    expect(cursorLineResult.exitCode).toBe(11);
+    const envelope = JSON.parse(
+      cursorLineResult.stdout,
+    ) as SuccessEnvelope<WaitForRenderResult>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.matched).toBe(false);
+    expect(envelope.result.timedOut).toBe(true);
+  });
+
+  it('matches text on the cursor row with CLI --scope cursor-line', async () => {
+    await waitForReadySnapshot(rpcSocketPath);
+
+    // Typing without a newline leaves the echoed text on the cursor row.
+    const typeResult = runCli(
+      ['type', sessionId, 'CURSOR_TOKEN', '--json'],
+      { AGENT_TTY_HOME: testHome },
+      15_000,
+    );
+    expect(typeResult.exitCode).toBe(0);
+
+    const result = runCli(
+      [
+        'wait',
+        sessionId,
+        '--text',
+        'CURSOR_TOKEN',
+        '--scope',
+        'cursor-line',
+        '--timeout',
+        '15000',
+        '--json',
+      ],
+      { AGENT_TTY_HOME: testHome },
+      20_000,
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    const envelope = JSON.parse(
+      result.stdout,
+    ) as SuccessEnvelope<WaitForRenderResult>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.matched).toBe(true);
+    expect(envelope.result.matchedText).toBe('CURSOR_TOKEN');
+  });
+
+  it('rejects invalid CLI --scope values', () => {
+    const result = runCli(
+      ['wait', sessionId, '--text', 'Ready', '--scope', 'line', '--json'],
+      { AGENT_TTY_HOME: testHome },
+      15_000,
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+  });
+
   it('detects screen stability via CLI --screen-stable-ms', () => {
     const readyResult = runCli(
       ['wait', sessionId, '--text', 'Ready', '--timeout', '15000', '--json'],

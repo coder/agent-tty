@@ -61,7 +61,7 @@ Good tests assert external behavior, not implementation details.
 
 - Capture steps inside a batch (taking a snapshot or screenshot, or exporting a recording, as a step). v1 batch is input plus wait; capture stays a separate command the caller runs around the batch.
 - A stdin source for steps.
-- Fixing echo-match (a `wait` matching the terminal's echo of a just-typed command). The **Wait Baseline** fixes stale-match only; echo-match stays the caller's responsibility — use a distinctive output token or a screen-stability wait — exactly as with the `wait` command today.
+- Fixing echo-match (a `wait` matching the terminal's echo of a just-typed command). The **Wait Baseline** fixes stale-match only; echo-match stays the caller's responsibility — use a distinctive output token or a screen-stability wait — exactly as with the `wait` command today. _(Since addressed by the `cursor-line` wait scope; see ADR 0010.)_
 - A host-side batch RPC or single-round-trip execution. v1 executes client-side; a host-side executor is a possible later optimization.
 - Inline waits attached to input steps, and any control flow (conditionals, loops, retries). v1 is a flat, linear sequence of single-action steps.
 - Atomic or transactional rollback. Already-sent input cannot be undone.

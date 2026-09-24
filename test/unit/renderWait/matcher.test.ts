@@ -101,6 +101,149 @@ describe('render wait matcher', () => {
     );
   });
 
+  it('scopes text matching to the cursor row with cursor-line scope', () => {
+    const condition = prepareRenderWaitCondition({
+      text: 'READY>',
+      scope: 'cursor-line',
+    });
+    const snapshot = createTestSemanticSnapshot({
+      visibleLines: [
+        { row: 0, text: 'booting' },
+        { row: 1, text: 'READY> ' },
+      ],
+      cursorRow: 1,
+      cursorCol: 7,
+    });
+
+    expect(matchRenderWaitSnapshot(condition, snapshot)).toMatchObject({
+      matched: true,
+      textMatched: true,
+      matchedText: 'READY>',
+    });
+  });
+
+  it('matches an end-anchored prompt regex against the right-trimmed cursor row', () => {
+    // Backends right-trim trailing ASCII spaces from visibleLines[].text, so a
+    // prompt displayed as 'READY> ' must be anchored without the space.
+    const condition = prepareRenderWaitCondition({
+      regex: 'READY>$',
+      scope: 'cursor-line',
+    });
+    const snapshot = createTestSemanticSnapshot({
+      visibleLines: [
+        { row: 0, text: 'booting' },
+        { row: 1, text: 'READY>' },
+      ],
+      cursorRow: 1,
+      cursorCol: 7,
+    });
+
+    expect(matchRenderWaitSnapshot(condition, snapshot)).toMatchObject({
+      matched: true,
+      matchedText: 'READY>',
+    });
+  });
+
+  it('does not match echoed command text above the cursor with cursor-line scope', () => {
+    // Echo-match scenario: the just-typed command is visible on row 0, but the
+    // cursor has already moved to row 1. A whole-screen wait would match the
+    // echo; a cursor-line wait must not.
+    const condition = prepareRenderWaitCondition({
+      text: 'echo Done',
+      scope: 'cursor-line',
+    });
+    const snapshot = createTestSemanticSnapshot({
+      visibleLines: [
+        { row: 0, text: '$ echo Done' },
+        { row: 1, text: '' },
+      ],
+      cursorRow: 1,
+      cursorCol: 0,
+    });
+
+    expect(matchRenderWaitSnapshot(condition, snapshot)).toMatchObject({
+      matched: false,
+      textMatched: false,
+    });
+
+    const screenCondition = prepareRenderWaitCondition({ text: 'echo Done' });
+    expect(matchRenderWaitSnapshot(screenCondition, snapshot)).toMatchObject({
+      matched: true,
+      textMatched: true,
+    });
+  });
+
+  it('scopes regex matching to the cursor row with cursor-line scope', () => {
+    const condition = prepareRenderWaitCondition({
+      regex: '\\d+ items',
+      scope: 'cursor-line',
+    });
+    const snapshot = createTestSemanticSnapshot({
+      visibleLines: [
+        { row: 0, text: 'found 42 items' },
+        { row: 1, text: 'found 7 items' },
+      ],
+      cursorRow: 1,
+      cursorCol: 13,
+    });
+
+    expect(matchRenderWaitSnapshot(condition, snapshot)).toMatchObject({
+      matched: true,
+      matchedText: '7 items',
+    });
+  });
+
+  it('treats a cursor row beyond the visible lines as an empty match target', () => {
+    const condition = prepareRenderWaitCondition({
+      text: 'Ready',
+      scope: 'cursor-line',
+    });
+    const snapshot = createTestSemanticSnapshot({
+      visibleLines: [{ row: 0, text: 'Ready' }],
+      cursorRow: 5,
+      cursorCol: 0,
+    });
+
+    expect(matchRenderWaitSnapshot(condition, snapshot)).toMatchObject({
+      matched: false,
+      textMatched: false,
+    });
+  });
+
+  it('defaults to whole-screen scope when scope is omitted or screen', () => {
+    const snapshot = createTestSemanticSnapshot({
+      visibleLines: [
+        { row: 0, text: 'Ready' },
+        { row: 1, text: '' },
+      ],
+      cursorRow: 1,
+    });
+
+    expect(
+      matchRenderWaitSnapshot(
+        prepareRenderWaitCondition({ text: 'Ready' }),
+        snapshot,
+      ),
+    ).toMatchObject({ matched: true });
+    expect(
+      matchRenderWaitSnapshot(
+        prepareRenderWaitCondition({ text: 'Ready', scope: 'screen' }),
+        snapshot,
+      ),
+    ).toMatchObject({ matched: true });
+  });
+
+  it('rejects cursor-line scope without a text or regex condition', () => {
+    expect(() =>
+      prepareRenderWaitCondition({ scope: 'cursor-line', screenStableMs: 100 }),
+    ).toThrow(
+      expect.objectContaining({
+        code: ERROR_CODES.INVALID_INPUT,
+        message: "scope 'cursor-line' requires a text or regex condition",
+      }),
+    );
+  });
+
   it('matches regexes and reports the matched substring', () => {
     const condition = prepareRenderWaitCondition({ regex: '\\d+ items' });
     const snapshot = createTestSemanticSnapshot({

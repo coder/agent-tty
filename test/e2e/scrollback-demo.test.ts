@@ -3,8 +3,10 @@ import { readFile, stat } from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type {
+  RecordDiffResult,
   ScreenshotResult,
   SnapshotResult,
+  WaitForRenderResult,
 } from '../../src/protocol/messages.js';
 import {
   cleanupHome,
@@ -128,13 +130,6 @@ describe('scrollback-demo e2e', { timeout: 60_000 }, () => {
     expect(scrollbackLines).toBeDefined();
     expect(scrollbackLines?.length).toBeGreaterThan(0);
 
-    const visibleText = structuredSnapshotEnvelope.result.visibleLines
-      .map((line) => line.text)
-      .join('\n');
-
-    expect(visibleText).toContain('SCROLLBACK COMPLETE');
-    expect(visibleText).not.toContain('LINE 001');
-
     const screenshotEnvelope = runCliJson<SuccessEnvelope<ScreenshotResult>>(
       ['screenshot', sessionId],
       env,
@@ -152,5 +147,82 @@ describe('scrollback-demo e2e', { timeout: 60_000 }, () => {
       screenshotEnvelope.result.artifactPath,
     );
     expect(screenshotBytes.subarray(0, 8).toString('hex')).toBe(PNG_MAGIC_HEX);
+  });
+
+  it('diffs the scrolled viewport against its pre-completion state', () => {
+    const env = testEnv(testHome);
+    // The stdin handshake keeps the fixture blocked before the completion
+    // marker, so the wait below observes an ingested Event Log state that is
+    // guaranteed to precede the marker — no PTY chunk-coalescing race.
+    const createEnvelope = runCliJson<SuccessEnvelope<CreateResult>>(
+      [
+        'create',
+        '--rows',
+        '10',
+        '--cols',
+        '80',
+        '--',
+        ...fixtureCommand('scrollback-demo'),
+        '--wait-input-before-complete',
+      ],
+      env,
+    );
+    expect(createEnvelope.ok).toBe(true);
+    const sessionId = createEnvelope.result.sessionId;
+    createdSessionIds.push(sessionId);
+
+    const waitEnvelope = runCliJson<SuccessEnvelope<WaitForRenderResult>>(
+      ['wait', sessionId, '--text', 'LINE 080', '--timeout', '15000'],
+      env,
+    );
+    expect(waitEnvelope.ok).toBe(true);
+    expect(waitEnvelope.result.matched).toBe(true);
+    const preCompletionSeq = waitEnvelope.result.capturedAtSeq;
+
+    const releaseEnvelope = runCliJson<SuccessEnvelope<unknown>>(
+      ['send-keys', sessionId, 'Enter'],
+      env,
+    );
+    expect(releaseEnvelope.ok).toBe(true);
+
+    const exitEnvelope = runCliJson<SuccessEnvelope<WaitResult>>(
+      ['wait', sessionId, '--exit', '--timeout', String(EXIT_WAIT_TIMEOUT_MS)],
+      env,
+    );
+    expect(exitEnvelope.ok).toBe(true);
+    expect(exitEnvelope.result.exitCode).toBe(0);
+
+    // `record diff` against the observed pre-completion sequence proves the
+    // viewport scrolled: the final screen (equal + add entries) gained the
+    // completion marker and no longer shows the first line.
+    const diffEnvelope = runCliJson<SuccessEnvelope<RecordDiffResult>>(
+      [
+        'record',
+        'diff',
+        sessionId,
+        sessionId,
+        '--at-seq-a',
+        String(preCompletionSeq),
+      ],
+      env,
+    );
+    expect(diffEnvelope.ok).toBe(true);
+    expect(diffEnvelope.command).toBe('record diff');
+    expect(diffEnvelope.result.identical).toBe(false);
+    const preCompletionLines = diffEnvelope.result.diff
+      .filter((entry) => entry.op !== 'add')
+      .map((entry) => entry.text);
+    expect(
+      preCompletionLines.some((line) => line.includes('SCROLLBACK COMPLETE')),
+    ).toBe(false);
+    const finalScreenLines = diffEnvelope.result.diff
+      .filter((entry) => entry.op !== 'delete')
+      .map((entry) => entry.text);
+    expect(
+      finalScreenLines.some((line) => line.includes('SCROLLBACK COMPLETE')),
+    ).toBe(true);
+    expect(finalScreenLines.some((line) => line.includes('LINE 001'))).toBe(
+      false,
+    );
   });
 });

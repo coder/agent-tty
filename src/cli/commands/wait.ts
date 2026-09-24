@@ -42,6 +42,7 @@ interface CommandOptions {
   timeout: number | undefined;
   text: string | undefined;
   regex: string | undefined;
+  scope: string | undefined;
   screenStableMs: number | undefined;
   cursorRow: number | undefined;
   cursorCol: number | undefined;
@@ -62,11 +63,25 @@ function isRenderWaitMode(options: CommandOptions): boolean {
   return (
     options.text !== undefined ||
     options.regex !== undefined ||
+    options.scope !== undefined ||
     options.screenStableMs !== undefined ||
     options.cursorRow !== undefined ||
     options.cursorCol !== undefined ||
     options.afterSeq !== undefined
   );
+}
+
+function parseRenderWaitScope(
+  scope: string | undefined,
+): 'screen' | 'cursor-line' | undefined {
+  if (scope === undefined || scope === 'screen' || scope === 'cursor-line') {
+    return scope;
+  }
+
+  throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+    message: "--scope must be 'screen' or 'cursor-line'.",
+    details: { scope },
+  });
 }
 
 function waitLines(result: WaitResult): string[] {
@@ -137,6 +152,7 @@ function buildOfflineRenderWaitResult(
     details: {
       text: preparedCondition.text,
       regex: preparedCondition.regex,
+      scope: preparedCondition.scope,
       screenStableMs: preparedCondition.screenStableMs,
       expectedCursorRow: preparedCondition.cursorRow,
       expectedCursorCol: preparedCondition.cursorCol,
@@ -249,9 +265,11 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       });
     }
 
+    const scope = parseRenderWaitScope(options.scope);
     const preparedCondition = prepareRenderWaitCondition({
       text: options.text,
       regex: options.regex,
+      scope,
       screenStableMs: options.screenStableMs,
       cursorRow: options.cursorRow,
       cursorCol: options.cursorCol,
@@ -262,6 +280,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     const params = {
       text: options.text,
       regex: options.regex,
+      scope,
       screenStableMs: options.screenStableMs,
       cursorRow: options.cursorRow,
       cursorCol: options.cursorCol,

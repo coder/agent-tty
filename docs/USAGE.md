@@ -91,6 +91,7 @@ Use `wait` to synchronize on terminal state:
 ```bash
 agent-tty wait <session-id> --text 'ready' --json
 agent-tty wait <session-id> --regex 'READY|DONE' --json
+agent-tty wait <session-id> --regex 'READY>$' --scope cursor-line --json
 agent-tty wait <session-id> --screen-stable-ms 1000 --json
 agent-tty wait <session-id> --idle-ms 500 --json
 agent-tty wait <session-id> --exit --json
@@ -100,12 +101,33 @@ Useful flags:
 
 - `--text <string>`: wait for text to appear in rendered output.
 - `--regex <pattern>`: wait for a regex match in rendered output.
+- `--scope <scope>`: where `--text`/`--regex` match — `screen` (default, whole visible screen) or `cursor-line` (only the row the cursor is on). See [Echo-Match](#echo-match).
 - `--screen-stable-ms <ms>`: wait for the rendered screen to be stable.
+- `--after-seq <n>`: only match renderer snapshots produced after this Event Log sequence — thread an input command's returned `seq` here so the wait cannot match pre-input screen state.
 - `--idle-ms <ms>`: wait for output idleness.
 - `--exit`: wait for the process to exit.
 - `--timeout <ms>`: maximum wait time in milliseconds, with `0` meaning infinite.
 
 On timeout, a standalone `wait` exits `11` (`WAIT_TIMEOUT`) while preserving a success JSON envelope with `timedOut: true` in the result (`matched: false` for render waits). Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast.
+
+### Echo-Match
+
+A whole-screen `wait` can be satisfied by the terminal's **echo of a just-typed command**: `run <sid> 'echo Done'` followed by `wait --text Done` matches the echoed command line itself, not the command's output. Use `--scope cursor-line` to restrict `--text`/`--regex` matching to the row the cursor is currently on. Once Enter is pressed the cursor moves past the echoed line, so a cursor-line wait cannot match the echo. It is ideal for waiting on prompts, which render exactly at the cursor:
+
+```bash
+agent-tty wait <session-id> --regex 'READY>$' --scope cursor-line --json
+```
+
+Rendered lines are right-trimmed of trailing ASCII spaces, so anchor prompt regexes without the trailing space: a prompt displayed as `READY> ` matches `READY>$`, not `READY> $`.
+
+A standalone cursor-line wait issued right after an input command (`type`, `send-keys`, `run --no-wait`) can still match the **pre-input screen**: input commands return once the input is logged, before the application's response is necessarily rendered. If the cursor row already matched before the input — for example a repeated prompt in an echo-disabled application — the wait returns without the application having responded. Thread the input command's returned `seq` into `--after-seq` so the wait only observes screen state produced after the input; inside `batch`, wait steps get this anchoring automatically from the Wait Baseline:
+
+```bash
+SEQ=$(agent-tty send-keys <session-id> Enter --json | jq -r '.result.seq')
+agent-tty wait <session-id> --regex 'READY>$' --scope cursor-line --after-seq "$SEQ" --json
+```
+
+For waiting on output text that scrolls past the cursor, prefer a distinctive output token or combine `--text` with `--screen-stable-ms`.
 
 ### Screen Hash
 
@@ -143,7 +165,7 @@ Steps are a JSON array; each step is exactly one verb. The shape mirrors the res
 - `type` / `paste`: a string of literal text.
 - `sendKeys`: a non-empty array of key names — individual named keys or single characters (e.g. `["Enter"]`, `["Ctrl+C"]`, `["Escape", "Enter"]`). Multi-character literal text such as `:wq` is not a key name; send it with a `type` step.
 - `run`: a command string, with optional `noWait` (fire-and-forget) and `timeout` (ms). A `run` step is a waited run by default.
-- `wait`: the same conditions as the `wait` command — `text`, `regex`, `screenStableMs`, `cursorRow`, `cursorCol`, and `timeout` (ms).
+- `wait`: the same conditions as the `wait` command — `text`, `regex`, `scope`, `screenStableMs`, `cursorRow`, `cursorCol`, and `timeout` (ms).
 
 Input source and flags:
 
@@ -187,7 +209,7 @@ The `--json` result is a per-step envelope:
 
 Each step record carries its `index`, `kind`, `status` (`completed` | `failed` | `not-run` | `interrupted`), and `durationMs`. Input steps report the Event Log `seq` they produced; `wait` steps report the `waitBaseline` they were anchored to plus `matched` / `timedOut` / `matchedText` / `capturedAtSeq`, and a matched `wait` step also carries the `screenHash` of the screen it observed (see [Screen Hash](#screen-hash)). `completedCount` and `failedIndices` summarize the run. A fail-fast batch exits non-zero with the failed step's exit code (e.g. `11` for a `WAIT_TIMEOUT`); `--keep-going` exits `1` if any step failed. If the process is interrupted by SIGINT/SIGTERM, batch flushes the same envelope with the in-flight step marked `interrupted` and later steps `not-run`, then exits non-zero.
 
-The Wait Baseline fixes stale-match only. It does **not** fix echo-match: a `wait` can still match the terminal's echo of a just-typed command (the echo renders _after_ the baseline). Use a distinctive output token or a `screenStableMs` wait rather than waiting for text you just typed. Interrupting a batch mid-`wait` leaves that wait's command still running on the session (the wait is abandoned, not cancelled), exactly like a caller timeout on `run`.
+The Wait Baseline fixes stale-match only. It does **not** fix echo-match: a whole-screen `wait` can still match the terminal's echo of a just-typed command (the echo renders _after_ the baseline). Use `"scope": "cursor-line"` on the wait step to restrict matching to the cursor row (see [Echo-Match](#echo-match)), or wait for a distinctive output token. Interrupting a batch mid-`wait` leaves that wait's command still running on the session (the wait is abandoned, not cancelled), exactly like a caller timeout on `run`.
 
 ## Screenshots And Recording Exports
 
@@ -214,6 +236,21 @@ SVG exports always embed the pinned JetBrains Mono latin subset and additionally
 Use `--renderer ghostty-web`, `AGENT_TTY_RENDERER=ghostty-web`, or Home `config.json` `{ "defaultRenderer": "ghostty-web" }` to force legacy all-browser rendering. Use `--renderer libghostty-vt` only when you intentionally want semantic and screenshot requests routed through the native backend; WebM requests still record `ghostty-web` as the actual video producer.
 
 `ghostty-web` provides reference visual truth for reviewable artifacts; it does not promise exact pixel parity with native terminals.
+
+## `record diff`
+
+`computeScreenHash` (see [Screen Hash](#screen-hash)) can only say _whether_ two screens differ. Use `record diff` to see _what_ changed: it replays two recorded sessions offline from their event logs and prints an LCS line diff of the canonical visible screens.
+
+```bash
+agent-tty record diff <session-id-a> <session-id-b> --json
+agent-tty record diff <session-id> <session-id> --at-seq-a 0 --json
+```
+
+- `--at-seq-a <seq>` / `--at-seq-b <seq>`: replay each side up to an Event Log sequence (default: latest). Diffing a session against itself at an earlier sequence shows how its screen evolved.
+- The JSON result carries `identical`, per-side `sessionId`/`capturedAtSeq`/`cols`/`rows`/`screenHash`, and a `diff` array of `{ op: equal | delete | add, text, aRow?, bRow? }` entries over the visible screen lines (0-based rows, no trimming or normalization — the same canonical lines that `screenHash` hashes). A side with an empty event log reports the pre-event blank screen with `capturedAtSeq: -1` (no event was replayed).
+- Human output is a unified-style diff with `---`/`+++` headers naming each side's session, sequence, and hash prefix.
+- The line diff is LCS-minimal for any realistic screen. As a bounded-memory safeguard, when the differing region (after matching the common prefix and suffix) is so large that the product of its two side lengths exceeds a 4,000,000-cell budget (for example 1,000 × 4,001 lines), that region degrades to a plain delete-then-add block instead of a minimal diff — `identical`, both `screenHash` values, and full-screen reconstruction remain exact; only diff minimality is reduced.
+- The command works entirely offline from `events.jsonl`; sessions may be running or exited. The exit code is `0` whether or not the screens differ — automation should read `identical` from the JSON result.
 
 ## Isolation
 

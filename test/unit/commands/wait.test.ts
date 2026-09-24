@@ -93,6 +93,7 @@ function createOptions(
     timeout: undefined,
     text: undefined,
     regex: undefined,
+    scope: undefined,
     screenStableMs: undefined,
     cursorRow: undefined,
     cursorCol: undefined,
@@ -283,6 +284,46 @@ describe('wait command', () => {
         result,
       }),
     );
+  });
+
+  it('passes --scope through to the waitForRender RPC', async () => {
+    const result = {
+      matched: true,
+      timedOut: false,
+      matchedText: 'READY>',
+      capturedAtSeq: 12,
+    };
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runWaitCommand(
+      createOptions({ text: 'READY>', scope: 'cursor-line' }),
+    );
+
+    expect(mocks.sendRpc).toHaveBeenCalledWith(
+      '/tmp/agent-tty/sessions/session-01/rpc.sock',
+      'waitForRender',
+      expect.objectContaining({ text: 'READY>', scope: 'cursor-line' }),
+      expect.any(Number),
+    );
+  });
+
+  it('rejects invalid --scope values', async () => {
+    await expect(
+      runWaitCommand(createOptions({ text: 'Ready', scope: 'line' })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+      details: { scope: 'line' },
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects --scope cursor-line without a text or regex condition', async () => {
+    await expect(
+      runWaitCommand(createOptions({ scope: 'cursor-line' })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INVALID_INPUT,
+    });
+    expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
 
   it('rejects negative --timeout values for render waits', async () => {
