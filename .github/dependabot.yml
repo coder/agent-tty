@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # pnpm project (Dependabot detects pnpm from pnpm-lock.yaml and the
+  # packageManager field). The 7-day cooldown (zizmor's minimum) also exceeds
+  # pnpm-workspace.yaml's 1-day minimumReleaseAge, so version updates never
+  # propose a release pnpm would refuse to resolve.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore(deps)
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore(ci)

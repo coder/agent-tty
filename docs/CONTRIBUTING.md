@@ -9,10 +9,11 @@ mise install
 mise run bootstrap
 ```
 
-Fallback setup after installing `aube` directly:
+Fallback setup after installing `pnpm` directly (use the npm-distributed build, which bundles the `node-gyp` that `node-pty` needs on Linux):
 
 ```bash
-aube exec playwright install chromium
+pnpm install
+pnpm exec playwright install chromium
 ```
 
 ## Day-to-day workflow

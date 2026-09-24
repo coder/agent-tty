@@ -19,7 +19,7 @@
     "url": "git+https://github.com/coder/agent-tty.git"
   },
   "type": "module",
-  "packageManager": "aube@1.2.0",
+  "packageManager": "pnpm@10.34.5",
   "engines": {
     "node": ">=24.0.0 <27"
   },
@@ -90,23 +90,23 @@
     "@coder/libghostty-vt-node": "0.1.0-beta.0"
   },
   "pnpm": {
-    "allowBuilds": {
-      "@coder/libghostty-vt-node": true,
-      "esbuild": true,
-      "fsevents": true,
-      "node-pty": true,
-      "@parcel/watcher": true,
-      "msgpackr-extract": true
+    "onlyBuiltDependencies": [
+      "@coder/libghostty-vt-node",
+      "esbuild",
+      "fsevents",
+      "msgpackr-extract",
+      "node-pty",
+      "@parcel/watcher"
+    ],
+    "overrides": {
+      "@xmldom/xmldom": "0.8.15",
+      "brace-expansion": "5.0.9",
+      "esbuild": "0.28.1",
+      "js-yaml": "4.3.2",
+      "nanoid": "3.3.18",
+      "postcss": "8.5.18",
+      "vite": "8.0.16",
+      "ws": "8.21.0"
     }
-  },
-  "overrides": {
-    "@xmldom/xmldom": "0.8.15",
-    "brace-expansion": "5.0.9",
-    "esbuild": "0.28.1",
-    "js-yaml": "4.3.2",
-    "nanoid": "3.3.18",
-    "postcss": "8.5.18",
-    "vite": "8.0.16",
-    "ws": "8.21.0"
   }
 }
