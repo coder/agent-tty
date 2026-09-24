@@ -233,6 +233,12 @@ Animated SVG capture retains every distinct frame's styled grid in memory, so it
 
 SVG exports always embed the pinned JetBrains Mono latin subset and additionally embed the Symbols Nerd Font Mono face when the rendered content needs it. Glyphs outside both faces (notably CJK and most emoji) render via the viewer's monospace fallback, mirroring the reference renderer's own system-font fallback for the same glyphs. Text content and layout metrics stay deterministic even when fallback glyph shapes vary: every text run is pinned to the terminal grid via `textLength`, so columns never shift.
 
+SVG export has known fidelity limits, because the native backend's snapshot cells do not yet carry every attribute ([coder/libghostty-vt-node#15](https://github.com/coder/libghostty-vt-node/issues/15)):
+
+- **Only bold, italic, underline, and foreground/background colors are rendered.** Reverse video (SGR 7), strikethrough (SGR 9), dim (SGR 2), and hidden text (SGR 8) render as plain text, so hidden text stays visible. Reverse video is the one most often visible in TUIs (selection bars, status lines, fuzzy-finder highlights). Use a PNG screenshot or WebM export when those attributes matter.
+- **The cursor is always drawn.** SVG frames show a block cursor even after the application hides it with `ESC[?25l`. PNG screenshots hide the cursor unless you pass `--show-cursor`.
+- **Viewers without SMIL show only the final frame.** Animated SVGs play in browsers. Viewers that ignore SMIL animation (librsvg-based previews, Inkscape) show the final frame as a still image.
+
 Use `--renderer ghostty-web`, `AGENT_TTY_RENDERER=ghostty-web`, or Home `config.json` `{ "defaultRenderer": "ghostty-web" }` to force legacy all-browser rendering. Use `--renderer libghostty-vt` only when you intentionally want semantic and screenshot requests routed through the native backend; WebM requests still record `ghostty-web` as the actual video producer.
 
 `ghostty-web` provides reference visual truth for reviewable artifacts; it does not promise exact pixel parity with native terminals.

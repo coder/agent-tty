@@ -454,13 +454,48 @@ describe('renderGridFramesToSvg', () => {
       animate: true,
     });
 
-    expect(countOccurrences(svg, '<g visibility="hidden">')).toBe(3);
+    expect(countOccurrences(svg, '<g visibility="hidden">')).toBe(2);
+    expect(countOccurrences(svg, '<g visibility="visible">')).toBe(1);
     expect(svg).toContain(
       '<animate attributeName="visibility" values="visible;hidden" keyTimes="0;0.1" dur="1000ms" calcMode="discrete" repeatCount="indefinite"/>',
     );
     expect(svg).toContain(
       '<animate attributeName="visibility" values="hidden;visible;hidden" keyTimes="0;0.1;0.3" dur="1000ms" calcMode="discrete" repeatCount="indefinite"/>',
     );
+    expect(svg).toContain(
+      '<animate attributeName="visibility" values="hidden;visible" keyTimes="0;0.3" dur="1000ms" calcMode="discrete" repeatCount="indefinite"/>',
+    );
+  });
+
+  it('shows the final frame by default for viewers without SMIL support', () => {
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [
+        makeFrame({ lines: [[cell('a')]], holdMs: 100 }),
+        makeFrame({ lines: [[cell('b')]], holdMs: 200 }),
+        makeFrame({ lines: [[cell('z')]], holdMs: 700 }),
+      ],
+      animate: true,
+    });
+
+    // Strip SMIL: what remains is what a non-animating viewer renders.
+    const groups = svg
+      .replace(/<animate [^>]*\/>\n/g, '')
+      .split('<g visibility=')
+      .slice(1);
+    expect(groups).toHaveLength(3);
+    const visibleGroups = groups.filter((group) =>
+      group.startsWith('"visible">'),
+    );
+    expect(visibleGroups).toHaveLength(1);
+    // The statically visible group is the last one and carries the final
+    // frame's text; earlier frames stay hidden until SMIL reveals them.
+    expect(groups.at(-1)?.startsWith('"visible">')).toBe(true);
+    expect(visibleGroups[0]).toContain('>z<');
+    for (const group of groups.slice(0, -1)) {
+      expect(group.startsWith('"hidden">')).toBe(true);
+    }
+    // SMIL playback still starts the final frame hidden until its window.
     expect(svg).toContain(
       '<animate attributeName="visibility" values="hidden;visible" keyTimes="0;0.3" dur="1000ms" calcMode="discrete" repeatCount="indefinite"/>',
     );

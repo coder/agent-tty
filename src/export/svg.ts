@@ -653,12 +653,20 @@ export function renderGridFramesToSvg(options: SvgRenderOptions): string {
     const totalMs = frames.reduce((sum, frame) => sum + frame.holdMs, 0);
     invariant(totalMs > 0, 'animated svg requires a positive total duration');
 
+    const finalFrameIndex = frames.length - 1;
     let offsetMs = 0;
     for (const [frameIndex, frame] of frames.entries()) {
       invariant(frame.holdMs > 0, 'animated svg frames must hold for >0 ms');
       const endMs = offsetMs + frame.holdMs;
+      // The static (non-animated) value is what viewers without SMIL support
+      // (librsvg, Inkscape, many previewers) render, so the final frame is
+      // visible by default. SMIL-capable viewers are unaffected: each
+      // animation starts at document begin, repeats indefinitely, and its
+      // discrete values override the static attribute for the whole timeline.
+      const staticVisibility =
+        frameIndex === finalFrameIndex ? 'visible' : 'hidden';
       lines.push(
-        '<g visibility="hidden">',
+        `<g visibility="${staticVisibility}">`,
         renderVisibilityAnimation(
           frameIndex,
           frames.length,
