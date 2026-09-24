@@ -268,7 +268,7 @@ The shell also receives two session variables, so scripts inside a session can d
 | `AGENT_TTY_ACTIVE`     | `true`.                                                   |
 | `AGENT_TTY_SESSION_ID` | The session's ID (a ULID, as printed by `create --json`). |
 
-Both replace inherited values, so a session created from inside another session reports its own ID, not the outer one. Like the `PROMPT_EOL_MARK` default, they are set at spawn time and are not stored in the session's recorded `env`.
+Both replace inherited values, so a session created from inside another session reports its own ID, not the outer one. A PTY that agent-tty spawns without a session (the `doctor` spawn probe) gets neither variable: inherited values are removed, so it never reports an outer session's ID. Like the `PROMPT_EOL_MARK` default, they are set at spawn time and are not stored in the session's recorded `env`.
 
 Any `--env` value always wins, so you can opt back into the shell's native behavior or override a session variable per session:
 
