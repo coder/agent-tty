@@ -76,6 +76,25 @@ describe('artifact paths', () => {
     expect(recordingFilename(7, 'webm')).toBe('recording-7-webm.webm');
   });
 
+  it('generates recording filenames for svg format', () => {
+    expect(recordingFilename(7, 'svg')).toBe('recording-7-svg.svg');
+  });
+
+  it('generates distinct recording filenames per variant', () => {
+    expect(recordingFilename(7, 'svg', 'reference-dark')).toBe(
+      'recording-7-svg-reference-dark.svg',
+    );
+    expect(recordingFilename(7, 'svg', 'reference-dark-animated')).toBe(
+      'recording-7-svg-reference-dark-animated.svg',
+    );
+    expect(recordingFilename(7, 'svg', 'reference-light')).not.toBe(
+      recordingFilename(7, 'svg', 'reference-dark'),
+    );
+    expect(recordingFilename(7, 'svg', 'reference-dark-animated')).not.toBe(
+      recordingFilename(7, 'svg', 'reference-dark'),
+    );
+  });
+
   it('asserts on unsupported recording formats', () => {
     expect(() => recordingFilename(7, 'trace')).toThrow(
       /unsupported recording format: trace/u,
