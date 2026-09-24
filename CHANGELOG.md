@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-24
+
+### Added
+
+- `wait --scope cursor-line` (also available on batch `wait` steps and the `waitForRender` RPC) matches `--text`/`--regex` only against the row the cursor is on, so a post-command wait can no longer be satisfied by the echoed command line. `--scope screen` remains the default and is byte-identical to prior behavior ([#169](https://github.com/coder/agent-tty/pull/169)).
+- `agent-tty record diff <session-id-a> <session-id-b>`: replays two sessions offline from `events.jsonl` and emits an LCS-based line diff of their canonical visible screens. Supports `--at-seq-a`/`--at-seq-b` for diffing a session against its own earlier state, and `--json` returns `{ identical, a, b, diff }` validated against a new `RecordDiffResultSchema` ([#170](https://github.com/coder/agent-tty/pull/170)).
+- PTYs spawned inside a managed session now see `AGENT_TTY_ACTIVE=true` and `AGENT_TTY_SESSION_ID=<sessionId>` in their environment, so shell profiles and scripts can detect the active session and reference its ID ([#166](https://github.com/coder/agent-tty/pull/166)).
+
+### Fixed
+
+- Session-less PTYs (e.g. the `doctor` spawn probe) no longer inherit an outer `AGENT_TTY_ACTIVE` / `AGENT_TTY_SESSION_ID` from the parent environment, restoring the documented contract that a session reports its own ID. An empty `sessionId` is now rejected via invariant instead of being silently treated as session-less. Closes [#177](https://github.com/coder/agent-tty/issues/177) ([#178](https://github.com/coder/agent-tty/pull/178)).
+
+### Changed
+
+- CI setup relocked against the `jdx/aube` repo transfer (artifact sha256s unchanged) and `package.json` `overrides` bumped to clear high-severity advisories in `brace-expansion`, `js-yaml`, `nanoid`, and `postcss` ([#168](https://github.com/coder/agent-tty/pull/168)). Follow-up bumps `vitest` to `4.1.11` (Dependabot alert #8 / GHSA-82fw-gwwq-j7x9) and adds `@xmldom/xmldom` 0.8.15 + `js-yaml` 4.3.2 overrides to clear post-Aug-21 advisories that were failing `aube audit --audit-level high` on `main` ([#175](https://github.com/coder/agent-tty/pull/175)).
+
 ## [0.5.0] - 2026-06-23
 
 ### Added
