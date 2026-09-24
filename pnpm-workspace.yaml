@@ -1,6 +1,12 @@
-# aube configuration (aube reads pnpm-workspace.yaml keys; npm ignores this
-# file, so settings here don't trigger "Unknown project config" warnings the
-# way .npmrc keys do).
+# pnpm configuration (npm ignores this file, so settings here don't trigger
+# "Unknown project config" warnings the way .npmrc keys do). Overrides and the
+# build-script allowlist live in package.json's "pnpm" field.
+
+# Supply-chain guards carried over from aube's defaults: skip versions
+# published less than a day ago (the resolver falls back to an older match),
+# and reject versions whose publish trust evidence weakens between releases.
+minimumReleaseAge: 1440
+trustPolicy: no-downgrade
 
 # Resolve optional platform dependencies for every platform devs and CI use,
 # so the lockfile is identical no matter which host regenerates it.

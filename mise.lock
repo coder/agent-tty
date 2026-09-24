@@ -979,40 +979,6 @@ checksum = "sha256:6e7241b51e6817ea6a047693d8e6fed13b31819c9a0dd6c5a726e1592d22f
 url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_windows_amd64.zip"
 provenance = "github-attestations"
 
-[[tools.aube]]
-version = "1.10.4"
-backend = "github:endevco/aube"
-
-[tools.aube."platforms.linux-arm64"]
-checksum = "sha256:45dc6d46e69f1da58360fa8ac353d83c2b84e1ca2e31edb9be912a7729c839c1"
-url = "https://github.com/jdx/aube/releases/download/v1.10.4/aube-v1.10.4-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/aube/releases/assets/417134849"
-
-[tools.aube."platforms.linux-arm64-musl"]
-checksum = "sha256:8094e14b0906ecb2fcdb573700e7c9536abdeedc203a15051723b4fe6247237e"
-url = "https://github.com/jdx/aube/releases/download/v1.10.4/aube-v1.10.4-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/jdx/aube/releases/assets/417112128"
-
-[tools.aube."platforms.linux-x64"]
-checksum = "sha256:234b5d01ab5818937740ebc773709595e18eb926f2c543273e36670c5c416851"
-url = "https://github.com/jdx/aube/releases/download/v1.10.4/aube-v1.10.4-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/aube/releases/assets/417115596"
-
-[tools.aube."platforms.linux-x64-musl"]
-checksum = "sha256:c6bc24fa4a06f13cc8fa7fdb18bd15c55ec17b2f9ebce478c559b9664bc5abde"
-url = "https://github.com/jdx/aube/releases/download/v1.10.4/aube-v1.10.4-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/jdx/aube/releases/assets/417115736"
-
-[tools.aube."platforms.macos-arm64"]
-checksum = "sha256:963d276cef7f039a5750bf18d30af7c2457f6d5804fa24bd784458e22a4d1a14"
-url = "https://github.com/jdx/aube/releases/download/v1.10.4/aube-v1.10.4-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/jdx/aube/releases/assets/417151945"
-
-[tools.aube."platforms.windows-x64"]
-checksum = "sha256:631566d6802cbae88c35a54d8746ac36f56d563a0a680b6c5d882db8b9d495d5"
-url = "https://github.com/jdx/aube/releases/download/v1.10.4/aube-v1.10.4-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/jdx/aube/releases/assets/417123778"
-
 [[tools.communique]]
 version = "1.1.3"
 backend = "github:jdx/communique"
@@ -1380,6 +1346,10 @@ url = "https://nodejs.org/dist/v26.2.0/node-v26.2.0-darwin-x64.tar.gz"
 [tools.node."platforms.windows-x64"]
 checksum = "sha256:371071a4f7e2c8a5dd280730049c685911feecc59f50ebc488d675dc1087c69c"
 url = "https://nodejs.org/dist/v26.2.0/node-v26.2.0-win-x64.zip"
+
+[[tools."npm:pnpm"]]
+version = "10.34.5"
+backend = "npm:pnpm"
 
 [[tools.python]]
 version = "3.14.5"

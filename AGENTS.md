@@ -80,17 +80,18 @@ Important implications:
 
 # Essential commands
 
-Preferred setup uses `mise`; fall back to direct `aube` only when necessary.
+Preferred setup uses `mise`; fall back to direct `pnpm` only when necessary.
 
 ```sh
 mise install
 mise run bootstrap
 ```
 
-If `mise` is unavailable but `aube` is available:
+If `mise` is unavailable but `pnpm` is available:
 
 ```sh
-aube exec playwright install chromium
+pnpm install
+pnpm exec playwright install chromium
 ```
 
 Core commands:
