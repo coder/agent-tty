@@ -87,9 +87,11 @@ const PROMPT_EOL_MARK_ENV_KEY = 'PROMPT_EOL_MARK';
  *
  * Precedence, lowest to highest: the inherited process environment (minus
  * host-only internals), then the `PROMPT_EOL_MARK=''` default, then the
- * generated session metadata (`AGENT_TTY_ACTIVE=true` and, when `sessionId` is
- * given, `AGENT_TTY_SESSION_ID`), then the caller-supplied `env` (so a `--env`
- * value always wins — even an explicit empty one), then `TERM`. The defaults sit
+ * generated session metadata, then the caller-supplied `env` (so a `--env`
+ * value always wins — even an explicit empty one), then `TERM`. The session
+ * metadata is `AGENT_TTY_ACTIVE=true` plus `AGENT_TTY_SESSION_ID` when
+ * `sessionId` is given; without a `sessionId` both are removed instead, so a
+ * session-less PTY never claims an inherited outer session. The defaults sit
  * after the inherited environment so they also override inherited values: a
  * nested session reports its own id rather than the outer session's, and
  * captures stay deterministic regardless of the launching shell. The
@@ -117,8 +119,17 @@ export function resolvePtyEnv(
     resolved[PROMPT_EOL_MARK_ENV_KEY] = '';
   }
 
-  resolved.AGENT_TTY_ACTIVE = 'true';
-  if (sessionId) {
+  invariant(
+    sessionId === undefined || sessionId.length > 0,
+    'resolvePtyEnv: sessionId must be non-empty when provided',
+  );
+  if (sessionId === undefined) {
+    // A PTY without a session (the doctor spawn probe) must not claim one, so
+    // drop any session variables inherited from an outer session.
+    delete resolved.AGENT_TTY_ACTIVE;
+    delete resolved.AGENT_TTY_SESSION_ID;
+  } else {
+    resolved.AGENT_TTY_ACTIVE = 'true';
     resolved.AGENT_TTY_SESSION_ID = sessionId;
   }
 
