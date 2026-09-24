@@ -213,6 +213,55 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
     }
   });
 
+  it('exposes the session id and AGENT_TTY_ACTIVE to the spawned shell', () => {
+    let sessionId = '';
+
+    try {
+      // An id inherited from an outer session must not leak into this one.
+      const createResult = runCli(
+        [
+          'create',
+          '--json',
+          '--',
+          '/bin/sh',
+          '-c',
+          'printf "active=%s id=%s\\n" "${AGENT_TTY_ACTIVE-unset}" "${AGENT_TTY_SESSION_ID-unset}"; exec cat',
+        ],
+        { AGENT_TTY_HOME: testHome, AGENT_TTY_SESSION_ID: 'outer-session' },
+      );
+      expect(createResult.status).toBe(0);
+      expect(createResult.stderr).toBe('');
+      const envelope = JSON.parse(createResult.stdout) as SuccessEnvelope<{
+        sessionId: string;
+      }>;
+      expect(envelope.ok).toBe(true);
+      sessionId = envelope.result.sessionId;
+      expect(sessionId.length).toBeGreaterThan(0);
+
+      const waitResult = runCli(
+        [
+          'wait',
+          sessionId,
+          '--text',
+          `active=true id=${sessionId}`,
+          '--timeout',
+          '10000',
+          '--json',
+        ],
+        { AGENT_TTY_HOME: testHome },
+        60_000,
+      );
+      expect(waitResult.status).toBe(0);
+      expect(waitResult.stderr).toBe('');
+      expect(JSON.parse(waitResult.stdout)).toMatchObject({
+        ok: true,
+        result: { matched: true, timedOut: false },
+      });
+    } finally {
+      destroySession(testHome, sessionId);
+    }
+  });
+
   it('resize records resize and inspect reflects new dimensions', async () => {
     let sessionId = '';
 
