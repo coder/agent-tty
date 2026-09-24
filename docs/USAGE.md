@@ -261,7 +261,16 @@ Avoid writing automated sessions into the default `~/.agent-tty` unless you inte
 
 `create` spawns the shell with your inherited environment plus `TERM` (from `--term`) and a default `PROMPT_EOL_MARK=` (empty). The empty `PROMPT_EOL_MARK` suppresses the inverse-video `%` that `zsh` prints at the end of any output without a trailing newline; without it, agent-tty's hidden per-`run` completion marker leaves a stray `%` in snapshots, screenshots, and recordings. The variable is zsh-only and inert in other shells.
 
-Any `--env` value always wins, so you can opt back into the shell's native behavior per session:
+The shell also receives two session variables, so scripts inside a session can detect agent-tty and find their own session:
+
+| Variable               | Value                                                     |
+| ---------------------- | --------------------------------------------------------- |
+| `AGENT_TTY_ACTIVE`     | `true`.                                                   |
+| `AGENT_TTY_SESSION_ID` | The session's ID (a ULID, as printed by `create --json`). |
+
+Both replace inherited values, so a session created from inside another session reports its own ID, not the outer one. Like the `PROMPT_EOL_MARK` default, they are set at spawn time and are not stored in the session's recorded `env`.
+
+Any `--env` value always wins, so you can opt back into the shell's native behavior or override a session variable per session:
 
 ```bash
 # Restore zsh's styled default marker:

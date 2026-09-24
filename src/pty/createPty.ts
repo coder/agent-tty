@@ -86,12 +86,16 @@ const PROMPT_EOL_MARK_ENV_KEY = 'PROMPT_EOL_MARK';
  * Resolves the environment handed to the spawned PTY shell.
  *
  * Precedence, lowest to highest: the inherited process environment (minus
- * host-only internals), then the `PROMPT_EOL_MARK=''` default, then the caller-supplied `env` (so a `--env`
- * value always wins — even an explicit empty one), then `TERM`. The default sits
- * after the inherited environment so it also overrides any inherited
- * `PROMPT_EOL_MARK`, keeping captures deterministic regardless of the launching
- * shell. The presence check is against `env` (the user-explicit set) rather than
- * the merged result, so an inherited value never counts as opting out.
+ * host-only internals), then the `PROMPT_EOL_MARK=''` default, then the
+ * generated session metadata (`AGENT_TTY_ACTIVE=true` and, when `sessionId` is
+ * given, `AGENT_TTY_SESSION_ID`), then the caller-supplied `env` (so a `--env`
+ * value always wins — even an explicit empty one), then `TERM`. The defaults sit
+ * after the inherited environment so they also override inherited values: a
+ * nested session reports its own id rather than the outer session's, and
+ * captures stay deterministic regardless of the launching shell. The
+ * `PROMPT_EOL_MARK` presence check is against `env` (the user-explicit set)
+ * rather than the merged result, so an inherited value never counts as opting
+ * out.
  */
 export function resolvePtyEnv(
   env: Record<string, string>,
@@ -113,14 +117,13 @@ export function resolvePtyEnv(
     resolved[PROMPT_EOL_MARK_ENV_KEY] = '';
   }
 
-  Object.assign(resolved, env);
-  resolved.TERM = term;
-
   resolved.AGENT_TTY_ACTIVE = 'true';
   if (sessionId) {
     resolved.AGENT_TTY_SESSION_ID = sessionId;
   }
 
+  Object.assign(resolved, env);
+  resolved.TERM = term;
   return resolved;
 }
 
