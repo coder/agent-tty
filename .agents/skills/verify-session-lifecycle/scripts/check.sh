@@ -56,7 +56,13 @@ sha256() {
 # --- tools ---------------------------------------------------------------
 
 command -v node >/dev/null 2>&1 || die "node is not on PATH"
-"$JAVA" -version >/dev/null 2>&1 || die "Java 11+ is needed (set JAVA=/path/to/java)"
+# `java -version` prints `version "11.0.2"`, or `version "1.8.0_292"` for Java 8.
+java_version=$("$JAVA" -version 2>&1 | sed -n 's/.* version "\([^"]*\)".*/\1/p' | head -1)
+[ -n "$java_version" ] || die "Java 11+ is needed (set JAVA=/path/to/java)"
+java_major=${java_version#1.}
+java_major=${java_major%%[!0-9]*}
+[ -n "$java_major" ] && [ "$java_major" -ge 11 ] ||
+  die "Java 11+ is needed, $JAVA is version $java_version (set JAVA=/path/to/java)"
 if [ ! -f "$JAR" ]; then
   mkdir -p "$(dirname "$JAR")"
   echo "Fetching TLC $TLC_VERSION into $JAR"
@@ -132,6 +138,8 @@ RUNS=""
 write_run() {
   local name=$1 expect=$2 invariants=$3 overrides=$4 note=$5 must=${6:-}
   local dir="$OUT/$name" fact guard value
+  # A reused CHECK_OUT still holds the last run's files, such as actions.txt.
+  rm -rf "$dir"
   mkdir -p "$dir"
   cp "$SPEC" "$dir/SessionLifecycle.tla"
   {

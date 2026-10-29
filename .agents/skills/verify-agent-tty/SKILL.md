@@ -20,7 +20,7 @@ ENV=$(.agents/skills/verify-agent-tty/scripts/start-run.sh <name>)
 
 `start-run.sh` does this, from an empty folder to a usable CLI:
 
-1. If `node_modules/.bin/tsc` is missing (a partial install), it runs `aube ci`.
+1. If `node_modules/.bin/tsc` is missing (a partial install), it runs `aube ci`. Otherwise it runs `aube install --frozen-lockfile`, which brings `node_modules` up to date after a change to `aube-lock.yaml` and returns at once when nothing changed. Without that, a run after a dependency change builds and runs the old packages.
 2. It runs `npm run build`. If `dist/cli/main.js` is still older than a file in `src/`, it removes `.tsconfig.build.tsbuildinfo` and `dist/` and builds again. A stale build info file makes `tsc` exit 0 and write nothing.
 3. It makes the run folder `<root>/<UTC time>-<name>-<random>/` with `mktemp -d`, and `home/`, `state/` and `evidence/` in it. The root is `$VERIFY_ROOT`, or `${TMPDIR:-/tmp}/verify-agent-tty-<uid>`. The script refuses a root that is a symlink or that you do not own, and sets it to mode 700, so another user on a shared machine cannot plant files there.
 4. It writes `env.sh` there and prints its path.
@@ -75,7 +75,7 @@ All scripts take the run's `env.sh` path, except `start-run.sh`:
 
 | Script                         | Use                                                                               |
 | ------------------------------ | --------------------------------------------------------------------------------- |
-| `scripts/start-run.sh [name]`  | Install deps if needed, build, make the run folder, print the `env.sh` path.      |
+| `scripts/start-run.sh [name]`  | Sync deps with the lockfile, build, make the run folder, print the `env.sh` path. |
 | `scripts/doctor.sh <env.sh>`   | Check that the run is worth driving. Exit 0 or 1.                                 |
 | `scripts/run-pids.sh <env.sh>` | Print the PIDs of the hosts and programs this run started (Linux, reads `/proc`). |
 | `scripts/cleanup.sh <env.sh>`  | Tear the run down and keep the evidence.                                          |
