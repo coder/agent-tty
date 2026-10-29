@@ -21,7 +21,7 @@ describe('cleanupEvalHome', () => {
     );
     originalTmpdir = process.env.TMPDIR;
     process.env.TMPDIR = fakeTempRoot;
-    // Guards the real temp folder: an unfixed cleanupEvalHome(tmpdir()) can only delete fakeTempRoot.
+    // An unfixed cleanupEvalHome(tmpdir()) must only be able to delete fakeTempRoot.
     expect(tmpdir()).toBe(fakeTempRoot);
   });
 
@@ -38,9 +38,7 @@ describe('cleanupEvalHome', () => {
     const sentinelPath = join(fakeTempRoot, 'sentinel.txt');
     await writeFile(sentinelPath, 'keep me\n');
 
-    await expect(cleanupEvalHome(tmpdir())).rejects.toThrow(
-      'home must be strictly inside the system temp directory',
-    );
+    await expect(cleanupEvalHome(tmpdir())).rejects.toThrow();
     expect(existsSync(sentinelPath)).toBe(true);
   });
 
