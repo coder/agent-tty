@@ -22,8 +22,8 @@ This directory turns a renderer screenshot into a stored session artifact. `capt
 ## Side Effects
 
 - Creates the artifacts directory with `ensureArtifactsDir` from `src/storage/artifactPaths.ts` [capture.ts:captureScreenshotResult].
-- The backend writes the PNG to `artifacts/.tmp-screenshot-<ulid>.png`. This module moves it into place with `publishArtifactFile` from `src/storage/artifactFiles.ts`, which never replaces an existing file [capture.ts:captureScreenshotResult]. A repeat capture at the same seq and profile with identical bytes reuses `screenshot-<seq>-<profile>.png`. Different bytes go to `screenshot-<seq>-<profile>-<n>.png`.
-- Appends the manifest entry with `createArtifactEntry` and `appendArtifactWithRollback` from `src/storage/artifactManifest.ts`. If the append fails, the rollback helper tries to remove the PNG (best effort), but only when this capture created the file [capture.ts:captureScreenshotResult]. A reused file stays.
+- The backend writes the PNG to `artifacts/.tmp-screenshot-<ulid>.png`. This module builds the entry with `createArtifactEntry` and passes both to `publishArtifactWithRollback` from `src/storage/artifactManifest.ts`. That call moves the PNG into place without replacing an existing file and appends the entry [capture.ts:captureScreenshotResult]. A repeat capture at the same seq and profile with identical bytes reuses `screenshot-<seq>-<profile>.png`. Different bytes go to `screenshot-<seq>-<profile>-<n>.png`.
+- If the append fails, `publishArtifactWithRollback` tries to remove the PNG (best effort), but only when this capture created the file [capture.ts:captureScreenshotResult]. A reused file stays.
 - On any error it removes the temporary file with `rm({ force: true })` and rethrows [capture.ts:captureScreenshotResult].
 - This module computes no hash. The `sha256` comes from the renderer [capture.ts:captureScreenshotResult].
 

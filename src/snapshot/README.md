@@ -26,8 +26,8 @@ This directory turns a renderer `SemanticSnapshot` into a snapshot result and st
 
 - `createSnapshotResult` computes the Screen Hash with `computeScreenHash` from `src/renderer/canonicalScreen.ts` [capture.ts:createSnapshotResult].
 - `persistSnapshotArtifact` creates the artifacts directory with `ensureArtifactsDir` from `src/storage/artifactPaths.ts` [capture.ts:persistSnapshotArtifact].
-- It writes the pretty-printed JSON result to `artifacts/.tmp-snapshot-<ulid>.json` with `writeTextFileAtomic` from `src/storage/manifests.ts`. It then moves that file into place with `publishArtifactFile` from `src/storage/artifactFiles.ts`, which never replaces an existing file [capture.ts:persistSnapshotArtifact]. A repeat capture at the same seq and format with identical JSON reuses `snapshot-<seq>-<format>.json`. Different JSON, for example with `scrollbackLines`, goes to `snapshot-<seq>-<format>-<n>.json`.
-- It appends the manifest entry with `createArtifactEntry` and `appendArtifactWithRollback` from `src/storage/artifactManifest.ts`. If the append fails, the rollback helper tries to remove the snapshot file (best effort), but only when this capture created the file [capture.ts:persistSnapshotArtifact]. A reused file stays.
+- It writes the pretty-printed JSON result to `artifacts/.tmp-snapshot-<ulid>.json` with `writeTextFileAtomic` from `src/storage/manifests.ts`. It builds the entry with `createArtifactEntry` and passes both to `publishArtifactWithRollback` from `src/storage/artifactManifest.ts`. That call moves the file into place without replacing an existing file and appends the entry [capture.ts:persistSnapshotArtifact]. A repeat capture at the same seq and format with identical JSON reuses `snapshot-<seq>-<format>.json`. Different JSON, for example with `scrollbackLines`, goes to `snapshot-<seq>-<format>-<n>.json`.
+- If the append fails, `publishArtifactWithRollback` tries to remove the snapshot file (best effort), but only when this capture created the file [capture.ts:persistSnapshotArtifact]. A reused file stays.
 
 ## Verification
 

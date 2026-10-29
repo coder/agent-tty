@@ -13,12 +13,11 @@ const mocks = vi.hoisted(() => ({
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
   withOfflineReplayRenderer: vi.fn(),
-  appendArtifactWithRollback: vi.fn(),
-  // Test-internal delegate used by the appendArtifactWithRollback mock.
+  publishArtifactWithRollback: vi.fn(),
+  // Test-internal delegate used by the publishArtifactWithRollback mock.
   appendArtifact: vi.fn(),
   createArtifactEntry: vi.fn(),
   ensureArtifactsDir: vi.fn(),
-  publishArtifactFile: vi.fn(),
   rm: vi.fn(),
 }));
 
@@ -52,12 +51,8 @@ vi.mock('../../../src/replay/offlineReplay.js', () => ({
   withOfflineReplayRenderer: mocks.withOfflineReplayRenderer,
 }));
 
-vi.mock('../../../src/storage/artifactFiles.js', () => ({
-  publishArtifactFile: mocks.publishArtifactFile,
-}));
-
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
-  appendArtifactWithRollback: mocks.appendArtifactWithRollback,
+  publishArtifactWithRollback: mocks.publishArtifactWithRollback,
   createArtifactEntry: mocks.createArtifactEntry,
 }));
 
@@ -200,9 +195,10 @@ describe('screenshot command', () => {
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
     );
     mocks.readManifestIfExists.mockResolvedValue(createRunningSessionRecord());
-    mocks.appendArtifactWithRollback.mockImplementation(
+    mocks.publishArtifactWithRollback.mockImplementation(
       async (options: { sessionDir: string; entry: unknown }) => {
         await mocks.appendArtifact(options.sessionDir, options.entry);
+        return options.entry;
       },
     );
     mocks.appendArtifact.mockResolvedValue(undefined);
@@ -213,14 +209,6 @@ describe('screenshot command', () => {
     }));
     mocks.ensureArtifactsDir.mockResolvedValue(
       '/tmp/agent-tty/sessions/session-01/artifacts',
-    );
-    mocks.publishArtifactFile.mockImplementation(
-      (options: { filename: string }) =>
-        Promise.resolve({
-          filename: options.filename,
-          path: `/artifacts/${options.filename}`,
-          created: true,
-        }),
     );
     mocks.rm.mockResolvedValue(undefined);
   });
@@ -554,8 +542,7 @@ describe('screenshot command', () => {
       expect.stringMatching(/^\/artifacts\/\.tmp-screenshot-.*\.png$/),
       { force: true },
     );
-    expect(mocks.publishArtifactFile).not.toHaveBeenCalled();
-    expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
+    expect(mocks.publishArtifactWithRollback).not.toHaveBeenCalled();
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 

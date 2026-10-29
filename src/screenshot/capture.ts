@@ -7,10 +7,9 @@ import type { RendererBackend } from '../renderer/backend.js';
 
 import { ScreenshotResultSchema } from '../protocol/schemas.js';
 import { parseValidatedResult } from '../protocol/validation.js';
-import { publishArtifactFile } from '../storage/artifactFiles.js';
 import {
-  appendArtifactWithRollback,
   createArtifactEntry,
+  publishArtifactWithRollback,
 } from '../storage/artifactManifest.js';
 import {
   artifactPath,
@@ -128,21 +127,14 @@ export async function captureScreenshotResult(
       parsedResult.sha256 !== undefined,
       'parsed screenshot result must preserve sha256',
     );
-
-    const published = await publishArtifactFile({
-      sessionDir: options.sessionDir,
-      temporaryPath: temporaryOutputPath,
-      filename,
-    });
     const publicResult: CapturedScreenshotResult = {
       ...parsedResult,
-      artifactPath: published.path,
       sha256: parsedResult.sha256,
     };
 
     const artifactEntry = createArtifactEntry({
       kind: 'screenshot',
-      filename: published.filename,
+      filename,
       sessionId: publicResult.sessionId,
       capturedAtSeq: publicResult.capturedAtSeq,
       sha256,
@@ -159,13 +151,16 @@ export async function captureScreenshotResult(
       },
     });
 
-    await appendArtifactWithRollback({
+    const recordedEntry = await publishArtifactWithRollback({
       sessionDir: options.sessionDir,
+      temporaryPath: temporaryOutputPath,
       entry: artifactEntry,
-      ...(published.created ? { rollbackArtifactPath: published.path } : {}),
     });
 
-    return publicResult;
+    return {
+      ...publicResult,
+      artifactPath: artifactPath(options.sessionDir, recordedEntry.filename),
+    };
   } catch (error) {
     await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
     throw error;

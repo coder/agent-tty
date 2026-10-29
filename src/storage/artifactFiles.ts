@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { copyFile, link, readFile, rm } from 'node:fs/promises';
+import { copyFile, link, open, readFile, rm } from 'node:fs/promises';
 import { extname, isAbsolute } from 'node:path';
 
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
@@ -50,6 +50,20 @@ async function createWithoutReplacing(
   }
 }
 
+// O_NOFOLLOW makes a symlink fail with ELOOP, so an artifact name can never
+// resolve to a file outside the session.
+async function readRegularFile(path: string): Promise<Buffer> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    if (!(await handle.stat()).isFile()) {
+      throw new Error(`${path} is not a regular file`);
+    }
+    return await handle.readFile();
+  } finally {
+    await handle.close();
+  }
+}
+
 function variantFilename(filename: string, variant: number): string {
   if (variant === 1) {
     return filename;
@@ -90,7 +104,7 @@ export async function publishArtifactFile(
       contents ??= await readFile(options.temporaryPath);
       let existing: Buffer;
       try {
-        existing = await readFile(path);
+        existing = await readRegularFile(path);
       } catch (error) {
         // Another capture's rollback can remove the file after our EEXIST.
         if (

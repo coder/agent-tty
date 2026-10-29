@@ -7,10 +7,9 @@ import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { SnapshotResultSchema } from '../protocol/schemas.js';
 import { parseValidatedResult } from '../protocol/validation.js';
 import { computeScreenHash } from '../renderer/canonicalScreen.js';
-import { publishArtifactFile } from '../storage/artifactFiles.js';
 import {
-  appendArtifactWithRollback,
   createArtifactEntry,
+  publishArtifactWithRollback,
 } from '../storage/artifactManifest.js';
 import {
   artifactPath,
@@ -127,25 +126,18 @@ export async function persistSnapshotArtifact(
   );
 
   await ensureArtifactsDir(options.sessionDir);
+  const filename = snapshotFilename(
+    options.snapshot.capturedAtSeq,
+    options.format,
+  );
   const temporaryPath = artifactPath(
     options.sessionDir,
     `.tmp-snapshot-${ulid()}.json`,
   );
-  await writeTextFileAtomic({
-    path: temporaryPath,
-    pathLabel: 'snapshot artifact path',
-    contents: `${JSON.stringify(options.result, null, 2)}\n`,
-    writeErrorMessage: `Failed to write snapshot artifact at ${temporaryPath}.`,
-  });
-  const published = await publishArtifactFile({
-    sessionDir: options.sessionDir,
-    temporaryPath,
-    filename: snapshotFilename(options.snapshot.capturedAtSeq, options.format),
-  });
 
   const artifactEntry = createArtifactEntry({
     kind: 'snapshot',
-    filename: published.filename,
+    filename,
     sessionId: options.snapshot.sessionId,
     capturedAtSeq: options.snapshot.capturedAtSeq,
     metadata: {
@@ -161,10 +153,17 @@ export async function persistSnapshotArtifact(
     },
   });
 
-  await appendArtifactWithRollback({
+  await writeTextFileAtomic({
+    path: temporaryPath,
+    pathLabel: 'snapshot artifact path',
+    contents: `${JSON.stringify(options.result, null, 2)}\n`,
+    writeErrorMessage: `Failed to write snapshot artifact at ${temporaryPath}.`,
+  });
+
+  await publishArtifactWithRollback({
     sessionDir: options.sessionDir,
+    temporaryPath,
     entry: artifactEntry,
-    ...(published.created ? { rollbackArtifactPath: published.path } : {}),
   });
 }
 
