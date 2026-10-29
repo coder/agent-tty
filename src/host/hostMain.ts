@@ -1,6 +1,7 @@
 import { chmod, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import process from 'node:process';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { loadPackageMetadata } from '../util/packageMetadata.js';
 import {
@@ -8,6 +9,8 @@ import {
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
 import { EventLog } from './eventLog.js';
+import { isProcessAlive } from './lifecycle.js';
+import { createSerialManifestWriter } from './manifestWriter.js';
 import { buildReplayInput } from './replay.js';
 import { HostRendererManager } from './renderer.js';
 import { RpcServer, type MethodHandler } from './rpcServer.js';
@@ -19,6 +22,7 @@ import { encodeKey } from '../pty/keyEncoder.js';
 import { encodePaste } from '../pty/pasteEncoder.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { isCommandableSessionStatus } from '../protocol/sessionStatusPolicy.js';
+import type { SessionRecord } from '../protocol/schemas.js';
 import type {
   MarkParams,
   PasteParams,
@@ -49,7 +53,7 @@ import { createRendererBackend } from '../renderer/registry.js';
 import { captureScreenshotResult } from '../screenshot/capture.js';
 import { captureSnapshotResult } from '../snapshot/capture.js';
 import { resolveHome } from '../storage/home.js';
-import { readManifest, writeManifest } from '../storage/manifests.js';
+import { readManifestIfExists } from '../storage/manifests.js';
 import {
   eventLogPath,
   manifestPath,
@@ -79,6 +83,7 @@ export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
 // Idle-timeout enforcement is polling-based: actual idle duration before kill
 // may exceed idleTimeoutMs by up to checkIntervalMs (bounded by this cap).
 const IDLE_CHECK_CAP_MS = 5_000;
+const MANIFEST_WAIT_INTERVAL_MS = 20;
 
 type WaitOutcome = {
   exitCode?: number;
@@ -133,7 +138,41 @@ export function resolveHostRendererName(
   }
 }
 
-export async function runHost(sessionId: string): Promise<void> {
+// `create` launches the host before it writes the first manifest, so the host
+// waits for that write for as long as the creating process lives. A creator
+// that has exited finished all its writes first, so the read after its
+// liveness check sees any manifest it wrote.
+export async function waitForManifestFromCreate(
+  path: string,
+  creatorPid: number,
+): Promise<SessionRecord> {
+  invariant(
+    Number.isInteger(creatorPid) && creatorPid > 0,
+    'creatorPid must be a positive integer',
+  );
+
+  let creatorAlive = isProcessAlive(creatorPid);
+  let manifest = await readManifestIfExists(path);
+  while (manifest === null && creatorAlive) {
+    await delay(MANIFEST_WAIT_INTERVAL_MS);
+    creatorAlive = isProcessAlive(creatorPid);
+    manifest = await readManifestIfExists(path);
+  }
+
+  if (manifest === null) {
+    throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
+      message: 'Session manifest did not appear before its creator exited.',
+      details: { manifestPath: path, creatorPid },
+    });
+  }
+
+  return manifest;
+}
+
+export async function runHost(
+  sessionId: string,
+  creatorPid: number,
+): Promise<void> {
   invariant(
     typeof sessionId === 'string' && sessionId.length > 0,
     'sessionId must be a non-empty string',
@@ -145,10 +184,14 @@ export async function runHost(sessionId: string): Promise<void> {
   const ePath = eventLogPath(sessDir);
   const sPath = socketPath(sessDir);
 
-  const manifest = await readManifest(mPath);
+  const manifest = await waitForManifestFromCreate(mPath, creatorPid);
   invariant(
     manifest.sessionId === sessionId,
     'session manifest sessionId must match the requested session',
+  );
+  invariant(
+    manifest.hostPid === process.pid,
+    'session manifest hostPid must be this host process',
   );
   const idleTimeoutMs = manifest.idleTimeoutMs ?? 0;
   invariant(
@@ -158,11 +201,9 @@ export async function runHost(sessionId: string): Promise<void> {
 
   const hostDefaultRendererName = resolveHostRendererName(undefined);
   const state = new SessionState(manifest);
-  invariant(
-    Number.isInteger(process.pid) && process.pid > 0,
-    'process.pid must be a positive integer',
+  const persistManifest = createSerialManifestWriter(mPath, () =>
+    state.snapshot(),
   );
-  state.setHostPid(process.pid);
 
   const eventLog = await EventLog.open(ePath);
 
@@ -378,7 +419,7 @@ export async function runHost(sessionId: string): Promise<void> {
         if (isSessionCommandable(state)) {
           pty.kill();
           state.requestDestroy();
-          await writeManifest(mPath, state.snapshot());
+          await persistManifest();
         }
       } finally {
         try {
@@ -434,7 +475,7 @@ export async function runHost(sessionId: string): Promise<void> {
       } finally {
         runCompletion.resetForExit();
         try {
-          await writeManifest(mPath, state.snapshot());
+          await persistManifest();
         } finally {
           await initiateShutdown();
         }
@@ -738,7 +779,7 @@ export async function runHost(sessionId: string): Promise<void> {
       pty.resize(cols, rows);
       lastActivityAt = Date.now();
       state.setDimensions(cols, rows);
-      await writeManifest(mPath, state.snapshot());
+      await persistManifest();
       await eventLog.append('resize', { cols, rows });
       return { cols, rows };
     },
@@ -1102,7 +1143,7 @@ export async function runHost(sessionId: string): Promise<void> {
   });
 
   try {
-    await writeManifest(mPath, state.snapshot());
+    await persistManifest();
     const socketDirectory = dirname(sPath);
     await mkdir(socketDirectory, { recursive: true });
     await chmod(socketDirectory, 0o700);
