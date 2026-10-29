@@ -84,7 +84,7 @@
     "playwright": "1.60.0",
     "react": "^19.2.7",
     "ulid": "3.0.2",
-    "zod": "4.3.6"
+    "zod": "4.6.6"
   },
   "optionalDependencies": {
     "@coder/libghostty-vt-node": "0.1.0-beta.0"
@@ -101,12 +101,15 @@
   },
   "overrides": {
     "@xmldom/xmldom": "0.8.15",
-    "brace-expansion": "5.0.9",
+    "brace-expansion": "5.0.11",
     "esbuild": "0.28.1",
+    "handlebars": "4.7.10",
     "js-yaml": "4.3.2",
     "nanoid": "3.3.18",
     "postcss": "8.5.18",
-    "vite": "8.0.16",
+    "source-map-js": "1.2.2",
+    "tinypool": "2.1.2",
+    "vite": "8.1.6",
     "ws": "8.21.0"
   }
 }
