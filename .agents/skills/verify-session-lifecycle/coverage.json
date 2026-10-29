@@ -20,7 +20,7 @@
     "src/host/hostMain.ts#runHost(final try)": "ad91fa180ff36ffb",
     "src/host/hostMain.ts#runHost>handlers.resize": "30dd1da32879d478",
     "skill:model/SessionLifecycle.tla": "c40c42945e1f5283",
-    "skill:scripts/facts.mjs": "85a4ce08f8c77d9f",
+    "skill:scripts/facts.mjs": "0a5942fd848b61f5",
     "skill:scripts/check.sh": "9b350bbd80a7de3f"
   },
   "callSites": {
@@ -34,6 +34,37 @@
       "src/host/hostMain.ts#runHost>handlePtyExit",
       "src/host/hostMain.ts#runHost>initiateShutdown",
       "src/host/hostMain.ts#runHost>resize"
+    ],
+    "writeValidatedJsonFile": [
+      "src/storage/artifactManifest.ts#writeArtifactManifest",
+      "src/storage/manifests.ts#writeManifest",
+      "src/tools/canonicalBundleArtifacts.ts#writeCanonicalBundleManifest"
+    ],
+    "writeTextFileAtomic": [
+      "src/cli/commands/record-export.ts#runRecordExportCommand",
+      "src/snapshot/capture.ts#persistSnapshotArtifact",
+      "src/storage/homeRegistry.ts#defaultDependencies>writeAtomic",
+      "src/storage/manifests.ts#writeValidatedJsonFile"
+    ],
+    "manifestPath": [
+      "src/cli/commandTarget.ts#resolveCommandTarget",
+      "src/cli/commands/create.ts#readCreateResult",
+      "src/cli/commands/create.ts#runCreateCommand",
+      "src/cli/commands/gc.ts#gcSessions",
+      "src/cli/commands/inspect.ts#runInspectCommand",
+      "src/cli/commands/record-diff.ts#resolveSessionDirectory",
+      "src/cli/commands/record-export.ts#runRecordExportCommand",
+      "src/cli/commands/screenshot.ts#runScreenshotCommand",
+      "src/cli/commands/snapshot.ts#runSnapshotCommand",
+      "src/cli/commands/wait.ts#runWaitCommand",
+      "src/dashboard/sessionScope.ts#listDashboardSessions",
+      "src/host/hostMain.ts#runHost",
+      "src/host/lifecycle.ts#allocateSession",
+      "src/host/lifecycle.ts#getSessionPaths>manifestFile",
+      "src/host/lifecycle.ts#listSessions",
+      "src/host/lifecycle.ts#reconcileSession",
+      "src/replay/offlineReplay.ts#withOfflineReplayRenderer",
+      "src/storage/homeScope.ts#scanHome"
     ],
     "reconcileSession": [
       "src/cli/commands/create.ts#runCreateCommand",
