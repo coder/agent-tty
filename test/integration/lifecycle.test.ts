@@ -1,6 +1,7 @@
 import {
   chmod,
   mkdtemp,
+  readdir,
   readFile,
   realpath,
   stat,
@@ -488,6 +489,49 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     expect(errorEnvelope.error.code).toBe('INVALID_INPUT');
     expect(errorEnvelope.error.message).toContain(missingShellPath);
   });
+
+  it.each([
+    {
+      failure: 'a missing working directory',
+      args: (home: string) => [
+        '--cwd',
+        join(home, 'missing-cwd'),
+        '--',
+        '/bin/sh',
+      ],
+      code: 'STORAGE_READ_ERROR',
+    },
+    {
+      failure: 'a missing shell path',
+      args: (home: string) => ['--shell', join(home, 'missing-shell.sh')],
+      code: 'INVALID_INPUT',
+    },
+    {
+      failure: 'an empty command segment',
+      args: () => ['--', ''],
+      code: 'INTERNAL_ERROR',
+    },
+  ])(
+    'leaves no session directory behind after $failure',
+    async ({ args, code }) => {
+      const createResult = runCli(['create', '--json', ...args(testHome)], {
+        AGENT_TTY_HOME: testHome,
+      });
+
+      const errorEnvelope = JSON.parse(createResult.stdout) as ErrorEnvelope;
+      expect(errorEnvelope.ok).toBe(false);
+      expect(errorEnvelope.error.code).toBe(code);
+      const sessionEntries = await readdir(join(testHome, 'sessions')).catch(
+        (error: unknown) => {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+            return [];
+          }
+          throw error;
+        },
+      );
+      expect(sessionEntries).toEqual([]);
+    },
+  );
 
   it('host crash reconciles to failed with failureReason and failureOrigin', async () => {
     const sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec cat']);
