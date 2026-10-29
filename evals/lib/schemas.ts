@@ -1110,146 +1110,110 @@ export type ProviderAgentResultSchemaType = z.infer<
 >;
 export type ProviderConfigSchemaType = z.infer<typeof ProviderConfigSchema>;
 
-type AssertExact<T, U> = [T] extends [U]
-  ? [U] extends [T]
-    ? true
-    : never
-  : never;
+type OptionalKeys<T> = {
+  [K in keyof T]-?: string extends K
+    ? never
+    : number extends K
+      ? never
+      : {} extends Pick<T, K>
+        ? K
+        : never;
+}[keyof T];
 
-export type _ArtifactKindSchemaParity = AssertExact<
-  ArtifactKind,
-  ArtifactKindSchemaType
->;
-export type _BundleValidationProfileSchemaParity = AssertExact<
-  BundleValidationProfile,
-  BundleValidationProfileSchemaType
->;
-export type _PatternMatchResultSchemaParity = AssertExact<
-  PatternMatchResult,
-  PatternMatchResultSchemaType
->;
-export type _AntiPatternFindingSchemaParity = AssertExact<
-  AntiPatternFinding,
-  AntiPatternFindingSchemaType
->;
-export type _BundleCompletenessScoreSchemaParity = AssertExact<
-  BundleCompletenessScore,
-  BundleCompletenessScoreSchemaType
->;
-export type _ReportCompletenessScoreSchemaParity = AssertExact<
-  ReportCompletenessScore,
-  ReportCompletenessScoreSchemaType
->;
-export type _MatrixEntrySchemaParity = AssertExact<
-  MatrixEntry,
-  MatrixEntrySchemaType
->;
-export type _ComparisonMetricsSchemaParity = AssertExact<
-  ComparisonMetrics,
-  ComparisonMetricsSchemaType
->;
-export type _PromptEvalCaseSchemaParity = AssertExact<
-  PromptEvalCase,
-  PromptEvalCaseSchemaType
->;
-export type _ExecutionEvalCaseSchemaParity = AssertExact<
-  ExecutionEvalCase,
-  ExecutionEvalCaseSchemaType
->;
-export type _DogfoodEvalCaseSchemaParity = AssertExact<
-  DogfoodEvalCase,
-  DogfoodEvalCaseSchemaType
->;
-export type _EvalCaseSchemaParity = AssertExact<EvalCase, EvalCaseSchemaType>;
-export type _PromptCaseScoreSchemaParity = AssertExact<
-  PromptCaseScore,
-  PromptCaseScoreSchemaType
->;
-export type _EvalResultSchemaParity = AssertExact<
-  EvalResult,
-  EvalResultSchemaType
->;
-export type _AggregateMetricsSchemaParity = AssertExact<
-  AggregateMetrics,
-  AggregateMetricsSchemaType
->;
-export type _ConfidenceIntervalSchemaParity = AssertExact<
-  ConfidenceInterval,
-  ConfidenceIntervalSchemaType
->;
-export type _TrialAggregationSchemaParity = AssertExact<
-  TrialAggregation,
-  TrialAggregationSchemaType
->;
-export type _PerCaseComparisonSchemaParity = AssertExact<
-  PerCaseComparison,
-  PerCaseComparisonSchemaType
->;
-export type _BaselineOverallSchemaParity = AssertExact<
-  BaselineOverall,
-  BaselineOverallSchemaType
->;
-export type _BaselineComparisonSchemaParity = AssertExact<
-  BaselineComparison,
-  BaselineComparisonSchemaType
->;
-export type _JsonReportSchemaParity = AssertExact<
-  JsonReport,
-  JsonReportSchemaType
->;
-export type _ProviderComparisonReportSchemaParity = AssertExact<
-  ProviderComparisonReport,
-  ProviderComparisonReportSchemaType
->;
-export type _EvalCliOptionsSchemaParity = AssertExact<
-  EvalCliOptions,
-  EvalCliOptionsSchemaType
->;
-export type _EvalCliResultSchemaParity = AssertExact<
-  EvalCliResult,
-  EvalCliResultSchemaType
->;
-export type _EvalEventRecordSchemaParity = AssertExact<
-  EvalEventRecord,
-  EvalEventRecordSchemaType
->;
-export type _ProviderPromptRequestSchemaParity = AssertExact<
-  ProviderPromptRequest,
-  ProviderPromptRequestSchemaType
->;
-export type _ProviderPromptResultSchemaParity = AssertExact<
-  ProviderPromptResult,
-  ProviderPromptResultSchemaType
->;
-export type _ProviderAgentRequestSchemaParity = AssertExact<
-  ProviderAgentRequest,
-  ProviderAgentRequestSchemaType
->;
-export type _ProviderAgentResultSchemaParity = AssertExact<
-  ProviderAgentResult,
-  ProviderAgentResultSchemaType
->;
-export type _ProviderRuntimeInfoSchemaParity = AssertExact<
-  ProviderRuntimeInfo,
-  ProviderRuntimeInfoSchemaType
->;
-export type _TokenUsageSchemaParity = AssertExact<
-  TokenUsage,
-  TokenUsageSchemaType
->;
-export type _TokenReportSummarySchemaParity = AssertExact<
-  TokenReportSummary,
-  TokenReportSummarySchemaType
->;
-export type _NormalizedProviderOutputSchemaParity = AssertExact<
-  NormalizedProviderOutput,
-  NormalizedProviderOutputSchemaType
->;
-export type _ProviderCapabilitiesSchemaParity = AssertExact<
-  ProviderCapabilities,
-  ProviderCapabilitiesSchemaType
->;
-export type _ProviderConfigSchemaParity = AssertExact<
-  ProviderConfig,
-  ProviderConfigSchemaType
->;
+// z.infer types an `.optional()` key as `?: T | undefined`, while types.ts
+// writes `?: T` under exactOptionalPropertyTypes. Adding `| undefined` to
+// every optional key on both sides leaves only real drift.
+type WithUndefinedOptionals<T> = T extends readonly unknown[]
+  ? { [K in keyof T]: WithUndefinedOptionals<T[K]> }
+  : T extends object
+    ? {
+        [K in keyof T]: K extends OptionalKeys<T>
+          ? WithUndefinedOptionals<Exclude<T[K], undefined>> | undefined
+          : WithUndefinedOptionals<T[K]>;
+      }
+    : T;
+
+type IsExact<T, U> = [WithUndefinedOptionals<T>] extends [
+  WithUndefinedOptionals<U>,
+]
+  ? [WithUndefinedOptionals<U>] extends [WithUndefinedOptionals<T>]
+    ? true
+    : false
+  : false;
+
+type ExpectAllExact<T extends Record<string, true>> = T;
+
+/**
+ * Fails the typecheck when a types.ts shape and its schema diverge. The
+ * error names the drifted key.
+ */
+export type _SchemaParity = ExpectAllExact<{
+  ArtifactKind: IsExact<ArtifactKind, ArtifactKindSchemaType>;
+  BundleValidationProfile: IsExact<
+    BundleValidationProfile,
+    BundleValidationProfileSchemaType
+  >;
+  PatternMatchResult: IsExact<PatternMatchResult, PatternMatchResultSchemaType>;
+  AntiPatternFinding: IsExact<AntiPatternFinding, AntiPatternFindingSchemaType>;
+  BundleCompletenessScore: IsExact<
+    BundleCompletenessScore,
+    BundleCompletenessScoreSchemaType
+  >;
+  ReportCompletenessScore: IsExact<
+    ReportCompletenessScore,
+    ReportCompletenessScoreSchemaType
+  >;
+  MatrixEntry: IsExact<MatrixEntry, MatrixEntrySchemaType>;
+  ComparisonMetrics: IsExact<ComparisonMetrics, ComparisonMetricsSchemaType>;
+  PromptEvalCase: IsExact<PromptEvalCase, PromptEvalCaseSchemaType>;
+  ExecutionEvalCase: IsExact<ExecutionEvalCase, ExecutionEvalCaseSchemaType>;
+  DogfoodEvalCase: IsExact<DogfoodEvalCase, DogfoodEvalCaseSchemaType>;
+  EvalCase: IsExact<EvalCase, EvalCaseSchemaType>;
+  PromptCaseScore: IsExact<PromptCaseScore, PromptCaseScoreSchemaType>;
+  EvalResult: IsExact<EvalResult, EvalResultSchemaType>;
+  AggregateMetrics: IsExact<AggregateMetrics, AggregateMetricsSchemaType>;
+  ConfidenceInterval: IsExact<ConfidenceInterval, ConfidenceIntervalSchemaType>;
+  TrialAggregation: IsExact<TrialAggregation, TrialAggregationSchemaType>;
+  PerCaseComparison: IsExact<PerCaseComparison, PerCaseComparisonSchemaType>;
+  BaselineOverall: IsExact<BaselineOverall, BaselineOverallSchemaType>;
+  BaselineComparison: IsExact<BaselineComparison, BaselineComparisonSchemaType>;
+  JsonReport: IsExact<JsonReport, JsonReportSchemaType>;
+  ProviderComparisonReport: IsExact<
+    ProviderComparisonReport,
+    ProviderComparisonReportSchemaType
+  >;
+  EvalCliOptions: IsExact<EvalCliOptions, EvalCliOptionsSchemaType>;
+  EvalCliResult: IsExact<EvalCliResult, EvalCliResultSchemaType>;
+  EvalEventRecord: IsExact<EvalEventRecord, EvalEventRecordSchemaType>;
+  ProviderPromptRequest: IsExact<
+    ProviderPromptRequest,
+    ProviderPromptRequestSchemaType
+  >;
+  ProviderPromptResult: IsExact<
+    ProviderPromptResult,
+    ProviderPromptResultSchemaType
+  >;
+  ProviderAgentRequest: IsExact<
+    ProviderAgentRequest,
+    ProviderAgentRequestSchemaType
+  >;
+  ProviderAgentResult: IsExact<
+    ProviderAgentResult,
+    ProviderAgentResultSchemaType
+  >;
+  ProviderRuntimeInfo: IsExact<
+    ProviderRuntimeInfo,
+    ProviderRuntimeInfoSchemaType
+  >;
+  TokenUsage: IsExact<TokenUsage, TokenUsageSchemaType>;
+  TokenReportSummary: IsExact<TokenReportSummary, TokenReportSummarySchemaType>;
+  NormalizedProviderOutput: IsExact<
+    NormalizedProviderOutput,
+    NormalizedProviderOutputSchemaType
+  >;
+  ProviderCapabilities: IsExact<
+    ProviderCapabilities,
+    ProviderCapabilitiesSchemaType
+  >;
+  ProviderConfig: IsExact<ProviderConfig, ProviderConfigSchemaType>;
+}>;
