@@ -1,6 +1,16 @@
 import { readFileSync } from 'node:fs';
+import {
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildLeakFindings,
@@ -10,9 +20,83 @@ import {
   generateRunner,
   generateTape,
   parseHeroDemoArgs,
+  promote,
   selectPromotionRuns,
   selectedAgents,
+  type RunRecord,
 } from '../../../src/tools/hero-demo.js';
+import { validateBundle } from '../../../src/tools/validate-bundle.js';
+
+const tempDirs: string[] = [];
+
+async function createTempDir(): Promise<string> {
+  // oxfmt-ignore
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-hero-demo-test-')));
+  tempDirs.push(directory);
+  return directory;
+}
+
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  await Promise.all(
+    tempDirs
+      .splice(0, tempDirs.length)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
+
+async function createPromotionFixture(
+  failedRunError: string,
+): Promise<{ bundleDir: string; records: RunRecord[] }> {
+  const runDir = await createTempDir();
+  const sourceFile = async (name: string): Promise<string> => {
+    const path = join(runDir, name);
+    await writeFile(path, `${name}\n`);
+    return path;
+  };
+  const sources = {
+    outerWebm: await sourceFile('outer.webm'),
+    outerTranscript: await sourceFile('outer.ascii'),
+    outerThumbnail: await sourceFile('marker.png'),
+    prompt: await sourceFile('prompt.md'),
+    innerCast: await sourceFile('inner-nvim.cast'),
+    innerWebm: await sourceFile('inner-nvim.webm'),
+    finalProof: await sourceFile('final-file-proof.txt'),
+    finalFile: await sourceFile('demo-note.txt'),
+  };
+  const runRecord = (
+    agent: RunRecord['agent'],
+    index: number,
+    error?: string,
+  ): RunRecord => ({
+    agent,
+    index,
+    runDir,
+    passed: error === undefined,
+    selected: false,
+    ...sources,
+    ...(error === undefined ? {} : { error }),
+  });
+
+  const bundleDir = await createTempDir();
+  await writeFile(join(bundleDir, 'VIDEO_PLAYBACK.md'), '# Video playback\n');
+  await writeFile(join(bundleDir, 'README.md'), '# Previous bundle\n');
+  // Keep the summary's tool-version probes away from real vhs, codex and claude.
+  vi.stubEnv('PATH', await createTempDir());
+
+  return {
+    bundleDir,
+    records: [
+      runRecord('codex', 1, failedRunError),
+      runRecord('codex', 2),
+      runRecord('codex', 3),
+      runRecord('codex', 4),
+      runRecord('claude', 1),
+      runRecord('claude', 2),
+      runRecord('claude', 3),
+    ],
+  };
+}
 
 describe('hero demo generator planning', () => {
   it('requires promotion to run both agents at least three times', () => {
@@ -403,5 +487,36 @@ describe('hero demo generator planning', () => {
       'account/billing line',
       'account greeting',
     ]);
+  });
+});
+
+describe('hero demo promotion', () => {
+  it('promotes the first passing run per agent into a valid canonical bundle', async () => {
+    const { bundleDir, records } = await createPromotionFixture(
+      'vhs exited with code 1',
+    );
+
+    await promote(parseHeroDemoArgs(['--bundle-dir', bundleDir]), records);
+
+    const result = await validateBundle(bundleDir, 'canonical');
+    expect(result.checks.filter((check) => !check.ok)).toEqual([]);
+  });
+
+  it('leaves the bundle unchanged when the leak check fails', async () => {
+    const { bundleDir, records } = await createPromotionFixture(
+      'spawn failed in /home/alice/agent-tty',
+    );
+
+    await expect(
+      promote(parseHeroDemoArgs(['--bundle-dir', bundleDir]), records),
+    ).rejects.toThrow('leak check failed: absolute Linux home path');
+
+    expect((await readdir(bundleDir)).sort()).toEqual([
+      'README.md',
+      'VIDEO_PLAYBACK.md',
+    ]);
+    expect(await readFile(join(bundleDir, 'README.md'), 'utf8')).toBe(
+      '# Previous bundle\n',
+    );
   });
 });
