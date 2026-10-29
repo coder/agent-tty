@@ -25,6 +25,12 @@ case "$XDG_STATE_HOME" in
   "$VERIFY_RUN"/state) pass "Home Registry is private: $XDG_STATE_HOME" ;;
   *) bad "XDG_STATE_HOME is not $VERIFY_RUN/state" ;;
 esac
+# Every `att` call below can write to the configured home, so stop before the
+# first one when the run is not isolated.
+if [ "$fail" -ne 0 ]; then
+  echo "FAIL  the run is not isolated: not running agent-tty"
+  exit 1
+fi
 
 cd "$AGENT_TTY_REPO" || exit 2
 if [ ! -f dist/cli/main.js ]; then

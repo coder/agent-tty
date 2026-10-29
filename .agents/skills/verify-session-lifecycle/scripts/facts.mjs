@@ -355,17 +355,52 @@ function hasRecursiveOption(call) {
   );
 }
 
-// Every call that writes a manifest, reconciles, or removes a directory tree.
-// A new one is code the model may have to cover: whatever its argument is
-// named, a recursive rm can remove a session folder.
+// The helpers that write a manifest file, the function that names a session's
+// manifest path, and reconcile. writeValidatedJsonFile and writeTextFileAtomic
+// also write other files: listing their callers still shows a new writer of
+// session.json that skips writeManifest, and a new caller of manifestPath shows
+// a new writer that gets the path some other way.
+const TRACKED_CALLS = [
+  'writeManifest',
+  'writeValidatedJsonFile',
+  'writeTextFileAtomic',
+  'manifestPath',
+  'reconcileSession',
+];
+
+// Maps each local name of a tracked function in one file to the tracked name,
+// so a call through an import alias (`import { writeManifest as save }`) counts.
+function trackedNames(sourceFile) {
+  const names = new Map(TRACKED_CALLS.map((name) => [name, name]));
+  for (const statement of sourceFile.statements) {
+    const bindings = ts.isImportDeclaration(statement)
+      ? statement.importClause?.namedBindings
+      : undefined;
+    if (bindings === undefined || !ts.isNamedImports(bindings)) {
+      continue;
+    }
+    for (const element of bindings.elements) {
+      const imported = (element.propertyName ?? element.name).text;
+      if (TRACKED_CALLS.includes(imported)) {
+        names.set(element.name.text, imported);
+      }
+    }
+  }
+  return names;
+}
+
+// Every call that writes a manifest, names a manifest path, reconciles, or
+// removes a directory tree. A new one is code the model may have to cover:
+// whatever its argument is named, a recursive rm can remove a session folder.
 function callSites() {
   const out = {
-    writeManifest: [],
-    reconcileSession: [],
+    ...Object.fromEntries(TRACKED_CALLS.map((name) => [name, []])),
     recursiveRemovals: [],
   };
   for (const file of listSources('src')) {
-    walk(source(relative(repo, join(repo, file))), (node) => {
+    const sourceFile = source(relative(repo, join(repo, file)));
+    const names = trackedNames(sourceFile);
+    walk(sourceFile, (node) => {
       if (!ts.isCallExpression(node)) {
         return;
       }
@@ -376,8 +411,9 @@ function callSites() {
           ? callee.text
           : '';
       const site = `${file}#${ownerPath(node)}`;
-      if (name === 'writeManifest' || name === 'reconcileSession') {
-        out[name].push(site);
+      const tracked = names.get(name);
+      if (tracked !== undefined) {
+        out[tracked].push(site);
       } else if (
         (name === 'rm' || name === 'rmSync') &&
         hasRecursiveOption(node)

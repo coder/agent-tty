@@ -33,7 +33,7 @@ Yes, when the diff changes any of these:
 - `src/host/sessionState.ts` `setHostPid` and `recordExit`, `src/host/eventLog.ts` `EventLog.open`, `src/host/rpcServer.ts` `listen` and `close`.
 - `src/storage/manifests.ts` `readValidatedJsonFile`, `writeTextFileAtomic`, `writeManifest`.
 - The `SESSION_STATUS_POLICIES` table in `src/protocol/sessionStatusPolicy.ts`.
-- Any new or removed call to `writeManifest` or `reconcileSession`, or a recursive `rm` (one with `recursive: true`, whatever its argument is named), anywhere in `src/`.
+- Any new or removed call to `writeManifest`, `writeValidatedJsonFile`, `writeTextFileAtomic`, `manifestPath` or `reconcileSession` (also through an import alias), or a recursive `rm` (one with `recursive: true`, whatever its argument is named), anywhere in `src/`.
 - This skill's `model/SessionLifecycle.tla`, `scripts/facts.mjs` and `scripts/check.sh`: an edit to them also needs a new confirmed `coverage.json`.
 
 You do not have to judge this by hand. The check prints `STALE` when any of these changed since the sync commit.
@@ -80,16 +80,18 @@ For every violated run, read the counterexample with the `/statechart` skill (th
 
 ### Bug or modeling error
 
-A counterexample is a bug only if every step can happen in the real code. Map each step to the code that its action comment names. Then replay the path against the real CLI. `scripts/replay-hold.mjs` holds one file-system call in one agent-tty process, so you can force the order that the trace shows. It changes timing only. Its header comment explains `REPLAY_HOLD`. Use an isolated Home for every replay:
+A counterexample is a bug only if every step can happen in the real code. Map each step to the code that its action comment names. Then replay the path against the real CLI. `scripts/replay-hold.mjs` holds one file-system call in one agent-tty process, so you can force the order that the trace shows. It changes timing only. Its header comment explains `REPLAY_HOLD`. Use an isolated run of the `verify-agent-tty` skill for every replay:
 
 ```sh
-export AGENT_TTY_HOME=$(mktemp -d) XDG_STATE_HOME=$(mktemp -d) NODE_NO_WARNINGS=1
+ENV_FILE=$(.agents/skills/verify-agent-tty/scripts/start-run.sh replay)
+. "$ENV_FILE"
+export NODE_NO_WARNINGS=1
 HOLD="--import $PWD/.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs"
 ```
 
 The model's "other command" can reconcile at any time. In the real code, `gc`, `gc --dry-run` and the `create` time-out always reconcile. `list`, `inspect` and the dashboard first read the manifest themselves and reconcile only a session whose status is active. So when a trace has that command reconcile a terminal manifest, replay it with `gc --dry-run`: `list` skips that session unless it races.
 
-After a replay, destroy what it started and remove its folders: `for s in $(node --import tsx src/cli/main.ts list --json | jq -r '.result.sessions[].sessionId'); do node --import tsx src/cli/main.ts destroy "$s" --json; done; rm -rf "$AGENT_TTY_HOME" "$XDG_STATE_HOME"`.
+After a replay, run `.agents/skills/verify-agent-tty/scripts/cleanup.sh "$ENV_FILE"`. It destroys the run's sessions, stops every process that carries the run's `AGENT_TTY_HOME` (also the live host of a session that a replay left `failed`, which `list` does not show), and only then removes the run's home and state folders.
 
 If a step cannot happen in the code, the model is wrong: fix the model, and say what was wrong. If the replay shows the break, it is a bug: report it with the steps and the harm, and do not weaken a rule or the model to make the run pass.
 
