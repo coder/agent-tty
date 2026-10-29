@@ -148,8 +148,9 @@ CreateLaunchesHost ==
 
 \* The host reads its manifest. With HostWaitsForManifest it waits while the
 \* manifest is missing (create writes it right after the spawn); it gives up
-\* after a time-out, which HostCrashes covers. A missing manifest without the
-\* wait, or a status other than "running", throws, and the host exits.
+\* only when the create process has exited, which HostCrashes covers. A
+\* missing manifest without the wait, or a status other than "running",
+\* throws, and the host exits.
 HostReadsManifest ==
     /\ hostAlive /\ hpc = "boot"
     /\ ~(HostWaitsForManifest /\ mst = "none")

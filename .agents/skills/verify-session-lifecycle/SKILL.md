@@ -102,7 +102,7 @@ Each of these races broke the rules in earlier code. The guard named in each hea
 
 Without the guard, `allocateSession` wrote a manifest with `hostPid: null`, and the host recorded its pid only later. A `reconcileSession` in that window (from `gc`, `gc --dry-run`, `list`, `inspect`, `destroy` or the dashboard) read the null pid as a dead host, wrote `failed`, `host-death` and unlinked the socket, and `gc` then removed the folder of the starting session. `create` failed with `HOST_UNREACHABLE`. With the dashboard open, that hit 4 of 20 `create` calls.
 
-Now `allocateSession` calls `launch` first and writes the first manifest with the returned pid, and `runCreateCommand` starts the host only through that callback. Because the host can start before that write lands, `waitForManifestFromCreate` polls for the manifest for up to 5 seconds, and the host then checks that the manifest names its own pid.
+Now `allocateSession` calls `launch` first and writes the first manifest with the returned pid, and `runCreateCommand` starts the host only through that callback. Because the host can start before that write lands, `waitForManifestFromCreate` polls for the manifest for as long as the `create` process lives (`launchHost` passes its pid as the second argument of `_host`), and the host then checks that the manifest names its own pid.
 
 ```sh
 LOG=$(mktemp)

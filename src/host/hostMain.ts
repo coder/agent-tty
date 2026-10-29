@@ -9,6 +9,7 @@ import {
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
 import { EventLog } from './eventLog.js';
+import { isProcessAlive } from './lifecycle.js';
 import { createSerialManifestWriter } from './manifestWriter.js';
 import { buildReplayInput } from './replay.js';
 import { HostRendererManager } from './renderer.js';
@@ -83,7 +84,6 @@ export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
 // may exceed idleTimeoutMs by up to checkIntervalMs (bounded by this cap).
 const IDLE_CHECK_CAP_MS = 5_000;
 const MANIFEST_WAIT_INTERVAL_MS = 20;
-const MANIFEST_WAIT_TIMEOUT_MS = 5_000;
 
 type WaitOutcome = {
   exitCode?: number;
@@ -138,25 +138,41 @@ export function resolveHostRendererName(
   }
 }
 
-async function waitForManifestFromCreate(path: string): Promise<SessionRecord> {
-  const deadline = Date.now() + MANIFEST_WAIT_TIMEOUT_MS;
+// `create` launches the host before it writes the first manifest, so the host
+// waits for that write for as long as the creating process lives. A creator
+// that has exited finished all its writes first, so the read after its
+// liveness check sees any manifest it wrote.
+export async function waitForManifestFromCreate(
+  path: string,
+  creatorPid: number,
+): Promise<SessionRecord> {
+  invariant(
+    Number.isInteger(creatorPid) && creatorPid > 0,
+    'creatorPid must be a positive integer',
+  );
+
+  let creatorAlive = isProcessAlive(creatorPid);
   let manifest = await readManifestIfExists(path);
-  while (manifest === null && Date.now() < deadline) {
+  while (manifest === null && creatorAlive) {
     await delay(MANIFEST_WAIT_INTERVAL_MS);
+    creatorAlive = isProcessAlive(creatorPid);
     manifest = await readManifestIfExists(path);
   }
 
   if (manifest === null) {
     throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
-      message: `Session manifest did not appear within ${String(MANIFEST_WAIT_TIMEOUT_MS)} ms.`,
-      details: { manifestPath: path },
+      message: 'Session manifest did not appear before its creator exited.',
+      details: { manifestPath: path, creatorPid },
     });
   }
 
   return manifest;
 }
 
-export async function runHost(sessionId: string): Promise<void> {
+export async function runHost(
+  sessionId: string,
+  creatorPid: number,
+): Promise<void> {
   invariant(
     typeof sessionId === 'string' && sessionId.length > 0,
     'sessionId must be a non-empty string',
@@ -168,7 +184,7 @@ export async function runHost(sessionId: string): Promise<void> {
   const ePath = eventLogPath(sessDir);
   const sPath = socketPath(sessDir);
 
-  const manifest = await waitForManifestFromCreate(mPath);
+  const manifest = await waitForManifestFromCreate(mPath, creatorPid);
   invariant(
     manifest.sessionId === sessionId,
     'session manifest sessionId must match the requested session',

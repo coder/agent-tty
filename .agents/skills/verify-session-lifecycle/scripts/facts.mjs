@@ -242,7 +242,7 @@ function hostFacts() {
   const runHost = requireDeclaration('src/host/hostMain.ts', 'runHost');
   const waits = indexOfStatement(
     runHost.body,
-    /^const manifest = await waitForManifestFromCreate\(mPath\);$/,
+    /^const manifest = await waitForManifestFromCreate\(mPath, creatorPid\);$/,
   );
   const wait = requireDeclaration(
     'src/host/hostMain.ts',

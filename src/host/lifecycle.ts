@@ -162,7 +162,7 @@ function assertStringRecord(
   }
 }
 
-function isProcessAlive(pid: number | null): boolean {
+export function isProcessAlive(pid: number | null): boolean {
   if (pid === null) {
     return false;
   }
@@ -470,7 +470,14 @@ export function launchHost(config: LaunchHostConfig): number {
 
   const child = spawn(
     process.execPath,
-    [...process.execArgv, entrypoint, '_host', config.sessionId],
+    [
+      ...process.execArgv,
+      entrypoint,
+      '_host',
+      config.sessionId,
+      // The host waits for the first manifest while this process lives.
+      String(process.pid),
+    ],
     {
       detached: true,
       stdio: 'ignore',
