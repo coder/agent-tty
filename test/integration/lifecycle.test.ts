@@ -533,6 +533,24 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     },
   );
 
+  it('creates a session whose cwd is a Home that does not exist yet', async () => {
+    const newHome = join(testHome, 'new-home');
+    try {
+      const createResult = runCli(
+        ['create', '--json', '--cwd', newHome, '--', '/bin/sh', '-c', 'exit 0'],
+        { AGENT_TTY_HOME: newHome },
+      );
+
+      const envelope = JSON.parse(createResult.stdout) as SuccessEnvelope<{
+        cwd: string;
+      }>;
+      expect(envelope.ok).toBe(true);
+      expect(envelope.result.cwd).toBe(newHome);
+    } finally {
+      await cleanupHome(newHome);
+    }
+  });
+
   it('host crash reconciles to failed with failureReason and failureOrigin', async () => {
     const sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec cat']);
 
