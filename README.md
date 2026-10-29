@@ -158,6 +158,51 @@ npm run cli -- --help
 npm run verify
 ```
 
+## Repository blueprint
+
+This map is for contributors and coding agents. Each linked `README.md` is a contract that lists its directory's interface, invariants, side effects and test commands.
+
+### System overview
+
+The `agent-tty` CLI (`src/cli/main.ts`) starts one detached host process per session (`src/host/hostMain.ts`) and talks to it with newline-delimited JSON RPC over a Unix socket. The host runs the PTY (`src/pty/`) and appends input, output, resize, marker, signal and exit events to `events.jsonl` (`src/host/eventLog.ts`). Snapshots, screenshots, render waits and WebM export replay that log into a renderer backend (`src/renderer/`, `src/replay/`). Asciicast export reads the log directly. The results become artifact files and manifest entries (`src/snapshot/`, `src/screenshot/`, `src/export/`, `src/storage/`). `evals/` is a separate harness that runs agent CLIs against `agent-tty` and scores the results. It is not part of the published package.
+
+### Local interface and invariants
+
+- `vitest.config.ts` runs `test/**/*.test.ts` in the `node` environment with the setup file `test/setup-node-options.ts`. It sets no timeouts, pool or worker limit. `npm test` adds `--retry=2`, and `npm run test:integration` and `npm run test:e2e` add `--maxWorkers=1`. [vitest.config.ts:include] [vitest.config.ts:setupFiles] [package.json:scripts]
+
+### Subdirectories and system boundaries
+
+- [`src/`](./src/README.md): the package source: CLI, per-session host, protocol schemas, storage, PTY, renderers, capture and export, dashboard, bundled-skill loader, maintainer tools and shared utilities.
+- [`evals/`](./evals/README.md): the eval harness (`npx tsx evals/run.ts`) with prompt, execution and dogfood lanes, providers, reporters, token snapshots and workspace presets.
+- [`scripts/`](./scripts/README.md): plain Node build, packaging and install-smoke scripts behind `npm run build`, `npm run pack:release` and `npm run smoke:install`.
+- [`assets/`](./assets/README.md): README and social-preview images, and the script that renders the social preview.
+- [`skills/agent-tty/SKILL.md`](./skills/agent-tty/SKILL.md): the public `agent-tty` skill artifact. `package.json` `files` ships `skills/`.
+- [`skill-data/agent-tty/SKILL.md`](./skill-data/agent-tty/SKILL.md) and [`skill-data/dogfood-tui/SKILL.md`](./skill-data/dogfood-tui/SKILL.md): the bundled skills that `agent-tty skills list|get|path` serves through `src/skills/`.
+- No contracts, because these hold no production source: `test/` (unit, integration and e2e tests and the fixture apps), [`dogfood/`](./dogfood/README.md) (proof bundles with hash-locked manifests, indexed in [`dogfood/CATALOG.md`](./dogfood/CATALOG.md)), `docs/`, `design/` and `plans/`.
+
+### Global invariants
+
+- The CLI JSON envelope is the stable automation surface. `src/protocol/envelope.ts` defines it, and `src/cli/exitCodes.ts` maps known error codes to fixed exit codes. Unmapped codes, such as `SKILL_NOT_FOUND`, exit 1. [src/protocol/envelope.ts:CommandEnvelope] [src/cli/exitCodes.ts:exitCodeForError]
+- Every `.object(...)` schema in `src/protocol/schemas.ts` and `src/protocol/messages.ts` ends in `.strict()`, so unknown keys fail validation. [src/protocol/schemas.ts:SessionRecordSchema] [src/protocol/messages.ts:RpcRequestSchema]
+- The event log is append-only with contiguous sequence numbers. `EventLog.append` asserts that each new `seq` equals the buffer length. `src/storage/eventLogCodec.ts` requires `seq` to start at 0 and rise by 1, and rejects opening or reading a log larger than `MAX_EVENT_LOG_SIZE` (50 MB). `EventLog.append` checks no byte size. It caps only the buffer at `MAX_EVENT_BUFFER_ENTRIES` (250,000 entries), so a live session can grow the file past 50 MB and then fail to reopen. [src/host/eventLog.ts:EventLog] [src/host/eventLog.ts:MAX_EVENT_BUFFER_ENTRIES] [src/storage/eventLogCodec.ts:parseEventLogContent] [src/storage/eventLogCodec.ts:assertEventLogSize] [src/storage/eventLogCodec.ts:MAX_EVENT_LOG_SIZE]
+- Session, socket and artifact paths come from guarded builders that reject path separators and `.` or `..` session IDs. [src/storage/sessionPaths.ts:sessionDir] [src/storage/artifactPaths.ts:artifactPath]
+- `session.json`, the artifact manifest and the Home registry are written through `writeTextFileAtomic`: a temp file with mode `0o600`, then a rename. [src/storage/manifests.ts:writeTextFileAtomic]
+- `gc` deletes only sessions whose status is collectable (`exited`, `failed` or `destroyed`) after `reconcileSession`, and it re-reads the manifest before each delete. [src/cli/commands/gc.ts:gcSessions] [src/protocol/sessionStatusPolicy.ts:getSessionStatusPolicy]
+
+### Global side effects
+
+- Session state lives in the Home: `~/.agent-tty`, unless `--home` or `AGENT_TTY_HOME` names another absolute path. Each session has `<home>/sessions/<sessionId>/` with `session.json`, `events.jsonl` and `artifacts/`. [src/storage/home.ts:resolveHome] [src/storage/sessionPaths.ts:sessionDir]
+- The registry of known Homes is `${XDG_STATE_HOME:-~/.local/state}/agent-tty/homes.json`. [src/storage/homeRegistry.ts:resolveHomeRegistryPath]
+- Each session's RPC socket is under `/tmp/agent-tty/`, with mode `0o600`. [src/storage/sessionPaths.ts:socketPath] [src/host/rpcServer.ts:RpcServer]
+- `create` spawns a detached host process (`process.execPath ... _host <sessionId> <creatorPid>`) before it writes the first manifest, and the host waits for that manifest. The host spawns the PTY child through `node-pty`. [src/host/lifecycle.ts:launchHost] [src/host/lifecycle.ts:allocateSession] [src/host/hostMain.ts:waitForManifestFromCreate] [src/pty/createPty.ts:createPty]
+- The `ghostty-web` renderer launches headless Chromium through Playwright. [src/renderer/ghosttyWeb/backend.ts:GhosttyWebBackend]
+- In `evals/`, the `claude` and `codex` providers run the real agent CLIs with permission-bypass flags, and runs write to `evals/reports/` by default. [evals/providers/claude.ts:ClaudeProvider] [evals/run.ts:resolveOutputBaseDir]
+
+### System verification
+
+- Run: `mise run ci` (format check, workflow lint, lint, audit, typecheck, tests, build and install smoke), or `npm run verify` without `mise`.
+- Run: `npm test` for the tests only.
+
 ## License
 
 [Apache License 2.0](./LICENSE).
