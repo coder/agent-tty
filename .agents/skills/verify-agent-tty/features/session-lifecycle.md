@@ -43,6 +43,5 @@ Preconditions:
 
 - `gc` without `AGENT_TTY_HOME` or `--home` sweeps every Home in the Home Registry, including your own. `env.sh` sets both `AGENT_TTY_HOME` and a private `XDG_STATE_HOME`; never run `gc` in a shell that did not source it.
 - `gc --dry-run` removes nothing but still reconciles: it rewrites `session.json` of sessions whose host died. Do not use it as a read-only probe.
-- `gc`, `list`, `inspect` and the dashboard can mark a session that is still starting as `failed` (`failureOrigin: "host-death"`). A `create` that runs at the same time then fails with `HOST_UNREACHABLE` (exit 6). This is finding F1 of the `verify-session-lifecycle` skill. Do not run `gc` or the dashboard against the run's Home while a recipe creates sessions, unless that race is what you verify.
 - `list` without `--all` hides finished sessions. Use `--all` before you claim that a session is gone.
 - agent-tty resolves the Home to a real path. When `$TMPDIR` goes through a symlink, paths in envelopes differ from the path you passed. `start-run.sh` resolves the run folder for this reason.

@@ -40,13 +40,15 @@ export const step = (action, from, to) => {
     case 'CreateMakesDirectory':
       return 'create makes the session folder';
     case 'CreateWritesManifest':
-      return 'create writes "running" without a host pid';
+      return to.mpid
+        ? 'create writes "running" with the host pid'
+        : 'create writes "running" without a host pid';
     case 'CreateLaunchesHost':
       return 'create starts the host';
     case 'HostReadsManifest':
       return to.hostAlive
         ? 'the host reads the manifest'
-        : 'the host cannot read a running manifest and exits';
+        : 'the host finds no running manifest and exits';
     case 'HostOpensLogAndSpawns':
       return to.hostAlive
         ? 'the host opens the event log and starts the program'
@@ -73,6 +75,8 @@ export const step = (action, from, to) => {
       return `${reconciles(from, to)} reads the manifest`;
     case 'ReconcileChecksHost':
       return `${reconciles(from, to)} checks the host pid`;
+    case 'ReconcileRereadsManifest':
+      return `${reconciles(from, to)} reads the manifest again`;
     case 'ReconcileWrites':
       return `${reconciles(from, to)} writes "failed"`;
     case 'ReconcileUnlinksSocket':

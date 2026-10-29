@@ -17,9 +17,10 @@
 (*           shows an active status. This process may reconcile at any     *)
 (*           time, so it covers all of them.                               *)
 (*                                                                         *)
-(* facts.mjs reads the four guard constants from the source. FALSE means   *)
-(* the guard is not in the code. Collectable and Terminal come from the    *)
-(* SESSION_STATUS_POLICIES table in src/protocol/sessionStatusPolicy.ts.   *)
+(* facts.mjs reads the guard constants from the source. FALSE means the    *)
+(* guard is not in the code, and the model then runs the code without it.  *)
+(* Collectable and Terminal come from the SESSION_STATUS_POLICIES table in *)
+(* src/protocol/sessionStatusPolicy.ts.                                    *)
 (***************************************************************************)
 EXTENDS Naturals
 
@@ -30,18 +31,19 @@ CONSTANTS
     GcFinalCheck,           \* gc.ts: re-read before rm, skip if not collectable
     ReconcileSkipsTerminal, \* lifecycle.ts: return when the manifest is terminal
     ReconcileSkipsLiveHost, \* lifecycle.ts: return when hostPid is set and alive
-    MaxListReconciles,      \* how many times the "list" process reconciles
-    \* Each Close* constant assumes that one known finding is fixed. Only the
-    \* residual run sets them, so that it still checks the other rules. The
-    \* run that describes the current code sets all of them to FALSE.
-    CloseStartupWindow,     \* F1
-    CloseStaleCheckWindow,  \* F2
-    CloseExitWriteRace      \* F3
+    CreateRecordsHostPid,   \* lifecycle.ts: launch the host, then write the
+                            \*   first manifest with its pid
+    HostWaitsForManifest,   \* hostMain.ts: wait for the manifest to appear
+    ReconcileRereads,       \* lifecycle.ts: re-read the manifest after the
+                            \*   host is found dead, write from that copy
+    HostSerializesWrites,   \* hostMain.ts: one writer, writes in call order
+    MaxListReconciles       \* how many times the "list" process reconciles
 
 ASSUME MaxListReconciles \in 1..3
 ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
-                 ReconcileSkipsLiveHost, CloseStartupWindow,
-                 CloseStaleCheckWindow, CloseExitWriteRace} : b \in BOOLEAN
+                 ReconcileSkipsLiveHost, CreateRecordsHostPid,
+                 HostWaitsForManifest, ReconcileRereads,
+                 HostSerializesWrites} : b \in BOOLEAN
 
 Readers == {"gc", "list"}   \* the two processes that run reconcileSession
 
@@ -52,6 +54,7 @@ VARIABLES
     morigin,     \* failureOrigin on disk: "none", "host-death", "unknown"
     wasTerminal, \* ghost: the manifest has shown a terminal status
     wasExited,   \* ghost: the manifest has shown "exited"
+    startFailed, \* ghost: the host died because its files were missing
     sock,        \* the RPC socket file exists (it is outside the directory)
     cpc,         \* create: "alloc", "write", "launch", "done"
     hostAlive,   \* the detached host process is alive
@@ -67,13 +70,14 @@ VARIABLES
     lruns        \* how many reconciles "list" has started
 
 diskVars == <<dir, mst, mpid, morigin, wasTerminal, wasExited>>
+ghostVars == <<startFailed>>
 hostVars == <<hostAlive, hpc, hex, rsz>>
 readerVars == <<pc, rd, gres, lruns>>
-vars == <<diskVars, sock, cpc, hostVars, readerVars>>
+vars == <<diskVars, ghostVars, sock, cpc, hostVars, readerVars>>
 
 Init ==
     /\ dir = FALSE /\ mst = "none" /\ mpid = FALSE /\ morigin = "none"
-    /\ wasTerminal = FALSE /\ wasExited = FALSE
+    /\ wasTerminal = FALSE /\ wasExited = FALSE /\ startFailed = FALSE
     /\ sock = FALSE
     /\ cpc = "alloc"
     /\ hostAlive = FALSE /\ hpc = "none" /\ hex = "none" /\ rsz = "none"
@@ -93,6 +97,14 @@ Write(s, pid, origin) ==
     /\ wasTerminal' = (wasTerminal \/ s \in Terminal)
     /\ wasExited' = (wasExited \/ s = "exited")
 
+\* The host fails to start because its files are missing or were rewritten.
+HostFailsToStart ==
+    /\ startFailed' = TRUE
+    /\ hostAlive' = FALSE
+    /\ hpc' = "dead"
+    /\ hex' = IF hex = "none" THEN "none" ELSE "gone"
+    /\ rsz' = rsz
+
 \* The host process ends abnormally. Its exit path ends with it.
 HostDies ==
     /\ hostAlive' = FALSE
@@ -103,40 +115,48 @@ HostDies ==
 \* -------------------------------------------------------------------------
 \* create
 
+\* With CreateRecordsHostPid, allocateSession calls launch (launchHost) and
+\* then writes the first manifest with the pid that launch returned, so no
+\* manifest exists without its hostPid. Without it, allocateSession writes a
+\* manifest with hostPid null, and create calls launchHost after that.
+
 \* allocateSession: mkdir(sessionDirectory), chmod 0o700.
 CreateMakesDirectory ==
     /\ cpc = "alloc"
     /\ dir' = TRUE
-    /\ cpc' = "write"
-    /\ UNCHANGED <<mst, mpid, morigin, wasTerminal, wasExited, sock, hostVars,
-                   readerVars>>
+    /\ cpc' = IF CreateRecordsHostPid THEN "launch" ELSE "write"
+    /\ UNCHANGED <<mst, mpid, morigin, wasTerminal, wasExited, ghostVars, sock,
+                   hostVars, readerVars>>
 
-\* allocateSession: writeManifest with status "running" and hostPid null.
+\* allocateSession: writeManifest with status "running".
 CreateWritesManifest ==
     /\ cpc = "write"
-    /\ Write("running", FALSE, "none")
-    /\ cpc' = "launch"
-    /\ UNCHANGED <<sock, hostVars, readerVars>>
+    /\ Write("running", CreateRecordsHostPid, "none")
+    /\ cpc' = IF CreateRecordsHostPid THEN "done" ELSE "launch"
+    /\ UNCHANGED <<ghostVars, sock, hostVars, readerVars>>
 
-\* launchHost spawns the detached `_host` process. runCreateCommand does not
-\* keep the pid it returns. Only the host itself records hostPid, later.
+\* launchHost spawns the detached `_host` process.
 CreateLaunchesHost ==
     /\ cpc = "launch"
     /\ hostAlive' = TRUE
     /\ hpc' = "boot"
-    /\ cpc' = "done"
-    /\ UNCHANGED <<diskVars, sock, hex, rsz, readerVars>>
+    /\ cpc' = IF CreateRecordsHostPid THEN "write" ELSE "done"
+    /\ UNCHANGED <<diskVars, ghostVars, sock, hex, rsz, readerVars>>
 
 \* -------------------------------------------------------------------------
 \* host start-up path (runHost)
 
-\* readManifest, then SessionState.setHostPid in memory. A missing manifest
-\* or a status other than "running" throws, and the host process exits.
+\* The host reads its manifest. With HostWaitsForManifest it waits while the
+\* manifest is missing (create writes it right after the spawn); it gives up
+\* only when the create process has exited, which HostCrashes covers. A
+\* missing manifest without the wait, or a status other than "running",
+\* throws, and the host exits.
 HostReadsManifest ==
     /\ hostAlive /\ hpc = "boot"
+    /\ ~(HostWaitsForManifest /\ mst = "none")
     /\ IF mst = "running"
-          THEN /\ hpc' = "open" /\ UNCHANGED <<hostAlive, hex, rsz>>
-          ELSE HostDies
+          THEN /\ hpc' = "open" /\ UNCHANGED <<hostAlive, hex, rsz, ghostVars>>
+          ELSE HostFailsToStart
     /\ UNCHANGED <<diskVars, sock, cpc, readerVars>>
 
 \* EventLog.open(events.jsonl, 'a') throws when the directory is gone. From
@@ -147,8 +167,8 @@ HostOpensLogAndSpawns ==
     /\ hostAlive /\ hpc = "open"
     /\ IF dir
           THEN /\ hpc' = "pidwrite" /\ hex' = "wait"
-               /\ UNCHANGED <<hostAlive, rsz>>
-          ELSE HostDies
+               /\ UNCHANGED <<hostAlive, rsz, ghostVars>>
+          ELSE HostFailsToStart
     /\ UNCHANGED <<diskVars, sock, cpc, readerVars>>
 
 \* The start-up write lands. It is the host's in-memory record, so it
@@ -157,7 +177,7 @@ HostWritesPids ==
     /\ hostAlive /\ hpc = "pidwrite"
     /\ Write("running", TRUE, "none")
     /\ hpc' = "sockdir"
-    /\ UNCHANGED <<sock, cpc, hostAlive, hex, rsz, readerVars>>
+    /\ UNCHANGED <<ghostVars, sock, cpc, hostAlive, hex, rsz, readerVars>>
 
 \* `if (!isSessionCommandable(state))` shut down, else rpcServer.listen().
 \* The program has ended exactly when the exit path has left "wait".
@@ -166,20 +186,21 @@ HostListens ==
     /\ IF hex = "wait"
           THEN /\ sock' = TRUE /\ hpc' = "serving"
           ELSE /\ hpc' = "idle" /\ UNCHANGED sock
-    /\ UNCHANGED <<diskVars, cpc, hostAlive, hex, rsz, readerVars>>
+    /\ UNCHANGED <<diskVars, ghostVars, cpc, hostAlive, hex, rsz, readerVars>>
 
 \* The resize handler: setDimensions in memory, then writeManifest with
 \* status "running". The write starts here and lands in the next step.
 HostStartsResize ==
     /\ hostAlive /\ hpc = "serving" /\ hex = "wait" /\ rsz = "none"
     /\ rsz' = "pending"
-    /\ UNCHANGED <<diskVars, sock, cpc, hostAlive, hpc, hex, readerVars>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, hex,
+                   readerVars>>
 
 HostResizeWriteLands ==
     /\ hostAlive /\ rsz = "pending"
     /\ Write("running", TRUE, "none")
     /\ rsz' = "done"
-    /\ UNCHANGED <<sock, cpc, hostAlive, hpc, hex, readerVars>>
+    /\ UNCHANGED <<ghostVars, sock, cpc, hostAlive, hpc, hex, readerVars>>
 
 \* -------------------------------------------------------------------------
 \* host exit path (pty.onExit -> handlePtyExit -> initiateShutdown)
@@ -190,17 +211,19 @@ HostResizeWriteLands ==
 ProgramExits ==
     /\ hostAlive /\ hex = "wait"
     /\ hex' = "exitwrite"
-    /\ UNCHANGED <<diskVars, sock, cpc, hostAlive, hpc, rsz, readerVars>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, rsz,
+                   readerVars>>
 
-\* writeManifest with status "exited" and the exit code. Nothing orders it
-\* after a start-up or resize write that is still in flight, unless
-\* CloseExitWriteRace assumes that.
+\* writeManifest with status "exited" and the exit code. With
+\* HostSerializesWrites, createSerialManifestWriter runs the host's writes
+\* in call order, so this write lands after a start-up or resize write that
+\* was already in flight. Without it, nothing orders them.
 HostWritesExit ==
     /\ hostAlive /\ hex = "exitwrite"
-    /\ CloseExitWriteRace => (hpc # "pidwrite" /\ rsz # "pending")
+    /\ HostSerializesWrites => (hpc # "pidwrite" /\ rsz # "pending")
     /\ Write("exited", TRUE, "none")
     /\ hex' = "shutdown"
-    /\ UNCHANGED <<sock, cpc, hostAlive, hpc, rsz, readerVars>>
+    /\ UNCHANGED <<ghostVars, sock, cpc, hostAlive, hpc, rsz, readerVars>>
 
 \* initiateShutdown: eventLog.close, renderer dispose, rpcServer.close. close
 \* unlinks the socket file also when the server never listened.
@@ -208,7 +231,7 @@ HostClosesSocket ==
     /\ hostAlive /\ hex = "shutdown"
     /\ sock' = FALSE
     /\ hex' = "done"
-    /\ UNCHANGED <<diskVars, cpc, hostAlive, hpc, rsz, readerVars>>
+    /\ UNCHANGED <<diskVars, ghostVars, cpc, hostAlive, hpc, rsz, readerVars>>
 
 \* The process ends when both paths are finished and no write is in flight.
 HostProcessEnds ==
@@ -216,50 +239,54 @@ HostProcessEnds ==
     /\ rsz # "pending"
     /\ hostAlive' = FALSE
     /\ hpc' = "dead"
-    /\ UNCHANGED <<diskVars, sock, cpc, hex, rsz, readerVars>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hex, rsz, readerVars>>
 
 \* SIGKILL, OOM, or an uncaught error, at any point. The socket file stays.
 HostCrashes ==
     /\ hostAlive
     /\ HostDies
-    /\ UNCHANGED <<diskVars, sock, cpc, readerVars>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, readerVars>>
 
 \* -------------------------------------------------------------------------
 \* reconcileSession, run by process p
 
 AfterReconcile(p) == IF p = "gc" THEN "readafter" ELSE "idle"
 
-\* The F1 start-up window: a pid-less "running" manifest while create or its
-\* host is still on the way to writing hostPid.
-InStartupWindow == mst = "running" /\ ~mpid /\ (cpc # "done" \/ hostAlive)
-
 \* `if (manifest.hostPid !== null && hostAlive) return`, where hostAlive is
 \* isProcessAlive(manifest.hostPid). A null hostPid reads as a dead host.
 SkipsHost(read) == ReconcileSkipsLiveHost /\ read.pid /\ hostAlive
 
 \* readManifestIfExists; return when it is null or terminal.
-\* CloseStaleCheckWindow joins this read and the pid check into one step.
 ReconcileReads(p) ==
     /\ pc[p] = "r_read"
-    /\ CloseStartupWindow => ~InStartupWindow
-    /\ LET read == [st |-> mst, pid |-> mpid] IN
-       IF mst = "none" \/ (ReconcileSkipsTerminal /\ mst \in Terminal)
+    /\ IF mst = "none" \/ (ReconcileSkipsTerminal /\ mst \in Terminal)
           THEN /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
                /\ UNCHANGED rd
-          ELSE /\ pc' = [pc EXCEPT ![p] =
-                           IF ~CloseStaleCheckWindow THEN "r_check"
-                           ELSE IF SkipsHost(read) THEN AfterReconcile(p)
-                           ELSE "r_write"]
-               /\ rd' = [rd EXCEPT ![p] = read]
-    /\ UNCHANGED <<diskVars, sock, cpc, hostVars, gres, lruns>>
+          ELSE /\ pc' = [pc EXCEPT ![p] = "r_check"]
+               /\ rd' = [rd EXCEPT ![p] = [st |-> mst, pid |-> mpid]]
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, gres, lruns>>
 
 \* One synchronous block: isProcessAlive(hostPid), the pid check, and the
 \* kill of the child process if it is alive.
 ReconcileChecksHost(p) ==
     /\ pc[p] = "r_check"
     /\ pc' = [pc EXCEPT ![p] =
-                IF SkipsHost(rd[p]) THEN AfterReconcile(p) ELSE "r_write"]
-    /\ UNCHANGED <<diskVars, sock, cpc, hostVars, rd, gres, lruns>>
+                IF SkipsHost(rd[p]) THEN AfterReconcile(p)
+                ELSE IF ReconcileRereads THEN "r_reread"
+                ELSE "r_write"]
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, rd, gres, lruns>>
+
+\* With ReconcileRereads: `current = readManifestIfExists`, taken after the
+\* host was found dead, so no host write can follow it; return when it is
+\* null or terminal, else reconcile from it.
+ReconcileRereadsManifest(p) ==
+    /\ pc[p] = "r_reread"
+    /\ IF mst = "none" \/ mst \in Terminal
+          THEN /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
+               /\ UNCHANGED rd
+          ELSE /\ pc' = [pc EXCEPT ![p] = "r_write"]
+               /\ rd' = [rd EXCEPT ![p] = [st |-> mst, pid |-> mpid]]
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, gres, lruns>>
 
 \* writeManifest(reconciledManifest): "running" becomes failed/host-death,
 \* any other status that gets here becomes failed/unknown (the default
@@ -269,14 +296,14 @@ ReconcileWrites(p) ==
     /\ Write("failed", FALSE,
              IF rd[p].st = "running" THEN "host-death" ELSE "unknown")
     /\ pc' = [pc EXCEPT ![p] = "r_unlink"]
-    /\ UNCHANGED <<sock, cpc, hostVars, rd, gres, lruns>>
+    /\ UNCHANGED <<ghostVars, sock, cpc, hostVars, rd, gres, lruns>>
 
 \* unlinkIfPresent(socketPath(sessionDirectory))
 ReconcileUnlinksSocket(p) ==
     /\ pc[p] = "r_unlink"
     /\ sock' = FALSE
     /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
-    /\ UNCHANGED <<diskVars, cpc, hostVars, rd, gres, lruns>>
+    /\ UNCHANGED <<diskVars, ghostVars, cpc, hostVars, rd, gres, lruns>>
 
 \* -------------------------------------------------------------------------
 \* gc
@@ -294,13 +321,13 @@ GcGoesTo(next) ==
 GcFindsDirectory ==
     /\ pc["gc"] = "stat"
     /\ IF dir THEN GcGoesTo("readbefore") ELSE GcSkips
-    /\ UNCHANGED <<diskVars, sock, cpc, hostVars, rd, lruns>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, rd, lruns>>
 
 \* manifestBefore = readManifestIfExists; skip when it is missing.
 GcReadsManifest ==
     /\ pc["gc"] = "readbefore"
     /\ IF mst = "none" THEN GcSkips ELSE GcGoesTo("r_read")
-    /\ UNCHANGED <<diskVars, sock, cpc, hostVars, rd, lruns>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, rd, lruns>>
 
 \* manifestAfter = readManifestIfExists; skip when it is missing or not
 \* collectable ("session host is still alive").
@@ -309,7 +336,7 @@ GcReadsReconciled ==
     /\ IF mst = "none" \/ (GcSkipsNonCollectable /\ mst \notin Collectable)
           THEN GcSkips
           ELSE GcGoesTo("final")
-    /\ UNCHANGED <<diskVars, sock, cpc, hostVars, rd, lruns>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, rd, lruns>>
 
 \* finalManifest = readManifestIfExists; skip when it is there and not
 \* collectable ("session restarted between check and delete").
@@ -318,7 +345,7 @@ GcFinalRead ==
     /\ IF GcFinalCheck /\ mst # "none" /\ mst \notin Collectable
           THEN GcSkips
           ELSE GcGoesTo("rm")
-    /\ UNCHANGED <<diskVars, sock, cpc, hostVars, rd, lruns>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, rd, lruns>>
 
 \* rm(sessionDirectory, { recursive: true, force: true })
 GcRemoves ==
@@ -326,7 +353,8 @@ GcRemoves ==
     /\ dir' = FALSE /\ mst' = "none" /\ mpid' = FALSE /\ morigin' = "none"
     /\ pc' = [pc EXCEPT !["gc"] = "done"]
     /\ gres' = "removed"
-    /\ UNCHANGED <<wasTerminal, wasExited, sock, cpc, hostVars, rd, lruns>>
+    /\ UNCHANGED <<wasTerminal, wasExited, ghostVars, sock, cpc, hostVars, rd,
+                   lruns>>
 
 \* -------------------------------------------------------------------------
 \* list: another command that reconciles this session (see the header)
@@ -335,7 +363,7 @@ ListStartsReconcile ==
     /\ pc["list"] = "idle" /\ lruns < MaxListReconciles
     /\ pc' = [pc EXCEPT !["list"] = "r_read"]
     /\ lruns' = lruns + 1
-    /\ UNCHANGED <<diskVars, sock, cpc, hostVars, rd, gres>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, rd, gres>>
 
 \* Every process is finished. This step keeps TLC from reporting the end
 \* states as deadlocks. Any other state without a step is a model error.
@@ -352,6 +380,7 @@ Next ==
     \/ HostCrashes
     \/ \E p \in Readers :
           \/ ReconcileReads(p) \/ ReconcileChecksHost(p)
+          \/ ReconcileRereadsManifest(p)
           \/ ReconcileWrites(p) \/ ReconcileUnlinksSocket(p)
     \/ GcFindsDirectory \/ GcReadsManifest \/ GcReadsReconciled
     \/ GcFinalRead \/ GcRemoves
@@ -364,10 +393,12 @@ Spec == Init /\ [][Next]_vars
 \* Rules. check.sh runs each one on its own.
 
 TypeOK ==
-    /\ {dir, mpid, wasTerminal, wasExited, sock, hostAlive} \subseteq BOOLEAN
+    /\ {dir, mpid, wasTerminal, wasExited, startFailed, sock, hostAlive}
+          \subseteq BOOLEAN
     /\ mst \in {"none", "running", "exited", "failed"}
     /\ morigin \in {"none", "host-death", "unknown"}
-    /\ (mst = "none") <=> (~dir \/ cpc = "write")
+    /\ (mst # "none") => dir
+    /\ (dir /\ mst = "none") => cpc # "done"
     /\ gres \in {"pending", "skipped", "removed"}
     /\ lruns \in 0..MaxListReconciles
 
@@ -400,6 +431,10 @@ RecordedExitKept == wasExited => mst \in {"exited", "none"}
 \* file that every command connects to exists.
 RunningSessionReachable ==
     (hostAlive /\ hpc = "serving" /\ hex = "wait") => sock
+
+\* R6: a host never fails to start because its files were missing or were
+\* rewritten by another process. Only an outside crash stops a start-up.
+HostStartsWhenCreated == ~startFailed
 
 \* Witnesses. check.sh expects TLC to report each one VIOLATED, which shows
 \* that the model reaches the state: the rules above are not true only

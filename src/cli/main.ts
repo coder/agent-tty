@@ -969,11 +969,11 @@ async function main(): Promise<void> {
     );
 
   program
-    .command('_host <session-id>', { hidden: true })
+    .command('_host <session-id> <creator-pid>', { hidden: true })
     .description('Internal: run the session host process')
-    .action(async (sessionId: string) => {
+    .action(async (sessionId: string, creatorPid: string) => {
       const { runHost } = await import('../host/hostMain.js');
-      await runHost(sessionId);
+      await runHost(sessionId, Number(creatorPid));
     });
 
   await program.parseAsync();
