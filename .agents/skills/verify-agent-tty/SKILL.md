@@ -67,7 +67,7 @@ Put every proof under `$EVIDENCE/<feature>/`, and make that folder with `mkdir -
 .agents/skills/verify-agent-tty/scripts/cleanup.sh "$ENV"
 ```
 
-It destroys every active session of the run through `att destroy` (then `--force` if needed), waits up to 10 seconds for the run's processes to end, and stops only the ones that are left. Those are the session hosts that carry this run's `AGENT_TTY_HOME` and the programs that carry the `AGENT_TTY_SESSION_ID` of one of this run's sessions, as `run-pids.sh` lists them. It never kills by process name. It then copies each session's `session.json`, `events.jsonl` and `artifacts/` into `$EVIDENCE/sessions/`, removes the run's socket folder `/tmp/agent-tty/<hash>` if it is empty, and removes `home/` and `state/`. `$EVIDENCE` stays. Run cleanup after every run, also after a failed one.
+It destroys every active session of the run through `att destroy` (then `--force` if needed), waits up to 10 seconds for the run's processes to end, and stops only the ones that are left. Those are the session hosts that carry this run's `AGENT_TTY_HOME` and the programs that carry the `AGENT_TTY_SESSION_ID` of one of this run's sessions, as `run-pids.sh` lists them. It never kills by process name. It then copies each session's `session.json`, `events.jsonl` and `artifacts/` into `$EVIDENCE/sessions/`, removes the run's socket folder `/tmp/agent-tty/<hash>` if it is empty, and removes `home/` and `state/`. `$EVIDENCE` stays. It keeps `home/` and `state/` and exits 1 when the copy fails, or when there is no `/proc` (macOS): then it cannot confirm that every process of the run has ended, so stop them and remove the two folders yourself. Run cleanup after every run, also after a failed one.
 
 ## Helpers
 

@@ -40,11 +40,19 @@ if [ -n "$left" ]; then
   # shellcheck disable=SC2086
   [ -z "$left" ] || kill -KILL $left 2>/dev/null
 fi
-[ -d /proc/self ] || echo "cleanup.sh: no /proc here; check 'ps' for processes with AGENT_TTY_HOME=$AGENT_TTY_HOME" >&2
-
 if [ -d "$AGENT_TTY_HOME/sessions" ]; then
-  mkdir -p "$EVIDENCE/sessions"
-  cp -R "$AGENT_TTY_HOME/sessions/." "$EVIDENCE/sessions/"
+  { mkdir -p "$EVIDENCE/sessions" && cp -R "$AGENT_TTY_HOME/sessions/." "$EVIDENCE/sessions/"; } || {
+    echo "cleanup.sh: could not copy the sessions into $EVIDENCE/sessions; kept home/ and state/" >&2
+    exit 1
+  }
+fi
+
+# Without /proc, run-pids.sh cannot see a live host behind a failed manifest,
+# so removing home/ could delete the folder of a session that still runs.
+if [ ! -d /proc/self ]; then
+  echo "cleanup.sh: no /proc here, so it cannot confirm that every process of this run has ended; kept home/ and state/." >&2
+  echo "cleanup.sh: stop the processes with AGENT_TTY_HOME=$AGENT_TTY_HOME (see 'ps'), then remove $AGENT_TTY_HOME and $XDG_STATE_HOME." >&2
+  exit 1
 fi
 
 # The socket folder is /tmp/agent-tty/<first 8 hex of sha256(home)>.

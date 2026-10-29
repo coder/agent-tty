@@ -21,7 +21,7 @@
     "src/host/hostMain.ts#runHost>handlers.resize": "30dd1da32879d478",
     "skill:model/SessionLifecycle.tla": "3fbd7365274cdc9f",
     "skill:scripts/facts.mjs": "f69c376b14dcec98",
-    "skill:scripts/check.sh": "f90685b6d4f5fa12"
+    "skill:scripts/check.sh": "2cfc6d8782570707"
   },
   "callSites": {
     "writeManifest": [

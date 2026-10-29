@@ -57,7 +57,8 @@ sha256() {
 
 command -v node >/dev/null 2>&1 || die "node is not on PATH"
 # `java -version` prints `version "11.0.2"`, or `version "1.8.0_292"` for Java 8.
-java_version=$("$JAVA" -version 2>&1 | sed -n 's/.* version "\([^"]*\)".*/\1/p' | head -1)
+java_out=$("$JAVA" -version 2>&1) || die "Java 11+ is needed (set JAVA=/path/to/java)"
+java_version=$(sed -n 's/.* version "\([^"]*\)".*/\1/p' <<<"$java_out" | head -1)
 [ -n "$java_version" ] || die "Java 11+ is needed (set JAVA=/path/to/java)"
 java_major=${java_version#1.}
 java_major=${java_major%%[!0-9]*}
