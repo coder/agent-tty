@@ -162,7 +162,7 @@ function assertStringRecord(
   }
 }
 
-function isProcessAlive(pid: number | null): boolean {
+export function isProcessAlive(pid: number | null): boolean {
   if (pid === null) {
     return false;
   }
@@ -334,6 +334,7 @@ async function waitForProcessAndSocketShutdown(
 
 export async function allocateSession(
   config: AllocateConfig,
+  launch: (sessionId: string) => number,
 ): Promise<AllocateResult> {
   const rawConfig: unknown = config;
   invariant(
@@ -423,6 +424,8 @@ export async function allocateSession(
     assertNonEmptyString(commandPart, 'command segment');
   }
 
+  const hostPid = launch(sessionId);
+
   const now = new Date().toISOString();
   await writeManifest(manifestPath(sessionDirectory), {
     version: 1,
@@ -436,7 +439,7 @@ export async function allocateSession(
     rows: config.rows,
     creationCols: config.cols,
     creationRows: config.rows,
-    hostPid: null,
+    hostPid,
     childPid: null,
     exitCode: null,
     exitSignal: null,
@@ -467,7 +470,14 @@ export function launchHost(config: LaunchHostConfig): number {
 
   const child = spawn(
     process.execPath,
-    [...process.execArgv, entrypoint, '_host', config.sessionId],
+    [
+      ...process.execArgv,
+      entrypoint,
+      '_host',
+      config.sessionId,
+      // The host waits for the first manifest while this process lives.
+      String(process.pid),
+    ],
     {
       detached: true,
       stdio: 'ignore',
@@ -689,16 +699,21 @@ export async function reconcileSession(
     killProcessBestEffort(manifest.childPid);
   }
 
+  const current = await readManifestIfExists(manifestFile);
+  if (current === null || isTerminalSessionStatus(current.status)) {
+    return;
+  }
+
   let reconciledStatus: SessionRecord['status'];
   let failureReason: string | undefined;
   let failureOrigin: FailureOrigin | undefined;
 
-  switch (manifest.status) {
+  switch (current.status) {
     case 'running':
       reconciledStatus = 'failed';
       failureReason =
-        manifest.hostPid !== null
-          ? `host process died unexpectedly (pid: ${String(manifest.hostPid)})`
+        current.hostPid !== null
+          ? `host process died unexpectedly (pid: ${String(current.hostPid)})`
           : 'host process died unexpectedly';
       failureOrigin = 'host-death';
       break;
@@ -710,13 +725,13 @@ export async function reconcileSession(
       break;
     default:
       reconciledStatus = 'failed';
-      failureReason = `unexpected pre-reconcile status: ${manifest.status}`;
+      failureReason = `unexpected pre-reconcile status: ${current.status}`;
       failureOrigin = 'unknown';
       break;
   }
 
   const reconciledManifest: SessionRecord = {
-    ...manifest,
+    ...current,
     status: reconciledStatus,
     updatedAt: new Date().toISOString(),
     hostPid: null,

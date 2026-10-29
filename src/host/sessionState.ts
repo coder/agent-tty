@@ -18,21 +18,6 @@ export class SessionState {
     };
   }
 
-  public setHostPid(pid: number): void {
-    invariant(
-      this.#record.status === 'running',
-      'Cannot set host PID unless session is running',
-    );
-    invariant(this.#record.hostPid === null, 'Host PID has already been set');
-    invariant(
-      Number.isInteger(pid) && pid > 0,
-      'Host PID must be a positive integer',
-    );
-
-    this.#record.hostPid = pid;
-    this.touch();
-  }
-
   public setChildPid(pid: number): void {
     invariant(
       this.#record.status === 'running',
