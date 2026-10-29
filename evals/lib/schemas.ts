@@ -118,6 +118,7 @@ export const ArtifactKindSchema = z.enum([
 export const BundleValidationProfileSchema = z.enum([
   'contract-reporting',
   'interactive-renderer',
+  'canonical',
 ]);
 
 const PromptBudgetSchema = z
