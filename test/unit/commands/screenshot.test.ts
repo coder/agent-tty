@@ -18,12 +18,11 @@ const mocks = vi.hoisted(() => ({
   appendArtifact: vi.fn(),
   createArtifactEntry: vi.fn(),
   ensureArtifactsDir: vi.fn(),
-  rename: vi.fn(),
+  publishArtifactFile: vi.fn(),
   rm: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', () => ({
-  rename: mocks.rename,
   rm: mocks.rm,
 }));
 
@@ -51,6 +50,10 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 
 vi.mock('../../../src/replay/offlineReplay.js', () => ({
   withOfflineReplayRenderer: mocks.withOfflineReplayRenderer,
+}));
+
+vi.mock('../../../src/storage/artifactFiles.js', () => ({
+  publishArtifactFile: mocks.publishArtifactFile,
 }));
 
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
@@ -211,7 +214,14 @@ describe('screenshot command', () => {
     mocks.ensureArtifactsDir.mockResolvedValue(
       '/tmp/agent-tty/sessions/session-01/artifacts',
     );
-    mocks.rename.mockResolvedValue(undefined);
+    mocks.publishArtifactFile.mockImplementation(
+      (options: { filename: string }) =>
+        Promise.resolve({
+          filename: options.filename,
+          path: `/artifacts/${options.filename}`,
+          created: true,
+        }),
+    );
     mocks.rm.mockResolvedValue(undefined);
   });
 
@@ -372,7 +382,7 @@ describe('screenshot command', () => {
       },
       expect.any(Function),
     );
-    // Rename, manifest-entry construction, and manifest append are exercised
+    // Publishing, manifest-entry construction, and manifest append are exercised
     // by `test/unit/screenshot/capture.test.ts`. Here we only check the
     // routing-level surface of the offline path.
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
@@ -544,7 +554,7 @@ describe('screenshot command', () => {
       expect.stringMatching(/^\/artifacts\/\.tmp-screenshot-.*\.png$/),
       { force: true },
     );
-    expect(mocks.rename).not.toHaveBeenCalled();
+    expect(mocks.publishArtifactFile).not.toHaveBeenCalled();
     expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });

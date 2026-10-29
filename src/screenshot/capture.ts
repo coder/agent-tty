@@ -1,4 +1,4 @@
-import { rename, rm } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 
 import { ulid } from 'ulid';
 
@@ -7,6 +7,7 @@ import type { RendererBackend } from '../renderer/backend.js';
 
 import { ScreenshotResultSchema } from '../protocol/schemas.js';
 import { parseValidatedResult } from '../protocol/validation.js';
+import { publishArtifactFile } from '../storage/artifactFiles.js';
 import {
   appendArtifactWithRollback,
   createArtifactEntry,
@@ -96,7 +97,6 @@ export async function captureScreenshotResult(
       rendererResult.capturedAtSeq,
       rendererResult.profileName,
     );
-    const finalArtifactPath = artifactPath(options.sessionDir, filename);
 
     // Mirror `src/snapshot/capture.ts` by building a typed intermediate
     // before validation. A misspelled field name surfaces at compile time
@@ -107,7 +107,7 @@ export async function captureScreenshotResult(
       profileName: rendererResult.profileName,
       cols: rendererResult.cols,
       rows: rendererResult.rows,
-      artifactPath: finalArtifactPath,
+      artifactPath: artifactPath(options.sessionDir, filename),
       pngSizeBytes: rendererResult.pngSizeBytes,
       cursorVisible: rendererResult.cursorVisible,
       rendererBackend: rendererResult.rendererBackend,
@@ -128,14 +128,21 @@ export async function captureScreenshotResult(
       parsedResult.sha256 !== undefined,
       'parsed screenshot result must preserve sha256',
     );
+
+    const published = await publishArtifactFile({
+      sessionDir: options.sessionDir,
+      temporaryPath: temporaryOutputPath,
+      filename,
+    });
     const publicResult: CapturedScreenshotResult = {
       ...parsedResult,
+      artifactPath: published.path,
       sha256: parsedResult.sha256,
     };
 
     const artifactEntry = createArtifactEntry({
       kind: 'screenshot',
-      filename,
+      filename: published.filename,
       sessionId: publicResult.sessionId,
       capturedAtSeq: publicResult.capturedAtSeq,
       sha256,
@@ -152,11 +159,10 @@ export async function captureScreenshotResult(
       },
     });
 
-    await rename(temporaryOutputPath, finalArtifactPath);
     await appendArtifactWithRollback({
       sessionDir: options.sessionDir,
       entry: artifactEntry,
-      rollbackArtifactPath: finalArtifactPath,
+      ...(published.created ? { rollbackArtifactPath: published.path } : {}),
     });
 
     return publicResult;

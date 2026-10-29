@@ -1,3 +1,5 @@
+import { ulid } from 'ulid';
+
 import type { SnapshotParams, SnapshotResult } from '../protocol/messages.js';
 import type { SemanticSnapshot } from '../renderer/types.js';
 
@@ -5,6 +7,7 @@ import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { SnapshotResultSchema } from '../protocol/schemas.js';
 import { parseValidatedResult } from '../protocol/validation.js';
 import { computeScreenHash } from '../renderer/canonicalScreen.js';
+import { publishArtifactFile } from '../storage/artifactFiles.js';
 import {
   appendArtifactWithRollback,
   createArtifactEntry,
@@ -124,15 +127,25 @@ export async function persistSnapshotArtifact(
   );
 
   await ensureArtifactsDir(options.sessionDir);
-  const filename = snapshotFilename(
-    options.snapshot.capturedAtSeq,
-    options.format,
+  const temporaryPath = artifactPath(
+    options.sessionDir,
+    `.tmp-snapshot-${ulid()}.json`,
   );
-  const snapshotArtifactPath = artifactPath(options.sessionDir, filename);
+  await writeTextFileAtomic({
+    path: temporaryPath,
+    pathLabel: 'snapshot artifact path',
+    contents: `${JSON.stringify(options.result, null, 2)}\n`,
+    writeErrorMessage: `Failed to write snapshot artifact at ${temporaryPath}.`,
+  });
+  const published = await publishArtifactFile({
+    sessionDir: options.sessionDir,
+    temporaryPath,
+    filename: snapshotFilename(options.snapshot.capturedAtSeq, options.format),
+  });
 
   const artifactEntry = createArtifactEntry({
     kind: 'snapshot',
-    filename,
+    filename: published.filename,
     sessionId: options.snapshot.sessionId,
     capturedAtSeq: options.snapshot.capturedAtSeq,
     metadata: {
@@ -148,17 +161,10 @@ export async function persistSnapshotArtifact(
     },
   });
 
-  await writeTextFileAtomic({
-    path: snapshotArtifactPath,
-    pathLabel: 'snapshot artifact path',
-    contents: `${JSON.stringify(options.result, null, 2)}\n`,
-    writeErrorMessage: `Failed to write snapshot artifact at ${snapshotArtifactPath}.`,
-  });
-
   await appendArtifactWithRollback({
     sessionDir: options.sessionDir,
     entry: artifactEntry,
-    rollbackArtifactPath: snapshotArtifactPath,
+    ...(published.created ? { rollbackArtifactPath: published.path } : {}),
   });
 }
 

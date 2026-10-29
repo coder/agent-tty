@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   ensureArtifactsDir: vi.fn(),
   snapshotFilename: vi.fn(),
   writeTextFileAtomic: vi.fn(),
+  publishArtifactFile: vi.fn(),
 }));
 
 vi.mock('../../../src/cli/output.js', () => ({
@@ -32,6 +33,10 @@ vi.mock('../../../src/host/rpcClient.js', () => ({
 
 vi.mock('../../../src/replay/offlineReplay.js', () => ({
   withOfflineReplayRenderer: mocks.withOfflineReplayRenderer,
+}));
+
+vi.mock('../../../src/storage/artifactFiles.js', () => ({
+  publishArtifactFile: mocks.publishArtifactFile,
 }));
 
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
@@ -173,6 +178,14 @@ describe('snapshot command', () => {
     );
     mocks.appendArtifact.mockResolvedValue(undefined);
     mocks.writeTextFileAtomic.mockResolvedValue(undefined);
+    mocks.publishArtifactFile.mockImplementation(
+      (options: { filename: string }) =>
+        Promise.resolve({
+          filename: options.filename,
+          path: `/artifacts/${options.filename}`,
+          created: true,
+        }),
+    );
   });
 
   it('requests structured snapshots by default and formats human output', async () => {
