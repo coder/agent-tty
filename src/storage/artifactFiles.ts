@@ -62,8 +62,10 @@ function variantFilename(filename: string, variant: number): string {
 /**
  * Moves a fully written temporary file into the session artifacts directory
  * without replacing an existing file, because earlier manifest entries can
- * point at it. Identical bytes reuse the existing file. Different bytes take
- * the first free `<stem>-<n><ext>` name. The temporary file is always removed.
+ * point at it. Identical bytes reuse the existing file. Different bytes try
+ * `<stem>-2<ext>`, `<stem>-3<ext>` and so on, reuse the first one with
+ * identical bytes, or create the first free one. The temporary file is always
+ * removed.
  */
 export async function publishArtifactFile(
   options: PublishArtifactFileOptions,
