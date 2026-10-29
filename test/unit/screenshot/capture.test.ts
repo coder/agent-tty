@@ -1,4 +1,6 @@
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import { access, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -458,5 +460,109 @@ describe('screenshot capture', () => {
     }
     const manifest = await readArtifactManifest(sessionDirectory);
     expect(manifest.artifacts).toEqual([]);
+  });
+});
+
+function sha256Of(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+function createPngBackend(png: Buffer) {
+  return createFakeBackend({
+    writePng: false,
+    onScreenshot: (outputPath) => {
+      writeFileSync(outputPath, png);
+    },
+    resultOverrides: { pngSizeBytes: png.length, sha256: sha256Of(png) },
+  });
+}
+
+async function captureWith(sessionDirectory: string, png: Buffer) {
+  return await captureScreenshotResult({
+    backend: createPngBackend(png),
+    sessionDir: sessionDirectory,
+    profileName: 'reference-dark',
+    expectedSessionId: 'session-01',
+  });
+}
+
+async function expectEveryEntryMatchesItsFile(
+  sessionDirectory: string,
+): Promise<void> {
+  const manifest = await readArtifactManifest(sessionDirectory);
+  for (const entry of manifest.artifacts) {
+    const contents = await readFile(
+      artifactPath(sessionDirectory, entry.filename),
+    );
+    expect(sha256Of(contents), entry.filename).toBe(entry.sha256);
+  }
+}
+
+describe('repeat screenshot capture at the same seq and profile', () => {
+  const firstPng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01]);
+  const secondPng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x02]);
+
+  it('reuses the existing file when the PNG bytes are identical', async () => {
+    const sessionDirectory = await createSessionDir();
+
+    const first = await captureWith(sessionDirectory, firstPng);
+    const second = await captureWith(sessionDirectory, firstPng);
+
+    expect(second.artifactPath).toBe(first.artifactPath);
+    expect(first.artifactPath).toBe(
+      artifactPath(sessionDirectory, screenshotFilename(5, 'reference-dark')),
+    );
+    const manifest = await readArtifactManifest(sessionDirectory);
+    expect(manifest.artifacts.map((entry) => entry.filename)).toEqual([
+      'screenshot-5-reference-dark.png',
+      'screenshot-5-reference-dark.png',
+    ]);
+    expect((await readdir(dirname(first.artifactPath))).sort()).toEqual([
+      'manifest.json',
+      'screenshot-5-reference-dark.png',
+    ]);
+    await expectEveryEntryMatchesItsFile(sessionDirectory);
+  });
+
+  it('stores different PNG bytes under a new name and keeps the earlier file', async () => {
+    const sessionDirectory = await createSessionDir();
+
+    const first = await captureWith(sessionDirectory, firstPng);
+    const second = await captureWith(sessionDirectory, secondPng);
+
+    expect(second.artifactPath).toBe(
+      artifactPath(sessionDirectory, 'screenshot-5-reference-dark-2.png'),
+    );
+    await expect(readFile(first.artifactPath)).resolves.toEqual(firstPng);
+    await expect(readFile(second.artifactPath)).resolves.toEqual(secondPng);
+    const manifest = await readArtifactManifest(sessionDirectory);
+    expect(manifest.artifacts.map((entry) => entry.filename)).toEqual([
+      'screenshot-5-reference-dark.png',
+      'screenshot-5-reference-dark-2.png',
+    ]);
+    await expectEveryEntryMatchesItsFile(sessionDirectory);
+  });
+
+  it('keeps the earlier file when the repeat capture fails to append', async () => {
+    const sessionDirectory = await createSessionDir();
+    const first = await captureWith(sessionDirectory, firstPng);
+    const manifestFilePath = artifactPath(sessionDirectory, 'manifest.json');
+    const recordedManifest = await readFile(manifestFilePath, 'utf8');
+    await writeFile(manifestFilePath, '{');
+
+    await expect(captureWith(sessionDirectory, firstPng)).rejects.toMatchObject(
+      { code: 'MANIFEST_VALIDATION_ERROR' },
+    );
+    await expect(
+      captureWith(sessionDirectory, secondPng),
+    ).rejects.toMatchObject({ code: 'MANIFEST_VALIDATION_ERROR' });
+
+    await writeFile(manifestFilePath, recordedManifest);
+    await expect(readFile(first.artifactPath)).resolves.toEqual(firstPng);
+    expect((await readdir(dirname(first.artifactPath))).sort()).toEqual([
+      'manifest.json',
+      'screenshot-5-reference-dark.png',
+    ]);
+    await expectEveryEntryMatchesItsFile(sessionDirectory);
   });
 });
