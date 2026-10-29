@@ -109,7 +109,7 @@ export interface PromotionSelection {
   index: number;
 }
 
-interface RunRecord {
+export interface RunRecord {
   agent: AgentName;
   index: number;
   runDir: string;
@@ -916,7 +916,7 @@ export function selectPromotionRuns(
   });
 }
 
-async function promote(
+export async function promote(
   options: HeroDemoOptions,
   records: RunRecord[],
 ): Promise<void> {
