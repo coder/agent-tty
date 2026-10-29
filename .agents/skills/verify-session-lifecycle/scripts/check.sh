@@ -103,83 +103,71 @@ node -e '
   }
 ' "$OUT/facts.json" "$COVERAGE" >"$OUT/drift.txt"
 
-constant() {
-  node -e '
-    const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
-    const v = c[process.argv[2]];
-    console.log(Array.isArray(v)
-      ? "{" + v.map((s) => JSON.stringify(s)).join(", ") + "}"
-      : v ? "TRUE" : "FALSE");
-  ' "$OUT/facts.json" "$1"
-}
+COLLECTABLE=$(node -e '
+  const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
+  console.log("{" + c.Collectable.map((s) => JSON.stringify(s)).join(", ") + "}");
+' "$OUT/facts.json")
+TERMINAL=$(node -e '
+  const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
+  console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
+' "$OUT/facts.json")
+GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites"
+# One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
+FACTS_LINE=$(node -e '
+  const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
+  console.log(process.argv.slice(2).map((g) => {
+    if (typeof c[g] !== "boolean") throw new Error(`facts.mjs gave no boolean for ${g}`);
+    return `${g}=${c[g] ? "TRUE" : "FALSE"}`;
+  }).join(" "));
+' "$OUT/facts.json" $GUARDS) || die "facts.json lacks a guard fact"
 
-COLLECTABLE=$(constant Collectable)
-TERMINAL=$(constant Terminal)
-GC_SKIPS=$(constant GcSkipsNonCollectable)
-GC_FINAL=$(constant GcFinalCheck)
-REC_TERMINAL=$(constant ReconcileSkipsTerminal)
-REC_LIVE=$(constant ReconcileSkipsLiveHost)
-
-RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal RecordedExitKept RunningSessionReachable"
+RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal RecordedExitKept RunningSessionReachable HostStartsWhenCreated"
 WITNESSES="WitnessGcRemovesSession WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled"
 
 # --- runs ----------------------------------------------------------------
 
-# write_run NAME EXPECT "INVARIANTS" "F1 F2 F3 to close" "GUARD=FALSE ..." NOTE [RULE]
+# write_run NAME EXPECT "INVARIANTS" "GUARD=FALSE ..." NOTE [RULE]
 # RULE: for an expected violation, the rule that TLC must report.
 RUNS=""
 write_run() {
-  local name=$1 expect=$2 invariants=$3 close=$4 overrides=$5 note=$6 must=${7:-}
-  local dir="$OUT/$name"
+  local name=$1 expect=$2 invariants=$3 overrides=$4 note=$5 must=${6:-}
+  local dir="$OUT/$name" fact guard value
   mkdir -p "$dir"
   cp "$SPEC" "$dir/SessionLifecycle.tla"
-  local f1=FALSE f2=FALSE f3=FALSE
-  case " $close " in *" F1 "*) f1=TRUE ;; esac
-  case " $close " in *" F2 "*) f2=TRUE ;; esac
-  case " $close " in *" F3 "*) f3=TRUE ;; esac
-  local gc_skips=$GC_SKIPS gc_final=$GC_FINAL rec_terminal=$REC_TERMINAL rec_live=$REC_LIVE
-  case " $overrides " in *" GcSkipsNonCollectable=FALSE "*) gc_skips=FALSE ;; esac
-  case " $overrides " in *" GcFinalCheck=FALSE "*) gc_final=FALSE ;; esac
-  case " $overrides " in *" ReconcileSkipsTerminal=FALSE "*) rec_terminal=FALSE ;; esac
-  case " $overrides " in *" ReconcileSkipsLiveHost=FALSE "*) rec_live=FALSE ;; esac
-  cat >"$dir/SessionLifecycle.cfg" <<EOF
-\* $name: expect $expect. $note
-CONSTANTS
-  Collectable = $COLLECTABLE
-  Terminal = $TERMINAL
-  GcSkipsNonCollectable = $gc_skips
-  GcFinalCheck = $gc_final
-  ReconcileSkipsTerminal = $rec_terminal
-  ReconcileSkipsLiveHost = $rec_live
-  MaxListReconciles = 2
-  CloseStartupWindow = $f1
-  CloseStaleCheckWindow = $f2
-  CloseExitWriteRace = $f3
-SPECIFICATION Spec
-CHECK_DEADLOCK TRUE
-INVARIANTS TypeOK $invariants
-EOF
+  {
+    echo "\\* $name: expect $expect. $note"
+    echo "CONSTANTS"
+    echo "  Collectable = $COLLECTABLE"
+    echo "  Terminal = $TERMINAL"
+    for fact in $FACTS_LINE; do
+      guard=${fact%%=*}
+      value=${fact#*=}
+      case " $overrides " in *" $guard=FALSE "*) value=FALSE ;; esac
+      echo "  $guard = $value"
+    done
+    echo "  MaxListReconciles = 2"
+    echo "SPECIFICATION Spec"
+    echo "CHECK_DEADLOCK TRUE"
+    echo "INVARIANTS TypeOK $invariants"
+  } >"$dir/SessionLifecycle.cfg"
   printf '%s\t%s\t%s\n' "$expect" "$note" "$must" >"$dir/expect.txt"
   RUNS="$RUNS $name"
 }
 
-for rule in $RULES; do
-  write_run "current-$rule" violated "$rule" "" "" "known findings F1-F3 break every rule today"
-done
-write_run finding-F1 violated "$RULES" "F2 F3" "" "F1: reconcile treats a starting session as dead"
-write_run finding-F2 violated "$RULES" "F1 F3" "" "F2: reconcile writes over an exit it did not read"
-write_run finding-F3 violated "$RULES" "F1 F2" "" "F3: a late host write replaces the exit record"
-write_run residual pass "$RULES" "F1 F2 F3" "" "with F1-F3 assumed fixed, every rule holds"
+write_run current pass "$RULES" "" "the code as it is: every rule holds"
 for witness in $WITNESSES; do
-  write_run "witness-$witness" violated "$witness" "F1 F2 F3" "" "the model reaches this state"
+  write_run "witness-$witness" violated "$witness" "" "the model reaches this state"
 done
-# Each mutant removes one guard from the residual model and checks only the
-# rule that the guard protects.
-write_run mutant-ReconcileSkipsTerminal violated RecordedExitKept "F1 F2 F3" "ReconcileSkipsTerminal=FALSE" "without the terminal return, reconcile overwrites exited" RecordedExitKept
-write_run mutant-ReconcileSkipsLiveHost violated HostDeathOnlyWhenDead "F1 F2 F3" "ReconcileSkipsLiveHost=FALSE" "without the live-host return, reconcile fails a live session" HostDeathOnlyWhenDead
-write_run mutant-GcSkipsNonCollectable pass NoLiveSessionDeleted "F1 F2 F3" "GcSkipsNonCollectable=FALSE" "redundant: the final check still skips"
-write_run mutant-GcFinalCheck pass NoLiveSessionDeleted "F1 F2 F3" "GcFinalCheck=FALSE" "redundant: the first check still skips"
-write_run mutant-GcBothChecks violated NoLiveSessionDeleted "F1 F2 F3" "GcSkipsNonCollectable=FALSE GcFinalCheck=FALSE" "with neither gc check, gc removes live sessions" NoLiveSessionDeleted
+# Each mutant removes one guard and checks only the rule that it protects.
+write_run mutant-CreateRecordsHostPid violated NoLiveSessionDeleted "CreateRecordsHostPid=FALSE" "without the pid in the first manifest, gc removes a starting session" NoLiveSessionDeleted
+write_run mutant-HostWaitsForManifest violated HostStartsWhenCreated "HostWaitsForManifest=FALSE" "without the wait, the host reads before create writes the manifest" HostStartsWhenCreated
+write_run mutant-ReconcileRereads violated RecordedExitKept "ReconcileRereads=FALSE" "without the re-read, reconcile writes over an exit it did not read" RecordedExitKept
+write_run mutant-HostSerializesWrites violated TerminalIsFinal "HostSerializesWrites=FALSE" "without one writer, a late start-up write replaces the exit record" TerminalIsFinal
+write_run mutant-ReconcileSkipsLiveHost violated HostDeathOnlyWhenDead "ReconcileSkipsLiveHost=FALSE" "without the live-host return, reconcile fails a live session" HostDeathOnlyWhenDead
+write_run mutant-ReconcileSkipsTerminal pass RecordedExitKept "ReconcileSkipsTerminal=FALSE" "redundant: the re-read returns on a terminal manifest"
+write_run mutant-GcSkipsNonCollectable pass NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE" "redundant: the final check still skips"
+write_run mutant-GcFinalCheck pass NoLiveSessionDeleted "GcFinalCheck=FALSE" "redundant: the first check still skips"
+write_run mutant-GcBothChecks violated NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE GcFinalCheck=FALSE" "with neither gc check, gc removes live sessions" NoLiveSessionDeleted
 
 run_tlc() {
   local dir="$OUT/$1" rc=0
@@ -241,9 +229,9 @@ done
 # from git keeps it right after a squash merge, which rewrites branch commits.
 SYNC=$(git -C "$REPO" log -1 --format=%H -- "$COVERAGE" 2>/dev/null || true)
 echo
-echo "Facts: GcSkipsNonCollectable=$GC_SKIPS GcFinalCheck=$GC_FINAL ReconcileSkipsTerminal=$REC_TERMINAL ReconcileSkipsLiveHost=$REC_LIVE"
+echo "Facts: $FACTS_LINE"
 echo "       Collectable=$COLLECTABLE Terminal=$TERMINAL"
-echo "Distinct states: residual model $(sed -n 's/.* \([0-9]*\) distinct states found.*/\1/p' "$OUT/residual/tlc.out" | tail -1) (all of it). A violated run stops at its first violation."
+echo "Distinct states of the current model: $(sed -n 's/.* \([0-9]*\) distinct states found.*/\1/p' "$OUT/current/tlc.out" | tail -1). A violated run stops at its first violation."
 echo "Sync commit (last change to coverage.json): ${SYNC:-none yet}"
 echo "Results: $OUT"
 

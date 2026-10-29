@@ -136,10 +136,137 @@ function reconcileFacts() {
     ts.SyntaxKind.ReturnStatement,
   );
   const write = indexOfStatement(body, /^await writeManifest\(/);
+  // The re-read after the host is found dead, its guard, and a reconciled
+  // record built from that copy, all before the write.
+  const reread = indexOfStatement(
+    body,
+    /^const current = await readManifestIfExists\(manifestFile\);$/,
+  );
+  const rereadGuard = guardIndex(
+    body,
+    'current === null || isTerminalSessionStatus(current.status)',
+    ts.SyntaxKind.ReturnStatement,
+  );
+  const fromCurrent = indexOfStatement(
+    body,
+    /^const reconciledManifest: SessionRecord = \{\s*\.\.\.current,/,
+  );
+  const switchOnCurrent = indexOfStatement(body, /^switch \(current\.status\)/);
   return {
     ReconcileSkipsTerminal: terminal >= 0 && terminal < write,
     ReconcileSkipsLiveHost:
       aliveRead >= 0 && aliveRead < alive && alive >= 0 && alive < write,
+    ReconcileRereads:
+      alive >= 0 &&
+      alive < reread &&
+      rereadGuard === reread + 1 &&
+      rereadGuard < switchOnCurrent &&
+      switchOnCurrent < fromCurrent &&
+      fromCurrent < write,
+  };
+}
+
+function isCall(node, name) {
+  if (!ts.isCallExpression(node)) {
+    return false;
+  }
+  const callee = node.expression;
+  return ts.isIdentifier(callee)
+    ? callee.text === name
+    : ts.isPropertyAccessExpression(callee) && callee.name.text === name;
+}
+
+function calls(root, name) {
+  const found = [];
+  walk(root, (node) => {
+    if (isCall(node, name)) {
+      found.push(node);
+    }
+  });
+  return found;
+}
+
+// allocateSession launches the host before it writes the first manifest, and
+// that manifest carries the launched pid. runCreateCommand launches the host
+// only through that callback.
+function createFacts() {
+  const body = requireDeclaration(
+    'src/host/lifecycle.ts',
+    'allocateSession',
+  ).body;
+  const launch = indexOfStatement(
+    body,
+    /^const hostPid = launch\(sessionId\);$/,
+  );
+  const write = indexOfStatement(
+    body,
+    /^await writeManifest\(manifestPath\(sessionDirectory\)/,
+  );
+  let pidInManifest = false;
+  if (write >= 0) {
+    walk(body.statements[write], (node) => {
+      if (
+        ts.isShorthandPropertyAssignment(node) &&
+        node.name.text === 'hostPid'
+      ) {
+        pidInManifest = true;
+      }
+    });
+  }
+  const create = requireDeclaration(
+    'src/cli/commands/create.ts',
+    'runCreateCommand',
+  );
+  const launches = calls(create.body, 'launchHost');
+  const onlyThroughCallback =
+    launches.length > 0 &&
+    launches.every((call) => {
+      for (let n = call.parent; n !== undefined; n = n.parent) {
+        if (ts.isArrowFunction(n) || ts.isFunctionExpression(n)) {
+          return (
+            isCall(n.parent, 'allocateSession') && n.parent.arguments[1] === n
+          );
+        }
+      }
+      return false;
+    });
+  return {
+    CreateRecordsHostPid:
+      launch >= 0 && launch < write && pidInManifest && onlyThroughCallback,
+  };
+}
+
+// runHost waits for create's manifest, and every host write of session.json
+// goes through one createSerialManifestWriter.
+function hostFacts() {
+  const runHost = requireDeclaration('src/host/hostMain.ts', 'runHost');
+  const waits = indexOfStatement(
+    runHost.body,
+    /^const manifest = await waitForManifestFromCreate\(mPath\);$/,
+  );
+  const wait = requireDeclaration(
+    'src/host/hostMain.ts',
+    'waitForManifestFromCreate',
+  );
+  const loops = wait.body.statements.some(
+    (s) =>
+      ts.isWhileStatement(s) &&
+      normalize(s.expression.getText()).startsWith('manifest === null') &&
+      calls(s, 'readManifestIfExists').length > 0,
+  );
+  const writer = requireDeclaration(
+    'src/host/manifestWriter.ts',
+    'createSerialManifestWriter',
+  );
+  const chains =
+    /tail\.then\(/.test(writer.getText()) &&
+    /tail = next\.catch\(/.test(writer.getText());
+  return {
+    HostWaitsForManifest: waits >= 0 && loops,
+    HostSerializesWrites:
+      calls(runHost.body, 'writeManifest').length === 0 &&
+      calls(runHost.body, 'createSerialManifestWriter').length === 1 &&
+      chains,
   };
 }
 
@@ -220,7 +347,8 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'launchHost'],
   ['src/host/lifecycle.ts', 'isProcessAlive'],
   ['src/host/lifecycle.ts', 'reconcileSession'],
-  ['src/host/sessionState.ts', 'SessionState.setHostPid'],
+  ['src/host/hostMain.ts', 'waitForManifestFromCreate'],
+  ['src/host/manifestWriter.ts', 'createSerialManifestWriter'],
   ['src/host/sessionState.ts', 'SessionState.recordExit'],
   ['src/host/eventLog.ts', 'EventLog.open'],
   ['src/host/rpcServer.ts', 'RpcServer.listen'],
@@ -235,8 +363,9 @@ const COVERED = [
 // start-up statements, handlePtyExit, initiateShutdown, pty.onExit, the
 // resize handler, and the closing try block that writes and listens.
 const RUN_HOST_PARTS = [
-  /= await readManifest\(/,
-  /state\.setHostPid\(/,
+  /= await waitForManifestFromCreate\(/,
+  /^invariant\(\s*manifest\.hostPid === process\.pid/,
+  /^const persistManifest = createSerialManifestWriter\(/,
   /= await EventLog\.open\(/,
   /= createPty\(/,
   /state\.setChildPid\(/,
@@ -361,6 +490,7 @@ function hasRecursiveOption(call) {
 function callSites() {
   const out = {
     writeManifest: [],
+    persistManifest: [],
     reconcileSession: [],
     recursiveRemovals: [],
   };
@@ -376,7 +506,11 @@ function callSites() {
           ? callee.text
           : '';
       const site = `${file}#${ownerPath(node)}`;
-      if (name === 'writeManifest' || name === 'reconcileSession') {
+      if (
+        name === 'writeManifest' ||
+        name === 'persistManifest' ||
+        name === 'reconcileSession'
+      ) {
         out[name].push(site);
       } else if (
         (name === 'rm' || name === 'rmSync') &&
@@ -392,7 +526,13 @@ function callSites() {
   return out;
 }
 
-const constants = { ...reconcileFacts(), ...gcFacts(), ...policyFacts() };
+const constants = {
+  ...reconcileFacts(),
+  ...gcFacts(),
+  ...createFacts(),
+  ...hostFacts(),
+  ...policyFacts(),
+};
 console.log(
   JSON.stringify(
     { constants, fingerprints: fingerprints(), callSites: callSites() },

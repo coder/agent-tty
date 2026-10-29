@@ -37,5 +37,5 @@ Preconditions:
 - Run the dashboard as the program of an agent-tty session. Run directly in a non-interactive shell, it has no TTY.
 - The dashboard is in its own session list, and it starts on the first row. With it selected, the live view shows the dashboard inside itself. Select another row before you assert on the live view.
 - Names are cut to fit the list column (`watched` shows as `watc…`). Assert on session IDs or on the live view, not on full names.
-- "Read-only" means no input to sessions. The dashboard still reconciles sessions every 1.5 seconds through `listSessions`, and that can mark a session that is still starting as `failed` (finding F1 of the `verify-session-lifecycle` skill). Create the sessions you watch before you open the dashboard.
+- "Read-only" means no input to sessions. The dashboard still reconciles sessions every 1.5 seconds through `listSessions`, so it rewrites `session.json` of a session whose host died.
 - Give the dashboard session at least `--cols 120 --rows 30`. At 80x24 the list and the live view are cramped and text you wait for can be cut off.

@@ -58,7 +58,7 @@ Put every proof under `$EVIDENCE/<feature>/`, and make that folder with `mkdir -
 - Drive the real user path: the built CLI, its public commands and flags, and real programs. Do not call internal functions, do not use the hidden `_host` command, and do not write `session.json` by hand. The fixture apps are real programs, not mocks.
 - Capture the action and the result: save each command line and its JSON envelope (`att ... --json | tee "$EVIDENCE/<feature>/<step>.json"`) and its exit code, plus the screen after it (`snapshot --format text --json`, and `screenshot` when the look matters).
 - Check side effects on disk next to what the CLI reports: `$AGENT_TTY_HOME/sessions/<id>/session.json` (status, exit code, `failureOrigin`), `events.jsonl` (the event types in order), and `artifacts/manifest.json` plus the files it lists.
-- A flag that sounds read-only can still write. `gc --dry-run` removes nothing, but it still reconciles: it rewrites `session.json` of sessions whose host is gone, and it can mark a session that is starting as `failed` (finding F1 in the `verify-session-lifecycle` skill). Check the files, not the flag name.
+- A flag that sounds read-only can still write. `gc --dry-run` removes nothing, but it still reconciles: it rewrites `session.json` of every session whose host is gone. Check the files, not the flag name.
 - Copy each PNG you cite into `$EVIDENCE` and look at it (attach it, or open it). A screenshot that exists is not a screenshot that shows the right thing.
 
 ## Cleanup
