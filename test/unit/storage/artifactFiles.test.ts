@@ -139,6 +139,21 @@ describe('publishArtifactFile', () => {
     ]);
   });
 
+  it('refuses to reuse a symlink whose target has identical bytes', async () => {
+    const sessionDirectory = await createArtifactsSessionDir();
+    const outsidePath = join(sessionDirectory, 'outside.txt');
+    await writeFile(outsidePath, 'a');
+    await symlink(
+      outsidePath,
+      artifactPath(sessionDirectory, 'artifact-5.txt'),
+    );
+
+    await expect(publish(sessionDirectory, 'a')).rejects.toMatchObject({
+      code: 'STORAGE_WRITE_ERROR',
+    });
+    await expect(readFile(outsidePath, 'utf8')).resolves.toBe('a');
+  });
+
   it('fails instead of retrying forever when a dangling symlink holds the name', async () => {
     const sessionDirectory = await createArtifactsSessionDir();
     await symlink(

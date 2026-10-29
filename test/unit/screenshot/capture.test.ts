@@ -467,22 +467,30 @@ function sha256Of(bytes: Buffer): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-function createPngBackend(png: Buffer) {
+function createPngBackend(png: Buffer, sessionId: string) {
   return createFakeBackend({
     writePng: false,
     onScreenshot: (outputPath) => {
       writeFileSync(outputPath, png);
     },
-    resultOverrides: { pngSizeBytes: png.length, sha256: sha256Of(png) },
+    resultOverrides: {
+      pngSizeBytes: png.length,
+      sha256: sha256Of(png),
+      sessionId,
+    },
   });
 }
 
-async function captureWith(sessionDirectory: string, png: Buffer) {
+async function captureWith(
+  sessionDirectory: string,
+  png: Buffer,
+  sessionId = 'session-01',
+) {
   return await captureScreenshotResult({
-    backend: createPngBackend(png),
+    backend: createPngBackend(png, sessionId),
     sessionDir: sessionDirectory,
     profileName: 'reference-dark',
-    expectedSessionId: 'session-01',
+    expectedSessionId: sessionId,
   });
 }
 
@@ -541,6 +549,25 @@ describe('repeat screenshot capture at the same seq and profile', () => {
       'screenshot-5-reference-dark-2.png',
     ]);
     await expectEveryEntryMatchesItsFile(sessionDirectory);
+  });
+
+  it('never removes a file that a concurrent identical capture recorded', async () => {
+    for (let round = 0; round < 10; round += 1) {
+      const sessionDirectory = await createSessionDir();
+
+      // An entry for another session fails validation, so that append fails.
+      await Promise.allSettled(
+        Array.from({ length: 20 }, (_, index) =>
+          captureWith(
+            sessionDirectory,
+            firstPng,
+            index % 2 === 0 ? 'other-session' : 'session-01',
+          ),
+        ),
+      );
+
+      await expectEveryEntryMatchesItsFile(sessionDirectory);
+    }
   });
 
   it('keeps the earlier file when the repeat capture fails to append', async () => {
