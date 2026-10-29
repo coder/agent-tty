@@ -376,6 +376,9 @@ export async function allocateSession(
   const sessionId = ulid();
   assertNonEmptyString(sessionId, 'sessionId');
 
+  // Before the cwd check, because the cwd can be the Home this call creates.
+  const home = await ensureHome(config.home);
+
   const resolvedCwd = resolve(config.cwd);
   try {
     const cwdStats = await stat(resolvedCwd);
@@ -417,7 +420,6 @@ export async function allocateSession(
     assertNonEmptyString(commandPart, 'command segment');
   }
 
-  const home = await ensureHome(config.home);
   const sessionDirectory = sessionDir(home, sessionId);
   await mkdir(sessionDirectory, { recursive: true });
   // Owner-only: this directory holds the event log and all artifacts, so 0o700

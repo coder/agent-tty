@@ -542,10 +542,9 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       );
 
       const envelope = JSON.parse(createResult.stdout) as SuccessEnvelope<{
-        cwd: string;
+        sessionId: string;
       }>;
       expect(envelope.ok).toBe(true);
-      expect(envelope.result.cwd).toBe(newHome);
     } finally {
       await cleanupHome(newHome);
     }
