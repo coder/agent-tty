@@ -181,8 +181,8 @@ async function normalizeTempHome(home: string): Promise<string> {
   const tempPrefix = `${tempRoot}${sep}`;
 
   invariant(
-    resolvedHome === tempRoot || resolvedHome.startsWith(tempPrefix),
-    'home must stay within the system temp directory',
+    resolvedHome.startsWith(tempPrefix),
+    'home must be strictly inside the system temp directory',
   );
 
   return resolvedHome;
