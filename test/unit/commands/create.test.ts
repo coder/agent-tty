@@ -1,4 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { existsSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
@@ -96,10 +101,15 @@ describe('create command', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.allocateSession.mockResolvedValue({
-      sessionId: 'session-01',
-      sessionDirectory: '/tmp/agent-tty-home/sessions/session-01',
-    });
+    mocks.allocateSession.mockImplementation(
+      (_config: unknown, launch: (sessionId: string) => number) => {
+        launch('session-01');
+        return Promise.resolve({
+          sessionId: 'session-01',
+          sessionDirectory: '/tmp/agent-tty-home/sessions/session-01',
+        });
+      },
+    );
     mocks.launchHost.mockReturnValue(12345);
     mocks.sendRpc.mockResolvedValue({ session: { sessionId: 'session-01' } });
     mocks.readManifestIfExists.mockResolvedValue(makeManifest());
@@ -151,18 +161,21 @@ describe('create command', () => {
       name: 'demo-session',
     });
 
-    expect(mocks.allocateSession).toHaveBeenCalledWith({
-      home: context.home,
-      command: ['/bin/sh', '-c', 'echo ready'],
-      shellPath: '/bin/bash',
-      cwd: '/tmp/workspace',
-      cols: 120,
-      rows: 40,
-      env: { FOO: 'bar', BAZ: 'qux' },
-      term: 'vt100',
-      idleTimeoutMs: 5000,
-      name: 'demo-session',
-    });
+    expect(mocks.allocateSession).toHaveBeenCalledWith(
+      {
+        home: context.home,
+        command: ['/bin/sh', '-c', 'echo ready'],
+        shellPath: '/bin/bash',
+        cwd: '/tmp/workspace',
+        cols: 120,
+        rows: 40,
+        env: { FOO: 'bar', BAZ: 'qux' },
+        term: 'vt100',
+        idleTimeoutMs: 5000,
+        name: 'demo-session',
+      },
+      expect.any(Function),
+    );
     expect(mocks.launchHost).toHaveBeenCalledWith({
       sessionId: 'session-01',
       home: context.home,
@@ -211,6 +224,25 @@ describe('create command', () => {
     );
   });
 
+  it('removes the session folder when the host fails to launch', async () => {
+    const sessionDirectory = await mkdtemp(join(tmpdir(), 'agent-tty-create-'));
+    onTestFinished(() =>
+      rm(sessionDirectory, { recursive: true, force: true }),
+    );
+    mocks.sessionDir.mockReturnValue(sessionDirectory);
+    mocks.launchHost.mockImplementation(() => {
+      throw new Error('spawn failed');
+    });
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'spawn failed',
+    });
+    expect(existsSync(sessionDirectory)).toBe(false);
+  });
+
   it('emits the enriched result when the session exits before inspect becomes ready', async () => {
     mocks.sendRpc.mockRejectedValue(
       makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
@@ -256,6 +288,7 @@ describe('create command', () => {
       expect.objectContaining({
         idleTimeoutMs: 5000,
       }),
+      expect.any(Function),
     );
   });
 
@@ -274,6 +307,7 @@ describe('create command', () => {
       expect.objectContaining({
         idleTimeoutMs: 1234,
       }),
+      expect.any(Function),
     );
   });
 
