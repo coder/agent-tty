@@ -5,7 +5,7 @@
 #
 #   .agents/skills/verify-agent-tty/scripts/start-run.sh [name]
 #
-# Run folder: ${VERIFY_ROOT:-${TMPDIR:-/tmp}/verify-agent-tty}/<UTC time>-<name>-<pid>/
+# Run folder: ${VERIFY_ROOT:-${TMPDIR:-/tmp}/verify-agent-tty-<uid>}/<UTC time>-<name>-<random>/
 #   home/      AGENT_TTY_HOME for this run (cleanup removes it)
 #   state/     XDG_STATE_HOME, so the Home Registry is private (cleanup removes it)
 #   evidence/  proof artifacts (cleanup keeps it)
@@ -20,9 +20,17 @@ case "$NAME" in
     exit 2
     ;;
 esac
-ROOT=${VERIFY_ROOT:-${TMPDIR:-/tmp}/verify-agent-tty}
-RUN="$ROOT/$(date -u +%Y%m%dT%H%M%SZ)-$NAME-$$"
-mkdir -p "$RUN/home" "$RUN/state" "$RUN/evidence"
+ROOT=${VERIFY_ROOT:-${TMPDIR:-/tmp}/verify-agent-tty-$(id -u)}
+# In a shared /tmp another user could plant this path first, so the root
+# must be a real directory that only you own and can write.
+mkdir -p "$ROOT"
+if [ -L "$ROOT" ] || [ ! -d "$ROOT" ] || [ ! -O "$ROOT" ]; then
+  echo "start-run.sh: $ROOT must be a directory that you own, not a symlink" >&2
+  exit 2
+fi
+chmod 700 "$ROOT"
+RUN=$(mktemp -d "$ROOT/$(date -u +%Y%m%dT%H%M%SZ)-$NAME-XXXXXX")
+mkdir "$RUN/home" "$RUN/state" "$RUN/evidence"
 # agent-tty resolves its Home to a real path, and the host processes carry
 # that path. Use it here too, so run-pids.sh can match them.
 RUN=$(cd "$RUN" && pwd -P)
@@ -49,7 +57,7 @@ build() {
   }
 }
 stale_source() {
-  find src -name '*.ts' -newer dist/cli/main.js | head -1
+  find src \( -name '*.ts' -o -name '*.tsx' \) -newer dist/cli/main.js | head -1
 }
 build
 # A stale .tsconfig.build.tsbuildinfo makes tsc exit 0 and emit nothing.
@@ -64,17 +72,20 @@ fi
   exit 2
 }
 
-cat >"$RUN/env.sh" <<EOF
-# Source this file in every shell of the run.
-export VERIFY_RUN='$RUN'
-export AGENT_TTY_HOME='$RUN/home'
-export XDG_STATE_HOME='$RUN/state'
-export EVIDENCE='$RUN/evidence'
-export AGENT_TTY_REPO='$REPO'
-# As test/setup-node-options.ts does: without it, Node 26 prints a DEP0205
-# warning from tsx into every fixture app's screen, under its prompt.
-export NODE_OPTIONS="\${NODE_OPTIONS:+\$NODE_OPTIONS }--disable-warning=DEP0205"
-# The built CLI, exactly as the agent-tty bin in package.json runs it.
-att() { node '$REPO/dist/cli/main.js' "\$@"; }
-EOF
+q() { printf '%q' "$1"; }
+{
+  echo "# Source this file in every shell of the run."
+  echo "export VERIFY_RUN=$(q "$RUN")"
+  echo "export AGENT_TTY_HOME=$(q "$RUN/home")"
+  echo "export XDG_STATE_HOME=$(q "$RUN/state")"
+  echo "export EVIDENCE=$(q "$RUN/evidence")"
+  echo "export AGENT_TTY_REPO=$(q "$REPO")"
+  echo "# As test/setup-node-options.ts does: without it, Node 26 prints a DEP0205"
+  echo "# warning from tsx into every fixture app's screen, under its prompt."
+  echo 'export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--disable-warning=DEP0205"'
+  echo "# A recipe pipes envelopes through tee; keep the CLI's exit status."
+  echo "set -o pipefail"
+  echo "# The built CLI, exactly as the agent-tty bin in package.json runs it."
+  echo "att() { node $(q "$REPO/dist/cli/main.js") \"\$@\"; }"
+} >"$RUN/env.sh"
 echo "$RUN/env.sh"

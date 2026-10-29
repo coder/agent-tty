@@ -10,13 +10,11 @@ set -uo pipefail
 ENV_FILE=${1:?usage: cleanup.sh <run>/env.sh}
 # shellcheck source=/dev/null
 . "$ENV_FILE"
-case "$AGENT_TTY_HOME" in
-  "$VERIFY_RUN"/home) ;;
-  *)
-    echo "cleanup.sh: refusing: AGENT_TTY_HOME is not $VERIFY_RUN/home" >&2
-    exit 2
-    ;;
-esac
+if [ "$AGENT_TTY_HOME" != "$VERIFY_RUN/home" ] || [ "$XDG_STATE_HOME" != "$VERIFY_RUN/state" ] ||
+  [ "$EVIDENCE" != "$VERIFY_RUN/evidence" ]; then
+  echo "cleanup.sh: refusing: AGENT_TTY_HOME, XDG_STATE_HOME and EVIDENCE must be home/, state/ and evidence/ of $VERIFY_RUN" >&2
+  exit 2
+fi
 
 if [ -d "$AGENT_TTY_HOME/sessions" ]; then
   for id in $(att list --json 2>/dev/null | jq -r '.result.sessions[].sessionId'); do

@@ -22,10 +22,10 @@ ENV=$(.agents/skills/verify-agent-tty/scripts/start-run.sh <name>)
 
 1. If `node_modules/.bin/tsc` is missing (a partial install), it runs `aube ci`.
 2. It runs `npm run build`. If `dist/cli/main.js` is still older than a file in `src/`, it removes `.tsconfig.build.tsbuildinfo` and `dist/` and builds again. A stale build info file makes `tsc` exit 0 and write nothing.
-3. It makes the run folder `${VERIFY_ROOT:-${TMPDIR:-/tmp}/verify-agent-tty}/<UTC time>-<name>-<pid>/` with `home/`, `state/` and `evidence/`.
+3. It makes the run folder `<root>/<UTC time>-<name>-<random>/` with `mktemp -d`, and `home/`, `state/` and `evidence/` in it. The root is `$VERIFY_ROOT`, or `${TMPDIR:-/tmp}/verify-agent-tty-<uid>`. The script refuses a root that is a symlink or that you do not own, and sets it to mode 700, so another user on a shared machine cannot plant files there.
 4. It writes `env.sh` there and prints its path.
 
-`env.sh` sets `AGENT_TTY_HOME` (the run's `home/`), `XDG_STATE_HOME` (the run's `state/`, so the Home Registry is private), `EVIDENCE`, `VERIFY_RUN`, `AGENT_TTY_REPO`, and `NODE_OPTIONS=--disable-warning=DEP0205`, as the tests set it. It also defines `att`, which runs `node $AGENT_TTY_REPO/dist/cli/main.js`, exactly what the `agent-tty` bin runs.
+`env.sh` sets `AGENT_TTY_HOME` (the run's `home/`), `XDG_STATE_HOME` (the run's `state/`, so the Home Registry is private), `EVIDENCE`, `VERIFY_RUN`, `AGENT_TTY_REPO`, and `NODE_OPTIONS=--disable-warning=DEP0205`, as the tests set it. It turns on `set -o pipefail`, so `att ... | tee file` keeps the CLI's exit status. It also defines `att`, which runs `node $AGENT_TTY_REPO/dist/cli/main.js`, exactly what the `agent-tty` bin runs.
 
 Every bash call is a new shell, so start each one with `. "$ENV"` (keep the path from the first call). The CLI is ready when `doctor.sh` passes. Rebuild with a new `start-run.sh` after every change to `src/`: `att` runs `dist/`, not the source.
 

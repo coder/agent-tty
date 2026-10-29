@@ -33,7 +33,8 @@ Yes, when the diff changes any of these:
 - `src/host/sessionState.ts` `setHostPid` and `recordExit`, `src/host/eventLog.ts` `EventLog.open`, `src/host/rpcServer.ts` `listen` and `close`.
 - `src/storage/manifests.ts` `readValidatedJsonFile`, `writeTextFileAtomic`, `writeManifest`.
 - The `SESSION_STATUS_POLICIES` table in `src/protocol/sessionStatusPolicy.ts`.
-- Any new or removed call to `writeManifest`, `reconcileSession`, or `rm` of a session folder anywhere in `src/`.
+- Any new or removed call to `writeManifest` or `reconcileSession`, or a recursive `rm` (one with `recursive: true`, whatever its argument is named), anywhere in `src/`.
+- This skill's `model/SessionLifecycle.tla`, `scripts/facts.mjs` and `scripts/check.sh`: an edit to them also needs a new confirmed `coverage.json`.
 
 You do not have to judge this by hand. The check prints `STALE` when any of these changed since the sync commit.
 
@@ -174,7 +175,7 @@ It leaves out: `destroy` and the `destroying`/`destroyed` writes, a SIGTERM shut
 
 ## Coverage record
 
-The sync commit is the last commit that changed `coverage.json`. `check.sh` prints it, and `git log -1 --format=%h -- .agents/skills/verify-session-lifecycle/coverage.json` shows it too. In that commit, someone read the covered code above and confirmed that the model describes it. `coverage.json` holds the hash of each covered function and the list of call sites at that commit, and the check compares the code with it on every run.
+The sync commit is the last commit that changed `coverage.json`. `check.sh` prints it, and `git log -1 --format=%h -- .agents/skills/verify-session-lifecycle/coverage.json` shows it too. In that commit, someone read the covered code above and confirmed that the model describes it. `coverage.json` holds the hash of each covered function, of the model and of the two check scripts, and the list of call sites at that commit. The check compares them with the code on every run.
 
 Change `coverage.json` (with `check.sh --update-coverage`) only in the same commit as a confirmed model, or after you have confirmed that the model still describes the changed code. Because the sync commit comes from git, a squash merge keeps it correct.
 

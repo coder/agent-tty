@@ -17,7 +17,10 @@
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
     "src/host/hostMain.ts#runHost(parts)": "691f41d2072a1f1f",
     "src/host/hostMain.ts#runHost(final try)": "514659259ca9a024",
-    "src/host/hostMain.ts#runHost>handlers.resize": "ad5c39e6eac7db1d"
+    "src/host/hostMain.ts#runHost>handlers.resize": "ad5c39e6eac7db1d",
+    "skill:model/SessionLifecycle.tla": "5566cfaa04405f36",
+    "skill:scripts/facts.mjs": "610997ea79271c9e",
+    "skill:scripts/check.sh": "177fc9808e927358"
   },
   "callSites": {
     "writeManifest": [
@@ -38,10 +41,18 @@
       "src/host/lifecycle.ts#destroySession",
       "src/host/lifecycle.ts#listSessions"
     ],
-    "removesSession": [
+    "recursiveRemovals": [
       "src/cli/commands/create.ts#runCreateCommand",
+      "src/cli/commands/doctor.ts#runScreenshotViabilityCheck",
+      "src/cli/commands/doctor.ts#runTemporaryDirectoryCheck",
       "src/cli/commands/doctor.ts#withDoctorSessionDirectory",
-      "src/cli/commands/gc.ts#gcSessions"
+      "src/cli/commands/gc.ts#gcSessions",
+      "src/export/webm.ts#generateWebmExport",
+      "src/tools/hero-demo.ts#cleanBundle",
+      "src/tools/hero-demo.ts#mkDebugRoot",
+      "src/tools/hero-demo.ts#runHeroDemo",
+      "src/tools/hero-video-playback.ts#prepareHeroVideoUploadAssets",
+      "src/tools/release-please-runner.ts#createCommuniqueChangelogNotes>buildNotes"
     ]
   }
 }

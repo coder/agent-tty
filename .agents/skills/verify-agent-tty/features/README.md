@@ -12,6 +12,7 @@ This folder is the maintained source for verifying what agent-tty users see. Rea
 ## Driving conventions
 
 - Add `--json` to every command and read the envelope with `jq`. Do not parse the human-readable output.
+- `env.sh` turns on `pipefail`, so in `att ... | tee file` the exit code is the CLI's. In a shell that did not source it, read `${PIPESTATUS[0]}`.
 - Give every `wait` a `--timeout <ms>`, and every batch `wait` step a `"timeout"`. The default is 10 minutes.
 - Wait on screen content (`wait --text`, `--regex`, `--screen-stable-ms`, `--exit`), never on `sleep`.
 - Prefer stable handles: the prompt `READY>` and the `ECHO: <line>` replies of `hello-prompt`, session IDs from `create`, and the key hints in the dashboard footer.

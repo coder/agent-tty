@@ -13,8 +13,9 @@
 // reads FALSE, and the model then treats the guard as absent.
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 import ts from 'typescript';
 
@@ -287,7 +288,7 @@ function fingerprints() {
   for (const [file, name] of COVERED) {
     out[`${file}#${name}`] = hash(canonical(requireDeclaration(file, name)));
   }
-  return { ...out, ...runHostFingerprints() };
+  return { ...out, ...runHostFingerprints(), ...checkInputFingerprints() };
 }
 
 function listSources(dir) {
@@ -326,10 +327,43 @@ function ownerPath(node) {
   return names.join('>') || '<module>';
 }
 
-// Every call that writes a manifest, reconciles, or removes a session
-// directory. A new writer of session.json is new code the model must cover.
+// The model and the scripts that judge it are part of what a sync confirms,
+// so a change to them without a new coverage.json shows as STALE too.
+function checkInputFingerprints() {
+  const skillDir = dirname(dirname(fileURLToPath(import.meta.url)));
+  const out = {};
+  for (const file of [
+    'model/SessionLifecycle.tla',
+    'scripts/facts.mjs',
+    'scripts/check.sh',
+  ]) {
+    out[`skill:${file}`] = hash(readFileSync(join(skillDir, file), 'utf8'));
+  }
+  return out;
+}
+
+function hasRecursiveOption(call) {
+  return call.arguments.some(
+    (arg) =>
+      ts.isObjectLiteralExpression(arg) &&
+      arg.properties.some(
+        (p) =>
+          ts.isPropertyAssignment(p) &&
+          p.name.getText() === 'recursive' &&
+          p.initializer.kind === ts.SyntaxKind.TrueKeyword,
+      ),
+  );
+}
+
+// Every call that writes a manifest, reconciles, or removes a directory tree.
+// A new one is code the model may have to cover: whatever its argument is
+// named, a recursive rm can remove a session folder.
 function callSites() {
-  const out = { writeManifest: [], reconcileSession: [], removesSession: [] };
+  const out = {
+    writeManifest: [],
+    reconcileSession: [],
+    recursiveRemovals: [],
+  };
   for (const file of listSources('src')) {
     walk(source(relative(repo, join(repo, file))), (node) => {
       if (!ts.isCallExpression(node)) {
@@ -345,11 +379,10 @@ function callSites() {
       if (name === 'writeManifest' || name === 'reconcileSession') {
         out[name].push(site);
       } else if (
-        name === 'rm' &&
-        node.arguments.length > 0 &&
-        /session/i.test(node.arguments[0].getText())
+        (name === 'rm' || name === 'rmSync') &&
+        hasRecursiveOption(node)
       ) {
-        out.removesSession.push(site);
+        out.recursiveRemovals.push(site);
       }
     });
   }
