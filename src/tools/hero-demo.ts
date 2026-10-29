@@ -21,8 +21,10 @@ import { basename, dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { CanonicalBundleManifestSchema } from './bundleManifestSchema.js';
-import { canonicalBundleArtifactEntry } from './canonicalBundleArtifacts.js';
+import {
+  canonicalBundleArtifactEntry,
+  writeCanonicalBundleManifest,
+} from './canonicalBundleArtifacts.js';
 import { invariant } from '../util/assert.js';
 import { isDirectExecution } from '../util/isDirectExecution.js';
 import { LIBGHOSTTY_VT_PACKAGE } from '../renderer/readiness.js';
@@ -502,11 +504,11 @@ function isTextArtifact(path: string): boolean {
 async function copyPromotedArtifact(
   from: string,
   to: string,
-  relativePath: string,
+  sanitizedText: string | undefined,
 ): Promise<void> {
   await mkdir(dirname(to), { recursive: true });
-  if (isTextArtifact(relativePath)) {
-    await writeFile(to, sanitizePromotedText(await readFile(from, 'utf8')));
+  if (sanitizedText !== undefined) {
+    await writeFile(to, sanitizedText);
     return;
   }
   await copyFile(from, to);
@@ -933,13 +935,15 @@ export async function promote(
     return run;
   });
 
-  await cleanBundle(options.bundleDir);
-  const artifactsDir = join(options.bundleDir, 'artifacts');
-  const promotedPaths: Array<{ path: string; description: string }> = [];
-
+  const copies: Array<{
+    from: string;
+    path: string;
+    description: string;
+    sanitizedText: string | undefined;
+  }> = [];
   for (const record of selected) {
     const prefix = record.agent;
-    const copies: Array<[string, string, string]> = [
+    const recordCopies: Array<[string, string, string]> = [
       [
         record.outerWebm,
         `artifacts/${prefix}-outer.webm`,
@@ -981,14 +985,49 @@ export async function promote(
         `Demo note written by ${prefix}`,
       ],
     ];
-    for (const [from, relative, description] of copies) {
-      const to = join(options.bundleDir, relative);
-      await copyPromotedArtifact(from, to, relative);
-      promotedPaths.push({ path: relative, description });
+    for (const [from, relative, description] of recordCopies) {
+      copies.push({
+        from,
+        path: relative,
+        description,
+        sanitizedText: isTextArtifact(relative)
+          ? sanitizePromotedText(await readFile(from, 'utf8'))
+          : undefined,
+      });
     }
   }
 
   const summary = renderSummary(options, records);
+  const readme = renderReadme();
+  const videoPlayback = await readFile(
+    join(options.bundleDir, VIDEO_PLAYBACK_DOC),
+    'utf8',
+  );
+  const reproduce = renderReproduce(options);
+
+  const findings = buildLeakFindings(
+    [
+      ...copies.flatMap((copy) => copy.sanitizedText ?? []),
+      summary,
+      readme,
+      videoPlayback,
+      reproduce,
+    ].join('\n'),
+  );
+  invariant(findings.length === 0, `leak check failed: ${findings.join(', ')}`);
+
+  await cleanBundle(options.bundleDir);
+  const artifactsDir = join(options.bundleDir, 'artifacts');
+  const promotedPaths: Array<{ path: string; description: string }> = [];
+  for (const copy of copies) {
+    await copyPromotedArtifact(
+      copy.from,
+      join(options.bundleDir, copy.path),
+      copy.sanitizedText,
+    );
+    promotedPaths.push({ path: copy.path, description: copy.description });
+  }
+
   await writeFile(join(options.bundleDir, 'promoted-run-summary.md'), summary);
   promotedPaths.push({
     path: 'promoted-run-summary.md',
@@ -996,7 +1035,6 @@ export async function promote(
       'Promotion summary proving three successful Codex and Claude runs',
   });
 
-  const readme = renderReadme();
   await writeFile(join(options.bundleDir, 'README.md'), readme);
   promotedPaths.push({
     path: 'README.md',
@@ -1008,7 +1046,7 @@ export async function promote(
   });
 
   const reproducePath = join(options.bundleDir, 'reproduce.sh');
-  await writeExecutable(reproducePath, renderReproduce(options));
+  await writeExecutable(reproducePath, reproduce);
   promotedPaths.push({
     path: 'reproduce.sh',
     description: 'Maintainer-facing reproduction wrapper for the Hero Demo',
@@ -1026,7 +1064,7 @@ export async function promote(
       ),
     );
   }
-  const manifest = CanonicalBundleManifestSchema.parse({
+  await writeCanonicalBundleManifest(join(options.bundleDir, 'manifest.json'), {
     bundle: 'agent-uses-agent-tty',
     title: 'Agents use agent-tty: Codex and Claude Hero Demo',
     description:
@@ -1039,23 +1077,6 @@ export async function promote(
     ],
     artifacts: manifestArtifacts,
   });
-  await writeFile(
-    join(options.bundleDir, 'manifest.json'),
-    `${JSON.stringify(manifest, null, 2)}\n`,
-  );
-
-  const leakTexts = await Promise.all(
-    promotedPaths
-      .filter(
-        (artifact) =>
-          !artifact.path.endsWith('.png') && !artifact.path.endsWith('.webm'),
-      )
-      .map(async (artifact) =>
-        readFile(join(options.bundleDir, artifact.path), 'utf8'),
-      ),
-  );
-  const findings = buildLeakFindings(leakTexts.join('\n'));
-  invariant(findings.length === 0, `leak check failed: ${findings.join(', ')}`);
   await writeFile(join(artifactsDir, '.gitkeep'), '\n');
 }
 
