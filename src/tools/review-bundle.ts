@@ -21,6 +21,7 @@ import process from 'node:process';
 import { z } from 'zod';
 
 import { assertString, invariant } from '../util/assert.js';
+import { hasErrorCode } from '../util/hasErrorCode.js';
 import { isDirectExecution } from '../util/isDirectExecution.js';
 import { isWithinRoot } from '../util/isWithinRoot.js';
 
@@ -402,15 +403,20 @@ async function validateBundleRelativePath(
     `bundle artifact path escapes bundle root: ${relativePath}`,
   );
 
+  let candidateRealPath: string;
   try {
-    const candidateRealPath = await realpath(candidatePath);
-    invariant(
-      isWithinRoot(bundleRoot, candidateRealPath),
-      `bundle artifact path escapes bundle root via symlink: ${relativePath}`,
-    );
-  } catch {
-    // Missing paths are validated syntactically above and may be absent in older manifests.
+    candidateRealPath = await realpath(candidatePath);
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      // Missing paths are validated syntactically above and may be absent in older manifests.
+      return candidatePath;
+    }
+    throw error;
   }
+  invariant(
+    isWithinRoot(bundleRoot, candidateRealPath),
+    `bundle artifact path escapes bundle root via symlink: ${relativePath}`,
+  );
 
   return candidatePath;
 }
