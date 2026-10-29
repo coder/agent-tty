@@ -19,7 +19,7 @@ This directory is Lane B (execution) of the eval harness. `runner.ts` turns the 
 - Every case id must have an entry in `EXECUTION_CASE_COVERAGE`, and every entry must name a registered case. [runner.ts:assertExecutionCaseCoverageMetadata]
 - Case filter ids must be known. Work item keys must be unique (`assertUniqueWorkItems` from `evals/lib/types.ts`). [runner.ts:enumerateExecutionWorkItems]
 - `totalTrials` defaults to 1 and must be a positive integer. The work item trial must be a positive integer. [runner.ts:resolveTotalTrials] [runner.ts:executeExecutionWorkItem]
-- A trial passes when the provider call succeeded, every required verifier passed, and no anti-pattern finding has severity `error`. Workflow checks and artifact requirements are scored but do not gate the pass. [runner.ts:buildScoreBreakdown]
+- A trial passes when the provider call succeeded, every required verifier passed, and no anti-pattern finding has severity `error`. Workflow checks are scored (`workflow-compliance`) but do not gate the pass. Artifact requirements are evaluated, but they are neither scored nor part of the pass. A missing required artifact only adds an `(informational)` note to the failure message, and a passing trial has no failure message. [runner.ts:buildScoreBreakdown] [runner.ts:summarizeFailureReasons] [runner.ts:buildResult]
 - When a case has `rendererRequirement: 'required'` and the transcript or provider error matches a renderer failure pattern, a failed result gets `errorClass: 'environment-blocked'`. [runner.ts:detectRendererEnvironmentBlock] [runner.ts:ENVIRONMENT_BLOCKED_ERROR_CLASS]
 - Results pass `EvalResultSchema.parse` from `evals/lib/schemas.ts`. [runner.ts:buildResult]
 
