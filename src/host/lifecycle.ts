@@ -376,13 +376,6 @@ export async function allocateSession(
   const sessionId = ulid();
   assertNonEmptyString(sessionId, 'sessionId');
 
-  const home = await ensureHome(config.home);
-  const sessionDirectory = sessionDir(home, sessionId);
-  await mkdir(sessionDirectory, { recursive: true });
-  // Owner-only: this directory holds the event log and all artifacts, so 0o700
-  // here protects every per-session file regardless of each file's own mode.
-  await chmod(sessionDirectory, 0o700);
-
   const resolvedCwd = resolve(config.cwd);
   try {
     const cwdStats = await stat(resolvedCwd);
@@ -423,6 +416,13 @@ export async function allocateSession(
   for (const commandPart of effectiveCommand) {
     assertNonEmptyString(commandPart, 'command segment');
   }
+
+  const home = await ensureHome(config.home);
+  const sessionDirectory = sessionDir(home, sessionId);
+  await mkdir(sessionDirectory, { recursive: true });
+  // Owner-only: this directory holds the event log and all artifacts, so 0o700
+  // here protects every per-session file regardless of each file's own mode.
+  await chmod(sessionDirectory, 0o700);
 
   const hostPid = launch(sessionId);
 
