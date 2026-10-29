@@ -1,4 +1,5 @@
-import { link, readFile, rm } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { copyFile, link, readFile, rm } from 'node:fs/promises';
 import { extname, isAbsolute } from 'node:path';
 
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
@@ -17,6 +18,36 @@ export interface PublishedArtifactFile {
   path: string;
   /** False when the call reused an existing file with identical bytes. */
   created: boolean;
+}
+
+// Codes `link` returns on filesystems without hard links (vfat, exFAT, SMB
+// without Unix extensions, some FUSE mounts).
+const NO_HARD_LINK_ERROR_CODES = ['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS'];
+const MAX_VANISHED_FILE_RETRIES = 3;
+
+/** Returns false when `path` already exists. */
+async function createWithoutReplacing(
+  temporaryPath: string,
+  path: string,
+): Promise<boolean> {
+  try {
+    try {
+      await link(temporaryPath, path);
+    } catch (error) {
+      if (!NO_HARD_LINK_ERROR_CODES.some((code) => hasErrorCode(error, code))) {
+        throw error;
+      }
+      // Still refuses to replace a file, but a reader can see a partly
+      // copied file until the copy finishes.
+      await copyFile(temporaryPath, path, constants.COPYFILE_EXCL);
+    }
+    return true;
+  } catch (error) {
+    if (hasErrorCode(error, 'EEXIST')) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 function variantFilename(filename: string, variant: number): string {
@@ -45,22 +76,34 @@ export async function publishArtifactFile(
   let contents: Buffer | undefined;
 
   try {
-    for (let variant = 1; ; variant += 1) {
+    let variant = 1;
+    let vanishedFileRetries = 0;
+    for (;;) {
       const filename = variantFilename(options.filename, variant);
       const path = artifactPath(options.sessionDir, filename);
-      try {
-        await link(options.temporaryPath, path);
+      if (await createWithoutReplacing(options.temporaryPath, path)) {
         return { filename, path, created: true };
-      } catch (error) {
-        if (!hasErrorCode(error, 'EEXIST')) {
-          throw error;
-        }
       }
 
       contents ??= await readFile(options.temporaryPath);
-      if (contents.equals(await readFile(path))) {
+      let existing: Buffer;
+      try {
+        existing = await readFile(path);
+      } catch (error) {
+        // Another capture's rollback can remove the file after our EEXIST.
+        if (
+          hasErrorCode(error, 'ENOENT') &&
+          vanishedFileRetries < MAX_VANISHED_FILE_RETRIES
+        ) {
+          vanishedFileRetries += 1;
+          continue;
+        }
+        throw error;
+      }
+      if (contents.equals(existing)) {
         return { filename, path, created: false };
       }
+      variant += 1;
     }
   } catch (error) {
     throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
