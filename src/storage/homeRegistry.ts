@@ -17,7 +17,7 @@ const REGISTRY_VERSION = 1;
 /**
  * A single Home Registry entry: just the Home path and when it was last seen.
  * Session counts and statuses are derived live by scanning the Home, never
- * cached here (see `src/dashboard/homeScope.ts`).
+ * cached here (see `src/storage/homeScope.ts`).
  */
 export interface HomeRegistryEntry {
   path: string;
@@ -32,10 +32,11 @@ const HomeRegistryEntrySchema = z
   .strict();
 
 // Non-strict at the top level so a future field never makes an existing file
-// unreadable; entries themselves are validated and bad ones drop out.
+// unreadable. Entries are validated one by one in `readRaw`, so one bad entry
+// drops out without taking the valid Homes with it.
 const HomeRegistryFileSchema = z.object({
   version: z.number(),
-  homes: z.array(HomeRegistryEntrySchema),
+  homes: z.array(z.unknown()),
 });
 
 /**
@@ -157,7 +158,13 @@ export function createHomeRegistry(
     }
 
     const parsed = HomeRegistryFileSchema.safeParse(data);
-    return parsed.success ? parsed.data.homes : [];
+    if (!parsed.success) {
+      return [];
+    }
+    return parsed.data.homes.flatMap((entry) => {
+      const entryResult = HomeRegistryEntrySchema.safeParse(entry);
+      return entryResult.success ? [entryResult.data] : [];
+    });
   }
 
   async function write(entries: HomeRegistryEntry[]): Promise<void> {
