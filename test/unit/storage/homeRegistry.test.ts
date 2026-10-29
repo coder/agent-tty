@@ -1,19 +1,22 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createHomeRegistry,
   normalizeHomePath,
+  readHomeRegistry,
   resolveHomeRegistryPath,
+  upsertHome,
   type HomeRegistry,
 } from '../../../src/storage/homeRegistry.js';
 
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     temporaryDirectories
       .splice(0)
@@ -125,6 +128,42 @@ describe('HomeRegistry store', () => {
     await writeFile(registryPath, '{ not valid json', 'utf8');
 
     expect(await registry.read()).toEqual([]);
+  });
+
+  it('drops only the invalid entry and keeps the valid Homes on upsert', async () => {
+    const stateHome = await mkdtemp(join(tmpdir(), 'agent-tty-state-'));
+    temporaryDirectories.push(stateHome);
+    vi.stubEnv('XDG_STATE_HOME', stateHome);
+    const registryPath = join(stateHome, 'agent-tty', 'homes.json');
+    await mkdir(join(stateHome, 'agent-tty'), { recursive: true });
+    await writeFile(
+      registryPath,
+      JSON.stringify({
+        version: 1,
+        homes: [
+          { path: '/homes/alpha', lastSeenAt: '2020-01-02T00:00:00.000Z' },
+          { path: '/homes/broken' },
+          { path: '/homes/beta', lastSeenAt: '2020-01-01T00:00:00.000Z' },
+        ],
+      }),
+      'utf8',
+    );
+
+    expect(await readHomeRegistry()).toEqual([
+      { path: '/homes/alpha', lastSeenAt: '2020-01-02T00:00:00.000Z' },
+      { path: '/homes/beta', lastSeenAt: '2020-01-01T00:00:00.000Z' },
+    ]);
+
+    await upsertHome('/homes/gamma');
+
+    const written = JSON.parse(await readFile(registryPath, 'utf8')) as {
+      homes: Array<{ path: string }>;
+    };
+    expect(written.homes.map((entry) => entry.path)).toEqual([
+      '/homes/gamma',
+      '/homes/alpha',
+      '/homes/beta',
+    ]);
   });
 
   it('writes atomically and survives concurrent upserts without corruption', async () => {
