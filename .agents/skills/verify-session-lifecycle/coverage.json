@@ -1,0 +1,92 @@
+{
+  "fingerprints": {
+    "src/cli/commands/create.ts#runCreateCommand": "1b2b29a895cde754",
+    "src/cli/commands/gc.ts#gcSessions": "95b60bad891bdc73",
+    "src/host/lifecycle.ts#allocateSession": "bf6f53abd1348cfc",
+    "src/host/lifecycle.ts#launchHost": "24751cfcbe8a055e",
+    "src/host/lifecycle.ts#isProcessAlive": "1ca1fe6ad6c41711",
+    "src/host/lifecycle.ts#reconcileSession": "32e17d1bc75bb636",
+    "src/host/hostMain.ts#waitForManifestFromCreate": "fd500651f83683eb",
+    "src/host/manifestWriter.ts#createSerialManifestWriter": "4f54c3353c5a7602",
+    "src/host/sessionState.ts#SessionState.recordExit": "a4f3f6706ae953c3",
+    "src/host/eventLog.ts#EventLog.open": "2bc70b7c6b669f20",
+    "src/host/rpcServer.ts#RpcServer.listen": "aa62e1cd89eceaa4",
+    "src/host/rpcServer.ts#RpcServer.close": "2d8092cceb4b8e13",
+    "src/storage/manifests.ts#readValidatedJsonFile": "6287eb627b09bf80",
+    "src/storage/manifests.ts#writeTextFileAtomic": "87f4e3ecc13dbe59",
+    "src/storage/manifests.ts#writeManifest": "97c755b27788a6e5",
+    "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
+    "src/host/hostMain.ts#runHost(parts)": "6607f7fc5234f6cc",
+    "src/host/hostMain.ts#runHost(final try)": "ad91fa180ff36ffb",
+    "src/host/hostMain.ts#runHost>handlers.resize": "30dd1da32879d478",
+    "skill:model/SessionLifecycle.tla": "3fbd7365274cdc9f",
+    "skill:scripts/facts.mjs": "f69c376b14dcec98",
+    "skill:scripts/check.sh": "2cfc6d8782570707"
+  },
+  "callSites": {
+    "writeManifest": [
+      "src/host/lifecycle.ts#allocateSession",
+      "src/host/lifecycle.ts#destroySession",
+      "src/host/lifecycle.ts#reconcileSession"
+    ],
+    "persistManifest": [
+      "src/host/hostMain.ts#runHost",
+      "src/host/hostMain.ts#runHost>handlePtyExit",
+      "src/host/hostMain.ts#runHost>initiateShutdown",
+      "src/host/hostMain.ts#runHost>resize"
+    ],
+    "writeValidatedJsonFile": [
+      "src/storage/artifactManifest.ts#writeArtifactManifest",
+      "src/storage/manifests.ts#writeManifest",
+      "src/tools/canonicalBundleArtifacts.ts#writeCanonicalBundleManifest"
+    ],
+    "writeTextFileAtomic": [
+      "src/cli/commands/record-export.ts#runRecordExportCommand",
+      "src/snapshot/capture.ts#persistSnapshotArtifact",
+      "src/storage/homeRegistry.ts#defaultDependencies>writeAtomic",
+      "src/storage/manifests.ts#writeValidatedJsonFile"
+    ],
+    "manifestPath": [
+      "src/cli/commandTarget.ts#resolveCommandTarget",
+      "src/cli/commands/create.ts#readCreateResult",
+      "src/cli/commands/create.ts#runCreateCommand",
+      "src/cli/commands/gc.ts#gcSessions",
+      "src/cli/commands/inspect.ts#runInspectCommand",
+      "src/cli/commands/record-diff.ts#resolveSessionDirectory",
+      "src/cli/commands/record-export.ts#runRecordExportCommand",
+      "src/cli/commands/screenshot.ts#runScreenshotCommand",
+      "src/cli/commands/snapshot.ts#runSnapshotCommand",
+      "src/cli/commands/wait.ts#runWaitCommand",
+      "src/dashboard/sessionScope.ts#listDashboardSessions",
+      "src/host/hostMain.ts#runHost",
+      "src/host/lifecycle.ts#allocateSession",
+      "src/host/lifecycle.ts#getSessionPaths>manifestFile",
+      "src/host/lifecycle.ts#listSessions",
+      "src/host/lifecycle.ts#reconcileSession",
+      "src/replay/offlineReplay.ts#withOfflineReplayRenderer",
+      "src/storage/homeScope.ts#scanHome"
+    ],
+    "reconcileSession": [
+      "src/cli/commands/create.ts#runCreateCommand",
+      "src/cli/commands/gc.ts#gcSessions",
+      "src/cli/commands/inspect.ts#runInspectCommand",
+      "src/host/lifecycle.ts#destroySession",
+      "src/host/lifecycle.ts#destroySession",
+      "src/host/lifecycle.ts#destroySession",
+      "src/host/lifecycle.ts#listSessions"
+    ],
+    "recursiveRemovals": [
+      "src/cli/commands/create.ts#runCreateCommand",
+      "src/cli/commands/doctor.ts#runScreenshotViabilityCheck",
+      "src/cli/commands/doctor.ts#runTemporaryDirectoryCheck",
+      "src/cli/commands/doctor.ts#withDoctorSessionDirectory",
+      "src/cli/commands/gc.ts#gcSessions",
+      "src/export/webm.ts#generateWebmExport",
+      "src/tools/hero-demo.ts#cleanBundle",
+      "src/tools/hero-demo.ts#mkDebugRoot",
+      "src/tools/hero-demo.ts#runHeroDemo",
+      "src/tools/hero-video-playback.ts#prepareHeroVideoUploadAssets",
+      "src/tools/release-please-runner.ts#createCommuniqueChangelogNotes>buildNotes"
+    ]
+  }
+}
