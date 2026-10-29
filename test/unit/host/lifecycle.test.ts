@@ -117,12 +117,12 @@ describe('reconcileSession', () => {
     return directory;
   }
 
-  // Every pid is dead. `onHostProbe` runs at the liveness check of the host,
-  // which is the moment a host can still record its exit and then end.
-  function killProbeReportsDead(onHostProbe: () => void = () => undefined) {
+  function killProbeReportsDead(
+    beforeHostReportsDead: () => void = () => undefined,
+  ) {
     vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
       if (pid === HOST_PID && signal === 0) {
-        onHostProbe();
+        beforeHostReportsDead();
       }
       throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
     });
