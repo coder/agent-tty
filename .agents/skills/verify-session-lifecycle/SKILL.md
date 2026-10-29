@@ -158,7 +158,7 @@ It assumes:
 
 - A pid is not reused while the check looks at it, so `isProcessAlive(hostPid)` is true exactly while the host lives.
 - A manifest write is atomic, because `writeTextFileAtomic` renames a temp file. A write that fails counts as a host crash or a failed command.
-- The host's 5-second wait for its manifest is long enough. A host that gives up counts as a crash, which R6 does not cover.
+- The host waits for its manifest while the `create` process lives, so it gives up only when `create` dies before that write. That counts as a host crash, which R6 does not cover.
 - gc's `rm(sessionDirectory, { recursive: true })` is one step, though the real `rm` deletes file by file. R1 already forbids removing a session whose host can still write, so the order of the deleted files does not matter.
 - Steps that only lead to the same outcome are joined: gc's `readdir` and `stat` (both only skip), the host's `EventLog.open` and `createPty` (synchronous after the open), and `recordExit` with the `exit` event append (no other process sees them).
 
