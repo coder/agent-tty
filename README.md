@@ -194,7 +194,7 @@ The `agent-tty` CLI (`src/cli/main.ts`) starts one detached host process per ses
 - Session state lives in the Home: `~/.agent-tty`, unless `--home` or `AGENT_TTY_HOME` names another absolute path. Each session has `<home>/sessions/<sessionId>/` with `session.json`, `events.jsonl` and `artifacts/`. [src/storage/home.ts:resolveHome] [src/storage/sessionPaths.ts:sessionDir]
 - The registry of known Homes is `${XDG_STATE_HOME:-~/.local/state}/agent-tty/homes.json`. [src/storage/homeRegistry.ts:resolveHomeRegistryPath]
 - Each session's RPC socket is under `/tmp/agent-tty/`, with mode `0o600`. [src/storage/sessionPaths.ts:socketPath] [src/host/rpcServer.ts:RpcServer]
-- `create` spawns a detached host process (`process.execPath ... _host <sessionId>`), and the host spawns the PTY child through `node-pty`. [src/host/lifecycle.ts:launchHost] [src/pty/createPty.ts:createPty]
+- `create` spawns a detached host process (`process.execPath ... _host <sessionId> <creatorPid>`) before it writes the first manifest, and the host waits for that manifest. The host spawns the PTY child through `node-pty`. [src/host/lifecycle.ts:launchHost] [src/host/lifecycle.ts:allocateSession] [src/host/hostMain.ts:waitForManifestFromCreate] [src/pty/createPty.ts:createPty]
 - The `ghostty-web` renderer launches headless Chromium through Playwright. [src/renderer/ghosttyWeb/backend.ts:GhosttyWebBackend]
 - In `evals/`, the `claude` and `codex` providers run the real agent CLIs with permission-bypass flags, and runs write to `evals/reports/` by default. [evals/providers/claude.ts:ClaudeProvider] [evals/run.ts:resolveOutputBaseDir]
 
