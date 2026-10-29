@@ -2,7 +2,7 @@
   "fingerprints": {
     "src/cli/commands/create.ts#runCreateCommand": "1b2b29a895cde754",
     "src/cli/commands/gc.ts#gcSessions": "95b60bad891bdc73",
-    "src/host/lifecycle.ts#allocateSession": "bf6f53abd1348cfc",
+    "src/host/lifecycle.ts#allocateSession": "751277359c539c32",
     "src/host/lifecycle.ts#launchHost": "24751cfcbe8a055e",
     "src/host/lifecycle.ts#isProcessAlive": "1ca1fe6ad6c41711",
     "src/host/lifecycle.ts#reconcileSession": "32e17d1bc75bb636",
