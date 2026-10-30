@@ -35,7 +35,7 @@ import {
   readProgramGroup,
   readProvenProgramGroup,
   stopProgramGroup,
-  type ProgramRecord,
+  type ProgramGroup,
 } from './programGroup.js';
 import { sendRpc } from './rpcClient.js';
 
@@ -352,7 +352,7 @@ async function waitForTerminalManifest(
 
 export async function waitForProcessesToExit(
   hostPid: number | null,
-  group: ProgramRecord | null,
+  group: ProgramGroup | null,
   maxAttempts: number = DESTROY_MAX_ATTEMPTS,
   intervalMs: number = DESTROY_POLL_INTERVAL_MS,
   options: PollOptions = {},
@@ -556,7 +556,7 @@ async function recordDestroyed(
   manifestFile: string,
   socketFile: string,
   manifest: SessionRecord,
-  group: ProgramRecord | null,
+  group: ProgramGroup | null,
 ): Promise<void> {
   invariant(
     isTerminalSessionStatus(manifest.status) ||
@@ -576,7 +576,7 @@ async function recordDestroyed(
 async function stopSessionProcesses(
   sessionId: string,
   hostPid: number | null,
-  group: ProgramRecord | null,
+  group: ProgramGroup | null,
   sessionDirectory: string,
   signal: AbortSignal | undefined,
 ): Promise<void> {

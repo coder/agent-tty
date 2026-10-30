@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 
 import { z } from 'zod';
@@ -38,6 +38,19 @@ const ProgramRecordSchema = z.union([
 
 export type ProgramRecord = z.infer<typeof ProgramRecordSchema>;
 type ProvenRecord = Extract<ProgramRecord, { bootId: string }>;
+
+// No record proves this group, so the kill trusts the childPid of a manifest
+// read before program.json, as before program.json existed. A session that
+// has a record names its childPid only after the record, so a record that is
+// missing from a folder that still exists marks a session that never had
+// one. Once gc removed the folder, the group can have ended and its id can
+// name an unrelated group.
+interface ChildPidGroup {
+  readonly childPid: number;
+  readonly sessionDirectory: string;
+}
+
+export type ProgramGroup = ProgramRecord | ChildPidGroup;
 
 const CAPTURE_BUDGET_MS = 250;
 const STOP_ATTEMPTS = 5;
@@ -228,12 +241,12 @@ export async function readProvenProgramGroup(
   return typeof record === 'object' && hasToken(record) ? record : null;
 }
 
-// Without a record or a token the kill trusts childPid, as before
-// program.json existed. An invalid record gets no kill.
+// Call it after the manifest read that gave childPid. An invalid record
+// gets no kill.
 export async function readProgramGroup(
   sessionDirectory: string,
   childPid: number | null,
-): Promise<ProgramRecord | null> {
+): Promise<ProgramGroup | null> {
   const record = await readProgramRecord(sessionDirectory);
   if (typeof record === 'object' && hasToken(record)) {
     return record;
@@ -241,7 +254,7 @@ export async function readProgramGroup(
   if (record === 'invalid' || childPid === null) {
     return null;
   }
-  return { version: 1, pid: childPid, bootId: null, autogroup: null };
+  return { childPid, sessionDirectory };
 }
 
 type GroupJudgement =
@@ -411,9 +424,14 @@ function killProcessGroupBestEffort(pgid: number): void {
   }
 }
 
-export function isProgramGroupAlive(group: ProgramRecord | null): boolean {
+export function isProgramGroupAlive(group: ProgramGroup | null): boolean {
   if (group === null) {
     return false;
+  }
+  if ('childPid' in group) {
+    return (
+      existsSync(group.sessionDirectory) && isProcessGroupAlive(group.childPid)
+    );
   }
   if (!hasToken(group)) {
     return isProcessGroupAlive(group.pid);
@@ -421,8 +439,14 @@ export function isProgramGroupAlive(group: ProgramRecord | null): boolean {
   return judgeLiveGroup(group).verdict === 'owned';
 }
 
-export function stopProgramGroup(group: ProgramRecord | null): void {
+export function stopProgramGroup(group: ProgramGroup | null): void {
   if (group === null) {
+    return;
+  }
+  if ('childPid' in group) {
+    if (existsSync(group.sessionDirectory)) {
+      killProcessGroupBestEffort(group.childPid);
+    }
     return;
   }
   if (!hasToken(group)) {
