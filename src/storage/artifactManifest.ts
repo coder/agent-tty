@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { readValidatedJsonFile, writeValidatedJsonFile } from './manifests.js';
+import { publishArtifactFile } from './artifactFiles.js';
 import { artifactPath, ensureArtifactsDir } from './artifactPaths.js';
 import { invariant } from '../util/assert.js';
 import { KeyedSerializer } from '../util/keyedSerializer.js';
@@ -182,12 +183,15 @@ export interface AppendArtifactWithRollbackOptions {
 
 async function appendArtifact(
   sessionDir: string,
-  entry: ArtifactEntry,
-  rollbackArtifactPath: string | undefined,
-): Promise<void> {
+  prepare: () => Promise<{
+    entry: ArtifactEntry;
+    rollbackArtifactPath: string | undefined;
+  }>,
+): Promise<ArtifactEntry> {
   const resolvedSessionDir = resolve(sessionDir);
   const expectedSessionId = sessionIdFromSessionDir(resolvedSessionDir);
-  await appendSerializer.run(resolvedSessionDir, async () => {
+  return await appendSerializer.run(resolvedSessionDir, async () => {
+    const { entry, rollbackArtifactPath } = await prepare();
     try {
       const validatedEntry = validateArtifactEntry(entry, expectedSessionId);
       const manifest = await readArtifactManifest(resolvedSessionDir);
@@ -195,6 +199,7 @@ async function appendArtifact(
         ...manifest,
         artifacts: [...manifest.artifacts, validatedEntry],
       });
+      return validatedEntry;
     } catch (error) {
       if (rollbackArtifactPath !== undefined) {
         // Best-effort: swallow rm errors so the original manifest failure propagates.
@@ -224,11 +229,46 @@ export async function appendArtifactWithRollback(
     );
   }
 
-  await appendArtifact(
-    options.sessionDir,
-    options.entry,
-    options.rollbackArtifactPath,
+  await appendArtifact(options.sessionDir, () =>
+    Promise.resolve({
+      entry: options.entry,
+      rollbackArtifactPath: options.rollbackArtifactPath,
+    }),
   );
+}
+
+export interface PublishArtifactWithRollbackOptions {
+  sessionDir: string;
+  temporaryPath: string;
+  /** `entry.filename` is the preferred name. */
+  entry: ArtifactEntry;
+}
+
+/**
+ * Publish `temporaryPath` with `publishArtifactFile` and append `entry` under
+ * the published name. Publishing runs in the same per-session queue as the
+ * append, so a failed append cannot remove a file that another capture reused
+ * in between. A failed append removes the file only when this call created
+ * it. The temporary file is always removed. Returns the recorded entry.
+ */
+export async function publishArtifactWithRollback(
+  options: PublishArtifactWithRollbackOptions,
+): Promise<ArtifactEntry> {
+  try {
+    return await appendArtifact(options.sessionDir, async () => {
+      const published = await publishArtifactFile({
+        sessionDir: options.sessionDir,
+        temporaryPath: options.temporaryPath,
+        filename: options.entry.filename,
+      });
+      return {
+        entry: { ...options.entry, filename: published.filename },
+        rollbackArtifactPath: published.created ? published.path : undefined,
+      };
+    });
+  } finally {
+    await rm(options.temporaryPath, { force: true }).catch(() => undefined);
+  }
 }
 
 export function createArtifactEntry(

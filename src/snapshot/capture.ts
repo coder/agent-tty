@@ -1,3 +1,5 @@
+import { ulid } from 'ulid';
+
 import type { SnapshotParams, SnapshotResult } from '../protocol/messages.js';
 import type { SemanticSnapshot } from '../renderer/types.js';
 
@@ -6,8 +8,8 @@ import { SnapshotResultSchema } from '../protocol/schemas.js';
 import { parseValidatedResult } from '../protocol/validation.js';
 import { computeScreenHash } from '../renderer/canonicalScreen.js';
 import {
-  appendArtifactWithRollback,
   createArtifactEntry,
+  publishArtifactWithRollback,
 } from '../storage/artifactManifest.js';
 import {
   artifactPath,
@@ -128,7 +130,10 @@ export async function persistSnapshotArtifact(
     options.snapshot.capturedAtSeq,
     options.format,
   );
-  const snapshotArtifactPath = artifactPath(options.sessionDir, filename);
+  const temporaryPath = artifactPath(
+    options.sessionDir,
+    `.tmp-snapshot-${ulid()}.json`,
+  );
 
   const artifactEntry = createArtifactEntry({
     kind: 'snapshot',
@@ -149,17 +154,17 @@ export async function persistSnapshotArtifact(
   });
 
   await writeTextFileAtomic({
-    path: snapshotArtifactPath,
+    path: temporaryPath,
     pathLabel: 'snapshot artifact path',
     contents: `${JSON.stringify(options.result, null, 2)}\n`,
-    writeErrorMessage: `Failed to write snapshot artifact at ${snapshotArtifactPath}.`,
+    writeErrorMessage: `Failed to write snapshot artifact at ${temporaryPath}.`,
     createParentFolders: false,
   });
 
-  await appendArtifactWithRollback({
+  await publishArtifactWithRollback({
     sessionDir: options.sessionDir,
+    temporaryPath,
     entry: artifactEntry,
-    rollbackArtifactPath: snapshotArtifactPath,
   });
 }
 

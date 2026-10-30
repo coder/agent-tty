@@ -152,7 +152,7 @@ describe('artifact writes after gc removed the session folder', () => {
     expect(existsSync(sessionDirectory)).toBe(false);
   });
 
-  it('a screenshot reports SESSION_NOT_FOUND when the folder goes before the rename', async () => {
+  it('a screenshot reports SESSION_NOT_FOUND when the folder goes before the publish', async () => {
     const renderer = createFakeBackend();
     const backend = {
       screenshot: async (
