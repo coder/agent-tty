@@ -1,10 +1,13 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 
 import { z } from 'zod';
 
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
-import { writeValidatedJsonFileSync } from '../storage/manifests.js';
+import {
+  readValidatedJsonFile,
+  writeValidatedJsonFileSync,
+} from '../storage/manifests.js';
 import { programRecordPath } from '../storage/sessionPaths.js';
 import { invariant } from '../util/assert.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
@@ -35,8 +38,10 @@ const ProgramRecordSchema = z.union([
 ]);
 
 export type ProgramRecord = z.infer<typeof ProgramRecordSchema>;
+type ProvenRecord = Extract<ProgramRecord, { bootId: string }>;
 
 const CAPTURE_BUDGET_MS = 250;
+const STOP_ATTEMPTS = 5;
 
 interface ProcStat {
   readonly pid: number;
@@ -95,6 +100,14 @@ function readProcFile(path: string): string | null {
 function readProcStat(pid: number): ProcStat | null {
   const text = readProcFile(`/proc/${String(pid)}/stat`);
   return text === null ? null : parseProcStat(text);
+}
+
+export interface ProcessRow {
+  readonly pid: number;
+  readonly pgid: number;
+  readonly sid: number;
+  readonly state: string;
+  readonly autogroup: number | null;
 }
 
 function readAutogroup(pid: number): number | null {
@@ -176,4 +189,239 @@ export function writeProgramRecord(
     writeErrorMessage: `Failed to write the program record at ${path}.`,
     validate: validateProgramRecord,
   });
+}
+
+// The group that a kill may target. A record with a token names it. Without
+// one, the kill trusts childPid, as before program.json existed, and a null
+// childPid trusts no number.
+export async function readProgramGroup(
+  sessionDirectory: string,
+  childPid: number | null,
+): Promise<ProgramRecord | null> {
+  const path = programRecordPath(sessionDirectory);
+  const record = await readValidatedJsonFile({
+    path,
+    pathLabel: 'program record path',
+    allowMissing: true,
+    readErrorMessage: `Failed to read the program record at ${path}.`,
+    invalidJsonMessage: `The program record contains invalid JSON at ${path}.`,
+    validate: validateProgramRecord,
+  });
+  if (record !== null && record.bootId !== null) {
+    return record;
+  }
+  return childPid === null
+    ? null
+    : { version: 1, pid: childPid, bootId: null, autogroup: null };
+}
+
+export type GroupJudgement =
+  | { readonly verdict: 'owned'; readonly witness: number }
+  | { readonly verdict: 'gone' | 'unproven' };
+
+// A live member of the group proves the group is the program's when it is
+// in the program's session: its session id is the program's pid and it has
+// the recorded autogroup of the same boot.
+export function judgeProgramGroup(
+  record: ProvenRecord,
+  bootId: string | null,
+  rows: readonly ProcessRow[],
+): GroupJudgement {
+  const members = rows.filter(
+    (row) => row.pgid === record.pid && row.state !== 'Z' && row.state !== 'X',
+  );
+  if (members.length === 0) {
+    return { verdict: 'gone' };
+  }
+  const witness =
+    bootId === record.bootId
+      ? members.find(
+          (row) => row.sid === record.pid && row.autogroup === record.autogroup,
+        )
+      : undefined;
+  return witness === undefined
+    ? { verdict: 'unproven' }
+    : { verdict: 'owned', witness: witness.pid };
+}
+
+function toProcessRow(stat: ProcStat): ProcessRow {
+  return {
+    pid: stat.pid,
+    pgid: stat.pgid,
+    sid: stat.sid,
+    state: stat.state,
+    autogroup: readAutogroup(stat.pid),
+  };
+}
+
+function readProcessRow(pid: number): ProcessRow | null {
+  const stat = readProcStat(pid);
+  return stat === null ? null : toProcessRow(stat);
+}
+
+function readGroupMembers(pgid: number): ProcessRow[] {
+  const members: ProcessRow[] = [];
+  for (const entry of readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry)) {
+      continue;
+    }
+    const stat = readProcStat(Number(entry));
+    if (stat?.pgid === pgid) {
+      members.push(toProcessRow(stat));
+    }
+  }
+  return members;
+}
+
+function judgeLiveGroup(record: ProvenRecord): GroupJudgement {
+  return judgeProgramGroup(record, readBootId(), readGroupMembers(record.pid));
+}
+
+// node-pty starts the program as a session leader, so the program's pid is
+// also the id of its process group, which the program cannot leave. Windows
+// has no process groups, so there the kill reaches the program's pid only.
+function processGroupTarget(pgid: number): number {
+  // process.kill(-0) signals the caller's own group, process.kill(-1) every
+  // process that the caller may signal.
+  invariant(
+    Number.isInteger(pgid) && pgid > 1,
+    'process group id must be an integer above 1',
+  );
+  return process.platform === 'win32' ? pgid : -pgid;
+}
+
+// hidepid=2 and hidepid=4 (shown as invisible and ptraceable on newer
+// kernels) leave processes of other users out of the /proc listing. The
+// last /proc line is the mount on top. An unreadable mountinfo counts as
+// hiding them.
+function procHidesOtherUsers(): boolean {
+  let mountinfo: string;
+  try {
+    mountinfo = readFileSync('/proc/self/mountinfo', 'utf8');
+  } catch {
+    return true;
+  }
+  let hides = false;
+  for (const line of mountinfo.split('\n')) {
+    const fields = line.split(' ');
+    const separator = fields.indexOf('-');
+    if (fields[4] === '/proc' && fields[separator + 1] === 'proc') {
+      hides = /(^|,)hidepid=(2|4|invisible|ptraceable)(,|$)/.test(
+        fields[separator + 3] ?? '',
+      );
+    }
+  }
+  return hides;
+}
+
+// Whether /proc shows a process of the group that is not a zombie, or a
+// process that it refuses to show, or null when it shows none of the group.
+// kill(-pgid, 0) finds a zombie until its parent reaps it, and an init that
+// never reaps orphans, such as a container's PID 1 without an init, never
+// does. Off Linux, and when /proc hides other users, there is no scan and
+// the answer is true, so a zombie reads alive. launchd reaps orphans on
+// macOS.
+function groupHasLiveProcess(pgid: number): boolean | null {
+  if (process.platform !== 'linux' || procHidesOtherUsers()) {
+    return true;
+  }
+
+  let seen = false;
+  for (const entry of readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry)) {
+      continue;
+    }
+    let stat: ProcStat | null;
+    try {
+      stat = readProcStat(Number(entry));
+    } catch (error) {
+      // hidepid=1 (EPERM) or a security module (EACCES) refuses to show
+      // the process of another user.
+      if (hasErrorCode(error, 'EPERM') || hasErrorCode(error, 'EACCES')) {
+        return true;
+      }
+      throw error;
+    }
+    if (stat?.pgid !== pgid) {
+      continue;
+    }
+    if (stat.state !== 'Z' && stat.state !== 'X') {
+      return true;
+    }
+    seen = true;
+  }
+  return seen ? false : null;
+}
+
+function isProcessGroupAlive(pgid: number): boolean {
+  try {
+    process.kill(processGroupTarget(pgid), 0);
+  } catch (error) {
+    // EPERM: the group still holds a process of another user, which hidepid
+    // can hide from /proc.
+    if (hasErrorCode(error, 'EPERM')) {
+      return groupHasLiveProcess(pgid) ?? true;
+    }
+    if (hasErrorCode(error, 'ESRCH')) {
+      return false;
+    }
+
+    throw error;
+  }
+
+  // None in view: the kill found processes that were reaped before the scan.
+  return groupHasLiveProcess(pgid) ?? false;
+}
+
+function killProcessGroupBestEffort(pgid: number): void {
+  try {
+    process.kill(processGroupTarget(pgid), 'SIGKILL');
+  } catch (error) {
+    if (hasErrorCode(error, 'ESRCH') || hasErrorCode(error, 'EPERM')) {
+      return;
+    }
+
+    throw error;
+  }
+}
+
+// True while the group holds a process that the kill would target.
+export function isProgramGroupAlive(group: ProgramRecord | null): boolean {
+  if (group === null) {
+    return false;
+  }
+  if (group.bootId === null) {
+    return isProcessGroupAlive(group.pid);
+  }
+  return judgeLiveGroup(group).verdict === 'owned';
+}
+
+// SIGKILLs the group when the record proves it is the program's, and never
+// when the proof fails. A record without a token gets the kill of its number.
+export function stopProgramGroup(group: ProgramRecord | null): void {
+  if (group === null) {
+    return;
+  }
+  if (group.bootId === null) {
+    killProcessGroupBestEffort(group.pid);
+    return;
+  }
+
+  for (let attempt = 0; attempt < STOP_ATTEMPTS; attempt += 1) {
+    const judgement = judgeLiveGroup(group);
+    if (judgement.verdict !== 'owned') {
+      return;
+    }
+    // The scan can take milliseconds, so read the witness again right before
+    // the kill. Between this read and the kill, every member must exit and
+    // another group must take the id for the kill to miss.
+    const witness = readProcessRow(judgement.witness);
+    if (
+      witness !== null &&
+      judgeProgramGroup(group, group.bootId, [witness]).verdict === 'owned'
+    ) {
+      killProcessGroupBestEffort(group.pid);
+      return;
+    }
+  }
 }

@@ -9,13 +9,13 @@ import {
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
 import { EventLog } from './eventLog.js';
-import {
-  isProcessAlive,
-  killProcessGroupBestEffort,
-  waitForProcessesToExit,
-} from './lifecycle.js';
+import { isProcessAlive, waitForProcessesToExit } from './lifecycle.js';
 import { createSerialManifestWriter } from './manifestWriter.js';
-import { captureProgram, writeProgramRecord } from './programGroup.js';
+import {
+  captureProgram,
+  stopProgramGroup,
+  writeProgramRecord,
+} from './programGroup.js';
 import { buildReplayInput } from './replay.js';
 import { HostRendererManager } from './renderer.js';
 import { RpcServer, type MethodHandler } from './rpcServer.js';
@@ -373,7 +373,7 @@ export async function runHost(
   const hangUpProgram = (): void => {
     pty.kill();
     groupKillTimer ??= setTimeout(() => {
-      killProcessGroupBestEffort(pty.pid);
+      stopProgramGroup(program);
     }, SHUTDOWN_KILL_GRACE_MS);
   };
 
@@ -484,12 +484,12 @@ export async function runHost(
 
     if (currentStatus === 'destroying') {
       // A process that the program started can outlive it.
-      killProcessGroupBestEffort(pty.pid);
+      stopProgramGroup(program);
     } else {
       if (hungUp) {
         // The program can exit on the idle hang-up while a process it
         // started ignores SIGHUP.
-        killProcessGroupBestEffort(pty.pid);
+        stopProgramGroup(program);
       }
       state.recordExit(exitCode, exitSignal);
     }
@@ -506,7 +506,7 @@ export async function runHost(
           // reconcile retries the kill.
           if (
             currentStatus === 'destroying' &&
-            (await waitForProcessesToExit(null, pty.pid))
+            (await waitForProcessesToExit(null, program))
           ) {
             state.recordDestroyed({ exitCode, exitSignal });
           }

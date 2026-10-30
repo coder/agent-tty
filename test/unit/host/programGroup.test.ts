@@ -5,13 +5,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { once } from 'node:events';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   captureProgram,
+  isProgramGroupAlive,
+  judgeProgramGroup,
   parseAutogroup,
   parseProcStat,
+  stopProgramGroup,
   writeProgramRecord,
+  type ProcessRow,
   type ProgramRecord,
 } from '../../../src/host/programGroup.js';
 import {
@@ -19,11 +25,62 @@ import {
   sessionDir,
 } from '../../../src/storage/sessionPaths.js';
 
+import type * as Fs from 'node:fs';
+
+const procHooks = vi.hoisted(() => ({
+  // /proc/<pid>/stat by pid, or the error that its read throws.
+  stat: undefined as Map<string, string | Error> | undefined,
+  mountinfo: undefined as string | undefined,
+}));
+
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof Fs>('node:fs');
+  const readdirSync = ((path: string, ...rest: unknown[]) =>
+    procHooks.stat !== undefined && path === '/proc'
+      ? ['self', ...procHooks.stat.keys()]
+      : (actual.readdirSync as (...args: unknown[]) => unknown)(
+          path,
+          ...rest,
+        )) as typeof actual.readdirSync;
+  const readFileSync = ((path: string, ...rest: unknown[]) => {
+    if (procHooks.stat !== undefined && path === '/proc/self/mountinfo') {
+      if (procHooks.mountinfo === undefined) {
+        throw errno('ENOENT');
+      }
+      return procHooks.mountinfo;
+    }
+    const pid = /^\/proc\/(\d+)\/stat$/.exec(path)?.[1];
+    if (procHooks.stat === undefined || pid === undefined) {
+      return (actual.readFileSync as (...args: unknown[]) => unknown)(
+        path,
+        ...rest,
+      );
+    }
+    const stat = procHooks.stat.get(pid);
+    if (stat instanceof Error) {
+      throw stat;
+    }
+    return stat;
+  }) as typeof actual.readFileSync;
+  return { ...actual, readdirSync, readFileSync };
+});
+
 const platform = process.platform;
 
 afterEach(() => {
+  vi.restoreAllMocks();
+  procHooks.stat = undefined;
+  procHooks.mountinfo = undefined;
   Object.defineProperty(process, 'platform', { value: platform });
 });
+
+function errno(code: string): Error {
+  return Object.assign(new Error(code), { code });
+}
+
+function procMount(options: string): string {
+  return `22 1 0:21 / /proc rw,nosuid,nodev,noexec,relatime shared:12 - proc proc ${options}\n`;
+}
 
 function thrownBy(run: () => unknown): unknown {
   try {
@@ -169,5 +226,301 @@ describe('writeProgramRecord', () => {
         writeProgramRecord(directory, invalid as unknown as ProgramRecord),
       ),
     ).toMatchObject({ code: 'MANIFEST_VALIDATION_ERROR' });
+  });
+});
+
+describe('judgeProgramGroup', () => {
+  const BOOT = 'ce4b84e5-e77e-4d68-bc28-cd04a84f6cd7';
+  const record = { version: 1, pid: 4242, bootId: BOOT, autogroup: 7 } as const;
+
+  function member(pid: number, overrides: Partial<ProcessRow> = {}) {
+    return {
+      pid,
+      pgid: 4242,
+      sid: 4242,
+      state: 'S',
+      autogroup: 7,
+      ...overrides,
+    };
+  }
+
+  it.each<[string, string | null, ProcessRow[], string]>([
+    ['a live leader', BOOT, [member(4242)], 'owned'],
+    ['a member left by an exited leader', BOOT, [member(4250)], 'owned'],
+    [
+      'members born after the leader exited',
+      BOOT,
+      [member(4300, { state: 'R' }), member(4301)],
+      'owned',
+    ],
+    ['no process', BOOT, [], 'gone'],
+    [
+      'processes of other groups only',
+      BOOT,
+      [member(100, { pgid: 100, sid: 100, autogroup: 9 })],
+      'gone',
+    ],
+    [
+      'zombies only',
+      BOOT,
+      [member(4242, { state: 'Z' }), member(4250, { state: 'X' })],
+      'gone',
+    ],
+    [
+      'a recycled group with another autogroup',
+      BOOT,
+      [member(4242, { autogroup: 8 })],
+      'unproven',
+    ],
+    [
+      'a zombie with the token and a member without it',
+      BOOT,
+      [member(4242, { state: 'Z' }), member(4250, { autogroup: 8 })],
+      'unproven',
+    ],
+    [
+      'a member of another session',
+      BOOT,
+      [member(4250, { sid: 4000 })],
+      'unproven',
+    ],
+    ['another boot', 'other-boot', [member(4242)], 'unproven'],
+    ['an unreadable boot id', null, [member(4242)], 'unproven'],
+  ])('judges %s', (_name, bootId, rows, verdict) => {
+    expect(judgeProgramGroup(record, bootId, rows).verdict).toBe(verdict);
+  });
+});
+
+describe('a program group without a token', () => {
+  const CHILD_PID = 2_147_483_645;
+  const group: ProgramRecord = {
+    version: 1,
+    pid: CHILD_PID,
+    bootId: null,
+    autogroup: null,
+  };
+
+  function killFailsWith(code: string) {
+    return vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw errno(code);
+    });
+  }
+
+  function probeEnds(outcome: 'ok' | 'EPERM'): void {
+    if (outcome === 'ok') {
+      vi.spyOn(process, 'kill').mockReturnValue(true);
+    } else {
+      killFailsWith(outcome);
+    }
+  }
+
+  // /proc shows one process of the group per state, under a command name
+  // with spaces and parentheses, beside a process of another group and a
+  // process that ends during the scan. Unless the test set its own, /proc
+  // is mounted without hidepid, so the result does not depend on the host.
+  function procShowsGroup(...states: string[]): void {
+    procHooks.mountinfo ??= procMount('rw');
+    const tail = '0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 100';
+    procHooks.stat = new Map<string, string | Error>([
+      ['1', `1 (init) S 0 1 1 ${tail}`],
+      ['2', errno('ESRCH')],
+    ]);
+    states.forEach((state, index) => {
+      const pid = String(100 + index);
+      procHooks.stat?.set(
+        pid,
+        `${pid} (a) b (c) ${state} 1 ${String(CHILD_PID)} ${String(CHILD_PID)} ${tail}`,
+      );
+    });
+  }
+
+  it.each([
+    ['ok', ['Z', 'X'], false],
+    ['ok', ['Z', 'S'], true],
+    ['ok', [], false],
+    ['EPERM', ['Z'], false],
+    ['EPERM', ['R'], true],
+    ['EPERM', [], true],
+  ] as const)(
+    'on linux, when the probe ends %s and the group shows %j, is alive: %s',
+    (outcome, states, alive) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procShowsGroup(...states);
+      probeEnds(outcome);
+
+      expect(isProgramGroupAlive(group)).toBe(alive);
+    },
+  );
+
+  it.each(['ok', 'EPERM'] as const)(
+    'on darwin, when the probe ends %s, counts a zombie as alive',
+    (outcome) => {
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+      procShowsGroup('Z');
+      probeEnds(outcome);
+
+      expect(isProgramGroupAlive(group)).toBe(true);
+    },
+  );
+
+  // hidepid=1 lists the processes of other users but refuses their reads,
+  // so a process that refuses its read can be a live one of the group.
+  it.each([
+    ['ok', 'EPERM'],
+    ['ok', 'EACCES'],
+    ['EPERM', 'EPERM'],
+    ['EPERM', 'EACCES'],
+  ] as const)(
+    'on linux, when the probe ends %s, counts a zombie group alive while a process refuses its read with %s',
+    (outcome, readError) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procShowsGroup('Z');
+      procHooks.stat?.set('3', errno(readError));
+      probeEnds(outcome);
+
+      expect(isProgramGroupAlive(group)).toBe(true);
+    },
+  );
+
+  it.each([
+    'hidepid=2',
+    'hidepid=invisible',
+    'hidepid=4',
+    'hidepid=ptraceable',
+  ])(
+    'on linux, when /proc is mounted with %s, counts a zombie group alive',
+    (option) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procHooks.mountinfo = procMount(`rw,${option}`);
+      procShowsGroup('Z');
+      probeEnds('ok');
+
+      expect(isProgramGroupAlive(group)).toBe(true);
+    },
+  );
+
+  it('on linux, when a hidepid /proc is mounted over a plain one, counts a zombie group alive', () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    procHooks.mountinfo =
+      procMount('rw') +
+      procMount('rw,hidepid=invisible').replace('22 1 ', '23 22 ');
+    procShowsGroup('Z');
+    probeEnds('ok');
+
+    expect(isProgramGroupAlive(group)).toBe(true);
+  });
+
+  it('on linux, when mountinfo cannot be read, counts a zombie group alive', () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    procShowsGroup('Z');
+    procHooks.mountinfo = undefined;
+    probeEnds('ok');
+
+    expect(isProgramGroupAlive(group)).toBe(true);
+  });
+
+  it('is not alive when the probe fails with ESRCH', () => {
+    procShowsGroup('S');
+    killFailsWith('ESRCH');
+
+    expect(isProgramGroupAlive(group)).toBe(false);
+  });
+
+  it.each([
+    ['linux', -CHILD_PID],
+    ['darwin', -CHILD_PID],
+    ['win32', CHILD_PID],
+  ])('on %s gets the kill %i', (name, target) => {
+    Object.defineProperty(process, 'platform', { value: name });
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+    stopProgramGroup(group);
+
+    expect(kill).toHaveBeenCalledExactlyOnceWith(target, 'SIGKILL');
+  });
+
+  it.each(['EPERM', 'ESRCH'])('ignores a kill that fails with %s', (code) => {
+    killFailsWith(code);
+
+    expect(() => {
+      stopProgramGroup(group);
+    }).not.toThrow();
+  });
+
+  it.each([0, 1])('refuses the group id %i', (pgid) => {
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+    expect(() => {
+      stopProgramGroup({ ...group, pid: pgid });
+    }).toThrow('process group id must be an integer above 1');
+    expect(kill).not.toHaveBeenCalled();
+  });
+
+  it('is no group when nothing names one', () => {
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+    stopProgramGroup(null);
+
+    expect(isProgramGroupAlive(null)).toBe(false);
+    expect(kill).not.toHaveBeenCalled();
+  });
+});
+
+// Only Linux has the token.
+describe.runIf(platform === 'linux')('a program group with a token', () => {
+  const children: ChildProcess[] = [];
+
+  afterEach(() => {
+    for (const child of children.splice(0)) {
+      child.kill('SIGKILL');
+    }
+  });
+
+  function startGroup(): { pid: number; record: ProgramRecord } {
+    const child = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' });
+    children.push(child);
+    const pid = child.pid as number;
+    const record = captureProgram(pid);
+    expect(record.autogroup).not.toBeNull();
+    return { pid, record };
+  }
+
+  it('gets the kill when the record proves it', () => {
+    const { pid, record } = startGroup();
+    const kill = vi.spyOn(process, 'kill');
+
+    expect(isProgramGroupAlive(record)).toBe(true);
+    stopProgramGroup(record);
+
+    expect(kill).toHaveBeenCalledWith(-pid, 'SIGKILL');
+    expect(isProgramGroupAlive(record)).toBe(false);
+  });
+
+  it('gets no kill when the record names another autogroup', () => {
+    const { pid, record } = startGroup();
+    const mismatched =
+      record.autogroup === null
+        ? record
+        : { ...record, autogroup: record.autogroup + 1 };
+    const kill = vi.spyOn(process, 'kill');
+
+    stopProgramGroup(mismatched);
+
+    expect(kill).not.toHaveBeenCalled();
+    expect(isProgramGroupAlive(mismatched)).toBe(false);
+    expect(() => process.kill(-pid, 0)).not.toThrow();
+  });
+
+  it('gets no kill once the group is gone', async () => {
+    const { record } = startGroup();
+    const child = children.pop() as ChildProcess;
+    child.kill('SIGKILL');
+    await once(child, 'exit');
+    const kill = vi.spyOn(process, 'kill');
+
+    stopProgramGroup(record);
+
+    expect(kill).not.toHaveBeenCalled();
+    expect(isProgramGroupAlive(record)).toBe(false);
   });
 });

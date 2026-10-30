@@ -80,8 +80,6 @@ import {
   allocateSession,
   destroySession,
   cliRunsInsideProgramSession,
-  isProcessGroupAlive,
-  killProcessGroupBestEffort,
   reconcileSession,
   type AllocateConfig,
 } from '../../../src/host/lifecycle.js';
@@ -120,6 +118,9 @@ function procMount(options: string): string {
   return `22 1 0:21 / /proc rw,nosuid,nodev,noexec,relatime shared:12 - proc proc ${options}\n`;
 }
 
+// The fields of /proc/<pid>/stat after the session id, up to the start time.
+const STAT_TAIL = '0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 100';
+
 // /proc shows one process of the program's group per state, under a command
 // name with spaces and parentheses, beside a process of another group and a
 // process that ends during the scan. Unless the test set its own, /proc is
@@ -127,14 +128,14 @@ function procMount(options: string): string {
 function procShowsGroup(...states: string[]): void {
   fsHooks.mountinfo ??= procMount('rw');
   fsHooks.proc = new Map<string, string | Error>([
-    ['1', '1 (init) S 0 1 1 0 -1'],
+    ['1', `1 (init) S 0 1 1 ${STAT_TAIL}`],
     ['2', errno('ESRCH')],
   ]);
   states.forEach((state, index) => {
     const pid = String(100 + index);
     fsHooks.proc?.set(
       pid,
-      `${pid} (a) b (c) ${state} 1 ${String(CHILD_PID)} ${String(CHILD_PID)} 0 -1`,
+      `${pid} (a) b (c) ${state} 1 ${String(CHILD_PID)} ${String(CHILD_PID)} ${STAT_TAIL}`,
     );
   });
 }
@@ -360,29 +361,31 @@ describe('reconcileSession', () => {
 
     async function seedProgramGroup(
       change: (record: ProgramRecord) => ProgramRecord,
-    ): Promise<string> {
+    ) {
       group = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' })
         .pid as number;
       const record = captureProgram(group);
       expect(record.autogroup).not.toBeNull();
       const directory = await seedSession(makeRecord({ childPid: group }));
       writeProgramRecord(directory, change(record));
-      const kill = process.kill.bind(process);
-      vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
-        if (pid === HOST_PID) {
-          throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
-        }
-        return kill(pid, signal);
-      });
-      return directory;
+      const send = process.kill.bind(process);
+      const kill = vi
+        .spyOn(process, 'kill')
+        .mockImplementation((pid, signal) => {
+          if (pid === HOST_PID) {
+            throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
+          }
+          return send(pid, signal);
+        });
+      return { directory, kill };
     }
 
     it('kills the group that the record proves', async () => {
-      const directory = await seedProgramGroup((record) => record);
+      const { directory, kill } = await seedProgramGroup((record) => record);
 
       await reconcileSession(directory);
 
-      expect(process.kill).toHaveBeenCalledWith(-group, 'SIGKILL');
+      expect(kill).toHaveBeenCalledWith(-group, 'SIGKILL');
       expect(await readManifest(manifestPath(directory))).toMatchObject({
         status: 'failed',
       });
@@ -404,11 +407,11 @@ describe('reconcileSession', () => {
             : { ...record, bootId: '00000000-0000-0000-0000-000000000000' },
       ],
     ])('does not kill a group whose record names %s', async (_name, change) => {
-      const directory = await seedProgramGroup(change);
+      const { directory, kill } = await seedProgramGroup(change);
 
       await reconcileSession(directory);
 
-      expect(process.kill).not.toHaveBeenCalledWith(-group, 'SIGKILL');
+      expect(kill).not.toHaveBeenCalledWith(-group, 'SIGKILL');
       expect(await readManifest(manifestPath(directory))).toMatchObject({
         status: 'failed',
       });
@@ -430,12 +433,6 @@ describe('destroySession', () => {
     expect(existsSync(directory)).toBe(false);
   });
 });
-
-function killFailsWith(code: string) {
-  return vi.spyOn(process, 'kill').mockImplementation(() => {
-    throw Object.assign(new Error(`kill ${code}`), { code });
-  });
-}
 
 describe('cliRunsInsideProgramSession', () => {
   const platform = process.platform;
@@ -506,151 +503,5 @@ describe('cliRunsInsideProgramSession', () => {
     Object.defineProperty(process, 'platform', { value: 'win32' });
 
     expect(await cliRunsInsideProgramSession('session-01')).toBe(false);
-  });
-});
-
-describe('isProcessGroupAlive', () => {
-  const platform = process.platform;
-
-  afterEach(() => {
-    Object.defineProperty(process, 'platform', { value: platform });
-  });
-
-  function probeEnds(outcome: 'ok' | 'EPERM'): void {
-    if (outcome === 'ok') {
-      vi.spyOn(process, 'kill').mockReturnValue(true);
-    } else {
-      killFailsWith(outcome);
-    }
-  }
-
-  it.each([
-    ['ok', ['Z', 'X'], false],
-    ['ok', ['Z', 'S'], true],
-    ['ok', [], false],
-    ['EPERM', ['Z'], false],
-    ['EPERM', ['R'], true],
-    ['EPERM', [], true],
-  ] as const)(
-    'on linux, when the probe ends %s and the group shows %j, returns %s',
-    (outcome, states, alive) => {
-      Object.defineProperty(process, 'platform', { value: 'linux' });
-      procShowsGroup(...states);
-      probeEnds(outcome);
-
-      expect(isProcessGroupAlive(CHILD_PID)).toBe(alive);
-    },
-  );
-
-  it.each(['ok', 'EPERM'] as const)(
-    'on darwin, when the probe ends %s, counts a zombie as alive',
-    (outcome) => {
-      Object.defineProperty(process, 'platform', { value: 'darwin' });
-      procShowsGroup('Z');
-      probeEnds(outcome);
-
-      expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
-    },
-  );
-
-  // hidepid=1 lists the processes of other users but refuses their reads,
-  // so a process that refuses its read can be a live one of the group.
-  it.each([
-    ['ok', 'EPERM'],
-    ['ok', 'EACCES'],
-    ['EPERM', 'EPERM'],
-    ['EPERM', 'EACCES'],
-  ] as const)(
-    'on linux, when the probe ends %s, counts a zombie group alive while a process refuses its read with %s',
-    (outcome, readError) => {
-      Object.defineProperty(process, 'platform', { value: 'linux' });
-      procShowsGroup('Z');
-      fsHooks.proc?.set('3', errno(readError));
-      probeEnds(outcome);
-
-      expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
-    },
-  );
-
-  it.each([
-    'hidepid=2',
-    'hidepid=invisible',
-    'hidepid=4',
-    'hidepid=ptraceable',
-  ])(
-    'on linux, when /proc is mounted with %s, counts a zombie group alive',
-    (option) => {
-      Object.defineProperty(process, 'platform', { value: 'linux' });
-      fsHooks.mountinfo = procMount(`rw,${option}`);
-      procShowsGroup('Z');
-      probeEnds('ok');
-
-      expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
-    },
-  );
-
-  it('on linux, when a hidepid /proc is mounted over a plain one, counts a zombie group alive', () => {
-    Object.defineProperty(process, 'platform', { value: 'linux' });
-    fsHooks.mountinfo =
-      procMount('rw') +
-      procMount('rw,hidepid=invisible').replace('22 1 ', '23 22 ');
-    procShowsGroup('Z');
-    probeEnds('ok');
-
-    expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
-  });
-
-  it('on linux, when mountinfo cannot be read, counts a zombie group alive', () => {
-    Object.defineProperty(process, 'platform', { value: 'linux' });
-    procShowsGroup('Z');
-    fsHooks.mountinfo = undefined;
-    probeEnds('ok');
-
-    expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
-  });
-
-  it('returns false when the probe fails with ESRCH', () => {
-    procShowsGroup('S');
-    killFailsWith('ESRCH');
-
-    expect(isProcessGroupAlive(CHILD_PID)).toBe(false);
-  });
-});
-
-describe('killProcessGroupBestEffort', () => {
-  const platform = process.platform;
-
-  afterEach(() => {
-    Object.defineProperty(process, 'platform', { value: platform });
-  });
-
-  it.each([
-    ['linux', -CHILD_PID],
-    ['darwin', -CHILD_PID],
-    ['win32', CHILD_PID],
-  ])('on %s signals %i', (name, target) => {
-    Object.defineProperty(process, 'platform', { value: name });
-    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
-
-    killProcessGroupBestEffort(CHILD_PID);
-
-    expect(kill).toHaveBeenCalledExactlyOnceWith(target, 'SIGKILL');
-  });
-
-  it.each(['EPERM', 'ESRCH'])('ignores a kill that fails with %s', (code) => {
-    killFailsWith(code);
-
-    expect(() => {
-      killProcessGroupBestEffort(CHILD_PID);
-    }).not.toThrow();
-  });
-
-  it.each([0, 1])('refuses the group id %i', (pgid) => {
-    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
-
-    expect(() => killProcessGroupBestEffort(pgid)).toThrow(
-      'process group id must be an integer above 1',
-    );
-    expect(kill).not.toHaveBeenCalled();
   });
 });
