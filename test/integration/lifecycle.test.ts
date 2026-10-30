@@ -934,6 +934,29 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       expect(await groupEnds(pgid)).toBe(true);
     });
 
+    // Only Linux records the token that proves the process is the program's.
+    it.runIf(process.platform === 'linux')(
+      'destroy ends a background process left by a program that exited',
+      async () => {
+        const sessionId = await createProgram(
+          'trap "" HUP; sleep 300 & touch "$0"; exit 0',
+        );
+        const deadline = Date.now() + 10_000;
+        while (inspectSession(testHome, sessionId).status !== 'exited') {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
+        expect(isGroupAlive(pgid)).toBe(true);
+
+        const result = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await groupEnds(pgid)).toBe(true);
+      },
+    );
+
     it('a reconcile after a host crash ends the program and its background process', async () => {
       const sessionId = await createProgram(
         'trap "" TERM HUP; sleep 300 & touch "$0"; wait',
