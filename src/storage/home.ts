@@ -9,10 +9,10 @@ import { invariant } from '../util/assert.js';
 const DEFAULT_HOME_DIRECTORY_NAME = '.agent-tty';
 
 /**
- * The real path of the deepest existing ancestor of `path`, joined with the
- * parts below it that do not exist yet. This equals `realpathSync(path)` once
- * those parts exist, so a Home resolves to one path before and after `create`
- * makes it: the CLI and the host must hash the same path for the socket.
+ * The real path of the deepest ancestor of `path` that resolves, joined with
+ * the parts below it. This equals `realpathSync(path)` once those parts exist,
+ * so a Home resolves to one path before and after `create` makes it: the CLI
+ * and the host must hash the same path for the socket.
  */
 export function canonicalHomePath(
   path: string,

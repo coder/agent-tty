@@ -7,7 +7,7 @@
 ## Interface
 
 - `resolveHome(configuredHome = process.env.AGENT_TTY_HOME)` returns the absolute Home: the configured path, or `os.homedir()/.agent-tty`, passed through `canonicalHomePath`. [home.ts:resolveHome]
-- `canonicalHomePath(path, realpath = realpathSync)` returns the real path of the deepest existing ancestor of `path`, joined with the parts below it that do not exist yet. [home.ts:canonicalHomePath]
+- `canonicalHomePath(path, realpath = realpathSync)` returns the real path of the deepest ancestor of `path` that resolves, joined with the parts below it. [home.ts:canonicalHomePath]
 - `ensureHome(configuredHome = process.env.AGENT_TTY_HOME)` resolves the Home, creates it and returns its path. [home.ts:ensureHome]
 - `sessionDir(home, sessionId)`, `manifestPath(sessionDir)` and `eventLogPath(sessionDir)` return `<home>/sessions/<sessionId>`, its `session.json` and its `events.jsonl`. [sessionPaths.ts:sessionDir] [sessionPaths.ts:manifestPath] [sessionPaths.ts:eventLogPath]
 - `socketPath(sessionDir)` returns `/tmp/agent-tty/<8 hex of sha256(home)>/<12 hex of sha256(sessionId)>`. [sessionPaths.ts:socketPath]

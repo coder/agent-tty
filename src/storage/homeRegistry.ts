@@ -191,9 +191,15 @@ export function createHomeRegistry(
     },
 
     async forget(homePath) {
-      const key = normalizeHomePath(homePath, deps.realpath);
+      // An entry keeps the path it was stored under. Once an ancestor of that
+      // path becomes a symlink, the path no longer resolves to the entry, so
+      // match the path as written too.
+      const keys = new Set([
+        normalizeHomePath(homePath, deps.realpath),
+        resolve(homePath),
+      ]);
       const existing = await readRaw();
-      const filtered = existing.filter((entry) => entry.path !== key);
+      const filtered = existing.filter((entry) => !keys.has(entry.path));
       if (filtered.length === existing.length) {
         return false;
       }

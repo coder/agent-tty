@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import { emitSuccess } from '../../output.js';
 import {
   createHomeRegistry,
@@ -24,13 +26,14 @@ export async function runHomeForgetCommand(
   options: HomeForgetCommandOptions,
   dependencies: HomeForgetCommandDependencies = {},
 ): Promise<void> {
-  // Normalize for display and matching; the store normalizes again (idempotent).
+  // Display the normalized path, but pass the path as written, which the store
+  // also matches against the stored entries.
   // forget never touches the Home directory on disk — registry-only.
   const normalizedPath = normalizeHomePath(options.path);
   const forget =
     dependencies.forget ??
     ((path: string) => createHomeRegistry().forget(path));
-  const forgotten = await forget(normalizedPath);
+  const forgotten = await forget(resolve(options.path));
 
   const result: HomeForgetResult = { path: normalizedPath, forgotten };
   emitSuccess({
