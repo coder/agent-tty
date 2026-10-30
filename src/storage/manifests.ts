@@ -171,10 +171,10 @@ export async function writeValidatedJsonFile<T>(
   });
 }
 
-// For a caller that must not yield to the event loop. Unlike
-// writeValidatedJsonFile it never creates a missing folder.
+// For a caller that must not yield to the event loop. It never creates a
+// missing folder, so the caller states createParentFolders: false.
 export function writeValidatedJsonFileSync<T>(
-  options: WriteValidatedJsonFileOptions<T>,
+  options: WriteValidatedJsonFileOptions<T> & { createParentFolders: false },
 ): void {
   assertAbsoluteStoragePath(options.path, options.pathLabel);
   const validatedData = options.validate(options.path, options.data);

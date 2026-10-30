@@ -188,6 +188,7 @@ export function writeProgramRecord(
     data: record,
     writeErrorMessage: `Failed to write the program record at ${path}.`,
     validate: validateProgramRecord,
+    createParentFolders: false,
   });
 }
 
