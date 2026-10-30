@@ -1,4 +1,5 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { chmod, mkdir, readdir, stat, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import process from 'node:process';
@@ -247,6 +248,43 @@ export function killProcessGroupBestEffort(pgid: number | null): void {
 
     throw error;
   }
+}
+
+function ownProcessGroupId(): number | null {
+  if (process.platform === 'win32') {
+    return null;
+  }
+
+  let pgid: number;
+  if (process.platform === 'linux') {
+    // The command name can hold spaces and parentheses, so count the fields
+    // from the last ')': state, ppid, pgrp.
+    const stat = readFileSync('/proc/self/stat', 'utf8');
+    pgid = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[2]);
+  } else {
+    pgid = Number(
+      execFileSync('ps', ['-o', 'pgid=', '-p', String(process.pid)], {
+        encoding: 'utf8',
+      }).trim(),
+    );
+  }
+  invariant(
+    Number.isInteger(pgid) && pgid > 0,
+    'own process group id must be a positive integer',
+  );
+  return pgid;
+}
+
+export async function isInsideSessionProcessGroup(
+  sessionId: string,
+): Promise<boolean> {
+  const { manifestFile } = getSessionPaths(sessionId);
+  const manifest = await readManifestIfExists(manifestFile);
+  return (
+    manifest !== null &&
+    manifest.childPid !== null &&
+    manifest.childPid === ownProcessGroupId()
+  );
 }
 
 async function unlinkIfPresent(path: string): Promise<void> {
