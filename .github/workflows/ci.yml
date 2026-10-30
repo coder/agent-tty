@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   linux-static:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Check out repository
@@ -65,7 +65,7 @@ jobs:
         run: mise run install-smoke
 
   test-unit:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Check out repository
@@ -94,7 +94,7 @@ jobs:
   # in place instead of failing the shard; a genuine failure still fails all
   # three attempts. Unit tests (`test:unit`) deliberately do NOT retry.
   test-integration:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -121,7 +121,7 @@ jobs:
         run: npm run test:integration -- --shard=${{ matrix.shard }}
 
   test-e2e:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -148,7 +148,7 @@ jobs:
         run: npm run test:e2e -- --shard=${{ matrix.shard }}
 
   quality-gates:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
       - linux-static

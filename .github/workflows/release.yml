@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   prepare-release:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
       release_tag: ${{ steps.release-metadata.outputs.release_tag }}
