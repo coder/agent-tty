@@ -33,12 +33,11 @@ if [ "$fail" -ne 0 ]; then
 fi
 
 cd "$AGENT_TTY_REPO" || exit 2
-if [ ! -f dist/cli/main.js ]; then
-  bad "dist/cli/main.js is missing: run start-run.sh again"
-elif [ -n "$(find src \( -name '*.ts' -o -name '*.tsx' \) -newer dist/cli/main.js | head -1)" ]; then
-  bad "dist/ is older than src/: run start-run.sh again to rebuild"
+stale=$("$(dirname "${BASH_SOURCE[0]}")/stale-dist.sh")
+if [ -n "$stale" ]; then
+  bad "dist/ is stale ($stale): run start-run.sh again to rebuild"
 else
-  pass "dist/ is newer than every file in src/"
+  pass "dist/ has every module of src/ and is newer than src/"
 fi
 
 want=$(node -p "require('./package.json').version")
