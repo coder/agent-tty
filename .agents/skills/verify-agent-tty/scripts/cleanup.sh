@@ -4,7 +4,8 @@
 # session's files into evidence/sessions/, then removes home/ and state/.
 # evidence/ stays. It keeps home/ and state/ and exits 1 when run-pids.sh
 # fails, or while a process outside the caller's terminal session still
-# carries this run's AGENT_TTY_HOME. It also exits 1 when the removal fails.
+# carries this run's AGENT_TTY_HOME. It also exits 1 when the removal fails, or
+# when a process that started during the removal still carries it.
 #
 #   .agents/skills/verify-agent-tty/scripts/cleanup.sh <run>/env.sh
 set -uo pipefail
@@ -110,5 +111,11 @@ if [ -n "$holders" ]; then
   keep_home
 fi
 rm -rf "$aside" || removal_failed "remove $aside"
+find_holders
+if [ -n "$holders" ] || [ -e "$AGENT_TTY_HOME" ] || [ -e "$XDG_STATE_HOME" ]; then
+  printf 'cleanup.sh: removed the old home/ and state/, but a process that started meanwhile carries AGENT_TTY_HOME=%s or made a new home/ or state/:\n%s' "$AGENT_TTY_HOME" "$holders" >&2
+  echo "cleanup.sh: stop it, then run cleanup.sh again." >&2
+  exit 1
+fi
 [ -d "$sockets" ] && rmdir "$sockets" 2>/dev/null
 echo "Removed the run's home and state. Evidence kept in: $EVIDENCE"
