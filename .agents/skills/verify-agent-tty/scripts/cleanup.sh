@@ -118,7 +118,7 @@ find_holders() {
 keep_home() {
   [ -z "$pids_failed" ] || echo "cleanup.sh: run-pids.sh failed, so cleanup.sh cannot prove that every process of this run has ended. Fix what run-pids.sh reports." >&2
   [ -z "$holders" ] || printf 'cleanup.sh: these processes outside your terminal session still carry AGENT_TTY_HOME=%s, or hide their environment and started after the run. Stop them (kill <pid>) or let them end:\n%s' "$AGENT_TTY_HOME" "$holders" >&2
-  echo "cleanup.sh: kept home/ and state/. Then run cleanup.sh again." >&2
+  echo "cleanup.sh: kept ${kept:-home/ and state/}. Then run cleanup.sh again." >&2
   exit 1
 }
 find_holders
@@ -137,14 +137,19 @@ for name in home state; do
 done
 find_holders
 if [ -n "$holders" ]; then
+  kept=""
   for name in home state; do
-    present "$aside/$name" || continue
-    if present "$VERIFY_RUN/$name"; then
+    where="$name/"
+    if ! present "$aside/$name"; then
+      :
+    elif present "$VERIFY_RUN/$name"; then
       echo "cleanup.sh: a process made a new $name/, so the run's own $name/ is in $aside" >&2
-    else
-      mv "$aside/$name" "$VERIFY_RUN/" ||
-        echo "cleanup.sh: could not move $aside/$name back to $VERIFY_RUN/, so the run's $name/ is in $aside" >&2
+      where="removing/$name/"
+    elif ! mv "$aside/$name" "$VERIFY_RUN/"; then
+      echo "cleanup.sh: could not move $aside/$name back to $VERIFY_RUN/, so the run's $name/ is in $aside" >&2
+      where="removing/$name/"
     fi
+    kept="${kept:+$kept and }$where"
   done
   rmdir "$aside" 2>/dev/null
   keep_home
