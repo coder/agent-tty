@@ -478,7 +478,12 @@ describe('isProcessGroupAlive', () => {
     },
   );
 
-  it.each(['hidepid=2', 'hidepid=invisible'])(
+  it.each([
+    'hidepid=2',
+    'hidepid=invisible',
+    'hidepid=4',
+    'hidepid=ptraceable',
+  ])(
     'on linux, when /proc is mounted with %s, counts a zombie group alive',
     (option) => {
       Object.defineProperty(process, 'platform', { value: 'linux' });
@@ -489,6 +494,26 @@ describe('isProcessGroupAlive', () => {
       expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
     },
   );
+
+  it('on linux, when a hidepid /proc is mounted over a plain one, counts a zombie group alive', () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    fsHooks.mountinfo =
+      procMount('rw') +
+      procMount('rw,hidepid=invisible').replace('22 1 ', '23 22 ');
+    procShowsGroup('Z');
+    probeEnds('ok');
+
+    expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
+  });
+
+  it('on linux, when mountinfo cannot be read, counts a zombie group alive', () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    procShowsGroup('Z');
+    fsHooks.mountinfo = undefined;
+    probeEnds('ok');
+
+    expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
+  });
 
   it('returns false when the probe fails with ESRCH', () => {
     procShowsGroup('S');
