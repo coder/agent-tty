@@ -9,7 +9,7 @@ import {
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
 import { EventLog } from './eventLog.js';
-import { isProcessAlive } from './lifecycle.js';
+import { isProcessAlive, killProcessGroupBestEffort } from './lifecycle.js';
 import { createSerialManifestWriter } from './manifestWriter.js';
 import { buildReplayInput } from './replay.js';
 import { HostRendererManager } from './renderer.js';
@@ -84,6 +84,9 @@ export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
 // may exceed idleTimeoutMs by up to checkIntervalMs (bounded by this cap).
 const IDLE_CHECK_CAP_MS = 5_000;
 const MANIFEST_WAIT_INTERVAL_MS = 20;
+// How long shutdown waits after SIGHUP before it kills the program's process
+// group. nvim takes about 1 s to exit on SIGHUP, and `destroy` waits about 5 s.
+const SHUTDOWN_KILL_GRACE_MS = 2_000;
 
 type WaitOutcome = {
   exitCode?: number;
@@ -413,11 +416,15 @@ export async function runHost(
     }
 
     shutdownPromise = (async () => {
+      let killTimer: ReturnType<typeof setTimeout> | undefined;
       try {
         hostAbortController.abort(makeAbortReason('Host is shutting down.'));
         clearIdleTimeout();
         if (isSessionCommandable(state)) {
           pty.kill();
+          killTimer = setTimeout(() => {
+            killProcessGroupBestEffort(pty.pid);
+          }, SHUTDOWN_KILL_GRACE_MS);
           state.requestDestroy();
           await persistManifest();
         }
@@ -425,6 +432,7 @@ export async function runHost(
         try {
           await ptyExitPromise;
         } finally {
+          clearTimeout(killTimer);
           if (rpcListenPromise !== null) {
             await rpcListenPromise.catch(() => undefined);
           }
@@ -463,6 +471,8 @@ export async function runHost(
     const currentStatus = state.snapshot().status;
 
     if (currentStatus === 'destroying') {
+      // A process that the program started can outlive it.
+      killProcessGroupBestEffort(pty.pid);
       state.recordDestroyed({ exitCode, exitSignal });
     } else {
       state.recordExit(exitCode, exitSignal);
