@@ -86,14 +86,11 @@ export function parseProcStat(text: string): ProcStat {
   return stat;
 }
 
-// The kernel prints nothing for a task in no autogroup.
+// The kernel prints nothing for a task in no autogroup. Text in any other
+// format names no autogroup either, so it proves nothing.
 export function parseAutogroup(text: string): number | null {
-  if (text.length === 0) {
-    return null;
-  }
   const match = /^\/autogroup-(\d+) nice -?\d+\n?$/.exec(text);
-  invariant(match !== null, 'proc autogroup must name an autogroup');
-  return Number(match[1]);
+  return match === null ? null : Number(match[1]);
 }
 
 function readProcFileIfExists(path: string): string | null {
@@ -112,9 +109,14 @@ function readProcStat(pid: number): ProcStat | null {
   return text === null ? null : parseProcStat(text);
 }
 
-function readAutogroup(pid: number): number | null {
-  const text = readProcFileIfExists(`/proc/${String(pid)}/autogroup`);
-  return text === null ? null : parseAutogroup(text);
+function readAutogroup(pid: number | 'self'): number | null {
+  try {
+    return parseAutogroup(
+      readFileSync(`/proc/${String(pid)}/autogroup`, 'utf8'),
+    );
+  } catch {
+    return null;
+  }
 }
 
 function readBootId(): string | null {
@@ -130,15 +132,14 @@ function captureToken(
   if (process.platform !== 'linux') {
     return null;
   }
-  const ownAutogroupFile = readProcFileIfExists('/proc/self/autogroup');
+  const ownAutogroup = readAutogroup('self');
   const bootId = readBootId();
-  if (ownAutogroupFile === null || bootId === null) {
+  if (ownAutogroup === null || bootId === null) {
     return null;
   }
 
   // node-pty returns before the child calls setsid(), so the first reads can
   // show the host's own session.
-  const ownAutogroup = parseAutogroup(ownAutogroupFile);
   const deadline = Date.now() + CAPTURE_BUDGET_MS;
   while (Date.now() < deadline) {
     const before = readProcStat(pid);
@@ -152,8 +153,8 @@ function captureToken(
     ) {
       return null;
     }
-    if (after.sid === pid && autogroup !== null && autogroup !== ownAutogroup) {
-      return { bootId, autogroup };
+    if (after.sid === pid && autogroup !== ownAutogroup) {
+      return autogroup === null ? null : { bootId, autogroup };
     }
   }
   return null;
