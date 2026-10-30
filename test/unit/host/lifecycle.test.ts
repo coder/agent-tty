@@ -9,7 +9,35 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fsHooks = vi.hoisted(() => ({
   afterReadFile: undefined as ((path: string) => Promise<void>) | undefined,
+  // /proc/<pid>/stat by pid, or the error that its read throws.
+  proc: undefined as Map<string, string | Error> | undefined,
 }));
+
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof Fs>('node:fs');
+  const readdirSync = ((path: string, ...rest: unknown[]) =>
+    fsHooks.proc !== undefined && path === '/proc'
+      ? ['self', ...fsHooks.proc.keys()]
+      : (actual.readdirSync as (...args: unknown[]) => unknown)(
+          path,
+          ...rest,
+        )) as typeof actual.readdirSync;
+  const readFileSync = ((path: string, ...rest: unknown[]) => {
+    const pid = /^\/proc\/(\d+)\/stat$/.exec(path)?.[1];
+    if (fsHooks.proc === undefined || pid === undefined) {
+      return (actual.readFileSync as (...args: unknown[]) => unknown)(
+        path,
+        ...rest,
+      );
+    }
+    const stat = fsHooks.proc.get(pid);
+    if (stat instanceof Error) {
+      throw stat;
+    }
+    return stat;
+  }) as typeof actual.readFileSync;
+  return { ...actual, readdirSync, readFileSync };
+});
 
 vi.mock('node:fs/promises', async () => {
   const actual = await vi.importActual<typeof FsPromises>('node:fs/promises');
@@ -37,6 +65,7 @@ vi.mock('node:timers/promises', async () => {
   };
 });
 
+import type * as Fs from 'node:fs';
 import type * as FsPromises from 'node:fs/promises';
 import type * as TimersPromises from 'node:timers/promises';
 
@@ -66,8 +95,30 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   fsHooks.afterReadFile = undefined;
+  fsHooks.proc = undefined;
   await rm(home, { recursive: true, force: true });
 });
+
+function errno(code: string): Error {
+  return Object.assign(new Error(code), { code });
+}
+
+// /proc shows one process of the program's group per state, under a command
+// name with spaces and parentheses, beside a process of another group and a
+// process that ends during the scan.
+function procShowsGroup(...states: string[]): void {
+  fsHooks.proc = new Map<string, string | Error>([
+    ['1', '1 (init) S 0 1 1 0 -1'],
+    ['2', errno('ESRCH')],
+  ]);
+  states.forEach((state, index) => {
+    const pid = String(100 + index);
+    fsHooks.proc?.set(
+      pid,
+      `${pid} (a) b (c) ${state} 1 ${String(CHILD_PID)} ${String(CHILD_PID)} 0 -1`,
+    );
+  });
+}
 
 function gcRemovesFolderAfterRead(directory: string, nth: number): void {
   let reads = 0;
@@ -210,6 +261,7 @@ describe('reconcileSession', () => {
   it('writes nothing while the program group survives its kill', async () => {
     const record = makeRecord();
     const directory = await seedSession(record);
+    procShowsGroup('S');
     vi.spyOn(process, 'kill').mockImplementation((pid) => {
       if (pid === HOST_PID) {
         throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
@@ -319,13 +371,64 @@ describe('cliRunsInsideProgramSession', () => {
 });
 
 describe('isProcessGroupAlive', () => {
-  it.each([
-    [true, 'EPERM'],
-    [false, 'ESRCH'],
-  ])('returns %s when the probe fails with %s', (alive, code) => {
-    killFailsWith(code);
+  const platform = process.platform;
 
-    expect(isProcessGroupAlive(CHILD_PID)).toBe(alive);
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: platform });
+  });
+
+  function probeEnds(outcome: 'ok' | 'EPERM'): void {
+    if (outcome === 'ok') {
+      vi.spyOn(process, 'kill').mockReturnValue(true);
+    } else {
+      killFailsWith(outcome);
+    }
+  }
+
+  it.each([
+    ['ok', ['Z', 'X'], false],
+    ['ok', ['Z', 'S'], true],
+    ['ok', [], false],
+    ['EPERM', ['Z'], false],
+    ['EPERM', ['R'], true],
+    ['EPERM', [], true],
+  ] as const)(
+    'on linux, when the probe ends %s and the group shows %j, returns %s',
+    (outcome, states, alive) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procShowsGroup(...states);
+      probeEnds(outcome);
+
+      expect(isProcessGroupAlive(CHILD_PID)).toBe(alive);
+    },
+  );
+
+  it.each(['ok', 'EPERM'] as const)(
+    'on darwin, when the probe ends %s, counts a zombie as alive',
+    (outcome) => {
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+      procShowsGroup('Z');
+      probeEnds(outcome);
+
+      expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
+    },
+  );
+
+  // hidepid=1 lists the processes of other users but refuses their reads.
+  it('on linux counts a group alive whose processes refuse their reads', () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    procShowsGroup();
+    fsHooks.proc?.set('3', errno('EPERM'));
+    killFailsWith('EPERM');
+
+    expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
+  });
+
+  it('returns false when the probe fails with ESRCH', () => {
+    procShowsGroup('S');
+    killFailsWith('ESRCH');
+
+    expect(isProcessGroupAlive(CHILD_PID)).toBe(false);
   });
 });
 
