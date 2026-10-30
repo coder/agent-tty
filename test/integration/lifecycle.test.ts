@@ -1,6 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { readFileSync } from 'node:fs';
 import {
   chmod,
   mkdir,
@@ -45,6 +44,17 @@ import {
   type SessionRecord,
   type SuccessEnvelope,
 } from '../helpers.js';
+
+const zombieLeader = resolve('test/fixtures/zombie-leader.py');
+
+function groupStates(group: number): string[] {
+  return execFileSync('ps', ['-eo', 'pgid=,s='], { encoding: 'utf8' })
+    .split('\n')
+    .flatMap((line) => {
+      const [id, state] = line.trim().split(/\s+/);
+      return Number(id) === group && state !== undefined ? [state] : [];
+    });
+}
 
 interface ErrorEnvelope {
   ok: false;
@@ -991,18 +1001,21 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       },
     );
 
-    // Without a token, the kill needs no live process in view.
-    it.runIf(capturesToken)(
-      'destroy ends a program whose main thread exited while another thread runs',
-      async () => {
-        const sessionId = await createProgram(
-          `touch "$0"; exec python3 '${resolve('test/fixtures/zombie-leader.py')}'`,
-        );
+    // /proc shows Z for a process whose main thread exited while another
+    // of its threads runs. Without a token, the kill needs no live process
+    // in view.
+    it.runIf(capturesToken).each([
+      ['a program', `touch "$0"; exec python3 '${zombieLeader}'`],
+      [
+        'a child of the program',
+        `python3 '${zombieLeader}' & touch "$0"; wait`,
+      ],
+    ])(
+      'destroy ends %s whose main thread exited while another thread runs',
+      async (_name, script) => {
+        const sessionId = await createProgram(script);
         const deadline = Date.now() + 10_000;
-        while (
-          parseProcStat(readFileSync(`/proc/${String(pgid)}/stat`, 'utf8'))
-            .state !== 'Z'
-        ) {
+        while (!groupStates(pgid).includes('Z')) {
           expect(Date.now()).toBeLessThan(deadline);
           await sleep(50);
         }
