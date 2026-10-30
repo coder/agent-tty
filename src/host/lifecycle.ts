@@ -221,6 +221,10 @@ export function isProcessGroupAlive(pgid: number | null): boolean {
     process.kill(processGroupTarget(pgid), 0);
     return true;
   } catch (error) {
+    // EPERM: the group still holds a process of another user.
+    if (hasErrorCode(error, 'EPERM')) {
+      return true;
+    }
     if (hasErrorCode(error, 'ESRCH')) {
       return false;
     }
@@ -237,7 +241,7 @@ export function killProcessGroupBestEffort(pgid: number | null): void {
   try {
     process.kill(processGroupTarget(pgid), 'SIGKILL');
   } catch (error) {
-    if (hasErrorCode(error, 'ESRCH')) {
+    if (hasErrorCode(error, 'ESRCH') || hasErrorCode(error, 'EPERM')) {
       return;
     }
 
@@ -327,7 +331,7 @@ async function waitForTerminalManifest(
   return null;
 }
 
-async function waitForProcessesToExit(
+export async function waitForProcessesToExit(
   hostPid: number | null,
   childPid: number | null,
   maxAttempts: number = DESTROY_MAX_ATTEMPTS,
@@ -751,6 +755,11 @@ export async function reconcileSession(
   // The program can outlive its host. This copy names it even when the first
   // read came before the host's start-up write.
   killProcessGroupBestEffort(current.childPid);
+  // A kill can leave processes of another user, such as the root child of
+  // `sudo cmd &`. Keep childPid so that a later reconcile retries.
+  if (!(await waitForProcessesToExit(null, current.childPid))) {
+    return;
+  }
 
   let reconciledStatus: SessionRecord['status'];
   let failureReason: string | undefined;

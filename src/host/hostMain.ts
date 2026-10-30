@@ -9,7 +9,11 @@ import {
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
 import { EventLog } from './eventLog.js';
-import { isProcessAlive, killProcessGroupBestEffort } from './lifecycle.js';
+import {
+  isProcessAlive,
+  killProcessGroupBestEffort,
+  waitForProcessesToExit,
+} from './lifecycle.js';
 import { createSerialManifestWriter } from './manifestWriter.js';
 import { buildReplayInput } from './replay.js';
 import { HostRendererManager } from './renderer.js';
@@ -244,6 +248,7 @@ export async function runHost(
   let eventLogClosed = false;
   let ptyExitHandled = false;
   let ptyHasExited = false;
+  let ptyExitCode: number | null = null;
   let lastOutputAt = Date.now();
   let lastActivityAt = lastOutputAt;
   const hostAbortController = new AbortController();
@@ -477,10 +482,10 @@ export async function runHost(
     if (currentStatus === 'destroying') {
       // A process that the program started can outlive it.
       killProcessGroupBestEffort(pty.pid);
-      state.recordDestroyed({ exitCode, exitSignal });
     } else {
       state.recordExit(exitCode, exitSignal);
     }
+    ptyExitCode = exitCode;
     markPtyExited();
 
     void (async () => {
@@ -489,6 +494,14 @@ export async function runHost(
       } finally {
         runCompletion.resetForExit();
         try {
+          // Until the group is gone the session stays destroying, so a later
+          // reconcile retries the kill.
+          if (
+            currentStatus === 'destroying' &&
+            (await waitForProcessesToExit(null, pty.pid))
+          ) {
+            state.recordDestroyed({ exitCode, exitSignal });
+          }
           await persistManifest();
         } finally {
           await initiateShutdown();
@@ -498,10 +511,9 @@ export async function runHost(
   };
 
   const makeWaitExitOutcome = (): WaitOutcome => {
-    const snapshot = state.snapshot();
     const result: WaitOutcome = { timedOut: false };
-    if (snapshot.exitCode !== null) {
-      result.exitCode = snapshot.exitCode;
+    if (ptyExitCode !== null) {
+      result.exitCode = ptyExitCode;
     }
     return result;
   };
@@ -902,12 +914,7 @@ export async function runHost(
                 return;
               }
 
-              const snapshot = state.snapshot();
-              const result: WaitOutcome = { timedOut: false };
-              if (snapshot.exitCode !== null) {
-                result.exitCode = snapshot.exitCode;
-              }
-              resolve(result);
+              resolve(makeWaitExitOutcome());
             },
             Math.min(idleDuration / 2, 100),
           );
