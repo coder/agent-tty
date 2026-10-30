@@ -483,13 +483,16 @@ export function launchHost(config: LaunchHostConfig): number {
   return child.pid;
 }
 
-// Every successful destroy ends here, with a manifest that no host write can
-// follow: a terminal one, or one read after both processes died.
 async function recordDestroyed(
   manifestFile: string,
   socketFile: string,
   manifest: SessionRecord,
 ): Promise<void> {
+  invariant(
+    isTerminalSessionStatus(manifest.status) ||
+      !isProcessAlive(manifest.hostPid),
+    'recordDestroyed needs a terminal manifest or a dead host',
+  );
   if (!isDestroyedSessionStatus(manifest.status)) {
     await writeManifest(manifestFile, {
       ...manifest,
@@ -548,11 +551,9 @@ export async function destroySession(
       });
     }
 
-    await recordDestroyed(
-      manifestFile,
-      socketFile,
-      await readSessionManifestOrThrow(sessionId, manifestFile),
-    );
+    const current = await readSessionManifestOrThrow(sessionId, manifestFile);
+    killProcessBestEffort(current.childPid);
+    await recordDestroyed(manifestFile, socketFile, current);
     return;
   }
 
