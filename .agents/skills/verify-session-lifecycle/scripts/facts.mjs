@@ -261,8 +261,8 @@ function hostFacts() {
   const chains =
     /tail\.then\(/.test(writer.getText()) &&
     /tail = next\.catch\(/.test(writer.getText());
-  const skips =
-    /if \(text === lastWritten\) \{\s*return;\s*\}\s*await write\(path, record\);\s*lastWritten = text;/.test(
+  const stops =
+    /if \(wroteTerminal\) \{\s*return;\s*\}\s*const record = snapshot\(\);\s*await write\(path, record\);\s*wroteTerminal = isTerminalSessionStatus\(record\.status\);/.test(
       writer.getText(),
     );
   return {
@@ -271,13 +271,11 @@ function hostFacts() {
       calls(runHost.body, 'writeManifest').length === 0 &&
       calls(runHost.body, 'createSerialManifestWriter').length === 1 &&
       chains,
-    HostSkipsRepeatedWrite: skips,
+    HostStopsAfterTerminalWrite: stops,
     ShutdownChecksCommandable: shutdownChecksCommandable(runHost.body),
   };
 }
 
-// The only state.requestDestroy() in runHost sits in initiateShutdown, inside
-// `if (isSessionCommandable(state)) { ... }`, before that block's write.
 function shutdownChecksCommandable(runHostBody) {
   const requests = calls(runHostBody, 'requestDestroy');
   if (requests.length !== 1) {
@@ -309,11 +307,6 @@ function shutdownChecksCommandable(runHostBody) {
   return inShutdown && request >= 0 && request < write;
 }
 
-// Every success return of destroySession comes right after an
-// `await recordDestroyed(...)`. recordDestroyed writes destroyed from the
-// manifest it gets and unlinks the socket. The --force path waits only for
-// the two processes, reconciles nothing, and records from a read that comes
-// after that wait.
 function destroyFacts() {
   const destroy = requireDeclaration('src/host/lifecycle.ts', 'destroySession');
   const returns = [];
@@ -359,14 +352,19 @@ function destroyFacts() {
       /^const stopped = await waitForProcessesToExit\(/,
     );
     const check = guardIndex(block, '!stopped', ts.SyntaxKind.ThrowStatement);
+    const reread = indexOfStatement(
+      block,
+      /^const current = await readSessionManifestOrThrow\(/,
+    );
     const records = indexOfStatement(
       block,
-      /^await recordDestroyed\([^]*await readSessionManifestOrThrow\(/,
+      /^await recordDestroyed\(manifestFile, socketFile, current\);$/,
     );
     forceRecords =
       wait >= 0 &&
       check === wait + 1 &&
-      records > check &&
+      reread > check &&
+      records > reread &&
       calls(block, 'reconcileSession').length === 0;
   }
   const wait = requireDeclaration(
@@ -487,10 +485,6 @@ const COVERED = [
   ['src/protocol/sessionStatusPolicy.ts', 'SESSION_STATUS_POLICIES'],
 ];
 
-// The parts of runHost that the model describes, in source order: the
-// start-up statements, initiateShutdown, startShutdown, handlePtyExit,
-// pty.onExit, the SIGTERM handler, the resize and destroy handlers, and the
-// closing try block that writes and listens.
 const RUN_HOST_PARTS = [
   /= await waitForManifestFromCreate\(/,
   /^invariant\(\s*manifest\.hostPid === process\.pid/,

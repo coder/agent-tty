@@ -10,12 +10,12 @@
     "src/host/lifecycle.ts#readSessionManifestOrThrow": "9709f28e5e9cca4b",
     "src/host/lifecycle.ts#waitForTerminalManifest": "3f14811e8d2f5f7f",
     "src/host/lifecycle.ts#waitForProcessesToExit": "e4d0096f5da4eca3",
-    "src/host/lifecycle.ts#recordDestroyed": "55eb44b2a379f4f1",
-    "src/host/lifecycle.ts#destroySession": "d2ecf5b0944807e3",
+    "src/host/lifecycle.ts#recordDestroyed": "4a0f6641b7ab6b2e",
+    "src/host/lifecycle.ts#destroySession": "4a2fae95c15572e4",
     "src/host/lifecycle.ts#reconcileSession": "32e17d1bc75bb636",
     "src/host/hostMain.ts#waitForManifestFromCreate": "fd500651f83683eb",
     "src/host/hostMain.ts#isSessionCommandable": "260060f07b068ec1",
-    "src/host/manifestWriter.ts#createSerialManifestWriter": "1c9c75b1428d30b4",
+    "src/host/manifestWriter.ts#createSerialManifestWriter": "94a2decf4fedb2e2",
     "src/host/rpcClient.ts#toTransportCliError": "dd6531349c62bcbd",
     "src/host/sessionState.ts#SessionState.setDimensions": "08c4f06122d157e9",
     "src/host/sessionState.ts#SessionState.requestDestroy": "f66074e815527ff1",
@@ -32,9 +32,9 @@
     "src/host/hostMain.ts#runHost(final try)": "ad91fa180ff36ffb",
     "src/host/hostMain.ts#runHost>handlers.resize": "30dd1da32879d478",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "b55bff4ff186a71e",
-    "skill:scripts/facts.mjs": "ba8659bce46c8b8d",
-    "skill:scripts/check.sh": "927beae7271a2b0e"
+    "skill:model/SessionLifecycle.tla": "f0e68f5ef5bdef86",
+    "skill:scripts/facts.mjs": "4f807ad412777032",
+    "skill:scripts/check.sh": "f7640092797bf14b"
   },
   "callSites": {
     "writeManifest": [

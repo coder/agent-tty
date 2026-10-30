@@ -39,8 +39,8 @@ CONSTANTS
     ReconcileRereads,       \* lifecycle.ts: re-read the manifest after the
                             \*   host is found dead, write from that copy
     HostSerializesWrites,   \* hostMain.ts: one writer, writes in call order
-    HostSkipsRepeatedWrite, \* manifestWriter.ts: skip a write whose snapshot
-                            \*   equals the last one it wrote
+    HostStopsAfterTerminalWrite, \* manifestWriter.ts: write nothing after a
+                            \*   terminal record
     ShutdownChecksCommandable, \* hostMain.ts: initiateShutdown requests
                             \*   destroy only while the session is commandable
     DestroyRecordsDestroyed, \* lifecycle.ts: every successful destroySession
@@ -51,7 +51,7 @@ ASSUME MaxListReconciles \in 1..3
 ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  ReconcileSkipsLiveHost, CreateRecordsHostPid,
                  HostWaitsForManifest, ReconcileRereads,
-                 HostSerializesWrites, HostSkipsRepeatedWrite,
+                 HostSerializesWrites, HostStopsAfterTerminalWrite,
                  ShutdownChecksCommandable,
                  DestroyRecordsDestroyed} : b \in BOOLEAN
 
@@ -80,8 +80,9 @@ VARIABLES
     hsd,         \* initiateShutdown: "none", "write" (its "destroying" write
                  \*   is queued), "wait" (it waits for the program and the
                  \*   listen), "closed" (rpcServer.close unlinked the socket)
-    dsnap,       \* the snapshot that the "destroying" write took when its
-                 \*   turn started, kept after it lands; "none" before that
+    dsnap,       \* the snapshot that the queued "destroying" write took when
+                 \*   its turn started; "none" while it waits for its turn
+    hwt,         \* the host's writer has written a terminal record
     sig,         \* the host got its one SIGTERM
     pc,          \* pc["gc"] and pc["list"]
     rd,          \* rd[p]: the manifest that reconcileSession read in process p
@@ -98,7 +99,7 @@ VARIABLES
 diskVars == <<dir, mst, mpid, morigin, wasTerminal, wasExited>>
 ghostVars == <<startFailed>>
 hostVars == <<hostAlive, hpc, hex, rsz>>
-shutVars == <<hst, hsd, dsnap, sig>>
+shutVars == <<hst, hsd, dsnap, hwt, sig>>
 readerVars == <<pc, rd, gres, lruns>>
 destroyVars == <<dpc, dforce, drd, dres, dsaw, dkill>>
 vars == <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, readerVars,
@@ -110,7 +111,8 @@ Init ==
     /\ sock = FALSE
     /\ cpc = "alloc"
     /\ hostAlive = FALSE /\ hpc = "none" /\ hex = "none" /\ rsz = "none"
-    /\ hst = "running" /\ hsd = "none" /\ dsnap = "none" /\ sig = FALSE
+    /\ hst = "running" /\ hsd = "none" /\ dsnap = "none" /\ hwt = FALSE
+    /\ sig = FALSE
     /\ pc = [p \in Readers |-> IF p = "gc" THEN "stat" ELSE "idle"]
     /\ rd = [p \in Readers |-> [st |-> "none", pid |-> FALSE]]
     /\ gres = "pending"
@@ -185,20 +187,22 @@ CreateLaunchesHost ==
 \* turn while the state changes, so only it keeps its snapshot in a variable.
 \* The other writes carry a status that cannot change before their turn.
 
-\* A host write is queued or in flight, so a new write waits for its turn.
 WriteQueued == hpc = "pidwrite" \/ rsz = "pending" \/ hex = "exitwrite"
 
-\* The exit write was queued before the "destroying" write. That happens only
-\* when destroy is requested after the program ended.
-XAheadOfD == hex = "exitwrite" /\ hst = "destroying"
+\* Reachable only without ShutdownChecksCommandable: destroy requested after
+\* the program ended.
+ExitWriteAheadOfDestroying == hex = "exitwrite" /\ hst = "destroying"
 
-\* The "destroying" write was queued before the exit write.
-DAheadOfX == hsd = "write" /\ hst = "destroyed"
+DestroyingWriteAheadOfExit == hsd = "write" /\ hst = "destroyed"
 
-\* With HostSkipsRepeatedWrite, the exit write writes nothing when the
-\* "destroying" write already landed the same "destroyed" record.
-XRepeatsLastWrite ==
-    HostSkipsRepeatedWrite /\ hsd \in {"wait", "closed"} /\ dsnap = "destroyed"
+WriterStopped == HostSerializesWrites /\ HostStopsAfterTerminalWrite /\ hwt
+
+\* A host write lands, or writes nothing once the writer has stopped.
+HostWrite(s) ==
+    IF WriterStopped
+    THEN UNCHANGED <<diskVars, hwt>>
+    ELSE /\ Write(s, TRUE, "none")
+         /\ hwt' = (hwt \/ s \in Terminal)
 
 \* A write lands. When the queued "destroying" write is next, its turn starts
 \* in the same microtask chain and it takes its snapshot.
@@ -254,9 +258,9 @@ HostOpensLogAndSpawns ==
 \* replaces whatever another process wrote after the host read the manifest.
 HostWritesPids ==
     /\ hostAlive /\ hpc = "pidwrite"
-    /\ Write("running", TRUE, "none")
+    /\ HostWrite("running")
     /\ hpc' = "sockdir"
-    /\ dsnap' = NextTurn(XAheadOfD)
+    /\ dsnap' = NextTurn(ExitWriteAheadOfDestroying)
     /\ UNCHANGED <<ghostVars, sock, cpc, hostAlive, hex, rsz, hst, hsd, sig,
                    readerVars, destroyVars>>
 
@@ -269,12 +273,12 @@ HostListens ==
                /\ UNCHANGED <<hst, hsd, dsnap>>
           ELSE /\ hpc' = "idle" /\ UNCHANGED sock
                /\ StartShutdown(WriteQueued)
-    /\ UNCHANGED <<diskVars, ghostVars, cpc, hostAlive, hex, rsz, sig,
+    /\ UNCHANGED <<diskVars, ghostVars, cpc, hostAlive, hex, rsz, hwt, sig,
                    readerVars, destroyVars>>
 
 \* The resize handler: assertSessionCommandable, setDimensions in memory,
 \* then writeManifest with status "running". No write is queued then, so the
-\* snapshot is taken at once. The write lands in the next step.
+\* snapshot is taken at once.
 HostStartsResize ==
     /\ hostAlive /\ hpc = "serving" /\ hst = "running" /\ rsz = "none"
     /\ rsz' = "pending"
@@ -283,9 +287,9 @@ HostStartsResize ==
 
 HostResizeWriteLands ==
     /\ hostAlive /\ rsz = "pending"
-    /\ Write("running", TRUE, "none")
+    /\ HostWrite("running")
     /\ rsz' = "done"
-    /\ dsnap' = NextTurn(XAheadOfD)
+    /\ dsnap' = NextTurn(ExitWriteAheadOfDestroying)
     /\ UNCHANGED <<ghostVars, sock, cpc, hostAlive, hpc, hex, hst, hsd, sig,
                    readerVars, destroyVars>>
 
@@ -298,17 +302,16 @@ HostGetsSigterm ==
     /\ hostAlive /\ ~sig /\ hpc \in {"pidwrite", "sockdir", "serving", "idle"}
     /\ sig' = TRUE
     /\ StartShutdown(WriteQueued)
-    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, readerVars,
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, hwt, readerVars,
                    destroyVars>>
 
-\* initiateShutdown's `await persistManifest()`: the "destroying" write lands
-\* with the snapshot it took when its turn started. Then the finally block
+\* initiateShutdown's `await persistManifest()` lands, then its finally block
 \* starts.
 HostWritesDestroying ==
     /\ hostAlive /\ hsd = "write" /\ dsnap # "none"
-    /\ Write(dsnap, TRUE, "none")
-    /\ hsd' = "wait"
-    /\ UNCHANGED <<ghostVars, sock, cpc, hostVars, hst, dsnap, sig, readerVars,
+    /\ HostWrite(dsnap)
+    /\ hsd' = "wait" /\ dsnap' = "none"
+    /\ UNCHANGED <<ghostVars, sock, cpc, hostVars, hst, sig, readerVars,
                    destroyVars>>
 
 \* The finally block of initiateShutdown: await ptyExitPromise (the program
@@ -318,7 +321,7 @@ HostWritesDestroying ==
 HostClosesSocket ==
     /\ hostAlive /\ hsd = "wait" /\ hex \in {"exitwrite", "done"}
     /\ sock' = FALSE /\ hsd' = "closed"
-    /\ UNCHANGED <<diskVars, ghostVars, cpc, hostVars, hst, dsnap, sig,
+    /\ UNCHANGED <<diskVars, ghostVars, cpc, hostVars, hst, dsnap, hwt, sig,
                    readerVars, destroyVars>>
 
 \* -------------------------------------------------------------------------
@@ -333,20 +336,17 @@ ProgramExits ==
     /\ hex' = "exitwrite"
     /\ hst' = IF hst = "destroying" THEN "destroyed" ELSE "exited"
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, rsz, hsd,
-                   dsnap, sig, readerVars, destroyVars>>
+                   dsnap, hwt, sig, readerVars, destroyVars>>
 
 \* handlePtyExit's persistManifest lands: "exited" or "destroyed" with the
-\* exit code. With HostSerializesWrites, createSerialManifestWriter runs the
-\* host's writes in call order, so this write lands after a start-up,
-\* resize or "destroying" write that was queued before it. Without it,
-\* nothing orders them. In the code nothing changes the status after
-\* recordExit or recordDestroyed, so the write carries hst; it is skipped
-\* when it repeats the last write. Then `finally { await initiateShutdown() }`.
+\* exit code. In the code nothing changes the status after recordExit or
+\* recordDestroyed, so the write carries hst. Then
+\* `finally { await initiateShutdown() }`.
 HostWritesExit ==
     /\ hostAlive /\ hex = "exitwrite"
     /\ HostSerializesWrites =>
-          (hpc # "pidwrite" /\ rsz # "pending" /\ ~DAheadOfX)
-    /\ IF XRepeatsLastWrite THEN UNCHANGED diskVars ELSE Write(hst, TRUE, "none")
+          (hpc # "pidwrite" /\ rsz # "pending" /\ ~DestroyingWriteAheadOfExit)
+    /\ HostWrite(hst)
     /\ hex' = "done"
     /\ IF hsd = "none"
           THEN StartShutdown(FALSE)
@@ -354,7 +354,8 @@ HostWritesExit ==
     /\ UNCHANGED <<ghostVars, sock, cpc, hostAlive, hpc, rsz, sig, readerVars,
                    destroyVars>>
 
-\* The process ends when every path is finished and no write is queued.
+\* runHost has returned and every handle is closed, so the `_host` process
+\* exits.
 HostProcessEnds ==
     /\ hostAlive /\ hsd = "closed" /\ hex = "done"
     /\ hpc \in {"serving", "idle"} /\ rsz # "pending"
@@ -520,9 +521,10 @@ DestroyFinishes ==
     ELSE /\ dpc' = "twrite" /\ drd' = [pid |-> mpid, origin |-> morigin]
          /\ UNCHANGED <<dres, dsaw>>
 
-\* readSessionManifestOrThrow: missing throws SESSION_NOT_FOUND, destroyed
-\* throws SESSION_ALREADY_DESTROYED. A terminal copy goes to
-\* recordDestroyed, an active one to --force or to the destroy RPC.
+\* readSessionManifestOrThrow throws SESSION_NOT_FOUND on a missing manifest,
+\* then destroySession throws SESSION_ALREADY_DESTROYED on a destroyed one. A
+\* terminal copy goes to recordDestroyed, an active one to --force or to the
+\* destroy RPC.
 DestroyReads ==
     /\ dpc = "read"
     /\ IF mst \in {"none", "destroyed"}
@@ -557,8 +559,8 @@ DestroyUnlinksSocket ==
 \* --force: killProcessBestEffort(childPid) and killProcessBestEffort(hostPid),
 \* one synchronous block. The program ends with the host. With
 \* DestroyRecordsDestroyed, waitForProcessesToExit then returns at once, and
-\* destroy reads the manifest again. Without it, destroy waited for the
-\* socket file, which a killed host never removes, then reconciled and read.
+\* destroy reads the manifest again. Without it, destroy goes to the
+\* reconcile and final read of the code before recordDestroyed.
 DestroyKills ==
     /\ dpc = "kill"
     /\ IF drd.pid /\ hostAlive
@@ -570,7 +572,8 @@ DestroyKills ==
                    dforce, dres, dsaw>>
 
 \* readSessionManifestOrThrow after both processes died, so no host write
-\* can follow it; recordDestroyed writes from it.
+\* can follow it. killProcessBestEffort(current.childPid) kills a program
+\* that the first read did not name, and recordDestroyed writes from it.
 DestroyRereads ==
     /\ dpc = "reread"
     /\ IF mst = "none"
@@ -589,8 +592,8 @@ DestroySendsRpc ==
     /\ dpc = "rpc" /\ sock /\ hostAlive
     /\ StartShutdown(WriteQueued)
     /\ dpc' = "poll"
-    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, sig, readerVars,
-                   dforce, drd, dres, dsaw, dkill>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, hwt, sig,
+                   readerVars, dforce, drd, dres, dsaw, dkill>>
 
 \* No socket file, or nobody listens on it: HOST_UNREACHABLE. destroy then
 \* reconciles and reads the manifest.
@@ -600,9 +603,9 @@ DestroyRpcFails ==
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
                    readerVars, dforce, drd, dres, dsaw, dkill>>
 
-\* waitForTerminalManifest: readManifest every 100 ms, at most 50 times. A
-\* missing manifest throws. A read that is not terminal is either retried (a
-\* later step) or the last one; destroy then reconciles and reads again.
+\* waitForTerminalManifest: readManifest until it is terminal. A missing
+\* manifest throws. A read that is not terminal is either retried or the
+\* last one; destroy then reconciles and reads again.
 DestroyPolls ==
     /\ dpc = "poll"
     /\ IF mst = "none"
@@ -667,17 +670,13 @@ TypeOK ==
     /\ gres \in {"pending", "skipped", "removed"}
     /\ lruns \in 0..MaxListReconciles
     /\ dres \in {"pending", "ok", "error"}
-    \* A "destroying" write that waits for its turn has a write ahead of it.
+    /\ hwt \in BOOLEAN
     /\ (hostAlive /\ hsd = "write" /\ dsnap = "none") =>
-          (hpc = "pidwrite" \/ rsz = "pending" \/ XAheadOfD)
+          (hpc = "pidwrite" \/ rsz = "pending" \/ ExitWriteAheadOfDestroying)
 
-\* The host can still write the session's files: it is alive and the
-\* program has not ended with its exit write landed, or one of its manifest
-\* writes is queued or in flight.
 HostMayStillWrite ==
-    /\ hostAlive
-    /\ \/ hex \in {"none", "wait"}
-       \/ (hex = "exitwrite" /\ ~XRepeatsLastWrite)
+    /\ hostAlive /\ ~WriterStopped
+    /\ \/ hex \in {"none", "wait", "exitwrite"}
        \/ hpc = "pidwrite"
        \/ rsz = "pending"
        \/ hsd = "write"
@@ -697,7 +696,8 @@ TerminalIsFinal == wasTerminal => mst \in Terminal \cup {"none"}
 
 \* R4: once the manifest records that the program exited, only destroy
 \* changes it, to destroyed, and destroy keeps the exit code because it
-\* writes `{ ...manifest, status: 'destroyed' }`. 02-cli-contract.md 17.2:
+\* writes `{ ...manifest, status: 'destroyed' }`.
+\* design/20260319_agent-tty-v1/02-cli-contract.md 17.2:
 \* "if the PTY child already exited, destroy still reconciles the session
 \* to destroyed".
 RecordedExitKept == wasExited => mst \in {"exited", "destroyed", "none"}
@@ -732,16 +732,12 @@ WitnessResizeLands == ~(rsz = "done" /\ hostAlive /\ mst = "running")
 WitnessCleanExitRecorded == ~(mst = "exited" /\ ~hostAlive)
 WitnessCrashReconciled ==
     ~(mst = "failed" /\ morigin = "host-death" /\ hpc = "dead")
-\* A plain destroy of a running session: the host records destroyed and ends.
 WitnessDestroyCompletes ==
     ~(dres = "ok" /\ ~dforce /\ ~sig /\ ~wasExited /\ mst = "destroyed"
       /\ hex = "done" /\ ~hostAlive)
-\* A SIGTERM, with no destroy command: the host records destroyed and ends.
 WitnessSigtermRecorded ==
     ~(sig /\ dpc = "read" /\ mst = "destroyed" /\ hex = "done" /\ ~hostAlive)
-\* destroy of a session whose program exited keeps it and marks it destroyed.
 WitnessDestroyExitedSession ==
     ~(wasExited /\ mst = "destroyed" /\ dres = "ok")
-\* destroy --force kills a live host and the manifest says destroyed.
 WitnessForceDestroyRecorded == ~(dkill /\ dres = "ok" /\ mst = "destroyed")
 =============================================================================

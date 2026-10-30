@@ -67,7 +67,9 @@ export const step = (action, from, to) => {
     case 'HostGetsSigterm':
       return 'the host gets SIGTERM';
     case 'HostWritesDestroying':
-      return `the host shutdown write lands: ${to.mst}`;
+      return from.mst === to.mst && from.dir === to.dir
+        ? 'the host skips its shutdown write'
+        : `the host shutdown write lands: ${to.mst}`;
     case 'ProgramExits':
       return 'the program ends';
     case 'HostWritesExit':

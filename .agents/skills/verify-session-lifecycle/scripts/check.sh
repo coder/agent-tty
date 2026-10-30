@@ -78,8 +78,6 @@ fi
 
 OUT=${CHECK_OUT:-$(mktemp -d "${TMPDIR:-/tmp}/session-lifecycle-check.XXXXXX")}
 mkdir -p "$OUT"
-# Each TLC run changes into its own folder, so a relative path would break.
-OUT=$(cd "$OUT" && pwd)
 
 # --- facts from the code -------------------------------------------------
 
@@ -124,7 +122,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostSkipsRepeatedWrite ShutdownChecksCommandable DestroyRecordsDestroyed"
+GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -179,16 +177,18 @@ write_run mutant-HostWaitsForManifest violated HostStartsWhenCreated "HostWaitsF
 write_run mutant-ReconcileRereads violated RecordedExitKept "ReconcileRereads=FALSE" "without the re-read, reconcile writes over an exit it did not read" RecordedExitKept
 write_run mutant-HostSerializesWrites violated TerminalIsFinal "HostSerializesWrites=FALSE" "without one writer, a late start-up write replaces the exit record" TerminalIsFinal
 write_run mutant-ReconcileSkipsLiveHost violated HostDeathOnlyWhenDead "ReconcileSkipsLiveHost=FALSE" "without the live-host return, reconcile fails a live session" HostDeathOnlyWhenDead
-write_run mutant-HostSkipsRepeatedWrite violated TerminalIsLastWrite "HostSkipsRepeatedWrite=FALSE" "without the skip, the exit write follows a destroyed record" TerminalIsLastWrite
-write_run mutant-ShutdownChecksCommandable violated TerminalIsFinal "ShutdownChecksCommandable=FALSE" "without the check, shutdown writes destroying over an exit record" TerminalIsFinal
+write_run mutant-HostStopsAfterTerminalWrite violated TerminalIsLastWrite "HostStopsAfterTerminalWrite=FALSE" "without the stop, the exit write follows a destroyed record" TerminalIsLastWrite
 write_run mutant-DestroyRecordsDestroyed violated DestroyEndsDestroyed "DestroyRecordsDestroyed=FALSE" "without recordDestroyed, destroy succeeds on a session that is not destroyed" DestroyEndsDestroyed
 write_run mutant-ReconcileSkipsTerminal pass RecordedExitKept "ReconcileSkipsTerminal=FALSE" "redundant: the re-read returns on a terminal manifest"
 write_run mutant-GcSkipsNonCollectable pass NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE" "redundant: the final check still skips"
 write_run mutant-GcFinalCheck pass NoLiveSessionDeleted "GcFinalCheck=FALSE" "redundant: the first check still skips"
 write_run mutant-GcBothChecks violated NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE GcFinalCheck=FALSE" "with neither gc check, gc removes live sessions" NoLiveSessionDeleted
+write_run mutant-ShutdownChecksCommandable pass TerminalIsFinal "ShutdownChecksCommandable=FALSE" "redundant: the writer writes nothing after a terminal record"
+write_run mutant-ShutdownBothChecks violated TerminalIsFinal "ShutdownChecksCommandable=FALSE HostStopsAfterTerminalWrite=FALSE" "with neither, shutdown writes destroying over an exit record" TerminalIsFinal
 
 run_tlc() {
-  local dir="$OUT/$1" rc=0
+  local dir rc=0
+  dir=$(cd "$OUT/$1" && pwd)
   mkdir -p "$dir/tmp"
   (cd "$dir" && "$JAVA" -XX:+UseParallelGC -Xmx2g -Djava.io.tmpdir="$dir/tmp" \
     -cp "$JAR" tlc2.TLC -workers 1 -config SessionLifecycle.cfg \
