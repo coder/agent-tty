@@ -50,8 +50,9 @@ async function createWithoutReplacing(
   }
 }
 
-// O_NOFOLLOW makes a symlink fail with ELOOP, so an artifact name can never
-// resolve to a file outside the session.
+// O_NOFOLLOW fails with ELOOP only when the final path component is a
+// symlink, so a symlink at the artifact name is never reused. It does not
+// check the parent folders, and a hard link still counts as a regular file.
 async function readRegularFile(path: string): Promise<Buffer> {
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
