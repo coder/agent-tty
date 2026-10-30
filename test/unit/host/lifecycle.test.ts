@@ -375,6 +375,14 @@ describe('cliRunsInsideProgramSession', () => {
     await expectMatchesOnly(pgid);
   });
 
+  it("on darwin matches the caller's process group with no ps on PATH", async () => {
+    const pgid = ownId('pgid');
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    vi.stubEnv('PATH', '');
+
+    await expectMatchesOnly(pgid);
+  });
+
   it('matches a caller whose environment names the session before a manifest names the program', async () => {
     await seedSession(makeRecord({ childPid: null }));
     vi.stubEnv('AGENT_TTY_SESSION_ID', 'session-01');
