@@ -18,6 +18,8 @@
 (*           read shows an active status. This process may reconcile at    *)
 (*           any time, so it covers all of them.                           *)
 (*   destroy src/host/lifecycle.ts destroySession, with or without --force *)
+(*   program the PTY child and the processes it starts. node-pty starts it  *)
+(*           as a session leader, so its pid is its process group id.       *)
 (*                                                                         *)
 (* facts.mjs reads the guard constants from the source. FALSE means the    *)
 (* guard is not in the code, and the model then runs the code without it.  *)
@@ -47,6 +49,9 @@ CONSTANTS
                             \*   records destroyed through recordDestroyed
     DestroyKeepsExitCode,   \* lifecycle.ts: recordDestroyed writes
                             \*   { ...manifest, status, updatedAt } only
+    KillsProgramGroup,      \* lifecycle.ts, hostMain.ts: every kill of the
+                            \*   program SIGKILLs its process group, and
+                            \*   destroy --force waits for the group
     MaxListReconciles       \* how many times the "list" process reconciles
 
 ASSUME MaxListReconciles \in 1..3
@@ -55,10 +60,11 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  HostWaitsForManifest, ReconcileRereads,
                  HostSerializesWrites, HostStopsAfterTerminalWrite,
                  ShutdownChecksCommandable,
-                 DestroyRecordsDestroyed, DestroyKeepsExitCode} : b \in BOOLEAN
+                 DestroyRecordsDestroyed, DestroyKeepsExitCode,
+                 KillsProgramGroup} : b \in BOOLEAN
 
 Readers == {"gc", "list"}   \* the two processes that run reconcileSession
-NoRead == [pid |-> FALSE, origin |-> "none", code |-> FALSE]
+NoRead == [pid |-> FALSE, origin |-> "none", code |-> FALSE, child |-> FALSE]
 
 VARIABLES
     dir,         \* the session directory exists
@@ -66,8 +72,10 @@ VARIABLES
     mpid,        \* the manifest on disk records a hostPid
     morigin,     \* failureOrigin on disk: "none", "host-death", "unknown"
     mcode,       \* the manifest on disk records the program's exit code
+    mchild,      \* the manifest on disk records the program's pid (childPid)
     wasTerminal, \* ghost: the manifest has shown a terminal status
     wasExited,   \* ghost: the manifest has shown "exited"
+    wasNamed,    \* ghost: a manifest has recorded the program's pid
     startFailed, \* ghost: the host died because its files were missing
     sock,        \* the RPC socket file exists (it is outside the directory)
     cpc,         \* create: "alloc", "write", "launch", "done"
@@ -78,6 +86,7 @@ VARIABLES
                  \*   "exitwrite" (its exit write is queued), "done", "gone"
     rsz,         \* one resize RPC: "none", "pending" (its write is in flight),
                  \*   "done"
+    prog,        \* a process of the program's process group runs
     hst,         \* the host's in-memory status (SessionState): "running",
                  \*   "destroying", "exited", "destroyed"
     hsd,         \* initiateShutdown: "none", "write" (its "destroying" write
@@ -99,9 +108,10 @@ VARIABLES
     dsaw,        \* ghost: destroy wrote "destroyed" or read it last
     dkill        \* ghost: destroy --force killed a live host
 
-diskVars == <<dir, mst, mpid, morigin, mcode, wasTerminal, wasExited>>
+diskVars == <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal, wasExited,
+              wasNamed>>
 ghostVars == <<startFailed>>
-hostVars == <<hostAlive, hpc, hex, rsz>>
+hostVars == <<hostAlive, hpc, hex, rsz, prog>>
 shutVars == <<hst, hsd, dsnap, hwt, sig>>
 readerVars == <<pc, rd, gres, lruns>>
 destroyVars == <<dpc, dforce, drd, dres, dsaw, dkill>>
@@ -110,15 +120,18 @@ vars == <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, readerVars,
 
 Init ==
     /\ dir = FALSE /\ mst = "none" /\ mpid = FALSE /\ morigin = "none"
-    /\ mcode = FALSE
-    /\ wasTerminal = FALSE /\ wasExited = FALSE /\ startFailed = FALSE
+    /\ mcode = FALSE /\ mchild = FALSE
+    /\ wasTerminal = FALSE /\ wasExited = FALSE /\ wasNamed = FALSE
+    /\ startFailed = FALSE
     /\ sock = FALSE
     /\ cpc = "alloc"
     /\ hostAlive = FALSE /\ hpc = "none" /\ hex = "none" /\ rsz = "none"
+    /\ prog = FALSE
     /\ hst = "running" /\ hsd = "none" /\ dsnap = "none" /\ hwt = FALSE
     /\ sig = FALSE
     /\ pc = [p \in Readers |-> IF p = "gc" THEN "stat" ELSE "idle"]
-    /\ rd = [p \in Readers |-> [st |-> "none", pid |-> FALSE, code |-> FALSE]]
+    /\ rd = [p \in Readers |->
+              [st |-> "none", pid |-> FALSE, code |-> FALSE, child |-> FALSE]]
     /\ gres = "pending"
     /\ lruns = 0
     /\ dpc = "read" /\ dforce \in BOOLEAN /\ drd = NoRead /\ dres = "pending"
@@ -127,14 +140,25 @@ Init ==
 \* writeManifest -> writeTextFileAtomic in src/storage/manifests.ts: mkdir -p
 \* the session directory, write a temp file, rename it over session.json.
 \* The rename is the visible step. The mkdir brings back a removed directory.
-Write(s, pid, origin, code) ==
+Write(s, pid, origin, code, child) ==
     /\ dir' = TRUE
     /\ mst' = s
     /\ mpid' = pid
     /\ morigin' = origin
     /\ mcode' = code
+    /\ mchild' = child
     /\ wasTerminal' = (wasTerminal \/ s \in Terminal)
     /\ wasExited' = (wasExited \/ s = "exited")
+    /\ wasNamed' = (wasNamed \/ child)
+
+\* The program's processes after killProcessGroupBestEffort. Without
+\* KillsProgramGroup the code kills only the program's pid, and a process
+\* that the program started can still run.
+Killed == IF KillsProgramGroup THEN {FALSE} ELSE {FALSE, prog}
+
+\* A kill of the program through a manifest copy, which names the program
+\* only when `named` (its childPid is set).
+KillNamed(named) == prog' \in IF named THEN Killed ELSE {prog}
 
 \* The host fails to start because its files are missing or were rewritten.
 HostFailsToStart ==
@@ -164,14 +188,14 @@ CreateMakesDirectory ==
     /\ cpc = "alloc"
     /\ dir' = TRUE
     /\ cpc' = IF CreateRecordsHostPid THEN "launch" ELSE "write"
-    /\ UNCHANGED <<mst, mpid, morigin, mcode, wasTerminal, wasExited,
-                   ghostVars, sock, hostVars, shutVars, readerVars,
+    /\ UNCHANGED <<mst, mpid, morigin, mcode, mchild, wasTerminal, wasExited,
+                   wasNamed, ghostVars, sock, hostVars, shutVars, readerVars,
                    destroyVars>>
 
 \* allocateSession: writeManifest with status "running".
 CreateWritesManifest ==
     /\ cpc = "write"
-    /\ Write("running", CreateRecordsHostPid, "none", FALSE)
+    /\ Write("running", CreateRecordsHostPid, "none", FALSE, FALSE)
     /\ cpc' = IF CreateRecordsHostPid THEN "done" ELSE "launch"
     /\ UNCHANGED <<ghostVars, sock, hostVars, shutVars, readerVars,
                    destroyVars>>
@@ -182,8 +206,8 @@ CreateLaunchesHost ==
     /\ hostAlive' = TRUE
     /\ hpc' = "boot"
     /\ cpc' = IF CreateRecordsHostPid THEN "write" ELSE "done"
-    /\ UNCHANGED <<diskVars, ghostVars, sock, hex, rsz, shutVars, readerVars,
-                   destroyVars>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, hex, rsz, prog, shutVars,
+                   readerVars, destroyVars>>
 
 \* -------------------------------------------------------------------------
 \* The host's serial manifest writer (createSerialManifestWriter). Each write
@@ -204,11 +228,12 @@ DestroyingWriteAheadOfExit == hsd = "write" /\ hst = "destroyed"
 WriterStopped == HostSerializesWrites /\ HostStopsAfterTerminalWrite /\ hwt
 
 \* A host write lands, or writes nothing once the writer has stopped. The
-\* record carries the exit code once recordExit or recordDestroyed ran.
+\* record carries the exit code once recordExit or recordDestroyed ran, and
+\* the program's pid, which setChildPid records before the first host write.
 HostWrite(s, code) ==
     IF WriterStopped
     THEN UNCHANGED <<diskVars, hwt>>
-    ELSE /\ Write(s, TRUE, "none", code)
+    ELSE /\ Write(s, TRUE, "none", code, TRUE)
          /\ hwt' = (hwt \/ s \in Terminal)
 
 \* A write lands. When the queued "destroying" write is next, its turn starts
@@ -246,7 +271,8 @@ HostReadsManifest ==
     /\ IF mst = "running"
           THEN /\ hpc' = "open" /\ UNCHANGED <<hostAlive, hex, rsz, ghostVars>>
           ELSE HostFailsToStart
-    /\ UNCHANGED <<diskVars, sock, cpc, shutVars, readerVars, destroyVars>>
+    /\ UNCHANGED <<diskVars, sock, cpc, prog, shutVars, readerVars,
+                   destroyVars>>
 
 \* EventLog.open(events.jsonl, 'a') throws when the directory is gone. From
 \* there to `await writeManifest(mPath, state.snapshot())` near the end of
@@ -256,9 +282,9 @@ HostReadsManifest ==
 HostOpensLogAndSpawns ==
     /\ hostAlive /\ hpc = "open"
     /\ IF dir
-          THEN /\ hpc' = "pidwrite" /\ hex' = "wait"
+          THEN /\ hpc' = "pidwrite" /\ hex' = "wait" /\ prog' = TRUE
                /\ UNCHANGED <<hostAlive, rsz, ghostVars>>
-          ELSE HostFailsToStart
+          ELSE HostFailsToStart /\ UNCHANGED prog
     /\ UNCHANGED <<diskVars, sock, cpc, shutVars, readerVars, destroyVars>>
 
 \* The start-up write lands. It is the host's in-memory record, so it
@@ -268,8 +294,8 @@ HostWritesPids ==
     /\ HostWrite("running", FALSE)
     /\ hpc' = "sockdir"
     /\ dsnap' = NextTurn(ExitWriteAheadOfDestroying)
-    /\ UNCHANGED <<ghostVars, sock, cpc, hostAlive, hex, rsz, hst, hsd, sig,
-                   readerVars, destroyVars>>
+    /\ UNCHANGED <<ghostVars, sock, cpc, hostAlive, hex, rsz, prog, hst, hsd,
+                   sig, readerVars, destroyVars>>
 
 \* `if (!isSessionCommandable(state))` initiateShutdown, else
 \* rpcServer.listen().
@@ -280,8 +306,8 @@ HostListens ==
                /\ UNCHANGED <<hst, hsd, dsnap>>
           ELSE /\ hpc' = "idle" /\ UNCHANGED sock
                /\ StartShutdown(WriteQueued)
-    /\ UNCHANGED <<diskVars, ghostVars, cpc, hostAlive, hex, rsz, hwt, sig,
-                   readerVars, destroyVars>>
+    /\ UNCHANGED <<diskVars, ghostVars, cpc, hostAlive, hex, rsz, prog, hwt,
+                   sig, readerVars, destroyVars>>
 
 \* The resize handler: assertSessionCommandable, setDimensions in memory,
 \* then writeManifest with status "running". No write is queued then, so the
@@ -289,7 +315,7 @@ HostListens ==
 HostStartsResize ==
     /\ hostAlive /\ hpc = "serving" /\ hst = "running" /\ rsz = "none"
     /\ rsz' = "pending"
-    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, hex,
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, hex, prog,
                    shutVars, readerVars, destroyVars>>
 
 HostResizeWriteLands ==
@@ -297,8 +323,8 @@ HostResizeWriteLands ==
     /\ HostWrite("running", FALSE)
     /\ rsz' = "done"
     /\ dsnap' = NextTurn(ExitWriteAheadOfDestroying)
-    /\ UNCHANGED <<ghostVars, sock, cpc, hostAlive, hpc, hex, hst, hsd, sig,
-                   readerVars, destroyVars>>
+    /\ UNCHANGED <<ghostVars, sock, cpc, hostAlive, hpc, hex, prog, hst, hsd,
+                   sig, readerVars, destroyVars>>
 
 \* -------------------------------------------------------------------------
 \* host shutdown: the destroy handler, the SIGTERM handler, initiateShutdown
@@ -331,17 +357,33 @@ HostClosesSocket ==
     /\ UNCHANGED <<diskVars, ghostVars, cpc, hostVars, hst, dsnap, hwt, sig,
                    readerVars, destroyVars>>
 
+\* The kill timer of initiateShutdown fires: SHUTDOWN_KILL_GRACE_MS after
+\* pty.kill(), killProcessGroupBestEffort(pty.pid). clearTimeout stops it
+\* once ptyExitPromise settles, so it fires only while the host waits for
+\* the program. The host then sees the exit (ProgramExits). The rules do not
+\* depend on this kill, because handlePtyExit kills the group too. It makes
+\* destroy end within its wait, a time bound that the model does not check.
+HostKillsProgram ==
+    /\ hostAlive /\ hst = "destroying" /\ hex = "wait" /\ prog
+    /\ prog' = FALSE
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, hex, rsz,
+                   shutVars, readerVars, destroyVars>>
+
 \* -------------------------------------------------------------------------
 \* host exit path (pty.onExit -> handlePtyExit)
 
 \* The program ends: on its own, by the idle time-out, by a signal, or by
-\* the pty.kill of initiateShutdown. handlePtyExit: recordDestroyed when the
-\* status is "destroying", else recordExit (both in memory), then the 'exit'
-\* event append and persistManifest; no other process can see this step.
+\* the pty.kill or the kill timer of initiateShutdown. handlePtyExit: when
+\* the status is "destroying", killProcessGroupBestEffort(pty.pid) and
+\* recordDestroyed, else recordExit (all in memory), then the 'exit' event
+\* append and persistManifest; no other process can see this step. A process
+\* that a program left when it exited on its own is no longer the session's
+\* (see the Scope section of SKILL.md), so the model drops it.
 ProgramExits ==
     /\ hostAlive /\ hex = "wait"
     /\ hex' = "exitwrite"
     /\ hst' = IF hst = "destroying" THEN "destroyed" ELSE "exited"
+    /\ prog' \in IF hst = "destroying" THEN Killed ELSE {FALSE}
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, rsz, hsd,
                    dsnap, hwt, sig, readerVars, destroyVars>>
 
@@ -358,8 +400,8 @@ HostWritesExit ==
     /\ IF hsd = "none"
           THEN StartShutdown(FALSE)
           ELSE /\ dsnap' = NextTurn(FALSE) /\ UNCHANGED <<hst, hsd>>
-    /\ UNCHANGED <<ghostVars, sock, cpc, hostAlive, hpc, rsz, sig, readerVars,
-                   destroyVars>>
+    /\ UNCHANGED <<ghostVars, sock, cpc, hostAlive, hpc, rsz, prog, sig,
+                   readerVars, destroyVars>>
 
 \* runHost has returned and every handle is closed, so the `_host` process
 \* exits.
@@ -368,14 +410,16 @@ HostProcessEnds ==
     /\ hpc \in {"serving", "idle"} /\ rsz # "pending"
     /\ hostAlive' = FALSE
     /\ hpc' = "dead"
-    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hex, rsz, shutVars,
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hex, rsz, prog, shutVars,
                    readerVars, destroyVars>>
 
 \* SIGKILL, OOM, or an uncaught error, at any point. The socket file stays.
+\* The program can outlive the host: the closed PTY sends it SIGHUP, which a
+\* program can ignore. The model keeps it running, the worst case.
 HostCrashes ==
     /\ hostAlive
     /\ HostDies
-    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, shutVars, readerVars,
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, prog, shutVars, readerVars,
                    destroyVars>>
 
 \* -------------------------------------------------------------------------
@@ -395,34 +439,40 @@ ReconcileReads(p) ==
                /\ UNCHANGED rd
           ELSE /\ pc' = [pc EXCEPT ![p] = "r_check"]
                /\ rd' = [rd EXCEPT ![p] = [st |-> mst, pid |-> mpid,
-                                           code |-> mcode]]
+                                           code |-> mcode, child |-> mchild]]
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, gres,
                    lruns, destroyVars>>
 
-\* One synchronous block: isProcessAlive(hostPid), the pid check, and the
-\* kill of the child process if it is alive.
+\* One synchronous block: isProcessAlive(hostPid) and the pid check. The
+\* code kills the program after its re-read. Without ReconcileRereads it
+\* kills the program that the first copy names, here.
 ReconcileChecksHost(p) ==
     /\ pc[p] = "r_check"
     /\ pc' = [pc EXCEPT ![p] =
                 IF SkipsHost(rd[p]) THEN AfterReconcile(p)
                 ELSE IF ReconcileRereads THEN "r_reread"
                 ELSE "r_write"]
-    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, rd,
-                   gres, lruns, destroyVars>>
+    /\ IF SkipsHost(rd[p]) \/ ReconcileRereads
+          THEN UNCHANGED prog
+          ELSE KillNamed(rd[p].child)
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, hex, rsz,
+                   shutVars, rd, gres, lruns, destroyVars>>
 
 \* With ReconcileRereads: `current = readManifestIfExists`, taken after the
 \* host was found dead, so no host write can follow it; return when it is
-\* null or terminal, else reconcile from it.
+\* null or terminal, else killProcessGroupBestEffort(current.childPid) and
+\* reconcile from it.
 ReconcileRereadsManifest(p) ==
     /\ pc[p] = "r_reread"
     /\ IF mst = "none" \/ mst \in Terminal
           THEN /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
-               /\ UNCHANGED rd
+               /\ UNCHANGED <<rd, prog>>
           ELSE /\ pc' = [pc EXCEPT ![p] = "r_write"]
                /\ rd' = [rd EXCEPT ![p] = [st |-> mst, pid |-> mpid,
-                                           code |-> mcode]]
-    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, gres,
-                   lruns, destroyVars>>
+                                           code |-> mcode, child |-> mchild]]
+               /\ KillNamed(mchild)
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, hex, rsz,
+                   shutVars, gres, lruns, destroyVars>>
 
 \* writeManifest(reconciledManifest): "running" becomes failed/host-death,
 \* "destroying" becomes destroyed, any other status that gets here becomes
@@ -430,10 +480,10 @@ ReconcileRereadsManifest(p) ==
 ReconcileWrites(p) ==
     /\ pc[p] = "r_write"
     /\ CASE rd[p].st = "running" ->
-              Write("failed", FALSE, "host-death", rd[p].code)
+              Write("failed", FALSE, "host-death", rd[p].code, FALSE)
          [] rd[p].st = "destroying" ->
-              Write("destroyed", FALSE, "none", rd[p].code)
-         [] OTHER -> Write("failed", FALSE, "unknown", rd[p].code)
+              Write("destroyed", FALSE, "none", rd[p].code, FALSE)
+         [] OTHER -> Write("failed", FALSE, "unknown", rd[p].code, FALSE)
     /\ pc' = [pc EXCEPT ![p] = "r_unlink"]
     /\ UNCHANGED <<ghostVars, sock, cpc, hostVars, shutVars, rd, gres, lruns,
                    destroyVars>>
@@ -496,11 +546,11 @@ GcFinalRead ==
 GcRemoves ==
     /\ pc["gc"] = "rm"
     /\ dir' = FALSE /\ mst' = "none" /\ mpid' = FALSE /\ morigin' = "none"
-    /\ mcode' = FALSE
+    /\ mcode' = FALSE /\ mchild' = FALSE
     /\ pc' = [pc EXCEPT !["gc"] = "done"]
     /\ gres' = "removed"
-    /\ UNCHANGED <<wasTerminal, wasExited, ghostVars, sock, cpc, hostVars,
-                   shutVars, rd, lruns, destroyVars>>
+    /\ UNCHANGED <<wasTerminal, wasExited, wasNamed, ghostVars, sock, cpc,
+                   hostVars, shutVars, rd, lruns, destroyVars>>
 
 \* -------------------------------------------------------------------------
 \* list: another command that reconciles this session (see the header)
@@ -516,7 +566,7 @@ ListStartsReconcile ==
 \* destroy (destroySession). Its reconcileSession calls are the "list"
 \* process's reconciles, so after each one this process only reads.
 
-ReadCopy == [pid |-> mpid, origin |-> morigin, code |-> mcode]
+ReadCopy == [pid |-> mpid, origin |-> morigin, code |-> mcode, child |-> mchild]
 
 DestroyEnds(result) ==
     /\ dpc' = "done" /\ dres' = result /\ drd' = NoRead
@@ -558,7 +608,8 @@ DestroyReads ==
 \* removed in the meantime (coder/agent-tty#196).
 DestroyWritesDestroyed ==
     /\ dpc = "twrite"
-    /\ Write("destroyed", drd.pid, drd.origin, DestroyKeepsExitCode /\ drd.code)
+    /\ Write("destroyed", drd.pid, drd.origin, DestroyKeepsExitCode /\ drd.code,
+             drd.child)
     /\ dpc' = "tunlink" /\ drd' = NoRead /\ dsaw' = TRUE
     /\ UNCHANGED <<ghostVars, sock, cpc, hostVars, shutVars, readerVars,
                    dforce, dres, dkill>>
@@ -571,17 +622,18 @@ DestroyUnlinksSocket ==
     /\ UNCHANGED <<diskVars, ghostVars, cpc, hostVars, shutVars, readerVars,
                    dforce, drd, dsaw, dkill>>
 
-\* --force, stopSessionProcesses: killProcessBestEffort(childPid) and
-\* killProcessBestEffort(hostPid), one synchronous block. The program ends
-\* with the host, so waitForProcessesToExit then returns at once. With
-\* DestroyRecordsDestroyed destroy reads the manifest again. Without it,
-\* destroy goes to the reconcile and final read of the code before
-\* recordDestroyed.
+\* --force, stopSessionProcesses: killProcessGroupBestEffort(childPid) and
+\* killProcessBestEffort(hostPid), one synchronous block. Then
+\* waitForProcessesToExit returns once the host and the program's group are
+\* gone. With DestroyRecordsDestroyed destroy reads the manifest again.
+\* Without it, destroy goes to the reconcile and final read of the code
+\* before recordDestroyed.
 DestroyKills ==
     /\ dpc = "kill"
     /\ IF drd.pid /\ hostAlive
           THEN /\ HostDies /\ dkill' = TRUE
-          ELSE UNCHANGED <<hostVars, dkill>>
+          ELSE UNCHANGED <<hostAlive, hpc, hex, rsz, dkill>>
+    /\ KillNamed(drd.child)
     /\ dpc' = IF DestroyRecordsDestroyed THEN "reread" ELSE "final"
     /\ drd' = NoRead
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, shutVars, readerVars,
@@ -593,13 +645,15 @@ DestroyKills ==
 DestroyRereads ==
     /\ dpc = "reread"
     /\ IF mst = "none"
-          THEN DestroyEnds("error")
-          ELSE IF mst = "destroyed"
-          THEN /\ dpc' = "tunlink" /\ dsaw' = TRUE /\ UNCHANGED <<drd, dres>>
-          ELSE /\ dpc' = "twrite" /\ drd' = ReadCopy
-               /\ UNCHANGED <<dres, dsaw>>
-    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
-                   readerVars, dforce, dkill>>
+          THEN DestroyEnds("error") /\ UNCHANGED prog
+          ELSE /\ KillNamed(mchild)
+               /\ IF mst = "destroyed"
+                     THEN /\ dpc' = "tunlink" /\ dsaw' = TRUE
+                          /\ UNCHANGED <<drd, dres>>
+                     ELSE /\ dpc' = "twrite" /\ drd' = ReadCopy
+                          /\ UNCHANGED <<dres, dsaw>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, hex, rsz,
+                   shutVars, readerVars, dforce, dkill>>
 
 \* sendRpc(socketFile, 'destroy') reaches the host, whose destroy handler
 \* calls startShutdown and answers. The host does the work, so this is one
@@ -653,7 +707,7 @@ Next ==
     \/ HostReadsManifest \/ HostOpensLogAndSpawns \/ HostWritesPids
     \/ HostListens \/ HostStartsResize \/ HostResizeWriteLands
     \/ HostGetsSigterm \/ HostWritesDestroying \/ HostClosesSocket
-    \/ ProgramExits \/ HostWritesExit \/ HostProcessEnds
+    \/ HostKillsProgram \/ ProgramExits \/ HostWritesExit \/ HostProcessEnds
     \/ HostCrashes
     \/ \E p \in Readers :
           \/ ReconcileReads(p) \/ ReconcileChecksHost(p)
@@ -673,8 +727,8 @@ Spec == Init /\ [][Next]_vars
 \* Rules. check.sh runs each one on its own.
 
 TypeOK ==
-    /\ {dir, mpid, wasTerminal, wasExited, startFailed, sock, hostAlive, sig,
-        dforce, dsaw, dkill} \subseteq BOOLEAN
+    /\ {dir, mpid, mchild, wasTerminal, wasExited, wasNamed, startFailed, sock,
+        hostAlive, prog, sig, dforce, dsaw, dkill} \subseteq BOOLEAN
     /\ mst \in {"none", "running", "destroying", "exited", "failed",
                 "destroyed"}
     /\ morigin \in {"none", "host-death", "unknown"}
@@ -687,7 +741,8 @@ TypeOK ==
     /\ lruns \in 0..MaxListReconciles
     /\ dres \in {"pending", "ok", "error"}
     /\ {hwt, mcode} \subseteq BOOLEAN
-    /\ (mst = "none") => ~mcode
+    /\ (mst = "none") => ~mcode /\ ~mchild
+    /\ mchild => wasNamed
     /\ (hostAlive /\ hsd = "write" /\ dsnap = "none") =>
           (hpc = "pidwrite" \/ rsz = "pending" \/ ExitWriteAheadOfDestroying)
 
@@ -732,13 +787,19 @@ HostStartsWhenCreated == ~startFailed
 \* terminal sessions, never races a host write.
 TerminalIsLastWrite == mst \in Terminal => ~HostMayStillWrite
 
-\* R8: the manifest says destroyed only after the program has ended. A dead
-\* host ends its program (see the Scope section of SKILL.md).
+\* R8: the manifest says destroyed only after the host saw the program end.
+\* R10 covers a program that outlives its host.
 DestroyedOnlyWhenEnded ==
     (mst = "destroyed" /\ hostAlive) => hex \in {"exitwrite", "done"}
 
 \* R9: destroy reports success only after it wrote destroyed or read it.
 DestroyEndsDestroyed == dres = "ok" => dsaw
+
+\* R10: the manifest says destroyed only when no process of the program's
+\* process group runs. A program that no manifest named is out of reach:
+\* its host died before the start-up write (see the Scope section of
+\* SKILL.md).
+DestroyedProgramStopped == (mst = "destroyed" /\ wasNamed) => ~prog
 
 \* Witnesses. check.sh expects TLC to report each one VIOLATED, which shows
 \* that the model reaches the state: the rules above are not true only
@@ -757,4 +818,5 @@ WitnessSigtermRecorded ==
 WitnessDestroyExitedSession ==
     ~(wasExited /\ mst = "destroyed" /\ dres = "ok")
 WitnessForceDestroyRecorded == ~(dkill /\ dres = "ok" /\ mst = "destroyed")
+WitnessProgramOutlivesHost == ~(prog /\ ~hostAlive /\ wasNamed)
 =============================================================================
