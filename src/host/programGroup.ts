@@ -274,9 +274,11 @@ export async function readProgramGroup(
   return { childPid, sessionDirectory };
 }
 
+// unknown: /proc refuses the boot id, or shows a member of the program's
+// session without an autogroup, so the group can still be ours.
 type GroupJudgement =
   | { readonly verdict: 'owned'; readonly witness: number }
-  | { readonly verdict: 'gone' | 'unproven' };
+  | { readonly verdict: 'gone' | 'unproven' | 'unknown' };
 
 export function judgeProgramGroup(
   record: ProvenRecord,
@@ -289,15 +291,21 @@ export function judgeProgramGroup(
   if (members.length === 0) {
     return { verdict: 'gone' };
   }
-  const witness =
-    bootId === record.bootId
-      ? members.find(
-          (row) => row.sid === record.pid && row.autogroup === record.autogroup,
-        )
-      : undefined;
-  return witness === undefined
-    ? { verdict: 'unproven' }
-    : { verdict: 'owned', witness: witness.pid };
+  if (bootId === null) {
+    return { verdict: 'unknown' };
+  }
+  if (bootId !== record.bootId) {
+    return { verdict: 'unproven' };
+  }
+  const witness = members.find(
+    (row) => row.sid === record.pid && row.autogroup === record.autogroup,
+  );
+  if (witness !== undefined) {
+    return { verdict: 'owned', witness: witness.pid };
+  }
+  return members.some((row) => row.sid === record.pid && row.autogroup === null)
+    ? { verdict: 'unknown' }
+    : { verdict: 'unproven' };
 }
 
 function toProcessRow(stat: ProcStat): ProcessRow {
@@ -453,11 +461,13 @@ export function isProgramGroupAlive(group: ProgramGroup | null): boolean {
   }
   const { verdict } = judgeLiveGroup(group);
   // A live member in view decides, because the members of a group share one
-  // session. With none in view, a zombie does not show the group gone, and
-  // /proc can refuse or hide a live member of another user, so the probe of
-  // a group without a token decides.
+  // session. A group that can be ours reads alive, so a wait times out
+  // instead of reporting it gone. With none in view, a zombie does not show
+  // the group gone, and /proc can refuse or hide a live member of another
+  // user, so the probe of a group without a token decides.
   return (
     verdict === 'owned' ||
+    verdict === 'unknown' ||
     (verdict === 'gone' && isProcessGroupAlive(group.pid))
   );
 }

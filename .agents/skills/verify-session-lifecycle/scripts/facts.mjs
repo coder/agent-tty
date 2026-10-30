@@ -758,7 +758,9 @@ function ownershipFacts() {
     judge.includes(
       "(row) => row.pgid === record.pid && row.state !== 'Z' && row.state !== 'X'",
     ) &&
-    judge.includes('bootId === record.bootId') &&
+    judge.includes(
+      "if (bootId !== record.bootId) { return { verdict: 'unproven' }; }",
+    ) &&
     judge.includes(
       '(row) => row.sid === record.pid && row.autogroup === record.autogroup',
     );
