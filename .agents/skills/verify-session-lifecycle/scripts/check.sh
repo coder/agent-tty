@@ -55,6 +55,9 @@ sha256() {
 
 # --- tools ---------------------------------------------------------------
 
+case "$JOBS" in
+  *[!0-9]* | 0*) die "CHECK_JOBS must be a positive integer, not '$JOBS'" ;;
+esac
 command -v node >/dev/null 2>&1 || die "node is not on PATH"
 # `java -version` prints `version "11.0.2"`, or `version "1.8.0_292"` for Java 8.
 java_out=$("$JAVA" -version 2>&1) || die "Java 11+ is needed (set JAVA=/path/to/java)"
@@ -74,6 +77,8 @@ fi
 
 OUT=${CHECK_OUT:-$(mktemp -d "${TMPDIR:-/tmp}/session-lifecycle-check.XXXXXX")}
 mkdir -p "$OUT"
+# Each TLC run changes into its own folder, so a relative path would break.
+OUT=$(cd "$OUT" && pwd)
 
 # --- facts from the code -------------------------------------------------
 
