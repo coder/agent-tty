@@ -24,7 +24,10 @@ vi.mock('node:fs', async () => {
           ...rest,
         )) as typeof actual.readdirSync;
   const readFileSync = ((path: string, ...rest: unknown[]) => {
-    if (fsHooks.mountinfo !== undefined && path === '/proc/self/mountinfo') {
+    if (fsHooks.proc !== undefined && path === '/proc/self/mountinfo') {
+      if (fsHooks.mountinfo === undefined) {
+        throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      }
       return fsHooks.mountinfo;
     }
     const pid = /^\/proc\/(\d+)\/stat$/.exec(path)?.[1];
@@ -108,10 +111,16 @@ function errno(code: string): Error {
   return Object.assign(new Error(code), { code });
 }
 
+function procMount(options: string): string {
+  return `22 1 0:21 / /proc rw,nosuid,nodev,noexec,relatime shared:12 - proc proc ${options}\n`;
+}
+
 // /proc shows one process of the program's group per state, under a command
 // name with spaces and parentheses, beside a process of another group and a
-// process that ends during the scan.
+// process that ends during the scan. Unless the test set its own, /proc is
+// mounted without hidepid, so the result does not depend on the host.
 function procShowsGroup(...states: string[]): void {
+  fsHooks.mountinfo ??= procMount('rw');
   fsHooks.proc = new Map<string, string | Error>([
     ['1', '1 (init) S 0 1 1 0 -1'],
     ['2', errno('ESRCH')],
@@ -473,7 +482,7 @@ describe('isProcessGroupAlive', () => {
     'on linux, when /proc is mounted with %s, counts a zombie group alive',
     (option) => {
       Object.defineProperty(process, 'platform', { value: 'linux' });
-      fsHooks.mountinfo = `22 1 0:21 / /proc rw,nosuid,nodev,noexec,relatime shared:12 - proc proc rw,${option}\n`;
+      fsHooks.mountinfo = procMount(`rw,${option}`);
       procShowsGroup('Z');
       probeEnds('ok');
 
