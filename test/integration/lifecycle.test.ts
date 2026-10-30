@@ -1108,7 +1108,11 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
       // The unrelated group's parent exits, so init reaps it as soon as a
       // kill ends it.
-      async function pointSessionAtUnrelatedGroup(): Promise<string> {
+      async function pointSessionAtUnrelatedGroup(
+        rewriteProgram: (program: Record<string, unknown>) => string = (
+          program,
+        ) => JSON.stringify({ ...program, pid: unrelated }),
+      ): Promise<string> {
         const sessionId = createSession(testHome, [
           '/bin/sh',
           '-c',
@@ -1138,10 +1142,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         const program = JSON.parse(
           await readFile(programRecordPath(directory), 'utf8'),
         ) as Record<string, unknown>;
-        await writeFile(
-          programRecordPath(directory),
-          JSON.stringify({ ...program, pid: unrelated }),
-        );
+        await writeFile(programRecordPath(directory), rewriteProgram(program));
         const manifest = SessionRecordSchema.parse(
           JSON.parse(await readFile(manifestPath(directory), 'utf8')),
         );
@@ -1175,6 +1176,43 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
         expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
         await expectUnrelatedAlive();
+      });
+
+      describe.each([
+        ['corrupt JSON', () => '{'],
+        [
+          'a record of another version',
+          (program: Record<string, unknown>) =>
+            JSON.stringify({ ...program, version: 2, pid: unrelated }),
+        ],
+      ])('and a program.json with %s', (_name, rewriteProgram) => {
+        it('list shows the session failed and leaves the group running', async () => {
+          const sessionId = await pointSessionAtUnrelatedGroup(rewriteProgram);
+
+          const result = runCli(['list', '--all', '--json'], {
+            AGENT_TTY_HOME: testHome,
+          });
+          const sessions = (
+            JSON.parse(result.stdout) as SuccessEnvelope<{
+              sessions: SessionSummary[];
+            }>
+          ).result.sessions;
+          expect(
+            sessions.find((session) => session.sessionId === sessionId),
+          ).toMatchObject({ status: 'failed' });
+          await expectUnrelatedAlive();
+        });
+
+        it('destroy --force records the session destroyed and leaves the group running', async () => {
+          const sessionId = await pointSessionAtUnrelatedGroup(rewriteProgram);
+
+          const result = runCli(['destroy', sessionId, '--force', '--json'], {
+            AGENT_TTY_HOME: testHome,
+          });
+          expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
+          expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+          await expectUnrelatedAlive();
+        });
       });
     },
   );
