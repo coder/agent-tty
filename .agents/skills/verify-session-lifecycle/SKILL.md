@@ -177,7 +177,7 @@ node --import tsx src/cli/main.ts inspect "$id" --json           # status: destr
 
 Without the guard, `writeManifest` went through `writeTextFileAtomic`, which runs `mkdir` before every write. A manifest write that landed after gc removed the session folder created the folder again, holding only `session.json`. `destroy` and `reconcileSession` both did that, and `list --all` showed the stub session until the next gc.
 
-Now `writeManifest` writes the temp file and renames it with no `mkdir`, so a write into a removed folder fails with `SESSION_NOT_FOUND`. `reconcileSession` then returns. `destroy` reports `SESSION_NOT_FOUND`, as it does when its reads find no manifest. A host write fails and the host ends.
+Now `writeManifest` writes the temp file and renames it with no `mkdir`, so a write into a removed folder fails with `SESSION_NOT_FOUND`. `reconcileSession` then returns. `destroy` reports `SESSION_NOT_FOUND`, as it does when its reads find no manifest. A host write fails too. A failed start-up or exit write ends the host, and a failed resize write fails only that RPC.
 
 ```sh
 id=$(node --import tsx src/cli/main.ts create --json -- sleep 300 | node -e 'let s="";process.stdin.on("data",(d)=>(s+=d)).on("end",()=>console.log(JSON.parse(s).result.sessionId))')
@@ -211,7 +211,7 @@ It assumes:
 - A pid is not reused while the check looks at it, so `isProcessAlive(hostPid)` is true exactly while the host lives.
 - A manifest write is atomic, because `writeManifest` renames a temp file. A write that fails counts as a host crash or a failed command. That covers a host write into a removed folder, which only a state that already breaks R1 reaches.
 - The host waits for its manifest while the `create` process lives, so it gives up only when `create` dies before that write. That counts as a host crash, which R6 does not cover.
-- gc's `rm(sessionDirectory, { recursive: true })` is one step, though the real `rm` deletes file by file. R1 already forbids removing a session whose host can still write, so the order of the deleted files does not matter.
+- gc's `rm(sessionDirectory, { recursive: true })` is one step, though the real `rm` deletes file by file. R1 already forbids removing a session whose host can still write, so for the host the order of the deleted files does not matter. R10 is different. A reconcile or `destroy` write that lands during the real `rm` makes it fail with `ENOTEMPTY` and leaves the folder with only `session.json`, until the next gc removes it (coder/agent-tty#202).
 - Steps that only lead to the same outcome are joined: gc's `readdir` and `stat` (both only skip), the host's `EventLog.open` and `createPty` (synchronous after the open), and `recordExit` with the `exit` event append (no other process sees them).
 - A program ends with its host: a host crash or the SIGKILL of `destroy --force` ends both. `reconcileSession` also kills a live child of a dead host, which the model leaves out.
 - The `destroy` RPC is one step: the host's handler does the work. `destroySession`'s own `reconcileSession` calls are the reconciles of the other command, so `destroy` itself only reads after them. A poll that reads an active status is either retried later or is the last of its 50 tries.
