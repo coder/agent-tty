@@ -494,15 +494,11 @@ async function recordDestroyed(
     'recordDestroyed needs a terminal manifest or dead session processes',
   );
   if (!isDestroyedSessionStatus(manifest.status)) {
-    await writeManifest(
-      manifestFile,
-      {
-        ...manifest,
-        status: 'destroyed',
-        updatedAt: new Date().toISOString(),
-      },
-      false,
-    );
+    await writeManifest(manifestFile, {
+      ...manifest,
+      status: 'destroyed',
+      updatedAt: new Date().toISOString(),
+    });
   }
   await unlinkIfPresent(socketFile);
 }

@@ -109,9 +109,7 @@ export const step = (action, from, to) => {
         ? 'destroy reads the manifest and fails'
         : 'destroy reads the manifest';
     case 'DestroyWritesDestroyed':
-      return to.dpc === 'done'
-        ? 'destroy cannot write, the folder is gone'
-        : 'destroy writes "destroyed"';
+      return 'destroy writes "destroyed"';
     case 'DestroyUnlinksSocket':
       return 'destroy unlinks the socket file and succeeds';
     case 'DestroyKills':

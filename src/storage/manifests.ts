@@ -26,7 +26,6 @@ export interface WriteValidatedJsonFileOptions<T> {
   data: T;
   writeErrorMessage: string;
   validate: (path: string, data: unknown) => T;
-  createDirectory?: boolean;
 }
 
 export interface WriteTextFileAtomicOptions {
@@ -34,7 +33,6 @@ export interface WriteTextFileAtomicOptions {
   pathLabel: string;
   contents: string;
   writeErrorMessage: string;
-  createDirectory?: boolean;
 }
 
 function assertAbsoluteStoragePath(path: string, label: string): void {
@@ -108,9 +106,7 @@ export async function writeTextFileAtomic(
   const temporaryPath = `${options.path}.tmp-${randomUUID()}`;
 
   try {
-    if (options.createDirectory ?? true) {
-      await mkdir(outputDirectory, { recursive: true });
-    }
+    await mkdir(outputDirectory, { recursive: true });
     await writeFile(temporaryPath, options.contents, {
       encoding: 'utf8',
       mode: 0o600,
@@ -136,7 +132,6 @@ export async function writeValidatedJsonFile<T>(
     pathLabel: options.pathLabel,
     contents: `${JSON.stringify(validatedData, null, 2)}\n`,
     writeErrorMessage: options.writeErrorMessage,
-    createDirectory: options.createDirectory ?? true,
   });
 }
 
@@ -187,7 +182,6 @@ export async function readManifestIfExists(
 export async function writeManifest(
   path: string,
   record: SessionRecord,
-  createDirectory = true,
 ): Promise<void> {
   await writeValidatedJsonFile({
     path,
@@ -195,6 +189,5 @@ export async function writeManifest(
     data: record,
     writeErrorMessage: `Failed to write session manifest at ${path}.`,
     validate: validateManifestData,
-    createDirectory,
   });
 }
