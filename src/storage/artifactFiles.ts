@@ -53,8 +53,13 @@ async function createWithoutReplacing(
 // O_NOFOLLOW fails with ELOOP only when the final path component is a
 // symlink, so a symlink at the artifact name is never reused. It does not
 // check the parent folders, and a hard link still counts as a regular file.
+// O_NONBLOCK keeps a FIFO at the name from blocking the open until a writer
+// appears. It has no effect on reads from a regular file.
 async function readRegularFile(path: string): Promise<Buffer> {
-  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const handle = await open(
+    path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
   try {
     if (!(await handle.stat()).isFile()) {
       throw new Error(`${path} is not a regular file`);
