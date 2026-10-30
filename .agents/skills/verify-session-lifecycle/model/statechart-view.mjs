@@ -28,6 +28,7 @@ export const state = (v) => {
   let host;
   if (!v.hostAlive) {
     host = v.hpc === 'none' ? 'Host not started' : 'Host gone';
+    host += v.prog ? ', program runs' : '';
   } else if (['boot', 'open', 'pidwrite', 'sockdir'].includes(v.hpc)) {
     host = v.hex === 'wait' ? 'Host starting, program runs' : 'Host starting';
   } else if (v.hex === 'wait' && v.hst === 'destroying') {
@@ -72,8 +73,12 @@ export const step = (action, from, to) => {
       return from.mst === to.mst && from.dir === to.dir
         ? 'the host skips its shutdown write'
         : `the host shutdown write lands: ${to.mst}`;
+    case 'HostKillsProgram':
+      return "the kill timer kills the program's process group";
     case 'ProgramExits':
-      return 'the program ends';
+      return to.prog
+        ? 'the program ends, a process of its group still runs'
+        : 'the program ends';
     case 'HostWritesExit':
       return from.mst === to.mst && from.dir === to.dir
         ? 'the host skips its exit write'
@@ -119,7 +124,7 @@ export const step = (action, from, to) => {
     case 'DestroyUnlinksSocket':
       return 'destroy unlinks the socket file and succeeds';
     case 'DestroyKills':
-      return 'destroy --force kills the host and the program';
+      return "destroy --force kills the host and the program's group";
     case 'DestroyRereads':
       return 'destroy reads the manifest after the kill';
     case 'DestroySendsRpc':

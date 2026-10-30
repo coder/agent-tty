@@ -392,8 +392,10 @@ function destroyFacts() {
     'stopSessionProcesses',
   ).body;
   const stopWaits =
-    indexOfStatement(stop, /^killProcessBestEffort\(manifest\.childPid\);$/) >=
-      0 &&
+    indexOfStatement(
+      stop,
+      /^killProcessGroupBestEffort\(manifest\.childPid\);$/,
+    ) >= 0 &&
     indexOfStatement(stop, /^killProcessBestEffort\(manifest\.hostPid\);$/) >=
       0 &&
     indexOfStatement(stop, /^const stopped = await waitForProcessesToExit\(/) >=
@@ -404,7 +406,8 @@ function destroyFacts() {
     'waitForProcessesToExit',
   );
   const waitsForProcessesOnly =
-    calls(wait.body, 'isProcessAlive').length === 2 &&
+    calls(wait.body, 'isProcessAlive').length === 1 &&
+    calls(wait.body, 'isProcessGroupAlive').length === 1 &&
     calls(wait.body, 'stat').length === 0 &&
     calls(wait.body, 'pathExists').length === 0;
   return {
@@ -448,6 +451,88 @@ function manifestWriteFacts() {
   };
   visit(requireDeclaration(file, 'writeManifest'));
   return { ManifestWriteNeedsFolder: renames > 0 && mkdirs === 0 };
+}
+
+// Every kill of the program that a rule depends on SIGKILLs its process
+// group, and destroy --force waits until the group is gone: the helpers
+// signal the negated group id outside Windows, stopSessionProcesses and waitForProcessesToExit
+// use them, reconcileSession kills the group that its re-read names, and
+// handlePtyExit kills the group before it records destroyed.
+function programGroupFacts() {
+  const lifecycle = 'src/host/lifecycle.ts';
+  const negates = requireDeclaration(
+    lifecycle,
+    'processGroupTarget',
+  ).body.statements.some(
+    (st) =>
+      ts.isReturnStatement(st) &&
+      normalize(st.expression?.getText() ?? '') ===
+        "process.platform === 'win32' ? pgid : -pgid",
+  );
+  const signalsGroup = (name, signal) =>
+    calls(requireDeclaration(lifecycle, name).body, 'kill').some(
+      (call) =>
+        normalize(call.getText()) ===
+        `process.kill(processGroupTarget(pgid), ${signal})`,
+    );
+  const helpers =
+    negates &&
+    signalsGroup('killProcessGroupBestEffort', "'SIGKILL'") &&
+    signalsGroup('isProcessGroupAlive', '0');
+  const stop = requireDeclaration(lifecycle, 'stopSessionProcesses').body;
+  const forceKills =
+    indexOfStatement(
+      stop,
+      /^killProcessGroupBestEffort\(manifest\.childPid\);$/,
+    ) >= 0;
+  const probes = calls(
+    requireDeclaration(lifecycle, 'waitForProcessesToExit').body,
+    'isProcessGroupAlive',
+  );
+  const forceWaits =
+    probes.length === 1 && probes[0].arguments[0]?.getText() === 'childPid';
+  const reconcile = requireDeclaration(lifecycle, 'reconcileSession').body;
+  const rereadGuard = guardIndex(
+    reconcile,
+    'current === null || isTerminalSessionStatus(current.status)',
+    ts.SyntaxKind.ReturnStatement,
+  );
+  const reconcileKills =
+    rereadGuard >= 0 &&
+    indexOfStatement(
+      reconcile,
+      /^killProcessGroupBestEffort\(current\.childPid\);$/,
+    ) ===
+      rereadGuard + 1;
+  let exitKills = false;
+  walk(requireDeclaration('src/host/hostMain.ts', 'runHost').body, (node) => {
+    if (
+      !ts.isVariableDeclaration(node) ||
+      node.name.getText() !== 'handlePtyExit'
+    ) {
+      return;
+    }
+    walk(node, (inner) => {
+      if (
+        ts.isIfStatement(inner) &&
+        normalize(inner.expression.getText()) ===
+          "currentStatus === 'destroying'" &&
+        ts.isBlock(inner.thenStatement)
+      ) {
+        const block = inner.thenStatement;
+        const kill = indexOfStatement(
+          block,
+          /^killProcessGroupBestEffort\(pty\.pid\);$/,
+        );
+        const record = indexOfStatement(block, /^state\.recordDestroyed\(/);
+        exitKills = kill >= 0 && kill < record;
+      }
+    });
+  });
+  return {
+    KillsProgramGroup:
+      helpers && forceKills && forceWaits && reconcileKills && exitKills,
+  };
 }
 
 function gcFacts() {
@@ -528,6 +613,9 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'launchHost'],
   ['src/host/lifecycle.ts', 'isProcessAlive'],
   ['src/host/lifecycle.ts', 'killProcessBestEffort'],
+  ['src/host/lifecycle.ts', 'processGroupTarget'],
+  ['src/host/lifecycle.ts', 'isProcessGroupAlive'],
+  ['src/host/lifecycle.ts', 'killProcessGroupBestEffort'],
   ['src/host/lifecycle.ts', 'readSessionManifestOrThrow'],
   ['src/host/lifecycle.ts', 'waitForTerminalManifest'],
   ['src/host/lifecycle.ts', 'waitForProcessesToExit'],
@@ -537,6 +625,7 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'reconcileSession'],
   ['src/host/hostMain.ts', 'waitForManifestFromCreate'],
   ['src/host/hostMain.ts', 'isSessionCommandable'],
+  ['src/host/hostMain.ts', 'SHUTDOWN_KILL_GRACE_MS'],
   ['src/host/manifestWriter.ts', 'createSerialManifestWriter'],
   ['src/host/rpcClient.ts', 'toTransportCliError'],
   ['src/host/sessionState.ts', 'SessionState.setDimensions'],
@@ -763,6 +852,7 @@ const constants = {
   ...hostFacts(),
   ...destroyFacts(),
   ...manifestWriteFacts(),
+  ...programGroupFacts(),
   ...policyFacts(),
 };
 console.log(

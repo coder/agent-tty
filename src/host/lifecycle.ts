@@ -199,6 +199,52 @@ function killProcessBestEffort(pid: number | null): void {
   }
 }
 
+// node-pty starts the program as a session leader, so the program's pid is
+// also the id of its process group, which the program cannot leave. Windows
+// has no process groups, so there the kill reaches the program's pid only.
+function processGroupTarget(pgid: number): number {
+  // process.kill(-0) signals the caller's own group, process.kill(-1) every
+  // process that the caller may signal.
+  invariant(
+    Number.isInteger(pgid) && pgid > 1,
+    'process group id must be an integer above 1',
+  );
+  return process.platform === 'win32' ? pgid : -pgid;
+}
+
+export function isProcessGroupAlive(pgid: number | null): boolean {
+  if (pgid === null) {
+    return false;
+  }
+
+  try {
+    process.kill(processGroupTarget(pgid), 0);
+    return true;
+  } catch (error) {
+    if (hasErrorCode(error, 'ESRCH')) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+export function killProcessGroupBestEffort(pgid: number | null): void {
+  if (pgid === null) {
+    return;
+  }
+
+  try {
+    process.kill(processGroupTarget(pgid), 'SIGKILL');
+  } catch (error) {
+    if (hasErrorCode(error, 'ESRCH')) {
+      return;
+    }
+
+    throw error;
+  }
+}
+
 async function unlinkIfPresent(path: string): Promise<void> {
   try {
     await unlink(path);
@@ -302,7 +348,7 @@ async function waitForProcessesToExit(
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     throwIfAborted(signal);
-    if (!isProcessAlive(hostPid) && !isProcessAlive(childPid)) {
+    if (!isProcessAlive(hostPid) && !isProcessGroupAlive(childPid)) {
       return true;
     }
 
@@ -490,7 +536,8 @@ async function recordDestroyed(
 ): Promise<void> {
   invariant(
     isTerminalSessionStatus(manifest.status) ||
-      (!isProcessAlive(manifest.hostPid) && !isProcessAlive(manifest.childPid)),
+      (!isProcessAlive(manifest.hostPid) &&
+        !isProcessGroupAlive(manifest.childPid)),
     'recordDestroyed needs a terminal manifest or dead session processes',
   );
   if (!isDestroyedSessionStatus(manifest.status)) {
@@ -508,7 +555,7 @@ async function stopSessionProcesses(
   sessionDirectory: string,
   signal: AbortSignal | undefined,
 ): Promise<void> {
-  killProcessBestEffort(manifest.childPid);
+  killProcessGroupBestEffort(manifest.childPid);
   killProcessBestEffort(manifest.hostPid);
 
   const stopped = await waitForProcessesToExit(
@@ -697,14 +744,13 @@ export async function reconcileSession(
     return;
   }
 
-  if (manifest.childPid !== null && isProcessAlive(manifest.childPid)) {
-    killProcessBestEffort(manifest.childPid);
-  }
-
   const current = await readManifestIfExists(manifestFile);
   if (current === null || isTerminalSessionStatus(current.status)) {
     return;
   }
+  // The program can outlive its host. This copy names it even when the first
+  // read came before the host's start-up write.
+  killProcessGroupBestEffort(current.childPid);
 
   let reconciledStatus: SessionRecord['status'];
   let failureReason: string | undefined;
