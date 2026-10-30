@@ -199,19 +199,6 @@ function killProcessBestEffort(pid: number | null): void {
   }
 }
 
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) {
-      return false;
-    }
-
-    throw error;
-  }
-}
-
 async function unlinkIfPresent(path: string): Promise<void> {
   try {
     await unlink(path);
@@ -294,10 +281,9 @@ async function waitForTerminalManifest(
   return null;
 }
 
-async function waitForProcessAndSocketShutdown(
+async function waitForProcessesToExit(
   hostPid: number | null,
   childPid: number | null,
-  socketFile: string,
   maxAttempts: number = DESTROY_MAX_ATTEMPTS,
   intervalMs: number = DESTROY_POLL_INTERVAL_MS,
   options: PollOptions = {},
@@ -316,11 +302,7 @@ async function waitForProcessAndSocketShutdown(
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     throwIfAborted(signal);
-    const hostAlive = isProcessAlive(hostPid);
-    const childAlive = isProcessAlive(childPid);
-    const socketPresent = await pathExists(socketFile);
-
-    if (!hostAlive && !childAlive && !socketPresent) {
+    if (!isProcessAlive(hostPid) && !isProcessAlive(childPid)) {
       return true;
     }
 
@@ -501,6 +483,23 @@ export function launchHost(config: LaunchHostConfig): number {
   return child.pid;
 }
 
+// Every successful destroy ends here, with a manifest that no host write can
+// follow: a terminal one, or one read after both processes died.
+async function recordDestroyed(
+  manifestFile: string,
+  socketFile: string,
+  manifest: SessionRecord,
+): Promise<void> {
+  if (!isDestroyedSessionStatus(manifest.status)) {
+    await writeManifest(manifestFile, {
+      ...manifest,
+      status: 'destroyed',
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  await unlinkIfPresent(socketFile);
+}
+
 export interface DestroySessionOptions {
   readonly signal?: AbortSignal;
 }
@@ -524,14 +523,7 @@ export async function destroySession(
   }
 
   if (isTerminalSessionStatus(manifest.status)) {
-    const destroyedManifest: SessionRecord = {
-      ...manifest,
-      status: 'destroyed',
-      updatedAt: new Date().toISOString(),
-    };
-
-    await writeManifest(manifestFile, destroyedManifest);
-    await unlinkIfPresent(socketFile);
+    await recordDestroyed(manifestFile, socketFile, manifest);
     return;
   }
 
@@ -539,31 +531,29 @@ export async function destroySession(
     killProcessBestEffort(manifest.childPid);
     killProcessBestEffort(manifest.hostPid);
 
-    await waitForProcessAndSocketShutdown(
+    const stopped = await waitForProcessesToExit(
       manifest.hostPid,
       manifest.childPid,
-      socketFile,
       DESTROY_MAX_ATTEMPTS,
       DESTROY_POLL_INTERVAL_MS,
       pollOptions(signal),
     );
-    await reconcileSession(sessionDirectory);
-
-    const reconciledManifest = await readSessionManifestOrThrow(
-      sessionId,
-      manifestFile,
-    );
-    if (isTerminalSessionStatus(reconciledManifest.status)) {
-      return;
+    if (!stopped) {
+      throw makeCliError(ERROR_CODES.HOST_TIMEOUT, {
+        message: `Timed out forcing session "${sessionId}" to exit.`,
+        details: {
+          sessionId,
+          sessionDirectory,
+        },
+      });
     }
 
-    throw makeCliError(ERROR_CODES.HOST_TIMEOUT, {
-      message: `Timed out forcing session "${sessionId}" to exit.`,
-      details: {
-        sessionId,
-        sessionDirectory,
-      },
-    });
+    await recordDestroyed(
+      manifestFile,
+      socketFile,
+      await readSessionManifestOrThrow(sessionId, manifestFile),
+    );
+    return;
   }
 
   try {
@@ -583,6 +573,7 @@ export async function destroySession(
       manifestFile,
     );
     if (isTerminalSessionStatus(reconciledManifest.status)) {
+      await recordDestroyed(manifestFile, socketFile, reconciledManifest);
       return;
     }
 
@@ -596,6 +587,7 @@ export async function destroySession(
     pollOptions(signal),
   );
   if (terminalManifest !== null) {
+    await recordDestroyed(manifestFile, socketFile, terminalManifest);
     return;
   }
 
@@ -605,6 +597,7 @@ export async function destroySession(
     manifestFile,
   );
   if (isTerminalSessionStatus(reconciledManifest.status)) {
+    await recordDestroyed(manifestFile, socketFile, reconciledManifest);
     return;
   }
 
