@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { chmod, mkdir, readdir, stat, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import process from 'node:process';
@@ -29,6 +29,14 @@ import {
 import { makeAbortError, throwIfAborted } from '../util/abort.js';
 import { invariant } from '../util/assert.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
+import {
+  isProgramGroupAlive,
+  parseProcStat,
+  readProgramGroup,
+  readProvenProgramGroup,
+  stopProgramGroup,
+  type ProgramGroup,
+} from './programGroup.js';
 import { sendRpc } from './rpcClient.js';
 
 const DESTROY_POLL_INTERVAL_MS = 100;
@@ -200,142 +208,9 @@ function killProcessBestEffort(pid: number | null): void {
   }
 }
 
-// node-pty starts the program as a session leader, so the program's pid is
-// also the id of its process group, which the program cannot leave. Windows
-// has no process groups, so there the kill reaches the program's pid only.
-function processGroupTarget(pgid: number): number {
-  // process.kill(-0) signals the caller's own group, process.kill(-1) every
-  // process that the caller may signal.
-  invariant(
-    Number.isInteger(pgid) && pgid > 1,
-    'process group id must be an integer above 1',
-  );
-  return process.platform === 'win32' ? pgid : -pgid;
-}
-
-// The fields of /proc/<pid>/stat from the state on: state, ppid, pgrp,
-// session. The command name before them can hold spaces and parentheses, so
-// they start after the last ')'.
-function procStatFields(procStat: string): string[] {
-  return procStat.slice(procStat.lastIndexOf(')') + 2).split(' ');
-}
-
-// hidepid=2 and hidepid=4 (shown as invisible and ptraceable on newer
-// kernels) leave processes of other users out of the /proc listing. The
-// last /proc line is the mount on top. An unreadable mountinfo counts as
-// hiding them.
-function procHidesOtherUsers(): boolean {
-  let mountinfo: string;
-  try {
-    mountinfo = readFileSync('/proc/self/mountinfo', 'utf8');
-  } catch {
-    return true;
-  }
-  let hides = false;
-  for (const line of mountinfo.split('\n')) {
-    const fields = line.split(' ');
-    const separator = fields.indexOf('-');
-    if (fields[4] === '/proc' && fields[separator + 1] === 'proc') {
-      hides = /(^|,)hidepid=(2|4|invisible|ptraceable)(,|$)/.test(
-        fields[separator + 3] ?? '',
-      );
-    }
-  }
-  return hides;
-}
-
-// Whether /proc shows a process of the group that is not a zombie, or a
-// process that it refuses to show, or null when it shows none of the group.
-// kill(-pgid, 0) finds a zombie until its parent reaps it, and an init that
-// never reaps orphans, such as a container's PID 1 without an init, never
-// does. Off Linux, and when /proc hides other users, there is no scan and
-// the answer is true, so a zombie reads alive. launchd reaps orphans on
-// macOS.
-function groupHasLiveProcess(pgid: number): boolean | null {
-  if (process.platform !== 'linux' || procHidesOtherUsers()) {
-    return true;
-  }
-
-  let seen = false;
-  for (const entry of readdirSync('/proc')) {
-    if (!/^\d+$/.test(entry)) {
-      continue;
-    }
-    let procStat: string;
-    try {
-      procStat = readFileSync(`/proc/${entry}/stat`, 'utf8');
-    } catch (error) {
-      // ENOENT and ESRCH: the process ended during the scan.
-      if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ESRCH')) {
-        continue;
-      }
-      // hidepid=1 (EPERM) or a security module (EACCES) refuses to show
-      // the process of another user.
-      if (hasErrorCode(error, 'EPERM') || hasErrorCode(error, 'EACCES')) {
-        return true;
-      }
-      throw error;
-    }
-    const [state, , pgrp] = procStatFields(procStat);
-    if (Number(pgrp) !== pgid) {
-      continue;
-    }
-    if (state !== 'Z' && state !== 'X') {
-      return true;
-    }
-    seen = true;
-  }
-  return seen ? false : null;
-}
-
-export function isProcessGroupAlive(pgid: number | null): boolean {
-  if (pgid === null) {
-    return false;
-  }
-
-  try {
-    process.kill(processGroupTarget(pgid), 0);
-  } catch (error) {
-    // EPERM: the group still holds a process of another user, which hidepid
-    // can hide from /proc.
-    if (hasErrorCode(error, 'EPERM')) {
-      return groupHasLiveProcess(pgid) ?? true;
-    }
-    if (hasErrorCode(error, 'ESRCH')) {
-      return false;
-    }
-
-    throw error;
-  }
-
-  // None in view: the kill found processes that were reaped before the scan.
-  return groupHasLiveProcess(pgid) ?? false;
-}
-
-export function killProcessGroupBestEffort(pgid: number | null): void {
-  if (pgid === null) {
-    return;
-  }
-
-  try {
-    process.kill(processGroupTarget(pgid), 'SIGKILL');
-  } catch (error) {
-    if (hasErrorCode(error, 'ESRCH') || hasErrorCode(error, 'EPERM')) {
-      return;
-    }
-
-    throw error;
-  }
-}
-
 function ownLinuxSessionId(): number {
-  const sid = Number(
-    procStatFields(readFileSync('/proc/self/stat', 'utf8'))[3],
-  );
-  invariant(
-    Number.isInteger(sid) && sid > 0,
-    'own session id must be a positive integer',
-  );
+  const { sid } = parseProcStat(readFileSync('/proc/self/stat', 'utf8'));
+  invariant(sid > 0, 'own session id must be a positive integer');
   return sid;
 }
 
@@ -477,7 +352,7 @@ async function waitForTerminalManifest(
 
 export async function waitForProcessesToExit(
   hostPid: number | null,
-  childPid: number | null,
+  group: ProgramGroup | null,
   maxAttempts: number = DESTROY_MAX_ATTEMPTS,
   intervalMs: number = DESTROY_POLL_INTERVAL_MS,
   options: PollOptions = {},
@@ -496,7 +371,7 @@ export async function waitForProcessesToExit(
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     throwIfAborted(signal);
-    if (!isProcessAlive(hostPid) && !isProcessGroupAlive(childPid)) {
+    if (!isProcessAlive(hostPid) && !isProgramGroupAlive(group)) {
       return true;
     }
 
@@ -681,11 +556,11 @@ async function recordDestroyed(
   manifestFile: string,
   socketFile: string,
   manifest: SessionRecord,
+  group: ProgramGroup | null,
 ): Promise<void> {
   invariant(
     isTerminalSessionStatus(manifest.status) ||
-      (!isProcessAlive(manifest.hostPid) &&
-        !isProcessGroupAlive(manifest.childPid)),
+      (!isProcessAlive(manifest.hostPid) && !isProgramGroupAlive(group)),
     'recordDestroyed needs a terminal manifest or dead session processes',
   );
   if (!isDestroyedSessionStatus(manifest.status)) {
@@ -699,24 +574,26 @@ async function recordDestroyed(
 }
 
 async function stopSessionProcesses(
-  manifest: SessionRecord,
+  sessionId: string,
+  hostPid: number | null,
+  group: ProgramGroup | null,
   sessionDirectory: string,
   signal: AbortSignal | undefined,
 ): Promise<void> {
-  killProcessGroupBestEffort(manifest.childPid);
-  killProcessBestEffort(manifest.hostPid);
+  stopProgramGroup(group);
+  killProcessBestEffort(hostPid);
 
   const stopped = await waitForProcessesToExit(
-    manifest.hostPid,
-    manifest.childPid,
+    hostPid,
+    group,
     DESTROY_MAX_ATTEMPTS,
     DESTROY_POLL_INTERVAL_MS,
     pollOptions(signal),
   );
   if (!stopped) {
     throw makeCliError(ERROR_CODES.HOST_TIMEOUT, {
-      message: `Timed out forcing session "${manifest.sessionId}" to exit.`,
-      details: { sessionId: manifest.sessionId, sessionDirectory },
+      message: `Timed out forcing session "${sessionId}" to exit.`,
+      details: { sessionId, sessionDirectory },
     });
   }
 }
@@ -743,18 +620,44 @@ export async function destroySession(
     });
   }
 
+  const stopLeftoversThenRecordDestroyed = async (
+    terminal: SessionRecord,
+  ): Promise<void> => {
+    await stopSessionProcesses(
+      sessionId,
+      null,
+      await readProvenProgramGroup(sessionDirectory),
+      sessionDirectory,
+      signal,
+    );
+    await recordDestroyed(manifestFile, socketFile, terminal, null);
+  };
+
   if (isTerminalSessionStatus(manifest.status)) {
-    await recordDestroyed(manifestFile, socketFile, manifest);
+    await stopLeftoversThenRecordDestroyed(manifest);
     return;
   }
 
   if (force === true) {
-    await stopSessionProcesses(manifest, sessionDirectory, signal);
+    await stopSessionProcesses(
+      sessionId,
+      manifest.hostPid,
+      await readProgramGroup(sessionDirectory, manifest.childPid),
+      sessionDirectory,
+      signal,
+    );
     // The host is dead now, so this read is final. It can name a child that
     // the first read did not.
     const current = await readSessionManifestOrThrow(sessionId, manifestFile);
-    await stopSessionProcesses(current, sessionDirectory, signal);
-    await recordDestroyed(manifestFile, socketFile, current);
+    const group = await readProgramGroup(sessionDirectory, current.childPid);
+    await stopSessionProcesses(
+      sessionId,
+      current.hostPid,
+      group,
+      sessionDirectory,
+      signal,
+    );
+    await recordDestroyed(manifestFile, socketFile, current, group);
     return;
   }
 
@@ -775,7 +678,7 @@ export async function destroySession(
       manifestFile,
     );
     if (isTerminalSessionStatus(reconciledManifest.status)) {
-      await recordDestroyed(manifestFile, socketFile, reconciledManifest);
+      await stopLeftoversThenRecordDestroyed(reconciledManifest);
       return;
     }
 
@@ -789,7 +692,7 @@ export async function destroySession(
     pollOptions(signal),
   );
   if (terminalManifest !== null) {
-    await recordDestroyed(manifestFile, socketFile, terminalManifest);
+    await stopLeftoversThenRecordDestroyed(terminalManifest);
     return;
   }
 
@@ -799,7 +702,7 @@ export async function destroySession(
     manifestFile,
   );
   if (isTerminalSessionStatus(reconciledManifest.status)) {
-    await recordDestroyed(manifestFile, socketFile, reconciledManifest);
+    await stopLeftoversThenRecordDestroyed(reconciledManifest);
     return;
   }
 
@@ -898,10 +801,11 @@ export async function reconcileSession(
   }
   // The program can outlive its host. This copy names it even when the first
   // read came before the host's start-up write.
-  killProcessGroupBestEffort(current.childPid);
+  const group = await readProgramGroup(sessionDirectory, current.childPid);
+  stopProgramGroup(group);
   // A kill can leave processes of another user, such as the root child of
   // `sudo cmd &`. Keep childPid so that a later reconcile retries.
-  if (!(await waitForProcessesToExit(null, current.childPid))) {
+  if (!(await waitForProcessesToExit(null, group))) {
     return;
   }
   // A destroy or another reconcile can write a terminal status during the

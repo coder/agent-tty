@@ -24,12 +24,15 @@ export const state = (v) => {
   } else {
     files = `Manifest: ${v.mst}${v.mpid ? '' : ', no host pid'}`;
   }
+  files += v.rec ? ', program.json names the program' : '';
 
   let host;
   if (!v.hostAlive) {
     host = v.hpc === 'none' ? 'Host not started' : 'Host gone';
     host += v.prog ? ', program runs' : '';
-  } else if (['boot', 'open', 'pidwrite', 'sockdir'].includes(v.hpc)) {
+  } else if (
+    ['boot', 'open', 'record', 'pidwrite', 'sockdir'].includes(v.hpc)
+  ) {
     host = v.hex === 'wait' ? 'Host starting, program runs' : 'Host starting';
   } else if (v.hex === 'wait' && v.hst === 'destroying') {
     host = 'Host shutting down, program runs';
@@ -41,6 +44,9 @@ export const state = (v) => {
     host = 'Host finishing';
   }
   host += v.foreign ? ', a process of another user runs in the group' : '';
+  host += v.left ? ', a process that the program left runs' : '';
+  host += v.reused ? ", an unrelated group has the program's group id" : '';
+  host += v.hitUnrelated ? ', a kill reached that unrelated group' : '';
   return { Files: files, Host: host };
 };
 
@@ -62,6 +68,10 @@ export const step = (action, from, to) => {
       return to.hostAlive
         ? 'the host opens the event log and starts the program'
         : 'the host finds no folder and exits';
+    case 'HostRecordsProgram':
+      return to.hostAlive
+        ? 'the host writes program.json with the token of the program'
+        : 'the host finds no folder for program.json and exits';
     case 'HostWritesPids':
       return 'the host start-up write lands: running, with pids';
     case 'HostListens':
@@ -86,7 +96,14 @@ export const step = (action, from, to) => {
       return 'the program starts a process of another user';
     case 'ForeignEnds':
       return 'the process of another user ends';
+    case 'LeftoverEnds':
+      return 'the process that the program left ends';
+    case 'GroupIdReused':
+      return "an unrelated process group takes the program's group id";
     case 'ProgramExits':
+      if (to.left) {
+        return 'the program ends and leaves a process running';
+      }
       return to.prog
         ? 'the program ends, a process of its group still runs'
         : 'the program ends';
@@ -106,6 +123,8 @@ export const step = (action, from, to) => {
       return `${reconciles(from, to)} checks the host pid`;
     case 'ReconcileRereadsManifest':
       return `${reconciles(from, to)} reads the manifest again`;
+    case 'ReconcileReadsRecord':
+      return `${reconciles(from, to)} reads program.json and kills the group it names`;
     case 'ReconcilePollsGroup':
       return to.pc.gc === 'r_write' || to.pc.list === 'r_write'
         ? `${reconciles(from, to)} finds the program's group gone`
@@ -144,12 +163,16 @@ export const step = (action, from, to) => {
         : 'destroy finds the folder gone and fails';
     case 'DestroyUnlinksSocket':
       return 'destroy unlinks the socket file and succeeds';
+    case 'DestroyKillsLeftovers':
+      return 'destroy reads program.json and kills the group that it proves';
     case 'DestroyKills':
-      return "destroy --force kills the host and the program's group";
+      return from.dpc === 'kill'
+        ? "destroy --force reads program.json and kills the host and the program's group"
+        : "destroy --force reads program.json and kills the program's group again";
     case 'DestroyPollsGroup':
       return to.dpc === 'done'
-        ? "destroy --force gives up on the program's group"
-        : "destroy --force finds the program's group gone";
+        ? "destroy gives up on the program's group"
+        : "destroy finds the program's group gone";
     case 'DestroyRereads':
       return 'destroy reads the manifest after the kill';
     case 'DestroySendsRpc':

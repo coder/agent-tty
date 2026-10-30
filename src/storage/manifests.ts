@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { renameSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute } from 'node:path';
 
@@ -119,6 +120,18 @@ async function replaceFileAtomic(
   }
 }
 
+function replaceFileAtomicSync(path: string, contents: string): void {
+  const temporaryPath = `${path}.tmp-${randomUUID()}`;
+
+  try {
+    writeFileSync(temporaryPath, contents, { encoding: 'utf8', mode: 0o600 });
+    renameSync(temporaryPath, path);
+  } catch (error) {
+    rmSync(temporaryPath, { force: true });
+    throw error;
+  }
+}
+
 export async function writeTextFileAtomic(
   options: WriteTextFileAtomicOptions,
 ): Promise<void> {
@@ -152,6 +165,26 @@ export async function writeValidatedJsonFile<T>(
       ? {}
       : { createParentFolders: options.createParentFolders }),
   });
+}
+
+export function writeValidatedJsonFileSync<T>(
+  options: WriteValidatedJsonFileOptions<T> & { createParentFolders: false },
+): void {
+  assertAbsoluteStoragePath(options.path, options.pathLabel);
+  const validatedData = options.validate(options.path, options.data);
+
+  try {
+    replaceFileAtomicSync(
+      options.path,
+      `${JSON.stringify(validatedData, null, 2)}\n`,
+    );
+  } catch (error) {
+    throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+      message: options.writeErrorMessage,
+      details: { path: options.path },
+      cause: error,
+    });
+  }
 }
 
 function validateManifestData(path: string, data: unknown): SessionRecord {

@@ -1,3 +1,5 @@
+import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import {
   chmod,
   mkdir,
@@ -13,13 +15,21 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { isProcessAlive } from '../../src/host/lifecycle.js';
+import { parseProcStat } from '../../src/host/programGroup.js';
 import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
 import { SessionRecordSchema } from '../../src/protocol/schemas.js';
-import { sessionDir, socketPath } from '../../src/storage/sessionPaths.js';
+import { writeManifest } from '../../src/storage/manifests.js';
 import {
+  manifestPath,
+  programRecordPath,
+  sessionDir,
+  socketPath,
+} from '../../src/storage/sessionPaths.js';
+import {
+  capturesToken,
   cleanupHome,
   crashSession,
   createSession,
@@ -27,12 +37,24 @@ import {
   groupEnds,
   inspectSession,
   isGroupAlive,
+  killGroupIfAlive,
   runCli,
   sleep,
   type EventRecord,
   type SessionRecord,
   type SuccessEnvelope,
 } from '../helpers.js';
+
+const zombieLeader = resolve('test/fixtures/zombie-leader.py');
+
+function groupStates(group: number): string[] {
+  return execFileSync('ps', ['-eo', 'pgid=,s='], { encoding: 'utf8' })
+    .split('\n')
+    .flatMap((line) => {
+      const [id, state] = line.trim().split(/\s+/);
+      return Number(id) === group && state !== undefined ? [state] : [];
+    });
+}
 
 interface ErrorEnvelope {
   ok: false;
@@ -926,6 +948,87 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       expect(await groupEnds(pgid)).toBe(true);
     });
 
+    // Only the token lets destroy stop what an exited program left.
+    it.runIf(capturesToken)(
+      'destroy ends a background process left by a program that exited',
+      async () => {
+        const sessionId = await createProgram(
+          'trap "" HUP; sleep 300 & touch "$0"; exit 0',
+        );
+        const deadline = Date.now() + 10_000;
+        while (inspectSession(testHome, sessionId).status !== 'exited') {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
+        expect(isGroupAlive(pgid)).toBe(true);
+
+        const result = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await groupEnds(pgid)).toBe(true);
+      },
+    );
+
+    // Only a session with a token checks the autogroup.
+    it.runIf(capturesToken)(
+      'destroy times out while it cannot read the autogroup of a process that the program left',
+      async () => {
+        const sessionId = await createProgram(
+          'trap "" HUP; sleep 300 & touch "$0"; exit 0',
+        );
+        const deadline = Date.now() + 10_000;
+        while (inspectSession(testHome, sessionId).status !== 'exited') {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
+
+        const result = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+          NODE_OPTIONS: [
+            process.env.NODE_OPTIONS ?? '',
+            `--import=${pathToFileURL(resolve('test/fixtures/denied-autogroup.ts')).href}`,
+          ].join(' '),
+        });
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          ok: false,
+          error: { code: 'HOST_TIMEOUT' },
+        });
+        expect(result.status).toBe(5);
+        expect(inspectSession(testHome, sessionId).status).toBe('exited');
+        expect(isGroupAlive(pgid)).toBe(true);
+      },
+    );
+
+    // /proc shows Z for a process whose main thread exited while another
+    // of its threads runs. Without a token, the kill needs no live process
+    // in view.
+    it.runIf(capturesToken).each([
+      ['a program', `touch "$0"; exec python3 '${zombieLeader}'`],
+      [
+        'a child of the program',
+        `python3 '${zombieLeader}' & touch "$0"; wait`,
+      ],
+    ])(
+      'destroy ends %s whose main thread exited while another thread runs',
+      async (_name, script) => {
+        const sessionId = await createProgram(script);
+        const deadline = Date.now() + 10_000;
+        while (!groupStates(pgid).includes('Z')) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(50);
+        }
+
+        const result = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await groupEnds(pgid)).toBe(true);
+      },
+    );
+
     it('a reconcile after a host crash ends the program and its background process', async () => {
       const sessionId = await createProgram(
         'trap "" TERM HUP; sleep 300 & touch "$0"; wait',
@@ -1052,6 +1155,223 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       });
     });
   });
+
+  // Without a token, the childPid fallback kills the unrelated group.
+  describe.runIf(capturesToken)(
+    'a manifest whose group id now names an unrelated group',
+    () => {
+      let unrelated = 0;
+
+      beforeEach(() => {
+        vi.stubEnv('XDG_STATE_HOME', join(testHome, 'state'));
+      });
+
+      afterEach(() => {
+        if (unrelated > 1) {
+          killGroupIfAlive(unrelated);
+        }
+        unrelated = 0;
+        vi.unstubAllEnvs();
+      });
+
+      async function pointSessionAtUnrelatedGroup(
+        rewriteProgram: (program: Record<string, unknown>) => string = (
+          program,
+        ) => JSON.stringify({ ...program, pid: unrelated }),
+      ): Promise<string> {
+        const sessionId = createSession(testHome, [
+          '/bin/sh',
+          '-c',
+          'exec sleep 300',
+        ]);
+        destroySession(testHome, sessionId);
+        unrelated = Number(
+          execFileSync(
+            '/bin/sh',
+            ['-c', 'setsid sleep 300 </dev/null >/dev/null 2>&1 & echo $!'],
+            {
+              encoding: 'utf8',
+              env: { ...process.env, AGENT_TTY_SESSION_ID: sessionId },
+            },
+          ).trim(),
+        );
+        const deadline = Date.now() + 5_000;
+        while (
+          execFileSync('ps', ['-o', 'sid=', '-p', String(unrelated)], {
+            encoding: 'utf8',
+          }).trim() !== String(unrelated)
+        ) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(10);
+        }
+        const directory = sessionDir(testHome, sessionId);
+        const program = JSON.parse(
+          await readFile(programRecordPath(directory), 'utf8'),
+        ) as Record<string, unknown>;
+        await writeFile(programRecordPath(directory), rewriteProgram(program));
+        const manifest = SessionRecordSchema.parse(
+          JSON.parse(await readFile(manifestPath(directory), 'utf8')),
+        );
+        await writeManifest(manifestPath(directory), {
+          ...manifest,
+          status: 'running',
+          hostPid: null,
+          childPid: unrelated,
+        });
+        return sessionId;
+      }
+
+      async function expectUnrelatedAlive(): Promise<void> {
+        await sleep(200);
+        const stat = await readFile(`/proc/${String(unrelated)}/stat`, 'utf8');
+        expect(parseProcStat(stat).state).not.toBe('Z');
+      }
+
+      it('a reconcile records the session failed and leaves the group running', async () => {
+        const sessionId = await pointSessionAtUnrelatedGroup();
+
+        expect(inspectSession(testHome, sessionId).status).toBe('failed');
+        await expectUnrelatedAlive();
+      });
+
+      it('destroy --force records the session destroyed and leaves the group running', async () => {
+        const sessionId = await pointSessionAtUnrelatedGroup();
+
+        const result = runCli(['destroy', sessionId, '--force', '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        await expectUnrelatedAlive();
+      });
+
+      describe.each([
+        ['corrupt JSON', () => '{'],
+        [
+          'a record of another version',
+          (program: Record<string, unknown>) =>
+            JSON.stringify({ ...program, version: 2, pid: unrelated }),
+        ],
+      ])('and a program.json with %s', (_name, rewriteProgram) => {
+        it('list shows the session failed and leaves the group running', async () => {
+          const sessionId = await pointSessionAtUnrelatedGroup(rewriteProgram);
+
+          const result = runCli(['list', '--all', '--json'], {
+            AGENT_TTY_HOME: testHome,
+          });
+          const sessions = (
+            JSON.parse(result.stdout) as SuccessEnvelope<{
+              sessions: SessionSummary[];
+            }>
+          ).result.sessions;
+          expect(
+            sessions.find((session) => session.sessionId === sessionId),
+          ).toMatchObject({ status: 'failed' });
+          await expectUnrelatedAlive();
+        });
+
+        it('destroy --force records the session destroyed and leaves the group running', async () => {
+          const sessionId = await pointSessionAtUnrelatedGroup(rewriteProgram);
+
+          const result = runCli(['destroy', sessionId, '--force', '--json'], {
+            AGENT_TTY_HOME: testHome,
+          });
+          expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
+          expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+          await expectUnrelatedAlive();
+        });
+      });
+    },
+  );
+
+  // Without a token, nothing names the program that destroy must kill.
+  describe.runIf(capturesToken)(
+    'a host that dies before its first manifest write',
+    () => {
+      let pgid = 0;
+
+      beforeEach(() => {
+        vi.stubEnv('XDG_STATE_HOME', join(testHome, 'state'));
+      });
+
+      afterEach(() => {
+        if (pgid > 1) {
+          killGroupIfAlive(pgid);
+        }
+        pgid = 0;
+        vi.unstubAllEnvs();
+      });
+
+      it('destroy --force ends the program that no manifest names', async () => {
+        const holdLog = join(testHome, 'hold.log');
+        const creator = spawn(
+          process.execPath,
+          [
+            '--import',
+            'tsx',
+            './src/cli/main.ts',
+            'create',
+            '--json',
+            '--',
+            '/bin/sh',
+            '-c',
+            'trap "" HUP; sleep 300 & wait',
+          ],
+          {
+            stdio: 'ignore',
+            env: {
+              ...process.env,
+              AGENT_TTY_HOME: testHome,
+              REPLAY_LOG: holdLog,
+              REPLAY_HOLD: '_host:rename:/session.json:1:30000',
+              NODE_OPTIONS: [
+                process.env.NODE_OPTIONS ?? '',
+                `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+              ].join(' '),
+            },
+          },
+        );
+        const creatorExit = once(creator, 'exit');
+        const deadline = Date.now() + 15_000;
+        while (
+          !(await readFile(holdLog, 'utf8').then(
+            (log) => log.includes('hold rename'),
+            () => false,
+          ))
+        ) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(50);
+        }
+        const [sessionId] = await readdir(join(testHome, 'sessions'));
+        expect(sessionId).toBeTypeOf('string');
+        const manifest = SessionRecordSchema.parse(
+          JSON.parse(
+            await readFile(
+              manifestPath(sessionDir(testHome, sessionId as string)),
+              'utf8',
+            ),
+          ),
+        );
+        expect(manifest.childPid).toBeNull();
+        const hostPid = manifest.hostPid as number;
+        pgid = Number(
+          execFileSync('ps', ['-o', 'pid=', '--ppid', String(hostPid)], {
+            encoding: 'utf8',
+          }).trim(),
+        );
+        expect(isGroupAlive(pgid)).toBe(true);
+        process.kill(hostPid, 'SIGKILL');
+        await creatorExit;
+
+        const result = runCli(
+          ['destroy', sessionId as string, '--force', '--json'],
+          { AGENT_TTY_HOME: testHome },
+        );
+        expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
+        expect(await groupEnds(pgid)).toBe(true);
+      });
+    },
+  );
 
   describe('destroy run by the program itself', () => {
     let pgid = 0;
