@@ -1,5 +1,12 @@
 import crypto from 'node:crypto';
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -87,14 +94,28 @@ describe('manifest storage', () => {
     // oxfmt-ignore
     const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
     temporaryDirectories.push(home);
-    const path = manifestPath(sessionDir(home, 'session-01'));
+    const directory = sessionDir(home, 'session-01');
+    const path = manifestPath(directory);
     const record = createSessionRecord();
 
+    await mkdir(directory, { recursive: true });
     await writeManifest(path, record);
 
     const roundTripped = await readManifest(path);
 
     expect(roundTripped).toEqual(record);
+  });
+
+  it('fails with SESSION_NOT_FOUND and creates nothing when the session folder is gone', async () => {
+    // oxfmt-ignore
+    const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
+    temporaryDirectories.push(home);
+    const directory = sessionDir(home, 'session-01');
+
+    await expect(
+      writeManifest(manifestPath(directory), createSessionRecord()),
+    ).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' });
+    await expect(stat(directory)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('returns null when a manifest does not exist', async () => {
@@ -110,8 +131,10 @@ describe('manifest storage', () => {
     // oxfmt-ignore
     const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
     temporaryDirectories.push(home);
-    const path = manifestPath(sessionDir(home, 'session-01'));
+    const directory = sessionDir(home, 'session-01');
+    const path = manifestPath(directory);
 
+    await mkdir(directory, { recursive: true });
     await writeManifest(path, createSessionRecord());
     await writeFile(
       path,

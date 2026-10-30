@@ -65,19 +65,18 @@ build() {
     exit 2
   }
 }
-stale_source() {
-  find src \( -name '*.ts' -o -name '*.tsx' \) -newer dist/cli/main.js | head -1
-}
 build
 # A stale .tsconfig.build.tsbuildinfo makes tsc exit 0 and emit nothing.
-if [ ! -f dist/cli/main.js ] || [ -n "$(stale_source)" ]; then
-  echo "dist/ is older than src/; removing the incremental build info and rebuilding" >&2
+stale=$("$SKILL_DIR/scripts/stale-dist.sh")
+if [ -n "$stale" ]; then
+  echo "dist/ is stale ($stale); removing the incremental build info and rebuilding" >&2
   rm -f .tsconfig.build.tsbuildinfo
   rm -rf dist
   build
 fi
-[ -f dist/cli/main.js ] && [ -z "$(stale_source)" ] || {
-  echo "start-run.sh: dist/cli/main.js is still older than src/" >&2
+stale=$("$SKILL_DIR/scripts/stale-dist.sh")
+[ -z "$stale" ] || {
+  echo "start-run.sh: dist/ is still stale after a clean build: $stale" >&2
   exit 2
 }
 

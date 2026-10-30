@@ -65,6 +65,9 @@ vi.mock('../../../src/storage/artifactPaths.js', () => ({
     (seq: number, profileName: string) =>
       `screenshot-${String(seq)}-${profileName}.png`,
   ),
+  sessionNotFoundIfRemoved: vi.fn((_dir: string, error: unknown) =>
+    Promise.resolve(error),
+  ),
 }));
 
 import { runScreenshotCommand } from '../../../src/cli/commands/screenshot.js';

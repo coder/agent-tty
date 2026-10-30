@@ -76,6 +76,28 @@ describe('createSerialManifestWriter', () => {
     ]);
   });
 
+  it('writes nothing after it wrote a terminal record', async () => {
+    const write = vi
+      .fn<(path: string, record: SessionRecord) => Promise<void>>()
+      .mockResolvedValue(undefined);
+    let current = makeRecord(80);
+    const writeManifest = createSerialManifestWriter(
+      MANIFEST,
+      () => current,
+      write,
+    );
+
+    await writeManifest();
+    current = { ...makeRecord(80), status: 'destroyed', exitCode: 0 };
+    await writeManifest();
+    await writeManifest();
+
+    expect(write.mock.calls).toEqual([
+      [MANIFEST, makeRecord(80)],
+      [MANIFEST, { ...makeRecord(80), status: 'destroyed', exitCode: 0 }],
+    ]);
+  });
+
   it('rejects only the caller whose write failed and still runs the next write', async () => {
     const failure = new Error('disk full');
     const write = vi

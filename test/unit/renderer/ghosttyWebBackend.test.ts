@@ -1,7 +1,15 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
@@ -340,19 +348,13 @@ describe('GhosttyWebBackend unit guards', () => {
 
     const evaluate = vi.fn().mockResolvedValue(undefined);
     const screenshot = vi.fn(
-      async (options: {
-        animations: 'disabled';
-        caret: 'hide';
-        path: string;
-        type: 'png';
-      }) => {
+      (options: { animations: 'disabled'; caret: 'hide'; type: 'png' }) => {
         expect(options).toEqual({
           animations: 'disabled',
           caret: 'hide',
-          path: outputPath,
           type: 'png',
         });
-        await writeFile(outputPath, pngBuffer);
+        return Promise.resolve(pngBuffer);
       },
     );
     const locator = vi.fn((selector: string) => {
@@ -407,19 +409,13 @@ describe('GhosttyWebBackend unit guards', () => {
 
     const evaluate = vi.fn().mockResolvedValue(undefined);
     const screenshot = vi.fn(
-      async (options: {
-        animations: 'disabled';
-        caret: 'initial';
-        path: string;
-        type: 'png';
-      }) => {
+      (options: { animations: 'disabled'; caret: 'initial'; type: 'png' }) => {
         expect(options).toEqual({
           animations: 'disabled',
           caret: 'initial',
-          path: outputPath,
           type: 'png',
         });
-        await writeFile(outputPath, pngBuffer);
+        return Promise.resolve(pngBuffer);
       },
     );
     const locator = vi.fn((selector: string) => {
@@ -461,6 +457,47 @@ describe('GhosttyWebBackend unit guards', () => {
       expect(evaluate.mock.calls[0]?.[1]).toBe(true);
       expect(locator).toHaveBeenCalledWith('#terminal');
       expect(screenshot).toHaveBeenCalledTimes(1);
+    } finally {
+      await rm(temporaryDirectory, { force: true, recursive: true });
+    }
+  });
+
+  it('does not create the output folder again when it goes while the video is finalized', async () => {
+    const backend = createBackend();
+    // oxfmt-ignore
+    const temporaryDirectory = await realpath(await mkdtemp(join(tmpdir(), 'ghostty-web-backend-video-')));
+    const recordedVideo = join(temporaryDirectory, 'recorded.webm');
+    await writeFile(recordedVideo, 'webm');
+    const outputDirectory = join(temporaryDirectory, 'session-01', 'artifacts');
+    await mkdir(outputDirectory, { recursive: true });
+    const video = {
+      path: () => Promise.resolve(recordedVideo),
+      saveAs: async (path: string) => {
+        await mkdir(dirname(path), { recursive: true });
+        await copyFile(recordedVideo, path);
+      },
+    };
+
+    Object.assign(backend as object, {
+      isBooted: true,
+      videoOptions: {},
+      browserContext: { close: () => Promise.resolve() },
+      page: {
+        isClosed: () => false,
+        video: () => video,
+        close: () =>
+          rm(join(temporaryDirectory, 'session-01'), {
+            recursive: true,
+            force: true,
+          }),
+      },
+    });
+
+    try {
+      await expect(
+        backend.finalizeVideo(join(outputDirectory, 'recording-1-webm.webm')),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(existsSync(join(temporaryDirectory, 'session-01'))).toBe(false);
     } finally {
       await rm(temporaryDirectory, { force: true, recursive: true });
     }

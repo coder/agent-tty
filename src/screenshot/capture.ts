@@ -15,6 +15,7 @@ import {
   artifactPath,
   ensureArtifactsDir,
   screenshotFilename,
+  sessionNotFoundIfRemoved,
 } from '../storage/artifactPaths.js';
 import { invariant } from '../util/assert.js';
 
@@ -163,6 +164,6 @@ export async function captureScreenshotResult(
     };
   } catch (error) {
     await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
-    throw error;
+    throw await sessionNotFoundIfRemoved(options.sessionDir, error);
   }
 }

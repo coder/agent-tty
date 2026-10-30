@@ -40,8 +40,8 @@ import {
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
 import { createLogger } from '../../../src/util/logger.js';
 
-const TEST_ENV_HOME = '/tmp/from-env';
-const TEST_FLAG_HOME = '/tmp/from-flag';
+const TEST_ENV_HOME = '/agent-tty-missing/from-env';
+const TEST_FLAG_HOME = '/agent-tty-missing/from-flag';
 
 describe('CLI context resolution', () => {
   beforeEach(() => {

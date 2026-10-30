@@ -199,13 +199,46 @@ function killProcessBestEffort(pid: number | null): void {
   }
 }
 
-async function pathExists(path: string): Promise<boolean> {
+// node-pty starts the program as a session leader, so the program's pid is
+// also the id of its process group, which the program cannot leave. Windows
+// has no process groups, so there the kill reaches the program's pid only.
+function processGroupTarget(pgid: number): number {
+  // process.kill(-0) signals the caller's own group, process.kill(-1) every
+  // process that the caller may signal.
+  invariant(
+    Number.isInteger(pgid) && pgid > 1,
+    'process group id must be an integer above 1',
+  );
+  return process.platform === 'win32' ? pgid : -pgid;
+}
+
+export function isProcessGroupAlive(pgid: number | null): boolean {
+  if (pgid === null) {
+    return false;
+  }
+
   try {
-    await stat(path);
+    process.kill(processGroupTarget(pgid), 0);
     return true;
   } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) {
+    if (hasErrorCode(error, 'ESRCH')) {
       return false;
+    }
+
+    throw error;
+  }
+}
+
+export function killProcessGroupBestEffort(pgid: number | null): void {
+  if (pgid === null) {
+    return;
+  }
+
+  try {
+    process.kill(processGroupTarget(pgid), 'SIGKILL');
+  } catch (error) {
+    if (hasErrorCode(error, 'ESRCH')) {
+      return;
     }
 
     throw error;
@@ -294,10 +327,9 @@ async function waitForTerminalManifest(
   return null;
 }
 
-async function waitForProcessAndSocketShutdown(
+async function waitForProcessesToExit(
   hostPid: number | null,
   childPid: number | null,
-  socketFile: string,
   maxAttempts: number = DESTROY_MAX_ATTEMPTS,
   intervalMs: number = DESTROY_POLL_INTERVAL_MS,
   options: PollOptions = {},
@@ -316,11 +348,7 @@ async function waitForProcessAndSocketShutdown(
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     throwIfAborted(signal);
-    const hostAlive = isProcessAlive(hostPid);
-    const childAlive = isProcessAlive(childPid);
-    const socketPresent = await pathExists(socketFile);
-
-    if (!hostAlive && !childAlive && !socketPresent) {
+    if (!isProcessAlive(hostPid) && !isProcessGroupAlive(childPid)) {
       return true;
     }
 
@@ -501,6 +529,50 @@ export function launchHost(config: LaunchHostConfig): number {
   return child.pid;
 }
 
+async function recordDestroyed(
+  manifestFile: string,
+  socketFile: string,
+  manifest: SessionRecord,
+): Promise<void> {
+  invariant(
+    isTerminalSessionStatus(manifest.status) ||
+      (!isProcessAlive(manifest.hostPid) &&
+        !isProcessGroupAlive(manifest.childPid)),
+    'recordDestroyed needs a terminal manifest or dead session processes',
+  );
+  if (!isDestroyedSessionStatus(manifest.status)) {
+    await writeManifest(manifestFile, {
+      ...manifest,
+      status: 'destroyed',
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  await unlinkIfPresent(socketFile);
+}
+
+async function stopSessionProcesses(
+  manifest: SessionRecord,
+  sessionDirectory: string,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  killProcessGroupBestEffort(manifest.childPid);
+  killProcessBestEffort(manifest.hostPid);
+
+  const stopped = await waitForProcessesToExit(
+    manifest.hostPid,
+    manifest.childPid,
+    DESTROY_MAX_ATTEMPTS,
+    DESTROY_POLL_INTERVAL_MS,
+    pollOptions(signal),
+  );
+  if (!stopped) {
+    throw makeCliError(ERROR_CODES.HOST_TIMEOUT, {
+      message: `Timed out forcing session "${manifest.sessionId}" to exit.`,
+      details: { sessionId: manifest.sessionId, sessionDirectory },
+    });
+  }
+}
+
 export interface DestroySessionOptions {
   readonly signal?: AbortSignal;
 }
@@ -524,46 +596,18 @@ export async function destroySession(
   }
 
   if (isTerminalSessionStatus(manifest.status)) {
-    const destroyedManifest: SessionRecord = {
-      ...manifest,
-      status: 'destroyed',
-      updatedAt: new Date().toISOString(),
-    };
-
-    await writeManifest(manifestFile, destroyedManifest);
-    await unlinkIfPresent(socketFile);
+    await recordDestroyed(manifestFile, socketFile, manifest);
     return;
   }
 
   if (force === true) {
-    killProcessBestEffort(manifest.childPid);
-    killProcessBestEffort(manifest.hostPid);
-
-    await waitForProcessAndSocketShutdown(
-      manifest.hostPid,
-      manifest.childPid,
-      socketFile,
-      DESTROY_MAX_ATTEMPTS,
-      DESTROY_POLL_INTERVAL_MS,
-      pollOptions(signal),
-    );
-    await reconcileSession(sessionDirectory);
-
-    const reconciledManifest = await readSessionManifestOrThrow(
-      sessionId,
-      manifestFile,
-    );
-    if (isTerminalSessionStatus(reconciledManifest.status)) {
-      return;
-    }
-
-    throw makeCliError(ERROR_CODES.HOST_TIMEOUT, {
-      message: `Timed out forcing session "${sessionId}" to exit.`,
-      details: {
-        sessionId,
-        sessionDirectory,
-      },
-    });
+    await stopSessionProcesses(manifest, sessionDirectory, signal);
+    // The host is dead now, so this read is final. It can name a child that
+    // the first read did not.
+    const current = await readSessionManifestOrThrow(sessionId, manifestFile);
+    await stopSessionProcesses(current, sessionDirectory, signal);
+    await recordDestroyed(manifestFile, socketFile, current);
+    return;
   }
 
   try {
@@ -583,6 +627,7 @@ export async function destroySession(
       manifestFile,
     );
     if (isTerminalSessionStatus(reconciledManifest.status)) {
+      await recordDestroyed(manifestFile, socketFile, reconciledManifest);
       return;
     }
 
@@ -596,6 +641,7 @@ export async function destroySession(
     pollOptions(signal),
   );
   if (terminalManifest !== null) {
+    await recordDestroyed(manifestFile, socketFile, terminalManifest);
     return;
   }
 
@@ -605,6 +651,7 @@ export async function destroySession(
     manifestFile,
   );
   if (isTerminalSessionStatus(reconciledManifest.status)) {
+    await recordDestroyed(manifestFile, socketFile, reconciledManifest);
     return;
   }
 
@@ -697,14 +744,13 @@ export async function reconcileSession(
     return;
   }
 
-  if (manifest.childPid !== null && isProcessAlive(manifest.childPid)) {
-    killProcessBestEffort(manifest.childPid);
-  }
-
   const current = await readManifestIfExists(manifestFile);
   if (current === null || isTerminalSessionStatus(current.status)) {
     return;
   }
+  // The program can outlive its host. This copy names it even when the first
+  // read came before the host's start-up write.
+  killProcessGroupBestEffort(current.childPid);
 
   let reconciledStatus: SessionRecord['status'];
   let failureReason: string | undefined;
@@ -742,6 +788,16 @@ export async function reconcileSession(
     ...(failureOrigin !== undefined ? { failureOrigin } : {}),
   };
 
-  await writeManifest(manifestFile, reconciledManifest);
+  try {
+    await writeManifest(manifestFile, reconciledManifest);
+  } catch (error) {
+    if (
+      error instanceof CliError &&
+      error.code === ERROR_CODES.SESSION_NOT_FOUND
+    ) {
+      return;
+    }
+    throw error;
+  }
   await unlinkIfPresent(socketPath(sessionDirectory));
 }

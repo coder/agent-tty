@@ -1,4 +1,3 @@
-import { realpathSync } from 'node:fs';
 import { isAbsolute, normalize } from 'node:path';
 import process from 'node:process';
 
@@ -18,7 +17,7 @@ import {
   probeLibghosttyVt,
   type LibghosttyVtProbe,
 } from '../renderer/readiness.js';
-import { resolveHome } from '../storage/home.js';
+import { canonicalHomePath, resolveHome } from '../storage/home.js';
 import { invariant } from '../util/assert.js';
 import {
   createLogger,
@@ -88,12 +87,7 @@ function validateHomePath(home: string, source: string): string {
     });
   }
 
-  const normalized = normalize(home);
-  try {
-    return realpathSync(normalized);
-  } catch {
-    return normalized;
-  }
+  return canonicalHomePath(normalize(home));
 }
 
 export function parseTimeoutMsOption(value: string): number {

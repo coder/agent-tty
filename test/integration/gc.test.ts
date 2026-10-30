@@ -6,6 +6,7 @@ import {
   realpath,
   rm,
   stat,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -254,6 +255,44 @@ describe('gc cross-Home integration', { timeout: 30000 }, () => {
       expect(await pathExists(homeA)).toBe(true);
       expect(await pathExists(homeB)).toBe(true);
       expect(await pathExists(join(homeA, 'sessions', 'a-exit'))).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('deregisters a gone Home whose parent became a symlink', async () => {
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), 'agent-tty-gc-xhome-')),
+    );
+    try {
+      const fakeHome = join(root, 'fake-home');
+      const stateHome = join(root, 'state');
+      const goneHome = join(root, 'data', 'homeB');
+      await mkdir(fakeHome, { recursive: true });
+      await mkdir(join(root, 'data2'));
+      await symlink(join(root, 'data2'), join(root, 'data'));
+      await mkdir(join(stateHome, 'agent-tty'), { recursive: true });
+      await writeFile(
+        join(stateHome, 'agent-tty', 'homes.json'),
+        JSON.stringify({
+          version: 1,
+          homes: [{ path: goneHome, lastSeenAt: '2026-06-08T12:00:00.000Z' }],
+        }),
+        'utf8',
+      );
+
+      const result = runGcCrossHome(fakeHome, stateHome);
+      expect(result.status).toBe(0);
+      const envelope = JSON.parse(result.stdout) as SuccessEnvelope<GcResult>;
+      expect(envelope.result.deregisteredHomes).toEqual([goneHome]);
+
+      const registryRaw = await readFile(
+        join(stateHome, 'agent-tty', 'homes.json'),
+        'utf8',
+      );
+      expect((JSON.parse(registryRaw) as { homes: unknown[] }).homes).toEqual(
+        [],
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }

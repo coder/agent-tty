@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -44,7 +44,9 @@ async function writeSessionManifest(
     childPid: status === 'running' ? 456 : null,
     exitCode: status === 'exited' ? 0 : null,
   });
-  await writeManifest(manifestPath(sessionDir(home, sessionId)), manifest);
+  const directory = sessionDir(home, sessionId);
+  await mkdir(directory, { recursive: true });
+  await writeManifest(manifestPath(directory), manifest);
   return manifest;
 }
 
