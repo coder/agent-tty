@@ -274,6 +274,29 @@ describe('reconcileSession', () => {
     expect(await readManifest(manifestPath(directory))).toEqual(record);
   });
 
+  it('keeps a destroyed record that a destroy writes while reconcile waits for the group', async () => {
+    const directory = await seedSession(makeRecord());
+    const destroyed = makeRecord({
+      status: 'destroyed',
+      hostPid: null,
+      childPid: null,
+    });
+    procShowsGroup('S');
+    let probes = 0;
+    vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (pid === -CHILD_PID && signal === 0 && probes++ === 0) {
+        writeFileSync(manifestPath(directory), JSON.stringify(destroyed));
+        return true;
+      }
+      throw errno('ESRCH');
+    });
+
+    await reconcileSession(directory);
+
+    expect(probes).toBe(2);
+    expect(await readManifest(manifestPath(directory))).toEqual(destroyed);
+  });
+
   it('leaves a folder that gc removed after the re-read removed', async () => {
     const directory = await seedSession(makeRecord());
     killProbeReportsDead();
