@@ -37,9 +37,10 @@ function makeHeldWrite() {
 describe('createSerialManifestWriter', () => {
   it('does not start a write until the previous write settles', async () => {
     const { write, releaseFirstWrite } = makeHeldWrite();
+    let cols = 80;
     const writeManifest = createSerialManifestWriter(
       MANIFEST,
-      () => makeRecord(80),
+      () => makeRecord(cols++),
       write,
     );
 
@@ -73,6 +74,28 @@ describe('createSerialManifestWriter', () => {
     expect(write.mock.calls).toEqual([
       [MANIFEST, makeRecord(80)],
       [MANIFEST, makeRecord(120)],
+    ]);
+  });
+
+  it('skips a write whose state equals the state it wrote last', async () => {
+    const write = vi
+      .fn<(path: string, record: SessionRecord) => Promise<void>>()
+      .mockResolvedValue(undefined);
+    let current = makeRecord(80);
+    const writeManifest = createSerialManifestWriter(
+      MANIFEST,
+      () => current,
+      write,
+    );
+
+    await writeManifest();
+    await writeManifest();
+    current = makeRecord(100);
+    await writeManifest();
+
+    expect(write.mock.calls).toEqual([
+      [MANIFEST, makeRecord(80)],
+      [MANIFEST, makeRecord(100)],
     ]);
   });
 
