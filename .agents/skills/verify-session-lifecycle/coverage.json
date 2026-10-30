@@ -16,9 +16,10 @@
     "src/host/lifecycle.ts#stopSessionProcesses": "9e9ca493407e3a5e",
     "src/host/lifecycle.ts#recordDestroyed": "8376907f909e7ea9",
     "src/host/lifecycle.ts#destroySession": "b2713e315822b08d",
-    "src/host/lifecycle.ts#reconcileSession": "14b15ff45771b607",
+    "src/host/lifecycle.ts#reconcileSession": "2f5dc70e3eb0f4fc",
     "src/host/hostMain.ts#waitForManifestFromCreate": "fd500651f83683eb",
     "src/host/hostMain.ts#isSessionCommandable": "260060f07b068ec1",
+    "src/host/hostMain.ts#SHUTDOWN_KILL_GRACE_MS": "51171d9c5aa6c510",
     "src/host/manifestWriter.ts#createSerialManifestWriter": "94a2decf4fedb2e2",
     "src/host/rpcClient.ts#toTransportCliError": "dd6531349c62bcbd",
     "src/host/sessionState.ts#SessionState.setDimensions": "08c4f06122d157e9",
@@ -29,16 +30,16 @@
     "src/host/rpcServer.ts#RpcServer.listen": "aa62e1cd89eceaa4",
     "src/host/rpcServer.ts#RpcServer.close": "2d8092cceb4b8e13",
     "src/storage/manifests.ts#readValidatedJsonFile": "6287eb627b09bf80",
-    "src/storage/manifests.ts#writeTextFileAtomic": "87f4e3ecc13dbe59",
-    "src/storage/manifests.ts#writeManifest": "97c755b27788a6e5",
+    "src/storage/manifests.ts#replaceFileAtomic": "20532509b3dcaade",
+    "src/storage/manifests.ts#writeManifest": "1bcc99f09acfc577",
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
     "src/host/hostMain.ts#runHost(parts)": "eafd45c3fc216cd5",
     "src/host/hostMain.ts#runHost(final try)": "ad91fa180ff36ffb",
     "src/host/hostMain.ts#runHost>handlers.resize": "30dd1da32879d478",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "dd0b0b1020a91981",
-    "skill:scripts/facts.mjs": "7602ed205f290472",
-    "skill:scripts/check.sh": "b568c7aa2510e51d"
+    "skill:model/SessionLifecycle.tla": "8f2054597143aa20",
+    "skill:scripts/facts.mjs": "1c8d4d3384a3722c",
+    "skill:scripts/check.sh": "2d505a7e2d4715ef"
   },
   "callSites": {
     "writeManifest": [
@@ -52,9 +53,12 @@
       "src/host/hostMain.ts#runHost>initiateShutdown",
       "src/host/hostMain.ts#runHost>resize"
     ],
+    "replaceFileAtomic": [
+      "src/storage/manifests.ts#writeManifest",
+      "src/storage/manifests.ts#writeTextFileAtomic"
+    ],
     "writeValidatedJsonFile": [
       "src/storage/artifactManifest.ts#writeArtifactManifest",
-      "src/storage/manifests.ts#writeManifest",
       "src/tools/canonicalBundleArtifacts.ts#writeCanonicalBundleManifest"
     ],
     "writeTextFileAtomic": [
