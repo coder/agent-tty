@@ -316,12 +316,22 @@ function ownLinuxSessionId(): number {
   return sid;
 }
 
-function ownProcessGroupId(): number {
-  const pgid = Number(
-    execFileSync('ps', ['-o', 'pgid=', '-p', String(process.pid)], {
-      encoding: 'utf8',
-    }).trim(),
-  );
+// macOS and the BSDs ship ps at /bin/ps, so a restricted PATH cannot hide
+// it. Without it the CLI takes the destroy path it had before this check.
+function ownProcessGroupId(): number | null {
+  let output: string;
+  try {
+    output = execFileSync(
+      '/bin/ps',
+      ['-o', 'pgid=', '-p', String(process.pid)],
+      {
+        encoding: 'utf8',
+      },
+    );
+  } catch {
+    return null;
+  }
+  const pgid = Number(output.trim());
   invariant(
     Number.isInteger(pgid) && pgid > 0,
     'own process group id must be a positive integer',
