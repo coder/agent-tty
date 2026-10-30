@@ -93,18 +93,19 @@ find_holders
 sockets="/tmp/agent-tty/$(node -e 'process.stdout.write(require("node:crypto").createHash("sha256").update(require("node:path").resolve(process.argv[1])).digest("hex").slice(0, 8))' "$AGENT_TTY_HOME")"
 
 aside=$VERIFY_RUN/removing
+present() { [ -e "$1" ] || [ -L "$1" ]; }
 removal_failed() {
   echo "cleanup.sh: could not $1. Fix the error above, then run cleanup.sh again." >&2
   exit 1
 }
 { rm -rf "$aside" && mkdir "$aside"; } || removal_failed "make an empty $aside"
 for name in home state; do
-  [ ! -e "$VERIFY_RUN/$name" ] || mv "$VERIFY_RUN/$name" "$aside/" || removal_failed "move $name/ into $aside"
+  ! present "$VERIFY_RUN/$name" || mv "$VERIFY_RUN/$name" "$aside/" || removal_failed "move $name/ into $aside"
 done
 find_holders
 if [ -n "$holders" ]; then
   for name in home state; do
-    [ -e "$VERIFY_RUN/$name" ] || [ ! -e "$aside/$name" ] || mv "$aside/$name" "$VERIFY_RUN/"
+    present "$VERIFY_RUN/$name" || ! present "$aside/$name" || mv "$aside/$name" "$VERIFY_RUN/"
   done
   rmdir "$aside" 2>/dev/null ||
     echo "cleanup.sh: a process made a new home/ or state/, so the run's own copies are in $aside" >&2
@@ -112,7 +113,7 @@ if [ -n "$holders" ]; then
 fi
 rm -rf "$aside" || removal_failed "remove $aside"
 find_holders
-if [ -n "$holders" ] || [ -e "$AGENT_TTY_HOME" ] || [ -e "$XDG_STATE_HOME" ]; then
+if [ -n "$holders" ] || present "$AGENT_TTY_HOME" || present "$XDG_STATE_HOME"; then
   printf 'cleanup.sh: removed the old home/ and state/, but a process that started meanwhile carries AGENT_TTY_HOME=%s or made a new home/ or state/:\n%s' "$AGENT_TTY_HOME" "$holders" >&2
   echo "cleanup.sh: stop it, then run cleanup.sh again." >&2
   exit 1
