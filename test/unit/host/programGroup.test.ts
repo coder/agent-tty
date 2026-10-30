@@ -631,7 +631,7 @@ describe.runIf(capturesToken)('a program group with a token', () => {
     return { pid, record };
   }
 
-  it('gets the kill when the record proves it', () => {
+  it('gets the kill when the record proves it', async () => {
     const { pid, record } = startGroup();
     const kill = vi.spyOn(process, 'kill');
 
@@ -639,7 +639,10 @@ describe.runIf(capturesToken)('a program group with a token', () => {
     stopProgramGroup(record);
 
     expect(kill).toHaveBeenCalledWith(-pid, 'SIGKILL');
-    expect(isProgramGroupAlive(record)).toBe(false);
+    // SIGKILL ends the process soon after kill(2) returns, not at once.
+    await vi.waitFor(() => {
+      expect(isProgramGroupAlive(record)).toBe(false);
+    });
   });
 
   it('gets no kill when the record names another autogroup', () => {
