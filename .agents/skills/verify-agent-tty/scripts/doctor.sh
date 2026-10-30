@@ -33,8 +33,9 @@ if [ "$fail" -ne 0 ]; then
 fi
 
 cd "$AGENT_TTY_REPO" || exit 2
-stale=$("$(dirname "${BASH_SOURCE[0]}")/stale-dist.sh")
-if [ -n "$stale" ]; then
+if ! stale=$("$(dirname "${BASH_SOURCE[0]}")/stale-dist.sh"); then
+  bad "stale-dist.sh could not check dist/"
+elif [ -n "$stale" ]; then
   bad "dist/ is stale ($stale): run start-run.sh again to rebuild"
 else
   pass "dist/ has every module of src/ and is newer than src/"

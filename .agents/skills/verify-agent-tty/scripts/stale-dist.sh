@@ -6,7 +6,8 @@
 #   .agents/skills/verify-agent-tty/scripts/stale-dist.sh
 set -uo pipefail
 
-cd "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)" || exit 2
+repo=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel) || exit 2
+cd "$repo" || exit 2
 if [ ! -f dist/cli/main.js ]; then
   echo "dist/cli/main.js is missing"
   exit 0
