@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prints why dist/ of this checkout is not a complete, current build of src/,
 # or nothing when it is. dist/ is stale when a module of src/ has no built
-# module, or when a file of src/ is newer than dist/cli/main.js.
+# module, or when a .ts or .tsx file of src/ is newer than dist/cli/main.js.
 #
 #   .agents/skills/verify-agent-tty/scripts/stale-dist.sh
 set -uo pipefail

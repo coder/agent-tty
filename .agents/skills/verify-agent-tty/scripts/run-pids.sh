@@ -23,7 +23,7 @@ ENV_FILE=${1:?usage: run-pids.sh <run>/env.sh}
 session_of() {
   { sed 's/.*) //' "/proc/$1/stat"; } 2>/dev/null | cut -d' ' -f4
 }
-own_session=$(session_of $$)
+caller_session=$(session_of $$)
 
 ids=""
 for dir in "$AGENT_TTY_HOME"/sessions/*/; do
@@ -35,8 +35,6 @@ done
 {
   for file in $(grep -lzxF "AGENT_TTY_HOME=$AGENT_TTY_HOME" /proc/[0-9]*/environ 2>/dev/null); do
     dir=${file%/environ}
-    # A program can set its own AGENT_TTY_SESSION_ID through `create --env`,
-    # so match a session program on the run's Home, not only on its ID.
     if { tr '\0' ' ' <"$dir/cmdline"; } 2>/dev/null | grep -q ' _host ' ||
       grep -qzxF AGENT_TTY_ACTIVE=true "$file" 2>/dev/null; then
       echo "${dir#/proc/}"
@@ -47,10 +45,9 @@ done
       sed 's#^/proc/##; s#/environ$##'
   fi
 } | sort -un | while read -r pid; do
-  # Hosts and PTY programs start their own terminal sessions. Inside an outer
-  # agent-tty session, this script and the shell that ran it also carry the
-  # run's Home and AGENT_TTY_ACTIVE=true, so skip the caller's session.
-  [ "$(session_of "$pid")" != "$own_session" ] || continue
+  # Hosts and PTY programs call setsid, so no run process is in the caller's
+  # session. Inside an outer agent-tty session the caller matches, though.
+  [ "$(session_of "$pid")" != "$caller_session" ] || continue
   # /proc files report size 0, so read the command line to see if it is live.
   [ -n "$({ tr -d '\0' <"/proc/$pid/cmdline"; } 2>/dev/null)" ] && echo "$pid"
 done

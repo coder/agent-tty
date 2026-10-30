@@ -21,7 +21,7 @@ ENV=$(.agents/skills/verify-agent-tty/scripts/start-run.sh <name>)
 `start-run.sh` does this, from an empty folder to a usable CLI:
 
 1. If `node_modules/.bin/tsc` is missing (a partial install), it runs `aube ci`. Otherwise it runs `aube install --frozen-lockfile`, which brings `node_modules` up to date after a change to `aube-lock.yaml` and returns at once when nothing changed. Without that, a run after a dependency change builds and runs the old packages.
-2. It runs `npm run build`. If `stale-dist.sh` then finds a module of `src/` without its built module in `dist/`, or a file in `src/` newer than `dist/cli/main.js`, it removes `.tsconfig.build.tsbuildinfo` and `dist/` and builds again. A stale build info file makes `tsc` exit 0 and write nothing, also when only one built module was deleted.
+2. It runs `npm run build`. If `stale-dist.sh` then finds a module of `src/` without its built module in `dist/`, or a `.ts` or `.tsx` file in `src/` newer than `dist/cli/main.js`, it removes `.tsconfig.build.tsbuildinfo` and `dist/` and builds again. A stale build info file makes `tsc` exit 0 and write nothing, also when only one built module was deleted.
 3. It makes the run folder `<root>/<UTC time>-<name>-<random>/` with `mktemp -d`, and `home/`, `state/` and `evidence/` in it. The root is `$VERIFY_ROOT`, or `${TMPDIR:-/tmp}/verify-agent-tty-<uid>`. The script refuses a root that is a symlink or that you do not own, and sets it to mode 700, so another user on a shared machine cannot plant files there.
 4. It writes `env.sh` there and prints its path.
 
