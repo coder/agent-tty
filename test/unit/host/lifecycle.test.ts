@@ -437,15 +437,19 @@ describe('isProcessGroupAlive', () => {
     },
   );
 
-  // hidepid=1 lists the processes of other users but refuses their reads.
-  it('on linux counts a group alive whose processes refuse their reads', () => {
-    Object.defineProperty(process, 'platform', { value: 'linux' });
-    procShowsGroup();
-    fsHooks.proc?.set('3', errno('EPERM'));
-    killFailsWith('EPERM');
+  // hidepid=1 lists the processes of other users but refuses their reads,
+  // so a process that refuses its read can be a live one of the group.
+  it.each(['ok', 'EPERM'] as const)(
+    'on linux, when the probe ends %s, counts a zombie group alive while a process refuses its read',
+    (outcome) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procShowsGroup('Z');
+      fsHooks.proc?.set('3', errno('EPERM'));
+      probeEnds(outcome);
 
-    expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
-  });
+      expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
+    },
+  );
 
   it('returns false when the probe fails with ESRCH', () => {
     procShowsGroup('S');
