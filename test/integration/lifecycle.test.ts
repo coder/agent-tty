@@ -895,8 +895,9 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         AGENT_TTY_HOME: testHome,
       });
       expect(result.status).toBe(0);
+      // destroy --force returns only after the whole group is gone.
+      expect(isGroupAlive(pgid)).toBe(false);
       expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
-      expect(await groupEnds(pgid)).toBe(true);
     });
 
     it('destroy ends a background process that outlives the program', async () => {
