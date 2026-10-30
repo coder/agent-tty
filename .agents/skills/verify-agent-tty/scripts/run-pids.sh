@@ -8,18 +8,21 @@
 # own terminal session, such as your shells that sourced env.sh and
 # cleanup.sh, are not in the list. Linux only: it reads /proc.
 #
-# It appends each recorded childPid to <run>/child-pids, because reconcile
-# clears childPid from session.json when it finds a dead host, and the
-# program's children can outlive it. So it finds the children of a program
-# with its own AGENT_TTY_SESSION_ID only if it read the program's PID before a
-# reconcile, and never a daemon that such a program starts in a new terminal
-# session. Once no process is left in the terminal session of a recorded PID,
-# it appends "ended <pid>" and stops matching that PID, so a process that gets
-# the PID later is not in the list. A PID that is reused before any call saw
-# its session end still matches.
+# It appends each recorded childPid with its session ID ("<pid> <session>")
+# to <run>/child-pids, because reconcile clears childPid from session.json when
+# it finds a dead host, and the program's children can outlive it. So it finds
+# the children of a program with its own AGENT_TTY_SESSION_ID only if it read
+# the program's PID before a reconcile, and never a daemon that such a program
+# starts in a new terminal session. Once no process is left in the terminal
+# session of a recorded PID, it appends "ended <pid> <session>" and stops
+# matching that PID for that session, so a process that gets the PID later is
+# not in the list, unless a later session of the run records it as its
+# program. A PID that is reused before any call saw its session end still
+# matches.
 #
 # Exit 2: no /proc here (macOS), so no list. Exit 3: <run>/child-pids is not a
-# regular file that it can read and write, or an append to it failed.
+# regular file that it can read and write, has lines without a session ID
+# from an older run-pids.sh, or an append to it failed.
 #
 #   .agents/skills/verify-agent-tty/scripts/run-pids.sh <run>/env.sh
 set -uo pipefail
@@ -51,14 +54,18 @@ ledger_failed() {
 [ -f "$ledger" ] && [ -r "$ledger" ] && [ -w "$ledger" ] ||
   ledger_failed "$ledger must be a regular file that you can read and write"
 # -a: one NUL byte must not make grep read the whole ledger as binary.
-recorded="|$(grep -a -E '^[0-9]+$' "$ledger" | sort -un | tr '\n' '|')"
-ended="|$(grep -a -E '^ended [0-9]+$' "$ledger" | cut -d' ' -f2 | tr '\n' '|')"
+! grep -a -q -E '^(ended )?[0-9]+$' "$ledger" ||
+  ledger_failed "$ledger has lines from an older run-pids.sh. Stop this run's processes yourself, remove $VERIFY_RUN, and start a new run"
+recorded="|$(grep -a -E '^[0-9]+ [0-9A-Za-z._-]+$' "$ledger" | sort -u | tr '\n' '|')"
+ended="|$(grep -a -E '^ended [0-9]+ [0-9A-Za-z._-]+$' "$ledger" | cut -d' ' -f2- | tr '\n' '|')"
 added=""
 for manifest in "$AGENT_TTY_HOME"/sessions/*/session.json; do
   [ -f "$manifest" ] || continue
+  id=$(basename "$(dirname "$manifest")")
+  case "$id" in *[!0-9A-Za-z._-]*) continue ;; esac
   pid=$(jq -r '.childPid // empty' "$manifest" 2>/dev/null)
   case "$pid" in '' | *[!0-9]*) continue ;; esac
-  case "$recorded$added" in *"|$pid|"*) ;; *) added="$added$pid|" ;; esac
+  case "$recorded$added" in *"|$pid $id|"*) ;; *) added="$added$pid $id|" ;; esac
 done
 [ -z "$added" ] || printf '%s' "$added" | tr '|' '\n' >>"$ledger" ||
   ledger_failed "could not append to $ledger"
@@ -68,13 +75,15 @@ done
 sessions="|$(cat /proc/[0-9]*/stat 2>/dev/null | sed 's/.*) //' | cut -d' ' -f4 | sort -un | tr '\n' '|')"
 program_sessions="|"
 newly_ended=""
-for pid in $(printf '%s' "${recorded#|}$added" | tr '|' ' '); do
-  case "$ended" in *"|$pid|"*) continue ;; esac
+while IFS= read -r entry; do
+  [ -n "$entry" ] || continue
+  case "$ended" in *"|$entry|"*) continue ;; esac
+  pid=${entry%% *}
   case "$sessions" in
     *"|$pid|"*) program_sessions="$program_sessions$pid|" ;;
-    *) newly_ended="${newly_ended}ended $pid"$'\n' ;;
+    *) newly_ended="${newly_ended}ended $entry"$'\n' ;;
   esac
-done
+done < <(printf '%s' "${recorded#|}$added" | tr '|' '\n')
 [ -z "$newly_ended" ] || printf '%s' "$newly_ended" >>"$ledger" ||
   ledger_failed "could not append to $ledger"
 
