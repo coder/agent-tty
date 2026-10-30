@@ -220,12 +220,12 @@ function procStatFields(procStat: string): string[] {
   return procStat.slice(procStat.lastIndexOf(')') + 2).split(' ');
 }
 
-// Whether /proc shows a process of the group that is not a zombie, or null
-// when it shows none of the group. kill(-pgid, 0) finds a zombie until its
-// parent reaps it, and an init that never reaps orphans, such as a
-// container's PID 1 without an init, never does. Off Linux there is no scan
-// and the answer is true, so a zombie reads alive. launchd reaps orphans on
-// macOS.
+// Whether /proc shows a process of the group that is not a zombie, or a
+// process that it refuses to show, or null when it shows none of the group.
+// kill(-pgid, 0) finds a zombie until its parent reaps it, and an init that
+// never reaps orphans, such as a container's PID 1 without an init, never
+// does. Off Linux there is no scan and the answer is true, so a zombie reads
+// alive. launchd reaps orphans on macOS.
 function groupHasLiveProcess(pgid: number): boolean | null {
   if (process.platform !== 'linux') {
     return true;
@@ -240,14 +240,13 @@ function groupHasLiveProcess(pgid: number): boolean | null {
     try {
       procStat = readFileSync(`/proc/${entry}/stat`, 'utf8');
     } catch (error) {
-      // ENOENT and ESRCH: the process ended during the scan. EPERM: hidepid=1
-      // hides the process of another user.
-      if (
-        hasErrorCode(error, 'ENOENT') ||
-        hasErrorCode(error, 'ESRCH') ||
-        hasErrorCode(error, 'EPERM')
-      ) {
+      // ENOENT and ESRCH: the process ended during the scan.
+      if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ESRCH')) {
         continue;
+      }
+      // hidepid=1 refuses to show the process of another user.
+      if (hasErrorCode(error, 'EPERM')) {
+        return true;
       }
       throw error;
     }
@@ -283,7 +282,9 @@ export function isProcessGroupAlive(pgid: number | null): boolean {
     throw error;
   }
 
-  // The kill found processes that were reaped before the scan.
+  // None in view: the kill found processes that were reaped before the scan.
+  // hidepid=2 can also hide a process of another user here, which then reads
+  // gone.
   return groupHasLiveProcess(pgid) ?? false;
 }
 
