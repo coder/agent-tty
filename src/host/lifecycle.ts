@@ -490,17 +490,44 @@ async function recordDestroyed(
 ): Promise<void> {
   invariant(
     isTerminalSessionStatus(manifest.status) ||
-      !isProcessAlive(manifest.hostPid),
-    'recordDestroyed needs a terminal manifest or a dead host',
+      (!isProcessAlive(manifest.hostPid) && !isProcessAlive(manifest.childPid)),
+    'recordDestroyed needs a terminal manifest or dead session processes',
   );
   if (!isDestroyedSessionStatus(manifest.status)) {
-    await writeManifest(manifestFile, {
-      ...manifest,
-      status: 'destroyed',
-      updatedAt: new Date().toISOString(),
-    });
+    await writeManifest(
+      manifestFile,
+      {
+        ...manifest,
+        status: 'destroyed',
+        updatedAt: new Date().toISOString(),
+      },
+      false,
+    );
   }
   await unlinkIfPresent(socketFile);
+}
+
+async function stopSessionProcesses(
+  manifest: SessionRecord,
+  sessionDirectory: string,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  killProcessBestEffort(manifest.childPid);
+  killProcessBestEffort(manifest.hostPid);
+
+  const stopped = await waitForProcessesToExit(
+    manifest.hostPid,
+    manifest.childPid,
+    DESTROY_MAX_ATTEMPTS,
+    DESTROY_POLL_INTERVAL_MS,
+    pollOptions(signal),
+  );
+  if (!stopped) {
+    throw makeCliError(ERROR_CODES.HOST_TIMEOUT, {
+      message: `Timed out forcing session "${manifest.sessionId}" to exit.`,
+      details: { sessionId: manifest.sessionId, sessionDirectory },
+    });
+  }
 }
 
 export interface DestroySessionOptions {
@@ -531,28 +558,11 @@ export async function destroySession(
   }
 
   if (force === true) {
-    killProcessBestEffort(manifest.childPid);
-    killProcessBestEffort(manifest.hostPid);
-
-    const stopped = await waitForProcessesToExit(
-      manifest.hostPid,
-      manifest.childPid,
-      DESTROY_MAX_ATTEMPTS,
-      DESTROY_POLL_INTERVAL_MS,
-      pollOptions(signal),
-    );
-    if (!stopped) {
-      throw makeCliError(ERROR_CODES.HOST_TIMEOUT, {
-        message: `Timed out forcing session "${sessionId}" to exit.`,
-        details: {
-          sessionId,
-          sessionDirectory,
-        },
-      });
-    }
-
+    await stopSessionProcesses(manifest, sessionDirectory, signal);
+    // The host is dead now, so this read is final. It can name a child that
+    // the first read did not.
     const current = await readSessionManifestOrThrow(sessionId, manifestFile);
-    killProcessBestEffort(current.childPid);
+    await stopSessionProcesses(current, sessionDirectory, signal);
     await recordDestroyed(manifestFile, socketFile, current);
     return;
   }

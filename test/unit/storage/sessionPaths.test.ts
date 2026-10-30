@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -95,6 +95,18 @@ describe('manifest storage', () => {
     const roundTripped = await readManifest(path);
 
     expect(roundTripped).toEqual(record);
+  });
+
+  it('does not bring back a removed session directory when asked not to create it', async () => {
+    // oxfmt-ignore
+    const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
+    temporaryDirectories.push(home);
+    const directory = sessionDir(home, 'session-01');
+
+    await expect(
+      writeManifest(manifestPath(directory), createSessionRecord(), false),
+    ).rejects.toMatchObject({ code: 'STORAGE_WRITE_ERROR' });
+    await expect(stat(directory)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('returns null when a manifest does not exist', async () => {
