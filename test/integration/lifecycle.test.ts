@@ -1,3 +1,5 @@
+import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import {
   chmod,
   mkdir,
@@ -13,12 +15,18 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { isProcessAlive } from '../../src/host/lifecycle.js';
 import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
 import { SessionRecordSchema } from '../../src/protocol/schemas.js';
-import { sessionDir, socketPath } from '../../src/storage/sessionPaths.js';
+import { writeManifest } from '../../src/storage/manifests.js';
+import {
+  manifestPath,
+  programRecordPath,
+  sessionDir,
+  socketPath,
+} from '../../src/storage/sessionPaths.js';
 import {
   cleanupHome,
   crashSession,
@@ -1052,6 +1060,195 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       });
     });
   });
+
+  // Only Linux records the session token that tells the two groups apart.
+  describe.runIf(process.platform === 'linux')(
+    'a manifest whose group id now names an unrelated group',
+    () => {
+      let unrelated = 0;
+
+      beforeEach(() => {
+        vi.stubEnv('XDG_STATE_HOME', join(testHome, 'state'));
+      });
+
+      afterEach(() => {
+        if (unrelated > 1) {
+          try {
+            process.kill(-unrelated, 'SIGKILL');
+          } catch {
+            // the group is already gone
+          }
+        }
+        unrelated = 0;
+        vi.unstubAllEnvs();
+      });
+
+      // The session's program is gone. A program of another session took its
+      // group id and copied its session id, as a reused id would look. Its
+      // parent exits, so init reaps it once it dies.
+      async function reuseGroupId(): Promise<string> {
+        const sessionId = createSession(testHome, [
+          '/bin/sh',
+          '-c',
+          'exec sleep 300',
+        ]);
+        destroySession(testHome, sessionId);
+        unrelated = Number(
+          execFileSync(
+            '/bin/sh',
+            ['-c', 'setsid sleep 300 </dev/null >/dev/null 2>&1 & echo $!'],
+            {
+              encoding: 'utf8',
+              env: { ...process.env, AGENT_TTY_SESSION_ID: sessionId },
+            },
+          ).trim(),
+        );
+        const deadline = Date.now() + 5_000;
+        while (
+          execFileSync('ps', ['-o', 'sid=', '-p', String(unrelated)], {
+            encoding: 'utf8',
+          }).trim() !== String(unrelated)
+        ) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(10);
+        }
+        const directory = sessionDir(testHome, sessionId);
+        const program = JSON.parse(
+          await readFile(programRecordPath(directory), 'utf8'),
+        ) as Record<string, unknown>;
+        await writeFile(
+          programRecordPath(directory),
+          JSON.stringify({ ...program, pid: unrelated }),
+        );
+        const manifest = SessionRecordSchema.parse(
+          JSON.parse(await readFile(manifestPath(directory), 'utf8')),
+        );
+        await writeManifest(manifestPath(directory), {
+          ...manifest,
+          status: 'running',
+          hostPid: null,
+          childPid: unrelated,
+        });
+        return sessionId;
+      }
+
+      async function expectUnrelatedAlive(): Promise<void> {
+        await sleep(200);
+        expect(isGroupAlive(unrelated)).toBe(true);
+      }
+
+      it('a reconcile records the session failed and leaves the group running', async () => {
+        const sessionId = await reuseGroupId();
+
+        expect(inspectSession(testHome, sessionId).status).toBe('failed');
+        await expectUnrelatedAlive();
+      });
+
+      it('destroy --force records the session destroyed and leaves the group running', async () => {
+        const sessionId = await reuseGroupId();
+
+        const result = runCli(['destroy', sessionId, '--force', '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        await expectUnrelatedAlive();
+      });
+    },
+  );
+
+  // The hold needs the token to find the program without a manifest pid.
+  describe.runIf(process.platform === 'linux')(
+    'a host that dies before its first manifest write',
+    () => {
+      let pgid = 0;
+
+      beforeEach(() => {
+        vi.stubEnv('XDG_STATE_HOME', join(testHome, 'state'));
+      });
+
+      afterEach(() => {
+        if (pgid > 1) {
+          try {
+            process.kill(-pgid, 'SIGKILL');
+          } catch {
+            // the group is already gone
+          }
+        }
+        pgid = 0;
+        vi.unstubAllEnvs();
+      });
+
+      it('destroy --force ends the program that no manifest names', async () => {
+        const holdLog = join(testHome, 'hold.log');
+        const creator = spawn(
+          process.execPath,
+          [
+            '--import',
+            'tsx',
+            './src/cli/main.ts',
+            'create',
+            '--json',
+            '--',
+            '/bin/sh',
+            '-c',
+            'trap "" HUP; sleep 300 & wait',
+          ],
+          {
+            stdio: 'ignore',
+            env: {
+              ...process.env,
+              AGENT_TTY_HOME: testHome,
+              REPLAY_LOG: holdLog,
+              REPLAY_HOLD: '_host:rename:/session.json:1:30000',
+              NODE_OPTIONS: [
+                process.env.NODE_OPTIONS ?? '',
+                `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+              ].join(' '),
+            },
+          },
+        );
+        const creatorExit = once(creator, 'exit');
+        const deadline = Date.now() + 15_000;
+        while (
+          !(await readFile(holdLog, 'utf8').then(
+            (log) => log.includes('hold rename'),
+            () => false,
+          ))
+        ) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(50);
+        }
+        const [sessionId] = await readdir(join(testHome, 'sessions'));
+        expect(sessionId).toBeTypeOf('string');
+        const manifest = SessionRecordSchema.parse(
+          JSON.parse(
+            await readFile(
+              manifestPath(sessionDir(testHome, sessionId as string)),
+              'utf8',
+            ),
+          ),
+        );
+        expect(manifest.childPid).toBeNull();
+        const hostPid = manifest.hostPid as number;
+        pgid = Number(
+          execFileSync('ps', ['-o', 'pid=', '--ppid', String(hostPid)], {
+            encoding: 'utf8',
+          }).trim(),
+        );
+        expect(isGroupAlive(pgid)).toBe(true);
+        process.kill(hostPid, 'SIGKILL');
+        await creatorExit;
+
+        const result = runCli(
+          ['destroy', sessionId as string, '--force', '--json'],
+          { AGENT_TTY_HOME: testHome },
+        );
+        expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
+        expect(await groupEnds(pgid)).toBe(true);
+      });
+    },
+  );
 
   describe('destroy run by the program itself', () => {
     let pgid = 0;

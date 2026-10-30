@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -85,6 +85,11 @@ import {
   reconcileSession,
   type AllocateConfig,
 } from '../../../src/host/lifecycle.js';
+import {
+  captureProgram,
+  writeProgramRecord,
+  type ProgramRecord,
+} from '../../../src/host/programGroup.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
 import { manifestPath, sessionDir } from '../../../src/storage/sessionPaths.js';
@@ -319,6 +324,95 @@ describe('reconcileSession', () => {
     await reconcileSession(directory);
 
     expect(existsSync(directory)).toBe(false);
+  });
+
+  it('kills the group of the manifest when the program record has no token', async () => {
+    const directory = await seedSession(makeRecord());
+    writeProgramRecord(directory, {
+      version: 1,
+      pid: CHILD_PID,
+      bootId: null,
+      autogroup: null,
+    });
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
+    });
+
+    await reconcileSession(directory);
+
+    expect(kill).toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+  });
+
+  // Only Linux has the token.
+  describe.runIf(process.platform === 'linux')('with a token', () => {
+    let group = 0;
+
+    afterEach(() => {
+      if (group > 1) {
+        try {
+          process.kill(-group, 'SIGKILL');
+        } catch {
+          // the group is already gone
+        }
+      }
+      group = 0;
+    });
+
+    async function seedProgramGroup(
+      change: (record: ProgramRecord) => ProgramRecord,
+    ): Promise<string> {
+      group = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' })
+        .pid as number;
+      const record = captureProgram(group);
+      expect(record.autogroup).not.toBeNull();
+      const directory = await seedSession(makeRecord({ childPid: group }));
+      writeProgramRecord(directory, change(record));
+      const kill = process.kill.bind(process);
+      vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+        if (pid === HOST_PID) {
+          throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
+        }
+        return kill(pid, signal);
+      });
+      return directory;
+    }
+
+    it('kills the group that the record proves', async () => {
+      const directory = await seedProgramGroup((record) => record);
+
+      await reconcileSession(directory);
+
+      expect(process.kill).toHaveBeenCalledWith(-group, 'SIGKILL');
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'failed',
+      });
+    });
+
+    it.each([
+      [
+        'another autogroup',
+        (record: ProgramRecord) =>
+          record.autogroup === null
+            ? record
+            : { ...record, autogroup: record.autogroup + 1 },
+      ],
+      [
+        'another boot',
+        (record: ProgramRecord) =>
+          record.bootId === null
+            ? record
+            : { ...record, bootId: '00000000-0000-0000-0000-000000000000' },
+      ],
+    ])('does not kill a group whose record names %s', async (_name, change) => {
+      const directory = await seedProgramGroup(change);
+
+      await reconcileSession(directory);
+
+      expect(process.kill).not.toHaveBeenCalledWith(-group, 'SIGKILL');
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'failed',
+      });
+    });
   });
 });
 
