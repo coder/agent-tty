@@ -1,6 +1,7 @@
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -8,12 +9,23 @@ import {
   cleanupHome,
   groupEnds,
   inspectSession,
+  isGroupAlive,
+  killGroupIfAlive,
   runCli,
   sleep,
   type SuccessEnvelope,
 } from '../helpers.js';
 
 let testHome = '';
+
+// The preload makes every group signal fail with EPERM and deliver nothing,
+// as when the group's remaining processes belong to another user.
+const refusesGroupKill = {
+  NODE_OPTIONS: [
+    process.env.NODE_OPTIONS ?? '',
+    `--import=${pathToFileURL(resolve('test/fixtures/eperm-group-kill.ts')).href}`,
+  ].join(' '),
+};
 
 describe('idle-timeout integration', { timeout: 30000 }, () => {
   beforeEach(async () => {
@@ -127,4 +139,60 @@ describe('idle-timeout integration', { timeout: 30000 }, () => {
     expect(session.childPid).toBeTypeOf('number');
     expect(await groupEnds(session.childPid as number)).toBe(true);
   });
+
+  // Only Linux records the token that lets destroy stop what an exited
+  // program left.
+  it.runIf(process.platform === 'linux')(
+    'leaves a member that refuses the kill to a destroy that times out',
+    async () => {
+      const createResult = runCli(
+        [
+          'create',
+          '--idle-timeout-ms',
+          '300',
+          '--json',
+          '--',
+          '/bin/sh',
+          '-c',
+          '(trap "" HUP; exec sleep 300) & wait',
+        ],
+        { ...refusesGroupKill, AGENT_TTY_HOME: testHome },
+      );
+      expect(createResult.status).toBe(0);
+      const sessionId = (
+        JSON.parse(createResult.stdout) as SuccessEnvelope<{
+          sessionId: string;
+        }>
+      ).result.sessionId;
+
+      let session = inspectSession(testHome, sessionId);
+      const pgid = session.childPid;
+      if (pgid === null || pgid <= 1) {
+        throw new Error(`the session names no program group: ${String(pgid)}`);
+      }
+      try {
+        const deadline = Date.now() + 10_000;
+        while (session.status === 'running' && Date.now() < deadline) {
+          await sleep(200);
+          session = inspectSession(testHome, sessionId);
+        }
+        expect(session.status).toBe('exited');
+        expect(isGroupAlive(pgid)).toBe(true);
+
+        const destroyResult = runCli(['destroy', sessionId, '--json'], {
+          ...refusesGroupKill,
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(JSON.parse(destroyResult.stdout)).toMatchObject({
+          ok: false,
+          error: { code: 'HOST_TIMEOUT' },
+        });
+        expect(destroyResult.status).toBe(5);
+        expect(inspectSession(testHome, sessionId).status).toBe('exited');
+        expect(isGroupAlive(pgid)).toBe(true);
+      } finally {
+        killGroupIfAlive(pgid);
+      }
+    },
+  );
 });
