@@ -327,6 +327,18 @@ describe('reconcileSession', () => {
     expect(existsSync(directory)).toBe(false);
   });
 
+  it('kills no group when gc removes the folder after the re-read', async () => {
+    const directory = await seedSession(makeRecord());
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
+    });
+    gcRemovesFolderAfterRead(directory, 2);
+
+    await reconcileSession(directory);
+
+    expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+  });
+
   it('kills the group of the manifest when the program record has no token', async () => {
     const directory = await seedSession(makeRecord());
     writeProgramRecord(directory, {
