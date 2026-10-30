@@ -7,8 +7,9 @@
     "src/host/lifecycle.ts#launchHost": "24751cfcbe8a055e",
     "src/host/lifecycle.ts#isProcessAlive": "1ca1fe6ad6c41711",
     "src/host/lifecycle.ts#killProcessBestEffort": "1dd0cb4ee9bbc676",
-    "src/host/lifecycle.ts#isProcessGroupAlive": "7bf836a5a7b126df",
-    "src/host/lifecycle.ts#killProcessGroupBestEffort": "7cdcb0e3559a1aa8",
+    "src/host/lifecycle.ts#processGroupTarget": "88de1544b1553e54",
+    "src/host/lifecycle.ts#isProcessGroupAlive": "ebbca643715fc039",
+    "src/host/lifecycle.ts#killProcessGroupBestEffort": "870d02ee86c5fb91",
     "src/host/lifecycle.ts#readSessionManifestOrThrow": "9709f28e5e9cca4b",
     "src/host/lifecycle.ts#waitForTerminalManifest": "3f14811e8d2f5f7f",
     "src/host/lifecycle.ts#waitForProcessesToExit": "1ea0cacb6c9c091e",
@@ -36,7 +37,7 @@
     "src/host/hostMain.ts#runHost>handlers.resize": "30dd1da32879d478",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "dd0b0b1020a91981",
-    "skill:scripts/facts.mjs": "38d05126f3facd8d",
+    "skill:scripts/facts.mjs": "7602ed205f290472",
     "skill:scripts/check.sh": "b568c7aa2510e51d"
   },
   "callSites": {

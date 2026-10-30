@@ -423,16 +423,28 @@ function destroyFacts() {
 
 // Every kill of the program that a rule depends on SIGKILLs its process
 // group, and destroy --force waits until the group is gone: the helpers
-// signal the negated group id, stopSessionProcesses and waitForProcessesToExit
+// signal the negated group id outside Windows, stopSessionProcesses and waitForProcessesToExit
 // use them, reconcileSession kills the group that its re-read names, and
 // handlePtyExit kills the group before it records destroyed.
 function programGroupFacts() {
   const lifecycle = 'src/host/lifecycle.ts';
+  const negates = requireDeclaration(
+    lifecycle,
+    'processGroupTarget',
+  ).body.statements.some(
+    (st) =>
+      ts.isReturnStatement(st) &&
+      normalize(st.expression?.getText() ?? '') ===
+        "process.platform === 'win32' ? pgid : -pgid",
+  );
   const signalsGroup = (name, signal) =>
     calls(requireDeclaration(lifecycle, name).body, 'kill').some(
-      (call) => normalize(call.getText()) === `process.kill(-pgid, ${signal})`,
+      (call) =>
+        normalize(call.getText()) ===
+        `process.kill(processGroupTarget(pgid), ${signal})`,
     );
   const helpers =
+    negates &&
     signalsGroup('killProcessGroupBestEffort', "'SIGKILL'") &&
     signalsGroup('isProcessGroupAlive', '0');
   const stop = requireDeclaration(lifecycle, 'stopSessionProcesses').body;
@@ -569,6 +581,7 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'launchHost'],
   ['src/host/lifecycle.ts', 'isProcessAlive'],
   ['src/host/lifecycle.ts', 'killProcessBestEffort'],
+  ['src/host/lifecycle.ts', 'processGroupTarget'],
   ['src/host/lifecycle.ts', 'isProcessGroupAlive'],
   ['src/host/lifecycle.ts', 'killProcessGroupBestEffort'],
   ['src/host/lifecycle.ts', 'readSessionManifestOrThrow'],

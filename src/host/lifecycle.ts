@@ -200,14 +200,16 @@ function killProcessBestEffort(pid: number | null): void {
 }
 
 // node-pty starts the program as a session leader, so the program's pid is
-// also the id of its process group, which the program cannot leave.
-function assertProcessGroupId(pgid: number): void {
+// also the id of its process group, which the program cannot leave. Windows
+// has no process groups, so there the kill reaches the program's pid only.
+function processGroupTarget(pgid: number): number {
   // process.kill(-0) signals the caller's own group, process.kill(-1) every
   // process that the caller may signal.
   invariant(
     Number.isInteger(pgid) && pgid > 1,
     'process group id must be an integer above 1',
   );
+  return process.platform === 'win32' ? pgid : -pgid;
 }
 
 export function isProcessGroupAlive(pgid: number | null): boolean {
@@ -215,10 +217,8 @@ export function isProcessGroupAlive(pgid: number | null): boolean {
     return false;
   }
 
-  assertProcessGroupId(pgid);
-
   try {
-    process.kill(-pgid, 0);
+    process.kill(processGroupTarget(pgid), 0);
     return true;
   } catch (error) {
     if (hasErrorCode(error, 'ESRCH')) {
@@ -234,10 +234,8 @@ export function killProcessGroupBestEffort(pgid: number | null): void {
     return;
   }
 
-  assertProcessGroupId(pgid);
-
   try {
-    process.kill(-pgid, 'SIGKILL');
+    process.kill(processGroupTarget(pgid), 'SIGKILL');
   } catch (error) {
     if (hasErrorCode(error, 'ESRCH')) {
       return;

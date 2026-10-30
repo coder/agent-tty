@@ -32,7 +32,7 @@ The tool is TLC, the TLA+ model checker, pinned to release 1.7.4 by sha256. The 
 
 Yes, when the diff changes any of these:
 
-- `src/host/lifecycle.ts`: `allocateSession` (and the order of its `launch` call and first manifest write), `launchHost`, `isProcessAlive`, `isProcessGroupAlive`, `killProcessGroupBestEffort`, `reconcileSession`, and `destroySession` with its helpers `recordDestroyed`, `stopSessionProcesses`, `readSessionManifestOrThrow`, `waitForTerminalManifest`, `waitForProcessesToExit` and `killProcessBestEffort`.
+- `src/host/lifecycle.ts`: `allocateSession` (and the order of its `launch` call and first manifest write), `launchHost`, `isProcessAlive`, `processGroupTarget`, `isProcessGroupAlive`, `killProcessGroupBestEffort`, `reconcileSession`, and `destroySession` with its helpers `recordDestroyed`, `stopSessionProcesses`, `readSessionManifestOrThrow`, `waitForTerminalManifest`, `waitForProcessesToExit` and `killProcessBestEffort`.
 - `src/host/hostMain.ts`: `waitForManifestFromCreate`, `isSessionCommandable`, and in `runHost` the start-up statements (the manifest wait, the `hostPid === process.pid` check, `createSerialManifestWriter`, `EventLog.open`, `createPty`, `setChildPid`), `initiateShutdown`, `startShutdown`, `handlePtyExit`, `pty.onExit`, the `SIGTERM` handler, the `resize` and `destroy` handlers, and the last `try` block (the start-up manifest write and `rpcServer.listen`).
 - `src/host/manifestWriter.ts` `createSerialManifestWriter`.
 - `src/cli/commands/gc.ts` `gcSessions`, `src/cli/commands/create.ts` `runCreateCommand` and `src/cli/commands/destroy.ts` `runDestroyCommand`.
@@ -221,6 +221,7 @@ It assumes:
 - gc's `rm(sessionDirectory, { recursive: true })` is one step, though the real `rm` deletes file by file. R1 already forbids removing a session whose host can still write, so the order of the deleted files does not matter.
 - Steps that only lead to the same outcome are joined: gc's `readdir` and `stat` (both only skip), the host's `EventLog.open` and `createPty` (synchronous after the open), and `recordExit` with the `exit` event append (no other process sees them).
 - A program can outlive its host: the PTY closes with the host and sends the program SIGHUP, which a program can ignore. The model keeps such a program running until a kill of its group ends it, the worst case for R10. A SIGKILL of the group ends every process in it at once.
+- The model describes Linux and macOS. Windows has no process groups, so there `processGroupTarget` gives the program's pid, and every kill reaches only that process.
 - The program's processes stay in its process group. A process that leaves the group (`setsid`, or the job control of an interactive shell) is out of reach, and so is a process that the program left when it exited on its own: the model drops it at that exit.
 - The `destroy` RPC is one step: the host's handler does the work. `destroySession`'s own `reconcileSession` calls are the reconciles of the other command, so `destroy` itself only reads after them. A poll that reads an active status is either retried later or is the last of its 50 tries.
 - Only the "destroying" write of `initiateShutdown` can wait for its turn while the in-memory status changes, so only it keeps its snapshot in the model. The start-up, resize and exit writes carry a status that cannot change before their turn.

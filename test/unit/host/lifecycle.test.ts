@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   allocateSession,
+  killProcessGroupBestEffort,
   reconcileSession,
   type AllocateConfig,
 } from '../../../src/host/lifecycle.js';
@@ -153,5 +154,35 @@ describe('reconcileSession', () => {
       hostPid: null,
       childPid: null,
     });
+  });
+});
+
+describe('killProcessGroupBestEffort', () => {
+  const platform = process.platform;
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: platform });
+  });
+
+  it.each([
+    ['linux', -CHILD_PID],
+    ['darwin', -CHILD_PID],
+    ['win32', CHILD_PID],
+  ])('on %s signals %i', (name, target) => {
+    Object.defineProperty(process, 'platform', { value: name });
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+    killProcessGroupBestEffort(CHILD_PID);
+
+    expect(kill).toHaveBeenCalledExactlyOnceWith(target, 'SIGKILL');
+  });
+
+  it.each([0, 1])('refuses the group id %i', (pgid) => {
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+    expect(() => killProcessGroupBestEffort(pgid)).toThrow(
+      'process group id must be an integer above 1',
+    );
+    expect(kill).not.toHaveBeenCalled();
   });
 });
