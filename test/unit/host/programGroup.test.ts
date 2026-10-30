@@ -30,6 +30,9 @@ import type * as Fs from 'node:fs';
 const procHooks = vi.hoisted(() => ({
   // /proc/<pid>/stat by pid, or the error that its read throws.
   stat: undefined as Map<string, string | Error> | undefined,
+  // /proc/<pid>/task/<tid>/stat by "<pid>/<tid>" for the threads beside the
+  // leader, whose task stat is its /proc/<pid>/stat.
+  threads: new Map<string, string | Error>(),
   mountinfo: undefined as string | undefined,
 }));
 
@@ -39,13 +42,27 @@ const autogroupFile = vi.hoisted(() => ({
 
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof Fs>('node:fs');
-  const readdirSync = ((path: string, ...rest: unknown[]) =>
-    procHooks.stat !== undefined && path === '/proc'
-      ? ['self', ...procHooks.stat.keys()]
-      : (actual.readdirSync as (...args: unknown[]) => unknown)(
-          path,
-          ...rest,
-        )) as typeof actual.readdirSync;
+  const readdirSync = ((path: string, ...rest: unknown[]) => {
+    const pid = /^\/proc\/(\d+)\/task$/.exec(path)?.[1];
+    if (procHooks.stat === undefined || (path !== '/proc' && !pid)) {
+      return (actual.readdirSync as (...args: unknown[]) => unknown)(
+        path,
+        ...rest,
+      );
+    }
+    if (pid === undefined) {
+      return ['self', ...procHooks.stat.keys()];
+    }
+    if (!procHooks.stat.has(pid)) {
+      throw errno('ENOENT');
+    }
+    return [
+      pid,
+      ...[...procHooks.threads.keys()].flatMap((key) =>
+        key.startsWith(`${pid}/`) ? [key.slice(pid.length + 1)] : [],
+      ),
+    ];
+  }) as typeof actual.readdirSync;
   const readFileSync = ((path: string, ...rest: unknown[]) => {
     const replaced = autogroupFile.read?.(path);
     if (replaced !== undefined && replaced !== null) {
@@ -57,14 +74,18 @@ vi.mock('node:fs', async () => {
       }
       return procHooks.mountinfo;
     }
-    const pid = /^\/proc\/(\d+)\/stat$/.exec(path)?.[1];
+    const [, pid, tid] =
+      /^\/proc\/(\d+)(?:\/task\/(\d+))?\/stat$/.exec(path) ?? [];
     if (procHooks.stat === undefined || pid === undefined) {
       return (actual.readFileSync as (...args: unknown[]) => unknown)(
         path,
         ...rest,
       );
     }
-    const stat = procHooks.stat.get(pid);
+    const stat =
+      tid === undefined || tid === pid
+        ? procHooks.stat.get(pid)
+        : (procHooks.threads.get(`${pid}/${tid}`) ?? errno('ENOENT'));
     if (stat instanceof Error) {
       throw stat;
     }
@@ -78,6 +99,7 @@ const platform = process.platform;
 afterEach(() => {
   vi.restoreAllMocks();
   procHooks.stat = undefined;
+  procHooks.threads.clear();
   procHooks.mountinfo = undefined;
   autogroupFile.read = null;
   Object.defineProperty(process, 'platform', { value: platform });
@@ -426,9 +448,11 @@ function probeEnds(outcome: 'ok' | 'EPERM') {
 // that ends during the scan. Each process of the group leads it and its
 // session. Unless the test set its own, /proc is mounted without hidepid,
 // so the result does not depend on the host.
+const STAT_TAIL = '0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 100';
+
 function procShowsGroup(...states: string[]): void {
   procHooks.mountinfo ??= procMount('rw');
-  const tail = '0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 100';
+  const tail = STAT_TAIL;
   procHooks.stat = new Map<string, string | Error>([
     ['1', `1 (init) S 0 1 1 ${tail}`],
     ['2', errno('ESRCH')],
@@ -440,6 +464,17 @@ function procShowsGroup(...states: string[]): void {
       `${pid} (a) b (c) ${state} 1 ${String(CHILD_PID)} ${String(CHILD_PID)} ${tail}`,
     );
   });
+}
+
+// The first process of the group gets a second thread in this state, or one
+// whose read fails with this error code.
+function procShowsSecondThread(thread: string): void {
+  procHooks.threads.set(
+    '100/150',
+    thread.length === 1
+      ? `150 (a) ${thread} 1 ${String(CHILD_PID)} ${String(CHILD_PID)} ${STAT_TAIL}`
+      : errno(thread),
+  );
 }
 
 describe('a program group without a token', () => {
@@ -462,6 +497,26 @@ describe('a program group without a token', () => {
     (outcome, states, alive) => {
       Object.defineProperty(process, 'platform', { value: 'linux' });
       procShowsGroup(...states);
+      probeEnds(outcome);
+
+      expect(isProgramGroupAlive(group)).toBe(alive);
+    },
+  );
+
+  // A process whose main thread called pthread_exit shows Z while another
+  // of its threads runs.
+  it.each([
+    ['ok', 'S', true],
+    ['EPERM', 'R', true],
+    ['ok', 'Z', false],
+    ['ok', 'EACCES', true],
+    ['ok', 'ENOENT', false],
+  ] as const)(
+    'on linux, when the probe ends %s and a zombie leader has a second thread %s, is alive: %s',
+    (outcome, thread, alive) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procShowsGroup('Z');
+      procShowsSecondThread(thread);
       probeEnds(outcome);
 
       expect(isProgramGroupAlive(group)).toBe(alive);
@@ -687,6 +742,41 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     const kill = probeEnds('ok');
 
     expect(isProgramGroupAlive(group)).toBe(false);
+    stopProgramGroup(group);
+    expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+  });
+
+  it('is alive and gets the kill when a zombie leader with the token has a live thread', () => {
+    procShowsTokenGroup('Z');
+    procShowsSecondThread('S');
+    const kill = probeEnds('ok');
+
+    expect(isProgramGroupAlive(group)).toBe(true);
+    stopProgramGroup(group);
+    expect(kill).toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+  });
+
+  it('is not alive and gets no kill when a zombie leader with a live thread names another autogroup', () => {
+    procShowsTokenGroup('Z');
+    procShowsSecondThread('S');
+    const tokenRead = autogroupFile.read;
+    autogroupFile.read = (file) =>
+      file === '/proc/100/autogroup'
+        ? '/autogroup-8 nice 0\n'
+        : (tokenRead?.(file) ?? null);
+    const kill = probeEnds('ok');
+
+    expect(isProgramGroupAlive(group)).toBe(false);
+    stopProgramGroup(group);
+    expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+  });
+
+  it('is alive and gets no kill while /proc refuses a thread of a zombie leader', () => {
+    procShowsTokenGroup('Z');
+    procShowsSecondThread('EACCES');
+    const kill = probeEnds('ok');
+
+    expect(isProgramGroupAlive(group)).toBe(true);
     stopProgramGroup(group);
     expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
   });

@@ -1,5 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { readFileSync } from 'node:fs';
 import {
   chmod,
   mkdir,
@@ -987,6 +988,31 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         expect(result.status).toBe(5);
         expect(inspectSession(testHome, sessionId).status).toBe('exited');
         expect(isGroupAlive(pgid)).toBe(true);
+      },
+    );
+
+    // Without a token, the kill needs no live process in view.
+    it.runIf(capturesToken)(
+      'destroy ends a program whose main thread exited while another thread runs',
+      async () => {
+        const sessionId = await createProgram(
+          `touch "$0"; exec python3 '${resolve('test/fixtures/zombie-leader.py')}'`,
+        );
+        const deadline = Date.now() + 10_000;
+        while (
+          parseProcStat(readFileSync(`/proc/${String(pgid)}/stat`, 'utf8'))
+            .state !== 'Z'
+        ) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(50);
+        }
+
+        const result = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await groupEnds(pgid)).toBe(true);
       },
     );
 
