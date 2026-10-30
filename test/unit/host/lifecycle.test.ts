@@ -11,6 +11,7 @@ const fsHooks = vi.hoisted(() => ({
   afterReadFile: undefined as ((path: string) => Promise<void>) | undefined,
   // /proc/<pid>/stat by pid, or the error that its read throws.
   proc: undefined as Map<string, string | Error> | undefined,
+  mountinfo: undefined as string | undefined,
 }));
 
 vi.mock('node:fs', async () => {
@@ -23,6 +24,9 @@ vi.mock('node:fs', async () => {
           ...rest,
         )) as typeof actual.readdirSync;
   const readFileSync = ((path: string, ...rest: unknown[]) => {
+    if (fsHooks.mountinfo !== undefined && path === '/proc/self/mountinfo') {
+      return fsHooks.mountinfo;
+    }
     const pid = /^\/proc\/(\d+)\/stat$/.exec(path)?.[1];
     if (fsHooks.proc === undefined || pid === undefined) {
       return (actual.readFileSync as (...args: unknown[]) => unknown)(
@@ -96,6 +100,7 @@ afterEach(async () => {
   vi.unstubAllEnvs();
   fsHooks.afterReadFile = undefined;
   fsHooks.proc = undefined;
+  fsHooks.mountinfo = undefined;
   await rm(home, { recursive: true, force: true });
 });
 
@@ -459,6 +464,18 @@ describe('isProcessGroupAlive', () => {
       procShowsGroup('Z');
       fsHooks.proc?.set('3', errno(readError));
       probeEnds(outcome);
+
+      expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
+    },
+  );
+
+  it.each(['hidepid=2', 'hidepid=invisible'])(
+    'on linux, when /proc is mounted with %s, counts a zombie group alive',
+    (option) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      fsHooks.mountinfo = `22 1 0:21 / /proc rw,nosuid,nodev,noexec,relatime shared:12 - proc proc rw,${option}\n`;
+      procShowsGroup('Z');
+      probeEnds('ok');
 
       expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
     },
