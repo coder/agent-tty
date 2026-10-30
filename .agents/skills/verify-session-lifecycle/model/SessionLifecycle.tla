@@ -422,9 +422,10 @@ HostClosesSocket ==
 \* finds none. The host then sees the exit (ProgramExits). The rules do not
 \* depend on this kill, because handlePtyExit kills the group too. It makes
 \* destroy end within its wait, a time bound that the model does not check.
-\* The idle time-out arms the same timer while the status is "running". The
-\* model leaves that kill out: it only ends processes that the normal exit
-\* after it (ProgramExits) drops anyway.
+\* The idle time-out arms the same timer while the status is "running", and
+\* handlePtyExit then kills the group too, because the timer was armed. The
+\* model leaves both kills out: they only end processes that the normal exit
+\* (ProgramExits) drops anyway.
 HostKillsProgram ==
     /\ hostAlive /\ hst = "destroying" /\ hex = "wait" /\ prog
     /\ prog' = FALSE
@@ -438,7 +439,8 @@ HostKillsProgram ==
 \* and the kill timer), which the idle time-out and initiateShutdown call.
 \* handlePtyExit: clearTimeout(groupKillTimer), then when the status is
 \* "destroying" killProcessGroupBestEffort(pty.pid), else recordExit (in
-\* memory), markPtyExited, and the 'exit' event append; no other process can
+\* memory), after the same kill when the idle time-out armed the timer,
+\* markPtyExited, and the 'exit' event append; no other process can
 \* see this step. Without HostWaitsForGroup the host records destroyed right
 \* after the kill and queues its exit write, as the code did before the
 \* wait. A process that a program left when it exited on its own is no

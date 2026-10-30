@@ -37,11 +37,11 @@
     "src/storage/manifests.ts#replaceFileAtomic": "20532509b3dcaade",
     "src/storage/manifests.ts#writeManifest": "1bcc99f09acfc577",
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
-    "src/host/hostMain.ts#runHost(parts)": "d039fa1539c9ea04",
+    "src/host/hostMain.ts#runHost(parts)": "a9d0b07a4b560b00",
     "src/host/hostMain.ts#runHost(final try)": "ad91fa180ff36ffb",
     "src/host/hostMain.ts#runHost>handlers.resize": "30dd1da32879d478",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "edd4561d4c61a78b",
+    "skill:model/SessionLifecycle.tla": "28a9587a3f559d4b",
     "skill:scripts/facts.mjs": "a31a6f10e20de53e",
     "skill:scripts/check.sh": "95e2b4d121abbd56"
   },
