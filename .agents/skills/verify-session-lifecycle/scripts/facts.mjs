@@ -343,7 +343,7 @@ function destroyFacts() {
       const previous = statements[statements.indexOf(r) - 1]?.getText() ?? '';
       return (
         /^await recordDestroyed\(/.test(previous) ||
-        (stopsThenRecords !== undefined &&
+        (stopsThenRecords.records &&
           /^await stopLeftoversThenRecordDestroyed\(/.test(previous))
       );
     });
@@ -434,7 +434,8 @@ function destroyFacts() {
       waitsForProcessesOnly,
     DestroyKeepsExitCode: keepsExitCode,
     DestroyStopsLeftovers:
-      stopsThenRecords !== undefined &&
+      stopsThenRecords.records &&
+      stopsThenRecords.stops &&
       returns.every((r) => {
         const statements = ts.isBlock(r.parent) ? r.parent.statements : [];
         const previous = statements[statements.indexOf(r) - 1]?.getText() ?? '';
@@ -446,11 +447,11 @@ function destroyFacts() {
   };
 }
 
-// The local stopLeftoversThenRecordDestroyed of destroySession: it stops the
-// group that program.json proves, waits for it, and only then records
-// destroyed.
+// The statements of destroySession's local stopLeftoversThenRecordDestroyed:
+// with DestroyStopsLeftovers it stops the group that program.json proves,
+// waits for it, and only then records destroyed.
 function stopLeftoversThenRecordDestroyed(destroy) {
-  let found;
+  let found = [];
   walk(destroy.body, (node) => {
     if (
       ts.isVariableDeclaration(node) &&
@@ -459,20 +460,22 @@ function stopLeftoversThenRecordDestroyed(destroy) {
       ts.isArrowFunction(node.initializer) &&
       ts.isBlock(node.initializer.body)
     ) {
-      found = node.initializer.body;
+      found = node.initializer.body.statements.map((st) =>
+        normalize(st.getText()),
+      );
     }
   });
-  if (found === undefined || found.statements.length !== 2) {
-    return undefined;
-  }
-  const [stop, record] = found.statements.map((st) => normalize(st.getText()));
-  return stop ===
-    'await stopSessionProcesses( sessionId, null, await readProvenProgramGroup(sessionDirectory), sessionDirectory, signal, );' &&
-    /^await recordDestroyed\(manifestFile, socketFile, terminal, null\);$/.test(
-      record,
-    )
-    ? found
-    : undefined;
+  return {
+    records:
+      found.length > 0 &&
+      /^await recordDestroyed\(manifestFile, socketFile, terminal, null\);$/.test(
+        found.at(-1),
+      ),
+    stops:
+      found.length === 2 &&
+      found[0] ===
+        'await stopSessionProcesses( sessionId, null, await readProvenProgramGroup(sessionDirectory), sessionDirectory, signal, );',
+  };
 }
 
 function manifestWriteFacts() {
