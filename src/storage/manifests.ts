@@ -186,8 +186,6 @@ export async function readManifestIfExists(
   return readManifestInternal(path, true);
 }
 
-// No mkdir: only allocateSession creates a session folder, so a write after
-// gc removed the folder fails instead of bringing it back.
 export async function writeManifest(
   path: string,
   record: SessionRecord,

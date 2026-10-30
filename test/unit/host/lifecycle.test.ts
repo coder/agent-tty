@@ -52,7 +52,6 @@ afterEach(async () => {
   await rm(home, { recursive: true, force: true });
 });
 
-// gc's `rm` lands right after the nth read of the session's manifest.
 function gcRemovesFolderAfterRead(directory: string, nth: number): void {
   let reads = 0;
   fsHooks.afterReadFile = async (path) => {
