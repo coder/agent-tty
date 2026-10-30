@@ -1,7 +1,9 @@
 import { mkdir } from 'node:fs/promises';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, resolve } from 'node:path';
 
+import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
+import { hasErrorCode } from '../util/hasErrorCode.js';
 
 const ARTIFACTS_DIRNAME = 'artifacts';
 const SAFE_FILENAME_COMPONENT_PATTERN = /[^a-zA-Z0-9._-]+/g;
@@ -120,6 +122,24 @@ export function artifactPath(sessionDir: string, filename: string): string {
 
 export async function ensureArtifactsDir(sessionDir: string): Promise<string> {
   const directory = artifactsDir(sessionDir);
-  await mkdir(directory, { recursive: true });
+
+  try {
+    await mkdir(directory);
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      const sessionDirectory = dirname(directory);
+      const sessionId = basename(sessionDirectory);
+      throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
+        message: `Session "${sessionId}" was not found: its folder ${sessionDirectory} no longer exists.`,
+        details: { sessionId, sessionDir: sessionDirectory },
+        cause: error,
+      });
+    }
+
+    if (!hasErrorCode(error, 'EEXIST')) {
+      throw error;
+    }
+  }
+
   return directory;
 }

@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { readValidatedJsonFile, writeValidatedJsonFile } from './manifests.js';
-import { artifactPath } from './artifactPaths.js';
+import { artifactPath, ensureArtifactsDir } from './artifactPaths.js';
 import { invariant } from '../util/assert.js';
 import { KeyedSerializer } from '../util/keyedSerializer.js';
 
@@ -162,6 +162,7 @@ export async function writeArtifactManifest(
   const path = artifactManifestPath(sessionDir);
   const expectedSessionId = sessionIdFromSessionDir(sessionDir);
 
+  await ensureArtifactsDir(sessionDir);
   await writeValidatedJsonFile({
     path,
     pathLabel: 'artifact manifest path',
@@ -169,6 +170,7 @@ export async function writeArtifactManifest(
     writeErrorMessage: `Failed to write artifact manifest at ${path}.`,
     validate: (manifestPath, data) =>
       validateArtifactManifestData(manifestPath, data, expectedSessionId),
+    createParentFolders: false,
   });
 }
 

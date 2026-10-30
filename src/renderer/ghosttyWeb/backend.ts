@@ -6,7 +6,7 @@ import {
   type Server,
   type ServerResponse,
 } from 'node:http';
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { copyFile, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 import { ensurePlaywrightBrowsersPath } from '../browserPath.js';
@@ -834,12 +834,12 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     await this.setScreenshotCursorVisibility(page, showCursor);
     await this.waitForScreenshotPaint(page);
 
-    await page.locator('#terminal').screenshot({
+    const renderedPng = await page.locator('#terminal').screenshot({
       animations: 'disabled',
       caret: showCursor ? 'initial' : 'hide',
-      path: outputPath,
       type: 'png',
     });
+    await writeFile(outputPath, renderedPng);
 
     const screenshotFile = await stat(outputPath);
     assertPositiveInteger(
@@ -937,7 +937,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       this.expectedPageClosure = false;
     }
 
-    await video.saveAs(outputPath);
+    await copyFile(await video.path(), outputPath);
     this.page = null;
     this.browserContext = null;
 

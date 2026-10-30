@@ -26,6 +26,7 @@ export interface WriteValidatedJsonFileOptions<T> {
   data: T;
   writeErrorMessage: string;
   validate: (path: string, data: unknown) => T;
+  createParentFolders?: boolean;
 }
 
 export interface WriteTextFileAtomicOptions {
@@ -33,6 +34,12 @@ export interface WriteTextFileAtomicOptions {
   pathLabel: string;
   contents: string;
   writeErrorMessage: string;
+  /**
+   * Defaults to true. Pass false for a file inside a session folder: gc can
+   * remove that folder at any time, and the write must then fail instead of
+   * creating the folder again.
+   */
+  createParentFolders?: boolean;
 }
 
 function assertAbsoluteStoragePath(path: string, label: string): void {
@@ -118,7 +125,9 @@ export async function writeTextFileAtomic(
   assertAbsoluteStoragePath(options.path, options.pathLabel);
 
   try {
-    await mkdir(dirname(options.path), { recursive: true });
+    if (options.createParentFolders !== false) {
+      await mkdir(dirname(options.path), { recursive: true });
+    }
     await replaceFileAtomic(options.path, options.contents);
   } catch (error) {
     throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
@@ -139,6 +148,9 @@ export async function writeValidatedJsonFile<T>(
     pathLabel: options.pathLabel,
     contents: `${JSON.stringify(validatedData, null, 2)}\n`,
     writeErrorMessage: options.writeErrorMessage,
+    ...(options.createParentFolders === undefined
+      ? {}
+      : { createParentFolders: options.createParentFolders }),
   });
 }
 

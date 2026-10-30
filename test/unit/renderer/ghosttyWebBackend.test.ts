@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -340,19 +340,13 @@ describe('GhosttyWebBackend unit guards', () => {
 
     const evaluate = vi.fn().mockResolvedValue(undefined);
     const screenshot = vi.fn(
-      async (options: {
-        animations: 'disabled';
-        caret: 'hide';
-        path: string;
-        type: 'png';
-      }) => {
+      (options: { animations: 'disabled'; caret: 'hide'; type: 'png' }) => {
         expect(options).toEqual({
           animations: 'disabled',
           caret: 'hide',
-          path: outputPath,
           type: 'png',
         });
-        await writeFile(outputPath, pngBuffer);
+        return Promise.resolve(pngBuffer);
       },
     );
     const locator = vi.fn((selector: string) => {
@@ -407,19 +401,13 @@ describe('GhosttyWebBackend unit guards', () => {
 
     const evaluate = vi.fn().mockResolvedValue(undefined);
     const screenshot = vi.fn(
-      async (options: {
-        animations: 'disabled';
-        caret: 'initial';
-        path: string;
-        type: 'png';
-      }) => {
+      (options: { animations: 'disabled'; caret: 'initial'; type: 'png' }) => {
         expect(options).toEqual({
           animations: 'disabled',
           caret: 'initial',
-          path: outputPath,
           type: 'png',
         });
-        await writeFile(outputPath, pngBuffer);
+        return Promise.resolve(pngBuffer);
       },
     );
     const locator = vi.fn((selector: string) => {
