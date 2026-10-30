@@ -10,8 +10,11 @@
 #
 # It appends each recorded childPid to <run>/child-pids, because reconcile
 # clears childPid from session.json when it finds a dead host, and the
-# program's children can outlive it. It misses a daemon that a program with
-# its own AGENT_TTY_SESSION_ID starts in a new terminal session.
+# program's children can outlive it. So it finds the children of a program
+# with its own AGENT_TTY_SESSION_ID only if it read the program's PID before a
+# reconcile, and never a daemon that such a program starts in a new terminal
+# session. It exits 2 when <run>/child-pids is not a regular file that it can
+# read and write.
 #
 #   .agents/skills/verify-agent-tty/scripts/run-pids.sh <run>/env.sh
 set -uo pipefail
@@ -35,6 +38,11 @@ caller_session=$(session_of $$)
 # children share its PID as their session ID. Any process can copy the run's
 # environment, but only the host's PTY gives it such a session.
 ledger=$VERIFY_RUN/child-pids
+[ -e "$ledger" ] || : >"$ledger"
+[ -f "$ledger" ] && [ -r "$ledger" ] && [ -w "$ledger" ] || {
+  echo "run-pids.sh: $ledger must be a regular file that you can read and write" >&2
+  exit 2
+}
 for manifest in "$AGENT_TTY_HOME"/sessions/*/session.json; do
   [ -f "$manifest" ] && jq -r '.childPid // empty' "$manifest" 2>/dev/null
 done >>"$ledger"
