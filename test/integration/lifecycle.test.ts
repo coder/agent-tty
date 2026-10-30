@@ -1034,6 +1034,26 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       pgid = 0;
     });
 
+    const cli = [
+      process.execPath,
+      '--import',
+      resolve('node_modules/tsx/dist/loader.mjs'),
+      resolve('src/cli/main.ts'),
+    ];
+
+    async function readEnvelopeOnceWritten(path: string): Promise<unknown> {
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline) {
+        await sleep(100);
+        try {
+          return JSON.parse(await readFile(path, 'utf8')) as unknown;
+        } catch {
+          // not written yet
+        }
+      }
+      return undefined;
+    }
+
     it.each([
       ['destroy', ''],
       ['destroy --force', '--force'],
@@ -1044,32 +1064,53 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         '-c',
         `while [ ! -e "$0" ]; do sleep 0.1; done; "$@" destroy "$AGENT_TTY_SESSION_ID" ${flag} --json > "$0.json"; sleep 300`,
         go,
-        process.execPath,
-        '--import',
-        resolve('node_modules/tsx/dist/loader.mjs'),
-        resolve('src/cli/main.ts'),
+        ...cli,
       ]);
       pgid = inspectSession(testHome, sessionId).childPid as number;
       await writeFile(go, '');
 
-      const deadline = Date.now() + 15_000;
-      let envelope: unknown;
-      while (envelope === undefined && Date.now() < deadline) {
-        await sleep(100);
-        try {
-          envelope = JSON.parse(await readFile(`${go}.json`, 'utf8'));
-        } catch {
-          // not written yet
-        }
-      }
-
-      expect(envelope).toMatchObject({
+      expect(await readEnvelopeOnceWritten(`${go}.json`)).toMatchObject({
         ok: true,
         result: { sessionId, destroyed: true },
       });
       expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
       expect(await groupEnds(pgid)).toBe(true);
     });
+
+    // Bash runs a typed command as a job in its own process group, so only
+    // the session id shows that it runs inside the program. destroy reads
+    // that id on Linux only.
+    it.runIf(process.platform === 'linux').each([
+      ['destroy', ''],
+      ['destroy --force', '--force'],
+    ])(
+      '%s typed into an interactive shell prints its result',
+      async (_name, flag) => {
+        const out = join(testHome, 'inner-destroy.json');
+        const sessionId = createSession(
+          testHome,
+          ['/bin/bash', '--norc', '--noprofile', '-i'],
+          { env: { HISTFILE: '/dev/null' } },
+        );
+        pgid = inspectSession(testHome, sessionId).childPid as number;
+        const command = `${cli.map((part) => `'${part}'`).join(' ')} destroy "$AGENT_TTY_SESSION_ID" ${flag} --json > '${out}'`;
+        for (const args of [
+          ['type', sessionId, command],
+          ['send-keys', sessionId, 'Enter'],
+        ]) {
+          expect(
+            runCli([...args, '--json'], { AGENT_TTY_HOME: testHome }).status,
+          ).toBe(0);
+        }
+
+        expect(await readEnvelopeOnceWritten(out)).toMatchObject({
+          ok: true,
+          result: { sessionId, destroyed: true },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await groupEnds(pgid)).toBe(true);
+      },
+    );
   });
 
   it('destroyed session rejects commands with SESSION_ALREADY_DESTROYED', () => {

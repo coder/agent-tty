@@ -256,11 +256,26 @@ function killFailsWith(code: string) {
 
 describe('isInsideSessionProcessGroup', () => {
   const platform = process.platform;
-  const ownGroup = Number(
-    execFileSync('ps', ['-o', 'pgid=', '-p', String(process.pid)], {
-      encoding: 'utf8',
-    }),
-  );
+
+  function ownId(field: 'sid' | 'pgid'): number {
+    return Number(
+      execFileSync('ps', ['-o', `${field}=`, '-p', String(process.pid)], {
+        encoding: 'utf8',
+      }),
+    );
+  }
+
+  async function expectMatchesOnly(id: number): Promise<void> {
+    expect(process.pid).not.toBe(id);
+    const directory = await seedSession(makeRecord({ childPid: id }));
+    expect(await isInsideSessionProcessGroup('session-01')).toBe(true);
+
+    await writeManifest(
+      manifestPath(directory),
+      makeRecord({ childPid: process.pid }),
+    );
+    expect(await isInsideSessionProcessGroup('session-01')).toBe(false);
+  }
 
   beforeEach(() => {
     vi.stubEnv('AGENT_TTY_HOME', home);
@@ -270,25 +285,23 @@ describe('isInsideSessionProcessGroup', () => {
     Object.defineProperty(process, 'platform', { value: platform });
   });
 
-  it.each([platform, 'darwin'])(
-    "on %s matches the caller's process group only",
-    async (name) => {
-      expect(process.pid).not.toBe(ownGroup);
-      const directory = await seedSession(makeRecord({ childPid: ownGroup }));
-      Object.defineProperty(process, 'platform', { value: name });
-
-      expect(await isInsideSessionProcessGroup('session-01')).toBe(true);
-
-      await writeManifest(
-        manifestPath(directory),
-        makeRecord({ childPid: process.pid }),
-      );
-      expect(await isInsideSessionProcessGroup('session-01')).toBe(false);
+  // Only Linux has /proc/self/stat.
+  it.runIf(platform === 'linux')(
+    "on linux matches the caller's session only",
+    async () => {
+      await expectMatchesOnly(ownId('sid'));
     },
   );
 
+  it("on darwin matches the caller's process group only", async () => {
+    const pgid = ownId('pgid');
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+    await expectMatchesOnly(pgid);
+  });
+
   it('on win32 never matches', async () => {
-    await seedSession(makeRecord({ childPid: ownGroup }));
+    await seedSession(makeRecord({ childPid: ownId('pgid') }));
     Object.defineProperty(process, 'platform', { value: 'win32' });
 
     expect(await isInsideSessionProcessGroup('session-01')).toBe(false);
