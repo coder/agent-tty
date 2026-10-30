@@ -15,6 +15,7 @@ import {
   waitForProcessesToExit,
 } from './lifecycle.js';
 import { createSerialManifestWriter } from './manifestWriter.js';
+import { captureProgram, writeProgramRecord } from './programGroup.js';
 import { buildReplayInput } from './replay.js';
 import { HostRendererManager } from './renderer.js';
 import { RpcServer, type MethodHandler } from './rpcServer.js';
@@ -302,6 +303,7 @@ export async function runHost(
     'PTY child PID must be a positive integer',
   );
   state.setChildPid(pty.pid);
+  const program = captureProgram(pty.pid);
 
   // Answer the terminal-capability queries programs emit at startup (OSC 10/11
   // color probes, the `ESC [ 5 n` DSR sentinel). The colors mirror the default
@@ -1170,6 +1172,7 @@ export async function runHost(
   });
 
   try {
+    writeProgramRecord(sessDir, program);
     await persistManifest();
     const socketDirectory = dirname(sPath);
     await mkdir(socketDirectory, { recursive: true });

@@ -16,6 +16,7 @@ import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import {
   manifestPath,
   eventLogPath,
+  programRecordPath,
   sessionDir,
   socketPath,
 } from '../../../src/storage/sessionPaths.js';
@@ -66,6 +67,9 @@ describe('session paths', () => {
     );
     expect(eventLogPath(directory)).toBe(
       '/tmp/agent-tty-home/sessions/session-01/events.jsonl',
+    );
+    expect(programRecordPath(directory)).toBe(
+      '/tmp/agent-tty-home/sessions/session-01/program.json',
     );
     expect(socketPath(directory)).toBe(expectedSocketPath);
   });
