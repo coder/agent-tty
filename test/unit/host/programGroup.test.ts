@@ -208,6 +208,23 @@ describe('captureProgram', () => {
     });
   });
 
+  it.runIf(capturesToken).each(['EPERM', 'EACCES'])(
+    'records no token when /proc refuses to show the child with %s',
+    (readError) => {
+      const child = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' });
+      children.push(child);
+      const pid = child.pid as number;
+      procHooks.stat = new Map([[String(pid), errno(readError)]]);
+
+      expect(captureProgram(pid)).toEqual({
+        version: 1,
+        pid,
+        bootId: null,
+        autogroup: null,
+      });
+    },
+  );
+
   it('records no token on a system without autogroups', () => {
     Object.defineProperty(process, 'platform', { value: 'darwin' });
 
@@ -334,48 +351,48 @@ describe('judgeProgramGroup', () => {
   });
 });
 
+const CHILD_PID = 2_147_483_645;
+
+function killFailsWith(code: string) {
+  return vi.spyOn(process, 'kill').mockImplementation(() => {
+    throw errno(code);
+  });
+}
+
+function probeEnds(outcome: 'ok' | 'EPERM') {
+  return outcome === 'ok'
+    ? vi.spyOn(process, 'kill').mockReturnValue(true)
+    : killFailsWith(outcome);
+}
+
+// /proc shows one process of the group per state, under a command name with
+// spaces and parentheses, beside a process of another group and a process
+// that ends during the scan. Each process of the group leads it and its
+// session. Unless the test set its own, /proc is mounted without hidepid,
+// so the result does not depend on the host.
+function procShowsGroup(...states: string[]): void {
+  procHooks.mountinfo ??= procMount('rw');
+  const tail = '0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 100';
+  procHooks.stat = new Map<string, string | Error>([
+    ['1', `1 (init) S 0 1 1 ${tail}`],
+    ['2', errno('ESRCH')],
+  ]);
+  states.forEach((state, index) => {
+    const pid = String(100 + index);
+    procHooks.stat?.set(
+      pid,
+      `${pid} (a) b (c) ${state} 1 ${String(CHILD_PID)} ${String(CHILD_PID)} ${tail}`,
+    );
+  });
+}
+
 describe('a program group without a token', () => {
-  const CHILD_PID = 2_147_483_645;
   const group: ProgramRecord = {
     version: 1,
     pid: CHILD_PID,
     bootId: null,
     autogroup: null,
   };
-
-  function killFailsWith(code: string) {
-    return vi.spyOn(process, 'kill').mockImplementation(() => {
-      throw errno(code);
-    });
-  }
-
-  function probeEnds(outcome: 'ok' | 'EPERM'): void {
-    if (outcome === 'ok') {
-      vi.spyOn(process, 'kill').mockReturnValue(true);
-    } else {
-      killFailsWith(outcome);
-    }
-  }
-
-  // /proc shows one process of the group per state, under a command name
-  // with spaces and parentheses, beside a process of another group and a
-  // process that ends during the scan. Unless the test set its own, /proc
-  // is mounted without hidepid, so the result does not depend on the host.
-  function procShowsGroup(...states: string[]): void {
-    procHooks.mountinfo ??= procMount('rw');
-    const tail = '0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 100';
-    procHooks.stat = new Map<string, string | Error>([
-      ['1', `1 (init) S 0 1 1 ${tail}`],
-      ['2', errno('ESRCH')],
-    ]);
-    states.forEach((state, index) => {
-      const pid = String(100 + index);
-      procHooks.stat?.set(
-        pid,
-        `${pid} (a) b (c) ${state} 1 ${String(CHILD_PID)} ${String(CHILD_PID)} ${tail}`,
-      );
-    });
-  }
 
   it.each([
     ['ok', ['Z', 'X'], false],
@@ -506,6 +523,93 @@ describe('a program group without a token', () => {
 
     expect(isProgramGroupAlive(null)).toBe(false);
     expect(kill).not.toHaveBeenCalled();
+  });
+});
+
+describe('a program group with a token, as a faked /proc shows it', () => {
+  const BOOT = 'ce4b84e5-e77e-4d68-bc28-cd04a84f6cd7';
+  const group: ProgramRecord = {
+    version: 1,
+    pid: CHILD_PID,
+    bootId: BOOT,
+    autogroup: 7,
+  };
+
+  // Every process in view carries the token.
+  function procShowsTokenGroup(...states: string[]): void {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    procShowsGroup(...states);
+    autogroupFile.read = (file) =>
+      file === '/proc/sys/kernel/random/boot_id'
+        ? `${BOOT}\n`
+        : /^\/proc\/\d+\/autogroup$/.test(file)
+          ? '/autogroup-7 nice 0\n'
+          : null;
+  }
+
+  it.each(['EPERM', 'EACCES'])(
+    'is alive and gets the kill when a live member carries the token and another process refuses its read with %s',
+    (readError) => {
+      procShowsTokenGroup('Z', 'S');
+      procHooks.stat?.set('3', errno(readError));
+      const kill = probeEnds('ok');
+
+      expect(isProgramGroupAlive(group)).toBe(true);
+      stopProgramGroup(group);
+      expect(kill).toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+    },
+  );
+
+  it.each(['EPERM', 'EACCES'])(
+    'is alive with only a zombie in view while another process refuses its read with %s',
+    (readError) => {
+      procShowsTokenGroup('Z');
+      procHooks.stat?.set('3', errno(readError));
+      probeEnds('ok');
+
+      expect(isProgramGroupAlive(group)).toBe(true);
+    },
+  );
+
+  it.each([
+    'hidepid=2',
+    'hidepid=invisible',
+    'hidepid=4',
+    'hidepid=ptraceable',
+  ])(
+    'is alive with only a zombie in view when /proc is mounted with %s',
+    (option) => {
+      procShowsTokenGroup('Z');
+      procHooks.mountinfo = procMount(`rw,${option}`);
+      const kill = probeEnds('ok');
+
+      expect(isProgramGroupAlive(group)).toBe(true);
+      stopProgramGroup(group);
+      expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+    },
+  );
+
+  it('is alive with no member in view when /proc hides other users and the probe ends EPERM', () => {
+    procShowsTokenGroup();
+    procHooks.mountinfo = procMount('rw,hidepid=2');
+    probeEnds('EPERM');
+
+    expect(isProgramGroupAlive(group)).toBe(true);
+  });
+
+  it('is not alive with only zombies in view when /proc shows every process', () => {
+    procShowsTokenGroup('Z', 'X');
+    probeEnds('ok');
+
+    expect(isProgramGroupAlive(group)).toBe(false);
+  });
+
+  it('is not alive when /proc hides other users and the probe finds no process', () => {
+    procShowsTokenGroup();
+    procHooks.mountinfo = procMount('rw,hidepid=2');
+    killFailsWith('ESRCH');
+
+    expect(isProgramGroupAlive(group)).toBe(false);
   });
 });
 
