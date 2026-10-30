@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  capturesToken,
   cleanupHome,
   groupEnds,
   inspectSession,
@@ -140,9 +141,8 @@ describe('idle-timeout integration', { timeout: 30000 }, () => {
     expect(await groupEnds(session.childPid as number)).toBe(true);
   });
 
-  // Only Linux records the token that lets destroy stop what an exited
-  // program left.
-  it.runIf(process.platform === 'linux')(
+  // Only the token lets destroy stop what an exited program left.
+  it.runIf(capturesToken)(
     'leaves a member that refuses the kill to a destroy that times out',
     async () => {
       const createResult = runCli(

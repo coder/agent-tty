@@ -23,6 +23,7 @@ import {
   programRecordPath,
   sessionDir,
 } from '../../../src/storage/sessionPaths.js';
+import { capturesToken } from '../../helpers.js';
 
 import type * as Fs from 'node:fs';
 
@@ -73,7 +74,6 @@ vi.mock('node:fs', async () => {
 });
 
 const platform = process.platform;
-const capturesToken = platform === 'linux';
 
 afterEach(() => {
   vi.restoreAllMocks();

@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import {
   mkdir,
   mkdtemp,
@@ -281,6 +282,23 @@ export async function readEvents(
     .filter((line) => line.length > 0)
     .map((line) => JSON.parse(line) as EventRecord);
 }
+
+// The host records the program's session token only where /proc shows an
+// autogroup and the boot id, which a Linux kernel without
+// CONFIG_SCHED_AUTOGROUP or a hardened /proc does not.
+export const capturesToken = ((): boolean => {
+  if (process.platform !== 'linux') {
+    return false;
+  }
+  try {
+    return (
+      /^\/autogroup-\d+ /.test(readFileSync('/proc/self/autogroup', 'utf8')) &&
+      readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim() !== ''
+    );
+  } catch {
+    return false;
+  }
+})();
 
 export function isGroupAlive(group: number): boolean {
   try {

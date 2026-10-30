@@ -29,6 +29,7 @@ import {
   socketPath,
 } from '../../src/storage/sessionPaths.js';
 import {
+  capturesToken,
   cleanupHome,
   crashSession,
   createSession,
@@ -43,8 +44,6 @@ import {
   type SessionRecord,
   type SuccessEnvelope,
 } from '../helpers.js';
-
-const capturesToken = process.platform === 'linux';
 
 interface ErrorEnvelope {
   ok: false;
@@ -938,6 +937,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       expect(await groupEnds(pgid)).toBe(true);
     });
 
+    // Only the token lets destroy stop what an exited program left.
     it.runIf(capturesToken)(
       'destroy ends a background process left by a program that exited',
       async () => {
@@ -960,6 +960,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       },
     );
 
+    // Only a session with a token checks the autogroup.
     it.runIf(capturesToken)(
       'destroy times out while it cannot read the autogroup of a process that the program left',
       async () => {
@@ -1116,6 +1117,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     });
   });
 
+  // Without a token, the childPid fallback kills the unrelated group.
   describe.runIf(capturesToken)(
     'a manifest whose group id now names an unrelated group',
     () => {
@@ -1243,6 +1245,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     },
   );
 
+  // Without a token, nothing names the program that destroy must kill.
   describe.runIf(capturesToken)(
     'a host that dies before its first manifest write',
     () => {

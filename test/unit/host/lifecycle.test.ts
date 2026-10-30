@@ -91,9 +91,8 @@ import {
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
 import { manifestPath, sessionDir } from '../../../src/storage/sessionPaths.js';
-import { killGroupIfAlive } from '../../helpers.js';
+import { capturesToken, killGroupIfAlive } from '../../helpers.js';
 
-const capturesToken = process.platform === 'linux';
 const HOST_PID = 2_147_483_646;
 const CHILD_PID = 2_147_483_645;
 
