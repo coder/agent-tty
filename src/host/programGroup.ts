@@ -144,11 +144,19 @@ function readAutogroup(pid: number | 'self'): number | null {
   }
 }
 
+// A hardened /proc can refuse the boot id and still show the autogroups.
 function readBootId(): string | null {
-  const bootId = readProcFileIfExists(
-    '/proc/sys/kernel/random/boot_id',
-  )?.trim();
-  return bootId === undefined || bootId.length === 0 ? null : bootId;
+  try {
+    const bootId = readProcFileIfExists(
+      '/proc/sys/kernel/random/boot_id',
+    )?.trim();
+    return bootId === undefined || bootId.length === 0 ? null : bootId;
+  } catch (error) {
+    if (isRefusedRead(error)) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 function captureToken(
