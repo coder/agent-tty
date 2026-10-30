@@ -439,12 +439,17 @@ describe('isProcessGroupAlive', () => {
 
   // hidepid=1 lists the processes of other users but refuses their reads,
   // so a process that refuses its read can be a live one of the group.
-  it.each(['ok', 'EPERM'] as const)(
-    'on linux, when the probe ends %s, counts a zombie group alive while a process refuses its read',
-    (outcome) => {
+  it.each([
+    ['ok', 'EPERM'],
+    ['ok', 'EACCES'],
+    ['EPERM', 'EPERM'],
+    ['EPERM', 'EACCES'],
+  ] as const)(
+    'on linux, when the probe ends %s, counts a zombie group alive while a process refuses its read with %s',
+    (outcome, readError) => {
       Object.defineProperty(process, 'platform', { value: 'linux' });
       procShowsGroup('Z');
-      fsHooks.proc?.set('3', errno('EPERM'));
+      fsHooks.proc?.set('3', errno(readError));
       probeEnds(outcome);
 
       expect(isProcessGroupAlive(CHILD_PID)).toBe(true);
