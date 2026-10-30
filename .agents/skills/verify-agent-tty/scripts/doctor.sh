@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Answers "is this run worth driving?" for one verification run. It changes
-# nothing outside the run's home: `agent-tty doctor` creates and removes one
-# probe session there.
+# nothing outside the run folder: `agent-tty doctor` creates and removes one
+# probe session in the run's home, and run-pids.sh records child PIDs.
 #
 #   .agents/skills/verify-agent-tty/scripts/doctor.sh <run>/env.sh
 set -uo pipefail

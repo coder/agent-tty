@@ -16,6 +16,12 @@ if [ "$AGENT_TTY_HOME" != "$VERIFY_RUN/home" ] || [ "$XDG_STATE_HOME" != "$VERIF
   exit 2
 fi
 
+run_pids() {
+  "$(dirname "${BASH_SOURCE[0]}")/run-pids.sh" "$ENV_FILE" 2>/dev/null
+}
+# `att list` reconciles, which clears childPid of a session whose host died.
+# run-pids.sh records each childPid first, so it still finds their children.
+run_pids >/dev/null
 if [ -d "$AGENT_TTY_HOME/sessions" ]; then
   for id in $(att list --json 2>/dev/null | jq -r '.result.sessions[].sessionId'); do
     att destroy "$id" --json >/dev/null 2>&1 || att destroy "$id" --force --json >/dev/null 2>&1 ||
@@ -23,9 +29,6 @@ if [ -d "$AGENT_TTY_HOME/sessions" ]; then
   done
 fi
 
-run_pids() {
-  "$(dirname "${BASH_SOURCE[0]}")/run-pids.sh" "$ENV_FILE" 2>/dev/null
-}
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   [ -z "$(run_pids)" ] && break
   sleep 1

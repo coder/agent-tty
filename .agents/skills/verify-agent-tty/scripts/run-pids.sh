@@ -2,11 +2,15 @@
 # Prints the PIDs of the processes that one verification run started: the
 # session hosts (argv `_host`, environment AGENT_TTY_HOME=<run home>) and the
 # programs in its sessions and their children (environment
-# AGENT_TTY_HOME=<run home> with the AGENT_TTY_ACTIVE=true that the session's
-# PTY sets, in a terminal session that such a program leads, or
+# AGENT_TTY_HOME=<run home> in the terminal session of a program that a
+# session.json of the run records as childPid, or environment
 # AGENT_TTY_SESSION_ID=<a session of the run home>). Processes in the caller's
 # own terminal session, such as your shells that sourced env.sh and
 # cleanup.sh, are not in the list. Linux only: it reads /proc.
+#
+# It appends each recorded childPid to <run>/child-pids, because reconcile
+# clears childPid from session.json when it finds a dead host, and the
+# program's children can outlive it.
 #
 #   .agents/skills/verify-agent-tty/scripts/run-pids.sh <run>/env.sh
 set -uo pipefail
@@ -26,19 +30,14 @@ session_of() {
 }
 caller_session=$(session_of $$)
 
-# Each session program leads its own terminal session. Inside an outer
-# agent-tty session, a shell that sourced env.sh passes the run's Home and
-# AGENT_TTY_ACTIVE=true to its children too, but the leader of that shell's
-# session carries the outer Home. A leader that has exited counts as a
-# program of the run: reconcile kills the program when its host has died.
-in_program_session() {
-  local leader
-  leader=$(session_of "$1")
-  [ -n "$leader" ] || return 1
-  [ -e "/proc/$leader" ] || return 0
-  grep -qzxF "AGENT_TTY_HOME=$AGENT_TTY_HOME" "/proc/$leader/environ" 2>/dev/null &&
-    grep -qzxF AGENT_TTY_ACTIVE=true "/proc/$leader/environ" 2>/dev/null
-}
+# Each session program leads its own terminal session (forkpty), so its
+# children share its PID as their session ID. Any process can copy the run's
+# environment, but only the host's PTY gives it such a session.
+ledger=$VERIFY_RUN/child-pids
+for manifest in "$AGENT_TTY_HOME"/sessions/*/session.json; do
+  [ -f "$manifest" ] && jq -r '.childPid // empty' "$manifest" 2>/dev/null
+done >>"$ledger"
+program_sessions="|$(grep -E '^[0-9]+$' "$ledger" | sort -un | tr '\n' '|')"
 
 ids=""
 for dir in "$AGENT_TTY_HOME"/sessions/*/; do
@@ -50,9 +49,11 @@ done
 {
   for file in $(grep -lzxF "AGENT_TTY_HOME=$AGENT_TTY_HOME" /proc/[0-9]*/environ 2>/dev/null); do
     dir=${file%/environ}
-    if { tr '\0' ' ' <"$dir/cmdline"; } 2>/dev/null | grep -q ' _host ' ||
-      { grep -qzxF AGENT_TTY_ACTIVE=true "$file" 2>/dev/null && in_program_session "${dir#/proc/}"; }; then
-      echo "${dir#/proc/}"
+    pid=${dir#/proc/}
+    if { tr '\0' ' ' <"$dir/cmdline"; } 2>/dev/null | grep -q ' _host '; then
+      echo "$pid"
+    else
+      case "$program_sessions" in *"|$(session_of "$pid")|"*) echo "$pid" ;; esac
     fi
   done
   if [ -n "$ids" ]; then
@@ -61,7 +62,7 @@ done
   fi
 } | sort -un | while read -r pid; do
   # Hosts and PTY programs call setsid, so no run process is in the caller's
-  # session. This keeps cleanup.sh alive even when its session leader is gone.
+  # session. Skip it, so cleanup.sh never stops itself.
   [ "$(session_of "$pid")" != "$caller_session" ] || continue
   # /proc files report size 0, so read the command line to see if it is live.
   [ -n "$({ tr -d '\0' <"/proc/$pid/cmdline"; } 2>/dev/null)" ] && echo "$pid"
