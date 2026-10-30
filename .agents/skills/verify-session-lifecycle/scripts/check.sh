@@ -132,14 +132,19 @@ FACTS_LINE=$(node -e '
   }).join(" "));
 ' "$OUT/facts.json" $GUARDS) || die "facts.json lacks a guard fact"
 
-RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal RecordedExitKept RunningSessionReachable HostStartsWhenCreated TerminalIsLastWrite DestroyedOnlyWhenEnded DestroyEndsDestroyed RemovedFolderStaysRemoved DestroyedProgramStopped LiveGroupStaysNamed DestroyOutlivesProgram NoUnrelatedGroupKilled DestroyedSessionStopped"
+NO_TOKEN_RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal RecordedExitKept RunningSessionReachable HostStartsWhenCreated TerminalIsLastWrite DestroyedOnlyWhenEnded DestroyEndsDestroyed RemovedFolderStaysRemoved DestroyedProgramStopped LiveGroupStaysNamed DestroyOutlivesProgram"
+# R15 and R16 are what the token adds, so only the runs with Token check them.
+RULES="$NO_TOKEN_RULES NoUnrelatedGroupKilled DestroyedSessionStopped"
+NO_TOKEN_WITNESSES="WitnessCrashReconciled WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce"
 WITNESSES="WitnessGcRemovesSession WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled WitnessDestroyCompletes WitnessSigtermRecorded WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessLeftoverMeetsDestroy WitnessReusedIdMeetsKill WitnessRecordNamesProgram WitnessUnrecordedProgramOutlives"
 
 # --- runs ----------------------------------------------------------------
 
 # write_run NAME EXPECT "INVARIANTS" "GUARD=FALSE ..." NOTE [RULE]
 # RULE: for an expected violation, the rule that TLC must report.
+# TOKEN: whether the host's capture finds the program's session token.
 RUNS=""
+TOKEN=TRUE
 write_run() {
   local name=$1 expect=$2 invariants=$3 overrides=$4 note=$5 must=${6:-}
   local dir="$OUT/$name" fact guard value
@@ -158,6 +163,7 @@ write_run() {
       case " $overrides " in *" $guard=FALSE "*) value=FALSE ;; esac
       echo "  $guard = $value"
     done
+    echo "  Token = $TOKEN"
     echo "  MaxListReconciles = 2"
     echo "SPECIFICATION Spec"
     echo "CHECK_DEADLOCK TRUE"
@@ -194,9 +200,20 @@ write_run mutant-ReconcileSkipsTerminal pass RecordedExitKept "ReconcileSkipsTer
 write_run mutant-GcSkipsNonCollectable pass NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE" "redundant: the final check still skips"
 write_run mutant-GcFinalCheck pass NoLiveSessionDeleted "GcFinalCheck=FALSE" "redundant: the first check still skips"
 write_run mutant-GcBothChecks violated NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE GcFinalCheck=FALSE" "with neither gc check, gc removes live sessions" NoLiveSessionDeleted
-write_run mutant-ProbeCountsDeniedGroup pass DestroyedProgramStopped "ProbeCountsDeniedGroup=FALSE" "redundant with a token: the token check, not the EPERM probe, reads a process of another user as alive"
 write_run mutant-ShutdownChecksCommandable pass TerminalIsFinal "ShutdownChecksCommandable=FALSE" "redundant: the writer writes nothing after a terminal record"
 write_run mutant-ShutdownBothChecks violated TerminalIsFinal "ShutdownChecksCommandable=FALSE HostStopsAfterTerminalWrite=FALSE" "with neither, shutdown writes destroying over an exit record" TerminalIsFinal
+
+# Without a token every kill falls back to the id that a manifest or the
+# host's own record names, as before program.json existed.
+TOKEN=FALSE
+write_run current-no-token pass "$NO_TOKEN_RULES" "" "the code without a token: R1 to R14 hold"
+for witness in $NO_TOKEN_WITNESSES; do
+  write_run "witness-$witness-no-token" violated "$witness" "" "the model reaches this state without a token"
+done
+write_run mutant-ProbeCountsDeniedGroup-no-token violated DestroyedProgramStopped "ProbeCountsDeniedGroup=FALSE" "without a token, a wait that reads EPERM as gone records destroyed while a process of another user runs" DestroyedProgramStopped
+write_run mutant-KillsProgramGroup-no-token violated DestroyedProgramStopped "KillsProgramGroup=FALSE" "without a token, with pid kills and pid waits only, a process of the program outlives destroy" DestroyedProgramStopped
+write_run mutant-HostWaitsForGroup-no-token violated DestroyedProgramStopped "HostWaitsForGroup=FALSE" "without a token, the host records destroyed while a process of another user runs" DestroyedProgramStopped
+write_run mutant-ReconcileWaitsForGroup-no-token violated LiveGroupStaysNamed "ReconcileWaitsForGroup=FALSE" "without a token, reconcile drops childPid while the group runs" LiveGroupStaysNamed
 
 run_tlc() {
   local dir rc=0
@@ -261,7 +278,10 @@ SYNC=$(git -C "$REPO" log -1 --format=%H -- "$COVERAGE" 2>/dev/null || true)
 echo
 echo "Facts: $FACTS_LINE"
 echo "       Collectable=$COLLECTABLE Terminal=$TERMINAL"
-echo "Distinct states of the current model: $(sed -n 's/.* \([0-9]*\) distinct states found.*/\1/p' "$OUT/current/tlc.out" | tail -1). A violated run stops at its first violation."
+for name in current current-no-token; do
+  echo "Distinct states of $name: $(sed -n 's/.* \([0-9]*\) distinct states found.*/\1/p' "$OUT/$name/tlc.out" | tail -1)."
+done
+echo "A violated run stops at its first violation."
 echo "Sync commit (last change to coverage.json): ${SYNC:-none yet}"
 echo "Results: $OUT"
 

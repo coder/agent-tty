@@ -24,10 +24,13 @@
 (*                                                                         *)
 (* The host records the program in program.json with its session token:    *)
 (* the boot id and the autogroup id that setsid() gave the program's       *)
-(* session (src/host/programGroup.ts). The model describes Linux with      *)
-(* autogroups, where that capture succeeds. Every kill of the group checks  *)
-(* that a live member carries the token, so a kill never reaches another   *)
-(* group that took the id after the program's group ended.                 *)
+(* session (src/host/programGroup.ts). With Token, that capture succeeds,  *)
+(* as on Linux with autogroups, and every kill of the group checks that a  *)
+(* live member carries the token, so a kill never reaches another group    *)
+(* that took the id after the program's group ended. Without Token there   *)
+(* is no token: on macOS, on a kernel without autogroups, when the capture *)
+(* read none, and for a session that an older agent-tty created. Every     *)
+(* kill then targets the id as it is, as before program.json existed.      *)
 (*                                                                         *)
 (* facts.mjs reads the guard constants from the source. FALSE means the    *)
 (* guard is not in the code, and the model then runs the code without it.  *)
@@ -83,9 +86,12 @@ CONSTANTS
     FallbackNeedsFolder,    \* programGroup.ts: a group that only a childPid
                             \*   names gets the kill, and reads alive, only
                             \*   while the session folder exists
+    Token,                  \* the environment: the host's capture finds the
+                            \*   program's session token
     MaxListReconciles       \* how many times the "list" process reconciles
 
 ASSUME MaxListReconciles \in 1..3
+ASSUME Token \in BOOLEAN
 ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  ReconcileSkipsLiveHost, CreateRecordsHostPid,
                  HostWaitsForManifest, ReconcileRereads,
@@ -102,8 +108,8 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
 Readers == {"gc", "list"}   \* the two processes that run reconcileSession
 \* The group that a kill went through, and that the wait after it probes:
 \* "proven" (program.json with a token), "numeric" (a childPid without a
-\* token) or "none".
-GroupKinds == {"none", "proven", "numeric"}
+\* token), "bare" (the host's own record without a token) or "none".
+GroupKinds == {"none", "proven", "numeric", "bare"}
 NoRead == [pid |-> FALSE, origin |-> "none", code |-> FALSE, child |-> FALSE,
            grp |-> "none"]
 
@@ -266,22 +272,32 @@ KillThrough(named) ==
 KindThrough(named) ==
     IF rec THEN "proven" ELSE IF named THEN "numeric" ELSE "none"
 
+\* stopProgramGroup(program) in the host, through its own record: with
+\* Token as ProvenKill, else the kill of the program's pid as it is, with
+\* no folder check.
+HostKill == IF Token THEN ProvenKill ELSE KillsGroupId
+HostKind == IF Token THEN "proven" ELSE "bare"
+
 GroupAlive == prog \/ foreign
+
+\* isProcessGroupAlive probes kill(-pgid, 0): every process with that group
+\* id reads alive, also one of an unrelated group that took it. EPERM, when
+\* every process left belongs to another user, reads alive only with
+\* ProbeCountsDeniedGroup.
+ProbeSees == prog \/ left \/ reused \/ (ProbeCountsDeniedGroup /\ foreign)
 
 \* isProgramGroupAlive in waitForProcessesToExit, for the group that the
 \* kill before it went through. With a token it reads the group alive while
 \* a live member carries the token, which a process of another user in the
-\* program's session also does. Without a token it probes kill(-pgid, 0):
-\* every process with that group id reads alive, also one of an unrelated
-\* group that took it. EPERM, when every process left belongs to another
-\* user, reads alive only with ProbeCountsDeniedGroup. Without
-\* KillsProgramGroup the wait probes only the program's pid, and every wait
-\* comes after the program's kill or exit, so it reads gone.
+\* program's session also does. Without a token it is the probe, and for a
+\* childPid only while the folder exists. Without KillsProgramGroup the wait
+\* probes only the program's pid, and every wait comes after the program's
+\* kill or exit, so it reads gone.
 GroupSeen(kind) ==
     /\ KillsProgramGroup
     /\ \/ kind = "proven" /\ (prog \/ left \/ foreign)
-       \/ kind = "numeric" /\ FallbackReaches
-          /\ (prog \/ left \/ reused \/ (ProbeCountsDeniedGroup /\ foreign))
+       \/ kind = "bare" /\ ProbeSees
+       \/ kind = "numeric" /\ FallbackReaches /\ ProbeSees
 
 \* The host fails to start because its files are missing or were rewritten.
 HostFailsToStart ==
@@ -431,10 +447,11 @@ HostOpensLogAndSpawns ==
 \* writeProgramRecord(sessDir, program), the first statement of runHost's
 \* last try: a temp file and renameSync, with no mkdir, so it throws when gc
 \* removed the folder, which only a state that already breaks R1 reaches.
+\* Without Token the record holds no token, which reads as no record.
 HostRecordsProgram ==
     /\ hostAlive /\ hpc = "record"
     /\ IF dir
-          THEN /\ rec' = TRUE /\ hpc' = "pidwrite"
+          THEN /\ rec' = Token /\ hpc' = "pidwrite"
                /\ UNCHANGED <<hostAlive, hex, rsz, ghostVars, diedUnrecorded>>
           ELSE HostFailsToStart /\ UNCHANGED rec
     /\ UNCHANGED <<diskVars, sock, cpc, prog, foreign, left, reused,
@@ -449,7 +466,7 @@ HostWritesPids ==
     /\ HostWrite("running", FALSE)
     /\ hpc' = "sockdir"
     /\ dsnap' = NextTurn(ExitWriteAheadOfDestroying)
-    /\ rec' = (rec \/ (~RecordsProgramSync /\ dir))
+    /\ rec' = (rec \/ (Token /\ ~RecordsProgramSync /\ dir))
     /\ UNCHANGED <<ghostVars, sock, cpc, hostAlive, hex, rsz, prog, foreign,
                    left, reused, hitUnrelated, diedUnrecorded, hst, hsd, sig,
                    readerVars, destroyVars>>
@@ -548,9 +565,10 @@ HostKillsProgram ==
 \* "destroying" stopProgramGroup(program), else recordExit (in memory),
 \* after the same kill when the idle time-out armed the timer,
 \* markPtyExited, and the 'exit' event append; no other process can
-\* see this step. The host's own record of the program has its token, and
-\* node-pty has reaped the program before this runs, so its group can have
-\* ended and its id can name another group by now. Without
+\* see this step. The kill goes through the host's own record of the
+\* program (HostKill), and node-pty has reaped the program before this
+\* runs, so its group can have ended and its id can name another group by
+\* now. Without
 \* HostWaitsForGroup the host records destroyed right after the kill and
 \* queues its exit write, as the code did before the wait. A program that
 \* exits on its own can leave a process that it started running in its
@@ -560,7 +578,7 @@ ProgramExits ==
     /\ hostAlive /\ hex = "wait"
     /\ RecordsProgramSync => hpc # "record"
     /\ IF hst = "destroying"
-          THEN /\ ProvenKill
+          THEN /\ HostKill
                /\ UNCHANGED foreign
                /\ IF HostWaitsForGroup
                      THEN hex' = "groupwait" /\ UNCHANGED hst
@@ -581,7 +599,7 @@ ProgramExits ==
 \* the wait give up at any poll that reads the group alive.
 HostPollsGroup ==
     /\ hostAlive /\ hex = "groupwait"
-    /\ IF GroupSeen("proven")
+    /\ IF GroupSeen(HostKind)
           THEN hex' = "giveup" /\ UNCHANGED hst
           ELSE hex' = "exitwrite" /\ hst' = "destroyed"
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, rsz, prog,
