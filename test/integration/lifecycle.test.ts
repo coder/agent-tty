@@ -17,13 +17,14 @@ import { isProcessAlive } from '../../src/host/lifecycle.js';
 import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
 import { SessionRecordSchema } from '../../src/protocol/schemas.js';
 import { sessionDir, socketPath } from '../../src/storage/sessionPaths.js';
-import { hasErrorCode } from '../../src/util/hasErrorCode.js';
 import {
   cleanupHome,
   crashSession,
   createSession,
   destroySession,
+  groupEnds,
   inspectSession,
+  isGroupAlive,
   runCli,
   sleep,
   type EventRecord,
@@ -849,30 +850,6 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       }
       expect(isGroupAlive(pgid)).toBe(true);
       return sessionId;
-    }
-
-    function isGroupAlive(group: number): boolean {
-      try {
-        process.kill(-group, 0);
-        return true;
-      } catch (error) {
-        if (hasErrorCode(error, 'ESRCH')) {
-          return false;
-        }
-        throw error;
-      }
-    }
-
-    // init reaps the killed processes a moment after they die.
-    async function groupEnds(group: number): Promise<boolean> {
-      const deadline = Date.now() + 2_000;
-      while (isGroupAlive(group)) {
-        if (Date.now() > deadline) {
-          return false;
-        }
-        await sleep(50);
-      }
-      return true;
     }
 
     it('destroy ends it within the destroy wait', async () => {

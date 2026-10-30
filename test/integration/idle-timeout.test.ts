@@ -4,9 +4,9 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { hasErrorCode } from '../../src/util/hasErrorCode.js';
 import {
   cleanupHome,
+  groupEnds,
   inspectSession,
   runCli,
   sleep,
@@ -97,23 +97,3 @@ describe('idle-timeout integration', { timeout: 30000 }, () => {
     expect(await groupEnds(session.childPid as number)).toBe(true);
   });
 });
-
-// The PTY child leads its own process group, so the group id is its pid.
-// init reaps the killed processes a moment after they die.
-async function groupEnds(pgid: number): Promise<boolean> {
-  const deadline = Date.now() + 2_000;
-  for (;;) {
-    try {
-      process.kill(-pgid, 0);
-    } catch (error) {
-      if (hasErrorCode(error, 'ESRCH')) {
-        return true;
-      }
-      throw error;
-    }
-    if (Date.now() > deadline) {
-      return false;
-    }
-    await sleep(50);
-  }
-}
