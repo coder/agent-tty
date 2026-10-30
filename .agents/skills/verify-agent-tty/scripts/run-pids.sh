@@ -8,21 +8,19 @@
 # own terminal session, such as your shells that sourced env.sh and
 # cleanup.sh, are not in the list. Linux only: it reads /proc.
 #
-# It appends each recorded childPid with its session ID ("<pid> <session>")
-# to <run>/child-pids, because reconcile clears childPid from session.json when
-# it finds a dead host, and the program's children can outlive it. So it finds
-# the children of a program with its own AGENT_TTY_SESSION_ID only if it read
-# the program's PID before a reconcile, and never a daemon that such a program
-# starts in a new terminal session. Once no process is left in the terminal
-# session of a recorded PID, it appends "ended <pid> <session>" and stops
-# matching that PID for that session, so a process that gets the PID later is
-# not in the list, unless a later session of the run records it as its
-# program. A PID that is reused before any call saw its session end still
-# matches.
+# It appends "<pid> <agent-tty session ID>" for each recorded childPid to
+# <run>/child-pids, and "ended <pid> <agent-tty session ID>" once no process
+# is left in that PID's terminal session, and then stops matching that PID for
+# that agent-tty session. It finds the children of a program with its own
+# AGENT_TTY_SESSION_ID only if a call read the program's PID before a
+# reconcile, and never a daemon that such a program starts in a new terminal
+# session. A PID that is reused before any call saw its terminal session end
+# still matches, and so does a PID that a later session of the run records as
+# its program.
 #
 # Exit 2: no /proc here (macOS), so no list. Exit 3: <run>/child-pids is not a
-# regular file that it can read and write, has lines without a session ID
-# from an older run-pids.sh, or an append to it failed.
+# regular file that it can read and write, has lines without an agent-tty
+# session ID from an older run-pids.sh, or an append to it failed.
 #
 #   .agents/skills/verify-agent-tty/scripts/run-pids.sh <run>/env.sh
 set -uo pipefail

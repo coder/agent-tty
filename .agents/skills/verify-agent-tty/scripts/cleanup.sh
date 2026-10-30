@@ -22,8 +22,6 @@ fi
 
 aside=$VERIFY_RUN/removing
 present() { [ -e "$1" ] || [ -L "$1" ]; }
-# An interrupted cleanup.sh can leave home/ and state/ in removing/. Move them
-# back, so that this run destroys, copies and scans them as usual.
 for name in home state; do
   present "$VERIFY_RUN/$name" || ! present "$aside/$name" || mv "$aside/$name" "$VERIFY_RUN/" || {
     echo "cleanup.sh: could not move $aside/$name back to $VERIFY_RUN/. Fix the error above, then run cleanup.sh again." >&2
@@ -72,7 +70,6 @@ copy_sessions() {
   }
 }
 copy_sessions "$AGENT_TTY_HOME/sessions" "$EVIDENCE/sessions"
-# The run's own home/ stays in removing/ when a process made a new one.
 copy_sessions "$aside/home/sessions" "$EVIDENCE/removing/sessions"
 
 # Without /proc, run-pids.sh cannot see a live host behind a failed manifest,
@@ -91,20 +88,18 @@ add_holder() {
   args=$({ tr '\0' ' ' <"/proc/$1/cmdline"; } 2>/dev/null)
   [ -z "$args" ] || [ "$(session_of "$1")" = "$caller_session" ] || holders="$holders  $1 $args$2"$'\n'
 }
-# The kernel hides the environ of your own setuid programs, of programs with
-# more capabilities than you, and of non-dumpable ones (prctl
-# PR_SET_DUMPABLE 0). Such a process counts as a holder if it started after
-# start-run.sh named the run folder (2 s earlier, for rounding): one from
-# before cannot carry the run's path, and agents and daemons are often such
-# processes.
+# The kernel hides /proc/<pid>/environ of your own setuid programs, of
+# programs with more capabilities than you, and of non-dumpable ones
+# (prctl PR_SET_DUMPABLE 0).
 uid=$(id -u)
 boot=$(sed -n 's/^btime //p' /proc/stat)
 ticks=$(getconf CLK_TCK)
-run_named=$(basename "$VERIFY_RUN" | sed -nE 's/^([0-9]{4})([0-9]{2})([0-9]{2})T([0-9]{2})([0-9]{2})([0-9]{2})Z-.*/\1-\2-\3 \4:\5:\6 UTC/p')
-run_named=$([ -n "$run_named" ] && date -d "$run_named" +%s 2>/dev/null) || run_named=0
+run_started=$(basename "$VERIFY_RUN" | sed -nE 's/^([0-9]{4})([0-9]{2})([0-9]{2})T([0-9]{2})([0-9]{2})([0-9]{2})Z-.*/\1-\2-\3 \4:\5:\6 UTC/p')
+run_started=$([ -n "$run_started" ] && date -d "$run_started" +%s 2>/dev/null) || run_started=0
+rounding_slack_s=2
 started_after_run() {
   start=$({ sed 's/.*) //' "/proc/$1/stat"; } 2>/dev/null | cut -d' ' -f20)
-  [ -n "$start" ] && [ $((boot + start / ticks)) -ge $((run_named - 2)) ]
+  [ -n "$start" ] && [ $((boot + start / ticks)) -ge $((run_started - rounding_slack_s)) ]
 }
 find_holders() {
   holders=""
