@@ -9,7 +9,11 @@ import {
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
 import { EventLog } from './eventLog.js';
-import { isProcessAlive, killProcessGroupBestEffort } from './lifecycle.js';
+import {
+  isProcessAlive,
+  killProcessGroupBestEffort,
+  waitForProcessesToExit,
+} from './lifecycle.js';
 import { createSerialManifestWriter } from './manifestWriter.js';
 import { buildReplayInput } from './replay.js';
 import { HostRendererManager } from './renderer.js';
@@ -84,7 +88,7 @@ export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
 // may exceed idleTimeoutMs by up to checkIntervalMs (bounded by this cap).
 const IDLE_CHECK_CAP_MS = 5_000;
 const MANIFEST_WAIT_INTERVAL_MS = 20;
-// How long shutdown waits after SIGHUP before it kills the program's process
+// How long the host waits after SIGHUP before it kills the program's process
 // group. nvim takes about 1 s to exit on SIGHUP, and `destroy` waits about 5 s.
 const SHUTDOWN_KILL_GRACE_MS = 2_000;
 
@@ -244,6 +248,7 @@ export async function runHost(
   let eventLogClosed = false;
   let ptyExitHandled = false;
   let ptyHasExited = false;
+  let ptyExitCode: number | null = null;
   let lastOutputAt = Date.now();
   let lastActivityAt = lastOutputAt;
   const hostAbortController = new AbortController();
@@ -362,6 +367,14 @@ export async function runHost(
     void scope.close().catch(rethrowAsync);
   };
 
+  let groupKillTimer: ReturnType<typeof setTimeout> | undefined;
+  const hangUpProgram = (): void => {
+    pty.kill();
+    groupKillTimer ??= setTimeout(() => {
+      killProcessGroupBestEffort(pty.pid);
+    }, SHUTDOWN_KILL_GRACE_MS);
+  };
+
   const startIdlePolling = (): void => {
     if (
       idleTimeoutMs <= 0 ||
@@ -391,7 +404,7 @@ export async function runHost(
       const elapsedIdleMs = Date.now() - lastActivityAt;
       if (elapsedIdleMs >= idleTimeoutMs) {
         clearIdleTimeout();
-        pty.kill();
+        hangUpProgram();
       }
     }, checkIntervalMs);
     scope.add('idle timeout interval', () => {
@@ -416,15 +429,11 @@ export async function runHost(
     }
 
     shutdownPromise = (async () => {
-      let killTimer: ReturnType<typeof setTimeout> | undefined;
       try {
         hostAbortController.abort(makeAbortReason('Host is shutting down.'));
         clearIdleTimeout();
         if (isSessionCommandable(state)) {
-          pty.kill();
-          killTimer = setTimeout(() => {
-            killProcessGroupBestEffort(pty.pid);
-          }, SHUTDOWN_KILL_GRACE_MS);
+          hangUpProgram();
           state.requestDestroy();
           await persistManifest();
         }
@@ -432,7 +441,6 @@ export async function runHost(
         try {
           await ptyExitPromise;
         } finally {
-          clearTimeout(killTimer);
           if (rpcListenPromise !== null) {
             await rpcListenPromise.catch(() => undefined);
           }
@@ -466,6 +474,8 @@ export async function runHost(
 
     ptyExitHandled = true;
     clearIdleTimeout();
+    const hungUp = groupKillTimer !== undefined;
+    clearTimeout(groupKillTimer);
 
     const exitSignal = normalizeExitSignal(signal);
     const currentStatus = state.snapshot().status;
@@ -473,10 +483,15 @@ export async function runHost(
     if (currentStatus === 'destroying') {
       // A process that the program started can outlive it.
       killProcessGroupBestEffort(pty.pid);
-      state.recordDestroyed({ exitCode, exitSignal });
     } else {
+      if (hungUp) {
+        // The program can exit on the idle hang-up while a process it
+        // started ignores SIGHUP.
+        killProcessGroupBestEffort(pty.pid);
+      }
       state.recordExit(exitCode, exitSignal);
     }
+    ptyExitCode = exitCode;
     markPtyExited();
 
     void (async () => {
@@ -485,6 +500,14 @@ export async function runHost(
       } finally {
         runCompletion.resetForExit();
         try {
+          // Until the group is gone the session stays destroying, so a later
+          // reconcile retries the kill.
+          if (
+            currentStatus === 'destroying' &&
+            (await waitForProcessesToExit(null, pty.pid))
+          ) {
+            state.recordDestroyed({ exitCode, exitSignal });
+          }
           await persistManifest();
         } finally {
           await initiateShutdown();
@@ -494,10 +517,9 @@ export async function runHost(
   };
 
   const makeWaitExitOutcome = (): WaitOutcome => {
-    const snapshot = state.snapshot();
     const result: WaitOutcome = { timedOut: false };
-    if (snapshot.exitCode !== null) {
-      result.exitCode = snapshot.exitCode;
+    if (ptyExitCode !== null) {
+      result.exitCode = ptyExitCode;
     }
     return result;
   };
@@ -898,12 +920,7 @@ export async function runHost(
                 return;
               }
 
-              const snapshot = state.snapshot();
-              const result: WaitOutcome = { timedOut: false };
-              if (snapshot.exitCode !== null) {
-                result.exitCode = snapshot.exitCode;
-              }
-              resolve(result);
+              resolve(makeWaitExitOutcome());
             },
             Math.min(idleDuration / 2, 100),
           );

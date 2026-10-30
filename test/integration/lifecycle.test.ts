@@ -10,7 +10,8 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -18,13 +19,14 @@ import { isProcessAlive } from '../../src/host/lifecycle.js';
 import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
 import { SessionRecordSchema } from '../../src/protocol/schemas.js';
 import { sessionDir, socketPath } from '../../src/storage/sessionPaths.js';
-import { hasErrorCode } from '../../src/util/hasErrorCode.js';
 import {
   cleanupHome,
   crashSession,
   createSession,
   destroySession,
+  groupEnds,
   inspectSession,
+  isGroupAlive,
   runCli,
   sleep,
   type EventRecord,
@@ -856,14 +858,16 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
     // The PTY child leads its own process group, so the group id is its pid.
     // `script` touches "$0" once its traps are set.
-    async function createProgram(script: string): Promise<string> {
+    async function createProgram(
+      script: string,
+      env: Record<string, string> = {},
+    ): Promise<string> {
       const ready = join(testHome, 'program-ready');
-      const sessionId = createSession(testHome, [
-        '/bin/sh',
-        '-c',
-        script,
-        ready,
-      ]);
+      const sessionId = createSession(
+        testHome,
+        ['/bin/sh', '-c', script, ready],
+        { env },
+      );
       const childPid = inspectSession(testHome, sessionId).childPid;
       expect(childPid).toBeTypeOf('number');
       pgid = childPid as number;
@@ -879,30 +883,6 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       }
       expect(isGroupAlive(pgid)).toBe(true);
       return sessionId;
-    }
-
-    function isGroupAlive(group: number): boolean {
-      try {
-        process.kill(-group, 0);
-        return true;
-      } catch (error) {
-        if (hasErrorCode(error, 'ESRCH')) {
-          return false;
-        }
-        throw error;
-      }
-    }
-
-    // init reaps the killed processes a moment after they die.
-    async function groupEnds(group: number): Promise<boolean> {
-      const deadline = Date.now() + 2_000;
-      while (isGroupAlive(group)) {
-        if (Date.now() > deadline) {
-          return false;
-        }
-        await sleep(50);
-      }
-      return true;
     }
 
     it('destroy ends it within the destroy wait', async () => {
@@ -957,6 +937,250 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       expect(inspectSession(testHome, sessionId).status).toBe('failed');
       expect(await groupEnds(pgid)).toBe(true);
     });
+
+    describe('whose process group refuses the kill', () => {
+      const refusesGroupKill = {
+        NODE_OPTIONS: [
+          process.env.NODE_OPTIONS ?? '',
+          `--import=${pathToFileURL(resolve('test/fixtures/eperm-group-kill.ts')).href}`,
+        ].join(' '),
+      };
+
+      function destroyRefused(sessionId: string, ...flags: string[]) {
+        const result = runCli(['destroy', sessionId, ...flags, '--json'], {
+          ...refusesGroupKill,
+          AGENT_TTY_HOME: testHome,
+        });
+        return {
+          status: result.status,
+          stderr: result.stderr,
+          envelope: JSON.parse(result.stdout) as ErrorEnvelope,
+        };
+      }
+
+      async function readManifestFile(sessionId: string) {
+        return SessionRecordSchema.parse(
+          JSON.parse(
+            await readFile(
+              join(testHome, 'sessions', sessionId, 'session.json'),
+              'utf8',
+            ),
+          ) as unknown,
+        );
+      }
+
+      it('destroy times out and the host survives its kill timer', async () => {
+        const sessionId = await createProgram(
+          'trap "" TERM HUP; touch "$0"; exec sleep 300',
+          refusesGroupKill,
+        );
+        const { hostPid } = inspectSession(testHome, sessionId);
+
+        const result = destroyRefused(sessionId);
+        expect(result.envelope).toMatchObject({
+          ok: false,
+          error: { code: 'HOST_TIMEOUT' },
+        });
+        expect(result.status).toBe(5);
+        expect(result.stderr).toBe('');
+        expect(isProcessAlive(hostPid)).toBe(true);
+        expect(await readManifestFile(sessionId)).toMatchObject({
+          status: 'destroying',
+          childPid: pgid,
+        });
+      });
+
+      it('destroy times out when a background process outlives the program', async () => {
+        const sessionId = await createProgram(
+          '(trap "" HUP; touch "$0"; exec sleep 300) & wait',
+          refusesGroupKill,
+        );
+        const { hostPid } = inspectSession(testHome, sessionId);
+
+        const result = destroyRefused(sessionId);
+        expect(result.envelope).toMatchObject({
+          ok: false,
+          error: { code: 'HOST_TIMEOUT' },
+        });
+        expect(result.status).toBe(5);
+        expect(result.stderr).toBe('');
+        const deadline = Date.now() + 10_000;
+        while (isProcessAlive(hostPid)) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
+        expect(await readManifestFile(sessionId)).toMatchObject({
+          status: 'destroying',
+          childPid: pgid,
+        });
+      }, 60_000);
+
+      it('destroy --force times out without recording destroyed', async () => {
+        const sessionId = await createProgram(
+          'trap "" TERM HUP; touch "$0"; exec sleep 300',
+        );
+
+        const result = destroyRefused(sessionId, '--force');
+        expect(result.envelope).toMatchObject({
+          ok: false,
+          error: { code: 'HOST_TIMEOUT' },
+        });
+        expect(result.status).toBe(5);
+        expect(result.stderr).toBe('');
+        const manifest = await readManifestFile(sessionId);
+        expect(manifest.status).not.toBe('destroyed');
+        expect(manifest.childPid).toBe(pgid);
+      });
+
+      it('a reconcile after a host crash keeps the manifest', async () => {
+        const sessionId = await createProgram(
+          'trap "" TERM HUP; touch "$0"; exec sleep 300',
+        );
+        crashSession(testHome, sessionId);
+
+        const result = destroyRefused(sessionId);
+        expect(result.envelope).toMatchObject({
+          ok: false,
+          error: { code: 'HOST_UNREACHABLE' },
+        });
+        expect(result.status).toBe(6);
+        expect(result.stderr).toBe('');
+        expect(await readManifestFile(sessionId)).toMatchObject({
+          status: 'running',
+          childPid: pgid,
+        });
+      });
+    });
+  });
+
+  describe('destroy run by the program itself', () => {
+    let pgid = 0;
+
+    afterEach(() => {
+      if (pgid > 1) {
+        try {
+          process.kill(-pgid, 'SIGKILL');
+        } catch {
+          // the group is already gone
+        }
+      }
+      pgid = 0;
+    });
+
+    const cli = [
+      process.execPath,
+      '--import',
+      resolve('node_modules/tsx/dist/loader.mjs'),
+      resolve('src/cli/main.ts'),
+    ];
+
+    async function readEnvelopeOnceWritten(path: string): Promise<unknown> {
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline) {
+        await sleep(100);
+        try {
+          return JSON.parse(await readFile(path, 'utf8')) as unknown;
+        } catch {
+          // not written yet
+        }
+      }
+      return undefined;
+    }
+
+    it.each([
+      ['destroy', ''],
+      ['destroy --force', '--force'],
+    ])('%s prints its result and ends the group', async (_name, flag) => {
+      const go = join(testHome, 'go');
+      const sessionId = createSession(testHome, [
+        '/bin/sh',
+        '-c',
+        `while [ ! -e "$0" ]; do sleep 0.1; done; "$@" destroy "$AGENT_TTY_SESSION_ID" ${flag} --json > "$0.json"; sleep 300`,
+        go,
+        ...cli,
+      ]);
+      pgid = inspectSession(testHome, sessionId).childPid as number;
+      await writeFile(go, '');
+
+      expect(await readEnvelopeOnceWritten(`${go}.json`)).toMatchObject({
+        ok: true,
+        result: { sessionId, destroyed: true },
+      });
+      expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+      expect(await groupEnds(pgid)).toBe(true);
+    });
+
+    // The program can run destroy before the host's start-up write names its
+    // pid. Holding that write keeps create's manifest, with no childPid, for
+    // the whole destroy. The hold matches the host's argv only, so the inner
+    // CLI, which inherits it, runs at full speed.
+    it('destroy --force before the host names the program prints its result', async () => {
+      const out = join(testHome, 'early-destroy.json');
+      runCli(
+        [
+          'create',
+          '--json',
+          '--',
+          '/bin/sh',
+          '-c',
+          '"$@" destroy "$AGENT_TTY_SESSION_ID" --force --json > "$0"',
+          out,
+          ...cli,
+        ],
+        {
+          AGENT_TTY_HOME: testHome,
+          NODE_OPTIONS: [
+            process.env.NODE_OPTIONS ?? '',
+            `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+          ].join(' '),
+          REPLAY_HOLD: '_host:rename:/session.json:1:4000',
+        },
+      );
+      const [sessionId] = await readdir(join(testHome, 'sessions'));
+
+      expect(await readEnvelopeOnceWritten(out)).toMatchObject({
+        ok: true,
+        result: { sessionId, destroyed: true },
+      });
+      expect(inspectSession(testHome, sessionId as string).status).toBe(
+        'destroyed',
+      );
+    }, 60_000);
+
+    // Bash runs a typed command as a job in its own process group, so only
+    // the session id shows that it runs inside the program. destroy reads
+    // that id on Linux only.
+    it.runIf(process.platform === 'linux').each([
+      ['destroy', ''],
+      ['destroy --force', '--force'],
+    ])(
+      '%s typed into an interactive shell prints its result',
+      async (_name, flag) => {
+        const out = join(testHome, 'inner-destroy.json');
+        const sessionId = createSession(
+          testHome,
+          ['/bin/bash', '--norc', '--noprofile', '-i'],
+          { env: { HISTFILE: '/dev/null' } },
+        );
+        pgid = inspectSession(testHome, sessionId).childPid as number;
+        const command = `${cli.map((part) => `'${part}'`).join(' ')} destroy "$AGENT_TTY_SESSION_ID" ${flag} --json > '${out}'`;
+        for (const args of [
+          ['type', sessionId, command],
+          ['send-keys', sessionId, 'Enter'],
+        ]) {
+          expect(
+            runCli([...args, '--json'], { AGENT_TTY_HOME: testHome }).status,
+          ).toBe(0);
+        }
+
+        expect(await readEnvelopeOnceWritten(out)).toMatchObject({
+          ok: true,
+          result: { sessionId, destroyed: true },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await groupEnds(pgid)).toBe(true);
+      },
+    );
   });
 
   it('destroyed session rejects commands with SESSION_ALREADY_DESTROYED', () => {

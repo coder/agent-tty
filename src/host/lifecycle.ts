@@ -1,4 +1,5 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { readdirSync, readFileSync } from 'node:fs';
 import { chmod, mkdir, readdir, stat, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import process from 'node:process';
@@ -212,6 +213,81 @@ function processGroupTarget(pgid: number): number {
   return process.platform === 'win32' ? pgid : -pgid;
 }
 
+// The fields of /proc/<pid>/stat from the state on: state, ppid, pgrp,
+// session. The command name before them can hold spaces and parentheses, so
+// they start after the last ')'.
+function procStatFields(procStat: string): string[] {
+  return procStat.slice(procStat.lastIndexOf(')') + 2).split(' ');
+}
+
+// hidepid=2 and hidepid=4 (shown as invisible and ptraceable on newer
+// kernels) leave processes of other users out of the /proc listing. The
+// last /proc line is the mount on top. An unreadable mountinfo counts as
+// hiding them.
+function procHidesOtherUsers(): boolean {
+  let mountinfo: string;
+  try {
+    mountinfo = readFileSync('/proc/self/mountinfo', 'utf8');
+  } catch {
+    return true;
+  }
+  let hides = false;
+  for (const line of mountinfo.split('\n')) {
+    const fields = line.split(' ');
+    const separator = fields.indexOf('-');
+    if (fields[4] === '/proc' && fields[separator + 1] === 'proc') {
+      hides = /(^|,)hidepid=(2|4|invisible|ptraceable)(,|$)/.test(
+        fields[separator + 3] ?? '',
+      );
+    }
+  }
+  return hides;
+}
+
+// Whether /proc shows a process of the group that is not a zombie, or a
+// process that it refuses to show, or null when it shows none of the group.
+// kill(-pgid, 0) finds a zombie until its parent reaps it, and an init that
+// never reaps orphans, such as a container's PID 1 without an init, never
+// does. Off Linux, and when /proc hides other users, there is no scan and
+// the answer is true, so a zombie reads alive. launchd reaps orphans on
+// macOS.
+function groupHasLiveProcess(pgid: number): boolean | null {
+  if (process.platform !== 'linux' || procHidesOtherUsers()) {
+    return true;
+  }
+
+  let seen = false;
+  for (const entry of readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry)) {
+      continue;
+    }
+    let procStat: string;
+    try {
+      procStat = readFileSync(`/proc/${entry}/stat`, 'utf8');
+    } catch (error) {
+      // ENOENT and ESRCH: the process ended during the scan.
+      if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ESRCH')) {
+        continue;
+      }
+      // hidepid=1 (EPERM) or a security module (EACCES) refuses to show
+      // the process of another user.
+      if (hasErrorCode(error, 'EPERM') || hasErrorCode(error, 'EACCES')) {
+        return true;
+      }
+      throw error;
+    }
+    const [state, , pgrp] = procStatFields(procStat);
+    if (Number(pgrp) !== pgid) {
+      continue;
+    }
+    if (state !== 'Z' && state !== 'X') {
+      return true;
+    }
+    seen = true;
+  }
+  return seen ? false : null;
+}
+
 export function isProcessGroupAlive(pgid: number | null): boolean {
   if (pgid === null) {
     return false;
@@ -219,14 +295,21 @@ export function isProcessGroupAlive(pgid: number | null): boolean {
 
   try {
     process.kill(processGroupTarget(pgid), 0);
-    return true;
   } catch (error) {
+    // EPERM: the group still holds a process of another user, which hidepid
+    // can hide from /proc.
+    if (hasErrorCode(error, 'EPERM')) {
+      return groupHasLiveProcess(pgid) ?? true;
+    }
     if (hasErrorCode(error, 'ESRCH')) {
       return false;
     }
 
     throw error;
   }
+
+  // None in view: the kill found processes that were reaped before the scan.
+  return groupHasLiveProcess(pgid) ?? false;
 }
 
 export function killProcessGroupBestEffort(pgid: number | null): void {
@@ -237,12 +320,77 @@ export function killProcessGroupBestEffort(pgid: number | null): void {
   try {
     process.kill(processGroupTarget(pgid), 'SIGKILL');
   } catch (error) {
-    if (hasErrorCode(error, 'ESRCH')) {
+    if (hasErrorCode(error, 'ESRCH') || hasErrorCode(error, 'EPERM')) {
       return;
     }
 
     throw error;
   }
+}
+
+function ownLinuxSessionId(): number {
+  const sid = Number(
+    procStatFields(readFileSync('/proc/self/stat', 'utf8'))[3],
+  );
+  invariant(
+    Number.isInteger(sid) && sid > 0,
+    'own session id must be a positive integer',
+  );
+  return sid;
+}
+
+// macOS and the BSDs ship ps at /bin/ps, so a restricted PATH cannot hide
+// it. Without it the CLI takes the destroy path it had before this check.
+function ownProcessGroupId(): number | null {
+  let output: string;
+  try {
+    output = execFileSync(
+      '/bin/ps',
+      ['-o', 'pgid=', '-p', String(process.pid)],
+      {
+        encoding: 'utf8',
+      },
+    );
+  } catch {
+    return null;
+  }
+  const pgid = Number(output.trim());
+  invariant(
+    Number.isInteger(pgid) && pgid > 0,
+    'own process group id must be a positive integer',
+  );
+  return pgid;
+}
+
+// The program and the processes it starts inherit AGENT_TTY_SESSION_ID at
+// spawn, before any manifest names the program's pid. `create --env` can
+// override that variable, so the ids are compared too. The program leads its
+// own session, so a process inside that session has the program's pid as its
+// session id. Linux compares that id, which also covers a job that the
+// program's shell put in a group of its own. POSIX ps has no session id
+// field, so other systems compare the process group and miss such a job
+// whose environment lost the variable. Windows has no sessions or groups.
+export async function cliRunsInsideProgramSession(
+  sessionId: string,
+): Promise<boolean> {
+  if (process.platform === 'win32') {
+    return false;
+  }
+
+  if (process.env.AGENT_TTY_SESSION_ID === sessionId) {
+    return true;
+  }
+
+  const { manifestFile } = getSessionPaths(sessionId);
+  const manifest = await readManifestIfExists(manifestFile);
+  if (manifest === null || manifest.childPid === null) {
+    return false;
+  }
+
+  return (
+    manifest.childPid ===
+    (process.platform === 'linux' ? ownLinuxSessionId() : ownProcessGroupId())
+  );
 }
 
 async function unlinkIfPresent(path: string): Promise<void> {
@@ -327,7 +475,7 @@ async function waitForTerminalManifest(
   return null;
 }
 
-async function waitForProcessesToExit(
+export async function waitForProcessesToExit(
   hostPid: number | null,
   childPid: number | null,
   maxAttempts: number = DESTROY_MAX_ATTEMPTS,
@@ -751,17 +899,28 @@ export async function reconcileSession(
   // The program can outlive its host. This copy names it even when the first
   // read came before the host's start-up write.
   killProcessGroupBestEffort(current.childPid);
+  // A kill can leave processes of another user, such as the root child of
+  // `sudo cmd &`. Keep childPid so that a later reconcile retries.
+  if (!(await waitForProcessesToExit(null, current.childPid))) {
+    return;
+  }
+  // A destroy or another reconcile can write a terminal status during the
+  // wait.
+  const latest = await readManifestIfExists(manifestFile);
+  if (latest === null || isTerminalSessionStatus(latest.status)) {
+    return;
+  }
 
   let reconciledStatus: SessionRecord['status'];
   let failureReason: string | undefined;
   let failureOrigin: FailureOrigin | undefined;
 
-  switch (current.status) {
+  switch (latest.status) {
     case 'running':
       reconciledStatus = 'failed';
       failureReason =
-        current.hostPid !== null
-          ? `host process died unexpectedly (pid: ${String(current.hostPid)})`
+        latest.hostPid !== null
+          ? `host process died unexpectedly (pid: ${String(latest.hostPid)})`
           : 'host process died unexpectedly';
       failureOrigin = 'host-death';
       break;
@@ -773,13 +932,13 @@ export async function reconcileSession(
       break;
     default:
       reconciledStatus = 'failed';
-      failureReason = `unexpected pre-reconcile status: ${current.status}`;
+      failureReason = `unexpected pre-reconcile status: ${latest.status}`;
       failureOrigin = 'unknown';
       break;
   }
 
   const reconciledManifest: SessionRecord = {
-    ...current,
+    ...latest,
     status: reconciledStatus,
     updatedAt: new Date().toISOString(),
     hostPid: null,

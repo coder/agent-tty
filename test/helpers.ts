@@ -13,6 +13,7 @@ import process from 'node:process';
 
 import type { SessionRecord as ProtocolSessionRecord } from '../src/protocol/schemas.js';
 import type { SemanticSnapshot } from '../src/renderer/types.js';
+import { hasErrorCode } from '../src/util/hasErrorCode.js';
 
 import { afterEach, expect } from 'vitest';
 
@@ -188,6 +189,7 @@ export async function cleanupHome(home: string): Promise<void> {
 interface CreateSessionOptions {
   cols?: number;
   rows?: number;
+  env?: Record<string, string>;
 }
 
 export function createSession(
@@ -205,6 +207,7 @@ export function createSession(
   args.push('--', ...command);
 
   const result = runCli(args, {
+    ...options.env,
     AGENT_TTY_HOME: testHome,
   });
   expect(result.status).toBe(0);
@@ -277,6 +280,30 @@ export async function readEvents(
     .split('\n')
     .filter((line) => line.length > 0)
     .map((line) => JSON.parse(line) as EventRecord);
+}
+
+export function isGroupAlive(group: number): boolean {
+  try {
+    process.kill(-group, 0);
+    return true;
+  } catch (error) {
+    if (hasErrorCode(error, 'ESRCH')) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+// init reaps the killed processes a moment after they die.
+export async function groupEnds(group: number): Promise<boolean> {
+  const deadline = Date.now() + 2_000;
+  while (isGroupAlive(group)) {
+    if (Date.now() > deadline) {
+      return false;
+    }
+    await sleep(50);
+  }
+  return true;
 }
 
 export async function sleep(ms: number): Promise<void> {
