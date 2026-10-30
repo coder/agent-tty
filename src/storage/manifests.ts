@@ -97,23 +97,30 @@ export async function readValidatedJsonFile<T>(
   );
 }
 
+async function replaceFileAtomic(
+  path: string,
+  contents: string,
+): Promise<void> {
+  const temporaryPath = `${path}.tmp-${randomUUID()}`;
+
+  try {
+    await writeFile(temporaryPath, contents, { encoding: 'utf8', mode: 0o600 });
+    await rename(temporaryPath, path);
+  } catch (error) {
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function writeTextFileAtomic(
   options: WriteTextFileAtomicOptions,
 ): Promise<void> {
   assertAbsoluteStoragePath(options.path, options.pathLabel);
 
-  const outputDirectory = dirname(options.path);
-  const temporaryPath = `${options.path}.tmp-${randomUUID()}`;
-
   try {
-    await mkdir(outputDirectory, { recursive: true });
-    await writeFile(temporaryPath, options.contents, {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
-    await rename(temporaryPath, options.path);
+    await mkdir(dirname(options.path), { recursive: true });
+    await replaceFileAtomic(options.path, options.contents);
   } catch (error) {
-    await rm(temporaryPath, { force: true }).catch(() => undefined);
     throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
       message: options.writeErrorMessage,
       details: { path: options.path },
@@ -179,15 +186,30 @@ export async function readManifestIfExists(
   return readManifestInternal(path, true);
 }
 
+// No mkdir: only allocateSession creates a session folder, so a write after
+// gc removed the folder fails instead of bringing it back.
 export async function writeManifest(
   path: string,
   record: SessionRecord,
 ): Promise<void> {
-  await writeValidatedJsonFile({
-    path,
-    pathLabel: 'manifest path',
-    data: record,
-    writeErrorMessage: `Failed to write session manifest at ${path}.`,
-    validate: validateManifestData,
-  });
+  assertAbsoluteStoragePath(path, 'manifest path');
+  const manifest = validateManifestData(path, record);
+
+  try {
+    await replaceFileAtomic(path, `${JSON.stringify(manifest, null, 2)}\n`);
+  } catch (error) {
+    if (isEnoentError(error)) {
+      throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
+        message: `Session "${manifest.sessionId}" was not found: its folder ${dirname(path)} no longer exists.`,
+        details: { sessionId: manifest.sessionId, manifestPath: path },
+        cause: error,
+      });
+    }
+
+    throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+      message: `Failed to write session manifest at ${path}.`,
+      details: { path },
+      cause: error,
+    });
+  }
 }

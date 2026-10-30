@@ -1,5 +1,12 @@
 import crypto from 'node:crypto';
-import { mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -87,9 +94,11 @@ describe('manifest storage', () => {
     // oxfmt-ignore
     const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
     temporaryDirectories.push(home);
-    const path = manifestPath(sessionDir(home, 'session-01'));
+    const directory = sessionDir(home, 'session-01');
+    const path = manifestPath(directory);
     const record = createSessionRecord();
 
+    await mkdir(directory, { recursive: true });
     await writeManifest(path, record);
 
     const roundTripped = await readManifest(path);
@@ -122,8 +131,10 @@ describe('manifest storage', () => {
     // oxfmt-ignore
     const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
     temporaryDirectories.push(home);
-    const path = manifestPath(sessionDir(home, 'session-01'));
+    const directory = sessionDir(home, 'session-01');
+    const path = manifestPath(directory);
 
+    await mkdir(directory, { recursive: true });
     await writeManifest(path, createSessionRecord());
     await writeFile(
       path,
