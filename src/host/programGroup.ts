@@ -198,29 +198,48 @@ function hasToken(record: ProgramRecord): record is ProvenRecord {
   return record.bootId !== null;
 }
 
+async function readProgramRecord(
+  sessionDirectory: string,
+): Promise<ProgramRecord | 'missing' | 'invalid'> {
+  const path = programRecordPath(sessionDirectory);
+  try {
+    const record = await readValidatedJsonFile({
+      path,
+      pathLabel: 'program record path',
+      allowMissing: true,
+      readErrorMessage: `Failed to read the program record at ${path}.`,
+      invalidJsonMessage: `The program record contains invalid JSON at ${path}.`,
+      validate: validateProgramRecord,
+    });
+    return record ?? 'missing';
+  } catch (error) {
+    // A corrupt record, or one that another version wrote, proves nothing.
+    if (hasErrorCode(error, ERROR_CODES.MANIFEST_VALIDATION_ERROR)) {
+      return 'invalid';
+    }
+    throw error;
+  }
+}
+
 export async function readProvenProgramGroup(
   sessionDirectory: string,
 ): Promise<ProvenRecord | null> {
-  const path = programRecordPath(sessionDirectory);
-  const record = await readValidatedJsonFile({
-    path,
-    pathLabel: 'program record path',
-    allowMissing: true,
-    readErrorMessage: `Failed to read the program record at ${path}.`,
-    invalidJsonMessage: `The program record contains invalid JSON at ${path}.`,
-    validate: validateProgramRecord,
-  });
-  return record !== null && hasToken(record) ? record : null;
+  const record = await readProgramRecord(sessionDirectory);
+  return typeof record === 'object' && hasToken(record) ? record : null;
 }
 
-// Without a token the kill trusts childPid, as before program.json existed.
+// Without a record or a token the kill trusts childPid, as before
+// program.json existed. An invalid record gets no kill.
 export async function readProgramGroup(
   sessionDirectory: string,
   childPid: number | null,
 ): Promise<ProgramRecord | null> {
-  const proven = await readProvenProgramGroup(sessionDirectory);
-  if (proven !== null || childPid === null) {
-    return proven;
+  const record = await readProgramRecord(sessionDirectory);
+  if (typeof record === 'object' && hasToken(record)) {
+    return record;
+  }
+  if (record === 'invalid' || childPid === null) {
+    return null;
   }
   return { version: 1, pid: childPid, bootId: null, autogroup: null };
 }
