@@ -5,7 +5,7 @@ import { extname, isAbsolute } from 'node:path';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
-import { artifactPath } from './artifactPaths.js';
+import { artifactPath, sessionNotFoundIfRemoved } from './artifactPaths.js';
 
 export interface PublishArtifactFileOptions {
   sessionDir: string;
@@ -128,6 +128,10 @@ export async function publishArtifactFile(
       variant += 1;
     }
   } catch (error) {
+    const removed = await sessionNotFoundIfRemoved(options.sessionDir, error);
+    if (removed !== error) {
+      throw removed;
+    }
     throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
       message: `Failed to store artifact at ${preferredPath}.`,
       details: { path: preferredPath },
