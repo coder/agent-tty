@@ -359,10 +359,13 @@ HostClosesSocket ==
 
 \* The kill timer of initiateShutdown fires: SHUTDOWN_KILL_GRACE_MS after
 \* pty.kill(), killProcessGroupBestEffort(pty.pid). clearTimeout stops it
-\* once ptyExitPromise settles, so it fires only while the host waits for
-\* the program. The host then sees the exit (ProgramExits). The rules do not
-\* depend on this kill, because handlePtyExit kills the group too. It makes
-\* destroy end within its wait, a time bound that the model does not check.
+\* once handlePtyExit settles ptyExitPromise, so it fires only before the
+\* host handles the exit. It can fire after the program ended and before
+\* handlePtyExit runs; the kill then reaches the group's other processes or
+\* finds none (ESRCH). The host then sees the exit (ProgramExits). The rules
+\* do not depend on this kill, because handlePtyExit kills the group too. It
+\* makes destroy end within its wait, a time bound that the model does not
+\* check.
 HostKillsProgram ==
     /\ hostAlive /\ hst = "destroying" /\ hex = "wait" /\ prog
     /\ prog' = FALSE
@@ -795,10 +798,11 @@ DestroyedOnlyWhenEnded ==
 \* R9: destroy reports success only after it wrote destroyed or read it.
 DestroyEndsDestroyed == dres = "ok" => dsaw
 
-\* R10: the manifest says destroyed only when no process of the program's
-\* process group runs. A program that no manifest named is out of reach:
-\* its host died before the start-up write (see the Scope section of
-\* SKILL.md).
+\* R10: when the manifest says destroyed, no process of the program's
+\* process group runs. ProgramExits drops a process that a program left
+\* when it exited on its own, and a program that no manifest named is out
+\* of reach: its host died before the start-up write (see the Scope section
+\* of SKILL.md).
 DestroyedProgramStopped == (mst = "destroyed" /\ wasNamed) => ~prog
 
 \* Witnesses. check.sh expects TLC to report each one VIOLATED, which shows

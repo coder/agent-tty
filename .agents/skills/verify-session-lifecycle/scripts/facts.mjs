@@ -593,6 +593,7 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'reconcileSession'],
   ['src/host/hostMain.ts', 'waitForManifestFromCreate'],
   ['src/host/hostMain.ts', 'isSessionCommandable'],
+  ['src/host/hostMain.ts', 'SHUTDOWN_KILL_GRACE_MS'],
   ['src/host/manifestWriter.ts', 'createSerialManifestWriter'],
   ['src/host/rpcClient.ts', 'toTransportCliError'],
   ['src/host/sessionState.ts', 'SessionState.setDimensions'],
