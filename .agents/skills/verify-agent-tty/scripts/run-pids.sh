@@ -64,8 +64,7 @@ done
   ledger_failed "could not append to $ledger"
 
 # Linux does not reuse a PID while a process is left in the session that it
-# names. Once that session is empty, a new process can get the PID, so mark it
-# ended and never match it again.
+# names. Once that session is empty, a new process can get the PID.
 sessions="|$(cat /proc/[0-9]*/stat 2>/dev/null | sed 's/.*) //' | cut -d' ' -f4 | sort -un | tr '\n' '|')"
 program_sessions="|"
 newly_ended=""

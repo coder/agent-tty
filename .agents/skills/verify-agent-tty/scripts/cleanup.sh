@@ -91,9 +91,6 @@ find_holders
 # The socket folder is /tmp/agent-tty/<first 8 hex of sha256(home)>.
 sockets="/tmp/agent-tty/$(node -e 'process.stdout.write(require("node:crypto").createHash("sha256").update(require("node:path").resolve(process.argv[1])).digest("hex").slice(0, 8))' "$AGENT_TTY_HOME")"
 
-# A process can start after that scan. Move home/ and state/ aside first, so a
-# process that starts later cannot reach them, then scan again for one that
-# started in between.
 aside=$VERIFY_RUN/removing
 removal_failed() {
   echo "cleanup.sh: could not $1. Fix the error above, then run cleanup.sh again." >&2
