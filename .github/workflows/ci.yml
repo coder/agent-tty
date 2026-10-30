@@ -168,14 +168,12 @@ jobs:
         if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
         run: exit 1
 
-  # macOS compilation and static-analysis counterpart to the Ubuntu quality
-  # gates above.  Tests are excluded because the macOS GitHub Actions runner
-  # has pre-existing issues with PTY spawning and Unix domain sockets that
-  # cause integration/e2e test failures.  The full test suite runs on Linux;
-  # macOS validates that the code compiles and passes static checks.
+  # macOS counterpart to the Ubuntu quality gates above. It runs the static
+  # checks and the full test suite serially in one job, so PTY spawning,
+  # process groups and Unix domain sockets are tested on macOS too.
   quality-gates-macos:
     runs-on: macos-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -203,3 +201,15 @@ jobs:
 
       - name: Build
         run: mise run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Test unit
+        run: mise run test-unit
+
+      - name: Test integration
+        run: mise run test-integration
+
+      - name: Test e2e
+        run: mise run test-e2e
