@@ -584,16 +584,17 @@ async function recordDestroyed(
 }
 
 async function stopSessionProcesses(
-  manifest: SessionRecord,
+  sessionId: string,
+  hostPid: number | null,
   group: ProgramRecord | null,
   sessionDirectory: string,
   signal: AbortSignal | undefined,
 ): Promise<void> {
   stopProgramGroup(group);
-  killProcessBestEffort(manifest.hostPid);
+  killProcessBestEffort(hostPid);
 
   const stopped = await waitForProcessesToExit(
-    manifest.hostPid,
+    hostPid,
     group,
     DESTROY_MAX_ATTEMPTS,
     DESTROY_POLL_INTERVAL_MS,
@@ -601,8 +602,8 @@ async function stopSessionProcesses(
   );
   if (!stopped) {
     throw makeCliError(ERROR_CODES.HOST_TIMEOUT, {
-      message: `Timed out forcing session "${manifest.sessionId}" to exit.`,
-      details: { sessionId: manifest.sessionId, sessionDirectory },
+      message: `Timed out forcing session "${sessionId}" to exit.`,
+      details: { sessionId, sessionDirectory },
     });
   }
 }
@@ -629,14 +630,30 @@ export async function destroySession(
     });
   }
 
+  // A program that exits on its own can leave processes in its group. Only
+  // a group that program.json proves is the program's gets the kill.
+  const recordTerminalDestroyed = async (
+    terminal: SessionRecord,
+  ): Promise<void> => {
+    await stopSessionProcesses(
+      sessionId,
+      null,
+      await readProgramGroup(sessionDirectory, null),
+      sessionDirectory,
+      signal,
+    );
+    await recordDestroyed(manifestFile, socketFile, terminal, null);
+  };
+
   if (isTerminalSessionStatus(manifest.status)) {
-    await recordDestroyed(manifestFile, socketFile, manifest, null);
+    await recordTerminalDestroyed(manifest);
     return;
   }
 
   if (force === true) {
     await stopSessionProcesses(
-      manifest,
+      sessionId,
+      manifest.hostPid,
       await readProgramGroup(sessionDirectory, manifest.childPid),
       sessionDirectory,
       signal,
@@ -645,7 +662,13 @@ export async function destroySession(
     // the first read did not.
     const current = await readSessionManifestOrThrow(sessionId, manifestFile);
     const group = await readProgramGroup(sessionDirectory, current.childPid);
-    await stopSessionProcesses(current, group, sessionDirectory, signal);
+    await stopSessionProcesses(
+      sessionId,
+      current.hostPid,
+      group,
+      sessionDirectory,
+      signal,
+    );
     await recordDestroyed(manifestFile, socketFile, current, group);
     return;
   }
@@ -667,7 +690,7 @@ export async function destroySession(
       manifestFile,
     );
     if (isTerminalSessionStatus(reconciledManifest.status)) {
-      await recordDestroyed(manifestFile, socketFile, reconciledManifest, null);
+      await recordTerminalDestroyed(reconciledManifest);
       return;
     }
 
@@ -681,7 +704,7 @@ export async function destroySession(
     pollOptions(signal),
   );
   if (terminalManifest !== null) {
-    await recordDestroyed(manifestFile, socketFile, terminalManifest, null);
+    await recordTerminalDestroyed(terminalManifest);
     return;
   }
 
@@ -691,7 +714,7 @@ export async function destroySession(
     manifestFile,
   );
   if (isTerminalSessionStatus(reconciledManifest.status)) {
-    await recordDestroyed(manifestFile, socketFile, reconciledManifest, null);
+    await recordTerminalDestroyed(reconciledManifest);
     return;
   }
 
