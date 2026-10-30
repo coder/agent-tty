@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import {
   access,
   link,
@@ -153,6 +154,15 @@ describe('publishArtifactFile', () => {
     });
     await expect(readFile(outsidePath, 'utf8')).resolves.toBe('a');
   });
+
+  it('refuses a FIFO at the name without blocking', async () => {
+    const sessionDirectory = await createArtifactsSessionDir();
+    execFileSync('mkfifo', [artifactPath(sessionDirectory, 'artifact-5.txt')]);
+
+    await expect(publish(sessionDirectory, 'a')).rejects.toMatchObject({
+      code: 'STORAGE_WRITE_ERROR',
+    });
+  }, 5_000);
 
   it('fails instead of retrying forever when a dangling symlink holds the name', async () => {
     const sessionDirectory = await createArtifactsSessionDir();
