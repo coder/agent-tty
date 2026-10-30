@@ -1,7 +1,9 @@
-import { mkdir } from 'node:fs/promises';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { mkdir, stat } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, resolve } from 'node:path';
 
+import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
+import { hasErrorCode } from '../util/hasErrorCode.js';
 
 const ARTIFACTS_DIRNAME = 'artifacts';
 const SAFE_FILENAME_COMPONENT_PATTERN = /[^a-zA-Z0-9._-]+/g;
@@ -118,8 +120,53 @@ export function artifactPath(sessionDir: string, filename: string): string {
   return resolvedArtifactPath;
 }
 
+function sessionNotFoundError(sessionDirectory: string, cause: unknown) {
+  const sessionId = basename(sessionDirectory);
+  return makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
+    message: `Session "${sessionId}" was not found: its folder ${sessionDirectory} no longer exists.`,
+    details: { sessionId, sessionDir: sessionDirectory },
+    cause,
+  });
+}
+
 export async function ensureArtifactsDir(sessionDir: string): Promise<string> {
   const directory = artifactsDir(sessionDir);
-  await mkdir(directory, { recursive: true });
+
+  try {
+    await mkdir(directory);
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      throw sessionNotFoundError(dirname(directory), error);
+    }
+
+    if (!hasErrorCode(error, 'EEXIST')) {
+      throw error;
+    }
+  }
+
   return directory;
+}
+
+/**
+ * Returns SESSION_NOT_FOUND for an ENOENT from a write under the session
+ * folder when gc removed that folder, and any other error unchanged.
+ */
+export async function sessionNotFoundIfRemoved(
+  sessionDir: string,
+  error: unknown,
+): Promise<unknown> {
+  assertAbsolutePath(sessionDir, 'sessionDir');
+
+  if (!hasErrorCode(error, 'ENOENT')) {
+    return error;
+  }
+
+  try {
+    await stat(sessionDir);
+    return error;
+  } catch (statError) {
+    return hasErrorCode(statError, 'ENOENT')
+      ? sessionNotFoundError(resolve(sessionDir), error)
+      : error;
+  }
 }

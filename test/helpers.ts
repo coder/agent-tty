@@ -1,5 +1,12 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, readdir, realpath, rm } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -111,7 +118,9 @@ export async function createTemporarySessionDir(
 ): Promise<string> {
   const home = await realpath(await mkdtemp(join(tmpdir(), prefix)));
   temporaryDirectories.push(home);
-  return join(home, sessionId);
+  const sessionDirectory = join(home, sessionId);
+  await mkdir(sessionDirectory);
+  return sessionDirectory;
 }
 
 export function runCli(

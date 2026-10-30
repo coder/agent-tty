@@ -300,6 +300,7 @@ export async function runRecordExportCommand(
         pathLabel: 'record export path',
         contents: exportArtifact.contents,
         writeErrorMessage: `Failed to write record export artifact at ${artifactOutputPath}.`,
+        createParentFolders: false,
       });
 
       bytes = contentsBuffer.byteLength;

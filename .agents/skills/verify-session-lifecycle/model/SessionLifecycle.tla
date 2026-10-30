@@ -560,7 +560,8 @@ GcFinalRead ==
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, rd,
                    lruns, destroyVars>>
 
-\* rm(sessionDirectory, { recursive: true, force: true })
+\* rm(sessionDirectory, { recursive: true, force: true, maxRetries: 3,
+\*    retryDelay: 10 })
 GcRemoves ==
     /\ pc["gc"] = "rm"
     /\ dir' = FALSE /\ mst' = "none" /\ mpid' = FALSE /\ morigin' = "none"

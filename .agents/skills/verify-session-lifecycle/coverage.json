@@ -2,7 +2,7 @@
   "fingerprints": {
     "src/cli/commands/create.ts#runCreateCommand": "1b2b29a895cde754",
     "src/cli/commands/destroy.ts#runDestroyCommand": "82b8d0366b1c08dd",
-    "src/cli/commands/gc.ts#gcSessions": "95b60bad891bdc73",
+    "src/cli/commands/gc.ts#gcSessions": "ac079db2a0199d69",
     "src/host/lifecycle.ts#allocateSession": "8f7eee41b3c56db9",
     "src/host/lifecycle.ts#launchHost": "24751cfcbe8a055e",
     "src/host/lifecycle.ts#isProcessAlive": "1ca1fe6ad6c41711",
@@ -37,7 +37,7 @@
     "src/host/hostMain.ts#runHost(final try)": "ad91fa180ff36ffb",
     "src/host/hostMain.ts#runHost>handlers.resize": "30dd1da32879d478",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "8f2054597143aa20",
+    "skill:model/SessionLifecycle.tla": "f140f1136ff08f1b",
     "skill:scripts/facts.mjs": "1c8d4d3384a3722c",
     "skill:scripts/check.sh": "2d505a7e2d4715ef"
   },
