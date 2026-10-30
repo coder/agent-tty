@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { chmod, mkdir, readdir, stat, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import process from 'node:process';
@@ -213,6 +213,56 @@ function processGroupTarget(pgid: number): number {
   return process.platform === 'win32' ? pgid : -pgid;
 }
 
+// The fields of /proc/<pid>/stat from the state on: state, ppid, pgrp,
+// session. The command name before them can hold spaces and parentheses, so
+// they start after the last ')'.
+function procStatFields(procStat: string): string[] {
+  return procStat.slice(procStat.lastIndexOf(')') + 2).split(' ');
+}
+
+// Whether /proc shows a process of the group that is not a zombie, or null
+// when it shows none of the group. kill(-pgid, 0) finds a zombie until its
+// parent reaps it, and an init that never reaps orphans, such as a
+// container's PID 1 without an init, never does. Off Linux there is no scan
+// and the answer is true, so a zombie reads alive. launchd reaps orphans on
+// macOS.
+function groupHasLiveProcess(pgid: number): boolean | null {
+  if (process.platform !== 'linux') {
+    return true;
+  }
+
+  let seen = false;
+  for (const entry of readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry)) {
+      continue;
+    }
+    let procStat: string;
+    try {
+      procStat = readFileSync(`/proc/${entry}/stat`, 'utf8');
+    } catch (error) {
+      // ENOENT and ESRCH: the process ended during the scan. EPERM: hidepid=1
+      // hides the process of another user.
+      if (
+        hasErrorCode(error, 'ENOENT') ||
+        hasErrorCode(error, 'ESRCH') ||
+        hasErrorCode(error, 'EPERM')
+      ) {
+        continue;
+      }
+      throw error;
+    }
+    const [state, , pgrp] = procStatFields(procStat);
+    if (Number(pgrp) !== pgid) {
+      continue;
+    }
+    if (state !== 'Z' && state !== 'X') {
+      return true;
+    }
+    seen = true;
+  }
+  return seen ? false : null;
+}
+
 export function isProcessGroupAlive(pgid: number | null): boolean {
   if (pgid === null) {
     return false;
@@ -220,11 +270,11 @@ export function isProcessGroupAlive(pgid: number | null): boolean {
 
   try {
     process.kill(processGroupTarget(pgid), 0);
-    return true;
   } catch (error) {
-    // EPERM: the group still holds a process of another user.
+    // EPERM: the group still holds a process of another user, which hidepid
+    // can hide from /proc.
     if (hasErrorCode(error, 'EPERM')) {
-      return true;
+      return groupHasLiveProcess(pgid) ?? true;
     }
     if (hasErrorCode(error, 'ESRCH')) {
       return false;
@@ -232,6 +282,9 @@ export function isProcessGroupAlive(pgid: number | null): boolean {
 
     throw error;
   }
+
+  // The kill found processes that were reaped before the scan.
+  return groupHasLiveProcess(pgid) ?? false;
 }
 
 export function killProcessGroupBestEffort(pgid: number | null): void {
@@ -251,11 +304,8 @@ export function killProcessGroupBestEffort(pgid: number | null): void {
 }
 
 function ownLinuxSessionId(): number {
-  // The command name can hold spaces and parentheses, so count the fields
-  // from the last ')': state, ppid, pgrp, session.
-  const procStat = readFileSync('/proc/self/stat', 'utf8');
   const sid = Number(
-    procStat.slice(procStat.lastIndexOf(')') + 2).split(' ')[3],
+    procStatFields(readFileSync('/proc/self/stat', 'utf8'))[3],
   );
   invariant(
     Number.isInteger(sid) && sid > 0,
