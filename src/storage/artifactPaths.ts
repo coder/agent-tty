@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, stat } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, resolve } from 'node:path';
 
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
@@ -120,6 +120,15 @@ export function artifactPath(sessionDir: string, filename: string): string {
   return resolvedArtifactPath;
 }
 
+function sessionNotFoundError(sessionDirectory: string, cause: unknown) {
+  const sessionId = basename(sessionDirectory);
+  return makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
+    message: `Session "${sessionId}" was not found: its folder ${sessionDirectory} no longer exists.`,
+    details: { sessionId, sessionDir: sessionDirectory },
+    cause,
+  });
+}
+
 export async function ensureArtifactsDir(sessionDir: string): Promise<string> {
   const directory = artifactsDir(sessionDir);
 
@@ -127,13 +136,7 @@ export async function ensureArtifactsDir(sessionDir: string): Promise<string> {
     await mkdir(directory);
   } catch (error) {
     if (hasErrorCode(error, 'ENOENT')) {
-      const sessionDirectory = dirname(directory);
-      const sessionId = basename(sessionDirectory);
-      throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
-        message: `Session "${sessionId}" was not found: its folder ${sessionDirectory} no longer exists.`,
-        details: { sessionId, sessionDir: sessionDirectory },
-        cause: error,
-      });
+      throw sessionNotFoundError(dirname(directory), error);
     }
 
     if (!hasErrorCode(error, 'EEXIST')) {
@@ -142,4 +145,28 @@ export async function ensureArtifactsDir(sessionDir: string): Promise<string> {
   }
 
   return directory;
+}
+
+/**
+ * Returns SESSION_NOT_FOUND for an ENOENT from a write under the session
+ * folder when gc removed that folder, and any other error unchanged.
+ */
+export async function sessionNotFoundIfRemoved(
+  sessionDir: string,
+  error: unknown,
+): Promise<unknown> {
+  assertAbsolutePath(sessionDir, 'sessionDir');
+
+  if (!hasErrorCode(error, 'ENOENT')) {
+    return error;
+  }
+
+  try {
+    await stat(sessionDir);
+    return error;
+  } catch (statError) {
+    return hasErrorCode(statError, 'ENOENT')
+      ? sessionNotFoundError(resolve(sessionDir), error)
+      : error;
+  }
 }
