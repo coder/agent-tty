@@ -277,16 +277,23 @@ function ownProcessGroupId(): number {
   return pgid;
 }
 
-// The program leads its own session, so a process inside that session has
-// the program's pid as its session id. Linux compares that id, which also
-// covers a job that the program's shell put in a group of its own. POSIX ps
-// has no session id field, so other systems compare the process group and
-// miss such a job. Windows has no sessions or groups.
+// The program and the processes it starts inherit AGENT_TTY_SESSION_ID at
+// spawn, before any manifest names the program's pid. `create --env` can
+// override that variable, so the ids are compared too. The program leads its
+// own session, so a process inside that session has the program's pid as its
+// session id. Linux compares that id, which also covers a job that the
+// program's shell put in a group of its own. POSIX ps has no session id
+// field, so other systems compare the process group and miss such a job
+// whose environment lost the variable. Windows has no sessions or groups.
 export async function cliRunsInsideProgramSession(
   sessionId: string,
 ): Promise<boolean> {
   if (process.platform === 'win32') {
     return false;
+  }
+
+  if (process.env.AGENT_TTY_SESSION_ID === sessionId) {
+    return true;
   }
 
   const { manifestFile } = getSessionPaths(sessionId);
