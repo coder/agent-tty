@@ -8,7 +8,8 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -823,14 +824,16 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
     // The PTY child leads its own process group, so the group id is its pid.
     // `script` touches "$0" once its traps are set.
-    async function createProgram(script: string): Promise<string> {
+    async function createProgram(
+      script: string,
+      env: Record<string, string> = {},
+    ): Promise<string> {
       const ready = join(testHome, 'program-ready');
-      const sessionId = createSession(testHome, [
-        '/bin/sh',
-        '-c',
-        script,
-        ready,
-      ]);
+      const sessionId = createSession(
+        testHome,
+        ['/bin/sh', '-c', script, ready],
+        { env },
+      );
       const childPid = inspectSession(testHome, sessionId).childPid;
       expect(childPid).toBeTypeOf('number');
       pgid = childPid as number;
@@ -923,6 +926,114 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
       expect(inspectSession(testHome, sessionId).status).toBe('failed');
       expect(await groupEnds(pgid)).toBe(true);
+    });
+
+    describe('whose process group refuses the kill', () => {
+      const refusesGroupKill = {
+        NODE_OPTIONS: [
+          process.env.NODE_OPTIONS ?? '',
+          `--import=${pathToFileURL(resolve('test/fixtures/eperm-group-kill.ts')).href}`,
+        ].join(' '),
+      };
+
+      function destroyRefused(sessionId: string, ...flags: string[]) {
+        const result = runCli(['destroy', sessionId, ...flags, '--json'], {
+          ...refusesGroupKill,
+          AGENT_TTY_HOME: testHome,
+        });
+        return {
+          status: result.status,
+          stderr: result.stderr,
+          envelope: JSON.parse(result.stdout) as ErrorEnvelope,
+        };
+      }
+
+      async function readManifestFile(sessionId: string) {
+        return SessionRecordSchema.parse(
+          JSON.parse(
+            await readFile(
+              join(testHome, 'sessions', sessionId, 'session.json'),
+              'utf8',
+            ),
+          ) as unknown,
+        );
+      }
+
+      it('destroy times out and the host survives its kill timer', async () => {
+        const sessionId = await createProgram(
+          'trap "" TERM HUP; touch "$0"; exec sleep 300',
+          refusesGroupKill,
+        );
+        const { hostPid } = inspectSession(testHome, sessionId);
+
+        const result = destroyRefused(sessionId);
+        expect(result.envelope).toMatchObject({
+          ok: false,
+          error: { code: 'HOST_TIMEOUT' },
+        });
+        expect(result.status).toBe(5);
+        expect(result.stderr).toBe('');
+        expect(isProcessAlive(hostPid)).toBe(true);
+        expect(await readManifestFile(sessionId)).toMatchObject({
+          status: 'destroying',
+          childPid: pgid,
+        });
+      });
+
+      it('destroy times out when a background process outlives the program', async () => {
+        const sessionId = await createProgram(
+          '(trap "" HUP; touch "$0"; exec sleep 300) & wait',
+          refusesGroupKill,
+        );
+
+        const result = destroyRefused(sessionId);
+        expect(result.envelope).toMatchObject({
+          ok: false,
+          error: { code: 'HOST_TIMEOUT' },
+        });
+        expect(result.status).toBe(5);
+        expect(result.stderr).toBe('');
+        expect(await readManifestFile(sessionId)).toMatchObject({
+          status: 'destroying',
+          childPid: pgid,
+        });
+      }, 60_000);
+
+      it('destroy --force times out without recording destroyed', async () => {
+        const sessionId = await createProgram(
+          'trap "" TERM HUP; touch "$0"; exec sleep 300',
+        );
+
+        const result = destroyRefused(sessionId, '--force');
+        expect(result.envelope).toMatchObject({
+          ok: false,
+          error: { code: 'HOST_TIMEOUT' },
+        });
+        expect(result.status).toBe(5);
+        expect(result.stderr).toBe('');
+        const manifest = await readManifestFile(sessionId);
+        expect(manifest.status).not.toBe('destroyed');
+        expect(manifest.childPid).toBe(pgid);
+      });
+
+      it('a reconcile after a host crash keeps the manifest', async () => {
+        const sessionId = await createProgram(
+          'trap "" TERM HUP; touch "$0"; exec sleep 300',
+        );
+        crashSession(testHome, sessionId);
+
+        const result = destroyRefused(sessionId);
+        expect(result.envelope).toMatchObject({
+          ok: false,
+          error: { code: 'HOST_UNREACHABLE' },
+        });
+        expect(result.status).toBe(6);
+        expect(result.stderr).toBe('');
+        expect(await readManifestFile(sessionId)).toMatchObject({
+          status: 'running',
+          childPid: pgid,
+        });
+      });
     });
   });
 

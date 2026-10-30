@@ -24,11 +24,25 @@ vi.mock('node:fs/promises', async () => {
   return { ...actual, readFile };
 });
 
+// destroy and reconcile poll for about 5 s; these tests skip the waits.
+vi.mock('node:timers/promises', async () => {
+  const actual = await vi.importActual<typeof TimersPromises>(
+    'node:timers/promises',
+  );
+  return {
+    ...actual,
+    setTimeout: (_delay: number, value?: unknown, options?: object) =>
+      actual.setImmediate(value, options),
+  };
+});
+
 import type * as FsPromises from 'node:fs/promises';
+import type * as TimersPromises from 'node:timers/promises';
 
 import {
   allocateSession,
   destroySession,
+  isProcessGroupAlive,
   killProcessGroupBestEffort,
   reconcileSession,
   type AllocateConfig,
@@ -191,6 +205,21 @@ describe('reconcileSession', () => {
     });
   });
 
+  it('writes nothing while the program group survives its kill', async () => {
+    const record = makeRecord();
+    const directory = await seedSession(record);
+    vi.spyOn(process, 'kill').mockImplementation((pid) => {
+      if (pid === HOST_PID) {
+        throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
+      }
+      return true;
+    });
+
+    await reconcileSession(directory);
+
+    expect(await readManifest(manifestPath(directory))).toEqual(record);
+  });
+
   it('leaves a folder that gc removed after the re-read removed', async () => {
     const directory = await seedSession(makeRecord());
     killProbeReportsDead();
@@ -217,6 +246,23 @@ describe('destroySession', () => {
   });
 });
 
+function killFailsWith(code: string) {
+  return vi.spyOn(process, 'kill').mockImplementation(() => {
+    throw Object.assign(new Error(`kill ${code}`), { code });
+  });
+}
+
+describe('isProcessGroupAlive', () => {
+  it.each([
+    [true, 'EPERM'],
+    [false, 'ESRCH'],
+  ])('returns %s when the probe fails with %s', (alive, code) => {
+    killFailsWith(code);
+
+    expect(isProcessGroupAlive(CHILD_PID)).toBe(alive);
+  });
+});
+
 describe('killProcessGroupBestEffort', () => {
   const platform = process.platform;
 
@@ -235,6 +281,14 @@ describe('killProcessGroupBestEffort', () => {
     killProcessGroupBestEffort(CHILD_PID);
 
     expect(kill).toHaveBeenCalledExactlyOnceWith(target, 'SIGKILL');
+  });
+
+  it.each(['EPERM', 'ESRCH'])('ignores a kill that fails with %s', (code) => {
+    killFailsWith(code);
+
+    expect(() => {
+      killProcessGroupBestEffort(CHILD_PID);
+    }).not.toThrow();
   });
 
   it.each([0, 1])('refuses the group id %i', (pgid) => {

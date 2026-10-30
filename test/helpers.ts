@@ -179,6 +179,7 @@ export async function cleanupHome(home: string): Promise<void> {
 interface CreateSessionOptions {
   cols?: number;
   rows?: number;
+  env?: Record<string, string>;
 }
 
 export function createSession(
@@ -196,6 +197,7 @@ export function createSession(
   args.push('--', ...command);
 
   const result = runCli(args, {
+    ...options.env,
     AGENT_TTY_HOME: testHome,
   });
   expect(result.status).toBe(0);
