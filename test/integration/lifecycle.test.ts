@@ -985,6 +985,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
           '(trap "" HUP; touch "$0"; exec sleep 300) & wait',
           refusesGroupKill,
         );
+        const { hostPid } = inspectSession(testHome, sessionId);
 
         const result = destroyRefused(sessionId);
         expect(result.envelope).toMatchObject({
@@ -993,6 +994,11 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         });
         expect(result.status).toBe(5);
         expect(result.stderr).toBe('');
+        const deadline = Date.now() + 10_000;
+        while (isProcessAlive(hostPid)) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
         expect(await readManifestFile(sessionId)).toMatchObject({
           status: 'destroying',
           childPid: pgid,
