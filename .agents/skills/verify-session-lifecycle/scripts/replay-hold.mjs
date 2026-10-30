@@ -8,7 +8,7 @@
 //
 // <argv word>  a word in the process's argv: _host, gc, list, inspect, ...
 // <call>       a node:fs/promises function: rename (matches the target
-//              path), rm, unlink, writeFile (hold before the call), or
+//              path), rm, unlink, writeFile, mkdir (hold before the call), or
 //              readFile (hold after the read, so the caller gets an old copy)
 // <nth>        hold the nth matching call (1 = the first) in that process
 //
@@ -20,7 +20,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import process from 'node:process';
 
 const HOLD_AFTER = new Set(['readFile']);
-const HOLD_BEFORE = new Set(['rename', 'rm', 'unlink', 'writeFile']);
+const HOLD_BEFORE = new Set(['rename', 'rm', 'unlink', 'writeFile', 'mkdir']);
 
 function log(message) {
   if (process.env.REPLAY_LOG !== undefined) {
