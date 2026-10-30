@@ -28,7 +28,7 @@
 
 - `DEFAULT_SHELL` reads `process.env.SHELL` once, when the module loads. [defaults.ts:DEFAULT_SHELL]
 - `loadConfigFile` reads `<home>/config.json` with `readFile` from `node:fs/promises`. It does not use a storage helper. [resolveConfig.ts:loadConfigFile]
-- `resolveConfig` calls `resolveHome()` from `src/storage/home.ts`. That function reads `process.env.AGENT_TTY_HOME`, falls back to `~/.agent-tty` and resolves it with `realpathSync` when the path exists. If `realpathSync` throws, it returns the normalized path. [resolveConfig.ts:resolveConfig] [src/storage/home.ts:resolveHome]
+- `resolveConfig` calls `resolveHome()` from `src/storage/home.ts`. That function reads `process.env.AGENT_TTY_HOME`, falls back to `~/.agent-tty` and resolves symlinks with `canonicalHomePath`, also when the Home does not exist yet. [resolveConfig.ts:resolveConfig] [src/storage/home.ts:resolveHome]
 
 ## Verification
 

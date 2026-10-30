@@ -8,6 +8,7 @@ import { z } from 'zod';
 
 import { invariant } from '../util/assert.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
+import { canonicalHomePath } from './home.js';
 import { writeTextFileAtomic } from './manifests.js';
 
 const STATE_SUBDIRECTORY = 'agent-tty';
@@ -66,9 +67,8 @@ export function resolveHomeRegistryPath(
 /**
  * Normalize a Home path to the canonical form stored in the registry, matching
  * how `resolveHome`/`validateHomePath` canonicalize: resolve to absolute,
- * normalize, then realpath if the directory exists (so symlinks and `..`
- * collapse). A path whose directory is gone (a forgettable dead Home) falls
- * back to its normalized absolute form.
+ * normalize, then `canonicalHomePath`, so symlinks and `..` collapse and a
+ * Home whose directory is gone (a forgettable dead Home) keeps its key.
  */
 export function normalizeHomePath(
   homePath: string,
@@ -80,12 +80,7 @@ export function normalizeHomePath(
   );
 
   const absolute = isAbsolute(homePath) ? homePath : resolve(homePath);
-  const normalized = normalize(absolute);
-  try {
-    return realpath(normalized);
-  } catch {
-    return normalized;
-  }
+  return canonicalHomePath(normalize(absolute), realpath);
 }
 
 export interface HomeRegistryDependencies {
@@ -119,9 +114,9 @@ export interface HomeRegistry {
   read(): Promise<HomeRegistryEntry[]>;
   /** Register a Home (or refresh its `lastSeenAt`). Atomic and idempotent. */
   upsert(homePath: string): Promise<void>;
-  /** Remove a Home from the registry. Returns whether an entry was removed.
-   * Never touches the Home directory on disk. */
-  forget(homePath: string): Promise<boolean>;
+  /** Remove a Home from the registry. Returns the path of the removed entry,
+   * or null when none matched. Never touches the Home directory on disk. */
+  forget(homePath: string): Promise<string | null>;
   /** Replace the registry contents atomically. */
   write(entries: HomeRegistryEntry[]): Promise<void>;
 }
@@ -196,14 +191,21 @@ export function createHomeRegistry(
     },
 
     async forget(homePath) {
-      const key = normalizeHomePath(homePath, deps.realpath);
+      const canonical = normalizeHomePath(homePath, deps.realpath);
+      // An entry keeps the path it was stored under, which stops resolving to
+      // it once an ancestor of that path becomes a symlink. So the entry stored
+      // under the path as written wins over the canonical one.
+      const written = resolve(homePath);
       const existing = await readRaw();
+      const key = existing.some((entry) => entry.path === written)
+        ? written
+        : canonical;
       const filtered = existing.filter((entry) => entry.path !== key);
       if (filtered.length === existing.length) {
-        return false;
+        return null;
       }
       await write(filtered);
-      return true;
+      return key;
     },
 
     write,
@@ -216,7 +218,7 @@ export async function upsertHome(homePath: string): Promise<void> {
 }
 
 /** Convenience: forget a Home using the default (real-fs) registry. */
-export async function forgetHome(homePath: string): Promise<boolean> {
+export async function forgetHome(homePath: string): Promise<string | null> {
   return createHomeRegistry().forget(homePath);
 }
 

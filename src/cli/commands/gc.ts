@@ -80,7 +80,12 @@ export interface GcDependencies {
   }>;
   rm: (
     path: string,
-    options: { recursive: boolean; force: boolean },
+    options: {
+      recursive: boolean;
+      force: boolean;
+      maxRetries: number;
+      retryDelay: number;
+    },
   ) => Promise<void>;
   readManifestIfExists: (path: string) => Promise<SessionRecord | null>;
   reconcileSession: (sessionDirectory: string) => Promise<void>;
@@ -436,9 +441,13 @@ export async function gcSessions(
       }
 
       try {
+        // A reconcile or destroy write can land during the rm and make its
+        // last rmdir fail with ENOTEMPTY. A retry deletes that late file.
         await dependencies.rm(sessionDirectory, {
           recursive: true,
           force: true,
+          maxRetries: 3,
+          retryDelay: 10,
         });
       } catch (error) {
         result.skippedSessions.push({

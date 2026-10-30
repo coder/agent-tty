@@ -1,12 +1,33 @@
 import { realpathSync } from 'node:fs';
 import { chmod, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { isAbsolute, join, normalize } from 'node:path';
+import { basename, dirname, isAbsolute, join, normalize } from 'node:path';
 import process from 'node:process';
 
 import { invariant } from '../util/assert.js';
 
 const DEFAULT_HOME_DIRECTORY_NAME = '.agent-tty';
+
+/**
+ * The real path of the deepest ancestor of `path` that resolves, joined with
+ * the parts below it. This equals `realpathSync(path)` once those parts exist,
+ * so a Home resolves to one path before and after `create` makes it: the CLI
+ * and the host must hash the same path for the socket.
+ */
+export function canonicalHomePath(
+  path: string,
+  realpath: (path: string) => string = realpathSync,
+): string {
+  invariant(isAbsolute(path), 'home path must be absolute');
+  try {
+    return realpath(path);
+  } catch {
+    const parent = dirname(path);
+    return parent === path
+      ? path
+      : join(canonicalHomePath(parent, realpath), basename(path));
+  }
+}
 
 function validateConfiguredHome(
   configuredHome: string,
@@ -15,12 +36,7 @@ function validateConfiguredHome(
   invariant(configuredHome.length > 0, `${source} must not be empty`);
   invariant(isAbsolute(configuredHome), `${source} must be an absolute path`);
 
-  const normalized = normalize(configuredHome);
-  try {
-    return realpathSync(normalized);
-  } catch {
-    return normalized;
-  }
+  return canonicalHomePath(normalize(configuredHome));
 }
 
 export function resolveHome(
@@ -34,11 +50,7 @@ export function resolveHome(
 
   invariant(isAbsolute(normalized), 'resolved agent-tty home must be absolute');
 
-  try {
-    return realpathSync(normalized);
-  } catch {
-    return normalized;
-  }
+  return canonicalHomePath(normalized);
 }
 
 export async function ensureHome(

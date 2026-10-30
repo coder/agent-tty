@@ -1,10 +1,12 @@
 import {
   chmod,
+  mkdir,
   mkdtemp,
   readdir,
   readFile,
   realpath,
   stat,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -552,6 +554,37 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       expect(envelope.ok).toBe(true);
     } finally {
       await cleanupHome(newHome);
+    }
+  });
+
+  it('creates a running session in a new Home behind a symlink', async () => {
+    const realRoot = join(testHome, 'real');
+    await mkdir(realRoot);
+    await symlink(realRoot, join(testHome, 'link'));
+    const env = {
+      AGENT_TTY_HOME: join(testHome, 'link', 'home'),
+      XDG_STATE_HOME: join(testHome, 'state'),
+    };
+    try {
+      const createResult = runCli(
+        ['create', '--json', '--', '/bin/sh', '-c', 'exec cat'],
+        env,
+      );
+      expect(createResult.status).toBe(0);
+      const envelope = JSON.parse(createResult.stdout) as SuccessEnvelope<{
+        sessionId: string;
+      }>;
+
+      const inspectResult = runCli(
+        ['inspect', envelope.result.sessionId, '--json'],
+        env,
+      );
+      const inspected = JSON.parse(inspectResult.stdout) as SuccessEnvelope<{
+        session: SessionRecord;
+      }>;
+      expect(inspected.result.session.status).toBe('running');
+    } finally {
+      await cleanupHome(join(realRoot, 'home'));
     }
   });
 

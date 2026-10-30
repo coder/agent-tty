@@ -153,6 +153,7 @@ export async function persistSnapshotArtifact(
     pathLabel: 'snapshot artifact path',
     contents: `${JSON.stringify(options.result, null, 2)}\n`,
     writeErrorMessage: `Failed to write snapshot artifact at ${snapshotArtifactPath}.`,
+    createParentFolders: false,
   });
 
   await appendArtifactWithRollback({
