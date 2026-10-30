@@ -1,6 +1,6 @@
 ---
 name: verify-session-lifecycle
-description: TLA+ model check of the agent-tty session lifecycle when several agent-tty processes use one Home at the same time - create, the session host (start-up, resize, exit), reconcileSession (list, inspect, destroy, gc) and gc. Use it before you change src/host/lifecycle.ts, the start-up or exit path of src/host/hostMain.ts, src/cli/commands/gc.ts, src/cli/commands/create.ts, src/storage/manifests.ts or src/protocol/sessionStatusPolicy.ts, before you add a new writer of session.json, and when you must know whether a race can delete a session or corrupt its status.
+description: TLA+ model check of the agent-tty session lifecycle when several agent-tty processes use one Home at the same time - create, the session host (start-up, resize, destroy, SIGTERM shutdown, exit), reconcileSession (list, inspect, destroy, gc), gc and destroy (with and without --force). Use it before you change src/host/lifecycle.ts, the start-up, shutdown or exit path of src/host/hostMain.ts, src/host/manifestWriter.ts, src/cli/commands/gc.ts, src/cli/commands/create.ts, src/cli/commands/destroy.ts, src/storage/manifests.ts or src/protocol/sessionStatusPolicy.ts, before you add a new writer of session.json, and when you must know whether a race can delete a session or corrupt its status.
 ---
 
 # Verify the session lifecycle (TLA+)
@@ -13,14 +13,17 @@ The tool is TLC, the TLA+ model checker, pinned to release 1.7.4 by sha256. The 
 
 ## The rules
 
-| Rule                         | What must hold                                                                      | Harm when it breaks                                                       |
-| ---------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| R1 `NoLiveSessionDeleted`    | gc never removes the folder of a session whose host can still write to it.          | A running or starting session loses its manifest and event log.           |
-| R2 `HostDeathOnlyWhenDead`   | The manifest says "failed, host died" only when the host process is dead.           | `list` and `inspect` show a live session as failed. Commands refuse it.   |
-| R3 `TerminalIsFinal`         | Once the manifest shows exited, failed or destroyed, it never shows running again.  | A finished session looks running, and the next reconcile marks it failed. |
-| R4 `RecordedExitKept`        | Once the manifest records that the program exited, no process replaces that record. | A program that exited 0 is reported as failed, with its exit code lost.   |
-| R5 `RunningSessionReachable` | While the host serves a running program, the socket file exists.                    | The session runs, but no command can reach it.                            |
-| R6 `HostStartsWhenCreated`   | A host never fails to start because another process removed or rewrote its files.   | `create` fails with `HOST_UNREACHABLE` for a session nobody touched.      |
+| Rule                         | What must hold                                                                                                       | Harm when it breaks                                                                                                                       |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| R1 `NoLiveSessionDeleted`    | gc never removes the folder of a session whose host can still write to it.                                           | A running or starting session loses its manifest and event log.                                                                           |
+| R2 `HostDeathOnlyWhenDead`   | The manifest says "failed, host died" only when the host process is dead.                                            | `list` and `inspect` show a live session as failed. Commands refuse it.                                                                   |
+| R3 `TerminalIsFinal`         | Once the manifest shows exited, failed or destroyed, it never shows running again.                                   | A finished session looks running, and the next reconcile marks it failed.                                                                 |
+| R4 `RecordedExitKept`        | Once the manifest records that the program exited, only `destroy` changes it, to destroyed, and keeps the exit code. | A program that exited 0 is reported as failed, with its exit code lost.                                                                   |
+| R5 `RunningSessionReachable` | While the host serves a running program, the socket file exists.                                                     | The session runs, but no command can reach it.                                                                                            |
+| R6 `HostStartsWhenCreated`   | A host never fails to start because another process removed or rewrote its files.                                    | `create` fails with `HOST_UNREACHABLE` for a session nobody touched.                                                                      |
+| R7 `TerminalIsLastWrite`     | Once the manifest shows exited, failed or destroyed, the host has no write left to make.                             | gc removes the folder while the host still writes to it. The host's write then fails, or brings the folder back with only `session.json`. |
+| R8 `DestroyedOnlyWhenEnded`  | The manifest says destroyed only after the program has ended.                                                        | `list` hides a program that still runs, and gc removes its folder.                                                                        |
+| R9 `DestroyEndsDestroyed`    | `destroy` reports success only after it wrote destroyed or read it.                                                  | `destroy` says `destroyed: true`, but the session reads failed, "host process died unexpectedly", until a second `destroy`.               |
 
 `TypeOK` also runs in every run. When it breaks, the model is wrong, not the code.
 
@@ -28,11 +31,11 @@ The tool is TLC, the TLA+ model checker, pinned to release 1.7.4 by sha256. The 
 
 Yes, when the diff changes any of these:
 
-- `src/host/lifecycle.ts`: `allocateSession` (and the order of its `launch` call and first manifest write), `launchHost`, `isProcessAlive`, `reconcileSession`.
-- `src/host/hostMain.ts`: `waitForManifestFromCreate`, and in `runHost` the start-up statements (the manifest wait, the `hostPid === process.pid` check, `createSerialManifestWriter`, `EventLog.open`, `createPty`, `setChildPid`), `initiateShutdown`, `handlePtyExit`, `pty.onExit`, the `resize` handler, and the last `try` block (the start-up manifest write and `rpcServer.listen`).
+- `src/host/lifecycle.ts`: `allocateSession` (and the order of its `launch` call and first manifest write), `launchHost`, `isProcessAlive`, `reconcileSession`, and `destroySession` with its helpers `recordDestroyed`, `readSessionManifestOrThrow`, `waitForTerminalManifest`, `waitForProcessesToExit` and `killProcessBestEffort`.
+- `src/host/hostMain.ts`: `waitForManifestFromCreate`, `isSessionCommandable`, and in `runHost` the start-up statements (the manifest wait, the `hostPid === process.pid` check, `createSerialManifestWriter`, `EventLog.open`, `createPty`, `setChildPid`), `initiateShutdown`, `startShutdown`, `handlePtyExit`, `pty.onExit`, the `SIGTERM` handler, the `resize` and `destroy` handlers, and the last `try` block (the start-up manifest write and `rpcServer.listen`).
 - `src/host/manifestWriter.ts` `createSerialManifestWriter`.
-- `src/cli/commands/gc.ts` `gcSessions` and `src/cli/commands/create.ts` `runCreateCommand`.
-- `src/host/sessionState.ts` `recordExit`, `src/host/eventLog.ts` `EventLog.open`, `src/host/rpcServer.ts` `listen` and `close`.
+- `src/cli/commands/gc.ts` `gcSessions`, `src/cli/commands/create.ts` `runCreateCommand` and `src/cli/commands/destroy.ts` `runDestroyCommand`.
+- `src/host/sessionState.ts` `setDimensions`, `requestDestroy`, `recordDestroyed` and `recordExit`, `src/host/eventLog.ts` `EventLog.open`, `src/host/rpcServer.ts` `listen` and `close`, `src/host/rpcClient.ts` `toTransportCliError` (which socket errors read as `HOST_UNREACHABLE`).
 - `src/storage/manifests.ts` `readValidatedJsonFile`, `writeTextFileAtomic`, `writeManifest`.
 - The `SESSION_STATUS_POLICIES` table in `src/protocol/sessionStatusPolicy.ts`.
 - Any new or removed call to `writeManifest`, `persistManifest`, `writeValidatedJsonFile`, `writeTextFileAtomic`, `manifestPath` or `reconcileSession` (also through an import alias), or a recursive `rm` (one with `recursive: true`, whatever its argument is named), anywhere in `src/`.
@@ -48,13 +51,13 @@ From the repo root:
 .agents/skills/verify-session-lifecycle/scripts/check.sh
 ```
 
-It needs `node`, Java 11 or newer (`java -version`), and the network once: the first run downloads `tla2tools.jar` 1.7.4 into this skill's `.cache/` folder (git ignores it) and checks its sha256. On this repo it takes about 10 seconds. `JAVA=/path/to/java` picks another Java. `TLA2TOOLS_JAR=/path/to/tla2tools.jar` uses a jar you already have, which must be the same 1.7.4 build. `CHECK_OUT=<folder>` keeps the results in that folder (default: a new temp folder, printed at the end).
+It needs `node`, Java 11 or newer (`java -version`), and the network once: the first run downloads `tla2tools.jar` 1.7.4 into this skill's `.cache/` folder (git ignores it) and checks its sha256. On this repo it takes about 30 seconds. `JAVA=/path/to/java` picks another Java. `TLA2TOOLS_JAR=/path/to/tla2tools.jar` uses a jar you already have, which must be the same 1.7.4 build. `CHECK_OUT=<folder>` keeps the results in that folder (default: a new temp folder, printed at the end).
 
 What it does:
 
-1. `scripts/facts.mjs` reads the code with the TypeScript compiler. It finds the eight guards that the rules depend on and the status sets of the policy table, and it hashes each covered function with comments and layout removed.
+1. `scripts/facts.mjs` reads the code with the TypeScript compiler. It finds the eleven guards that the rules depend on and the status sets of the policy table, and it hashes each covered function with comments and layout removed.
 2. It writes one TLC config per run, with those facts as constants. A guard that is not in the code, in the expected place and order, reads FALSE, and the model then runs without it.
-3. It runs TLC 15 times and prints one line per run.
+3. It runs TLC 23 times and prints one line per run.
 4. It compares the hashes and call sites with `coverage.json`.
 
 Exit codes: 0 means every run gave the expected result and the covered code matches the sync record. 1 means at least one run gave an unexpected result; the line says `UNEXPECTED`. 3 means every result was as expected, but covered code changed since the sync commit; that is not a pass, so follow "When you change covered code on purpose". 2 means a tool could not run. When both 1 and 3 apply, the exit code is 1.
@@ -63,13 +66,13 @@ Exit codes: 0 means every run gave the expected result and the covered code matc
 
 At the sync commit, the expected results are:
 
-| Runs                                                                                                                                                                           | Expected | Why                                                                                                                                                                                                                                                                 |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `current`, the code as it is, every rule                                                                                                                                       | pass     | No order of the modelled steps breaks a rule. This is the run that catches a new bug.                                                                                                                                                                               |
-| `witness-*`                                                                                                                                                                    | violated | Each witness is a state that must be reachable: gc removes a session, a session serves, a resize lands, a clean exit is recorded, a crash is reconciled. A witness that passes means the model can no longer reach that state, and the passing rules prove nothing. |
-| `mutant-CreateRecordsHostPid`, `mutant-HostWaitsForManifest`, `mutant-ReconcileRereads`, `mutant-HostSerializesWrites`, `mutant-ReconcileSkipsLiveHost`, `mutant-GcBothChecks` | violated | Each run removes a guard from the model and checks only the rule that the guard protects. That rule must break, which shows the check can fail.                                                                                                                     |
-| `mutant-ReconcileSkipsTerminal`                                                                                                                                                | pass     | The re-read in `reconcileSession` also returns on a terminal manifest, so the first terminal return alone is redundant.                                                                                                                                             |
-| `mutant-GcSkipsNonCollectable`, `mutant-GcFinalCheck`                                                                                                                          | pass     | gc checks "collectable" twice. One check alone still keeps R1, so removing one is safe. Removing both is not.                                                                                                                                                       |
+| Runs                                                                                                                                                                                                                                                                                  | Expected | Why                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `current`, the code as it is, every rule                                                                                                                                                                                                                                              | pass     | No order of the modelled steps breaks a rule. This is the run that catches a new bug.                                                                                                                                                                                                                                                                                                                                     |
+| `witness-*`                                                                                                                                                                                                                                                                           | violated | Each witness is a state that must be reachable: gc removes a session, a session serves, a resize lands, a clean exit is recorded, a crash is reconciled, a plain destroy completes, a SIGTERM shutdown is recorded, an exited session is destroyed, and `destroy --force` records a live session as destroyed. A witness that passes means the model can no longer reach that state, and the passing rules prove nothing. |
+| `mutant-CreateRecordsHostPid`, `mutant-HostWaitsForManifest`, `mutant-ReconcileRereads`, `mutant-HostSerializesWrites`, `mutant-ReconcileSkipsLiveHost`, `mutant-HostSkipsRepeatedWrite`, `mutant-ShutdownChecksCommandable`, `mutant-DestroyRecordsDestroyed`, `mutant-GcBothChecks` | violated | Each run removes a guard from the model and checks only the rule that the guard protects. That rule must break, which shows the check can fail.                                                                                                                                                                                                                                                                           |
+| `mutant-ReconcileSkipsTerminal`                                                                                                                                                                                                                                                       | pass     | The re-read in `reconcileSession` also returns on a terminal manifest, so the first terminal return alone is redundant.                                                                                                                                                                                                                                                                                                   |
+| `mutant-GcSkipsNonCollectable`, `mutant-GcFinalCheck`                                                                                                                                                                                                                                 | pass     | gc checks "collectable" twice. One check alone still keeps R1, so removing one is safe. Removing both is not.                                                                                                                                                                                                                                                                                                             |
 
 Read `current` first. The witness and mutant runs use the same facts from the code, so a code change that breaks `current` can also turn them `UNEXPECTED`.
 
@@ -96,7 +99,7 @@ If a step cannot happen in the code, the model is wrong: fix the model, and say 
 
 ## Races the guards prevent
 
-Each of these races broke the rules in earlier code. The guard named in each heading closes it, and its mutant run shows the race again when the guard is gone. Each replay drives the real CLI. On the current code, each one must show the safe result in its last comment.
+Each of these broke the rules in earlier code. The guard named in each heading closes it, and its mutant run shows the race again when the guard is gone. Each replay drives the real CLI. On the current code, each one must show the safe result in its last comment.
 
 ### `CreateRecordsHostPid` and `HostWaitsForManifest`: a starting session read as dead (R1, R2, R5, R6)
 
@@ -138,6 +141,34 @@ REPLAY_HOLD='_host:rename:/session.json:1:1500' NODE_OPTIONS="$HOLD" \
 sleep 2; node --import tsx src/cli/main.ts list --all --json   # status: exited
 ```
 
+### `HostSkipsRepeatedWrite`: a terminal manifest before the host's last write (R1, R7)
+
+Without the guard, a SIGTERM or a destroy request that came while another host write was in flight queued the "destroying" write behind it. When the program ended before that write's turn, the write took the "destroyed" snapshot and landed while the exit write of `handlePtyExit` was still queued. gc then removed the folder of a host that still wrote to it, and the exit write failed on the removed folder.
+
+Now `createSerialManifestWriter` skips a write whose snapshot equals the one it wrote last. Once the record is terminal it never changes, so the terminal write is the host's last write.
+
+```sh
+LOG=$(mktemp)
+REPLAY_LOG=$LOG REPLAY_HOLD='_host:rename:/session.json:1:3000,_host:rename:/session.json:3:6000' \
+  NODE_OPTIONS="$HOLD" node --import tsx src/cli/main.ts create --json -- sleep 30 &
+until grep -q hold "$LOG"; do sleep 0.1; done   # the host holds its start-up write
+kill -TERM "$(node -e 'console.log(require(process.argv[1]).hostPid)' "$AGENT_TTY_HOME"/sessions/*/session.json)"
+sleep 4; node --import tsx src/cli/main.ts gc --json
+wait; grep -c hold "$LOG"                        # 1: the host made no exit write after "destroyed"
+```
+
+### `DestroyRecordsDestroyed`: a destroyed session that reads failed (R9)
+
+Without the guard, `destroy --force` killed the host and the program and then called `reconcileSession`, which read the dead host as a crash. The session read failed, "host process died unexpectedly", and only a second `destroy` made it destroyed. A plain `destroy` of a session whose host had crashed did the same. The force path also waited for the socket file, which only the dead host could remove, so it always took 5 seconds.
+
+Now every successful return of `destroySession` comes right after `recordDestroyed`, which writes destroyed from a manifest that no host write can follow and unlinks the socket. The force path waits only for the two processes, then reads the manifest again.
+
+```sh
+id=$(node --import tsx src/cli/main.ts create --json -- sleep 30 | node -e 'let s="";process.stdin.on("data",(d)=>(s+=d)).on("end",()=>console.log(JSON.parse(s).result.sessionId))')
+node --import tsx src/cli/main.ts destroy "$id" --force --json   # returns in about 1 second
+node --import tsx src/cli/main.ts inspect "$id" --json           # status: destroyed
+```
+
 ## When you change covered code on purpose
 
 1. Read the diff of every item that `STALE` lists, and the commits that the check prints. For a change that is not committed yet, read `git diff`.
@@ -152,7 +183,7 @@ To bring the check back in line after changes that skipped it, use `/maintain-fo
 
 ## Scope
 
-The model checks every order of these steps for one session: one `create`, its host, one `gc` pass over that session (not `--dry-run`), one other command that reconciles twice, one resize, a program exit at any time, and a host crash at any time. The current model has 4,163 distinct states, and the check prints that count.
+The model checks every order of these steps for one session: one `create`, its host, one `gc` pass over that session (not `--dry-run`), one other command that reconciles twice, one resize, one `destroy` (with or without `--force`), one SIGTERM to the host, a program exit at any time, and a host crash at any time. The current model has 470,329 distinct states, and the check prints that count.
 
 It assumes:
 
@@ -161,8 +192,11 @@ It assumes:
 - The host waits for its manifest while the `create` process lives, so it gives up only when `create` dies before that write. That counts as a host crash, which R6 does not cover.
 - gc's `rm(sessionDirectory, { recursive: true })` is one step, though the real `rm` deletes file by file. R1 already forbids removing a session whose host can still write, so the order of the deleted files does not matter.
 - Steps that only lead to the same outcome are joined: gc's `readdir` and `stat` (both only skip), the host's `EventLog.open` and `createPty` (synchronous after the open), and `recordExit` with the `exit` event append (no other process sees them).
+- A program ends with its host: a host crash or the SIGKILL of `destroy --force` ends both. `reconcileSession` also kills a live child of a dead host, which the model leaves out.
+- The `destroy` RPC is one step: the host's handler does the work. `destroySession`'s own `reconcileSession` calls are the reconciles of the other command, so `destroy` itself only reads after them. A poll that reads an active status is either retried later or is the last of its 50 tries.
+- Only the "destroying" write of `initiateShutdown` can wait for its turn while the in-memory status changes, so only it keeps its snapshot in the model. The start-up, resize and exit writes carry a status that cannot change before their turn.
 
-It leaves out: `destroy` and the `destroying`/`destroyed` writes, a SIGTERM shutdown, `gc --stale-only` and `--older-than` (they only skip more), `gc --dry-run` (the other command covers its reconcile), the `rm` in `create`'s error path and in `doctor`, the Home registry, the contents of the event log and of the renderer, the kill of a child process whose host died, and the socket liveness probe in `rpcServer.listen`. A pass covers the model, not the whole product.
+It leaves out: a second `destroy` or a second SIGTERM, a SIGTERM before the host registers its handler (a crash covers it), a `destroy` RPC that fails for a reason other than an unreachable host (it writes nothing), `gc --stale-only` and `--older-than` (they only skip more), `gc --dry-run` (the other command covers its reconcile), the `rm` in `create`'s error path and in `doctor`, the Home registry, the contents of the event log and of the renderer, the kill of a child process whose host died, and the socket liveness probe in `rpcServer.listen`. A pass covers the model, not the whole product.
 
 ## Coverage record
 

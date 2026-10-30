@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Model-check the agent-tty session lifecycle: create, the session host,
-# reconcileSession, and gc, all acting on one session at the same time.
+# reconcileSession, gc, and destroy, all acting on one session at the same
+# time.
 #
 #   .agents/skills/verify-session-lifecycle/scripts/check.sh [--update-coverage]
 #
@@ -123,7 +124,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites"
+GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostSkipsRepeatedWrite ShutdownChecksCommandable DestroyRecordsDestroyed"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -133,8 +134,8 @@ FACTS_LINE=$(node -e '
   }).join(" "));
 ' "$OUT/facts.json" $GUARDS) || die "facts.json lacks a guard fact"
 
-RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal RecordedExitKept RunningSessionReachable HostStartsWhenCreated"
-WITNESSES="WitnessGcRemovesSession WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled"
+RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal RecordedExitKept RunningSessionReachable HostStartsWhenCreated TerminalIsLastWrite DestroyedOnlyWhenEnded DestroyEndsDestroyed"
+WITNESSES="WitnessGcRemovesSession WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled WitnessDestroyCompletes WitnessSigtermRecorded WitnessDestroyExitedSession WitnessForceDestroyRecorded"
 
 # --- runs ----------------------------------------------------------------
 
@@ -178,6 +179,9 @@ write_run mutant-HostWaitsForManifest violated HostStartsWhenCreated "HostWaitsF
 write_run mutant-ReconcileRereads violated RecordedExitKept "ReconcileRereads=FALSE" "without the re-read, reconcile writes over an exit it did not read" RecordedExitKept
 write_run mutant-HostSerializesWrites violated TerminalIsFinal "HostSerializesWrites=FALSE" "without one writer, a late start-up write replaces the exit record" TerminalIsFinal
 write_run mutant-ReconcileSkipsLiveHost violated HostDeathOnlyWhenDead "ReconcileSkipsLiveHost=FALSE" "without the live-host return, reconcile fails a live session" HostDeathOnlyWhenDead
+write_run mutant-HostSkipsRepeatedWrite violated TerminalIsLastWrite "HostSkipsRepeatedWrite=FALSE" "without the skip, the exit write follows a destroyed record" TerminalIsLastWrite
+write_run mutant-ShutdownChecksCommandable violated TerminalIsFinal "ShutdownChecksCommandable=FALSE" "without the check, shutdown writes destroying over an exit record" TerminalIsFinal
+write_run mutant-DestroyRecordsDestroyed violated DestroyEndsDestroyed "DestroyRecordsDestroyed=FALSE" "without recordDestroyed, destroy succeeds on a session that is not destroyed" DestroyEndsDestroyed
 write_run mutant-ReconcileSkipsTerminal pass RecordedExitKept "ReconcileSkipsTerminal=FALSE" "redundant: the re-read returns on a terminal manifest"
 write_run mutant-GcSkipsNonCollectable pass NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE" "redundant: the final check still skips"
 write_run mutant-GcFinalCheck pass NoLiveSessionDeleted "GcFinalCheck=FALSE" "redundant: the first check still skips"
@@ -259,7 +263,8 @@ if [ -s "$OUT/drift.txt" ]; then
 fi
 if [ -n "$SYNC" ] && git -C "$REPO" cat-file -e "$SYNC^{commit}" 2>/dev/null; then
   commits=$(git -C "$REPO" log --oneline "$SYNC..HEAD" -- src/host src/cli/commands/gc.ts \
-    src/cli/commands/create.ts src/storage/manifests.ts src/protocol/sessionStatusPolicy.ts)
+    src/cli/commands/create.ts src/cli/commands/destroy.ts src/storage/manifests.ts \
+    src/protocol/sessionStatusPolicy.ts)
   if [ -n "$commits" ]; then
     echo
     echo "Commits since the sync commit that touch covered folders:"

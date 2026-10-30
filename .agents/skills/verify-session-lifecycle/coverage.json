@@ -1,13 +1,25 @@
 {
   "fingerprints": {
     "src/cli/commands/create.ts#runCreateCommand": "1b2b29a895cde754",
+    "src/cli/commands/destroy.ts#runDestroyCommand": "82b8d0366b1c08dd",
     "src/cli/commands/gc.ts#gcSessions": "95b60bad891bdc73",
     "src/host/lifecycle.ts#allocateSession": "8f7eee41b3c56db9",
     "src/host/lifecycle.ts#launchHost": "24751cfcbe8a055e",
     "src/host/lifecycle.ts#isProcessAlive": "1ca1fe6ad6c41711",
+    "src/host/lifecycle.ts#killProcessBestEffort": "1dd0cb4ee9bbc676",
+    "src/host/lifecycle.ts#readSessionManifestOrThrow": "9709f28e5e9cca4b",
+    "src/host/lifecycle.ts#waitForTerminalManifest": "3f14811e8d2f5f7f",
+    "src/host/lifecycle.ts#waitForProcessesToExit": "e4d0096f5da4eca3",
+    "src/host/lifecycle.ts#recordDestroyed": "55eb44b2a379f4f1",
+    "src/host/lifecycle.ts#destroySession": "d2ecf5b0944807e3",
     "src/host/lifecycle.ts#reconcileSession": "32e17d1bc75bb636",
     "src/host/hostMain.ts#waitForManifestFromCreate": "fd500651f83683eb",
-    "src/host/manifestWriter.ts#createSerialManifestWriter": "4f54c3353c5a7602",
+    "src/host/hostMain.ts#isSessionCommandable": "260060f07b068ec1",
+    "src/host/manifestWriter.ts#createSerialManifestWriter": "1c9c75b1428d30b4",
+    "src/host/rpcClient.ts#toTransportCliError": "dd6531349c62bcbd",
+    "src/host/sessionState.ts#SessionState.setDimensions": "08c4f06122d157e9",
+    "src/host/sessionState.ts#SessionState.requestDestroy": "f66074e815527ff1",
+    "src/host/sessionState.ts#SessionState.recordDestroyed": "495b3a20c56b6330",
     "src/host/sessionState.ts#SessionState.recordExit": "a4f3f6706ae953c3",
     "src/host/eventLog.ts#EventLog.open": "2bc70b7c6b669f20",
     "src/host/rpcServer.ts#RpcServer.listen": "aa62e1cd89eceaa4",
@@ -16,18 +28,19 @@
     "src/storage/manifests.ts#writeTextFileAtomic": "87f4e3ecc13dbe59",
     "src/storage/manifests.ts#writeManifest": "97c755b27788a6e5",
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
-    "src/host/hostMain.ts#runHost(parts)": "6607f7fc5234f6cc",
+    "src/host/hostMain.ts#runHost(parts)": "d2cd124b6e820920",
     "src/host/hostMain.ts#runHost(final try)": "ad91fa180ff36ffb",
     "src/host/hostMain.ts#runHost>handlers.resize": "30dd1da32879d478",
-    "skill:model/SessionLifecycle.tla": "3fbd7365274cdc9f",
-    "skill:scripts/facts.mjs": "f69c376b14dcec98",
-    "skill:scripts/check.sh": "3b12a31eb16db6c3"
+    "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
+    "skill:model/SessionLifecycle.tla": "b55bff4ff186a71e",
+    "skill:scripts/facts.mjs": "ba8659bce46c8b8d",
+    "skill:scripts/check.sh": "927beae7271a2b0e"
   },
   "callSites": {
     "writeManifest": [
       "src/host/lifecycle.ts#allocateSession",
-      "src/host/lifecycle.ts#destroySession",
-      "src/host/lifecycle.ts#reconcileSession"
+      "src/host/lifecycle.ts#reconcileSession",
+      "src/host/lifecycle.ts#recordDestroyed"
     ],
     "persistManifest": [
       "src/host/hostMain.ts#runHost",
@@ -70,7 +83,6 @@
       "src/cli/commands/create.ts#runCreateCommand",
       "src/cli/commands/gc.ts#gcSessions",
       "src/cli/commands/inspect.ts#runInspectCommand",
-      "src/host/lifecycle.ts#destroySession",
       "src/host/lifecycle.ts#destroySession",
       "src/host/lifecycle.ts#destroySession",
       "src/host/lifecycle.ts#listSessions"
