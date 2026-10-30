@@ -12,8 +12,10 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { isProcessAlive } from '../../src/host/lifecycle.js';
 import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
 import { SessionRecordSchema } from '../../src/protocol/schemas.js';
+import { sessionDir, socketPath } from '../../src/storage/sessionPaths.js';
 import {
   cleanupHome,
   crashSession,
@@ -764,6 +766,44 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       stat(sessionDirectory),
       'gc should remove the stale session directory from disk',
     ).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('destroy --force records a running session as destroyed without waiting for its socket', async () => {
+    const sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec cat']);
+    const running = inspectSession(testHome, sessionId);
+    expect(running.status).toBe('running');
+
+    const startedAt = Date.now();
+    const result = runCli(['destroy', sessionId, '--force', '--json'], {
+      AGENT_TTY_HOME: testHome,
+    });
+    const elapsedMs = Date.now() - startedAt;
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+
+    const destroyed = inspectSession(testHome, sessionId);
+    expect(destroyed.status).toBe('destroyed');
+    expect(destroyed.failureOrigin).toBeUndefined();
+    expect(destroyed.failureReason).toBeUndefined();
+    expect(isProcessAlive(running.hostPid)).toBe(false);
+    expect(isProcessAlive(running.childPid)).toBe(false);
+    await expect(
+      stat(socketPath(sessionDir(testHome, sessionId))),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(elapsedMs).toBeLessThan(4_500);
+  });
+
+  it('destroy records a session whose host crashed as destroyed', () => {
+    const sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec cat']);
+    crashSession(testHome, sessionId);
+
+    const result = runCli(['destroy', sessionId, '--json'], {
+      AGENT_TTY_HOME: testHome,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+
+    expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
   });
 
   it('destroyed session rejects commands with SESSION_ALREADY_DESTROYED', () => {

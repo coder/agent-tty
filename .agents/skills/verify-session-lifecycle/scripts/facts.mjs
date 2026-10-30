@@ -261,12 +261,160 @@ function hostFacts() {
   const chains =
     /tail\.then\(/.test(writer.getText()) &&
     /tail = next\.catch\(/.test(writer.getText());
+  const stops =
+    /if \(wroteTerminal\) \{\s*return;\s*\}\s*const record = snapshot\(\);\s*await write\(path, record\);\s*wroteTerminal = isTerminalSessionStatus\(record\.status\);/.test(
+      writer.getText(),
+    );
   return {
     HostWaitsForManifest: waits >= 0 && loops,
     HostSerializesWrites:
       calls(runHost.body, 'writeManifest').length === 0 &&
       calls(runHost.body, 'createSerialManifestWriter').length === 1 &&
       chains,
+    HostStopsAfterTerminalWrite: stops,
+    ShutdownChecksCommandable: shutdownChecksCommandable(runHost.body),
+  };
+}
+
+function shutdownChecksCommandable(runHostBody) {
+  const requests = calls(runHostBody, 'requestDestroy');
+  if (requests.length !== 1) {
+    return false;
+  }
+  let guard;
+  let inShutdown = false;
+  for (let n = requests[0].parent; n !== runHostBody; n = n.parent) {
+    if (guard === undefined && ts.isIfStatement(n)) {
+      guard = n;
+    }
+    if (
+      ts.isVariableDeclaration(n) &&
+      n.name.getText() === 'initiateShutdown'
+    ) {
+      inShutdown = true;
+    }
+  }
+  if (
+    guard === undefined ||
+    normalize(guard.expression.getText()) !== 'isSessionCommandable(state)' ||
+    !ts.isBlock(guard.thenStatement)
+  ) {
+    return false;
+  }
+  const block = guard.thenStatement;
+  const request = indexOfStatement(block, /^state\.requestDestroy\(\);$/);
+  const write = indexOfStatement(block, /^await persistManifest\(\);$/);
+  return inShutdown && request >= 0 && request < write;
+}
+
+function destroyFacts() {
+  const destroy = requireDeclaration('src/host/lifecycle.ts', 'destroySession');
+  const returns = [];
+  const visit = (node) => {
+    if (ts.isFunctionLike(node) && node !== destroy) {
+      return;
+    }
+    if (ts.isReturnStatement(node)) {
+      returns.push(node);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(destroy);
+  const recordsBeforeReturn =
+    returns.length > 0 &&
+    returns.every((r) => {
+      if (!ts.isBlock(r.parent)) {
+        return false;
+      }
+      const statements = r.parent.statements;
+      const previous = statements[statements.indexOf(r) - 1];
+      return (
+        previous !== undefined &&
+        /^await recordDestroyed\(/.test(previous.getText())
+      );
+    });
+  const record = requireDeclaration('src/host/lifecycle.ts', 'recordDestroyed');
+  const writes = calls(record.body, 'writeManifest');
+  const write = writes.length === 1 ? writes[0] : undefined;
+  const recordWrites =
+    write !== undefined &&
+    calls(record.body, 'unlinkIfPresent').length === 1 &&
+    normalize(write.arguments[1]?.getText() ?? '').includes(
+      "...manifest, status: 'destroyed'",
+    );
+  const literal = write?.arguments[1];
+  const keepsExitCode =
+    literal !== undefined &&
+    ts.isObjectLiteralExpression(literal) &&
+    literal.properties.length === 3 &&
+    ts.isSpreadAssignment(literal.properties[0]) &&
+    literal.properties[0].expression.getText() === 'manifest' &&
+    literal.properties
+      .slice(1)
+      .every(
+        (p) =>
+          ts.isPropertyAssignment(p) &&
+          ['status', 'updatedAt'].includes(p.name.getText()),
+      );
+  const force = destroy.body.statements.find(
+    (st) =>
+      ts.isIfStatement(st) &&
+      normalize(st.expression.getText()) === 'force === true',
+  );
+  let forceRecords = false;
+  if (force !== undefined && ts.isBlock(force.thenStatement)) {
+    const block = force.thenStatement;
+    const first = indexOfStatement(
+      block,
+      /^await stopSessionProcesses\(manifest, /,
+    );
+    const reread = indexOfStatement(
+      block,
+      /^const current = await readSessionManifestOrThrow\(/,
+    );
+    const second = indexOfStatement(
+      block,
+      /^await stopSessionProcesses\(current, /,
+    );
+    const records = indexOfStatement(
+      block,
+      /^await recordDestroyed\(manifestFile, socketFile, current\);$/,
+    );
+    forceRecords =
+      first >= 0 &&
+      reread > first &&
+      second > reread &&
+      records > second &&
+      calls(block, 'reconcileSession').length === 0;
+  }
+  const stop = requireDeclaration(
+    'src/host/lifecycle.ts',
+    'stopSessionProcesses',
+  ).body;
+  const stopWaits =
+    indexOfStatement(stop, /^killProcessBestEffort\(manifest\.childPid\);$/) >=
+      0 &&
+    indexOfStatement(stop, /^killProcessBestEffort\(manifest\.hostPid\);$/) >=
+      0 &&
+    indexOfStatement(stop, /^const stopped = await waitForProcessesToExit\(/) >=
+      0 &&
+    guardIndex(stop, '!stopped', ts.SyntaxKind.ThrowStatement) >= 0;
+  const wait = requireDeclaration(
+    'src/host/lifecycle.ts',
+    'waitForProcessesToExit',
+  );
+  const waitsForProcessesOnly =
+    calls(wait.body, 'isProcessAlive').length === 2 &&
+    calls(wait.body, 'stat').length === 0 &&
+    calls(wait.body, 'pathExists').length === 0;
+  return {
+    DestroyRecordsDestroyed:
+      recordsBeforeReturn &&
+      recordWrites &&
+      forceRecords &&
+      stopWaits &&
+      waitsForProcessesOnly,
+    DestroyKeepsExitCode: keepsExitCode,
   };
 }
 
@@ -342,13 +490,26 @@ function policyFacts() {
 
 const COVERED = [
   ['src/cli/commands/create.ts', 'runCreateCommand'],
+  ['src/cli/commands/destroy.ts', 'runDestroyCommand'],
   ['src/cli/commands/gc.ts', 'gcSessions'],
   ['src/host/lifecycle.ts', 'allocateSession'],
   ['src/host/lifecycle.ts', 'launchHost'],
   ['src/host/lifecycle.ts', 'isProcessAlive'],
+  ['src/host/lifecycle.ts', 'killProcessBestEffort'],
+  ['src/host/lifecycle.ts', 'readSessionManifestOrThrow'],
+  ['src/host/lifecycle.ts', 'waitForTerminalManifest'],
+  ['src/host/lifecycle.ts', 'waitForProcessesToExit'],
+  ['src/host/lifecycle.ts', 'stopSessionProcesses'],
+  ['src/host/lifecycle.ts', 'recordDestroyed'],
+  ['src/host/lifecycle.ts', 'destroySession'],
   ['src/host/lifecycle.ts', 'reconcileSession'],
   ['src/host/hostMain.ts', 'waitForManifestFromCreate'],
+  ['src/host/hostMain.ts', 'isSessionCommandable'],
   ['src/host/manifestWriter.ts', 'createSerialManifestWriter'],
+  ['src/host/rpcClient.ts', 'toTransportCliError'],
+  ['src/host/sessionState.ts', 'SessionState.setDimensions'],
+  ['src/host/sessionState.ts', 'SessionState.requestDestroy'],
+  ['src/host/sessionState.ts', 'SessionState.recordDestroyed'],
   ['src/host/sessionState.ts', 'SessionState.recordExit'],
   ['src/host/eventLog.ts', 'EventLog.open'],
   ['src/host/rpcServer.ts', 'RpcServer.listen'],
@@ -359,9 +520,6 @@ const COVERED = [
   ['src/protocol/sessionStatusPolicy.ts', 'SESSION_STATUS_POLICIES'],
 ];
 
-// The parts of runHost that the model describes, in source order: the
-// start-up statements, handlePtyExit, initiateShutdown, pty.onExit, the
-// resize handler, and the closing try block that writes and listens.
 const RUN_HOST_PARTS = [
   /= await waitForManifestFromCreate\(/,
   /^invariant\(\s*manifest\.hostPid === process\.pid/,
@@ -370,8 +528,10 @@ const RUN_HOST_PARTS = [
   /= createPty\(/,
   /state\.setChildPid\(/,
   /^const initiateShutdown = /,
+  /^const startShutdown = /,
   /^const handlePtyExit = /,
   /^pty\.onExit\(/,
+  /^process\.on\('SIGTERM'/,
 ];
 
 function runHostFingerprints() {
@@ -394,21 +554,25 @@ function runHostFingerprints() {
     throw new Error('runHost: the last statement is not the start-up try');
   }
   out['src/host/hostMain.ts#runHost(final try)'] = hash(canonical(last));
-  let resize;
-  walk(body, (node) => {
-    if (
-      ts.isPropertyAssignment(node) &&
-      node.name.getText() === 'resize' &&
-      ts.isVariableDeclaration(node.parent.parent) &&
-      node.parent.parent.name.getText() === 'handlers'
-    ) {
-      resize = node;
+  for (const name of ['resize', 'destroy']) {
+    let handler;
+    walk(body, (node) => {
+      if (
+        ts.isPropertyAssignment(node) &&
+        node.name.getText() === name &&
+        ts.isVariableDeclaration(node.parent.parent) &&
+        node.parent.parent.name.getText() === 'handlers'
+      ) {
+        handler = node;
+      }
+    });
+    if (handler === undefined) {
+      throw new Error(`runHost: cannot find the ${name} handler`);
     }
-  });
-  if (resize === undefined) {
-    throw new Error('runHost: cannot find the resize handler');
+    out[`src/host/hostMain.ts#runHost>handlers.${name}`] = hash(
+      canonical(handler),
+    );
   }
-  out['src/host/hostMain.ts#runHost>handlers.resize'] = hash(canonical(resize));
   return out;
 }
 
@@ -564,6 +728,7 @@ const constants = {
   ...gcFacts(),
   ...createFacts(),
   ...hostFacts(),
+  ...destroyFacts(),
   ...policyFacts(),
 };
 console.log(

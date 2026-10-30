@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Model-check the agent-tty session lifecycle: create, the session host,
-# reconcileSession, and gc, all acting on one session at the same time.
+# reconcileSession, gc, and destroy, all acting on one session at the same
+# time.
 #
 #   .agents/skills/verify-session-lifecycle/scripts/check.sh [--update-coverage]
 #
@@ -55,6 +56,9 @@ sha256() {
 
 # --- tools ---------------------------------------------------------------
 
+case "$JOBS" in
+  *[!0-9]* | 0*) die "CHECK_JOBS must be a positive integer, not '$JOBS'" ;;
+esac
 command -v node >/dev/null 2>&1 || die "node is not on PATH"
 # `java -version` prints `version "11.0.2"`, or `version "1.8.0_292"` for Java 8.
 java_out=$("$JAVA" -version 2>&1) || die "Java 11+ is needed (set JAVA=/path/to/java)"
@@ -118,7 +122,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites"
+GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -128,8 +132,8 @@ FACTS_LINE=$(node -e '
   }).join(" "));
 ' "$OUT/facts.json" $GUARDS) || die "facts.json lacks a guard fact"
 
-RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal RecordedExitKept RunningSessionReachable HostStartsWhenCreated"
-WITNESSES="WitnessGcRemovesSession WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled"
+RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal RecordedExitKept RunningSessionReachable HostStartsWhenCreated TerminalIsLastWrite DestroyedOnlyWhenEnded DestroyEndsDestroyed"
+WITNESSES="WitnessGcRemovesSession WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled WitnessDestroyCompletes WitnessSigtermRecorded WitnessDestroyExitedSession WitnessForceDestroyRecorded"
 
 # --- runs ----------------------------------------------------------------
 
@@ -173,13 +177,19 @@ write_run mutant-HostWaitsForManifest violated HostStartsWhenCreated "HostWaitsF
 write_run mutant-ReconcileRereads violated RecordedExitKept "ReconcileRereads=FALSE" "without the re-read, reconcile writes over an exit it did not read" RecordedExitKept
 write_run mutant-HostSerializesWrites violated TerminalIsFinal "HostSerializesWrites=FALSE" "without one writer, a late start-up write replaces the exit record" TerminalIsFinal
 write_run mutant-ReconcileSkipsLiveHost violated HostDeathOnlyWhenDead "ReconcileSkipsLiveHost=FALSE" "without the live-host return, reconcile fails a live session" HostDeathOnlyWhenDead
+write_run mutant-HostStopsAfterTerminalWrite violated TerminalIsLastWrite "HostStopsAfterTerminalWrite=FALSE" "without the stop, the exit write follows a destroyed record" TerminalIsLastWrite
+write_run mutant-DestroyRecordsDestroyed violated DestroyEndsDestroyed "DestroyRecordsDestroyed=FALSE" "without recordDestroyed, destroy succeeds on a session that is not destroyed" DestroyEndsDestroyed
+write_run mutant-DestroyKeepsExitCode violated RecordedExitKept "DestroyKeepsExitCode=FALSE" "without it, destroy writes destroyed without the exit code" RecordedExitKept
 write_run mutant-ReconcileSkipsTerminal pass RecordedExitKept "ReconcileSkipsTerminal=FALSE" "redundant: the re-read returns on a terminal manifest"
 write_run mutant-GcSkipsNonCollectable pass NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE" "redundant: the final check still skips"
 write_run mutant-GcFinalCheck pass NoLiveSessionDeleted "GcFinalCheck=FALSE" "redundant: the first check still skips"
 write_run mutant-GcBothChecks violated NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE GcFinalCheck=FALSE" "with neither gc check, gc removes live sessions" NoLiveSessionDeleted
+write_run mutant-ShutdownChecksCommandable pass TerminalIsFinal "ShutdownChecksCommandable=FALSE" "redundant: the writer writes nothing after a terminal record"
+write_run mutant-ShutdownBothChecks violated TerminalIsFinal "ShutdownChecksCommandable=FALSE HostStopsAfterTerminalWrite=FALSE" "with neither, shutdown writes destroying over an exit record" TerminalIsFinal
 
 run_tlc() {
-  local dir="$OUT/$1" rc=0
+  local dir rc=0
+  dir=$(cd "$OUT/$1" && pwd)
   mkdir -p "$dir/tmp"
   (cd "$dir" && "$JAVA" -XX:+UseParallelGC -Xmx2g -Djava.io.tmpdir="$dir/tmp" \
     -cp "$JAR" tlc2.TLC -workers 1 -config SessionLifecycle.cfg \
@@ -254,7 +264,8 @@ if [ -s "$OUT/drift.txt" ]; then
 fi
 if [ -n "$SYNC" ] && git -C "$REPO" cat-file -e "$SYNC^{commit}" 2>/dev/null; then
   commits=$(git -C "$REPO" log --oneline "$SYNC..HEAD" -- src/host src/cli/commands/gc.ts \
-    src/cli/commands/create.ts src/storage/manifests.ts src/protocol/sessionStatusPolicy.ts)
+    src/cli/commands/create.ts src/cli/commands/destroy.ts src/storage/manifests.ts \
+    src/protocol/sessionStatusPolicy.ts)
   if [ -n "$commits" ]; then
     echo
     echo "Commits since the sync commit that touch covered folders:"
