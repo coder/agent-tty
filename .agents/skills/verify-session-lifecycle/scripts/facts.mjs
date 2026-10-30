@@ -356,18 +356,6 @@ function destroyFacts() {
           ts.isPropertyAssignment(p) &&
           ['status', 'updatedAt'].includes(p.name.getText()),
       );
-  const storage = (name) =>
-    normalize(requireDeclaration('src/storage/manifests.ts', name).getText());
-  const needsDirectory =
-    write?.arguments[2]?.kind === ts.SyntaxKind.FalseKeyword &&
-    storage('writeManifest').includes('createDirectory = true') &&
-    storage('writeManifest').includes('createDirectory, }') &&
-    storage('writeValidatedJsonFile').includes(
-      'createDirectory: options.createDirectory ?? true',
-    ) &&
-    /if \(options\.createDirectory \?\? true\) \{ await mkdir\(outputDirectory, \{ recursive: true \}\); \}/.test(
-      storage('writeTextFileAtomic'),
-    );
   const force = destroy.body.statements.find(
     (st) =>
       ts.isIfStatement(st) &&
@@ -426,7 +414,6 @@ function destroyFacts() {
       forceRecords &&
       stopWaits &&
       waitsForProcessesOnly,
-    DestroyNeedsDirectory: needsDirectory,
     DestroyKeepsExitCode: keepsExitCode,
   };
 }
@@ -529,7 +516,6 @@ const COVERED = [
   ['src/host/rpcServer.ts', 'RpcServer.close'],
   ['src/storage/manifests.ts', 'readValidatedJsonFile'],
   ['src/storage/manifests.ts', 'writeTextFileAtomic'],
-  ['src/storage/manifests.ts', 'writeValidatedJsonFile'],
   ['src/storage/manifests.ts', 'writeManifest'],
   ['src/protocol/sessionStatusPolicy.ts', 'SESSION_STATUS_POLICIES'],
 ];

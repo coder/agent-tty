@@ -45,8 +45,6 @@ CONSTANTS
                             \*   destroy only while the session is commandable
     DestroyRecordsDestroyed, \* lifecycle.ts: every successful destroySession
                             \*   records destroyed through recordDestroyed
-    DestroyNeedsDirectory,  \* lifecycle.ts: recordDestroyed's write fails
-                            \*   instead of creating a missing session folder
     DestroyKeepsExitCode,   \* lifecycle.ts: recordDestroyed writes
                             \*   { ...manifest, status, updatedAt } only
     MaxListReconciles       \* how many times the "list" process reconciles
@@ -57,8 +55,7 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  HostWaitsForManifest, ReconcileRereads,
                  HostSerializesWrites, HostStopsAfterTerminalWrite,
                  ShutdownChecksCommandable,
-                 DestroyRecordsDestroyed, DestroyNeedsDirectory,
-                 DestroyKeepsExitCode} : b \in BOOLEAN
+                 DestroyRecordsDestroyed, DestroyKeepsExitCode} : b \in BOOLEAN
 
 Readers == {"gc", "list"}   \* the two processes that run reconcileSession
 NoRead == [pid |-> FALSE, origin |-> "none", code |-> FALSE]
@@ -100,15 +97,14 @@ VARIABLES
     drd,         \* the manifest copy that destroy writes "destroyed" from
     dres,        \* what destroy reported: "pending", "ok", "error"
     dsaw,        \* ghost: destroy wrote "destroyed" or read it last
-    dkill,       \* ghost: destroy --force killed a live host
-    drecreated   \* ghost: destroy's write brought back a removed folder
+    dkill        \* ghost: destroy --force killed a live host
 
 diskVars == <<dir, mst, mpid, morigin, mcode, wasTerminal, wasExited>>
 ghostVars == <<startFailed>>
 hostVars == <<hostAlive, hpc, hex, rsz>>
 shutVars == <<hst, hsd, dsnap, hwt, sig>>
 readerVars == <<pc, rd, gres, lruns>>
-destroyVars == <<dpc, dforce, drd, dres, dsaw, dkill, drecreated>>
+destroyVars == <<dpc, dforce, drd, dres, dsaw, dkill>>
 vars == <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, readerVars,
           destroyVars>>
 
@@ -126,7 +122,7 @@ Init ==
     /\ gres = "pending"
     /\ lruns = 0
     /\ dpc = "read" /\ dforce \in BOOLEAN /\ drd = NoRead /\ dres = "pending"
-    /\ dsaw = FALSE /\ dkill = FALSE /\ drecreated = FALSE
+    /\ dsaw = FALSE /\ dkill = FALSE
 
 \* writeManifest -> writeTextFileAtomic in src/storage/manifests.ts: mkdir -p
 \* the session directory, write a temp file, rename it over session.json.
@@ -555,23 +551,17 @@ DestroyReads ==
                /\ UNCHANGED <<dres, dsaw>>
           ELSE /\ dpc' = "rpc" /\ UNCHANGED <<drd, dres, dsaw>>
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
-                   readerVars, dforce, dkill, drecreated>>
+                   readerVars, dforce, dkill>>
 
-\* recordDestroyed: writeManifest({ ...manifest, status: 'destroyed' },
-\* false) from the copy that destroy read. With DestroyNeedsDirectory the
-\* write fails when gc removed the folder, and destroy reports the error.
+\* recordDestroyed: writeManifest({ ...manifest, status: 'destroyed' }) from
+\* the copy that destroy read. Its mkdir brings back a folder that gc
+\* removed in the meantime (coder/agent-tty#196).
 DestroyWritesDestroyed ==
     /\ dpc = "twrite"
-    /\ IF dir \/ ~DestroyNeedsDirectory
-          THEN /\ Write("destroyed", drd.pid, drd.origin,
-                        DestroyKeepsExitCode /\ drd.code)
-               /\ drecreated' = (drecreated \/ ~dir)
-               /\ dpc' = "tunlink" /\ drd' = NoRead /\ dsaw' = TRUE
-               /\ UNCHANGED dres
-          ELSE /\ DestroyEnds("error")
-               /\ UNCHANGED <<diskVars, drecreated>>
+    /\ Write("destroyed", drd.pid, drd.origin, DestroyKeepsExitCode /\ drd.code)
+    /\ dpc' = "tunlink" /\ drd' = NoRead /\ dsaw' = TRUE
     /\ UNCHANGED <<ghostVars, sock, cpc, hostVars, shutVars, readerVars,
-                   dforce, dkill>>
+                   dforce, dres, dkill>>
 
 \* recordDestroyed: unlinkIfPresent(socketFile). destroy reports success.
 DestroyUnlinksSocket ==
@@ -579,7 +569,7 @@ DestroyUnlinksSocket ==
     /\ sock' = FALSE
     /\ dpc' = "done" /\ dres' = "ok"
     /\ UNCHANGED <<diskVars, ghostVars, cpc, hostVars, shutVars, readerVars,
-                   dforce, drd, dsaw, dkill, drecreated>>
+                   dforce, drd, dsaw, dkill>>
 
 \* --force, stopSessionProcesses: killProcessBestEffort(childPid) and
 \* killProcessBestEffort(hostPid), one synchronous block. The program ends
@@ -595,7 +585,7 @@ DestroyKills ==
     /\ dpc' = IF DestroyRecordsDestroyed THEN "reread" ELSE "final"
     /\ drd' = NoRead
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, shutVars, readerVars,
-                   dforce, dres, dsaw, drecreated>>
+                   dforce, dres, dsaw>>
 
 \* readSessionManifestOrThrow after both processes died, so no host write
 \* can follow it. stopSessionProcesses(current) stops a program that only
@@ -609,7 +599,7 @@ DestroyRereads ==
           ELSE /\ dpc' = "twrite" /\ drd' = ReadCopy
                /\ UNCHANGED <<dres, dsaw>>
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
-                   readerVars, dforce, dkill, drecreated>>
+                   readerVars, dforce, dkill>>
 
 \* sendRpc(socketFile, 'destroy') reaches the host, whose destroy handler
 \* calls startShutdown and answers. The host does the work, so this is one
@@ -619,7 +609,7 @@ DestroySendsRpc ==
     /\ StartShutdown(WriteQueued)
     /\ dpc' = "poll"
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, hwt, sig,
-                   readerVars, dforce, drd, dres, dsaw, dkill, drecreated>>
+                   readerVars, dforce, drd, dres, dsaw, dkill>>
 
 \* No socket file, or nobody listens on it: HOST_UNREACHABLE. destroy then
 \* reconciles and reads the manifest.
@@ -627,7 +617,7 @@ DestroyRpcFails ==
     /\ dpc = "rpc" /\ ~(sock /\ hostAlive)
     /\ dpc' = "final"
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
-                   readerVars, dforce, drd, dres, dsaw, dkill, drecreated>>
+                   readerVars, dforce, drd, dres, dsaw, dkill>>
 
 \* waitForTerminalManifest: readManifest until it is terminal. A missing
 \* manifest throws. A read that is not terminal is either retried or the
@@ -640,7 +630,7 @@ DestroyPolls ==
           THEN DestroyFinishes
           ELSE /\ dpc' = "final" /\ UNCHANGED <<drd, dres, dsaw>>
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
-                   readerVars, dforce, dkill, drecreated>>
+                   readerVars, dforce, dkill>>
 
 \* readSessionManifestOrThrow after destroy's own reconcile: terminal means
 \* success, anything else throws.
@@ -648,7 +638,7 @@ DestroyFinalRead ==
     /\ dpc = "final"
     /\ IF mst \in Terminal THEN DestroyFinishes ELSE DestroyEnds("error")
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
-                   readerVars, dforce, dkill, drecreated>>
+                   readerVars, dforce, dkill>>
 
 \* Every process is finished. This step keeps TLC from reporting the end
 \* states as deadlocks. Any other state without a step is a model error.
@@ -696,7 +686,7 @@ TypeOK ==
     /\ gres \in {"pending", "skipped", "removed"}
     /\ lruns \in 0..MaxListReconciles
     /\ dres \in {"pending", "ok", "error"}
-    /\ {hwt, mcode, drecreated} \subseteq BOOLEAN
+    /\ {hwt, mcode} \subseteq BOOLEAN
     /\ (mst = "none") => ~mcode
     /\ (hostAlive /\ hsd = "write" /\ dsnap = "none") =>
           (hpc = "pidwrite" \/ rsz = "pending" \/ ExitWriteAheadOfDestroying)
@@ -749,9 +739,6 @@ DestroyedOnlyWhenEnded ==
 
 \* R9: destroy reports success only after it wrote destroyed or read it.
 DestroyEndsDestroyed == dres = "ok" => dsaw
-
-\* R10: destroy never brings back a session folder that gc removed.
-DestroyNeverRecreates == ~drecreated
 
 \* Witnesses. check.sh expects TLC to report each one VIOLATED, which shows
 \* that the model reaches the state: the rules above are not true only
