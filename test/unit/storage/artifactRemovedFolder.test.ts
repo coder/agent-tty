@@ -36,7 +36,9 @@ vi.mock('node:fs/promises', async () => {
 import type * as FsPromises from 'node:fs/promises';
 
 import { createTestSemanticSnapshot } from '../../helpers.js';
+import { createFakeBackend } from '../../helpers/fakeBackend.js';
 
+import { captureScreenshotResult } from '../../../src/screenshot/capture.js';
 import { captureSnapshotResult } from '../../../src/snapshot/capture.js';
 import {
   appendArtifactWithRollback,
@@ -128,6 +130,48 @@ describe('artifact writes after gc removed the session folder', () => {
         expectedSessionId: 'session-01',
       }),
     ).rejects.toThrow();
+
+    expect(existsSync(sessionDirectory)).toBe(false);
+  });
+
+  it('a screenshot reports SESSION_NOT_FOUND when the folder goes before the PNG write', async () => {
+    gcRemovesSessionAfter('afterMkdir', join(sessionDirectory, 'artifacts'));
+
+    await expect(
+      captureScreenshotResult({
+        backend: createFakeBackend(),
+        sessionDir: sessionDirectory,
+        profileName: 'reference-dark',
+        expectedSessionId: 'session-01',
+      }),
+    ).rejects.toMatchObject({
+      code: 'SESSION_NOT_FOUND',
+      details: { sessionId: 'session-01' },
+    });
+
+    expect(existsSync(sessionDirectory)).toBe(false);
+  });
+
+  it('a screenshot reports SESSION_NOT_FOUND when the folder goes before the rename', async () => {
+    const renderer = createFakeBackend();
+    const backend = {
+      screenshot: async (
+        ...args: Parameters<typeof renderer.screenshot>
+      ): ReturnType<typeof renderer.screenshot> => {
+        const result = await renderer.screenshot(...args);
+        await rm(sessionDirectory, { recursive: true, force: true });
+        return result;
+      },
+    };
+
+    await expect(
+      captureScreenshotResult({
+        backend,
+        sessionDir: sessionDirectory,
+        profileName: 'reference-dark',
+        expectedSessionId: 'session-01',
+      }),
+    ).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' });
 
     expect(existsSync(sessionDirectory)).toBe(false);
   });
