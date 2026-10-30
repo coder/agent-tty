@@ -56,5 +56,9 @@ fi
 
 echo "sessions in this home: $(att list --all --json | jq -c '[.result.sessions[].status] | group_by(.) | map({(.[0]): length}) | add // {}')"
 pids=$("$(dirname "${BASH_SOURCE[0]}")/run-pids.sh" "$ENV_FILE" | tr '\n' ' ')
-echo "processes this run started (hosts and session programs): ${pids:-none}"
+case $? in
+  0) echo "processes this run started (hosts and session programs): ${pids:-none}" ;;
+  2) echo "processes this run started: unknown, run-pids.sh needs /proc" ;;
+  *) bad "run-pids.sh failed, so cleanup.sh would keep home/ and state/: fix what it reports" ;;
+esac
 exit "$fail"

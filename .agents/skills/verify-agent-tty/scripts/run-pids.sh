@@ -13,8 +13,13 @@
 # program's children can outlive it. So it finds the children of a program
 # with its own AGENT_TTY_SESSION_ID only if it read the program's PID before a
 # reconcile, and never a daemon that such a program starts in a new terminal
-# session. It exits 2 when <run>/child-pids is not a regular file that it can
-# read and write.
+# session. Once no process is left in the terminal session of a recorded PID,
+# it appends "ended <pid>" and stops matching that PID, so a process that gets
+# the PID later is not in the list. A PID that is reused before any call saw
+# its session end still matches.
+#
+# Exit 2: no /proc here (macOS), so no list. Exit 3: <run>/child-pids is not a
+# regular file that it can read and write, or an append to it failed.
 #
 #   .agents/skills/verify-agent-tty/scripts/run-pids.sh <run>/env.sh
 set -uo pipefail
@@ -38,15 +43,40 @@ caller_session=$(session_of $$)
 # children share its PID as their session ID. Any process can copy the run's
 # environment, but only the host's PTY gives it such a session.
 ledger=$VERIFY_RUN/child-pids
-[ -e "$ledger" ] || : >"$ledger"
-[ -f "$ledger" ] && [ -r "$ledger" ] && [ -w "$ledger" ] || {
-  echo "run-pids.sh: $ledger must be a regular file that you can read and write" >&2
-  exit 2
+ledger_failed() {
+  echo "run-pids.sh: $1" >&2
+  exit 3
 }
+[ -e "$ledger" ] || : >"$ledger"
+[ -f "$ledger" ] && [ -r "$ledger" ] && [ -w "$ledger" ] ||
+  ledger_failed "$ledger must be a regular file that you can read and write"
+# -a: one NUL byte must not make grep read the whole ledger as binary.
+recorded="|$(grep -a -E '^[0-9]+$' "$ledger" | sort -un | tr '\n' '|')"
+ended="|$(grep -a -E '^ended [0-9]+$' "$ledger" | cut -d' ' -f2 | tr '\n' '|')"
+added=""
 for manifest in "$AGENT_TTY_HOME"/sessions/*/session.json; do
-  [ -f "$manifest" ] && jq -r '.childPid // empty' "$manifest" 2>/dev/null
-done >>"$ledger"
-program_sessions="|$(grep -E '^[0-9]+$' "$ledger" | sort -un | tr '\n' '|')"
+  [ -f "$manifest" ] || continue
+  pid=$(jq -r '.childPid // empty' "$manifest" 2>/dev/null)
+  case "$pid" in '' | *[!0-9]*) continue ;; esac
+  case "$recorded$added" in *"|$pid|"*) ;; *) added="$added$pid|" ;; esac
+done
+[ -z "$added" ] || printf '%s' "$added" | tr '|' '\n' >>"$ledger" ||
+  ledger_failed "could not append to $ledger"
+
+# Linux does not reuse a PID while a process is left in the session that it
+# names. Once that session is empty, a new process can get the PID.
+sessions="|$(cat /proc/[0-9]*/stat 2>/dev/null | sed 's/.*) //' | cut -d' ' -f4 | sort -un | tr '\n' '|')"
+program_sessions="|"
+newly_ended=""
+for pid in $(printf '%s' "${recorded#|}$added" | tr '|' ' '); do
+  case "$ended" in *"|$pid|"*) continue ;; esac
+  case "$sessions" in
+    *"|$pid|"*) program_sessions="$program_sessions$pid|" ;;
+    *) newly_ended="${newly_ended}ended $pid"$'\n' ;;
+  esac
+done
+[ -z "$newly_ended" ] || printf '%s' "$newly_ended" >>"$ledger" ||
+  ledger_failed "could not append to $ledger"
 
 ids=""
 for dir in "$AGENT_TTY_HOME"/sessions/*/; do
