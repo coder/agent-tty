@@ -880,7 +880,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       const result = runCli(['destroy', sessionId, '--json'], {
         AGENT_TTY_HOME: testHome,
       });
-      expect(result.stdout).toContain('"ok":true');
+      expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
       expect(result.status).toBe(0);
       expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
       expect(await groupEnds(pgid)).toBe(true);
