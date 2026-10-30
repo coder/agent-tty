@@ -244,8 +244,9 @@ function groupHasLiveProcess(pgid: number): boolean | null {
       if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ESRCH')) {
         continue;
       }
-      // hidepid=1 refuses to show the process of another user.
-      if (hasErrorCode(error, 'EPERM')) {
+      // hidepid=1 (EPERM) or a security module (EACCES) refuses to show
+      // the process of another user.
+      if (hasErrorCode(error, 'EPERM') || hasErrorCode(error, 'EACCES')) {
         return true;
       }
       throw error;
