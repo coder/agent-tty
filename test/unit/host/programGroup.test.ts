@@ -225,6 +225,26 @@ describe('captureProgram', () => {
     },
   );
 
+  it.each(['EPERM', 'EACCES'])(
+    'records no token when /proc refuses to show the boot id with %s',
+    (readError) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      autogroupFile.read = (file) => {
+        if (file === '/proc/sys/kernel/random/boot_id') {
+          throw errno(readError);
+        }
+        return file === '/proc/self/autogroup' ? '/autogroup-7 nice 0\n' : null;
+      };
+
+      expect(captureProgram(4242)).toEqual({
+        version: 1,
+        pid: 4242,
+        bootId: null,
+        autogroup: null,
+      });
+    },
+  );
+
   it('records no token on a system without autogroups', () => {
     Object.defineProperty(process, 'platform', { value: 'darwin' });
 
