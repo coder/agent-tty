@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -24,7 +25,7 @@ vi.mock('node:fs/promises', async () => {
   return { ...actual, readFile };
 });
 
-// destroy and reconcile poll for about 5 s; these tests skip the waits.
+// destroy and reconcile poll for about 5 s. These tests skip the waits.
 vi.mock('node:timers/promises', async () => {
   const actual = await vi.importActual<typeof TimersPromises>(
     'node:timers/promises',
@@ -42,6 +43,7 @@ import type * as TimersPromises from 'node:timers/promises';
 import {
   allocateSession,
   destroySession,
+  isInsideSessionProcessGroup,
   isProcessGroupAlive,
   killProcessGroupBestEffort,
   reconcileSession,
@@ -251,6 +253,47 @@ function killFailsWith(code: string) {
     throw Object.assign(new Error(`kill ${code}`), { code });
   });
 }
+
+describe('isInsideSessionProcessGroup', () => {
+  const platform = process.platform;
+  const ownGroup = Number(
+    execFileSync('ps', ['-o', 'pgid=', '-p', String(process.pid)], {
+      encoding: 'utf8',
+    }),
+  );
+
+  beforeEach(() => {
+    vi.stubEnv('AGENT_TTY_HOME', home);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: platform });
+  });
+
+  it.each([platform, 'darwin'])(
+    "on %s matches the caller's process group only",
+    async (name) => {
+      expect(process.pid).not.toBe(ownGroup);
+      const directory = await seedSession(makeRecord({ childPid: ownGroup }));
+      Object.defineProperty(process, 'platform', { value: name });
+
+      expect(await isInsideSessionProcessGroup('session-01')).toBe(true);
+
+      await writeManifest(
+        manifestPath(directory),
+        makeRecord({ childPid: process.pid }),
+      );
+      expect(await isInsideSessionProcessGroup('session-01')).toBe(false);
+    },
+  );
+
+  it('on win32 never matches', async () => {
+    await seedSession(makeRecord({ childPid: ownGroup }));
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+
+    expect(await isInsideSessionProcessGroup('session-01')).toBe(false);
+  });
+});
 
 describe('isProcessGroupAlive', () => {
   it.each([
