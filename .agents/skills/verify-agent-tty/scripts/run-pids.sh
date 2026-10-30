@@ -10,7 +10,8 @@
 #
 # It appends each recorded childPid to <run>/child-pids, because reconcile
 # clears childPid from session.json when it finds a dead host, and the
-# program's children can outlive it.
+# program's children can outlive it. It misses a daemon that a program with
+# its own AGENT_TTY_SESSION_ID starts in a new terminal session.
 #
 #   .agents/skills/verify-agent-tty/scripts/run-pids.sh <run>/env.sh
 set -uo pipefail
