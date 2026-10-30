@@ -109,12 +109,12 @@ describe('HomeRegistry store', () => {
     await registry.upsert('/homes/alpha');
     await registry.upsert('/homes/beta');
 
-    expect(await registry.forget('/homes/alpha')).toBe(true);
+    expect(await registry.forget('/homes/alpha')).toBe('/homes/alpha');
     expect((await registry.read()).map((entry) => entry.path)).toEqual([
       '/homes/beta',
     ]);
 
-    expect(await registry.forget('/homes/does-not-exist')).toBe(false);
+    expect(await registry.forget('/homes/does-not-exist')).toBeNull();
     expect((await registry.read()).map((entry) => entry.path)).toEqual([
       '/homes/beta',
     ]);
@@ -131,7 +131,9 @@ describe('HomeRegistry store', () => {
     await registry.upsert(join(root, 'link', 'home'));
     await rm(join(root, 'real', 'home'), { recursive: true });
 
-    expect(await registry.forget(join(root, 'link', 'home'))).toBe(true);
+    expect(await registry.forget(join(root, 'link', 'home'))).toBe(
+      join(root, 'real', 'home'),
+    );
     expect(await registry.read()).toEqual([]);
   });
 
@@ -147,7 +149,9 @@ describe('HomeRegistry store', () => {
     await mkdir(join(root, 'data2'));
     await symlink(join(root, 'data2'), join(root, 'data'));
 
-    expect(await registry.forget(join(root, 'data', 'homeB'))).toBe(true);
+    expect(await registry.forget(join(root, 'data', 'homeB'))).toBe(
+      join(root, 'data', 'homeB'),
+    );
     expect(await registry.read()).toEqual([]);
   });
 

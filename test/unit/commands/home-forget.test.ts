@@ -60,9 +60,9 @@ describe('home forget command', () => {
   it('forgets a registered Home and reports it in the JSON envelope', async () => {
     const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
     const forgotten: string[] = [];
-    const forget = (path: string): Promise<boolean> => {
+    const forget = (path: string): Promise<string | null> => {
       forgotten.push(path);
-      return Promise.resolve(true);
+      return Promise.resolve(path);
     };
 
     await runHomeForgetCommand(
@@ -83,7 +83,7 @@ describe('home forget command', () => {
 
     await runHomeForgetCommand(
       { json: false, path: '/homes/ghost' },
-      { forget: () => Promise.resolve(false) },
+      { forget: () => Promise.resolve(null) },
     );
 
     expect(getWrittenStdout(stdout.mock.calls as unknown[][])).toBe(
@@ -100,7 +100,7 @@ describe('home forget command', () => {
       {
         forget: (path) => {
           forgotten.push(path);
-          return Promise.resolve(true);
+          return Promise.resolve(path);
         },
       },
     );

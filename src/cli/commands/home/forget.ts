@@ -19,31 +19,31 @@ export interface HomeForgetCommandOptions {
 }
 
 export interface HomeForgetCommandDependencies {
-  forget?: (path: string) => Promise<boolean>;
+  forget?: (path: string) => Promise<string | null>;
 }
 
 export async function runHomeForgetCommand(
   options: HomeForgetCommandOptions,
   dependencies: HomeForgetCommandDependencies = {},
 ): Promise<void> {
-  // Display the normalized path, but pass the path as written, which the store
-  // also matches against the stored entries.
+  // Pass the path as written: the store prefers the entry stored under it and
+  // returns the path of the entry it removed.
   // forget never touches the Home directory on disk — registry-only.
   const normalizedPath = normalizeHomePath(options.path);
   const forget =
     dependencies.forget ??
     ((path: string) => createHomeRegistry().forget(path));
-  const forgotten = await forget(resolve(options.path));
+  const forgottenPath = await forget(resolve(options.path));
+  const forgotten = forgottenPath !== null;
+  const path = forgottenPath ?? normalizedPath;
 
-  const result: HomeForgetResult = { path: normalizedPath, forgotten };
+  const result: HomeForgetResult = { path, forgotten };
   emitSuccess({
     command: COMMAND_NAME,
     json: options.json,
     result,
     lines: [
-      forgotten
-        ? `Forgot Home: ${normalizedPath}`
-        : `Home not in registry: ${normalizedPath}`,
+      forgotten ? `Forgot Home: ${path}` : `Home not in registry: ${path}`,
     ],
   });
 }
