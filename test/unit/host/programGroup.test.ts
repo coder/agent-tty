@@ -32,6 +32,10 @@ const procHooks = vi.hoisted(() => ({
   mountinfo: undefined as string | undefined,
 }));
 
+const autogroupFile = vi.hoisted(() => ({
+  read: null as ((path: string) => string | null) | null,
+}));
+
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof Fs>('node:fs');
   const readdirSync = ((path: string, ...rest: unknown[]) =>
@@ -42,6 +46,10 @@ vi.mock('node:fs', async () => {
           ...rest,
         )) as typeof actual.readdirSync;
   const readFileSync = ((path: string, ...rest: unknown[]) => {
+    const replaced = autogroupFile.read?.(path);
+    if (replaced !== undefined && replaced !== null) {
+      return replaced;
+    }
     if (procHooks.stat !== undefined && path === '/proc/self/mountinfo') {
       if (procHooks.mountinfo === undefined) {
         throw errno('ENOENT');
@@ -70,6 +78,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   procHooks.stat = undefined;
   procHooks.mountinfo = undefined;
+  autogroupFile.read = null;
   Object.defineProperty(process, 'platform', { value: platform });
 });
 
@@ -79,6 +88,17 @@ function errno(code: string): Error {
 
 function procMount(options: string): string {
   return `22 1 0:21 / /proc rw,nosuid,nodev,noexec,relatime shared:12 - proc proc ${options}\n`;
+}
+
+function replaceAutogroupOf(pid: number, read: () => string): void {
+  const path = `/proc/${String(pid)}/autogroup`;
+  autogroupFile.read = (file) => (file === path ? read() : null);
+}
+
+function deniedRead(): never {
+  throw Object.assign(new Error('EACCES: permission denied'), {
+    code: 'EACCES',
+  });
 }
 
 function thrownBy(run: () => unknown): unknown {
@@ -122,11 +142,12 @@ describe('parseAutogroup', () => {
     expect(parseAutogroup(text)).toBe(id);
   });
 
-  it('refuses text that names no autogroup', () => {
-    expect(() => parseAutogroup('autogroup?\n')).toThrow(
-      'proc autogroup must name an autogroup',
-    );
-  });
+  it.each(['autogroup?\n', '/autogroup-x nice 0\n', '/autogroup-7\n'])(
+    'reads %j, which names no autogroup, as none',
+    (text) => {
+      expect(parseAutogroup(text)).toBeNull();
+    },
+  );
 });
 
 describe('captureProgram', () => {
@@ -169,6 +190,23 @@ describe('captureProgram', () => {
       });
     },
   );
+
+  it.runIf(platform === 'linux').each([
+    ['names no autogroup', () => 'autogroup?\n'],
+    ['cannot be read', deniedRead],
+  ])('records no token when the autogroup of the child %s', (_name, read) => {
+    const child = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' });
+    children.push(child);
+    const pid = child.pid as number;
+    replaceAutogroupOf(pid, read);
+
+    expect(captureProgram(pid)).toEqual({
+      version: 1,
+      pid,
+      bootId: null,
+      autogroup: null,
+    });
+  });
 
   it('records no token on a system without autogroups', () => {
     Object.defineProperty(process, 'platform', { value: 'darwin' });
@@ -513,6 +551,21 @@ describe.runIf(platform === 'linux')('a program group with a token', () => {
 
     expect(kill).not.toHaveBeenCalled();
     expect(isProgramGroupAlive(mismatched)).toBe(false);
+    expect(() => process.kill(-pid, 0)).not.toThrow();
+  });
+
+  it.each([
+    ['names no autogroup', () => 'autogroup?\n'],
+    ['cannot be read', deniedRead],
+  ])('gets no kill when the autogroup of its member %s', (_name, read) => {
+    const { pid, record } = startGroup();
+    replaceAutogroupOf(pid, read);
+    const kill = vi.spyOn(process, 'kill');
+
+    stopProgramGroup(record);
+
+    expect(kill).not.toHaveBeenCalled();
+    expect(isProgramGroupAlive(record)).toBe(false);
     expect(() => process.kill(-pid, 0)).not.toThrow();
   });
 
