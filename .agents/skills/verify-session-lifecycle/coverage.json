@@ -10,7 +10,7 @@
     "src/host/lifecycle.ts#killProcessBestEffort": "1dd0cb4ee9bbc676",
     "src/host/lifecycle.ts#processGroupTarget": "88de1544b1553e54",
     "src/host/lifecycle.ts#procStatFields": "b9900d23f53dbe0e",
-    "src/host/lifecycle.ts#groupHasLiveProcess": "0314eb413006a988",
+    "src/host/lifecycle.ts#groupHasLiveProcess": "7ad672d42e92e44b",
     "src/host/lifecycle.ts#isProcessGroupAlive": "57aaad7a78eab475",
     "src/host/lifecycle.ts#killProcessGroupBestEffort": "5ebf296d3c2dafe7",
     "src/host/lifecycle.ts#ownLinuxSessionId": "e7b0355a11fd9740",
