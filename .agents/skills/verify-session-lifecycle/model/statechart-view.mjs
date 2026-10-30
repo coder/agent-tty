@@ -35,9 +35,12 @@ export const state = (v) => {
     host = 'Host shutting down, program runs';
   } else if (v.hex === 'wait') {
     host = v.sock ? 'Host serving' : 'Host serving, socket file gone';
+  } else if (v.hex === 'groupwait') {
+    host = "Host waits for the program's group";
   } else {
     host = 'Host finishing';
   }
+  host += v.foreign ? ', a process of another user runs in the group' : '';
   return { Files: files, Host: host };
 };
 
@@ -75,6 +78,14 @@ export const step = (action, from, to) => {
         : `the host shutdown write lands: ${to.mst}`;
     case 'HostKillsProgram':
       return "the kill timer kills the program's process group";
+    case 'HostPollsGroup':
+      return to.hex === 'giveup'
+        ? "the host gives up on the program's group and keeps destroying"
+        : "the host finds the program's group gone and records destroyed";
+    case 'ForeignStarts':
+      return 'the program starts a process of another user';
+    case 'ForeignEnds':
+      return 'the process of another user ends';
     case 'ProgramExits':
       return to.prog
         ? 'the program ends, a process of its group still runs'
@@ -95,6 +106,10 @@ export const step = (action, from, to) => {
       return `${reconciles(from, to)} checks the host pid`;
     case 'ReconcileRereadsManifest':
       return `${reconciles(from, to)} reads the manifest again`;
+    case 'ReconcilePollsGroup':
+      return to.pc.gc === 'r_write' || to.pc.list === 'r_write'
+        ? `${reconciles(from, to)} finds the program's group gone`
+        : `${reconciles(from, to)} gives up on the program's group and returns`;
     case 'ReconcileWrites':
       return to.dir
         ? `${reconciles(from, to)} writes "${to.mst}"${back(from, to)}`
@@ -113,6 +128,12 @@ export const step = (action, from, to) => {
       return 'gc removes the session folder';
     case 'ListStartsReconcile':
       return 'another command starts a reconcile';
+    case 'DestroyChecksSession':
+      return to.dinside
+        ? "destroy starts inside the program's session"
+        : "destroy checks whether it runs inside the program's session";
+    case 'DestroyDies':
+      return "destroy dies with the program's session before it reports";
     case 'DestroyReads':
       return to.dpc === 'done'
         ? 'destroy reads the manifest and fails'
@@ -125,6 +146,10 @@ export const step = (action, from, to) => {
       return 'destroy unlinks the socket file and succeeds';
     case 'DestroyKills':
       return "destroy --force kills the host and the program's group";
+    case 'DestroyPollsGroup':
+      return to.dpc === 'done'
+        ? "destroy --force gives up on the program's group"
+        : "destroy --force finds the program's group gone";
     case 'DestroyRereads':
       return 'destroy reads the manifest after the kill';
     case 'DestroySendsRpc':

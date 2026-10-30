@@ -454,10 +454,11 @@ function manifestWriteFacts() {
 }
 
 // Every kill of the program that a rule depends on SIGKILLs its process
-// group, and destroy --force waits until the group is gone: the helpers
-// signal the negated group id outside Windows, stopSessionProcesses and waitForProcessesToExit
-// use them, reconcileSession kills the group that its re-read names, and
-// handlePtyExit kills the group before it records destroyed.
+// group, and waitForProcessesToExit waits until the group is gone: the
+// helpers signal the negated group id outside Windows, stopSessionProcesses
+// and waitForProcessesToExit use them, reconcileSession kills the group that
+// its re-read names, and handlePtyExit kills the group when the program ends
+// during a destroy.
 function programGroupFacts() {
   const lifecycle = 'src/host/lifecycle.ts';
   const negates = requireDeclaration(
@@ -519,19 +520,166 @@ function programGroupFacts() {
           "currentStatus === 'destroying'" &&
         ts.isBlock(inner.thenStatement)
       ) {
-        const block = inner.thenStatement;
-        const kill = indexOfStatement(
-          block,
-          /^killProcessGroupBestEffort\(pty\.pid\);$/,
-        );
-        const record = indexOfStatement(block, /^state\.recordDestroyed\(/);
-        exitKills = kill >= 0 && kill < record;
+        exitKills =
+          indexOfStatement(
+            inner.thenStatement,
+            /^killProcessGroupBestEffort\(pty\.pid\);$/,
+          ) >= 0;
       }
     });
   });
   return {
     KillsProgramGroup:
       helpers && forceKills && forceWaits && reconcileKills && exitKills,
+  };
+}
+
+// isProcessGroupAlive returns true on EPERM before it returns false on ESRCH,
+// so a group that holds only processes of another user reads alive.
+function deniedProbeFacts() {
+  const body = requireDeclaration(
+    'src/host/lifecycle.ts',
+    'isProcessGroupAlive',
+  ).body;
+  const handler = body.statements.find(ts.isTryStatement)?.catchClause?.block;
+  if (handler === undefined) {
+    return { ProbeCountsDeniedGroup: false };
+  }
+  const denied = indexOfStatement(
+    handler,
+    /^if \(hasErrorCode\(error, 'EPERM'\)\) \{\s*return true;\s*\}$/,
+  );
+  const gone = indexOfStatement(
+    handler,
+    /^if \(hasErrorCode\(error, 'ESRCH'\)\) \{\s*return false;\s*\}$/,
+  );
+  return { ProbeCountsDeniedGroup: denied >= 0 && gone > denied };
+}
+
+// handlePtyExit records destroyed only after waitForProcessesToExit read the
+// group gone, right before its exit write, and reconcileSession returns
+// before its write while the group lives.
+function groupWaitFacts() {
+  let hostWaits = false;
+  walk(requireDeclaration('src/host/hostMain.ts', 'runHost').body, (node) => {
+    if (
+      !ts.isVariableDeclaration(node) ||
+      node.name.getText() !== 'handlePtyExit'
+    ) {
+      return;
+    }
+    const records = calls(node, 'recordDestroyed');
+    if (records.length !== 1) {
+      return;
+    }
+    let guard = records[0].parent;
+    while (guard !== node && !ts.isIfStatement(guard)) {
+      guard = guard.parent;
+    }
+    if (!ts.isIfStatement(guard) || !ts.isBlock(guard.parent)) {
+      return;
+    }
+    const statements = guard.parent.statements;
+    const next = statements[statements.indexOf(guard) + 1];
+    hostWaits =
+      normalize(guard.expression.getText()) ===
+        "currentStatus === 'destroying' && (await waitForProcessesToExit(null, pty.pid))" &&
+      next !== undefined &&
+      /^await persistManifest\(\);$/.test(next.getText());
+  });
+  const reconcile = requireDeclaration(
+    'src/host/lifecycle.ts',
+    'reconcileSession',
+  ).body;
+  const kill = indexOfStatement(
+    reconcile,
+    /^killProcessGroupBestEffort\(current\.childPid\);$/,
+  );
+  const wait = guardIndex(
+    reconcile,
+    '!(await waitForProcessesToExit(null, current.childPid))',
+    ts.SyntaxKind.ReturnStatement,
+  );
+  const write = indexOfStatement(
+    reconcile,
+    /^(?:try \{\s*)?await writeManifest\(/,
+  );
+  return {
+    HostWaitsForGroup: hostWaits,
+    ReconcileWaitsForGroup: kill >= 0 && wait === kill + 1 && wait < write,
+  };
+}
+
+// runDestroyCommand runs the same command detached, in a new session, before
+// it destroys anything when cliRunsInsideProgramSession matches. On Linux
+// that check compares the program's pid with the CLI's session id, the
+// fourth field after the command name in /proc/self/stat. Before it reads
+// the manifest, the check matches AGENT_TTY_SESSION_ID, and the copy does
+// not get that variable, so it does not start a copy of its own.
+function rerunFacts() {
+  const destroyFile = 'src/cli/commands/destroy.ts';
+  const run = requireDeclaration(destroyFile, 'runDestroyCommand').body;
+  const check = run.statements.findIndex(
+    (st) =>
+      ts.isIfStatement(st) &&
+      normalize(st.expression.getText()) ===
+        'await cliRunsInsideProgramSession(options.sessionId)' &&
+      /^\{\s*process\.exitCode = await rerunInNewSession\(\);\s*return;\s*\}$/.test(
+        st.thenStatement.getText(),
+      ),
+  );
+  const destroy = indexOfStatement(run, /^await destroySession\(/);
+  const spawns = calls(
+    requireDeclaration(destroyFile, 'rerunInNewSession').body,
+    'spawn',
+  );
+  const detached =
+    spawns.length === 1 && /\bdetached: true\b/.test(spawns[0].getText());
+  const lifecycle = 'src/host/lifecycle.ts';
+  const compares = requireDeclaration(
+    lifecycle,
+    'cliRunsInsideProgramSession',
+  ).body.statements.some((st) => {
+    if (!ts.isReturnStatement(st) || st.expression === undefined) {
+      return false;
+    }
+    let expression = st.expression;
+    while (ts.isParenthesizedExpression(expression)) {
+      expression = expression.expression;
+    }
+    return (
+      normalize(expression.getText()) ===
+      "manifest.childPid === (process.platform === 'linux' ? ownLinuxSessionId() : ownProcessGroupId())"
+    );
+  });
+  const readsSessionId = /\.split\(' '\)\[3\]/.test(
+    requireDeclaration(lifecycle, 'ownLinuxSessionId').getText(),
+  );
+  const inside = requireDeclaration(
+    lifecycle,
+    'cliRunsInsideProgramSession',
+  ).body;
+  const readsEnv = inside.statements.findIndex(
+    (st) =>
+      ts.isIfStatement(st) &&
+      normalize(st.expression.getText()) ===
+        'process.env.AGENT_TTY_SESSION_ID === sessionId' &&
+      /^\{\s*return true;\s*\}$/.test(st.thenStatement.getText()),
+  );
+  const readsManifest = indexOfStatement(
+    inside,
+    /= await readManifestIfExists\(/,
+  );
+  const copyDropsId =
+    spawns.length === 1 &&
+    normalize(spawns[0].getText()).includes(
+      'env: { ...process.env, AGENT_TTY_SESSION_ID: undefined }',
+    );
+  return {
+    ReRunsInNewSession:
+      check >= 0 && destroy > check && detached && compares && readsSessionId,
+    InsideCheckReadsEnv:
+      readsEnv >= 0 && readsEnv < readsManifest && copyDropsId,
   };
 }
 
@@ -608,6 +756,7 @@ function policyFacts() {
 const COVERED = [
   ['src/cli/commands/create.ts', 'runCreateCommand'],
   ['src/cli/commands/destroy.ts', 'runDestroyCommand'],
+  ['src/cli/commands/destroy.ts', 'rerunInNewSession'],
   ['src/cli/commands/gc.ts', 'gcSessions'],
   ['src/host/lifecycle.ts', 'allocateSession'],
   ['src/host/lifecycle.ts', 'launchHost'],
@@ -616,6 +765,9 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'processGroupTarget'],
   ['src/host/lifecycle.ts', 'isProcessGroupAlive'],
   ['src/host/lifecycle.ts', 'killProcessGroupBestEffort'],
+  ['src/host/lifecycle.ts', 'ownLinuxSessionId'],
+  ['src/host/lifecycle.ts', 'ownProcessGroupId'],
+  ['src/host/lifecycle.ts', 'cliRunsInsideProgramSession'],
   ['src/host/lifecycle.ts', 'readSessionManifestOrThrow'],
   ['src/host/lifecycle.ts', 'waitForTerminalManifest'],
   ['src/host/lifecycle.ts', 'waitForProcessesToExit'],
@@ -648,6 +800,8 @@ const RUN_HOST_PARTS = [
   /= await EventLog\.open\(/,
   /= createPty\(/,
   /state\.setChildPid\(/,
+  /^const hangUpProgram = /,
+  /^const startIdlePolling = /,
   /^const initiateShutdown = /,
   /^const startShutdown = /,
   /^const handlePtyExit = /,
@@ -853,6 +1007,9 @@ const constants = {
   ...destroyFacts(),
   ...manifestWriteFacts(),
   ...programGroupFacts(),
+  ...deniedProbeFacts(),
+  ...groupWaitFacts(),
+  ...rerunFacts(),
   ...policyFacts(),
 };
 console.log(
