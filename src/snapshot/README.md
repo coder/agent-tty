@@ -20,14 +20,14 @@ This directory turns a renderer `SemanticSnapshot` into a snapshot result and st
 - `persistSnapshotArtifact` asserts a non-empty `sessionDir` and `rendererBackend` [capture.ts:persistSnapshotArtifact].
 - The result must match its source snapshot: same `format`, `sessionId`, `capturedAtSeq`, `cols`, `rows`, `cursorRow` and `cursorCol` [capture.ts:assertSnapshotResultMatchesSource].
 - If `expectedSessionId` is set and differs from the snapshot's `sessionId`, `captureSnapshotResult` throws a `PROTOCOL_ERROR` CLI error [capture.ts:captureSnapshotResult].
-- The filename comes from `snapshotFilename(capturedAtSeq, format)` in `src/storage/artifactPaths.ts` [capture.ts:persistSnapshotArtifact].
+- The preferred filename comes from `snapshotFilename(capturedAtSeq, format)` in `src/storage/artifactPaths.ts`. The stored name gets a `-<n>` suffix when a different file already has that name [capture.ts:persistSnapshotArtifact].
 
 ## Side Effects
 
 - `createSnapshotResult` computes the Screen Hash with `computeScreenHash` from `src/renderer/canonicalScreen.ts` [capture.ts:createSnapshotResult].
 - `persistSnapshotArtifact` creates the artifacts directory with `ensureArtifactsDir` from `src/storage/artifactPaths.ts` [capture.ts:persistSnapshotArtifact].
-- It writes the pretty-printed JSON result with `writeTextFileAtomic` from `src/storage/manifests.ts` [capture.ts:persistSnapshotArtifact]. The write replaces any existing `snapshot-<seq>-<format>.json` at the same seq and format.
-- It appends the manifest entry with `createArtifactEntry` and `appendArtifactWithRollback` from `src/storage/artifactManifest.ts`. If the append fails, the rollback helper tries to remove the snapshot file (best effort) [capture.ts:persistSnapshotArtifact]. After an overwrite, that removal also deletes the file of the earlier recorded artifact with the same name.
+- It writes the pretty-printed JSON result to `artifacts/.tmp-snapshot-<ulid>.json` with `writeTextFileAtomic` from `src/storage/manifests.ts`. It builds the entry with `createArtifactEntry` and passes both to `publishArtifactWithRollback` from `src/storage/artifactManifest.ts`. That call moves the file into place without replacing an existing file and appends the entry [capture.ts:persistSnapshotArtifact]. A repeat capture at the same seq and format with identical JSON reuses `snapshot-<seq>-<format>.json`. Different JSON, for example with `scrollbackLines`, goes to `snapshot-<seq>-<format>-<n>.json`.
+- If the append fails, `publishArtifactWithRollback` tries to remove the snapshot file (best effort), but only when this capture created the file [capture.ts:persistSnapshotArtifact]. A reused file stays.
 
 ## Verification
 

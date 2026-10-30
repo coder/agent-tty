@@ -13,17 +13,15 @@ const mocks = vi.hoisted(() => ({
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
   withOfflineReplayRenderer: vi.fn(),
-  appendArtifactWithRollback: vi.fn(),
-  // Test-internal delegate used by the appendArtifactWithRollback mock.
+  publishArtifactWithRollback: vi.fn(),
+  // Test-internal delegate used by the publishArtifactWithRollback mock.
   appendArtifact: vi.fn(),
   createArtifactEntry: vi.fn(),
   ensureArtifactsDir: vi.fn(),
-  rename: vi.fn(),
   rm: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', () => ({
-  rename: mocks.rename,
   rm: mocks.rm,
 }));
 
@@ -54,7 +52,7 @@ vi.mock('../../../src/replay/offlineReplay.js', () => ({
 }));
 
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
-  appendArtifactWithRollback: mocks.appendArtifactWithRollback,
+  publishArtifactWithRollback: mocks.publishArtifactWithRollback,
   createArtifactEntry: mocks.createArtifactEntry,
 }));
 
@@ -200,9 +198,10 @@ describe('screenshot command', () => {
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
     );
     mocks.readManifestIfExists.mockResolvedValue(createRunningSessionRecord());
-    mocks.appendArtifactWithRollback.mockImplementation(
+    mocks.publishArtifactWithRollback.mockImplementation(
       async (options: { sessionDir: string; entry: unknown }) => {
         await mocks.appendArtifact(options.sessionDir, options.entry);
+        return options.entry;
       },
     );
     mocks.appendArtifact.mockResolvedValue(undefined);
@@ -214,7 +213,6 @@ describe('screenshot command', () => {
     mocks.ensureArtifactsDir.mockResolvedValue(
       '/tmp/agent-tty/sessions/session-01/artifacts',
     );
-    mocks.rename.mockResolvedValue(undefined);
     mocks.rm.mockResolvedValue(undefined);
   });
 
@@ -375,7 +373,7 @@ describe('screenshot command', () => {
       },
       expect.any(Function),
     );
-    // Rename, manifest-entry construction, and manifest append are exercised
+    // Publishing, manifest-entry construction, and manifest append are exercised
     // by `test/unit/screenshot/capture.test.ts`. Here we only check the
     // routing-level surface of the offline path.
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
@@ -547,8 +545,7 @@ describe('screenshot command', () => {
       expect.stringMatching(/^\/artifacts\/\.tmp-screenshot-.*\.png$/),
       { force: true },
     );
-    expect(mocks.rename).not.toHaveBeenCalled();
-    expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
+    expect(mocks.publishArtifactWithRollback).not.toHaveBeenCalled();
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 

@@ -21,7 +21,7 @@
   - [`./renderer/README.md`](./renderer/README.md): `RendererBackend` contract, replay, snapshot and profile schemas, the backend registry, Screen Hash helpers and the `ghostty-web` and `libghostty-vt` backends.
   - [`./renderWait/README.md`](./renderWait/README.md): validates `waitForRender` conditions and matches them against semantic snapshots. Pure.
   - [`./snapshot/README.md`](./snapshot/README.md): builds structured and text snapshot results with a Screen Hash and saves them as JSON artifacts with a manifest entry.
-  - [`./screenshot/README.md`](./screenshot/README.md): captures a renderer PNG to a temp path, validates it, renames it to the artifact name and appends a manifest entry.
+  - [`./screenshot/README.md`](./screenshot/README.md): captures a renderer PNG to a temp path, validates it, moves it to the artifact name without replacing an existing file and appends a manifest entry.
   - [`./export/README.md`](./export/README.md): asciicast v2 text from the event log, and WebM video by timed replay into a `ghostty-web` backend.
   - [`./batch/README.md`](./batch/README.md): parses and runs Batch plans of `type`, `paste`, `sendKeys`, `run` and `wait` steps over host RPC.
   - [`./dashboard/README.md`](./dashboard/README.md): Ink/React Session Dashboard behind `agent-tty dashboard`.
