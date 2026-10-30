@@ -869,17 +869,23 @@ export async function reconcileSession(
   if (!(await waitForProcessesToExit(null, current.childPid))) {
     return;
   }
+  // A destroy or another reconcile can write a terminal status during the
+  // wait.
+  const latest = await readManifestIfExists(manifestFile);
+  if (latest === null || isTerminalSessionStatus(latest.status)) {
+    return;
+  }
 
   let reconciledStatus: SessionRecord['status'];
   let failureReason: string | undefined;
   let failureOrigin: FailureOrigin | undefined;
 
-  switch (current.status) {
+  switch (latest.status) {
     case 'running':
       reconciledStatus = 'failed';
       failureReason =
-        current.hostPid !== null
-          ? `host process died unexpectedly (pid: ${String(current.hostPid)})`
+        latest.hostPid !== null
+          ? `host process died unexpectedly (pid: ${String(latest.hostPid)})`
           : 'host process died unexpectedly';
       failureOrigin = 'host-death';
       break;
@@ -891,13 +897,13 @@ export async function reconcileSession(
       break;
     default:
       reconciledStatus = 'failed';
-      failureReason = `unexpected pre-reconcile status: ${current.status}`;
+      failureReason = `unexpected pre-reconcile status: ${latest.status}`;
       failureOrigin = 'unknown';
       break;
   }
 
   const reconciledManifest: SessionRecord = {
-    ...current,
+    ...latest,
     status: reconciledStatus,
     updatedAt: new Date().toISOString(),
     hostPid: null,
