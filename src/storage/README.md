@@ -6,7 +6,8 @@
 
 ## Interface
 
-- `resolveHome(configuredHome = process.env.AGENT_TTY_HOME)` returns the absolute Home: the configured path, or `os.homedir()/.agent-tty`. It returns the real path when `realpathSync` succeeds. [home.ts:resolveHome]
+- `resolveHome(configuredHome = process.env.AGENT_TTY_HOME)` returns the absolute Home: the configured path, or `os.homedir()/.agent-tty`, passed through `canonicalHomePath`. [home.ts:resolveHome]
+- `canonicalHomePath(path, realpath = realpathSync)` returns the real path of the deepest existing ancestor of `path`, joined with the parts below it that do not exist yet. [home.ts:canonicalHomePath]
 - `ensureHome(configuredHome = process.env.AGENT_TTY_HOME)` resolves the Home, creates it and returns its path. [home.ts:ensureHome]
 - `sessionDir(home, sessionId)`, `manifestPath(sessionDir)` and `eventLogPath(sessionDir)` return `<home>/sessions/<sessionId>`, its `session.json` and its `events.jsonl`. [sessionPaths.ts:sessionDir] [sessionPaths.ts:manifestPath] [sessionPaths.ts:eventLogPath]
 - `socketPath(sessionDir)` returns `/tmp/agent-tty/<8 hex of sha256(home)>/<12 hex of sha256(sessionId)>`. [sessionPaths.ts:socketPath]
@@ -26,6 +27,7 @@
 ## Invariants
 
 - `AGENT_TTY_HOME` must be a non-empty absolute path when set. [home.ts:resolveHome]
+- `canonicalHomePath(path)` equals `realpathSync(path)` once the missing parts of `path` exist. So the CLI, which resolves a Home before `create` makes it, and the host, which resolves it after, get the same Home and the same socket path. [home.ts:canonicalHomePath]
 - `sessionDir` requires an absolute `home` and a session ID that is not empty, `.` or `..` and has no `/` or `\`. The result must be a direct child of `<home>/sessions`, and `session.json` and `events.jsonl` must be direct children of the session directory. [sessionPaths.ts:sessionDir] [sessionPaths.ts:manifestPath]
 - `socketPath` asserts that the socket directory is a direct child of `/tmp/agent-tty`, that the two IDs have 8 and 12 characters, and that the session directory's parent is `<home>/sessions`. [sessionPaths.ts:socketPath]
 - `artifactPath` rejects a file name that is empty or has `/` or `\`, and asserts that the result is directly inside `<sessionDir>/artifacts`. File-name builders replace unsafe characters in the profile name with `-` and require a non-negative integer `seq`. [artifactPaths.ts:artifactPath] [artifactPaths.ts:screenshotFilename]

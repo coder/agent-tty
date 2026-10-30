@@ -8,6 +8,7 @@ import { z } from 'zod';
 
 import { invariant } from '../util/assert.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
+import { canonicalHomePath } from './home.js';
 import { writeTextFileAtomic } from './manifests.js';
 
 const STATE_SUBDIRECTORY = 'agent-tty';
@@ -66,9 +67,8 @@ export function resolveHomeRegistryPath(
 /**
  * Normalize a Home path to the canonical form stored in the registry, matching
  * how `resolveHome`/`validateHomePath` canonicalize: resolve to absolute,
- * normalize, then realpath if the directory exists (so symlinks and `..`
- * collapse). A path whose directory is gone (a forgettable dead Home) falls
- * back to its normalized absolute form.
+ * normalize, then `canonicalHomePath`, so symlinks and `..` collapse and a
+ * Home whose directory is gone (a forgettable dead Home) keeps its key.
  */
 export function normalizeHomePath(
   homePath: string,
@@ -80,12 +80,7 @@ export function normalizeHomePath(
   );
 
   const absolute = isAbsolute(homePath) ? homePath : resolve(homePath);
-  const normalized = normalize(absolute);
-  try {
-    return realpath(normalized);
-  } catch {
-    return normalized;
-  }
+  return canonicalHomePath(normalize(absolute), realpath);
 }
 
 export interface HomeRegistryDependencies {

@@ -22,7 +22,7 @@ This directory holds the handlers for the `home list` and `home forget` CLI subc
 ## Side Effects
 
 - Both commands write to stdout through `emitSuccess` (JSON envelope with `--json`, text lines otherwise). [src/cli/output.ts:emitSuccess]
-- `home forget` calls `realpathSync` on the given path and falls back to the normalized absolute path on error. [src/storage/homeRegistry.ts:normalizeHomePath]
+- `home forget` resolves the given path with `canonicalHomePath`, so a removed Home still matches its entry when you name it through a symlink. [src/storage/homeRegistry.ts:normalizeHomePath]
 - `home forget` reads `${XDG_STATE_HOME:-~/.local/state}/agent-tty/homes.json`. When it removes an entry, it rewrites that file through `writeTextFileAtomic` (temp file, then rename). `writeTextFileAtomic` creates the `agent-tty/` state directory when it is missing and writes the file with mode 0600. The comment in the handler states that it never touches the Home directory. [src/storage/homeRegistry.ts:createHomeRegistry] [src/storage/manifests.ts:writeTextFileAtomic] [forget.ts:runHomeForgetCommand]
 - `home list` reads the registry, runs `readdir` on each `<home>/sessions`, and reads each session manifest through `readManifestIfExists`. It writes no files. [src/storage/homeScope.ts:scanHome]
 
