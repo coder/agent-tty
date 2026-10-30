@@ -3,9 +3,10 @@
 # session hosts (argv `_host`, environment AGENT_TTY_HOME=<run home>) and the
 # programs in its sessions and their children (environment
 # AGENT_TTY_HOME=<run home> with the AGENT_TTY_ACTIVE=true that the session's
-# PTY sets, or AGENT_TTY_SESSION_ID=<a session of the run home>). Processes in
-# the caller's own terminal session, such as your shells that sourced env.sh
-# and cleanup.sh, are not in the list. Linux only: it reads /proc.
+# PTY sets, in a terminal session that such a program leads, or
+# AGENT_TTY_SESSION_ID=<a session of the run home>). Processes in the caller's
+# own terminal session, such as your shells that sourced env.sh and
+# cleanup.sh, are not in the list. Linux only: it reads /proc.
 #
 #   .agents/skills/verify-agent-tty/scripts/run-pids.sh <run>/env.sh
 set -uo pipefail
@@ -25,6 +26,20 @@ session_of() {
 }
 caller_session=$(session_of $$)
 
+# Each session program leads its own terminal session. Inside an outer
+# agent-tty session, a shell that sourced env.sh passes the run's Home and
+# AGENT_TTY_ACTIVE=true to its children too, but the leader of that shell's
+# session carries the outer Home. A leader that has exited counts as a
+# program of the run: reconcile kills the program when its host has died.
+in_program_session() {
+  local leader
+  leader=$(session_of "$1")
+  [ -n "$leader" ] || return 1
+  [ -e "/proc/$leader" ] || return 0
+  grep -qzxF "AGENT_TTY_HOME=$AGENT_TTY_HOME" "/proc/$leader/environ" 2>/dev/null &&
+    grep -qzxF AGENT_TTY_ACTIVE=true "/proc/$leader/environ" 2>/dev/null
+}
+
 ids=""
 for dir in "$AGENT_TTY_HOME"/sessions/*/; do
   id=$(basename "$dir")
@@ -36,7 +51,7 @@ done
   for file in $(grep -lzxF "AGENT_TTY_HOME=$AGENT_TTY_HOME" /proc/[0-9]*/environ 2>/dev/null); do
     dir=${file%/environ}
     if { tr '\0' ' ' <"$dir/cmdline"; } 2>/dev/null | grep -q ' _host ' ||
-      grep -qzxF AGENT_TTY_ACTIVE=true "$file" 2>/dev/null; then
+      { grep -qzxF AGENT_TTY_ACTIVE=true "$file" 2>/dev/null && in_program_session "${dir#/proc/}"; }; then
       echo "${dir#/proc/}"
     fi
   done
@@ -46,7 +61,7 @@ done
   fi
 } | sort -un | while read -r pid; do
   # Hosts and PTY programs call setsid, so no run process is in the caller's
-  # session. Inside an outer agent-tty session the caller matches, though.
+  # session. This keeps cleanup.sh alive even when its session leader is gone.
   [ "$(session_of "$pid")" != "$caller_session" ] || continue
   # /proc files report size 0, so read the command line to see if it is live.
   [ -n "$({ tr -d '\0' <"/proc/$pid/cmdline"; } 2>/dev/null)" ] && echo "$pid"
