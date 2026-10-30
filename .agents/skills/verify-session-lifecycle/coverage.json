@@ -14,7 +14,7 @@
     "src/host/lifecycle.ts#isProcessGroupAlive": "57aaad7a78eab475",
     "src/host/lifecycle.ts#killProcessGroupBestEffort": "5ebf296d3c2dafe7",
     "src/host/lifecycle.ts#ownLinuxSessionId": "e7b0355a11fd9740",
-    "src/host/lifecycle.ts#ownProcessGroupId": "8488087c1b370913",
+    "src/host/lifecycle.ts#ownProcessGroupId": "b480c93782250b9a",
     "src/host/lifecycle.ts#cliRunsInsideProgramSession": "03b559668a9216ce",
     "src/host/lifecycle.ts#readSessionManifestOrThrow": "9709f28e5e9cca4b",
     "src/host/lifecycle.ts#waitForTerminalManifest": "3f14811e8d2f5f7f",
