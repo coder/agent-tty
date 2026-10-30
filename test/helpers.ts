@@ -294,6 +294,16 @@ export function isGroupAlive(group: number): boolean {
   }
 }
 
+export function killGroupIfAlive(group: number): void {
+  try {
+    process.kill(-group, 'SIGKILL');
+  } catch (error) {
+    if (!hasErrorCode(error, 'ESRCH')) {
+      throw error;
+    }
+  }
+}
+
 // init reaps the killed processes a moment after they die.
 export async function groupEnds(group: number): Promise<boolean> {
   const deadline = Date.now() + 2_000;

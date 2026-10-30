@@ -39,12 +39,6 @@ const ProgramRecordSchema = z.union([
 export type ProgramRecord = z.infer<typeof ProgramRecordSchema>;
 type ProvenRecord = Extract<ProgramRecord, { bootId: string }>;
 
-// No record proves this group, so the kill trusts the childPid of a manifest
-// read before program.json, as before program.json existed. A session that
-// has a record names its childPid only after the record, so a record that is
-// missing from a folder that still exists marks a session that never had
-// one. Once gc removed the folder, the group can have ended and its id can
-// name an unrelated group.
 interface ChildPidGroup {
   readonly childPid: number;
   readonly sessionDirectory: string;
@@ -99,8 +93,7 @@ export function parseProcStat(text: string): ProcStat {
   return stat;
 }
 
-// The kernel prints nothing for a task in no autogroup. Text in any other
-// format names no autogroup either, so it proves nothing.
+// The kernel prints nothing for a task in no autogroup.
 export function parseAutogroup(text: string): number | null {
   const match = /^\/autogroup-(\d+) nice -?\d+\n?$/.exec(text);
   return match === null ? null : Number(match[1]);
@@ -226,7 +219,6 @@ async function readProgramRecord(
     });
     return record ?? 'missing';
   } catch (error) {
-    // A corrupt record, or one that another version wrote, proves nothing.
     if (hasErrorCode(error, ERROR_CODES.MANIFEST_VALIDATION_ERROR)) {
       return 'invalid';
     }
@@ -241,8 +233,6 @@ export async function readProvenProgramGroup(
   return typeof record === 'object' && hasToken(record) ? record : null;
 }
 
-// Call it after the manifest read that gave childPid. An invalid record
-// gets no kill.
 export async function readProgramGroup(
   sessionDirectory: string,
   childPid: number | null,

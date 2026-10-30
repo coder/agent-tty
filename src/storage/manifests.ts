@@ -127,11 +127,7 @@ function replaceFileAtomicSync(path: string, contents: string): void {
     writeFileSync(temporaryPath, contents, { encoding: 'utf8', mode: 0o600 });
     renameSync(temporaryPath, path);
   } catch (error) {
-    try {
-      rmSync(temporaryPath, { force: true });
-    } catch {
-      // keep the write error
-    }
+    rmSync(temporaryPath, { force: true });
     throw error;
   }
 }
@@ -171,9 +167,6 @@ export async function writeValidatedJsonFile<T>(
   });
 }
 
-// For a write that must be durable before the caller yields to the event
-// loop. Like writeManifest it never creates a missing folder, and the caller
-// states createParentFolders: false.
 export function writeValidatedJsonFileSync<T>(
   options: WriteValidatedJsonFileOptions<T> & { createParentFolders: false },
 ): void {

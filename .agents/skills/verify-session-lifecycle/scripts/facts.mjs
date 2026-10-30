@@ -678,7 +678,6 @@ function groupWaitFacts() {
   };
 }
 
-// True when no statement in `statements` awaits outside a nested function.
 function noAwaitIn(statements) {
   let found = false;
   const visit = (node) => {

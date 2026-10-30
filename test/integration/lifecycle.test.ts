@@ -18,6 +18,7 @@ import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { isProcessAlive } from '../../src/host/lifecycle.js';
+import { parseProcStat } from '../../src/host/programGroup.js';
 import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
 import { SessionRecordSchema } from '../../src/protocol/schemas.js';
 import { writeManifest } from '../../src/storage/manifests.js';
@@ -35,12 +36,15 @@ import {
   groupEnds,
   inspectSession,
   isGroupAlive,
+  killGroupIfAlive,
   runCli,
   sleep,
   type EventRecord,
   type SessionRecord,
   type SuccessEnvelope,
 } from '../helpers.js';
+
+const capturesToken = process.platform === 'linux';
 
 interface ErrorEnvelope {
   ok: false;
@@ -934,8 +938,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       expect(await groupEnds(pgid)).toBe(true);
     });
 
-    // Only Linux records the token that proves the process is the program's.
-    it.runIf(process.platform === 'linux')(
+    it.runIf(capturesToken)(
       'destroy ends a background process left by a program that exited',
       async () => {
         const sessionId = await createProgram(
@@ -1084,8 +1087,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     });
   });
 
-  // Only Linux records the session token that tells the two groups apart.
-  describe.runIf(process.platform === 'linux')(
+  describe.runIf(capturesToken)(
     'a manifest whose group id now names an unrelated group',
     () => {
       let unrelated = 0;
@@ -1096,18 +1098,12 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
       afterEach(() => {
         if (unrelated > 1) {
-          try {
-            process.kill(-unrelated, 'SIGKILL');
-          } catch {
-            // the group is already gone
-          }
+          killGroupIfAlive(unrelated);
         }
         unrelated = 0;
         vi.unstubAllEnvs();
       });
 
-      // The unrelated group's parent exits, so init reaps it as soon as a
-      // kill ends it.
       async function pointSessionAtUnrelatedGroup(
         rewriteProgram: (program: Record<string, unknown>) => string = (
           program,
@@ -1157,7 +1153,8 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
       async function expectUnrelatedAlive(): Promise<void> {
         await sleep(200);
-        expect(isGroupAlive(unrelated)).toBe(true);
+        const stat = await readFile(`/proc/${String(unrelated)}/stat`, 'utf8');
+        expect(parseProcStat(stat).state).not.toBe('Z');
       }
 
       it('a reconcile records the session failed and leaves the group running', async () => {
@@ -1217,9 +1214,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     },
   );
 
-  // Only Linux records the token, the one record of a program that no
-  // manifest names.
-  describe.runIf(process.platform === 'linux')(
+  describe.runIf(capturesToken)(
     'a host that dies before its first manifest write',
     () => {
       let pgid = 0;
@@ -1230,11 +1225,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
       afterEach(() => {
         if (pgid > 1) {
-          try {
-            process.kill(-pgid, 'SIGKILL');
-          } catch {
-            // the group is already gone
-          }
+          killGroupIfAlive(pgid);
         }
         pgid = 0;
         vi.unstubAllEnvs();

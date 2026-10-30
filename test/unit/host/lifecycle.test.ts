@@ -91,7 +91,9 @@ import {
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
 import { manifestPath, sessionDir } from '../../../src/storage/sessionPaths.js';
+import { killGroupIfAlive } from '../../helpers.js';
 
+const capturesToken = process.platform === 'linux';
 const HOST_PID = 2_147_483_646;
 const CHILD_PID = 2_147_483_645;
 
@@ -356,17 +358,12 @@ describe('reconcileSession', () => {
     expect(kill).toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
   });
 
-  // Only Linux has the token.
-  describe.runIf(process.platform === 'linux')('with a token', () => {
+  describe.runIf(capturesToken)('with a token', () => {
     let group = 0;
 
     afterEach(() => {
       if (group > 1) {
-        try {
-          process.kill(-group, 'SIGKILL');
-        } catch {
-          // the group is already gone
-        }
+        killGroupIfAlive(group);
       }
       group = 0;
     });
@@ -470,63 +467,56 @@ describe('destroySession', () => {
       });
     });
 
-    // Only Linux has the token.
-    describe.runIf(process.platform === 'linux')(
-      'and left a process in its group',
-      () => {
-        let group = 0;
+    describe.runIf(capturesToken)('and left a process in its group', () => {
+      let group = 0;
 
-        afterEach(() => {
-          if (group > 1) {
-            try {
-              process.kill(-group, 'SIGKILL');
-            } catch {
-              // the group is already gone
-            }
-          }
-          group = 0;
-        });
-
-        async function seedLeftover(): Promise<string> {
-          group = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' })
-            .pid as number;
-          const record = captureProgram(group);
-          expect(record.autogroup).not.toBeNull();
-          const directory = await seedSession(exited);
-          writeProgramRecord(directory, record);
-          return directory;
+      afterEach(() => {
+        vi.restoreAllMocks();
+        if (group > 1) {
+          killGroupIfAlive(group);
         }
+        group = 0;
+      });
 
-        it('kills the group that the record proves', async () => {
-          const directory = await seedLeftover();
-          const kill = vi.spyOn(process, 'kill');
+      async function seedLeftover(): Promise<string> {
+        group = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' })
+          .pid as number;
+        const record = captureProgram(group);
+        expect(record.autogroup).not.toBeNull();
+        const directory = await seedSession(exited);
+        writeProgramRecord(directory, record);
+        return directory;
+      }
 
-          await destroySession('session-01');
+      it('kills the group that the record proves', async () => {
+        const directory = await seedLeftover();
+        const kill = vi.spyOn(process, 'kill');
 
-          expect(kill).toHaveBeenCalledWith(-group, 'SIGKILL');
-          expect(kill).not.toHaveBeenCalledWith(HOST_PID, 'SIGKILL');
-          expect(await readManifest(manifestPath(directory))).toMatchObject({
-            status: 'destroyed',
-          });
+        await destroySession('session-01');
+
+        expect(kill).toHaveBeenCalledWith(-group, 'SIGKILL');
+        expect(kill).not.toHaveBeenCalledWith(HOST_PID, 'SIGKILL');
+        expect(await readManifest(manifestPath(directory))).toMatchObject({
+          status: 'destroyed',
+        });
+      });
+
+      it('times out without recording destroyed while the group survives its kill', async () => {
+        const directory = await seedLeftover();
+        const send = process.kill.bind(process);
+        vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+          if (pid === -group) {
+            throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' });
+          }
+          return send(pid, signal);
         });
 
-        it('times out without recording destroyed while the group survives its kill', async () => {
-          const directory = await seedLeftover();
-          const send = process.kill.bind(process);
-          vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
-            if (pid === -group) {
-              throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' });
-            }
-            return send(pid, signal);
-          });
-
-          await expect(destroySession('session-01')).rejects.toMatchObject({
-            code: 'HOST_TIMEOUT',
-          });
-          expect(await readManifest(manifestPath(directory))).toEqual(exited);
+        await expect(destroySession('session-01')).rejects.toMatchObject({
+          code: 'HOST_TIMEOUT',
         });
-      },
-    );
+        expect(await readManifest(manifestPath(directory))).toEqual(exited);
+      });
+    });
   });
 });
 

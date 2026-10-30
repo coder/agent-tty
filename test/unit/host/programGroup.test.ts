@@ -73,6 +73,7 @@ vi.mock('node:fs', async () => {
 });
 
 const platform = process.platform;
+const capturesToken = platform === 'linux';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -159,8 +160,7 @@ describe('captureProgram', () => {
     }
   });
 
-  // Only Linux has autogroups.
-  it.runIf(platform === 'linux')(
+  it.runIf(capturesToken)(
     'records the boot id and the session autogroup of a child that leads its own session',
     () => {
       const child = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' });
@@ -179,7 +179,7 @@ describe('captureProgram', () => {
     },
   );
 
-  it.runIf(platform === 'linux')(
+  it.runIf(capturesToken)(
     'records no token for a process that is not its child',
     () => {
       expect(captureProgram(process.ppid)).toEqual({
@@ -191,7 +191,7 @@ describe('captureProgram', () => {
     },
   );
 
-  it.runIf(platform === 'linux').each([
+  it.runIf(capturesToken).each([
     ['names no autogroup', () => 'autogroup?\n'],
     ['cannot be read', deniedRead],
   ])('records no token when the autogroup of the child %s', (_name, read) => {
@@ -509,8 +509,7 @@ describe('a program group without a token', () => {
   });
 });
 
-// Only Linux has the token.
-describe.runIf(platform === 'linux')('a program group with a token', () => {
+describe.runIf(capturesToken)('a program group with a token', () => {
   const children: ChildProcess[] = [];
 
   afterEach(() => {
