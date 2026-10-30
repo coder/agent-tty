@@ -84,7 +84,7 @@ export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
 // may exceed idleTimeoutMs by up to checkIntervalMs (bounded by this cap).
 const IDLE_CHECK_CAP_MS = 5_000;
 const MANIFEST_WAIT_INTERVAL_MS = 20;
-// How long shutdown waits after SIGHUP before it kills the program's process
+// How long the host waits after SIGHUP before it kills the program's process
 // group. nvim takes about 1 s to exit on SIGHUP, and `destroy` waits about 5 s.
 const SHUTDOWN_KILL_GRACE_MS = 2_000;
 
@@ -362,6 +362,14 @@ export async function runHost(
     void scope.close().catch(rethrowAsync);
   };
 
+  let groupKillTimer: ReturnType<typeof setTimeout> | undefined;
+  const hangUpProgram = (): void => {
+    pty.kill();
+    groupKillTimer ??= setTimeout(() => {
+      killProcessGroupBestEffort(pty.pid);
+    }, SHUTDOWN_KILL_GRACE_MS);
+  };
+
   const startIdlePolling = (): void => {
     if (
       idleTimeoutMs <= 0 ||
@@ -391,7 +399,7 @@ export async function runHost(
       const elapsedIdleMs = Date.now() - lastActivityAt;
       if (elapsedIdleMs >= idleTimeoutMs) {
         clearIdleTimeout();
-        pty.kill();
+        hangUpProgram();
       }
     }, checkIntervalMs);
     scope.add('idle timeout interval', () => {
@@ -416,15 +424,11 @@ export async function runHost(
     }
 
     shutdownPromise = (async () => {
-      let killTimer: ReturnType<typeof setTimeout> | undefined;
       try {
         hostAbortController.abort(makeAbortReason('Host is shutting down.'));
         clearIdleTimeout();
         if (isSessionCommandable(state)) {
-          pty.kill();
-          killTimer = setTimeout(() => {
-            killProcessGroupBestEffort(pty.pid);
-          }, SHUTDOWN_KILL_GRACE_MS);
+          hangUpProgram();
           state.requestDestroy();
           await persistManifest();
         }
@@ -432,7 +436,6 @@ export async function runHost(
         try {
           await ptyExitPromise;
         } finally {
-          clearTimeout(killTimer);
           if (rpcListenPromise !== null) {
             await rpcListenPromise.catch(() => undefined);
           }
@@ -466,6 +469,7 @@ export async function runHost(
 
     ptyExitHandled = true;
     clearIdleTimeout();
+    clearTimeout(groupKillTimer);
 
     const exitSignal = normalizeExitSignal(signal);
     const currentStatus = state.snapshot().status;
