@@ -135,6 +135,22 @@ describe('HomeRegistry store', () => {
     expect(await registry.read()).toEqual([]);
   });
 
+  it('forgets a removed Home by its stored path after its parent became a symlink', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-')));
+    temporaryDirectories.push(root);
+    await mkdir(join(root, 'data', 'homeB'), { recursive: true });
+    const registry = createHomeRegistry({
+      registryPath: await tempRegistryPath(),
+    });
+    await registry.upsert(join(root, 'data', 'homeB'));
+    await rm(join(root, 'data'), { recursive: true });
+    await mkdir(join(root, 'data2'));
+    await symlink(join(root, 'data2'), join(root, 'data'));
+
+    expect(await registry.forget(join(root, 'data', 'homeB'))).toBe(true);
+    expect(await registry.read()).toEqual([]);
+  });
+
   it('reads a missing registry file as empty', async () => {
     const { registry } = await makeRegistry();
     expect(await registry.read()).toEqual([]);

@@ -1,8 +1,14 @@
-import { isAbsolute } from 'node:path';
+import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { isAbsolute, join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runHomeForgetCommand } from '../../../src/cli/commands/home/forget.js';
+import {
+  readHomeRegistry,
+  upsertHome,
+} from '../../../src/storage/homeRegistry.js';
 import type { SuccessEnvelope } from '../../helpers.js';
 
 function getWrittenStdout(calls: readonly unknown[][]): string {
@@ -15,8 +21,37 @@ function getWrittenStdout(calls: readonly unknown[][]): string {
 }
 
 describe('home forget command', () => {
-  afterEach(() => {
+  let root = '';
+
+  afterEach(async () => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    if (root.length > 0) {
+      await rm(root, { recursive: true, force: true });
+      root = '';
+    }
+  });
+
+  it('forgets a removed Home by its stored path after its parent became a symlink', async () => {
+    root = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-forget-')));
+    vi.stubEnv('XDG_STATE_HOME', join(root, 'state'));
+    await mkdir(join(root, 'data', 'homeB'), { recursive: true });
+    await upsertHome(join(root, 'data', 'homeB'));
+    await rm(join(root, 'data'), { recursive: true });
+    await mkdir(join(root, 'data2'));
+    await symlink(join(root, 'data2'), join(root, 'data'));
+    const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+
+    await runHomeForgetCommand({
+      json: true,
+      path: join(root, 'data', 'homeB'),
+    });
+
+    const parsed = JSON.parse(
+      getWrittenStdout(stdout.mock.calls as unknown[][]),
+    ) as SuccessEnvelope<{ path: string; forgotten: boolean }>;
+    expect(parsed.result.forgotten).toBe(true);
+    expect(await readHomeRegistry()).toEqual([]);
   });
 
   it('forgets a registered Home and reports it in the JSON envelope', async () => {
