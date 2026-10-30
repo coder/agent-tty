@@ -452,16 +452,15 @@ const STAT_TAIL = '0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 100';
 
 function procShowsGroup(...states: string[]): void {
   procHooks.mountinfo ??= procMount('rw');
-  const tail = STAT_TAIL;
   procHooks.stat = new Map<string, string | Error>([
-    ['1', `1 (init) S 0 1 1 ${tail}`],
+    ['1', `1 (init) S 0 1 1 ${STAT_TAIL}`],
     ['2', errno('ESRCH')],
   ]);
   states.forEach((state, index) => {
     const pid = String(100 + index);
     procHooks.stat?.set(
       pid,
-      `${pid} (a) b (c) ${state} 1 ${String(CHILD_PID)} ${String(CHILD_PID)} ${tail}`,
+      `${pid} (a) b (c) ${state} 1 ${String(CHILD_PID)} ${String(CHILD_PID)} ${STAT_TAIL}`,
     );
   });
 }
