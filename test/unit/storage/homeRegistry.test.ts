@@ -1,4 +1,12 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -110,6 +118,21 @@ describe('HomeRegistry store', () => {
     expect((await registry.read()).map((entry) => entry.path)).toEqual([
       '/homes/beta',
     ]);
+  });
+
+  it('forgets a removed Home by the symlinked path it was created through', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-')));
+    temporaryDirectories.push(root);
+    await mkdir(join(root, 'real', 'home'), { recursive: true });
+    await symlink(join(root, 'real'), join(root, 'link'));
+    const registry = createHomeRegistry({
+      registryPath: await tempRegistryPath(),
+    });
+    await registry.upsert(join(root, 'link', 'home'));
+    await rm(join(root, 'real', 'home'), { recursive: true });
+
+    expect(await registry.forget(join(root, 'link', 'home'))).toBe(true);
+    expect(await registry.read()).toEqual([]);
   });
 
   it('reads a missing registry file as empty', async () => {
