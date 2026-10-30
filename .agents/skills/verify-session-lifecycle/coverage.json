@@ -13,7 +13,7 @@
     "src/host/lifecycle.ts#stopSessionProcesses": "c2121dfa9d2c0d43",
     "src/host/lifecycle.ts#recordDestroyed": "6610e88a55a2aa0d",
     "src/host/lifecycle.ts#destroySession": "b2713e315822b08d",
-    "src/host/lifecycle.ts#reconcileSession": "32e17d1bc75bb636",
+    "src/host/lifecycle.ts#reconcileSession": "c506c699762d398f",
     "src/host/hostMain.ts#waitForManifestFromCreate": "fd500651f83683eb",
     "src/host/hostMain.ts#isSessionCommandable": "260060f07b068ec1",
     "src/host/manifestWriter.ts#createSerialManifestWriter": "94a2decf4fedb2e2",
@@ -26,16 +26,16 @@
     "src/host/rpcServer.ts#RpcServer.listen": "aa62e1cd89eceaa4",
     "src/host/rpcServer.ts#RpcServer.close": "2d8092cceb4b8e13",
     "src/storage/manifests.ts#readValidatedJsonFile": "6287eb627b09bf80",
-    "src/storage/manifests.ts#writeTextFileAtomic": "87f4e3ecc13dbe59",
-    "src/storage/manifests.ts#writeManifest": "97c755b27788a6e5",
+    "src/storage/manifests.ts#replaceFileAtomic": "20532509b3dcaade",
+    "src/storage/manifests.ts#writeManifest": "1bcc99f09acfc577",
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
     "src/host/hostMain.ts#runHost(parts)": "d2cd124b6e820920",
     "src/host/hostMain.ts#runHost(final try)": "ad91fa180ff36ffb",
     "src/host/hostMain.ts#runHost>handlers.resize": "30dd1da32879d478",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "10ba06448b1bd6ff",
-    "skill:scripts/facts.mjs": "553e1cac7b74042a",
-    "skill:scripts/check.sh": "8059eab056acc01b"
+    "skill:model/SessionLifecycle.tla": "0b52bbddfeae290c",
+    "skill:scripts/facts.mjs": "82268d59fc07d657",
+    "skill:scripts/check.sh": "8ce08f1c1196895f"
   },
   "callSites": {
     "writeManifest": [
@@ -49,9 +49,12 @@
       "src/host/hostMain.ts#runHost>initiateShutdown",
       "src/host/hostMain.ts#runHost>resize"
     ],
+    "replaceFileAtomic": [
+      "src/storage/manifests.ts#writeManifest",
+      "src/storage/manifests.ts#writeTextFileAtomic"
+    ],
     "writeValidatedJsonFile": [
       "src/storage/artifactManifest.ts#writeArtifactManifest",
-      "src/storage/manifests.ts#writeManifest",
       "src/tools/canonicalBundleArtifacts.ts#writeCanonicalBundleManifest"
     ],
     "writeTextFileAtomic": [

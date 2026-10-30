@@ -742,6 +742,16 @@ export async function reconcileSession(
     ...(failureOrigin !== undefined ? { failureOrigin } : {}),
   };
 
-  await writeManifest(manifestFile, reconciledManifest);
+  try {
+    await writeManifest(manifestFile, reconciledManifest);
+  } catch (error) {
+    if (
+      error instanceof CliError &&
+      error.code === ERROR_CODES.SESSION_NOT_FOUND
+    ) {
+      return;
+    }
+    throw error;
+  }
   await unlinkIfPresent(socketPath(sessionDirectory));
 }
