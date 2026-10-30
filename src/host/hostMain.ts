@@ -474,6 +474,7 @@ export async function runHost(
 
     ptyExitHandled = true;
     clearIdleTimeout();
+    const hungUp = groupKillTimer !== undefined;
     clearTimeout(groupKillTimer);
 
     const exitSignal = normalizeExitSignal(signal);
@@ -483,6 +484,11 @@ export async function runHost(
       // A process that the program started can outlive it.
       killProcessGroupBestEffort(pty.pid);
     } else {
+      if (hungUp) {
+        // The program can exit on the idle hang-up while a process it
+        // started ignores SIGHUP.
+        killProcessGroupBestEffort(pty.pid);
+      }
       state.recordExit(exitCode, exitSignal);
     }
     ptyExitCode = exitCode;
