@@ -332,6 +332,7 @@ function destroyFacts() {
     ts.forEachChild(node, visit);
   };
   visit(destroy);
+  const stopsThenRecords = stopLeftoversThenRecordDestroyed(destroy);
   const recordsBeforeReturn =
     returns.length > 0 &&
     returns.every((r) => {
@@ -339,10 +340,11 @@ function destroyFacts() {
         return false;
       }
       const statements = r.parent.statements;
-      const previous = statements[statements.indexOf(r) - 1];
+      const previous = statements[statements.indexOf(r) - 1]?.getText() ?? '';
       return (
-        previous !== undefined &&
-        /^await recordDestroyed\(/.test(previous.getText())
+        /^await recordDestroyed\(/.test(previous) ||
+        (stopsThenRecords !== undefined &&
+          /^await stopLeftoversThenRecordDestroyed\(/.test(previous))
       );
     });
   const record = requireDeclaration('src/host/lifecycle.ts', 'recordDestroyed');
@@ -378,24 +380,29 @@ function destroyFacts() {
     const block = force.thenStatement;
     const first = indexOfStatement(
       block,
-      /^await stopSessionProcesses\(manifest, /,
+      /^await stopSessionProcesses\(\s*sessionId,\s*manifest\.hostPid,\s*await readProgramGroup\(/,
     );
     const reread = indexOfStatement(
       block,
       /^const current = await readSessionManifestOrThrow\(/,
     );
+    const group = indexOfStatement(
+      block,
+      /^const group = await readProgramGroup\(/,
+    );
     const second = indexOfStatement(
       block,
-      /^await stopSessionProcesses\(current, /,
+      /^await stopSessionProcesses\(\s*sessionId,\s*current\.hostPid,\s*group,/,
     );
     const records = indexOfStatement(
       block,
-      /^await recordDestroyed\(manifestFile, socketFile, current\);$/,
+      /^await recordDestroyed\(manifestFile, socketFile, current, group\);$/,
     );
     forceRecords =
       first >= 0 &&
       reread > first &&
-      second > reread &&
+      group > reread &&
+      second > group &&
       records > second &&
       calls(block, 'reconcileSession').length === 0;
   }
@@ -404,12 +411,8 @@ function destroyFacts() {
     'stopSessionProcesses',
   ).body;
   const stopWaits =
-    indexOfStatement(
-      stop,
-      /^killProcessGroupBestEffort\(manifest\.childPid\);$/,
-    ) >= 0 &&
-    indexOfStatement(stop, /^killProcessBestEffort\(manifest\.hostPid\);$/) >=
-      0 &&
+    indexOfStatement(stop, /^stopProgramGroup\(group\);$/) >= 0 &&
+    indexOfStatement(stop, /^killProcessBestEffort\(hostPid\);$/) >= 0 &&
     indexOfStatement(stop, /^const stopped = await waitForProcessesToExit\(/) >=
       0 &&
     guardIndex(stop, '!stopped', ts.SyntaxKind.ThrowStatement) >= 0;
@@ -419,7 +422,7 @@ function destroyFacts() {
   );
   const waitsForProcessesOnly =
     calls(wait.body, 'isProcessAlive').length === 1 &&
-    calls(wait.body, 'isProcessGroupAlive').length === 1 &&
+    calls(wait.body, 'isProgramGroupAlive').length === 1 &&
     calls(wait.body, 'stat').length === 0 &&
     calls(wait.body, 'pathExists').length === 0;
   return {
@@ -430,7 +433,46 @@ function destroyFacts() {
       stopWaits &&
       waitsForProcessesOnly,
     DestroyKeepsExitCode: keepsExitCode,
+    DestroyStopsLeftovers:
+      stopsThenRecords !== undefined &&
+      returns.every((r) => {
+        const statements = ts.isBlock(r.parent) ? r.parent.statements : [];
+        const previous = statements[statements.indexOf(r) - 1]?.getText() ?? '';
+        return (
+          /^await stopLeftoversThenRecordDestroyed\(/.test(previous) ||
+          (ts.isBlock(r.parent) && r.parent === force?.thenStatement)
+        );
+      }),
   };
+}
+
+// The local stopLeftoversThenRecordDestroyed of destroySession: it stops the
+// group that program.json proves, waits for it, and only then records
+// destroyed.
+function stopLeftoversThenRecordDestroyed(destroy) {
+  let found;
+  walk(destroy.body, (node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      node.name.getText() === 'stopLeftoversThenRecordDestroyed' &&
+      node.initializer !== undefined &&
+      ts.isArrowFunction(node.initializer) &&
+      ts.isBlock(node.initializer.body)
+    ) {
+      found = node.initializer.body;
+    }
+  });
+  if (found === undefined || found.statements.length !== 2) {
+    return undefined;
+  }
+  const [stop, record] = found.statements.map((st) => normalize(st.getText()));
+  return stop ===
+    'await stopSessionProcesses( sessionId, null, await readProvenProgramGroup(sessionDirectory), sessionDirectory, signal, );' &&
+    /^await recordDestroyed\(manifestFile, socketFile, terminal, null\);$/.test(
+      record,
+    )
+    ? found
+    : undefined;
 }
 
 function manifestWriteFacts() {
@@ -467,14 +509,16 @@ function manifestWriteFacts() {
 
 // Every kill of the program that a rule depends on SIGKILLs its process
 // group, and waitForProcessesToExit waits until the group is gone: the
-// helpers signal the negated group id outside Windows, stopSessionProcesses
-// and waitForProcessesToExit use them, reconcileSession kills the group that
-// its re-read names, and handlePtyExit kills the group when the program ends
+// helpers signal the negated group id outside Windows, stopProgramGroup uses
+// the kill, isProgramGroupAlive the probe, stopSessionProcesses and
+// waitForProcessesToExit use those two, reconcileSession kills the group
+// after its re-read, and handlePtyExit kills the group when the program ends
 // during a destroy.
 function programGroupFacts() {
+  const module = 'src/host/programGroup.ts';
   const lifecycle = 'src/host/lifecycle.ts';
   const negates = requireDeclaration(
-    lifecycle,
+    module,
     'processGroupTarget',
   ).body.statements.some(
     (st) =>
@@ -483,27 +527,36 @@ function programGroupFacts() {
         "process.platform === 'win32' ? pgid : -pgid",
   );
   const signalsGroup = (name, signal) =>
-    calls(requireDeclaration(lifecycle, name).body, 'kill').some(
+    calls(requireDeclaration(module, name).body, 'kill').some(
       (call) =>
         normalize(call.getText()) ===
         `process.kill(processGroupTarget(pgid), ${signal})`,
     );
+  const stopKills =
+    calls(
+      requireDeclaration(module, 'stopProgramGroup').body,
+      'killProcessGroupBestEffort',
+    ).length > 0;
+  const aliveProbes =
+    calls(
+      requireDeclaration(module, 'isProgramGroupAlive').body,
+      'isProcessGroupAlive',
+    ).length > 0;
   const helpers =
     negates &&
     signalsGroup('killProcessGroupBestEffort', "'SIGKILL'") &&
-    signalsGroup('isProcessGroupAlive', '0');
+    signalsGroup('isProcessGroupAlive', '0') &&
+    stopKills &&
+    aliveProbes;
   const stop = requireDeclaration(lifecycle, 'stopSessionProcesses').body;
   const forceKills =
-    indexOfStatement(
-      stop,
-      /^killProcessGroupBestEffort\(manifest\.childPid\);$/,
-    ) >= 0;
+    indexOfStatement(stop, /^stopProgramGroup\(group\);$/) >= 0;
   const probes = calls(
     requireDeclaration(lifecycle, 'waitForProcessesToExit').body,
-    'isProcessGroupAlive',
+    'isProgramGroupAlive',
   );
   const forceWaits =
-    probes.length === 1 && probes[0].arguments[0]?.getText() === 'childPid';
+    probes.length === 1 && probes[0].arguments[0]?.getText() === 'group';
   const reconcile = requireDeclaration(lifecycle, 'reconcileSession').body;
   const rereadGuard = guardIndex(
     reconcile,
@@ -512,11 +565,10 @@ function programGroupFacts() {
   );
   const reconcileKills =
     rereadGuard >= 0 &&
-    indexOfStatement(
-      reconcile,
-      /^killProcessGroupBestEffort\(current\.childPid\);$/,
-    ) ===
-      rereadGuard + 1;
+    indexOfStatement(reconcile, /^const group = await readProgramGroup\(/) ===
+      rereadGuard + 1 &&
+    indexOfStatement(reconcile, /^stopProgramGroup\(group\);$/) ===
+      rereadGuard + 2;
   let exitKills = false;
   walk(requireDeclaration('src/host/hostMain.ts', 'runHost').body, (node) => {
     if (
@@ -535,7 +587,7 @@ function programGroupFacts() {
         exitKills ||=
           indexOfStatement(
             inner.thenStatement,
-            /^killProcessGroupBestEffort\(pty\.pid\);$/,
+            /^stopProgramGroup\(program\);$/,
           ) >= 0;
       }
     });
@@ -554,7 +606,7 @@ function programGroupFacts() {
 // alive.
 function deniedProbeFacts() {
   const body = requireDeclaration(
-    'src/host/lifecycle.ts',
+    'src/host/programGroup.ts',
     'isProcessGroupAlive',
   ).body;
   const handler = body.statements.find(ts.isTryStatement)?.catchClause?.block;
@@ -599,7 +651,7 @@ function groupWaitFacts() {
     const next = statements[statements.indexOf(guard) + 1];
     hostWaits =
       normalize(guard.expression.getText()) ===
-        "currentStatus === 'destroying' && (await waitForProcessesToExit(null, pty.pid))" &&
+        "currentStatus === 'destroying' && (await waitForProcessesToExit(null, program))" &&
       next !== undefined &&
       /^await persistManifest\(\);$/.test(next.getText());
   });
@@ -607,13 +659,10 @@ function groupWaitFacts() {
     'src/host/lifecycle.ts',
     'reconcileSession',
   ).body;
-  const kill = indexOfStatement(
-    reconcile,
-    /^killProcessGroupBestEffort\(current\.childPid\);$/,
-  );
+  const kill = indexOfStatement(reconcile, /^stopProgramGroup\(group\);$/);
   const wait = guardIndex(
     reconcile,
-    '!(await waitForProcessesToExit(null, current.childPid))',
+    '!(await waitForProcessesToExit(null, group))',
     ts.SyntaxKind.ReturnStatement,
   );
   const write = indexOfStatement(
@@ -623,6 +672,142 @@ function groupWaitFacts() {
   return {
     HostWaitsForGroup: hostWaits,
     ReconcileWaitsForGroup: kill >= 0 && wait === kill + 1 && wait < write,
+  };
+}
+
+// True when no statement in `statements` awaits outside a nested function.
+function noAwaitIn(statements) {
+  let found = false;
+  const visit = (node) => {
+    if (ts.isFunctionLike(node)) {
+      return;
+    }
+    if (
+      ts.isAwaitExpression(node) ||
+      (ts.isForOfStatement(node) && node.awaitModifier)
+    ) {
+      found = true;
+    }
+    ts.forEachChild(node, visit);
+  };
+  statements.forEach(visit);
+  return !found;
+}
+
+// runHost captures the program's token right after setChildPid and writes
+// program.json as the first statement of its last try, before
+// `await persistManifest()`, and no statement between createPty and that try
+// awaits. So the record is written in the synchronous block that spawns the
+// program.
+function programRecordFacts() {
+  const body = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
+  const spawn = indexOfStatement(body, /= createPty\(/);
+  const named = indexOfStatement(body, /^state\.setChildPid\(pty\.pid\);$/);
+  const captured = indexOfStatement(
+    body,
+    /^const program = captureProgram\(pty\.pid\);$/,
+  );
+  const last = body.statements.at(-1);
+  const tried =
+    last !== undefined && ts.isTryStatement(last)
+      ? last.tryBlock.statements.map((st) => st.getText())
+      : [];
+  return {
+    RecordsProgramSync:
+      spawn >= 0 &&
+      named > spawn &&
+      captured === named + 1 &&
+      tried[0] === 'writeProgramRecord(sessDir, program);' &&
+      tried[1] === 'await persistManifest();' &&
+      noAwaitIn(body.statements.slice(spawn + 1, -1)),
+  };
+}
+
+// Every group kill goes through stopProgramGroup. It is synchronous, and
+// with a token it kills only right after it read a live member of the group
+// again and found the program's session id, autogroup and boot id on it.
+// No other code calls the raw group kill or builds a group target.
+function ownershipFacts() {
+  const module = 'src/host/programGroup.ts';
+  const stop = requireDeclaration(module, 'stopProgramGroup');
+  const synchronous = !(stop.modifiers ?? []).some(
+    (m) => m.kind === ts.SyntaxKind.AsyncKeyword,
+  );
+  let checkedKill = false;
+  walk(stop.body, (node) => {
+    if (!ts.isForStatement(node) || !ts.isBlock(node.statement)) {
+      return;
+    }
+    const st = node.statement.statements.map((s) => normalize(s.getText()));
+    checkedKill =
+      st[0] === 'const judgement = judgeLiveGroup(group);' &&
+      /^if \(judgement\.verdict !== 'owned'\) \{ return; \}$/.test(
+        st[1] ?? '',
+      ) &&
+      st[2] === 'const witness = readProcessRow(judgement.witness);' &&
+      /^if \( witness !== null && judgeProgramGroup\(group, group\.bootId, \[witness\]\)\.verdict === 'owned' \) \{ killProcessGroupBestEffort\(group\.pid\); return; \}$/.test(
+        st[3] ?? '',
+      );
+  });
+  const judge = normalize(
+    requireDeclaration(module, 'judgeProgramGroup').getText(),
+  );
+  const judgesToken =
+    judge.includes(
+      "(row) => row.pgid === record.pid && row.state !== 'Z' && row.state !== 'X'",
+    ) &&
+    judge.includes('bootId === record.bootId') &&
+    judge.includes(
+      '(row) => row.sid === record.pid && row.autogroup === record.autogroup',
+    );
+  let rawKills = 0;
+  let targets = 0;
+  let stray = false;
+  for (const file of listSources('src')) {
+    walk(source(file), (node) => {
+      if (isCall(node, 'killProcessGroupBestEffort')) {
+        rawKills += 1;
+        stray ||= file !== module || ownerPath(node) !== 'stopProgramGroup';
+      }
+      if (isCall(node, 'processGroupTarget')) {
+        targets += 1;
+        stray ||=
+          file !== module ||
+          !['isProcessGroupAlive', 'killProcessGroupBestEffort'].includes(
+            ownerPath(node),
+          );
+      }
+    });
+  }
+  return {
+    ProvesGroupOwnership:
+      synchronous &&
+      checkedKill &&
+      judgesToken &&
+      rawKills > 0 &&
+      targets === 2 &&
+      !stray,
+  };
+}
+
+// A group that only a childPid names, without a record with a token, gets
+// the kill and reads alive only while the session folder exists, checked in
+// the same synchronous block as the kill or the probe.
+function fallbackFacts() {
+  const module = 'src/host/programGroup.ts';
+  const first = (name) =>
+    normalize(
+      requireDeclaration(module, name).body.statements[1]?.getText() ?? '',
+    );
+  const read = requireDeclaration(module, 'readProgramGroup').body.statements;
+  return {
+    FallbackNeedsFolder:
+      first('stopProgramGroup') ===
+        "if ('childPid' in group) { if (existsSync(group.sessionDirectory)) { killProcessGroupBestEffort(group.childPid); } return; }" &&
+      first('isProgramGroupAlive') ===
+        "if ('childPid' in group) { return ( existsSync(group.sessionDirectory) && isProcessGroupAlive(group.childPid) ); }" &&
+      normalize(read.at(-1)?.getText() ?? '') ===
+        'return { childPid, sessionDirectory };',
   };
 }
 
@@ -669,14 +854,11 @@ function rerunFacts() {
     );
   });
   const readsSessionId =
-    /procStatFields\(readFileSync\('\/proc\/self\/stat', 'utf8'\)\)\[3\]/.test(
+    /const \{ sid \} = parseProcStat\(readFileSync\('\/proc\/self\/stat', 'utf8'\)\)/.test(
       normalize(requireDeclaration(lifecycle, 'ownLinuxSessionId').getText()),
     ) &&
-    requireDeclaration(lifecycle, 'procStatFields').body.statements.some(
-      (st) =>
-        ts.isReturnStatement(st) &&
-        normalize(st.expression?.getText() ?? '') ===
-          "procStat.slice(procStat.lastIndexOf(')') + 2).split(' ')",
+    /const fields = text\.slice\(close \+ 2\)\.split\(' '\);[^]*sid: Number\(fields\[3\]\)/.test(
+      requireDeclaration('src/host/programGroup.ts', 'parseProcStat').getText(),
     );
   const inside = requireDeclaration(
     lifecycle,
@@ -785,12 +967,6 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'launchHost'],
   ['src/host/lifecycle.ts', 'isProcessAlive'],
   ['src/host/lifecycle.ts', 'killProcessBestEffort'],
-  ['src/host/lifecycle.ts', 'processGroupTarget'],
-  ['src/host/lifecycle.ts', 'procStatFields'],
-  ['src/host/lifecycle.ts', 'groupHasLiveProcess'],
-  ['src/host/lifecycle.ts', 'procHidesOtherUsers'],
-  ['src/host/lifecycle.ts', 'isProcessGroupAlive'],
-  ['src/host/lifecycle.ts', 'killProcessGroupBestEffort'],
   ['src/host/lifecycle.ts', 'ownLinuxSessionId'],
   ['src/host/lifecycle.ts', 'ownProcessGroupId'],
   ['src/host/lifecycle.ts', 'cliRunsInsideProgramSession'],
@@ -805,6 +981,24 @@ const COVERED = [
   ['src/host/hostMain.ts', 'isSessionCommandable'],
   ['src/host/hostMain.ts', 'SHUTDOWN_KILL_GRACE_MS'],
   ['src/host/manifestWriter.ts', 'createSerialManifestWriter'],
+  ['src/host/programGroup.ts', 'parseProcStat'],
+  ['src/host/programGroup.ts', 'parseAutogroup'],
+  ['src/host/programGroup.ts', 'readAutogroup'],
+  ['src/host/programGroup.ts', 'captureToken'],
+  ['src/host/programGroup.ts', 'captureProgram'],
+  ['src/host/programGroup.ts', 'writeProgramRecord'],
+  ['src/host/programGroup.ts', 'readProgramRecord'],
+  ['src/host/programGroup.ts', 'readProvenProgramGroup'],
+  ['src/host/programGroup.ts', 'readProgramGroup'],
+  ['src/host/programGroup.ts', 'judgeProgramGroup'],
+  ['src/host/programGroup.ts', 'readGroupMembers'],
+  ['src/host/programGroup.ts', 'processGroupTarget'],
+  ['src/host/programGroup.ts', 'procHidesOtherUsers'],
+  ['src/host/programGroup.ts', 'groupHasLiveProcess'],
+  ['src/host/programGroup.ts', 'isProcessGroupAlive'],
+  ['src/host/programGroup.ts', 'killProcessGroupBestEffort'],
+  ['src/host/programGroup.ts', 'isProgramGroupAlive'],
+  ['src/host/programGroup.ts', 'stopProgramGroup'],
   ['src/host/rpcClient.ts', 'toTransportCliError'],
   ['src/host/sessionState.ts', 'SessionState.setDimensions'],
   ['src/host/sessionState.ts', 'SessionState.requestDestroy'],
@@ -815,6 +1009,8 @@ const COVERED = [
   ['src/host/rpcServer.ts', 'RpcServer.close'],
   ['src/storage/manifests.ts', 'readValidatedJsonFile'],
   ['src/storage/manifests.ts', 'replaceFileAtomic'],
+  ['src/storage/manifests.ts', 'replaceFileAtomicSync'],
+  ['src/storage/manifests.ts', 'writeValidatedJsonFileSync'],
   ['src/storage/manifests.ts', 'writeManifest'],
   ['src/protocol/sessionStatusPolicy.ts', 'SESSION_STATUS_POLICIES'],
 ];
@@ -826,6 +1022,7 @@ const RUN_HOST_PARTS = [
   /= await EventLog\.open\(/,
   /= createPty\(/,
   /state\.setChildPid\(/,
+  /^const program = captureProgram\(/,
   /^const hangUpProgram = /,
   /^const startIdlePolling = /,
   /^const initiateShutdown = /,
@@ -963,6 +1160,8 @@ const TRACKED_CALLS = [
   'writeTextFileAtomic',
   'manifestPath',
   'reconcileSession',
+  'writeProgramRecord',
+  'stopProgramGroup',
 ];
 
 // Maps each local name of a tracked function in one file to the tracked name,
@@ -1035,6 +1234,9 @@ const constants = {
   ...programGroupFacts(),
   ...deniedProbeFacts(),
   ...groupWaitFacts(),
+  ...programRecordFacts(),
+  ...ownershipFacts(),
+  ...fallbackFacts(),
   ...rerunFacts(),
   ...policyFacts(),
 };
