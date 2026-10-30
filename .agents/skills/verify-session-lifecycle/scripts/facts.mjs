@@ -137,21 +137,34 @@ function reconcileFacts() {
   );
   const write = indexOfStatement(body, /^(?:try \{\s*)?await writeManifest\(/);
   // The re-read after the host is found dead, its guard, and a reconciled
-  // record built from that copy, all before the write.
-  const reread = indexOfStatement(
+  // record built from that copy, all before the write. A later re-read with
+  // its guard, the one after the group wait, may stand in for that copy.
+  const rereadOf = (name) => {
+    const read = body.statements.findIndex((s) =>
+      new RegExp(
+        `^const ${name} = await readManifestIfExists\\(manifestFile\\);$`,
+      ).test(s.getText()),
+    );
+    const guard = guardIndex(
+      body,
+      `${name} === null || isTerminalSessionStatus(${name}.status)`,
+      ts.SyntaxKind.ReturnStatement,
+    );
+    return read >= 0 && guard === read + 1 ? guard : -1;
+  };
+  const reread = rereadOf('current');
+  const latest = rereadOf('latest');
+  const source = latest > reread ? 'latest' : 'current';
+  const fromSource = indexOfStatement(
     body,
-    /^const current = await readManifestIfExists\(manifestFile\);$/,
+    new RegExp(
+      `^const reconciledManifest: SessionRecord = \\{\\s*\\.\\.\\.${source},`,
+    ),
   );
-  const rereadGuard = guardIndex(
+  const switchOnSource = indexOfStatement(
     body,
-    'current === null || isTerminalSessionStatus(current.status)',
-    ts.SyntaxKind.ReturnStatement,
+    new RegExp(`^switch \\(${source}\\.status\\)`),
   );
-  const fromCurrent = indexOfStatement(
-    body,
-    /^const reconciledManifest: SessionRecord = \{\s*\.\.\.current,/,
-  );
-  const switchOnCurrent = indexOfStatement(body, /^switch \(current\.status\)/);
   return {
     ReconcileSkipsTerminal: terminal >= 0 && terminal < write,
     ReconcileSkipsLiveHost:
@@ -159,10 +172,9 @@ function reconcileFacts() {
     ReconcileRereads:
       alive >= 0 &&
       alive < reread &&
-      rereadGuard === reread + 1 &&
-      rereadGuard < switchOnCurrent &&
-      switchOnCurrent < fromCurrent &&
-      fromCurrent < write,
+      Math.max(reread, latest) < switchOnSource &&
+      switchOnSource < fromSource &&
+      fromSource < write,
   };
 }
 
@@ -534,8 +546,12 @@ function programGroupFacts() {
   };
 }
 
-// isProcessGroupAlive returns true on EPERM before it returns false on ESRCH,
-// so a group that holds only processes of another user reads alive.
+// On EPERM, isProcessGroupAlive returns before it returns false on ESRCH,
+// and reads the group alive when /proc shows none of it, so a group that
+// holds only processes of another user reads alive also when hidepid hides
+// them. groupHasLiveProcess, covered by its hash, reads a process in view
+// alive unless it is a zombie, and a process that /proc refuses to show
+// alive.
 function deniedProbeFacts() {
   const body = requireDeclaration(
     'src/host/lifecycle.ts',
@@ -547,7 +563,7 @@ function deniedProbeFacts() {
   }
   const denied = indexOfStatement(
     handler,
-    /^if \(hasErrorCode\(error, 'EPERM'\)\) \{\s*return true;\s*\}$/,
+    /^if \(hasErrorCode\(error, 'EPERM'\)\) \{\s*return groupHasLiveProcess\(pgid\) \?\? true;\s*\}$/,
   );
   const gone = indexOfStatement(
     handler,
@@ -652,9 +668,16 @@ function rerunFacts() {
       "manifest.childPid === (process.platform === 'linux' ? ownLinuxSessionId() : ownProcessGroupId())"
     );
   });
-  const readsSessionId = /\.split\(' '\)\[3\]/.test(
-    requireDeclaration(lifecycle, 'ownLinuxSessionId').getText(),
-  );
+  const readsSessionId =
+    /procStatFields\(readFileSync\('\/proc\/self\/stat', 'utf8'\)\)\[3\]/.test(
+      normalize(requireDeclaration(lifecycle, 'ownLinuxSessionId').getText()),
+    ) &&
+    requireDeclaration(lifecycle, 'procStatFields').body.statements.some(
+      (st) =>
+        ts.isReturnStatement(st) &&
+        normalize(st.expression?.getText() ?? '') ===
+          "procStat.slice(procStat.lastIndexOf(')') + 2).split(' ')",
+    );
   const inside = requireDeclaration(
     lifecycle,
     'cliRunsInsideProgramSession',
@@ -763,6 +786,8 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'isProcessAlive'],
   ['src/host/lifecycle.ts', 'killProcessBestEffort'],
   ['src/host/lifecycle.ts', 'processGroupTarget'],
+  ['src/host/lifecycle.ts', 'procStatFields'],
+  ['src/host/lifecycle.ts', 'groupHasLiveProcess'],
   ['src/host/lifecycle.ts', 'isProcessGroupAlive'],
   ['src/host/lifecycle.ts', 'killProcessGroupBestEffort'],
   ['src/host/lifecycle.ts', 'ownLinuxSessionId'],

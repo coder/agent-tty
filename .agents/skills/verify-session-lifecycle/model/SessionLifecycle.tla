@@ -585,6 +585,12 @@ ReconcileRereadsManifest(p) ==
 \* reads false, or gives up after about 5 seconds; reconcileSession then
 \* returns with no write, and childPid stays for a later reconcile. The
 \* model lets the wait give up at any poll that reads the group alive.
+\* After the wait the code reads the manifest again (`latest`), returns
+\* when it is null or terminal, and builds its record from that copy. The
+\* model leaves that read out and writes from rd[p]. The host is dead, so
+\* only a terminal write or gc's rm can land after the re-read, and the
+\* code's read only turns the write over it into a return. A write that
+\* lands between that read and the write is still overwritten, as here.
 ReconcilePollsGroup(p) ==
     /\ pc[p] = "r_wait"
     /\ pc' = [pc EXCEPT ![p] = IF ProbeSeesGroup(rd[p].child)
