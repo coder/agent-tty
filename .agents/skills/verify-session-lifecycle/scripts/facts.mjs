@@ -520,7 +520,7 @@ function programGroupFacts() {
           "currentStatus === 'destroying'" &&
         ts.isBlock(inner.thenStatement)
       ) {
-        exitKills =
+        exitKills ||=
           indexOfStatement(
             inner.thenStatement,
             /^killProcessGroupBestEffort\(pty\.pid\);$/,
