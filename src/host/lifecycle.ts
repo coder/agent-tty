@@ -220,16 +220,10 @@ function procStatFields(procStat: string): string[] {
   return procStat.slice(procStat.lastIndexOf(')') + 2).split(' ');
 }
 
-// Whether /proc shows a process of the group that is not a zombie, or a
-// process that it refuses to show, or null when it shows none of the group.
-// kill(-pgid, 0) finds a zombie until its parent reaps it, and an init that
-// never reaps orphans, such as a container's PID 1 without an init, never
-// does. Off Linux, and when /proc hides other users, there is no scan and
-// the answer is true, so a zombie reads alive. launchd reaps orphans on
-// macOS.
-// hidepid=2 (shown as hidepid=invisible on newer kernels) leaves the
-// processes of other users out of the /proc listing. An unreadable
-// mountinfo counts as hiding them.
+// hidepid=2 and hidepid=4 (shown as invisible and ptraceable on newer
+// kernels) leave processes of other users out of the /proc listing. The
+// last /proc line is the mount on top. An unreadable mountinfo counts as
+// hiding them.
 function procHidesOtherUsers(): boolean {
   let mountinfo: string;
   try {
@@ -237,18 +231,26 @@ function procHidesOtherUsers(): boolean {
   } catch {
     return true;
   }
+  let hides = false;
   for (const line of mountinfo.split('\n')) {
     const fields = line.split(' ');
     const separator = fields.indexOf('-');
     if (fields[4] === '/proc' && fields[separator + 1] === 'proc') {
-      return /(^|,)hidepid=(2|invisible)(,|$)/.test(
+      hides = /(^|,)hidepid=(2|4|invisible|ptraceable)(,|$)/.test(
         fields[separator + 3] ?? '',
       );
     }
   }
-  return false;
+  return hides;
 }
 
+// Whether /proc shows a process of the group that is not a zombie, or a
+// process that it refuses to show, or null when it shows none of the group.
+// kill(-pgid, 0) finds a zombie until its parent reaps it, and an init that
+// never reaps orphans, such as a container's PID 1 without an init, never
+// does. Off Linux, and when /proc hides other users, there is no scan and
+// the answer is true, so a zombie reads alive. launchd reaps orphans on
+// macOS.
 function groupHasLiveProcess(pgid: number): boolean | null {
   if (process.platform !== 'linux' || procHidesOtherUsers()) {
     return true;
