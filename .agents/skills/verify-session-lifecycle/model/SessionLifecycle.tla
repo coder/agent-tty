@@ -249,7 +249,9 @@ NoKill == UNCHANGED <<prog, left, hitUnrelated>>
 \* it reads the process table, finds a live member of the group whose
 \* session id is the program's pid and whose autogroup and boot id are the
 \* recorded ones, reads that member again, and kills the group. A group that
-\* took the id later has another autogroup, so it gets no kill. Without
+\* took the id later has another autogroup, so it gets no kill. When /proc
+\* refuses the boot id or a member's autogroup, the code kills nothing
+\* either. The model has no refused reads (see Scope). Without
 \* ProvesGroupOwnership the code kills the id as it is.
 ProvenKill ==
     IF ProvesGroupOwnership /\ reused THEN NoKill ELSE KillsGroupId
@@ -289,10 +291,12 @@ ProbeSees == prog \/ left \/ reused \/ (ProbeCountsDeniedGroup /\ foreign)
 \* isProgramGroupAlive in waitForProcessesToExit, for the group that the
 \* kill before it went through. With a token it reads the group alive while
 \* a live member carries the token, which a process of another user in the
-\* program's session also does. Without a token it is the probe, and for a
-\* childPid only while the folder exists. Without KillsProgramGroup the wait
-\* probes only the program's pid, and every wait comes after the program's
-\* kill or exit, so it reads gone.
+\* program's session also does. The code also reads it alive while /proc
+\* refuses the boot id or the autogroup of a member in the program's
+\* session, which the model leaves out. Without a token it is the probe,
+\* and for a childPid only while the folder exists. Without
+\* KillsProgramGroup the wait probes only the program's pid, and every wait
+\* comes after the program's kill or exit, so it reads gone.
 GroupSeen(kind) ==
     /\ KillsProgramGroup
     /\ \/ kind = "proven" /\ (prog \/ left \/ foreign)
