@@ -1,11 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
-
-import { once } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -121,6 +120,12 @@ describe('parseAutogroup', () => {
     ['', null],
   ])('reads %j as %s', (text, id) => {
     expect(parseAutogroup(text)).toBe(id);
+  });
+
+  it('refuses text that names no autogroup', () => {
+    expect(() => parseAutogroup('autogroup?\n')).toThrow(
+      'proc autogroup must name an autogroup',
+    );
   });
 });
 

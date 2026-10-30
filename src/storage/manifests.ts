@@ -171,8 +171,9 @@ export async function writeValidatedJsonFile<T>(
   });
 }
 
-// For a caller that must not yield to the event loop. It never creates a
-// missing folder, so the caller states createParentFolders: false.
+// For a write that must be durable before the caller yields to the event
+// loop. Like writeManifest it never creates a missing folder, and the caller
+// states createParentFolders: false.
 export function writeValidatedJsonFileSync<T>(
   options: WriteValidatedJsonFileOptions<T> & { createParentFolders: false },
 ): void {

@@ -1106,10 +1106,9 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         vi.unstubAllEnvs();
       });
 
-      // The session's program is gone. A program of another session took its
-      // group id and copied its session id, as a reused id would look. Its
-      // parent exits, so init reaps it once it dies.
-      async function reuseGroupId(): Promise<string> {
+      // The unrelated group's parent exits, so init reaps it as soon as a
+      // kill ends it.
+      async function pointSessionAtUnrelatedGroup(): Promise<string> {
         const sessionId = createSession(testHome, [
           '/bin/sh',
           '-c',
@@ -1161,14 +1160,14 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       }
 
       it('a reconcile records the session failed and leaves the group running', async () => {
-        const sessionId = await reuseGroupId();
+        const sessionId = await pointSessionAtUnrelatedGroup();
 
         expect(inspectSession(testHome, sessionId).status).toBe('failed');
         await expectUnrelatedAlive();
       });
 
       it('destroy --force records the session destroyed and leaves the group running', async () => {
-        const sessionId = await reuseGroupId();
+        const sessionId = await pointSessionAtUnrelatedGroup();
 
         const result = runCli(['destroy', sessionId, '--force', '--json'], {
           AGENT_TTY_HOME: testHome,
@@ -1180,7 +1179,8 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     },
   );
 
-  // The hold needs the token to find the program without a manifest pid.
+  // Only Linux records the token, the one record of a program that no
+  // manifest names.
   describe.runIf(process.platform === 'linux')(
     'a host that dies before its first manifest write',
     () => {

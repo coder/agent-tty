@@ -12,12 +12,11 @@ import { programRecordPath } from '../storage/sessionPaths.js';
 import { invariant } from '../util/assert.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
 
+const ProgramPidSchema = z.number().int().gt(1);
 // On Linux, setsid() gives the new session a new autogroup, whose id comes
 // from a counter that never repeats within a boot, and fork() passes it on.
 // So the boot id and the autogroup id name the program's session, also after
 // the program exits. A later group that reuses its id has another autogroup.
-// Without autogroups (macOS, Windows, some kernels) both are null.
-const ProgramPidSchema = z.number().int().gt(1);
 const ProgramRecordSchema = z.union([
   z
     .object({
@@ -52,6 +51,14 @@ interface ProcStat {
   readonly startTicks: string;
 }
 
+export interface ProcessRow {
+  readonly pid: number;
+  readonly pgid: number;
+  readonly sid: number;
+  readonly state: string;
+  readonly autogroup: number | null;
+}
+
 export function parseProcStat(text: string): ProcStat {
   // The command name can hold spaces and parentheses, so count the fields
   // from the last ')'.
@@ -79,14 +86,17 @@ export function parseProcStat(text: string): ProcStat {
   return stat;
 }
 
-// An empty file means the process is in no autogroup.
+// The kernel prints nothing for a task in no autogroup.
 export function parseAutogroup(text: string): number | null {
+  if (text.length === 0) {
+    return null;
+  }
   const match = /^\/autogroup-(\d+) nice -?\d+\n?$/.exec(text);
-  return match === null ? null : Number(match[1]);
+  invariant(match !== null, 'proc autogroup must name an autogroup');
+  return Number(match[1]);
 }
 
-// null: the file is gone, as for a process that has exited.
-function readProcFile(path: string): string | null {
+function readProcFileIfExists(path: string): string | null {
   try {
     return readFileSync(path, 'utf8');
   } catch (error) {
@@ -98,25 +108,19 @@ function readProcFile(path: string): string | null {
 }
 
 function readProcStat(pid: number): ProcStat | null {
-  const text = readProcFile(`/proc/${String(pid)}/stat`);
+  const text = readProcFileIfExists(`/proc/${String(pid)}/stat`);
   return text === null ? null : parseProcStat(text);
 }
 
-export interface ProcessRow {
-  readonly pid: number;
-  readonly pgid: number;
-  readonly sid: number;
-  readonly state: string;
-  readonly autogroup: number | null;
-}
-
 function readAutogroup(pid: number): number | null {
-  const text = readProcFile(`/proc/${String(pid)}/autogroup`);
+  const text = readProcFileIfExists(`/proc/${String(pid)}/autogroup`);
   return text === null ? null : parseAutogroup(text);
 }
 
 function readBootId(): string | null {
-  const bootId = readProcFile('/proc/sys/kernel/random/boot_id')?.trim();
+  const bootId = readProcFileIfExists(
+    '/proc/sys/kernel/random/boot_id',
+  )?.trim();
   return bootId === undefined || bootId.length === 0 ? null : bootId;
 }
 
@@ -126,7 +130,7 @@ function captureToken(
   if (process.platform !== 'linux') {
     return null;
   }
-  const ownAutogroupFile = readProcFile('/proc/self/autogroup');
+  const ownAutogroupFile = readProcFileIfExists('/proc/self/autogroup');
   const bootId = readBootId();
   if (ownAutogroupFile === null || bootId === null) {
     return null;
@@ -155,8 +159,6 @@ function captureToken(
   return null;
 }
 
-// For the host, right after it spawns the program and before it awaits
-// anything, while the program is still its unreaped child.
 export function captureProgram(pid: number): ProgramRecord {
   const token = captureToken(pid);
   return token === null
@@ -176,7 +178,6 @@ function validateProgramRecord(path: string, data: unknown): ProgramRecord {
   });
 }
 
-// The host writes the record once, before its first manifest write.
 export function writeProgramRecord(
   sessionDirectory: string,
   record: ProgramRecord,
@@ -192,13 +193,13 @@ export function writeProgramRecord(
   });
 }
 
-// The group that a kill may target. A record with a token names it. Without
-// one, the kill trusts childPid, as before program.json existed, and a null
-// childPid trusts no number.
-export async function readProgramGroup(
+function hasToken(record: ProgramRecord): record is ProvenRecord {
+  return record.bootId !== null;
+}
+
+export async function readProvenProgramGroup(
   sessionDirectory: string,
-  childPid: number | null,
-): Promise<ProgramRecord | null> {
+): Promise<ProvenRecord | null> {
   const path = programRecordPath(sessionDirectory);
   const record = await readValidatedJsonFile({
     path,
@@ -208,21 +209,25 @@ export async function readProgramGroup(
     invalidJsonMessage: `The program record contains invalid JSON at ${path}.`,
     validate: validateProgramRecord,
   });
-  if (record !== null && record.bootId !== null) {
-    return record;
-  }
-  return childPid === null
-    ? null
-    : { version: 1, pid: childPid, bootId: null, autogroup: null };
+  return record !== null && hasToken(record) ? record : null;
 }
 
-export type GroupJudgement =
+// Without a token the kill trusts childPid, as before program.json existed.
+export async function readProgramGroup(
+  sessionDirectory: string,
+  childPid: number | null,
+): Promise<ProgramRecord | null> {
+  const proven = await readProvenProgramGroup(sessionDirectory);
+  if (proven !== null || childPid === null) {
+    return proven;
+  }
+  return { version: 1, pid: childPid, bootId: null, autogroup: null };
+}
+
+type GroupJudgement =
   | { readonly verdict: 'owned'; readonly witness: number }
   | { readonly verdict: 'gone' | 'unproven' };
 
-// A live member of the group proves the group is the program's when it is
-// in the program's session: its session id is the program's pid and it has
-// the recorded autogroup of the same boot.
 export function judgeProgramGroup(
   record: ProvenRecord,
   bootId: string | null,
@@ -386,24 +391,21 @@ function killProcessGroupBestEffort(pgid: number): void {
   }
 }
 
-// True while the group holds a process that the kill would target.
 export function isProgramGroupAlive(group: ProgramRecord | null): boolean {
   if (group === null) {
     return false;
   }
-  if (group.bootId === null) {
+  if (!hasToken(group)) {
     return isProcessGroupAlive(group.pid);
   }
   return judgeLiveGroup(group).verdict === 'owned';
 }
 
-// SIGKILLs the group when the record proves it is the program's, and never
-// when the proof fails. A record without a token gets the kill of its number.
 export function stopProgramGroup(group: ProgramRecord | null): void {
   if (group === null) {
     return;
   }
-  if (group.bootId === null) {
+  if (!hasToken(group)) {
     killProcessGroupBestEffort(group.pid);
     return;
   }
@@ -413,9 +415,9 @@ export function stopProgramGroup(group: ProgramRecord | null): void {
     if (judgement.verdict !== 'owned') {
       return;
     }
-    // The scan can take milliseconds, so read the witness again right before
-    // the kill. Between this read and the kill, every member must exit and
-    // another group must take the id for the kill to miss.
+    // No pidfd exists for a process group, so the kill races a reused group
+    // id. Reading the witness again shrinks that race to the time between
+    // this read and the kill.
     const witness = readProcessRow(judgement.witness);
     if (
       witness !== null &&

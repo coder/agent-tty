@@ -31,7 +31,9 @@ import { invariant } from '../util/assert.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
 import {
   isProgramGroupAlive,
+  parseProcStat,
   readProgramGroup,
+  readProvenProgramGroup,
   stopProgramGroup,
   type ProgramRecord,
 } from './programGroup.js';
@@ -206,21 +208,9 @@ function killProcessBestEffort(pid: number | null): void {
   }
 }
 
-// The fields of /proc/<pid>/stat from the state on: state, ppid, pgrp,
-// session. The command name before them can hold spaces and parentheses, so
-// they start after the last ')'.
-function procStatFields(procStat: string): string[] {
-  return procStat.slice(procStat.lastIndexOf(')') + 2).split(' ');
-}
-
 function ownLinuxSessionId(): number {
-  const sid = Number(
-    procStatFields(readFileSync('/proc/self/stat', 'utf8'))[3],
-  );
-  invariant(
-    Number.isInteger(sid) && sid > 0,
-    'own session id must be a positive integer',
-  );
+  const { sid } = parseProcStat(readFileSync('/proc/self/stat', 'utf8'));
+  invariant(sid > 0, 'own session id must be a positive integer');
   return sid;
 }
 
@@ -630,15 +620,13 @@ export async function destroySession(
     });
   }
 
-  // A program that exits on its own can leave processes in its group. Only
-  // a group that program.json proves is the program's gets the kill.
-  const recordTerminalDestroyed = async (
+  const stopLeftoversThenRecordDestroyed = async (
     terminal: SessionRecord,
   ): Promise<void> => {
     await stopSessionProcesses(
       sessionId,
       null,
-      await readProgramGroup(sessionDirectory, null),
+      await readProvenProgramGroup(sessionDirectory),
       sessionDirectory,
       signal,
     );
@@ -646,7 +634,7 @@ export async function destroySession(
   };
 
   if (isTerminalSessionStatus(manifest.status)) {
-    await recordTerminalDestroyed(manifest);
+    await stopLeftoversThenRecordDestroyed(manifest);
     return;
   }
 
@@ -690,7 +678,7 @@ export async function destroySession(
       manifestFile,
     );
     if (isTerminalSessionStatus(reconciledManifest.status)) {
-      await recordTerminalDestroyed(reconciledManifest);
+      await stopLeftoversThenRecordDestroyed(reconciledManifest);
       return;
     }
 
@@ -704,7 +692,7 @@ export async function destroySession(
     pollOptions(signal),
   );
   if (terminalManifest !== null) {
-    await recordTerminalDestroyed(terminalManifest);
+    await stopLeftoversThenRecordDestroyed(terminalManifest);
     return;
   }
 
@@ -714,7 +702,7 @@ export async function destroySession(
     manifestFile,
   );
   if (isTerminalSessionStatus(reconciledManifest.status)) {
-    await recordTerminalDestroyed(reconciledManifest);
+    await stopLeftoversThenRecordDestroyed(reconciledManifest);
     return;
   }
 
