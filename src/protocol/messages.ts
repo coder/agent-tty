@@ -20,7 +20,10 @@ import {
   WaitForRenderParamsSchema,
   WaitForRenderResultSchema,
   WaitResultSchema,
+  MouseActionSchema,
+  MouseButtonSchema,
 } from './schemas.js';
+import { RendererNameSchema } from '../renderer/names.js';
 
 export {
   RecordDiffLineSchema,
@@ -300,6 +303,64 @@ export const SendKeysResultSchema = z
   .strict();
 export type SendKeysResult = z.infer<typeof SendKeysResultSchema>;
 
+const MouseInputModifiersSchema = z
+  .object({
+    shift: z.boolean().optional(),
+    alt: z.boolean().optional(),
+    ctrl: z.boolean().optional(),
+  })
+  .strict();
+
+export const MouseParamsSchema = z
+  .object({
+    action: MouseActionSchema,
+    button: MouseButtonSchema.optional(),
+    row: z.number().int().nonnegative(),
+    col: z.number().int().nonnegative(),
+    cellWidth: z.number().int().positive().max(0xffffffff).optional(),
+    cellHeight: z.number().int().positive().max(0xffffffff).optional(),
+    modifiers: MouseInputModifiersSchema.optional().default({}),
+    rendererName: RendererNameSchema.optional(),
+  })
+  .strict()
+  .superRefine((event, ctx) => {
+    if (event.action === 'move' && event.button !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'button must not be set for move actions',
+        path: ['button'],
+      });
+    }
+    if (event.action !== 'move' && event.button === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'button is required for press and release actions',
+        path: ['button'],
+      });
+    }
+    if (
+      event.action === 'release' &&
+      event.button !== undefined &&
+      event.button.startsWith('wheel-')
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'wheel buttons are instantaneous press actions',
+        path: ['button'],
+      });
+    }
+  });
+export type MouseParams = z.infer<typeof MouseParamsSchema>;
+
+export const MouseResultSchema = z
+  .object({
+    reported: z.boolean(),
+    bytesWritten: z.number().int().nonnegative(),
+    seq: z.number().int().nonnegative(),
+  })
+  .strict();
+export type MouseResult = z.infer<typeof MouseResultSchema>;
+
 export const ResizeParamsSchema = z
   .object({
     cols: z.number().int().positive(),
@@ -365,6 +426,7 @@ const RPC_METHODS = [
   'run',
   'mark',
   'sendKeys',
+  'mouse',
   'resize',
   'signal',
   'wait',
@@ -407,6 +469,10 @@ export const RpcMethodSchemas = {
   sendKeys: {
     params: SendKeysParamsSchema,
     result: SendKeysResultSchema,
+  },
+  mouse: {
+    params: MouseParamsSchema,
+    result: MouseResultSchema,
   },
   resize: {
     params: ResizeParamsSchema,

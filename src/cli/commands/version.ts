@@ -8,7 +8,7 @@ import { RendererNameSchema } from '../../renderer/names.js';
 import { loadPackageMetadata } from '../../util/packageMetadata.js';
 
 const COMMAND_NAME = 'version';
-const PROTOCOL_VERSION = '0.1.0';
+const PROTOCOL_VERSION = '0.2.0';
 
 export interface VersionResult {
   cliVersion: string;

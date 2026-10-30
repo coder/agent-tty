@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, realpath, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -32,6 +33,8 @@ const SNAPSHOT_TIMEOUT_MS = 60_000;
 const OUTPUT_MARKER = 'hello-structured';
 
 const SCROLLBACK_OUTPUT_MARKER = 'line-50';
+const mouseProbe = await probeLibghosttyVt();
+const itWithMouse = mouseProbe.mouseInputAvailable === true ? it : it.skip;
 
 async function waitForOutputMarker(
   testHome: string,
@@ -100,7 +103,7 @@ describe(
 
       sessDir = sessionDir(testHome, sessionId);
       rpcSocketPath = socketPath(sessDir);
-    });
+    }, 30_000);
 
     afterEach(async () => {
       destroySession(testHome, sessionId);
@@ -210,6 +213,63 @@ describe(
         }),
       );
     });
+
+    itWithMouse(
+      'drives press, drag motion, and release through child-negotiated mouse modes',
+      async () => {
+        await restartSession(
+          [
+            process.execPath,
+            '--import',
+            'tsx',
+            'test/fixtures/apps/mouse-report/main.ts',
+          ],
+          'MOUSE_READY',
+        );
+
+        const actions = [
+          ['press', '--button', 'left', '--row', '4', '--col', '9'],
+          ['move', '--row', '5', '--col', '10'],
+          ['release', '--button', 'left', '--row', '5', '--col', '10'],
+        ];
+        const expectedData = [
+          '\u001b[<0;10;5M',
+          '\u001b[<32;11;6M',
+          '\u001b[<0;11;6m',
+        ];
+
+        for (const action of actions) {
+          const result = runCli(['mouse', sessionId, ...action, '--json'], {
+            AGENT_TTY_HOME: testHome,
+            AGENT_TTY_RENDERER: 'libghostty-vt',
+          });
+          expect(result.status).toBe(0);
+          expect(result.stderr).toBe('');
+          expect(JSON.parse(result.stdout)).toMatchObject({
+            ok: true,
+            command: 'mouse',
+            result: { reported: true },
+          });
+        }
+
+        await waitForOutputMarker(
+          testHome,
+          sessionId,
+          `MOUSE_HEX:${Buffer.from(expectedData.at(-1) ?? '').toString('hex')}`,
+        );
+        const mouseEvents = (await readEvents(testHome, sessionId)).filter(
+          (event) => event.type === 'input_mouse',
+        );
+        expect(mouseEvents.map((event) => event.payload.dataBase64)).toEqual(
+          expectedData.map((data) => Buffer.from(data).toString('base64')),
+        );
+        expect(mouseEvents.map((event) => event.payload.action)).toEqual([
+          'press',
+          'move',
+          'release',
+        ]);
+      },
+    );
 
     it('defaults snapshot RPCs to structured format', async () => {
       const result = (await sendRpc(

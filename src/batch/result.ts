@@ -30,7 +30,7 @@ export const InputStepRecordSchema = z
   .object({
     index: NonNegativeIntSchema,
     durationMs: NonNegativeIntSchema,
-    kind: z.enum(['type', 'paste', 'sendKeys']),
+    kind: z.enum(['type', 'paste', 'sendKeys', 'mouse']),
     status: StepStatusSchema,
     seq: NonNegativeIntSchema.optional(),
     error: BatchStepErrorSchema.optional(),
@@ -105,6 +105,7 @@ export function unreachedStepRecord(
     case 'type':
     case 'paste':
     case 'sendKeys':
+    case 'mouse':
       return { ...base, kind: step.kind };
     default:
       return unreachable(step, `batch unreached-step kind at index ${index}`);

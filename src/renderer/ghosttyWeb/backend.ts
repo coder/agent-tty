@@ -456,6 +456,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         case 'input_text':
         case 'input_paste':
         case 'input_keys':
+        case 'input_mouse':
         case 'input_run':
         case 'run_complete':
         case 'signal':
@@ -715,6 +716,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         case 'input_text':
         case 'input_paste':
         case 'input_keys':
+        case 'input_mouse':
         case 'input_run':
         case 'run_complete':
         case 'signal':

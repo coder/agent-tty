@@ -18,7 +18,7 @@ describe('version command', () => {
     const result = await buildVersionResult();
 
     expect(result.cliVersion).toMatch(SEMVER_WITH_OPTIONAL_PRERELEASE);
-    expect(result.protocolVersion).toBe('0.1.0');
+    expect(result.protocolVersion).toBe('0.2.0');
     expect(result.rendererBackends).toEqual(['ghostty-web', 'libghostty-vt']);
     expect(result.runtime.node).toMatch(/^v\d+\.\d+\.\d+$/);
     expect('capabilities' in result).toBe(false);
@@ -27,10 +27,11 @@ describe('version command', () => {
   it('builds the version result with runtime capabilities when requested', async () => {
     const result = await buildVersionResult({ includeCapabilities: true });
 
-    expect(result.capabilities).toHaveLength(6);
+    expect(result.capabilities).toHaveLength(7);
     expect(result.capabilities?.map((capability) => capability.name)).toEqual([
       'snapshot',
       'wait',
+      'mouse-input',
       'screenshot',
       'record-export-asciicast',
       'record-export-webm',
@@ -55,7 +56,7 @@ describe('version command', () => {
     const result = await buildVersionResult({ includeCapabilities: true });
 
     expect(result.cliVersion).toMatch(SEMVER_WITH_OPTIONAL_PRERELEASE);
-    expect(result.protocolVersion).toBe('0.1.0');
+    expect(result.protocolVersion).toBe('0.2.0');
     expect(result.rendererBackends).toEqual(['ghostty-web', 'libghostty-vt']);
     expect(result.runtime.node).toMatch(/^v\d+\.\d+\.\d+$/);
     expect(result.runtime.platform).toBe(process.platform);

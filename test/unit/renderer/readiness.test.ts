@@ -11,10 +11,24 @@ import {
 describe('probeLibghosttyVt', () => {
   it('reports available when the native module exposes createTerminal', async () => {
     const probe = await probeLibghosttyVt(() =>
+      Promise.resolve({
+        createTerminal: () => ({}),
+        supportsMouseInput: true,
+      }),
+    );
+
+    expect(probe.available).toBe(true);
+    expect(probe.mouseInputAvailable).toBe(true);
+  });
+
+  it('reports an old renderer as available without mouse input', async () => {
+    const probe = await probeLibghosttyVt(() =>
       Promise.resolve({ createTerminal: () => ({}) }),
     );
 
     expect(probe.available).toBe(true);
+    expect(probe.mouseInputAvailable).toBe(false);
+    expect(probe.detail).toContain('mouse-capable release');
   });
 
   it('reports unavailable when the loaded module is missing createTerminal', async () => {

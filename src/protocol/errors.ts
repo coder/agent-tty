@@ -14,6 +14,7 @@ export const ERROR_CODES = {
   INVALID_KEYS: 'INVALID_KEYS',
   INVALID_DURATION: 'INVALID_DURATION',
   INVALID_INPUT: 'INVALID_INPUT',
+  CAPABILITY_UNAVAILABLE: 'CAPABILITY_UNAVAILABLE',
   STORAGE_READ_ERROR: 'STORAGE_READ_ERROR',
   STORAGE_WRITE_ERROR: 'STORAGE_WRITE_ERROR',
   MANIFEST_VALIDATION_ERROR: 'MANIFEST_VALIDATION_ERROR',
@@ -40,6 +41,8 @@ export const DEFAULT_ERROR_MESSAGES: Record<ProtocolErrorCode, string> = {
   [ERROR_CODES.INVALID_KEYS]: 'Key sequence is invalid.',
   [ERROR_CODES.INVALID_DURATION]: 'Duration value is invalid.',
   [ERROR_CODES.INVALID_INPUT]: 'Invalid input provided.',
+  [ERROR_CODES.CAPABILITY_UNAVAILABLE]:
+    'The requested capability is unavailable.',
   [ERROR_CODES.STORAGE_READ_ERROR]: 'Failed to read session storage.',
   [ERROR_CODES.STORAGE_WRITE_ERROR]: 'Failed to write session storage.',
   [ERROR_CODES.MANIFEST_VALIDATION_ERROR]: 'Session manifest is invalid.',

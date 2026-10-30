@@ -17,6 +17,7 @@ import { runHomeListCommand } from './commands/home/list.js';
 import { runInspectCommand } from './commands/inspect.js';
 import { runListCommand } from './commands/list.js';
 import { runMarkCommand } from './commands/mark.js';
+import { runMouseCommand } from './commands/mouse.js';
 import { runPasteCommand } from './commands/paste.js';
 import { runRunCommand } from './commands/run.js';
 import { runRecordDiffCommand } from './commands/record-diff.js';
@@ -58,6 +59,17 @@ function parseIntegerOption(value: string): number {
 
 function parseNumberOption(value: string): number {
   return Number(value);
+}
+
+function parseNonNegativeIntegerOption(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: 'Mouse row and column values must be non-negative integers.',
+      details: { value },
+    });
+  }
+  return parsed;
 }
 
 // Strict integer-token parser: empty, whitespace-only, fractional, partially
@@ -637,6 +649,75 @@ async function main(): Promise<void> {
             json: options.json,
             sessionId,
             keys,
+          });
+        },
+      ),
+    );
+
+  program
+    .command('mouse <session-id> <action>')
+    .description('Send mode-aware mouse input to a terminal cell')
+    .requiredOption(
+      '--row <n>',
+      'Zero-based terminal row',
+      parseNonNegativeIntegerOption,
+    )
+    .requiredOption(
+      '--col <n>',
+      'Zero-based terminal column',
+      parseNonNegativeIntegerOption,
+    )
+    .option('--button <name>', 'left, middle, right, or a wheel direction')
+    .option(
+      '--cell-width <n>',
+      'Cell width in pixels (default: virtual unit cell)',
+      parseNumberOption,
+    )
+    .option(
+      '--cell-height <n>',
+      'Cell height in pixels (default: virtual unit cell)',
+      parseNumberOption,
+    )
+    .option('--shift', 'Hold Shift for this mouse action', false)
+    .option('--alt', 'Hold Alt for this mouse action', false)
+    .option('--ctrl', 'Hold Ctrl for this mouse action', false)
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'mouse',
+        async (
+          sessionId: string,
+          action: string,
+          options: {
+            row: number;
+            col: number;
+            cellWidth?: number;
+            cellHeight?: number;
+            button?: string;
+            shift: boolean;
+            alt: boolean;
+            ctrl: boolean;
+            json: boolean;
+          },
+          context: CommandContext,
+        ) => {
+          await runMouseCommand({
+            context,
+            json: options.json,
+            sessionId,
+            action,
+            ...(options.button === undefined ? {} : { button: options.button }),
+            row: options.row,
+            col: options.col,
+            ...(options.cellWidth === undefined
+              ? {}
+              : { cellWidth: options.cellWidth }),
+            ...(options.cellHeight === undefined
+              ? {}
+              : { cellHeight: options.cellHeight }),
+            shift: options.shift,
+            alt: options.alt,
+            ctrl: options.ctrl,
           });
         },
       ),

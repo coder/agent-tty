@@ -33,6 +33,7 @@ describe('CLI exit codes', () => {
     expect(exitCodeForError(ERROR_CODES.PROTOCOL_ERROR)).toBe(9);
     expect(exitCodeForError(ERROR_CODES.RPC_ERROR)).toBe(9);
     expect(exitCodeForError(ERROR_CODES.REPLAY_ERROR)).toBe(10);
+    expect(exitCodeForError(ERROR_CODES.CAPABILITY_UNAVAILABLE)).toBe(12);
   });
 
   it('maps a render-wait timeout to a distinct exit code 11', () => {

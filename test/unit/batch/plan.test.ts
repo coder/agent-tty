@@ -40,6 +40,38 @@ describe('parseBatchPlan', () => {
       ).toEqual([{ kind: 'sendKeys', keys: ['Escape', 'ctrl+c', 'Enter'] }]);
     });
 
+    it('parses mouse steps with cell coordinates and modifiers', () => {
+      expect(
+        parse([
+          {
+            mouse: {
+              action: 'press',
+              button: 'left',
+              row: 4,
+              col: 9,
+              modifiers: { ctrl: true },
+            },
+          },
+          { mouse: { action: 'move', row: 5, col: 10 } },
+        ]).steps,
+      ).toEqual([
+        {
+          kind: 'mouse',
+          input: {
+            action: 'press',
+            button: 'left',
+            row: 4,
+            col: 9,
+            modifiers: { ctrl: true },
+          },
+        },
+        {
+          kind: 'mouse',
+          input: { action: 'move', row: 5, col: 10, modifiers: {} },
+        },
+      ]);
+    });
+
     it('parses a run step with noWait defaulting to false (Waited Run)', () => {
       expect(parse([{ run: 'echo hi' }]).steps).toEqual([
         {
@@ -195,7 +227,7 @@ describe('parseBatchPlan', () => {
         expect.objectContaining({
           code: ERROR_CODES.INVALID_INPUT,
           message:
-            'Batch step 0 must have exactly one of type|paste|sendKeys|run|wait; found none',
+            'Batch step 0 must have exactly one of type|paste|sendKeys|mouse|run|wait; found none',
           details: { stepIndex: 0 },
         }),
       );
@@ -206,7 +238,7 @@ describe('parseBatchPlan', () => {
         expect.objectContaining({
           code: ERROR_CODES.INVALID_INPUT,
           message:
-            'Batch step 0 must have exactly one of type|paste|sendKeys|run|wait; found type, wait',
+            'Batch step 0 must have exactly one of type|paste|sendKeys|mouse|run|wait; found type, wait',
           details: { stepIndex: 0 },
         }),
       );
@@ -256,6 +288,37 @@ describe('parseBatchPlan', () => {
       expect(() => parse([{ sendKeys: ['Enter', 'BOGUS'] }])).toThrow(
         expect.objectContaining({ code: ERROR_CODES.INVALID_KEYS }),
       );
+    });
+  });
+
+  describe('mouse validation', () => {
+    it('classifies invalid mouse batch steps', () => {
+      const invalid = [
+        { mouse: { action: 'press', row: 0, col: 0 } },
+        { mouse: { action: 'move', button: 'left', row: 0, col: 0 } },
+        { mouse: { action: 'drag', button: 'left', row: 0, col: 0 } },
+        { mouse: { action: 'press', button: 'left', row: -1, col: 0 } },
+        {
+          mouse: {
+            action: 'press',
+            button: 'left',
+            row: 0,
+            col: 0,
+            extra: true,
+          },
+        },
+      ];
+
+      expect(
+        invalid.map((step) => {
+          try {
+            parse([step]);
+            return false;
+          } catch {
+            return true;
+          }
+        }),
+      ).toEqual(invalid.map(() => true));
     });
   });
 

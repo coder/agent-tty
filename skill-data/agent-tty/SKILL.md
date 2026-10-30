@@ -49,6 +49,7 @@ agent-tty --home <path> run <session-id> 'command here' --json
 agent-tty --home <path> type <session-id> 'literal text' --json
 agent-tty --home <path> paste <session-id> 'multiline payload' --json
 agent-tty --home <path> send-keys <session-id> Enter Ctrl+C --json
+agent-tty --home <path> mouse <session-id> press --button left --row 8 --col 20 --json
 agent-tty --home <path> batch <session-id> '[{"run":"htop","noWait":true},{"wait":{"screenStableMs":1000}}]' --json
 
 # Observation and proof
@@ -76,6 +77,13 @@ agent-tty --home "$AGENT_HOME" snapshot "$SESSION_ID" --format text --json
 ### Drive an interactive CLI or TUI
 
 Use `batch` to run an ordered sequence of input-and-`wait` steps in one call instead of separate `run`/`wait`/`send-keys` invocations. Each `wait` step is anchored to a Wait Baseline — it only observes screen state produced _after_ the preceding input step, so the sequence cannot race ahead and match a stale screen. A batch stops at the first failed step by default (`--keep-going` attempts every step).
+
+Use `mouse` for TUI hit-testing, scrolling, and drag behavior. Coordinates are
+zero-based cells. A drag is three actions: `press --button left`, one or more
+button-free `move` actions, then `release --button left`. The child must enable
+mouse tracking; a suppressed event returns `reported: false`. Mouse input
+requires the `libghostty-vt` capability and must never be replaced with a
+hard-coded SGR sequence.
 
 ```bash
 AGENT_HOME="$(mktemp -d)"

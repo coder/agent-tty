@@ -14,6 +14,7 @@ import {
 export const CapabilityNameSchema = z.enum([
   'snapshot',
   'wait',
+  'mouse-input',
   'screenshot',
   'record-export-asciicast',
   'record-export-webm',
@@ -79,6 +80,7 @@ export type RendererRuntimeSummary = z.infer<
 const CAPABILITY_NAMES: ReadonlyArray<CapabilityName> = Object.freeze([
   'snapshot',
   'wait',
+  'mouse-input',
   'screenshot',
   'record-export-asciicast',
   'record-export-webm',
@@ -549,6 +551,37 @@ async function discoverDashboardCapability(
   return buildDashboardCapability(probe, mode);
 }
 
+async function discoverMouseInputCapability(
+  mode: DiscoveryMode,
+  deps: CapabilityDiscoveryDependencies,
+): Promise<CapabilityEntry> {
+  const probe = await (deps.probeLibghosttyVt ?? probeLibghosttyVt)();
+  if (!probe.available) {
+    return {
+      name: 'mouse-input',
+      status: 'unavailable',
+      ...(probe.reason === undefined ? {} : { reason: probe.reason }),
+      ...(probe.detail === undefined ? {} : { detail: probe.detail }),
+    };
+  }
+  if (probe.mouseInputAvailable === false) {
+    return {
+      name: 'mouse-input',
+      status: 'unavailable',
+      reason: 'libghostty-vt mouse encoder unavailable',
+      ...(probe.detail === undefined ? {} : { detail: probe.detail }),
+    };
+  }
+  return mode === 'full'
+    ? {
+        name: 'mouse-input',
+        status: 'available',
+        reason: 'libghostty-vt mouse encoder available',
+        ...(probe.detail === undefined ? {} : { detail: probe.detail }),
+      }
+    : { name: 'mouse-input', status: 'available' };
+}
+
 function validateDiscoveredCapabilities(
   capabilities: ReadonlyArray<CapabilityEntry>,
 ): CapabilityEntry[] {
@@ -616,6 +649,8 @@ export async function discoverCapabilities(
   for (const name of BUILTIN_CAPABILITY_NAMES) {
     capabilities.push(buildBuiltinCapability(name, mode));
   }
+
+  capabilities.push(await discoverMouseInputCapability(mode, cachedDeps));
 
   capabilities.push(
     await buildPlaywrightCapability('screenshot', mode, cachedDeps),

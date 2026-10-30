@@ -177,6 +177,7 @@ function stepOutcome(record: BatchStepRecord): string {
     case 'type':
     case 'paste':
     case 'sendKeys':
+    case 'mouse':
       return 'completed';
   }
 }

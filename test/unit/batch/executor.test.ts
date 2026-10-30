@@ -15,6 +15,7 @@ type DriverCall =
   | { verb: 'type'; text: string }
   | { verb: 'paste'; text: string }
   | { verb: 'sendKeys'; keys: string[] }
+  | { verb: 'mouse'; action: string; row: number; col: number }
   | { verb: 'run'; command: string; noWait: boolean }
   | { verb: 'wait'; afterSeq: number | undefined };
 
@@ -72,6 +73,15 @@ function createFakeDriver(options: FakeDriverOptions = {}): FakeDriver {
     }),
     sendKeys: vi.fn((keys: string[]): Promise<number> => {
       calls.push({ verb: 'sendKeys', keys });
+      return Promise.resolve(nextInputSeq());
+    }),
+    mouse: vi.fn((input): Promise<number> => {
+      calls.push({
+        verb: 'mouse',
+        action: input.action,
+        row: input.row,
+        col: input.col,
+      });
       return Promise.resolve(nextInputSeq());
     }),
     run: vi.fn((command: string, noWait: boolean): Promise<RunResult> => {
@@ -133,6 +143,28 @@ describe('executeBatch', () => {
 
     const waitCall = calls.find((call) => call.verb === 'wait');
     expect(waitCall).toEqual({ verb: 'wait', afterSeq: 7 });
+  });
+
+  it('drives mouse steps and threads their sequence into the following wait', async () => {
+    const { driver, calls } = createFakeDriver({ inputSeqs: [17] });
+    const result = await executeBatch({
+      plan: plan([
+        { mouse: { action: 'move', row: 4, col: 9 } },
+        { wait: { text: 'hovered' } },
+      ]),
+      driver,
+      keepGoing: false,
+    });
+
+    expect(calls).toEqual([
+      { verb: 'mouse', action: 'move', row: 4, col: 9 },
+      { verb: 'wait', afterSeq: 17 },
+    ]);
+    expect(result.steps[0]).toMatchObject({
+      kind: 'mouse',
+      status: 'completed',
+      seq: 17,
+    });
   });
 
   it('records the threaded seq as the wait step waitBaseline', async () => {
@@ -574,6 +606,7 @@ describe('executeBatch', () => {
         type: () => Promise.reject(new TypeError('boom')),
         paste: () => Promise.resolve(1),
         sendKeys: () => Promise.resolve(1),
+        mouse: () => Promise.resolve(1),
         run: () => Promise.resolve({ accepted: true, seq: 1 }),
         wait: () =>
           Promise.resolve({ matched: true, timedOut: false, capturedAtSeq: 1 }),
@@ -603,6 +636,7 @@ describe('executeBatch', () => {
           ),
         paste: () => Promise.resolve(1),
         sendKeys: () => Promise.resolve(1),
+        mouse: () => Promise.resolve(1),
         run: () => Promise.resolve({ accepted: true, seq: 1 }),
         wait: () =>
           Promise.resolve({ matched: true, timedOut: false, capturedAtSeq: 1 }),

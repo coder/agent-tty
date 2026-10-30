@@ -129,10 +129,11 @@ describe('doctor command', () => {
     expect(result.ok).toBe(true);
     expect(result.checks.environment).toHaveLength(9);
     expect(result.checks.renderer).toHaveLength(6);
-    expect(result.capabilities).toHaveLength(6);
+    expect(result.capabilities).toHaveLength(7);
     expect(result.capabilities.map((capability) => capability.name)).toEqual([
       'snapshot',
       'wait',
+      'mouse-input',
       'screenshot',
       'record-export-asciicast',
       'record-export-webm',

@@ -224,6 +224,54 @@ describe('EventLog', () => {
     }
   });
 
+  it('appends input_mouse events and round-trips their semantic and wire data', async () => {
+    const eventLog = await EventLog.open(eventLogPath);
+
+    try {
+      const seq = await eventLog.append('input_mouse', {
+        action: 'move',
+        row: 3,
+        col: 8,
+        modifiers: { shift: false, alt: false, ctrl: true },
+        rendererBackend: 'libghostty-vt',
+        dataBase64: Buffer.from('\u001b[<48;9;4M').toString('base64'),
+      });
+
+      expect(seq).toBe(0);
+      expect(await eventLog.readAll()).toEqual([
+        expect.objectContaining({
+          seq: 0,
+          type: 'input_mouse',
+          payload: {
+            action: 'move',
+            row: 3,
+            col: 8,
+            modifiers: { shift: false, alt: false, ctrl: true },
+            rendererBackend: 'libghostty-vt',
+            dataBase64: Buffer.from('\u001b[<48;9;4M').toString('base64'),
+          },
+        }),
+      ]);
+    } finally {
+      await eventLog.close();
+    }
+
+    const reopenedEventLog = await EventLog.open(eventLogPath);
+    try {
+      expect(reopenedEventLog.getEvents()).toEqual([
+        expect.objectContaining({
+          seq: 0,
+          type: 'input_mouse',
+          payload: expect.objectContaining({
+            dataBase64: Buffer.from('\u001b[<48;9;4M').toString('base64'),
+          }),
+        }),
+      ]);
+    } finally {
+      await reopenedEventLog.close();
+    }
+  });
+
   it('returns buffered events without rereading the log file', async () => {
     const eventLog = await EventLog.open(eventLogPath);
 

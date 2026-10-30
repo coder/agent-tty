@@ -9,6 +9,8 @@ import {
   HostInspectResultSchema,
   InspectResultSchema,
   MarkParamsSchema,
+  MouseParamsSchema,
+  MouseResultSchema,
   RendererRuntimeSummarySchema,
   MarkResultSchema,
   PasteParamsSchema,
@@ -35,6 +37,7 @@ import {
 } from '../../../src/protocol/messages.js';
 import {
   EventRecordSchema,
+  InputMouseEventRecordSchema,
   MarkerEventRecordSchema,
   RunCompleteEventPayloadSchema,
   RunCompleteEventRecordSchema,
@@ -220,6 +223,7 @@ describe('CapabilityEntrySchema', () => {
     const names = [
       'snapshot',
       'wait',
+      'mouse-input',
       'screenshot',
       'record-export-asciicast',
       'record-export-webm',
@@ -1133,6 +1137,92 @@ describe('RPC message schemas', () => {
     });
   });
 
+  it('classifies valid mouse parameter sets', () => {
+    const validParams = [
+      { action: 'press', button: 'left', row: 0, col: 0 },
+      { action: 'release', button: 'right', row: 23, col: 79 },
+      { action: 'move', row: 2, col: 3 },
+      {
+        action: 'move',
+        row: 4,
+        col: 5,
+        modifiers: { shift: true, alt: false, ctrl: true },
+        rendererName: 'libghostty-vt',
+      },
+      { action: 'press', button: 'wheel-up', row: 6, col: 7 },
+      { action: 'press', button: 'wheel-down', row: 6, col: 7 },
+      { action: 'press', button: 'wheel-left', row: 6, col: 7 },
+      { action: 'press', button: 'wheel-right', row: 6, col: 7 },
+    ];
+
+    expect(
+      validParams.map((params) => MouseParamsSchema.safeParse(params).success),
+    ).toEqual(validParams.map(() => true));
+  });
+
+  it('classifies invalid mouse parameter sets', () => {
+    const invalidParams = [
+      { action: 'press', row: 0, col: 0 },
+      { action: 'release', row: 0, col: 0 },
+      { action: 'move', button: 'left', row: 0, col: 0 },
+      { action: 'drag', button: 'left', row: 0, col: 0 },
+      { action: 'press', button: 'primary', row: 0, col: 0 },
+      { action: 'release', button: 'wheel-up', row: 0, col: 0 },
+      { action: 'press', button: 'left', row: -1, col: 0 },
+      { action: 'press', button: 'left', row: 0, col: -1 },
+      { action: 'press', button: 'left', row: 1.5, col: 0 },
+      {
+        action: 'press',
+        button: 'left',
+        row: 0,
+        col: 0,
+        modifiers: { meta: true },
+      },
+      { action: 'press', button: 'left', row: 0, col: 0, extra: true },
+    ];
+
+    expect(
+      invalidParams.map(
+        (params) => MouseParamsSchema.safeParse(params).success,
+      ),
+    ).toEqual(invalidParams.map(() => false));
+  });
+
+  it('accepts mouse results with reporting state, byte count, and seq', () => {
+    expect(
+      MouseResultSchema.parse({ reported: true, bytesWritten: 10, seq: 42 }),
+    ).toEqual({ reported: true, bytesWritten: 10, seq: 42 });
+    expect(
+      MouseResultSchema.parse({ reported: false, bytesWritten: 0, seq: 43 }),
+    ).toEqual({ reported: false, bytesWritten: 0, seq: 43 });
+  });
+
+  it('strictly validates input_mouse event records', () => {
+    const record = {
+      seq: 7,
+      ts: '2026-03-19T12:00:02.000Z',
+      type: 'input_mouse',
+      payload: {
+        action: 'press',
+        button: 'left',
+        row: 4,
+        col: 9,
+        modifiers: { shift: true, alt: false, ctrl: false },
+        rendererBackend: 'libghostty-vt',
+        dataBase64: Buffer.from('\u001b[<0;10;5M').toString('base64'),
+      },
+    } as const;
+
+    expect(InputMouseEventRecordSchema.parse(record)).toEqual(record);
+    expect(EventRecordSchema.parse(record)).toEqual(record);
+    expect(
+      InputMouseEventRecordSchema.safeParse({
+        ...record,
+        payload: { ...record.payload, reported: true },
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects empty type text', () => {
     const result = TypeParamsSchema.safeParse({
       text: '',
@@ -1210,6 +1300,7 @@ describe('RPC message schemas', () => {
       'run',
       'mark',
       'sendKeys',
+      'mouse',
       'resize',
       'signal',
       'wait',

@@ -25,6 +25,7 @@ import { isCommandableSessionStatus } from '../protocol/sessionStatusPolicy.js';
 import type { SessionRecord } from '../protocol/schemas.js';
 import type {
   MarkParams,
+  MouseParams,
   PasteParams,
   ResizeParams,
   RunParams,
@@ -50,6 +51,8 @@ import {
 } from '../renderer/names.js';
 import { resolveProfile } from '../renderer/profiles.js';
 import { createRendererBackend } from '../renderer/registry.js';
+import { supportsMouseEncoding } from '../renderer/backend.js';
+import { prepareHeldMouseButtons, type HeldMouseButton } from './mouseInput.js';
 import { captureScreenshotResult } from '../screenshot/capture.js';
 import { captureSnapshotResult } from '../snapshot/capture.js';
 import { resolveHome } from '../storage/home.js';
@@ -261,6 +264,7 @@ export async function runHost(
     appendRunComplete: (payload) => eventLog.append('run_complete', payload),
   });
   let ptyIngestionQueue: Promise<void> = Promise.resolve();
+  let heldMouseButtons: ReadonlySet<HeldMouseButton> = new Set();
 
   // Per-client wait-exit callbacks, cleaned up individually via ResourceScope.
   // Using ptyExitPromise.then() would permanently attach to the shared promise.
@@ -769,6 +773,118 @@ export async function runHost(
       return {
         accepted: [...keys],
         bytesWritten: Buffer.byteLength(encoded),
+        seq,
+      };
+    },
+    mouse: async (params: unknown) => {
+      const {
+        action,
+        button,
+        row,
+        col,
+        cellWidth,
+        cellHeight,
+        modifiers,
+        rendererName: requestedRendererName,
+      } = params as MouseParams;
+
+      assertSessionCommandable(state);
+      await ptyIngestionQueue;
+
+      const normalizedModifiers = {
+        shift: modifiers.shift ?? false,
+        alt: modifiers.alt ?? false,
+        ctrl: modifiers.ctrl ?? false,
+      };
+      const rendererName = resolveHostRendererName(requestedRendererName);
+      if (rendererName !== 'libghostty-vt') {
+        throw makeCliError(ERROR_CODES.CAPABILITY_UNAVAILABLE, {
+          message: `Renderer ${rendererName} cannot encode mouse input. Use libghostty-vt.`,
+        });
+      }
+      const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
+      const replayInput = loadReplayInput();
+
+      let encoded: Buffer;
+      let rendererBackend: string;
+      try {
+        ({ encoded, rendererBackend } = await rendererManager.withBackend(
+          rendererName,
+          profile,
+          replayInput,
+          (backend) => {
+            if (!supportsMouseEncoding(backend)) {
+              throw makeCliError(ERROR_CODES.CAPABILITY_UNAVAILABLE, {
+                message: `Renderer ${backend.rendererBackend} cannot encode mouse input. Use libghostty-vt.`,
+                details: { rendererBackend: backend.rendererBackend },
+              });
+            }
+            // The renderer lock also serializes held-button transitions. A
+            // second request can arrive while the first backend is booting.
+            const transition = prepareHeldMouseButtons(heldMouseButtons, {
+              action,
+              ...(button === undefined ? {} : { button }),
+            });
+            const encoded = backend.encodeMouse({
+              action,
+              ...(button === undefined
+                ? action === 'move' && transition.dragButton !== undefined
+                  ? { button: transition.dragButton }
+                  : {}
+                : { button }),
+              row,
+              col,
+              ...(cellWidth === undefined ? {} : { cellWidth }),
+              ...(cellHeight === undefined ? {} : { cellHeight }),
+              modifiers: normalizedModifiers,
+              anyButtonPressed: transition.anyButtonPressed,
+            });
+            assertSessionCommandable(state);
+            if (encoded.length > 0) {
+              pty.write(encoded);
+            }
+            heldMouseButtons = transition.nextHeld;
+            return {
+              encoded,
+              rendererBackend: backend.rendererBackend,
+            };
+          },
+        ));
+      } catch (error) {
+        if (error instanceof RangeError || error instanceof TypeError) {
+          throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+            message: error.message,
+            cause: error,
+          });
+        }
+        if (
+          error instanceof Error &&
+          error.message.includes('terminal.encodeMouse is required')
+        ) {
+          throw makeCliError(ERROR_CODES.CAPABILITY_UNAVAILABLE, {
+            message: error.message,
+            details: { rendererBackend: rendererName },
+            cause: error,
+          });
+        }
+        throw error;
+      }
+
+      lastActivityAt = Date.now();
+      const seq = await eventLog.append('input_mouse', {
+        action,
+        ...(button === undefined ? {} : { button }),
+        row,
+        col,
+        modifiers: normalizedModifiers,
+        rendererBackend,
+        ...(cellWidth === undefined ? {} : { cellWidth }),
+        ...(cellHeight === undefined ? {} : { cellHeight }),
+        dataBase64: encoded.toString('base64'),
+      });
+      return {
+        reported: encoded.length > 0,
+        bytesWritten: encoded.length,
         seq,
       };
     },

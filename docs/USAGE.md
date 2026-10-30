@@ -50,6 +50,7 @@ agent-tty --home <path> run <session-id> 'command here' --json
 agent-tty --home <path> type <session-id> 'literal text' --json
 agent-tty --home <path> paste <session-id> 'multiline payload' --json
 agent-tty --home <path> send-keys <session-id> Enter Ctrl+C --json
+agent-tty --home <path> mouse <session-id> press --button left --row 8 --col 20 --json
 agent-tty --home <path> resize <session-id> --cols 100 --rows 30 --json
 agent-tty --home <path> signal <session-id> SIGTERM --json
 
@@ -82,6 +83,42 @@ Important flags:
 
 Use `type` when the target application needs literal interactive typing, `paste` when the target should receive a literal pasted payload, and `send-keys` for discrete control keys such as `Enter`, `Escape`, or `Ctrl+C`.
 `run` is not structured output capture and does not report the child command's exit status.
+
+## `mouse`
+
+`mouse` sends a cell-addressed event through the terminal modes selected by
+the child. The `libghostty-vt` renderer is required because static escape
+sequences cannot account for tracking mode, wire format, pixel mode, viewport
+clamping, or motion deduplication.
+
+```bash
+agent-tty mouse <session-id> press --button left --row 8 --col 20 --json
+agent-tty mouse <session-id> move --row 9 --col 24 --json
+agent-tty mouse <session-id> release --button left --row 9 --col 24 --json
+agent-tty mouse <session-id> press --button wheel-down --row 9 --col 24 --json
+```
+
+Rows and columns are zero-based. `press` and `release` require `--button`;
+`move` uses the host's held-button state so press, move, and release form a real
+drag. Buttons are `left`, `middle`, `right`, `wheel-up`, `wheel-down`,
+`wheel-left`, and `wheel-right`. `--shift`, `--alt`, and `--ctrl` add modifiers.
+An event suppressed by the child's tracking mode succeeds with
+`reported: false` and `bytesWritten: 0`. Missing renderer support exits `12`
+with `CAPABILITY_UNAVAILABLE`.
+
+The default surface uses virtual one-pixel cells. For SGR-pixels with a known
+surface, pass `--cell-width` and `--cell-height` in pixels; the requested cell
+maps to its top-left pixel. For example, row 2, column 3 with a 10x20 cell maps
+to pixel 30,40. Screen dimensions follow the session's current rows and columns.
+The same optional `cellWidth` and `cellHeight` fields are accepted in batch steps.
+
+The host writes the native buffer directly to the PTY, including non-UTF-8 X10
+bytes. Each `input_mouse` event stores those exact bytes as `dataBase64` alongside
+the action, cell position, modifiers, renderer, and any explicit cell metrics.
+Suppressed events still receive a sequence number and record an empty payload.
+Older native packages remain usable for other operations; see the
+[native mouse development setup](mouse-native-development.md) until a
+mouse-capable package is published.
 
 ## `wait`
 
@@ -153,6 +190,7 @@ Steps are a JSON array; each step is exactly one verb. The shape mirrors the res
   { "run": "nvim --clean", "noWait": true },
   { "wait": { "screenStableMs": 1000 } },
   { "sendKeys": ["i"] },
+  { "mouse": { "action": "press", "button": "left", "row": 8, "col": 20 } },
   { "type": "hello" },
   { "sendKeys": ["Escape"] },
   { "type": ":wq" },
@@ -163,6 +201,7 @@ Steps are a JSON array; each step is exactly one verb. The shape mirrors the res
 
 - `type` / `paste`: a string of literal text.
 - `sendKeys`: a non-empty array of key names — individual named keys or single characters (e.g. `["Enter"]`, `["Ctrl+C"]`, `["Escape", "Enter"]`). Multi-character literal text such as `:wq` is not a key name; send it with a `type` step.
+- `mouse`: the same `action`, `button`, `row`, `col`, and optional `modifiers` fields as the `mouse` command. It may also carry `rendererName` for an explicit backend override.
 - `run`: a command string, with optional `noWait` (fire-and-forget) and `timeout` (ms). A `run` step is a waited run by default.
 - `wait`: the same conditions as the `wait` command — `text`, `regex`, `scope`, `screenStableMs`, `cursorRow`, `cursorCol`, and `timeout` (ms).
 
@@ -297,6 +336,7 @@ Every command exits with a stable code, so scripts can branch without parsing ou
 | `9`       | Protocol or RPC error.                                                                                                      |
 | `10`      | Replay failed.                                                                                                              |
 | `11`      | A standalone `wait` timed out, or a `wait` step inside a fail-fast `batch` timed out (`WAIT_TIMEOUT`; see [`wait`](#wait)). |
+| `12`      | A requested runtime capability is unavailable (`CAPABILITY_UNAVAILABLE`).                                                   |
 
 A fail-fast `batch` exits with the failed step's code (for example `11` for a wait timeout); `--keep-going` exits `1` if any step failed.
 

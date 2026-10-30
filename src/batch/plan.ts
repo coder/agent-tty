@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
 import type { PreparedRenderWaitCondition } from '../renderWait/matcher.js';
+import type { MouseParams } from '../protocol/messages.js';
 
 import { assertValidKeyName } from '../pty/keyEncoder.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
+import { MouseParamsSchema } from '../protocol/messages.js';
 import { prepareRenderWaitCondition } from '../renderWait/matcher.js';
 import { invariant, unreachable } from '../util/assert.js';
 
@@ -11,6 +13,7 @@ export type BatchStep =
   | { kind: 'type'; text: string }
   | { kind: 'paste'; text: string }
   | { kind: 'sendKeys'; keys: string[] }
+  | { kind: 'mouse'; input: MouseParams }
   | {
       kind: 'run';
       command: string;
@@ -27,7 +30,14 @@ export interface BatchPlan {
   steps: BatchStep[];
 }
 
-const VERB_KEYS = ['type', 'paste', 'sendKeys', 'run', 'wait'] as const;
+const VERB_KEYS = [
+  'type',
+  'paste',
+  'sendKeys',
+  'mouse',
+  'run',
+  'wait',
+] as const;
 
 type VerbKey = (typeof VERB_KEYS)[number];
 
@@ -41,6 +51,7 @@ const PasteStepSchema = z.object({ paste: z.string().min(1) }).strict();
 const SendKeysStepSchema = z
   .object({ sendKeys: z.array(z.string().min(1)).min(1) })
   .strict();
+const MouseStepSchema = z.object({ mouse: z.unknown() }).strict();
 const RunStepSchema = z
   .object({
     run: z.string().min(1),
@@ -90,13 +101,13 @@ function parseStep(rawStep: unknown, index: number): BatchStep {
   const verbs = presentVerbKeys(rawStep);
   if (verbs.length === 0) {
     return invalidInput(
-      `Batch step ${String(index)} must have exactly one of type|paste|sendKeys|run|wait; found none`,
+      `Batch step ${String(index)} must have exactly one of type|paste|sendKeys|mouse|run|wait; found none`,
       index,
     );
   }
   if (verbs.length > 1) {
     return invalidInput(
-      `Batch step ${String(index)} must have exactly one of type|paste|sendKeys|run|wait; found ${verbs.join(', ')}`,
+      `Batch step ${String(index)} must have exactly one of type|paste|sendKeys|mouse|run|wait; found ${verbs.join(', ')}`,
       index,
     );
   }
@@ -111,6 +122,8 @@ function parseStep(rawStep: unknown, index: number): BatchStep {
       return parsePasteStep(rawStep, index);
     case 'sendKeys':
       return parseSendKeysStep(rawStep, index);
+    case 'mouse':
+      return parseMouseStep(rawStep, index);
     case 'run':
       return parseRunStep(rawStep, index);
     case 'wait':
@@ -162,6 +175,21 @@ function parseSendKeysStep(
     assertValidKeyName(key);
   }
   return { kind: 'sendKeys', keys };
+}
+
+function parseMouseStep(
+  rawStep: Record<string, unknown>,
+  index: number,
+): BatchStep {
+  const { mouse } = unwrapStep(MouseStepSchema, rawStep, index);
+  const result = MouseParamsSchema.safeParse(mouse);
+  if (!result.success) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: `Batch step ${String(index)} is invalid`,
+      details: { stepIndex: index, issues: result.error.issues },
+    });
+  }
+  return { kind: 'mouse', input: result.data };
 }
 
 function parseRunStep(
