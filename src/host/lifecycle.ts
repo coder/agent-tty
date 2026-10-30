@@ -259,8 +259,8 @@ function ownProcessGroupId(): number | null {
   if (process.platform === 'linux') {
     // The command name can hold spaces and parentheses, so count the fields
     // from the last ')': state, ppid, pgrp.
-    const stat = readFileSync('/proc/self/stat', 'utf8');
-    pgid = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[2]);
+    const procStat = readFileSync('/proc/self/stat', 'utf8');
+    pgid = Number(procStat.slice(procStat.lastIndexOf(')') + 2).split(' ')[2]);
   } else {
     pgid = Number(
       execFileSync('ps', ['-o', 'pgid=', '-p', String(process.pid)], {
