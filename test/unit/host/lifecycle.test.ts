@@ -43,7 +43,7 @@ import type * as TimersPromises from 'node:timers/promises';
 import {
   allocateSession,
   destroySession,
-  isInsideSessionProcessGroup,
+  cliRunsInsideProgramSession,
   isProcessGroupAlive,
   killProcessGroupBestEffort,
   reconcileSession,
@@ -254,7 +254,7 @@ function killFailsWith(code: string) {
   });
 }
 
-describe('isInsideSessionProcessGroup', () => {
+describe('cliRunsInsideProgramSession', () => {
   const platform = process.platform;
 
   function ownId(field: 'sid' | 'pgid'): number {
@@ -268,13 +268,13 @@ describe('isInsideSessionProcessGroup', () => {
   async function expectMatchesOnly(id: number): Promise<void> {
     expect(process.pid).not.toBe(id);
     const directory = await seedSession(makeRecord({ childPid: id }));
-    expect(await isInsideSessionProcessGroup('session-01')).toBe(true);
+    expect(await cliRunsInsideProgramSession('session-01')).toBe(true);
 
     await writeManifest(
       manifestPath(directory),
       makeRecord({ childPid: process.pid }),
     );
-    expect(await isInsideSessionProcessGroup('session-01')).toBe(false);
+    expect(await cliRunsInsideProgramSession('session-01')).toBe(false);
   }
 
   beforeEach(() => {
@@ -304,7 +304,7 @@ describe('isInsideSessionProcessGroup', () => {
     await seedSession(makeRecord({ childPid: ownId('pgid') }));
     Object.defineProperty(process, 'platform', { value: 'win32' });
 
-    expect(await isInsideSessionProcessGroup('session-01')).toBe(false);
+    expect(await cliRunsInsideProgramSession('session-01')).toBe(false);
   });
 });
 

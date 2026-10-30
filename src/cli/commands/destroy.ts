@@ -5,8 +5,8 @@ import type { DestroyResult } from '../../protocol/messages.js';
 
 import { emitSuccess } from '../output.js';
 import {
+  cliRunsInsideProgramSession,
   destroySession,
-  isInsideSessionProcessGroup,
 } from '../../host/lifecycle.js';
 
 interface CommandOptions {
@@ -15,10 +15,10 @@ interface CommandOptions {
   force: boolean;
 }
 
-// The destroy kills the program's process group, and the kernel hangs up
-// the group when the program exits, so a CLI inside that group dies before
-// it prints. A copy in a new session does the destroy and prints instead.
-async function rerunOutsideProcessGroup(): Promise<number> {
+// The destroy kills the program's process group and ends the program, whose
+// exit hangs up the jobs of its session. A CLI inside that session dies
+// before it prints, so a copy in a new session does the destroy instead.
+async function rerunInNewSession(): Promise<number> {
   const child = spawn(
     process.execPath,
     [...process.execArgv, ...process.argv.slice(1)],
@@ -35,8 +35,8 @@ async function rerunOutsideProcessGroup(): Promise<number> {
 export async function runDestroyCommand(
   options: CommandOptions,
 ): Promise<void> {
-  if (await isInsideSessionProcessGroup(options.sessionId)) {
-    process.exitCode = await rerunOutsideProcessGroup();
+  if (await cliRunsInsideProgramSession(options.sessionId)) {
+    process.exitCode = await rerunInNewSession();
     return;
   }
 

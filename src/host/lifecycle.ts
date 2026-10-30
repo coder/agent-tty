@@ -250,24 +250,26 @@ export function killProcessGroupBestEffort(pgid: number | null): void {
   }
 }
 
-function ownProcessGroupId(): number | null {
-  if (process.platform === 'win32') {
-    return null;
-  }
+function ownLinuxSessionId(): number {
+  // The command name can hold spaces and parentheses, so count the fields
+  // from the last ')': state, ppid, pgrp, session.
+  const procStat = readFileSync('/proc/self/stat', 'utf8');
+  const sid = Number(
+    procStat.slice(procStat.lastIndexOf(')') + 2).split(' ')[3],
+  );
+  invariant(
+    Number.isInteger(sid) && sid > 0,
+    'own session id must be a positive integer',
+  );
+  return sid;
+}
 
-  let pgid: number;
-  if (process.platform === 'linux') {
-    // The command name can hold spaces and parentheses, so count the fields
-    // from the last ')': state, ppid, pgrp.
-    const procStat = readFileSync('/proc/self/stat', 'utf8');
-    pgid = Number(procStat.slice(procStat.lastIndexOf(')') + 2).split(' ')[2]);
-  } else {
-    pgid = Number(
-      execFileSync('ps', ['-o', 'pgid=', '-p', String(process.pid)], {
-        encoding: 'utf8',
-      }).trim(),
-    );
-  }
+function ownProcessGroupId(): number {
+  const pgid = Number(
+    execFileSync('ps', ['-o', 'pgid=', '-p', String(process.pid)], {
+      encoding: 'utf8',
+    }).trim(),
+  );
   invariant(
     Number.isInteger(pgid) && pgid > 0,
     'own process group id must be a positive integer',
@@ -275,15 +277,27 @@ function ownProcessGroupId(): number | null {
   return pgid;
 }
 
-export async function isInsideSessionProcessGroup(
+// The program leads its own session, so a process inside that session has
+// the program's pid as its session id. Linux compares that id, which also
+// covers a job that the program's shell put in a group of its own. POSIX ps
+// has no session id field, so other systems compare the process group and
+// miss such a job. Windows has no sessions or groups.
+export async function cliRunsInsideProgramSession(
   sessionId: string,
 ): Promise<boolean> {
+  if (process.platform === 'win32') {
+    return false;
+  }
+
   const { manifestFile } = getSessionPaths(sessionId);
   const manifest = await readManifestIfExists(manifestFile);
+  if (manifest === null || manifest.childPid === null) {
+    return false;
+  }
+
   return (
-    manifest !== null &&
-    manifest.childPid !== null &&
-    manifest.childPid === ownProcessGroupId()
+    manifest.childPid ===
+    (process.platform === 'linux' ? ownLinuxSessionId() : ownProcessGroupId())
   );
 }
 
