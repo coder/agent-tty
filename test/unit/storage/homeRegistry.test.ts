@@ -151,6 +151,26 @@ describe('HomeRegistry store', () => {
     expect(await registry.read()).toEqual([]);
   });
 
+  it('forgets only the entry stored under the path as written when the canonical path is registered too', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-')));
+    temporaryDirectories.push(root);
+    await mkdir(join(root, 'data', 'homeB'), { recursive: true });
+    const registry = createHomeRegistry({
+      registryPath: await tempRegistryPath(),
+    });
+    await registry.upsert(join(root, 'data', 'homeB'));
+    await rm(join(root, 'data'), { recursive: true });
+    await mkdir(join(root, 'data2', 'homeB'), { recursive: true });
+    await symlink(join(root, 'data2'), join(root, 'data'));
+    await registry.upsert(join(root, 'data2', 'homeB'));
+
+    await registry.forget(join(root, 'data', 'homeB'));
+
+    expect((await registry.read()).map((entry) => entry.path)).toEqual([
+      join(root, 'data2', 'homeB'),
+    ]);
+  });
+
   it('reads a missing registry file as empty', async () => {
     const { registry } = await makeRegistry();
     expect(await registry.read()).toEqual([]);

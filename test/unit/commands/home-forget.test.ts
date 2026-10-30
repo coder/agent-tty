@@ -50,7 +50,10 @@ describe('home forget command', () => {
     const parsed = JSON.parse(
       getWrittenStdout(stdout.mock.calls as unknown[][]),
     ) as SuccessEnvelope<{ path: string; forgotten: boolean }>;
-    expect(parsed.result.forgotten).toBe(true);
+    expect(parsed.result).toEqual({
+      path: join(root, 'data', 'homeB'),
+      forgotten: true,
+    });
     expect(await readHomeRegistry()).toEqual([]);
   });
 
