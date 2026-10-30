@@ -334,11 +334,40 @@ function destroyFacts() {
       );
     });
   const record = requireDeclaration('src/host/lifecycle.ts', 'recordDestroyed');
-  const recordText = normalize(record.getText());
+  const writes = calls(record.body, 'writeManifest');
+  const write = writes.length === 1 ? writes[0] : undefined;
   const recordWrites =
-    calls(record.body, 'writeManifest').length === 1 &&
+    write !== undefined &&
     calls(record.body, 'unlinkIfPresent').length === 1 &&
-    recordText.includes("...manifest, status: 'destroyed'");
+    normalize(write.arguments[1]?.getText() ?? '').includes(
+      "...manifest, status: 'destroyed'",
+    );
+  const literal = write?.arguments[1];
+  const keepsExitCode =
+    literal !== undefined &&
+    ts.isObjectLiteralExpression(literal) &&
+    literal.properties.length === 3 &&
+    ts.isSpreadAssignment(literal.properties[0]) &&
+    literal.properties[0].expression.getText() === 'manifest' &&
+    literal.properties
+      .slice(1)
+      .every(
+        (p) =>
+          ts.isPropertyAssignment(p) &&
+          ['status', 'updatedAt'].includes(p.name.getText()),
+      );
+  const storage = (name) =>
+    normalize(requireDeclaration('src/storage/manifests.ts', name).getText());
+  const needsDirectory =
+    write?.arguments[2]?.kind === ts.SyntaxKind.FalseKeyword &&
+    storage('writeManifest').includes('createDirectory = true') &&
+    storage('writeManifest').includes('createDirectory, }') &&
+    storage('writeValidatedJsonFile').includes(
+      'createDirectory: options.createDirectory ?? true',
+    ) &&
+    /if \(options\.createDirectory \?\? true\) \{ await mkdir\(outputDirectory, \{ recursive: true \}\); \}/.test(
+      storage('writeTextFileAtomic'),
+    );
   const force = destroy.body.statements.find(
     (st) =>
       ts.isIfStatement(st) &&
@@ -347,26 +376,41 @@ function destroyFacts() {
   let forceRecords = false;
   if (force !== undefined && ts.isBlock(force.thenStatement)) {
     const block = force.thenStatement;
-    const wait = indexOfStatement(
+    const first = indexOfStatement(
       block,
-      /^const stopped = await waitForProcessesToExit\(/,
+      /^await stopSessionProcesses\(manifest, /,
     );
-    const check = guardIndex(block, '!stopped', ts.SyntaxKind.ThrowStatement);
     const reread = indexOfStatement(
       block,
       /^const current = await readSessionManifestOrThrow\(/,
+    );
+    const second = indexOfStatement(
+      block,
+      /^await stopSessionProcesses\(current, /,
     );
     const records = indexOfStatement(
       block,
       /^await recordDestroyed\(manifestFile, socketFile, current\);$/,
     );
     forceRecords =
-      wait >= 0 &&
-      check === wait + 1 &&
-      reread > check &&
-      records > reread &&
+      first >= 0 &&
+      reread > first &&
+      second > reread &&
+      records > second &&
       calls(block, 'reconcileSession').length === 0;
   }
+  const stop = requireDeclaration(
+    'src/host/lifecycle.ts',
+    'stopSessionProcesses',
+  ).body;
+  const stopWaits =
+    indexOfStatement(stop, /^killProcessBestEffort\(manifest\.childPid\);$/) >=
+      0 &&
+    indexOfStatement(stop, /^killProcessBestEffort\(manifest\.hostPid\);$/) >=
+      0 &&
+    indexOfStatement(stop, /^const stopped = await waitForProcessesToExit\(/) >=
+      0 &&
+    guardIndex(stop, '!stopped', ts.SyntaxKind.ThrowStatement) >= 0;
   const wait = requireDeclaration(
     'src/host/lifecycle.ts',
     'waitForProcessesToExit',
@@ -380,7 +424,10 @@ function destroyFacts() {
       recordsBeforeReturn &&
       recordWrites &&
       forceRecords &&
+      stopWaits &&
       waitsForProcessesOnly,
+    DestroyNeedsDirectory: needsDirectory,
+    DestroyKeepsExitCode: keepsExitCode,
   };
 }
 
@@ -465,6 +512,7 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'readSessionManifestOrThrow'],
   ['src/host/lifecycle.ts', 'waitForTerminalManifest'],
   ['src/host/lifecycle.ts', 'waitForProcessesToExit'],
+  ['src/host/lifecycle.ts', 'stopSessionProcesses'],
   ['src/host/lifecycle.ts', 'recordDestroyed'],
   ['src/host/lifecycle.ts', 'destroySession'],
   ['src/host/lifecycle.ts', 'reconcileSession'],
@@ -481,6 +529,7 @@ const COVERED = [
   ['src/host/rpcServer.ts', 'RpcServer.close'],
   ['src/storage/manifests.ts', 'readValidatedJsonFile'],
   ['src/storage/manifests.ts', 'writeTextFileAtomic'],
+  ['src/storage/manifests.ts', 'writeValidatedJsonFile'],
   ['src/storage/manifests.ts', 'writeManifest'],
   ['src/protocol/sessionStatusPolicy.ts', 'SESSION_STATUS_POLICIES'],
 ];
