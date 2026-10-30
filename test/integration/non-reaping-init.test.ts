@@ -75,7 +75,11 @@ describe.runIf(process.platform === 'linux')(
           ready,
         ],
         {
-          env: { ...process.env, AGENT_TTY_HOME: testHome },
+          env: {
+            ...process.env,
+            AGENT_TTY_HOME: testHome,
+            XDG_STATE_HOME: join(testHome, 'state'),
+          },
           stdio: ['ignore', 'pipe', 'inherit'],
         },
       );
