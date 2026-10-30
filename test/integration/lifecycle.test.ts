@@ -960,6 +960,35 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       },
     );
 
+    it.runIf(capturesToken)(
+      'destroy times out while it cannot read the autogroup of a process that the program left',
+      async () => {
+        const sessionId = await createProgram(
+          'trap "" HUP; sleep 300 & touch "$0"; exit 0',
+        );
+        const deadline = Date.now() + 10_000;
+        while (inspectSession(testHome, sessionId).status !== 'exited') {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
+
+        const result = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+          NODE_OPTIONS: [
+            process.env.NODE_OPTIONS ?? '',
+            `--import=${pathToFileURL(resolve('test/fixtures/denied-autogroup.ts')).href}`,
+          ].join(' '),
+        });
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          ok: false,
+          error: { code: 'HOST_TIMEOUT' },
+        });
+        expect(result.status).toBe(5);
+        expect(inspectSession(testHome, sessionId).status).toBe('exited');
+        expect(isGroupAlive(pgid)).toBe(true);
+      },
+    );
+
     it('a reconcile after a host crash ends the program and its background process', async () => {
       const sessionId = await createProgram(
         'trap "" TERM HUP; sleep 300 & touch "$0"; wait',

@@ -364,8 +364,44 @@ describe('judgeProgramGroup', () => {
       [member(4250, { sid: 4000 })],
       'unproven',
     ],
+    [
+      'a member of another session whose autogroup cannot be read',
+      BOOT,
+      [member(4250, { sid: 4000, autogroup: null })],
+      'unproven',
+    ],
     ['another boot', 'other-boot', [member(4242)], 'unproven'],
-    ['an unreadable boot id', null, [member(4242)], 'unproven'],
+    [
+      'another boot with a member whose autogroup cannot be read',
+      'other-boot',
+      [member(4242, { autogroup: null })],
+      'unproven',
+    ],
+    ['an unreadable boot id', null, [member(4242)], 'unknown'],
+    [
+      'zombies only with an unreadable boot id',
+      null,
+      [member(4242, { state: 'Z' })],
+      'gone',
+    ],
+    [
+      'a leader whose autogroup cannot be read',
+      BOOT,
+      [member(4242, { autogroup: null })],
+      'unknown',
+    ],
+    [
+      'a member left by an exited leader whose autogroup cannot be read',
+      BOOT,
+      [member(4250, { autogroup: null })],
+      'unknown',
+    ],
+    [
+      'a member with the token beside one whose autogroup cannot be read',
+      BOOT,
+      [member(4242, { autogroup: null }), member(4250)],
+      'owned',
+    ],
   ])('judges %s', (_name, bootId, rows, verdict) => {
     expect(judgeProgramGroup(record, bootId, rows).verdict).toBe(verdict);
   });
@@ -609,6 +645,52 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     },
   );
 
+  it.each([
+    ['refuses its read', deniedRead],
+    ['is empty', () => ''],
+  ])(
+    'is alive and gets no kill while the autogroup of a live member %s',
+    (_name, read) => {
+      procShowsTokenGroup('S');
+      const tokenRead = autogroupFile.read;
+      autogroupFile.read = (file) =>
+        file === '/proc/100/autogroup' ? read() : (tokenRead?.(file) ?? null);
+      const kill = probeEnds('ok');
+
+      expect(isProgramGroupAlive(group)).toBe(true);
+      stopProgramGroup(group);
+      expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+    },
+  );
+
+  it('is alive and gets no kill while /proc refuses to show the boot id', () => {
+    procShowsTokenGroup('S');
+    const tokenRead = autogroupFile.read;
+    autogroupFile.read = (file) =>
+      file === '/proc/sys/kernel/random/boot_id'
+        ? deniedRead()
+        : (tokenRead?.(file) ?? null);
+    const kill = probeEnds('ok');
+
+    expect(isProgramGroupAlive(group)).toBe(true);
+    stopProgramGroup(group);
+    expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+  });
+
+  it('is not alive and gets no kill while a live member names another autogroup', () => {
+    procShowsTokenGroup('S');
+    const tokenRead = autogroupFile.read;
+    autogroupFile.read = (file) =>
+      file === '/proc/100/autogroup'
+        ? '/autogroup-8 nice 0\n'
+        : (tokenRead?.(file) ?? null);
+    const kill = probeEnds('ok');
+
+    expect(isProgramGroupAlive(group)).toBe(false);
+    stopProgramGroup(group);
+    expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+  });
+
   it('is alive with no member in view when /proc hides other users and the probe ends EPERM', () => {
     procShowsTokenGroup();
     procHooks.mountinfo = procMount('rw,hidepid=2');
@@ -683,17 +765,20 @@ describe.runIf(capturesToken)('a program group with a token', () => {
   it.each([
     ['names no autogroup', () => 'autogroup?\n'],
     ['cannot be read', deniedRead],
-  ])('gets no kill when the autogroup of its member %s', (_name, read) => {
-    const { pid, record } = startGroup();
-    replaceAutogroupOf(pid, read);
-    const kill = vi.spyOn(process, 'kill');
+  ])(
+    'gets no kill and reads alive when the autogroup of its member %s',
+    (_name, read) => {
+      const { pid, record } = startGroup();
+      replaceAutogroupOf(pid, read);
+      const kill = vi.spyOn(process, 'kill');
 
-    stopProgramGroup(record);
+      stopProgramGroup(record);
 
-    expect(kill).not.toHaveBeenCalled();
-    expect(isProgramGroupAlive(record)).toBe(false);
-    expect(() => process.kill(-pid, 0)).not.toThrow();
-  });
+      expect(kill).not.toHaveBeenCalled();
+      expect(isProgramGroupAlive(record)).toBe(true);
+      expect(() => process.kill(-pid, 0)).not.toThrow();
+    },
+  );
 
   it('gets no kill once the group is gone', async () => {
     const { record } = startGroup();
