@@ -47,6 +47,7 @@ CONSTANTS
                             \*   records destroyed through recordDestroyed
     DestroyKeepsExitCode,   \* lifecycle.ts: recordDestroyed writes
                             \*   { ...manifest, status, updatedAt } only
+    ManifestWriteNeedsFolder, \* manifests.ts: writeManifest runs no mkdir
     MaxListReconciles       \* how many times the "list" process reconciles
 
 ASSUME MaxListReconciles \in 1..3
@@ -55,7 +56,8 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  HostWaitsForManifest, ReconcileRereads,
                  HostSerializesWrites, HostStopsAfterTerminalWrite,
                  ShutdownChecksCommandable,
-                 DestroyRecordsDestroyed, DestroyKeepsExitCode} : b \in BOOLEAN
+                 DestroyRecordsDestroyed, DestroyKeepsExitCode,
+                 ManifestWriteNeedsFolder} : b \in BOOLEAN
 
 Readers == {"gc", "list"}   \* the two processes that run reconcileSession
 NoRead == [pid |-> FALSE, origin |-> "none", code |-> FALSE]
@@ -124,9 +126,13 @@ Init ==
     /\ dpc = "read" /\ dforce \in BOOLEAN /\ drd = NoRead /\ dres = "pending"
     /\ dsaw = FALSE /\ dkill = FALSE
 
-\* writeManifest -> writeTextFileAtomic in src/storage/manifests.ts: mkdir -p
-\* the session directory, write a temp file, rename it over session.json.
-\* The rename is the visible step. The mkdir brings back a removed directory.
+\* writeManifest in src/storage/manifests.ts: write a temp file in the session
+\* directory and rename it over session.json. The rename is the visible step.
+\* WriteLands: with ManifestWriteNeedsFolder there is no mkdir, so a write into
+\* a removed directory throws SESSION_NOT_FOUND and creates nothing. Without
+\* it, the write runs mkdir first and brings the directory back.
+WriteLands == dir \/ ~ManifestWriteNeedsFolder
+
 Write(s, pid, origin, code) ==
     /\ dir' = TRUE
     /\ mst' = s
@@ -168,7 +174,9 @@ CreateMakesDirectory ==
                    ghostVars, sock, hostVars, shutVars, readerVars,
                    destroyVars>>
 
-\* allocateSession: writeManifest with status "running".
+\* allocateSession: writeManifest with status "running". gc skips a directory
+\* without a manifest, so this write always finds its directory (TypeOK
+\* checks that).
 CreateWritesManifest ==
     /\ cpc = "write"
     /\ Write("running", CreateRecordsHostPid, "none", FALSE)
@@ -205,10 +213,12 @@ WriterStopped == HostSerializesWrites /\ HostStopsAfterTerminalWrite /\ hwt
 
 \* A host write lands, or writes nothing once the writer has stopped. The
 \* record carries the exit code once recordExit or recordDestroyed ran.
+\* WriteLands is false here only in a state that already breaks R1.
 HostWrite(s, code) ==
     IF WriterStopped
     THEN UNCHANGED <<diskVars, hwt>>
-    ELSE /\ Write(s, TRUE, "none", code)
+    ELSE /\ WriteLands
+         /\ Write(s, TRUE, "none", code)
          /\ hwt' = (hwt \/ s \in Terminal)
 
 \* A write lands. When the queued "destroying" write is next, its turn starts
@@ -427,14 +437,19 @@ ReconcileRereadsManifest(p) ==
 \* writeManifest(reconciledManifest): "running" becomes failed/host-death,
 \* "destroying" becomes destroyed, any other status that gets here becomes
 \* failed/unknown (the default branch). hostPid and childPid become null.
+\* When the directory is gone, the write throws SESSION_NOT_FOUND and
+\* reconcileSession returns.
 ReconcileWrites(p) ==
     /\ pc[p] = "r_write"
-    /\ CASE rd[p].st = "running" ->
-              Write("failed", FALSE, "host-death", rd[p].code)
-         [] rd[p].st = "destroying" ->
-              Write("destroyed", FALSE, "none", rd[p].code)
-         [] OTHER -> Write("failed", FALSE, "unknown", rd[p].code)
-    /\ pc' = [pc EXCEPT ![p] = "r_unlink"]
+    /\ IF WriteLands
+          THEN /\ CASE rd[p].st = "running" ->
+                         Write("failed", FALSE, "host-death", rd[p].code)
+                    [] rd[p].st = "destroying" ->
+                         Write("destroyed", FALSE, "none", rd[p].code)
+                    [] OTHER -> Write("failed", FALSE, "unknown", rd[p].code)
+               /\ pc' = [pc EXCEPT ![p] = "r_unlink"]
+          ELSE /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
+               /\ UNCHANGED diskVars
     /\ UNCHANGED <<ghostVars, sock, cpc, hostVars, shutVars, rd, gres, lruns,
                    destroyVars>>
 
@@ -554,14 +569,19 @@ DestroyReads ==
                    readerVars, dforce, dkill>>
 
 \* recordDestroyed: writeManifest({ ...manifest, status: 'destroyed' }) from
-\* the copy that destroy read. Its mkdir brings back a folder that gc
-\* removed in the meantime (coder/agent-tty#196).
+\* the copy that destroy read. When gc removed the directory in the meantime,
+\* the write throws SESSION_NOT_FOUND, and destroy reports that error.
 DestroyWritesDestroyed ==
     /\ dpc = "twrite"
-    /\ Write("destroyed", drd.pid, drd.origin, DestroyKeepsExitCode /\ drd.code)
-    /\ dpc' = "tunlink" /\ drd' = NoRead /\ dsaw' = TRUE
+    /\ IF WriteLands
+          THEN /\ Write("destroyed", drd.pid, drd.origin,
+                        DestroyKeepsExitCode /\ drd.code)
+               /\ dpc' = "tunlink" /\ drd' = NoRead /\ dsaw' = TRUE
+               /\ UNCHANGED dres
+          ELSE /\ DestroyEnds("error")
+               /\ UNCHANGED diskVars
     /\ UNCHANGED <<ghostVars, sock, cpc, hostVars, shutVars, readerVars,
-                   dforce, dres, dkill>>
+                   dforce, dkill>>
 
 \* recordDestroyed: unlinkIfPresent(socketFile). destroy reports success.
 DestroyUnlinksSocket ==
@@ -683,6 +703,7 @@ TypeOK ==
     /\ dsnap \in {"none", "destroying", "destroyed"}
     /\ (mst # "none") => dir
     /\ (dir /\ mst = "none") => cpc # "done"
+    /\ (cpc = "write") => dir
     /\ gres \in {"pending", "skipped", "removed"}
     /\ lruns \in 0..MaxListReconciles
     /\ dres \in {"pending", "ok", "error"}
@@ -739,6 +760,9 @@ DestroyedOnlyWhenEnded ==
 
 \* R9: destroy reports success only after it wrote destroyed or read it.
 DestroyEndsDestroyed == dres = "ok" => dsaw
+
+\* R10: once gc removed the session directory, no write brings it back.
+RemovedFolderStaysRemoved == gres = "removed" => ~dir
 
 \* Witnesses. check.sh expects TLC to report each one VIOLATED, which shows
 \* that the model reaches the state: the rules above are not true only

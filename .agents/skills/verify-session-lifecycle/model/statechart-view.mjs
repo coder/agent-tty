@@ -4,6 +4,8 @@
 const reader = (from, to) =>
   from.pc.gc === to.pc.gc ? 'another command' : 'gc';
 const reconciles = (from, to) => `${reader(from, to)} reconciles:`;
+const back = (from, to) =>
+  !from.dir && to.dir ? ' and brings back the session folder' : '';
 
 export const title =
   'One agent-tty session while gc, destroy and another command run';
@@ -89,7 +91,9 @@ export const step = (action, from, to) => {
     case 'ReconcileRereadsManifest':
       return `${reconciles(from, to)} reads the manifest again`;
     case 'ReconcileWrites':
-      return `${reconciles(from, to)} writes "${to.mst}"`;
+      return to.dir
+        ? `${reconciles(from, to)} writes "${to.mst}"${back(from, to)}`
+        : `${reconciles(from, to)} finds the folder gone and returns`;
     case 'ReconcileUnlinksSocket':
       return `${reconciles(from, to)} unlinks the socket file`;
     case 'GcFindsDirectory':
@@ -109,7 +113,9 @@ export const step = (action, from, to) => {
         ? 'destroy reads the manifest and fails'
         : 'destroy reads the manifest';
     case 'DestroyWritesDestroyed':
-      return 'destroy writes "destroyed"';
+      return to.dir
+        ? `destroy writes "destroyed"${back(from, to)}`
+        : 'destroy finds the folder gone and fails';
     case 'DestroyUnlinksSocket':
       return 'destroy unlinks the socket file and succeeds';
     case 'DestroyKills':

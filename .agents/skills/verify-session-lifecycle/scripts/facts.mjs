@@ -135,7 +135,7 @@ function reconcileFacts() {
     'manifest.hostPid !== null && hostAlive',
     ts.SyntaxKind.ReturnStatement,
   );
-  const write = indexOfStatement(body, /^await writeManifest\(/);
+  const write = indexOfStatement(body, /^(?:try \{\s*)?await writeManifest\(/);
   // The re-read after the host is found dead, its guard, and a reconciled
   // record built from that copy, all before the write.
   const reread = indexOfStatement(
@@ -418,6 +418,38 @@ function destroyFacts() {
   };
 }
 
+function manifestWriteFacts() {
+  const file = 'src/storage/manifests.ts';
+  const visited = new Set();
+  let renames = 0;
+  let mkdirs = 0;
+  const visit = (fn) => {
+    walk(fn.body, (node) => {
+      if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
+        return;
+      }
+      const name = node.expression.text;
+      if (name === 'rename') {
+        renames += 1;
+      }
+      if (name === 'mkdir' || name === 'mkdirSync') {
+        mkdirs += 1;
+      }
+      const local = findDeclaration(file, name);
+      if (
+        local !== undefined &&
+        ts.isFunctionDeclaration(local) &&
+        !visited.has(name)
+      ) {
+        visited.add(name);
+        visit(local);
+      }
+    });
+  };
+  visit(requireDeclaration(file, 'writeManifest'));
+  return { ManifestWriteNeedsFolder: renames > 0 && mkdirs === 0 };
+}
+
 function gcFacts() {
   const fn = requireDeclaration('src/cli/commands/gc.ts', 'gcSessions');
   let loop;
@@ -515,7 +547,7 @@ const COVERED = [
   ['src/host/rpcServer.ts', 'RpcServer.listen'],
   ['src/host/rpcServer.ts', 'RpcServer.close'],
   ['src/storage/manifests.ts', 'readValidatedJsonFile'],
-  ['src/storage/manifests.ts', 'writeTextFileAtomic'],
+  ['src/storage/manifests.ts', 'replaceFileAtomic'],
   ['src/storage/manifests.ts', 'writeManifest'],
   ['src/protocol/sessionStatusPolicy.ts', 'SESSION_STATUS_POLICIES'],
 ];
@@ -657,6 +689,7 @@ function hasRecursiveOption(call) {
 const TRACKED_CALLS = [
   'writeManifest',
   'persistManifest',
+  'replaceFileAtomic',
   'writeValidatedJsonFile',
   'writeTextFileAtomic',
   'manifestPath',
@@ -729,6 +762,7 @@ const constants = {
   ...createFacts(),
   ...hostFacts(),
   ...destroyFacts(),
+  ...manifestWriteFacts(),
   ...policyFacts(),
 };
 console.log(
