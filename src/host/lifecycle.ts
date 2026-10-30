@@ -224,10 +224,33 @@ function procStatFields(procStat: string): string[] {
 // process that it refuses to show, or null when it shows none of the group.
 // kill(-pgid, 0) finds a zombie until its parent reaps it, and an init that
 // never reaps orphans, such as a container's PID 1 without an init, never
-// does. Off Linux there is no scan and the answer is true, so a zombie reads
-// alive. launchd reaps orphans on macOS.
+// does. Off Linux, and when /proc hides other users, there is no scan and
+// the answer is true, so a zombie reads alive. launchd reaps orphans on
+// macOS.
+// hidepid=2 (shown as hidepid=invisible on newer kernels) leaves the
+// processes of other users out of the /proc listing. An unreadable
+// mountinfo counts as hiding them.
+function procHidesOtherUsers(): boolean {
+  let mountinfo: string;
+  try {
+    mountinfo = readFileSync('/proc/self/mountinfo', 'utf8');
+  } catch {
+    return true;
+  }
+  for (const line of mountinfo.split('\n')) {
+    const fields = line.split(' ');
+    const separator = fields.indexOf('-');
+    if (fields[4] === '/proc' && fields[separator + 1] === 'proc') {
+      return /(^|,)hidepid=(2|invisible)(,|$)/.test(
+        fields[separator + 3] ?? '',
+      );
+    }
+  }
+  return false;
+}
+
 function groupHasLiveProcess(pgid: number): boolean | null {
-  if (process.platform !== 'linux') {
+  if (process.platform !== 'linux' || procHidesOtherUsers()) {
     return true;
   }
 
@@ -284,8 +307,6 @@ export function isProcessGroupAlive(pgid: number | null): boolean {
   }
 
   // None in view: the kill found processes that were reaped before the scan.
-  // hidepid=2 can also hide a process of another user here, which then reads
-  // gone.
   return groupHasLiveProcess(pgid) ?? false;
 }
 
