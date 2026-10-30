@@ -554,7 +554,8 @@ HostKillsProgram ==
 \* HostWaitsForGroup the host records destroyed right after the kill and
 \* queues its exit write, as the code did before the wait. A program that
 \* exits on its own can leave a process that it started running in its
-\* group (`left`). The model drops one of another user.
+\* group (`left`), unless a kill ended the group first. The model drops one
+\* of another user.
 ProgramExits ==
     /\ hostAlive /\ hex = "wait"
     /\ RecordsProgramSync => hpc # "record"
@@ -565,7 +566,7 @@ ProgramExits ==
                      THEN hex' = "groupwait" /\ UNCHANGED hst
                      ELSE hex' = "exitwrite" /\ hst' = "destroyed"
           ELSE /\ hex' = "exitwrite" /\ hst' = "exited"
-               /\ prog' = FALSE /\ foreign' = FALSE /\ left' \in BOOLEAN
+               /\ prog' = FALSE /\ foreign' = FALSE /\ left' \in {FALSE, prog}
                /\ UNCHANGED hitUnrelated
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, rsz, hsd,
                    dsnap, hwt, sig, readerVars, destroyVars, rec, reused,
