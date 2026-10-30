@@ -300,8 +300,18 @@ describe('cliRunsInsideProgramSession', () => {
     await expectMatchesOnly(pgid);
   });
 
+  it('matches a caller whose environment names the session before a manifest names the program', async () => {
+    await seedSession(makeRecord({ childPid: null }));
+    vi.stubEnv('AGENT_TTY_SESSION_ID', 'session-01');
+    expect(await cliRunsInsideProgramSession('session-01')).toBe(true);
+
+    vi.stubEnv('AGENT_TTY_SESSION_ID', 'session-02');
+    expect(await cliRunsInsideProgramSession('session-01')).toBe(false);
+  });
+
   it('on win32 never matches', async () => {
     await seedSession(makeRecord({ childPid: ownId('pgid') }));
+    vi.stubEnv('AGENT_TTY_SESSION_ID', 'session-01');
     Object.defineProperty(process, 'platform', { value: 'win32' });
 
     expect(await cliRunsInsideProgramSession('session-01')).toBe(false);

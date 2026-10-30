@@ -1077,6 +1077,43 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       expect(await groupEnds(pgid)).toBe(true);
     });
 
+    // The program can run destroy before the host's start-up write names its
+    // pid. Holding that write keeps create's manifest, with no childPid, for
+    // the whole destroy. The hold matches the host's argv only, so the inner
+    // CLI, which inherits it, runs at full speed.
+    it('destroy --force before the host names the program prints its result', async () => {
+      const out = join(testHome, 'early-destroy.json');
+      runCli(
+        [
+          'create',
+          '--json',
+          '--',
+          '/bin/sh',
+          '-c',
+          '"$@" destroy "$AGENT_TTY_SESSION_ID" --force --json > "$0"',
+          out,
+          ...cli,
+        ],
+        {
+          AGENT_TTY_HOME: testHome,
+          NODE_OPTIONS: [
+            process.env.NODE_OPTIONS ?? '',
+            `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+          ].join(' '),
+          REPLAY_HOLD: '_host:rename:/session.json:1:4000',
+        },
+      );
+      const [sessionId] = await readdir(join(testHome, 'sessions'));
+
+      expect(await readEnvelopeOnceWritten(out)).toMatchObject({
+        ok: true,
+        result: { sessionId, destroyed: true },
+      });
+      expect(inspectSession(testHome, sessionId as string).status).toBe(
+        'destroyed',
+      );
+    }, 60_000);
+
     // Bash runs a typed command as a job in its own process group, so only
     // the session id shows that it runs inside the program. destroy reads
     // that id on Linux only.
