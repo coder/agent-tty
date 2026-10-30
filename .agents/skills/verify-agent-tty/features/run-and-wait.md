@@ -11,6 +11,7 @@ A user sends input to a running program and waits until the screen shows the res
 - `input-mark` adds a labeled marker event to the timeline.
 - `wait-text` waits for text on the screen.
 - `wait-regex-cursor` waits for a regex on the cursor's row only.
+- `wait-cursor` waits until the cursor is at a row, a column, or both.
 - `wait-stable` waits until the visible screen has not changed for a time.
 - `wait-idle` waits until the program has written nothing for a time.
 - `wait-exit` waits for the program to exit and returns its exit code.
@@ -40,9 +41,10 @@ Preconditions:
 - **Type.** Run `att type "$H" hello --append-newline --json`. `.result.seq` is a number. `att wait "$H" --text 'ECHO: hello' --timeout 10000 --json` returns `matched: true` and `matchedText: "ECHO: hello"`.
 - **Paste.** Run `att paste "$H" pasted --json`, then `att send-keys "$H" Enter --json`. The second envelope has `accepted: ["Enter"]`. `att wait "$H" --text 'ECHO: pasted' --timeout 10000 --json` matches. The snapshot shows the input line as `READY> ^[[200~pasted^[[201~` (the paste is bracketed) and the reply as `ECHO: pasted`, without the markers.
 - **Prompt on the cursor row.** Run `att wait "$H" --regex 'READY>$' --scope cursor-line --timeout 10000 --json`. `.result.cursorRow` is the row of the last `READY>` prompt.
+- **Cursor position.** Run `R=$(att wait "$H" --regex 'READY>$' --scope cursor-line --timeout 10000 --json | jq .result.cursorRow)`, then `att type "$H" abc --json` and `att wait "$H" --cursor-row "$R" --cursor-col 10 --timeout 5000 --json`. `.result.matched` is `true`, `cursorRow` equals `$R`, and `cursorCol` is `10`: the 7 columns of `READY> ` plus `abc`. `att wait "$H" --cursor-row "$R" --timeout 5000 --json` and `att wait "$H" --cursor-col 10 --timeout 5000 --json` also match. `att wait "$H" --cursor-col 0 --timeout 500 --json` exits 11 with `.result.timedOut: true`. Then `att send-keys "$H" Enter --json`, and `att wait "$H" --text 'ECHO: abc' --timeout 10000 --json` matches.
 - **Stable screen.** Run `att wait "$H" --screen-stable-ms 1000 --timeout 10000 --json`. `.result.matched` is `true`, and `.result.screenHash` equals the `screenHash` of a `snapshot` taken right after it.
 - **Marker.** Run `att mark "$H" checkpoint --json`. `.result.seq` is a number, and `events.jsonl` of the session has a `marker` event with label `checkpoint` at that seq.
-- **Time-out.** Run `att wait "$H" --text never-there --timeout 500 --json`. Exit code 11, `.error.code` is `WAIT_TIMEOUT`.
+- **Time-out.** Run `att wait "$H" --text never-there --timeout 500 --json`. Exit code 11 (`WAIT_TIMEOUT`). `.ok` is `true`, `.result.matched` is `false` and `.result.timedOut` is `true`: `wait` reports a time-out in the result and the exit code, not in `.error`.
 - **Key chord and exit.** Run `att send-keys "$H" Ctrl+C --json`, then `att wait "$H" --exit --timeout 10000 --json`. The screen shows `INTERRUPTED`, and `.result` is `{"timedOut":false,"exitCode":130}`.
 - **Proof.** Save the final `snapshot --format text --json` of each session and a `screenshot --json` of `$B` under `$EVIDENCE/input/`, and copy `events.jsonl` of both sessions there.
 

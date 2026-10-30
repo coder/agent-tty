@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Answers "is this run worth driving?" for one verification run. It changes
-# nothing outside the run's home: `agent-tty doctor` creates and removes one
-# probe session there.
+# nothing outside the run folder: `agent-tty doctor` creates and removes one
+# probe session in the run's home, and run-pids.sh records child PIDs.
 #
 #   .agents/skills/verify-agent-tty/scripts/doctor.sh <run>/env.sh
 set -uo pipefail
@@ -33,12 +33,12 @@ if [ "$fail" -ne 0 ]; then
 fi
 
 cd "$AGENT_TTY_REPO" || exit 2
-if [ ! -f dist/cli/main.js ]; then
-  bad "dist/cli/main.js is missing: run start-run.sh again"
-elif [ -n "$(find src \( -name '*.ts' -o -name '*.tsx' \) -newer dist/cli/main.js | head -1)" ]; then
-  bad "dist/ is older than src/: run start-run.sh again to rebuild"
+if ! stale=$("$(dirname "${BASH_SOURCE[0]}")/stale-dist.sh"); then
+  bad "stale-dist.sh could not check dist/"
+elif [ -n "$stale" ]; then
+  bad "dist/ is stale ($stale): run start-run.sh again to rebuild"
 else
-  pass "dist/ is newer than every file in src/"
+  pass "dist/ has every module of src/ and is newer than src/"
 fi
 
 want=$(node -p "require('./package.json').version")

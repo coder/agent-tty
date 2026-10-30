@@ -21,7 +21,7 @@ ENV=$(.agents/skills/verify-agent-tty/scripts/start-run.sh <name>)
 `start-run.sh` does this, from an empty folder to a usable CLI:
 
 1. If `node_modules/.bin/tsc` is missing (a partial install), it runs `aube ci`. Otherwise it runs `aube install --frozen-lockfile`, which brings `node_modules` up to date after a change to `aube-lock.yaml` and returns at once when nothing changed. Without that, a run after a dependency change builds and runs the old packages.
-2. It runs `npm run build`. If `dist/cli/main.js` is still older than a file in `src/`, it removes `.tsconfig.build.tsbuildinfo` and `dist/` and builds again. A stale build info file makes `tsc` exit 0 and write nothing.
+2. It runs `npm run build`. If `stale-dist.sh` then finds a module of `src/` without its built module in `dist/`, or a `.ts` or `.tsx` file in `src/` newer than `dist/cli/main.js`, it removes `.tsconfig.build.tsbuildinfo` and `dist/` and builds again. A stale build info file makes `tsc` exit 0 and write nothing, also when only one built module was deleted.
 3. It makes the run folder `<root>/<UTC time>-<name>-<random>/` with `mktemp -d`, and `home/`, `state/` and `evidence/` in it. The root is `$VERIFY_ROOT`, or `${TMPDIR:-/tmp}/verify-agent-tty-<uid>`. The script refuses a root that is a symlink or that you do not own, and sets it to mode 700, so another user on a shared machine cannot plant files there.
 4. It writes `env.sh` there and prints its path.
 
@@ -39,7 +39,7 @@ Run this first, and again whenever a result looks wrong:
 .agents/skills/verify-agent-tty/scripts/doctor.sh "$ENV"
 ```
 
-It checks that the Home and the Home Registry are this run's and not `~/.agent-tty`, that `dist/` is newer than `src/`, that `att version --json` reports the `package.json` version, and that `att doctor --json` passes (PTY spawn, socket, atomic writes, Playwright Chromium, ghostty-web, libghostty-vt). It prints the sessions in the run's Home and the processes the run started. Exit 0 means the run is worth driving. `agent-tty doctor` creates and removes one probe session in the run's Home. Nothing outside the run folder changes.
+It checks that the Home and the Home Registry are this run's and not `~/.agent-tty`, that `dist/` has a built module for every module of `src/` and is newer than `src/`, that `att version --json` reports the `package.json` version, and that `att doctor --json` passes (PTY spawn, socket, atomic writes, Playwright Chromium, ghostty-web, libghostty-vt). It prints the sessions in the run's Home and the processes the run started. Exit 0 means the run is worth driving. `agent-tty doctor` creates and removes one probe session in the run's Home. Nothing outside the run folder changes.
 
 ## Drive
 
@@ -67,15 +67,16 @@ Put every proof under `$EVIDENCE/<feature>/`, and make that folder with `mkdir -
 .agents/skills/verify-agent-tty/scripts/cleanup.sh "$ENV"
 ```
 
-It destroys every active session of the run through `att destroy` (then `--force` if needed), waits up to 10 seconds for the run's processes to end, and stops only the ones that are left. Those are the session hosts that carry this run's `AGENT_TTY_HOME` and the programs that carry the `AGENT_TTY_SESSION_ID` of one of this run's sessions, as `run-pids.sh` lists them. It never kills by process name. It then copies each session's `session.json`, `events.jsonl` and `artifacts/` into `$EVIDENCE/sessions/`, removes the run's socket folder `/tmp/agent-tty/<hash>` if it is empty, and removes `home/` and `state/`. `$EVIDENCE` stays. It keeps `home/` and `state/` and exits 1 when the copy fails, or when there is no `/proc` (macOS): then it cannot confirm that every process of the run has ended, so stop them and remove the two folders yourself. Run cleanup after every run, also after a failed one.
+It destroys every active session of the run through `att destroy` (then `--force` if needed), waits up to 10 seconds for the run's processes to end, and stops only the ones that are left. Those are the session hosts that carry this run's `AGENT_TTY_HOME`, and the programs that carry this run's `AGENT_TTY_HOME` in the terminal session of a session program, or the `AGENT_TTY_SESSION_ID` of one of this run's sessions, as `run-pids.sh` lists them. `run-pids.sh` keeps the PID of each session program that it has seen in `<run>/child-pids`, so it still finds the children of that program after its host died and reconcile removed the PID from `session.json`. `cleanup.sh` runs it before its first `att` call. A program that sets its own `AGENT_TTY_SESSION_ID` with `create --env` is tied to the run only by its terminal session. So after its host died, `run-pids.sh` finds its children only if it read the program's PID before an `att` command such as `att list`, `att inspect`, `att gc` or `att destroy` reconciled the session, and it never finds a daemon that such a program starts in a new terminal session. It never kills by process name, and it skips the processes of the caller's own terminal session. It then copies each session's `session.json`, `events.jsonl` and `artifacts/` into `$EVIDENCE/sessions/`. Before it removes anything, it looks for every process outside the caller's terminal session that still carries this run's `AGENT_TTY_HOME`, also one that `run-pids.sh` cannot tie to the run, such as a process that you started from another shell that sourced `env.sh`. If it finds one, or if `run-pids.sh` failed, it stops nothing more, prints those processes, keeps `home/` and `state/`, and exits 1. Stop them yourself (`kill <pid>`) or let them end, then run `cleanup.sh` again. Otherwise it removes the run's socket folder `/tmp/agent-tty/<hash>` if it is empty, and removes `home/` and `state/`. `$EVIDENCE` stays. It also keeps `home/` and `state/` and exits 1 when the copy fails, or when there is no `/proc` (macOS): then it cannot confirm that every process of the run has ended, so stop them and remove the two folders yourself. Run cleanup after every run, also after a failed one.
 
 ## Helpers
 
-All scripts take the run's `env.sh` path, except `start-run.sh`:
+All scripts take the run's `env.sh` path, except `start-run.sh` and `stale-dist.sh`:
 
 | Script                         | Use                                                                               |
 | ------------------------------ | --------------------------------------------------------------------------------- |
 | `scripts/start-run.sh [name]`  | Sync deps with the lockfile, build, make the run folder, print the `env.sh` path. |
+| `scripts/stale-dist.sh`        | Print why `dist/` is not a complete, current build of `src/`, or nothing.         |
 | `scripts/doctor.sh <env.sh>`   | Check that the run is worth driving. Exit 0 or 1.                                 |
 | `scripts/run-pids.sh <env.sh>` | Print the PIDs of the hosts and programs this run started (Linux, reads `/proc`). |
 | `scripts/cleanup.sh <env.sh>`  | Tear the run down and keep the evidence.                                          |

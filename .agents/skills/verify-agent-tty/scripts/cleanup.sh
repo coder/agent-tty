@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Tears down one verification run: destroys its sessions through the CLI,
-# stops only the processes that carry this run's AGENT_TTY_HOME, copies each
+# stops only the processes that run-pids.sh ties to this run, copies each
 # session's files into evidence/sessions/, then removes home/ and state/.
-# evidence/ stays.
+# evidence/ stays. It keeps home/ and state/ and exits 1 when run-pids.sh
+# fails, or while a process outside the caller's terminal session still
+# carries this run's AGENT_TTY_HOME.
 #
 #   .agents/skills/verify-agent-tty/scripts/cleanup.sh <run>/env.sh
 set -uo pipefail
@@ -16,6 +18,18 @@ if [ "$AGENT_TTY_HOME" != "$VERIFY_RUN/home" ] || [ "$XDG_STATE_HOME" != "$VERIF
   exit 2
 fi
 
+pids_failed=""
+run_pids() {
+  left=""
+  [ -z "$pids_failed" ] || return 0
+  left=$("$(dirname "${BASH_SOURCE[0]}")/run-pids.sh" "$ENV_FILE" | tr '\n' ' ') || {
+    left=""
+    pids_failed=1
+  }
+}
+# `att list` reconciles, which clears childPid of a session whose host died.
+# run-pids.sh records each childPid first, so it still finds their children.
+run_pids
 if [ -d "$AGENT_TTY_HOME/sessions" ]; then
   for id in $(att list --json 2>/dev/null | jq -r '.result.sessions[].sessionId'); do
     att destroy "$id" --json >/dev/null 2>&1 || att destroy "$id" --force --json >/dev/null 2>&1 ||
@@ -23,20 +37,17 @@ if [ -d "$AGENT_TTY_HOME/sessions" ]; then
   done
 fi
 
-run_pids() {
-  "$(dirname "${BASH_SOURCE[0]}")/run-pids.sh" "$ENV_FILE" 2>/dev/null
-}
 for _ in 1 2 3 4 5 6 7 8 9 10; do
-  [ -z "$(run_pids)" ] && break
+  run_pids
+  [ -z "$left" ] && break
   sleep 1
 done
-left=$(run_pids | tr '\n' ' ')
 if [ -n "$left" ]; then
   echo "cleanup.sh: stopping processes of this run that outlived destroy: $left" >&2
   # shellcheck disable=SC2086
   kill -TERM $left 2>/dev/null
   sleep 2
-  left=$(run_pids | tr '\n' ' ')
+  run_pids
   # shellcheck disable=SC2086
   [ -z "$left" ] || kill -KILL $left 2>/dev/null
 fi
@@ -52,6 +63,24 @@ fi
 if [ ! -d /proc/self ]; then
   echo "cleanup.sh: no /proc here, so it cannot confirm that every process of this run has ended; kept home/ and state/." >&2
   echo "cleanup.sh: stop the processes with AGENT_TTY_HOME=$AGENT_TTY_HOME (see 'ps'), then remove $AGENT_TTY_HOME and $XDG_STATE_HOME." >&2
+  exit 1
+fi
+
+session_of() {
+  { sed 's/.*) //' "/proc/$1/stat"; } 2>/dev/null | cut -d' ' -f4
+}
+caller_session=$(session_of $$)
+holders=""
+for file in $(grep -lzxF "AGENT_TTY_HOME=$AGENT_TTY_HOME" /proc/[0-9]*/environ 2>/dev/null); do
+  pid=${file#/proc/}
+  pid=${pid%/environ}
+  args=$({ tr '\0' ' ' <"/proc/$pid/cmdline"; } 2>/dev/null)
+  [ -z "$args" ] || [ "$(session_of "$pid")" = "$caller_session" ] || holders="$holders  $pid $args"$'\n'
+done
+if [ -n "$pids_failed$holders" ]; then
+  [ -z "$pids_failed" ] || echo "cleanup.sh: run-pids.sh failed, so cleanup.sh cannot prove that every process of this run has ended. Fix what run-pids.sh reports." >&2
+  [ -z "$holders" ] || printf 'cleanup.sh: these processes outside your terminal session still carry AGENT_TTY_HOME=%s. Stop them (kill <pid>) or let them end:\n%s' "$AGENT_TTY_HOME" "$holders" >&2
+  echo "cleanup.sh: kept home/ and state/. Then run cleanup.sh again." >&2
   exit 1
 fi
 
