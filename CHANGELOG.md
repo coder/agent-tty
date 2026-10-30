@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-30
+
+### Added
+
+- `wait --scope cursor-line` matches `--text`/`--regex` only against the row under the cursor, eliminating the classic echoed-command false positive. Also surfaced as a `scope` field on batch `wait` steps and the `waitForRender` RPC ([#169](https://github.com/coder/agent-tty/pull/169)).
+- `record diff <session-id-a> <session-id-b>` replays two sessions offline from their event logs and emits a line-level diff of their canonical visible screens, with `--at-seq-a`/`--at-seq-b` for self-diffing against earlier state and a strict `RecordDiffResultSchema` on the `--json` envelope ([#170](https://github.com/coder/agent-tty/pull/170)).
+- PTY processes spawned inside a session now receive `AGENT_TTY_ACTIVE=true` and `AGENT_TTY_SESSION_ID=<id>` so shell profiles and scripts can detect the managed session and reference its ID ([#166](https://github.com/coder/agent-tty/pull/166) by @prmartinow).
+
+### Fixed
+
+- `destroy` now stops the program's full process group, escalating to SIGKILL 2 s after SIGHUP, so programs that ignore SIGHUP and their background children no longer survive ([#201](https://github.com/coder/agent-tty/pull/201)). Idle timeouts also kill the group, EPERM from a foreign-user process parks the session in `destroying` instead of crashing the host, and `destroy` invoked from inside its own session re-runs in a new session so it can print its result ([#216](https://github.com/coder/agent-tty/pull/216)). On Linux the host records the program's autogroup token in `program.json` and every group kill verifies the token before signalling, so `destroy` of an exited session can reap leftovers without ever killing an unrelated group that reused the id ([#221](https://github.com/coder/agent-tty/pull/221)).
+- Every successful `destroy` now records `destroyed` on the manifest. `destroy --force` and `destroy` of a crashed session previously spent ~5 s waiting for a socket and ended `failed`; they now end `destroyed` in under a second ([#194](https://github.com/coder/agent-tty/pull/194)).
+- `create` no longer races with concurrent `gc`, `list`, `inspect` or dashboard reconciles: the host is launched first, the first manifest carries its pid, reconcile re-reads the manifest before marking anything failed, and all `session.json` writes go through a single serial writer ([#181](https://github.com/coder/agent-tty/pull/181)).
+- `allocateSession` validates `cwd`, shell, and command segments before creating `<home>/sessions/<id>`, so a failed `create` no longer leaves empty session directories that `gc` refuses to clean ([#188](https://github.com/coder/agent-tty/pull/188)).
+- `writeManifest` no longer re-creates a session folder that `gc` has removed; late writes fail with `SESSION_NOT_FOUND` and `destroy` can now surface exit 3 when `gc` wins the race, preventing stub folders that `list --all` would show forever ([#200](https://github.com/coder/agent-tty/pull/200)). Snapshot, screenshot and `record export` artifact writes gained the same guarantee, and `gc`'s `rm` retries up to three times so a late `session.json` still gets cleaned ([#212](https://github.com/coder/agent-tty/pull/212)).
+- Session-less PTYs (the `doctor` spawn probe) no longer inherit `AGENT_TTY_ACTIVE` or `AGENT_TTY_SESSION_ID` from an outer agent-tty session ([#178](https://github.com/coder/agent-tty/pull/178)).
+- Repeat `screenshot` and `snapshot` captures at the same seq now publish via `link` into `artifacts/`, falling back to `copyFile` with `COPYFILE_EXCL` on filesystems without hard links. Identical bytes reuse the existing file, different bytes land at `<name>-<n>`, and a failed manifest append can no longer delete an earlier capture's file ([#191](https://github.com/coder/agent-tty/pull/191)).
+- `canonicalHomePath` resolves a Home behind a symlink the same way before and after it exists, so the first `create` in a new symlinked `--home` or `AGENT_TTY_HOME` succeeds instead of exiting 6 `HOST_UNREACHABLE` while silently leaving the session running. `home forget` also finds entries whose stored path's parent has since become a symlink ([#210](https://github.com/coder/agent-tty/pull/210)).
+- A single invalid entry in `homes.json` no longer wipes the Home registry; the read drops only the bad entries and keeps the rest visible to `create`, `home list`, `home forget`, `gc` and the dashboard ([#186](https://github.com/coder/agent-tty/pull/186)).
+
+### Changed
+
+- Dev dependency bumps clear high-severity audit advisories (`brace-expansion`, `js-yaml`, `nanoid`, `postcss`, `@xmldom/xmldom`) and move `vitest` to 4.1.11, which patches GHSA-82fw-gwwq-j7x9 in `@vitest/mocker` ([#168](https://github.com/coder/agent-tty/pull/168), [#175](https://github.com/coder/agent-tty/pull/175)).
+
 ## [0.5.0] - 2026-06-23
 
 ### Added
