@@ -115,6 +115,25 @@ function readProcStat(pid: number): ProcStat | null {
   return text === null ? null : parseProcStat(text);
 }
 
+// hidepid=1 (EPERM) or a security module (EACCES) refuses to show the
+// process of another user.
+function isRefusedRead(error: unknown): boolean {
+  return hasErrorCode(error, 'EPERM') || hasErrorCode(error, 'EACCES');
+}
+
+// null also for a process that /proc refuses to show, which cannot carry
+// the token in view.
+function readShownProcStat(pid: number): ProcStat | null {
+  try {
+    return readProcStat(pid);
+  } catch (error) {
+    if (isRefusedRead(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 function readAutogroup(pid: number | 'self'): number | null {
   try {
     return parseAutogroup(
@@ -148,9 +167,9 @@ function captureToken(
   // show the host's own session.
   const deadline = Date.now() + CAPTURE_BUDGET_MS;
   while (Date.now() < deadline) {
-    const before = readProcStat(pid);
+    const before = readShownProcStat(pid);
     const autogroup = readAutogroup(pid);
-    const after = readProcStat(pid);
+    const after = readShownProcStat(pid);
     if (
       before === null ||
       after === null ||
@@ -284,7 +303,7 @@ function toProcessRow(stat: ProcStat): ProcessRow {
 }
 
 function readProcessRow(pid: number): ProcessRow | null {
-  const stat = readProcStat(pid);
+  const stat = readShownProcStat(pid);
   return stat === null ? null : toProcessRow(stat);
 }
 
@@ -294,7 +313,7 @@ function readGroupMembers(pgid: number): ProcessRow[] {
     if (!/^\d+$/.test(entry)) {
       continue;
     }
-    const stat = readProcStat(Number(entry));
+    const stat = readShownProcStat(Number(entry));
     if (stat?.pgid === pgid) {
       members.push(toProcessRow(stat));
     }
@@ -364,9 +383,7 @@ function groupHasLiveProcess(pgid: number): boolean | null {
     try {
       stat = readProcStat(Number(entry));
     } catch (error) {
-      // hidepid=1 (EPERM) or a security module (EACCES) refuses to show
-      // the process of another user.
-      if (hasErrorCode(error, 'EPERM') || hasErrorCode(error, 'EACCES')) {
+      if (isRefusedRead(error)) {
         return true;
       }
       throw error;
@@ -426,7 +443,15 @@ export function isProgramGroupAlive(group: ProgramGroup | null): boolean {
   if (!hasToken(group)) {
     return isProcessGroupAlive(group.pid);
   }
-  return judgeLiveGroup(group).verdict === 'owned';
+  const { verdict } = judgeLiveGroup(group);
+  // A live member in view decides, because the members of a group share one
+  // session. With none in view, a zombie does not show the group gone, and
+  // /proc can refuse or hide a live member of another user, so the probe of
+  // a group without a token decides.
+  return (
+    verdict === 'owned' ||
+    (verdict === 'gone' && isProcessGroupAlive(group.pid))
+  );
 }
 
 export function stopProgramGroup(group: ProgramGroup | null): void {
