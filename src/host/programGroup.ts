@@ -110,9 +110,37 @@ function readProcFileIfExists(path: string): string | null {
   }
 }
 
+function readLiveThreadState(pid: number): string | null {
+  const taskDirectory = `/proc/${String(pid)}/task`;
+  let tids: string[];
+  try {
+    tids = readdirSync(taskDirectory);
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ESRCH')) {
+      return null;
+    }
+    throw error;
+  }
+  for (const tid of tids) {
+    const text = readProcFileIfExists(`${taskDirectory}/${tid}/stat`);
+    const state = text === null ? 'X' : parseProcStat(text).state;
+    if (state !== 'Z' && state !== 'X') {
+      return state;
+    }
+  }
+  return null;
+}
+
+// A process whose main thread called pthread_exit shows Z while another of
+// its threads runs, so it takes the state of that thread.
 function readProcStat(pid: number): ProcStat | null {
   const text = readProcFileIfExists(`/proc/${String(pid)}/stat`);
-  return text === null ? null : parseProcStat(text);
+  if (text === null) {
+    return null;
+  }
+  const stat = parseProcStat(text);
+  const threadState = stat.state === 'Z' ? readLiveThreadState(pid) : null;
+  return threadState === null ? stat : { ...stat, state: threadState };
 }
 
 // hidepid=1 (EPERM) or a security module (EACCES) refuses to show the
