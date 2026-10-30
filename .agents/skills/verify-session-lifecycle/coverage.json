@@ -10,7 +10,8 @@
     "src/host/lifecycle.ts#killProcessBestEffort": "1dd0cb4ee9bbc676",
     "src/host/lifecycle.ts#processGroupTarget": "88de1544b1553e54",
     "src/host/lifecycle.ts#procStatFields": "b9900d23f53dbe0e",
-    "src/host/lifecycle.ts#groupHasLiveProcess": "7ad672d42e92e44b",
+    "src/host/lifecycle.ts#groupHasLiveProcess": "6971fcfdc66dc960",
+    "src/host/lifecycle.ts#procHidesOtherUsers": "a5e0ab078c3815b4",
     "src/host/lifecycle.ts#isProcessGroupAlive": "57aaad7a78eab475",
     "src/host/lifecycle.ts#killProcessGroupBestEffort": "5ebf296d3c2dafe7",
     "src/host/lifecycle.ts#ownLinuxSessionId": "e7b0355a11fd9740",
@@ -44,7 +45,7 @@
     "src/host/hostMain.ts#runHost>handlers.resize": "30dd1da32879d478",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "927e36806cf3fb27",
-    "skill:scripts/facts.mjs": "e9d53aa065062679",
+    "skill:scripts/facts.mjs": "f096de2954d2a187",
     "skill:scripts/check.sh": "95e2b4d121abbd56"
   },
   "callSites": {

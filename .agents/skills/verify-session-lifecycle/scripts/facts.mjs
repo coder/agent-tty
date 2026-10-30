@@ -788,6 +788,7 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'processGroupTarget'],
   ['src/host/lifecycle.ts', 'procStatFields'],
   ['src/host/lifecycle.ts', 'groupHasLiveProcess'],
+  ['src/host/lifecycle.ts', 'procHidesOtherUsers'],
   ['src/host/lifecycle.ts', 'isProcessGroupAlive'],
   ['src/host/lifecycle.ts', 'killProcessGroupBestEffort'],
   ['src/host/lifecycle.ts', 'ownLinuxSessionId'],
