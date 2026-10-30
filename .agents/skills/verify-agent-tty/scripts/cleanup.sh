@@ -4,7 +4,7 @@
 # session's files into evidence/sessions/, then removes home/ and state/.
 # evidence/ stays. It keeps home/ and state/ and exits 1 when run-pids.sh
 # fails, or while a process outside the caller's terminal session still
-# carries this run's AGENT_TTY_HOME.
+# carries this run's AGENT_TTY_HOME. It also exits 1 when the removal fails.
 #
 #   .agents/skills/verify-agent-tty/scripts/cleanup.sh <run>/env.sh
 set -uo pipefail
@@ -70,23 +70,48 @@ session_of() {
   { sed 's/.*) //' "/proc/$1/stat"; } 2>/dev/null | cut -d' ' -f4
 }
 caller_session=$(session_of $$)
-holders=""
-for file in $(grep -lzxF "AGENT_TTY_HOME=$AGENT_TTY_HOME" /proc/[0-9]*/environ 2>/dev/null); do
-  pid=${file#/proc/}
-  pid=${pid%/environ}
-  args=$({ tr '\0' ' ' <"/proc/$pid/cmdline"; } 2>/dev/null)
-  [ -z "$args" ] || [ "$(session_of "$pid")" = "$caller_session" ] || holders="$holders  $pid $args"$'\n'
-done
-if [ -n "$pids_failed$holders" ]; then
+find_holders() {
+  holders=""
+  for file in $(grep -lzxF "AGENT_TTY_HOME=$AGENT_TTY_HOME" /proc/[0-9]*/environ 2>/dev/null); do
+    pid=${file#/proc/}
+    pid=${pid%/environ}
+    args=$({ tr '\0' ' ' <"/proc/$pid/cmdline"; } 2>/dev/null)
+    [ -z "$args" ] || [ "$(session_of "$pid")" = "$caller_session" ] || holders="$holders  $pid $args"$'\n'
+  done
+}
+keep_home() {
   [ -z "$pids_failed" ] || echo "cleanup.sh: run-pids.sh failed, so cleanup.sh cannot prove that every process of this run has ended. Fix what run-pids.sh reports." >&2
   [ -z "$holders" ] || printf 'cleanup.sh: these processes outside your terminal session still carry AGENT_TTY_HOME=%s. Stop them (kill <pid>) or let them end:\n%s' "$AGENT_TTY_HOME" "$holders" >&2
   echo "cleanup.sh: kept home/ and state/. Then run cleanup.sh again." >&2
   exit 1
-fi
+}
+find_holders
+[ -z "$pids_failed$holders" ] || keep_home
 
 # The socket folder is /tmp/agent-tty/<first 8 hex of sha256(home)>.
 sockets="/tmp/agent-tty/$(node -e 'process.stdout.write(require("node:crypto").createHash("sha256").update(require("node:path").resolve(process.argv[1])).digest("hex").slice(0, 8))' "$AGENT_TTY_HOME")"
-[ -d "$sockets" ] && rmdir "$sockets" 2>/dev/null
 
-rm -rf "$AGENT_TTY_HOME" "$XDG_STATE_HOME"
+# A process can start after that scan. Move home/ and state/ aside first, so a
+# process that starts later cannot reach them, then scan again for one that
+# started in between.
+aside=$VERIFY_RUN/removing
+removal_failed() {
+  echo "cleanup.sh: could not $1. Fix the error above, then run cleanup.sh again." >&2
+  exit 1
+}
+{ rm -rf "$aside" && mkdir "$aside"; } || removal_failed "make an empty $aside"
+for name in home state; do
+  [ ! -e "$VERIFY_RUN/$name" ] || mv "$VERIFY_RUN/$name" "$aside/" || removal_failed "move $name/ into $aside"
+done
+find_holders
+if [ -n "$holders" ]; then
+  for name in home state; do
+    [ -e "$VERIFY_RUN/$name" ] || [ ! -e "$aside/$name" ] || mv "$aside/$name" "$VERIFY_RUN/"
+  done
+  rmdir "$aside" 2>/dev/null ||
+    echo "cleanup.sh: a process made a new home/ or state/, so the run's own copies are in $aside" >&2
+  keep_home
+fi
+rm -rf "$aside" || removal_failed "remove $aside"
+[ -d "$sockets" ] && rmdir "$sockets" 2>/dev/null
 echo "Removed the run's home and state. Evidence kept in: $EVIDENCE"
