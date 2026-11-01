@@ -273,6 +273,7 @@ describe('record export command', () => {
       contents: expectedContents,
       writeErrorMessage:
         'Failed to write record export artifact at /tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast.',
+      createParentFolders: false,
     });
     expect(mocks.createArtifactEntry).toHaveBeenCalledWith({
       kind: 'recording',

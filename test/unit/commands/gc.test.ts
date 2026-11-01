@@ -1,3 +1,7 @@
+import { mkdir, mkdtemp, rm, stat, watch, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
@@ -11,6 +15,8 @@ import {
 } from '../../../src/cli/commands/gc.js';
 import type { CommandContext } from '../../../src/cli/context.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
+import { writeManifest } from '../../../src/storage/manifests.js';
+import { manifestPath, sessionDir } from '../../../src/storage/sessionPaths.js';
 import { createLogger } from '../../../src/util/logger.js';
 
 interface MockDirectoryNode {
@@ -642,5 +648,70 @@ describe('runGcCommand (cross-Home sweep)', () => {
     expect(forgetHome).not.toHaveBeenCalled();
     // Only the already-gone Home is reported as a would-deregister.
     expect(readResult().deregisteredHomes).toEqual(['/h/gone']);
+  });
+});
+
+describe('gcSessions on a real Home', () => {
+  const homes: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(
+      homes.splice(0).map((home) => rm(home, { recursive: true, force: true })),
+    );
+  });
+
+  it('removes the session folder when a manifest write lands during its rm', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'agent-tty-gc-rm-race-'));
+    homes.push(home);
+    const sessionId = 'exited-01';
+    const sessionDirectory = sessionDir(home, sessionId);
+    const manifestFile = manifestPath(sessionDirectory);
+    const record = createSessionRecord({
+      sessionId,
+      status: 'exited',
+      createdAt: '2026-03-21T10:00:00.000Z',
+    });
+    await mkdir(join(sessionDirectory, 'artifacts'), { recursive: true });
+    await writeManifest(manifestFile, record);
+    await Promise.all(
+      Array.from({ length: 2000 }, (_, index) =>
+        writeFile(
+          join(sessionDirectory, 'artifacts', `${String(index)}.txt`),
+          '',
+        ),
+      ),
+    );
+
+    const stopWatching = new AbortController();
+    const lateWrite = (async () => {
+      try {
+        for await (const event of watch(sessionDirectory, {
+          signal: stopWatching.signal,
+        })) {
+          if (event.filename === 'session.json') {
+            await writeManifest(manifestFile, record).catch(() => undefined);
+            return;
+          }
+        }
+      } catch (error) {
+        if (!(error instanceof Error && error.name === 'AbortError')) {
+          throw error;
+        }
+      }
+    })();
+
+    const sweep = await gcSessions(home, {
+      dryRun: false,
+      staleOnly: false,
+      olderThanMs: null,
+    });
+    stopWatching.abort();
+    await lateWrite;
+
+    expect(sweep.skippedSessions).toEqual([]);
+    expect(sweep.removedSessions).toEqual([sessionId]);
+    await expect(stat(sessionDirectory)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 });

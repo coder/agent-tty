@@ -11,3 +11,4 @@ export const HOST_RENDERER_ENV_KEY = 'AGENT_TTY_HOST_RENDERER' as const;
 export const SOCKET_FILENAME = 'host.sock';
 export const MANIFEST_FILENAME = 'session.json';
 export const EVENT_LOG_FILENAME = 'events.jsonl';
+export const PROGRAM_RECORD_FILENAME = 'program.json';

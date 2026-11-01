@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { renameSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute } from 'node:path';
 
@@ -26,6 +27,7 @@ export interface WriteValidatedJsonFileOptions<T> {
   data: T;
   writeErrorMessage: string;
   validate: (path: string, data: unknown) => T;
+  createParentFolders?: boolean;
 }
 
 export interface WriteTextFileAtomicOptions {
@@ -33,6 +35,12 @@ export interface WriteTextFileAtomicOptions {
   pathLabel: string;
   contents: string;
   writeErrorMessage: string;
+  /**
+   * Defaults to true. Pass false for a file inside a session folder: gc can
+   * remove that folder at any time, and the write must then fail instead of
+   * creating the folder again.
+   */
+  createParentFolders?: boolean;
 }
 
 function assertAbsoluteStoragePath(path: string, label: string): void {
@@ -97,23 +105,44 @@ export async function readValidatedJsonFile<T>(
   );
 }
 
+async function replaceFileAtomic(
+  path: string,
+  contents: string,
+): Promise<void> {
+  const temporaryPath = `${path}.tmp-${randomUUID()}`;
+
+  try {
+    await writeFile(temporaryPath, contents, { encoding: 'utf8', mode: 0o600 });
+    await rename(temporaryPath, path);
+  } catch (error) {
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+function replaceFileAtomicSync(path: string, contents: string): void {
+  const temporaryPath = `${path}.tmp-${randomUUID()}`;
+
+  try {
+    writeFileSync(temporaryPath, contents, { encoding: 'utf8', mode: 0o600 });
+    renameSync(temporaryPath, path);
+  } catch (error) {
+    rmSync(temporaryPath, { force: true });
+    throw error;
+  }
+}
+
 export async function writeTextFileAtomic(
   options: WriteTextFileAtomicOptions,
 ): Promise<void> {
   assertAbsoluteStoragePath(options.path, options.pathLabel);
 
-  const outputDirectory = dirname(options.path);
-  const temporaryPath = `${options.path}.tmp-${randomUUID()}`;
-
   try {
-    await mkdir(outputDirectory, { recursive: true });
-    await writeFile(temporaryPath, options.contents, {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
-    await rename(temporaryPath, options.path);
+    if (options.createParentFolders !== false) {
+      await mkdir(dirname(options.path), { recursive: true });
+    }
+    await replaceFileAtomic(options.path, options.contents);
   } catch (error) {
-    await rm(temporaryPath, { force: true }).catch(() => undefined);
     throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
       message: options.writeErrorMessage,
       details: { path: options.path },
@@ -132,7 +161,30 @@ export async function writeValidatedJsonFile<T>(
     pathLabel: options.pathLabel,
     contents: `${JSON.stringify(validatedData, null, 2)}\n`,
     writeErrorMessage: options.writeErrorMessage,
+    ...(options.createParentFolders === undefined
+      ? {}
+      : { createParentFolders: options.createParentFolders }),
   });
+}
+
+export function writeValidatedJsonFileSync<T>(
+  options: WriteValidatedJsonFileOptions<T> & { createParentFolders: false },
+): void {
+  assertAbsoluteStoragePath(options.path, options.pathLabel);
+  const validatedData = options.validate(options.path, options.data);
+
+  try {
+    replaceFileAtomicSync(
+      options.path,
+      `${JSON.stringify(validatedData, null, 2)}\n`,
+    );
+  } catch (error) {
+    throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+      message: options.writeErrorMessage,
+      details: { path: options.path },
+      cause: error,
+    });
+  }
 }
 
 function validateManifestData(path: string, data: unknown): SessionRecord {
@@ -183,11 +235,24 @@ export async function writeManifest(
   path: string,
   record: SessionRecord,
 ): Promise<void> {
-  await writeValidatedJsonFile({
-    path,
-    pathLabel: 'manifest path',
-    data: record,
-    writeErrorMessage: `Failed to write session manifest at ${path}.`,
-    validate: validateManifestData,
-  });
+  assertAbsoluteStoragePath(path, 'manifest path');
+  const manifest = validateManifestData(path, record);
+
+  try {
+    await replaceFileAtomic(path, `${JSON.stringify(manifest, null, 2)}\n`);
+  } catch (error) {
+    if (isEnoentError(error)) {
+      throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
+        message: `Session "${manifest.sessionId}" was not found: its folder ${dirname(path)} no longer exists.`,
+        details: { sessionId: manifest.sessionId, manifestPath: path },
+        cause: error,
+      });
+    }
+
+    throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+      message: `Failed to write session manifest at ${path}.`,
+      details: { path },
+      cause: error,
+    });
+  }
 }

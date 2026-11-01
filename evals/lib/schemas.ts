@@ -118,6 +118,7 @@ export const ArtifactKindSchema = z.enum([
 export const BundleValidationProfileSchema = z.enum([
   'contract-reporting',
   'interactive-renderer',
+  'canonical',
 ]);
 
 const PromptBudgetSchema = z
@@ -1110,146 +1111,143 @@ export type ProviderAgentResultSchemaType = z.infer<
 >;
 export type ProviderConfigSchemaType = z.infer<typeof ProviderConfigSchema>;
 
-type AssertExact<T, U> = [T] extends [U]
-  ? [U] extends [T]
-    ? true
-    : never
-  : never;
+// Index signatures match `{}` too, but they are not optional keys.
+type OptionalKeys<T> = {
+  [K in keyof T]-?: string extends K
+    ? never
+    : number extends K
+      ? never
+      : {} extends Pick<T, K>
+        ? K
+        : never;
+}[keyof T];
 
-export type _ArtifactKindSchemaParity = AssertExact<
-  ArtifactKind,
-  ArtifactKindSchemaType
+// z.infer types an `.optional()` key as `?: T | undefined`, while types.ts
+// writes `?: T` under exactOptionalPropertyTypes. Adding `| undefined` to
+// every optional key on both sides leaves only real drift.
+type WithUndefinedOptionals<T> = T extends readonly unknown[]
+  ? { [K in keyof T]: WithUndefinedOptionals<T[K]> }
+  : T extends object
+    ? {
+        [K in keyof T]: K extends OptionalKeys<T>
+          ? WithUndefinedOptionals<Exclude<T[K], undefined>> | undefined
+          : WithUndefinedOptionals<T[K]>;
+      }
+    : T;
+
+// Mutual assignability misses a key that is optional on one side and absent
+// on the other, so this uses the compiler's type identity check instead.
+type IsExact<T, U> =
+  (<V>() => V extends WithUndefinedOptionals<T> ? 1 : 2) extends <
+    V,
+  >() => V extends WithUndefinedOptionals<U> ? 1 : 2
+    ? true
+    : false;
+
+type ExpectTrue<T extends true> = T;
+
+export type _ArtifactKindSchemaParity = ExpectTrue<
+  IsExact<ArtifactKind, ArtifactKindSchemaType>
 >;
-export type _BundleValidationProfileSchemaParity = AssertExact<
-  BundleValidationProfile,
-  BundleValidationProfileSchemaType
+export type _BundleValidationProfileSchemaParity = ExpectTrue<
+  IsExact<BundleValidationProfile, BundleValidationProfileSchemaType>
 >;
-export type _PatternMatchResultSchemaParity = AssertExact<
-  PatternMatchResult,
-  PatternMatchResultSchemaType
+export type _PatternMatchResultSchemaParity = ExpectTrue<
+  IsExact<PatternMatchResult, PatternMatchResultSchemaType>
 >;
-export type _AntiPatternFindingSchemaParity = AssertExact<
-  AntiPatternFinding,
-  AntiPatternFindingSchemaType
+export type _AntiPatternFindingSchemaParity = ExpectTrue<
+  IsExact<AntiPatternFinding, AntiPatternFindingSchemaType>
 >;
-export type _BundleCompletenessScoreSchemaParity = AssertExact<
-  BundleCompletenessScore,
-  BundleCompletenessScoreSchemaType
+export type _BundleCompletenessScoreSchemaParity = ExpectTrue<
+  IsExact<BundleCompletenessScore, BundleCompletenessScoreSchemaType>
 >;
-export type _ReportCompletenessScoreSchemaParity = AssertExact<
-  ReportCompletenessScore,
-  ReportCompletenessScoreSchemaType
+export type _ReportCompletenessScoreSchemaParity = ExpectTrue<
+  IsExact<ReportCompletenessScore, ReportCompletenessScoreSchemaType>
 >;
-export type _MatrixEntrySchemaParity = AssertExact<
-  MatrixEntry,
-  MatrixEntrySchemaType
+export type _MatrixEntrySchemaParity = ExpectTrue<
+  IsExact<MatrixEntry, MatrixEntrySchemaType>
 >;
-export type _ComparisonMetricsSchemaParity = AssertExact<
-  ComparisonMetrics,
-  ComparisonMetricsSchemaType
+export type _ComparisonMetricsSchemaParity = ExpectTrue<
+  IsExact<ComparisonMetrics, ComparisonMetricsSchemaType>
 >;
-export type _PromptEvalCaseSchemaParity = AssertExact<
-  PromptEvalCase,
-  PromptEvalCaseSchemaType
+export type _PromptEvalCaseSchemaParity = ExpectTrue<
+  IsExact<PromptEvalCase, PromptEvalCaseSchemaType>
 >;
-export type _ExecutionEvalCaseSchemaParity = AssertExact<
-  ExecutionEvalCase,
-  ExecutionEvalCaseSchemaType
+export type _ExecutionEvalCaseSchemaParity = ExpectTrue<
+  IsExact<ExecutionEvalCase, ExecutionEvalCaseSchemaType>
 >;
-export type _DogfoodEvalCaseSchemaParity = AssertExact<
-  DogfoodEvalCase,
-  DogfoodEvalCaseSchemaType
+export type _DogfoodEvalCaseSchemaParity = ExpectTrue<
+  IsExact<DogfoodEvalCase, DogfoodEvalCaseSchemaType>
 >;
-export type _EvalCaseSchemaParity = AssertExact<EvalCase, EvalCaseSchemaType>;
-export type _PromptCaseScoreSchemaParity = AssertExact<
-  PromptCaseScore,
-  PromptCaseScoreSchemaType
+export type _EvalCaseSchemaParity = ExpectTrue<
+  IsExact<EvalCase, EvalCaseSchemaType>
 >;
-export type _EvalResultSchemaParity = AssertExact<
-  EvalResult,
-  EvalResultSchemaType
+export type _PromptCaseScoreSchemaParity = ExpectTrue<
+  IsExact<PromptCaseScore, PromptCaseScoreSchemaType>
 >;
-export type _AggregateMetricsSchemaParity = AssertExact<
-  AggregateMetrics,
-  AggregateMetricsSchemaType
+export type _EvalResultSchemaParity = ExpectTrue<
+  IsExact<EvalResult, EvalResultSchemaType>
 >;
-export type _ConfidenceIntervalSchemaParity = AssertExact<
-  ConfidenceInterval,
-  ConfidenceIntervalSchemaType
+export type _AggregateMetricsSchemaParity = ExpectTrue<
+  IsExact<AggregateMetrics, AggregateMetricsSchemaType>
 >;
-export type _TrialAggregationSchemaParity = AssertExact<
-  TrialAggregation,
-  TrialAggregationSchemaType
+export type _ConfidenceIntervalSchemaParity = ExpectTrue<
+  IsExact<ConfidenceInterval, ConfidenceIntervalSchemaType>
 >;
-export type _PerCaseComparisonSchemaParity = AssertExact<
-  PerCaseComparison,
-  PerCaseComparisonSchemaType
+export type _TrialAggregationSchemaParity = ExpectTrue<
+  IsExact<TrialAggregation, TrialAggregationSchemaType>
 >;
-export type _BaselineOverallSchemaParity = AssertExact<
-  BaselineOverall,
-  BaselineOverallSchemaType
+export type _PerCaseComparisonSchemaParity = ExpectTrue<
+  IsExact<PerCaseComparison, PerCaseComparisonSchemaType>
 >;
-export type _BaselineComparisonSchemaParity = AssertExact<
-  BaselineComparison,
-  BaselineComparisonSchemaType
+export type _BaselineOverallSchemaParity = ExpectTrue<
+  IsExact<BaselineOverall, BaselineOverallSchemaType>
 >;
-export type _JsonReportSchemaParity = AssertExact<
-  JsonReport,
-  JsonReportSchemaType
+export type _BaselineComparisonSchemaParity = ExpectTrue<
+  IsExact<BaselineComparison, BaselineComparisonSchemaType>
 >;
-export type _ProviderComparisonReportSchemaParity = AssertExact<
-  ProviderComparisonReport,
-  ProviderComparisonReportSchemaType
+export type _JsonReportSchemaParity = ExpectTrue<
+  IsExact<JsonReport, JsonReportSchemaType>
 >;
-export type _EvalCliOptionsSchemaParity = AssertExact<
-  EvalCliOptions,
-  EvalCliOptionsSchemaType
+export type _ProviderComparisonReportSchemaParity = ExpectTrue<
+  IsExact<ProviderComparisonReport, ProviderComparisonReportSchemaType>
 >;
-export type _EvalCliResultSchemaParity = AssertExact<
-  EvalCliResult,
-  EvalCliResultSchemaType
+export type _EvalCliOptionsSchemaParity = ExpectTrue<
+  IsExact<EvalCliOptions, EvalCliOptionsSchemaType>
 >;
-export type _EvalEventRecordSchemaParity = AssertExact<
-  EvalEventRecord,
-  EvalEventRecordSchemaType
+export type _EvalCliResultSchemaParity = ExpectTrue<
+  IsExact<EvalCliResult, EvalCliResultSchemaType>
 >;
-export type _ProviderPromptRequestSchemaParity = AssertExact<
-  ProviderPromptRequest,
-  ProviderPromptRequestSchemaType
+export type _EvalEventRecordSchemaParity = ExpectTrue<
+  IsExact<EvalEventRecord, EvalEventRecordSchemaType>
 >;
-export type _ProviderPromptResultSchemaParity = AssertExact<
-  ProviderPromptResult,
-  ProviderPromptResultSchemaType
+export type _ProviderPromptRequestSchemaParity = ExpectTrue<
+  IsExact<ProviderPromptRequest, ProviderPromptRequestSchemaType>
 >;
-export type _ProviderAgentRequestSchemaParity = AssertExact<
-  ProviderAgentRequest,
-  ProviderAgentRequestSchemaType
+export type _ProviderPromptResultSchemaParity = ExpectTrue<
+  IsExact<ProviderPromptResult, ProviderPromptResultSchemaType>
 >;
-export type _ProviderAgentResultSchemaParity = AssertExact<
-  ProviderAgentResult,
-  ProviderAgentResultSchemaType
+export type _ProviderAgentRequestSchemaParity = ExpectTrue<
+  IsExact<ProviderAgentRequest, ProviderAgentRequestSchemaType>
 >;
-export type _ProviderRuntimeInfoSchemaParity = AssertExact<
-  ProviderRuntimeInfo,
-  ProviderRuntimeInfoSchemaType
+export type _ProviderAgentResultSchemaParity = ExpectTrue<
+  IsExact<ProviderAgentResult, ProviderAgentResultSchemaType>
 >;
-export type _TokenUsageSchemaParity = AssertExact<
-  TokenUsage,
-  TokenUsageSchemaType
+export type _ProviderRuntimeInfoSchemaParity = ExpectTrue<
+  IsExact<ProviderRuntimeInfo, ProviderRuntimeInfoSchemaType>
 >;
-export type _TokenReportSummarySchemaParity = AssertExact<
-  TokenReportSummary,
-  TokenReportSummarySchemaType
+export type _TokenUsageSchemaParity = ExpectTrue<
+  IsExact<TokenUsage, TokenUsageSchemaType>
 >;
-export type _NormalizedProviderOutputSchemaParity = AssertExact<
-  NormalizedProviderOutput,
-  NormalizedProviderOutputSchemaType
+export type _TokenReportSummarySchemaParity = ExpectTrue<
+  IsExact<TokenReportSummary, TokenReportSummarySchemaType>
 >;
-export type _ProviderCapabilitiesSchemaParity = AssertExact<
-  ProviderCapabilities,
-  ProviderCapabilitiesSchemaType
+export type _NormalizedProviderOutputSchemaParity = ExpectTrue<
+  IsExact<NormalizedProviderOutput, NormalizedProviderOutputSchemaType>
 >;
-export type _ProviderConfigSchemaParity = AssertExact<
-  ProviderConfig,
-  ProviderConfigSchemaType
+export type _ProviderCapabilitiesSchemaParity = ExpectTrue<
+  IsExact<ProviderCapabilities, ProviderCapabilitiesSchemaType>
+>;
+export type _ProviderConfigSchemaParity = ExpectTrue<
+  IsExact<ProviderConfig, ProviderConfigSchemaType>
 >;

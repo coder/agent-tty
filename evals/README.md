@@ -130,8 +130,11 @@ evals/
 │   ├── cliHarness.ts
 │   ├── matrix.ts
 │   ├── reporting.ts
+│   ├── scheduler.ts
 │   ├── schemas.ts
 │   ├── scoring.ts
+│   ├── statistics.ts
+│   ├── tokenAggregation.ts
 │   └── types.ts
 ├── prompt/
 │   ├── cases/
@@ -145,6 +148,7 @@ evals/
 │   ├── scorers/
 │   └── runner.ts
 ├── providers/
+│   ├── base.js
 │   ├── base.ts
 │   ├── claude.ts
 │   ├── codex.ts
@@ -1099,3 +1103,54 @@ Guardrails:
 - The snapshot store writes one JSONL file per `provider-model` pair under the snapshot directory. Use a stable `--snapshot-dir` if you want to compare runs over time; the default is `<output>/snapshots`.
 
 Use `--json` when you want only the final run summary on stdout; the full report files are still written to disk.
+
+## 12. Interface
+
+Each subdirectory has its own contract:
+
+- [`./authoring/README.md`](./authoring/README.md): fluent, pure builders (`promptCase`, `executionCase`, `dogfoodCase`, `ReportBuilder`, `WorkflowBuilder`) that compile eval cases and validate them against the lane schemas in `evals/lib/schemas.ts`.
+- [`./lib/README.md`](./lib/README.md): shared library: eval types and strict Zod schemas, prompt scoring and anti-pattern detection, dogfood bundle scoring, the condition matrix, statistics, JSON and Markdown reporting, run artifact storage, token aggregation, a scheduler and a CLI harness.
+- [`./prompt/README.md`](./prompt/README.md): Lane A runner and its cases. It calls provider plan mode with condition-specific system prompts and scores the answers.
+- [`./execution/README.md`](./execution/README.md): Lane B runner, its cases and verifiers. It runs agent-mode provider calls with isolated `agent-tty` homes and verifies event logs, manifests and artifacts.
+- [`./dogfood/README.md`](./dogfood/README.md): Lane C runner, its cases and scorers. It runs agent-mode provider calls in temp homes and scores proof bundles and reports.
+- [`./providers/README.md`](./providers/README.md): the `EvalProvider` contract, the `createProvider` factory, the Claude Code and Codex CLI adapters, and the stub, recording and fixture providers.
+- [`./reporters/README.md`](./reporters/README.md): reporter event schemas, the dispatcher that validates and redacts payloads, and the console, JSONL and final-report reporters.
+- [`./snapshots/README.md`](./snapshots/README.md): token-usage snapshot storage, case fingerprints and snapshot comparison.
+- [`./workspaces/README.md`](./workspaces/README.md): workspace preset schema, registry, the built-in `agent-tty-smoke` preset and the resolver.
+
+`run.ts` is the CLI entry point:
+
+- `runEvalCli(argumentsList)` returns a `Promise<number>` exit code. It prints `HELP_TEXT` for `--help` and the case matrix for `--dry-run`. Otherwise it creates the output directory, the provider and the reporters, runs the selected lanes, and builds the JSON report, the optional baseline comparison and the token report. [run.ts:runEvalCli]
+- `parseCliArgs(argumentsList)` parses the flags `--provider`, `--lane`, `--case`, `--condition`, `--model`, `--effort`, `--output`, `--trials`, `--concurrency`, `--reporter`, `--reporter-output`, `--progress`, `--compare-baseline`, `--snapshot-update`, `--snapshot-check`, `--snapshot-threshold`, `--snapshot-dir`, `--dry-run`, `--json`, `--verbose` and `--help` (`-h`). [run.ts:parseCliArgs]
+- `resolveRequestedConditions(conditions)` returns every `SKILL_CONDITIONS` value for no input or `all`, otherwise the requested values in `SKILL_CONDITIONS` order without duplicates. It throws if `all` is combined with specific values. [run.ts:resolveRequestedConditions]
+- `resolveReporterSelection(repoRoot, options)` returns a `ResolvedReporterSelection`. The default reporter list is `['final']`, and `--progress` adds `console`. `ReporterId` is `final`, `console` or `jsonl`. [run.ts:resolveReporterSelection] [run.ts:ReporterId] [run.ts:REPORTER_IDS]
+- When `run.ts` is the process entry point (`isDirectExecution`), the module awaits `runEvalCli(process.argv.slice(2))` and sets `process.exitCode`. [run.ts:isDirectExecution]
+
+## 13. Invariants
+
+- `--provider` and `--lane` are required. `--provider` accepts `stub`, `fixture`, `claude` or `codex`: `SUPPORTED_PROVIDER_IDS` without `recording`. `--lane` accepts `prompt`, `execution`, `dogfood` or `all`. [run.ts:resolveProviderId] [run.ts:CLI_PROVIDER_IDS] [run.ts:resolveRequestedLanes]
+- `parseCliArgs` throws on an unknown option, a positional argument, or a repeated single-value option or boolean flag. `--help` (`-h`) is the exception: repeating it does not throw. [run.ts:parseCliArgs]
+- `--snapshot-update` and `--snapshot-check` cannot be combined. `--snapshot-threshold` must be a number from 0 to 100 and defaults to 20. [run.ts:resolveSnapshotOptions]
+- `--concurrency` and `--trials` must be positive integers. Both default to 1. [run.ts:resolveConcurrency] [run.ts:resolveTotalTrials]
+- `--reporter jsonl` requires `--reporter-output`. [run.ts:resolveReporterSelection]
+- Each `--case` id must exist in the selected lanes, and the case selection must not be empty. [run.ts:buildCaseSelections]
+- The `fixture` provider requires `EVAL_FIXTURE_DIR`. [run.ts:createEvalProvider]
+- `runEvalCli` returns 0 for `--help` and `--dry-run`. Otherwise it returns 0 only when no result failed and no lane threw (`ok = failed === 0 && laneErrors.length === 0`). Token snapshot regressions do not change the exit code. [run.ts:buildSummary] [run.ts:runEvalCli]
+- A lane that throws does not stop the other lanes. `recordLaneFailure` adds it to `laneErrors` and to the run metadata notes. [run.ts:recordLaneFailure]
+- An error thrown out of `runEvalCli` in script mode sets `process.exitCode` to 1. [run.ts:isDirectExecution]
+
+## 14. Side Effects
+
+- Without `--output`, a run writes under `evals/reports/<timestamp>/`, which `.gitignore` excludes. `runEvalCli` creates the output and run directories with `mkdir` and saves the run metadata through `EvalArtifactStore.saveRunMetadata` (`evals/lib/artifacts.ts`). [run.ts:resolveOutputBaseDir] [run.ts:runEvalCli]
+- The `claude` and `codex` providers start the real agent CLIs with `child_process.execFile`. In agent mode, Claude gets `--dangerously-skip-permissions`, and Codex gets `--dangerously-bypass-approvals-and-sandbox` in both modes. See [`./providers/README.md`](./providers/README.md). [providers/claude.ts:ClaudeProvider] [providers/codex.ts:CodexProvider]
+- The `final` reporter writes `report.json` and `report.md` in the run directory. The `jsonl` reporter writes to `--reporter-output`. [reporters/final-report.ts:FinalReportReporter] [run.ts:createReporterDispatcher]
+- `--snapshot-update` writes one snapshot file per provider and model through `writeSnapshotFile` (`evals/snapshots/store.ts`). `--snapshot-check` reads them. `--compare-baseline` reads the baseline report file. [run.ts:buildTokenReport] [run.ts:loadBaselineReport]
+- `createEvalProvider` reads `process.env.EVAL_FIXTURE_DIR`. For `claude` with `--effort`, it passes `CLAUDE_CODE_EFFORT` in the provider environment. [run.ts:createEvalProvider]
+- `run.ts` writes help text, the dry-run matrix and the run summary to stdout (JSON with `--json`). It writes `--verbose` logs, and errors without `--json`, to stderr. With `--json`, it writes a thrown error to stdout as `{ ok: false, error }`. [run.ts:writeHumanSummary] [run.ts:logVerbose] [run.ts:isDirectExecution]
+
+## 15. Verification
+
+- Run: `npx vitest run test/unit/evals` (`test/unit/evals/run.test.ts` covers `run.ts`)
+- Run: `npx vitest run --maxWorkers=1 test/integration/evals` (the `test/integration/evals-*.test.ts` files and `test/integration/evals/authoring-pilots.test.ts`)
+- Run: `npx tsx evals/run.ts --provider stub --lane all --dry-run` (lists the matrix without provider calls)
+- Run: `npm run typecheck` (`tsconfig.json` includes `evals/**/*.ts`)

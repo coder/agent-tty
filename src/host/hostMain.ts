@@ -1,6 +1,7 @@
 import { chmod, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import process from 'node:process';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { loadPackageMetadata } from '../util/packageMetadata.js';
 import {
@@ -8,6 +9,13 @@ import {
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
 import { EventLog } from './eventLog.js';
+import { isProcessAlive, waitForProcessesToExit } from './lifecycle.js';
+import { createSerialManifestWriter } from './manifestWriter.js';
+import {
+  captureProgram,
+  stopProgramGroup,
+  writeProgramRecord,
+} from './programGroup.js';
 import { buildReplayInput } from './replay.js';
 import { HostRendererManager } from './renderer.js';
 import { RpcServer, type MethodHandler } from './rpcServer.js';
@@ -19,6 +27,7 @@ import { encodeKey } from '../pty/keyEncoder.js';
 import { encodePaste } from '../pty/pasteEncoder.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { isCommandableSessionStatus } from '../protocol/sessionStatusPolicy.js';
+import type { SessionRecord } from '../protocol/schemas.js';
 import type {
   MarkParams,
   MouseParams,
@@ -52,7 +61,7 @@ import { prepareHeldMouseButtons, type HeldMouseButton } from './mouseInput.js';
 import { captureScreenshotResult } from '../screenshot/capture.js';
 import { captureSnapshotResult } from '../snapshot/capture.js';
 import { resolveHome } from '../storage/home.js';
-import { readManifest, writeManifest } from '../storage/manifests.js';
+import { readManifestIfExists } from '../storage/manifests.js';
 import {
   eventLogPath,
   manifestPath,
@@ -82,6 +91,10 @@ export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
 // Idle-timeout enforcement is polling-based: actual idle duration before kill
 // may exceed idleTimeoutMs by up to checkIntervalMs (bounded by this cap).
 const IDLE_CHECK_CAP_MS = 5_000;
+const MANIFEST_WAIT_INTERVAL_MS = 20;
+// How long the host waits after SIGHUP before it kills the program's process
+// group. nvim takes about 1 s to exit on SIGHUP, and `destroy` waits about 5 s.
+const SHUTDOWN_KILL_GRACE_MS = 2_000;
 
 type WaitOutcome = {
   exitCode?: number;
@@ -136,7 +149,41 @@ export function resolveHostRendererName(
   }
 }
 
-export async function runHost(sessionId: string): Promise<void> {
+// `create` launches the host before it writes the first manifest, so the host
+// waits for that write for as long as the creating process lives. A creator
+// that has exited finished all its writes first, so the read after its
+// liveness check sees any manifest it wrote.
+export async function waitForManifestFromCreate(
+  path: string,
+  creatorPid: number,
+): Promise<SessionRecord> {
+  invariant(
+    Number.isInteger(creatorPid) && creatorPid > 0,
+    'creatorPid must be a positive integer',
+  );
+
+  let creatorAlive = isProcessAlive(creatorPid);
+  let manifest = await readManifestIfExists(path);
+  while (manifest === null && creatorAlive) {
+    await delay(MANIFEST_WAIT_INTERVAL_MS);
+    creatorAlive = isProcessAlive(creatorPid);
+    manifest = await readManifestIfExists(path);
+  }
+
+  if (manifest === null) {
+    throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
+      message: 'Session manifest did not appear before its creator exited.',
+      details: { manifestPath: path, creatorPid },
+    });
+  }
+
+  return manifest;
+}
+
+export async function runHost(
+  sessionId: string,
+  creatorPid: number,
+): Promise<void> {
   invariant(
     typeof sessionId === 'string' && sessionId.length > 0,
     'sessionId must be a non-empty string',
@@ -148,10 +195,14 @@ export async function runHost(sessionId: string): Promise<void> {
   const ePath = eventLogPath(sessDir);
   const sPath = socketPath(sessDir);
 
-  const manifest = await readManifest(mPath);
+  const manifest = await waitForManifestFromCreate(mPath, creatorPid);
   invariant(
     manifest.sessionId === sessionId,
     'session manifest sessionId must match the requested session',
+  );
+  invariant(
+    manifest.hostPid === process.pid,
+    'session manifest hostPid must be this host process',
   );
   const idleTimeoutMs = manifest.idleTimeoutMs ?? 0;
   invariant(
@@ -161,11 +212,9 @@ export async function runHost(sessionId: string): Promise<void> {
 
   const hostDefaultRendererName = resolveHostRendererName(undefined);
   const state = new SessionState(manifest);
-  invariant(
-    Number.isInteger(process.pid) && process.pid > 0,
-    'process.pid must be a positive integer',
+  const persistManifest = createSerialManifestWriter(mPath, () =>
+    state.snapshot(),
   );
-  state.setHostPid(process.pid);
 
   const eventLog = await EventLog.open(ePath);
 
@@ -203,6 +252,7 @@ export async function runHost(sessionId: string): Promise<void> {
   let eventLogClosed = false;
   let ptyExitHandled = false;
   let ptyHasExited = false;
+  let ptyExitCode: number | null = null;
   let lastOutputAt = Date.now();
   let lastActivityAt = lastOutputAt;
   const hostAbortController = new AbortController();
@@ -257,6 +307,7 @@ export async function runHost(sessionId: string): Promise<void> {
     'PTY child PID must be a positive integer',
   );
   state.setChildPid(pty.pid);
+  const program = captureProgram(pty.pid);
 
   // Answer the terminal-capability queries programs emit at startup (OSC 10/11
   // color probes, the `ESC [ 5 n` DSR sentinel). The colors mirror the default
@@ -322,6 +373,14 @@ export async function runHost(sessionId: string): Promise<void> {
     void scope.close().catch(rethrowAsync);
   };
 
+  let groupKillTimer: ReturnType<typeof setTimeout> | undefined;
+  const hangUpProgram = (): void => {
+    pty.kill();
+    groupKillTimer ??= setTimeout(() => {
+      stopProgramGroup(program);
+    }, SHUTDOWN_KILL_GRACE_MS);
+  };
+
   const startIdlePolling = (): void => {
     if (
       idleTimeoutMs <= 0 ||
@@ -351,7 +410,7 @@ export async function runHost(sessionId: string): Promise<void> {
       const elapsedIdleMs = Date.now() - lastActivityAt;
       if (elapsedIdleMs >= idleTimeoutMs) {
         clearIdleTimeout();
-        pty.kill();
+        hangUpProgram();
       }
     }, checkIntervalMs);
     scope.add('idle timeout interval', () => {
@@ -380,9 +439,9 @@ export async function runHost(sessionId: string): Promise<void> {
         hostAbortController.abort(makeAbortReason('Host is shutting down.'));
         clearIdleTimeout();
         if (isSessionCommandable(state)) {
-          pty.kill();
+          hangUpProgram();
           state.requestDestroy();
-          await writeManifest(mPath, state.snapshot());
+          await persistManifest();
         }
       } finally {
         try {
@@ -421,15 +480,24 @@ export async function runHost(sessionId: string): Promise<void> {
 
     ptyExitHandled = true;
     clearIdleTimeout();
+    const hungUp = groupKillTimer !== undefined;
+    clearTimeout(groupKillTimer);
 
     const exitSignal = normalizeExitSignal(signal);
     const currentStatus = state.snapshot().status;
 
     if (currentStatus === 'destroying') {
-      state.recordDestroyed({ exitCode, exitSignal });
+      // A process that the program started can outlive it.
+      stopProgramGroup(program);
     } else {
+      if (hungUp) {
+        // The program can exit on the idle hang-up while a process it
+        // started ignores SIGHUP.
+        stopProgramGroup(program);
+      }
       state.recordExit(exitCode, exitSignal);
     }
+    ptyExitCode = exitCode;
     markPtyExited();
 
     void (async () => {
@@ -438,7 +506,15 @@ export async function runHost(sessionId: string): Promise<void> {
       } finally {
         runCompletion.resetForExit();
         try {
-          await writeManifest(mPath, state.snapshot());
+          // Until the group is gone the session stays destroying, so a later
+          // reconcile retries the kill.
+          if (
+            currentStatus === 'destroying' &&
+            (await waitForProcessesToExit(null, program))
+          ) {
+            state.recordDestroyed({ exitCode, exitSignal });
+          }
+          await persistManifest();
         } finally {
           await initiateShutdown();
         }
@@ -447,10 +523,9 @@ export async function runHost(sessionId: string): Promise<void> {
   };
 
   const makeWaitExitOutcome = (): WaitOutcome => {
-    const snapshot = state.snapshot();
     const result: WaitOutcome = { timedOut: false };
-    if (snapshot.exitCode !== null) {
-      result.exitCode = snapshot.exitCode;
+    if (ptyExitCode !== null) {
+      result.exitCode = ptyExitCode;
     }
     return result;
   };
@@ -854,7 +929,7 @@ export async function runHost(sessionId: string): Promise<void> {
       pty.resize(cols, rows);
       lastActivityAt = Date.now();
       state.setDimensions(cols, rows);
-      await writeManifest(mPath, state.snapshot());
+      await persistManifest();
       await eventLog.append('resize', { cols, rows });
       return { cols, rows };
     },
@@ -963,12 +1038,7 @@ export async function runHost(sessionId: string): Promise<void> {
                 return;
               }
 
-              const snapshot = state.snapshot();
-              const result: WaitOutcome = { timedOut: false };
-              if (snapshot.exitCode !== null) {
-                result.exitCode = snapshot.exitCode;
-              }
-              resolve(result);
+              resolve(makeWaitExitOutcome());
             },
             Math.min(idleDuration / 2, 100),
           );
@@ -1218,7 +1288,8 @@ export async function runHost(sessionId: string): Promise<void> {
   });
 
   try {
-    await writeManifest(mPath, state.snapshot());
+    writeProgramRecord(sessDir, program);
+    await persistManifest();
     const socketDirectory = dirname(sPath);
     await mkdir(socketDirectory, { recursive: true });
     await chmod(socketDirectory, 0o700);

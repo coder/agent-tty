@@ -1,4 +1,4 @@
-import { rename, rm } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 
 import { ulid } from 'ulid';
 
@@ -8,13 +8,14 @@ import type { RendererBackend } from '../renderer/backend.js';
 import { ScreenshotResultSchema } from '../protocol/schemas.js';
 import { parseValidatedResult } from '../protocol/validation.js';
 import {
-  appendArtifactWithRollback,
   createArtifactEntry,
+  publishArtifactWithRollback,
 } from '../storage/artifactManifest.js';
 import {
   artifactPath,
   ensureArtifactsDir,
   screenshotFilename,
+  sessionNotFoundIfRemoved,
 } from '../storage/artifactPaths.js';
 import { invariant } from '../util/assert.js';
 
@@ -96,7 +97,6 @@ export async function captureScreenshotResult(
       rendererResult.capturedAtSeq,
       rendererResult.profileName,
     );
-    const finalArtifactPath = artifactPath(options.sessionDir, filename);
 
     // Mirror `src/snapshot/capture.ts` by building a typed intermediate
     // before validation. A misspelled field name surfaces at compile time
@@ -107,7 +107,7 @@ export async function captureScreenshotResult(
       profileName: rendererResult.profileName,
       cols: rendererResult.cols,
       rows: rendererResult.rows,
-      artifactPath: finalArtifactPath,
+      artifactPath: artifactPath(options.sessionDir, filename),
       pngSizeBytes: rendererResult.pngSizeBytes,
       cursorVisible: rendererResult.cursorVisible,
       rendererBackend: rendererResult.rendererBackend,
@@ -152,16 +152,18 @@ export async function captureScreenshotResult(
       },
     });
 
-    await rename(temporaryOutputPath, finalArtifactPath);
-    await appendArtifactWithRollback({
+    const recordedEntry = await publishArtifactWithRollback({
       sessionDir: options.sessionDir,
+      temporaryPath: temporaryOutputPath,
       entry: artifactEntry,
-      rollbackArtifactPath: finalArtifactPath,
     });
 
-    return publicResult;
+    return {
+      ...publicResult,
+      artifactPath: artifactPath(options.sessionDir, recordedEntry.filename),
+    };
   } catch (error) {
     await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
-    throw error;
+    throw await sessionNotFoundIfRemoved(options.sessionDir, error);
   }
 }

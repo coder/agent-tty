@@ -1,7 +1,11 @@
 import crypto from 'node:crypto';
 import { basename, dirname, isAbsolute, resolve } from 'node:path';
 
-import { EVENT_LOG_FILENAME, MANIFEST_FILENAME } from '../config/defaults.js';
+import {
+  EVENT_LOG_FILENAME,
+  MANIFEST_FILENAME,
+  PROGRAM_RECORD_FILENAME,
+} from '../config/defaults.js';
 import { invariant } from '../util/assert.js';
 
 const SOCKET_ROOT_DIRECTORY = '/tmp/agent-tty';
@@ -65,6 +69,10 @@ export function manifestPath(sessionDirectory: string): string {
 
 export function eventLogPath(sessionDirectory: string): string {
   return childPath(sessionDirectory, EVENT_LOG_FILENAME);
+}
+
+export function programRecordPath(sessionDirectory: string): string {
+  return childPath(sessionDirectory, PROGRAM_RECORD_FILENAME);
 }
 
 function resolveSocketDirectory(home: string): string {

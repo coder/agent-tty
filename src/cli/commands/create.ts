@@ -138,26 +138,30 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
   let sessionId: string | undefined;
 
   try {
-    const allocatedSession = await allocateSession({
-      home: options.context.home,
-      command: options.command,
-      shellPath: options.shellPath,
-      cwd: options.cwd,
-      cols: options.cols,
-      rows: options.rows,
-      env: environment,
-      term: options.term,
-      ...(idleTimeoutMs > 0 ? { idleTimeoutMs } : {}),
-      ...(options.name !== undefined ? { name: options.name } : {}),
-    });
+    const allocatedSession = await allocateSession(
+      {
+        home: options.context.home,
+        command: options.command,
+        shellPath: options.shellPath,
+        cwd: options.cwd,
+        cols: options.cols,
+        rows: options.rows,
+        env: environment,
+        term: options.term,
+        ...(idleTimeoutMs > 0 ? { idleTimeoutMs } : {}),
+        ...(options.name !== undefined ? { name: options.name } : {}),
+      },
+      (id) => {
+        sessionId = id;
+        return launchHost({
+          sessionId: id,
+          home: options.context.home,
+          env: environment,
+          term: options.term,
+        });
+      },
+    );
     sessionId = allocatedSession.sessionId;
-
-    launchHost({
-      sessionId,
-      home: options.context.home,
-      env: environment,
-      term: options.term,
-    });
   } catch (error) {
     if (sessionId !== undefined) {
       const home = options.context.home;
