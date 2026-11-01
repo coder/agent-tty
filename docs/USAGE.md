@@ -103,7 +103,8 @@ Rows and columns are zero-based. `press` and `release` require `--button`;
 drag. Buttons are `left`, `middle`, `right`, `wheel-up`, `wheel-down`,
 `wheel-left`, and `wheel-right`. `--shift`, `--alt`, and `--ctrl` add modifiers.
 An event suppressed by the child's tracking mode succeeds with
-`reported: false` and `bytesWritten: 0`. Missing renderer support exits `12`
+`reported: false` and `bytesWritten: 0`. A cell outside the session's current
+grid exits `2` with `INVALID_INPUT`. Missing renderer support exits `12`
 with `CAPABILITY_UNAVAILABLE`.
 
 The default surface uses virtual one-pixel cells. For SGR-pixels with a known
@@ -116,9 +117,9 @@ The host writes the native buffer directly to the PTY, including non-UTF-8 X10
 bytes. Each `input_mouse` event stores those exact bytes as `dataBase64` alongside
 the action, cell position, modifiers, renderer, and any explicit cell metrics.
 Suppressed events still receive a sequence number and record an empty payload.
-Older native packages remain usable for other operations; see the
-[native mouse development setup](mouse-native-development.md) until a
-mouse-capable package is published.
+The mouse encoder comes with the optional `@coder/libghostty-vt-node` package,
+and `doctor --json` reports it as the `mouse-input` capability. Without that
+package, the other commands still work and `mouse` exits `12`.
 
 ## `wait`
 
@@ -201,7 +202,7 @@ Steps are a JSON array; each step is exactly one verb. The shape mirrors the res
 
 - `type` / `paste`: a string of literal text.
 - `sendKeys`: a non-empty array of key names — individual named keys or single characters (e.g. `["Enter"]`, `["Ctrl+C"]`, `["Escape", "Enter"]`). Multi-character literal text such as `:wq` is not a key name; send it with a `type` step.
-- `mouse`: the same `action`, `button`, `row`, `col`, and optional `modifiers` fields as the `mouse` command. It may also carry `rendererName` for an explicit backend override.
+- `mouse`: the same `action`, `button`, `row`, `col`, and optional `modifiers`, `cellWidth`, and `cellHeight` fields as the `mouse` command. It uses the batch command's renderer.
 - `run`: a command string, with optional `noWait` (fire-and-forget) and `timeout` (ms). A `run` step is a waited run by default.
 - `wait`: the same conditions as the `wait` command — `text`, `regex`, `scope`, `screenStableMs`, `cursorRow`, `cursorCol`, and `timeout` (ms).
 
@@ -245,7 +246,7 @@ The `--json` result is a per-step envelope:
 }
 ```
 
-Each step record carries its `index`, `kind`, `status` (`completed` | `failed` | `not-run` | `interrupted`), and `durationMs`. Input steps report the Event Log `seq` they produced; `wait` steps report the `waitBaseline` they were anchored to plus `matched` / `timedOut` / `matchedText` / `capturedAtSeq`, and a matched `wait` step also carries the `screenHash` of the screen it observed (see [Screen Hash](#screen-hash)). `completedCount` and `failedIndices` summarize the run. A fail-fast batch exits non-zero with the failed step's exit code (e.g. `11` for a `WAIT_TIMEOUT`); `--keep-going` exits `1` if any step failed. If the process is interrupted by SIGINT/SIGTERM, batch flushes the same envelope with the in-flight step marked `interrupted` and later steps `not-run`, then exits non-zero.
+Each step record carries its `index`, `kind`, `status` (`completed` | `failed` | `not-run` | `interrupted`), and `durationMs`. Input steps report the Event Log `seq` they produced, and `mouse` steps also report `reported` and `bytesWritten`; `wait` steps report the `waitBaseline` they were anchored to plus `matched` / `timedOut` / `matchedText` / `capturedAtSeq`, and a matched `wait` step also carries the `screenHash` of the screen it observed (see [Screen Hash](#screen-hash)). `completedCount` and `failedIndices` summarize the run. A fail-fast batch exits non-zero with the failed step's exit code (e.g. `11` for a `WAIT_TIMEOUT`); `--keep-going` exits `1` if any step failed. If the process is interrupted by SIGINT/SIGTERM, batch flushes the same envelope with the in-flight step marked `interrupted` and later steps `not-run`, then exits non-zero.
 
 The Wait Baseline fixes stale-match only. It does **not** fix echo-match: a whole-screen `wait` can still match the terminal's echo of a just-typed command (the echo renders _after_ the baseline). Use `"scope": "cursor-line"` on the wait step to restrict matching to the cursor row (see [Echo-Match](#echo-match)), or wait for a distinctive output token. Interrupting a batch mid-`wait` leaves that wait's command still running on the session (the wait is abandoned, not cancelled), exactly like a caller timeout on `run`.
 

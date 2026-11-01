@@ -82,8 +82,8 @@ Use `mouse` for TUI hit-testing, scrolling, and drag behavior. Coordinates are
 zero-based cells. A drag is three actions: `press --button left`, one or more
 button-free `move` actions, then `release --button left`. The child must enable
 mouse tracking; a suppressed event returns `reported: false`. Mouse input
-requires the `libghostty-vt` capability and must never be replaced with a
-hard-coded SGR sequence.
+requires the `mouse-input` capability that `agent-tty doctor --json` reports,
+and must never be replaced with a hard-coded SGR sequence.
 
 ```bash
 AGENT_HOME="$(mktemp -d)"

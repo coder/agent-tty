@@ -2,18 +2,18 @@
 
 ## Overview
 
-This directory parses and runs a Batch: an ordered JSON list of `type`, `paste`, `sendKeys`, `run` and `wait` steps sent to one live session. `parseBatchPlan` validates the whole plan before any input is sent. `executeBatch` runs the steps in order through a `StepDriver` and records one result per step. `createRpcStepDriver` implements the driver over the session host RPC socket. The caller is `src/cli/commands/batch.ts`.
+This directory parses and runs a Batch: an ordered JSON list of `type`, `paste`, `sendKeys`, `mouse`, `run` and `wait` steps sent to one live session. `parseBatchPlan` validates the whole plan before any input is sent. `executeBatch` runs the steps in order through a `StepDriver` and records one result per step. `createRpcStepDriver` implements the driver over the session host RPC socket. The caller is `src/cli/commands/batch.ts`.
 
 ## Interface
 
-- `BatchStep`: a union of `type` (`text`), `paste` (`text`), `sendKeys` (`keys`), `run` (`command`, `noWait`, `timeoutMs`) and `wait` (`condition`, `timeoutMs`) steps [plan.ts:BatchStep]. `BatchPlan` is `{ steps }` [plan.ts:BatchPlan].
+- `BatchStep`: a union of `type` (`text`), `paste` (`text`), `sendKeys` (`keys`), `mouse` (`input`, a `MouseInput` from `src/protocol/messages.ts`), `run` (`command`, `noWait`, `timeoutMs`) and `wait` (`condition`, `timeoutMs`) steps [plan.ts:BatchStep]. `BatchPlan` is `{ steps }` [plan.ts:BatchPlan].
 - `parseBatchPlan(raw)` parses a JSON string into a `BatchPlan` [plan.ts:parseBatchPlan].
 - `StepStatusSchema` and `StepStatus`: `completed`, `failed`, `not-run` and `interrupted` [result.ts:StepStatusSchema].
-- Record schemas and types: `BatchStepErrorSchema`, `InputStepRecordSchema`, `RunStepRecordSchema`, `WaitStepRecordSchema` and `BatchStepRecordSchema` (discriminated on `kind`) [result.ts:BatchStepRecordSchema].
+- Record schemas and types: `BatchStepErrorSchema`, `InputStepRecordSchema`, `MouseStepRecordSchema` (adds `reported` and `bytesWritten`), `RunStepRecordSchema`, `WaitStepRecordSchema` and `BatchStepRecordSchema` (discriminated on `kind`) [result.ts:BatchStepRecordSchema].
 - `BatchResultSchema`: `steps`, `completedCount` and `failedIndices` [result.ts:BatchResultSchema].
 - `unreachedStepRecord(step, index, status)` builds a `not-run` or `interrupted` record [result.ts:unreachedStepRecord].
 - `buildPartialBatchResult(plan, recorded)` completes a result for a batch that stopped early [result.ts:buildPartialBatchResult].
-- `StepDriver`: `type`, `paste` and `sendKeys` return the event seq. `run` returns a `RunResult`. `wait(condition, afterSeq, timeoutMs)` returns a `WaitForRenderResult` [stepDriver.ts:StepDriver].
+- `StepDriver`: `type`, `paste` and `sendKeys` return the event seq. `mouse` returns a `MouseResult`. `run` returns a `RunResult`. `wait(condition, afterSeq, timeoutMs)` returns a `WaitForRenderResult` [stepDriver.ts:StepDriver].
 - `createRpcStepDriver(socketPath, rendererName?)` returns a `StepDriver` backed by the session host RPC [stepDriver.ts:createRpcStepDriver].
 - `ExecuteBatchOptions`: `plan`, `driver`, `keepGoing`, and optional `assertCommandable` and `onStep` callbacks [executor.ts:ExecuteBatchOptions].
 - `executeBatch(opts)` runs the plan and returns a `BatchResult` [executor.ts:executeBatch].
@@ -25,6 +25,7 @@ This directory parses and runs a Batch: an ordered JSON list of `type`, `paste`,
 - Each step must be a plain object with exactly one verb key. Zero or several verbs throw `INVALID_INPUT` with `details.stepIndex` [plan.ts:parseStep].
 - All step schemas are Zod `.strict()`. Strings and `sendKeys` arrays must be non-empty [plan.ts:SendKeysStepSchema].
 - `sendKeys` names are checked with `assertValidKeyName` from `src/pty/keyEncoder.ts` [plan.ts:parseSendKeysStep].
+- A `mouse` step is checked with `MouseInputSchema`, which has no `rendererName`. The driver sends the batch command's renderer, as it does for `wait` [plan.ts:parseMouseStep] [stepDriver.ts:createRpcStepDriver].
 - Wait conditions are built with `prepareRenderWaitCondition` from `src/renderWait/matcher.ts` [plan.ts:parseWaitStep].
 - An omitted wait timeout becomes `DEFAULT_WAIT_TIMEOUT_MS` (600,000 ms). An explicit `0` means no timeout [plan.ts:DEFAULT_WAIT_TIMEOUT_MS].
 - `executeBatch` runs steps in order. Without `keepGoing`, the first failed step stops the batch and every later step gets a `not-run` record [executor.ts:executeBatch].
@@ -39,7 +40,7 @@ This directory parses and runs a Batch: an ordered JSON list of `type`, `paste`,
 
 ## Side Effects
 
-- `createRpcStepDriver` calls `sendRpc` from `src/host/rpcClient.ts` over the session socket with the methods `type`, `paste`, `sendKeys`, `run` and `waitForRender` [stepDriver.ts:createRpcStepDriver].
+- `createRpcStepDriver` calls `sendRpc` from `src/host/rpcClient.ts` over the session socket with the methods `type`, `paste`, `sendKeys`, `mouse`, `run` and `waitForRender` [stepDriver.ts:createRpcStepDriver].
 - `executeBatch` does no I/O itself. It acts through the injected driver and callbacks and reads `Date.now()` for step durations [executor.ts:executeBatch].
 - `plan.ts` and `result.ts`: none found in code.
 
