@@ -33,8 +33,9 @@ const SNAPSHOT_TIMEOUT_MS = 60_000;
 const OUTPUT_MARKER = 'hello-structured';
 
 const SCROLLBACK_OUTPUT_MARKER = 'line-50';
-const mouseProbe = await probeLibghosttyVt();
-const itWithMouse = mouseProbe.mouseInputAvailable === true ? it : it.skip;
+const hasNativeMouse = (await probeLibghosttyVt()).mouseInputAvailable === true;
+const requireNativeMouse = process.env.AGENT_TTY_REQUIRE_MOUSE_NATIVE === '1';
+const itWithMouse = hasNativeMouse || requireNativeMouse ? it : it.skip;
 
 async function waitForOutputMarker(
   testHome: string,
@@ -217,6 +218,10 @@ describe(
     itWithMouse(
       'drives press, drag motion, and release through child-negotiated mouse modes',
       async () => {
+        expect(
+          hasNativeMouse,
+          'AGENT_TTY_REQUIRE_MOUSE_NATIVE=1 needs a libghostty-vt mouse encoder',
+        ).toBe(true);
         await restartSession(
           [
             process.execPath,

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { sendRpc } from '../../src/host/rpcClient.js';
+import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
 import { sessionDir, socketPath } from '../../src/storage/sessionPaths.js';
 
 import {
@@ -14,25 +15,19 @@ import {
 } from '../helpers.js';
 
 let home = '';
-const hasNativeMouse = await import('@coder/libghostty-vt-node')
-  .then((native) => {
-    const terminal = native.createTerminal({ cols: 1, rows: 1 });
-    try {
-      return 'encodeMouse' in terminal;
-    } finally {
-      terminal.dispose();
-    }
-  })
-  .catch(() => false);
+// CI sets AGENT_TTY_REQUIRE_MOUSE_NATIVE=1, so a missing native encoder fails
+// these tests there instead of skipping them.
+const itWithNativeMouse = it.skipIf(
+  (await probeLibghosttyVt()).mouseInputAvailable !== true &&
+    process.env.AGENT_TTY_REQUIRE_MOUSE_NATIVE !== '1',
+);
 afterEach(async () => {
   await cleanupHome(home);
   home = '';
 });
 
 describe('mouse command', () => {
-  it.skipIf(
-    !hasNativeMouse && process.env.AGENT_TTY_REQUIRE_MOUSE_NATIVE !== '1',
-  )(
+  itWithNativeMouse(
     'retains held buttons across concurrent requests while the native backend boots',
     async () => {
       home = await realpath(
@@ -88,9 +83,7 @@ describe('mouse command', () => {
     30_000,
   );
 
-  it.skipIf(
-    !hasNativeMouse && process.env.AGENT_TTY_REQUIRE_MOUSE_NATIVE !== '1',
-  )(
+  itWithNativeMouse(
     'checks cells against the session grid before any output',
     async () => {
       home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-mouse-')));
@@ -137,9 +130,7 @@ describe('mouse command', () => {
     30_000,
   );
 
-  it.skipIf(
-    !hasNativeMouse && process.env.AGENT_TTY_REQUIRE_MOUSE_NATIVE !== '1',
-  )(
+  itWithNativeMouse(
     'records whether each batch mouse step reached the child',
     async () => {
       home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-mouse-')));
@@ -258,26 +249,20 @@ describe('mouse command', () => {
     expect(
       (await readEvents(home, session)).filter((e) => e.type === 'input_mouse'),
     ).toEqual([]);
-  });
+  }, 30_000);
 
-  // CI with the released optional package still tests the capability error.
-  // Set this flag when consuming the mouse-encoder branch; missing native support must fail.
-  it
-    .skipIf(
-      !hasNativeMouse && process.env.AGENT_TTY_REQUIRE_MOUSE_NATIVE !== '1',
-    )
-    .each([
-      ['SGR', '\x1b[?1000h\x1b[?1006h', Buffer.from('\x1b[<0;223;3M')],
-      ['SGR-pixels', '\x1b[?1000h\x1b[?1016h', Buffer.from('\x1b[<0;2220;40M')],
-      ['X10', '\x1b[?1000h', Buffer.from([27, 91, 77, 32, 255, 35])],
-      [
-        'UTF-8',
-        '\x1b[?1000h\x1b[?1005h',
-        Buffer.from([27, 91, 77, 32, 0xc3, 0xbf, 35]),
-      ],
-      ['URXVT', '\x1b[?1000h\x1b[?1015h', Buffer.from('\x1b[32;223;3M')],
-      ['disabled', '', Buffer.alloc(0)],
-    ] as const)(
+  itWithNativeMouse.each([
+    ['SGR', '\x1b[?1000h\x1b[?1006h', Buffer.from('\x1b[<0;223;3M')],
+    ['SGR-pixels', '\x1b[?1000h\x1b[?1016h', Buffer.from('\x1b[<0;2220;40M')],
+    ['X10', '\x1b[?1000h', Buffer.from([27, 91, 77, 32, 255, 35])],
+    [
+      'UTF-8',
+      '\x1b[?1000h\x1b[?1005h',
+      Buffer.from([27, 91, 77, 32, 0xc3, 0xbf, 35]),
+    ],
+    ['URXVT', '\x1b[?1000h\x1b[?1015h', Buffer.from('\x1b[32;223;3M')],
+    ['disabled', '', Buffer.alloc(0)],
+  ] as const)(
     'delivers %s bytes to a PTY and retains them for replay',
     async (_name, mode, expected) => {
       home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-mouse-')));
