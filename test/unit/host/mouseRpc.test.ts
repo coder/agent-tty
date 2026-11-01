@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { MouseInputEvent } from '@coder/libghostty-vt-node';
 import type { MouseRequest } from '../../../src/host/mouseRpc.js';
 import type { LibghosttyVtNativeModule } from '../../../src/renderer/libghosttyVt/backend.js';
+import type { LibghosttyVtProbe } from '../../../src/renderer/readiness.js';
 import type { ReplayInput } from '../../../src/renderer/types.js';
 
 import { EventLog } from '../../../src/host/eventLog.js';
@@ -19,6 +20,11 @@ import { createLogger } from '../../../src/util/logger.js';
 const SESSION_ID = 'session-01';
 const ENABLE_SGR_TRACKING = '\u001b[?1000h\u001b[?1006h';
 const DISABLE_TRACKING = '\u001b[?1000l';
+const BREAKS_REPLAY = 'breaks-replay';
+const MOUSE_CAPABLE: LibghosttyVtProbe = {
+  available: true,
+  mouseInputAvailable: true,
+};
 const LEFT_PRESS: MouseRequest = {
   action: 'press',
   button: 'left',
@@ -37,6 +43,9 @@ function createTrackingNativeModule(): LibghosttyVtNativeModule {
       return {
         feed: (data) => {
           const text = String(data);
+          if (text === BREAKS_REPLAY) {
+            throw new RangeError('native feed rejected the replay');
+          }
           if (text.includes('\u001b[?1000h')) {
             tracking = true;
           }
@@ -74,6 +83,7 @@ describe('mouse RPC handler', () => {
   let tempDir = '';
   let eventLog: EventLog;
   let rendererManager: HostRendererManager;
+  let backendsCreated: number;
   let ptyWrites: string[];
 
   const profile = resolveProfile('reference-dark');
@@ -92,15 +102,18 @@ describe('mouse RPC handler', () => {
         };
   };
 
-  function createHandler(onPtyWrite?: () => void) {
+  function createHandler(
+    options: { onPtyWrite?: () => void; probe?: LibghosttyVtProbe } = {},
+  ) {
     return createMouseRpcHandler({
       rendererManager,
       profile,
+      probeLibghosttyVt: () => Promise.resolve(options.probe ?? MOUSE_CAPABLE),
       loadReplayInput,
       assertCommandable: () => undefined,
       writePty: (data) => {
         ptyWrites.push(data.toString('latin1'));
-        onPtyWrite?.();
+        options.onPtyWrite?.();
       },
       appendMouseEvent: (payload) => eventLog.append('input_mouse', payload),
     });
@@ -111,15 +124,18 @@ describe('mouse RPC handler', () => {
     tempDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-mouse-rpc-')));
     eventLog = await EventLog.open(join(tempDir, 'events.jsonl'));
     ptyWrites = [];
+    backendsCreated = 0;
     const nativeModule = createTrackingNativeModule();
     rendererManager = new HostRendererManager({
       sessionId: SESSION_ID,
       sessionDir: tempDir,
-      backendFactory: (_rendererName, sessionId, backendProfile) =>
-        new LibghosttyVtBackend(sessionId, backendProfile, {
+      backendFactory: (_rendererName, sessionId, backendProfile) => {
+        backendsCreated += 1;
+        return new LibghosttyVtBackend(sessionId, backendProfile, {
           loadNative: () => Promise.resolve(nativeModule),
           logger: createLogger('info', () => undefined),
-        }),
+        });
+      },
     });
   });
 
@@ -166,17 +182,48 @@ describe('mouse RPC handler', () => {
     expect(eventLog.getEvents().map((event) => event.type)).toEqual(['output']);
   });
 
+  it.each([
+    ['the optional package is missing', { available: false }],
+    [
+      'the package predates mouse encoding',
+      { available: true, mouseInputAvailable: false },
+    ],
+  ] satisfies [string, LibghosttyVtProbe][])(
+    'reports CAPABILITY_UNAVAILABLE before booting a renderer when %s',
+    async (_name, probe) => {
+      await eventLog.append('output', { data: ENABLE_SGR_TRACKING });
+      const sendMouse = createHandler({ probe });
+
+      await expect(
+        sendMouse(LEFT_PRESS, 'libghostty-vt'),
+      ).rejects.toMatchObject({ code: 'CAPABILITY_UNAVAILABLE' });
+      expect(backendsCreated).toBe(0);
+      expect(ptyWrites).toEqual([]);
+    },
+  );
+
+  it('does not report a replay failure as invalid input', async () => {
+    await eventLog.append('output', { data: BREAKS_REPLAY });
+    const sendMouse = createHandler();
+
+    await expect(sendMouse(LEFT_PRESS, 'libghostty-vt')).rejects.toThrow(
+      new RangeError('native feed rejected the replay'),
+    );
+  });
+
   it('logs mouse input in the order its bytes reach the PTY', async () => {
     await eventLog.append('output', { data: ENABLE_SGR_TRACKING });
     const ptyOrder: string[] = [];
-    const sendMouse = createHandler(() => {
-      ptyOrder.push('input_mouse');
-      // Another input handler resumes as soon as this request yields, and
-      // writes and logs its bytes in one step the way `type` does.
-      queueMicrotask(() => {
-        ptyOrder.push('input_text');
-        void eventLog.append('input_text', { data: 'x' });
-      });
+    const sendMouse = createHandler({
+      onPtyWrite: () => {
+        ptyOrder.push('input_mouse');
+        // Another input handler resumes as soon as this request yields, and
+        // writes and logs its bytes in one step the way `type` does.
+        queueMicrotask(() => {
+          ptyOrder.push('input_text');
+          void eventLog.append('input_text', { data: 'x' });
+        });
+      },
     });
 
     await expect(sendMouse(LEFT_PRESS, 'libghostty-vt')).resolves.toMatchObject(

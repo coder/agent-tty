@@ -55,6 +55,10 @@ import {
   type RendererName,
 } from '../renderer/names.js';
 import { resolveProfile } from '../renderer/profiles.js';
+import {
+  probeLibghosttyVt,
+  type LibghosttyVtProbe,
+} from '../renderer/readiness.js';
 import { createRendererBackend } from '../renderer/registry.js';
 import { createMouseRpcHandler } from './mouseRpc.js';
 import { captureScreenshotResult } from '../screenshot/capture.js';
@@ -326,9 +330,11 @@ export async function runHost(
     backgroundColor: defaultProfile.backgroundColor,
     foregroundColor: defaultProfile.foregroundColor,
   });
+  let libghosttyVtProbe: Promise<LibghosttyVtProbe> | undefined;
   const sendMouse = createMouseRpcHandler({
     rendererManager,
     profile: defaultProfile,
+    probeLibghosttyVt: () => (libghosttyVtProbe ??= probeLibghosttyVt()),
     loadReplayInput: () => loadReplayInput(),
     assertCommandable: () => {
       assertSessionCommandable(state);
