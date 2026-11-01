@@ -12,6 +12,7 @@ import type { HostRendererManager } from './renderer.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { supportsMouseEncoding } from '../renderer/backend.js';
 import { LIBGHOSTTY_VT_PACKAGE } from '../renderer/readiness.js';
+import { throwIfAborted } from '../util/abort.js';
 import { invariant } from '../util/assert.js';
 import { prepareHeldMouseButtons, type HeldMouseButton } from './mouseInput.js';
 
@@ -53,10 +54,14 @@ function encodeMouse(
  */
 export function createMouseRpcHandler(
   deps: MouseRpcDependencies,
-): (request: MouseInput, rendererName: RendererName) => Promise<MouseResult> {
+): (
+  request: MouseInput,
+  rendererName: RendererName,
+  signal?: AbortSignal,
+) => Promise<MouseResult> {
   let heldMouseButtons: ReadonlySet<HeldMouseButton> = new Set();
 
-  return async (request, rendererName) => {
+  return async (request, rendererName, signal) => {
     const { action, button, row, col, cellWidth, cellHeight, modifiers } =
       request;
     const normalizedModifiers = {
@@ -99,6 +104,10 @@ export function createMouseRpcHandler(
           appliedSeq = latest.targetSeq;
           latest = deps.loadReplayInput();
         }
+
+        // A client that timed out already reported failure; clicking now
+        // would make its retry click twice.
+        throwIfAborted(signal);
 
         // No await from here through appendMouseEvent, which reserves the
         // seq synchronously, so no output can make the bytes stale and no

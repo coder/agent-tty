@@ -827,7 +827,7 @@ export async function runHost(
         seq,
       };
     },
-    mouse: async (params: unknown) => {
+    mouse: async (params: unknown, context) => {
       const { rendererName, ...request } = params as MouseParams;
 
       assertSessionCommandable(state);
@@ -836,6 +836,7 @@ export async function runHost(
       const result = await sendMouse(
         request,
         resolveHostRendererName(rendererName),
+        context.signal,
       );
       lastActivityAt = Date.now();
       return result;

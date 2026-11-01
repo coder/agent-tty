@@ -217,6 +217,28 @@ describe('mouse RPC handler', () => {
     await expect(queuedSnapshot).resolves.toMatchObject({ capturedAtSeq: 1 });
   });
 
+  it('drops a request whose client gave up while it waited for the renderer lock', async () => {
+    await eventLog.append('output', { data: ENABLE_SGR_TRACKING });
+    const sendMouse = createHandler();
+    const lockHolder = Promise.withResolvers<undefined>();
+    const otherRendererWork = rendererManager.withBackend(
+      'libghostty-vt',
+      profile,
+      loadReplayInput,
+      () => lockHolder.promise,
+    );
+    const client = new AbortController();
+
+    const pending = sendMouse(LEFT_PRESS, 'libghostty-vt', client.signal);
+    client.abort();
+    lockHolder.resolve(undefined);
+    await otherRendererWork;
+
+    await expect(pending).rejects.toThrow();
+    expect(ptyWrites).toEqual([]);
+    expect(eventLog.getEvents().map((event) => event.type)).toEqual(['output']);
+  });
+
   it('rejects a cell outside the terminal grid as invalid input without writing it', async () => {
     await eventLog.append('output', { data: ENABLE_SGR_TRACKING });
     const sendMouse = createHandler();
