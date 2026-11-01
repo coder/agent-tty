@@ -76,6 +76,7 @@ function createNativeFixture(options: { visibleText?: string } = {}) {
     rows,
     cursorRow: Math.min(1, rows - 1),
     cursorCol: Math.min(2, cols - 1),
+    cursorVisible: true,
     isAltScreen: true,
     visibleLines: [
       { row: 0, text: 'hello world' },
@@ -433,6 +434,7 @@ describe('LibghosttyVtBackend', () => {
       rows: 2,
       cursorRow: 0,
       cursorCol: 10, // true terminal column of the "d" in "done"
+      cursorVisible: true,
       isAltScreen: false,
       visibleLines: [
         { row: 0, text: 'rocket 🚀 done' },

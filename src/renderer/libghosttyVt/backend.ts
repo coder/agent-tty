@@ -3,6 +3,7 @@ import { isAbsolute } from 'node:path';
 import type {
   CreateTerminalOptions,
   GhosttyVtTerminal,
+  MouseButton as NativeMouseButton,
   NativeInfo,
   SnapshotCell as NativeSnapshotCell,
   TerminalSnapshot,
@@ -31,44 +32,9 @@ import { DEFAULT_COLS, DEFAULT_ROWS } from '../../config/defaults.js';
 import { invariant, assertString, unreachable } from '../../util/assert.js';
 import { Logger, createProcessLogger } from '../../util/logger.js';
 
-type NativeMouseAction = 'press' | 'release' | 'motion';
-type NativeMouseButton =
-  | 'left'
-  | 'middle'
-  | 'right'
-  | 'four'
-  | 'five'
-  | 'six'
-  | 'seven';
-
-interface NativeMouseInputEvent {
-  action: NativeMouseAction;
-  button?: NativeMouseButton;
-  x: number;
-  y: number;
-  modifiers?: { shift?: boolean; alt?: boolean; ctrl?: boolean };
-}
-
-interface NativeMouseEncoderOptions {
-  geometry: {
-    screenWidth: number;
-    screenHeight: number;
-    cellWidth: number;
-    cellHeight: number;
-  };
-  anyButtonPressed?: boolean;
-  trackLastCell?: boolean;
-}
-
-type MouseAwareGhosttyVtTerminal = Pick<
-  GhosttyVtTerminal,
-  'feed' | 'resize' | 'snapshot' | 'getVisibleText' | 'dispose'
-> & {
-  encodeMouse?(
-    event: NativeMouseInputEvent,
-    options: NativeMouseEncoderOptions,
-  ): Buffer;
-};
+// Bindings that predate mouse encoding still render.
+type MouseAwareGhosttyVtTerminal = Omit<GhosttyVtTerminal, 'encodeMouse'> &
+  Partial<Pick<GhosttyVtTerminal, 'encodeMouse'>>;
 
 export interface LibghosttyVtNativeModule {
   createTerminal(options: CreateTerminalOptions): MouseAwareGhosttyVtTerminal;
@@ -180,6 +146,7 @@ function assertNativeSnapshot(snapshot: unknown): TerminalSnapshot {
     rows?: unknown;
     cursorRow?: unknown;
     cursorCol?: unknown;
+    cursorVisible?: unknown;
     isAltScreen?: unknown;
     visibleLines?: unknown;
     scrollbackLines?: unknown;
@@ -203,6 +170,10 @@ function assertNativeSnapshot(snapshot: unknown): TerminalSnapshot {
   invariant(
     candidate.cursorCol < candidate.cols,
     'snapshot cursorCol must be within cols',
+  );
+  invariant(
+    typeof candidate.cursorVisible === 'boolean',
+    'snapshot cursorVisible must be a boolean',
   );
   invariant(
     typeof candidate.isAltScreen === 'boolean',
@@ -238,6 +209,7 @@ function assertNativeSnapshot(snapshot: unknown): TerminalSnapshot {
     rows: candidate.rows,
     cursorRow: candidate.cursorRow,
     cursorCol: candidate.cursorCol,
+    cursorVisible: candidate.cursorVisible,
     isAltScreen: candidate.isAltScreen,
     visibleLines,
     ...(scrollbackLines === undefined ? {} : { scrollbackLines }),
