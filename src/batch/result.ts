@@ -30,13 +30,27 @@ export const InputStepRecordSchema = z
   .object({
     index: NonNegativeIntSchema,
     durationMs: NonNegativeIntSchema,
-    kind: z.enum(['type', 'paste', 'sendKeys', 'mouse']),
+    kind: z.enum(['type', 'paste', 'sendKeys']),
     status: StepStatusSchema,
     seq: NonNegativeIntSchema.optional(),
     error: BatchStepErrorSchema.optional(),
   })
   .strict();
 export type InputStepRecord = z.infer<typeof InputStepRecordSchema>;
+
+export const MouseStepRecordSchema = z
+  .object({
+    index: NonNegativeIntSchema,
+    durationMs: NonNegativeIntSchema,
+    kind: z.literal('mouse'),
+    status: StepStatusSchema,
+    seq: NonNegativeIntSchema.optional(),
+    reported: z.boolean().optional(),
+    bytesWritten: NonNegativeIntSchema.optional(),
+    error: BatchStepErrorSchema.optional(),
+  })
+  .strict();
+export type MouseStepRecord = z.infer<typeof MouseStepRecordSchema>;
 
 export const RunStepRecordSchema = z
   .object({
@@ -75,6 +89,7 @@ export type WaitStepRecord = z.infer<typeof WaitStepRecordSchema>;
 
 export const BatchStepRecordSchema = z.discriminatedUnion('kind', [
   InputStepRecordSchema,
+  MouseStepRecordSchema,
   RunStepRecordSchema,
   WaitStepRecordSchema,
 ]);

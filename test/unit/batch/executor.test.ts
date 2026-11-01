@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BatchPlan } from '../../../src/batch/plan.js';
 import type { StepDriver } from '../../../src/batch/stepDriver.js';
 import type {
-  MouseParams,
+  MouseInput,
+  MouseResult,
   RunResult,
   WaitForRenderResult,
 } from '../../../src/protocol/messages.js';
@@ -76,14 +77,18 @@ function createFakeDriver(options: FakeDriverOptions = {}): FakeDriver {
       calls.push({ verb: 'sendKeys', keys });
       return Promise.resolve(nextInputSeq());
     }),
-    mouse: vi.fn((input: MouseParams): Promise<number> => {
+    mouse: vi.fn((input: MouseInput): Promise<MouseResult> => {
       calls.push({
         verb: 'mouse',
         action: input.action,
         row: input.row,
         col: input.col,
       });
-      return Promise.resolve(nextInputSeq());
+      return Promise.resolve({
+        reported: true,
+        bytesWritten: 6,
+        seq: nextInputSeq(),
+      });
     }),
     run: vi.fn((command: string, noWait: boolean): Promise<RunResult> => {
       calls.push({ verb: 'run', command, noWait });
@@ -165,6 +170,8 @@ describe('executeBatch', () => {
       kind: 'mouse',
       status: 'completed',
       seq: 17,
+      reported: true,
+      bytesWritten: 6,
     });
   });
 
@@ -607,7 +614,8 @@ describe('executeBatch', () => {
         type: () => Promise.reject(new TypeError('boom')),
         paste: () => Promise.resolve(1),
         sendKeys: () => Promise.resolve(1),
-        mouse: () => Promise.resolve(1),
+        mouse: () =>
+          Promise.resolve({ reported: true, bytesWritten: 1, seq: 1 }),
         run: () => Promise.resolve({ accepted: true, seq: 1 }),
         wait: () =>
           Promise.resolve({ matched: true, timedOut: false, capturedAtSeq: 1 }),
@@ -637,7 +645,8 @@ describe('executeBatch', () => {
           ),
         paste: () => Promise.resolve(1),
         sendKeys: () => Promise.resolve(1),
-        mouse: () => Promise.resolve(1),
+        mouse: () =>
+          Promise.resolve({ reported: true, bytesWritten: 1, seq: 1 }),
         run: () => Promise.resolve({ accepted: true, seq: 1 }),
         wait: () =>
           Promise.resolve({ matched: true, timedOut: false, capturedAtSeq: 1 }),

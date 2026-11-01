@@ -1,11 +1,11 @@
 import { z } from 'zod';
 
 import type { PreparedRenderWaitCondition } from '../renderWait/matcher.js';
-import type { MouseParams } from '../protocol/messages.js';
+import type { MouseInput } from '../protocol/messages.js';
 
 import { assertValidKeyName } from '../pty/keyEncoder.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
-import { MouseParamsSchema } from '../protocol/messages.js';
+import { MouseInputSchema } from '../protocol/messages.js';
 import { prepareRenderWaitCondition } from '../renderWait/matcher.js';
 import { invariant, unreachable } from '../util/assert.js';
 
@@ -13,7 +13,7 @@ export type BatchStep =
   | { kind: 'type'; text: string }
   | { kind: 'paste'; text: string }
   | { kind: 'sendKeys'; keys: string[] }
-  | { kind: 'mouse'; input: MouseParams }
+  | { kind: 'mouse'; input: MouseInput }
   | {
       kind: 'run';
       command: string;
@@ -182,7 +182,7 @@ function parseMouseStep(
   index: number,
 ): BatchStep {
   const { mouse } = unwrapStep(MouseStepSchema, rawStep, index);
-  const result = MouseParamsSchema.safeParse(mouse);
+  const result = MouseInputSchema.safeParse(mouse);
   if (!result.success) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {
       message: `Batch step ${String(index)} is invalid`,

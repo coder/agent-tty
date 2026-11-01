@@ -174,10 +174,11 @@ function stepOutcome(record: BatchStepRecord): string {
         : `matched "${record.matchedText}"`;
     case 'run':
       return record.runOutcome ?? 'completed';
+    case 'mouse':
+      return record.reported === false ? 'not reported' : 'completed';
     case 'type':
     case 'paste':
     case 'sendKeys':
-    case 'mouse':
       return 'completed';
   }
 }

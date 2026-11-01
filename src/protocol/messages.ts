@@ -311,45 +311,58 @@ const MouseInputModifiersSchema = z
   })
   .strict();
 
-export const MouseParamsSchema = z
-  .object({
-    action: MouseActionSchema,
-    button: MouseButtonSchema.optional(),
-    row: z.number().int().nonnegative(),
-    col: z.number().int().nonnegative(),
-    cellWidth: z.number().int().positive().max(0xffffffff).optional(),
-    cellHeight: z.number().int().positive().max(0xffffffff).optional(),
-    modifiers: MouseInputModifiersSchema.optional().default({}),
-    rendererName: RendererNameSchema.optional(),
-  })
+const MouseInputShape = {
+  action: MouseActionSchema,
+  button: MouseButtonSchema.optional(),
+  row: z.number().int().nonnegative(),
+  col: z.number().int().nonnegative(),
+  cellWidth: z.number().int().positive().max(0xffffffff).optional(),
+  cellHeight: z.number().int().positive().max(0xffffffff).optional(),
+  modifiers: MouseInputModifiersSchema.optional().default({}),
+};
+
+function refineMouseInput(
+  event: { action: string; button?: string | undefined },
+  ctx: z.RefinementCtx,
+): void {
+  if (event.action === 'move' && event.button !== undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'button must not be set for move actions',
+      path: ['button'],
+    });
+  }
+  if (event.action !== 'move' && event.button === undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'button is required for press and release actions',
+      path: ['button'],
+    });
+  }
+  if (
+    event.action === 'release' &&
+    event.button !== undefined &&
+    event.button.startsWith('wheel-')
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'wheel buttons are instantaneous press actions',
+      path: ['button'],
+    });
+  }
+}
+
+/** One cell-addressed mouse action, as a batch `mouse` step accepts it. */
+export const MouseInputSchema = z
+  .object(MouseInputShape)
   .strict()
-  .superRefine((event, ctx) => {
-    if (event.action === 'move' && event.button !== undefined) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'button must not be set for move actions',
-        path: ['button'],
-      });
-    }
-    if (event.action !== 'move' && event.button === undefined) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'button is required for press and release actions',
-        path: ['button'],
-      });
-    }
-    if (
-      event.action === 'release' &&
-      event.button !== undefined &&
-      event.button.startsWith('wheel-')
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'wheel buttons are instantaneous press actions',
-        path: ['button'],
-      });
-    }
-  });
+  .superRefine(refineMouseInput);
+export type MouseInput = z.infer<typeof MouseInputSchema>;
+
+export const MouseParamsSchema = z
+  .object({ ...MouseInputShape, rendererName: RendererNameSchema.optional() })
+  .strict()
+  .superRefine(refineMouseInput);
 export type MouseParams = z.infer<typeof MouseParamsSchema>;
 
 export const MouseResultSchema = z

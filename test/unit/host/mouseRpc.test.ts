@@ -5,9 +5,9 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { MouseInputEvent } from '@coder/libghostty-vt-node';
-import type { MouseRequest } from '../../../src/host/mouseRpc.js';
 import type { LibghosttyVtNativeModule } from '../../../src/renderer/libghosttyVt/backend.js';
 import type { LibghosttyVtProbe } from '../../../src/renderer/readiness.js';
+import type { MouseInput } from '../../../src/protocol/messages.js';
 import type { ReplayInput } from '../../../src/renderer/types.js';
 
 import { EventLog } from '../../../src/host/eventLog.js';
@@ -25,7 +25,7 @@ const MOUSE_CAPABLE: LibghosttyVtProbe = {
   available: true,
   mouseInputAvailable: true,
 };
-const LEFT_PRESS: MouseRequest = {
+const LEFT_PRESS: MouseInput = {
   action: 'press',
   button: 'left',
   row: 1,

@@ -171,13 +171,15 @@ async function runStep(
       };
     }
     case 'mouse': {
-      const seq = await driver.mouse(step.input);
+      const { seq, reported, bytesWritten } = await driver.mouse(step.input);
       return {
         index,
         durationMs: Date.now() - startedAt,
         kind: 'mouse',
         status: 'completed',
         seq,
+        reported,
+        bytesWritten,
       };
     }
     case 'run':

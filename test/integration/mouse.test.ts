@@ -137,6 +137,50 @@ describe('mouse command', () => {
     30_000,
   );
 
+  it.skipIf(
+    !hasNativeMouse && process.env.AGENT_TTY_REQUIRE_MOUSE_NATIVE !== '1',
+  )(
+    'records whether each batch mouse step reached the child',
+    async () => {
+      home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-mouse-')));
+      const session = createSession(home, [
+        process.execPath,
+        '-e',
+        "process.stdin.setRawMode(true);process.stdin.resume();process.stdout.write('\\x1b[?1000h\\x1b[?1006hREADY');process.stdin.once('data',()=>process.stdout.write('\\x1b[?1000lOFF'));",
+      ]);
+      const env = { AGENT_TTY_HOME: home, AGENT_TTY_RENDERER: 'libghostty-vt' };
+      const press = { action: 'press', button: 'left', row: 2, col: 3 };
+      const result = runCli(
+        [
+          'batch',
+          session,
+          JSON.stringify([
+            { wait: { text: 'READY' } },
+            { mouse: press },
+            { wait: { text: 'OFF' } },
+            { mouse: press },
+          ]),
+          '--json',
+        ],
+        env,
+      );
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        ok: true,
+        command: 'batch',
+        result: {
+          steps: [
+            { kind: 'wait' },
+            { kind: 'mouse', reported: true, bytesWritten: 9 },
+            { kind: 'wait' },
+            { kind: 'mouse', reported: false, bytesWritten: 0 },
+          ],
+        },
+      });
+    },
+    30_000,
+  );
+
   it('documents pixel geometry and reports invalid input before resolving a session', () => {
     const help = runCli(['mouse', '--help']);
     expect(help.status).toBe(0);

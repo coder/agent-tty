@@ -307,6 +307,15 @@ describe('parseBatchPlan', () => {
             extra: true,
           },
         },
+        {
+          mouse: {
+            action: 'press',
+            button: 'left',
+            row: 0,
+            col: 0,
+            rendererName: 'libghostty-vt',
+          },
+        },
       ];
 
       expect(

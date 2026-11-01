@@ -1,4 +1,4 @@
-import type { MouseParams, MouseResult } from '../protocol/messages.js';
+import type { MouseInput, MouseResult } from '../protocol/messages.js';
 import type { InputMouseEventPayload } from '../protocol/schemas.js';
 import type {
   MouseEncodingBackend,
@@ -14,8 +14,6 @@ import { supportsMouseEncoding } from '../renderer/backend.js';
 import { LIBGHOSTTY_VT_PACKAGE } from '../renderer/readiness.js';
 import { invariant } from '../util/assert.js';
 import { prepareHeldMouseButtons, type HeldMouseButton } from './mouseInput.js';
-
-export type MouseRequest = Omit<MouseParams, 'rendererName'>;
 
 export interface MouseRpcDependencies {
   readonly rendererManager: Pick<HostRendererManager, 'withBackend'>;
@@ -55,7 +53,7 @@ function encodeMouse(
  */
 export function createMouseRpcHandler(
   deps: MouseRpcDependencies,
-): (request: MouseRequest, rendererName: RendererName) => Promise<MouseResult> {
+): (request: MouseInput, rendererName: RendererName) => Promise<MouseResult> {
   let heldMouseButtons: ReadonlySet<HeldMouseButton> = new Set();
 
   return async (request, rendererName) => {
