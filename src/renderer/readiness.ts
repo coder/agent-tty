@@ -52,9 +52,7 @@ export async function probeLibghosttyVt(
       available: true,
       mouseInputAvailable,
       reason: 'libghostty-vt native module available',
-      detail: mouseInputAvailable
-        ? `${LIBGHOSTTY_VT_PACKAGE} exposes createTerminal() and mode-aware mouse encoding`
-        : `${LIBGHOSTTY_VT_PACKAGE} exposes createTerminal() but predates the mouse-capable release`,
+      detail: `${LIBGHOSTTY_VT_PACKAGE} exposes createTerminal()`,
     };
   } catch (error) {
     return {

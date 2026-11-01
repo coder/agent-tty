@@ -133,11 +133,11 @@ describe('doctor command', () => {
     expect(result.capabilities.map((capability) => capability.name)).toEqual([
       'snapshot',
       'wait',
-      'mouse-input',
       'screenshot',
       'record-export-asciicast',
       'record-export-webm',
       'dashboard',
+      'mouse-input',
     ]);
     expect(
       result.capabilities.find(({ name }) => name === 'snapshot'),

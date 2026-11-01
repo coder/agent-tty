@@ -28,7 +28,8 @@ describe('probeLibghosttyVt', () => {
 
     expect(probe.available).toBe(true);
     expect(probe.mouseInputAvailable).toBe(false);
-    expect(probe.detail).toContain('mouse-capable release');
+    // snapshot, wait and dashboard report this detail; it is not about mouse.
+    expect(probe.detail).not.toMatch(/mouse/u);
   });
 
   it('reports unavailable when the loaded module is missing createTerminal', async () => {

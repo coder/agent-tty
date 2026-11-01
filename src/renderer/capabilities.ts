@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { ensurePlaywrightBrowsersPath } from './browserPath.js';
 import {
   buildDashboardCapability,
+  LIBGHOSTTY_VT_PACKAGE,
   probeLibghosttyVt,
   type LibghosttyVtProbe,
 } from './readiness.js';
@@ -14,11 +15,11 @@ import {
 export const CapabilityNameSchema = z.enum([
   'snapshot',
   'wait',
-  'mouse-input',
   'screenshot',
   'record-export-asciicast',
   'record-export-webm',
   'dashboard',
+  'mouse-input',
 ]);
 export type CapabilityName = z.infer<typeof CapabilityNameSchema>;
 
@@ -80,11 +81,11 @@ export type RendererRuntimeSummary = z.infer<
 const CAPABILITY_NAMES: ReadonlyArray<CapabilityName> = Object.freeze([
   'snapshot',
   'wait',
-  'mouse-input',
   'screenshot',
   'record-export-asciicast',
   'record-export-webm',
   'dashboard',
+  'mouse-input',
 ]);
 const SEMANTIC_RENDER_CAPABILITY_NAMES: ReadonlyArray<'snapshot' | 'wait'> =
   Object.freeze(['snapshot', 'wait']);
@@ -564,12 +565,12 @@ async function discoverMouseInputCapability(
       ...(probe.detail === undefined ? {} : { detail: probe.detail }),
     };
   }
-  if (probe.mouseInputAvailable === false) {
+  if (probe.mouseInputAvailable !== true) {
     return {
       name: 'mouse-input',
       status: 'unavailable',
       reason: 'libghostty-vt mouse encoder unavailable',
-      ...(probe.detail === undefined ? {} : { detail: probe.detail }),
+      detail: `${LIBGHOSTTY_VT_PACKAGE} predates the mouse-capable release`,
     };
   }
   return mode === 'full'
@@ -577,7 +578,7 @@ async function discoverMouseInputCapability(
         name: 'mouse-input',
         status: 'available',
         reason: 'libghostty-vt mouse encoder available',
-        ...(probe.detail === undefined ? {} : { detail: probe.detail }),
+        detail: `${LIBGHOSTTY_VT_PACKAGE} exposes mode-aware mouse encoding`,
       }
     : { name: 'mouse-input', status: 'available' };
 }
@@ -650,8 +651,6 @@ export async function discoverCapabilities(
     capabilities.push(buildBuiltinCapability(name, mode));
   }
 
-  capabilities.push(await discoverMouseInputCapability(mode, cachedDeps));
-
   capabilities.push(
     await buildPlaywrightCapability('screenshot', mode, cachedDeps),
   );
@@ -659,6 +658,7 @@ export async function discoverCapabilities(
     await buildPlaywrightCapability('record-export-webm', mode, cachedDeps),
   );
   capabilities.push(await discoverDashboardCapability(mode, cachedDeps));
+  capabilities.push(await discoverMouseInputCapability(mode, cachedDeps));
 
   const sortedCapabilities: CapabilityEntry[] = [];
   for (const name of CAPABILITY_NAMES) {

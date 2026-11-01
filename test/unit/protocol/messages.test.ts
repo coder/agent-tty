@@ -223,11 +223,11 @@ describe('CapabilityEntrySchema', () => {
     const names = [
       'snapshot',
       'wait',
-      'mouse-input',
       'screenshot',
       'record-export-asciicast',
       'record-export-webm',
       'dashboard',
+      'mouse-input',
     ] as const;
 
     for (const name of names) {
