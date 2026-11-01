@@ -47,21 +47,34 @@ export function createMouseRpcHandler(
     const replayInput = deps.loadReplayInput();
 
     let encoded: Buffer;
-    let rendererBackend: string;
+    let seq: Promise<number>;
     try {
-      ({ encoded, rendererBackend } = await deps.rendererManager.withBackend(
+      ({ encoded, seq } = await deps.rendererManager.withBackend(
         rendererName,
         deps.profile,
         replayInput,
-        (backend) => {
+        async (backend) => {
           if (!supportsMouseEncoding(backend)) {
             throw makeCliError(ERROR_CODES.CAPABILITY_UNAVAILABLE, {
               message: `Renderer ${backend.rendererBackend} cannot encode mouse input. Use libghostty-vt.`,
               details: { rendererBackend: backend.rendererBackend },
             });
           }
-          // The renderer lock also serializes held-button transitions. A
-          // second request can arrive while the first backend is booting.
+          // Output the child printed while this request waited for the lock,
+          // or while the backend booted or replayed, can change its mouse
+          // modes. Replay until the backend holds the whole event log.
+          let appliedSeq = replayInput?.targetSeq ?? -1;
+          let latest = deps.loadReplayInput();
+          while (latest !== null && latest.targetSeq > appliedSeq) {
+            await backend.replayTo(latest);
+            appliedSeq = latest.targetSeq;
+            latest = deps.loadReplayInput();
+          }
+
+          // No await from here through appendMouseEvent, which reserves the
+          // seq synchronously, so no output can make the bytes stale and no
+          // other input can reach the PTY or the log in between. The lock
+          // also orders held-button transitions across requests.
           const transition = prepareHeldMouseButtons(heldMouseButtons, {
             action,
             ...(button === undefined ? {} : { button }),
@@ -84,11 +97,19 @@ export function createMouseRpcHandler(
           if (encoded.length > 0) {
             deps.writePty(encoded);
           }
-          heldMouseButtons = transition.nextHeld;
-          return {
-            encoded,
+          const seq = deps.appendMouseEvent({
+            action,
+            ...(button === undefined ? {} : { button }),
+            row,
+            col,
+            modifiers: normalizedModifiers,
             rendererBackend: backend.rendererBackend,
-          };
+            ...(cellWidth === undefined ? {} : { cellWidth }),
+            ...(cellHeight === undefined ? {} : { cellHeight }),
+            dataBase64: encoded.toString('base64'),
+          });
+          heldMouseButtons = transition.nextHeld;
+          return { encoded, seq };
         },
       ));
     } catch (error) {
@@ -111,21 +132,10 @@ export function createMouseRpcHandler(
       throw error;
     }
 
-    const seq = await deps.appendMouseEvent({
-      action,
-      ...(button === undefined ? {} : { button }),
-      row,
-      col,
-      modifiers: normalizedModifiers,
-      rendererBackend,
-      ...(cellWidth === undefined ? {} : { cellWidth }),
-      ...(cellHeight === undefined ? {} : { cellHeight }),
-      dataBase64: encoded.toString('base64'),
-    });
     return {
       reported: encoded.length > 0,
       bytesWritten: encoded.length,
-      seq,
+      seq: await seq,
     };
   };
 }
