@@ -858,8 +858,11 @@ export async function runHost(
       pty.resize(cols, rows);
       lastActivityAt = Date.now();
       state.setDimensions(cols, rows);
+      // Reserve the seq with the PTY resize, like the input handlers, so a
+      // mouse request never replays the old grid after the PTY changed.
+      const resizeLogged = eventLog.append('resize', { cols, rows });
       await persistManifest();
-      await eventLog.append('resize', { cols, rows });
+      await resizeLogged;
       return { cols, rows };
     },
     signal: async (params: unknown) => {

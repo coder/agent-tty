@@ -62,7 +62,7 @@
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
     "src/host/hostMain.ts#runHost(parts)": "a18ec06b67d355d1",
     "src/host/hostMain.ts#runHost(final try)": "5db2f94ef78701a8",
-    "src/host/hostMain.ts#runHost>handlers.resize": "30dd1da32879d478",
+    "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "427078c18d724c82",
     "skill:scripts/facts.mjs": "ad6f7db805c5d882",
