@@ -61,17 +61,6 @@ function parseNumberOption(value: string): number {
   return Number(value);
 }
 
-function parseNonNegativeIntegerOption(value: string): number {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-      message: 'Mouse row and column values must be non-negative integers.',
-      details: { value },
-    });
-  }
-  return parsed;
-}
-
 // Strict integer-token parser: empty, whitespace-only, fractional, partially
 // numeric (e.g. "", "1.5", "2junk"), or unsafe-magnitude tokens yield NaN so
 // command validation rejects them instead of silently truncating or rounding.
@@ -660,12 +649,12 @@ async function main(): Promise<void> {
     .requiredOption(
       '--row <n>',
       'Zero-based terminal row',
-      parseNonNegativeIntegerOption,
+      parseIntegerTokenOption,
     )
     .requiredOption(
       '--col <n>',
       'Zero-based terminal column',
-      parseNonNegativeIntegerOption,
+      parseIntegerTokenOption,
     )
     .option('--button <name>', 'left, middle, right, or a wheel direction')
     .option(

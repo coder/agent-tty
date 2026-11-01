@@ -159,7 +159,29 @@ describe('mouse command', () => {
       ok: false,
       error: { code: 'INVALID_INPUT' },
     });
-  });
+    for (const option of ['--row', '--col', '--cell-width']) {
+      const result = runCli([
+        'mouse',
+        'missing',
+        'press',
+        '--button',
+        'left',
+        '--row',
+        '2',
+        '--col',
+        '1',
+        option,
+        'abc',
+        '--json',
+      ]);
+      expect(result.status, `${option} abc`).toBe(2);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        ok: false,
+        command: 'mouse',
+        error: { code: 'INVALID_INPUT' },
+      });
+    }
+  }, 30_000);
 
   it('rejects an unsupported renderer without booting a browser or writing input', async () => {
     home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-mouse-')));
