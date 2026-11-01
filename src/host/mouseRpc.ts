@@ -80,13 +80,11 @@ export function createMouseRpcHandler(
         },
       });
     }
-    const replayInput = deps.loadReplayInput();
-
     const { encoded, seq } = await deps.rendererManager.withBackend(
       rendererName,
       deps.profile,
-      replayInput,
-      async (backend) => {
+      deps.loadReplayInput,
+      async (backend, replayInput) => {
         invariant(
           supportsMouseEncoding(backend),
           'the libghostty-vt backend must encode mouse input',

@@ -222,7 +222,7 @@ describe('HostRendererManager', () => {
     const firstOperation = manager.withBackend(
       'libghostty-vt',
       createProfile('dark'),
-      null,
+      () => null,
       async () => {
         operationStarted.resolve(undefined);
         await releaseOperation.promise;
@@ -234,7 +234,7 @@ describe('HostRendererManager', () => {
     const replacementOperation = manager.withBackend(
       'ghostty-web',
       createProfile('dark'),
-      null,
+      () => null,
       (backend) => backend.rendererBackend,
     );
     await flushAsyncQueue();

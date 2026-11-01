@@ -351,15 +351,21 @@ export async function runHost(
       'targetSeq must be a non-negative integer',
     );
 
-    const replayInput = loadReplayInput(targetSeq);
-    invariant(replayInput !== null, 'run-complete replay input must exist');
-
     const rendererName = resolveHostRendererName(undefined);
     const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
     await rendererManager.withBackend(
       rendererName,
       profile,
-      replayInput,
+      () => {
+        // The latest log, not targetSeq: earlier queued work can already have
+        // replayed past targetSeq.
+        const replayInput = loadReplayInput();
+        invariant(
+          replayInput !== null && replayInput.targetSeq >= targetSeq,
+          'run-complete replay input must exist',
+        );
+        return replayInput;
+      },
       async (backend) => {
         const snapshot = await backend.snapshot();
         invariant(
@@ -603,11 +609,10 @@ export async function runHost(
 
       const rendererName = resolveHostRendererName(requestedRendererName);
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
-      const replayInput = loadReplayInput();
       const { snapshot, rendererBackend } = await rendererManager.withBackend(
         rendererName,
         profile,
-        replayInput,
+        () => loadReplayInput(),
         async (backend) => ({
           snapshot: await backend.snapshot({
             includeScrollback,
@@ -651,12 +656,11 @@ export async function runHost(
       })();
 
       const rendererName = resolveHostRendererName(requestedRendererName);
-      const replayInput = loadReplayInput();
 
       return await rendererManager.withBackend(
         rendererName,
         profile,
-        replayInput,
+        () => loadReplayInput(),
         async (backend) =>
           await captureScreenshotResult({
             backend,
@@ -1039,11 +1043,10 @@ export async function runHost(
           void (async () => {
             try {
               throwIfAborted(signal);
-              const replayInput = loadReplayInput();
               const snapshot = await rendererManager.withBackend(
                 rendererName,
                 profile,
-                replayInput,
+                () => loadReplayInput(),
                 async (backend) => {
                   throwIfAborted(signal);
                   return await backend.snapshot();

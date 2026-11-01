@@ -152,7 +152,7 @@ describe('mouse RPC handler', () => {
     const otherRendererWork = rendererManager.withBackend(
       'libghostty-vt',
       profile,
-      loadReplayInput(),
+      loadReplayInput,
       () => lockHolder.promise,
     );
 
@@ -166,6 +166,55 @@ describe('mouse RPC handler', () => {
       bytesWritten: 0,
     });
     expect(ptyWrites).toEqual([]);
+  });
+
+  it('encodes every queued request with the mode the child set while they waited', async () => {
+    await eventLog.append('output', { data: ENABLE_SGR_TRACKING });
+    const sendMouse = createHandler();
+    const lockHolder = Promise.withResolvers<undefined>();
+    const otherRendererWork = rendererManager.withBackend(
+      'libghostty-vt',
+      profile,
+      loadReplayInput,
+      () => lockHolder.promise,
+    );
+
+    const first = sendMouse(LEFT_PRESS, 'libghostty-vt');
+    const second = sendMouse(LEFT_PRESS, 'libghostty-vt');
+    await new Promise(setImmediate);
+    await eventLog.append('output', { data: DISABLE_TRACKING });
+    lockHolder.resolve(undefined);
+    await otherRendererWork;
+
+    await expect(first).resolves.toMatchObject({ reported: false });
+    await expect(second).resolves.toMatchObject({ reported: false });
+    expect(ptyWrites).toEqual([]);
+  });
+
+  it('lets renderer work queued behind a mouse request replay the current log', async () => {
+    await eventLog.append('output', { data: ENABLE_SGR_TRACKING });
+    const sendMouse = createHandler();
+    const lockHolder = Promise.withResolvers<undefined>();
+    const otherRendererWork = rendererManager.withBackend(
+      'libghostty-vt',
+      profile,
+      loadReplayInput,
+      () => lockHolder.promise,
+    );
+
+    const pendingMouse = sendMouse(LEFT_PRESS, 'libghostty-vt');
+    const queuedSnapshot = rendererManager.withBackend(
+      'libghostty-vt',
+      profile,
+      loadReplayInput,
+      (backend) => backend.snapshot(),
+    );
+    await eventLog.append('output', { data: DISABLE_TRACKING });
+    lockHolder.resolve(undefined);
+    await otherRendererWork;
+
+    await expect(pendingMouse).resolves.toMatchObject({ reported: false });
+    await expect(queuedSnapshot).resolves.toMatchObject({ capturedAtSeq: 1 });
   });
 
   it('rejects a cell outside the terminal grid as invalid input without writing it', async () => {
