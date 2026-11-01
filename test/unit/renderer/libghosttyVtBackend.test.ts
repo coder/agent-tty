@@ -302,6 +302,32 @@ describe('LibghosttyVtBackend', () => {
     );
   });
 
+  it('rejects mouse cells outside the replayed grid', async () => {
+    const fixture = createNativeFixture();
+    const backend = createBackend(fixture);
+    await backend.boot();
+    await backend.replayTo(createReplayInput());
+    const press = {
+      action: 'press',
+      button: 'left',
+      modifiers: { shift: false, alt: false, ctrl: false },
+      anyButtonPressed: true,
+    } as const;
+
+    expect(() => backend.encodeMouse({ ...press, row: 5, col: 0 })).toThrow(
+      new RangeError(
+        'Mouse cell row 5, col 0 is outside the 12x5 terminal grid. Use row 0-4 and col 0-11.',
+      ),
+    );
+    expect(() => backend.encodeMouse({ ...press, row: 0, col: 12 })).toThrow(
+      RangeError,
+    );
+    expect(fixture.encodeMouse).not.toHaveBeenCalled();
+
+    backend.encodeMouse({ ...press, row: 4, col: 11 });
+    expect(fixture.encodeMouse).toHaveBeenCalledOnce();
+  });
+
   it('preserves rendering but rejects mouse input when the binding predates mouse encoding', async () => {
     const fixture = createNativeFixture();
     const oldTerminal = { ...fixture.terminal } as Record<string, unknown>;

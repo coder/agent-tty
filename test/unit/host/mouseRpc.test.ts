@@ -152,6 +152,20 @@ describe('mouse RPC handler', () => {
     expect(ptyWrites).toEqual([]);
   });
 
+  it('rejects a cell outside the terminal grid as invalid input without writing it', async () => {
+    await eventLog.append('output', { data: ENABLE_SGR_TRACKING });
+    const sendMouse = createHandler();
+
+    await expect(
+      sendMouse({ ...LEFT_PRESS, row: 24 }, 'libghostty-vt'),
+    ).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      message: expect.stringContaining('80x24 terminal grid') as unknown,
+    });
+    expect(ptyWrites).toEqual([]);
+    expect(eventLog.getEvents().map((event) => event.type)).toEqual(['output']);
+  });
+
   it('logs mouse input in the order its bytes reach the PTY', async () => {
     await eventLog.append('output', { data: ENABLE_SGR_TRACKING });
     const ptyOrder: string[] = [];

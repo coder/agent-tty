@@ -598,6 +598,11 @@ export class LibghosttyVtBackend implements MouseEncodingBackend {
     );
     assertNonNegativeInteger(input.row, 'mouse row must be non-negative');
     assertNonNegativeInteger(input.col, 'mouse col must be non-negative');
+    if (input.row >= this.currentRows || input.col >= this.currentCols) {
+      throw new RangeError(
+        `Mouse cell row ${String(input.row)}, col ${String(input.col)} is outside the ${String(this.currentCols)}x${String(this.currentRows)} terminal grid. Use row 0-${String(this.currentRows - 1)} and col 0-${String(this.currentCols - 1)}.`,
+      );
+    }
     const cellWidth = input.cellWidth ?? 1;
     const cellHeight = input.cellHeight ?? 1;
     assertPositiveInteger(cellWidth, 'mouse cellWidth must be positive');

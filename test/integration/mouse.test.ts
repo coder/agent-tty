@@ -88,6 +88,55 @@ describe('mouse command', () => {
     30_000,
   );
 
+  it.skipIf(
+    !hasNativeMouse && process.env.AGENT_TTY_REQUIRE_MOUSE_NATIVE !== '1',
+  )(
+    'checks cells against the session grid before any output',
+    async () => {
+      home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-mouse-')));
+      const session = createSession(home, ['/bin/sh', '-c', 'exec cat'], {
+        cols: 100,
+      });
+      const press = (row: string, col: string) =>
+        runCli(
+          [
+            '--renderer',
+            'libghostty-vt',
+            'mouse',
+            session,
+            'press',
+            '--button',
+            'left',
+            '--row',
+            row,
+            '--col',
+            col,
+            '--json',
+          ],
+          { AGENT_TTY_HOME: home },
+        );
+
+      const lastCell = press('23', '99');
+      expect(lastCell.status, lastCell.stdout + lastCell.stderr).toBe(0);
+      const outside = press('999', '0');
+      expect(outside.status, outside.stdout + outside.stderr).toBe(2);
+      expect(JSON.parse(outside.stdout)).toMatchObject({
+        ok: false,
+        command: 'mouse',
+        error: {
+          code: 'INVALID_INPUT',
+          message: expect.stringContaining('100x24 terminal grid') as unknown,
+        },
+      });
+      expect(
+        (await readEvents(home, session))
+          .filter((e) => e.type === 'input_mouse')
+          .map((e) => e.payload.col),
+      ).toEqual([99]);
+    },
+    30_000,
+  );
+
   it('documents pixel geometry and reports invalid input before resolving a session', () => {
     const help = runCli(['mouse', '--help']);
     expect(help.status).toBe(0);

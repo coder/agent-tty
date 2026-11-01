@@ -233,8 +233,15 @@ export async function runHost(
   const rendererManager = new HostRendererManager({
     sessionId,
     sessionDir: sessDir,
+    // Boot at the creation size that replay starts from, so mouse geometry
+    // is right before the child has printed anything.
     backendFactory: (rendererName, sid, profile) =>
-      createRendererBackend(rendererName, sid, profile),
+      createRendererBackend(rendererName, sid, profile, {
+        libghosttyVt: {
+          initialCols: manifest.creationCols ?? manifest.cols,
+          initialRows: manifest.creationRows ?? manifest.rows,
+        },
+      }),
   });
 
   const loadReplayInput = (targetSeq?: number) => {
