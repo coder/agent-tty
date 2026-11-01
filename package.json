@@ -87,7 +87,7 @@
     "zod": "4.6.6"
   },
   "optionalDependencies": {
-    "@coder/libghostty-vt-node": "0.1.0-beta.4"
+    "@coder/libghostty-vt-node": "0.1.0-beta.5"
   },
   "pnpm": {
     "allowBuilds": {
