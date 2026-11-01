@@ -258,14 +258,14 @@ describe('EventLog', () => {
 
     const reopenedEventLog = await EventLog.open(eventLogPath);
     try {
-      expect(reopenedEventLog.getEvents()).toEqual([
-        expect.objectContaining({
+      expect(reopenedEventLog.getEvents()).toMatchObject([
+        {
           seq: 0,
           type: 'input_mouse',
-          payload: expect.objectContaining({
+          payload: {
             dataBase64: Buffer.from('\u001b[<48;9;4M').toString('base64'),
-          }),
-        }),
+          },
+        },
       ]);
     } finally {
       await reopenedEventLog.close();

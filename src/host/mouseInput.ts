@@ -36,19 +36,13 @@ export function prepareHeldMouseButtons(
 ): HeldMouseButtonTransition {
   invariant(currentHeld instanceof Set, 'currentHeld must be a Set');
   invariant(
-    input.action === 'press' ||
-      input.action === 'release' ||
-      input.action === 'move',
-    'mouse action must be press, release, or move',
-  );
-  invariant(
     input.button === undefined ||
       HOLDABLE_BUTTONS.has(input.button) ||
       WHEEL_BUTTONS.has(input.button),
     'mouse button is invalid',
   );
 
-  const nextHeld = new Set(currentHeld);
+  const nextHeld = new Set<HeldMouseButton>(currentHeld);
   switch (input.action) {
     case 'press':
       invariant(input.button !== undefined, 'press requires a mouse button');

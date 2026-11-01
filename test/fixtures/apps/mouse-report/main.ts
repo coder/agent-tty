@@ -1,4 +1,4 @@
-process.stdin.setRawMode?.(true);
+process.stdin.setRawMode(true);
 process.stdin.resume();
 
 // Any-event tracking plus SGR encoding exercises press, drag motion, release,

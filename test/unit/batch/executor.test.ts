@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BatchPlan } from '../../../src/batch/plan.js';
 import type { StepDriver } from '../../../src/batch/stepDriver.js';
 import type {
+  MouseParams,
   RunResult,
   WaitForRenderResult,
 } from '../../../src/protocol/messages.js';
@@ -75,7 +76,7 @@ function createFakeDriver(options: FakeDriverOptions = {}): FakeDriver {
       calls.push({ verb: 'sendKeys', keys });
       return Promise.resolve(nextInputSeq());
     }),
-    mouse: vi.fn((input): Promise<number> => {
+    mouse: vi.fn((input: MouseParams): Promise<number> => {
       calls.push({
         verb: 'mouse',
         action: input.action,
