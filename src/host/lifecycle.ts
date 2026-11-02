@@ -250,8 +250,10 @@ function runsSessionHost(host: SessionHost): boolean | null {
       return null;
     }
   }
-  const index = args.indexOf(HOST_SUBCOMMAND);
-  return index >= 0 && args[index + 1] === host.sessionId;
+  return args.some(
+    (arg, index) =>
+      arg === HOST_SUBCOMMAND && args[index + 1] === host.sessionId,
+  );
 }
 
 function isHostAlive(host: SessionHost | null): boolean {
