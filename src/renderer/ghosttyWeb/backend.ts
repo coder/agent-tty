@@ -387,9 +387,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       input.initialRows,
       'replay input initialRows must be a positive integer',
     );
-    assertNonNegativeInteger(
-      input.targetSeq,
-      'replay input targetSeq must be a non-negative integer',
+    invariant(
+      Number.isInteger(input.targetSeq) && input.targetSeq >= -1,
+      'replay input targetSeq must be an integer of at least -1',
     );
     invariant(
       input.targetSeq >= this.lastAppliedSeq,
@@ -766,8 +766,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   public async snapshot(options?: SnapshotOptions): Promise<SemanticSnapshot> {
     const page = this.requireOperationalPage('snapshot()');
     invariant(
-      this.lastAppliedSeq >= 0,
-      'snapshot() requires replayTo() to advance to a non-negative sequence first',
+      this.initialReplayCols !== null,
+      'snapshot() requires replayTo() first',
     );
 
     const snapshot = await this.readHarnessSnapshot(page, options);
@@ -798,8 +798,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   ): Promise<ScreenshotResult> {
     const page = this.requireOperationalPage('screenshot()');
     invariant(
-      this.lastAppliedSeq >= 0,
-      'screenshot() requires replayTo() to advance to a non-negative sequence first',
+      this.initialReplayCols !== null,
+      'screenshot() requires replayTo() first',
     );
     invariant(
       outputPath.length > 0,

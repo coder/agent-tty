@@ -36,6 +36,31 @@ describe('resolvePtyEnv', () => {
     expect(resolved.PROMPT_EOL_MARK).toBe('%B%S%#%s%b');
   });
 
+  it('defaults COLORTERM to truecolor when the caller does not set it', () => {
+    const resolved = resolvePtyEnv({}, 'xterm-256color', {});
+
+    expect(resolved.COLORTERM).toBe('truecolor');
+  });
+
+  it('overrides an inherited COLORTERM when the caller does not set it', () => {
+    const resolved = resolvePtyEnv({}, 'xterm-256color', {
+      COLORTERM: 'rxvt-xpm',
+    });
+
+    expect(resolved.COLORTERM).toBe('truecolor');
+  });
+
+  it('lets a caller-supplied COLORTERM win, including an explicit empty one', () => {
+    expect(
+      resolvePtyEnv({ COLORTERM: '24bit' }, 'xterm-256color', {}).COLORTERM,
+    ).toBe('24bit');
+    expect(
+      resolvePtyEnv({ COLORTERM: '' }, 'xterm-256color', {
+        COLORTERM: 'truecolor',
+      }).COLORTERM,
+    ).toBe('');
+  });
+
   it('always forces TERM to the provided value over inherited and caller env', () => {
     const resolved = resolvePtyEnv({ TERM: 'caller' }, 'vt100', {
       TERM: 'inherited',

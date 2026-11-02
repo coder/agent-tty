@@ -479,7 +479,7 @@ describe('withOfflineReplayRenderer', () => {
     expect(backend.disposed).toBe(true);
   });
 
-  it('produces an empty replay state without calling replayTo when the event log is empty', async () => {
+  it('replays an empty event log to targetSeq -1', async () => {
     const { sessionDir, sessionId } = await createSessionFixture({
       eventsContents: '',
     });
@@ -509,16 +509,14 @@ describe('withOfflineReplayRenderer', () => {
           'empty-log replay should expose -1 to prove that there is no durable seq to replay to',
         ).toBe(-1);
         expect(providedBackend).toBe(backend);
-        expect(backend.replayedInput).toBeNull();
-        expect(backend.replayedState).toBeNull();
+        expect(backend.replayedInput).toBe(replayInput);
         return Promise.resolve(undefined);
       },
       { backendFactory: () => backend },
     );
 
     expect(backend.booted).toBe(true);
-    expect(backend.replayCallCount).toBe(0);
-    expect(backend.replayedInput).toBeNull();
+    expect(backend.replayCallCount).toBe(1);
     expect(backend.disposed).toBe(true);
   });
 
@@ -532,12 +530,12 @@ describe('withOfflineReplayRenderer', () => {
       { sessionDir },
       ({ replayInput }: OfflineReplayRunContext) => {
         expect(replayInput.targetSeq).toBe(-1);
+        expect(backend.replayedInput).toBe(replayInput);
         return Promise.resolve(undefined);
       },
       { backendFactory: () => backend },
     );
 
-    expect(backend.replayedInput).toBeNull();
     expect(backend.disposed).toBe(true);
   });
 

@@ -250,20 +250,19 @@ describe('HostRendererManager', () => {
     expect(getCreatedBackend(backends, 0).disposeMock).toHaveBeenCalledTimes(1);
   });
 
-  it('skips replay when the replay target sequence is -1', async () => {
+  it('replays an empty event log so the backend starts at the session size', async () => {
     const manager = new HostRendererManager({
       sessionId: 'session-01',
       sessionDir,
       backendFactory,
     });
+    const replayInput = createReplayInput({ events: [], targetSeq: -1 });
 
-    await manager.getBackend(
-      'ghostty-web',
-      createProfile(),
-      createReplayInput({ events: [], targetSeq: -1 }),
+    await manager.getBackend('ghostty-web', createProfile(), replayInput);
+
+    expect(getCreatedBackend(backends, 0).replayToMock).toHaveBeenCalledWith(
+      replayInput,
     );
-
-    expect(getCreatedBackend(backends, 0).replayToMock).not.toHaveBeenCalled();
   });
 
   it('replays to the requested target sequence when replay input is provided', async () => {

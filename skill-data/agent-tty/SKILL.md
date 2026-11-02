@@ -35,6 +35,8 @@ agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format webm --json
 agent-tty --home "$AGENT_HOME" destroy "$SESSION_ID" --json
 ```
 
+`wait` gives up after 30 s by default and exits `11` (`WAIT_TIMEOUT`). Pass `--timeout <ms>` for a slower program, or `--timeout 0` to wait without a limit.
+
 ## Essential Commands
 
 ```bash
