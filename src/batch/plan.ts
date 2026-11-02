@@ -41,9 +41,9 @@ const VERB_KEYS = [
 
 type VerbKey = (typeof VERB_KEYS)[number];
 
-// Default for an omitted `wait` step timeout, matching the `wait` command; an
-// explicit `timeout: 0` still means infinite. Keeps an unattended Batch from
-// hanging forever on a wait whose condition never appears.
+// Default for an omitted `wait` step timeout (the standalone `wait` command
+// defaults to 30 s); an explicit `timeout: 0` still means infinite. Keeps an
+// unattended Batch from hanging forever on a wait whose condition never appears.
 const DEFAULT_WAIT_TIMEOUT_MS = 600_000;
 
 const TypeStepSchema = z.object({ type: z.string().min(1) }).strict();

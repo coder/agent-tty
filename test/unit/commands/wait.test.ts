@@ -325,6 +325,33 @@ describe('wait command', () => {
     expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['--idle-ms', { idleMs: 30_000 }],
+    ['--screen-stable-ms', { screenStableMs: 30_000 }],
+  ] as const)(
+    'rejects %s that cannot finish within the default timeout',
+    async (flag, overrides) => {
+      await expect(
+        runWaitCommand(createOptions(overrides)),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.INVALID_DURATION,
+        message: `${flag} 30000 cannot finish within the default --timeout of 30000 ms. Pass a larger --timeout, or --timeout 0 to wait without a limit.`,
+      });
+      expect(mocks.sendRpc).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([0, 60_000])(
+    'accepts a long --idle-ms with an explicit --timeout %d',
+    async (timeout) => {
+      mocks.sendRpc.mockResolvedValue({ timedOut: false });
+
+      await runWaitCommand(createOptions({ idleMs: 30_000, timeout }));
+
+      expect(mocks.sendRpc).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('rejects negative --timeout values for render waits', async () => {
     await expect(
       runWaitCommand(createOptions({ text: 'hello', timeout: -1 })),
@@ -355,9 +382,9 @@ describe('wait command', () => {
       {
         exit: true,
         idleMs: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -416,9 +443,9 @@ describe('wait command', () => {
       {
         exit: undefined,
         idleMs: 500,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -483,10 +510,10 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         afterSeq: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -516,7 +543,7 @@ describe('wait command', () => {
       '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'waitForRender',
       expect.objectContaining({ rendererName: 'libghostty-vt' }),
-      605_000,
+      35_000,
     );
   });
 
@@ -541,10 +568,10 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         afterSeq: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -578,10 +605,10 @@ describe('wait command', () => {
         cursorRow: 3,
         cursorCol: 4,
         afterSeq: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -612,10 +639,10 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         afterSeq: 5,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -694,10 +721,10 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         afterSeq: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
       {

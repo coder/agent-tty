@@ -24,7 +24,7 @@ A user sends input to a running program and waits until the screen shows the res
 - `agent-tty paste <id> '<text>'`, `--file <path>`.
 - `agent-tty send-keys <id> <key>...`.
 - `agent-tty mark <id> <label>`.
-- `agent-tty wait <id>` with one of `--text`, `--regex` (plus `--scope screen|cursor-line`), `--screen-stable-ms`, `--idle-ms`, `--cursor-row`/`--cursor-col`, `--exit`, and `--timeout`, `--after-seq`.
+- `agent-tty wait <id>` with one of `--text`, `--regex` (plus `--scope screen|cursor-line`), `--screen-stable-ms`, `--idle-ms`, `--cursor-row`/`--cursor-col`, `--exit`, and `--timeout` (default 30000 ms, `0` waits without a limit), `--after-seq`.
 
 ## Driving it with att
 
