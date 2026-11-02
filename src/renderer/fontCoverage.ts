@@ -139,10 +139,6 @@ function isUnicodeEncoding(platformId: number, encodingId: number): boolean {
   return platformId === 0 || (platformId === 3 && [1, 10].includes(encodingId));
 }
 
-/**
- * Returns the Unicode code points that a TrueType, OpenType or WOFF2 font maps
- * to a real glyph, read from the font's cmap formats 4 and 12.
- */
 export function readFontCoverage(bytes: Buffer): ReadonlySet<number> {
   invariant(bytes.length >= 12, 'font file is too short');
   const signature = bytes.readUInt32BE(0);
@@ -185,7 +181,6 @@ export function readFontCoverage(bytes: Buffer): ReadonlySet<number> {
 
 let bundledCoverage: ReadonlySet<number> | null = null;
 
-/** The code points that at least one bundled font maps to a glyph. */
 export function bundledFontCoverage(): ReadonlySet<number> {
   if (bundledCoverage === null) {
     const union = new Set<number>();

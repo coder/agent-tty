@@ -75,11 +75,6 @@ function uncoveredCodePoints(
   return [...codePoints];
 }
 
-/**
- * Groups the visible cells whose grapheme the bundled fonts cannot draw, keyed
- * by grapheme. Wide-glyph continuation cells and blanks have an empty `char`
- * and never count.
- */
 export function findGlyphCandidates(
   lines: readonly GhosttyHarnessRichLine[],
   coverage: ReadonlySet<number>,
@@ -117,10 +112,9 @@ function formatCodePoint(codePoint: number): string {
 }
 
 /**
- * Builds `missingGlyphs` from the candidates that Chromium drew with a bundled
- * font. Chromium draws a cluster that no font covers with the first font of the
- * stack, which is bundled, so that font draws `.notdef` boxes for the
- * uncovered code points.
+ * Chromium draws a cluster that no font covers with the first font of the
+ * stack. That font is bundled, so it draws `.notdef` boxes for the uncovered
+ * code points.
  */
 export function buildMissingGlyphs(
   candidates: ReadonlyMap<string, GlyphCandidate>,
@@ -150,11 +144,12 @@ export function buildMissingGlyphs(
     }));
 }
 
-/**
- * Asks Chromium which fonts draw each text in the given CSS font, and returns
- * whether a bundled (web) font drew any of it. A text with no reported font
- * counts as drawn by a bundled font, so a failed probe never hides a box.
- */
+function drawnByBundledFontOrUnknown(
+  fonts: readonly { isCustomFont: boolean }[],
+): boolean {
+  return fonts.length === 0 || fonts.some((font) => font.isCustomFont);
+}
+
 export async function probeBundledFontUse(
   page: Page,
   font: string,
@@ -175,6 +170,7 @@ export async function probeBundledFontUse(
         root.append(span);
       }
       document.body.append(root);
+      // CDP reports no fonts for a span that has not been laid out yet.
       return root.offsetWidth;
     },
     { rootId: PROBE_ROOT_ID, cssFont: font, probeTexts: [...texts] },
@@ -201,17 +197,14 @@ export async function probeBundledFontUse(
       const { fonts } = await cdp.send('CSS.getPlatformFontsForNode', {
         nodeId,
       });
-      drawnByBundledFont.set(
-        text,
-        fonts.length === 0 || fonts.some((usedFont) => usedFont.isCustomFont),
-      );
+      drawnByBundledFont.set(text, drawnByBundledFontOrUnknown(fonts));
     }
     return drawnByBundledFont;
   } finally {
-    await cdp.detach();
     await page.evaluate((rootId) => {
       const { document } = globalThis as unknown as ProbeGlobal;
       document.getElementById(rootId)?.remove();
     }, PROBE_ROOT_ID);
+    await cdp.detach();
   }
 }
