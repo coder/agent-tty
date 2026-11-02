@@ -19,7 +19,10 @@ import {
 import { buildReplayInput } from './replay.js';
 import { HostRendererManager } from './renderer.js';
 import { RpcServer, type MethodHandler } from './rpcServer.js';
-import { RunCompletionCoordinator } from './runCompletionCoordinator.js';
+import {
+  RunCompletionCoordinator,
+  type RegisteredWaitedRunCompletion,
+} from './runCompletionCoordinator.js';
 import { SessionState } from './sessionState.js';
 import { createPty } from '../pty/createPty.js';
 import { TerminalQueryResponder } from '../pty/terminalQueryResponder.js';
@@ -234,7 +237,9 @@ export async function runHost(
     return packageMetadataPromise;
   };
 
-  const rendererManager = new HostRendererManager({
+  const rendererManagerOptions: ConstructorParameters<
+    typeof HostRendererManager
+  >[0] = {
     sessionId,
     sessionDir: sessDir,
     // Boot at the creation size that replay starts from, so mouse geometry
@@ -246,7 +251,9 @@ export async function runHost(
           initialRows: manifest.creationRows ?? manifest.rows,
         },
       }),
-  });
+  };
+  const rendererManager = new HostRendererManager(rendererManagerOptions);
+  const mouseRendererManager = new HostRendererManager(rendererManagerOptions);
 
   const loadReplayInput = (targetSeq?: number) => {
     const replayInput = buildReplayInput(
@@ -332,7 +339,7 @@ export async function runHost(
   });
   let libghosttyVtProbe: Promise<LibghosttyVtProbe> | undefined;
   const sendMouse = createMouseRpcHandler({
-    rendererManager,
+    rendererManager: mouseRendererManager,
     profile: defaultProfile,
     probeLibghosttyVt: () => (libghosttyVtProbe ??= probeLibghosttyVt()),
     loadReplayInput: () => loadReplayInput(),
@@ -485,11 +492,10 @@ export async function runHost(
             eventLogClosed = true;
           }
 
-          try {
-            await rendererManager.dispose();
-          } catch {
-            // best-effort cleanup
-          }
+          await Promise.allSettled([
+            rendererManager.dispose(),
+            mouseRendererManager.dispose(),
+          ]);
 
           await rpcServer.close();
         }
@@ -567,11 +573,15 @@ export async function runHost(
       // reads, producing a result that does not correspond to any real
       // point in time.
       const sessionSnapshot = state.snapshot();
+      const reportedManager =
+        rendererManager.getCurrentRendererName() === null
+          ? mouseRendererManager
+          : rendererManager;
       const rendererBackend =
-        rendererManager.getCurrentRendererName() ?? hostDefaultRendererName;
-      const rendererProfile = rendererManager.getCurrentProfileName();
-      const rendererBooted = rendererManager.isBooted();
-      const rendererBootInFlight = rendererManager.isBootInFlight();
+        reportedManager.getCurrentRendererName() ?? hostDefaultRendererName;
+      const rendererProfile = reportedManager.getCurrentProfileName();
+      const rendererBooted = reportedManager.isBooted();
+      const rendererBootInFlight = reportedManager.isBootInFlight();
 
       const packageMetadata = await getPackageMetadata();
       return {
@@ -743,20 +753,27 @@ export async function runHost(
       }
 
       const preparedRun = runCompletion.prepareWaitedRun();
-      const seq = await eventLog.append('input_run', {
+      const inputRun = eventLog.startAppend('input_run', {
         command,
         marker: preparedRun.marker,
         noWait,
       });
-      const completion = runCompletion.registerWaitedRun({
-        marker: preparedRun.marker,
-        inputRunSeq: seq,
-      });
-      const injectedText = `${command}\n${completion.postamble}`;
+      const { seq } = inputRun;
       const effectiveTimeoutMs = timeoutMs ?? 30_000;
       const startTime = Date.now();
-      pty.write(injectedText);
+      let completion: RegisteredWaitedRunCompletion;
+      try {
+        completion = runCompletion.registerWaitedRun({
+          marker: preparedRun.marker,
+          inputRunSeq: seq,
+        });
+        pty.write(`${command}\n${completion.postamble}`);
+      } catch (error) {
+        await Promise.allSettled([inputRun.written]);
+        throw error;
+      }
       lastActivityAt = Date.now();
+      await inputRun.written;
 
       const waitResult = await completion.wait(effectiveTimeoutMs, { signal });
       const durationMs = Date.now() - startTime;

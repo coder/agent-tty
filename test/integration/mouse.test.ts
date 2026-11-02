@@ -84,6 +84,96 @@ describe('mouse command', () => {
   );
 
   itWithNativeMouse(
+    'keeps same-cell motion deduplicated after a renderer swap',
+    async () => {
+      home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-mouse-')));
+      const session = createSession(home, [
+        process.execPath,
+        '-e',
+        "process.stdin.setRawMode(true);process.stdin.resume();process.stdout.write('\\x1b[?1003h\\x1b[?1006hREADY');",
+      ]);
+      const env = { AGENT_TTY_HOME: home };
+      const ready = runCli(
+        ['wait', session, '--text', 'READY', '--timeout', '10000', '--json'],
+        env,
+      );
+      expect(ready.status, ready.stdout + ready.stderr).toBe(0);
+      const move = () =>
+        runCli(
+          [
+            '--renderer',
+            'libghostty-vt',
+            'mouse',
+            session,
+            'move',
+            '--row',
+            '2',
+            '--col',
+            '3',
+            '--json',
+          ],
+          env,
+        );
+
+      const first = move();
+      expect(first.status, first.stdout + first.stderr).toBe(0);
+      expect(JSON.parse(first.stdout)).toMatchObject({
+        result: { reported: true },
+      });
+      const swap = runCli(
+        ['--renderer', 'ghostty-web', 'snapshot', session, '--json'],
+        env,
+        30_000,
+      );
+      expect(swap.status, swap.stdout + swap.stderr).toBe(0);
+      const second = move();
+      expect(second.status, second.stdout + second.stderr).toBe(0);
+      expect(JSON.parse(second.stdout)).toMatchObject({
+        result: { reported: false, bytesWritten: 0 },
+      });
+    },
+    60_000,
+  );
+
+  itWithNativeMouse(
+    'inspect reports the renderer that mouse input booted',
+    async () => {
+      home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-mouse-')));
+      const session = createSession(home, ['/bin/sh', '-c', 'exec cat']);
+      const env = { AGENT_TTY_HOME: home };
+      const moved = runCli(
+        [
+          '--renderer',
+          'libghostty-vt',
+          'mouse',
+          session,
+          'move',
+          '--row',
+          '0',
+          '--col',
+          '0',
+          '--json',
+        ],
+        env,
+      );
+      expect(moved.status, moved.stdout + moved.stderr).toBe(0);
+
+      const inspected = runCli(['inspect', session, '--json'], env);
+      expect(inspected.status, inspected.stdout + inspected.stderr).toBe(0);
+      expect(JSON.parse(inspected.stdout)).toMatchObject({
+        result: {
+          rendererRuntime: {
+            backend: 'libghostty-vt',
+            profile: 'reference-dark',
+            booted: true,
+          },
+        },
+      });
+    },
+    30_000,
+  );
+
+  itWithNativeMouse(
     'checks cells against the session grid before any output',
     async () => {
       home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-mouse-')));
