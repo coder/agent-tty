@@ -309,7 +309,7 @@ A `destroy` that runs inside the session, such as one typed into the session's s
 The session's terminal is closed by then, so redirect stdout to keep the result, for example `agent-tty destroy "$AGENT_TTY_SESSION_ID" --json > destroy.json`.
 When `create` cannot reach its new host within about 6 s, it fails with `HOST_UNREACHABLE` or `HOST_TIMEOUT` and tells the host to stop.
 On Linux and macOS it sends the host SIGTERM, and the host stops the program the way `destroy` does and records the session as `destroyed` once the program's group has ended, also while its start-up is still slow.
-A host that has already died leaves the session to the reconcile above.
+A host that has already died, or that gets the SIGTERM before it spawns the program, leaves the session to the reconcile above: the session reads `running` until the next reconcile records it `failed`, and no program runs.
 When the host cannot end the program's group, for example a process of another user, the session stays `destroying` with the host alive. That host never listened, so a plain `destroy` then fails with `HOST_UNREACHABLE` (exit 6), and only `destroy --force` can end the session.
 On Windows, SIGTERM ends the host at once, so the host cannot stop the program itself. There `create` sends it only once the manifest names the program: the session then reads `running` with a dead host until the next reconcile records it `failed` and ends the program. Before the host's first manifest write, `create` leaves the host alone, as before this change, so a host that starts late can still serve the session.
 
