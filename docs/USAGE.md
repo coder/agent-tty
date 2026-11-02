@@ -323,9 +323,9 @@ Avoid writing automated sessions into the default `~/.agent-tty` unless you inte
 
 ## Shell Environment
 
-`create` spawns the shell with your inherited environment plus `TERM` (from `--term`) and a default `PROMPT_EOL_MARK=` (empty). The empty `PROMPT_EOL_MARK` suppresses the inverse-video `%` that `zsh` prints at the end of any output without a trailing newline; without it, agent-tty's hidden per-`run` completion marker leaves a stray `%` in snapshots, screenshots, and recordings. The variable is zsh-only and inert in other shells.
+`create` spawns the shell with your inherited environment plus `TERM` (from `--term`), a default `PROMPT_EOL_MARK=` (empty) and a default `COLORTERM=truecolor`. The empty `PROMPT_EOL_MARK` suppresses the inverse-video `%` that `zsh` prints at the end of any output without a trailing newline; without it, agent-tty's hidden per-`run` completion marker leaves a stray `%` in snapshots, screenshots, and recordings. The variable is zsh-only and inert in other shells.
 
-`create` also sets `COLORTERM=truecolor`, because the renderer draws 24-bit color. Neovim turns on 24-bit color when it sees that value. When `COLORTERM` is unset, Neovim asks the terminal instead, and agent-tty does not answer that query, so a screenshot loses the colors that the 256-color palette cannot show. An inherited `COLORTERM` describes the terminal that launched agent-tty, not the session's renderer, so the default replaces it.
+The `COLORTERM=truecolor` default says that the renderer draws 24-bit color. Neovim turns on 24-bit color when it sees that value. When `COLORTERM` is unset, Neovim asks the terminal instead, and agent-tty does not answer that query, so a screenshot loses the colors that the 256-color palette cannot show. An inherited `COLORTERM` describes the terminal that launched agent-tty, not the session's renderer, so the default replaces it.
 
 The shell also receives two session variables, so scripts inside a session can detect agent-tty and find their own session:
 

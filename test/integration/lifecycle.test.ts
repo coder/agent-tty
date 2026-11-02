@@ -38,6 +38,7 @@ import {
   inspectSession,
   isGroupAlive,
   killGroupIfAlive,
+  readEvents,
   runCli,
   sleep,
   type EventRecord,
@@ -392,24 +393,21 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       JSON.parse(createResult.stdout) as SuccessEnvelope<{ sessionId: string }>
     ).result.sessionId;
 
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 2000);
-    });
-
-    const eventContent = await readFile(
-      join(testHome, 'sessions', sessionId, 'events.jsonl'),
-      'utf8',
+    const output = async (): Promise<string> =>
+      (await readEvents(testHome, sessionId))
+        .filter((event) => event.type === 'output')
+        .map((event) => {
+          const data = event.payload.data;
+          return typeof data === 'string' ? data : '';
+        })
+        .join('');
+    await vi.waitFor(
+      async () => {
+        expect(await output()).toMatch(/\[[^\]]*\]/u);
+      },
+      { timeout: 15_000, interval: 100 },
     );
-    const allOutput = eventContent
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line) as EventRecord)
-      .filter((event) => event.type === 'output')
-      .map((event) => {
-        const data = event.payload.data;
-        return typeof data === 'string' ? data : '';
-      })
-      .join('');
+    const allOutput = await output();
     expect(allOutput).toContain('[truecolor]');
     expect(allOutput).not.toContain('inherited-sentinel');
   });

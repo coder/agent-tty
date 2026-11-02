@@ -82,6 +82,10 @@ or install a GitHub Release tarball as described in [`INSTALL.md`](./INSTALL.md)
 
 These renderers give repeatable artifacts for review and automation, but they do not guarantee exact native-terminal pixel parity. If a bug depends on a specific native terminal emulator, keep the `agent-tty` artifact as reference evidence and capture native-terminal evidence separately when needed.
 
+## A Program Ignores an Exported `COLORTERM`
+
+agent-tty spawns every session program with `COLORTERM=truecolor`, so an exported `COLORTERM` in the shell that runs `agent-tty create` does not reach the session. To hide 24-bit color support from a program, pass `--env COLORTERM=` (or another value) to `create`.
+
 ## Stray `%` at the End of Captured Output
 
 If a snapshot, screenshot, or recording shows an unexpected inverse-video `%` at the end of output that has no trailing newline, that is `zsh`'s `PROMPT_EOL_MARK` end-of-partial-line indicator. agent-tty spawns shells with `PROMPT_EOL_MARK=` (empty) by default to suppress it, so you should normally not see it.
