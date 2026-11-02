@@ -247,8 +247,11 @@ function controllingTerminal(pid: number): string | null {
     return null;
   }
   const tty = output.trim();
-  // ps prints ?? (BSD) or ? (procps) for a process without one.
-  return tty.length === 0 || /^\?+$/.test(tty) ? null : tty;
+  // A terminal name such as ttys001 or pts/3 starts with a letter and ends
+  // with a digit. For a process without a terminal ps prints ?? (macOS,
+  // OpenBSD), ? (procps, NetBSD) or - (FreeBSD), and any other value that
+  // names no terminal reads as none too, so two of them never match.
+  return /^[a-z][\w/]*\d$/i.test(tty) ? tty : null;
 }
 
 // A terminal is the controlling terminal of at most one session and of

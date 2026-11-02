@@ -820,8 +820,9 @@ function fallbackFacts() {
 // that check compares the program's pid with the CLI's session id, the
 // fourth field after the command name in /proc/self/stat. Before it reads
 // the manifest, the check matches AGENT_TTY_SESSION_ID, and the copy does
-// not get that variable, so it does not start a copy of its own. Off Linux
-// the check compares the process group and the controlling terminal.
+// not get that variable. Off Linux the check compares the process group and
+// the controlling terminal. The copy gets RERUN_MARKER and skips the check,
+// so it never starts a copy of its own.
 function rerunFacts() {
   const destroyFile = 'src/cli/commands/destroy.ts';
   const run = requireDeclaration(destroyFile, 'runDestroyCommand').body;
@@ -829,7 +830,7 @@ function rerunFacts() {
     (st) =>
       ts.isIfStatement(st) &&
       normalize(st.expression.getText()) ===
-        'await cliRunsInsideProgramSession(options.sessionId)' &&
+        "process.env[RERUN_MARKER] !== '1' && (await cliRunsInsideProgramSession(options.sessionId))" &&
       /^\{\s*process\.exitCode = await rerunInNewSession\(\);\s*return;\s*\}$/.test(
         st.thenStatement.getText(),
       ),
@@ -841,6 +842,13 @@ function rerunFacts() {
   );
   const detached =
     spawns.length === 1 && /\bdetached: true\b/.test(spawns[0].getText());
+  const copyEnv =
+    spawns.length === 1
+      ? (/\benv: \{ \.\.\.process\.env, ([^}]*?),? \}/
+          .exec(normalize(spawns[0].getText()))?.[1]
+          .split(', ') ?? [])
+      : [];
+  const copySkipsCheck = copyEnv.includes("[RERUN_MARKER]: '1'");
   const lifecycle = 'src/host/lifecycle.ts';
   const insideStatements = requireDeclaration(
     lifecycle,
@@ -874,14 +882,15 @@ function rerunFacts() {
     inside,
     /= await readManifestIfExists\(/,
   );
-  const copyDropsId =
-    spawns.length === 1 &&
-    normalize(spawns[0].getText()).includes(
-      'env: { ...process.env, AGENT_TTY_SESSION_ID: undefined }',
-    );
+  const copyDropsId = copyEnv.includes('AGENT_TTY_SESSION_ID: undefined');
   return {
     ReRunsInNewSession:
-      check >= 0 && destroy > check && detached && compares && readsSessionId,
+      check >= 0 &&
+      destroy > check &&
+      detached &&
+      copySkipsCheck &&
+      compares &&
+      readsSessionId,
     InsideCheckReadsEnv:
       readsEnv >= 0 && readsEnv < readsManifest && copyDropsId,
   };
