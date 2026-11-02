@@ -33,6 +33,8 @@ const procHooks = vi.hoisted(() => ({
   // /proc/<pid>/task/<tid>/stat by "<pid>/<tid>" for the threads beside the
   // leader, whose task stat is its /proc/<pid>/stat.
   threads: new Map<string, string | Error>(),
+  // Pids whose /proc/<pid>/task listing fails with this error.
+  taskErrors: new Map<string, Error>(),
   mountinfo: undefined as string | undefined,
 }));
 
@@ -55,6 +57,10 @@ vi.mock('node:fs', async () => {
     }
     if (!procHooks.stat.has(pid)) {
       throw errno('ENOENT');
+    }
+    const taskError = procHooks.taskErrors.get(pid);
+    if (taskError !== undefined) {
+      throw taskError;
     }
     return [
       pid,
@@ -100,6 +106,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   procHooks.stat = undefined;
   procHooks.threads.clear();
+  procHooks.taskErrors.clear();
   procHooks.mountinfo = undefined;
   autogroupFile.read = null;
   Object.defineProperty(process, 'platform', { value: platform });
@@ -522,6 +529,18 @@ describe('a program group without a token', () => {
     },
   );
 
+  it.each(['EACCES', 'EPERM'])(
+    'on linux, counts a zombie leader alive while /proc refuses the list of its threads with %s',
+    (code) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procShowsGroup('Z');
+      procHooks.taskErrors.set('100', errno(code));
+      probeEnds('ok');
+
+      expect(isProgramGroupAlive(group)).toBe(true);
+    },
+  );
+
   it.each(['ok', 'EPERM'] as const)(
     'on darwin, when the probe ends %s, counts a zombie as alive',
     (outcome) => {
@@ -779,6 +798,19 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     stopProgramGroup(group);
     expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
   });
+
+  it.each(['EACCES', 'EPERM'])(
+    'is alive and gets no kill while /proc refuses the list of the threads of a zombie leader with %s',
+    (code) => {
+      procShowsTokenGroup('Z');
+      procHooks.taskErrors.set('100', errno(code));
+      const kill = probeEnds('ok');
+
+      expect(isProgramGroupAlive(group)).toBe(true);
+      stopProgramGroup(group);
+      expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+    },
+  );
 
   it('is alive with no member in view when /proc hides other users and the probe ends EPERM', () => {
     procShowsTokenGroup();
