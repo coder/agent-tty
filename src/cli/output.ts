@@ -108,10 +108,17 @@ export function emitFailure(options: {
   );
 }
 
+export function jsonOutputRequested(): boolean {
+  const optionsEnd = process.argv.indexOf('--');
+  return process.argv
+    .slice(0, optionsEnd === -1 ? undefined : optionsEnd)
+    .includes('--json');
+}
+
 export function emitCliError(commandName: string, error: CliError): void {
   emitFailure({
     command: commandName,
-    json: process.argv.includes('--json'),
+    json: jsonOutputRequested(),
     error: {
       code: error.code,
       message: error.message,
