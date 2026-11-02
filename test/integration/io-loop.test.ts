@@ -9,6 +9,7 @@ import {
   createSession,
   destroySession,
   inspectSession,
+  parseWaitTimeoutEnvelope,
   readEvents,
   runCli,
   sleep,
@@ -139,12 +140,9 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       );
       expect(waitResult.status).toBe(11);
       expect(waitResult.stderr).toBe('');
-
-      const envelope = JSON.parse(
-        waitResult.stdout,
-      ) as SuccessEnvelope<WaitResult>;
-      expect(envelope.ok).toBe(true);
-      expect(envelope.result.timedOut).toBe(true);
+      expect(parseWaitTimeoutEnvelope(waitResult.stdout)).toEqual({
+        timedOut: true,
+      });
     } finally {
       destroySession(testHome, sessionId);
     }
