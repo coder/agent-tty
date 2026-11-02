@@ -80,10 +80,9 @@ function ensureDarwinSpawnHelperExecutable(): void {
  * Defaulting the parameter to empty suppresses the glyph. It is inert in shells
  * that do not implement it (bash, etc.), so setting it unconditionally is safe.
  *
- * `COLORTERM=truecolor` tells programs that the session's renderer draws
- * 24-bit color. Neovim, for one, enables `termguicolors` only when it sees it.
- * An inherited value describes the terminal that launched agent-tty, not the
- * session's renderer.
+ * `COLORTERM=truecolor` tells programs that the renderer draws 24-bit color.
+ * Neovim reads it before it queries the terminal, and any other non-empty
+ * value, such as one inherited from the launching terminal, skips that query.
  */
 const SPAWN_ENV_DEFAULTS: Readonly<Record<string, string>> = {
   PROMPT_EOL_MARK: '',
@@ -96,8 +95,8 @@ const SPAWN_ENV_DEFAULTS: Readonly<Record<string, string>> = {
  * Precedence, lowest to highest: the inherited process environment (minus
  * host-only internals), then `SPAWN_ENV_DEFAULTS`, then the generated session
  * metadata, then the caller-supplied `env` (so a `--env` value always wins —
- * even an explicit empty one), then `TERM`. The session
- * metadata is `AGENT_TTY_ACTIVE=true` plus `AGENT_TTY_SESSION_ID` when
+ * even an explicit empty one), then `TERM`. The session metadata is
+ * `AGENT_TTY_ACTIVE=true` plus `AGENT_TTY_SESSION_ID` when
  * `sessionId` is given; without a `sessionId` both are removed instead, so a
  * session-less PTY never claims an inherited outer session. The defaults sit
  * after the inherited environment so they also override inherited values: a
