@@ -1,4 +1,4 @@
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
@@ -581,7 +581,7 @@ describe('destroySession', () => {
 
 describe('a hostPid that may no longer name the host', () => {
   const platform = process.platform;
-  const started: ChildProcess[] = [];
+  const started: ReturnType<typeof spawn>[] = [];
 
   function startProcess(...args: string[]): number {
     const child = spawn(
