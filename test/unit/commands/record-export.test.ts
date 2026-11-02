@@ -583,6 +583,52 @@ describe('record export command', () => {
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
+  it('replaces an --out symlink with the WebM instead of writing through it', async () => {
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-webm-link-',
+    );
+    const linkTarget = join(workspaceDirectory, 'session.json');
+    const out = join(workspaceDirectory, 'proof.webm');
+    await writeFile(linkTarget, 'session record');
+    await symlink(linkTarget, out);
+    const webmContent = Buffer.from('webm bytes');
+    mocks.generateWebmExport.mockImplementation(
+      async (options: { outputPath: string }) => {
+        await writeFile(options.outputPath, webmContent);
+        return {
+          capturedAtSeq: 1,
+          durationMs: 1_500,
+          outputEventCount: 1,
+          resizeEventCount: 1,
+          cols: 80,
+          rows: 24,
+          profileName: 'reference-dark',
+          timingMode: 'recorded',
+          rendererBackend: 'ghostty-web',
+        };
+      },
+    );
+    mocks.stat.mockResolvedValue({ size: webmContent.byteLength });
+    mocks.readFile.mockResolvedValue(webmContent);
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+      out,
+    });
+
+    const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
+    expect(await fs.readFile(linkTarget, 'utf8')).toBe('session record');
+    expect((await fs.lstat(out)).isSymbolicLink()).toBe(false);
+    expect((await fs.readFile(out)).equals(webmContent)).toBe(true);
+    expect((await fs.readdir(workspaceDirectory)).sort()).toEqual([
+      'proof.webm',
+      'session.json',
+    ]);
+  });
+
   it('preserves explicit output artifacts when manifest append fails', async () => {
     const workspaceDirectory = await createTemporaryDirectory(
       'agent-tty-record-export-explicit-out-',
