@@ -6,7 +6,7 @@
 
 ## Interface
 
-- `CommandError`, `CommandSuccessEnvelope`, `CommandErrorEnvelope` and `CommandEnvelope` are the CLI output envelope types. Success is `{ ok: true, command, timestamp, result }`. Error is `{ ok: false, command, timestamp, error: { code, message, retryable, details } }`, plus `result` when the error carries one (a timed-out `wait`). [envelope.ts:CommandEnvelope]
+- `CommandError`, `CommandSuccessEnvelope`, `CommandErrorEnvelope` and `CommandEnvelope` are the CLI output envelope types. Success is `{ ok: true, command, timestamp, result }`. Error is `{ ok: false, command, timestamp, error: { code, message, retryable, details } }`, plus `result` when the error carries one (a timed-out `wait`). `CommandErrorEnvelope<TResult>` types that `result`, and `CommandEnvelope<TResult, TErrorResult>` defaults `TErrorResult` to `never`. [envelope.ts:CommandEnvelope]
 - `createSuccessEnvelope` and `createErrorEnvelope` build the envelopes with `timestamp = new Date().toISOString()`. [envelope.ts:createSuccessEnvelope] [envelope.ts:createErrorEnvelope]
 - `ERROR_CODES` and its value type `ProtocolErrorCode` list the error codes: `SESSION_NOT_FOUND`, `SESSION_NOT_RUNNING`, `SESSION_ALREADY_DESTROYED`, `HOST_UNREACHABLE`, `HOST_TIMEOUT`, `INVALID_SESSION_ID`, `INVALID_DIMENSIONS`, `INVALID_SIGNAL`, `INVALID_KEYS`, `INVALID_DURATION`, `INVALID_INPUT`, `CAPABILITY_UNAVAILABLE`, `STORAGE_READ_ERROR`, `STORAGE_WRITE_ERROR`, `MANIFEST_VALIDATION_ERROR`, `RPC_ERROR`, `PROTOCOL_ERROR`, `EXPORT_ERROR`, `REPLAY_ERROR`, `SKILL_NOT_FOUND`, `WAIT_TIMEOUT` and `INTERNAL_ERROR`. [errors.ts:ERROR_CODES] [errors.ts:ProtocolErrorCode]
 - `DEFAULT_ERROR_MESSAGES` holds one default message per code. [errors.ts:DEFAULT_ERROR_MESSAGES]

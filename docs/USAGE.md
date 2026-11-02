@@ -345,7 +345,7 @@ A lone `'%'` does **not** restore the marker (zsh treats it as a prompt escape t
 
 ## Exit Codes
 
-Every command exits with a stable code, so scripts can branch without parsing output. The `--json` error envelope carries the precise `error.code` when a command fails before producing a result. Commands that preserve an observable result for a failed predicate, such as timed-out `wait` and fail-fast `batch`, still emit a success envelope while exiting non-zero.
+Every command exits with a stable code, so scripts can branch without parsing output. The `--json` error envelope carries the precise `error.code` when a command fails before producing a result. A timed-out standalone `wait` emits an error envelope (`ok: false`, `error.code: "WAIT_TIMEOUT"`) that still carries the wait `result`. A fail-fast `batch` still emits a success envelope with its per-step results while exiting non-zero.
 
 | Exit code | Meaning                                                                                                                     |
 | --------- | --------------------------------------------------------------------------------------------------------------------------- |

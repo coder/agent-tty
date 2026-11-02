@@ -28,8 +28,8 @@ export function setColorEnabled(enabled: boolean): void {
   colorEnabled = enabled;
 }
 
-export function writeJsonEnvelope<TResult>(
-  envelope: CommandEnvelope<TResult>,
+export function writeJsonEnvelope<TResult, TErrorResult = never>(
+  envelope: CommandEnvelope<TResult, TErrorResult>,
 ): void {
   process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
 }

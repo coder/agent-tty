@@ -12,17 +12,17 @@ export interface CommandSuccessEnvelope<TResult> {
   result: TResult;
 }
 
-export interface CommandErrorEnvelope {
+export interface CommandErrorEnvelope<TResult = never> {
   ok: false;
   command: string;
   timestamp: string;
   error: CommandError;
-  result?: unknown;
+  result?: TResult;
 }
 
-export type CommandEnvelope<TResult> =
+export type CommandEnvelope<TResult, TErrorResult = never> =
   | CommandSuccessEnvelope<TResult>
-  | CommandErrorEnvelope;
+  | CommandErrorEnvelope<TErrorResult>;
 
 export function createSuccessEnvelope<TResult>(
   command: string,
@@ -36,11 +36,11 @@ export function createSuccessEnvelope<TResult>(
   };
 }
 
-export function createErrorEnvelope(
+export function createErrorEnvelope<TResult = never>(
   command: string,
   error: CommandError,
-  result?: unknown,
-): CommandErrorEnvelope {
+  result?: TResult,
+): CommandErrorEnvelope<TResult> {
   return {
     ok: false,
     command,

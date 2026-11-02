@@ -11,6 +11,8 @@ import {
   getSkillPath,
   listBundledSkills,
 } from '../../../src/skills/index.js';
+import type { CommandEnvelope } from '../../../src/protocol/envelope.js';
+import type { WaitForRenderResult } from '../../../src/protocol/messages.js';
 import {
   createErrorEnvelope,
   createSuccessEnvelope,
@@ -1461,7 +1463,7 @@ describe('JSON envelope contracts', () => {
       details: { sessionId: 'session-01', timeoutMs: 1000 },
     });
 
-    expect(
+    const envelope: CommandEnvelope<WaitForRenderResult, WaitForRenderResult> =
       createErrorEnvelope(
         'wait',
         {
@@ -1471,8 +1473,10 @@ describe('JSON envelope contracts', () => {
           details: error.details,
         },
         { matched: false, timedOut: true, capturedAtSeq: 7 },
-      ),
-    ).toEqual({
+      );
+
+    expect(envelope.result?.timedOut).toBe(true);
+    expect(envelope).toEqual({
       ok: false,
       command: 'wait',
       timestamp: LOCKED_TIMESTAMP,
