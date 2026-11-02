@@ -594,8 +594,6 @@ describe('a hostPid that may no longer name the host', () => {
     return child.pid as number;
   }
 
-  // The shell's child ends at once, and exec turns the shell into a sleep
-  // that never reaps it.
   async function startZombie(): Promise<number> {
     const parent = spawn(
       '/bin/sh',
@@ -629,8 +627,6 @@ describe('a hostPid that may no longer name the host', () => {
     }
   }
 
-  // A real host is no child of the CLI. This one is a child of the test, so
-  // it stays a zombie until Node reaps it, which the probe reads as alive.
   function reapedOnKill(host: number) {
     const send = process.kill.bind(process);
     let killed = false;

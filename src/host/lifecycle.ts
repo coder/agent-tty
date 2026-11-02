@@ -220,10 +220,7 @@ function hostOf(record: SessionRecord): SessionHost | null {
     : { pid: record.hostPid, sessionId: record.sessionId };
 }
 
-// launchHost starts the host as `... _host <session id> <creator pid>`. A
-// zombie or an exiting process shows an empty command line, and a process
-// that took the pid shows its own, so neither runs the host. null when the
-// command line cannot be read, and always on Windows.
+// A zombie shows an empty /proc/<pid>/cmdline.
 function runsSessionHost(host: SessionHost): boolean | null {
   let args: string[];
   if (process.platform === 'linux') {
@@ -255,7 +252,6 @@ function runsSessionHost(host: SessionHost): boolean | null {
   return index >= 0 && args[index + 1] === host.sessionId;
 }
 
-// Off Linux a zombie host, or a process that took its pid, reads alive.
 function isHostAlive(host: SessionHost | null): boolean {
   if (host === null) {
     return false;
