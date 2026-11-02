@@ -237,14 +237,36 @@ function ownProcessGroupId(): number | null {
   return pgid;
 }
 
+function controllingTerminal(pid: number): string | null {
+  let output: string;
+  try {
+    output = execFileSync('/bin/ps', ['-o', 'tty=', '-p', String(pid)], {
+      encoding: 'utf8',
+    });
+  } catch {
+    return null;
+  }
+  const tty = output.trim();
+  // ps prints ?? (BSD) or ? (procps) for a process without one.
+  return tty.length === 0 || /^[?-]+$/.test(tty) ? null : tty;
+}
+
+// A terminal is the controlling terminal of at most one session and of
+// every process in it. The program leads its session with the PTY as that
+// terminal, so a process with the program's terminal runs in its session.
+function sharesControllingTerminal(pid: number): boolean {
+  const own = controllingTerminal(process.pid);
+  return own !== null && own === controllingTerminal(pid);
+}
+
 // The program and the processes it starts inherit AGENT_TTY_SESSION_ID at
 // spawn, before any manifest names the program's pid. `create --env` can
 // override that variable, so the ids are compared too. The program leads its
 // own session, so a process inside that session has the program's pid as its
 // session id. Linux compares that id, which also covers a job that the
 // program's shell put in a group of its own. POSIX ps has no session id
-// field, so other systems compare the process group and miss such a job
-// whose environment lost the variable. Windows has no sessions or groups.
+// field, so other systems compare the process group, and the controlling
+// terminal for such a job. Windows has no sessions or groups.
 export async function cliRunsInsideProgramSession(
   sessionId: string,
 ): Promise<boolean> {
@@ -262,9 +284,12 @@ export async function cliRunsInsideProgramSession(
     return false;
   }
 
+  if (process.platform === 'linux') {
+    return manifest.childPid === ownLinuxSessionId();
+  }
   return (
-    manifest.childPid ===
-    (process.platform === 'linux' ? ownLinuxSessionId() : ownProcessGroupId())
+    manifest.childPid === ownProcessGroupId() ||
+    sharesControllingTerminal(manifest.childPid)
   );
 }
 
