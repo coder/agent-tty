@@ -7,10 +7,6 @@ import type { SessionRecord } from '../protocol/schemas.js';
 import { sessionDir } from '../storage/sessionPaths.js';
 import { invariant } from '../util/assert.js';
 
-/**
- * Resolves the session directory for a session ID given on the command line.
- * Throws INVALID_SESSION_ID when the ID is empty or not a single path segment.
- */
 export function checkedSessionDir(home: string, sessionId: string): string {
   try {
     return sessionDir(home, sessionId);
