@@ -315,10 +315,11 @@ It then kills nothing and counts the group as running.
 If the proven group, or a group that agent-tty cannot check, does not end within the destroy wait (about 5 s), `destroy` fails with `HOST_TIMEOUT` and does not record the session as `destroyed`.
 
 `destroy --force` and reconcile also check the host's pid from `session.json` before they trust it.
-On Linux they read `/proc/<pid>/cmdline` and count the pid as the session's host only while it runs `_host <session id>`, the arguments that agent-tty starts the host with.
-A crashed host that stays a zombie, for example under a container init that never reaps, and a process that later got the same pid both count as ended.
-Reconcile then records the session as `failed`, and `destroy --force` does not send that process a signal.
-On macOS and the BSDs, `destroy --force` runs `/bin/ps` for the same check before it kills the host.
+On Linux the host records its pid, the boot id and its start time from `/proc/self/stat` in an internal file, `host.json`, when it starts.
+Reconcile counts the host as ended only when no process has its pid, when that process is a zombie, or when `host.json` names another boot or another start time than that process has. That covers a crashed host that stays a zombie under a container init that never reaps, and a later process that got the same pid.
+Reconcile then records the session as `failed`. `destroy --force` sends the host SIGKILL only when the boot id and the start time of the process match `host.json`, so it never signals a process that got the pid.
+When agent-tty cannot read `/proc` or `host.json`, it counts a host whose pid exists as running and does not kill it.
+On macOS and the BSDs, `destroy --force` kills the host only when `/bin/ps` shows the pid running `_host <session id>`, the arguments that agent-tty starts the host with.
 
 Limits:
 
@@ -327,7 +328,7 @@ Limits:
 3. The check and the kill are separate system calls, a few microseconds apart. If every process of the group exits and an unrelated process takes the group id in that time, the kill reaches the unrelated process. No system call kills a process group through a handle, so this window remains.
 4. The host writes `program.json` a few milliseconds after it starts the program. We timed 150 `create` calls on Linux, from the return of node-pty's spawn to the renamed `program.json`, at 1-minute load averages of 38 to 83: the median was 2.8 ms, the 90th percentile 4.3 ms, and the longest 66 ms. If the host dies in that window and the program ignores the hang-up signal, no file names the program, and `destroy` cannot end it.
 5. `gc` removes `program.json` with the session folder, and `gc` kills nothing. Run `destroy` before `gc` when a program can leave processes behind.
-6. Off Linux, reconcile counts the host as alive while any process has its pid. A crashed host that stays a zombie, or a process that got its pid, keeps the session `running`, and `destroy --force` kills nothing and fails with `HOST_TIMEOUT`. On Windows, `destroy --force` never kills the host. On Linux, when `/proc` refuses to show the host's command line, agent-tty counts the host as alive and does not kill it.
+6. Off Linux, reconcile counts the host as alive while any process has its pid. A crashed host that stays a zombie, or a process that got its pid, keeps the session `running`, and `destroy --force` kills nothing and fails with `HOST_TIMEOUT`. On Linux, the same happens when `/proc` is not mounted or refuses to show the host, and for a session that an agent-tty version without `host.json` started. On Windows, `destroy --force` never kills the host: it kills the program, and a host that hangs makes it fail with `HOST_TIMEOUT`. End such a host yourself with the Host PID that `inspect` shows (`taskkill /pid <pid> /f`), then run `destroy --force` again.
 
 ## Isolation
 
