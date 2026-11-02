@@ -483,23 +483,26 @@ describe('CLI integration', () => {
       expect(result.stderr).toBe('');
     });
 
-    it('fails the doctor node-runtime check against the package.json range', () => {
-      const result = runCli(['doctor', '--json'], fakeNodeEnv('22.0.0'));
+    it.each(['22.0.0', '27.0.0'])(
+      'fails the doctor node-runtime check on Node %s against the package.json range',
+      (version) => {
+        const result = runCli(['doctor', '--json'], fakeNodeEnv(version));
 
-      const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
-        checks: Record<
-          string,
-          { name: string; status: string; message: string }[]
-        >;
-      }>;
-      const check = Object.values(envelope.result.checks)
-        .flat()
-        .find((entry) => entry.name === 'node-runtime');
-      expect(check).toMatchObject({
-        status: 'fail',
-        message: 'Node 22.0.0 requires >=24.0.0 <27',
-      });
-    });
+        const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+          checks: Record<
+            string,
+            { name: string; status: string; message: string }[]
+          >;
+        }>;
+        const check = Object.values(envelope.result.checks)
+          .flat()
+          .find((entry) => entry.name === 'node-runtime');
+        expect(check).toMatchObject({
+          status: 'fail',
+          message: `Node ${version} requires >=24.0.0 <27`,
+        });
+      },
+    );
   });
 
   it('uses --home instead of AGENT_TTY_HOME', () => {

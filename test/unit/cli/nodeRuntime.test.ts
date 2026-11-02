@@ -49,6 +49,17 @@ describe('warnIfUnsupportedNode', () => {
     expect(lines).toEqual([]);
   });
 
+  it('skips the check when engines.node uses an unsupported range', async () => {
+    mocks.loadSupportedNodeRange.mockResolvedValue('^24 || ^26');
+    const { lines, logger } = captureLogger();
+
+    await expect(
+      warnIfUnsupportedNode(logger, '22.0.0'),
+    ).resolves.toBeUndefined();
+
+    expect(lines).toEqual([]);
+  });
+
   it('skips the check when package.json cannot be read', async () => {
     mocks.loadSupportedNodeRange.mockRejectedValue(
       Object.assign(new Error('ENOENT: no such file'), { code: 'ENOENT' }),
