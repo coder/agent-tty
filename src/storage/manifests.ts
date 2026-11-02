@@ -231,6 +231,33 @@ export async function readManifestIfExists(
   return readManifestInternal(path, true);
 }
 
+// An empty file that destroy writes before it records destroyed. Like the
+// manifest write, it never creates the session folder.
+export async function writeDestroyMarker(
+  path: string,
+  sessionId: string,
+): Promise<void> {
+  assertAbsoluteStoragePath(path, 'destroy marker path');
+
+  try {
+    await writeFile(path, '', { mode: 0o600 });
+  } catch (error) {
+    if (isEnoentError(error)) {
+      throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
+        message: `Session "${sessionId}" was not found: its folder ${dirname(path)} no longer exists.`,
+        details: { sessionId, markerPath: path },
+        cause: error,
+      });
+    }
+
+    throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+      message: `Failed to write the destroy marker at ${path}.`,
+      details: { path },
+      cause: error,
+    });
+  }
+}
+
 export async function writeManifest(
   path: string,
   record: SessionRecord,

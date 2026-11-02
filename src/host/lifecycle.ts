@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { chmod, mkdir, readdir, rmdir, stat, unlink } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import process from 'node:process';
@@ -19,9 +19,11 @@ import { ensureHome, resolveHome } from '../storage/home.js';
 import {
   readManifest,
   readManifestIfExists,
+  writeDestroyMarker,
   writeManifest,
 } from '../storage/manifests.js';
 import {
+  destroyMarkerPath,
   manifestPath,
   sessionDir,
   socketPath,
@@ -641,6 +643,12 @@ async function recordDestroyed(
     'recordDestroyed needs a terminal manifest or dead session processes',
   );
   if (!isDestroyedSessionStatus(manifest.status)) {
+    // A reconcile that read the manifest before this write can still write
+    // over it, and the marker tells that reconcile to restore it.
+    await writeDestroyMarker(
+      destroyMarkerPath(dirname(manifestFile)),
+      manifest.sessionId,
+    );
     await writeManifest(manifestFile, {
       ...manifest,
       status: 'destroyed',
@@ -931,6 +939,20 @@ export async function reconcileSession(
 
   try {
     await writeManifest(manifestFile, reconciledManifest);
+    // A destroy that recorded destroyed after the last read above wrote the
+    // marker first, so this write may have replaced its record.
+    if (
+      reconciledStatus !== 'destroyed' &&
+      existsSync(destroyMarkerPath(sessionDirectory))
+    ) {
+      await writeManifest(manifestFile, {
+        ...latest,
+        status: 'destroyed',
+        updatedAt: new Date().toISOString(),
+        hostPid: null,
+        childPid: null,
+      });
+    }
   } catch (error) {
     if (
       error instanceof CliError &&
