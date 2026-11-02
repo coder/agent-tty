@@ -262,6 +262,13 @@ agent-tty record export <session-id> --format asciicast --out ./session.cast --j
 agent-tty record export <session-id> --format webm --timing accelerated --out ./session.webm --json
 ```
 
+The screenshot result lists `missingGlyphs`: each code point that the PNG draws as an empty `.notdef` box because neither the bundled fonts (a Latin JetBrains Mono subset and Symbols Nerd Font Mono) nor a font on the host has it, with the zero-based `row` and `col` of each cell. An empty array means no cell shows a box. Glyphs that a host font draws are not listed, so the same session can list different code points on hosts with different fonts. The text snapshot still has the right characters.
+
+```bash
+agent-tty screenshot <session-id> --json | jq -c '.result.missingGlyphs'
+# [{"codePoint":"U+29C9","cells":[{"row":0,"col":6}]}]
+```
+
 WebM export replays with recorded wall-clock timing by default. Pass `--timing accelerated` (idle gaps clamped to 400ms) or `--timing max-speed` for a time-compressed video.
 
 Use `--renderer ghostty-web`, `AGENT_TTY_RENDERER=ghostty-web`, or Home `config.json` `{ "defaultRenderer": "ghostty-web" }` to force legacy all-browser rendering. Use `--renderer libghostty-vt` only when you intentionally want semantic and screenshot requests routed through the native backend; WebM requests still record `ghostty-web` as the actual video producer.

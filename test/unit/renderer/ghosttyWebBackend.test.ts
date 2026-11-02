@@ -38,6 +38,18 @@ function createPngBuffer(width: number, height: number): Buffer {
   return Buffer.concat([pngSignature, ihdrChunk]);
 }
 
+function asciiHarnessSnapshot(cols: number, rows: number): unknown {
+  return {
+    cols,
+    rows,
+    cursorRow: 0,
+    cursorCol: 0,
+    isAltScreen: false,
+    visibleLines: [{ row: 0, text: 'ok' }],
+    cells: [{ lineNumber: 0, cells: [{ char: 'o' }, { char: 'k' }] }],
+  };
+}
+
 function createHarnessSnapshotPayload(overrides: Record<string, unknown> = {}) {
   return {
     cols: 3,
@@ -346,7 +358,11 @@ describe('GhosttyWebBackend unit guards', () => {
     const pngBuffer = createPngBuffer(800, 600);
     const expectedSha256 = createHash('sha256').update(pngBuffer).digest('hex');
 
-    const evaluate = vi.fn().mockResolvedValue(undefined);
+    const evaluate = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(asciiHarnessSnapshot(80, 24));
     const screenshot = vi.fn(
       (options: { animations: 'disabled'; caret: 'hide'; type: 'png' }) => {
         expect(options).toEqual({
@@ -389,8 +405,9 @@ describe('GhosttyWebBackend unit guards', () => {
         pixelHeight: 600,
         sha256: expectedSha256,
         renderProfileHash: hashProfile(PROFILE),
+        missingGlyphs: [],
       });
-      expect(evaluate).toHaveBeenCalledTimes(2);
+      expect(evaluate).toHaveBeenCalledTimes(3);
       expect(evaluate.mock.calls[0]?.[1]).toBe(false);
       expect(locator).toHaveBeenCalledWith('#terminal');
       expect(screenshot).toHaveBeenCalledTimes(1);
@@ -407,7 +424,11 @@ describe('GhosttyWebBackend unit guards', () => {
     const pngBuffer = createPngBuffer(640, 480);
     const expectedSha256 = createHash('sha256').update(pngBuffer).digest('hex');
 
-    const evaluate = vi.fn().mockResolvedValue(undefined);
+    const evaluate = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(asciiHarnessSnapshot(100, 30));
     const screenshot = vi.fn(
       (options: { animations: 'disabled'; caret: 'initial'; type: 'png' }) => {
         expect(options).toEqual({
@@ -452,8 +473,9 @@ describe('GhosttyWebBackend unit guards', () => {
         pixelHeight: 480,
         sha256: expectedSha256,
         renderProfileHash: hashProfile(PROFILE),
+        missingGlyphs: [],
       });
-      expect(evaluate).toHaveBeenCalledTimes(2);
+      expect(evaluate).toHaveBeenCalledTimes(3);
       expect(evaluate.mock.calls[0]?.[1]).toBe(true);
       expect(locator).toHaveBeenCalledWith('#terminal');
       expect(screenshot).toHaveBeenCalledTimes(1);

@@ -460,6 +460,42 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     }
   });
 
+  it('reports glyphs that no font draws as missingGlyphs, and the check leaves the PNG unchanged', async () => {
+    await backend.boot();
+    await backend.replayTo(
+      createReplayInput([
+        {
+          seq: 0,
+          ts: timestampFor(0),
+          type: 'output',
+          payload: { data: 'ok \ue0b0 \u0378\r\n\u0378 end\r\n' },
+        },
+      ]),
+    );
+
+    // oxfmt-ignore
+    const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-glyphs-')));
+
+    try {
+      const first = await backend.screenshot(join(outputDir, 'first.png'));
+      const second = await backend.screenshot(join(outputDir, 'second.png'));
+
+      expect(first.missingGlyphs).toEqual([
+        {
+          codePoint: 'U+0378',
+          cells: [
+            { row: 0, col: 5 },
+            { row: 1, col: 0 },
+          ],
+        },
+      ]);
+      expect(second.missingGlyphs).toEqual(first.missingGlyphs);
+      expect(second.sha256).toBe(first.sha256);
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
   it('allows dispose to be called more than once', async () => {
     await backend.boot();
 

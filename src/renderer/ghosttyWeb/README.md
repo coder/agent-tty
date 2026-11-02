@@ -10,10 +10,11 @@ This directory holds the `ghostty-web` reference renderer. `GhosttyWebBackend` s
   - `constructor(sessionId, profile, videoOptions?, logger?)` [backend.ts:GhosttyWebBackend.constructor].
   - `boot()`, `replayTo(input)` and `replayWithTiming(input, timing)` [backend.ts:GhosttyWebBackend.replayWithTiming]. Timing modes are `accelerated`, `recorded` and `max-speed`.
   - `snapshot(options?)` returns a `SemanticSnapshot` [backend.ts:GhosttyWebBackend.snapshot].
-  - `screenshot(outputPath, options?)` returns a `ScreenshotResult` with `sha256` and `renderProfileHash` [backend.ts:GhosttyWebBackend.screenshot].
+  - `screenshot(outputPath, options?)` returns a `ScreenshotResult` with `sha256`, `renderProfileHash` and `missingGlyphs` [backend.ts:GhosttyWebBackend.screenshot].
   - `finalizeVideo(outputPath)`, `getVisibleText()` and `dispose()` [backend.ts:GhosttyWebBackend.finalizeVideo].
 - `assembleCanonicalLine`, `stripTrailingAsciiSpaces` and type `GhosttyDecodedColumn` are re-exported from `harnessDecoding.ts` [backend.ts:GhosttyDecodedColumn].
 - Harness snapshot types: `GhosttyHarnessVisibleLine`, `GhosttyHarnessSnapshotCell`, `GhosttyHarnessRichLine`, `GhosttyHarnessSnapshot` and `GhosttyDecodedColumn` [harnessDecoding.ts:GhosttyHarnessSnapshot].
+- `missingGlyphs.ts`: `findGlyphCandidates(lines, coverage)` groups the visible cells whose grapheme the bundled fonts cannot draw, also after NFC or NFD normalization. `probeBundledFontUse(page, font, texts)` asks Chromium through CDP `CSS.getPlatformFontsForNode` which fonts draw each grapheme in hidden spans. `buildMissingGlyphs(candidates, drawnByBundledFont)` reports the uncovered code points of the graphemes that a bundled font drew [missingGlyphs.ts:buildMissingGlyphs].
 - `validateHarnessSnapshot(value)` checks an unknown harness payload and returns a `GhosttyHarnessSnapshot` [harnessDecoding.ts:validateHarnessSnapshot].
 - `stripTrailingAsciiSpaces(text)` and `assembleCanonicalLine(cols, readColumn)` build canonical line text [harnessDecoding.ts:assembleCanonicalLine].
 - Assertion helpers `assertNonNegativeInteger`, `assertPositiveInteger`, `assertPositiveNumber` and `assertHexColor`, plus `normalizeError(error, prefix)` [harnessDecoding.ts:normalizeError].
@@ -28,6 +29,7 @@ This directory holds the `ghostty-web` reference renderer. `GhosttyWebBackend` s
 - Replay cannot rewind: `targetSeq` must be >= the last applied seq. The initial dimensions cannot change after the first replay. `input.sessionId` must match the backend [backend.ts:GhosttyWebBackend.replayTo].
 - `replayWithTiming` asserts strictly increasing seqs and non-decreasing timestamps [backend.ts:GhosttyWebBackend.replayWithTiming].
 - `snapshot()` and `screenshot()` throw until `replayTo()` or `replayWithTiming()` has run once (`lastAppliedSeq >= 0`). A replay over zero events also sets `lastAppliedSeq` to `targetSeq` [backend.ts:GhosttyWebBackend.snapshot].
+- `missingGlyphs` lists a code point only when Chromium drew its grapheme with a bundled font that lacks it. Chromium draws a cluster that no font covers with the first font of the stack, which is bundled in both built-in profiles, so those cells show `.notdef` boxes. Glyphs that a host font draws are not listed. The check runs after the PNG is written, removes its probe spans, and caches each grapheme's result for the page [missingGlyphs.ts:probeBundledFontUse].
 - `screenshot()` requires an absolute `outputPath` whose parent directory exists. It checks that the output is a non-empty PNG with a valid signature and an `IHDR` first chunk [backend.ts:GhosttyWebBackend.screenshot].
 - `finalizeVideo()` requires video recording to be enabled and an absolute `outputPath` that ends in `.webm` [backend.ts:GhosttyWebBackend.finalizeVideo].
 - After a page crash, page error or browser disconnect, every later page operation throws [backend.ts:GhosttyWebBackend.requireOperationalPage].
