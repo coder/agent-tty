@@ -451,6 +451,22 @@ export const ScreenshotParamsSchema = z
   .strict();
 export type ScreenshotParams = z.infer<typeof ScreenshotParamsSchema>;
 
+export const MissingGlyphSchema = z
+  .object({
+    codePoint: z
+      .string()
+      .regex(/^U\+(?:[0-9A-F]{4}|[1-9A-F][0-9A-F]{4}|10[0-9A-F]{4})$/u),
+    cells: z
+      .array(
+        z
+          .object({ row: NonNegativeIntSchema, col: NonNegativeIntSchema })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
+export type MissingGlyph = z.infer<typeof MissingGlyphSchema>;
+
 export const ScreenshotResultSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
@@ -466,6 +482,8 @@ export const ScreenshotResultSchema = z
     pixelHeight: PositiveIntSchema.optional(),
     sha256: Sha256HexSchema.optional(),
     renderProfileHash: Sha256HexSchema.optional(),
+    missingGlyphs: z.array(MissingGlyphSchema).optional(),
+    missingGlyphsTruncated: z.literal(true).optional(),
   })
   .strict();
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;

@@ -7,6 +7,7 @@ This directory validates render-wait conditions and matches them against semanti
 ## Interface
 
 - `MAX_WAIT_FOR_RENDER_TEXT_LENGTH` (1000), `MAX_WAIT_FOR_RENDER_REGEX_LENGTH` (200) and `MAX_WAIT_FOR_RENDER_REGEX_TEXT_LENGTH` (50,000) [limits.ts:MAX_WAIT_FOR_RENDER_TEXT_LENGTH]. `matcher.ts` re-exports all three.
+- `DEFAULT_WAIT_TIMEOUT_MS` (30,000) is the timeout of a `wait` command or batch `wait` step that names none [limits.ts:DEFAULT_WAIT_TIMEOUT_MS].
 - `PreparedRenderWaitCondition`: the `text`, `regex`, `scope`, `screenStableMs`, `cursorRow`, `cursorCol` and `afterSeq` fields of `WaitForRenderParams` from `src/protocol/messages.ts`, plus an optional `compiledRegex` [matcher.ts:PreparedRenderWaitCondition].
 - `prepareRenderWaitCondition(condition)` validates the condition and returns a `PreparedRenderWaitCondition` [matcher.ts:prepareRenderWaitCondition].
 - `matchRenderWaitSnapshot(condition, snapshot, options?)` returns `matched` plus the per-part results `textMatched`, `cursorMatched`, `stabilityMatched` and `baselineMatched`, plus `contentAndCursorMatched`, the matched text, the cursor, `capturedAtSeq` and the canonical `visibleLines` [matcher.ts:matchRenderWaitSnapshot]. `contentAndCursorMatched` lets the offline fallback in `src/cli/commands/wait.ts` tell a stability result it cannot prove from a mismatch.

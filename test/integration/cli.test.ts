@@ -7,7 +7,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -454,6 +455,66 @@ describe('CLI integration', () => {
     expect(allChecks.every((check) => check.status === 'pass')).toBe(true);
   });
 
+  describe('on an unsupported Node', () => {
+    function fakeNodeEnv(version: string): Record<string, string> {
+      const preload = pathToFileURL(
+        resolve('test/fixtures/fake-node-version.ts'),
+      );
+      return {
+        ...testEnv(),
+        AGENT_TTY_TEST_NODE_VERSION: version,
+        NODE_OPTIONS: [
+          process.env.NODE_OPTIONS ?? '',
+          `--import=${preload.href}`,
+        ].join(' '),
+      };
+    }
+
+    it.each(['22.0.0', '27.0.0'])(
+      'warns on stderr and keeps one envelope on stdout for Node %s',
+      (version) => {
+        const result = runCli(['version', '--json'], fakeNodeEnv(version));
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stderr).toBe(
+          `[agent-tty] warn: Node ${version} is not supported. agent-tty requires Node >=24.0.0 <27. Run \`agent-tty doctor\` to check the runtime.\n`,
+        );
+
+        const envelope = JSON.parse(result.stdout) as SuccessEnvelope<unknown>;
+        expect(envelope.ok).toBe(true);
+      },
+    );
+
+    it('prints no warning at --log-level error', () => {
+      const result = runCli(
+        ['--log-level', 'error', 'version', '--json'],
+        fakeNodeEnv('22.0.0'),
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stderr).toBe('');
+    });
+
+    it.each(['22.0.0', '27.0.0'])(
+      'fails the doctor node-runtime check on Node %s against the package.json range',
+      (version) => {
+        const result = runCli(['doctor', '--json'], fakeNodeEnv(version));
+
+        const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+          checks: Record<
+            string,
+            { name: string; status: string; message: string }[]
+          >;
+        }>;
+        const check = Object.values(envelope.result.checks)
+          .flat()
+          .find((entry) => entry.name === 'node-runtime');
+        expect(check).toMatchObject({
+          status: 'fail',
+          message: `Node ${version} requires >=24.0.0 <27`,
+        });
+      },
+    );
+  });
+
   it('uses --home instead of AGENT_TTY_HOME', () => {
     // oxfmt-ignore
     const overrideHome = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tty-cli-override-')));
@@ -580,6 +641,149 @@ describe('CLI integration', () => {
     expect(parsed.command).toBe('agent-tty');
     expect(parsed.error.code).toBe('INVALID_INPUT');
     expect(parsed.error.message).toBe('--home must be an absolute path.');
+  });
+
+  it.each<[string, string[]]>([
+    ['inspect', ['inspect', '']],
+    ['destroy', ['destroy', '']],
+    ['destroy', ['destroy', '', '--force']],
+    ['type', ['type', '', 'hello']],
+    ['paste', ['paste', '', 'hello']],
+    ['run', ['run', '', 'echo hi']],
+    ['batch', ['batch', '', JSON.stringify([{ type: 'hello' }])]],
+    ['mark', ['mark', '', 'label']],
+    ['send-keys', ['send-keys', '', 'Enter']],
+    [
+      'mouse',
+      ['mouse', '', 'press', '--button', 'left', '--row', '0', '--col', '0'],
+    ],
+    ['resize', ['resize', '', '--cols', '80', '--rows', '24']],
+    ['signal', ['signal', '', 'TERM']],
+    ['wait', ['wait', '', '--text', 'ready']],
+    ['snapshot', ['snapshot', '']],
+    ['screenshot', ['screenshot', '']],
+    ['record diff', ['record', 'diff', '', 'other']],
+    ['record export', ['record', 'export', '', '--format', 'asciicast']],
+  ])(
+    'returns INVALID_SESSION_ID for an empty session ID in %s',
+    (command, args) => {
+      const result = runCli([...args, '--json'], testEnv());
+      expect(result.status, result.stderr).toBe(2);
+
+      const envelope = parseErrorEnvelope(result.stdout);
+      expect(envelope.ok).toBe(false);
+      expect(envelope.command).toBe(command);
+      expect(envelope.error.code).toBe('INVALID_SESSION_ID');
+      expect(envelope.error.message).toBe('Session ID "" is invalid.');
+    },
+  );
+
+  it('prints one INTERNAL_ERROR envelope without a stack for an unexpected command error', () => {
+    writeFileSync(join(testHome, 'sessions'), '');
+
+    const result = runCli(['list', '--json'], testEnv());
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).not.toMatch(/^\s+at /mu);
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe('list');
+    expect(envelope.error.code).toBe('INTERNAL_ERROR');
+    expect(envelope.error.message).toContain('ENOTDIR');
+  });
+
+  it('prints the stack of an unexpected command error at --log-level debug', () => {
+    writeFileSync(join(testHome, 'sessions'), '');
+
+    const result = runCli(
+      ['--log-level', 'debug', 'list', '--json'],
+      testEnv(),
+    );
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toMatch(/^\s+at /mu);
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.command).toBe('list');
+    expect(envelope.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('prints one INTERNAL_ERROR envelope for an unexpected error before the command runs', () => {
+    writeFileSync(join(testHome, 'config.json'), '{');
+
+    const result = runCli(['version', '--json'], testEnv());
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).not.toMatch(/^\s+at /mu);
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe('agent-tty');
+    expect(envelope.error.code).toBe('INTERNAL_ERROR');
+    expect(envelope.error.message).toContain('contains invalid JSON');
+  });
+
+  it.each<[string, string[], string]>([
+    [
+      'an unknown option',
+      ['inspect', 'session-01', '--bogus'],
+      "unknown option '--bogus'",
+    ],
+    [
+      'a missing argument',
+      ['inspect'],
+      "missing required argument 'session-id'",
+    ],
+    [
+      'a missing required option',
+      ['record', 'export', 'session-01'],
+      "required option '--format <format>' not specified",
+    ],
+    ['an unknown command', ['bogus'], "unknown command 'bogus'"],
+  ])(
+    'prints one INVALID_INPUT envelope for %s under --json',
+    (_case, args, message) => {
+      const result = runCli([...args, '--json'], testEnv());
+      expect(result.status, result.stderr).toBe(2);
+
+      const envelope = parseErrorEnvelope(result.stdout);
+      expect(envelope.ok).toBe(false);
+      expect(envelope.command).toBe('agent-tty');
+      expect(envelope.error.code).toBe('INVALID_INPUT');
+      expect(envelope.error.message).toBe(message);
+    },
+  );
+
+  it('keeps the plain Commander text for a usage error without --json', () => {
+    const result = runCli(['inspect', 'session-01', '--bogus'], testEnv());
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain("error: unknown option '--bogus'");
+  });
+
+  it('ignores a --json after -- for a usage error', () => {
+    const result = runCli(
+      ['create', '--bogus', '--', '/bin/cat', '--json'],
+      testEnv(),
+    );
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain("error: unknown option '--bogus'");
+  });
+
+  it('ignores a --json after -- for a command error', () => {
+    const result = runCli(
+      [
+        'create',
+        '--cwd',
+        join(testHome, 'missing-cwd'),
+        '--',
+        '/bin/sh',
+        '--json',
+      ],
+      testEnv(),
+    );
+    expect(result.status).toBe(8);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toMatch(/^STORAGE_READ_ERROR: /u);
   });
 
   it('keeps human output free of ANSI sequences when --no-color is set', () => {

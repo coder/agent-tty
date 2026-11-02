@@ -600,6 +600,52 @@ describe('RPC message schemas', () => {
     ).toBe(true);
   });
 
+  it('accepts missingGlyphs and rejects malformed entries', () => {
+    const result = {
+      sessionId: 'session-01',
+      capturedAtSeq: 5,
+      profileName: 'reference-dark',
+      cols: 80,
+      rows: 24,
+      artifactPath: '/tmp/screenshot.png',
+      pngSizeBytes: 1024,
+    };
+    const parse = (missingGlyphs: unknown) =>
+      ScreenshotResultSchema.safeParse({ ...result, missingGlyphs }).success;
+
+    expect(parse([])).toBe(true);
+    expect(
+      parse([
+        { codePoint: 'U+0378', cells: [{ row: 1, col: 6 }] },
+        { codePoint: 'U+1F468', cells: [{ row: 0, col: 0 }] },
+      ]),
+    ).toBe(true);
+    expect(parse([{ codePoint: 'U+29c9', cells: [{ row: 0, col: 0 }] }])).toBe(
+      false,
+    );
+    expect(
+      parse([{ codePoint: 'U+110000', cells: [{ row: 0, col: 0 }] }]),
+    ).toBe(false);
+    expect(parse([{ codePoint: 'U+29C9', cells: [] }])).toBe(false);
+    expect(
+      parse([{ codePoint: 'U+29C9', cells: [{ row: 0, col: 0, width: 1 }] }]),
+    ).toBe(false);
+    expect(
+      ScreenshotResultSchema.safeParse({
+        ...result,
+        missingGlyphs: [],
+        missingGlyphsTruncated: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      ScreenshotResultSchema.safeParse({
+        ...result,
+        missingGlyphs: [],
+        missingGlyphsTruncated: false,
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects empty screenshot profile names', () => {
     expect(ScreenshotParamsSchema.safeParse({ profile: '' }).success).toBe(
       false,

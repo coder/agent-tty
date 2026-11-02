@@ -4,7 +4,20 @@ import {
   isDestroyedSessionStatus,
 } from '../protocol/sessionStatusPolicy.js';
 import type { SessionRecord } from '../protocol/schemas.js';
+import { sessionDir } from '../storage/sessionPaths.js';
 import { invariant } from '../util/assert.js';
+
+export function checkedSessionDir(home: string, sessionId: string): string {
+  try {
+    return sessionDir(home, sessionId);
+  } catch (error) {
+    throw makeCliError(ERROR_CODES.INVALID_SESSION_ID, {
+      message: `Session ID "${sessionId}" is invalid.`,
+      details: { sessionId },
+      cause: error,
+    });
+  }
+}
 
 /**
  * Throws SESSION_ALREADY_DESTROYED for destroyed sessions and
