@@ -258,10 +258,10 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
 
     if (
       options.afterSeq !== undefined &&
-      !isNonNegativeInteger(options.afterSeq)
+      !(Number.isInteger(options.afterSeq) && options.afterSeq >= -1)
     ) {
       throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-        message: '--after-seq must be a non-negative integer.',
+        message: '--after-seq must be an integer of at least -1.',
         details: { afterSeq: options.afterSeq },
       });
     }

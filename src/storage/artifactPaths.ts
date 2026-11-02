@@ -26,6 +26,13 @@ function assertNonNegativeInteger(value: number, label: string): void {
   );
 }
 
+function assertReplaySeq(seq: number): void {
+  invariant(
+    Number.isInteger(seq) && seq >= -1,
+    'seq must be an integer of at least -1',
+  );
+}
+
 function assertAbsolutePath(pathValue: string, label: string): void {
   assertNonEmptyString(pathValue, label);
   invariant(isAbsolute(pathValue), `${label} must be an absolute path`);
@@ -62,7 +69,7 @@ function artifactsDir(sessionDir: string): string {
 }
 
 export function screenshotFilename(seq: number, profileName: string): string {
-  assertNonNegativeInteger(seq, 'seq');
+  assertReplaySeq(seq);
   const sanitizedProfileName = sanitizeFilenameComponent(
     profileName,
     'profileName',
@@ -74,7 +81,7 @@ export function snapshotFilename(
   seq: number,
   format: 'structured' | 'text',
 ): string {
-  assertNonNegativeInteger(seq, 'seq');
+  assertReplaySeq(seq);
   const sanitizedFormat = sanitizeFilenameComponent(format, 'format');
   return `snapshot-${String(seq)}-${sanitizedFormat}.json`;
 }
