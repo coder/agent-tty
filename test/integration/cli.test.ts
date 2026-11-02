@@ -572,6 +572,81 @@ describe('CLI integration', () => {
     expect(parsed.error.message).toBe('--home must be an absolute path.');
   });
 
+  it.each<[string, string[]]>([
+    ['inspect', ['inspect', '']],
+    ['destroy', ['destroy', '']],
+    ['destroy', ['destroy', '', '--force']],
+    ['type', ['type', '', 'hello']],
+    ['paste', ['paste', '', 'hello']],
+    ['run', ['run', '', 'echo hi']],
+    ['batch', ['batch', '', JSON.stringify([{ type: 'hello' }])]],
+    ['mark', ['mark', '', 'label']],
+    ['send-keys', ['send-keys', '', 'Enter']],
+    [
+      'mouse',
+      ['mouse', '', 'press', '--button', 'left', '--row', '0', '--col', '0'],
+    ],
+    ['resize', ['resize', '', '--cols', '80', '--rows', '24']],
+    ['signal', ['signal', '', 'TERM']],
+    ['wait', ['wait', '', '--text', 'ready']],
+    ['snapshot', ['snapshot', '']],
+    ['screenshot', ['screenshot', '']],
+    ['record diff', ['record', 'diff', '', 'other']],
+    ['record export', ['record', 'export', '', '--format', 'asciicast']],
+  ])('returns INVALID_SESSION_ID for an empty session ID in %s', (command, args) => {
+    const result = runCli([...args, '--json'], testEnv());
+    expect(result.status, result.stderr).toBe(2);
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe(command);
+    expect(envelope.error.code).toBe('INVALID_SESSION_ID');
+    expect(envelope.error.message).toBe('Session ID "" is invalid.');
+  });
+
+  it('prints one INTERNAL_ERROR envelope without a stack for an unexpected command error', () => {
+    writeFileSync(join(testHome, 'sessions'), '');
+
+    const result = runCli(['list', '--json'], testEnv());
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).not.toMatch(/^\s+at /mu);
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe('list');
+    expect(envelope.error.code).toBe('INTERNAL_ERROR');
+    expect(envelope.error.message).toContain('ENOTDIR');
+  });
+
+  it('prints the stack of an unexpected command error at --log-level debug', () => {
+    writeFileSync(join(testHome, 'sessions'), '');
+
+    const result = runCli(
+      ['--log-level', 'debug', 'list', '--json'],
+      testEnv(),
+    );
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toMatch(/^\s+at /mu);
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.command).toBe('list');
+    expect(envelope.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('prints one INTERNAL_ERROR envelope for an unexpected error before the command runs', () => {
+    writeFileSync(join(testHome, 'config.json'), '{');
+
+    const result = runCli(['version', '--json'], testEnv());
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).not.toMatch(/^\s+at /mu);
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe('agent-tty');
+    expect(envelope.error.code).toBe('INTERNAL_ERROR');
+    expect(envelope.error.message).toContain('contains invalid JSON');
+  });
+
   it('keeps human output free of ANSI sequences when --no-color is set', () => {
     const result = runCli(['--no-color', 'version'], testEnv());
     expect(result.status).toBe(0);
