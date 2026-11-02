@@ -112,7 +112,7 @@ export class HostRendererManager {
 
       const backend = await this.ensureBackend(rendererName, profile);
 
-      if (replayInput !== null && replayInput.targetSeq >= 0) {
+      if (replayInput !== null) {
         await backend.replayTo(replayInput);
         this.cachedInitialCols = replayInput.initialCols;
         this.cachedInitialRows = replayInput.initialRows;

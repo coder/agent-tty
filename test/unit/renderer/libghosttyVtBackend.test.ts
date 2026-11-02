@@ -205,6 +205,25 @@ describe('LibghosttyVtBackend', () => {
     });
   });
 
+  it('replays an empty event log to the initial size at seq -1', async () => {
+    const fixture = createNativeFixture();
+    const backend = createBackend(fixture);
+
+    await backend.boot();
+    await expect(backend.snapshot()).rejects.toThrow(
+      'snapshot() requires replayTo() first',
+    );
+    const state = await backend.replayTo(
+      createReplayInput({ events: [], targetSeq: -1 }),
+    );
+    const snapshot = await backend.snapshot();
+
+    expect(fixture.feed).not.toHaveBeenCalled();
+    expect(fixture.resize).toHaveBeenCalledWith(10, 4);
+    expect(state).toMatchObject({ lastSeq: -1, cols: 10, rows: 4 });
+    expect(snapshot).toMatchObject({ capturedAtSeq: -1, cols: 10, rows: 4 });
+  });
+
   it('scales cell positions using explicit pixel metrics', async () => {
     const fixture = createNativeFixture();
     const backend = createBackend(fixture);
