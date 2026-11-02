@@ -1411,6 +1411,64 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     },
   );
 
+  // The held rename keeps the reconcile of `list` between its last read and
+  // its write, which records failed for the dead host.
+  it('a destroy --force that lands during a reconcile write stays destroyed', async () => {
+    const sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec cat']);
+    const hostPid = inspectSession(testHome, sessionId).hostPid as number;
+    process.kill(hostPid, 'SIGKILL');
+    const deadline = Date.now() + 10_000;
+    while (isProcessAlive(hostPid)) {
+      expect(Date.now()).toBeLessThan(deadline);
+      await sleep(50);
+    }
+
+    const holdLog = join(testHome, 'hold.log');
+    const lister = spawn(
+      process.execPath,
+      ['--import', 'tsx', './src/cli/main.ts', 'list', '--json'],
+      {
+        stdio: 'ignore',
+        env: {
+          ...process.env,
+          AGENT_TTY_HOME: testHome,
+          REPLAY_LOG: holdLog,
+          REPLAY_HOLD: 'list:rename:/session.json:1:4000',
+          NODE_OPTIONS: [
+            process.env.NODE_OPTIONS ?? '',
+            `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+          ].join(' '),
+        },
+      },
+    );
+    const listerExit = once(lister, 'exit');
+    while (
+      !(await readFile(holdLog, 'utf8').then(
+        (log) => log.includes('hold rename'),
+        () => false,
+      ))
+    ) {
+      expect(Date.now()).toBeLessThan(deadline);
+      await sleep(50);
+    }
+
+    const result = runCli(['destroy', sessionId, '--force', '--json'], {
+      AGENT_TTY_HOME: testHome,
+    });
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      ok: true,
+      result: { sessionId, destroyed: true },
+    });
+    await listerExit;
+
+    const manifest = SessionRecordSchema.parse(
+      JSON.parse(
+        await readFile(manifestPath(sessionDir(testHome, sessionId)), 'utf8'),
+      ),
+    );
+    expect(manifest.status).toBe('destroyed');
+  });
+
   describe('destroy run by the program itself', () => {
     let pgid = 0;
 
