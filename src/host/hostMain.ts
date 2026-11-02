@@ -132,9 +132,7 @@ export function assertSessionCommandable(state: SessionState): void {
   }
 }
 
-// Another session's destroy removes the Home's socket directory once it holds
-// no socket, so the directory can vanish between the mkdir and the bind. libuv
-// reports a bind in a missing directory as EACCES.
+// libuv reports a bind in a missing directory as EACCES.
 function isVanishedSocketDirectory(
   error: unknown,
   socketDirectory: string,
