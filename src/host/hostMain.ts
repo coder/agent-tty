@@ -7,6 +7,7 @@ import {
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
 import { EventLog } from './eventLog.js';
+import { captureHost, writeHostRecord } from './hostRecord.js';
 import {
   isProcessAlive,
   listenInSocketDirectory,
@@ -213,6 +214,10 @@ export async function runHost(
     manifest.hostPid === process.pid,
     'session manifest hostPid must be this host process',
   );
+  const hostRecord = captureHost(process.pid);
+  if (hostRecord !== null) {
+    writeHostRecord(sessDir, hostRecord);
+  }
   const idleTimeoutMs = manifest.idleTimeoutMs ?? 0;
   invariant(
     Number.isInteger(idleTimeoutMs) && idleTimeoutMs >= 0,

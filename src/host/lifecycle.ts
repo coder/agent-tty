@@ -38,6 +38,7 @@ import {
   stopProgramGroup,
   type ProgramGroup,
 } from './programGroup.js';
+import { judgeHost, readHostRecord, type HostRecord } from './hostRecord.js';
 import { sendRpc } from './rpcClient.js';
 
 const DESTROY_POLL_INTERVAL_MS = 100;
@@ -214,41 +215,37 @@ const HOST_SUBCOMMAND = '_host';
 interface SessionHost {
   readonly pid: number;
   readonly sessionId: string;
+  readonly record: HostRecord | null;
 }
 
-function hostOf(record: SessionRecord): SessionHost | null {
-  return record.hostPid === null
+async function readSessionHost(
+  sessionDirectory: string,
+  manifest: SessionRecord,
+): Promise<SessionHost | null> {
+  return manifest.hostPid === null
     ? null
-    : { pid: record.hostPid, sessionId: record.sessionId };
+    : {
+        pid: manifest.hostPid,
+        sessionId: manifest.sessionId,
+        record: await readHostRecord(sessionDirectory),
+      };
 }
 
-// A zombie shows an empty /proc/<pid>/cmdline.
-function runsSessionHost(host: SessionHost): boolean | null {
+function psShowsSessionHost(host: SessionHost): boolean {
+  if (process.platform === 'win32') {
+    return false;
+  }
   let args: string[];
-  if (process.platform === 'linux') {
-    try {
-      args = readFileSync(`/proc/${String(host.pid)}/cmdline`, 'utf8').split(
-        '\0',
-      );
-    } catch (error) {
-      return hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ESRCH')
-        ? false
-        : null;
-    }
-  } else if (process.platform === 'win32') {
-    return null;
-  } else {
-    try {
-      args = execFileSync(
-        '/bin/ps',
-        ['-ww', '-o', 'command=', '-p', String(host.pid)],
-        { encoding: 'utf8' },
-      )
-        .trim()
-        .split(/\s+/);
-    } catch {
-      return null;
-    }
+  try {
+    args = execFileSync(
+      '/bin/ps',
+      ['-ww', '-o', 'command=', '-p', String(host.pid)],
+      { encoding: 'utf8' },
+    )
+      .trim()
+      .split(/\s+/);
+  } catch {
+    return false;
   }
   return args.some(
     (arg, index) =>
@@ -257,15 +254,17 @@ function runsSessionHost(host: SessionHost): boolean | null {
 }
 
 function isHostAlive(host: SessionHost | null): boolean {
-  if (host === null) {
-    return false;
-  }
-  const runs = process.platform === 'linux' ? runsSessionHost(host) : null;
-  return runs ?? isProcessAlive(host.pid);
+  return host !== null && judgeHost(host.pid, host.record) !== 'dead';
+}
+
+function hostMatches(host: SessionHost): boolean {
+  return process.platform === 'linux'
+    ? judgeHost(host.pid, host.record) === 'alive'
+    : psShowsSessionHost(host);
 }
 
 function killHostBestEffort(host: SessionHost | null): void {
-  if (host !== null && runsSessionHost(host) === true) {
+  if (host !== null && hostMatches(host)) {
     killProcessBestEffort(host.pid);
   }
 }
@@ -728,7 +727,8 @@ async function recordDestroyed(
 ): Promise<void> {
   invariant(
     isTerminalSessionStatus(manifest.status) ||
-      (!isHostAlive(hostOf(manifest)) && !isProgramGroupAlive(group)),
+      (!isHostAlive(await readSessionHost(dirname(manifestFile), manifest)) &&
+        !isProgramGroupAlive(group)),
     'recordDestroyed needs a terminal manifest or dead session processes',
   );
   if (!isDestroyedSessionStatus(manifest.status)) {
@@ -810,7 +810,7 @@ export async function destroySession(
   if (force === true) {
     await stopSessionProcesses(
       sessionId,
-      hostOf(manifest),
+      await readSessionHost(sessionDirectory, manifest),
       await readProgramGroup(sessionDirectory, manifest.childPid),
       sessionDirectory,
       signal,
@@ -821,7 +821,7 @@ export async function destroySession(
     const group = await readProgramGroup(sessionDirectory, current.childPid);
     await stopSessionProcesses(
       sessionId,
-      hostOf(current),
+      await readSessionHost(sessionDirectory, current),
       group,
       sessionDirectory,
       signal,
@@ -959,7 +959,9 @@ export async function reconcileSession(
     return;
   }
 
-  const hostAlive = isHostAlive(hostOf(manifest));
+  const hostAlive = isHostAlive(
+    await readSessionHost(sessionDirectory, manifest),
+  );
   if (manifest.hostPid !== null && hostAlive) {
     return;
   }

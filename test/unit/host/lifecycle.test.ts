@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,8 +14,7 @@ const fsHooks = vi.hoisted(() => ({
   proc: undefined as Map<string, string | Error> | undefined,
   mountinfo: undefined as string | undefined,
   ownStatError: undefined as Error | undefined,
-  cmdlineError: undefined as Error | undefined,
-  beforeCmdlineRead: undefined as ((path: string) => void) | undefined,
+  noProc: false,
   rmdirError: undefined as Error | undefined,
 }));
 
@@ -32,11 +31,8 @@ vi.mock('node:fs', async () => {
     if (fsHooks.ownStatError !== undefined && path === '/proc/self/stat') {
       throw fsHooks.ownStatError;
     }
-    if (/^\/proc\/\d+\/cmdline$/.test(path)) {
-      fsHooks.beforeCmdlineRead?.(path);
-      if (fsHooks.cmdlineError !== undefined) {
-        throw fsHooks.cmdlineError;
-      }
+    if (fsHooks.noProc && path.startsWith('/proc/')) {
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
     }
     if (fsHooks.proc !== undefined && path === '/proc/self/mountinfo') {
       if (fsHooks.mountinfo === undefined) {
@@ -139,6 +135,7 @@ import {
   writeProgramRecord,
   type ProgramRecord,
 } from '../../../src/host/programGroup.js';
+import { captureHost, writeHostRecord } from '../../../src/host/hostRecord.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
 import { manifestPath, sessionDir } from '../../../src/storage/sessionPaths.js';
@@ -161,8 +158,7 @@ afterEach(async () => {
   fsHooks.mountinfo = undefined;
   psHooks.tty = undefined;
   fsHooks.ownStatError = undefined;
-  fsHooks.cmdlineError = undefined;
-  fsHooks.beforeCmdlineRead = undefined;
+  fsHooks.noProc = false;
   await rm(home, { recursive: true, force: true });
 });
 
@@ -218,11 +214,6 @@ async function seedSession(record: SessionRecord): Promise<string> {
 function killProbeReportsDead(
   beforeHostReportsDead: () => void = () => undefined,
 ) {
-  fsHooks.beforeCmdlineRead = (path) => {
-    if (path === `/proc/${String(HOST_PID)}/cmdline`) {
-      beforeHostReportsDead();
-    }
-  };
   vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
     if (pid === HOST_PID && signal === 0) {
       beforeHostReportsDead();
@@ -639,9 +630,24 @@ describe('a hostPid that may no longer name the host', () => {
     });
   }
 
-  async function seedHost(hostPid: number): Promise<string> {
+  // The record that the host at hostPid wrote at start-up, or, with a start
+  // time, the record of an earlier host whose pid this process got.
+  async function seedHost(
+    hostPid: number,
+    record: 'none' | 'own' | { startTicks: string } = 'own',
+  ): Promise<string> {
     vi.stubEnv('AGENT_TTY_HOME', home);
-    return seedSession(makeRecord({ hostPid, childPid: null }));
+    const directory = await seedSession(
+      makeRecord({ hostPid, childPid: null }),
+    );
+    const own = record === 'none' ? null : captureHost(hostPid);
+    if (own !== null && record !== 'none') {
+      writeHostRecord(
+        directory,
+        record === 'own' ? own : { ...own, ...record },
+      );
+    }
+    return directory;
   }
 
   afterEach(() => {
@@ -651,30 +657,37 @@ describe('a hostPid that may no longer name the host', () => {
     }
   });
 
-  it('reconcile leaves the session running while its hostPid runs the host of that session', async () => {
-    const directory = await seedHost(startProcess('_host', 'session-01', '1'));
-    const record = await readManifest(manifestPath(directory));
+  it.each([
+    ['runs the host of that session', ['_host', 'session-01', '1']],
+    ['has an earlier _host argument', ['_host', 'x', '_host', 'session-01']],
+    ['has no _host argument', []],
+  ])(
+    'reconcile leaves the session running while its hostPid %s',
+    async (_, args) => {
+      const directory = await seedHost(startProcess(...args));
+      const record = await readManifest(manifestPath(directory));
 
-    await reconcileSession(directory);
+      await reconcileSession(directory);
 
-    expect(await readManifest(manifestPath(directory))).toEqual(record);
-  });
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+    },
+  );
 
-  it('reconcile leaves the session running when an earlier argument of its host is _host', async () => {
-    const directory = await seedHost(
-      startProcess('_host', 'x', '_host', 'session-01', '1'),
-    );
-    const record = await readManifest(manifestPath(directory));
-
-    await reconcileSession(directory);
-
-    expect(await readManifest(manifestPath(directory))).toEqual(record);
-  });
-
-  it.skipIf(platform === 'win32')(
-    'destroy --force kills a host when an earlier argument of it is _host',
+  it.runIf(platform === 'linux')(
+    'on linux destroy --force kills a host whose title replaced its command line',
     async () => {
-      const host = startProcess('_host', 'x', '_host', 'session-01', '1');
+      const child = spawn(
+        process.execPath,
+        ['--title=renamed-host', '-e', 'setInterval(() => {}, 1000)'],
+        { stdio: 'ignore' },
+      );
+      started.push(child);
+      const host = child.pid as number;
+      await vi.waitFor(() => {
+        expect(readFileSync(`/proc/${String(host)}/cmdline`, 'utf8')).toMatch(
+          /^renamed-host/,
+        );
+      });
       const directory = await seedHost(host);
       const kill = reapAsInitAfterKill(host);
 
@@ -688,9 +701,9 @@ describe('a hostPid that may no longer name the host', () => {
   );
 
   it.runIf(platform === 'linux')(
-    'on linux reconcile records failed when the hostPid runs another program',
+    'on linux reconcile records failed when another process got the hostPid',
     async () => {
-      const directory = await seedHost(startProcess());
+      const directory = await seedHost(startProcess(), { startTicks: '1' });
 
       await reconcileSession(directory);
 
@@ -704,7 +717,7 @@ describe('a hostPid that may no longer name the host', () => {
   it.runIf(platform === 'linux')(
     'on linux reconcile records failed when the host stays a zombie',
     async () => {
-      const directory = await seedHost(await startZombie());
+      const directory = await seedHost(await startZombie(), 'none');
 
       await reconcileSession(directory);
 
@@ -715,10 +728,10 @@ describe('a hostPid that may no longer name the host', () => {
   );
 
   it.runIf(platform === 'linux')(
-    'on linux destroy --force records destroyed without killing a hostPid that runs another program',
+    'on linux destroy --force records destroyed without killing a process that got the hostPid',
     async () => {
       const other = startProcess();
-      const directory = await seedHost(other);
+      const directory = await seedHost(other, { startTicks: '1' });
 
       await destroySession('session-01', true);
 
@@ -732,7 +745,7 @@ describe('a hostPid that may no longer name the host', () => {
   it.runIf(platform === 'linux')(
     'on linux destroy --force records destroyed when the host stays a zombie',
     async () => {
-      const directory = await seedHost(await startZombie());
+      const directory = await seedHost(await startZombie(), 'none');
 
       await destroySession('session-01', true);
 
@@ -742,13 +755,21 @@ describe('a hostPid that may no longer name the host', () => {
     },
   );
 
-  it.runIf(platform === 'linux')(
-    'on linux a hostPid whose command line /proc refuses counts as alive and gets no kill',
-    async () => {
-      const other = startProcess();
-      const directory = await seedHost(other);
+  it.runIf(platform === 'linux').each([
+    ['/proc is not mounted', 'none' as const],
+    ['/proc refuses the stat of the host', 'refused' as const],
+    ['no host record exists', 'record' as const],
+  ])(
+    'on linux, when %s, a live host stays running and gets no kill',
+    async (_, gap) => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host, gap === 'record' ? 'none' : 'own');
       const record = await readManifest(manifestPath(directory));
-      fsHooks.cmdlineError = errno('EACCES');
+      if (gap === 'none') {
+        fsHooks.noProc = true;
+      } else if (gap === 'refused') {
+        fsHooks.proc = new Map([[String(host), errno('EACCES')]]);
+      }
 
       await reconcileSession(directory);
       expect(await readManifest(manifestPath(directory))).toEqual(record);
@@ -756,34 +777,33 @@ describe('a hostPid that may no longer name the host', () => {
       await expect(destroySession('session-01', true)).rejects.toMatchObject({
         code: 'HOST_TIMEOUT',
       });
-      expect(isRunning(other)).toBe(true);
+      expect(isRunning(host)).toBe(true);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
     },
   );
 
-  it.skipIf(platform === 'win32')(
-    'destroy --force kills the host of the session',
-    async () => {
-      const host = startProcess('_host', 'session-01', '1');
-      const directory = await seedHost(host);
+  it.skipIf(platform === 'win32').each([
+    ['runs the host of that session', ['_host', 'session-01', '1']],
+    ['has an earlier _host argument', ['_host', 'x', '_host', 'session-01']],
+  ])('destroy --force kills a host that %s', async (_, args) => {
+    const host = startProcess(...args);
+    const directory = await seedHost(host);
+    const kill = reapAsInitAfterKill(host);
 
-      const kill = reapAsInitAfterKill(host);
+    await destroySession('session-01', true);
 
-      await destroySession('session-01', true);
-
-      expect(kill).toHaveBeenCalledWith(host, 'SIGKILL');
-      expect(await readManifest(manifestPath(directory))).toMatchObject({
-        status: 'destroyed',
-      });
-    },
-  );
+    expect(kill).toHaveBeenCalledWith(host, 'SIGKILL');
+    expect(await readManifest(manifestPath(directory))).toMatchObject({
+      status: 'destroyed',
+    });
+  });
 
   it.skipIf(platform === 'win32')(
     'on darwin destroy --force kills a host that ps shows',
     async () => {
       const host = startProcess('_host', 'session-01', '1');
-      const directory = await seedHost(host);
+      const directory = await seedHost(host, 'none');
       Object.defineProperty(process, 'platform', { value: 'darwin' });
-
       const kill = reapAsInitAfterKill(host);
 
       await destroySession('session-01', true);
@@ -799,7 +819,7 @@ describe('a hostPid that may no longer name the host', () => {
     'on darwin destroy --force does not kill a hostPid that runs another program',
     async () => {
       const other = startProcess();
-      const directory = await seedHost(other);
+      const directory = await seedHost(other, 'none');
       const record = await readManifest(manifestPath(directory));
       Object.defineProperty(process, 'platform', { value: 'darwin' });
 

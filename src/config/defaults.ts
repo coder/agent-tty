@@ -16,3 +16,4 @@ export const SOCKET_FILENAME = 'host.sock';
 export const MANIFEST_FILENAME = 'session.json';
 export const EVENT_LOG_FILENAME = 'events.jsonl';
 export const PROGRAM_RECORD_FILENAME = 'program.json';
+export const HOST_RECORD_FILENAME = 'host.json';
