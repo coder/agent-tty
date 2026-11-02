@@ -337,12 +337,6 @@ export class EventLog {
     return await this.queueAppend(type, payload).written;
   }
 
-  /**
-   * Reserves the record's seq and queues its write without an `await`, so a
-   * caller that needs the seq before its PTY write can do both in one
-   * synchronous step. `written` resolves with the seq once the file holds the
-   * record.
-   */
   startAppend(type: 'input_run', payload: InputRunEventPayload): StartedAppend {
     return this.queueAppend(type, payload);
   }

@@ -54,7 +54,6 @@ export interface RunCompletionWaitOptions {
   readonly signal?: AbortSignal;
 }
 
-/** Registered completion state returned once `input_run` has its seq. */
 export interface RegisteredWaitedRunCompletion {
   postamble: string;
   sentinel: string;
@@ -165,10 +164,7 @@ export class RunCompletionCoordinator {
     return { marker };
   }
 
-  /**
-   * Registers the marker once `input_run` has its seq and returns the shell
-   * postamble to write. The returned `wait()` function is single-use.
-   */
+  /** The returned `wait()` function is single-use. */
   public registerWaitedRun(params: {
     inputRunSeq: number;
     marker: string;

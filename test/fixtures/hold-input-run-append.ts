@@ -1,6 +1,3 @@
-// Preload (`--import`) that holds the first event-log write of an `input_run`
-// record for HOLD_INPUT_RUN_MS. It writes the hold's start and end times
-// (Date.now()) to HOLD_INPUT_RUN_SIGNAL, one per line.
 import { appendFileSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import process from 'node:process';

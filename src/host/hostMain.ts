@@ -250,9 +250,6 @@ export async function runHost(
       }),
   };
   const rendererManager = new HostRendererManager(rendererManagerOptions);
-  // The native mouse encoder dedups same-cell motion with state that replay
-  // does not rebuild, so mouse input keeps a backend that a render on another
-  // renderer or profile never replaces.
   const mouseRendererManager = new HostRendererManager(rendererManagerOptions);
 
   const loadReplayInput = (targetSeq?: number) => {
@@ -492,13 +489,10 @@ export async function runHost(
             eventLogClosed = true;
           }
 
-          for (const manager of [rendererManager, mouseRendererManager]) {
-            try {
-              await manager.dispose();
-            } catch {
-              // best-effort cleanup
-            }
-          }
+          await Promise.allSettled([
+            rendererManager.dispose(),
+            mouseRendererManager.dispose(),
+          ]);
 
           await rpcServer.close();
         }
@@ -751,9 +745,6 @@ export async function runHost(
         } satisfies RunResult;
       }
 
-      // Reserve the seq, register the marker and write with no await in
-      // between, so other input cannot reach the PTY or the log in between
-      // and the marker is registered before the command can print.
       const preparedRun = runCompletion.prepareWaitedRun();
       const inputRun = eventLog.startAppend('input_run', {
         command,
