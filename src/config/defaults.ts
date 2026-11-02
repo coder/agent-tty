@@ -7,6 +7,10 @@ export const DEFAULT_SHELL = process.env.SHELL ?? '/bin/sh';
 export { DEFAULT_LOG_LEVEL } from '../util/logger.js';
 export const DEFAULT_IDLE_TIMEOUT_MS = 0 as const;
 export const HOST_RENDERER_ENV_KEY = 'AGENT_TTY_HOST_RENDERER' as const;
+// Set only in the copy that `destroy` runs in a new session. The host and the
+// session's program never get it, so a destroy that the program runs still
+// re-runs.
+export const DESTROY_RERUN_ENV_KEY = 'AGENT_TTY_DESTROY_RERUN' as const;
 
 export const SOCKET_FILENAME = 'host.sock';
 export const MANIFEST_FILENAME = 'session.json';
