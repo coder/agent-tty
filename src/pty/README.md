@@ -7,7 +7,7 @@
 ## Interface
 
 - `PtyOptions` is the spawn input: `command`, `cwd`, `cols`, `rows`, `env`, `term` and an optional `sessionId`. [createPty.ts:PtyOptions]
-- `resolvePtyEnv(env, term, baseEnv = process.env, sessionId?)` builds the child environment. Order, lowest precedence first: `baseEnv` without `AGENT_TTY_HOST_RENDERER`, then `PROMPT_EOL_MARK=''` when `env` does not set it, then `AGENT_TTY_ACTIVE`/`AGENT_TTY_SESSION_ID`, then `env`, then `TERM=term`. [createPty.ts:resolvePtyEnv]
+- `resolvePtyEnv(env, term, baseEnv = process.env, sessionId?)` builds the child environment. Order, lowest precedence first: `baseEnv` without `AGENT_TTY_HOST_RENDERER`, then the `SPAWN_ENV_DEFAULTS` (`PROMPT_EOL_MARK=''` and `COLORTERM=truecolor`), then `AGENT_TTY_ACTIVE`/`AGENT_TTY_SESSION_ID`, then `env`, then `TERM=term`. [createPty.ts:resolvePtyEnv]
 - `createPty(options)` validates the options and returns the `IPty` from `node-pty` `spawn(command[0], command.slice(1), ...)`. [createPty.ts:createPty]
 - `encodeKey(name)` turns a key name such as `ctrl+c`, `shift+tab`, `f5` or `up` into its xterm-style byte sequence. [keyEncoder.ts:encodeKey]
 - `assertValidKeyName(name)` calls `encodeKey` and rethrows a failure as a `CliError` with code `INVALID_KEYS` (from `src/protocol/errors.ts`). [keyEncoder.ts:assertValidKeyName]
@@ -19,7 +19,7 @@
 
 - `createPty` asserts a non-empty `command`, positive integer `cols` and `rows`, a non-empty `term`, non-empty env keys and string env values. [createPty.ts:createPty]
 - `resolvePtyEnv` asserts that `sessionId` is non-empty when given. With a `sessionId` it sets `AGENT_TTY_ACTIVE='true'` and `AGENT_TTY_SESSION_ID`. Without one it deletes both inherited variables. It sets `TERM` last. [createPty.ts:resolvePtyEnv]
-- `resolvePtyEnv` sets `PROMPT_EOL_MARK` to `''` only when the caller's `env` has no `PROMPT_EOL_MARK` key. The inherited value does not count. [createPty.ts:resolvePtyEnv]
+- `resolvePtyEnv` sets `PROMPT_EOL_MARK` to `''` and `COLORTERM` to `truecolor` unless the caller's `env` has that key. The inherited value does not count. [createPty.ts:resolvePtyEnv]
 - `encodeKey` rejects an empty name, an unknown base key, a repeated modifier and a modifier other than `ctrl`, `alt` or `shift`. A printable key must be one ASCII character from 0x20 to 0x7e. [keyEncoder.ts:encodeKey]
 - `encodePaste` asserts that `text` is a non-empty string. [pasteEncoder.ts:encodePaste]
 - The `TerminalQueryResponder` constructor asserts that both colors match `/^#[0-9a-fA-F]{6}$/`. [terminalQueryResponder.ts:TerminalQueryResponder]
@@ -37,5 +37,5 @@
 ## Verification
 
 - Run: `npx vitest run test/unit/pty`
-- Run: `npx vitest run --maxWorkers=1 test/integration/lifecycle.test.ts` (checks the env and `PROMPT_EOL_MARK` that reach the spawned shell)
+- Run: `npx vitest run --maxWorkers=1 test/integration/lifecycle.test.ts` (checks the env, `PROMPT_EOL_MARK` and `COLORTERM` that reach the spawned shell)
 - Run: `npm run typecheck`
