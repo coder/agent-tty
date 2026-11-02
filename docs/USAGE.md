@@ -365,7 +365,7 @@ Every command exits with a stable code, so scripts can branch without parsing ou
 
 A fail-fast `batch` exits with the failed step's code (for example `11` for a wait timeout); `--keep-going` exits `1` if any step failed.
 
-An unexpected failure prints an `INTERNAL_ERROR` envelope and exits `1`. Add `--log-level debug` to also print its stack on stderr. With `--json`, a usage error (unknown command or flag, missing argument or required option) prints an `INVALID_INPUT` envelope under the command name `agent-tty` and exits `2`. The usage text still goes to stderr.
+An unexpected failure prints an `INTERNAL_ERROR` envelope and exits `1`. Add `--log-level debug` to also print its stack on stderr. A failure while the CLI reads the global options and the config file prints no stack, because the log level is not known yet. With `--json`, a usage error (unknown command or flag, missing argument or required option) prints an `INVALID_INPUT` envelope under the command name `agent-tty` and exits `2`. The usage text still goes to stderr.
 
 ## Anti-Patterns
 
