@@ -1607,6 +1607,52 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         expect(await groupEnds(pgid)).toBe(true);
       },
     );
+
+    // A CLI in a PID namespace whose session leader runs outside it reads
+    // session id 0 and runs again in a new session. When the host runs in
+    // another namespace, the manifest's hostPid can name an unrelated process
+    // in the CLI's one, and the copy's forced destroy must not kill it.
+    it.runIf(process.platform === 'linux')(
+      'destroy --force that reads session id 0 kills no unrelated process that hostPid names',
+      async () => {
+        const sessionId = createSession(testHome, [
+          '/bin/sh',
+          '-c',
+          'trap "" HUP; exec sleep 300',
+        ]);
+        const session = inspectSession(testHome, sessionId);
+        pgid = session.childPid as number;
+        const unrelated = spawn('sleep', ['300'], { stdio: 'ignore' });
+        try {
+          expect(unrelated.pid).toBeTypeOf('number');
+          const directory = sessionDir(testHome, sessionId);
+          await writeManifest(manifestPath(directory), {
+            ...SessionRecordSchema.parse(
+              JSON.parse(await readFile(manifestPath(directory), 'utf8')),
+            ),
+            hostPid: unrelated.pid as number,
+          });
+          const preload = pathToFileURL(
+            resolve('test/fixtures/zero-session-id.ts'),
+          ).href;
+
+          runCli(['destroy', sessionId, '--force', '--json'], {
+            AGENT_TTY_HOME: testHome,
+            NODE_OPTIONS: `--import=${preload}`,
+          });
+
+          expect(await groupEnds(pgid)).toBe(true);
+          await sleep(200);
+          expect(unrelated.signalCode).toBeNull();
+          expect(unrelated.exitCode).toBeNull();
+        } finally {
+          unrelated.kill('SIGKILL');
+          if (session.hostPid !== null && isProcessAlive(session.hostPid)) {
+            process.kill(session.hostPid, 'SIGKILL');
+          }
+        }
+      },
+    );
   });
 
   it('destroyed session rejects commands with SESSION_ALREADY_DESTROYED', () => {
