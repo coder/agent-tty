@@ -466,6 +466,7 @@ describe('GhosttyWebBackend unit guards', () => {
       isBooted: true,
       currentCols: 80,
       currentRows: 24,
+      initialReplayCols: 80,
       lastAppliedSeq: 3,
       page: {
         evaluate,
@@ -508,6 +509,7 @@ describe('GhosttyWebBackend unit guards', () => {
       isBooted: true,
       currentCols: 80,
       currentRows: 24,
+      initialReplayCols: 80,
       lastAppliedSeq: 3,
       page: {
         evaluate,
