@@ -326,6 +326,33 @@ describe('wait command', () => {
     expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['--idle-ms', { idleMs: 30_000 }],
+    ['--screen-stable-ms', { screenStableMs: 30_000 }],
+  ] as const)(
+    'rejects %s that cannot finish within the default timeout',
+    async (flag, overrides) => {
+      await expect(
+        runWaitCommand(createOptions(overrides)),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.INVALID_DURATION,
+        message: `${flag} 30000 cannot finish within the default --timeout of 30000 ms. Pass a larger --timeout, or --timeout 0 to wait without a limit.`,
+      });
+      expect(mocks.sendRpc).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([0, 60_000])(
+    'accepts a long --idle-ms with an explicit --timeout %d',
+    async (timeout) => {
+      mocks.sendRpc.mockResolvedValue({ timedOut: false });
+
+      await runWaitCommand(createOptions({ idleMs: 30_000, timeout }));
+
+      expect(mocks.sendRpc).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('rejects negative --timeout values for render waits', async () => {
     await expect(
       runWaitCommand(createOptions({ text: 'hello', timeout: -1 })),
