@@ -13,6 +13,7 @@ const fsHooks = vi.hoisted(() => ({
   proc: undefined as Map<string, string | Error> | undefined,
   mountinfo: undefined as string | undefined,
   ownStatError: undefined as Error | undefined,
+  rmdirError: undefined as Error | undefined,
 }));
 
 vi.mock('node:fs', async () => {
@@ -61,7 +62,15 @@ vi.mock('node:fs/promises', async () => {
     }
     return contents;
   };
-  return { ...actual, readFile };
+  const rmdir = async (
+    ...args: Parameters<typeof actual.rmdir>
+  ): Promise<void> => {
+    if (fsHooks.rmdirError !== undefined) {
+      throw fsHooks.rmdirError;
+    }
+    await actual.rmdir(...args);
+  };
+  return { ...actual, readFile, rmdir };
 });
 
 // destroy and reconcile poll for about 5 s. These tests skip the waits.
@@ -85,6 +94,8 @@ import {
   destroySession,
   cliRunsInsideProgramSession,
   reconcileSession,
+  removeSocketDirectoryBestEffort,
+  removeSocketDirectoryIfEmpty,
   type AllocateConfig,
 } from '../../../src/host/lifecycle.js';
 import {
@@ -604,5 +615,28 @@ describe('cliRunsInsideProgramSession', () => {
     Object.defineProperty(process, 'platform', { value: 'win32' });
 
     expect(await cliRunsInsideProgramSession('session-01')).toBe(false);
+  });
+});
+
+describe('removeSocketDirectoryBestEffort', () => {
+  afterEach(() => {
+    fsHooks.rmdirError = undefined;
+    vi.restoreAllMocks();
+  });
+
+  it('logs an unusual rmdir error instead of throwing it', async () => {
+    const busy = Object.assign(new Error('EBUSY'), { code: 'EBUSY' });
+    fsHooks.rmdirError = busy;
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    const socketFile = '/tmp/agent-tty/00000000/000000000000';
+
+    await expect(removeSocketDirectoryIfEmpty(socketFile)).rejects.toBe(busy);
+    await expect(
+      removeSocketDirectoryBestEffort(socketFile),
+    ).resolves.toBeUndefined();
+    expect(debug).toHaveBeenCalledWith(
+      'could not remove the socket directory:',
+      busy,
+    );
   });
 });

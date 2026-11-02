@@ -1,5 +1,3 @@
-import { chmod, mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -9,7 +7,12 @@ import {
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
 import { EventLog } from './eventLog.js';
-import { isProcessAlive, waitForProcessesToExit } from './lifecycle.js';
+import {
+  isProcessAlive,
+  listenInSocketDirectory,
+  removeSocketDirectoryBestEffort,
+  waitForProcessesToExit,
+} from './lifecycle.js';
 import { createSerialManifestWriter } from './manifestWriter.js';
 import {
   captureProgram,
@@ -496,6 +499,7 @@ export async function runHost(
           ]);
 
           await rpcServer.close();
+          await removeSocketDirectoryBestEffort(sPath);
         }
       }
     })();
@@ -1235,16 +1239,13 @@ export async function runHost(
   try {
     writeProgramRecord(sessDir, program);
     await persistManifest();
-    const socketDirectory = dirname(sPath);
-    await mkdir(socketDirectory, { recursive: true });
-    await chmod(socketDirectory, 0o700);
 
     if (!isSessionCommandable(state)) {
       await initiateShutdown();
       return;
     }
 
-    rpcListenPromise = rpcServer.listen();
+    rpcListenPromise = listenInSocketDirectory(sPath, () => rpcServer.listen());
     await rpcListenPromise;
 
     if (!isSessionCommandable(state)) {
