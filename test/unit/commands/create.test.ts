@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
   allocateSession: vi.fn(),
   launchHost: vi.fn(),
-  reconcileSession: vi.fn(),
+  destroySession: vi.fn(),
   sendRpc: vi.fn(),
   readManifestIfExists: vi.fn(),
   sessionDir: vi.fn(),
@@ -27,8 +27,13 @@ vi.mock('../../../src/cli/output.js', () => ({
 
 vi.mock('../../../src/host/lifecycle.js', () => ({
   allocateSession: mocks.allocateSession,
+  destroySession: mocks.destroySession,
   launchHost: mocks.launchHost,
-  reconcileSession: mocks.reconcileSession,
+}));
+
+// The readiness loop waits 100 ms between its 50 attempts.
+vi.mock('node:timers/promises', () => ({
+  setTimeout: () => Promise.resolve(),
 }));
 
 vi.mock('../../../src/host/rpcClient.js', () => ({
@@ -276,6 +281,31 @@ describe('create command', () => {
       }),
     );
   });
+
+  it.each([
+    ['stops', () => Promise.resolve()],
+    ['cannot stop', () => Promise.reject(new Error('stop failed'))],
+  ])(
+    'when the host never answers, %s the session and reports the last error',
+    async (_name, stop) => {
+      const unreachable = makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'host unreachable',
+      });
+      mocks.sendRpc.mockRejectedValue(unreachable);
+      mocks.readManifestIfExists.mockResolvedValue(makeManifest());
+      mocks.destroySession.mockImplementation(stop);
+
+      await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
+        unreachable,
+      );
+      expect(mocks.sendRpc).toHaveBeenCalledTimes(50);
+      expect(mocks.destroySession).toHaveBeenCalledExactlyOnceWith(
+        'session-01',
+        true,
+      );
+      expect(mocks.emitSuccess).not.toHaveBeenCalled();
+    },
+  );
 
   it('passes idle timeout through allocation when provided explicitly', async () => {
     await runCreateCommand({
