@@ -60,11 +60,11 @@
     "src/storage/manifests.ts#writeValidatedJsonFileSync": "4a5d1cc5f63ae8ce",
     "src/storage/manifests.ts#writeManifest": "1bcc99f09acfc577",
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
-    "src/host/hostMain.ts#runHost(parts)": "a18ec06b67d355d1",
+    "src/host/hostMain.ts#runHost(parts)": "5e0211387bab844b",
     "src/host/hostMain.ts#runHost(final try)": "5db2f94ef78701a8",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "427078c18d724c82",
+    "skill:model/SessionLifecycle.tla": "73aaefc573db9511",
     "skill:scripts/facts.mjs": "ad6f7db805c5d882",
     "skill:scripts/check.sh": "97acb7fdaaa2c783"
   },
