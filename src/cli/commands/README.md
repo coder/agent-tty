@@ -36,7 +36,7 @@ This directory holds one handler module per agent-tty CLI command. `src/cli/main
 - `record export` accepts only the formats in `RecordExportFormatSchema` (`asciicast`, `webm`). [record-export.ts:runRecordExportCommand]
 - `batch` parses the whole plan with `parseBatchPlan` before it resolves the session target. [batch.ts:runBatchCommand]
 - `create` polls readiness up to `READINESS_MAX_ATTEMPTS` (50) times, `READINESS_POLL_INTERVAL_MS` (100 ms) apart. [create.ts:runCreateCommand]
-- `doctor` reports the `node-runtime` check as failed below Node major version 24. It keeps running the other checks, reports `ok: false` and sets `process.exitCode = 1`. [doctor.ts:runNodeRuntimeCheck] [doctor.ts:runDoctorCommand]
+- `doctor` reports the `node-runtime` check as failed when the Node version is outside the `engines.node` range of `package.json`. It keeps running the other checks, reports `ok: false` and sets `process.exitCode = 1`. [doctor.ts:runNodeRuntimeCheck] [doctor.ts:runDoctorCommand]
 - `dashboard` throws `INVALID_INPUT` unless stdin and stdout are both TTYs. It also throws `INVALID_INPUT` when the libghostty-vt probe reports the renderer unavailable. [dashboard.ts:runDashboardCommand] [src/renderer/readiness.ts:assertDashboardRendererAvailable]
 - `version` reports the constant `PROTOCOL_VERSION` (`'0.1.0'`). [version.ts:buildVersionResult]
 

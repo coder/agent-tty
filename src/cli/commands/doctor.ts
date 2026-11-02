@@ -41,6 +41,8 @@ import {
   sessionDir,
   socketPath,
 } from '../../storage/sessionPaths.js';
+import { satisfiesNodeRange } from '../../util/nodeRange.js';
+import { loadSupportedNodeRange } from '../../util/packageMetadata.js';
 
 const COMMAND_NAME = 'doctor';
 const CHECK_TIMEOUT_MS = 10_000;
@@ -359,16 +361,12 @@ async function runCheckGroup(
   return results;
 }
 
-function runNodeRuntimeCheck(): string {
-  const majorVersion = Number.parseInt(
-    process.versions.node.split('.')[0] ?? '',
-    10,
-  );
+async function runNodeRuntimeCheck(): Promise<string> {
+  const range = await loadSupportedNodeRange();
   assert(
-    Number.isInteger(majorVersion),
-    'unable to parse Node runtime version',
+    satisfiesNodeRange(process.versions.node, range),
+    `Node ${process.versions.node} requires ${range}`,
   );
-  assert(majorVersion >= 24, `Node ${process.versions.node} requires 24+`);
   return `Node ${process.versions.node} ok`;
 }
 

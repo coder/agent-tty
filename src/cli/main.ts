@@ -52,6 +52,8 @@ import {
 } from '../config/defaults.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
+import { satisfiesNodeRange } from '../util/nodeRange.js';
+import { loadSupportedNodeRange } from '../util/packageMetadata.js';
 
 function parseIntegerOption(value: string): number {
   return Number.parseInt(value, 10);
@@ -182,6 +184,12 @@ async function main(): Promise<void> {
     }
     setColorEnabled(context.colorEnabled);
     setCommandContext(actionCommand, context);
+    const nodeRange = await loadSupportedNodeRange();
+    if (!satisfiesNodeRange(process.versions.node, nodeRange)) {
+      context.logger.warn(
+        `Node ${process.versions.node} is not supported. agent-tty requires Node ${nodeRange}. Run \`agent-tty doctor\` to check the runtime.`,
+      );
+    }
     context.logger.debug('resolved command context', {
       command: actionCommand.name(),
       home: context.home,

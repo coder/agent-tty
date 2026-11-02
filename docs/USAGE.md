@@ -63,6 +63,8 @@ agent-tty --home <path> record export <session-id> --format asciicast --json
 agent-tty --home <path> record export <session-id> --format webm --json
 ```
 
+Every command checks the Node version against the `engines.node` range in `package.json`. On a Node outside that range, the command still runs and writes a warning to stderr, so stdout keeps one JSON envelope. `--log-level error` hides the warning. `doctor` fails its `node-runtime` check against the same range.
+
 ## `run`
 
 Use `run` when you want shell-oriented setup inside an existing session, especially multiline bootstrap scripts or commands that should preserve shell state.
