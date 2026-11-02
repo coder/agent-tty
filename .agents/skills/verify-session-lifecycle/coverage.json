@@ -60,12 +60,12 @@
     "src/storage/manifests.ts#writeValidatedJsonFileSync": "4a5d1cc5f63ae8ce",
     "src/storage/manifests.ts#writeManifest": "1bcc99f09acfc577",
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
-    "src/host/hostMain.ts#runHost(parts)": "b54a44f8c101a29b",
+    "src/host/hostMain.ts#runHost(parts)": "10d2a8569f3b263e",
     "src/host/hostMain.ts#runHost(final try)": "16789dd4e2534bc7",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "8cdd2cb7edafdb57",
-    "skill:scripts/facts.mjs": "08358831e4a327fc",
+    "skill:scripts/facts.mjs": "656092bcf2b449c2",
     "skill:scripts/check.sh": "0f4a623d996be6ea"
   },
   "callSites": {
