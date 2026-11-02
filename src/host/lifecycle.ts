@@ -248,7 +248,7 @@ function controllingTerminal(pid: number): string | null {
   }
   const tty = output.trim();
   // ps prints ?? (BSD) or ? (procps) for a process without one.
-  return tty.length === 0 || /^[?-]+$/.test(tty) ? null : tty;
+  return tty.length === 0 || /^\?+$/.test(tty) ? null : tty;
 }
 
 // A terminal is the controlling terminal of at most one session and of
@@ -265,8 +265,8 @@ function sharesControllingTerminal(pid: number): boolean {
 // own session, so a process inside that session has the program's pid as its
 // session id. Linux compares that id, which also covers a job that the
 // program's shell put in a group of its own. POSIX ps has no session id
-// field, so other systems compare the process group, and the controlling
-// terminal for such a job. Windows has no sessions or groups.
+// field, so other systems compare the process group and the controlling
+// terminal. Windows has no sessions or groups.
 export async function cliRunsInsideProgramSession(
   sessionId: string,
 ): Promise<boolean> {

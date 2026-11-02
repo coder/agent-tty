@@ -558,13 +558,15 @@ describe('cliRunsInsideProgramSession', () => {
     );
   }
 
-  // init runs outside the caller's session, with no controlling terminal.
   async function expectMatchesOnly(id: number): Promise<void> {
-    expect(id).not.toBe(1);
+    expect(process.pid).not.toBe(id);
     const directory = await seedSession(makeRecord({ childPid: id }));
     expect(await cliRunsInsideProgramSession('session-01')).toBe(true);
 
-    await writeManifest(manifestPath(directory), makeRecord({ childPid: 1 }));
+    await writeManifest(
+      manifestPath(directory),
+      makeRecord({ childPid: process.pid }),
+    );
     expect(await cliRunsInsideProgramSession('session-01')).toBe(false);
   }
 
@@ -587,6 +589,7 @@ describe('cliRunsInsideProgramSession', () => {
   it("on darwin matches the caller's process group only", async () => {
     const pgid = ownId('pgid');
     Object.defineProperty(process, 'platform', { value: 'darwin' });
+    psHooks.tty = () => null;
 
     await expectMatchesOnly(pgid);
   });
@@ -594,13 +597,12 @@ describe('cliRunsInsideProgramSession', () => {
   it("on darwin matches the caller's process group with no ps on PATH", async () => {
     const pgid = ownId('pgid');
     Object.defineProperty(process, 'platform', { value: 'darwin' });
+    psHooks.tty = () => null;
     vi.stubEnv('PATH', '');
 
     await expectMatchesOnly(pgid);
   });
 
-  // An interactive shell runs a typed command as a job in a group of its
-  // own, in the program's session and on its terminal.
   it.each([
     ['ttys003', 'ttys003', true],
     ['ttys003', 'ttys004', false],
