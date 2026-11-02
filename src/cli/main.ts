@@ -32,7 +32,7 @@ import { runSkillsPathCommand } from './commands/skills/path.js';
 import { runSnapshotCommand } from './commands/snapshot.js';
 import { runTypeCommand } from './commands/type.js';
 import { runVersionCommand } from './commands/version.js';
-import { runWaitCommand } from './commands/wait.js';
+import { DEFAULT_WAIT_TIMEOUT_MS, runWaitCommand } from './commands/wait.js';
 import {
   getCommandContext,
   parseTimeoutMsOption,
@@ -971,6 +971,7 @@ async function main(): Promise<void> {
       '--timeout <ms>',
       'Maximum wait time in milliseconds (0 for infinite)',
       parseIntegerOption,
+      DEFAULT_WAIT_TIMEOUT_MS,
     )
     .option('--json', 'Emit a JSON command envelope', false)
     .option('--text <string>', 'Wait for text to appear in rendered output')

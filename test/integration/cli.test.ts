@@ -216,7 +216,7 @@ describe('CLI integration', () => {
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
     expect(result.stdout.replaceAll(/\s+/gu, ' ')).toContain(
-      '--timeout <ms> Maximum wait time in milliseconds (0 waits forever) (default: 30000)',
+      '--timeout <ms> Maximum wait time in milliseconds (0 for infinite) (default: 30000)',
     );
   });
 

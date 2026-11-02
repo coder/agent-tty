@@ -49,7 +49,7 @@ interface CommandOptions {
   afterSeq: number | undefined;
 }
 
-const DEFAULT_WAIT_TIMEOUT_MS = 600_000;
+export const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 
 function isPositiveInteger(value: number | undefined): value is number {
   return value !== undefined && Number.isInteger(value) && value > 0;
