@@ -1069,6 +1069,7 @@ const goldenResultContracts: readonly GoldenResultContractCase[] = [
       pixelHeight: 384,
       sha256: 'a'.repeat(64),
       renderProfileHash: 'b'.repeat(64),
+      missingGlyphs: [{ codePoint: 'U+29C9', cells: [{ row: 0, col: 6 }] }],
     },
     invalidResult: {
       sessionId: 'session-01',

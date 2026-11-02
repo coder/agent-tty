@@ -32,7 +32,7 @@ import { runSkillsPathCommand } from './commands/skills/path.js';
 import { runSnapshotCommand } from './commands/snapshot.js';
 import { runTypeCommand } from './commands/type.js';
 import { runVersionCommand } from './commands/version.js';
-import { DEFAULT_WAIT_TIMEOUT_MS, runWaitCommand } from './commands/wait.js';
+import { runWaitCommand } from './commands/wait.js';
 import {
   getCommandContext,
   parseTimeoutMsOption,
@@ -41,6 +41,7 @@ import {
   type GlobalCliOptions,
 } from './context.js';
 import { CliError } from './errors.js';
+import { warnIfUnsupportedNode } from './nodeRuntime.js';
 import {
   emitCliError,
   jsonOutputRequested,
@@ -54,6 +55,7 @@ import {
   HOST_RENDERER_ENV_KEY,
 } from '../config/defaults.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
+import { DEFAULT_WAIT_TIMEOUT_MS } from '../renderWait/limits.js';
 import { invariant } from '../util/assert.js';
 import type { Logger } from '../util/logger.js';
 
@@ -191,6 +193,7 @@ async function main(): Promise<void> {
     }
     setColorEnabled(context.colorEnabled);
     setCommandContext(actionCommand, context);
+    await warnIfUnsupportedNode(context.logger, process.versions.node);
     context.logger.debug('resolved command context', {
       command: actionCommand.name(),
       home: context.home,

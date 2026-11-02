@@ -27,7 +27,7 @@ This directory parses and runs a Batch: an ordered JSON list of `type`, `paste`,
 - `sendKeys` names are checked with `assertValidKeyName` from `src/pty/keyEncoder.ts` [plan.ts:parseSendKeysStep].
 - A `mouse` step is checked with `MouseInputSchema`, which has no `rendererName`. The driver sends the batch command's renderer, as it does for `wait` [plan.ts:parseMouseStep] [stepDriver.ts:createRpcStepDriver].
 - Wait conditions are built with `prepareRenderWaitCondition` from `src/renderWait/matcher.ts` [plan.ts:parseWaitStep].
-- An omitted wait timeout becomes `DEFAULT_WAIT_TIMEOUT_MS` (600,000 ms). An explicit `0` means no timeout [plan.ts:DEFAULT_WAIT_TIMEOUT_MS].
+- An omitted wait timeout becomes `DEFAULT_WAIT_TIMEOUT_MS` (30,000 ms, shared with the `wait` command). Without a timeout, a `screenStableMs` at or above it is `INVALID_INPUT`. An explicit `0` means no timeout [src/renderWait/limits.ts:DEFAULT_WAIT_TIMEOUT_MS] [plan.ts:parseWaitStep].
 - `executeBatch` runs steps in order. Without `keepGoing`, the first failed step stops the batch and every later step gets a `not-run` record [executor.ts:executeBatch].
 - A non-wait step that produced a seq, failed or not, becomes the `afterSeq` baseline for the next wait [executor.ts:executeBatch].
 - A thrown error that is not a `CliError` becomes an `INTERNAL_ERROR` failed record [executor.ts:reframeAsInternalError].

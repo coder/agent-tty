@@ -16,7 +16,7 @@ This directory turns a renderer screenshot into a stored session artifact. `capt
 
 - `sessionDir`, `profileName` and `expectedSessionId` must be non-empty [capture.ts:captureScreenshotResult].
 - The renderer result must match the expected session ID and the requested profile name. It must report a positive `pngSizeBytes`, the requested temporary path and a `sha256` [capture.ts:captureScreenshotResult].
-- The result must pass `ScreenshotResultSchema`, and `sha256` must survive the parse [capture.ts:captureScreenshotResult].
+- The result must pass `ScreenshotResultSchema`, and `sha256` must survive the parse. The renderer's `missingGlyphs` and `missingGlyphsTruncated` pass through unchanged and are not stored in the artifact metadata [capture.ts:captureScreenshotResult].
 - The preferred filename comes from `screenshotFilename(capturedAtSeq, profileName)` in `src/storage/artifactPaths.ts`. The stored name and the returned `artifactPath` get a `-<n>` suffix when a different PNG already has that name [capture.ts:captureScreenshotResult].
 
 ## Side Effects

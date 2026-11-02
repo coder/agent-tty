@@ -37,7 +37,7 @@ Preconditions:
 ## Gotchas
 
 - The wait step's time-out key is `timeout`, not `timeoutMs`. An unknown key rejects the whole batch with `INVALID_INPUT`.
-- A wait step without `timeout` waits up to 10 minutes.
+- A wait step without `timeout` waits up to 30 s, like `wait`.
 - A `run` step needs a shell. Sent to `hello-prompt`, it fails with `WAIT_TIMEOUT` (exit 11), because the program never prints the Run Completion marker.
 - A fail-fast batch with a failed step prints `"ok": false` and the step's error, and keeps the per-step `result`. A `--keep-going` batch with failures still prints `"ok": true`: there the exit code and `failedIndices` report the failure.
 - Wait Baselines keep a wait step from matching an older screen, but text that the program printed earlier can still be on the screen. Wait for text that only the new output contains.
