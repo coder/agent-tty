@@ -1,3 +1,4 @@
+import { readlinkSync } from 'node:fs';
 import process from 'node:process';
 
 import { z } from 'zod';
@@ -12,13 +13,15 @@ import { hasErrorCode } from '../util/hasErrorCode.js';
 import { readBootId, readProcStat } from './programGroup.js';
 
 // A pid can name a new process after the host ends, but not with the host's
-// start time on the same boot.
+// start time on the same boot. The pid means that process only in the
+// host's pid namespace.
 const HostRecordSchema = z
   .object({
     version: z.literal(1),
     pid: z.number().int().positive(),
     bootId: z.string().min(1),
     startTicks: z.string().regex(/^\d+$/),
+    pidNamespace: z.string().min(1),
   })
   .strict();
 
@@ -45,11 +48,26 @@ export function captureHost(pid: number): HostRecord | null {
   try {
     const stat = readProcStat(pid);
     const bootId = readBootId();
+    const pidNamespace = readlinkSync(`/proc/${String(pid)}/ns/pid`);
     return stat === null || bootId === null
       ? null
-      : { version: 1, pid, bootId, startTicks: stat.startTicks };
+      : {
+          version: 1,
+          pid,
+          bootId,
+          startTicks: stat.startTicks,
+          pidNamespace,
+        };
   } catch {
     return null;
+  }
+}
+
+function inPidNamespace(pidNamespace: string): boolean {
+  try {
+    return readlinkSync('/proc/self/ns/pid') === pidNamespace;
+  } catch {
+    return false;
   }
 }
 
@@ -105,8 +123,12 @@ function pidExists(pid: number): boolean {
 
 // dead only on proof: no process has the pid, a zombie has it, or the record
 // names another boot or another start time. A read that fails, as without
-// /proc, and a missing record leave the host unknown.
+// /proc, a missing record and a CLI in another pid namespace than the host
+// leave the host unknown.
 export function judgeHost(pid: number, record: HostRecord | null): HostVerdict {
+  if (record !== null && !inPidNamespace(record.pidNamespace)) {
+    return 'unknown';
+  }
   if (!pidExists(pid)) {
     return 'dead';
   }

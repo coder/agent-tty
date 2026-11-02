@@ -634,7 +634,11 @@ describe('a hostPid that may no longer name the host', () => {
   // time, the record of an earlier host whose pid this process got.
   async function seedHost(
     hostPid: number,
-    record: 'none' | 'own' | { startTicks: string } = 'own',
+    record:
+      | 'none'
+      | 'own'
+      | { startTicks: string }
+      | { pidNamespace: string } = 'own',
   ): Promise<string> {
     vi.stubEnv('AGENT_TTY_HOME', home);
     const directory = await seedSession(
@@ -778,6 +782,34 @@ describe('a hostPid that may no longer name the host', () => {
         code: 'HOST_TIMEOUT',
       });
       expect(isRunning(host)).toBe(true);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+    },
+  );
+
+  it.runIf(platform === 'linux').each([
+    ['an unrelated live process', 'live' as const],
+    ['no process', 'free' as const],
+  ])(
+    'on linux a hostPid that a host in another pid namespace recorded, which names %s here, gets no kill and no record',
+    async (_, here) => {
+      const other = startProcess();
+      const directory = await seedHost(other, { pidNamespace: 'pid:[1]' });
+      if (here === 'free') {
+        process.kill(other, 'SIGKILL');
+        await vi.waitFor(() => {
+          expect(isRunning(other)).toBe(false);
+        });
+      }
+      const record = await readManifest(manifestPath(directory));
+      const kill = vi.spyOn(process, 'kill');
+
+      await reconcileSession(directory);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+
+      await expect(destroySession('session-01', true)).rejects.toMatchObject({
+        code: 'HOST_TIMEOUT',
+      });
+      expect(kill).not.toHaveBeenCalledWith(other, 'SIGKILL');
       expect(await readManifest(manifestPath(directory))).toEqual(record);
     },
   );
