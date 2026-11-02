@@ -86,6 +86,9 @@ CONSTANTS
     FallbackNeedsFolder,    \* programGroup.ts: a group that only a childPid
                             \*   names gets the kill, and reads alive, only
                             \*   while the session folder exists
+    CreateStopsOnGiveUp,    \* create.ts: a create that gives up on its
+                            \*   host stops the session with destroy --force
+                            \*   before it reports the error
     Token,                  \* the environment: the host's capture finds the
                             \*   program's session token
     MaxListReconciles       \* how many times the "list" process reconciles
@@ -103,7 +106,7 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  ReconcileWaitsForGroup, ReRunsInNewSession,
                  InsideCheckReadsEnv, RecordsProgramSync,
                  ProvesGroupOwnership, DestroyStopsLeftovers,
-                 FallbackNeedsFolder} : b \in BOOLEAN
+                 FallbackNeedsFolder, CreateStopsOnGiveUp} : b \in BOOLEAN
 
 Readers == {"gc", "list"}   \* the two processes that run reconcileSession
 \* The group that a kill went through, and that the wait after it probes:
@@ -126,7 +129,9 @@ VARIABLES
     rec,         \* program.json names the program with its token
     startFailed, \* ghost: the host died because its files were missing
     sock,        \* the RPC socket file exists (it is outside the directory)
-    cpc,         \* create: "alloc", "write", "launch", "done"
+    cpc,         \* create: "alloc", "write", "launch", "done", "stopping"
+                 \*   (it gave up and stops the session), "failed" (it
+                 \*   reported that it gave up)
     hostAlive,   \* the detached host process is alive
     hpc,         \* host start-up path: "none", "boot", "open", "record"
                  \*   (the program runs, program.json is not written yet),
@@ -355,6 +360,28 @@ CreateLaunchesHost ==
     /\ cpc' = IF CreateRecordsHostPid THEN "write" ELSE "done"
     /\ UNCHANGED <<diskVars, ghostVars, sock, hex, rsz, prog, foreign, left,
                    shutVars, readerVars, destroyVars, groupVars>>
+
+\* runCreateCommand's readiness loop gives up after 50 inspect RPCs that
+\* fail, which the model lets happen at any step after the start-up, since
+\* it has no clock. With CreateStopsOnGiveUp, create then calls
+\* destroySession(sessionId, true), the path of destroy --force, before it
+\* reports the error. The model's one destroy is that call, so the give-up
+\* starts it at its manifest read. Without the guard, create reports the
+\* error at once.
+CreateGivesUp ==
+    /\ cpc = "done" /\ dpc = "check"
+    /\ IF CreateStopsOnGiveUp
+          THEN /\ cpc' = "stopping" /\ dpc' = "read" /\ dforce' = TRUE
+          ELSE /\ cpc' = "failed" /\ UNCHANGED <<dpc, dforce>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, hostVars, shutVars, readerVars,
+                   dinside, drd, dres, dsaw, dkill, groupVars>>
+
+\* create reports its error once destroySession returned or threw.
+CreateReportsFailure ==
+    /\ cpc = "stopping" /\ dpc = "done"
+    /\ cpc' = "failed"
+    /\ UNCHANGED <<diskVars, ghostVars, sock, hostVars, shutVars, readerVars,
+                   destroyVars, groupVars>>
 
 \* -------------------------------------------------------------------------
 \* The host's serial manifest writer (createSerialManifestWriter). Each write
@@ -1087,13 +1114,14 @@ DestroyFinalRead ==
 \* Every process is finished. This step keeps TLC from reporting the end
 \* states as deadlocks. Any other state without a step is a model error.
 AllFinished ==
-    /\ cpc = "done" /\ ~hostAlive /\ pc["gc"] = "done"
+    /\ cpc \in {"done", "failed"} /\ ~hostAlive /\ pc["gc"] = "done"
     /\ pc["list"] = "idle" /\ lruns = MaxListReconciles
     /\ dpc = "done"
     /\ UNCHANGED vars
 
 Next ==
     \/ CreateMakesDirectory \/ CreateWritesManifest \/ CreateLaunchesHost
+    \/ CreateGivesUp \/ CreateReportsFailure
     \/ HostReadsManifest \/ HostOpensLogAndSpawns \/ HostRecordsProgram
     \/ HostWritesPids
     \/ HostListens \/ HostStartsResize \/ HostResizeWriteLands
@@ -1133,7 +1161,7 @@ TypeOK ==
     /\ hsd \in {"none", "write", "wait", "closed"}
     /\ dsnap \in {"none", "destroying", "destroyed"}
     /\ (mst # "none") => dir
-    /\ (dir /\ mst = "none") => cpc # "done"
+    /\ (dir /\ mst = "none") => cpc \notin {"done", "stopping", "failed"}
     /\ (cpc = "write") => dir
     /\ gres \in {"pending", "skipped", "removed"}
     /\ lruns \in 0..MaxListReconciles
@@ -1227,10 +1255,18 @@ NoUnrelatedGroupKilled == ~hitUnrelated
 DestroyedSessionStopped ==
     (mst = "destroyed" /\ ~diedUnrecorded) => ~(GroupAlive \/ left)
 
+\* R17: once create reported that it gave up, no host serves the session,
+\* and the program runs only when no file named it.
+FailedCreateStopped ==
+    cpc = "failed" =>
+        /\ ~(hostAlive /\ hst = "running")
+        /\ prog => ~(wasNamed \/ rec)
+
 \* Witnesses. check.sh expects TLC to report each one VIOLATED, which shows
 \* that the model reaches the state: the rules above are not true only
 \* because the model can never get there.
 WitnessGcRemovesSession == gres # "removed"
+WitnessCreateGivesUp == ~(cpc = "failed" /\ dres = "ok" /\ mst = "destroyed")
 WitnessSessionServes == ~(hpc = "serving" /\ sock /\ mst = "running" /\ mpid)
 WitnessResizeLands == ~(rsz = "done" /\ hostAlive /\ mst = "running")
 WitnessCleanExitRecorded == ~(mst = "exited" /\ ~hostAlive)

@@ -60,6 +60,12 @@ export const step = (action, from, to) => {
         : 'create writes "running" without a host pid';
     case 'CreateLaunchesHost':
       return 'create starts the host';
+    case 'CreateGivesUp':
+      return to.cpc === 'stopping'
+        ? 'create gives up on the host and stops the session with destroy --force'
+        : 'create gives up on the host and reports the error';
+    case 'CreateReportsFailure':
+      return 'create reports that it gave up';
     case 'HostReadsManifest':
       return to.hostAlive
         ? 'the host reads the manifest'

@@ -245,7 +245,40 @@ function createFacts() {
   return {
     CreateRecordsHostPid:
       launch >= 0 && launch < write && pidInManifest && onlyThroughCallback,
+    CreateStopsOnGiveUp: stopsOnGiveUp(create.body),
   };
+}
+
+// In runCreateCommand's readiness loop, the catch of an unreachable host
+// calls destroySession(sessionId, true) right after its last retry and
+// before it rethrows the error.
+function stopsOnGiveUp(body) {
+  let stops = false;
+  walk(body, (node) => {
+    if (!ts.isCatchClause(node)) {
+      return;
+    }
+    const last = node.block.statements.at(-1);
+    if (last === undefined || normalize(last.getText()) !== 'throw error;') {
+      return;
+    }
+    walk(node.block, (inner) => {
+      if (!ts.isIfStatement(inner) || !ts.isBlock(inner.thenStatement)) {
+        return;
+      }
+      const st = inner.thenStatement.statements.map((s) =>
+        normalize(s.getText()),
+      );
+      const retry = st.findIndex((s) =>
+        s.startsWith('if (attempt + 1 < READINESS_MAX_ATTEMPTS) {'),
+      );
+      stops ||=
+        retry >= 0 &&
+        retry === st.length - 2 &&
+        st[retry + 1].startsWith('await destroySession(sessionId, true)');
+    });
+  });
+  return stops;
 }
 
 // runHost waits for create's manifest, and every host write of session.json
