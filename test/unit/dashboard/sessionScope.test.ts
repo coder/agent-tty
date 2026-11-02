@@ -1,3 +1,4 @@
+import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,6 +16,18 @@ import {
 } from '../../../src/storage/sessionPaths.js';
 
 let home = '';
+let host: ChildProcess | undefined;
+
+// Reconcile reads a hostPid as live only while it runs `_host <session id>`.
+function startHost(sessionId: string): number {
+  host = spawn(
+    process.execPath,
+    ['-e', 'setInterval(() => {}, 1000)', '_host', sessionId, '1'],
+    { stdio: 'ignore' },
+  );
+  expect(host.pid).toBeTypeOf('number');
+  return host.pid as number;
+}
 
 async function seedSession(
   record: Partial<SessionRecord> & { sessionId: string },
@@ -46,17 +59,18 @@ describe('listDashboardSessions', () => {
   });
 
   afterEach(async () => {
+    host?.kill('SIGKILL');
+    host = undefined;
     if (home.length > 0) {
       await rm(home, { recursive: true, force: true });
     }
   });
 
   it('returns only active sessions in active scope', async () => {
-    // A live hostPid keeps a `running` session from reconciling to `failed`.
     await seedSession({
       sessionId: 'running-1',
       status: 'running',
-      hostPid: process.pid,
+      hostPid: startHost('running-1'),
       createdAt: '2026-06-02T12:00:02.000Z',
     });
     await seedSession({
@@ -74,7 +88,7 @@ describe('listDashboardSessions', () => {
     await seedSession({
       sessionId: 'running-1',
       status: 'running',
-      hostPid: process.pid,
+      hostPid: startHost('running-1'),
       createdAt: '2026-06-02T12:00:02.000Z',
     });
     await seedSession({
@@ -100,7 +114,7 @@ describe('listDashboardSessions', () => {
     await seedSession({
       sessionId: 'running-1',
       status: 'running',
-      hostPid: process.pid,
+      hostPid: startHost('running-1'),
       cols: 80,
       rows: 24,
       creationCols: 120,
