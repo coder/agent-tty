@@ -637,6 +637,68 @@ describe('record export command', () => {
     ]);
   });
 
+  it('rejects a WebM --out path that does not end in .webm before rendering', async () => {
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-webm-suffix-',
+    );
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'webm',
+        out: join(workspaceDirectory, 'proof.mp4'),
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.EXPORT_ERROR });
+    expect(mocks.generateWebmExport).not.toHaveBeenCalled();
+  });
+
+  it.each(['render', 'rename'] as const)(
+    'removes the WebM temp file when the %s step fails',
+    async (failingStep) => {
+      const workspaceDirectory = await createTemporaryDirectory(
+        'agent-tty-record-export-webm-temp-',
+      );
+      const stepError = new Error(`${failingStep} failed`);
+      mocks.generateWebmExport.mockImplementation(
+        async (options: { outputPath: string }) => {
+          await writeFile(options.outputPath, 'partial webm');
+          if (failingStep === 'render') {
+            throw stepError;
+          }
+          return {
+            capturedAtSeq: 1,
+            durationMs: 1_500,
+            outputEventCount: 1,
+            resizeEventCount: 1,
+            cols: 80,
+            rows: 24,
+            profileName: 'reference-dark',
+            timingMode: 'recorded',
+            rendererBackend: 'ghostty-web',
+          };
+        },
+      );
+      if (failingStep === 'rename') {
+        mocks.rename.mockRejectedValue(stepError);
+      }
+
+      await expect(
+        runRecordExportCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          format: 'webm',
+          out: join(workspaceDirectory, 'proof.webm'),
+        }),
+      ).rejects.toMatchObject({ code: ERROR_CODES.EXPORT_ERROR });
+      expect(mocks.generateWebmExport).toHaveBeenCalledTimes(1);
+      const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
+      expect(await fs.readdir(workspaceDirectory)).toEqual([]);
+    },
+  );
+
   it('preserves explicit output artifacts when manifest append fails', async () => {
     const workspaceDirectory = await createTemporaryDirectory(
       'agent-tty-record-export-explicit-out-',
