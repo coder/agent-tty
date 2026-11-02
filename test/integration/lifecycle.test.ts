@@ -1506,9 +1506,9 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     }, 60_000);
 
     // Bash runs a typed command as a job in its own process group, so only
-    // the session id shows that it runs inside the program. destroy reads
-    // that id on Linux only.
-    it.runIf(process.platform === 'linux').each([
+    // the session id, or off Linux the controlling terminal, shows that it
+    // runs inside the program.
+    it.runIf(process.platform !== 'win32').each([
       ['destroy', ''],
       ['destroy --force', '--force'],
     ])(

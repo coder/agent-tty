@@ -820,7 +820,8 @@ function fallbackFacts() {
 // that check compares the program's pid with the CLI's session id, the
 // fourth field after the command name in /proc/self/stat. Before it reads
 // the manifest, the check matches AGENT_TTY_SESSION_ID, and the copy does
-// not get that variable, so it does not start a copy of its own.
+// not get that variable, so it does not start a copy of its own. Off Linux
+// the check compares the process group and the controlling terminal.
 function rerunFacts() {
   const destroyFile = 'src/cli/commands/destroy.ts';
   const run = requireDeclaration(destroyFile, 'runDestroyCommand').body;
@@ -841,22 +842,16 @@ function rerunFacts() {
   const detached =
     spawns.length === 1 && /\bdetached: true\b/.test(spawns[0].getText());
   const lifecycle = 'src/host/lifecycle.ts';
-  const compares = requireDeclaration(
+  const insideStatements = requireDeclaration(
     lifecycle,
     'cliRunsInsideProgramSession',
-  ).body.statements.some((st) => {
-    if (!ts.isReturnStatement(st) || st.expression === undefined) {
-      return false;
-    }
-    let expression = st.expression;
-    while (ts.isParenthesizedExpression(expression)) {
-      expression = expression.expression;
-    }
-    return (
-      normalize(expression.getText()) ===
-      "manifest.childPid === (process.platform === 'linux' ? ownLinuxSessionId() : ownProcessGroupId())"
-    );
-  });
+  ).body.statements.map((st) => normalize(st.getText()));
+  const compares =
+    insideStatements.includes(
+      "if (process.platform === 'linux') { return manifest.childPid === ownLinuxSessionId(); }",
+    ) &&
+    insideStatements.at(-1) ===
+      'return ( manifest.childPid === ownProcessGroupId() || sharesControllingTerminal(manifest.childPid) );';
   const readsSessionId =
     /const \{ sid \} = parseProcStat\(readFileSync\('\/proc\/self\/stat', 'utf8'\)\)/.test(
       normalize(requireDeclaration(lifecycle, 'ownLinuxSessionId').getText()),
@@ -973,6 +968,8 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'killProcessBestEffort'],
   ['src/host/lifecycle.ts', 'ownLinuxSessionId'],
   ['src/host/lifecycle.ts', 'ownProcessGroupId'],
+  ['src/host/lifecycle.ts', 'controllingTerminal'],
+  ['src/host/lifecycle.ts', 'sharesControllingTerminal'],
   ['src/host/lifecycle.ts', 'cliRunsInsideProgramSession'],
   ['src/host/lifecycle.ts', 'readSessionManifestOrThrow'],
   ['src/host/lifecycle.ts', 'waitForTerminalManifest'],
