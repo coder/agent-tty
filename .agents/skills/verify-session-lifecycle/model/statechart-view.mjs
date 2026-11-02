@@ -61,11 +61,7 @@ export const step = (action, from, to) => {
     case 'CreateLaunchesHost':
       return 'create starts the host';
     case 'CreateGivesUp':
-      return to.cpc === 'stopping'
-        ? 'create gives up on the host and stops the session with destroy --force'
-        : 'create gives up on the host and reports the error';
-    case 'CreateReportsFailure':
-      return 'create reports that it gave up';
+      return 'create gives up on the host and reports the error';
     case 'HostReadsManifest':
       return to.hostAlive
         ? 'the host reads the manifest'

@@ -87,8 +87,8 @@ CONSTANTS
                             \*   names gets the kill, and reads alive, only
                             \*   while the session folder exists
     CreateStopsOnGiveUp,    \* create.ts: a create that gives up on its
-                            \*   host stops the session with destroy --force
-                            \*   before it reports the error
+                            \*   host sends it SIGTERM, so the host stops
+                            \*   its program and ends the session
     Token,                  \* the environment: the host's capture finds the
                             \*   program's session token
     MaxListReconciles       \* how many times the "list" process reconciles
@@ -129,9 +129,8 @@ VARIABLES
     rec,         \* program.json names the program with its token
     startFailed, \* ghost: the host died because its files were missing
     sock,        \* the RPC socket file exists (it is outside the directory)
-    cpc,         \* create: "alloc", "write", "launch", "done", "stopping"
-                 \*   (it gave up and stops the session), "failed" (it
-                 \*   reported that it gave up)
+    cpc,         \* create: "alloc", "write", "launch", "done", "failed"
+                 \*   (it gave up on its host)
     hostAlive,   \* the detached host process is alive
     hpc,         \* host start-up path: "none", "boot", "open", "record"
                  \*   (the program runs, program.json is not written yet),
@@ -363,22 +362,14 @@ CreateLaunchesHost ==
 
 \* runCreateCommand's readiness loop gives up after 50 inspect RPCs that
 \* fail, which the model lets happen at any step after the start-up, since
-\* it has no clock. With CreateStopsOnGiveUp, create then calls
-\* destroySession(sessionId, true), the path of destroy --force, before it
-\* reports the error. The model's one destroy is that call, so the give-up
-\* starts it at its manifest read. Without the guard, create reports the
-\* error at once.
+\* it has no clock. With CreateStopsOnGiveUp, create then sends its host
+\* SIGTERM and reports the error. HostGetsSigterm takes that SIGTERM as the
+\* host's one SIGTERM, and HostCrashes covers one that ends a host before it
+\* spawns the program. create writes nothing itself: without a token only
+\* the host knows which group is the program's. Without the guard, create
+\* only reports the error.
 CreateGivesUp ==
-    /\ cpc = "done" /\ dpc = "check"
-    /\ IF CreateStopsOnGiveUp
-          THEN /\ cpc' = "stopping" /\ dpc' = "read" /\ dforce' = TRUE
-          ELSE /\ cpc' = "failed" /\ UNCHANGED <<dpc, dforce>>
-    /\ UNCHANGED <<diskVars, ghostVars, sock, hostVars, shutVars, readerVars,
-                   dinside, drd, dres, dsaw, dkill, groupVars>>
-
-\* create reports its error once destroySession returned or threw.
-CreateReportsFailure ==
-    /\ cpc = "stopping" /\ dpc = "done"
+    /\ cpc = "done"
     /\ cpc' = "failed"
     /\ UNCHANGED <<diskVars, ghostVars, sock, hostVars, shutVars, readerVars,
                    destroyVars, groupVars>>
@@ -536,9 +527,11 @@ HostResizeWriteLands ==
 \* -------------------------------------------------------------------------
 \* host shutdown: the destroy handler, the SIGTERM handler, initiateShutdown
 
-\* process.on('SIGTERM', () => startShutdown()). Before HostOpensLogAndSpawns
-\* registers it, a SIGTERM kills the host, which HostCrashes covers. The
-\* handler runs only after the synchronous start-up block.
+\* runHost registers its SIGTERM handler before it waits for the manifest.
+\* A SIGTERM before the spawn makes the host return before it spawns, which
+\* HostCrashes covers at "boot" and "open". From the spawn on the handler
+\* calls startShutdown, and it runs only after the synchronous start-up
+\* block.
 HostGetsSigterm ==
     /\ hostAlive /\ ~sig /\ hpc \in {"pidwrite", "sockdir", "serving", "idle"}
     /\ sig' = TRUE
@@ -1121,7 +1114,7 @@ AllFinished ==
 
 Next ==
     \/ CreateMakesDirectory \/ CreateWritesManifest \/ CreateLaunchesHost
-    \/ CreateGivesUp \/ CreateReportsFailure
+    \/ CreateGivesUp
     \/ HostReadsManifest \/ HostOpensLogAndSpawns \/ HostRecordsProgram
     \/ HostWritesPids
     \/ HostListens \/ HostStartsResize \/ HostResizeWriteLands
@@ -1161,7 +1154,7 @@ TypeOK ==
     /\ hsd \in {"none", "write", "wait", "closed"}
     /\ dsnap \in {"none", "destroying", "destroyed"}
     /\ (mst # "none") => dir
-    /\ (dir /\ mst = "none") => cpc \notin {"done", "stopping", "failed"}
+    /\ (dir /\ mst = "none") => cpc \notin {"done", "failed"}
     /\ (cpc = "write") => dir
     /\ gres \in {"pending", "skipped", "removed"}
     /\ lruns \in 0..MaxListReconciles
@@ -1255,18 +1248,18 @@ NoUnrelatedGroupKilled == ~hitUnrelated
 DestroyedSessionStopped ==
     (mst = "destroyed" /\ ~diedUnrecorded) => ~(GroupAlive \/ left)
 
-\* R17: once create reported that it gave up, no host serves the session,
-\* and the program runs only when no file named it.
+\* R17: once create gave up, its host keeps the session "running" only
+\* while create's SIGTERM is still on its way to it.
 FailedCreateStopped ==
-    cpc = "failed" =>
-        /\ ~(hostAlive /\ hst = "running")
-        /\ prog => ~(wasNamed \/ rec)
+    (cpc = "failed" /\ hostAlive /\ hst = "running") =>
+        (CreateStopsOnGiveUp /\ ~sig)
 
 \* Witnesses. check.sh expects TLC to report each one VIOLATED, which shows
 \* that the model reaches the state: the rules above are not true only
 \* because the model can never get there.
 WitnessGcRemovesSession == gres # "removed"
-WitnessCreateGivesUp == ~(cpc = "failed" /\ dres = "ok" /\ mst = "destroyed")
+WitnessCreateGivesUp ==
+    ~(cpc = "failed" /\ sig /\ mst = "destroyed" /\ ~hostAlive)
 WitnessSessionServes == ~(hpc = "serving" /\ sock /\ mst = "running" /\ mpid)
 WitnessResizeLands == ~(rsz = "done" /\ hostAlive /\ mst = "running")
 WitnessCleanExitRecorded == ~(mst = "exited" /\ ~hostAlive)

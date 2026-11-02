@@ -250,8 +250,10 @@ function createFacts() {
 }
 
 // In runCreateCommand's readiness loop, the catch of an unreachable host
-// calls destroySession(sessionId, true) right after its last retry and
-// before it rethrows the error.
+// ends with host.stop() right after its last retry and before it rethrows
+// the error. launchHost's stop sends SIGTERM through the ChildProcess
+// handle, and runHost registers its SIGTERM handler before it spawns the
+// program and skips the spawn when a SIGTERM came first.
 function stopsOnGiveUp(body) {
   let stops = false;
   walk(body, (node) => {
@@ -274,11 +276,28 @@ function stopsOnGiveUp(body) {
       );
       stops ||=
         retry >= 0 &&
-        retry === st.length - 2 &&
-        st[retry + 1].startsWith('await destroySession(sessionId, true)');
+        retry === st.length - 3 &&
+        st[retry + 1].startsWith('invariant(host !== undefined,') &&
+        st[retry + 2] === 'host.stop();';
     });
   });
-  return stops;
+  const launch = normalize(
+    requireDeclaration('src/host/lifecycle.ts', 'launchHost').getText(),
+  );
+  const run = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
+  const handler = indexOfStatement(run, /^process\.on\('SIGTERM'/);
+  const skip = indexOfStatement(
+    run,
+    /^if \(sigtermReceived\) \{\s*await eventLog\.close\(\);\s*return;\s*\}$/,
+  );
+  const spawn = indexOfStatement(run, /= createPty\(/);
+  return (
+    stops &&
+    /stop: \(\) => \{ child\.kill\('SIGTERM'\); \}/.test(launch) &&
+    handler >= 0 &&
+    handler < skip &&
+    skip === spawn - 1
+  );
 }
 
 // runHost waits for create's manifest, and every host write of session.json
@@ -1073,6 +1092,10 @@ const RUN_HOST_PARTS = [
   /^const handlePtyExit = /,
   /^pty\.onExit\(/,
   /^process\.on\('SIGTERM'/,
+  /^let onSigterm = /,
+  /^if \(sigtermReceived\) \{/,
+  /^invariant\(!sigtermReceived/,
+  /^onSigterm = startShutdown;/,
 ];
 
 function runHostFingerprints() {

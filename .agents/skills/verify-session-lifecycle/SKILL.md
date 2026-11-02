@@ -30,7 +30,7 @@ The tool is TLC, the TLA+ model checker, pinned to release 1.7.4 by sha256. The 
 | R14 `DestroyOutlivesProgram`    | `destroy` is never killed before it reports, also when it runs inside the program's session.                                                                                                       | `destroy` prints nothing. With `--force` it kills its own group, and the session reads exited, not destroyed.                                 |
 | R15 `NoUnrelatedGroupKilled`    | No kill reaches a process group that took the program's group id after the program's group ended.                                                                                                  | `destroy`, `destroy --force`, a reconcile or the host's shutdown sends SIGKILL to an unrelated group, such as the program of another session. |
 | R16 `DestroyedSessionStopped`   | When the manifest says destroyed, no process of the program's group runs, also none that the program left when it exited on its own, unless the host died before `program.json` named the program. | `destroy` reports `destroyed: true` while a process of the session runs, `list` hides it, and nothing stops it later.                         |
-| R17 `FailedCreateStopped`       | Once `create` reported that it gave up on its host, no host serves the session, and the program runs only when no file named it.                                                                   | `create` fails with `HOST_UNREACHABLE`, but the session runs, and `list --all` shows it running.                                              |
+| R17 `FailedCreateStopped`       | Once `create` gave up on its host, the host keeps the session `running` only while `create`'s SIGTERM is on its way to it.                                                                         | `create` fails with `HOST_UNREACHABLE`, but the session runs, and `list --all` shows it running.                                              |
 
 `TypeOK` also runs in every run. When it breaks, the model is wrong, not the code.
 
@@ -361,13 +361,13 @@ ps -eo pgid=,args= | awk -v g="$pgid" '$1 == g'          # prints nothing: the l
 
 Without the guard, `runCreateCommand` gave up after 50 failed `inspect` calls, about 6 seconds, and reported `HOST_UNREACHABLE` (exit 6) without stopping anything. A host that started slowly, on a loaded machine or after a pause, then listened later, and the session ran although `create` had failed (coder/agent-tty#209). The `reconcileSession` call and the `HOST_TIMEOUT` error after the loop never ran, because the last attempt rethrew its error, and the reconcile would have skipped a live host anyway.
 
-Now the last failed attempt calls `destroySession(sessionId, true)`, the path of `destroy --force`, and then rethrows the same error, so the error code does not change. A failure of that stop does not replace the error. In the model, the give-up starts the model's one destroy with `--force` at its manifest read, and `create` reports only after that destroy ended. The replay holds the host's start-up write past the readiness loop.
+Now the last failed attempt calls `host.stop()`, which sends the host SIGTERM through the `ChildProcess` handle that `launchHost` returns, and then rethrows the same error, so the error code does not change. The handle sends nothing once the host has exited, so a reused pid never gets the signal. The host stops its program and records `destroyed` once the group is gone, as for any SIGTERM. `create` writes nothing itself: before the host's start-up write names the program, and without a token, no file names a group that a CLI could prove, so a forced destroy from `create` would record `destroyed` while the program runs. `runHost` registers its SIGTERM handler before it waits for the manifest. A SIGTERM before the spawn makes it return without spawning, and one after the spawn waits for the synchronous start-up block, so the default action can no longer end the host between the spawn and `program.json`. In the model, the give-up sends that SIGTERM, which `HostGetsSigterm` takes. The replay holds the host's start-up write past the readiness loop.
 
 ```sh
 LOG=$(mktemp)
 REPLAY_LOG=$LOG REPLAY_HOLD='_host:rename:/session.json:1:9000' NODE_OPTIONS="$HOLD" \
   node --import tsx src/cli/main.ts create --json -- sh -c 'trap "" HUP; exec sleep 300'   # exit 6, HOST_UNREACHABLE
-node --import tsx src/cli/main.ts list --all --json                                         # the session is destroyed
+sleep 8; node --import tsx src/cli/main.ts list --all --json                                # the session is destroyed
 ```
 
 ### `FallbackNeedsFolder`: a childPid that gc's removal left stale gets the kill (R15)

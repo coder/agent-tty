@@ -196,7 +196,7 @@ write_run mutant-RecordsProgramSync violated DestroyedSessionStopped "RecordsPro
 write_run mutant-ProvesGroupOwnership violated NoUnrelatedGroupKilled "ProvesGroupOwnership=FALSE" "without the check before the kill, a kill reaches a group that took the id" NoUnrelatedGroupKilled
 write_run mutant-DestroyStopsLeftovers violated DestroyedSessionStopped "DestroyStopsLeftovers=FALSE" "without the kill, destroy of an exited session records destroyed while a process it left runs" DestroyedSessionStopped
 write_run mutant-FallbackNeedsFolder violated NoUnrelatedGroupKilled "FallbackNeedsFolder=FALSE" "without the folder check, a childPid that gc's removal left stale gets the kill" NoUnrelatedGroupKilled
-write_run mutant-CreateStopsOnGiveUp violated FailedCreateStopped "CreateStopsOnGiveUp=FALSE" "without the stop, a create that gave up leaves its host serving the session" FailedCreateStopped
+write_run mutant-CreateStopsOnGiveUp violated FailedCreateStopped "CreateStopsOnGiveUp=FALSE" "without the SIGTERM, a create that gave up leaves its host serving the session" FailedCreateStopped
 write_run mutant-ReconcileSkipsTerminal pass RecordedExitKept "ReconcileSkipsTerminal=FALSE" "redundant: the re-read returns on a terminal manifest"
 write_run mutant-GcSkipsNonCollectable pass NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE" "redundant: the final check still skips"
 write_run mutant-GcFinalCheck pass NoLiveSessionDeleted "GcFinalCheck=FALSE" "redundant: the first check still skips"

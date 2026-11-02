@@ -289,7 +289,7 @@ agent-tty record diff <session-id> <session-id> --at-seq-a 0 --json
 On Linux it also ends those processes when the program has already exited or the session has failed.
 `destroy --force` kills the host and the program's group without asking the host first.
 `list`, `inspect`, `destroy` and `gc` reconcile a session whose host died: they kill the program's group and record the session as `failed` (or `exited` or `destroyed`).
-When `create` cannot reach its new host within about 6 s, it stops the session the way `destroy --force` does and then fails with `HOST_UNREACHABLE` or `HOST_TIMEOUT`, so a failed `create` leaves no session running.
+When `create` cannot reach its new host within about 6 s, it sends the host SIGTERM and fails with `HOST_UNREACHABLE` or `HOST_TIMEOUT`. The host then stops the program the way `destroy` does and records the session as `destroyed` once the program's group has ended, also while its start-up is still slow. A host that has already died leaves the session to the reconcile above, and a group that the host cannot end keeps the session `destroying` (see the limits below).
 
 On Linux, `destroy` and reconcile never kill a process group that they cannot prove is the session's.
 When the host starts the program, it records the program's pid, the boot id and the program's autogroup id in an internal file, `program.json`.
