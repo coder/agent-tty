@@ -7,7 +7,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -452,6 +453,66 @@ describe('CLI integration', () => {
     );
     expect(parsed.result.checks.renderer.length).toBeGreaterThan(0);
     expect(allChecks.every((check) => check.status === 'pass')).toBe(true);
+  });
+
+  describe('on an unsupported Node', () => {
+    function fakeNodeEnv(version: string): Record<string, string> {
+      const preload = pathToFileURL(
+        resolve('test/fixtures/fake-node-version.ts'),
+      );
+      return {
+        ...testEnv(),
+        AGENT_TTY_TEST_NODE_VERSION: version,
+        NODE_OPTIONS: [
+          process.env.NODE_OPTIONS ?? '',
+          `--import=${preload.href}`,
+        ].join(' '),
+      };
+    }
+
+    it.each(['22.0.0', '27.0.0'])(
+      'warns on stderr and keeps one envelope on stdout for Node %s',
+      (version) => {
+        const result = runCli(['version', '--json'], fakeNodeEnv(version));
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stderr).toBe(
+          `[agent-tty] warn: Node ${version} is not supported. agent-tty requires Node >=24.0.0 <27. Run \`agent-tty doctor\` to check the runtime.\n`,
+        );
+
+        const envelope = JSON.parse(result.stdout) as SuccessEnvelope<unknown>;
+        expect(envelope.ok).toBe(true);
+      },
+    );
+
+    it('prints no warning at --log-level error', () => {
+      const result = runCli(
+        ['--log-level', 'error', 'version', '--json'],
+        fakeNodeEnv('22.0.0'),
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stderr).toBe('');
+    });
+
+    it.each(['22.0.0', '27.0.0'])(
+      'fails the doctor node-runtime check on Node %s against the package.json range',
+      (version) => {
+        const result = runCli(['doctor', '--json'], fakeNodeEnv(version));
+
+        const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+          checks: Record<
+            string,
+            { name: string; status: string; message: string }[]
+          >;
+        }>;
+        const check = Object.values(envelope.result.checks)
+          .flat()
+          .find((entry) => entry.name === 'node-runtime');
+        expect(check).toMatchObject({
+          status: 'fail',
+          message: `Node ${version} requires >=24.0.0 <27`,
+        });
+      },
+    );
   });
 
   it('uses --home instead of AGENT_TTY_HOME', () => {

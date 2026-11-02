@@ -41,6 +41,7 @@ import {
   type GlobalCliOptions,
 } from './context.js';
 import { CliError } from './errors.js';
+import { warnIfUnsupportedNode } from './nodeRuntime.js';
 import { exitCodeForError } from './exitCodes.js';
 import { emitFailure, setColorEnabled } from './output.js';
 import {
@@ -211,6 +212,7 @@ async function main(): Promise<void> {
     }
     setColorEnabled(context.colorEnabled);
     setCommandContext(actionCommand, context);
+    await warnIfUnsupportedNode(context.logger, process.versions.node);
     context.logger.debug('resolved command context', {
       command: actionCommand.name(),
       home: context.home,
