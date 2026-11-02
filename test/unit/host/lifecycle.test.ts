@@ -46,6 +46,32 @@ vi.mock('node:fs', async () => {
   return { ...actual, readdirSync, readFileSync };
 });
 
+// The controlling terminal that /bin/ps prints for a pid, or null when ps
+// finds no such process.
+const psHooks = vi.hoisted(() => ({
+  tty: undefined as ((pid: number) => string | null) | undefined,
+}));
+
+vi.mock('node:child_process', async () => {
+  const actual =
+    await vi.importActual<typeof ChildProcess>('node:child_process');
+  const execFileSync = ((file: string, args: readonly string[], ...rest) => {
+    if (psHooks.tty !== undefined && file === '/bin/ps' && args[1] === 'tty=') {
+      const tty = psHooks.tty(Number(args[3]));
+      if (tty === null) {
+        throw Object.assign(new Error('ps exited 1'), { status: 1 });
+      }
+      return `${tty}\n`;
+    }
+    return (actual.execFileSync as (...all: unknown[]) => unknown)(
+      file,
+      args,
+      ...rest,
+    );
+  }) as typeof actual.execFileSync;
+  return { ...actual, execFileSync };
+});
+
 vi.mock('node:fs/promises', async () => {
   const actual = await vi.importActual<typeof FsPromises>('node:fs/promises');
   const readFile = async (
@@ -72,6 +98,7 @@ vi.mock('node:timers/promises', async () => {
   };
 });
 
+import type * as ChildProcess from 'node:child_process';
 import type * as Fs from 'node:fs';
 import type * as FsPromises from 'node:fs/promises';
 import type * as TimersPromises from 'node:timers/promises';
@@ -108,6 +135,7 @@ afterEach(async () => {
   fsHooks.afterReadFile = undefined;
   fsHooks.proc = undefined;
   fsHooks.mountinfo = undefined;
+  psHooks.tty = undefined;
   await rm(home, { recursive: true, force: true });
 });
 
@@ -530,15 +558,13 @@ describe('cliRunsInsideProgramSession', () => {
     );
   }
 
+  // init runs outside the caller's session, with no controlling terminal.
   async function expectMatchesOnly(id: number): Promise<void> {
-    expect(process.pid).not.toBe(id);
+    expect(id).not.toBe(1);
     const directory = await seedSession(makeRecord({ childPid: id }));
     expect(await cliRunsInsideProgramSession('session-01')).toBe(true);
 
-    await writeManifest(
-      manifestPath(directory),
-      makeRecord({ childPid: process.pid }),
-    );
+    await writeManifest(manifestPath(directory), makeRecord({ childPid: 1 }));
     expect(await cliRunsInsideProgramSession('session-01')).toBe(false);
   }
 
@@ -572,6 +598,25 @@ describe('cliRunsInsideProgramSession', () => {
 
     await expectMatchesOnly(pgid);
   });
+
+  // An interactive shell runs a typed command as a job in a group of its
+  // own, in the program's session and on its terminal.
+  it.each([
+    ['ttys003', 'ttys003', true],
+    ['ttys003', 'ttys004', false],
+    ['??', '??', false],
+    ['ttys003', null, false],
+  ] as const)(
+    "on darwin, when ps shows the caller's terminal %s and the program's %s, matches: %s",
+    async (own, program, matches) => {
+      await seedSession(makeRecord({ childPid: CHILD_PID }));
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+      psHooks.tty = (pid) =>
+        pid === process.pid ? own : pid === CHILD_PID ? program : null;
+
+      expect(await cliRunsInsideProgramSession('session-01')).toBe(matches);
+    },
+  );
 
   it('matches a caller whose environment names the session before a manifest names the program', async () => {
     await seedSession(makeRecord({ childPid: null }));
