@@ -660,6 +660,33 @@ describe('a hostPid that may no longer name the host', () => {
     expect(await readManifest(manifestPath(directory))).toEqual(record);
   });
 
+  it('reconcile leaves the session running when an earlier argument of its host is _host', async () => {
+    const directory = await seedHost(
+      startProcess('_host', 'x', '_host', 'session-01', '1'),
+    );
+    const record = await readManifest(manifestPath(directory));
+
+    await reconcileSession(directory);
+
+    expect(await readManifest(manifestPath(directory))).toEqual(record);
+  });
+
+  it.skipIf(platform === 'win32')(
+    'destroy --force kills a host when an earlier argument of it is _host',
+    async () => {
+      const host = startProcess('_host', 'x', '_host', 'session-01', '1');
+      const directory = await seedHost(host);
+      const kill = reapAsInitAfterKill(host);
+
+      await destroySession('session-01', true);
+
+      expect(kill).toHaveBeenCalledWith(host, 'SIGKILL');
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'destroyed',
+      });
+    },
+  );
+
   it.runIf(platform === 'linux')(
     'on linux reconcile records failed when the hostPid runs another program',
     async () => {
