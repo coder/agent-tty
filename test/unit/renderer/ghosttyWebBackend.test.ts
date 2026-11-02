@@ -149,6 +149,44 @@ describe('GhosttyWebBackend unit guards', () => {
     expect(flushedChunks).toEqual([['before'], ['after']]);
   });
 
+  it('replays an empty event log to the initial size at seq -1', async () => {
+    const backend = createBackend();
+    const resizeBridge = vi.fn(() => Promise.resolve());
+    const page = { isClosed: () => false };
+    const harnessSnapshot = createHarnessSnapshotPayload({
+      cols: 40,
+      rows: 12,
+      cursorCol: 0,
+      visibleLines: [],
+    });
+
+    Object.assign(backend as object, {
+      isBooted: true,
+      page,
+      resizeBridge,
+      readHarnessSnapshot: () => Promise.resolve(harnessSnapshot),
+    });
+
+    await expect(backend.snapshot()).rejects.toThrow(
+      'snapshot() requires replayTo() first',
+    );
+    await expect(
+      backend.replayTo({
+        sessionId: 'renderer-unit-session',
+        initialCols: 40,
+        initialRows: 12,
+        targetSeq: -1,
+        events: [],
+      }),
+    ).resolves.toMatchObject({ lastSeq: -1, cols: 40, rows: 12 });
+    expect(resizeBridge).toHaveBeenCalledWith(page, 40, 12);
+    await expect(backend.snapshot()).resolves.toMatchObject({
+      capturedAtSeq: -1,
+      cols: 40,
+      rows: 12,
+    });
+  });
+
   it('rejects oversized bridge batches before page evaluation', async () => {
     const backend = createBackend();
     const evaluate = vi.fn();
@@ -191,6 +229,7 @@ describe('GhosttyWebBackend unit guards', () => {
     Object.assign(backend as object, {
       isBooted: true,
       lastAppliedSeq: 42,
+      initialReplayCols: 80,
       page: {
         evaluate,
         isClosed: () => false,
@@ -228,6 +267,7 @@ describe('GhosttyWebBackend unit guards', () => {
     Object.assign(backend as object, {
       isBooted: true,
       lastAppliedSeq: 7,
+      initialReplayCols: 80,
       page: {
         evaluate,
         isClosed: () => false,
@@ -249,6 +289,7 @@ describe('GhosttyWebBackend unit guards', () => {
     Object.assign(backend as object, {
       isBooted: true,
       lastAppliedSeq: 8,
+      initialReplayCols: 80,
       page: {
         evaluate,
         isClosed: () => false,
@@ -276,6 +317,7 @@ describe('GhosttyWebBackend unit guards', () => {
     Object.assign(backend as object, {
       isBooted: true,
       lastAppliedSeq: 9,
+      initialReplayCols: 80,
       page: {
         evaluate,
         isClosed: () => false,
@@ -377,6 +419,7 @@ describe('GhosttyWebBackend unit guards', () => {
       currentCols: 80,
       currentRows: 24,
       lastAppliedSeq: 42,
+      initialReplayCols: 80,
       page: {
         evaluate,
         isClosed: () => false,
@@ -523,6 +566,7 @@ describe('GhosttyWebBackend unit guards', () => {
       currentCols: 100,
       currentRows: 30,
       lastAppliedSeq: 7,
+      initialReplayCols: 80,
       page: {
         evaluate,
         isClosed: () => false,

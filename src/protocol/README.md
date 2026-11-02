@@ -30,6 +30,7 @@
 - `SessionRecordSchema` requires `version` to be the literal `1`, at least one `command` entry, positive integer `cols` and `rows`, and ISO datetimes for `createdAt` and `updatedAt`. [schemas.ts:SessionRecordSchema]
 - `Sha256HexSchema` requires 64 lowercase hex characters. [schemas.ts:Sha256HexSchema]
 - An event record has a non-negative integer `seq` and an ISO datetime `ts`. [schemas.ts:EventRecordSchema]
+- `ReplaySeqSchema` is an integer of at least -1: the Event Log seq a replay reached, or -1 before the first event. The snapshot, screenshot and render-wait results, `afterSeq`, and record diff sides use it. [schemas.ts:ReplaySeqSchema]
 - `InputRunEventPayloadSchema` requires `marker` when `noWait` is false and rejects it when `noWait` is true. [schemas.ts:InputRunEventPayloadSchema]
 - `WaitForRenderParamsSchema` requires at least one of `text`, `regex`, `screenStableMs`, `cursorRow` or `cursorCol`. `text` and `regex` are mutually exclusive, and scope `cursor-line` needs `text` or `regex`. [schemas.ts:WaitForRenderParamsSchema]
 - `RecordDiffResultSchema` checks that `identical` matches the equality of the two screen hashes. An identical result must have an empty diff and equal side row counts. A side with `capturedAtSeq` -1 must hash to a blank screen. For a non-identical result, the rows rebuilt from the diff must hash to each side's `screenHash`. [schemas.ts:RecordDiffResultSchema]

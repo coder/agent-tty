@@ -15,7 +15,7 @@
 - The manifest must exist. A missing manifest fails an `invariant`. [offlineReplay.ts:withOfflineReplayRenderer]
 - The default renderer is `DEFAULT_RENDERER_NAME`, checked with `resolveRendererName` (both from `src/renderer/names.ts`). The default profile is `'reference-dark'`, resolved with `resolveProfile` (from `src/renderer/profiles.ts`). The default backend factory is `createRendererBackend` (from `src/renderer/registry.ts`). [offlineReplay.ts:withOfflineReplayRenderer] [offlineReplay.ts:createBackend]
 - A missing event log counts as zero events. Other event-log read errors, replay-input errors, profile errors and boot or replay errors become a `CliError` with code `REPLAY_ERROR` (from `src/protocol/errors.ts`). [offlineReplay.ts:readOfflineReplayInput] [offlineReplay.ts:withOfflineReplayRenderer]
-- `backend.replayTo` runs only when `replayInput.targetSeq >= 0`. [offlineReplay.ts:withOfflineReplayRenderer]
+- `backend.replayTo` always runs, also for an empty Event Log (`targetSeq` -1). [offlineReplay.ts:withOfflineReplayRenderer]
 - After the backend is created, `backend.dispose()` runs in a `finally` block, on success and on failure. [offlineReplay.ts:withOfflineReplayRenderer]
 
 ## Side Effects

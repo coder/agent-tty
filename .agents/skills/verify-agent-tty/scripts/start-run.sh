@@ -94,6 +94,7 @@ q() { printf '%q' "$1"; }
   echo "# A recipe pipes envelopes through tee; keep the CLI's exit status."
   echo "set -o pipefail"
   echo "# The built CLI, exactly as the agent-tty bin in package.json runs it."
-  echo "att() { node $(q "$REPO/dist/cli/main.js") \"\$@\"; }"
+  echo "# HISTFILE reaches the sessions it creates but not the shell that sources this."
+  echo "att() { HISTFILE=/dev/null node $(q "$REPO/dist/cli/main.js") \"\$@\"; }"
 } >"$RUN/env.sh"
 echo "$RUN/env.sh"

@@ -96,7 +96,7 @@ describe('render wait matcher', () => {
     ).toThrow(
       expect.objectContaining({
         code: ERROR_CODES.INVALID_INPUT,
-        message: 'afterSeq must be a non-negative integer',
+        message: 'afterSeq must be an integer of at least -1',
       }),
     );
   });

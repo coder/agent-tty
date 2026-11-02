@@ -28,7 +28,8 @@ This directory defines the renderer abstraction that turns replayed session even
 ## Invariants
 
 - All schemas in `types.ts` are `.strict()`. Every replay event has a non-negative integer `seq` and an ISO `ts` [types.ts:ReplayEventSchema].
-- `ReplayInputSchema` rejects events whose `seq` values are not strictly increasing [types.ts:ReplayInputSchema].
+- `ReplayInputSchema` rejects events whose `seq` values are not strictly increasing, and `targetSeq` -1 when events exist [types.ts:ReplayInputSchema].
+- `replayTo` accepts `targetSeq` -1 for an empty Event Log: it sets the initial size and replays nothing. `snapshot` and `screenshot` need one `replayTo` first, and a capture before the first event has `capturedAtSeq` -1 [ghosttyWeb/backend.ts:GhosttyWebBackend] [libghosttyVt/backend.ts:LibghosttyVtBackend].
 - `RenderProfileConfigSchema` requires hex colors, a positive `fontSize`, `theme` `dark` or `light`, and `cursorStyle` `block`, `bar` or `underline`. It rejects repeated font asset identities or routes [types.ts:RenderProfileConfigSchema].
 - Doc comment: `iterateInRangeReplayEvents` enforces the seq rules that every backend shares. Seqs are non-negative and strictly increasing, events at or below `lastAppliedSeq` are skipped, and iteration stops past `targetSeq` [replayEvents.ts:iterateInRangeReplayEvents].
 - Doc comment: the canonical visible text comes only from `visibleLines[].text` with no trim, pad or normalize. It must not read `getVisibleText()` or `cells[]` [canonicalScreen.ts:canonicalVisibleLines].
