@@ -1,5 +1,3 @@
-import { chmod, mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -11,6 +9,7 @@ import {
 import { EventLog } from './eventLog.js';
 import {
   isProcessAlive,
+  listenInSocketDirectory,
   removeSocketDirectoryIfEmpty,
   waitForProcessesToExit,
 } from './lifecycle.js';
@@ -102,7 +101,6 @@ const MANIFEST_WAIT_INTERVAL_MS = 20;
 // How long the host waits after SIGHUP before it kills the program's process
 // group. nvim takes about 1 s to exit on SIGHUP, and `destroy` waits about 5 s.
 const SHUTDOWN_KILL_GRACE_MS = 2_000;
-const SOCKET_LISTEN_ATTEMPTS = 5;
 
 type WaitOutcome = {
   exitCode?: number;
@@ -130,21 +128,6 @@ export function assertSessionCommandable(state: SessionState): void {
       message: 'Session is not running.',
     });
   }
-}
-
-// libuv reports a bind in a missing directory as EACCES.
-function isVanishedSocketDirectory(
-  error: unknown,
-  socketDirectory: string,
-): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-  const { code, path, syscall } = error as NodeJS.ErrnoException;
-  return (
-    (syscall === 'listen' && (code === 'EACCES' || code === 'ENOENT')) ||
-    (syscall === 'chmod' && code === 'ENOENT' && path === socketDirectory)
-  );
 }
 
 function rethrowAsync(error: unknown): void {
@@ -1248,24 +1231,7 @@ export async function runHost(
       return;
     }
 
-    rpcListenPromise = (async () => {
-      const socketDirectory = dirname(sPath);
-      for (let attempt = 1; ; attempt += 1) {
-        try {
-          await mkdir(socketDirectory, { recursive: true });
-          await chmod(socketDirectory, 0o700);
-          await rpcServer.listen();
-          return;
-        } catch (error) {
-          if (
-            attempt === SOCKET_LISTEN_ATTEMPTS ||
-            !isVanishedSocketDirectory(error, socketDirectory)
-          ) {
-            throw error;
-          }
-        }
-      }
-    })();
+    rpcListenPromise = listenInSocketDirectory(sPath, () => rpcServer.listen());
     await rpcListenPromise;
 
     if (!isSessionCommandable(state)) {

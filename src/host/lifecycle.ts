@@ -298,6 +298,45 @@ export async function removeSocketDirectoryIfEmpty(
   }
 }
 
+const SOCKET_LISTEN_ATTEMPTS = 5;
+
+// libuv reports a bind in a missing directory as EACCES.
+function isVanishedSocketDirectory(
+  error: unknown,
+  socketDirectory: string,
+): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const { code, path, syscall } = error as NodeJS.ErrnoException;
+  return (
+    (syscall === 'listen' && (code === 'EACCES' || code === 'ENOENT')) ||
+    (syscall === 'chmod' && code === 'ENOENT' && path === socketDirectory)
+  );
+}
+
+export async function listenInSocketDirectory(
+  socketFile: string,
+  listen: () => Promise<void>,
+): Promise<void> {
+  const socketDirectory = dirname(socketFile);
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await mkdir(socketDirectory, { recursive: true });
+      await chmod(socketDirectory, 0o700);
+      await listen();
+      return;
+    } catch (error) {
+      if (
+        attempt === SOCKET_LISTEN_ATTEMPTS ||
+        !isVanishedSocketDirectory(error, socketDirectory)
+      ) {
+        throw error;
+      }
+    }
+  }
+}
+
 function getSessionPaths(sessionId: string): {
   sessionDirectory: string;
   manifestFile: string;
