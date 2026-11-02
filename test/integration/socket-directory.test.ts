@@ -15,6 +15,7 @@ import {
   inspectSession,
   runCli,
   sleep,
+  type SuccessEnvelope,
 } from '../helpers.js';
 
 let testHome = '';
@@ -89,6 +90,36 @@ describe.skipIf(process.platform === 'win32')(
       expect(inspectSession(testHome, sessionId).status).toBe('failed');
       expect(existsSync(socketDirectoryOf(sessionId))).toBe(false);
     });
+
+    it.each(['', 'bind'])(
+      'doctor passes its socket check and leaves no directory (removed before: %s)',
+      (step) => {
+        const result = runCli(['doctor', '--json'], {
+          AGENT_TTY_HOME: testHome,
+          ...(step === ''
+            ? {}
+            : {
+                REMOVE_SOCKET_DIRECTORY_BEFORE: step,
+                NODE_OPTIONS: [
+                  process.env.NODE_OPTIONS ?? '',
+                  `--import=${pathToFileURL(resolve('test/fixtures/remove-socket-directory-once.ts')).href}`,
+                ].join(' '),
+              }),
+        });
+        const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+          checks: { environment: Array<{ name: string; status: string }> };
+        }>;
+        expect(envelope.result.checks.environment).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: 'socket-viable', status: 'pass' }),
+          ]),
+        );
+        expect(existsSync(dirname(socketPath(sessionDir(testHome, 'x'))))).toBe(
+          false,
+        );
+      },
+      60_000,
+    );
 
     it.each(['chmod', 'bind'])(
       'a host listens when the directory vanishes before its %s',
