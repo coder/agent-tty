@@ -172,6 +172,27 @@ describe('renderer schemas', () => {
         targetSeq: -1,
       }).success,
     ).toBe(false);
+    expect(
+      ReplayInputSchema.safeParse({
+        sessionId: 'session-01',
+        initialCols: 80,
+        initialRows: 24,
+        events: [],
+        targetSeq: -2,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts an empty replay input at targetSeq -1', () => {
+    expect(
+      ReplayInputSchema.safeParse({
+        sessionId: 'session-01',
+        initialCols: 80,
+        initialRows: 24,
+        events: [],
+        targetSeq: -1,
+      }).success,
+    ).toBe(true);
   });
 
   it('accepts semantic snapshots, text snapshots, screenshots, and profiles', () => {

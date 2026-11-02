@@ -20,9 +20,9 @@ This directory validates render-wait conditions and matches them against semanti
   - `text` and `regex` cannot both be set. Scope `cursor-line` needs `text` or `regex`.
   - `text` length must be 1 to 1000. `regex` length must be 1 to 200.
   - A regex with nested quantifiers or an invalid pattern is rejected.
-  - `screenStableMs` must be a positive integer. `cursorRow`, `cursorCol` and `afterSeq` must be non-negative integers.
+  - `screenStableMs` must be a positive integer. `cursorRow` and `cursorCol` must be non-negative integers. `afterSeq` must be an integer of at least -1.
 - The compiled regex has no flags [matcher.ts:prepareRenderWaitCondition].
-- `matchRenderWaitSnapshot` asserts with `invariant` that a regex condition carries `compiledRegex` and that it is not global or sticky. It also asserts non-negative integer cursor and `capturedAtSeq` values [matcher.ts:matchRenderWaitSnapshot].
+- `matchRenderWaitSnapshot` asserts with `invariant` that a regex condition carries `compiledRegex` and that it is not global or sticky. It also asserts non-negative integer cursor values and a `capturedAtSeq` of at least -1 [matcher.ts:matchRenderWaitSnapshot].
 - Text matching is a substring check on the canonical visible text, or on the cursor row for scope `cursor-line` [matcher.ts:matchRenderWaitSnapshot].
 - A snapshot meets the baseline only when `capturedAtSeq > afterSeq` [matcher.ts:matchRenderWaitSnapshot].
 - With `screenStableMs` set and no `stableForMs` option, `stabilityMatched` is false [matcher.ts:matchRenderWaitSnapshot].

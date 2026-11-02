@@ -1,7 +1,6 @@
-import { mkdtemp, readFile, realpath } from 'node:fs/promises';
+import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { inflateSync } from 'node:zlib';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -45,74 +44,6 @@ function runJson<TResult>(
     status: result.status,
     envelope: JSON.parse(result.stdout) as SuccessEnvelope<TResult>,
   };
-}
-
-function decodePngPixels(png: Buffer): Buffer[] {
-  expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
-  let offset = 8;
-  let width = 0;
-  let height = 0;
-  let bytesPerPixel = 0;
-  const idat: Buffer[] = [];
-  while (offset < png.length) {
-    const length = png.readUInt32BE(offset);
-    const type = png.toString('ascii', offset + 4, offset + 8);
-    const data = png.subarray(offset + 8, offset + 8 + length);
-    if (type === 'IHDR') {
-      width = data.readUInt32BE(0);
-      height = data.readUInt32BE(4);
-      expect(data[8]).toBe(8);
-      expect([2, 6]).toContain(data[9]);
-      bytesPerPixel = data[9] === 6 ? 4 : 3;
-    } else if (type === 'IDAT') {
-      idat.push(data);
-    }
-    offset += length + 12;
-  }
-
-  const raw = inflateSync(Buffer.concat(idat));
-  const stride = width * bytesPerPixel;
-  const pixels: Buffer[] = [];
-  let previous = Buffer.alloc(stride);
-  for (let y = 0; y < height; y += 1) {
-    const filter = raw[y * (stride + 1)];
-    const line = Buffer.from(
-      raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)),
-    );
-    for (let x = 0; x < stride; x += 1) {
-      const left = x >= bytesPerPixel ? (line[x - bytesPerPixel] ?? 0) : 0;
-      const up = previous[x] ?? 0;
-      const upLeft =
-        x >= bytesPerPixel ? (previous[x - bytesPerPixel] ?? 0) : 0;
-      let predictor = 0;
-      if (filter === 1) {
-        predictor = left;
-      } else if (filter === 2) {
-        predictor = up;
-      } else if (filter === 3) {
-        predictor = Math.floor((left + up) / 2);
-      } else if (filter === 4) {
-        const estimate = left + up - upLeft;
-        const toLeft = Math.abs(estimate - left);
-        const toUp = Math.abs(estimate - up);
-        const toUpLeft = Math.abs(estimate - upLeft);
-        predictor =
-          toLeft <= toUp && toLeft <= toUpLeft
-            ? left
-            : toUp <= toUpLeft
-              ? up
-              : upLeft;
-      } else {
-        expect(filter).toBe(0);
-      }
-      line[x] = ((line[x] ?? 0) + predictor) & 0xff;
-    }
-    for (let x = 0; x < width; x += 1) {
-      pixels.push(line.subarray(x * bytesPerPixel, (x + 1) * bytesPerPixel));
-    }
-    previous = line;
-  }
-  return pixels;
 }
 
 function expectBlankSnapshot(result: SnapshotResult): void {
@@ -185,14 +116,32 @@ describe(
         expect(envelope.result.cols).toBe(COLS);
         expect(envelope.result.rows).toBe(ROWS);
 
-        const pixels = decodePngPixels(
-          await readFile(envelope.result.artifactPath),
+        const clearedId = createSession(
+          testHome,
+          ['/bin/sh', '-c', "printf '\\033[2J\\033[H'; exec cat"],
+          { cols: COLS, rows: ROWS },
         );
-        const first = pixels[0];
-        expect(first).toBeDefined();
-        expect(pixels.every((pixel) => first?.equals(pixel) === true)).toBe(
-          true,
-        );
+        try {
+          const deadline = Date.now() + 10_000;
+          while (
+            (await readEvents(testHome, clearedId)).length === 0 &&
+            Date.now() < deadline
+          ) {
+            await sleep(100);
+          }
+          const cleared = runJson<ScreenshotResult>(testHome, [
+            'screenshot',
+            clearedId,
+            '--renderer',
+            renderer,
+          ]);
+          expect(cleared.status).toBe(0);
+          expect(cleared.envelope.result.capturedAtSeq).toBe(0);
+          expect(envelope.result.sha256).toBeDefined();
+          expect(envelope.result.sha256).toBe(cleared.envelope.result.sha256);
+        } finally {
+          destroySession(testHome, clearedId);
+        }
       },
     );
 

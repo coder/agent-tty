@@ -637,12 +637,12 @@ describe('wait command', () => {
     expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
 
-  it('rejects negative --after-seq values', async () => {
+  it('rejects --after-seq values below -1', async () => {
     await expect(
-      runWaitCommand(createOptions({ text: 'hello', afterSeq: -1 })),
+      runWaitCommand(createOptions({ text: 'hello', afterSeq: -2 })),
     ).rejects.toMatchObject({
       code: ERROR_CODES.INVALID_INPUT,
-      details: { afterSeq: -1 },
+      details: { afterSeq: -2 },
     });
     expect(mocks.sendRpc).not.toHaveBeenCalled();
   });

@@ -5,6 +5,7 @@ import { ulid } from 'ulid';
 import { z } from 'zod';
 
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
+import { ReplaySeqSchema } from '../protocol/schemas.js';
 import { readValidatedJsonFile, writeValidatedJsonFile } from './manifests.js';
 import { publishArtifactFile } from './artifactFiles.js';
 import { artifactPath, ensureArtifactsDir } from './artifactPaths.js';
@@ -13,7 +14,6 @@ import { KeyedSerializer } from '../util/keyedSerializer.js';
 
 const ARTIFACT_MANIFEST_FILENAME = 'manifest.json';
 const NonEmptyStringSchema = z.string().min(1);
-const NonNegativeIntSchema = z.number().int().nonnegative();
 const IsoDatetimeSchema = z.iso.datetime();
 const ArtifactKindSchema = z.enum([
   'screenshot',
@@ -31,7 +31,7 @@ export const ArtifactEntrySchema = z
       'filename must not contain path separators',
     ),
     sessionId: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntSchema,
+    capturedAtSeq: ReplaySeqSchema,
     createdAt: IsoDatetimeSchema,
     sha256: z
       .string()

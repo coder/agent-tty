@@ -466,9 +466,9 @@ export class LibghosttyVtBackend implements MouseEncodingBackend {
       input.initialRows,
       'replay input initialRows must be positive',
     );
-    assertNonNegativeInteger(
-      input.targetSeq,
-      'replay input targetSeq must be non-negative',
+    invariant(
+      Number.isInteger(input.targetSeq) && input.targetSeq >= -1,
+      'replay input targetSeq must be an integer of at least -1',
     );
     invariant(
       input.targetSeq >= this.lastAppliedSeq,
@@ -555,8 +555,8 @@ export class LibghosttyVtBackend implements MouseEncodingBackend {
     await Promise.resolve();
     const terminal = this.requireTerminal('snapshot()');
     invariant(
-      this.lastAppliedSeq >= 0,
-      'snapshot() requires replayTo() to advance to a non-negative sequence first',
+      this.latestReplayInput !== null,
+      'snapshot() requires replayTo() first',
     );
     const nativeSnapshot = assertNativeSnapshot(terminal.snapshot(options));
     this.assertSnapshotDimensions(nativeSnapshot);

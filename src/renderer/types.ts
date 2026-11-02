@@ -4,6 +4,7 @@ import {
   MarkerEventPayloadSchema,
   InputMouseEventPayloadSchema,
   RichSnapshotLineSchema,
+  ReplaySeqSchema,
   RunCompleteEventPayloadSchema,
   Sha256HexSchema,
   VisibleLineSchema,
@@ -181,10 +182,18 @@ export const ReplayInputSchema = z
     initialCols: PositiveIntSchema,
     initialRows: PositiveIntSchema,
     events: z.array(ReplayEventSchema),
-    targetSeq: NonNegativeIntSchema,
+    targetSeq: ReplaySeqSchema,
   })
   .strict()
-  .superRefine(({ events }, context) => {
+  .superRefine(({ events, targetSeq }, context) => {
+    if (targetSeq === -1 && events.length > 0) {
+      context.addIssue({
+        code: 'custom',
+        path: ['targetSeq'],
+        message: 'targetSeq must not be -1 when events exist',
+      });
+    }
+
     let previousSeq: number | undefined;
 
     for (const [index, event] of events.entries()) {
@@ -203,7 +212,7 @@ export type ReplayInput = z.infer<typeof ReplayInputSchema>;
 
 export const ReplayStateSchema = z
   .object({
-    lastSeq: NonNegativeIntSchema,
+    lastSeq: ReplaySeqSchema,
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
     cursorRow: NonNegativeIntSchema,
@@ -218,7 +227,7 @@ export type { VisibleLine };
 export const SemanticSnapshotSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntSchema,
+    capturedAtSeq: ReplaySeqSchema,
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
     cursorRow: NonNegativeIntSchema,
@@ -234,7 +243,7 @@ export type SemanticSnapshot = z.infer<typeof SemanticSnapshotSchema>;
 export const TextSnapshotSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntSchema,
+    capturedAtSeq: ReplaySeqSchema,
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
     cursorRow: NonNegativeIntSchema,
@@ -247,7 +256,7 @@ export type TextSnapshot = z.infer<typeof TextSnapshotSchema>;
 export const ScreenshotResultSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntSchema,
+    capturedAtSeq: ReplaySeqSchema,
     profileName: NonEmptyStringSchema,
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,

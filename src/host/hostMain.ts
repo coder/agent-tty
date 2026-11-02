@@ -248,16 +248,14 @@ export async function runHost(
       }),
   });
 
-  const loadReplayInput = (targetSeq?: number) => {
-    const replayInput = buildReplayInput(
+  const loadReplayInput = (targetSeq?: number) =>
+    buildReplayInput(
       sessionId,
       state.snapshot(),
       eventLog.getEvents(),
       targetSeq,
       { trustValidated: true },
     );
-    return replayInput.targetSeq === -1 ? null : replayInput;
-  };
 
   let eventLogClosed = false;
   let ptyExitHandled = false;
@@ -361,8 +359,8 @@ export async function runHost(
         // replayed past targetSeq.
         const replayInput = loadReplayInput();
         invariant(
-          replayInput !== null && replayInput.targetSeq >= targetSeq,
-          'run-complete replay input must exist',
+          replayInput.targetSeq >= targetSeq,
+          'run-complete replay input must reach the run-complete event',
         );
         return replayInput;
       },
@@ -1031,7 +1029,7 @@ export async function runHost(
       const waitScope = new ResourceScope();
       let lastVisibleText: string | undefined;
       let lastTextChangeAt = Date.now();
-      let latestCapturedAtSeq = 0;
+      let latestCapturedAtSeq = -1;
       let seenPostBaseline = false;
 
       const pollCondition = new Promise<WaitForRenderResult>((resolve) => {
@@ -1138,8 +1136,7 @@ export async function runHost(
               timeoutMs,
               timeoutResult: () => {
                 try {
-                  const replayInput = loadReplayInput();
-                  latestCapturedAtSeq = replayInput?.targetSeq ?? 0;
+                  latestCapturedAtSeq = loadReplayInput().targetSeq;
                 } catch {
                   // Best-effort snapshot for timeout reporting.
                 }
