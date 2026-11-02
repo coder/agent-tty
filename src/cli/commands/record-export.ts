@@ -1,8 +1,6 @@
-import { createHash } from 'node:crypto';
-import { constants as fsConstants } from 'node:fs';
-import { access, lstat, readFile, realpath, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, resolve } from 'node:path';
-import process from 'node:process';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFile, rename, rm, stat } from 'node:fs/promises';
+import { basename, dirname, isAbsolute } from 'node:path';
 
 import { z } from 'zod';
 
@@ -41,6 +39,7 @@ import {
   readManifestIfExists,
   writeTextFileAtomic,
 } from '../../storage/manifests.js';
+import { resolveExplicitOutputPath } from '../../storage/outputPath.js';
 import { eventLogPath, manifestPath } from '../../storage/sessionPaths.js';
 import { invariant } from '../../util/assert.js';
 import { loadPackageMetadata } from '../../util/packageMetadata.js';
@@ -143,32 +142,7 @@ async function resolveOutputPath(
     );
   }
 
-  invariant(outputPath.length > 0, 'output path must be a non-empty string');
-
-  const currentWorkingDirectory = process.cwd();
-  const resolvedOutputPath = isAbsolute(outputPath)
-    ? resolve(outputPath)
-    : resolve(currentWorkingDirectory, outputPath);
-  const parentDirectory = dirname(resolvedOutputPath);
-  const realParentDirectory = await realpath(parentDirectory);
-  const parentStats = await lstat(realParentDirectory);
-
-  invariant(
-    parentStats.isDirectory(),
-    `record export parent directory must be a directory: ${realParentDirectory}`,
-  );
-
-  await access(realParentDirectory, fsConstants.W_OK);
-
-  const realOutputPath = resolve(
-    realParentDirectory,
-    basename(resolvedOutputPath),
-  );
-  invariant(
-    dirname(realOutputPath) === realParentDirectory,
-    'record export path must remain within the resolved parent directory',
-  );
-  return realOutputPath;
+  return await resolveExplicitOutputPath(outputPath, dirname(sessionDirectory));
 }
 
 async function computeFileHash(filePath: string): Promise<string> {
@@ -298,18 +272,30 @@ export async function runRecordExportCommand(
       );
 
       invariant(events.length > 0, 'webm export requires at least one event');
-      const webmResult: WebmExportResult = await generateWebmExport({
-        sessionId: options.sessionId,
-        sessionDir: sessionDirectory,
-        manifest,
-        events,
-        outputPath: artifactOutputPath,
-        ...(webmProfileName !== undefined
-          ? { profileName: webmProfileName }
-          : {}),
-        ...(timingMode !== undefined ? { timingMode } : {}),
-        rendererName: options.context.rendererVisualDefault,
-      });
+      invariant(
+        artifactOutputPath.endsWith('.webm'),
+        'webm export output path must end with .webm',
+      );
+      const temporaryOutputPath = `${artifactOutputPath}.tmp-${randomUUID()}.webm`;
+      let webmResult: WebmExportResult;
+      try {
+        webmResult = await generateWebmExport({
+          sessionId: options.sessionId,
+          sessionDir: sessionDirectory,
+          manifest,
+          events,
+          outputPath: temporaryOutputPath,
+          ...(webmProfileName !== undefined
+            ? { profileName: webmProfileName }
+            : {}),
+          ...(timingMode !== undefined ? { timingMode } : {}),
+          rendererName: options.context.rendererVisualDefault,
+        });
+        await rename(temporaryOutputPath, artifactOutputPath);
+      } catch (error) {
+        await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
+        throw error;
+      }
 
       const resolvedProfile = resolveProfile(webmResult.profileName);
       invariant(

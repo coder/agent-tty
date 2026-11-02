@@ -262,9 +262,12 @@ On a session that has printed nothing yet, `snapshot` returns an empty screen of
 ```bash
 agent-tty screenshot <session-id> --profile reference-dark --json
 agent-tty screenshot <session-id> --show-cursor --json
+agent-tty screenshot <session-id> --out ./proof.png --json
 agent-tty record export <session-id> --format asciicast --out ./session.cast --json
 agent-tty record export <session-id> --format webm --timing accelerated --out ./session.webm --json
 ```
+
+`--out <path>` on `screenshot` and `record export` writes the file to that path, so it outlives the Home. A relative path resolves against the working directory, and a file already at the path is replaced. The parent folder must exist: a missing or unwritable parent, or a path inside the Home's `sessions/` folder, fails with `EXPORT_ERROR` (exit 7). `screenshot --out` still records the capture in the session's artifact manifest and returns the `--out` path as `artifactPath`.
 
 The screenshot result lists `missingGlyphs`: each code point that the PNG draws as an empty `.notdef` box, with the zero-based `row` and `col` of each cell. A box appears when no font has the glyph, and also when Chromium draws a whole cluster (a letter plus a mark) with the first bundled font because no font has every part of it. The bundled fonts are a Latin JetBrains Mono subset and Symbols Nerd Font Mono. The check is best effort: an empty array means it found no box (see Known limits below), and a result without `missingGlyphs` means the check did not run or failed. The list holds at most 4096 cells, and one screenshot checks at most 4096 distinct glyphs within a 1-second time budget. When a limit or the budget stops the check early, the result also has `"missingGlyphsTruncated": true`, and the list can miss boxes. Glyphs that a host font draws are not listed, so the same session can list different code points on hosts with different fonts. The text snapshot still has the right characters.
 
