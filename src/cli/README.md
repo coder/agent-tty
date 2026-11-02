@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory is the agent-tty command-line front end. `main.ts` is the bin entrypoint and the public CLI contract: it builds the Commander program, registers every command, resolves a `CommandContext` before each action, and maps `CliError` failures to output envelopes and exit codes. The command handlers live in `./commands/`. The other files hold shared pieces: context resolution, output envelopes, session target lookup, session status guards, exit codes and the `CliError` class.
+This directory is the agent-tty command-line front end. `main.ts` is the bin entrypoint and the public CLI contract: it builds the Commander program, registers every command, resolves a `CommandContext` before each action, and maps command failures to output envelopes and exit codes. The command handlers live in `./commands/`. The other files hold shared pieces: context resolution, output envelopes, session target lookup, session status guards, exit codes and the `CliError` class.
 
 ## Interface
 
@@ -13,21 +13,24 @@ This directory is the agent-tty command-line front end. `main.ts` is the bin ent
 - `resolveCommandContext(options, env?, deps?)`, `getCommandContext`, `setCommandContext`, `parseTimeoutMsOption`, `resolveRendererDefault`, `resolveLogLevel`, `clearRendererDefaultProbeCacheForTests`, and the types `GlobalCliOptions` and `CommandContext`. [context.ts:resolveCommandContext] [context.ts:CommandContext]
 - `emitSuccess`, `emitSuccessSync`, `emitFailure`, `formatSuccessOutput`, `writeJsonEnvelope`, `writeHumanLines`, `writeStdoutSync`, `setColorEnabled`. [output.ts:emitSuccess] [output.ts:emitFailure] [output.ts:writeStdoutSync]
 - `resolveCommandTarget(options)` returns a `CommandTarget` (`sessionId`, `sessionDirectory`, `manifestPath`, `socketPath`, `manifest`). Also exports `ResolveCommandTargetOptions` and `CommandTargetManifest`. [commandTarget.ts:resolveCommandTarget] [commandTarget.ts:CommandTarget]
-- `assertSessionCommandable(manifest, sessionId)`. [sessionGuards.ts:assertSessionCommandable]
+- `assertSessionCommandable(manifest, sessionId)` and `checkedSessionDir(home, sessionId)`. [sessionGuards.ts:assertSessionCommandable] [sessionGuards.ts:checkedSessionDir]
 - `exitCodeForError(code)`. [exitCodes.ts:exitCodeForError]
 - `CliError` (`code`, `retryable`, `details`). [errors.ts:CliError]
 
 ## Invariants
 
 - `EXIT_CODE_BY_ERROR_CODE` maps error codes to exit codes: input errors 2, `SESSION_NOT_FOUND` 3, `SESSION_NOT_RUNNING` and `SESSION_ALREADY_DESTROYED` 4, `HOST_TIMEOUT` 5, `HOST_UNREACHABLE` 6, `EXPORT_ERROR` 7, storage and manifest errors 8, `PROTOCOL_ERROR` and `RPC_ERROR` 9, `REPLAY_ERROR` 10, `WAIT_TIMEOUT` 11, `CAPABILITY_UNAVAILABLE` 12, `INTERNAL_ERROR` 1. Unknown codes give 1. A code comment marks this as a public contract documented in `docs/USAGE.md`. [exitCodes.ts:exitCodeForError]
-- `wrapAction` turns only `CliError` into an error envelope and exit code. Other errors propagate. [main.ts:wrapAction]
+- `wrapAction` turns every error into an error envelope and exit code. An error that is not a `CliError` becomes `INTERNAL_ERROR` with the error's message, and its stack goes to the debug log. [main.ts:wrapAction] [main.ts:toCliError]
 - At top level, a `CommanderError` sets exit code 0 for `commander.helpDisplayed` and 2 otherwise. [main.ts:main]
+- The `preAction` hook turns a context resolution error that is not a `CliError` into `INTERNAL_ERROR`. Its stack is not logged, because the log level is not resolved yet. [main.ts:main] [main.ts:toCliError]
 - At top level, a `CliError` thrown outside `wrapAction` (for example from context resolution in the `preAction` hook) resets color from `--no-color` in argv and is emitted through `emitCliError` under the command name `agent-tty`. [main.ts:main] [main.ts:emitCliError]
+- Other errors at top level, such as a failure of the hidden `_host` action, are rethrown. [main.ts:main]
 - The envelope shapes come from `src/protocol/envelope.ts` (`createSuccessEnvelope`, `createErrorEnvelope`). `output.ts` defines no schema. [output.ts:emitSuccess]
 - Home precedence is `--home`, then `AGENT_TTY_HOME`, then `resolveHome`. An explicit Home must be non-empty and absolute, else `INVALID_INPUT`. The returned context is frozen with `Object.freeze`. [context.ts:resolveCommandContext]
 - `--timeout-ms` must match `/^\d+$/`, else `INVALID_DURATION`. [context.ts:parseTimeoutMsOption]
-- `resolveCommandTarget` throws `SESSION_NOT_FOUND` for a missing manifest. It then requires a commandable status through `assertSessionCommandable` and asserts `status === 'running'`. [commandTarget.ts:resolveCommandTarget]
+- `resolveCommandTarget` throws `INVALID_SESSION_ID` for an invalid ID and `SESSION_NOT_FOUND` for a missing manifest. It then requires a commandable status through `assertSessionCommandable` and asserts `status === 'running'`. [commandTarget.ts:resolveCommandTarget]
 - `assertSessionCommandable` throws `SESSION_ALREADY_DESTROYED` for destroyed sessions and `SESSION_NOT_RUNNING` for other non-commandable statuses. [sessionGuards.ts:assertSessionCommandable]
+- `checkedSessionDir` throws `INVALID_SESSION_ID` when `sessionDir` rejects the ID (empty, `.`, `..`, or a path separator). Every command that takes a session ID resolves it through this guard. [sessionGuards.ts:checkedSessionDir]
 - With color disabled, human output has ANSI escapes stripped. [output.ts:writeHumanLines]
 
 ## Side Effects

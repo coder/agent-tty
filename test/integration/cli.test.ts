@@ -593,16 +593,19 @@ describe('CLI integration', () => {
     ['screenshot', ['screenshot', '']],
     ['record diff', ['record', 'diff', '', 'other']],
     ['record export', ['record', 'export', '', '--format', 'asciicast']],
-  ])('returns INVALID_SESSION_ID for an empty session ID in %s', (command, args) => {
-    const result = runCli([...args, '--json'], testEnv());
-    expect(result.status, result.stderr).toBe(2);
+  ])(
+    'returns INVALID_SESSION_ID for an empty session ID in %s',
+    (command, args) => {
+      const result = runCli([...args, '--json'], testEnv());
+      expect(result.status, result.stderr).toBe(2);
 
-    const envelope = parseErrorEnvelope(result.stdout);
-    expect(envelope.ok).toBe(false);
-    expect(envelope.command).toBe(command);
-    expect(envelope.error.code).toBe('INVALID_SESSION_ID');
-    expect(envelope.error.message).toBe('Session ID "" is invalid.');
-  });
+      const envelope = parseErrorEnvelope(result.stdout);
+      expect(envelope.ok).toBe(false);
+      expect(envelope.command).toBe(command);
+      expect(envelope.error.code).toBe('INVALID_SESSION_ID');
+      expect(envelope.error.message).toBe('Session ID "" is invalid.');
+    },
+  );
 
   it('prints one INTERNAL_ERROR envelope without a stack for an unexpected command error', () => {
     writeFileSync(join(testHome, 'sessions'), '');

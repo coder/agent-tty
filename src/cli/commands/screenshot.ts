@@ -13,11 +13,8 @@ import {
   parseScreenshotResult,
 } from '../../screenshot/capture.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
-import {
-  manifestPath,
-  sessionDir,
-  socketPath,
-} from '../../storage/sessionPaths.js';
+import { manifestPath, socketPath } from '../../storage/sessionPaths.js';
+import { checkedSessionDir } from '../sessionGuards.js';
 
 const DEFAULT_SCREENSHOT_PROFILE = 'reference-dark';
 
@@ -130,19 +127,7 @@ export async function runScreenshotCommand(
     options.showCursor,
   );
   const home = options.context.home;
-  let sessionDirectory: string;
-
-  try {
-    sessionDirectory = sessionDir(home, options.sessionId);
-  } catch (error) {
-    throw makeCliError(ERROR_CODES.INVALID_SESSION_ID, {
-      message: `Session ID "${options.sessionId}" is invalid.`,
-      details: {
-        sessionId: options.sessionId,
-      },
-      cause: error,
-    });
-  }
+  const sessionDirectory = checkedSessionDir(home, options.sessionId);
 
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);

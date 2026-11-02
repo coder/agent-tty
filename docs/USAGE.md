@@ -365,6 +365,8 @@ Every command exits with a stable code, so scripts can branch without parsing ou
 
 A fail-fast `batch` exits with the failed step's code (for example `11` for a wait timeout); `--keep-going` exits `1` if any step failed.
 
+An unexpected failure prints an `INTERNAL_ERROR` envelope and exits `1`. Add `--log-level debug` to also print its stack on stderr.
+
 ## Anti-Patterns
 
 - Do not reach for `tmux`, `screen`, or ad hoc PTY wrappers first when `agent-tty` can provide an isolated, inspectable session.

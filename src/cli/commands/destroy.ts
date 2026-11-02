@@ -4,12 +4,14 @@ import process from 'node:process';
 import type { DestroyResult } from '../../protocol/messages.js';
 
 import { emitSuccess } from '../output.js';
+import { checkedSessionDir } from '../sessionGuards.js';
 import {
   cliRunsInsideProgramSession,
   destroySession,
 } from '../../host/lifecycle.js';
 
 interface CommandOptions {
+  home: string;
   json: boolean;
   sessionId: string;
   force: boolean;
@@ -41,6 +43,8 @@ async function rerunInNewSession(): Promise<number> {
 export async function runDestroyCommand(
   options: CommandOptions,
 ): Promise<void> {
+  checkedSessionDir(options.home, options.sessionId);
+
   if (await cliRunsInsideProgramSession(options.sessionId)) {
     process.exitCode = await rerunInNewSession();
     return;
