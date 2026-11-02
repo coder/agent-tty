@@ -1398,8 +1398,11 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
           }).trim(),
         );
         expect(isGroupAlive(pgid)).toBe(true);
-        process.kill(hostPid, 'SIGKILL');
+        // A create that gives up stops the session itself, so the creator
+        // dies first and only this destroy can reach the program.
+        creator.kill('SIGKILL');
         await creatorExit;
+        process.kill(hostPid, 'SIGKILL');
 
         const result = runCli(
           ['destroy', sessionId as string, '--force', '--json'],
