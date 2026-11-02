@@ -49,7 +49,7 @@ interface CommandOptions {
   afterSeq: number | undefined;
 }
 
-const DEFAULT_WAIT_TIMEOUT_MS = 600_000;
+export const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 
 function isPositiveInteger(value: number | undefined): value is number {
   return value !== undefined && Number.isInteger(value) && value > 0;
@@ -57,6 +57,23 @@ function isPositiveInteger(value: number | undefined): value is number {
 
 function isNonNegativeInteger(value: number | undefined): value is number {
   return value !== undefined && Number.isInteger(value) && value >= 0;
+}
+
+function assertFitsDefaultTimeout(
+  flag: '--idle-ms' | '--screen-stable-ms',
+  windowMs: number | undefined,
+  timeout: number | undefined,
+): void {
+  if (
+    timeout === undefined &&
+    windowMs !== undefined &&
+    windowMs >= DEFAULT_WAIT_TIMEOUT_MS
+  ) {
+    throw makeCliError(ERROR_CODES.INVALID_DURATION, {
+      message: `${flag} ${String(windowMs)} cannot finish within the default --timeout of ${String(DEFAULT_WAIT_TIMEOUT_MS)} ms. Pass a larger --timeout, or --timeout 0 to wait without a limit.`,
+      details: { flag, windowMs, defaultTimeoutMs: DEFAULT_WAIT_TIMEOUT_MS },
+    });
+  }
 }
 
 function isRenderWaitMode(options: CommandOptions): boolean {
@@ -244,10 +261,10 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
 
     if (
       options.afterSeq !== undefined &&
-      !isNonNegativeInteger(options.afterSeq)
+      !(Number.isInteger(options.afterSeq) && options.afterSeq >= -1)
     ) {
       throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-        message: '--after-seq must be a non-negative integer.',
+        message: '--after-seq must be an integer of at least -1.',
         details: { afterSeq: options.afterSeq },
       });
     }
@@ -264,6 +281,12 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
         },
       });
     }
+
+    assertFitsDefaultTimeout(
+      '--screen-stable-ms',
+      options.screenStableMs,
+      options.timeout,
+    );
 
     const scope = parseRenderWaitScope(options.scope);
     const preparedCondition = prepareRenderWaitCondition({
@@ -358,6 +381,8 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       },
     });
   }
+
+  assertFitsDefaultTimeout('--idle-ms', options.idleMs, options.timeout);
 
   const manifestStatus = manifest.status;
 

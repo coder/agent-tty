@@ -1,5 +1,3 @@
-import { chmod, mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -9,7 +7,12 @@ import {
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
 import { EventLog } from './eventLog.js';
-import { isProcessAlive, waitForProcessesToExit } from './lifecycle.js';
+import {
+  isProcessAlive,
+  listenInSocketDirectory,
+  removeSocketDirectoryBestEffort,
+  waitForProcessesToExit,
+} from './lifecycle.js';
 import { createSerialManifestWriter } from './manifestWriter.js';
 import {
   captureProgram,
@@ -267,16 +270,14 @@ export async function runHost(
   const rendererManager = new HostRendererManager(rendererManagerOptions);
   const mouseRendererManager = new HostRendererManager(rendererManagerOptions);
 
-  const loadReplayInput = (targetSeq?: number) => {
-    const replayInput = buildReplayInput(
+  const loadReplayInput = (targetSeq?: number) =>
+    buildReplayInput(
       sessionId,
       state.snapshot(),
       eventLog.getEvents(),
       targetSeq,
       { trustValidated: true },
     );
-    return replayInput.targetSeq === -1 ? null : replayInput;
-  };
 
   let eventLogClosed = false;
   let ptyExitHandled = false;
@@ -384,8 +385,8 @@ export async function runHost(
         // replayed past targetSeq.
         const replayInput = loadReplayInput();
         invariant(
-          replayInput !== null && replayInput.targetSeq >= targetSeq,
-          'run-complete replay input must exist',
+          replayInput.targetSeq >= targetSeq,
+          'run-complete replay input must reach the run-complete event',
         );
         return replayInput;
       },
@@ -514,6 +515,7 @@ export async function runHost(
           ]);
 
           await rpcServer.close();
+          await removeSocketDirectoryBestEffort(sPath);
         }
       }
     })();
@@ -1064,7 +1066,7 @@ export async function runHost(
       const waitScope = new ResourceScope();
       let lastVisibleText: string | undefined;
       let lastTextChangeAt = Date.now();
-      let latestCapturedAtSeq = 0;
+      let latestCapturedAtSeq = -1;
       let seenPostBaseline = false;
 
       const pollCondition = new Promise<WaitForRenderResult>((resolve) => {
@@ -1171,8 +1173,7 @@ export async function runHost(
               timeoutMs,
               timeoutResult: () => {
                 try {
-                  const replayInput = loadReplayInput();
-                  latestCapturedAtSeq = replayInput?.targetSeq ?? 0;
+                  latestCapturedAtSeq = loadReplayInput().targetSeq;
                 } catch {
                   // Best-effort snapshot for timeout reporting.
                 }
@@ -1254,16 +1255,13 @@ export async function runHost(
   try {
     writeProgramRecord(sessDir, program);
     await persistManifest();
-    const socketDirectory = dirname(sPath);
-    await mkdir(socketDirectory, { recursive: true });
-    await chmod(socketDirectory, 0o700);
 
     if (!isSessionCommandable(state)) {
       await initiateShutdown();
       return;
     }
 
-    rpcListenPromise = rpcServer.listen();
+    rpcListenPromise = listenInSocketDirectory(sPath, () => rpcServer.listen());
     await rpcListenPromise;
 
     if (!isSessionCommandable(state)) {

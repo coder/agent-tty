@@ -493,8 +493,9 @@ HostWritesPids ==
                    left, reused, hitUnrelated, diedUnrecorded, hst, hsd, sig,
                    readerVars, destroyVars>>
 
-\* `if (!isSessionCommandable(state))` initiateShutdown, else
-\* rpcServer.listen().
+\* `if (!isSessionCommandable(state))` initiateShutdown, else mkdir and
+\* chmod of the socket directory and rpcServer.listen(), which the host
+\* repeats when another session's destroy removed that directory.
 HostListens ==
     /\ hostAlive /\ hpc = "sockdir"
     /\ IF hst = "running"
