@@ -475,8 +475,9 @@ HostWritesPids ==
                    left, reused, hitUnrelated, diedUnrecorded, hst, hsd, sig,
                    readerVars, destroyVars>>
 
-\* `if (!isSessionCommandable(state))` initiateShutdown, else
-\* rpcServer.listen().
+\* `if (!isSessionCommandable(state))` initiateShutdown, else mkdir and
+\* chmod of the socket directory and rpcServer.listen(), which the host
+\* repeats when another session's destroy removed that directory.
 HostListens ==
     /\ hostAlive /\ hpc = "sockdir"
     /\ IF hst = "running"
@@ -530,9 +531,9 @@ HostWritesDestroying ==
 
 \* The finally block of initiateShutdown: await ptyExitPromise (the program
 \* ended; handlePtyExit settles it before its wait for the group), await
-\* rpcListenPromise, eventLog.close, rendererManager.dispose, then
-\* rpcServer.close, which unlinks the socket file also when the server never
-\* listened.
+\* rpcListenPromise, eventLog.close, the dispose of both renderer managers,
+\* then rpcServer.close, which unlinks the socket file also when the server
+\* never listened.
 HostClosesSocket ==
     /\ hostAlive /\ hsd = "wait"
     /\ hex \in {"groupwait", "exitwrite", "giveup", "done"}

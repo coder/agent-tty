@@ -107,6 +107,11 @@ type EventLogPayload =
   | ExitEventPayload
   | MarkerEventPayload;
 
+export interface StartedAppend {
+  readonly seq: number;
+  readonly written: Promise<number>;
+}
+
 /**
  * Maximum number of events retained in the in-memory buffer.
  * At ~200 bytes per event object, 250k events ≈ 50MB — consistent with the file size limit.
@@ -329,6 +334,17 @@ export class EventLog {
     type: EventLogEventType,
     payload: EventLogPayload,
   ): Promise<number> {
+    return await this.queueAppend(type, payload).written;
+  }
+
+  startAppend(type: 'input_run', payload: InputRunEventPayload): StartedAppend {
+    return this.queueAppend(type, payload);
+  }
+
+  private queueAppend(
+    type: EventLogEventType,
+    payload: EventLogPayload,
+  ): StartedAppend {
     invariant(!this.isClosed, 'cannot append to a closed event log');
 
     const validatedPayload = validatePayload(type, payload);
@@ -381,14 +397,14 @@ export class EventLog {
     });
     this.writeQueue = writePromise;
 
-    try {
-      await writePromise;
-    } catch (error) {
-      this.rollbackBufferedEventsFrom(seq);
-      throw error;
-    }
-
-    return seq;
+    const written = writePromise.then(
+      () => seq,
+      (error: unknown) => {
+        this.rollbackBufferedEventsFrom(seq);
+        throw error;
+      },
+    );
+    return { seq, written };
   }
 
   private rollbackBufferedEventsFrom(failedSeq: number): void {

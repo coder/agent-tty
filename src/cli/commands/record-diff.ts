@@ -8,6 +8,7 @@ import type {
 
 import { emitSuccess } from '../output.js';
 import { CliError } from '../errors.js';
+import { checkedSessionDir } from '../sessionGuards.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { RecordDiffResultSchema } from '../../protocol/messages.js';
 import {
@@ -16,11 +17,7 @@ import {
 } from '../../renderer/canonicalScreen.js';
 import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
-import {
-  eventLogPath,
-  manifestPath,
-  sessionDir,
-} from '../../storage/sessionPaths.js';
+import { eventLogPath, manifestPath } from '../../storage/sessionPaths.js';
 import { diffLines } from '../../util/lineDiff.js';
 import { invariant } from '../../util/assert.js';
 
@@ -51,17 +48,7 @@ async function resolveSessionDirectory(
   home: string,
   sessionId: string,
 ): Promise<string> {
-  let sessionDirectory: string;
-  try {
-    sessionDirectory = sessionDir(home, sessionId);
-  } catch (error) {
-    throw makeCliError(ERROR_CODES.INVALID_SESSION_ID, {
-      message: `Session ID "${sessionId}" is invalid.`,
-      details: { sessionId },
-      cause: error,
-    });
-  }
-
+  const sessionDirectory = checkedSessionDir(home, sessionId);
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
   if (manifest === null) {

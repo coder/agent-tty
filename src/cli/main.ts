@@ -32,7 +32,7 @@ import { runSkillsPathCommand } from './commands/skills/path.js';
 import { runSnapshotCommand } from './commands/snapshot.js';
 import { runTypeCommand } from './commands/type.js';
 import { runVersionCommand } from './commands/version.js';
-import { runWaitCommand } from './commands/wait.js';
+import { DEFAULT_WAIT_TIMEOUT_MS, runWaitCommand } from './commands/wait.js';
 import {
   getCommandContext,
   parseTimeoutMsOption,
@@ -53,6 +53,7 @@ import {
 } from '../config/defaults.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
+import type { Logger } from '../util/logger.js';
 
 function parseIntegerOption(value: string): number {
   return Number.parseInt(value, 10);
@@ -78,8 +79,15 @@ function collectStringOption(value: string, previous: string[] = []): string[] {
   return [...previous, value];
 }
 
+function jsonOutputRequested(): boolean {
+  const optionsEnd = process.argv.indexOf('--');
+  return process.argv
+    .slice(0, optionsEnd === -1 ? undefined : optionsEnd)
+    .includes('--json');
+}
+
 function emitCliError(commandName: string, error: CliError): void {
-  const json = process.argv.includes('--json');
+  const json = jsonOutputRequested();
   emitFailure({
     command: commandName,
     json,
@@ -91,6 +99,19 @@ function emitCliError(commandName: string, error: CliError): void {
     },
   });
   process.exitCode = exitCodeForError(error.code);
+}
+
+function toCliError(error: unknown, logger?: Logger): CliError {
+  if (error instanceof CliError) {
+    return error;
+  }
+
+  logger?.debug('unexpected error', error);
+  const message = error instanceof Error ? error.message : String(error);
+  return makeCliError(ERROR_CODES.INTERNAL_ERROR, {
+    ...(message.length > 0 && { message }),
+    cause: error,
+  });
 }
 
 function getActionCommand(rawArgs: readonly unknown[]): Command {
@@ -108,9 +129,11 @@ function wrapAction<Args extends unknown[]>(
 ): (...rawArgs: [...Args, Command]) => Promise<void> {
   return async (...rawArgs: [...Args, Command]) => {
     const command = getActionCommand(rawArgs);
+    let logger: Logger | undefined;
 
     try {
       const context = await getCommandContext(command);
+      logger = context.logger;
       setColorEnabled(context.colorEnabled);
       context.logger.debug(`starting ${commandName} command`, {
         logLevel: context.logLevel,
@@ -121,15 +144,16 @@ function wrapAction<Args extends unknown[]>(
       await fn(...([...args, context] as [...Args, CommandContext]));
       context.logger.debug(`completed ${commandName} command`);
     } catch (error: unknown) {
-      if (error instanceof CliError) {
-        emitCliError(commandName, error);
-        return;
-      }
-
-      throw error;
+      emitCliError(commandName, toCliError(error, logger));
     }
   };
 }
+
+const HELP_OUTPUT_CODES: ReadonlySet<string> = new Set([
+  'commander.help',
+  'commander.helpDisplayed',
+  'commander.version',
+]);
 
 const CODING_AGENT_HELP_INTRO =
   'MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get agent-tty` before any other agent-tty command.';
@@ -162,7 +186,11 @@ async function main(): Promise<void> {
     const globalOptions = actionCommand.optsWithGlobals<GlobalCliOptions>();
     const rendererConfiguredByEnv =
       process.env.AGENT_TTY_RENDERER !== undefined;
-    const context = await resolveCommandContext(globalOptions);
+    const context = await resolveCommandContext(globalOptions).catch(
+      (error: unknown) => {
+        throw toCliError(error);
+      },
+    );
     process.env.AGENT_TTY_HOME = context.home;
     // Propagate the resolved log level to the process environment so that
     // subsystems instantiated outside the CLI context (e.g., renderer backends,
@@ -434,8 +462,8 @@ async function main(): Promise<void> {
           options: { force: boolean; json: boolean },
           context: CommandContext,
         ) => {
-          void context;
           await runDestroyCommand({
+            home: context.home,
             json: options.json,
             sessionId,
             force: options.force,
@@ -971,7 +999,7 @@ async function main(): Promise<void> {
     .option('--idle-ms <ms>', 'Wait for output idle period', parseIntegerOption)
     .option(
       '--timeout <ms>',
-      'Maximum wait time in milliseconds (0 for infinite)',
+      `Maximum wait time in milliseconds (0 for infinite) (default: ${String(DEFAULT_WAIT_TIMEOUT_MS)})`,
       parseIntegerOption,
     )
     .option('--json', 'Emit a JSON command envelope', false)
@@ -1056,6 +1084,14 @@ try {
 } catch (error: unknown) {
   if (error instanceof CommanderError) {
     process.exitCode = error.code === 'commander.helpDisplayed' ? 0 : 2;
+    if (!HELP_OUTPUT_CODES.has(error.code) && jsonOutputRequested()) {
+      emitCliError(
+        'agent-tty',
+        makeCliError(ERROR_CODES.INVALID_INPUT, {
+          message: error.message.replace(/^error: /u, ''),
+        }),
+      );
+    }
   } else if (error instanceof CliError) {
     setColorEnabled(!process.argv.includes('--no-color'));
     emitCliError('agent-tty', error);

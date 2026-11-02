@@ -142,10 +142,10 @@ Useful flags:
 - `--regex <pattern>`: wait for a regex match in rendered output.
 - `--scope <scope>`: where `--text`/`--regex` match — `screen` (default, whole visible screen) or `cursor-line` (only the row the cursor is on). See [Echo-Match](#echo-match).
 - `--screen-stable-ms <ms>`: wait for the rendered screen to be stable.
-- `--after-seq <n>`: only match renderer snapshots produced after this Event Log sequence — thread an input command's returned `seq` here so the wait cannot match pre-input screen state.
+- `--after-seq <n>`: only match renderer snapshots produced after this Event Log sequence — thread an input command's returned `seq` here so the wait cannot match pre-input screen state. `-1` is the sequence before the first event, which a `snapshot` of a session that has printed nothing reports.
 - `--idle-ms <ms>`: wait for output idleness.
 - `--exit`: wait for the process to exit.
-- `--timeout <ms>`: maximum wait time in milliseconds, with `0` meaning infinite.
+- `--timeout <ms>`: maximum wait time in milliseconds. The default is `30000` (30 s). `0` waits without a limit. An `--idle-ms` or `--screen-stable-ms` of `30000` or more cannot finish within the default, so `wait` rejects it with `INVALID_DURATION` unless you pass `--timeout`.
 
 On timeout, a standalone `wait` exits `11` (`WAIT_TIMEOUT`) while preserving a success JSON envelope with `timedOut: true` in the result (`matched: false` for render waits). Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast.
 
@@ -256,6 +256,8 @@ The Wait Baseline fixes stale-match only. It does **not** fix echo-match: a whol
 
 Screenshots and WebM export use the `ghostty-web` reference visual renderer through Playwright/Chromium.
 Semantic `snapshot`, screen-hash, and render-backed `wait` paths prefer `libghostty-vt` when the optional native package is available and fall back to `ghostty-web` otherwise. Run `doctor --json` first in new environments.
+
+On a session that has printed nothing yet, `snapshot` returns an empty screen of the session's size and `screenshot` returns a blank image. Both report `capturedAtSeq: -1`, and the screenshot file is named `screenshot--1-<profile>.png`.
 
 ```bash
 agent-tty screenshot <session-id> --profile reference-dark --json
@@ -371,6 +373,8 @@ Every command exits with a stable code, so scripts can branch without parsing ou
 | `12`      | A requested runtime capability is unavailable (`CAPABILITY_UNAVAILABLE`).                                                   |
 
 A fail-fast `batch` exits with the failed step's code (for example `11` for a wait timeout); `--keep-going` exits `1` if any step failed.
+
+An unexpected failure prints an `INTERNAL_ERROR` envelope and exits `1`. Add `--log-level debug` to also print its stack on stderr. A failure while the CLI reads the global options and the config file prints no stack, because the log level is not known yet. With `--json`, a usage error (unknown command or flag, missing argument or required option) prints an `INVALID_INPUT` envelope under the command name `agent-tty` and exits `2`. The usage text still goes to stderr.
 
 ## Anti-Patterns
 
