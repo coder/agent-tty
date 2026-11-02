@@ -429,8 +429,17 @@ function groupHasLiveProcess(pgid: number): boolean | null {
   }
 
   // A process of the group can fork and end after the scan listed /proc,
-  // so a scan that finds no live process runs once more.
-  return scanGroup(pgid) || scanGroup(pgid);
+  // so a scan that finds no live process runs once more, and the group
+  // shows only zombies when both scans show only zombies.
+  const first = scanGroup(pgid);
+  if (first === true) {
+    return true;
+  }
+  const second = scanGroup(pgid);
+  if (second === true) {
+    return true;
+  }
+  return first === false && second === false ? false : null;
 }
 
 function scanGroup(pgid: number): boolean | null {
