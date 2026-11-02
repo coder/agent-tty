@@ -11,6 +11,8 @@ import {
   getSkillPath,
   listBundledSkills,
 } from '../../../src/skills/index.js';
+import type { CommandEnvelope } from '../../../src/protocol/envelope.js';
+import type { WaitForRenderResult } from '../../../src/protocol/messages.js';
 import {
   createErrorEnvelope,
   createSuccessEnvelope,
@@ -1453,6 +1455,39 @@ describe('JSON envelope contracts', () => {
           sessionId: 'session-01',
         },
       },
+    });
+  });
+
+  it('locks the WAIT_TIMEOUT error envelope shape with the wait result', () => {
+    const error = makeCliError(ERROR_CODES.WAIT_TIMEOUT, {
+      message: 'Wait timed out before its condition was met.',
+      details: { sessionId: 'session-01', timeoutMs: 1000 },
+    });
+
+    const envelope: CommandEnvelope<WaitForRenderResult, WaitForRenderResult> =
+      createErrorEnvelope(
+        'wait',
+        {
+          code: error.code,
+          message: error.message,
+          retryable: error.retryable,
+          details: error.details,
+        },
+        { matched: false, timedOut: true, capturedAtSeq: 7 },
+      );
+
+    expect(envelope.result?.timedOut).toBe(true);
+    expect(envelope).toEqual({
+      ok: false,
+      command: 'wait',
+      timestamp: LOCKED_TIMESTAMP,
+      error: {
+        code: 'WAIT_TIMEOUT',
+        message: 'Wait timed out before its condition was met.',
+        retryable: false,
+        details: { sessionId: 'session-01', timeoutMs: 1000 },
+      },
+      result: { matched: false, timedOut: true, capturedAtSeq: 7 },
     });
   });
 });

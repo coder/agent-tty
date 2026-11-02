@@ -502,7 +502,8 @@ function destroyFacts() {
 
 // The statements of destroySession's local stopLeftoversThenRecordDestroyed:
 // with DestroyStopsLeftovers it stops the group that program.json proves,
-// waits for it, and only then records destroyed.
+// waits for it, and only then records destroyed. readProvenProgramGroup
+// returns the record whenever it has a token.
 function stopLeftoversThenRecordDestroyed(destroy) {
   let found = [];
   walk(destroy.body, (node) => {
@@ -527,8 +528,20 @@ function stopLeftoversThenRecordDestroyed(destroy) {
     stops:
       found.length === 2 &&
       found[0] ===
-        'await stopSessionProcesses( sessionId, null, await readProvenProgramGroup(sessionDirectory), sessionDirectory, signal, );',
+        'await stopSessionProcesses( sessionId, null, await readProvenProgramGroup(sessionDirectory), sessionDirectory, signal, );' &&
+      bodyIs(
+        'readProvenProgramGroup',
+        "const record = await readProgramRecord(sessionDirectory); return typeof record === 'object' && hasToken(record) ? record : null;",
+      ) &&
+      bodyIs('hasToken', 'return record.bootId !== null;'),
   };
+}
+
+function bodyIs(name, text) {
+  const body = requireDeclaration('src/host/programGroup.ts', name).body;
+  return (
+    normalize(body.statements.map((st) => st.getText()).join(' ')) === text
+  );
 }
 
 function manifestWriteFacts() {
@@ -844,6 +857,47 @@ function ownershipFacts() {
       rawKills > 0 &&
       targets === 2 &&
       !stray,
+  };
+}
+
+// captureToken reads the program's autogroup between two reads of its stat,
+// and keeps it only when the second read shows the program as the leader of
+// its own session, with the same start time and the host as its parent, and
+// the autogroup differs from the host's own. isProgramGroupAlive reads a
+// group alive only while the check owns it, cannot run, or finds no live
+// member while the probe reads the group alive, so a group whose members
+// carry another autogroup reads gone.
+function tokenFacts() {
+  const module = 'src/host/programGroup.ts';
+  const capture = requireDeclaration(module, 'captureToken').body;
+  const loop = capture.statements.find(ts.isWhileStatement);
+  const st =
+    loop !== undefined && ts.isBlock(loop.statement)
+      ? loop.statement.statements.map((s) => normalize(s.getText()))
+      : [];
+  const capturesOwnSession =
+    capture.statements.some(
+      (s) =>
+        normalize(s.getText()) ===
+        "const ownAutogroup = readAutogroup('self');",
+    ) &&
+    st[0] === 'const before = readShownProcStat(pid);' &&
+    st[1] === 'const autogroup = readAutogroup(pid);' &&
+    st[2] === 'const after = readShownProcStat(pid);' &&
+    st[3] ===
+      'if ( before === null || after === null || before.startTicks !== after.startTicks || after.ppid !== process.pid ) { return null; }' &&
+    st[4] ===
+      'if (after.sid === pid && autogroup !== ownAutogroup) { return autogroup === null ? null : { bootId, autogroup }; }';
+  const alive = requireDeclaration(module, 'isProgramGroupAlive').body
+    .statements;
+  const readsUnprovenGone =
+    normalize(alive.at(-2)?.getText() ?? '') ===
+      'const { verdict } = judgeLiveGroup(group);' &&
+    normalize(alive.at(-1)?.getText() ?? '') ===
+      "return ( verdict === 'owned' || verdict === 'unknown' || (verdict === 'gone' && isProcessGroupAlive(group.pid)) );";
+  return {
+    TokenNamesProgram: capturesOwnSession,
+    ReusedIdReadsGone: readsUnprovenGone,
   };
 }
 
@@ -1319,6 +1373,7 @@ const constants = {
   ...programRecordFacts(),
   ...ownershipFacts(),
   ...fallbackFacts(),
+  ...tokenFacts(),
   ...rerunFacts(),
   ...policyFacts(),
 };
