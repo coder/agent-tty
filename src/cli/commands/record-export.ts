@@ -15,6 +15,7 @@ import {
 import { readEventLogRecords } from '../../storage/eventLogCodec.js';
 import { hashProfile, resolveProfile } from '../../renderer/profiles.js';
 import { CliError } from '../errors.js';
+import { checkedSessionDir } from '../sessionGuards.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import {
   RecordExportResultSchema,
@@ -39,11 +40,7 @@ import {
   writeTextFileAtomic,
 } from '../../storage/manifests.js';
 import { resolveExplicitOutputPath } from '../../storage/outputPath.js';
-import {
-  eventLogPath,
-  manifestPath,
-  sessionDir,
-} from '../../storage/sessionPaths.js';
+import { eventLogPath, manifestPath } from '../../storage/sessionPaths.js';
 import { invariant } from '../../util/assert.js';
 import { loadPackageMetadata } from '../../util/packageMetadata.js';
 
@@ -177,19 +174,7 @@ export async function runRecordExportCommand(
   const format = resolveRecordExportFormat(options.format);
   const timingMode = resolveReplayTimingMode(options.timing);
   const home = options.context.home;
-  let sessionDirectory: string;
-
-  try {
-    sessionDirectory = sessionDir(home, options.sessionId);
-  } catch (error) {
-    throw makeCliError(ERROR_CODES.INVALID_SESSION_ID, {
-      message: `Session ID "${options.sessionId}" is invalid.`,
-      details: {
-        sessionId: options.sessionId,
-      },
-      cause: error,
-    });
-  }
+  const sessionDirectory = checkedSessionDir(home, options.sessionId);
 
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);

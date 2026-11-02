@@ -26,12 +26,11 @@ import { computeScreenHash } from '../../renderer/canonicalScreen.js';
 import { isTerminalSessionStatus } from '../../protocol/sessionStatusPolicy.js';
 import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
+import { manifestPath, socketPath } from '../../storage/sessionPaths.js';
 import {
-  manifestPath,
-  sessionDir,
-  socketPath,
-} from '../../storage/sessionPaths.js';
-import { assertSessionCommandable } from '../sessionGuards.js';
+  assertSessionCommandable,
+  checkedSessionDir,
+} from '../sessionGuards.js';
 
 interface CommandOptions {
   context: CommandContext;
@@ -198,7 +197,7 @@ async function runOfflineRenderWait(
 
 export async function runWaitCommand(options: CommandOptions): Promise<void> {
   const home = options.context.home;
-  const sessionDirectory = sessionDir(home, options.sessionId);
+  const sessionDirectory = checkedSessionDir(home, options.sessionId);
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
 
