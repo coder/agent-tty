@@ -15,6 +15,10 @@ const PROBE_ROOT_ID = 'agent-tty-glyph-probe';
 export const MAX_MISSING_GLYPH_CELLS = 4096;
 export const MAX_GLYPH_PROBES = 4096;
 export const MAX_CACHED_GLYPH_PROBES = 4 * MAX_GLYPH_PROBES;
+// 4096 probes took 0.55-0.8 s at load 20-30. The budget keeps the probe pass
+// well inside the 5 s screenshot RPC timeout on a slower host.
+export const GLYPH_PROBE_BUDGET_MS = 1000;
+const GLYPH_PROBE_BATCH = 256;
 
 interface ProbeElement {
   id: string;
@@ -178,7 +182,7 @@ function boxedCodePoints(
     return [];
   }
   if (fonts.length <= 1) {
-    const family = fonts[0]?.familyName ?? coverage.firstFamily;
+    const family = fonts[0]?.familyName.toLowerCase() ?? coverage.firstFamily;
     const familyCoverage = coverage.byFamily.get(family);
     invariant(
       familyCoverage !== undefined,
@@ -264,8 +268,11 @@ export async function probeUsedFonts(
   page: Page,
   font: string,
   texts: readonly string[],
+  budgetMs: number = GLYPH_PROBE_BUDGET_MS,
 ): Promise<Map<string, readonly UsedFont[]>> {
   invariant(texts.length > 0, 'probeUsedFonts needs at least one text');
+  invariant(budgetMs > 0, 'probeUsedFonts needs a positive time budget');
+  const deadline = performance.now() + budgetMs;
   await page.evaluate(
     ({ rootId, cssFont, probeTexts }) => {
       const { document } = globalThis as unknown as ProbeGlobal;
@@ -303,22 +310,30 @@ export async function probeUsedFonts(
       'glyph probe must find one span per text',
     );
 
-    const results = await Promise.all(
-      nodeIds.map((nodeId) =>
-        cdp.send('CSS.getPlatformFontsForNode', { nodeId }),
-      ),
-    );
-    return new Map(
-      results.map(({ fonts }, index) => {
-        const text = texts[index];
+    const probed = new Map<string, readonly UsedFont[]>();
+    for (
+      let start = 0;
+      start < nodeIds.length && performance.now() < deadline;
+      start += GLYPH_PROBE_BATCH
+    ) {
+      const results = await Promise.all(
+        nodeIds
+          .slice(start, start + GLYPH_PROBE_BATCH)
+          .map((nodeId) => cdp.send('CSS.getPlatformFontsForNode', { nodeId })),
+      );
+      results.forEach(({ fonts }, offset) => {
+        const text = texts[start + offset];
         invariant(text !== undefined, 'glyph probe text must exist');
-        const used = fonts.map(({ familyName, isCustomFont }) => ({
-          familyName,
-          isCustomFont,
-        }));
-        return [text, used] as const;
-      }),
-    );
+        probed.set(
+          text,
+          fonts.map(({ familyName, isCustomFont }) => ({
+            familyName,
+            isCustomFont,
+          })),
+        );
+      });
+    }
+    return probed;
   } finally {
     await page.evaluate((rootId) => {
       const { document } = globalThis as unknown as ProbeGlobal;

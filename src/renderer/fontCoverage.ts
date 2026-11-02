@@ -202,10 +202,14 @@ export interface ProfileFontCoverage {
   union: ReadonlySet<number>;
 }
 
+// CSS matches font family names case-insensitively, so the keys are lower case.
 function stackFamilies(fontFamily: string): string[] {
-  return fontFamily
-    .split(',')
-    .map((family) => family.trim().replace(/^(["'])(.*)\1$/u, '$2'));
+  return fontFamily.split(',').map((family) =>
+    family
+      .trim()
+      .replace(/^(["'])(.*)\1$/u, '$2')
+      .toLowerCase(),
+  );
 }
 
 /**
@@ -230,14 +234,15 @@ export function profileFontCoverage(
   const firstFamily = families[0];
   const byFamily = new Map<string, Set<number>>();
   for (const font of fonts) {
-    if (!families.includes(font.family)) {
+    const family = font.family.toLowerCase();
+    if (!families.includes(family)) {
       continue;
     }
-    const coverage = byFamily.get(font.family) ?? new Set<number>();
+    const coverage = byFamily.get(family) ?? new Set<number>();
     for (const codePoint of bundledAssetCoverage(font.assetIdentity)) {
       coverage.add(codePoint);
     }
-    byFamily.set(font.family, coverage);
+    byFamily.set(family, coverage);
   }
   if (firstFamily === undefined || !byFamily.has(firstFamily)) {
     return null;

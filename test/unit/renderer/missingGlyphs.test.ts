@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import type { Page } from 'playwright';
+import { describe, expect, it, vi } from 'vitest';
 
 import { profileFontCoverage } from '../../../src/renderer/fontCoverage.js';
 import {
@@ -6,6 +7,7 @@ import {
   buildMissingGlyphs,
   findGlyphCandidates,
   glyphProbeTexts,
+  probeUsedFonts,
   type UsedFont,
 } from '../../../src/renderer/ghosttyWeb/missingGlyphs.js';
 import { resolveProfile } from '../../../src/renderer/profiles.js';
@@ -25,11 +27,11 @@ const HOST: UsedFont = { familyName: 'DejaVu Sans', isCustomFont: false };
 
 describe('profileFontCoverage', () => {
   it('covers the bundled fonts of the reference profile', () => {
-    expect(coverage.firstFamily).toBe('JetBrains Mono');
+    expect(coverage.firstFamily).toBe('jetbrains mono');
     expect(coverage.union.has(0x41)).toBe(true);
     expect(coverage.union.has(0xe0b0)).toBe(true);
     expect(coverage.union.has(0x29c9)).toBe(false);
-    expect(coverage.byFamily.get('JetBrains Mono')?.has(0xe0b0)).toBe(false);
+    expect(coverage.byFamily.get('jetbrains mono')?.has(0xe0b0)).toBe(false);
   });
 
   it('returns null when the font stack does not start with a bundled font', () => {
@@ -53,8 +55,27 @@ describe('profileFontCoverage', () => {
     expect(jetBrainsOnly?.union.has(0x41)).toBe(true);
     expect(jetBrainsOnly?.union.has(0xe0b0)).toBe(false);
     expect([...(jetBrainsOnly?.byFamily.keys() ?? [])]).toEqual([
-      'JetBrains Mono',
+      'jetbrains mono',
     ]);
+  });
+
+  it('matches family names without regard to case, as CSS does', () => {
+    const mixedCase = profileFontCoverage({
+      ...PROFILE,
+      fontFamily: '"jetbrains mono", "SYMBOLS NERD FONT MONO", monospace',
+    });
+    if (mixedCase === null) {
+      throw new Error('a lower-case bundled first family must be found');
+    }
+
+    expect(mixedCase.union.has(0xe0b0)).toBe(true);
+    expect(
+      buildMissingGlyphs(
+        findGlyphCandidates([['\u2764\u20dd']], mixedCase.union),
+        new Map([['\u2764\u20dd', [JETBRAINS]]]),
+        mixedCase,
+      ).missingGlyphs.map((glyph) => glyph.codePoint),
+    ).toEqual(['U+20DD', 'U+2764']);
   });
 });
 
@@ -228,5 +249,52 @@ describe('buildMissingGlyphs', () => {
     expect(result.missingGlyphs[0]?.cells).toHaveLength(
       MAX_MISSING_GLYPH_CELLS,
     );
+  });
+});
+
+describe('probeUsedFonts', () => {
+  function fakePage(count: number, delayMs: number): Page {
+    const send = vi.fn(async (method: string) => {
+      if (method === 'DOM.getDocument') {
+        return { root: { nodeId: 1 } };
+      }
+      if (method === 'DOM.querySelectorAll') {
+        return { nodeIds: Array.from({ length: count }, (_, i) => i + 2) };
+      }
+      if (method === 'CSS.getPlatformFontsForNode') {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        return {
+          fonts: [{ ...JETBRAINS, postScriptName: 'x', glyphCount: 1 }],
+        };
+      }
+      return {};
+    });
+    const session = { send, detach: vi.fn(() => Promise.resolve()) };
+    return {
+      evaluate: vi.fn(() => Promise.resolve(0)),
+      context: () => ({ newCDPSession: () => Promise.resolve(session) }),
+    } as unknown as Page;
+  }
+  const texts = (count: number): string[] =>
+    Array.from({ length: count }, (_, i) => String.fromCodePoint(0x4e00 + i));
+
+  it('probes every text when the budget allows', async () => {
+    const probed = await probeUsedFonts(fakePage(600, 1), '14px x', texts(600));
+
+    expect(probed.size).toBe(600);
+    expect(probed.get('\u4e00')).toEqual([JETBRAINS]);
+  });
+
+  it('stops between batches once the time budget is spent', async () => {
+    const probed = await probeUsedFonts(
+      fakePage(1000, 30),
+      '14px x',
+      texts(1000),
+      40,
+    );
+
+    expect(probed.size).toBeGreaterThanOrEqual(256);
+    expect(probed.size).toBeLessThan(1000);
+    expect(probed.size % 256).toBe(0);
   });
 });
