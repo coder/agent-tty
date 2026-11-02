@@ -325,6 +325,8 @@ Avoid writing automated sessions into the default `~/.agent-tty` unless you inte
 
 `create` spawns the shell with your inherited environment plus `TERM` (from `--term`) and a default `PROMPT_EOL_MARK=` (empty). The empty `PROMPT_EOL_MARK` suppresses the inverse-video `%` that `zsh` prints at the end of any output without a trailing newline; without it, agent-tty's hidden per-`run` completion marker leaves a stray `%` in snapshots, screenshots, and recordings. The variable is zsh-only and inert in other shells.
 
+`create` also sets `COLORTERM=truecolor`, because the renderer draws 24-bit color. Programs such as Neovim turn on 24-bit color only when they see it; without it, a screenshot loses the colors that the 256-color palette cannot show. An inherited `COLORTERM` describes the terminal that launched agent-tty, not the session's renderer, so the default replaces it.
+
 The shell also receives two session variables, so scripts inside a session can detect agent-tty and find their own session:
 
 | Variable               | Value                                                     |
@@ -332,13 +334,16 @@ The shell also receives two session variables, so scripts inside a session can d
 | `AGENT_TTY_ACTIVE`     | `true`.                                                   |
 | `AGENT_TTY_SESSION_ID` | The session's ID (a ULID, as printed by `create --json`). |
 
-Both replace inherited values, so a session created from inside another session reports its own ID, not the outer one. A PTY that agent-tty spawns without a session (the `doctor` spawn probe) gets neither variable: inherited values are removed, so it never reports an outer session's ID. Like the `PROMPT_EOL_MARK` default, they are set at spawn time and are not stored in the session's recorded `env`.
+Both replace inherited values, so a session created from inside another session reports its own ID, not the outer one. A PTY that agent-tty spawns without a session (the `doctor` spawn probe) gets neither variable: inherited values are removed, so it never reports an outer session's ID. Like the `PROMPT_EOL_MARK` and `COLORTERM` defaults, they are set at spawn time and are not stored in the session's recorded `env`.
 
 Any `--env` value always wins, so you can opt back into the shell's native behavior or override a session variable per session:
 
 ```bash
 # Restore zsh's styled default marker:
 agent-tty create --env PROMPT_EOL_MARK='%B%S%#%s%b' -- /bin/zsh
+
+# Hide 24-bit color support from the program:
+agent-tty create --env COLORTERM= -- nvim
 ```
 
 A lone `'%'` does **not** restore the marker (zsh treats it as a prompt escape that expands to nothing); use `'%B%S%#%s%b'` for the styled default or `'%%'` for a plain percent. The default is applied at spawn time and is not stored in the manifest, so it does not appear in `inspect`, `list`, or `create --json` output. If your `~/.zshrc` assigns `PROMPT_EOL_MARK` it runs after the environment is imported and wins, so the marker can reappear — remove that line or set the value you want via `--env`.
