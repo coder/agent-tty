@@ -821,8 +821,8 @@ function fallbackFacts() {
 // fourth field after the command name in /proc/self/stat. Before it reads
 // the manifest, the check matches AGENT_TTY_SESSION_ID, and the copy does
 // not get that variable. Off Linux the check compares the process group and
-// the controlling terminal. The copy gets RERUN_MARKER and skips the check,
-// so it never starts a copy of its own.
+// the controlling terminal. The copy gets DESTROY_RERUN_ENV_KEY and skips the
+// check, so it never starts a copy of its own.
 function rerunFacts() {
   const destroyFile = 'src/cli/commands/destroy.ts';
   const run = requireDeclaration(destroyFile, 'runDestroyCommand').body;
@@ -830,7 +830,7 @@ function rerunFacts() {
     (st) =>
       ts.isIfStatement(st) &&
       normalize(st.expression.getText()) ===
-        "process.env[RERUN_MARKER] !== '1' && (await cliRunsInsideProgramSession(options.sessionId))" &&
+        "process.env[DESTROY_RERUN_ENV_KEY] !== '1' && (await cliRunsInsideProgramSession(options.sessionId))" &&
       /^\{\s*process\.exitCode = await rerunInNewSession\(\);\s*return;\s*\}$/.test(
         st.thenStatement.getText(),
       ),
@@ -848,7 +848,7 @@ function rerunFacts() {
           .exec(normalize(spawns[0].getText()))?.[1]
           .split(', ') ?? [])
       : [];
-  const copySkipsCheck = copyEnv.includes("[RERUN_MARKER]: '1'");
+  const copySkipsCheck = copyEnv.includes("[DESTROY_RERUN_ENV_KEY]: '1'");
   const lifecycle = 'src/host/lifecycle.ts';
   const insideStatements = requireDeclaration(
     lifecycle,

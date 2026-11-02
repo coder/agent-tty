@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { ulid } from 'ulid';
 
 import { CliError } from '../cli/errors.js';
+import { DESTROY_RERUN_ENV_KEY } from '../config/defaults.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import {
   isActiveSessionStatus,
@@ -565,6 +566,7 @@ export function launchHost(config: LaunchHostConfig): number {
       env: {
         ...process.env,
         ...config.env,
+        [DESTROY_RERUN_ENV_KEY]: undefined,
         AGENT_TTY_HOME: config.home,
         TERM: config.term,
       },

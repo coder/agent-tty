@@ -6,7 +6,10 @@ import process from 'node:process';
 import type { IPty } from 'node-pty';
 import { spawn } from 'node-pty';
 
-import { HOST_RENDERER_ENV_KEY } from '../config/defaults.js';
+import {
+  DESTROY_RERUN_ENV_KEY,
+  HOST_RENDERER_ENV_KEY,
+} from '../config/defaults.js';
 import { invariant } from '../util/assert.js';
 
 export interface PtyOptions {
@@ -103,7 +106,8 @@ const SPAWN_ENV_DEFAULTS: Readonly<Record<string, string>> = {
  * nested session reports its own id rather than the outer session's, and
  * captures stay deterministic regardless of the launching shell. Only `env`
  * (the user-explicit set) opts out of a default, so an inherited value never
- * counts as opting out.
+ * counts as opting out. The destroy re-run marker never reaches the program,
+ * not even through `env`.
  */
 export function resolvePtyEnv(
   env: Record<string, string>,
@@ -138,6 +142,7 @@ export function resolvePtyEnv(
   }
 
   Object.assign(resolved, env);
+  delete resolved[DESTROY_RERUN_ENV_KEY];
   resolved.TERM = term;
   return resolved;
 }

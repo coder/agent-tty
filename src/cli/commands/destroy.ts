@@ -3,13 +3,12 @@ import process from 'node:process';
 
 import type { DestroyResult } from '../../protocol/messages.js';
 
+import { DESTROY_RERUN_ENV_KEY } from '../../config/defaults.js';
 import { emitSuccess } from '../output.js';
 import {
   cliRunsInsideProgramSession,
   destroySession,
 } from '../../host/lifecycle.js';
-
-const RERUN_MARKER = 'AGENT_TTY_DESTROY_RERUN';
 
 interface CommandOptions {
   json: boolean;
@@ -21,8 +20,8 @@ interface CommandOptions {
 // exit hangs up the jobs of its session. A CLI inside that session dies
 // before it prints, so a copy in a new session does the destroy instead.
 // The copy runs outside the session, so it does not get the session's id.
-// RERUN_MARKER tells the copy to skip the check, so whatever ps shows, a
-// copy never starts another copy.
+// DESTROY_RERUN_ENV_KEY tells the copy to skip the check, so whatever ps
+// shows, a copy never starts another copy.
 async function rerunInNewSession(): Promise<number> {
   const child = spawn(
     process.execPath,
@@ -32,7 +31,7 @@ async function rerunInNewSession(): Promise<number> {
       env: {
         ...process.env,
         AGENT_TTY_SESSION_ID: undefined,
-        [RERUN_MARKER]: '1',
+        [DESTROY_RERUN_ENV_KEY]: '1',
       },
       stdio: 'inherit',
     },
@@ -49,7 +48,7 @@ export async function runDestroyCommand(
   options: CommandOptions,
 ): Promise<void> {
   if (
-    process.env[RERUN_MARKER] !== '1' &&
+    process.env[DESTROY_RERUN_ENV_KEY] !== '1' &&
     (await cliRunsInsideProgramSession(options.sessionId))
   ) {
     process.exitCode = await rerunInNewSession();
