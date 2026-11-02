@@ -297,7 +297,10 @@ export async function cliRunsInsideProgramSession(
   }
 
   if (process.platform === 'linux') {
-    return manifest.childPid === ownLinuxSessionId();
+    // A CLI that cannot read its session id runs again in a new session,
+    // where the copy skips this check: a needless copy costs one re-run.
+    const sid = ownLinuxSessionId();
+    return sid === null || manifest.childPid === sid;
   }
   return (
     manifest.childPid === ownProcessGroupId() ||
