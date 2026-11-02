@@ -366,7 +366,17 @@ function readGroupMembers(pgid: number): ProcessRow[] {
 }
 
 function judgeLiveGroup(record: ProvenRecord): GroupJudgement {
-  return judgeProgramGroup(record, readBootId(), readGroupMembers(record.pid));
+  const bootId = readBootId();
+  const judgement = judgeProgramGroup(
+    record,
+    bootId,
+    readGroupMembers(record.pid),
+  );
+  // A member can fork and end after the scan listed /proc, so a group that
+  // reads gone is scanned once more.
+  return judgement.verdict === 'gone'
+    ? judgeProgramGroup(record, bootId, readGroupMembers(record.pid))
+    : judgement;
 }
 
 // node-pty starts the program as a session leader, so the program's pid is
@@ -418,6 +428,12 @@ function groupHasLiveProcess(pgid: number): boolean | null {
     return true;
   }
 
+  // A process of the group can fork and end after the scan listed /proc.
+  // The next scan lists its child.
+  return scanGroup(pgid) || scanGroup(pgid);
+}
+
+function scanGroup(pgid: number): boolean | null {
   let seen = false;
   for (const entry of readdirSync('/proc')) {
     if (!/^\d+$/.test(entry)) {
