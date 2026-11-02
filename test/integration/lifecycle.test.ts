@@ -1697,6 +1697,40 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         expect(await groupEnds(pgid)).toBe(true);
       },
     );
+
+    // Without the variable, only the session id, or off Linux the
+    // controlling terminal, shows that the job runs inside the program.
+    it.runIf(process.platform !== 'win32').each([
+      ['destroy', ''],
+      ['destroy --force', '--force'],
+    ])(
+      '%s typed into an interactive shell that unset the session variable prints its result',
+      async (_name, flag) => {
+        const out = join(testHome, 'inner-destroy.json');
+        const sessionId = createSession(
+          testHome,
+          ['/bin/bash', '--norc', '--noprofile', '-i'],
+          { env: { HISTFILE: '/dev/null' } },
+        );
+        pgid = inspectSession(testHome, sessionId).childPid as number;
+        const command = `unset AGENT_TTY_SESSION_ID; ${cli.map((part) => `'${part}'`).join(' ')} destroy ${sessionId} ${flag} --json > '${out}'`;
+        for (const args of [
+          ['type', sessionId, command],
+          ['send-keys', sessionId, 'Enter'],
+        ]) {
+          expect(
+            runCli([...args, '--json'], { AGENT_TTY_HOME: testHome }).status,
+          ).toBe(0);
+        }
+
+        expect(await readEnvelopeOnceWritten(out)).toMatchObject({
+          ok: true,
+          result: { sessionId, destroyed: true },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await groupEnds(pgid)).toBe(true);
+      },
+    );
   });
 
   it('destroyed session rejects commands with SESSION_ALREADY_DESTROYED', () => {

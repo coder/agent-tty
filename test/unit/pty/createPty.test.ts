@@ -79,6 +79,23 @@ describe('resolvePtyEnv', () => {
     expect(resolved.AGENT_TTY_RENDERER).toBe('ghostty-web');
   });
 
+  it.each([
+    ['inherited', {}, { AGENT_TTY_DESTROY_RERUN: '1' }],
+    ['caller-supplied', { AGENT_TTY_DESTROY_RERUN: '1' }, {}],
+  ])(
+    'never passes the destroy re-run marker from %s env to the program',
+    (_name, env, baseEnv) => {
+      const resolved = resolvePtyEnv(env, 'xterm-256color', baseEnv, 'session');
+
+      expect(
+        Object.prototype.hasOwnProperty.call(
+          resolved,
+          'AGENT_TTY_DESTROY_RERUN',
+        ),
+      ).toBe(false);
+    },
+  );
+
   it('passes through inherited and caller env entries and drops undefined values', () => {
     const resolved = resolvePtyEnv({ FOO: 'bar' }, 'xterm-256color', {
       BAZ: 'qux',
