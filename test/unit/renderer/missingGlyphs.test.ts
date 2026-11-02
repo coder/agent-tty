@@ -177,6 +177,12 @@ describe('buildMissingGlyphs', () => {
     ).toEqual([{ codePoint: 'U+29C9', cells: [{ row: 0, col: 0 }] }]);
   });
 
+  it('does not list a mark that a host font drew next to a bundled base', () => {
+    expect(
+      report([['a\u1ab0']], { 'a\u1ab0': [JETBRAINS, HOST] }).missingGlyphs,
+    ).toEqual([]);
+  });
+
   it('counts a probe with no reported font as drawn by the first font', () => {
     expect(report([['\u29c9']], { '\u29c9': [] }).missingGlyphs).toEqual([
       { codePoint: 'U+29C9', cells: [{ row: 0, col: 0 }] },

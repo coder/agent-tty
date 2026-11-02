@@ -182,10 +182,7 @@ function boxedCodePoints(
     if (codePointFonts === undefined) {
       return undefined;
     }
-    if (
-      codePointFonts.length === 0 ||
-      codePointFonts.some((font) => font.isCustomFont)
-    ) {
+    if (codePointFonts.every((font) => font.isCustomFont)) {
       boxed.push(codePoint);
     }
   }
