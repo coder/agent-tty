@@ -15,7 +15,7 @@ import process from 'node:process';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  copyToOutputPath,
+  copyFileReplacing,
   resolveExplicitOutputPath,
 } from '../../../src/storage/outputPath.js';
 
@@ -72,7 +72,7 @@ describe('explicit output paths', () => {
     await writeFile(source, 'new bytes');
     await writeFile(output, 'old bytes');
 
-    await copyToOutputPath(source, output);
+    await copyFileReplacing(source, output);
 
     expect(await readFile(output, 'utf8')).toBe('new bytes');
     expect((await readdir(workspace)).sort()).toEqual([
@@ -83,7 +83,10 @@ describe('explicit output paths', () => {
 
   it('leaves no temporary file when the source is missing', async () => {
     await expect(
-      copyToOutputPath(join(workspace, 'gone.png'), join(workspace, 'out.png')),
+      copyFileReplacing(
+        join(workspace, 'gone.png'),
+        join(workspace, 'out.png'),
+      ),
     ).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readdir(workspace)).toEqual([]);
   });

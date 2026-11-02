@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
   ensureArtifactsDir: vi.fn(),
   rm: vi.fn(),
   resolveExplicitOutputPath: vi.fn(),
-  copyToOutputPath: vi.fn(),
+  copyFileReplacing: vi.fn(),
   sessionNotFoundIfRemoved: vi.fn(),
 }));
 
@@ -73,7 +73,7 @@ vi.mock('../../../src/storage/artifactPaths.js', () => ({
 
 vi.mock('../../../src/storage/outputPath.js', () => ({
   resolveExplicitOutputPath: mocks.resolveExplicitOutputPath,
-  copyToOutputPath: mocks.copyToOutputPath,
+  copyFileReplacing: mocks.copyFileReplacing,
 }));
 
 import { runScreenshotCommand } from '../../../src/cli/commands/screenshot.js';
@@ -231,7 +231,7 @@ describe('screenshot command', () => {
         createScreenshotResult({ artifactPath: '/artifacts/shot.png' }),
       );
       mocks.resolveExplicitOutputPath.mockResolvedValue('/real/out/proof.png');
-      mocks.copyToOutputPath.mockResolvedValue(undefined);
+      mocks.copyFileReplacing.mockResolvedValue(undefined);
 
       await runScreenshotCommand({
         context: TEST_CONTEXT,
@@ -243,7 +243,7 @@ describe('screenshot command', () => {
       expect(mocks.resolveExplicitOutputPath).toHaveBeenCalledWith(
         'out/proof.png',
       );
-      expect(mocks.copyToOutputPath).toHaveBeenCalledWith(
+      expect(mocks.copyFileReplacing).toHaveBeenCalledWith(
         '/artifacts/shot.png',
         '/real/out/proof.png',
       );
@@ -279,7 +279,7 @@ describe('screenshot command', () => {
     it('fails with EXPORT_ERROR when the copy to --out fails', async () => {
       mocks.sendRpc.mockResolvedValue(createScreenshotResult());
       mocks.resolveExplicitOutputPath.mockResolvedValue('/real/out/proof.png');
-      mocks.copyToOutputPath.mockRejectedValue(
+      mocks.copyFileReplacing.mockRejectedValue(
         Object.assign(new Error('disk full'), { code: 'ENOSPC' }),
       );
 
@@ -304,7 +304,7 @@ describe('screenshot command', () => {
       );
       mocks.sendRpc.mockResolvedValue(createScreenshotResult());
       mocks.resolveExplicitOutputPath.mockResolvedValue('/real/out/proof.png');
-      mocks.copyToOutputPath.mockRejectedValue(
+      mocks.copyFileReplacing.mockRejectedValue(
         Object.assign(new Error('gone'), { code: 'ENOENT' }),
       );
       mocks.sessionNotFoundIfRemoved.mockResolvedValue(removed);

@@ -15,7 +15,7 @@ import {
 import { sessionNotFoundIfRemoved } from '../../storage/artifactPaths.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
-  copyToOutputPath,
+  copyFileReplacing,
   resolveExplicitOutputPath,
 } from '../../storage/outputPath.js';
 import {
@@ -243,7 +243,7 @@ export async function runScreenshotCommand(
 
   if (output !== undefined) {
     try {
-      await copyToOutputPath(result.artifactPath, output.path);
+      await copyFileReplacing(result.artifactPath, output.path);
     } catch (error) {
       const removed = await sessionNotFoundIfRemoved(sessionDirectory, error);
       throw removed === error

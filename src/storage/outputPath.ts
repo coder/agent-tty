@@ -13,11 +13,6 @@ import process from 'node:process';
 
 import { invariant } from '../util/assert.js';
 
-/**
- * Resolves an explicit `--out` path. A relative path resolves against the
- * current working directory. The parent folder must already exist, be a
- * directory and be writable, and the result uses its real path.
- */
 export async function resolveExplicitOutputPath(
   outputPath: string,
 ): Promise<string> {
@@ -47,8 +42,7 @@ export async function resolveExplicitOutputPath(
   return realOutputPath;
 }
 
-/** Copies `sourcePath` to `outputPath`, replacing any file there in one rename. */
-export async function copyToOutputPath(
+export async function copyFileReplacing(
   sourcePath: string,
   outputPath: string,
 ): Promise<void> {
