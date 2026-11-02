@@ -38,6 +38,12 @@ function createPngBuffer(width: number, height: number): Buffer {
   return Buffer.concat([pngSignature, ihdrChunk]);
 }
 
+function asciiCellGraphemes(cols: number, rows: number): string[][] {
+  return Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => 'a'),
+  );
+}
+
 function createHarnessSnapshotPayload(overrides: Record<string, unknown> = {}) {
   return {
     cols: 3,
@@ -143,6 +149,44 @@ describe('GhosttyWebBackend unit guards', () => {
     expect(flushedChunks).toEqual([['before'], ['after']]);
   });
 
+  it('replays an empty event log to the initial size at seq -1', async () => {
+    const backend = createBackend();
+    const resizeBridge = vi.fn(() => Promise.resolve());
+    const page = { isClosed: () => false };
+    const harnessSnapshot = createHarnessSnapshotPayload({
+      cols: 40,
+      rows: 12,
+      cursorCol: 0,
+      visibleLines: [],
+    });
+
+    Object.assign(backend as object, {
+      isBooted: true,
+      page,
+      resizeBridge,
+      readHarnessSnapshot: () => Promise.resolve(harnessSnapshot),
+    });
+
+    await expect(backend.snapshot()).rejects.toThrow(
+      'snapshot() requires replayTo() first',
+    );
+    await expect(
+      backend.replayTo({
+        sessionId: 'renderer-unit-session',
+        initialCols: 40,
+        initialRows: 12,
+        targetSeq: -1,
+        events: [],
+      }),
+    ).resolves.toMatchObject({ lastSeq: -1, cols: 40, rows: 12 });
+    expect(resizeBridge).toHaveBeenCalledWith(page, 40, 12);
+    await expect(backend.snapshot()).resolves.toMatchObject({
+      capturedAtSeq: -1,
+      cols: 40,
+      rows: 12,
+    });
+  });
+
   it('rejects oversized bridge batches before page evaluation', async () => {
     const backend = createBackend();
     const evaluate = vi.fn();
@@ -185,6 +229,7 @@ describe('GhosttyWebBackend unit guards', () => {
     Object.assign(backend as object, {
       isBooted: true,
       lastAppliedSeq: 42,
+      initialReplayCols: 80,
       page: {
         evaluate,
         isClosed: () => false,
@@ -222,6 +267,7 @@ describe('GhosttyWebBackend unit guards', () => {
     Object.assign(backend as object, {
       isBooted: true,
       lastAppliedSeq: 7,
+      initialReplayCols: 80,
       page: {
         evaluate,
         isClosed: () => false,
@@ -243,6 +289,7 @@ describe('GhosttyWebBackend unit guards', () => {
     Object.assign(backend as object, {
       isBooted: true,
       lastAppliedSeq: 8,
+      initialReplayCols: 80,
       page: {
         evaluate,
         isClosed: () => false,
@@ -270,6 +317,7 @@ describe('GhosttyWebBackend unit guards', () => {
     Object.assign(backend as object, {
       isBooted: true,
       lastAppliedSeq: 9,
+      initialReplayCols: 80,
       page: {
         evaluate,
         isClosed: () => false,
@@ -346,7 +394,11 @@ describe('GhosttyWebBackend unit guards', () => {
     const pngBuffer = createPngBuffer(800, 600);
     const expectedSha256 = createHash('sha256').update(pngBuffer).digest('hex');
 
-    const evaluate = vi.fn().mockResolvedValue(undefined);
+    const evaluate = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(asciiCellGraphemes(80, 24));
     const screenshot = vi.fn(
       (options: { animations: 'disabled'; caret: 'hide'; type: 'png' }) => {
         expect(options).toEqual({
@@ -367,6 +419,7 @@ describe('GhosttyWebBackend unit guards', () => {
       currentCols: 80,
       currentRows: 24,
       lastAppliedSeq: 42,
+      initialReplayCols: 80,
       page: {
         evaluate,
         isClosed: () => false,
@@ -389,11 +442,94 @@ describe('GhosttyWebBackend unit guards', () => {
         pixelHeight: 600,
         sha256: expectedSha256,
         renderProfileHash: hashProfile(PROFILE),
+        missingGlyphs: [],
       });
-      expect(evaluate).toHaveBeenCalledTimes(2);
+      expect(evaluate).toHaveBeenCalledTimes(3);
       expect(evaluate.mock.calls[0]?.[1]).toBe(false);
       expect(locator).toHaveBeenCalledWith('#terminal');
       expect(screenshot).toHaveBeenCalledTimes(1);
+    } finally {
+      await rm(temporaryDirectory, { force: true, recursive: true });
+    }
+  });
+
+  it('omits missingGlyphs when the profile font stack does not start with a bundled font', async () => {
+    const backend = new GhosttyWebBackend('renderer-unit-session', {
+      ...PROFILE,
+      fontFamily: 'monospace',
+    });
+    // oxfmt-ignore
+    const temporaryDirectory = await realpath(await mkdtemp(join(tmpdir(), 'ghostty-web-backend-host-font-')));
+    const outputPath = join(temporaryDirectory, 'screenshot.png');
+    const evaluate = vi.fn().mockResolvedValue(undefined);
+    Object.assign(backend as object, {
+      isBooted: true,
+      currentCols: 80,
+      currentRows: 24,
+      initialReplayCols: 80,
+      lastAppliedSeq: 3,
+      page: {
+        evaluate,
+        isClosed: () => false,
+        locator: () => ({
+          screenshot: () => Promise.resolve(createPngBuffer(80, 60)),
+        }),
+      },
+    });
+
+    try {
+      const result = await backend.screenshot(outputPath);
+
+      expect(result).not.toHaveProperty('missingGlyphs');
+      expect(evaluate).toHaveBeenCalledTimes(2);
+    } finally {
+      await rm(temporaryDirectory, { force: true, recursive: true });
+    }
+  });
+
+  it('still returns the screenshot, without missingGlyphs, when the glyph check fails', async () => {
+    const logger = new Logger('debug');
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const backend = new GhosttyWebBackend(
+      'renderer-unit-session',
+      PROFILE,
+      undefined,
+      logger,
+    );
+    // oxfmt-ignore
+    const temporaryDirectory = await realpath(await mkdtemp(join(tmpdir(), 'ghostty-web-backend-glyph-fail-')));
+    const outputPath = join(temporaryDirectory, 'screenshot.png');
+    const pngBuffer = createPngBuffer(80, 60);
+    const evaluate = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('grapheme read failed'));
+    Object.assign(backend as object, {
+      isBooted: true,
+      currentCols: 80,
+      currentRows: 24,
+      initialReplayCols: 80,
+      lastAppliedSeq: 3,
+      page: {
+        evaluate,
+        isClosed: () => false,
+        locator: () => ({ screenshot: () => Promise.resolve(pngBuffer) }),
+      },
+    });
+
+    try {
+      const result = await backend.screenshot(outputPath);
+
+      expect(result.sha256).toBe(
+        createHash('sha256').update(pngBuffer).digest('hex'),
+      );
+      expect(result).not.toHaveProperty('missingGlyphs');
+      expect(evaluate).toHaveBeenCalledTimes(3);
+      expect(debugSpy).toHaveBeenCalledWith(
+        'Missing-glyph check failed; the screenshot result omits missingGlyphs',
+        'grapheme read failed',
+      );
     } finally {
       await rm(temporaryDirectory, { force: true, recursive: true });
     }
@@ -407,7 +543,11 @@ describe('GhosttyWebBackend unit guards', () => {
     const pngBuffer = createPngBuffer(640, 480);
     const expectedSha256 = createHash('sha256').update(pngBuffer).digest('hex');
 
-    const evaluate = vi.fn().mockResolvedValue(undefined);
+    const evaluate = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(asciiCellGraphemes(100, 30));
     const screenshot = vi.fn(
       (options: { animations: 'disabled'; caret: 'initial'; type: 'png' }) => {
         expect(options).toEqual({
@@ -428,6 +568,7 @@ describe('GhosttyWebBackend unit guards', () => {
       currentCols: 100,
       currentRows: 30,
       lastAppliedSeq: 7,
+      initialReplayCols: 80,
       page: {
         evaluate,
         isClosed: () => false,
@@ -452,8 +593,9 @@ describe('GhosttyWebBackend unit guards', () => {
         pixelHeight: 480,
         sha256: expectedSha256,
         renderProfileHash: hashProfile(PROFILE),
+        missingGlyphs: [],
       });
-      expect(evaluate).toHaveBeenCalledTimes(2);
+      expect(evaluate).toHaveBeenCalledTimes(3);
       expect(evaluate.mock.calls[0]?.[1]).toBe(true);
       expect(locator).toHaveBeenCalledWith('#terminal');
       expect(screenshot).toHaveBeenCalledTimes(1);

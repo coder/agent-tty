@@ -83,7 +83,10 @@ describe('artifact paths', () => {
   });
 
   it('asserts on invalid helper inputs', () => {
-    expect(() => screenshotFilename(-1, 'reference-dark')).toThrow(
+    expect(() => screenshotFilename(-2, 'reference-dark')).toThrow(
+      /seq must be an integer of at least -1/u,
+    );
+    expect(() => recordingFilename(-1, 'asciicast')).toThrow(
       /seq must be a non-negative integer/u,
     );
     expect(() => screenshotFilename(0, '')).toThrow(

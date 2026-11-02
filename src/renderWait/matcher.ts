@@ -256,9 +256,12 @@ export function prepareRenderWaitCondition(
     });
   }
 
-  if (afterSeq !== undefined && (!Number.isInteger(afterSeq) || afterSeq < 0)) {
+  if (
+    afterSeq !== undefined &&
+    (!Number.isInteger(afterSeq) || afterSeq < -1)
+  ) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-      message: 'afterSeq must be a non-negative integer',
+      message: 'afterSeq must be an integer of at least -1',
     });
   }
 
@@ -307,8 +310,8 @@ export function matchRenderWaitSnapshot(
     'snapshot cursorCol must be a non-negative integer',
   );
   invariant(
-    Number.isInteger(snapshot.capturedAtSeq) && snapshot.capturedAtSeq >= 0,
-    'snapshot capturedAtSeq must be a non-negative integer',
+    Number.isInteger(snapshot.capturedAtSeq) && snapshot.capturedAtSeq >= -1,
+    'snapshot capturedAtSeq must be an integer of at least -1',
   );
 
   if (options.stableForMs !== undefined) {

@@ -12,6 +12,8 @@ const fsHooks = vi.hoisted(() => ({
   // /proc/<pid>/stat by pid, or the error that its read throws.
   proc: undefined as Map<string, string | Error> | undefined,
   mountinfo: undefined as string | undefined,
+  ownStatError: undefined as Error | undefined,
+  rmdirError: undefined as Error | undefined,
 }));
 
 vi.mock('node:fs', async () => {
@@ -24,6 +26,9 @@ vi.mock('node:fs', async () => {
           ...rest,
         )) as typeof actual.readdirSync;
   const readFileSync = ((path: string, ...rest: unknown[]) => {
+    if (fsHooks.ownStatError !== undefined && path === '/proc/self/stat') {
+      throw fsHooks.ownStatError;
+    }
     if (fsHooks.proc !== undefined && path === '/proc/self/mountinfo') {
       if (fsHooks.mountinfo === undefined) {
         throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
@@ -57,7 +62,15 @@ vi.mock('node:fs/promises', async () => {
     }
     return contents;
   };
-  return { ...actual, readFile };
+  const rmdir = async (
+    ...args: Parameters<typeof actual.rmdir>
+  ): Promise<void> => {
+    if (fsHooks.rmdirError !== undefined) {
+      throw fsHooks.rmdirError;
+    }
+    await actual.rmdir(...args);
+  };
+  return { ...actual, readFile, rmdir };
 });
 
 // destroy and reconcile poll for about 5 s. These tests skip the waits.
@@ -81,6 +94,8 @@ import {
   destroySession,
   cliRunsInsideProgramSession,
   reconcileSession,
+  removeSocketDirectoryBestEffort,
+  removeSocketDirectoryIfEmpty,
   type AllocateConfig,
 } from '../../../src/host/lifecycle.js';
 import {
@@ -108,6 +123,7 @@ afterEach(async () => {
   fsHooks.afterReadFile = undefined;
   fsHooks.proc = undefined;
   fsHooks.mountinfo = undefined;
+  fsHooks.ownStatError = undefined;
   await rm(home, { recursive: true, force: true });
 });
 
@@ -558,6 +574,17 @@ describe('cliRunsInsideProgramSession', () => {
     },
   );
 
+  it.each(['ENOENT', 'EACCES'])(
+    'on linux reads the caller as outside when /proc/self/stat fails with %s',
+    async (code) => {
+      await seedSession(makeRecord({ childPid: CHILD_PID }));
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      fsHooks.ownStatError = errno(code);
+
+      expect(await cliRunsInsideProgramSession('session-01')).toBe(false);
+    },
+  );
+
   it("on darwin matches the caller's process group only", async () => {
     const pgid = ownId('pgid');
     Object.defineProperty(process, 'platform', { value: 'darwin' });
@@ -588,5 +615,28 @@ describe('cliRunsInsideProgramSession', () => {
     Object.defineProperty(process, 'platform', { value: 'win32' });
 
     expect(await cliRunsInsideProgramSession('session-01')).toBe(false);
+  });
+});
+
+describe('removeSocketDirectoryBestEffort', () => {
+  afterEach(() => {
+    fsHooks.rmdirError = undefined;
+    vi.restoreAllMocks();
+  });
+
+  it('logs an unusual rmdir error instead of throwing it', async () => {
+    const busy = Object.assign(new Error('EBUSY'), { code: 'EBUSY' });
+    fsHooks.rmdirError = busy;
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    const socketFile = '/tmp/agent-tty/00000000/000000000000';
+
+    await expect(removeSocketDirectoryIfEmpty(socketFile)).rejects.toBe(busy);
+    await expect(
+      removeSocketDirectoryBestEffort(socketFile),
+    ).resolves.toBeUndefined();
+    expect(debug).toHaveBeenCalledWith(
+      'could not remove the socket directory:',
+      busy,
+    );
   });
 });

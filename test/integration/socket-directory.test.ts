@@ -1,0 +1,169 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdtemp, realpath } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import process from 'node:process';
+import { pathToFileURL } from 'node:url';
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { sessionDir, socketPath } from '../../src/storage/sessionPaths.js';
+import {
+  cleanupHome,
+  crashSession,
+  createSession,
+  inspectSession,
+  runCli,
+  sleep,
+  type SuccessEnvelope,
+} from '../helpers.js';
+
+let testHome = '';
+
+function socketDirectoryOf(sessionId: string): string {
+  return dirname(socketPath(sessionDir(testHome, sessionId)));
+}
+
+async function waitForRemoval(path: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (existsSync(path)) {
+    expect(Date.now()).toBeLessThan(deadline);
+    await sleep(50);
+  }
+}
+
+describe.skipIf(process.platform === 'win32')(
+  'socket directory',
+  { timeout: 30_000 },
+  () => {
+    beforeEach(async () => {
+      testHome = await realpath(
+        await mkdtemp(join(tmpdir(), 'agent-tty-socket-dir-')),
+      );
+    });
+
+    afterEach(async () => {
+      await cleanupHome(testHome);
+    });
+
+    it('destroy removes it with the last socket of the Home', () => {
+      const first = createSession(testHome);
+      const second = createSession(testHome);
+      const directory = socketDirectoryOf(first);
+      const env = { AGENT_TTY_HOME: testHome };
+
+      expect(runCli(['destroy', first, '--json'], env).status).toBe(0);
+      expect(readdirSync(directory)).toEqual([
+        socketPath(sessionDir(testHome, second)).slice(directory.length + 1),
+      ]);
+      expect(inspectSession(testHome, second).status).toBe('running');
+      expect(
+        runCli(['type', second, 'still-reachable', '--json'], env).status,
+      ).toBe(0);
+
+      expect(runCli(['destroy', second, '--json'], env).status).toBe(0);
+      expect(existsSync(directory)).toBe(false);
+    });
+
+    it('destroy --force removes it after it kills the host', () => {
+      const sessionId = createSession(testHome);
+      const directory = socketDirectoryOf(sessionId);
+
+      expect(
+        runCli(['destroy', sessionId, '--force', '--json'], {
+          AGENT_TTY_HOME: testHome,
+        }).status,
+      ).toBe(0);
+      expect(existsSync(directory)).toBe(false);
+    });
+
+    it('a host whose rmdir fails with EBUSY still exits cleanly', async () => {
+      const exitFile = join(testHome, 'host-exit');
+      const sessionId = createSession(testHome, undefined, {
+        env: {
+          HOST_EXIT_FILE: exitFile,
+          NODE_OPTIONS: [
+            process.env.NODE_OPTIONS ?? '',
+            `--import=${pathToFileURL(resolve('test/fixtures/host-rmdir-ebusy.ts')).href}`,
+          ].join(' '),
+        },
+      });
+
+      expect(
+        runCli(['destroy', sessionId, '--json'], { AGENT_TTY_HOME: testHome })
+          .status,
+      ).toBe(0);
+      const deadline = Date.now() + 10_000;
+      while (!existsSync(exitFile)) {
+        expect(Date.now()).toBeLessThan(deadline);
+        await sleep(50);
+      }
+      expect(readFileSync(exitFile, 'utf8')).toBe('0\n');
+    });
+
+    it('a host whose program exits removes it', async () => {
+      const sessionId = createSession(testHome, ['/bin/sh', '-c', 'sleep 1']);
+      await waitForRemoval(socketDirectoryOf(sessionId));
+      expect(inspectSession(testHome, sessionId).status).toBe('exited');
+    });
+
+    it('a reconcile after a host crash removes it', async () => {
+      const sessionId = createSession(testHome);
+      crashSession(testHome, sessionId);
+      await sleep(500);
+      expect(inspectSession(testHome, sessionId).status).toBe('failed');
+      expect(existsSync(socketDirectoryOf(sessionId))).toBe(false);
+    });
+
+    it.each(['', 'bind'])(
+      'doctor passes its socket check and leaves no directory (removed before: %s)',
+      (step) => {
+        const result = runCli(['doctor', '--json'], {
+          AGENT_TTY_HOME: testHome,
+          ...(step === ''
+            ? {}
+            : {
+                REMOVE_SOCKET_DIRECTORY_BEFORE: step,
+                NODE_OPTIONS: [
+                  process.env.NODE_OPTIONS ?? '',
+                  `--import=${pathToFileURL(resolve('test/fixtures/remove-socket-directory-once.ts')).href}`,
+                ].join(' '),
+              }),
+        });
+        const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+          checks: { environment: Array<{ name: string; status: string }> };
+        }>;
+        expect(envelope.result.checks.environment).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: 'socket-viable', status: 'pass' }),
+          ]),
+        );
+        expect(existsSync(dirname(socketPath(sessionDir(testHome, 'x'))))).toBe(
+          false,
+        );
+      },
+      60_000,
+    );
+
+    it.each(['chmod', 'bind'])(
+      'a host listens when the directory vanishes before its %s',
+      (step) => {
+        const sessionId = createSession(testHome, undefined, {
+          env: {
+            REMOVE_SOCKET_DIRECTORY_BEFORE: step,
+            NODE_OPTIONS: [
+              process.env.NODE_OPTIONS ?? '',
+              `--import=${pathToFileURL(resolve('test/fixtures/remove-socket-directory-once.ts')).href}`,
+            ].join(' '),
+          },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('running');
+        expect(
+          runCli(['type', sessionId, 'reachable', '--json'], {
+            AGENT_TTY_HOME: testHome,
+          }).status,
+        ).toBe(0);
+      },
+    );
+  },
+);

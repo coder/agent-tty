@@ -140,10 +140,10 @@ Useful flags:
 - `--regex <pattern>`: wait for a regex match in rendered output.
 - `--scope <scope>`: where `--text`/`--regex` match — `screen` (default, whole visible screen) or `cursor-line` (only the row the cursor is on). See [Echo-Match](#echo-match).
 - `--screen-stable-ms <ms>`: wait for the rendered screen to be stable.
-- `--after-seq <n>`: only match renderer snapshots produced after this Event Log sequence — thread an input command's returned `seq` here so the wait cannot match pre-input screen state.
+- `--after-seq <n>`: only match renderer snapshots produced after this Event Log sequence — thread an input command's returned `seq` here so the wait cannot match pre-input screen state. `-1` is the sequence before the first event, which a `snapshot` of a session that has printed nothing reports.
 - `--idle-ms <ms>`: wait for output idleness.
 - `--exit`: wait for the process to exit.
-- `--timeout <ms>`: maximum wait time in milliseconds, with `0` meaning infinite.
+- `--timeout <ms>`: maximum wait time in milliseconds. The default is `30000` (30 s). `0` waits without a limit. An `--idle-ms` or `--screen-stable-ms` of `30000` or more cannot finish within the default, so `wait` rejects it with `INVALID_DURATION` unless you pass `--timeout`.
 
 On timeout, a standalone `wait` exits `11` (`WAIT_TIMEOUT`) while preserving a success JSON envelope with `timedOut: true` in the result (`matched: false` for render waits). Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast.
 
@@ -204,7 +204,7 @@ Steps are a JSON array; each step is exactly one verb. The shape mirrors the res
 - `sendKeys`: a non-empty array of key names — individual named keys or single characters (e.g. `["Enter"]`, `["Ctrl+C"]`, `["Escape", "Enter"]`). Multi-character literal text such as `:wq` is not a key name; send it with a `type` step.
 - `mouse`: the same `action`, `button`, `row`, `col`, and optional `modifiers`, `cellWidth`, and `cellHeight` fields as the `mouse` command. It uses the batch command's renderer.
 - `run`: a command string, with optional `noWait` (fire-and-forget) and `timeout` (ms). A `run` step is a waited run by default.
-- `wait`: the same conditions as the `wait` command — `text`, `regex`, `scope`, `screenStableMs`, `cursorRow`, `cursorCol`, and `timeout` (ms).
+- `wait`: the same conditions as the `wait` command — `text`, `regex`, `scope`, `screenStableMs`, `cursorRow`, `cursorCol`, and `timeout` (ms). An omitted `timeout` is `30000`, the same default as the `wait` command, and `0` waits without a limit. Without `timeout`, a `screenStableMs` of `30000` or more is rejected with `INVALID_INPUT`.
 
 Input source and flags:
 
@@ -255,11 +255,22 @@ The Wait Baseline fixes stale-match only. It does **not** fix echo-match: a whol
 Screenshots and WebM export use the `ghostty-web` reference visual renderer through Playwright/Chromium.
 Semantic `snapshot`, screen-hash, and render-backed `wait` paths prefer `libghostty-vt` when the optional native package is available and fall back to `ghostty-web` otherwise. Run `doctor --json` first in new environments.
 
+On a session that has printed nothing yet, `snapshot` returns an empty screen of the session's size and `screenshot` returns a blank image. Both report `capturedAtSeq: -1`, and the screenshot file is named `screenshot--1-<profile>.png`.
+
 ```bash
 agent-tty screenshot <session-id> --profile reference-dark --json
 agent-tty screenshot <session-id> --show-cursor --json
 agent-tty record export <session-id> --format asciicast --out ./session.cast --json
 agent-tty record export <session-id> --format webm --timing accelerated --out ./session.webm --json
+```
+
+The screenshot result lists `missingGlyphs`: each code point that the PNG draws as an empty `.notdef` box, with the zero-based `row` and `col` of each cell. A box appears when no font has the glyph, and also when Chromium draws a whole cluster (a letter plus a mark) with the first bundled font because no font has every part of it. The bundled fonts are a Latin JetBrains Mono subset and Symbols Nerd Font Mono. The check is best effort: an empty array means it found no box (see Known limits below), and a result without `missingGlyphs` means the check did not run or failed. The list holds at most 4096 cells, and one screenshot checks at most 4096 distinct glyphs within a 1-second time budget. When a limit or the budget stops the check early, the result also has `"missingGlyphsTruncated": true`, and the list can miss boxes. Glyphs that a host font draws are not listed, so the same session can list different code points on hosts with different fonts. The text snapshot still has the right characters.
+
+Known limits: a letter that the font builds from a smaller precomposed letter plus a mark it lacks, such as Vietnamese `ế` (drawn as `ê` without the acute), is listed although the PNG shows a letter, not a box. A glyph under the block cursor is listed although the cursor hides it, and so is a glyph in a concealed (SGR 8) cell. The check uses the regular font style, so a bold or italic cell whose host font face differs in coverage can be judged wrong, and a grapheme that Chromium splits over several fonts is judged per code point, which can miss a box. A cluster whose parts the bundled fonts cover only between them, such as a Nerd Font glyph with a mark that only JetBrains Mono has, is not checked, so a box in it is not listed.
+
+```bash
+agent-tty screenshot <session-id> --json | jq -c '.result.missingGlyphs'
+# [{"codePoint":"U+29C9","cells":[{"row":0,"col":6}]}]
 ```
 
 WebM export replays with recorded wall-clock timing by default. Pass `--timing accelerated` (idle gaps clamped to 400ms) or `--timing max-speed` for a time-compressed video.
@@ -289,6 +300,8 @@ agent-tty record diff <session-id> <session-id> --at-seq-a 0 --json
 On Linux it also ends those processes when the program has already exited or the session has failed.
 `destroy --force` kills the host and the program's group without asking the host first.
 `list`, `inspect`, `destroy` and `gc` reconcile a session whose host died: they kill the program's group and record the session as `failed` (or `exited` or `destroyed`).
+A `destroy` that runs inside the session, such as one typed into the session's shell, runs again outside the session and prints its result once the session has ended.
+The session's terminal is closed by then, so redirect stdout to keep the result, for example `agent-tty destroy "$AGENT_TTY_SESSION_ID" --json > destroy.json`.
 
 On Linux, `destroy` and reconcile never kill a process group that they cannot prove is the session's.
 When the host starts the program, it records the program's pid, the boot id and the program's autogroup id in an internal file, `program.json`.
@@ -323,7 +336,9 @@ Avoid writing automated sessions into the default `~/.agent-tty` unless you inte
 
 ## Shell Environment
 
-`create` spawns the shell with your inherited environment plus `TERM` (from `--term`) and a default `PROMPT_EOL_MARK=` (empty). The empty `PROMPT_EOL_MARK` suppresses the inverse-video `%` that `zsh` prints at the end of any output without a trailing newline; without it, agent-tty's hidden per-`run` completion marker leaves a stray `%` in snapshots, screenshots, and recordings. The variable is zsh-only and inert in other shells.
+`create` spawns the shell with your inherited environment plus `TERM` (from `--term`), a default `PROMPT_EOL_MARK=` (empty) and a default `COLORTERM=truecolor`. The empty `PROMPT_EOL_MARK` suppresses the inverse-video `%` that `zsh` prints at the end of any output without a trailing newline; without it, agent-tty's hidden per-`run` completion marker leaves a stray `%` in snapshots, screenshots, and recordings. The variable is zsh-only and inert in other shells.
+
+The `COLORTERM=truecolor` default says that the renderer draws 24-bit color. Neovim turns on 24-bit color when it sees that value. When `COLORTERM` is unset, Neovim asks the terminal instead, and agent-tty does not answer that query, so a screenshot loses the colors that the 256-color palette cannot show. An inherited `COLORTERM` describes the terminal that launched agent-tty, not the session's renderer, so the default replaces it.
 
 The shell also receives two session variables, so scripts inside a session can detect agent-tty and find their own session:
 
@@ -332,13 +347,16 @@ The shell also receives two session variables, so scripts inside a session can d
 | `AGENT_TTY_ACTIVE`     | `true`.                                                   |
 | `AGENT_TTY_SESSION_ID` | The session's ID (a ULID, as printed by `create --json`). |
 
-Both replace inherited values, so a session created from inside another session reports its own ID, not the outer one. A PTY that agent-tty spawns without a session (the `doctor` spawn probe) gets neither variable: inherited values are removed, so it never reports an outer session's ID. Like the `PROMPT_EOL_MARK` default, they are set at spawn time and are not stored in the session's recorded `env`.
+Both replace inherited values, so a session created from inside another session reports its own ID, not the outer one. A PTY that agent-tty spawns without a session (the `doctor` spawn probe) gets neither variable: inherited values are removed, so it never reports an outer session's ID. Like the `PROMPT_EOL_MARK` and `COLORTERM` defaults, they are set at spawn time and are not stored in the session's recorded `env`.
 
 Any `--env` value always wins, so you can opt back into the shell's native behavior or override a session variable per session:
 
 ```bash
 # Restore zsh's styled default marker:
 agent-tty create --env PROMPT_EOL_MARK='%B%S%#%s%b' -- /bin/zsh
+
+# Hide 24-bit color support from the program:
+agent-tty create --env COLORTERM= -- nvim
 ```
 
 A lone `'%'` does **not** restore the marker (zsh treats it as a prompt escape that expands to nothing); use `'%B%S%#%s%b'` for the styled default or `'%%'` for a plain percent. The default is applied at spawn time and is not stored in the manifest, so it does not appear in `inspect`, `list`, or `create --json` output. If your `~/.zshrc` assigns `PROMPT_EOL_MARK` it runs after the environment is imported and wins, so the marker can reappear — remove that line or set the value you want via `--env`.
@@ -364,6 +382,8 @@ Every command exits with a stable code, so scripts can branch without parsing ou
 | `12`      | A requested runtime capability is unavailable (`CAPABILITY_UNAVAILABLE`).                                                   |
 
 A fail-fast `batch` exits with the failed step's code (for example `11` for a wait timeout); `--keep-going` exits `1` if any step failed.
+
+An unexpected failure prints an `INTERNAL_ERROR` envelope and exits `1`. Add `--log-level debug` to also print its stack on stderr. A failure while the CLI reads the global options and the config file prints no stack, because the log level is not known yet. With `--json`, a usage error (unknown command or flag, missing argument or required option) prints an `INVALID_INPUT` envelope under the command name `agent-tty` and exits `2`. The usage text still goes to stderr.
 
 ## Anti-Patterns
 

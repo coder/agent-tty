@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { chmod, mkdir, readdir, stat, unlink } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { chmod, mkdir, readdir, rmdir, stat, unlink } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -208,8 +208,16 @@ function killProcessBestEffort(pid: number | null): void {
   }
 }
 
-function ownLinuxSessionId(): number {
-  const { sid } = parseProcStat(readFileSync('/proc/self/stat', 'utf8'));
+// A chroot or a container without a mounted /proc has no /proc/self/stat,
+// and the CLI then counts as outside the session.
+function ownLinuxSessionId(): number | null {
+  let stat: string;
+  try {
+    stat = readFileSync('/proc/self/stat', 'utf8');
+  } catch {
+    return null;
+  }
+  const { sid } = parseProcStat(stat);
   invariant(sid > 0, 'own session id must be a positive integer');
   return sid;
 }
@@ -277,6 +285,75 @@ async function unlinkIfPresent(path: string): Promise<void> {
     }
 
     throw error;
+  }
+}
+
+export async function removeSocketDirectoryIfEmpty(
+  socketFile: string,
+): Promise<void> {
+  try {
+    await rmdir(dirname(socketFile));
+  } catch (error) {
+    if (
+      hasErrorCode(error, 'ENOENT') ||
+      hasErrorCode(error, 'ENOTEMPTY') ||
+      hasErrorCode(error, 'EEXIST')
+    ) {
+      return;
+    }
+
+    throw error;
+  }
+}
+
+// For a process whose work is already done: an unusual rmdir error, such as
+// EBUSY or EPERM, is logged and must not fail it.
+export async function removeSocketDirectoryBestEffort(
+  socketFile: string,
+): Promise<void> {
+  try {
+    await removeSocketDirectoryIfEmpty(socketFile);
+  } catch (error) {
+    console.debug('could not remove the socket directory:', error);
+  }
+}
+
+const SOCKET_LISTEN_ATTEMPTS = 5;
+
+// libuv reports a bind in a missing directory as EACCES.
+function isVanishedSocketDirectory(
+  error: unknown,
+  socketDirectory: string,
+): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const { code, path, syscall } = error as NodeJS.ErrnoException;
+  return (
+    (syscall === 'listen' && (code === 'EACCES' || code === 'ENOENT')) ||
+    (syscall === 'chmod' && code === 'ENOENT' && path === socketDirectory)
+  );
+}
+
+export async function listenInSocketDirectory(
+  socketFile: string,
+  listen: () => Promise<void>,
+): Promise<void> {
+  const socketDirectory = dirname(socketFile);
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await mkdir(socketDirectory, { recursive: true });
+      await chmod(socketDirectory, 0o700);
+      await listen();
+      return;
+    } catch (error) {
+      if (
+        attempt === SOCKET_LISTEN_ATTEMPTS ||
+        !isVanishedSocketDirectory(error, socketDirectory)
+      ) {
+        throw error;
+      }
+    }
   }
 }
 
@@ -571,6 +648,7 @@ async function recordDestroyed(
     });
   }
   await unlinkIfPresent(socketFile);
+  await removeSocketDirectoryIfEmpty(socketFile);
 }
 
 async function stopSessionProcesses(
@@ -862,5 +940,7 @@ export async function reconcileSession(
     }
     throw error;
   }
-  await unlinkIfPresent(socketPath(sessionDirectory));
+  const socketFile = socketPath(sessionDirectory);
+  await unlinkIfPresent(socketFile);
+  await removeSocketDirectoryIfEmpty(socketFile);
 }

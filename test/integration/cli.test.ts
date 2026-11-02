@@ -210,6 +210,16 @@ describe('CLI integration', () => {
     expect(result.stdout).toContain('List sessions');
   });
 
+  it('shows the finite default of wait --timeout in help', () => {
+    const result = runCli(['wait', '--help'], testEnv());
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout.replaceAll(/\s+/gu, ' ')).toContain(
+      '--timeout <ms> Maximum wait time in milliseconds (0 for infinite) (default: 30000)',
+    );
+  });
+
   it('documents cell-addressed mouse input and its modifiers', () => {
     const result = runCli(['mouse', '--help'], testEnv());
 
@@ -570,6 +580,149 @@ describe('CLI integration', () => {
     expect(parsed.command).toBe('agent-tty');
     expect(parsed.error.code).toBe('INVALID_INPUT');
     expect(parsed.error.message).toBe('--home must be an absolute path.');
+  });
+
+  it.each<[string, string[]]>([
+    ['inspect', ['inspect', '']],
+    ['destroy', ['destroy', '']],
+    ['destroy', ['destroy', '', '--force']],
+    ['type', ['type', '', 'hello']],
+    ['paste', ['paste', '', 'hello']],
+    ['run', ['run', '', 'echo hi']],
+    ['batch', ['batch', '', JSON.stringify([{ type: 'hello' }])]],
+    ['mark', ['mark', '', 'label']],
+    ['send-keys', ['send-keys', '', 'Enter']],
+    [
+      'mouse',
+      ['mouse', '', 'press', '--button', 'left', '--row', '0', '--col', '0'],
+    ],
+    ['resize', ['resize', '', '--cols', '80', '--rows', '24']],
+    ['signal', ['signal', '', 'TERM']],
+    ['wait', ['wait', '', '--text', 'ready']],
+    ['snapshot', ['snapshot', '']],
+    ['screenshot', ['screenshot', '']],
+    ['record diff', ['record', 'diff', '', 'other']],
+    ['record export', ['record', 'export', '', '--format', 'asciicast']],
+  ])(
+    'returns INVALID_SESSION_ID for an empty session ID in %s',
+    (command, args) => {
+      const result = runCli([...args, '--json'], testEnv());
+      expect(result.status, result.stderr).toBe(2);
+
+      const envelope = parseErrorEnvelope(result.stdout);
+      expect(envelope.ok).toBe(false);
+      expect(envelope.command).toBe(command);
+      expect(envelope.error.code).toBe('INVALID_SESSION_ID');
+      expect(envelope.error.message).toBe('Session ID "" is invalid.');
+    },
+  );
+
+  it('prints one INTERNAL_ERROR envelope without a stack for an unexpected command error', () => {
+    writeFileSync(join(testHome, 'sessions'), '');
+
+    const result = runCli(['list', '--json'], testEnv());
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).not.toMatch(/^\s+at /mu);
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe('list');
+    expect(envelope.error.code).toBe('INTERNAL_ERROR');
+    expect(envelope.error.message).toContain('ENOTDIR');
+  });
+
+  it('prints the stack of an unexpected command error at --log-level debug', () => {
+    writeFileSync(join(testHome, 'sessions'), '');
+
+    const result = runCli(
+      ['--log-level', 'debug', 'list', '--json'],
+      testEnv(),
+    );
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toMatch(/^\s+at /mu);
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.command).toBe('list');
+    expect(envelope.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('prints one INTERNAL_ERROR envelope for an unexpected error before the command runs', () => {
+    writeFileSync(join(testHome, 'config.json'), '{');
+
+    const result = runCli(['version', '--json'], testEnv());
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).not.toMatch(/^\s+at /mu);
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe('agent-tty');
+    expect(envelope.error.code).toBe('INTERNAL_ERROR');
+    expect(envelope.error.message).toContain('contains invalid JSON');
+  });
+
+  it.each<[string, string[], string]>([
+    [
+      'an unknown option',
+      ['inspect', 'session-01', '--bogus'],
+      "unknown option '--bogus'",
+    ],
+    [
+      'a missing argument',
+      ['inspect'],
+      "missing required argument 'session-id'",
+    ],
+    [
+      'a missing required option',
+      ['record', 'export', 'session-01'],
+      "required option '--format <format>' not specified",
+    ],
+    ['an unknown command', ['bogus'], "unknown command 'bogus'"],
+  ])(
+    'prints one INVALID_INPUT envelope for %s under --json',
+    (_case, args, message) => {
+      const result = runCli([...args, '--json'], testEnv());
+      expect(result.status, result.stderr).toBe(2);
+
+      const envelope = parseErrorEnvelope(result.stdout);
+      expect(envelope.ok).toBe(false);
+      expect(envelope.command).toBe('agent-tty');
+      expect(envelope.error.code).toBe('INVALID_INPUT');
+      expect(envelope.error.message).toBe(message);
+    },
+  );
+
+  it('keeps the plain Commander text for a usage error without --json', () => {
+    const result = runCli(['inspect', 'session-01', '--bogus'], testEnv());
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain("error: unknown option '--bogus'");
+  });
+
+  it('ignores a --json after -- for a usage error', () => {
+    const result = runCli(
+      ['create', '--bogus', '--', '/bin/cat', '--json'],
+      testEnv(),
+    );
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain("error: unknown option '--bogus'");
+  });
+
+  it('ignores a --json after -- for a command error', () => {
+    const result = runCli(
+      [
+        'create',
+        '--cwd',
+        join(testHome, 'missing-cwd'),
+        '--',
+        '/bin/sh',
+        '--json',
+      ],
+      testEnv(),
+    );
+    expect(result.status).toBe(8);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toMatch(/^STORAGE_READ_ERROR: /u);
   });
 
   it('keeps human output free of ANSI sequences when --no-color is set', () => {

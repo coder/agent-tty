@@ -16,6 +16,7 @@ const RegexPatternSchema = z
 const ProfileNameSchema = z.string().min(1).max(100);
 const PositiveIntSchema = z.number().int().positive();
 const NonNegativeIntSchema = z.number().int().nonnegative();
+export const ReplaySeqSchema = z.number().int().gte(-1);
 const IsoDatetimeSchema = z.iso.datetime();
 const SnapshotFormatSchema = z.enum(['structured', 'text']);
 
@@ -404,7 +405,7 @@ export const StructuredSnapshotResultSchema = z
   .object({
     format: z.literal('structured'),
     sessionId: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntSchema,
+    capturedAtSeq: ReplaySeqSchema,
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
     cursorRow: NonNegativeIntSchema,
@@ -424,7 +425,7 @@ export const TextSnapshotResultSchema = z
   .object({
     format: z.literal('text'),
     sessionId: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntSchema,
+    capturedAtSeq: ReplaySeqSchema,
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
     cursorRow: NonNegativeIntSchema,
@@ -450,10 +451,26 @@ export const ScreenshotParamsSchema = z
   .strict();
 export type ScreenshotParams = z.infer<typeof ScreenshotParamsSchema>;
 
+export const MissingGlyphSchema = z
+  .object({
+    codePoint: z
+      .string()
+      .regex(/^U\+(?:[0-9A-F]{4}|[1-9A-F][0-9A-F]{4}|10[0-9A-F]{4})$/u),
+    cells: z
+      .array(
+        z
+          .object({ row: NonNegativeIntSchema, col: NonNegativeIntSchema })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
+export type MissingGlyph = z.infer<typeof MissingGlyphSchema>;
+
 export const ScreenshotResultSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntSchema,
+    capturedAtSeq: ReplaySeqSchema,
     profileName: NonEmptyStringSchema,
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
@@ -465,6 +482,8 @@ export const ScreenshotResultSchema = z
     pixelHeight: PositiveIntSchema.optional(),
     sha256: Sha256HexSchema.optional(),
     renderProfileHash: Sha256HexSchema.optional(),
+    missingGlyphs: z.array(MissingGlyphSchema).optional(),
+    missingGlyphsTruncated: z.literal(true).optional(),
   })
   .strict();
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;
@@ -480,7 +499,7 @@ export const WaitForRenderParamsSchema = z
     screenStableMs: PositiveIntSchema.optional(),
     cursorRow: NonNegativeIntSchema.optional(),
     cursorCol: NonNegativeIntSchema.optional(),
-    afterSeq: NonNegativeIntSchema.optional(),
+    afterSeq: ReplaySeqSchema.optional(),
     timeoutMs: PositiveIntSchema.optional(),
     rendererName: RendererNameSchema.optional(),
   })
@@ -539,7 +558,7 @@ export const WaitForRenderResultSchema = z
     matchedText: z.string().optional(),
     cursorRow: NonNegativeIntSchema.optional(),
     cursorCol: NonNegativeIntSchema.optional(),
-    capturedAtSeq: NonNegativeIntSchema,
+    capturedAtSeq: ReplaySeqSchema,
     screenHash: Sha256HexSchema.optional(),
   })
   .strict();
@@ -592,9 +611,7 @@ const MAX_BLANK_HASH_ROWS = 100_000;
 export const RecordDiffSideSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
-    // -1 mirrors ReplayInput.targetSeq for an empty event log: the side is
-    // the pre-event blank screen and no event sequence was replayed.
-    capturedAtSeq: z.number().int().gte(-1),
+    capturedAtSeq: ReplaySeqSchema,
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
     screenHash: Sha256HexSchema,

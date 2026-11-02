@@ -254,6 +254,52 @@ describe('screenshot command', () => {
     });
   });
 
+  it('names missing glyphs in the human output', async () => {
+    const result = createScreenshotResult({
+      missingGlyphs: [
+        { codePoint: 'U+0378', cells: [{ row: 1, col: 6 }] },
+        { codePoint: 'U+29C9', cells: [{ row: 0, col: 6 }] },
+      ],
+    });
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runScreenshotCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+    });
+
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lines: expect.arrayContaining([
+          'Missing glyphs (drawn as boxes): U+0378, U+29C9',
+        ]) as unknown,
+      }),
+    );
+  });
+
+  it('says when the missing glyph list is truncated', async () => {
+    const result = createScreenshotResult({
+      missingGlyphs: [{ codePoint: 'U+0378', cells: [{ row: 1, col: 6 }] }],
+      missingGlyphsTruncated: true,
+    });
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runScreenshotCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+    });
+
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lines: expect.arrayContaining([
+          'Missing glyphs (drawn as boxes): U+0378, and more',
+        ]) as unknown,
+      }),
+    );
+  });
+
   it('threads showCursor to running-session screenshot RPC requests', async () => {
     const result = createScreenshotResult({
       artifactPath: '/tmp/show-cursor.png',

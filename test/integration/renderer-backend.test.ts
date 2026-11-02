@@ -2,12 +2,14 @@ import { mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { Page } from 'playwright';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { resolveDefaultPlaywrightBrowsersPath } from '../../src/renderer/browserPath.js';
 import { resolveProfile } from '../../src/renderer/profiles.js';
 import type { ReplayInput } from '../../src/renderer/types.js';
 import { GhosttyWebBackend } from '../../src/renderer/ghosttyWeb/index.js';
+import { probeUsedFonts } from '../../src/renderer/ghosttyWeb/missingGlyphs.js';
 
 const PROFILE = resolveProfile('reference-dark');
 const SESSION_ID = 'renderer-backend-integration';
@@ -457,6 +459,130 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       expect(screenshot.renderProfileHash).toMatch(/^[a-f0-9]{64}$/u);
     } finally {
       await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports glyphs that no font draws as missingGlyphs, and the check leaves the PNG unchanged', async () => {
+    await backend.boot();
+    await backend.replayTo(
+      createReplayInput([
+        {
+          seq: 0,
+          ts: timestampFor(0),
+          type: 'output',
+          payload: { data: 'ok \ue0b0 \u0378\r\n\u0378 end\r\n' },
+        },
+      ]),
+    );
+
+    // oxfmt-ignore
+    const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-glyphs-')));
+
+    try {
+      const first = await backend.screenshot(join(outputDir, 'first.png'));
+      const second = await backend.screenshot(join(outputDir, 'second.png'));
+
+      expect(first.missingGlyphs).toEqual([
+        {
+          codePoint: 'U+0378',
+          cells: [
+            { row: 0, col: 5 },
+            { row: 1, col: 0 },
+          ],
+        },
+      ]);
+      expect(second.missingGlyphs).toEqual(first.missingGlyphs);
+      expect(second.sha256).toBe(first.sha256);
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not list the spaces that the PNG draws blank', async () => {
+    await backend.boot();
+    await backend.replayTo(
+      createReplayInput([
+        {
+          seq: 0,
+          ts: timestampFor(0),
+          type: 'output',
+          payload: {
+            data: '1\u202f234\u202f567,5 a\u2009b\u2007c\u205fd\u3000e\r\n',
+          },
+        },
+      ]),
+    );
+    // oxfmt-ignore
+    const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-spaces-')));
+
+    try {
+      const shot = await backend.screenshot(join(outputDir, 'spaces.png'));
+
+      expect(shot.missingGlyphs).toEqual([]);
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  it('lists a glyph the same way whatever glyphs sit next to it', async () => {
+    // oxfmt-ignore
+    const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-neighbors-')));
+    const listed = async (text: string, name: string): Promise<string[]> => {
+      const renderer = new GhosttyWebBackend(SESSION_ID, PROFILE);
+      try {
+        await renderer.boot();
+        await renderer.replayTo(
+          createReplayInput([
+            {
+              seq: 0,
+              ts: timestampFor(0),
+              type: 'output',
+              payload: { data: `${text}\r\n` },
+            },
+          ]),
+        );
+        const shot = await renderer.screenshot(join(outputDir, `${name}.png`));
+        return (shot.missingGlyphs ?? []).map((glyph) => glyph.codePoint);
+      } finally {
+        await renderer.dispose();
+      }
+    };
+
+    try {
+      const alone = await listed('\u2500 \u2713 \u2631 \u2502', 'alone');
+      const nextToBoxes = await listed(
+        '\u0378\u2500\u0378\u2713\u0378\u2631\u0378\u2502\u0378',
+        'next-to-boxes',
+      );
+
+      expect(nextToBoxes).toEqual(['U+0378', ...alone]);
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports the font of every probe text, right after the probe spans appear', async () => {
+    await backend.boot();
+    await backend.replayTo(
+      createReplayInput([
+        { seq: 0, ts: timestampFor(0), type: 'output', payload: { data: 'x' } },
+      ]),
+    );
+    const { page } = backend as unknown as { page: Page };
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const fonts = await probeUsedFonts(
+        page,
+        `${String(PROFILE.fontSize)}px ${PROFILE.fontFamily}`,
+        ['A', '\ue0b0'],
+      );
+
+      expect(fonts.get('A')?.map((font) => font.familyName)).toEqual([
+        'JetBrains Mono',
+      ]);
+      expect(fonts.get('\ue0b0')?.map((font) => font.familyName)).toEqual([
+        'Symbols Nerd Font Mono',
+      ]);
     }
   });
 
