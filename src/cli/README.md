@@ -15,6 +15,7 @@ This directory is the agent-tty command-line front end. `main.ts` is the bin ent
 - `resolveCommandTarget(options)` returns a `CommandTarget` (`sessionId`, `sessionDirectory`, `manifestPath`, `socketPath`, `manifest`). Also exports `ResolveCommandTargetOptions` and `CommandTargetManifest`. [commandTarget.ts:resolveCommandTarget] [commandTarget.ts:CommandTarget]
 - `assertSessionCommandable(manifest, sessionId)` and `checkedSessionDir(home, sessionId)`. [sessionGuards.ts:assertSessionCommandable] [sessionGuards.ts:checkedSessionDir]
 - `exitCodeForError(code)`. [exitCodes.ts:exitCodeForError]
+- `warnIfUnsupportedNode(logger, version)`. [nodeRuntime.ts:warnIfUnsupportedNode]
 - `CliError` (`code`, `retryable`, `details`). [errors.ts:CliError]
 
 ## Invariants
@@ -38,7 +39,7 @@ This directory is the agent-tty command-line front end. `main.ts` is the bin ent
 - `emitSuccess` writes to stdout. `emitFailure` writes the error envelope to stdout with `--json`, or `code: message` to stderr without it. [output.ts:emitSuccess] [output.ts:emitFailure]
 - `writeStdoutSync` writes to fd 1 with `fs.writeSync`. [output.ts:writeStdoutSync]
 - `emitCliError` reads `process.argv` before the first `--` for `--json` and sets `process.exitCode`. [main.ts:emitCliError]
-- The `preAction` hook writes `AGENT_TTY_HOME`, `AGENT_TTY_LOG_LEVEL` and the host renderer key into `process.env`. It sets or deletes `AGENT_TTY_RENDERER`. [main.ts:main]
+- The `preAction` hook writes `AGENT_TTY_HOME`, `AGENT_TTY_LOG_LEVEL` and the host renderer key into `process.env`. It sets or deletes `AGENT_TTY_RENDERER`. It calls `warnIfUnsupportedNode`, which reads `package.json` and logs a warning when the Node version is outside its `engines.node` range. When `package.json` cannot be read or its range uses a comparator that `satisfiesNodeRange` does not support, it logs that at debug and skips the check. [main.ts:main]
 - `resolveCommandContext` reads `AGENT_TTY_HOME`, `AGENT_TTY_LOG_LEVEL`, `AGENT_TTY_PROFILE` and `AGENT_TTY_RENDERER`. It reads the config file through `loadConfigFile(home)` (`src/config/resolveConfig.ts`). When no renderer is configured, it dynamically imports libghostty-vt through `probeLibghosttyVt` and caches the result for the whole process. [context.ts:resolveCommandContext] [src/renderer/readiness.ts:probeLibghosttyVt]
 - `resolveCommandTarget` reads the session manifest through `readManifestIfExists`. [commandTarget.ts:resolveCommandTarget]
 

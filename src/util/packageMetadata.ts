@@ -1,10 +1,16 @@
 import { readFile } from 'node:fs/promises';
 
-import { assertString } from './assert.js';
+import { assertString, invariant } from './assert.js';
 
 export interface PackageMetadata {
   name: string;
   version: string;
+}
+
+async function readPackageJson(): Promise<Record<string, unknown>> {
+  const packageJsonUrl = new URL('../../package.json', import.meta.url);
+  const rawPackageJson = await readFile(packageJsonUrl, 'utf8');
+  return JSON.parse(rawPackageJson) as Record<string, unknown>;
 }
 
 /**
@@ -15,12 +21,7 @@ export interface PackageMetadata {
  * `.catch()`.
  */
 export async function loadPackageMetadata(): Promise<PackageMetadata> {
-  const packageJsonUrl = new URL('../../package.json', import.meta.url);
-  const rawPackageJson = await readFile(packageJsonUrl, 'utf8');
-  const parsedPackageJson = JSON.parse(rawPackageJson) as Record<
-    string,
-    unknown
-  >;
+  const parsedPackageJson = await readPackageJson();
   const packageName = parsedPackageJson.name;
   const packageVersion = parsedPackageJson.version;
 
@@ -31,4 +32,15 @@ export async function loadPackageMetadata(): Promise<PackageMetadata> {
     name: packageName,
     version: packageVersion,
   };
+}
+
+export async function loadSupportedNodeRange(): Promise<string> {
+  const { engines } = await readPackageJson();
+  invariant(
+    typeof engines === 'object' && engines !== null,
+    'package.json engines must be an object',
+  );
+  const range = (engines as Record<string, unknown>).node;
+  assertString(range, 'package.json engines.node must be a string');
+  return range;
 }
