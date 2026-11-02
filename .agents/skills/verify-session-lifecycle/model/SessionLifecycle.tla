@@ -90,6 +90,9 @@ CONSTANTS
                             \*   destroy marker before destroyed, and a
                             \*   reconcile that finds it after its own write
                             \*   writes destroyed again
+    CreateStopsOnGiveUp,    \* create.ts: a create that gives up on its
+                            \*   host sends it SIGTERM, so the host stops
+                            \*   its program and ends the session
     TokenNamesProgram,      \* programGroup.ts: captureToken records an
                             \*   autogroup only once the program leads its
                             \*   own session in an autogroup other than the
@@ -114,8 +117,9 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  ReconcileWaitsForGroup, ReRunsInNewSession,
                  InsideCheckReadsEnv, RecordsProgramSync,
                  ProvesGroupOwnership, DestroyStopsLeftovers,
-                 FallbackNeedsFolder, ReconcileRepairsDestroyed,
-                 TokenNamesProgram, ReusedIdReadsGone} : b \in BOOLEAN
+                 FallbackNeedsFolder, CreateStopsOnGiveUp,
+                 ReconcileRepairsDestroyed, TokenNamesProgram,
+                 ReusedIdReadsGone} : b \in BOOLEAN
 
 Readers == {"gc", "list"}   \* the two processes that run reconcileSession
 \* The group that a kill went through, and that the wait after it probes:
@@ -139,7 +143,8 @@ VARIABLES
     rec,         \* program.json names the program with its token
     startFailed, \* ghost: the host died because its files were missing
     sock,        \* the RPC socket file exists (it is outside the directory)
-    cpc,         \* create: "alloc", "write", "launch", "done"
+    cpc,         \* create: "alloc", "write", "launch", "done", "failed"
+                 \*   (it gave up on its host)
     hostAlive,   \* the detached host process is alive
     hpc,         \* host start-up path: "none", "boot", "open", "record"
                  \*   (the program runs, program.json is not written yet),
@@ -383,6 +388,20 @@ CreateLaunchesHost ==
     /\ UNCHANGED <<diskVars, ghostVars, sock, hex, rsz, prog, foreign, left,
                    shutVars, readerVars, destroyVars, groupVars>>
 
+\* runCreateCommand's readiness loop gives up after 50 inspect RPCs that
+\* fail, which the model lets happen at any step after the start-up, since
+\* it has no clock. With CreateStopsOnGiveUp, create then sends its host
+\* SIGTERM and reports the error. HostGetsSigterm takes that SIGTERM as the
+\* host's one SIGTERM, and HostCrashes covers one that ends a host before it
+\* spawns the program. create writes nothing itself: without a token only
+\* the host knows which group is the program's. Without the guard, create
+\* only reports the error.
+CreateGivesUp ==
+    /\ cpc = "done"
+    /\ cpc' = "failed"
+    /\ UNCHANGED <<diskVars, ghostVars, sock, hostVars, shutVars, readerVars,
+                   destroyVars, groupVars>>
+
 \* -------------------------------------------------------------------------
 \* The host's serial manifest writer (createSerialManifestWriter). Each write
 \* takes its snapshot of the in-memory state when its turn starts, which is
@@ -543,9 +562,11 @@ HostResizeWriteLands ==
 \* -------------------------------------------------------------------------
 \* host shutdown: the destroy handler, the SIGTERM handler, initiateShutdown
 
-\* process.on('SIGTERM', () => startShutdown()). Before HostOpensLogAndSpawns
-\* registers it, a SIGTERM kills the host, which HostCrashes covers. The
-\* handler runs only after the synchronous start-up block.
+\* runHost registers its SIGTERM handler before it waits for the manifest.
+\* A SIGTERM before the spawn makes the host return before it spawns, which
+\* HostCrashes covers at "boot" and "open". From the spawn on the handler
+\* calls startShutdown, and it runs only after the synchronous start-up
+\* block.
 HostGetsSigterm ==
     /\ hostAlive /\ ~sig /\ hpc \in {"pidwrite", "sockdir", "serving", "idle"}
     /\ sig' = TRUE
@@ -1160,13 +1181,14 @@ DestroyFinalRead ==
 \* Every process is finished. This step keeps TLC from reporting the end
 \* states as deadlocks. Any other state without a step is a model error.
 AllFinished ==
-    /\ cpc = "done" /\ ~hostAlive /\ pc["gc"] = "done"
+    /\ cpc \in {"done", "failed"} /\ ~hostAlive /\ pc["gc"] = "done"
     /\ pc["list"] = "idle" /\ lruns = MaxListReconciles
     /\ dpc = "done"
     /\ UNCHANGED vars
 
 Next ==
     \/ CreateMakesDirectory \/ CreateWritesManifest \/ CreateLaunchesHost
+    \/ CreateGivesUp
     \/ HostReadsManifest \/ HostOpensLogAndSpawns \/ HostRecordsProgram
     \/ HostWritesPids
     \/ HostListens \/ HostStartsResize \/ HostResizeWriteLands
@@ -1210,7 +1232,7 @@ TypeOK ==
     /\ hsd \in {"none", "write", "wait", "closed"}
     /\ dsnap \in {"none", "destroying", "destroyed"}
     /\ (mst # "none") => dir
-    /\ (dir /\ mst = "none") => cpc # "done"
+    /\ (dir /\ mst = "none") => cpc \notin {"done", "failed"}
     /\ (cpc = "write") => dir
     /\ gres \in {"pending", "skipped", "removed"}
     /\ lruns \in 0..MaxListReconciles
@@ -1297,13 +1319,6 @@ DestroyOutlivesProgram == dres # "killed"
 \* after the program's group ended.
 NoUnrelatedGroupKilled == ~hitUnrelated
 
-\* R17: once destroy reported success, the manifest says destroyed while the
-\* directory exists, except while a reconcile that wrote over it has yet to
-\* write destroyed again.
-DestroyedStaysDestroyed ==
-    (dres = "ok" /\ dir) =>
-        (mst = "destroyed" \/ \E p \in Readers : pc[p] = "r_repair")
-
 \* R16: when the manifest says destroyed, no process of the program's group
 \* runs, also none that the program left when it exited on its own, unless
 \* the host died after it started the program and before program.json named
@@ -1311,12 +1326,27 @@ DestroyedStaysDestroyed ==
 DestroyedSessionStopped ==
     (mst = "destroyed" /\ ~diedUnrecorded) => ~(GroupAlive \/ left)
 
+\* R17: once create gave up, its host keeps the session "running" only
+\* while create's SIGTERM is still on its way to it.
+FailedCreateStopped ==
+    (cpc = "failed" /\ hostAlive /\ hst = "running") =>
+        (CreateStopsOnGiveUp /\ ~sig)
+
+\* R18: once destroy reported success, the manifest says destroyed while the
+\* directory exists, except while a reconcile that wrote over it has yet to
+\* write destroyed again.
+DestroyedStaysDestroyed ==
+    (dres = "ok" /\ dir) =>
+        (mst = "destroyed" \/ \E p \in Readers : pc[p] = "r_repair")
+
 \* Witnesses. check.sh expects TLC to report each one VIOLATED, which shows
 \* that the model reaches the state: the rules above are not true only
 \* because the model can never get there.
 WitnessGcRemovesSession == gres # "removed"
 WitnessReconcileRepairs ==
     ~(dmark /\ mst = "failed" /\ \E p \in Readers : pc[p] = "r_repair")
+WitnessCreateGivesUp ==
+    ~(cpc = "failed" /\ sig /\ mst = "destroyed" /\ ~hostAlive)
 WitnessSessionServes == ~(hpc = "serving" /\ sock /\ mst = "running" /\ mpid)
 WitnessResizeLands == ~(rsz = "done" /\ hostAlive /\ mst = "running")
 WitnessCleanExitRecorded == ~(mst = "exited" /\ ~hostAlive)
