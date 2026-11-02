@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   MarkerEventPayloadSchema,
   InputMouseEventPayloadSchema,
+  MissingGlyphSchema,
   RichSnapshotLineSchema,
   RunCompleteEventPayloadSchema,
   Sha256HexSchema,
@@ -259,6 +260,7 @@ export const ScreenshotResultSchema = z
     pixelHeight: PositiveIntSchema.optional(),
     sha256: Sha256HexSchema.optional(),
     renderProfileHash: Sha256HexSchema.optional(),
+    missingGlyphs: z.array(MissingGlyphSchema).optional(),
   })
   .strict();
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;

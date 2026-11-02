@@ -42,7 +42,9 @@ import type {
   ScreenshotResult,
   SemanticSnapshot,
 } from '../types.js';
+import type { MissingGlyph } from '../../protocol/schemas.js';
 import { BUNDLED_FONT_ASSETS } from '../bundledFont.js';
+import { bundledFontCoverage } from '../fontCoverage.js';
 import { hashProfile } from '../profiles.js';
 import { iterateInRangeReplayEvents } from '../replayEvents.js';
 import {
@@ -55,6 +57,11 @@ import {
   validateHarnessSnapshot,
 } from './harnessDecoding.js';
 import type { GhosttyHarnessSnapshot } from './harnessDecoding.js';
+import {
+  buildMissingGlyphs,
+  findGlyphCandidates,
+  probeBundledFontUse,
+} from './missingGlyphs.js';
 
 export {
   assembleCanonicalLine,
@@ -271,6 +278,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   // duplicate warnings if both bootInternal()'s catch and a concurrent
   // dispose() race on the same scope.
   private readonly loggedScopes = new WeakSet<ResourceScope>();
+  private readonly drawnByBundledFont = new Map<string, boolean>();
   private initialReplayCols: number | null = null;
   private initialReplayRows: number | null = null;
   private lastAppliedSeq = -1;
@@ -871,6 +879,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     );
 
     const sha256 = createHash('sha256').update(pngBuffer).digest('hex');
+    const missingGlyphs = await this.findMissingGlyphs(page);
 
     return {
       sessionId: this.sessionId,
@@ -886,7 +895,36 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       pixelHeight,
       sha256,
       renderProfileHash: hashProfile(this.profile),
+      missingGlyphs,
     };
+  }
+
+  private async findMissingGlyphs(page: Page): Promise<MissingGlyph[]> {
+    const snapshot = await this.readHarnessSnapshot(page, {
+      includeCells: true,
+    });
+    invariant(
+      snapshot.cells !== undefined,
+      'missing-glyph check requires snapshot cells',
+    );
+    const candidates = findGlyphCandidates(
+      snapshot.cells,
+      bundledFontCoverage(),
+    );
+    const unprobed = [...candidates.keys()].filter(
+      (grapheme) => !this.drawnByBundledFont.has(grapheme),
+    );
+    if (unprobed.length > 0) {
+      const probed = await probeBundledFontUse(
+        page,
+        `${String(this.profile.fontSize)}px ${this.profile.fontFamily}`,
+        unprobed,
+      );
+      for (const [grapheme, bundled] of probed) {
+        this.drawnByBundledFont.set(grapheme, bundled);
+      }
+    }
+    return buildMissingGlyphs(candidates, this.drawnByBundledFont);
   }
 
   public async finalizeVideo(outputPath: string): Promise<void> {

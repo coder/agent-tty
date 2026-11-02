@@ -115,6 +115,7 @@ export async function captureScreenshotResult(
       pixelHeight: rendererResult.pixelHeight,
       sha256,
       renderProfileHash: rendererResult.renderProfileHash,
+      missingGlyphs: rendererResult.missingGlyphs,
     };
     const parsedResult = parseScreenshotResult(
       publicResultCandidate,
