@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -75,6 +75,30 @@ describe.skipIf(process.platform === 'win32')(
         }).status,
       ).toBe(0);
       expect(existsSync(directory)).toBe(false);
+    });
+
+    it('a host whose rmdir fails with EBUSY still exits cleanly', async () => {
+      const exitFile = join(testHome, 'host-exit');
+      const sessionId = createSession(testHome, undefined, {
+        env: {
+          HOST_EXIT_FILE: exitFile,
+          NODE_OPTIONS: [
+            process.env.NODE_OPTIONS ?? '',
+            `--import=${pathToFileURL(resolve('test/fixtures/host-rmdir-ebusy.ts')).href}`,
+          ].join(' '),
+        },
+      });
+
+      expect(
+        runCli(['destroy', sessionId, '--json'], { AGENT_TTY_HOME: testHome })
+          .status,
+      ).toBe(0);
+      const deadline = Date.now() + 10_000;
+      while (!existsSync(exitFile)) {
+        expect(Date.now()).toBeLessThan(deadline);
+        await sleep(50);
+      }
+      expect(readFileSync(exitFile, 'utf8')).toBe('0\n');
     });
 
     it('a host whose program exits removes it', async () => {
