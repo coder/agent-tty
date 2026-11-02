@@ -1440,13 +1440,14 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       },
     );
     const listerExit = once(lister, 'exit');
+    const holdDeadline = Date.now() + 10_000;
     while (
       !(await readFile(holdLog, 'utf8').then(
         (log) => log.includes('hold rename'),
         () => false,
       ))
     ) {
-      expect(Date.now()).toBeLessThan(deadline);
+      expect(Date.now()).toBeLessThan(holdDeadline);
       await sleep(50);
     }
 
