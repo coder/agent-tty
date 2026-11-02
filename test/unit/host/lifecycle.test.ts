@@ -627,7 +627,7 @@ describe('a hostPid that may no longer name the host', () => {
     }
   }
 
-  function reapedOnKill(host: number) {
+  function reapAsInitAfterKill(host: number) {
     const send = process.kill.bind(process);
     let killed = false;
     return vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
@@ -739,7 +739,7 @@ describe('a hostPid that may no longer name the host', () => {
       const host = startProcess('_host', 'session-01', '1');
       const directory = await seedHost(host);
 
-      const kill = reapedOnKill(host);
+      const kill = reapAsInitAfterKill(host);
 
       await destroySession('session-01', true);
 
@@ -757,7 +757,7 @@ describe('a hostPid that may no longer name the host', () => {
       const directory = await seedHost(host);
       Object.defineProperty(process, 'platform', { value: 'darwin' });
 
-      const kill = reapedOnKill(host);
+      const kill = reapAsInitAfterKill(host);
 
       await destroySession('session-01', true);
 

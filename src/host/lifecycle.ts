@@ -209,6 +209,8 @@ function killProcessBestEffort(pid: number | null): void {
   }
 }
 
+const HOST_SUBCOMMAND = '_host';
+
 interface SessionHost {
   readonly pid: number;
   readonly sessionId: string;
@@ -248,7 +250,7 @@ function runsSessionHost(host: SessionHost): boolean | null {
       return null;
     }
   }
-  const index = args.indexOf('_host');
+  const index = args.indexOf(HOST_SUBCOMMAND);
   return index >= 0 && args[index + 1] === host.sessionId;
 }
 
@@ -689,7 +691,7 @@ export function launchHost(config: LaunchHostConfig): number {
     [
       ...process.execArgv,
       entrypoint,
-      '_host',
+      HOST_SUBCOMMAND,
       config.sessionId,
       // The host waits for the first manifest while this process lives.
       String(process.pid),
