@@ -298,6 +298,18 @@ export async function removeSocketDirectoryIfEmpty(
   }
 }
 
+// For a process whose work is already done: an unusual rmdir error, such as
+// EBUSY or EPERM, is logged and must not fail it.
+export async function removeSocketDirectoryBestEffort(
+  socketFile: string,
+): Promise<void> {
+  try {
+    await removeSocketDirectoryIfEmpty(socketFile);
+  } catch (error) {
+    console.debug('could not remove the socket directory:', error);
+  }
+}
+
 const SOCKET_LISTEN_ATTEMPTS = 5;
 
 // libuv reports a bind in a missing directory as EACCES.

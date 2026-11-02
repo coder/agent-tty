@@ -10,7 +10,7 @@ import { EventLog } from './eventLog.js';
 import {
   isProcessAlive,
   listenInSocketDirectory,
-  removeSocketDirectoryIfEmpty,
+  removeSocketDirectoryBestEffort,
   waitForProcessesToExit,
 } from './lifecycle.js';
 import { createSerialManifestWriter } from './manifestWriter.js';
@@ -501,7 +501,7 @@ export async function runHost(
           ]);
 
           await rpcServer.close();
-          await removeSocketDirectoryIfEmpty(sPath);
+          await removeSocketDirectoryBestEffort(sPath);
         }
       }
     })();

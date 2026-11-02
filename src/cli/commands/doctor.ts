@@ -29,7 +29,7 @@ import type { CapabilityEntry } from '../../renderer/capabilities.js';
 
 import {
   listenInSocketDirectory,
-  removeSocketDirectoryIfEmpty,
+  removeSocketDirectoryBestEffort,
 } from '../../host/lifecycle.js';
 import { createPty } from '../../pty/createPty.js';
 import { resolveDefaultPlaywrightBrowsersPath } from '../../renderer/browserPath.js';
@@ -591,7 +591,7 @@ export async function runSocketViabilityCheck(
           await closeServer(server).catch(() => undefined);
         }
         await deps.rm(socketFile, { force: true }).catch(() => undefined);
-        await removeSocketDirectoryIfEmpty(socketFile).catch(() => undefined);
+        await removeSocketDirectoryBestEffort(socketFile);
       }
     },
   );
