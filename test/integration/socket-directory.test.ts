@@ -78,21 +78,25 @@ describe.skipIf(process.platform === 'win32')(
       expect(existsSync(socketDirectoryOf(sessionId))).toBe(false);
     });
 
-    it('a host listens when the directory vanishes before its bind', () => {
-      const sessionId = createSession(testHome, undefined, {
-        env: {
-          NODE_OPTIONS: [
-            process.env.NODE_OPTIONS ?? '',
-            `--import=${pathToFileURL(resolve('test/fixtures/remove-socket-directory-before-bind.ts')).href}`,
-          ].join(' '),
-        },
-      });
-      expect(inspectSession(testHome, sessionId).status).toBe('running');
-      expect(
-        runCli(['type', sessionId, 'reachable', '--json'], {
-          AGENT_TTY_HOME: testHome,
-        }).status,
-      ).toBe(0);
-    });
+    it.each(['chmod', 'bind'])(
+      'a host listens when the directory vanishes before its %s',
+      (step) => {
+        const sessionId = createSession(testHome, undefined, {
+          env: {
+            REMOVE_SOCKET_DIRECTORY_BEFORE: step,
+            NODE_OPTIONS: [
+              process.env.NODE_OPTIONS ?? '',
+              `--import=${pathToFileURL(resolve('test/fixtures/remove-socket-directory-once.ts')).href}`,
+            ].join(' '),
+          },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('running');
+        expect(
+          runCli(['type', sessionId, 'reachable', '--json'], {
+            AGENT_TTY_HOME: testHome,
+          }).status,
+        ).toBe(0);
+      },
+    );
   },
 );
