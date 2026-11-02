@@ -426,6 +426,53 @@ function hostProofFacts() {
   };
 }
 
+function repairFacts() {
+  const lifecycle = 'src/host/lifecycle.ts';
+  let marks = false;
+  walk(requireDeclaration(lifecycle, 'recordDestroyed').body, (node) => {
+    if (!ts.isIfStatement(node) || !ts.isBlock(node.thenStatement)) {
+      return;
+    }
+    const st = node.thenStatement.statements.map((s) => normalize(s.getText()));
+    marks ||=
+      st.length === 2 &&
+      st[0].startsWith(
+        'await writeDestroyMarker( destroyMarkerPath(dirname(manifestFile)),',
+      ) &&
+      st[1].startsWith('await writeManifest(manifestFile, {') &&
+      st[1].includes("status: 'destroyed'");
+  });
+  let repairs = false;
+  walk(requireDeclaration(lifecycle, 'reconcileSession').body, (node) => {
+    if (!ts.isTryStatement(node)) {
+      return;
+    }
+    const [write, check] = node.tryBlock.statements;
+    repairs ||=
+      write !== undefined &&
+      normalize(write.getText()) ===
+        'await writeManifest(manifestFile, reconciledManifest);' &&
+      check !== undefined &&
+      ts.isIfStatement(check) &&
+      normalize(check.expression.getText()) ===
+        "reconciledStatus !== 'destroyed' && existsSync(destroyMarkerPath(sessionDirectory))" &&
+      /^\{ await writeManifest\(manifestFile, \{[^]*status: 'destroyed'[^]*\}\); \}$/.test(
+        normalize(check.thenStatement.getText()),
+      );
+  });
+  const marker = requireDeclaration(
+    'src/storage/manifests.ts',
+    'writeDestroyMarker',
+  ).getText();
+  return {
+    ReconcileRepairsDestroyed:
+      marks &&
+      repairs &&
+      marker.includes("await replaceFileAtomic(path, '')") &&
+      !marker.includes('mkdir'),
+  };
+}
+
 function destroyFacts() {
   const destroy = requireDeclaration('src/host/lifecycle.ts', 'destroySession');
   const returns = [];
@@ -1201,6 +1248,7 @@ const COVERED = [
   ['src/storage/manifests.ts', 'replaceFileAtomicSync'],
   ['src/storage/manifests.ts', 'writeValidatedJsonFileSync'],
   ['src/storage/manifests.ts', 'writeManifest'],
+  ['src/storage/manifests.ts', 'writeDestroyMarker'],
   ['src/protocol/sessionStatusPolicy.ts', 'SESSION_STATUS_POLICIES'],
 ];
 
@@ -1424,6 +1472,7 @@ const constants = {
   ...hostFacts(),
   ...destroyFacts(),
   ...hostProofFacts(),
+  ...repairFacts(),
   ...manifestWriteFacts(),
   ...programGroupFacts(),
   ...deniedProbeFacts(),
