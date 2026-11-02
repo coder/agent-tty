@@ -428,8 +428,8 @@ function groupHasLiveProcess(pgid: number): boolean | null {
     return true;
   }
 
-  // A process of the group can fork and end after the scan listed /proc.
-  // The next scan lists its child.
+  // A process of the group can fork and end after the scan listed /proc,
+  // so a scan that finds no live process runs once more.
   return scanGroup(pgid) || scanGroup(pgid);
 }
 

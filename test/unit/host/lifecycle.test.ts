@@ -563,7 +563,6 @@ describe('cliRunsInsideProgramSession', () => {
     },
   );
 
-  // A chroot or a container without a mounted /proc has no /proc/self/stat.
   it.each(['ENOENT', 'EACCES'])(
     'on linux reads the caller as outside when /proc/self/stat fails with %s',
     async (code) => {
