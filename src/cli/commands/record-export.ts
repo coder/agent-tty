@@ -287,6 +287,10 @@ export async function runRecordExportCommand(
       );
 
       invariant(events.length > 0, 'webm export requires at least one event');
+      invariant(
+        artifactOutputPath.endsWith('.webm'),
+        'webm export output path must end with .webm',
+      );
       const temporaryOutputPath = `${artifactOutputPath}.tmp-${randomUUID()}.webm`;
       let webmResult: WebmExportResult;
       try {
