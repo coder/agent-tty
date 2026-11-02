@@ -304,7 +304,13 @@ describe('run command integration', { timeout: 45_000 }, () => {
       .trim()
       .split('\n')
       .map(Number);
-    const events = await readEvents(testHome, sessionId);
+    const echoDeadline = Date.now() + 10_000;
+    let events = await readEvents(testHome, sessionId);
+    while (!collectOutputText(events).includes('echo TYPED;')) {
+      expect(Date.now()).toBeLessThan(echoDeadline);
+      await sleep(20);
+      events = await readEvents(testHome, sessionId);
+    }
     const inputRun = events.find((event) => event.type === 'input_run');
     const inputText = events.find((event) => event.type === 'input_text');
     if (inputRun === undefined || inputText === undefined) {
