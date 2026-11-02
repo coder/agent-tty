@@ -16,7 +16,6 @@ const RegexPatternSchema = z
 const ProfileNameSchema = z.string().min(1).max(100);
 const PositiveIntSchema = z.number().int().positive();
 const NonNegativeIntSchema = z.number().int().nonnegative();
-// An Event Log seq that a replay reached, or -1 before the first event.
 export const ReplaySeqSchema = z.number().int().gte(-1);
 const IsoDatetimeSchema = z.iso.datetime();
 const SnapshotFormatSchema = z.enum(['structured', 'text']);
