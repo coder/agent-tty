@@ -335,6 +335,8 @@ export async function runBatchCommand(options: CommandOptions): Promise<void> {
       json: true,
       error: {
         ...failedError,
+        // Earlier steps already applied their input, so rerunning the Batch is
+        // never a safe retry, whatever the failed step's code.
         retryable: false,
         details: { sessionId: options.sessionId, stepIndex: failed.index },
       },
