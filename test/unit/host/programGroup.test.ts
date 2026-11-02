@@ -220,6 +220,24 @@ describe('captureProgram', () => {
     },
   );
 
+  it.runIf(capturesToken)(
+    "records no token while the child shows the host's autogroup",
+    () => {
+      const child = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' });
+      children.push(child);
+      const pid = child.pid as number;
+      const hostAutogroup = readFileSync('/proc/self/autogroup', 'utf8');
+      replaceAutogroupOf(pid, () => hostAutogroup);
+
+      expect(captureProgram(pid)).toEqual({
+        version: 1,
+        pid,
+        bootId: null,
+        autogroup: null,
+      });
+    },
+  );
+
   it.runIf(capturesToken).each([
     ['names no autogroup', () => 'autogroup?\n'],
     ['cannot be read', deniedRead],
