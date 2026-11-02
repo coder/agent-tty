@@ -1,5 +1,11 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -323,6 +329,22 @@ describe('reconcileSession', () => {
     });
   });
 
+  it('restores destroyed when a destroy marked the folder before this write', async () => {
+    const directory = await seedSession(makeRecord());
+    killProbeReportsDead();
+    writeFileSync(join(directory, 'destroyed'), '');
+
+    await reconcileSession(directory);
+
+    const manifest = await readManifest(manifestPath(directory));
+    expect(manifest).toMatchObject({
+      status: 'destroyed',
+      hostPid: null,
+      childPid: null,
+    });
+    expect(manifest.failureReason).toBeUndefined();
+  });
+
   it('writes nothing while the program group survives its kill', async () => {
     const record = makeRecord();
     const directory = await seedSession(record);
@@ -483,6 +505,35 @@ describe('destroySession', () => {
     });
 
     expect(existsSync(directory)).toBe(false);
+  });
+
+  it('marks the folder before it records destroyed', async () => {
+    vi.stubEnv('AGENT_TTY_HOME', home);
+    const directory = await seedSession(makeRecord());
+    killProbeReportsDead();
+
+    await destroySession('session-01', true);
+
+    expect(existsSync(join(directory, 'destroyed'))).toBe(true);
+    expect(await readManifest(manifestPath(directory))).toMatchObject({
+      status: 'destroyed',
+    });
+  });
+
+  it('replaces a symlink at the marker path instead of writing through it', async () => {
+    vi.stubEnv('AGENT_TTY_HOME', home);
+    const directory = await seedSession(makeRecord());
+    const outside = join(home, 'outside.txt');
+    writeFileSync(outside, 'keep');
+    symlinkSync(outside, join(directory, 'destroyed'));
+    killProbeReportsDead();
+
+    await destroySession('session-01', true);
+
+    expect(readFileSync(outside, 'utf8')).toBe('keep');
+    const marker = lstatSync(join(directory, 'destroyed'));
+    expect(marker.isFile()).toBe(true);
+    expect(marker.size).toBe(0);
   });
 
   describe('of a session whose program exited', () => {

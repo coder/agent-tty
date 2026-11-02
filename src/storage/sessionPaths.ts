@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { basename, dirname, isAbsolute, resolve } from 'node:path';
 
 import {
+  DESTROY_MARKER_FILENAME,
   EVENT_LOG_FILENAME,
   MANIFEST_FILENAME,
   PROGRAM_RECORD_FILENAME,
@@ -73,6 +74,10 @@ export function eventLogPath(sessionDirectory: string): string {
 
 export function programRecordPath(sessionDirectory: string): string {
   return childPath(sessionDirectory, PROGRAM_RECORD_FILENAME);
+}
+
+export function destroyMarkerPath(sessionDirectory: string): string {
+  return childPath(sessionDirectory, DESTROY_MARKER_FILENAME);
 }
 
 function resolveSocketDirectory(home: string): string {

@@ -86,6 +86,10 @@ CONSTANTS
     FallbackNeedsFolder,    \* programGroup.ts: a group that only a childPid
                             \*   names gets the kill, and reads alive, only
                             \*   while the session folder exists
+    ReconcileRepairsDestroyed, \* lifecycle.ts: recordDestroyed writes the
+                            \*   destroy marker before destroyed, and a
+                            \*   reconcile that finds it after its own write
+                            \*   writes destroyed again
     CreateStopsOnGiveUp,    \* create.ts: a create that gives up on its
                             \*   host sends it SIGTERM, so the host stops
                             \*   its program and ends the session
@@ -113,7 +117,8 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  ReconcileWaitsForGroup, ReRunsInNewSession,
                  InsideCheckReadsEnv, RecordsProgramSync,
                  ProvesGroupOwnership, DestroyStopsLeftovers,
-                 FallbackNeedsFolder, CreateStopsOnGiveUp, TokenNamesProgram,
+                 FallbackNeedsFolder, CreateStopsOnGiveUp,
+                 ReconcileRepairsDestroyed, TokenNamesProgram,
                  ReusedIdReadsGone} : b \in BOOLEAN
 
 Readers == {"gc", "list"}   \* the two processes that run reconcileSession
@@ -134,6 +139,7 @@ VARIABLES
     wasTerminal, \* ghost: the manifest has shown a terminal status
     wasExited,   \* ghost: the manifest has shown "exited"
     wasNamed,    \* ghost: a manifest has recorded the program's pid
+    dmark,       \* the destroy marker file exists in the session directory
     rec,         \* program.json names the program with its token
     startFailed, \* ghost: the host died because its files were missing
     sock,        \* the RPC socket file exists (it is outside the directory)
@@ -175,12 +181,13 @@ VARIABLES
     sig,         \* the host got its one SIGTERM
     pc,          \* pc["gc"] and pc["list"]; "r_record": reconcileSession
                  \*   reads program.json, "r_wait": it waits for the
-                 \*   program's group
+                 \*   program's group, "r_repair": it checks the destroy
+                 \*   marker after its write
     rd,          \* rd[p]: the manifest that reconcileSession read in process p
     gres,        \* what gc did: "pending", "skipped", "removed"
     lruns,       \* how many reconciles "list" has started
-    dpc,         \* destroy: "check", "read", "tkill", "twait", "twrite",
-                 \*   "tunlink", "kill", "kwait", "reread", "rkill", "rwait",
+    dpc,         \* destroy: "check", "read", "tkill", "twait", "tmark",
+                 \*   "twrite", "tunlink", "kill", "kwait", "reread", "rkill", "rwait",
                  \*   "rpc", "poll", "final", "done"
     dforce,      \* destroy runs with --force
     dinside,     \* destroy runs inside the program's session (a copy that
@@ -192,7 +199,7 @@ VARIABLES
     dkill        \* ghost: destroy --force killed a live host
 
 diskVars == <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal, wasExited,
-              wasNamed>>
+              wasNamed, dmark>>
 ghostVars == <<startFailed>>
 hostVars == <<hostAlive, hpc, hex, rsz, prog, foreign, left>>
 groupVars == <<rec, reused, hitUnrelated, diedUnrecorded, passedReused>>
@@ -206,6 +213,7 @@ Init ==
     /\ dir = FALSE /\ mst = "none" /\ mpid = FALSE /\ morigin = "none"
     /\ mcode = FALSE /\ mchild = FALSE
     /\ wasTerminal = FALSE /\ wasExited = FALSE /\ wasNamed = FALSE
+    /\ dmark = FALSE
     /\ rec = FALSE /\ startFailed = FALSE
     /\ sock = FALSE
     /\ cpc = "alloc"
@@ -242,6 +250,7 @@ Write(s, pid, origin, code, child) ==
     /\ wasTerminal' = (wasTerminal \/ s \in Terminal)
     /\ wasExited' = (wasExited \/ s = "exited")
     /\ wasNamed' = (wasNamed \/ child)
+    /\ dmark' = dmark
 
 \* SIGKILL of the program's group ends every process of our user in it.
 \* Without KillsProgramGroup the code kills only the program's pid, and a
@@ -357,8 +366,8 @@ CreateMakesDirectory ==
     /\ dir' = TRUE
     /\ cpc' = IF CreateRecordsHostPid THEN "launch" ELSE "write"
     /\ UNCHANGED <<mst, mpid, morigin, mcode, mchild, wasTerminal, wasExited,
-                   wasNamed, ghostVars, sock, hostVars, shutVars, readerVars,
-                   destroyVars, groupVars>>
+                   wasNamed, dmark, ghostVars, sock, hostVars, shutVars,
+                   readerVars, destroyVars, groupVars>>
 
 \* allocateSession: writeManifest with status "running". gc skips a directory
 \* without a manifest, so this write always finds its directory (TypeOK
@@ -805,7 +814,8 @@ ReconcileReadsRecord(p) ==
 \* model leaves that read out and writes from rd[p]. The host is dead, so
 \* only a terminal write or gc's rm can land after the re-read, and the
 \* code's read only turns the write over it into a return. A write that
-\* lands between that read and the write is still overwritten, as here.
+\* lands between that read and the write is still overwritten, as here;
+\* with ReconcileRepairsDestroyed, ReconcileRepairs then restores destroyed.
 ReconcilePollsGroup(p) ==
     /\ pc[p] = "r_wait"
     /\ pc' = [pc EXCEPT ![p] = IF GroupSeen(rd[p].grp)
@@ -827,9 +837,26 @@ ReconcileWrites(p) ==
                          Write("destroyed", FALSE, "none", rd[p].code, FALSE)
                     [] OTHER ->
                          Write("failed", FALSE, "unknown", rd[p].code, FALSE)
-               /\ pc' = [pc EXCEPT ![p] = "r_unlink"]
+               /\ pc' = [pc EXCEPT ![p] = IF ReconcileRepairsDestroyed
+                                          THEN "r_repair" ELSE "r_unlink"]
           ELSE /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
                /\ UNCHANGED diskVars
+    /\ UNCHANGED <<ghostVars, sock, cpc, hostVars, shutVars, rd, gres, lruns,
+                   destroyVars, groupVars>>
+
+\* With ReconcileRepairsDestroyed, in the same try as the write:
+\* `existsSync(destroyMarkerPath(sessionDirectory))`, and when the marker is
+\* there and the write was not destroyed, writeManifest of destroyed from
+\* the same copy, with hostPid and childPid null and no failure. Only a
+\* destroy writes the marker, right before its destroyed write, so the write
+\* above landed after the marker and may have replaced that record. gc's rm
+\* takes the marker with the directory, and then nothing is written.
+ReconcileRepairs(p) ==
+    /\ pc[p] = "r_repair"
+    /\ IF dmark /\ rd[p].st # "destroying"
+          THEN Write("destroyed", FALSE, "none", rd[p].code, FALSE)
+          ELSE UNCHANGED diskVars
+    /\ pc' = [pc EXCEPT ![p] = "r_unlink"]
     /\ UNCHANGED <<ghostVars, sock, cpc, hostVars, shutVars, rd, gres, lruns,
                    destroyVars, groupVars>>
 
@@ -892,7 +919,7 @@ GcFinalRead ==
 GcRemoves ==
     /\ pc["gc"] = "rm"
     /\ dir' = FALSE /\ mst' = "none" /\ mpid' = FALSE /\ morigin' = "none"
-    /\ mcode' = FALSE /\ mchild' = FALSE
+    /\ mcode' = FALSE /\ mchild' = FALSE /\ dmark' = FALSE
     /\ rec' = FALSE
     /\ pc' = [pc EXCEPT !["gc"] = "done"]
     /\ gres' = "removed"
@@ -965,6 +992,10 @@ DestroyEnds(result) ==
 \* then records destroyed. Without it, destroy records at once.
 AfterTerminalRead(next) == IF DestroyStopsLeftovers THEN "tkill" ELSE next
 
+\* recordDestroyed's write: with ReconcileRepairsDestroyed it writes the
+\* destroy marker first ("tmark").
+Records == IF ReconcileRepairsDestroyed THEN "tmark" ELSE "twrite"
+
 \* A terminal copy with DestroyRecordsDestroyed: recordDestroyed writes
 \* destroyed from it unless it already says destroyed. Without it, destroy
 \* returns on any terminal copy.
@@ -975,7 +1006,7 @@ DestroyFinishes ==
     ELSE IF mst = "destroyed"
     THEN /\ dpc' = AfterTerminalRead("tunlink") /\ dsaw' = TRUE
          /\ drd' = NoRead /\ UNCHANGED dres
-    ELSE /\ dpc' = AfterTerminalRead("twrite") /\ drd' = ReadCopy
+    ELSE /\ dpc' = AfterTerminalRead(Records) /\ drd' = ReadCopy
          /\ UNCHANGED <<dres, dsaw>>
 
 \* readSessionManifestOrThrow throws SESSION_NOT_FOUND on a missing manifest,
@@ -987,7 +1018,7 @@ DestroyReads ==
     /\ IF mst \in {"none", "destroyed"}
           THEN DestroyEnds("error")
           ELSE IF mst \in Terminal
-          THEN /\ dpc' = AfterTerminalRead("twrite") /\ drd' = ReadCopy
+          THEN /\ dpc' = AfterTerminalRead(Records) /\ drd' = ReadCopy
                /\ UNCHANGED <<dres, dsaw>>
           ELSE IF dforce
           THEN /\ dpc' = "kill" /\ drd' = ReadCopy
@@ -1009,6 +1040,19 @@ DestroyKillsLeftovers ==
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, hex, rsz,
                    foreign, shutVars, readerVars, dforce, dinside, dres, dsaw,
                    dkill, rec, reused, diedUnrecorded, passedReused>>
+
+\* recordDestroyed: writeDestroyMarker, an empty file written with no mkdir.
+\* When gc removed the directory in the meantime, it throws
+\* SESSION_NOT_FOUND, and destroy reports that error.
+DestroyMarksFolder ==
+    /\ DestroyAt({"tmark"})
+    /\ IF dir
+          THEN /\ dmark' = TRUE /\ dpc' = "twrite" /\ UNCHANGED <<drd, dres>>
+          ELSE /\ DestroyEnds("error") /\ UNCHANGED dmark
+    /\ UNCHANGED <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal,
+                   wasExited, wasNamed, ghostVars, sock, cpc, hostVars,
+                   shutVars, readerVars, dforce, dinside, dsaw, dkill,
+                   groupVars>>
 
 \* recordDestroyed: writeManifest({ ...manifest, status: 'destroyed' }) from
 \* the copy that destroy read. When gc removed the directory in the meantime,
@@ -1075,7 +1119,7 @@ DestroyPollsGroup ==
                /\ drd' = NoRead /\ UNCHANGED <<dres, dsaw>>
           ELSE IF dsaw
           THEN /\ dpc' = "tunlink" /\ drd' = NoRead /\ UNCHANGED <<dres, dsaw>>
-          ELSE /\ dpc' = "twrite" /\ UNCHANGED <<drd, dres, dsaw>>
+          ELSE /\ dpc' = Records /\ UNCHANGED <<drd, dres, dsaw>>
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
                    readerVars, dforce, dinside, dkill, rec, reused,
                    hitUnrelated, diedUnrecorded>>
@@ -1156,11 +1200,13 @@ Next ==
           \/ ReconcileReads(p) \/ ReconcileChecksHost(p)
           \/ ReconcileRereadsManifest(p) \/ ReconcileReadsRecord(p)
           \/ ReconcilePollsGroup(p)
-          \/ ReconcileWrites(p) \/ ReconcileUnlinksSocket(p)
+          \/ ReconcileWrites(p) \/ ReconcileRepairs(p)
+          \/ ReconcileUnlinksSocket(p)
     \/ GcFindsDirectory \/ GcReadsManifest \/ GcReadsReconciled
     \/ GcFinalRead \/ GcRemoves
     \/ ListStartsReconcile
-    \/ DestroyChecksSession \/ DestroyReads \/ DestroyWritesDestroyed
+    \/ DestroyChecksSession \/ DestroyReads \/ DestroyMarksFolder
+    \/ DestroyWritesDestroyed
     \/ DestroyUnlinksSocket \/ DestroyKillsLeftovers \/ DestroyKills
     \/ DestroyPollsGroup
     \/ DestroyRereads \/ DestroySendsRpc \/ DestroyRpcFails
@@ -1173,7 +1219,9 @@ Spec == Init /\ [][Next]_vars
 \* Rules. check.sh runs each one on its own.
 
 TypeOK ==
-    /\ {dir, mpid, mchild, wasTerminal, wasExited, wasNamed, startFailed, sock,
+    /\ dmark => dir
+    /\ {dir, mpid, mchild, wasTerminal, wasExited, wasNamed, dmark, startFailed,
+        sock,
         hostAlive, prog, foreign, sig, dforce, dinside, dsaw, dkill, rec, left,
         reused, hitUnrelated, diedUnrecorded, passedReused}
        \subseteq BOOLEAN
@@ -1284,10 +1332,19 @@ FailedCreateStopped ==
     (cpc = "failed" /\ hostAlive /\ hst = "running") =>
         (CreateStopsOnGiveUp /\ ~sig)
 
+\* R18: once destroy reported success, the manifest says destroyed while the
+\* directory exists, except while a reconcile that wrote over it has yet to
+\* write destroyed again.
+DestroyedStaysDestroyed ==
+    (dres = "ok" /\ dir) =>
+        (mst = "destroyed" \/ \E p \in Readers : pc[p] = "r_repair")
+
 \* Witnesses. check.sh expects TLC to report each one VIOLATED, which shows
 \* that the model reaches the state: the rules above are not true only
 \* because the model can never get there.
 WitnessGcRemovesSession == gres # "removed"
+WitnessReconcileRepairs ==
+    ~(dmark /\ mst = "failed" /\ \E p \in Readers : pc[p] = "r_repair")
 WitnessCreateGivesUp ==
     ~(cpc = "failed" /\ sig /\ mst = "destroyed" /\ ~hostAlive)
 WitnessSessionServes == ~(hpc = "serving" /\ sock /\ mst = "running" /\ mpid)

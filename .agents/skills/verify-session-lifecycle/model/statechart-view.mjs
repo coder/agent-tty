@@ -138,6 +138,10 @@ export const step = (action, from, to) => {
       return to.dir
         ? `${reconciles(from, to)} writes "${to.mst}"${back(from, to)}`
         : `${reconciles(from, to)} finds the folder gone and returns`;
+    case 'ReconcileRepairs':
+      return from.mst === to.mst
+        ? `${reconciles(from, to)} finds no destroy marker`
+        : `${reconciles(from, to)} finds the destroy marker and writes "destroyed" again`;
     case 'ReconcileUnlinksSocket':
       return `${reconciles(from, to)} unlinks the socket file`;
     case 'GcFindsDirectory':
@@ -162,6 +166,10 @@ export const step = (action, from, to) => {
       return to.dpc === 'done'
         ? 'destroy reads the manifest and fails'
         : 'destroy reads the manifest';
+    case 'DestroyMarksFolder':
+      return to.dir
+        ? 'destroy writes the destroy marker'
+        : 'destroy finds the folder gone and fails';
     case 'DestroyWritesDestroyed':
       return to.dir
         ? `destroy writes "destroyed"${back(from, to)}`
