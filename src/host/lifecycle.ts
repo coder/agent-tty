@@ -264,6 +264,8 @@ function hostMatches(host: SessionHost): boolean {
 }
 
 function killHostBestEffort(host: SessionHost | null): void {
+  // Node has no pidfd API, so the kill races a pid that the host gives up
+  // after hostMatches read it.
   if (host !== null && hostMatches(host)) {
     killProcessBestEffort(host.pid);
   }
