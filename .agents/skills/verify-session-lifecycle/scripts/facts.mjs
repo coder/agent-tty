@@ -361,7 +361,7 @@ function repairFacts() {
     ReconcileRepairsDestroyed:
       marks &&
       repairs &&
-      marker.includes("await writeFile(path, ''") &&
+      marker.includes("await replaceFileAtomic(path, '')") &&
       !marker.includes('mkdir'),
   };
 }

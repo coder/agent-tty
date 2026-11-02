@@ -238,7 +238,7 @@ export async function writeDestroyMarker(
   assertAbsoluteStoragePath(path, 'destroy marker path');
 
   try {
-    await writeFile(path, '', { mode: 0o600 });
+    await replaceFileAtomic(path, '');
   } catch (error) {
     if (isEnoentError(error)) {
       throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
