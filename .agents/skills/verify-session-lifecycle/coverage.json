@@ -10,7 +10,7 @@
     "src/host/lifecycle.ts#killProcessBestEffort": "1dd0cb4ee9bbc676",
     "src/host/lifecycle.ts#ownLinuxSessionId": "911643125a4fd21e",
     "src/host/lifecycle.ts#ownProcessGroupId": "b480c93782250b9a",
-    "src/host/lifecycle.ts#controllingTerminal": "250d1c5beff91cba",
+    "src/host/lifecycle.ts#controllingTerminal": "88e748310174eb59",
     "src/host/lifecycle.ts#sharesControllingTerminal": "7820f490ba998a11",
     "src/host/lifecycle.ts#cliRunsInsideProgramSession": "322f359e9575d783",
     "src/host/lifecycle.ts#readSessionManifestOrThrow": "9709f28e5e9cca4b",
