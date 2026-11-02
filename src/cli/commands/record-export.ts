@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto';
-import { constants as fsConstants } from 'node:fs';
-import { access, lstat, readFile, realpath, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, resolve } from 'node:path';
-import process from 'node:process';
+import { readFile, stat } from 'node:fs/promises';
+import { basename, isAbsolute } from 'node:path';
 
 import { z } from 'zod';
 
@@ -40,6 +38,7 @@ import {
   readManifestIfExists,
   writeTextFileAtomic,
 } from '../../storage/manifests.js';
+import { resolveExplicitOutputPath } from '../../storage/outputPath.js';
 import {
   eventLogPath,
   manifestPath,
@@ -146,32 +145,7 @@ async function resolveOutputPath(
     );
   }
 
-  invariant(outputPath.length > 0, 'output path must be a non-empty string');
-
-  const currentWorkingDirectory = process.cwd();
-  const resolvedOutputPath = isAbsolute(outputPath)
-    ? resolve(outputPath)
-    : resolve(currentWorkingDirectory, outputPath);
-  const parentDirectory = dirname(resolvedOutputPath);
-  const realParentDirectory = await realpath(parentDirectory);
-  const parentStats = await lstat(realParentDirectory);
-
-  invariant(
-    parentStats.isDirectory(),
-    `record export parent directory must be a directory: ${realParentDirectory}`,
-  );
-
-  await access(realParentDirectory, fsConstants.W_OK);
-
-  const realOutputPath = resolve(
-    realParentDirectory,
-    basename(resolvedOutputPath),
-  );
-  invariant(
-    dirname(realOutputPath) === realParentDirectory,
-    'record export path must remain within the resolved parent directory',
-  );
-  return realOutputPath;
+  return await resolveExplicitOutputPath(outputPath);
 }
 
 async function computeFileHash(filePath: string): Promise<string> {

@@ -12,7 +12,12 @@ import {
   captureScreenshotResult,
   parseScreenshotResult,
 } from '../../screenshot/capture.js';
+import { sessionNotFoundIfRemoved } from '../../storage/artifactPaths.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
+import {
+  copyToOutputPath,
+  resolveExplicitOutputPath,
+} from '../../storage/outputPath.js';
 import {
   manifestPath,
   sessionDir,
@@ -27,6 +32,7 @@ interface CommandOptions {
   sessionId: string;
   profile?: string;
   showCursor?: boolean;
+  out?: string;
 }
 
 interface ResolvedScreenshotRequest {
@@ -102,6 +108,29 @@ function formatScreenshotLines(result: ScreenshotResult): string[] {
   return lines;
 }
 
+function outputPathError(
+  sessionId: string,
+  out: string,
+  error: unknown,
+): CliError {
+  return makeCliError(ERROR_CODES.EXPORT_ERROR, {
+    message: `Failed to write the screenshot of session "${sessionId}" to ${out}.`,
+    details: { sessionId, out },
+    cause: error,
+  });
+}
+
+async function resolveScreenshotOutputPath(
+  sessionId: string,
+  out: string,
+): Promise<string> {
+  try {
+    return await resolveExplicitOutputPath(out);
+  } catch (error) {
+    throw outputPathError(sessionId, out, error);
+  }
+}
+
 async function runOfflineScreenshot(
   sessionDirectory: string,
   rendererName: CommandContext['rendererVisualDefault'],
@@ -157,6 +186,17 @@ export async function runScreenshotCommand(
     });
   }
 
+  const output =
+    options.out === undefined
+      ? undefined
+      : {
+          out: options.out,
+          path: await resolveScreenshotOutputPath(
+            options.sessionId,
+            options.out,
+          ),
+        };
+
   let result: ScreenshotResult;
 
   // Snapshot and screenshot intentionally keep their narrower legacy live-RPC
@@ -199,6 +239,18 @@ export async function runScreenshotCommand(
       profile,
       showCursor,
     );
+  }
+
+  if (output !== undefined) {
+    try {
+      await copyToOutputPath(result.artifactPath, output.path);
+    } catch (error) {
+      const removed = await sessionNotFoundIfRemoved(sessionDirectory, error);
+      throw removed === error
+        ? outputPathError(options.sessionId, output.out, error)
+        : removed;
+    }
+    result = { ...result, artifactPath: output.path };
   }
 
   emitSuccess({

@@ -807,6 +807,7 @@ async function main(): Promise<void> {
     .option('--profile <name>', 'Render profile name')
     .option('--show-cursor', 'Show the terminal cursor in the screenshot')
     .option('--hide-cursor', 'Hide the terminal cursor in the screenshot')
+    .option('--out <path>', 'Explicit output path')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
@@ -817,6 +818,7 @@ async function main(): Promise<void> {
             profile?: string;
             showCursor: boolean;
             hideCursor: boolean;
+            out?: string;
             json: boolean;
           },
           context: CommandContext,
@@ -844,6 +846,7 @@ async function main(): Promise<void> {
             ...(cursorVisible === undefined
               ? {}
               : { showCursor: cursorVisible }),
+            ...(options.out === undefined ? {} : { out: options.out }),
           });
         },
       ),
