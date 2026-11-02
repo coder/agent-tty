@@ -239,6 +239,7 @@ _Avoid_: bare "agent", "Coder agent"
 - A **Session** has one **Event Log**.
 - An **Offline Replay Eligible Session** is reconstructed from its persisted **Event Log** and manifest.
 - A **Snapshot Result** is derived from exactly one **Semantic Snapshot**.
+- A **Semantic Snapshot** of a **Session** whose **Event Log** has no events yet is the blank screen at the creation size, captured at sequence -1.
 - A **Session Dashboard** observes one **Home** at a time, chosen from the **Home Registry** (defaulting to the **Home** it was launched with); switching **Homes** is part of its read-only observation and sends no input.
 - A **Session Dashboard** presents a **Live View** of exactly one selected **Session** at a time within the selected **Home**.
 - A **Live View** reconstructs screen state from a **Session**'s **Event Log** and is never a **Command Target**.

@@ -163,9 +163,7 @@ export async function withOfflineReplayRenderer<T>(
 
     try {
       await backend.boot();
-      if (replayInput.targetSeq >= 0) {
-        await backend.replayTo(replayInput);
-      }
+      await backend.replayTo(replayInput);
     } catch (error) {
       throw makeCliError(ERROR_CODES.REPLAY_ERROR, {
         message: `Failed to boot or replay renderer for session ${sessionId}.`,
