@@ -1,11 +1,11 @@
 {
   "fingerprints": {
-    "src/cli/commands/create.ts#runCreateCommand": "1b2b29a895cde754",
+    "src/cli/commands/create.ts#runCreateCommand": "795dc9fc08a0359d",
     "src/cli/commands/destroy.ts#runDestroyCommand": "8a0a0a76d61664bf",
     "src/cli/commands/destroy.ts#rerunInNewSession": "573a64e3b1e83612",
     "src/cli/commands/gc.ts#gcSessions": "ac079db2a0199d69",
     "src/host/lifecycle.ts#allocateSession": "8f7eee41b3c56db9",
-    "src/host/lifecycle.ts#launchHost": "24751cfcbe8a055e",
+    "src/host/lifecycle.ts#launchHost": "028f8d71576a47d9",
     "src/host/lifecycle.ts#isProcessAlive": "1ca1fe6ad6c41711",
     "src/host/lifecycle.ts#killProcessBestEffort": "1dd0cb4ee9bbc676",
     "src/host/lifecycle.ts#ownLinuxSessionId": "911643125a4fd21e",
@@ -60,13 +60,13 @@
     "src/storage/manifests.ts#writeValidatedJsonFileSync": "4a5d1cc5f63ae8ce",
     "src/storage/manifests.ts#writeManifest": "1bcc99f09acfc577",
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
-    "src/host/hostMain.ts#runHost(parts)": "402885ee8e231aaa",
+    "src/host/hostMain.ts#runHost(parts)": "b54a44f8c101a29b",
     "src/host/hostMain.ts#runHost(final try)": "16789dd4e2534bc7",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "a9f5c1a913a0a6d5",
-    "skill:scripts/facts.mjs": "ad6f7db805c5d882",
-    "skill:scripts/check.sh": "97acb7fdaaa2c783"
+    "skill:model/SessionLifecycle.tla": "8cdd2cb7edafdb57",
+    "skill:scripts/facts.mjs": "08358831e4a327fc",
+    "skill:scripts/check.sh": "0f4a623d996be6ea"
   },
   "callSites": {
     "writeManifest": [
@@ -115,7 +115,6 @@
       "src/storage/homeScope.ts#scanHome"
     ],
     "reconcileSession": [
-      "src/cli/commands/create.ts#runCreateCommand",
       "src/cli/commands/gc.ts#gcSessions",
       "src/cli/commands/inspect.ts#runInspectCommand",
       "src/host/lifecycle.ts#destroySession",
