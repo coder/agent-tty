@@ -1,4 +1,5 @@
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { once } from 'node:events';
 import { existsSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -13,6 +14,7 @@ const fsHooks = vi.hoisted(() => ({
   proc: undefined as Map<string, string | Error> | undefined,
   mountinfo: undefined as string | undefined,
   ownStatError: undefined as Error | undefined,
+  cmdlineError: undefined as Error | undefined,
   rmdirError: undefined as Error | undefined,
 }));
 
@@ -28,6 +30,12 @@ vi.mock('node:fs', async () => {
   const readFileSync = ((path: string, ...rest: unknown[]) => {
     if (fsHooks.ownStatError !== undefined && path === '/proc/self/stat') {
       throw fsHooks.ownStatError;
+    }
+    if (
+      fsHooks.cmdlineError !== undefined &&
+      /^\/proc\/\d+\/cmdline$/.test(path)
+    ) {
+      throw fsHooks.cmdlineError;
     }
     if (fsHooks.proc !== undefined && path === '/proc/self/mountinfo') {
       if (fsHooks.mountinfo === undefined) {
@@ -152,6 +160,7 @@ afterEach(async () => {
   fsHooks.mountinfo = undefined;
   psHooks.tty = undefined;
   fsHooks.ownStatError = undefined;
+  fsHooks.cmdlineError = undefined;
   await rm(home, { recursive: true, force: true });
 });
 
@@ -561,6 +570,198 @@ describe('destroySession', () => {
       });
     });
   });
+});
+
+describe('a hostPid that may no longer name the host', () => {
+  const platform = process.platform;
+  const started: ChildProcess[] = [];
+
+  function startProcess(...args: string[]): number {
+    const child = spawn(
+      process.execPath,
+      ['-e', 'setInterval(() => {}, 1000)', ...args],
+      { stdio: 'ignore' },
+    );
+    started.push(child);
+    expect(child.pid).toBeTypeOf('number');
+    return child.pid as number;
+  }
+
+  // The shell's child ends at once, and exec turns the shell into a sleep
+  // that never reaps it.
+  async function startZombie(): Promise<number> {
+    const parent = spawn(
+      '/bin/sh',
+      ['-c', 'sleep 0 & echo $!; exec sleep 30'],
+      {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    );
+    started.push(parent);
+    const [line] = (await once(parent.stdout, 'data')) as [Buffer];
+    const pid = Number(line.toString().trim());
+    await vi.waitFor(
+      () => {
+        expect(
+          execFileSync('ps', ['-o', 's=', '-p', String(pid)], {
+            encoding: 'utf8',
+          }).trim(),
+        ).toBe('Z');
+      },
+      { timeout: 5000 },
+    );
+    return pid;
+  }
+
+  function isRunning(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function seedHost(hostPid: number): Promise<string> {
+    vi.stubEnv('AGENT_TTY_HOME', home);
+    return seedSession(makeRecord({ hostPid, childPid: null }));
+  }
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: platform });
+    for (const child of started.splice(0)) {
+      child.kill('SIGKILL');
+    }
+  });
+
+  it('reconcile leaves the session running while its hostPid runs the host of that session', async () => {
+    const directory = await seedHost(startProcess('_host', 'session-01', '1'));
+    const record = await readManifest(manifestPath(directory));
+
+    await reconcileSession(directory);
+
+    expect(await readManifest(manifestPath(directory))).toEqual(record);
+  });
+
+  it.runIf(platform === 'linux')(
+    'on linux reconcile records failed when the hostPid runs another program',
+    async () => {
+      const directory = await seedHost(startProcess());
+
+      await reconcileSession(directory);
+
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'failed',
+        failureOrigin: 'host-death',
+      });
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux reconcile records failed when the host stays a zombie',
+    async () => {
+      const directory = await seedHost(await startZombie());
+
+      await reconcileSession(directory);
+
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'failed',
+      });
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux destroy --force records destroyed without killing a hostPid that runs another program',
+    async () => {
+      const other = startProcess();
+      const directory = await seedHost(other);
+
+      await destroySession('session-01', true);
+
+      expect(isRunning(other)).toBe(true);
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'destroyed',
+      });
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux destroy --force records destroyed when the host stays a zombie',
+    async () => {
+      const directory = await seedHost(await startZombie());
+
+      await destroySession('session-01', true);
+
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'destroyed',
+      });
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux a hostPid whose command line /proc refuses counts as alive and gets no kill',
+    async () => {
+      const other = startProcess();
+      const directory = await seedHost(other);
+      const record = await readManifest(manifestPath(directory));
+      fsHooks.cmdlineError = errno('EACCES');
+
+      await reconcileSession(directory);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+
+      await expect(destroySession('session-01', true)).rejects.toMatchObject({
+        code: 'HOST_TIMEOUT',
+      });
+      expect(isRunning(other)).toBe(true);
+    },
+  );
+
+  it.skipIf(platform === 'win32')(
+    'destroy --force kills the host of the session',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host);
+
+      await destroySession('session-01', true);
+
+      expect(isRunning(host)).toBe(false);
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'destroyed',
+      });
+    },
+  );
+
+  it.skipIf(platform === 'win32')(
+    'on darwin destroy --force kills a host that ps shows',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host);
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+      await destroySession('session-01', true);
+
+      expect(isRunning(host)).toBe(false);
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'destroyed',
+      });
+    },
+  );
+
+  it.skipIf(platform === 'win32')(
+    'on darwin destroy --force does not kill a hostPid that runs another program',
+    async () => {
+      const other = startProcess();
+      const directory = await seedHost(other);
+      const record = await readManifest(manifestPath(directory));
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+      await expect(destroySession('session-01', true)).rejects.toMatchObject({
+        code: 'HOST_TIMEOUT',
+      });
+      expect(isRunning(other)).toBe(true);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+    },
+  );
 });
 
 describe('cliRunsInsideProgramSession', () => {
