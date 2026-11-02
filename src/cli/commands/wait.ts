@@ -22,6 +22,7 @@ import {
   matchRenderWaitSnapshot,
   prepareRenderWaitCondition,
 } from '../../renderWait/matcher.js';
+import { DEFAULT_WAIT_TIMEOUT_MS } from '../../renderWait/limits.js';
 import { computeScreenHash } from '../../renderer/canonicalScreen.js';
 import { isTerminalSessionStatus } from '../../protocol/sessionStatusPolicy.js';
 import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
@@ -48,8 +49,6 @@ interface CommandOptions {
   cursorCol: number | undefined;
   afterSeq: number | undefined;
 }
-
-export const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 
 function isPositiveInteger(value: number | undefined): value is number {
   return value !== undefined && Number.isInteger(value) && value > 0;

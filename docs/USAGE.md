@@ -204,7 +204,7 @@ Steps are a JSON array; each step is exactly one verb. The shape mirrors the res
 - `sendKeys`: a non-empty array of key names — individual named keys or single characters (e.g. `["Enter"]`, `["Ctrl+C"]`, `["Escape", "Enter"]`). Multi-character literal text such as `:wq` is not a key name; send it with a `type` step.
 - `mouse`: the same `action`, `button`, `row`, `col`, and optional `modifiers`, `cellWidth`, and `cellHeight` fields as the `mouse` command. It uses the batch command's renderer.
 - `run`: a command string, with optional `noWait` (fire-and-forget) and `timeout` (ms). A `run` step is a waited run by default.
-- `wait`: the same conditions as the `wait` command — `text`, `regex`, `scope`, `screenStableMs`, `cursorRow`, `cursorCol`, and `timeout` (ms).
+- `wait`: the same conditions as the `wait` command — `text`, `regex`, `scope`, `screenStableMs`, `cursorRow`, `cursorCol`, and `timeout` (ms). An omitted `timeout` is `30000`, the same default as the `wait` command, and `0` waits without a limit. Without `timeout`, a `screenStableMs` of `30000` or more is rejected with `INVALID_INPUT`.
 
 Input source and flags:
 

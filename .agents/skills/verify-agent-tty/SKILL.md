@@ -48,7 +48,7 @@ The harness is the CLI itself, run as `att <command> ... --json`, with `jq` to r
 - Start programs with `att create --json -- <argv>` and keep `.result.sessionId`.
 - Use the fixture apps in `test/fixtures/apps/` as the programs under test. Start them with `node --import tsx test/fixtures/apps/<app>/main.ts` from the repo root, as `test/e2e/helpers.ts` does. `hello-prompt` prints `READY> `, answers each line with `ECHO: <line>`, exits on `exit` or `exit-code <n>`, and prints `INTERRUPTED` and exits 130 on Ctrl+C.
 - For a shell, use `att create --json --env 'PS1=$ ' -- /bin/bash --noprofile --norc`. A plain `/bin/bash` loads your own prompt and dotfiles, so its screen differs between machines.
-- Wait on what the screen shows with `att wait`, never `sleep`. Always pass `--timeout <ms>`: the default is 30 s for `wait` and 10 minutes for a batch `wait` step.
+- Wait on what the screen shows with `att wait`, never `sleep`. Always pass `--timeout <ms>`: the default is 30 s, for `wait` and for a batch `wait` step.
 - For the TUI, run `att dashboard` as the program of an agent-tty session and drive it with `send-keys`, `wait` and `snapshot`. `features/dashboard.md` has the recipe.
 
 ## Evidence
