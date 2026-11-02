@@ -632,11 +632,7 @@ describe('a hostPid that may no longer name the host', () => {
 
   async function seedHost(
     hostPid: number,
-    record:
-      | 'none'
-      | 'own'
-      | { startTicks: string }
-      | { pidNamespace: string } = 'own',
+    record: 'none' | 'own' | 'earlierHost' | { pidNamespace: string } = 'own',
   ): Promise<string> {
     vi.stubEnv('AGENT_TTY_HOME', home);
     const directory = await seedSession(
@@ -646,7 +642,11 @@ describe('a hostPid that may no longer name the host', () => {
     if (own !== null && record !== 'none') {
       writeHostRecord(
         directory,
-        record === 'own' ? own : { ...own, ...record },
+        record === 'own'
+          ? own
+          : record === 'earlierHost'
+            ? { ...own, startTicks: '1' }
+            : { ...own, ...record },
       );
     }
     return directory;
@@ -705,7 +705,7 @@ describe('a hostPid that may no longer name the host', () => {
   it.runIf(platform === 'linux')(
     'on linux reconcile records failed when another process got the hostPid',
     async () => {
-      const directory = await seedHost(startProcess(), { startTicks: '1' });
+      const directory = await seedHost(startProcess(), 'earlierHost');
 
       await reconcileSession(directory);
 
@@ -733,7 +733,7 @@ describe('a hostPid that may no longer name the host', () => {
     'on linux destroy --force records destroyed without killing a process that got the hostPid',
     async () => {
       const other = startProcess();
-      const directory = await seedHost(other, { startTicks: '1' });
+      const directory = await seedHost(other, 'earlierHost');
 
       await destroySession('session-01', true);
 
