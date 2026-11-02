@@ -128,7 +128,7 @@ function reconcileFacts() {
   );
   const aliveRead = indexOfStatement(
     body,
-    /^const hostAlive = isProcessAlive\(manifest\.hostPid\);$/,
+    /^const hostAlive = isHostAlive\(hostOf\(manifest\)\);$/,
   );
   const alive = guardIndex(
     body,
@@ -380,7 +380,7 @@ function destroyFacts() {
     const block = force.thenStatement;
     const first = indexOfStatement(
       block,
-      /^await stopSessionProcesses\(\s*sessionId,\s*manifest\.hostPid,\s*await readProgramGroup\(/,
+      /^await stopSessionProcesses\(\s*sessionId,\s*hostOf\(manifest\),\s*await readProgramGroup\(/,
     );
     const reread = indexOfStatement(
       block,
@@ -392,7 +392,7 @@ function destroyFacts() {
     );
     const second = indexOfStatement(
       block,
-      /^await stopSessionProcesses\(\s*sessionId,\s*current\.hostPid,\s*group,/,
+      /^await stopSessionProcesses\(\s*sessionId,\s*hostOf\(current\),\s*group,/,
     );
     const records = indexOfStatement(
       block,
@@ -412,7 +412,7 @@ function destroyFacts() {
   ).body;
   const stopWaits =
     indexOfStatement(stop, /^stopProgramGroup\(group\);$/) >= 0 &&
-    indexOfStatement(stop, /^killProcessBestEffort\(hostPid\);$/) >= 0 &&
+    indexOfStatement(stop, /^killHostBestEffort\(host\);$/) >= 0 &&
     indexOfStatement(stop, /^const stopped = await waitForProcessesToExit\(/) >=
       0 &&
     guardIndex(stop, '!stopped', ts.SyntaxKind.ThrowStatement) >= 0;
@@ -421,7 +421,7 @@ function destroyFacts() {
     'waitForProcessesToExit',
   );
   const waitsForProcessesOnly =
-    calls(wait.body, 'isProcessAlive').length === 1 &&
+    calls(wait.body, 'isHostAlive').length === 1 &&
     calls(wait.body, 'isProgramGroupAlive').length === 1 &&
     calls(wait.body, 'stat').length === 0 &&
     calls(wait.body, 'pathExists').length === 0;
@@ -975,6 +975,10 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'launchHost'],
   ['src/host/lifecycle.ts', 'isProcessAlive'],
   ['src/host/lifecycle.ts', 'killProcessBestEffort'],
+  ['src/host/lifecycle.ts', 'hostOf'],
+  ['src/host/lifecycle.ts', 'runsSessionHost'],
+  ['src/host/lifecycle.ts', 'isHostAlive'],
+  ['src/host/lifecycle.ts', 'killHostBestEffort'],
   ['src/host/lifecycle.ts', 'ownLinuxSessionId'],
   ['src/host/lifecycle.ts', 'ownProcessGroupId'],
   ['src/host/lifecycle.ts', 'controllingTerminal'],
