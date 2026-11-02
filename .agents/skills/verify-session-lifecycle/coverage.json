@@ -63,14 +63,14 @@
     "src/storage/manifests.ts#replaceFileAtomicSync": "38bea7cd8e67828f",
     "src/storage/manifests.ts#writeValidatedJsonFileSync": "4a5d1cc5f63ae8ce",
     "src/storage/manifests.ts#writeManifest": "1bcc99f09acfc577",
-    "src/storage/manifests.ts#writeDestroyMarker": "e9ea2fa9437ba099",
+    "src/storage/manifests.ts#writeDestroyMarker": "7387a50b983a97c6",
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
     "src/host/hostMain.ts#runHost(parts)": "402885ee8e231aaa",
     "src/host/hostMain.ts#runHost(final try)": "16789dd4e2534bc7",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "abeeb64f8ca84162",
-    "skill:scripts/facts.mjs": "38e81cea3746ddf1",
+    "skill:scripts/facts.mjs": "d65aa27245d96e9a",
     "skill:scripts/check.sh": "2083a94d3b85190c"
   },
   "callSites": {
@@ -87,6 +87,7 @@
       "src/host/hostMain.ts#runHost>resize"
     ],
     "replaceFileAtomic": [
+      "src/storage/manifests.ts#writeDestroyMarker",
       "src/storage/manifests.ts#writeManifest",
       "src/storage/manifests.ts#writeTextFileAtomic"
     ],
