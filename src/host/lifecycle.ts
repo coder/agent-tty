@@ -210,7 +210,7 @@ function killProcessBestEffort(pid: number | null): void {
 }
 
 // A chroot or a container without a mounted /proc has no /proc/self/stat,
-// and the CLI then counts as outside the session.
+// and the CLI then counts as inside the session.
 function ownLinuxSessionId(): number | null {
   let stat: string;
   try {
