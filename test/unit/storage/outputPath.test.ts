@@ -14,6 +14,7 @@ import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ERROR_CODES } from '../../../src/protocol/errors.js';
 import {
   copyFileReplacing,
   resolveExplicitOutputPath,
@@ -21,6 +22,7 @@ import {
 
 describe('explicit output paths', () => {
   let workspace = '';
+  const sessionsRoot = (): string => join(workspace, 'home', 'sessions');
 
   beforeEach(async () => {
     workspace = await realpath(
@@ -37,9 +39,9 @@ describe('explicit output paths', () => {
     await mkdir(join(workspace, 'exports'));
     vi.spyOn(process, 'cwd').mockReturnValue(workspace);
 
-    await expect(resolveExplicitOutputPath('exports/shot.png')).resolves.toBe(
-      join(workspace, 'exports', 'shot.png'),
-    );
+    await expect(
+      resolveExplicitOutputPath('exports/shot.png', sessionsRoot()),
+    ).resolves.toBe(join(workspace, 'exports', 'shot.png'));
   });
 
   it('resolves a symlinked parent folder to its real path', async () => {
@@ -47,13 +49,19 @@ describe('explicit output paths', () => {
     await symlink(join(workspace, 'real'), join(workspace, 'linked'));
 
     await expect(
-      resolveExplicitOutputPath(join(workspace, 'linked', 'shot.png')),
+      resolveExplicitOutputPath(
+        join(workspace, 'linked', 'shot.png'),
+        sessionsRoot(),
+      ),
     ).resolves.toBe(join(workspace, 'real', 'shot.png'));
   });
 
   it('rejects a missing parent folder without creating it', async () => {
     await expect(
-      resolveExplicitOutputPath(join(workspace, 'missing', 'shot.png')),
+      resolveExplicitOutputPath(
+        join(workspace, 'missing', 'shot.png'),
+        sessionsRoot(),
+      ),
     ).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readdir(workspace)).toEqual([]);
   });
@@ -62,8 +70,46 @@ describe('explicit output paths', () => {
     await writeFile(join(workspace, 'file'), 'x');
 
     await expect(
-      resolveExplicitOutputPath(join(workspace, 'file', 'shot.png')),
+      resolveExplicitOutputPath(
+        join(workspace, 'file', 'shot.png'),
+        sessionsRoot(),
+      ),
     ).rejects.toThrow();
+  });
+
+  it('rejects a path inside session storage, also through a symlinked parent', async () => {
+    const artifacts = join(sessionsRoot(), 'session-01', 'artifacts');
+    await mkdir(artifacts, { recursive: true });
+    await symlink(artifacts, join(workspace, 'into-session'));
+
+    for (const out of [
+      join(artifacts, 'shot.png'),
+      join(sessionsRoot(), 'shot.png'),
+      join(workspace, 'into-session', 'manifest.json'),
+    ]) {
+      await expect(
+        resolveExplicitOutputPath(out, sessionsRoot()),
+      ).rejects.toMatchObject({ code: ERROR_CODES.EXPORT_ERROR });
+    }
+  });
+
+  it('accepts a path next to session storage', async () => {
+    await mkdir(join(workspace, 'home', 'sessions-evidence'), {
+      recursive: true,
+    });
+
+    await expect(
+      resolveExplicitOutputPath(
+        join(workspace, 'home', 'sessions-evidence', 'shot.png'),
+        sessionsRoot(),
+      ),
+    ).resolves.toBe(join(workspace, 'home', 'sessions-evidence', 'shot.png'));
+    await expect(
+      resolveExplicitOutputPath(
+        join(workspace, 'home', 'shot.png'),
+        sessionsRoot(),
+      ),
+    ).resolves.toBe(join(workspace, 'home', 'shot.png'));
   });
 
   it('replaces an existing file and leaves no temporary file', async () => {

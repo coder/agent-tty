@@ -133,6 +133,21 @@ describe('screenshot --out', { timeout: 120_000 }, () => {
     expect(manifest.artifacts).toEqual([]);
   });
 
+  it('refuses an --out inside session storage and leaves the managed files as they were', async () => {
+    const first = expectSuccess(screenshot([]));
+    const before = await readFile(first.artifactPath);
+
+    const run = screenshot(['--out', first.artifactPath]);
+
+    expect(run.status).toBe(7);
+    expect((run.envelope as ErrorEnvelope).error.code).toBe('EXPORT_ERROR');
+    expect((await readFile(first.artifactPath)).equals(before)).toBe(true);
+    const manifest = await readArtifactManifest(
+      sessionDir(testHome, sessionId),
+    );
+    expect(manifest.artifacts).toHaveLength(1);
+  });
+
   it('writes --out for a destroyed session through offline replay', async () => {
     destroySession(testHome, sessionId);
     const out = join(outDir, 'offline.png');
