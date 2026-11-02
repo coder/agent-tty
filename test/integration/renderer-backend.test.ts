@@ -498,6 +498,32 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     }
   });
 
+  it('does not list the spaces that the PNG draws blank', async () => {
+    await backend.boot();
+    await backend.replayTo(
+      createReplayInput([
+        {
+          seq: 0,
+          ts: timestampFor(0),
+          type: 'output',
+          payload: {
+            data: '1\u202f234\u202f567,5 a\u2009b\u2007c\u205fd\u3000e\r\n',
+          },
+        },
+      ]),
+    );
+    // oxfmt-ignore
+    const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-spaces-')));
+
+    try {
+      const shot = await backend.screenshot(join(outputDir, 'spaces.png'));
+
+      expect(shot.missingGlyphs).toEqual([]);
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
   it('lists a glyph the same way whatever glyphs sit next to it', async () => {
     // oxfmt-ignore
     const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-neighbors-')));

@@ -7,6 +7,8 @@ import { invariant } from '../../util/assert.js';
 
 const DEFAULT_IGNORABLE = /^\p{Default_Ignorable_Code_Point}$/u;
 const COMBINING_MARK = /^\p{M}$/u;
+// HarfBuzz draws these spaces as blank space when the font lacks them.
+const FALLBACK_SPACE = /^[\u00a0\u2000-\u200a\u202f\u205f\u3000]$/u;
 const PROBE_ROOT_ID = 'agent-tty-glyph-probe';
 // The report stays far below the 1 MiB RPC response limit, and the probe count
 // bounds the CDP round trips of one screenshot.
@@ -45,6 +47,7 @@ function isTextCovered(text: string, coverage: ReadonlySet<number>): boolean {
   for (const char of text) {
     if (
       !DEFAULT_IGNORABLE.test(char) &&
+      !FALLBACK_SPACE.test(char) &&
       !coverage.has(char.codePointAt(0) ?? -1)
     ) {
       return false;
@@ -116,14 +119,17 @@ function formatCodePoint(codePoint: number): string {
   return `U+${codePoint.toString(16).toUpperCase().padStart(4, '0')}`;
 }
 
+function baseOf(grapheme: string): string {
+  const base = grapheme.codePointAt(0);
+  invariant(base !== undefined, 'a grapheme must not be empty');
+  return String.fromCodePoint(base);
+}
+
 // A combining mark on its own draws no glyph, so it is probed on its base.
 export function probeText(grapheme: string, codePoint: number): string {
-  const base = grapheme.codePointAt(0);
-  invariant(base !== undefined, 'probeText needs a non-empty grapheme');
+  const base = baseOf(grapheme);
   const char = String.fromCodePoint(codePoint);
-  return COMBINING_MARK.test(char) && base !== codePoint
-    ? String.fromCodePoint(base) + char
-    : char;
+  return COMBINING_MARK.test(char) && base !== char ? base + char : char;
 }
 
 export function glyphProbeTexts(
@@ -133,7 +139,11 @@ export function glyphProbeTexts(
   for (const [grapheme, candidate] of candidates) {
     texts.add(grapheme);
     for (const codePoint of candidate.codePoints) {
-      texts.add(probeText(grapheme, codePoint));
+      const text = probeText(grapheme, codePoint);
+      texts.add(text);
+      if (text !== String.fromCodePoint(codePoint)) {
+        texts.add(baseOf(grapheme));
+      }
     }
   }
   return [...texts];
@@ -179,7 +189,23 @@ function boxedCodePoints(
 
   const boxed: number[] = [];
   for (const codePoint of candidate.codePoints) {
-    const codePointFonts = fontsByText.get(probeText(grapheme, codePoint));
+    const text = probeText(grapheme, codePoint);
+    let codePointFonts = fontsByText.get(text);
+    if (text !== String.fromCodePoint(codePoint)) {
+      const baseFonts = fontsByText.get(baseOf(grapheme));
+      if (codePointFonts === undefined || baseFonts === undefined) {
+        return undefined;
+      }
+      const markFonts = codePointFonts.filter(
+        (font) =>
+          !baseFonts.some(
+            (baseFont) => baseFont.familyName === font.familyName,
+          ),
+      );
+      if (markFonts.length > 0) {
+        codePointFonts = markFonts;
+      }
+    }
     if (codePointFonts === undefined) {
       return undefined;
     }

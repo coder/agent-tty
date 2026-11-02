@@ -95,6 +95,15 @@ describe('findGlyphCandidates', () => {
     expect([...candidates]).toEqual([]);
   });
 
+  it('counts the spaces that HarfBuzz draws blank as covered', () => {
+    const candidates = findGlyphCandidates(
+      [['1', '\u202f', '2', '\u2007', '\u2009', '\u205f', '\u3000']],
+      coverage.union,
+    );
+
+    expect([...candidates]).toEqual([]);
+  });
+
   it('never reports joiners or variation selectors on their own', () => {
     const candidates = findGlyphCandidates(
       [['\u2714\ufe0f', '\u{1f468}\u200d\u{1f469}']],
@@ -119,6 +128,7 @@ describe('glyphProbeTexts', () => {
       '\u{1f600}',
       '\u29c9',
       'a\u1ab0',
+      'a',
     ]);
   });
 });
@@ -179,8 +189,20 @@ describe('buildMissingGlyphs', () => {
 
   it('does not list a mark that a host font drew next to a bundled base', () => {
     expect(
-      report([['a\u1ab0']], { 'a\u1ab0': [JETBRAINS, HOST] }).missingGlyphs,
+      report([['a\u1ab0']], { 'a\u1ab0': [JETBRAINS, HOST], a: [JETBRAINS] })
+        .missingGlyphs,
     ).toEqual([]);
+  });
+
+  it('lists a mark that the first font drew next to a host-drawn base', () => {
+    expect(
+      report([['\u{1f600}\u20dd', '\u4e2d\u1ab0']], {
+        '\u{1f600}\u20dd': [HOST, JETBRAINS],
+        '\u{1f600}': [HOST],
+        '\u4e2d\u1ab0': [HOST, JETBRAINS],
+        '\u4e2d': [HOST],
+      }).missingGlyphs.map((glyph) => glyph.codePoint),
+    ).toEqual(['U+1AB0', 'U+20DD']);
   });
 
   it('counts a probe with no reported font as drawn by the first font', () => {
