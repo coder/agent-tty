@@ -209,6 +209,67 @@ function killProcessBestEffort(pid: number | null): void {
   }
 }
 
+interface SessionHost {
+  readonly pid: number;
+  readonly sessionId: string;
+}
+
+function hostOf(record: SessionRecord): SessionHost | null {
+  return record.hostPid === null
+    ? null
+    : { pid: record.hostPid, sessionId: record.sessionId };
+}
+
+// launchHost starts the host as `... _host <session id> <creator pid>`. A
+// zombie or an exiting process shows an empty command line, and a process
+// that took the pid shows its own, so neither runs the host. null when the
+// command line cannot be read, and always on Windows.
+function runsSessionHost(host: SessionHost): boolean | null {
+  let args: string[];
+  if (process.platform === 'linux') {
+    try {
+      args = readFileSync(`/proc/${String(host.pid)}/cmdline`, 'utf8').split(
+        '\0',
+      );
+    } catch (error) {
+      return hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ESRCH')
+        ? false
+        : null;
+    }
+  } else if (process.platform === 'win32') {
+    return null;
+  } else {
+    try {
+      args = execFileSync(
+        '/bin/ps',
+        ['-ww', '-o', 'command=', '-p', String(host.pid)],
+        { encoding: 'utf8' },
+      )
+        .trim()
+        .split(/\s+/);
+    } catch {
+      return null;
+    }
+  }
+  const index = args.indexOf('_host');
+  return index >= 0 && args[index + 1] === host.sessionId;
+}
+
+// Off Linux a zombie host, or a process that took its pid, reads alive.
+function isHostAlive(host: SessionHost | null): boolean {
+  if (host === null) {
+    return false;
+  }
+  const runs = process.platform === 'linux' ? runsSessionHost(host) : null;
+  return runs ?? isProcessAlive(host.pid);
+}
+
+function killHostBestEffort(host: SessionHost | null): void {
+  if (host !== null && runsSessionHost(host) === true) {
+    killProcessBestEffort(host.pid);
+  }
+}
+
 // A chroot or a container without a mounted /proc has no /proc/self/stat,
 // and the CLI then counts as outside the session.
 function ownLinuxSessionId(): number | null {
@@ -457,7 +518,7 @@ async function waitForTerminalManifest(
 }
 
 export async function waitForProcessesToExit(
-  hostPid: number | null,
+  host: SessionHost | null,
   group: ProgramGroup | null,
   maxAttempts: number = DESTROY_MAX_ATTEMPTS,
   intervalMs: number = DESTROY_POLL_INTERVAL_MS,
@@ -477,7 +538,7 @@ export async function waitForProcessesToExit(
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     throwIfAborted(signal);
-    if (!isProcessAlive(hostPid) && !isProgramGroupAlive(group)) {
+    if (!isHostAlive(host) && !isProgramGroupAlive(group)) {
       return true;
     }
 
@@ -667,7 +728,7 @@ async function recordDestroyed(
 ): Promise<void> {
   invariant(
     isTerminalSessionStatus(manifest.status) ||
-      (!isProcessAlive(manifest.hostPid) && !isProgramGroupAlive(group)),
+      (!isHostAlive(hostOf(manifest)) && !isProgramGroupAlive(group)),
     'recordDestroyed needs a terminal manifest or dead session processes',
   );
   if (!isDestroyedSessionStatus(manifest.status)) {
@@ -683,16 +744,16 @@ async function recordDestroyed(
 
 async function stopSessionProcesses(
   sessionId: string,
-  hostPid: number | null,
+  host: SessionHost | null,
   group: ProgramGroup | null,
   sessionDirectory: string,
   signal: AbortSignal | undefined,
 ): Promise<void> {
   stopProgramGroup(group);
-  killProcessBestEffort(hostPid);
+  killHostBestEffort(host);
 
   const stopped = await waitForProcessesToExit(
-    hostPid,
+    host,
     group,
     DESTROY_MAX_ATTEMPTS,
     DESTROY_POLL_INTERVAL_MS,
@@ -749,7 +810,7 @@ export async function destroySession(
   if (force === true) {
     await stopSessionProcesses(
       sessionId,
-      manifest.hostPid,
+      hostOf(manifest),
       await readProgramGroup(sessionDirectory, manifest.childPid),
       sessionDirectory,
       signal,
@@ -760,7 +821,7 @@ export async function destroySession(
     const group = await readProgramGroup(sessionDirectory, current.childPid);
     await stopSessionProcesses(
       sessionId,
-      current.hostPid,
+      hostOf(current),
       group,
       sessionDirectory,
       signal,
@@ -898,7 +959,7 @@ export async function reconcileSession(
     return;
   }
 
-  const hostAlive = isProcessAlive(manifest.hostPid);
+  const hostAlive = isHostAlive(hostOf(manifest));
   if (manifest.hostPid !== null && hostAlive) {
     return;
   }

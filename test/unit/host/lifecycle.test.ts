@@ -15,6 +15,7 @@ const fsHooks = vi.hoisted(() => ({
   mountinfo: undefined as string | undefined,
   ownStatError: undefined as Error | undefined,
   cmdlineError: undefined as Error | undefined,
+  beforeCmdlineRead: undefined as ((path: string) => void) | undefined,
   rmdirError: undefined as Error | undefined,
 }));
 
@@ -31,11 +32,11 @@ vi.mock('node:fs', async () => {
     if (fsHooks.ownStatError !== undefined && path === '/proc/self/stat') {
       throw fsHooks.ownStatError;
     }
-    if (
-      fsHooks.cmdlineError !== undefined &&
-      /^\/proc\/\d+\/cmdline$/.test(path)
-    ) {
-      throw fsHooks.cmdlineError;
+    if (/^\/proc\/\d+\/cmdline$/.test(path)) {
+      fsHooks.beforeCmdlineRead?.(path);
+      if (fsHooks.cmdlineError !== undefined) {
+        throw fsHooks.cmdlineError;
+      }
     }
     if (fsHooks.proc !== undefined && path === '/proc/self/mountinfo') {
       if (fsHooks.mountinfo === undefined) {
@@ -161,6 +162,7 @@ afterEach(async () => {
   psHooks.tty = undefined;
   fsHooks.ownStatError = undefined;
   fsHooks.cmdlineError = undefined;
+  fsHooks.beforeCmdlineRead = undefined;
   await rm(home, { recursive: true, force: true });
 });
 
@@ -216,6 +218,11 @@ async function seedSession(record: SessionRecord): Promise<string> {
 function killProbeReportsDead(
   beforeHostReportsDead: () => void = () => undefined,
 ) {
+  fsHooks.beforeCmdlineRead = (path) => {
+    if (path === `/proc/${String(HOST_PID)}/cmdline`) {
+      beforeHostReportsDead();
+    }
+  };
   vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
     if (pid === HOST_PID && signal === 0) {
       beforeHostReportsDead();
@@ -622,6 +629,20 @@ describe('a hostPid that may no longer name the host', () => {
     }
   }
 
+  // A real host is no child of the CLI. This one is a child of the test, so
+  // it stays a zombie until Node reaps it, which the probe reads as alive.
+  function reapedOnKill(host: number) {
+    const send = process.kill.bind(process);
+    let killed = false;
+    return vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (pid === host && killed && signal === 0) {
+        throw errno('ESRCH');
+      }
+      killed ||= pid === host && signal === 'SIGKILL';
+      return send(pid, signal);
+    });
+  }
+
   async function seedHost(hostPid: number): Promise<string> {
     vi.stubEnv('AGENT_TTY_HOME', home);
     return seedSession(makeRecord({ hostPid, childPid: null }));
@@ -722,9 +743,11 @@ describe('a hostPid that may no longer name the host', () => {
       const host = startProcess('_host', 'session-01', '1');
       const directory = await seedHost(host);
 
+      const kill = reapedOnKill(host);
+
       await destroySession('session-01', true);
 
-      expect(isRunning(host)).toBe(false);
+      expect(kill).toHaveBeenCalledWith(host, 'SIGKILL');
       expect(await readManifest(manifestPath(directory))).toMatchObject({
         status: 'destroyed',
       });
@@ -738,9 +761,11 @@ describe('a hostPid that may no longer name the host', () => {
       const directory = await seedHost(host);
       Object.defineProperty(process, 'platform', { value: 'darwin' });
 
+      const kill = reapedOnKill(host);
+
       await destroySession('session-01', true);
 
-      expect(isRunning(host)).toBe(false);
+      expect(kill).toHaveBeenCalledWith(host, 'SIGKILL');
       expect(await readManifest(manifestPath(directory))).toMatchObject({
         status: 'destroyed',
       });
