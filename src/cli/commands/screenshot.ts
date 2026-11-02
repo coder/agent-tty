@@ -95,6 +95,17 @@ function formatScreenshotLines(result: ScreenshotResult): string[] {
   if (result.renderProfileHash !== undefined) {
     lines.push(`Render profile hash: ${result.renderProfileHash}`);
   }
+  const missingCodePoints = (result.missingGlyphs ?? []).map(
+    (glyph) => glyph.codePoint,
+  );
+  if (result.missingGlyphsTruncated === true) {
+    missingCodePoints.push('and more');
+  }
+  if (missingCodePoints.length > 0) {
+    lines.push(
+      `Missing glyphs (drawn as boxes): ${missingCodePoints.join(', ')}`,
+    );
+  }
 
   return lines;
 }

@@ -136,6 +136,23 @@ describe('screenshot capture', () => {
     });
   });
 
+  it('passes the renderer missingGlyphs through to the result', async () => {
+    const sessionDirectory = await createSessionDir();
+    const missingGlyphs = [
+      { codePoint: 'U+29C9', cells: [{ row: 0, col: 6 }] },
+    ];
+    const backend = createFakeBackend({ resultOverrides: { missingGlyphs } });
+
+    const result = await captureScreenshotResult({
+      backend,
+      sessionDir: sessionDirectory,
+      profileName: 'reference-dark',
+      expectedSessionId: 'session-01',
+    });
+
+    expect(result.missingGlyphs).toEqual(missingGlyphs);
+  });
+
   it('omits screenshot options when showCursor is undefined and threads it when set', async () => {
     const sessionDirectory = await createSessionDir();
     const observed: Array<{
