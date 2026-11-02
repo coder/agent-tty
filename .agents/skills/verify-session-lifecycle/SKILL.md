@@ -65,7 +65,7 @@ What it does:
 
 1. `scripts/facts.mjs` reads the code with the TypeScript compiler. It finds the twenty-six guards that the rules depend on and the status sets of the policy table, and it hashes each covered function with comments and layout removed.
 2. It writes one TLC config per run, with those facts as constants. A guard that is not in the code, in the expected place and order, reads FALSE, and the model then runs without it.
-3. It runs TLC 55 times and prints one line per run.
+3. It runs TLC 58 times and prints one line per run.
 4. It compares the hashes and call sites with `coverage.json`.
 
 Exit codes: 0 means every run gave the expected result and the covered code matches the sync record. 1 means at least one run gave an unexpected result; the line says `UNEXPECTED`. 3 means every result was as expected, but covered code changed since the sync commit; that is not a pass, so follow "When you change covered code on purpose". 2 means a tool could not run. When both 1 and 3 apply, the exit code is 1.
@@ -422,7 +422,7 @@ To bring the check back in line after changes that skipped it, use `/maintain-fo
 
 ## Scope
 
-The model checks every order of these steps for one session: one `create`, its host, one `gc` pass over that session (not `--dry-run`), one other command that reconciles twice, one resize, one `destroy` (with or without `--force`, from outside or from inside the program's session), one SIGTERM to the host, a program exit at any time, a process of another user in the program's group that starts and ends at any time, a process that the program leaves when it exits on its own, the host's `program.json` write, an unrelated group that takes the program's group id once the whole group has ended, the kill timer of the host's shutdown, and a host crash at any time. With a token the model has STATES_TOKEN distinct states, and without one STATES_NOTOKEN. The check prints both counts.
+The model checks every order of these steps for one session: one `create`, its host, one `gc` pass over that session (not `--dry-run`), one other command that reconciles twice, one resize, one `destroy` (with or without `--force`, from outside or from inside the program's session), one SIGTERM to the host, a program exit at any time, a process of another user in the program's group that starts and ends at any time, a process that the program leaves when it exits on its own, the host's `program.json` write, an unrelated group that takes the program's group id once the whole group has ended, the kill timer of the host's shutdown, and a host crash at any time. With a token the model has 6,090,010 distinct states, and without one 6,127,976. The check prints both counts.
 
 It assumes:
 
