@@ -1411,6 +1411,90 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     },
   );
 
+  // The held start-up write keeps the host from listening past create's
+  // readiness loop, as a host that starts slowly on a loaded machine does.
+  describe('a create that gives up', () => {
+    let pgid = 0;
+
+    afterEach(() => {
+      if (pgid > 1) {
+        killGroupIfAlive(pgid);
+      }
+      pgid = 0;
+    });
+
+    it('stops the host and the program before it reports the error', async () => {
+      const holdLog = join(testHome, 'hold.log');
+      const creator = spawn(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          './src/cli/main.ts',
+          'create',
+          '--json',
+          '--',
+          '/bin/sh',
+          '-c',
+          'trap "" HUP; sleep 300 & wait',
+        ],
+        {
+          stdio: ['ignore', 'pipe', 'ignore'],
+          env: {
+            ...process.env,
+            AGENT_TTY_HOME: testHome,
+            REPLAY_LOG: holdLog,
+            REPLAY_HOLD: '_host:rename:/session.json:1:30000',
+            NODE_OPTIONS: [
+              process.env.NODE_OPTIONS ?? '',
+              `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+            ].join(' '),
+          },
+        },
+      );
+      let stdout = '';
+      creator.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString('utf8');
+      });
+      const creatorExit = once(creator, 'exit');
+      const deadline = Date.now() + 15_000;
+      while (
+        !(await readFile(holdLog, 'utf8').then(
+          (log) => log.includes('hold rename'),
+          () => false,
+        ))
+      ) {
+        expect(Date.now()).toBeLessThan(deadline);
+        await sleep(50);
+      }
+      const [sessionId] = await readdir(join(testHome, 'sessions'));
+      const directory = sessionDir(testHome, sessionId as string);
+      const manifest = SessionRecordSchema.parse(
+        JSON.parse(await readFile(manifestPath(directory), 'utf8')),
+      );
+      const hostPid = manifest.hostPid as number;
+      pgid = (
+        JSON.parse(await readFile(programRecordPath(directory), 'utf8')) as {
+          pid: number;
+        }
+      ).pid;
+      expect(isGroupAlive(pgid)).toBe(true);
+
+      const [code] = (await creatorExit) as [number | null];
+
+      expect(code).toBe(6);
+      expect(JSON.parse(stdout)).toMatchObject({
+        ok: false,
+        error: { code: 'HOST_UNREACHABLE' },
+      });
+      expect(isProcessAlive(hostPid)).toBe(false);
+      expect(await groupEnds(pgid)).toBe(true);
+      expect(inspectSession(testHome, sessionId as string).status).toBe(
+        'destroyed',
+      );
+    }, 60_000);
+  });
+
   describe('destroy run by the program itself', () => {
     let pgid = 0;
 
