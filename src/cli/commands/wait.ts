@@ -5,12 +5,9 @@ import type {
 import type { PreparedRenderWaitCondition } from '../../renderWait/matcher.js';
 import type { SemanticSnapshot } from '../../renderer/types.js';
 
-import process from 'node:process';
-
 import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
 
-import { exitCodeForError } from '../exitCodes.js';
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
@@ -100,10 +97,6 @@ function parseRenderWaitScope(
 }
 
 function waitLines(result: WaitResult): string[] {
-  if (result.timedOut) {
-    return ['Wait timed out.'];
-  }
-
   if (result.exitCode !== undefined) {
     return [`Process exited with code ${String(result.exitCode)}.`];
   }
@@ -112,10 +105,6 @@ function waitLines(result: WaitResult): string[] {
 }
 
 function renderWaitLines(result: WaitForRenderResult): string[] {
-  if (result.timedOut) {
-    return [`Wait timed out. (capturedAtSeq: ${String(result.capturedAtSeq)})`];
-  }
-
   const lines: string[] = [];
   if (!result.matched) {
     lines.push(
@@ -135,9 +124,17 @@ function renderWaitLines(result: WaitForRenderResult): string[] {
   return lines;
 }
 
-function setWaitTimeoutExitCode(result: { timedOut: boolean }): void {
+function throwIfTimedOut(
+  result: WaitResult | WaitForRenderResult,
+  sessionId: string,
+  timeoutMs: number,
+): void {
   if (result.timedOut) {
-    process.exitCode = exitCodeForError(ERROR_CODES.WAIT_TIMEOUT);
+    throw makeCliError(ERROR_CODES.WAIT_TIMEOUT, {
+      message: 'Wait timed out before its condition was met.',
+      details: { sessionId, timeoutMs },
+      result,
+    });
   }
 }
 
@@ -340,6 +337,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       });
     }
     const result: WaitForRenderResult = parsedResult.data;
+    throwIfTimedOut(result, options.sessionId, effectiveTimeout);
 
     emitSuccess({
       command: 'wait',
@@ -347,7 +345,6 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       result,
       lines: renderWaitLines(result),
     });
-    setWaitTimeoutExitCode(result);
     return;
   }
 
@@ -424,6 +421,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     });
   }
   const result: WaitResult = parsedResult.data;
+  throwIfTimedOut(result, options.sessionId, effectiveTimeout);
 
   emitSuccess({
     command: 'wait',
@@ -431,5 +429,4 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     result,
     lines: waitLines(result),
   });
-  setWaitTimeoutExitCode(result);
 }

@@ -19,6 +19,9 @@ const mocks = vi.hoisted(() => ({
   createArtifactEntry: vi.fn(),
   ensureArtifactsDir: vi.fn(),
   rm: vi.fn(),
+  resolveExplicitOutputPath: vi.fn(),
+  copyFileReplacing: vi.fn(),
+  sessionNotFoundIfRemoved: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', () => ({
@@ -65,9 +68,12 @@ vi.mock('../../../src/storage/artifactPaths.js', () => ({
     (seq: number, profileName: string) =>
       `screenshot-${String(seq)}-${profileName}.png`,
   ),
-  sessionNotFoundIfRemoved: vi.fn((_dir: string, error: unknown) =>
-    Promise.resolve(error),
-  ),
+  sessionNotFoundIfRemoved: mocks.sessionNotFoundIfRemoved,
+}));
+
+vi.mock('../../../src/storage/outputPath.js', () => ({
+  resolveExplicitOutputPath: mocks.resolveExplicitOutputPath,
+  copyFileReplacing: mocks.copyFileReplacing,
 }));
 
 import { runScreenshotCommand } from '../../../src/cli/commands/screenshot.js';
@@ -214,6 +220,105 @@ describe('screenshot command', () => {
       '/tmp/agent-tty/sessions/session-01/artifacts',
     );
     mocks.rm.mockResolvedValue(undefined);
+    mocks.sessionNotFoundIfRemoved.mockImplementation(
+      (_dir: string, error: unknown) => Promise.resolve(error),
+    );
+  });
+
+  describe('--out', () => {
+    it('copies the captured PNG to the resolved --out path and returns that path', async () => {
+      mocks.sendRpc.mockResolvedValue(
+        createScreenshotResult({ artifactPath: '/artifacts/shot.png' }),
+      );
+      mocks.resolveExplicitOutputPath.mockResolvedValue('/real/out/proof.png');
+      mocks.copyFileReplacing.mockResolvedValue(undefined);
+
+      await runScreenshotCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        out: 'out/proof.png',
+      });
+
+      expect(mocks.resolveExplicitOutputPath).toHaveBeenCalledWith(
+        'out/proof.png',
+        '/tmp/agent-tty/sessions',
+      );
+      expect(mocks.copyFileReplacing).toHaveBeenCalledWith(
+        '/artifacts/shot.png',
+        '/real/out/proof.png',
+      );
+      expect(mocks.emitSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          result: expect.objectContaining({
+            artifactPath: '/real/out/proof.png',
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('fails with EXPORT_ERROR before capturing when --out cannot be resolved', async () => {
+      mocks.resolveExplicitOutputPath.mockRejectedValue(
+        Object.assign(new Error('missing parent'), { code: 'ENOENT' }),
+      );
+
+      await expect(
+        runScreenshotCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          out: '/missing/proof.png',
+        }),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.EXPORT_ERROR,
+        details: { sessionId: 'session-01', out: '/missing/proof.png' },
+      });
+      expect(mocks.sendRpc).not.toHaveBeenCalled();
+      expect(mocks.emitSuccess).not.toHaveBeenCalled();
+    });
+
+    it('fails with EXPORT_ERROR when the copy to --out fails', async () => {
+      mocks.sendRpc.mockResolvedValue(createScreenshotResult());
+      mocks.resolveExplicitOutputPath.mockResolvedValue('/real/out/proof.png');
+      mocks.copyFileReplacing.mockRejectedValue(
+        Object.assign(new Error('disk full'), { code: 'ENOSPC' }),
+      );
+
+      await expect(
+        runScreenshotCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          out: '/real/out/proof.png',
+        }),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.EXPORT_ERROR,
+        details: { sessionId: 'session-01', out: '/real/out/proof.png' },
+      });
+      expect(mocks.emitSuccess).not.toHaveBeenCalled();
+    });
+
+    it('reports SESSION_NOT_FOUND when the session folder is gone before the copy', async () => {
+      const removed = new CliError(
+        ERROR_CODES.SESSION_NOT_FOUND,
+        'Session folder was removed.',
+      );
+      mocks.sendRpc.mockResolvedValue(createScreenshotResult());
+      mocks.resolveExplicitOutputPath.mockResolvedValue('/real/out/proof.png');
+      mocks.copyFileReplacing.mockRejectedValue(
+        Object.assign(new Error('gone'), { code: 'ENOENT' }),
+      );
+      mocks.sessionNotFoundIfRemoved.mockResolvedValue(removed);
+
+      await expect(
+        runScreenshotCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          out: '/real/out/proof.png',
+        }),
+      ).rejects.toBe(removed);
+    });
   });
 
   it('falls back to the default render profile when no profile is configured', async () => {

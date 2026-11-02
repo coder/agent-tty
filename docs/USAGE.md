@@ -147,7 +147,7 @@ Useful flags:
 - `--exit`: wait for the process to exit.
 - `--timeout <ms>`: maximum wait time in milliseconds. The default is `30000` (30 s). `0` waits without a limit. An `--idle-ms` or `--screen-stable-ms` of `30000` or more cannot finish within the default, so `wait` rejects it with `INVALID_DURATION` unless you pass `--timeout`.
 
-On timeout, a standalone `wait` exits `11` (`WAIT_TIMEOUT`) while preserving a success JSON envelope with `timedOut: true` in the result (`matched: false` for render waits). Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast.
+On timeout, a standalone `wait` exits `11` and prints an error envelope: `ok: false`, `error.code: "WAIT_TIMEOUT"`, and the wait result under `result` (`timedOut: true`, and `matched: false` for render waits). Without `--json`, it prints `WAIT_TIMEOUT: <message>` to stderr. Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast.
 
 ### Echo-Match
 
@@ -248,7 +248,7 @@ The `--json` result is a per-step envelope:
 }
 ```
 
-Each step record carries its `index`, `kind`, `status` (`completed` | `failed` | `not-run` | `interrupted`), and `durationMs`. Input steps report the Event Log `seq` they produced, and `mouse` steps also report `reported` and `bytesWritten`; `wait` steps report the `waitBaseline` they were anchored to plus `matched` / `timedOut` / `matchedText` / `capturedAtSeq`, and a matched `wait` step also carries the `screenHash` of the screen it observed (see [Screen Hash](#screen-hash)). `completedCount` and `failedIndices` summarize the run. A fail-fast batch exits non-zero with the failed step's exit code (e.g. `11` for a `WAIT_TIMEOUT`); `--keep-going` exits `1` if any step failed. If the process is interrupted by SIGINT/SIGTERM, batch flushes the same envelope with the in-flight step marked `interrupted` and later steps `not-run`, then exits non-zero.
+Each step record carries its `index`, `kind`, `status` (`completed` | `failed` | `not-run` | `interrupted`), and `durationMs`. Input steps report the Event Log `seq` they produced, and `mouse` steps also report `reported` and `bytesWritten`; `wait` steps report the `waitBaseline` they were anchored to plus `matched` / `timedOut` / `matchedText` / `capturedAtSeq`, and a matched `wait` step also carries the `screenHash` of the screen it observed (see [Screen Hash](#screen-hash)). `completedCount` and `failedIndices` summarize the run. A fail-fast batch with a failed step exits with that step's exit code (e.g. `11` for a `WAIT_TIMEOUT`) and, with `--json`, prints an error envelope: `ok: false`, the step's `error.code` and `message`, `error.details.stepIndex`, and the same per-step `result`. Its `retryable` is always `false`, because a batch is not atomic and a rerun repeats the input of the steps that already ran. `--keep-going` exits `1` if any step failed and keeps `ok: true`. If the process is interrupted by SIGINT/SIGTERM, batch flushes a success envelope (`ok: true`) with the per-step results so far, the in-flight step marked `interrupted` and later steps `not-run`, then exits `130` (SIGINT) or `143` (SIGTERM).
 
 The Wait Baseline fixes stale-match only. It does **not** fix echo-match: a whole-screen `wait` can still match the terminal's echo of a just-typed command (the echo renders _after_ the baseline). Use `"scope": "cursor-line"` on the wait step to restrict matching to the cursor row (see [Echo-Match](#echo-match)), or wait for a distinctive output token. Interrupting a batch mid-`wait` leaves that wait's command still running on the session (the wait is abandoned, not cancelled), exactly like a caller timeout on `run`.
 
@@ -262,9 +262,12 @@ On a session that has printed nothing yet, `snapshot` returns an empty screen of
 ```bash
 agent-tty screenshot <session-id> --profile reference-dark --json
 agent-tty screenshot <session-id> --show-cursor --json
+agent-tty screenshot <session-id> --out ./proof.png --json
 agent-tty record export <session-id> --format asciicast --out ./session.cast --json
 agent-tty record export <session-id> --format webm --timing accelerated --out ./session.webm --json
 ```
+
+`--out <path>` on `screenshot` and `record export` writes the file to that path, so it outlives the Home. A relative path resolves against the working directory, and a file already at the path is replaced. The parent folder must exist: a missing or unwritable parent, or a path inside the Home's `sessions/` folder, fails with `EXPORT_ERROR` (exit 7). `screenshot --out` still records the capture in the session's artifact manifest and returns the `--out` path as `artifactPath`.
 
 The screenshot result lists `missingGlyphs`: each code point that the PNG draws as an empty `.notdef` box, with the zero-based `row` and `col` of each cell. A box appears when no font has the glyph, and also when Chromium draws a whole cluster (a letter plus a mark) with the first bundled font because no font has every part of it. The bundled fonts are a Latin JetBrains Mono subset and Symbols Nerd Font Mono. The check is best effort: an empty array means it found no box (see Known limits below), and a result without `missingGlyphs` means the check did not run or failed. The list holds at most 4096 cells, and one screenshot checks at most 4096 distinct glyphs within a 1-second time budget. When a limit or the budget stops the check early, the result also has `"missingGlyphsTruncated": true`, and the list can miss boxes. Glyphs that a host font draws are not listed, so the same session can list different code points on hosts with different fonts. The text snapshot still has the right characters.
 
@@ -315,17 +318,20 @@ When the host starts the program, it records the program's pid, the boot id and 
 Linux gives each new session a new autogroup id, and child processes keep it.
 Before each kill, agent-tty checks that a live process in the group has that autogroup id and the program's pid as its session id.
 If no process passes the check, agent-tty kills nothing, for example when an unrelated program now uses the group id.
-If `/proc` refuses to show the boot id, or the autogroup of a live process whose group and session id are the program's pid, agent-tty cannot run the check.
+If `/proc` refuses to show the boot id, or shows no autogroup id for a live process whose group and session id are the program's pid (it refuses the read, or the file is empty or malformed), agent-tty cannot run the check.
 It then kills nothing and counts the group as running.
 If the proven group, or a group that agent-tty cannot check, does not end within the destroy wait (about 5 s), `destroy` fails with `HOST_TIMEOUT` and does not record the session as `destroyed`.
 
 Limits:
 
 1. `destroy` does not kill a process that has left the program's process group. A process leaves the group when it calls `setsid` (for example `setsid cmd` or a daemon), or when an interactive shell with job control runs it as a job (for example `cmd &` typed into `bash -i`). Stop such a process yourself, or keep it in the program's group.
-2. Some sessions have no autogroup record: sessions on macOS and Windows, on Linux kernels without autogroups (`/proc/self/autogroup` is missing), on Linux when `/proc` refuses to show the autogroup or the boot id at start-up, and sessions that an agent-tty version without `program.json` created. For these sessions, `destroy --force` and reconcile kill the process group (on Windows, the process) that `session.json` names, without the check. `destroy` of a session whose program has already exited kills nothing. A `program.json` that agent-tty cannot read as a record, for example one that a newer version wrote, proves nothing: `destroy` and reconcile kill nothing for that session.
+2. Some sessions have no autogroup record: sessions on macOS and Windows, on Linux kernels without autogroups (`/proc/self/autogroup` is missing), on Linux when `/proc` refuses to show the autogroup or the boot id at start-up, and sessions that an agent-tty version without `program.json` created. For these sessions, `destroy --force`, reconcile and the host's own kill at shutdown or at the idle time-out kill the process group (on Windows, the process) that `session.json` names, without the check, so such a kill can reach an unrelated process that took the group id after the program's group ended. `destroy` of a session whose program has already exited kills nothing. A `program.json` that agent-tty cannot read as a record, for example one that a newer version wrote, proves nothing: `destroy` and reconcile kill nothing for that session.
 3. The check and the kill are separate system calls, a few microseconds apart. If every process of the group exits and an unrelated process takes the group id in that time, the kill reaches the unrelated process. No system call kills a process group through a handle, so this window remains.
 4. The host writes `program.json` a few milliseconds after it starts the program. We timed 150 `create` calls on Linux, from the return of node-pty's spawn to the renamed `program.json`, at 1-minute load averages of 38 to 83: the median was 2.8 ms, the 90th percentile 4.3 ms, and the longest 66 ms. If the host dies in that window and the program ignores the hang-up signal, no file names the program, and `destroy` cannot end it.
 5. `gc` removes `program.json` with the session folder, and `gc` kills nothing. Run `destroy` before `gc` when a program can leave processes behind.
+6. Two cases where agent-tty cannot run the check end differently from a session that stays running:
+   - At the idle time-out, a host that cannot run the check kills nothing, but it still records the session as `exited` once the program has exited, while a process that the program left can still run. A later `destroy` then fails with `HOST_TIMEOUT`, and `gc` can remove the session folder.
+   - When `/proc` hides the processes of other users (mounted with `hidepid=2`, `hidepid=4`, `hidepid=invisible` or `hidepid=ptraceable`), a group whose processes agent-tty cannot see counts as running. A `destroy` that cannot prove such a group gone fails with `HOST_TIMEOUT` and does not record the session as `destroyed`.
 
 ## Isolation
 
@@ -370,7 +376,7 @@ A lone `'%'` does **not** restore the marker (zsh treats it as a prompt escape t
 
 ## Exit Codes
 
-Every command exits with a stable code, so scripts can branch without parsing output. The `--json` error envelope carries the precise `error.code` when a command fails before producing a result. Commands that preserve an observable result for a failed predicate, such as timed-out `wait` and fail-fast `batch`, still emit a success envelope while exiting non-zero.
+Every command exits with a stable code, so scripts can branch without parsing output. The `--json` error envelope carries the precise `error.code` when a command fails before producing a result. A timed-out standalone `wait` emits an error envelope (`ok: false`, `error.code: "WAIT_TIMEOUT"`) that still carries the wait `result`. A fail-fast `batch` with a failed step does the same with the step's `error.code` and its per-step `result`. A `--keep-going` batch with failures keeps a success envelope and exits `1`.
 
 | Exit code | Meaning                                                                                                                     |
 | --------- | --------------------------------------------------------------------------------------------------------------------------- |

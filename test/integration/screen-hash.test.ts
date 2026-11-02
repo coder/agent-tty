@@ -14,6 +14,7 @@ import {
   crashSession,
   destroySession,
   inspectSession,
+  parseWaitTimeoutEnvelope,
   readEvents,
   runCli,
   sleep,
@@ -215,13 +216,10 @@ describe('screen hash integration', { timeout: 120_000 }, () => {
 
     expect(result.status).toBe(11);
     expect(result.stderr).toBe('');
-    const envelope = JSON.parse(
-      result.stdout,
-    ) as SuccessEnvelope<WaitForRenderResult>;
-    expect(envelope.ok).toBe(true);
-    expect(envelope.result.matched).toBe(false);
-    expect(envelope.result.timedOut).toBe(true);
-    expect(envelope.result.screenHash).toBeUndefined();
+    const timedOut = parseWaitTimeoutEnvelope(result.stdout);
+    expect(timedOut.matched).toBe(false);
+    expect(timedOut.timedOut).toBe(true);
+    expect(timedOut.screenHash).toBeUndefined();
   });
 
   it('includes screenHash on the offline host-unreachable matched:false fallback', async () => {

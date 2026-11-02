@@ -23,6 +23,10 @@ function testEnv(): Record<string, string> {
   return { AGENT_TTY_HOME: testHome };
 }
 
+type FailedBatchEnvelope = CommandErrorEnvelope<BatchResult> & {
+  result: BatchResult;
+};
+
 describe('batch command integration', { timeout: 45_000 }, () => {
   beforeEach(() => {
     // oxfmt-ignore
@@ -196,10 +200,14 @@ describe('batch command integration', { timeout: 45_000 }, () => {
     expect(result.status).toBe(11);
     expect(result.stderr).toBe('');
 
-    // The per-step envelope is still emitted (doctor pattern): a step failure
-    // never routes through emitFailure, so steps[] is preserved.
-    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<BatchResult>;
-    expect(envelope.ok).toBe(true);
+    const envelope = JSON.parse(result.stdout) as FailedBatchEnvelope;
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error).toEqual({
+      code: 'WAIT_TIMEOUT',
+      message: 'Render wait at step 0 timed out before its condition was met.',
+      retryable: false,
+      details: { sessionId, stepIndex: 0 },
+    });
     expect(envelope.result.completedCount).toBe(0);
     expect(envelope.result.failedIndices).toEqual([0]);
     expect(envelope.result.steps).toHaveLength(2);
@@ -212,6 +220,27 @@ describe('batch command integration', { timeout: 45_000 }, () => {
       error: { code: 'WAIT_TIMEOUT' },
     });
     expect(typeStep).toMatchObject({ kind: 'type', status: 'not-run' });
+  });
+
+  it('prints the per-step lines on stdout when a fail-fast batch fails without --json', async () => {
+    sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      "printf 'Ready\\n'; exec cat",
+    ]);
+    await sleep(500);
+
+    const steps = JSON.stringify([
+      { wait: { text: 'never-appears', timeout: 1000 } },
+      { type: 'unreached' },
+    ]);
+
+    const result = runCli(['batch', sessionId, steps], testEnv());
+
+    expect(result.status).toBe(11);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('[1] type not-run');
+    expect(result.stdout).toContain('failed at step 0: WAIT_TIMEOUT: ');
   });
 
   it('exits non-zero with a full envelope under --keep-going on failure', async () => {
