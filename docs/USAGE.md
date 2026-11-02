@@ -262,7 +262,7 @@ agent-tty record export <session-id> --format asciicast --out ./session.cast --j
 agent-tty record export <session-id> --format webm --timing accelerated --out ./session.webm --json
 ```
 
-The screenshot result lists `missingGlyphs`: each code point that the PNG draws as an empty `.notdef` box because neither the bundled fonts (a Latin JetBrains Mono subset and Symbols Nerd Font Mono) nor a font on the host has it, with the zero-based `row` and `col` of each cell. An empty array means no cell shows a box. Glyphs that a host font draws are not listed, so the same session can list different code points on hosts with different fonts. The text snapshot still has the right characters.
+The screenshot result lists `missingGlyphs`: each code point that the PNG draws as an empty `.notdef` box because neither the bundled fonts (a Latin JetBrains Mono subset and Symbols Nerd Font Mono) nor a font on the host has it, with the zero-based `row` and `col` of each cell. An empty array means no cell shows a box. The list holds at most 4096 cells; when agent-tty stops early, the result also has `"missingGlyphsTruncated": true`. Glyphs that a host font draws are not listed, so the same session can list different code points on hosts with different fonts. The text snapshot still has the right characters.
 
 ```bash
 agent-tty screenshot <session-id> --json | jq -c '.result.missingGlyphs'

@@ -630,6 +630,20 @@ describe('RPC message schemas', () => {
     expect(
       parse([{ codePoint: 'U+29C9', cells: [{ row: 0, col: 0, width: 1 }] }]),
     ).toBe(false);
+    expect(
+      ScreenshotResultSchema.safeParse({
+        ...result,
+        missingGlyphs: [],
+        missingGlyphsTruncated: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      ScreenshotResultSchema.safeParse({
+        ...result,
+        missingGlyphs: [],
+        missingGlyphsTruncated: false,
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects empty screenshot profile names', () => {

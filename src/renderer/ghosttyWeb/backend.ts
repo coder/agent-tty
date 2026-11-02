@@ -42,9 +42,8 @@ import type {
   ScreenshotResult,
   SemanticSnapshot,
 } from '../types.js';
-import type { MissingGlyph } from '../../protocol/schemas.js';
 import { BUNDLED_FONT_ASSETS } from '../bundledFont.js';
-import { bundledFontCoverage } from '../fontCoverage.js';
+import { profileFontCoverage } from '../fontCoverage.js';
 import { hashProfile } from '../profiles.js';
 import { iterateInRangeReplayEvents } from '../replayEvents.js';
 import {
@@ -58,8 +57,10 @@ import {
 } from './harnessDecoding.js';
 import type { GhosttyHarnessSnapshot } from './harnessDecoding.js';
 import {
+  MAX_GLYPH_PROBES,
   buildMissingGlyphs,
   findGlyphCandidates,
+  glyphProbeTexts,
   probeBundledFontUse,
 } from './missingGlyphs.js';
 
@@ -85,6 +86,7 @@ interface GhosttyBrowserBridge {
   setCursorVisible?: (visible: boolean) => Promise<void> | void;
   getSnapshot?: (options?: SnapshotOptions) => GhosttyHarnessSnapshot;
   getVisibleText?: () => string;
+  getCellGraphemes?: () => string[][];
 }
 
 interface GhosttyBrowserGlobal {
@@ -279,6 +281,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   // dispose() race on the same scope.
   private readonly loggedScopes = new WeakSet<ResourceScope>();
   private readonly drawnByBundledFont = new Map<string, boolean>();
+  private glyphCoverage: ReadonlySet<number> | null | undefined;
   private initialReplayCols: number | null = null;
   private initialReplayRows: number | null = null;
   private lastAppliedSeq = -1;
@@ -895,36 +898,64 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       pixelHeight,
       sha256,
       renderProfileHash: hashProfile(this.profile),
-      missingGlyphs,
+      ...missingGlyphs,
     };
   }
 
-  private async findMissingGlyphs(page: Page): Promise<MissingGlyph[]> {
-    const snapshot = await this.readHarnessSnapshot(page, {
-      includeCells: true,
+  private async findMissingGlyphs(
+    page: Page,
+  ): Promise<
+    Pick<ScreenshotResult, 'missingGlyphs' | 'missingGlyphsTruncated'>
+  > {
+    if (this.glyphCoverage === undefined) {
+      this.glyphCoverage = profileFontCoverage(this.profile);
+    }
+    if (this.glyphCoverage === null) {
+      return {};
+    }
+    const grid = await page.evaluate(() => {
+      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
+      if (
+        bridge === undefined ||
+        typeof bridge.getCellGraphemes !== 'function'
+      ) {
+        throw new Error('ghostty-web bridge getCellGraphemes() is unavailable');
+      }
+      return bridge.getCellGraphemes();
     });
     invariant(
-      snapshot.cells !== undefined,
-      'missing-glyph check requires snapshot cells',
+      Array.isArray(grid) &&
+        grid.length === this.currentRows &&
+        grid.every(
+          (row) =>
+            Array.isArray(row) &&
+            row.length === this.currentCols &&
+            row.every((grapheme) => typeof grapheme === 'string'),
+        ),
+      'cell graphemes must be one string per viewport cell',
     );
-    const candidates = findGlyphCandidates(
-      snapshot.cells,
-      bundledFontCoverage(),
-    );
-    const unprobed = [...candidates.keys()].filter(
-      (grapheme) => !this.drawnByBundledFont.has(grapheme),
-    );
+    const candidates = findGlyphCandidates(grid, this.glyphCoverage);
+    const unprobed = glyphProbeTexts(candidates)
+      .filter((text) => !this.drawnByBundledFont.has(text))
+      .slice(0, MAX_GLYPH_PROBES);
     if (unprobed.length > 0) {
       const probed = await probeBundledFontUse(
         page,
         `${String(this.profile.fontSize)}px ${this.profile.fontFamily}`,
         unprobed,
       );
-      for (const [grapheme, bundled] of probed) {
-        this.drawnByBundledFont.set(grapheme, bundled);
+      for (const [text, bundled] of probed) {
+        this.drawnByBundledFont.set(text, bundled);
       }
     }
-    return buildMissingGlyphs(candidates, this.drawnByBundledFont);
+    const { missingGlyphs, truncated } = buildMissingGlyphs(
+      candidates,
+      this.drawnByBundledFont,
+    );
+    return {
+      missingGlyphs,
+      ...(truncated && { missingGlyphsTruncated: true }),
+    };
   }
 
   public async finalizeVideo(outputPath: string): Promise<void> {

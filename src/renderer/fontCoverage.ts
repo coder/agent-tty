@@ -1,7 +1,11 @@
 import { brotliDecompressSync } from 'node:zlib';
 
 import { invariant } from '../util/assert.js';
-import { BUNDLED_FONT_ASSETS } from './bundledFont.js';
+import type { RenderProfileConfig } from './types.js';
+import {
+  BUNDLED_FONT_FAMILY,
+  getBundledFontAssetByIdentity,
+} from './bundledFont.js';
 
 const WOFF2_SIGNATURE = 0x774f4632;
 const WOFF2_HEADER_SIZE = 48;
@@ -179,17 +183,50 @@ export function readFontCoverage(bytes: Buffer): ReadonlySet<number> {
   return codePoints;
 }
 
-let bundledCoverage: ReadonlySet<number> | null = null;
+const coverageByIdentity = new Map<string, ReadonlySet<number>>();
 
-export function bundledFontCoverage(): ReadonlySet<number> {
-  if (bundledCoverage === null) {
-    const union = new Set<number>();
-    for (const asset of BUNDLED_FONT_ASSETS) {
-      for (const codePoint of readFontCoverage(asset.buffer)) {
-        union.add(codePoint);
-      }
-    }
-    bundledCoverage = union;
+function bundledAssetCoverage(assetIdentity: string): ReadonlySet<number> {
+  let coverage = coverageByIdentity.get(assetIdentity);
+  if (coverage === undefined) {
+    const asset = getBundledFontAssetByIdentity(assetIdentity);
+    invariant(asset !== undefined, 'profile font must be a bundled asset');
+    coverage = readFontCoverage(asset.buffer);
+    coverageByIdentity.set(assetIdentity, coverage);
   }
-  return bundledCoverage;
+  return coverage;
+}
+
+/**
+ * The code points that the profile's bundled fonts cover, or null when the
+ * profile's font stack does not start with one of them. Only a bundled first
+ * font lets a screenshot tell a `.notdef` box from a host font's glyph.
+ */
+export function profileFontCoverage(
+  profile: RenderProfileConfig,
+): ReadonlySet<number> | null {
+  const fonts =
+    profile.fontAssets ??
+    (profile.fontAssetIdentity === undefined
+      ? []
+      : [
+          {
+            family: BUNDLED_FONT_FAMILY,
+            assetIdentity: profile.fontAssetIdentity,
+          },
+        ]);
+  const firstFamily = profile.fontFamily
+    .split(',')[0]
+    ?.trim()
+    .replace(/^(["'])(.*)\1$/u, '$2');
+  if (!fonts.some((font) => font.family === firstFamily)) {
+    return null;
+  }
+
+  const union = new Set<number>();
+  for (const font of fonts) {
+    for (const codePoint of bundledAssetCoverage(font.assetIdentity)) {
+      union.add(codePoint);
+    }
+  }
+  return union;
 }

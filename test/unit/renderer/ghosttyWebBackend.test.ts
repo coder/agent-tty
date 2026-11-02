@@ -38,16 +38,10 @@ function createPngBuffer(width: number, height: number): Buffer {
   return Buffer.concat([pngSignature, ihdrChunk]);
 }
 
-function asciiHarnessSnapshot(cols: number, rows: number): unknown {
-  return {
-    cols,
-    rows,
-    cursorRow: 0,
-    cursorCol: 0,
-    isAltScreen: false,
-    visibleLines: [{ row: 0, text: 'ok' }],
-    cells: [{ lineNumber: 0, cells: [{ char: 'o' }, { char: 'k' }] }],
-  };
+function asciiCellGraphemes(cols: number, rows: number): string[][] {
+  return Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => 'a'),
+  );
 }
 
 function createHarnessSnapshotPayload(overrides: Record<string, unknown> = {}) {
@@ -362,7 +356,7 @@ describe('GhosttyWebBackend unit guards', () => {
       .fn()
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(asciiHarnessSnapshot(80, 24));
+      .mockResolvedValueOnce(asciiCellGraphemes(80, 24));
     const screenshot = vi.fn(
       (options: { animations: 'disabled'; caret: 'hide'; type: 'png' }) => {
         expect(options).toEqual({
@@ -416,6 +410,39 @@ describe('GhosttyWebBackend unit guards', () => {
     }
   });
 
+  it('omits missingGlyphs when the profile font stack does not start with a bundled font', async () => {
+    const backend = new GhosttyWebBackend('renderer-unit-session', {
+      ...PROFILE,
+      fontFamily: 'monospace',
+    });
+    // oxfmt-ignore
+    const temporaryDirectory = await realpath(await mkdtemp(join(tmpdir(), 'ghostty-web-backend-host-font-')));
+    const outputPath = join(temporaryDirectory, 'screenshot.png');
+    const evaluate = vi.fn().mockResolvedValue(undefined);
+    Object.assign(backend as object, {
+      isBooted: true,
+      currentCols: 80,
+      currentRows: 24,
+      lastAppliedSeq: 3,
+      page: {
+        evaluate,
+        isClosed: () => false,
+        locator: () => ({
+          screenshot: () => Promise.resolve(createPngBuffer(80, 60)),
+        }),
+      },
+    });
+
+    try {
+      const result = await backend.screenshot(outputPath);
+
+      expect(result).not.toHaveProperty('missingGlyphs');
+      expect(evaluate).toHaveBeenCalledTimes(2);
+    } finally {
+      await rm(temporaryDirectory, { force: true, recursive: true });
+    }
+  });
+
   it('uses initial caret capture when showCursor is enabled', async () => {
     const backend = createBackend();
     // oxfmt-ignore
@@ -428,7 +455,7 @@ describe('GhosttyWebBackend unit guards', () => {
       .fn()
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(asciiHarnessSnapshot(100, 30));
+      .mockResolvedValueOnce(asciiCellGraphemes(100, 30));
     const screenshot = vi.fn(
       (options: { animations: 'disabled'; caret: 'initial'; type: 'png' }) => {
         expect(options).toEqual({

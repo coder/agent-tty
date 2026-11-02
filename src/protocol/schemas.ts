@@ -482,6 +482,7 @@ export const ScreenshotResultSchema = z
     sha256: Sha256HexSchema.optional(),
     renderProfileHash: Sha256HexSchema.optional(),
     missingGlyphs: z.array(MissingGlyphSchema).optional(),
+    missingGlyphsTruncated: z.literal(true).optional(),
   })
   .strict();
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;
