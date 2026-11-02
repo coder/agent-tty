@@ -15,7 +15,7 @@ Small shared helpers that the rest of `src/` imports: fail-fast assertions, abor
 - `diffLines(a, b)` and `LineDiffEntry` (`op: 'equal' | 'delete' | 'add'`): LCS line diff. [lineDiff.ts:diffLines] [lineDiff.ts:LineDiffEntry]
 - `Logger`, `createLogger`, `createProcessLogger`, `LOG_LEVEL_VALUES`, `LogLevel`, `LogSink`, `DEFAULT_LOG_LEVEL`, `isLogLevel`, `assertLogLevel`, `resolveLogLevel`: leveled logger. [logger.ts:Logger] [logger.ts:createProcessLogger] [logger.ts:resolveLogLevel]
 - `loadPackageMetadata()` and `PackageMetadata`: `{ name, version }` from the root `package.json`. `loadSupportedNodeRange()`: its `engines.node` range. [packageMetadata.ts:loadPackageMetadata] [packageMetadata.ts:loadSupportedNodeRange]
-- `satisfiesNodeRange(version, range)`: true when the Node version meets every space-separated `>=x[.y[.z]]` and `<x[.y[.z]]` comparator. [nodeRange.ts:satisfiesNodeRange]
+- `satisfiesNodeRange(version, range)`: true when the Node version meets every space-separated `>=x[.y[.z]]` and `<x[.y[.z]]` comparator. A prerelease version (`x.y.z-tag`) satisfies no range, as in npm semver. [nodeRange.ts:satisfiesNodeRange]
 - `sha256Hex(text)`: lowercase SHA-256 hex digest of the UTF-8 text. [hash.ts:sha256Hex]
 - `hasErrorCode(error, code)`: true when `error` is an `Error` with that `code`. [hasErrorCode.ts:hasErrorCode]
 - `isDirectExecution(importMetaUrl)`: true when the calling module is the script that `node` or `tsx` runs. [isDirectExecution.ts:isDirectExecution]
@@ -32,7 +32,7 @@ Small shared helpers that the rest of `src/` imports: fail-fast assertions, abor
 - `diffLines` accepts every input size. When the differing middle exceeds `MAX_DIFF_CELLS` (4,000,000), it falls back to all deletes, then all adds. On a tie it emits the delete first (doc comment). [lineDiff.ts:diffLines]
 - `resolveLogLevel` returns `'info'` for `undefined` and fails `assertLogLevel` for any value outside `LOG_LEVEL_VALUES`. Level ranks are fixed in a frozen `LOG_LEVEL_RANK`. [logger.ts:resolveLogLevel] [logger.ts:Logger]
 - `loadPackageMetadata` asserts that `name` and `version` are strings. `loadSupportedNodeRange` asserts that `engines.node` is a string. [packageMetadata.ts:loadPackageMetadata] [packageMetadata.ts:loadSupportedNodeRange]
-- `satisfiesNodeRange` throws an `AssertionError` for any other comparator, and for a version that does not start with `x.y.z`. [nodeRange.ts:satisfiesNodeRange]
+- `satisfiesNodeRange` throws an `AssertionError` for any other comparator, and for a version that is not `x.y.z` or `x.y.z-tag`. [nodeRange.ts:satisfiesNodeRange]
 
 ## Side Effects
 

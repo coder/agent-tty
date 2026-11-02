@@ -9,10 +9,16 @@ interface Comparator {
 
 const COMPARATOR_PATTERN = /^(>=|<)(\d+)(?:\.(\d+))?(?:\.(\d+))?$/u;
 
-function parseVersion(version: string): VersionParts {
-  const match = /^(\d+)\.(\d+)\.(\d+)/u.exec(version);
-  invariant(match !== null, `Node version "${version}" must start with x.y.z`);
-  return [Number(match[1]), Number(match[2]), Number(match[3])];
+function parseVersion(version: string): {
+  parts: VersionParts;
+  prerelease: boolean;
+} {
+  const match = /^(\d+)\.(\d+)\.(\d+)(-.+)?$/u.exec(version);
+  invariant(match !== null, `Node version "${version}" must be x.y.z[-tag]`);
+  return {
+    parts: [Number(match[1]), Number(match[2]), Number(match[3])],
+    prerelease: match[4] !== undefined,
+  };
 }
 
 // A missing part reads as 0, which is only correct for `>=` and `<`.
@@ -39,8 +45,14 @@ export function satisfiesNodeRange(version: string, range: string): boolean {
     .map((comparator) => parseComparator(comparator, range));
   const actual = parseVersion(version);
 
+  // As in npm semver, a prerelease satisfies no range without a prerelease
+  // comparator, and the comparator grammar above allows none.
+  if (actual.prerelease) {
+    return false;
+  }
+
   return comparators.every(({ operator, bound }) => {
-    const order = compareVersions(actual, bound);
+    const order = compareVersions(actual.parts, bound);
     return operator === '>=' ? order >= 0 : order < 0;
   });
 }
