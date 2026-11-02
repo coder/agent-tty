@@ -21,7 +21,7 @@ This directory is the agent-tty command-line front end. `main.ts` is the bin ent
 
 - `EXIT_CODE_BY_ERROR_CODE` maps error codes to exit codes: input errors 2, `SESSION_NOT_FOUND` 3, `SESSION_NOT_RUNNING` and `SESSION_ALREADY_DESTROYED` 4, `HOST_TIMEOUT` 5, `HOST_UNREACHABLE` 6, `EXPORT_ERROR` 7, storage and manifest errors 8, `PROTOCOL_ERROR` and `RPC_ERROR` 9, `REPLAY_ERROR` 10, `WAIT_TIMEOUT` 11, `CAPABILITY_UNAVAILABLE` 12, `INTERNAL_ERROR` 1. Unknown codes give 1. A code comment marks this as a public contract documented in `docs/USAGE.md`. [exitCodes.ts:exitCodeForError]
 - `wrapAction` turns every error into an error envelope and exit code. An error that is not a `CliError` becomes `INTERNAL_ERROR` with the error's message, and its stack goes to the debug log. [main.ts:wrapAction] [main.ts:toCliError]
-- At top level, a `CommanderError` sets exit code 0 for `commander.helpDisplayed` and 2 otherwise. With `--json` in argv, a `CommanderError` that is not help or version output is also emitted as `INVALID_INPUT` under the command name `agent-tty`, with Commander's message minus its `error: ` prefix. [main.ts:main]
+- At top level, a `CommanderError` sets exit code 0 for `commander.helpDisplayed` and 2 otherwise. With `--json` in argv before the first `--`, a `CommanderError` that is not help or version output is also emitted as `INVALID_INPUT` under the command name `agent-tty`, with Commander's message minus its `error: ` prefix. [main.ts:main]
 - The `preAction` hook turns a context resolution error that is not a `CliError` into `INTERNAL_ERROR`. Its stack is not logged, because the log level is not resolved yet. [main.ts:main] [main.ts:toCliError]
 - At top level, a `CliError` thrown outside `wrapAction` (for example from context resolution in the `preAction` hook) resets color from `--no-color` in argv and is emitted through `emitCliError` under the command name `agent-tty`. [main.ts:main] [main.ts:emitCliError]
 - Other errors at top level, such as a failure of the hidden `_host` action, are rethrown. [main.ts:main]
@@ -37,7 +37,7 @@ This directory is the agent-tty command-line front end. `main.ts` is the bin ent
 
 - `emitSuccess` writes to stdout. `emitFailure` writes the error envelope to stdout with `--json`, or `code: message` to stderr without it. [output.ts:emitSuccess] [output.ts:emitFailure]
 - `writeStdoutSync` writes to fd 1 with `fs.writeSync`. [output.ts:writeStdoutSync]
-- `emitCliError` reads `process.argv` for `--json` and sets `process.exitCode`. [main.ts:emitCliError]
+- `emitCliError` reads `process.argv` before the first `--` for `--json` and sets `process.exitCode`. [main.ts:emitCliError]
 - The `preAction` hook writes `AGENT_TTY_HOME`, `AGENT_TTY_LOG_LEVEL` and the host renderer key into `process.env`. It sets or deletes `AGENT_TTY_RENDERER`. [main.ts:main]
 - `resolveCommandContext` reads `AGENT_TTY_HOME`, `AGENT_TTY_LOG_LEVEL`, `AGENT_TTY_PROFILE` and `AGENT_TTY_RENDERER`. It reads the config file through `loadConfigFile(home)` (`src/config/resolveConfig.ts`). When no renderer is configured, it dynamically imports libghostty-vt through `probeLibghosttyVt` and caches the result for the whole process. [context.ts:resolveCommandContext] [src/renderer/readiness.ts:probeLibghosttyVt]
 - `resolveCommandTarget` reads the session manifest through `readManifestIfExists`. [commandTarget.ts:resolveCommandTarget]

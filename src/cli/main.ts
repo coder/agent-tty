@@ -78,8 +78,15 @@ function collectStringOption(value: string, previous: string[] = []): string[] {
   return [...previous, value];
 }
 
+function jsonOutputRequested(): boolean {
+  const optionsEnd = process.argv.indexOf('--');
+  return process.argv
+    .slice(0, optionsEnd === -1 ? undefined : optionsEnd)
+    .includes('--json');
+}
+
 function emitCliError(commandName: string, error: CliError): void {
-  const json = process.argv.includes('--json');
+  const json = jsonOutputRequested();
   emitFailure({
     command: commandName,
     json,
@@ -1075,7 +1082,7 @@ try {
 } catch (error: unknown) {
   if (error instanceof CommanderError) {
     process.exitCode = error.code === 'commander.helpDisplayed' ? 0 : 2;
-    if (!HELP_OUTPUT_CODES.has(error.code) && process.argv.includes('--json')) {
+    if (!HELP_OUTPUT_CODES.has(error.code) && jsonOutputRequested()) {
       emitCliError(
         'agent-tty',
         makeCliError(ERROR_CODES.INVALID_INPUT, {
