@@ -87,6 +87,8 @@ q() { printf '%q' "$1"; }
   echo "export AGENT_TTY_HOME=$(q "$RUN/home")"
   echo "export XDG_STATE_HOME=$(q "$RUN/state")"
   echo "export EVIDENCE=$(q "$RUN/evidence")"
+  echo "# An interactive bash in a session saves its history here, not in ~/.bash_history."
+  echo "export HISTFILE=$(q "$RUN/evidence/bash_history")"
   echo "export AGENT_TTY_REPO=$(q "$REPO")"
   echo "# As test/setup-node-options.ts does: without it, Node 26 prints a DEP0205"
   echo "# warning from tsx into every fixture app's screen, under its prompt."
