@@ -296,6 +296,38 @@ describe('create command', () => {
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
+  it('on Windows, stops a host that never answers only once the manifest names its program', async () => {
+    const platform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    onTestFinished(() => {
+      Object.defineProperty(process, 'platform', { value: platform });
+    });
+    const unreachable = makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+      message: 'host unreachable',
+    });
+    mocks.sendRpc.mockRejectedValue(unreachable);
+
+    mocks.readManifestIfExists.mockResolvedValue(makeManifest());
+    await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
+      unreachable,
+    );
+    expect(mocks.stopHost).not.toHaveBeenCalled();
+
+    mocks.readManifestIfExists.mockResolvedValue(null);
+    await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
+      unreachable,
+    );
+    expect(mocks.stopHost).not.toHaveBeenCalled();
+
+    mocks.readManifestIfExists.mockResolvedValue(
+      makeManifest({ childPid: 4321 }),
+    );
+    await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
+      unreachable,
+    );
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
   it('leaves a host that answers alone', async () => {
     await runCreateCommand({ ...baseOptions, context });
 

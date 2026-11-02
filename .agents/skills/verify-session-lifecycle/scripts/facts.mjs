@@ -251,7 +251,8 @@ function createFacts() {
 
 // In runCreateCommand's readiness loop, the catch of an unreachable host
 // ends with host.stop() right after its last retry and before it rethrows
-// the error. launchHost's stop sends SIGTERM through the ChildProcess
+// the error. Only a win32 create skips the stop while the manifest names
+// no program, so on Linux and macOS, which the model covers, it always stops. launchHost's stop sends SIGTERM through the ChildProcess
 // handle, and runHost registers its SIGTERM handler before it spawns the
 // program and skips the spawn when a SIGTERM came first.
 function stopsOnGiveUp(body) {
@@ -278,7 +279,8 @@ function stopsOnGiveUp(body) {
         retry >= 0 &&
         retry === st.length - 3 &&
         st[retry + 1].startsWith('invariant(host !== undefined,') &&
-        st[retry + 2] === 'host.stop();';
+        st[retry + 2] ===
+          "if (process.platform !== 'win32' || manifest?.childPid != null) { host.stop(); }";
     });
   });
   const launch = normalize(

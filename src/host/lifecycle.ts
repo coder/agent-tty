@@ -589,7 +589,8 @@ export interface LaunchedHost {
   readonly pid: number;
   // Sends the host SIGTERM, which makes it stop its program and end the
   // session. It sends nothing once the host has exited, so a reused pid
-  // never gets the signal. On Windows, SIGTERM ends the host at once.
+  // never gets the signal. On Windows, SIGTERM ends the host at once, without
+  // its shutdown.
   stop(): void;
 }
 

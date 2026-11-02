@@ -238,9 +238,13 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
 
         // A host that answers too late would serve a session whose create
         // failed. The host knows its program's pid also without a session
-        // token, so it stops the program and ends the session itself.
+        // token, so it stops the program and ends the session itself. On
+        // Windows the SIGTERM ends the host at once, and only a program that
+        // the manifest names can be stopped by a later reconcile.
         invariant(host !== undefined, 'a session that create polls has a host');
-        host.stop();
+        if (process.platform !== 'win32' || manifest?.childPid != null) {
+          host.stop();
+        }
       }
 
       throw error;
