@@ -605,8 +605,13 @@ describe('cliRunsInsideProgramSession', () => {
 
   it.each([
     ['ttys003', 'ttys003', true],
+    ['pts/3', 'pts/3', true],
     ['ttys003', 'ttys004', false],
     ['??', '??', false],
+    ['?', '?', false],
+    ['-', '-', false],
+    ['', '', false],
+    ['console', 'console', false],
     ['ttys003', null, false],
   ] as const)(
     "on darwin, when ps shows the caller's terminal %s and the program's %s, matches: %s",
