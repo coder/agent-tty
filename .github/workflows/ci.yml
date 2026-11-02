@@ -84,8 +84,12 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
+      # The pinned optional @coder/libghostty-vt-node ships prebuilds for the
+      # CI runners, so native mouse tests must run here rather than skip.
       - name: Test unit
         run: mise run test-unit
+        env:
+          AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
 
   # Integration and e2e tests drive real PTY hosts and headless-browser
   # renderers, which can transiently fail under machine load (e.g. a screenshot
@@ -119,6 +123,8 @@ jobs:
 
       - name: Test integration shard
         run: npm run test:integration -- --shard=${{ matrix.shard }}
+        env:
+          AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
 
   test-e2e:
     runs-on: ubuntu-latest
@@ -146,6 +152,8 @@ jobs:
 
       - name: Test e2e shard
         run: npm run test:e2e -- --shard=${{ matrix.shard }}
+        env:
+          AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
 
   quality-gates:
     runs-on: ubuntu-latest
@@ -207,9 +215,15 @@ jobs:
 
       - name: Test unit
         run: mise run test-unit
+        env:
+          AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
 
       - name: Test integration
         run: mise run test-integration
+        env:
+          AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
 
       - name: Test e2e
         run: mise run test-e2e
+        env:
+          AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'

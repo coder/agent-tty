@@ -170,6 +170,18 @@ async function runStep(
         seq,
       };
     }
+    case 'mouse': {
+      const { seq, reported, bytesWritten } = await driver.mouse(step.input);
+      return {
+        index,
+        durationMs: Date.now() - startedAt,
+        kind: 'mouse',
+        status: 'completed',
+        seq,
+        reported,
+        bytesWritten,
+      };
+    }
     case 'run':
       return runRunStep(step, index, driver, startedAt);
     case 'wait':
@@ -324,6 +336,7 @@ function failedRecord(
     case 'type':
     case 'paste':
     case 'sendKeys':
+    case 'mouse':
       return { ...base, kind: step.kind, error: stepError };
     default:
       return unreachable(step, `batch failed-step kind at index ${index}`);

@@ -23,7 +23,7 @@
   - [`./snapshot/README.md`](./snapshot/README.md): builds structured and text snapshot results with a Screen Hash and saves them as JSON artifacts with a manifest entry.
   - [`./screenshot/README.md`](./screenshot/README.md): captures a renderer PNG to a temp path, validates it, moves it to the artifact name without replacing an existing file and appends a manifest entry.
   - [`./export/README.md`](./export/README.md): asciicast v2 text from the event log, and WebM video by timed replay into a `ghostty-web` backend.
-  - [`./batch/README.md`](./batch/README.md): parses and runs Batch plans of `type`, `paste`, `sendKeys`, `run` and `wait` steps over host RPC.
+  - [`./batch/README.md`](./batch/README.md): parses and runs Batch plans of `type`, `paste`, `sendKeys`, `mouse`, `run` and `wait` steps over host RPC.
   - [`./dashboard/README.md`](./dashboard/README.md): Ink/React Session Dashboard behind `agent-tty dashboard`.
   - [`./skills/README.md`](./skills/README.md): finds, parses and serves the bundled skills from `<packageRoot>/skill-data/<name>/SKILL.md`.
   - [`./tools/README.md`](./tools/README.md): maintainer `tsx` tools for dogfood proof bundles, the Hero Demo videos and release-please runs.

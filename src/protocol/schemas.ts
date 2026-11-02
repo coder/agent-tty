@@ -110,6 +110,66 @@ export const InputKeysEventPayloadSchema = z
   .strict();
 export type InputKeysEventPayload = z.infer<typeof InputKeysEventPayloadSchema>;
 
+export const MouseActionSchema = z.enum(['press', 'release', 'move']);
+export type MouseAction = z.infer<typeof MouseActionSchema>;
+
+export const MouseButtonSchema = z.enum([
+  'left',
+  'middle',
+  'right',
+  'wheel-up',
+  'wheel-down',
+  'wheel-left',
+  'wheel-right',
+]);
+export type MouseButton = z.infer<typeof MouseButtonSchema>;
+
+export const MouseModifiersSchema = z
+  .object({
+    shift: z.boolean(),
+    alt: z.boolean(),
+    ctrl: z.boolean(),
+  })
+  .strict();
+export type MouseModifiers = z.infer<typeof MouseModifiersSchema>;
+
+export const InputMouseEventPayloadSchema = z
+  .object({
+    action: MouseActionSchema,
+    button: MouseButtonSchema.optional(),
+    row: NonNegativeIntSchema,
+    col: NonNegativeIntSchema,
+    cellWidth: PositiveIntSchema.optional(),
+    cellHeight: PositiveIntSchema.optional(),
+    modifiers: MouseModifiersSchema,
+    rendererBackend: NonEmptyStringSchema,
+    dataBase64: z
+      .string()
+      .regex(
+        /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u,
+      ),
+  })
+  .strict()
+  .superRefine((event, ctx) => {
+    if (event.action === 'move' && event.button !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'button must not be set for move events',
+        path: ['button'],
+      });
+    }
+    if (event.action !== 'move' && event.button === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'button is required for press and release events',
+        path: ['button'],
+      });
+    }
+  });
+export type InputMouseEventPayload = z.infer<
+  typeof InputMouseEventPayloadSchema
+>;
+
 export const InputRunEventPayloadSchema = z
   .object({
     command: z.string().min(1),
@@ -183,6 +243,7 @@ export const EventTypeSchema = z.enum([
   'input_text',
   'input_paste',
   'input_keys',
+  'input_mouse',
   'input_run',
   'run_complete',
   'resize',
@@ -226,6 +287,14 @@ export const InputKeysEventRecordSchema = z
     ...EventRecordBaseShape,
     type: z.literal('input_keys'),
     payload: InputKeysEventPayloadSchema,
+  })
+  .strict();
+
+export const InputMouseEventRecordSchema = z
+  .object({
+    ...EventRecordBaseShape,
+    type: z.literal('input_mouse'),
+    payload: InputMouseEventPayloadSchema,
   })
   .strict();
 
@@ -282,6 +351,7 @@ export const EventRecordSchema = z.discriminatedUnion('type', [
   InputTextEventRecordSchema,
   InputPasteEventRecordSchema,
   InputKeysEventRecordSchema,
+  InputMouseEventRecordSchema,
   InputRunEventRecordSchema,
   RunCompleteEventRecordSchema,
   ResizeEventRecordSchema,

@@ -65,6 +65,7 @@ Driving an interactive TUI is the same loop, with key chords and a wait for the 
 agent-tty run "$SID" 'nvim --clean' --no-wait --json
 agent-tty wait "$SID" --screen-stable-ms 1000 --json
 agent-tty send-keys "$SID" Down Down Enter --json
+agent-tty mouse "$SID" press --button left --row 8 --col 20 --json
 agent-tty screenshot "$SID" --json
 agent-tty record export "$SID" --format webm --json
 ```
@@ -115,13 +116,13 @@ A colleague then used `agent-tty` to build an experimental TUI for Coder agents 
 
 Every user-facing command takes `--json` and returns a stable, machine-readable envelope, and exits with a stable code (`0` success, `2` usage error, `3` session not found, `11` wait timeout, …) so scripts can branch without parsing output.
 
-| Group                   | Commands                                                                 |
-| ----------------------- | ------------------------------------------------------------------------ |
-| Session lifecycle       | `create`, `list`, `inspect`, `destroy`, `gc`                             |
-| Input and control       | `run`, `type`, `paste`, `send-keys`, `batch`, `resize`, `signal`, `mark` |
-| Observation and capture | `wait`, `snapshot`, `screenshot`, `record export`                        |
-| Live view               | `dashboard`                                                              |
-| Environment             | `version`, `doctor`, `skills`                                            |
+| Group                   | Commands                                                                          |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| Session lifecycle       | `create`, `list`, `inspect`, `destroy`, `gc`                                      |
+| Input and control       | `run`, `type`, `paste`, `send-keys`, `mouse`, `batch`, `resize`, `signal`, `mark` |
+| Observation and capture | `wait`, `snapshot`, `screenshot`, `record export`                                 |
+| Live view               | `dashboard`                                                                       |
+| Environment             | `version`, `doctor`, `skills`                                                     |
 
 The CLI documents itself: `agent-tty --help` lists every command, and `agent-tty <command> --help` shows its flags. The full reference, including the exit-code table, is in [`docs/USAGE.md`](./docs/USAGE.md); renderer and environment issues are in [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md).
 

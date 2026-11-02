@@ -4,6 +4,11 @@ import type {
   ScreenshotResult,
   SemanticSnapshot,
 } from './types.js';
+import type {
+  MouseAction,
+  MouseButton,
+  MouseModifiers,
+} from '../protocol/schemas.js';
 
 export interface SnapshotOptions {
   includeScrollback?: boolean;
@@ -41,6 +46,31 @@ export interface RendererBackend {
 
   /** Whether the renderer is currently booted. */
   readonly isBooted: boolean;
+}
+
+export interface MouseEncodingInput {
+  action: MouseAction;
+  button?: MouseButton;
+  row: number;
+  col: number;
+  cellWidth?: number;
+  cellHeight?: number;
+  modifiers: MouseModifiers;
+  anyButtonPressed: boolean;
+}
+
+export interface MouseEncodingBackend extends RendererBackend {
+  /** Encode one semantic mouse action using modes negotiated by the child. */
+  encodeMouse(input: MouseEncodingInput): Buffer;
+}
+
+export function supportsMouseEncoding(
+  backend: RendererBackend,
+): backend is MouseEncodingBackend {
+  return (
+    'encodeMouse' in backend &&
+    typeof (backend as Partial<MouseEncodingBackend>).encodeMouse === 'function'
+  );
 }
 
 export interface VideoRecordingOptions {

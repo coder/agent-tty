@@ -10,9 +10,11 @@ function getCapability(
 }
 
 describe('discoverCapabilities', () => {
-  it('returns six quick capabilities without browser-launch details', async () => {
+  it('returns seven quick capabilities without browser-launch details', async () => {
     const probePlaywright = vi.fn(() => Promise.resolve({ available: true }));
-    const probeLibghosttyVt = vi.fn(() => Promise.resolve({ available: true }));
+    const probeLibghosttyVt = vi.fn(() =>
+      Promise.resolve({ available: true, mouseInputAvailable: true }),
+    );
 
     const capabilities = await discoverCapabilities('quick', {
       probePlaywright,
@@ -21,7 +23,7 @@ describe('discoverCapabilities', () => {
 
     expect(probePlaywright).toHaveBeenCalledTimes(1);
     expect(probeLibghosttyVt).toHaveBeenCalledTimes(1);
-    expect(capabilities).toHaveLength(6);
+    expect(capabilities).toHaveLength(7);
     expect(capabilities.map((capability) => capability.name)).toEqual([
       'snapshot',
       'wait',
@@ -29,6 +31,7 @@ describe('discoverCapabilities', () => {
       'record-export-asciicast',
       'record-export-webm',
       'dashboard',
+      'mouse-input',
     ]);
     expect(getCapability(capabilities, 'snapshot')).toEqual({
       name: 'snapshot',
@@ -36,6 +39,10 @@ describe('discoverCapabilities', () => {
     });
     expect(getCapability(capabilities, 'wait')).toEqual({
       name: 'wait',
+      status: 'available',
+    });
+    expect(getCapability(capabilities, 'mouse-input')).toEqual({
+      name: 'mouse-input',
       status: 'available',
     });
     expect(getCapability(capabilities, 'screenshot')).toEqual({
@@ -72,6 +79,34 @@ describe('discoverCapabilities', () => {
       status: 'unavailable',
       reason: 'libghostty-vt not installed',
       detail: 'Cannot find package @coder/libghostty-vt-node',
+    });
+    expect(getCapability(capabilities, 'mouse-input')).toEqual({
+      name: 'mouse-input',
+      status: 'unavailable',
+      reason: 'libghostty-vt not installed',
+      detail: 'Cannot find package @coder/libghostty-vt-node',
+    });
+  });
+
+  it('keeps native rendering available while rejecting an old binding for mouse input', async () => {
+    const capabilities = await discoverCapabilities('quick', {
+      probePlaywright: () => Promise.resolve({ available: true }),
+      probeLibghosttyVt: () =>
+        Promise.resolve({
+          available: true,
+          mouseInputAvailable: false,
+          reason: 'libghostty-vt native module available',
+          detail: '@coder/libghostty-vt-node exposes createTerminal()',
+        }),
+    });
+
+    expect(getCapability(capabilities, 'snapshot')?.status).toBe('available');
+    expect(getCapability(capabilities, 'dashboard')?.status).toBe('available');
+    expect(getCapability(capabilities, 'mouse-input')).toEqual({
+      name: 'mouse-input',
+      status: 'unavailable',
+      reason: 'libghostty-vt mouse encoder unavailable',
+      detail: '@coder/libghostty-vt-node predates the mouse-capable release',
     });
   });
 

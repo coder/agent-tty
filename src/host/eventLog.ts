@@ -7,10 +7,12 @@ import { z } from 'zod';
 
 import {
   EventRecordSchema,
+  InputMouseEventPayloadSchema,
   InputRunEventPayloadSchema,
   MarkerEventPayloadSchema,
   RunCompleteEventPayloadSchema,
   type EventRecord,
+  type InputMouseEventPayload,
   type InputRunEventPayload,
   type MarkerEventPayload,
   type RunCompleteEventPayload,
@@ -85,6 +87,7 @@ type EventLogEventType =
   | 'input_text'
   | 'input_paste'
   | 'input_keys'
+  | 'input_mouse'
   | 'input_run'
   | 'run_complete'
   | 'resize'
@@ -96,6 +99,7 @@ type EventLogPayload =
   | InputTextEventPayload
   | InputPasteEventPayload
   | InputKeysEventPayload
+  | InputMouseEventPayload
   | InputRunEventPayload
   | RunCompleteEventPayload
   | ResizeEventPayload
@@ -136,6 +140,11 @@ function validatePayload(
     case 'input_keys': {
       const result = InputKeysEventPayloadSchema.safeParse(payload);
       invariant(result.success, 'input_keys payload must match schema');
+      return result.data;
+    }
+    case 'input_mouse': {
+      const result = InputMouseEventPayloadSchema.safeParse(payload);
+      invariant(result.success, 'input_mouse payload must match schema');
       return result.data;
     }
     case 'input_run': {
@@ -299,6 +308,10 @@ export class EventLog {
   async append(
     type: 'input_keys',
     payload: InputKeysEventPayload,
+  ): Promise<number>;
+  async append(
+    type: 'input_mouse',
+    payload: InputMouseEventPayload,
   ): Promise<number>;
   async append(
     type: 'input_run',

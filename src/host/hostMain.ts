@@ -30,6 +30,7 @@ import { isCommandableSessionStatus } from '../protocol/sessionStatusPolicy.js';
 import type { SessionRecord } from '../protocol/schemas.js';
 import type {
   MarkParams,
+  MouseParams,
   PasteParams,
   ResizeParams,
   RunParams,
@@ -54,7 +55,12 @@ import {
   type RendererName,
 } from '../renderer/names.js';
 import { resolveProfile } from '../renderer/profiles.js';
+import {
+  probeLibghosttyVt,
+  type LibghosttyVtProbe,
+} from '../renderer/readiness.js';
 import { createRendererBackend } from '../renderer/registry.js';
+import { createMouseRpcHandler } from './mouseRpc.js';
 import { captureScreenshotResult } from '../screenshot/capture.js';
 import { captureSnapshotResult } from '../snapshot/capture.js';
 import { resolveHome } from '../storage/home.js';
@@ -231,8 +237,15 @@ export async function runHost(
   const rendererManager = new HostRendererManager({
     sessionId,
     sessionDir: sessDir,
+    // Boot at the creation size that replay starts from, so mouse geometry
+    // is right before the child has printed anything.
     backendFactory: (rendererName, sid, profile) =>
-      createRendererBackend(rendererName, sid, profile),
+      createRendererBackend(rendererName, sid, profile, {
+        libghosttyVt: {
+          initialCols: manifest.creationCols ?? manifest.cols,
+          initialRows: manifest.creationRows ?? manifest.rows,
+        },
+      }),
   });
 
   const loadReplayInput = (targetSeq?: number) => {
@@ -317,6 +330,20 @@ export async function runHost(
     backgroundColor: defaultProfile.backgroundColor,
     foregroundColor: defaultProfile.foregroundColor,
   });
+  let libghosttyVtProbe: Promise<LibghosttyVtProbe> | undefined;
+  const sendMouse = createMouseRpcHandler({
+    rendererManager,
+    profile: defaultProfile,
+    probeLibghosttyVt: () => (libghosttyVtProbe ??= probeLibghosttyVt()),
+    loadReplayInput: () => loadReplayInput(),
+    assertCommandable: () => {
+      assertSessionCommandable(state);
+    },
+    writePty: (data) => {
+      pty.write(data);
+    },
+    appendMouseEvent: (payload) => eventLog.append('input_mouse', payload),
+  });
 
   const replayRendererThroughSeq = async (targetSeq: number): Promise<void> => {
     invariant(
@@ -324,15 +351,21 @@ export async function runHost(
       'targetSeq must be a non-negative integer',
     );
 
-    const replayInput = loadReplayInput(targetSeq);
-    invariant(replayInput !== null, 'run-complete replay input must exist');
-
     const rendererName = resolveHostRendererName(undefined);
     const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
     await rendererManager.withBackend(
       rendererName,
       profile,
-      replayInput,
+      () => {
+        // The latest log, not targetSeq: earlier queued work can already have
+        // replayed past targetSeq.
+        const replayInput = loadReplayInput();
+        invariant(
+          replayInput !== null && replayInput.targetSeq >= targetSeq,
+          'run-complete replay input must exist',
+        );
+        return replayInput;
+      },
       async (backend) => {
         const snapshot = await backend.snapshot();
         invariant(
@@ -576,11 +609,10 @@ export async function runHost(
 
       const rendererName = resolveHostRendererName(requestedRendererName);
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
-      const replayInput = loadReplayInput();
       const { snapshot, rendererBackend } = await rendererManager.withBackend(
         rendererName,
         profile,
-        replayInput,
+        () => loadReplayInput(),
         async (backend) => ({
           snapshot: await backend.snapshot({
             includeScrollback,
@@ -624,12 +656,11 @@ export async function runHost(
       })();
 
       const rendererName = resolveHostRendererName(requestedRendererName);
-      const replayInput = loadReplayInput();
 
       return await rendererManager.withBackend(
         rendererName,
         profile,
-        replayInput,
+        () => loadReplayInput(),
         async (backend) =>
           await captureScreenshotResult({
             backend,
@@ -796,6 +827,20 @@ export async function runHost(
         seq,
       };
     },
+    mouse: async (params: unknown, context) => {
+      const { rendererName, ...request } = params as MouseParams;
+
+      assertSessionCommandable(state);
+      await ptyIngestionQueue;
+
+      const result = await sendMouse(
+        request,
+        resolveHostRendererName(rendererName),
+        context.signal,
+      );
+      lastActivityAt = Date.now();
+      return result;
+    },
     resize: async (params: unknown) => {
       const { cols, rows } = params as ResizeParams;
 
@@ -813,8 +858,11 @@ export async function runHost(
       pty.resize(cols, rows);
       lastActivityAt = Date.now();
       state.setDimensions(cols, rows);
+      // Reserve the seq with the PTY resize, like the input handlers, so a
+      // mouse request never replays the old grid after the PTY changed.
+      const resizeLogged = eventLog.append('resize', { cols, rows });
       await persistManifest();
-      await eventLog.append('resize', { cols, rows });
+      await resizeLogged;
       return { cols, rows };
     },
     signal: async (params: unknown) => {
@@ -999,11 +1047,10 @@ export async function runHost(
           void (async () => {
             try {
               throwIfAborted(signal);
-              const replayInput = loadReplayInput();
               const snapshot = await rendererManager.withBackend(
                 rendererName,
                 profile,
-                replayInput,
+                () => loadReplayInput(),
                 async (backend) => {
                   throwIfAborted(signal);
                   return await backend.snapshot();

@@ -210,6 +210,22 @@ describe('CLI integration', () => {
     expect(result.stdout).toContain('List sessions');
   });
 
+  it('documents cell-addressed mouse input and its modifiers', () => {
+    const result = runCli(['mouse', '--help'], testEnv());
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain(
+      'Usage: agent-tty mouse [options] <session-id> <action>',
+    );
+    expect(result.stdout).toContain('--row <n>');
+    expect(result.stdout).toContain('--col <n>');
+    expect(result.stdout).toContain('--button <name>');
+    expect(result.stdout).toContain('--shift');
+    expect(result.stdout).toContain('--alt');
+    expect(result.stdout).toContain('--ctrl');
+  }, 30_000);
+
   it('accepts --append-newline for type', () => {
     const result = runCli(
       ['type', 'session-01', 'hello', '--append-newline', '--json'],

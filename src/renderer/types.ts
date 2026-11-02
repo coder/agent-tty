@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import {
   MarkerEventPayloadSchema,
+  InputMouseEventPayloadSchema,
   RichSnapshotLineSchema,
   RunCompleteEventPayloadSchema,
   Sha256HexSchema,
@@ -73,6 +74,15 @@ const InputKeysReplayEventSchema = z
         keys: z.array(NonEmptyStringSchema).min(1),
       })
       .strict(),
+  })
+  .strict();
+
+const InputMouseReplayEventSchema = z
+  .object({
+    seq: NonNegativeIntSchema,
+    ts: z.iso.datetime(),
+    type: z.literal('input_mouse'),
+    payload: InputMouseEventPayloadSchema,
   })
   .strict();
 
@@ -155,6 +165,7 @@ export const ReplayEventSchema = z.discriminatedUnion('type', [
   InputTextReplayEventSchema,
   InputPasteReplayEventSchema,
   InputKeysReplayEventSchema,
+  InputMouseReplayEventSchema,
   InputRunReplayEventSchema,
   RunCompleteReplayEventSchema,
   ResizeReplayEventSchema,

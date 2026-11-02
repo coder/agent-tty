@@ -76,6 +76,7 @@ function createNativeFixture(options: { visibleText?: string } = {}) {
     rows,
     cursorRow: Math.min(1, rows - 1),
     cursorCol: Math.min(2, cols - 1),
+    cursorVisible: true,
     isAltScreen: true,
     visibleLines: [
       { row: 0, text: 'hello world' },
@@ -104,8 +105,16 @@ function createNativeFixture(options: { visibleText?: string } = {}) {
   const getVisibleText = vi.fn(
     () => options.visibleText ?? 'hello world\nprompt>',
   );
+  const encodeMouse = vi.fn(() => Buffer.from('\u001b[<64;9;4M'));
   const dispose = vi.fn();
-  const terminal = { feed, resize, snapshot, getVisibleText, dispose };
+  const terminal = {
+    feed,
+    resize,
+    encodeMouse,
+    snapshot,
+    getVisibleText,
+    dispose,
+  };
   const createTerminal = vi.fn(
     (createOptions: { cols: number; rows: number }) => {
       cols = createOptions.cols;
@@ -131,6 +140,7 @@ function createNativeFixture(options: { visibleText?: string } = {}) {
     resize,
     snapshot,
     getVisibleText,
+    encodeMouse,
     dispose,
   };
 }
@@ -193,6 +203,153 @@ describe('LibghosttyVtBackend', () => {
       cursorRow: 1,
       cursorCol: 2,
     });
+  });
+
+  it('scales cell positions using explicit pixel metrics', async () => {
+    const fixture = createNativeFixture();
+    const backend = createBackend(fixture);
+    try {
+      await backend.boot();
+      await backend.replayTo(createReplayInput());
+      backend.encodeMouse({
+        action: 'press',
+        button: 'left',
+        row: 3,
+        col: 8,
+        cellWidth: 10,
+        cellHeight: 20,
+        modifiers: { shift: false, alt: false, ctrl: false },
+        anyButtonPressed: true,
+      });
+      expect(fixture.encodeMouse).toHaveBeenCalledWith(
+        expect.objectContaining({ x: 80, y: 60 }),
+        expect.objectContaining({
+          geometry: {
+            screenWidth: 120,
+            screenHeight: 100,
+            cellWidth: 10,
+            cellHeight: 20,
+          },
+        }),
+      );
+    } finally {
+      await backend.dispose();
+    }
+  });
+
+  it('maps semantic mouse input to native cell geometry and button names', async () => {
+    const fixture = createNativeFixture();
+    const backend = createBackend(fixture);
+
+    await backend.boot();
+    await backend.replayTo(createReplayInput());
+
+    const bytes = backend.encodeMouse({
+      action: 'press',
+      button: 'wheel-up',
+      row: 3,
+      col: 8,
+      modifiers: { shift: true, alt: false, ctrl: false },
+      anyButtonPressed: false,
+    });
+
+    expect(bytes).toEqual(Buffer.from('\u001b[<64;9;4M'));
+    expect(fixture.encodeMouse).toHaveBeenCalledWith(
+      {
+        action: 'press',
+        button: 'four',
+        x: 8,
+        y: 3,
+        modifiers: { shift: true, alt: false, ctrl: false },
+      },
+      {
+        geometry: {
+          screenWidth: 12,
+          screenHeight: 5,
+          cellWidth: 1,
+          cellHeight: 1,
+        },
+        anyButtonPressed: false,
+        trackLastCell: true,
+      },
+    );
+  });
+
+  it('maps move input to native motion while preserving held-button state', async () => {
+    const fixture = createNativeFixture();
+    const backend = createBackend(fixture);
+
+    await backend.boot();
+    await backend.replayTo(createReplayInput());
+    backend.encodeMouse({
+      action: 'move',
+      button: 'left',
+      row: 1,
+      col: 2,
+      modifiers: { shift: false, alt: true, ctrl: false },
+      anyButtonPressed: true,
+    });
+
+    expect(fixture.encodeMouse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'motion',
+        button: 'left',
+        x: 2,
+        y: 1,
+        modifiers: { shift: false, alt: true, ctrl: false },
+      }),
+      expect.objectContaining({ anyButtonPressed: true, trackLastCell: true }),
+    );
+  });
+
+  it('rejects mouse cells outside the replayed grid', async () => {
+    const fixture = createNativeFixture();
+    const backend = createBackend(fixture);
+    await backend.boot();
+    await backend.replayTo(createReplayInput());
+    const press = {
+      action: 'press',
+      button: 'left',
+      modifiers: { shift: false, alt: false, ctrl: false },
+      anyButtonPressed: true,
+    } as const;
+
+    expect(() => backend.encodeMouse({ ...press, row: 5, col: 0 })).toThrow(
+      new RangeError(
+        'Mouse cell row 5, col 0 is outside the 12x5 terminal grid. Use row 0-4 and col 0-11.',
+      ),
+    );
+    expect(() => backend.encodeMouse({ ...press, row: 0, col: 12 })).toThrow(
+      RangeError,
+    );
+    expect(fixture.encodeMouse).not.toHaveBeenCalled();
+
+    backend.encodeMouse({ ...press, row: 4, col: 11 });
+    expect(fixture.encodeMouse).toHaveBeenCalledOnce();
+  });
+
+  it('preserves rendering but rejects mouse input when the binding predates mouse encoding', async () => {
+    const fixture = createNativeFixture();
+    const oldTerminal = { ...fixture.terminal } as Record<string, unknown>;
+    delete oldTerminal.encodeMouse;
+    fixture.createTerminal.mockReturnValueOnce(oldTerminal as never);
+    const backend = createBackend(fixture);
+
+    await backend.boot();
+    await backend.replayTo(createReplayInput());
+
+    expect(() =>
+      backend.encodeMouse({
+        action: 'press',
+        button: 'left',
+        row: 0,
+        col: 0,
+        modifiers: { shift: false, alt: false, ctrl: false },
+        anyButtonPressed: true,
+      }),
+    ).toThrow(
+      'terminal.encodeMouse is required; update @coder/libghostty-vt-node to a mouse-capable release',
+    );
   });
 
   it('skips run_complete events during replay', async () => {
@@ -303,6 +460,7 @@ describe('LibghosttyVtBackend', () => {
       rows: 2,
       cursorRow: 0,
       cursorCol: 10, // true terminal column of the "d" in "done"
+      cursorVisible: true,
       isAltScreen: false,
       visibleLines: [
         { row: 0, text: 'rocket 🚀 done' },

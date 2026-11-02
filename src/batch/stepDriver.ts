@@ -1,11 +1,17 @@
 import type { z } from 'zod';
 
-import type { RunResult, WaitForRenderResult } from '../protocol/messages.js';
+import type {
+  MouseInput,
+  MouseResult,
+  RunResult,
+  WaitForRenderResult,
+} from '../protocol/messages.js';
 import type { PreparedRenderWaitCondition } from '../renderWait/matcher.js';
 
 import { sendRpc } from '../host/rpcClient.js';
 import {
   PasteResultSchema,
+  MouseResultSchema,
   RunResultSchema,
   SendKeysResultSchema,
   TypeResultSchema,
@@ -23,6 +29,7 @@ export interface StepDriver {
   type(text: string): Promise<number>;
   paste(text: string): Promise<number>;
   sendKeys(keys: string[]): Promise<number>;
+  mouse(input: MouseInput): Promise<MouseResult>;
   run(
     command: string,
     noWait: boolean,
@@ -105,6 +112,14 @@ export function createRpcStepDriver(
     async sendKeys(keys: string[]): Promise<number> {
       const raw = await sendRpc(socketPath, 'sendKeys', { keys });
       return parseOrThrow(SendKeysResultSchema, raw, 'sendKeys').seq;
+    },
+
+    async mouse(input: MouseInput): Promise<MouseResult> {
+      const raw = await sendRpc(socketPath, 'mouse', {
+        ...input,
+        ...(rendererName === undefined ? {} : { rendererName }),
+      });
+      return parseOrThrow(MouseResultSchema, raw, 'mouse');
     },
 
     async run(

@@ -67,7 +67,7 @@ export class HostRendererManager {
     return await this.withBackend(
       rendererName,
       profile,
-      replayInput,
+      () => replayInput,
       (backend) => backend,
     );
   }
@@ -75,8 +75,11 @@ export class HostRendererManager {
   async withBackend<T>(
     rendererName: RendererName,
     profile: RenderProfileConfig,
-    replayInput: ReplayInput | null,
-    operation: (backend: RendererBackend) => T | Promise<T>,
+    loadReplayInput: () => ReplayInput | null,
+    operation: (
+      backend: RendererBackend,
+      replayInput: ReplayInput | null,
+    ) => T | Promise<T>,
   ): Promise<T> {
     assertNonEmptyString(rendererName, 'rendererName');
     assertNonEmptyString(profile.name, 'profile name');
@@ -85,14 +88,17 @@ export class HostRendererManager {
       'backend operation must be a function',
     );
 
-    if (replayInput !== null) {
-      invariant(
-        replayInput.sessionId === this.sessionId,
-        'replay input sessionId must match manager sessionId',
-      );
-    }
-
+    // Load inside the lock: work queued earlier, such as a mouse request that
+    // catches up to the whole log, can leave the backend past any input
+    // captured before the wait, and a stateful backend cannot rewind.
     return this.runExclusive(async () => {
+      const replayInput = loadReplayInput();
+      if (replayInput !== null) {
+        invariant(
+          replayInput.sessionId === this.sessionId,
+          'replay input sessionId must match manager sessionId',
+        );
+      }
       if (
         replayInput !== null &&
         this.currentBackend !== null &&
@@ -112,7 +118,7 @@ export class HostRendererManager {
         this.cachedInitialRows = replayInput.initialRows;
       }
 
-      return await operation(backend);
+      return await operation(backend, replayInput);
     });
   }
 
