@@ -74,19 +74,7 @@ Failure envelope:
 
 ### 1.4 Exit codes
 
-Recommended exit codes:
-
-| Code | Meaning                             |
-| ---- | ----------------------------------- |
-| `0`  | Success                             |
-| `1`  | Generic command failure             |
-| `2`  | Usage / validation error            |
-| `3`  | Session not found                   |
-| `4`  | Session not running / invalid state |
-| `5`  | Wait timed out                      |
-| `6`  | Renderer unavailable                |
-| `7`  | Artifact export failure             |
-| `8`  | Environment / dependency failure    |
+The shipped exit codes are listed in [the Exit Codes section of docs/USAGE.md](../../docs/USAGE.md#exit-codes). A timed-out `wait` exits `11` (`WAIT_TIMEOUT`). Exit `5` is a session host timeout (`HOST_TIMEOUT`).
 
 ## 2. Global flags
 
