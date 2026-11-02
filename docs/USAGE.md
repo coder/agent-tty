@@ -264,7 +264,7 @@ agent-tty record export <session-id> --format webm --timing accelerated --out ./
 
 The screenshot result lists `missingGlyphs`: each code point that the PNG draws as an empty `.notdef` box because neither the bundled fonts (a Latin JetBrains Mono subset and Symbols Nerd Font Mono) nor a font on the host has it, with the zero-based `row` and `col` of each cell. An empty array means no cell shows a box. The list holds at most 4096 cells, and one screenshot checks at most 4096 distinct glyphs. When either limit stops the check early, the result also has `"missingGlyphsTruncated": true`, and the list can miss boxes. Glyphs that a host font draws are not listed, so the same session can list different code points on hosts with different fonts. The text snapshot still has the right characters.
 
-Known limits: a letter that the font builds from a smaller precomposed letter plus a mark it lacks, such as Vietnamese `ế` (drawn as `ê` without the acute), is listed although the PNG shows a letter, not a box. A glyph under the block cursor is listed although the cursor hides it, and so is a glyph in a concealed (SGR 8) cell.
+Known limits: a letter that the font builds from a smaller precomposed letter plus a mark it lacks, such as Vietnamese `ế` (drawn as `ê` without the acute), is listed although the PNG shows a letter, not a box. A glyph under the block cursor is listed although the cursor hides it, and so is a glyph in a concealed (SGR 8) cell. The check uses the regular font style, so a bold or italic cell whose host font face differs in coverage can be judged wrong, and a grapheme that Chromium splits over several fonts is judged per code point, which can miss a box.
 
 ```bash
 agent-tty screenshot <session-id> --json | jq -c '.result.missingGlyphs'

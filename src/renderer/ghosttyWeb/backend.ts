@@ -60,6 +60,7 @@ import {
 } from './harnessDecoding.js';
 import type { GhosttyHarnessSnapshot } from './harnessDecoding.js';
 import {
+  MAX_CACHED_GLYPH_PROBES,
   MAX_GLYPH_PROBES,
   buildMissingGlyphs,
   findGlyphCandidates,
@@ -939,7 +940,11 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       'cell graphemes must be one string per viewport cell',
     );
     const candidates = findGlyphCandidates(grid, this.glyphCoverage.union);
-    const unprobed = glyphProbeTexts(candidates)
+    const texts = glyphProbeTexts(candidates);
+    if (this.usedFontsByText.size + texts.length > MAX_CACHED_GLYPH_PROBES) {
+      this.usedFontsByText.clear();
+    }
+    const unprobed = texts
       .filter((text) => !this.usedFontsByText.has(text))
       .slice(0, MAX_GLYPH_PROBES);
     if (unprobed.length > 0) {

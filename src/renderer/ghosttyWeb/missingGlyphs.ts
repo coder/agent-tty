@@ -12,6 +12,7 @@ const PROBE_ROOT_ID = 'agent-tty-glyph-probe';
 // bounds the CDP round trips of one screenshot.
 export const MAX_MISSING_GLYPH_CELLS = 4096;
 export const MAX_GLYPH_PROBES = 4096;
+export const MAX_CACHED_GLYPH_PROBES = 4 * MAX_GLYPH_PROBES;
 
 interface ProbeElement {
   id: string;
