@@ -530,9 +530,9 @@ HostWritesDestroying ==
 
 \* The finally block of initiateShutdown: await ptyExitPromise (the program
 \* ended; handlePtyExit settles it before its wait for the group), await
-\* rpcListenPromise, eventLog.close, rendererManager.dispose, then
-\* rpcServer.close, which unlinks the socket file also when the server never
-\* listened.
+\* rpcListenPromise, eventLog.close, the dispose of both renderer managers,
+\* then rpcServer.close, which unlinks the socket file also when the server
+\* never listened.
 HostClosesSocket ==
     /\ hostAlive /\ hsd = "wait"
     /\ hex \in {"groupwait", "exitwrite", "giveup", "done"}
