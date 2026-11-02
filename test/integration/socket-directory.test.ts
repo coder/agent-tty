@@ -64,6 +64,18 @@ describe.skipIf(process.platform === 'win32')(
       expect(existsSync(directory)).toBe(false);
     });
 
+    it('destroy --force removes it after it kills the host', () => {
+      const sessionId = createSession(testHome);
+      const directory = socketDirectoryOf(sessionId);
+
+      expect(
+        runCli(['destroy', sessionId, '--force', '--json'], {
+          AGENT_TTY_HOME: testHome,
+        }).status,
+      ).toBe(0);
+      expect(existsSync(directory)).toBe(false);
+    });
+
     it('a host whose program exits removes it', async () => {
       const sessionId = createSession(testHome, ['/bin/sh', '-c', 'sleep 1']);
       await waitForRemoval(socketDirectoryOf(sessionId));
