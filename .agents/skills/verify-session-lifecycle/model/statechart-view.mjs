@@ -100,6 +100,8 @@ export const step = (action, from, to) => {
       return 'the process that the program left ends';
     case 'GroupIdReused':
       return "an unrelated process group takes the program's group id";
+    case 'HostPidReused':
+      return "an unrelated process takes the ended host's pid";
     case 'ProgramExits':
       if (to.left) {
         return 'the program ends and leaves a process running';
