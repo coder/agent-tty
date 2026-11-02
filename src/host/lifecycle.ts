@@ -614,7 +614,16 @@ export async function allocateSession(
   return { sessionId, sessionDirectory };
 }
 
-export function launchHost(config: LaunchHostConfig): number {
+export interface LaunchedHost {
+  readonly pid: number;
+  // Sends the host SIGTERM, which makes it stop its program and end the
+  // session. It sends nothing once the host has exited, so a reused pid
+  // never gets the signal. On Windows, SIGTERM ends the host at once, without
+  // its shutdown.
+  stop(): void;
+}
+
+export function launchHost(config: LaunchHostConfig): LaunchedHost {
   assertNonEmptyString(config.sessionId, 'sessionId');
   assertNonEmptyString(config.home, 'home');
   assertStringRecord(config.env, 'env');
@@ -656,7 +665,12 @@ export function launchHost(config: LaunchHostConfig): number {
     'Detached host process must expose a positive PID',
   );
 
-  return child.pid;
+  return {
+    pid: child.pid,
+    stop: () => {
+      child.kill('SIGTERM');
+    },
+  };
 }
 
 async function recordDestroyed(

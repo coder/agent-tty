@@ -245,7 +245,61 @@ function createFacts() {
   return {
     CreateRecordsHostPid:
       launch >= 0 && launch < write && pidInManifest && onlyThroughCallback,
+    CreateStopsOnGiveUp: stopsOnGiveUp(create.body),
   };
+}
+
+// In runCreateCommand's readiness loop, the catch of an unreachable host
+// ends with host.stop() right after its last retry and before it rethrows
+// the error. Only a win32 create skips the stop while the manifest names
+// no program, so on Linux and macOS, which the model covers, it always stops. launchHost's stop sends SIGTERM through the ChildProcess
+// handle, and runHost registers its SIGTERM handler before it spawns the
+// program and skips the spawn when a SIGTERM came first.
+function stopsOnGiveUp(body) {
+  let stops = false;
+  walk(body, (node) => {
+    if (!ts.isCatchClause(node)) {
+      return;
+    }
+    const last = node.block.statements.at(-1);
+    if (last === undefined || normalize(last.getText()) !== 'throw error;') {
+      return;
+    }
+    walk(node.block, (inner) => {
+      if (!ts.isIfStatement(inner) || !ts.isBlock(inner.thenStatement)) {
+        return;
+      }
+      const st = inner.thenStatement.statements.map((s) =>
+        normalize(s.getText()),
+      );
+      const retry = st.findIndex((s) =>
+        s.startsWith('if (attempt + 1 < READINESS_MAX_ATTEMPTS) {'),
+      );
+      stops ||=
+        retry >= 0 &&
+        retry === st.length - 3 &&
+        st[retry + 1].startsWith('invariant(host !== undefined,') &&
+        st[retry + 2] ===
+          "if (process.platform !== 'win32' || manifest?.childPid != null) { host.stop(); }";
+    });
+  });
+  const launch = normalize(
+    requireDeclaration('src/host/lifecycle.ts', 'launchHost').getText(),
+  );
+  const run = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
+  const handler = indexOfStatement(run, /^process\.on\('SIGTERM'/);
+  const skip = indexOfStatement(
+    run,
+    /^if \(sigterm\.received\) \{\s*await eventLog\.close\(\);\s*return;\s*\}$/,
+  );
+  const spawn = indexOfStatement(run, /= createPty\(/);
+  return (
+    stops &&
+    /stop: \(\) => \{ child\.kill\('SIGTERM'\); \}/.test(launch) &&
+    handler >= 0 &&
+    handler < skip &&
+    skip === spawn - 1
+  );
 }
 
 // runHost waits for create's manifest, and every host write of session.json
@@ -1102,6 +1156,10 @@ const RUN_HOST_PARTS = [
   /^const handlePtyExit = /,
   /^pty\.onExit\(/,
   /^process\.on\('SIGTERM'/,
+  /^let onSigterm = /,
+  /^if \(sigterm\.received\) \{/,
+  /^invariant\(!sigterm\.received/,
+  /^onSigterm = startShutdown;/,
 ];
 
 function runHostFingerprints() {
