@@ -141,6 +141,12 @@ function wrapAction<Args extends unknown[]>(
   };
 }
 
+const HELP_OUTPUT_CODES: ReadonlySet<string> = new Set([
+  'commander.help',
+  'commander.helpDisplayed',
+  'commander.version',
+]);
+
 const CODING_AGENT_HELP_INTRO =
   'MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get agent-tty` before any other agent-tty command.';
 const CODING_AGENT_HELP_OUTRO =
@@ -1069,6 +1075,14 @@ try {
 } catch (error: unknown) {
   if (error instanceof CommanderError) {
     process.exitCode = error.code === 'commander.helpDisplayed' ? 0 : 2;
+    if (!HELP_OUTPUT_CODES.has(error.code) && process.argv.includes('--json')) {
+      emitCliError(
+        'agent-tty',
+        makeCliError(ERROR_CODES.INVALID_INPUT, {
+          message: error.message.replace(/^error: /u, ''),
+        }),
+      );
+    }
   } else if (error instanceof CliError) {
     setColorEnabled(!process.argv.includes('--no-color'));
     emitCliError('agent-tty', error);
