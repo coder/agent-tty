@@ -5,8 +5,8 @@
 # evidence/ stays. It keeps home/ and state/ and exits 1 when run-pids.sh
 # fails, or while a process outside the caller's terminal session still
 # carries this run's AGENT_TTY_HOME, has its working directory or an open file
-# in home/ or state/, or is yours, hides its environment and started after the
-# run. It also exits 1 when the removal fails, or when a process that started
+# in home/, state/ or removing/, or is yours, hides its environment and started
+# after the run. It also exits 1 when the removal fails, or when a process that started
 # during the removal still holds the run's folders.
 #
 #   .agents/skills/verify-agent-tty/scripts/cleanup.sh <run>/env.sh
@@ -140,7 +140,7 @@ find_holders() {
 }
 keep_home() {
   [ -z "$pids_failed" ] || echo "cleanup.sh: run-pids.sh failed, so cleanup.sh cannot prove that every process of this run has ended. Fix what run-pids.sh reports." >&2
-  [ -z "$holders" ] || printf 'cleanup.sh: these processes outside your terminal session still carry AGENT_TTY_HOME=%s, use a path in the run'"'"'s home/ or state/, or hide their environment and started after the run. Stop them (kill <pid>) or let them end:\n%s' "$AGENT_TTY_HOME" "$holders" >&2
+  [ -z "$holders" ] || printf 'cleanup.sh: these processes outside your terminal session still carry AGENT_TTY_HOME=%s, use a path in the run'"'"'s home/, state/ or removing/, or hide their environment and started after the run. Stop them (kill <pid>) or let them end:\n%s' "$AGENT_TTY_HOME" "$holders" >&2
   echo "cleanup.sh: kept $kept. Then run cleanup.sh again." >&2
   exit 1
 }
