@@ -143,7 +143,7 @@ Useful flags:
 - `--after-seq <n>`: only match renderer snapshots produced after this Event Log sequence — thread an input command's returned `seq` here so the wait cannot match pre-input screen state.
 - `--idle-ms <ms>`: wait for output idleness.
 - `--exit`: wait for the process to exit.
-- `--timeout <ms>`: maximum wait time in milliseconds. The default is `30000` (30 s). `0` waits without a limit.
+- `--timeout <ms>`: maximum wait time in milliseconds. The default is `30000` (30 s). `0` waits without a limit. An `--idle-ms` or `--screen-stable-ms` of `30000` or more cannot finish within the default, so `wait` rejects it with `INVALID_DURATION` unless you pass `--timeout`.
 
 On timeout, a standalone `wait` exits `11` (`WAIT_TIMEOUT`) while preserving a success JSON envelope with `timedOut: true` in the result (`matched: false` for render waits). Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast.
 

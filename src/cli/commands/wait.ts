@@ -59,6 +59,23 @@ function isNonNegativeInteger(value: number | undefined): value is number {
   return value !== undefined && Number.isInteger(value) && value >= 0;
 }
 
+function assertFitsDefaultTimeout(
+  flag: '--idle-ms' | '--screen-stable-ms',
+  windowMs: number | undefined,
+  timeout: number | undefined,
+): void {
+  if (
+    timeout === undefined &&
+    windowMs !== undefined &&
+    windowMs >= DEFAULT_WAIT_TIMEOUT_MS
+  ) {
+    throw makeCliError(ERROR_CODES.INVALID_DURATION, {
+      message: `${flag} ${String(windowMs)} cannot finish within the default --timeout of ${String(DEFAULT_WAIT_TIMEOUT_MS)} ms. Pass a larger --timeout, or --timeout 0 to wait without a limit.`,
+      details: { flag, windowMs, defaultTimeoutMs: DEFAULT_WAIT_TIMEOUT_MS },
+    });
+  }
+}
+
 function isRenderWaitMode(options: CommandOptions): boolean {
   return (
     options.text !== undefined ||
@@ -265,6 +282,12 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       });
     }
 
+    assertFitsDefaultTimeout(
+      '--screen-stable-ms',
+      options.screenStableMs,
+      options.timeout,
+    );
+
     const scope = parseRenderWaitScope(options.scope);
     const preparedCondition = prepareRenderWaitCondition({
       text: options.text,
@@ -358,6 +381,8 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       },
     });
   }
+
+  assertFitsDefaultTimeout('--idle-ms', options.idleMs, options.timeout);
 
   const manifestStatus = manifest.status;
 

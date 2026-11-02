@@ -969,9 +969,8 @@ async function main(): Promise<void> {
     .option('--idle-ms <ms>', 'Wait for output idle period', parseIntegerOption)
     .option(
       '--timeout <ms>',
-      'Maximum wait time in milliseconds (0 for infinite)',
+      `Maximum wait time in milliseconds (0 for infinite) (default: ${String(DEFAULT_WAIT_TIMEOUT_MS)})`,
       parseIntegerOption,
-      DEFAULT_WAIT_TIMEOUT_MS,
     )
     .option('--json', 'Emit a JSON command envelope', false)
     .option('--text <string>', 'Wait for text to appear in rendered output')
