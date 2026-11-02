@@ -42,6 +42,7 @@ Each feature file starts with an H1 title and one paragraph that describes what 
 - [Session lifecycle](./session-lifecycle.md): create, list, inspect, destroy, gc, and the Home Registry.
 - [Input and waits](./run-and-wait.md): waited `run`, `type`, `paste`, `send-keys`, `mark`, and every `wait` condition.
 - [Batch](./batch.md): ordered input and wait steps with Wait Baselines, fail-fast and `--keep-going`.
+- [Mouse](./mouse.md): mode-aware `mouse` press, release, drag and wheel input, and the batch `mouse` step.
 - [Artifacts](./artifacts.md): `snapshot`, `screenshot`, `record export` (asciicast and WebM) and `record diff`.
 - [Dashboard](./dashboard.md): the read-only live TUI of a Home's sessions.
 

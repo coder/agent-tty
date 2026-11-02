@@ -11,7 +11,7 @@ A user creates a long-lived terminal session that runs one program, sees it in `
 - `life-destroy-force` ends a running session without the graceful shutdown.
 - `life-exit` records the program's own exit as `exited` with its exit code.
 - `life-gc` removes finished sessions and skips running ones.
-- `life-home-list` shows the Home in the Home Registry: with an active session, or always with `--all`.
+- `life-home-list` shows the Home in the Home Registry: with an active session, or with `--all` while it has a session that is not `destroyed`.
 
 ## How to get to it (user POV)
 
@@ -27,7 +27,7 @@ A user creates a long-lived terminal session that runs one program, sees it in `
 Preconditions:
 
 - `mkdir -p "$EVIDENCE/life"` has run. The recipe saves its proof there.
-- The baseline preconditions in the README hold, and the run's Home has no sessions (`att list --all --json` shows `"sessions":[]`).
+- The baseline preconditions in the README hold, and the run's Home has no sessions (`att list --all --json | jq -e '.result.sessions == []'` passes).
 
 - **Create.** Run `S=$(att create --json --name life -- node --import tsx test/fixtures/apps/hello-prompt/main.ts | tee "$EVIDENCE/life/create.json" | jq -r .result.sessionId)`. Exit code 0, and `.result` has `sessionId`, `createdAt`, `cols: 80`, `rows: 24`.
 - **Ready.** Run `att wait "$S" --regex 'READY>$' --scope cursor-line --timeout 10000 --json`. `.result.matched` is `true`.
@@ -38,7 +38,7 @@ Preconditions:
 - **Destroy.** Create a second session `D` as in step 1 and run `att destroy "$D" --json`. `.result` is `{"sessionId":"<D>","destroyed":true}`, and `att list --all --json` shows `D` as `destroyed`. A second `att destroy "$D" --json` exits 4 with `SESSION_ALREADY_DESTROYED`.
 - **Force destroy.** Create a session `K` as in step 1 and wait for its prompt. Keep `HP=$(jq .hostPid "$AGENT_TTY_HOME/sessions/$K/session.json")`, `CP=$(jq .childPid "$AGENT_TTY_HOME/sessions/$K/session.json")` and `SOCK=$(att inspect "$K" --json | jq -r .result.host.rpcSocketPath)`. `.agents/skills/verify-agent-tty/scripts/run-pids.sh "$ENV"` lists `HP` and `CP`, and the file `$SOCK` exists. Run `att destroy "$K" --force --json | tee "$EVIDENCE/life/destroy-force.json"`. Exit code 0, and `.result` is `{"sessionId":"<K>","destroyed":true}`. Then `run-pids.sh` lists neither `HP` nor `CP`, `$SOCK` is gone, and `session.json` of `K` has `status: "destroyed"`.
 - **Not found.** Run `att inspect 01NOSUCHSESSION --json`. Exit code 3, `SESSION_NOT_FOUND`.
-- **Home Registry.** Run `att home list --all --json`. `.result.homes[0].path` is `$AGENT_TTY_HOME`. Without `--all`, `home list` shows only Homes with an active session, so it is empty at this point.
+- **Home Registry.** Run `att home list --all --json`. `.result.homes[0].path` is `$AGENT_TTY_HOME`. Without `--all`, `home list` shows only Homes with an active session, so it is empty at this point. `--all` lists the Home here only because `S` is `exited`: a Home whose sessions are all `destroyed` is not listed, even with `--all`.
 - **gc.** Create one more session `R` that keeps running, then run `att gc --json | tee "$EVIDENCE/life/gc.json"`. `.result.homes[0].removedSessions` lists `S`, `D` and `K`, `skippedSessions` lists `R` with the reason `session host is still alive`, and the folders of `S`, `D` and `K` are gone from `$AGENT_TTY_HOME/sessions/`.
 
 ## Gotchas

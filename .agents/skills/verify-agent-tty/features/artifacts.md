@@ -1,6 +1,6 @@
 # Artifacts
 
-A user captures what a session showed: a semantic snapshot of the screen, a rendered PNG screenshot, a recording as an asciicast `.cast` or a WebM video, and a diff of the visible screens of two sessions. Each artifact is listed in the session's artifact manifest and can be rebuilt from the event log.
+A user captures what a session showed: a semantic snapshot of the screen, a rendered PNG screenshot, a recording as an asciicast `.cast` or a WebM video, and a diff of the visible screens of two sessions. Each snapshot, screenshot and recording is listed in the session's artifact manifest and can be rebuilt from the event log. `record diff` writes no file and no manifest entry: its result is only in the envelope.
 
 ## Sub-features
 
@@ -47,3 +47,4 @@ Preconditions:
 - With `--include-cells`, the default `libghostty-vt` renderer returns entries only for rows that hold text, and `--renderer ghostty-web` returns one for every row. Assert on rows that you know hold text.
 - A screenshot shows the reference renderer, not your terminal emulator. Do not claim native-terminal parity from it.
 - WebM export is slow. Export it once per proof, at the end.
+- A session whose program has printed nothing (for example `att create --json -- sleep 600`) has no events. Its `snapshot` and `screenshot` show a blank screen with `capturedAtSeq: -1`, and the PNG is named `screenshot--1-reference-dark.png`.

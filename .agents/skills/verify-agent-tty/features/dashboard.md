@@ -17,14 +17,14 @@ A user opens `agent-tty dashboard` to watch a Home's sessions live, without send
 ## How to get to it (user POV)
 
 - `agent-tty dashboard` (alias `d`), with `--all` and `--session <id>`.
-- Inside it: `Tab`, `↑`/`↓`, `j`/`k`, Enter, `a`, `H`, `z`, `q`, as the footer lists them.
+- Inside it: `Tab`, `↑`/`↓`, `j`/`k`, Enter, `a`, `H`, `z`, `q`, as the footer lists them. `Esc` restores a maximized view and closes the Home picker.
 
 ## Driving it with att
 
 Preconditions:
 
 - `mkdir -p "$EVIDENCE/dashboard"` has run. The recipe saves its proof there.
-- The baseline preconditions in the README hold, and the run's Home has no active session (`att list --json` shows `"sessions":[]`).
+- The baseline preconditions in the README hold, and the run's Home has no sessions (`att list --all --json | jq -e '.result.sessions == []'` passes). Finished sessions count too: the `all (3)` and `all (4)` steps below fail if another recipe left one. Run `att gc --json` first after other recipes.
 - A session to watch: `W=$(att create --json --name watched --env 'PS1=$ ' -- /bin/bash --noprofile --norc | jq -r .result.sessionId)`, then `att run "$W" 'echo watched-output-123' --json` returns `completed: true`.
 - A finished session: `F=$(att create --json --name finished -- /bin/sh -c 'exit 0' | jq -r .result.sessionId)`, then `att wait "$F" --exit --timeout 10000 --json` returns `exitCode: 0`.
 

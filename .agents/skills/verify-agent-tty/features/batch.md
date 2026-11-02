@@ -1,11 +1,11 @@
 # Batch
 
-A user sends an ordered list of input and wait steps to one session in a single `batch` call. Each wait step only sees screens produced after the step before it (its Wait Baseline). The batch stops at the first failed step unless the user passes `--keep-going`.
+A user sends an ordered list of input and wait steps to one session in a single `batch` call. Each wait step only sees screens produced after the latest earlier input step (its Wait Baseline). The batch stops at the first failed step unless the user passes `--keep-going`.
 
 ## Sub-features
 
-- `batch-steps` runs `type`, `paste`, `sendKeys`, `run` and `wait` steps in order.
-- `batch-baseline` anchors each wait step to the event-log sequence of the step before it.
+- `batch-steps` runs `type`, `paste`, `sendKeys`, `run`, `mouse` and `wait` steps in order. [Mouse](./mouse.md) drives the `mouse` step.
+- `batch-baseline` anchors each wait step to the event-log sequence of the latest earlier input step. A wait step does not move the baseline.
 - `batch-fail-fast` stops at the first failed step and marks later steps `not-run`.
 - `batch-keep-going` runs every step and reports each failure.
 - `batch-file` reads the steps from a JSON file.
@@ -40,4 +40,5 @@ Preconditions:
 - A wait step without `timeout` waits up to 10 minutes.
 - A `run` step needs a shell. Sent to `hello-prompt`, it fails with `WAIT_TIMEOUT` (exit 11), because the program never prints the Run Completion marker.
 - A failed batch still prints `"ok": true`: the envelope reports the batch, and the exit code and `failedIndices` report the failure. Check both.
+- In `[type, sendKeys, wait, wait]`, both wait steps have the `waitBaseline` of the `sendKeys` step. A wait step with no input step before it has no `waitBaseline` and can match the screen as it already is.
 - Wait Baselines keep a wait step from matching an older screen, but text that the program printed earlier can still be on the screen. Wait for text that only the new output contains.

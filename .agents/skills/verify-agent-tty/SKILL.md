@@ -1,6 +1,6 @@
 ---
 name: verify-agent-tty
-description: Drive the real agent-tty CLI built from this checkout, the way a user or agent does, and capture proof - JSON envelopes, rendered snapshots, PNG screenshots, recordings, and the session files on disk - in an isolated Home that never touches ~/.agent-tty. Use it to verify a change to any agent-tty command (create, run, wait, batch, snapshot, screenshot, record, gc, dashboard) end to end before you call it done, or to reproduce a reported CLI or TUI bug.
+description: Drive the real agent-tty CLI built from this checkout, the way a user or agent does, and capture proof - JSON envelopes, rendered snapshots, PNG screenshots, recordings, and the session files on disk - in an isolated Home that never touches ~/.agent-tty. Use it to verify a change to any agent-tty command (create, run, wait, batch, mouse, snapshot, screenshot, record, gc, dashboard) end to end before you call it done, or to reproduce a reported CLI or TUI bug.
 ---
 
 # Verify agent-tty by driving the CLI
