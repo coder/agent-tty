@@ -496,6 +496,43 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     }
   });
 
+  it('lists a glyph the same way whatever glyphs sit next to it', async () => {
+    // oxfmt-ignore
+    const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-neighbors-')));
+    const listed = async (text: string, name: string): Promise<string[]> => {
+      const renderer = new GhosttyWebBackend(SESSION_ID, PROFILE);
+      try {
+        await renderer.boot();
+        await renderer.replayTo(
+          createReplayInput([
+            {
+              seq: 0,
+              ts: timestampFor(0),
+              type: 'output',
+              payload: { data: `${text}\r\n` },
+            },
+          ]),
+        );
+        const shot = await renderer.screenshot(join(outputDir, `${name}.png`));
+        return (shot.missingGlyphs ?? []).map((glyph) => glyph.codePoint);
+      } finally {
+        await renderer.dispose();
+      }
+    };
+
+    try {
+      const alone = await listed('\u2500 \u2713 \u2631 \u2502', 'alone');
+      const nextToBoxes = await listed(
+        '\u0378\u2500\u0378\u2713\u0378\u2631\u0378\u2502\u0378',
+        'next-to-boxes',
+      );
+
+      expect(nextToBoxes).toEqual(['U+0378', ...alone]);
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
   it('allows dispose to be called more than once', async () => {
     await backend.boot();
 
