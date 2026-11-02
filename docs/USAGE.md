@@ -304,7 +304,8 @@ On Linux it also ends those processes when the program has already exited or the
 `list`, `inspect`, `destroy` and `gc` reconcile a session whose host died: they kill the program's group and record the session as `failed` (or `exited` or `destroyed`).
 A `destroy` that runs inside the session, such as one typed into the session's shell, runs again outside the session and prints its result once the session has ended.
 The session's terminal is closed by then, so redirect stdout to keep the result, for example `agent-tty destroy "$AGENT_TTY_SESSION_ID" --json > destroy.json`.
-Before `destroy` records `destroyed`, it writes an empty internal file, `destroyed`, in the session folder. A reconcile that wrote over that record in the same moment finds the file and records `destroyed` again, so a session that `destroy` reported destroyed stays destroyed.
+Before `destroy` records `destroyed`, it writes an empty internal file, `destroyed`, in the session folder. A reconcile that writes over that record at the same moment finds the file right after its own write and records `destroyed` again.
+A `list`, `inspect` or `gc` that reads the session between those two writes sees `failed`. If the reconciling process is killed between them, the session stays `failed`.
 
 On Linux, `destroy` and reconcile never kill a process group that they cannot prove is the session's.
 When the host starts the program, it records the program's pid, the boot id and the program's autogroup id in an internal file, `program.json`.
