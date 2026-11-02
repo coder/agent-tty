@@ -1,6 +1,6 @@
 {
   "fingerprints": {
-    "src/cli/commands/create.ts#runCreateCommand": "1b2b29a895cde754",
+    "src/cli/commands/create.ts#runCreateCommand": "0cf77810ec069bd6",
     "src/cli/commands/destroy.ts#runDestroyCommand": "8a0a0a76d61664bf",
     "src/cli/commands/destroy.ts#rerunInNewSession": "573a64e3b1e83612",
     "src/cli/commands/gc.ts#gcSessions": "ac079db2a0199d69",
@@ -64,9 +64,9 @@
     "src/host/hostMain.ts#runHost(final try)": "5db2f94ef78701a8",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "73aaefc573db9511",
-    "skill:scripts/facts.mjs": "ad6f7db805c5d882",
-    "skill:scripts/check.sh": "97acb7fdaaa2c783"
+    "skill:model/SessionLifecycle.tla": "1dfee8926f964fae",
+    "skill:scripts/facts.mjs": "f217fe5f58a61c4a",
+    "skill:scripts/check.sh": "e8d31207aa4a7145"
   },
   "callSites": {
     "writeManifest": [
@@ -115,7 +115,6 @@
       "src/storage/homeScope.ts#scanHome"
     ],
     "reconcileSession": [
-      "src/cli/commands/create.ts#runCreateCommand",
       "src/cli/commands/gc.ts#gcSessions",
       "src/cli/commands/inspect.ts#runInspectCommand",
       "src/host/lifecycle.ts#destroySession",
