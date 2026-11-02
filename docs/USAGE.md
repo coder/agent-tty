@@ -307,7 +307,7 @@ The session's terminal is closed by then, so redirect stdout to keep the result,
 When `destroy` records `destroyed` itself, as with `--force`, for a session whose host died or for a session that has already ended, it first writes an empty internal file, `destroyed`, in the session folder. When the host records `destroyed`, as after a plain `destroy` of a live session, nobody writes that file.
 A reconcile that writes over the record at the same moment finds the file right after its own write and records `destroyed` again.
 A `list`, `inspect` or `gc` that reads the session between those two writes sees `failed`. If the reconciling process is killed between them, the session stays `failed`.
-A `destroy` that fails after it wrote the file, for example because its manifest write fails, leaves the file, so the next reconcile records the session as `destroyed`.
+A `destroy` of a running session that fails after it wrote the file, for example because its manifest write fails, leaves the file, so the next reconcile records the session as `destroyed`. A reconcile skips a session that has already ended, so for such a session run `destroy` again.
 
 On Linux, `destroy` and reconcile never kill a process group that they cannot prove is the session's.
 When the host starts the program, it records the program's pid, the boot id and the program's autogroup id in an internal file, `program.json`.
