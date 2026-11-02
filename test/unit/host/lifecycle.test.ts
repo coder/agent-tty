@@ -603,13 +603,13 @@ describe('cliRunsInsideProgramSession', () => {
   );
 
   it.each(['ENOENT', 'EACCES'])(
-    'on linux reads the caller as outside when /proc/self/stat fails with %s',
+    'on linux reads the caller as inside when /proc/self/stat fails with %s',
     async (code) => {
       await seedSession(makeRecord({ childPid: CHILD_PID }));
       Object.defineProperty(process, 'platform', { value: 'linux' });
       fsHooks.ownStatError = errno(code);
 
-      expect(await cliRunsInsideProgramSession('session-01')).toBe(false);
+      expect(await cliRunsInsideProgramSession('session-01')).toBe(true);
     },
   );
 

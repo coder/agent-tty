@@ -1573,6 +1573,40 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         expect(await groupEnds(pgid)).toBe(true);
       },
     );
+
+    // Without /proc/self/stat the CLI cannot read its session id, so it runs
+    // again in a new session, and that copy skips the check.
+    it.runIf(process.platform === 'linux')(
+      'destroy typed into an interactive shell that cannot read its session id prints its result',
+      async () => {
+        const out = join(testHome, 'inner-destroy.json');
+        const sessionId = createSession(
+          testHome,
+          ['/bin/bash', '--norc', '--noprofile', '-i'],
+          { env: { HISTFILE: '/dev/null' } },
+        );
+        pgid = inspectSession(testHome, sessionId).childPid as number;
+        const preload = pathToFileURL(
+          resolve('test/fixtures/unreadable-self-stat.ts'),
+        ).href;
+        const command = `unset AGENT_TTY_SESSION_ID; NODE_OPTIONS='--import=${preload}' ${cli.map((part) => `'${part}'`).join(' ')} destroy ${sessionId} --json > '${out}'`;
+        for (const args of [
+          ['type', sessionId, command],
+          ['send-keys', sessionId, 'Enter'],
+        ]) {
+          expect(
+            runCli([...args, '--json'], { AGENT_TTY_HOME: testHome }).status,
+          ).toBe(0);
+        }
+
+        expect(await readEnvelopeOnceWritten(out)).toMatchObject({
+          ok: true,
+          result: { sessionId, destroyed: true },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await groupEnds(pgid)).toBe(true);
+      },
+    );
   });
 
   it('destroyed session rejects commands with SESSION_ALREADY_DESTROYED', () => {
