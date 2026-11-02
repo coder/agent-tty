@@ -42,7 +42,7 @@
     "src/host/programGroup.ts#judgeLiveGroup": "29c9c4bfd01c4338",
     "src/host/programGroup.ts#processGroupTarget": "88de1544b1553e54",
     "src/host/programGroup.ts#procHidesOtherUsers": "214f60a56d6573fa",
-    "src/host/programGroup.ts#groupHasLiveProcess": "5e8c7dac6ab54deb",
+    "src/host/programGroup.ts#groupHasLiveProcess": "1d8026f335463a72",
     "src/host/programGroup.ts#scanGroup": "babc9d5767424243",
     "src/host/programGroup.ts#isProcessGroupAlive": "ce1b8fca10085d51",
     "src/host/programGroup.ts#killProcessGroupBestEffort": "6d5d47cb5697681b",
