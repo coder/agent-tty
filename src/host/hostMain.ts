@@ -201,6 +201,18 @@ export async function runHost(
   const ePath = eventLogPath(sessDir);
   const sPath = socketPath(sessDir);
 
+  // A create that gives up sends SIGTERM at any point of the start-up. With
+  // the default action, one that came between the spawn and program.json
+  // would end the host and leave a program that no file names. Before the
+  // spawn the host only notes it, and from then on it shuts down.
+  let sigtermReceived = false;
+  let onSigterm = (): void => {
+    sigtermReceived = true;
+  };
+  process.on('SIGTERM', () => {
+    onSigterm();
+  });
+
   const manifest = await waitForManifestFromCreate(mPath, creatorPid);
   invariant(
     manifest.sessionId === sessionId,
@@ -308,6 +320,10 @@ export async function runHost(
     };
   });
 
+  if (sigtermReceived) {
+    await eventLog.close();
+    return;
+  }
   const pty = createPty({
     command: manifest.command,
     cwd: manifest.cwd,
@@ -1231,9 +1247,9 @@ export async function runHost(
 
   startIdlePolling();
 
-  process.on('SIGTERM', () => {
-    startShutdown();
-  });
+  // No handler runs between the check before createPty and here.
+  invariant(!sigtermReceived, 'SIGTERM is handled only after the spawn block');
+  onSigterm = startShutdown;
 
   try {
     writeProgramRecord(sessDir, program);

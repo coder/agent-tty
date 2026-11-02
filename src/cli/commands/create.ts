@@ -8,8 +8,8 @@ import { emitSuccess } from '../output.js';
 import { DEFAULT_IDLE_TIMEOUT_MS } from '../../config/defaults.js';
 import {
   allocateSession,
-  destroySession,
   launchHost,
+  type LaunchedHost,
 } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
@@ -136,6 +136,7 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
   }
 
   let sessionId: string | undefined;
+  let host: LaunchedHost | undefined;
 
   try {
     const allocatedSession = await allocateSession(
@@ -153,12 +154,13 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
       },
       (id) => {
         sessionId = id;
-        return launchHost({
+        host = launchHost({
           sessionId: id,
           home: options.context.home,
           env: environment,
           term: options.term,
         });
+        return host.pid;
       },
     );
     sessionId = allocatedSession.sessionId;
@@ -234,17 +236,11 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
           continue;
         }
 
-        // A host that answers too late would run a session whose create
-        // failed, so the session is stopped before the error is reported.
-        await destroySession(sessionId, true).catch((stopError: unknown) => {
-          options.context.logger.debug('failed to stop the session', {
-            sessionId,
-            error:
-              stopError instanceof Error
-                ? stopError.message
-                : String(stopError),
-          });
-        });
+        // A host that answers too late would serve a session whose create
+        // failed. The host knows its program's pid also without a session
+        // token, so it stops the program and ends the session itself.
+        invariant(host !== undefined, 'a session that create polls has a host');
+        host.stop();
       }
 
       throw error;

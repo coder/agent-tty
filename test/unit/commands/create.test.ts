@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
   allocateSession: vi.fn(),
   launchHost: vi.fn(),
-  destroySession: vi.fn(),
+  stopHost: vi.fn(),
   sendRpc: vi.fn(),
   readManifestIfExists: vi.fn(),
   sessionDir: vi.fn(),
@@ -27,7 +27,6 @@ vi.mock('../../../src/cli/output.js', () => ({
 
 vi.mock('../../../src/host/lifecycle.js', () => ({
   allocateSession: mocks.allocateSession,
-  destroySession: mocks.destroySession,
   launchHost: mocks.launchHost,
 }));
 
@@ -115,7 +114,7 @@ describe('create command', () => {
         });
       },
     );
-    mocks.launchHost.mockReturnValue(12345);
+    mocks.launchHost.mockReturnValue({ pid: 12345, stop: mocks.stopHost });
     mocks.sendRpc.mockResolvedValue({ session: { sessionId: 'session-01' } });
     mocks.readManifestIfExists.mockResolvedValue(makeManifest());
     mocks.sessionDir.mockImplementation(
@@ -282,30 +281,27 @@ describe('create command', () => {
     );
   });
 
-  it.each([
-    ['stops', () => Promise.resolve()],
-    ['cannot stop', () => Promise.reject(new Error('stop failed'))],
-  ])(
-    'when the host never answers, %s the session and reports the last error',
-    async (_name, stop) => {
-      const unreachable = makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
-        message: 'host unreachable',
-      });
-      mocks.sendRpc.mockRejectedValue(unreachable);
-      mocks.readManifestIfExists.mockResolvedValue(makeManifest());
-      mocks.destroySession.mockImplementation(stop);
+  it('when the host never answers, tells the host to stop and reports the last error', async () => {
+    const unreachable = makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+      message: 'host unreachable',
+    });
+    mocks.sendRpc.mockRejectedValue(unreachable);
+    mocks.readManifestIfExists.mockResolvedValue(makeManifest());
 
-      await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
-        unreachable,
-      );
-      expect(mocks.sendRpc).toHaveBeenCalledTimes(50);
-      expect(mocks.destroySession).toHaveBeenCalledExactlyOnceWith(
-        'session-01',
-        true,
-      );
-      expect(mocks.emitSuccess).not.toHaveBeenCalled();
-    },
-  );
+    await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
+      unreachable,
+    );
+    expect(mocks.sendRpc).toHaveBeenCalledTimes(50);
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('leaves a host that answers alone', async () => {
+    await runCreateCommand({ ...baseOptions, context });
+
+    expect(mocks.emitSuccess).toHaveBeenCalledOnce();
+    expect(mocks.stopHost).not.toHaveBeenCalled();
+  });
 
   it('passes idle timeout through allocation when provided explicitly', async () => {
     await runCreateCommand({
