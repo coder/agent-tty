@@ -44,12 +44,14 @@ export interface SuccessEnvelope<TResult> {
   result: TResult;
 }
 
-export function parseWaitTimeoutEnvelope<TResult>(stdout: string): TResult {
+export function parseWaitTimeoutEnvelope(
+  stdout: string,
+): Record<string, unknown> {
   const envelope = JSON.parse(stdout) as {
     ok: boolean;
     command: string;
     error?: { code: string; retryable: boolean };
-    result: TResult;
+    result: Record<string, unknown>;
   };
   expect(envelope.ok).toBe(false);
   expect(envelope.command).toBe('wait');

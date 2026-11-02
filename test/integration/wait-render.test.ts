@@ -337,9 +337,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     );
 
     expect(cursorLineResult.exitCode).toBe(11);
-    const timedOut = parseWaitTimeoutEnvelope<WaitForRenderResult>(
-      cursorLineResult.stdout,
-    );
+    const timedOut = parseWaitTimeoutEnvelope(cursorLineResult.stdout);
     expect(timedOut.matched).toBe(false);
     expect(timedOut.timedOut).toBe(true);
   });
@@ -478,9 +476,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
     expect(result.exitCode).toBe(11);
     expect(result.stderr).toBe('');
-    const timedOut = parseWaitTimeoutEnvelope<WaitForRenderResult>(
-      result.stdout,
-    );
+    const timedOut = parseWaitTimeoutEnvelope(result.stdout);
     expect(timedOut.matched).toBe(false);
     expect(timedOut.timedOut).toBe(true);
     expect(timedOut.capturedAtSeq).toBeGreaterThanOrEqual(0);
@@ -509,7 +505,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
     expect(result.exitCode).toBe(11);
     expect(result.stderr).toBe('');
-    expect(parseWaitTimeoutEnvelope<WaitResult>(result.stdout)).toEqual({
+    expect(parseWaitTimeoutEnvelope(result.stdout)).toEqual({
       timedOut: true,
     });
   });
@@ -523,7 +519,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
     expect(result.exitCode).toBe(11);
     expect(result.stderr).toBe('');
-    expect(parseWaitTimeoutEnvelope<WaitResult>(result.stdout)).toEqual({
+    expect(parseWaitTimeoutEnvelope(result.stdout)).toEqual({
       timedOut: true,
     });
   });

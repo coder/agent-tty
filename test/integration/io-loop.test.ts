@@ -140,7 +140,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       );
       expect(waitResult.status).toBe(11);
       expect(waitResult.stderr).toBe('');
-      expect(parseWaitTimeoutEnvelope<WaitResult>(waitResult.stdout)).toEqual({
+      expect(parseWaitTimeoutEnvelope(waitResult.stdout)).toEqual({
         timedOut: true,
       });
     } finally {

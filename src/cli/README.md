@@ -15,7 +15,7 @@ This directory is the agent-tty command-line front end. `main.ts` is the bin ent
 - `resolveCommandTarget(options)` returns a `CommandTarget` (`sessionId`, `sessionDirectory`, `manifestPath`, `socketPath`, `manifest`). Also exports `ResolveCommandTargetOptions` and `CommandTargetManifest`. [commandTarget.ts:resolveCommandTarget] [commandTarget.ts:CommandTarget]
 - `assertSessionCommandable(manifest, sessionId)`. [sessionGuards.ts:assertSessionCommandable]
 - `exitCodeForError(code)`. [exitCodes.ts:exitCodeForError]
-- `CliError` (`code`, `retryable`, `details`). [errors.ts:CliError]
+- `CliError` (`code`, `retryable`, `details`, `result`). `emitCliError` copies `result` into the error envelope when it is set. [errors.ts:CliError] [main.ts:emitCliError]
 
 ## Invariants
 

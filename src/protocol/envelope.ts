@@ -17,6 +17,7 @@ export interface CommandErrorEnvelope {
   command: string;
   timestamp: string;
   error: CommandError;
+  result?: unknown;
 }
 
 export type CommandEnvelope<TResult> =
@@ -38,11 +39,13 @@ export function createSuccessEnvelope<TResult>(
 export function createErrorEnvelope(
   command: string,
   error: CommandError,
+  result?: unknown,
 ): CommandErrorEnvelope {
   return {
     ok: false,
     command,
     timestamp: new Date().toISOString(),
     error,
+    ...(result === undefined ? {} : { result }),
   };
 }

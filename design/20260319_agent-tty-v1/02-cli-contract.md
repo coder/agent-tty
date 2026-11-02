@@ -42,7 +42,7 @@ Human-readable output is allowed, but it is not the primary contract.
 
 ### 1.3 Stable envelope
 
-Every JSON response uses the same top-level envelope fields in the shipped implementation: `ok`, `command`, `timestamp`, and either `result` or `error`. Session-specific identifiers currently live inside command-specific `result` payloads or `error.details` rather than as a top-level envelope `sessionId` field.
+Every JSON response uses the same top-level envelope fields in the shipped implementation: `ok`, `command`, `timestamp`, and either `result` or `error`. A timed-out `wait` is the one failure that carries both: `ok: false`, `error.code: "WAIT_TIMEOUT"`, and the wait `result`. Session-specific identifiers currently live inside command-specific `result` payloads or `error.details` rather than as a top-level envelope `sessionId` field.
 
 ```json
 {

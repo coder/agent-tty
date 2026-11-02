@@ -145,7 +145,7 @@ Useful flags:
 - `--exit`: wait for the process to exit.
 - `--timeout <ms>`: maximum wait time in milliseconds, with `0` meaning infinite.
 
-On timeout, a standalone `wait` exits `11` (`WAIT_TIMEOUT`) while preserving a success JSON envelope with `timedOut: true` in the result (`matched: false` for render waits). Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast.
+On timeout, a standalone `wait` exits `11` and prints an error envelope: `ok: false`, `error.code: "WAIT_TIMEOUT"`, and the wait result under `result` (`timedOut: true`, and `matched: false` for render waits). Without `--json`, it prints `WAIT_TIMEOUT: <message>` to stderr. Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast.
 
 ### Echo-Match
 

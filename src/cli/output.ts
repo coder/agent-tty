@@ -91,9 +91,12 @@ export function emitFailure(options: {
   command: string;
   json: boolean;
   error: CommandError;
+  result?: unknown;
 }): void {
   if (options.json) {
-    writeJsonEnvelope(createErrorEnvelope(options.command, options.error));
+    writeJsonEnvelope(
+      createErrorEnvelope(options.command, options.error, options.result),
+    );
     return;
   }
 

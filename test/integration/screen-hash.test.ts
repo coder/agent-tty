@@ -216,9 +216,7 @@ describe('screen hash integration', { timeout: 120_000 }, () => {
 
     expect(result.status).toBe(11);
     expect(result.stderr).toBe('');
-    const timedOut = parseWaitTimeoutEnvelope<WaitForRenderResult>(
-      result.stdout,
-    );
+    const timedOut = parseWaitTimeoutEnvelope(result.stdout);
     expect(timedOut.matched).toBe(false);
     expect(timedOut.timedOut).toBe(true);
     expect(timedOut.screenHash).toBeUndefined();

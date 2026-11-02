@@ -88,6 +88,7 @@ function emitCliError(commandName: string, error: CliError): void {
       retryable: error.retryable,
       details: error.details,
     },
+    result: error.result,
   });
   process.exitCode = exitCodeForError(error.code);
 }
