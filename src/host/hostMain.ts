@@ -208,9 +208,9 @@ export async function runHost(
   // the default action, one that came between the spawn and program.json
   // would end the host and leave a program that no file names. Before the
   // spawn the host only notes it, and from then on it shuts down.
-  let sigtermReceived = false;
+  const sigterm = { received: false };
   let onSigterm = (): void => {
-    sigtermReceived = true;
+    sigterm.received = true;
   };
   process.on('SIGTERM', () => {
     onSigterm();
@@ -321,7 +321,7 @@ export async function runHost(
     };
   });
 
-  if (sigtermReceived) {
+  if (sigterm.received) {
     await eventLog.close();
     return;
   }
@@ -1249,7 +1249,7 @@ export async function runHost(
   startIdlePolling();
 
   // No handler runs between the check before createPty and here.
-  invariant(!sigtermReceived, 'SIGTERM is handled only after the spawn block');
+  invariant(!sigterm.received, 'SIGTERM is handled only after the spawn block');
   onSigterm = startShutdown;
 
   try {

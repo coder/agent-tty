@@ -288,7 +288,7 @@ function stopsOnGiveUp(body) {
   const handler = indexOfStatement(run, /^process\.on\('SIGTERM'/);
   const skip = indexOfStatement(
     run,
-    /^if \(sigtermReceived\) \{\s*await eventLog\.close\(\);\s*return;\s*\}$/,
+    /^if \(sigterm\.received\) \{\s*await eventLog\.close\(\);\s*return;\s*\}$/,
   );
   const spawn = indexOfStatement(run, /= createPty\(/);
   return (
@@ -1093,8 +1093,8 @@ const RUN_HOST_PARTS = [
   /^pty\.onExit\(/,
   /^process\.on\('SIGTERM'/,
   /^let onSigterm = /,
-  /^if \(sigtermReceived\) \{/,
-  /^invariant\(!sigtermReceived/,
+  /^if \(sigterm\.received\) \{/,
+  /^invariant\(!sigterm\.received/,
   /^onSigterm = startShutdown;/,
 ];
 
