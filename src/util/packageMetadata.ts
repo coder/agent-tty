@@ -34,10 +34,6 @@ export async function loadPackageMetadata(): Promise<PackageMetadata> {
   };
 }
 
-/**
- * Returns the `engines.node` range of the root `package.json`, the single
- * source of the supported Node versions.
- */
 export async function loadSupportedNodeRange(): Promise<string> {
   const { engines } = await readPackageJson();
   invariant(
