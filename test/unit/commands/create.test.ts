@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
   allocateSession: vi.fn(),
   launchHost: vi.fn(),
-  reconcileSession: vi.fn(),
+  stopHost: vi.fn(),
   sendRpc: vi.fn(),
   readManifestIfExists: vi.fn(),
   sessionDir: vi.fn(),
@@ -28,7 +28,11 @@ vi.mock('../../../src/cli/output.js', () => ({
 vi.mock('../../../src/host/lifecycle.js', () => ({
   allocateSession: mocks.allocateSession,
   launchHost: mocks.launchHost,
-  reconcileSession: mocks.reconcileSession,
+}));
+
+// The readiness loop waits 100 ms between its 50 attempts.
+vi.mock('node:timers/promises', () => ({
+  setTimeout: () => Promise.resolve(),
 }));
 
 vi.mock('../../../src/host/rpcClient.js', () => ({
@@ -110,7 +114,7 @@ describe('create command', () => {
         });
       },
     );
-    mocks.launchHost.mockReturnValue(12345);
+    mocks.launchHost.mockReturnValue({ pid: 12345, stop: mocks.stopHost });
     mocks.sendRpc.mockResolvedValue({ session: { sessionId: 'session-01' } });
     mocks.readManifestIfExists.mockResolvedValue(makeManifest());
     mocks.sessionDir.mockImplementation(
@@ -275,6 +279,60 @@ describe('create command', () => {
         },
       }),
     );
+  });
+
+  it('when the host never answers, tells the host to stop and reports the last error', async () => {
+    const unreachable = makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+      message: 'host unreachable',
+    });
+    mocks.sendRpc.mockRejectedValue(unreachable);
+    mocks.readManifestIfExists.mockResolvedValue(makeManifest());
+
+    await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
+      unreachable,
+    );
+    expect(mocks.sendRpc).toHaveBeenCalledTimes(50);
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('on Windows, stops a host that never answers only once the manifest names its program', async () => {
+    const platform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    onTestFinished(() => {
+      Object.defineProperty(process, 'platform', { value: platform });
+    });
+    const unreachable = makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+      message: 'host unreachable',
+    });
+    mocks.sendRpc.mockRejectedValue(unreachable);
+
+    mocks.readManifestIfExists.mockResolvedValue(makeManifest());
+    await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
+      unreachable,
+    );
+    expect(mocks.stopHost).not.toHaveBeenCalled();
+
+    mocks.readManifestIfExists.mockResolvedValue(null);
+    await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
+      unreachable,
+    );
+    expect(mocks.stopHost).not.toHaveBeenCalled();
+
+    mocks.readManifestIfExists.mockResolvedValue(
+      makeManifest({ childPid: 4321 }),
+    );
+    await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
+      unreachable,
+    );
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
+  it('leaves a host that answers alone', async () => {
+    await runCreateCommand({ ...baseOptions, context });
+
+    expect(mocks.emitSuccess).toHaveBeenCalledOnce();
+    expect(mocks.stopHost).not.toHaveBeenCalled();
   });
 
   it('passes idle timeout through allocation when provided explicitly', async () => {

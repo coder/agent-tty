@@ -1452,6 +1452,164 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     },
   );
 
+  // The held start-up write keeps the host from listening past create's
+  // readiness loop, as a host that starts slowly on a loaded machine does.
+  // Without a session token, program.json names no group that a CLI can
+  // prove, so only the host can stop the program.
+  describe.each([
+    ['with a session token', []],
+    [
+      'without a session token',
+      [
+        `--import=${pathToFileURL(resolve('test/fixtures/denied-autogroup.ts')).href}`,
+      ],
+    ],
+  ])('a create that gives up %s', (_name, preloads) => {
+    let pgid = 0;
+
+    afterEach(() => {
+      if (pgid > 1) {
+        killGroupIfAlive(pgid);
+      }
+      pgid = 0;
+    });
+
+    it('lets its host stop the program and record destroyed', async () => {
+      const holdLog = join(testHome, 'hold.log');
+      const creator = spawn(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          './src/cli/main.ts',
+          'create',
+          '--json',
+          '--',
+          '/bin/sh',
+          '-c',
+          'trap "" HUP; sleep 300 & wait',
+        ],
+        {
+          stdio: ['ignore', 'pipe', 'ignore'],
+          env: {
+            ...process.env,
+            AGENT_TTY_HOME: testHome,
+            REPLAY_LOG: holdLog,
+            REPLAY_HOLD: '_host:rename:/session.json:1:10000',
+            NODE_OPTIONS: [
+              process.env.NODE_OPTIONS ?? '',
+              `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+              ...preloads,
+            ].join(' '),
+          },
+        },
+      );
+      let stdout = '';
+      creator.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString('utf8');
+      });
+      const creatorExit = once(creator, 'exit');
+      const deadline = Date.now() + 15_000;
+      while (
+        !(await readFile(holdLog, 'utf8').then(
+          (log) => log.includes('hold rename'),
+          () => false,
+        ))
+      ) {
+        expect(Date.now()).toBeLessThan(deadline);
+        await sleep(50);
+      }
+      const [sessionId] = await readdir(join(testHome, 'sessions'));
+      const directory = sessionDir(testHome, sessionId as string);
+      const manifest = SessionRecordSchema.parse(
+        JSON.parse(await readFile(manifestPath(directory), 'utf8')),
+      );
+      expect(manifest.childPid).toBeNull();
+      const hostPid = manifest.hostPid as number;
+      pgid = (
+        JSON.parse(await readFile(programRecordPath(directory), 'utf8')) as {
+          pid: number;
+        }
+      ).pid;
+      expect(isGroupAlive(pgid)).toBe(true);
+
+      const [code] = (await creatorExit) as [number | null];
+
+      expect(code).toBe(6);
+      expect(JSON.parse(stdout)).toMatchObject({
+        ok: false,
+        error: { code: 'HOST_UNREACHABLE' },
+      });
+      // The host hangs the program up, then kills its group after the
+      // shutdown grace, and exits once its held write has landed.
+      const stopDeadline = Date.now() + 20_000;
+      while (isGroupAlive(pgid) || isProcessAlive(hostPid)) {
+        expect(Date.now()).toBeLessThan(stopDeadline);
+        await sleep(100);
+      }
+      expect(inspectSession(testHome, sessionId as string).status).toBe(
+        'destroyed',
+      );
+    }, 60_000);
+  });
+
+  // A SIGTERM that the default action would turn into a host death between
+  // the spawn and program.json leaves a program that no file names.
+  describe('a host that gets SIGTERM right after it spawns the program', () => {
+    let pgid = 0;
+
+    afterEach(() => {
+      if (pgid > 1) {
+        killGroupIfAlive(pgid);
+      }
+      pgid = 0;
+    });
+
+    it('stops the program and records destroyed', async () => {
+      const pidFile = join(testHome, 'program.pid');
+      const creator = spawn(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          './src/cli/main.ts',
+          'create',
+          '--json',
+          '--',
+          '/bin/sh',
+          '-c',
+          'trap "" HUP; sleep 300 & wait',
+        ],
+        {
+          stdio: 'ignore',
+          env: {
+            ...process.env,
+            AGENT_TTY_HOME: testHome,
+            SIGTERM_AFTER_SPAWN_PID_FILE: pidFile,
+            NODE_OPTIONS: [
+              process.env.NODE_OPTIONS ?? '',
+              `--import=${pathToFileURL(resolve('test/fixtures/sigterm-after-spawn.ts')).href}`,
+            ].join(' '),
+          },
+        },
+      );
+      const [code] = (await once(creator, 'exit')) as [number | null];
+      expect(code).toBe(6);
+      pgid = Number(await readFile(pidFile, 'utf8'));
+      expect(pgid).toBeGreaterThan(1);
+
+      const stopDeadline = Date.now() + 15_000;
+      while (isGroupAlive(pgid)) {
+        expect(Date.now()).toBeLessThan(stopDeadline);
+        await sleep(100);
+      }
+      const [sessionId] = await readdir(join(testHome, 'sessions'));
+      expect(inspectSession(testHome, sessionId as string).status).toBe(
+        'destroyed',
+      );
+    }, 60_000);
+  });
+
   describe('destroy run by the program itself', () => {
     let pgid = 0;
 
