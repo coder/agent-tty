@@ -103,8 +103,6 @@ add_holder() {
 uid=$(id -u)
 boot=$(sed -n 's/^btime //p' /proc/stat)
 ticks=$(getconf CLK_TCK)
-# The time in the folder's name and the folder's birth time both come before
-# any process of the run. Use the earlier one, or 0 when neither is known.
 named=$(basename "$VERIFY_RUN" | sed -nE 's/^([0-9]{4})([0-9]{2})([0-9]{2})T([0-9]{2})([0-9]{2})([0-9]{2})Z-.*/\1-\2-\3 \4:\5:\6 UTC/p')
 named=$([ -n "$named" ] && date -d "$named" +%s 2>/dev/null) || named=""
 born=$(stat -c %W "$VERIFY_RUN" 2>/dev/null)
