@@ -409,7 +409,7 @@ To bring the check back in line after changes that skipped it, use `/maintain-fo
 
 ## Scope
 
-The model checks every order of these steps for one session: one `create`, its host, one `gc` pass over that session (not `--dry-run`), one other command that reconciles twice, one resize, one `destroy` (with or without `--force`, from outside or from inside the program's session), one SIGTERM to the host, a program exit at any time, a process of another user in the program's group that starts and ends at any time, a process that the program leaves when it exits on its own, the host's `program.json` write, an unrelated group that takes the program's group id once the whole group has ended, the kill timer of the host's shutdown, and a host crash at any time. With a token the model has 4,304,893 distinct states, and without one 5,218,828. The check prints both counts.
+The model checks every order of these steps for one session: one `create`, its host, one `gc` pass over that session (not `--dry-run`), one other command that reconciles twice, one resize, one `destroy` (with or without `--force`, from outside or from inside the program's session), one SIGTERM to the host, a program exit at any time, a process of another user in the program's group that starts and ends at any time, a process that the program leaves when it exits on its own, the host's `program.json` write, an unrelated group that takes the program's group id once the whole group has ended, the kill timer of the host's shutdown, and a host crash at any time. With a token the model has 5,063,023 distinct states, and without one 6,127,976. The check prints both counts.
 
 It assumes:
 
