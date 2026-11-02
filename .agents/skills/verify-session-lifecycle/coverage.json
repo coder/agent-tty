@@ -1,11 +1,11 @@
 {
   "fingerprints": {
     "src/cli/commands/create.ts#runCreateCommand": "1b2b29a895cde754",
-    "src/cli/commands/destroy.ts#runDestroyCommand": "ebe4e062dd0afab3",
-    "src/cli/commands/destroy.ts#rerunInNewSession": "4702c305846afda1",
+    "src/cli/commands/destroy.ts#runDestroyCommand": "0b27d60cb62e16de",
+    "src/cli/commands/destroy.ts#rerunInNewSession": "14ace5f1e7d356b5",
     "src/cli/commands/gc.ts#gcSessions": "ac079db2a0199d69",
     "src/host/lifecycle.ts#allocateSession": "8f7eee41b3c56db9",
-    "src/host/lifecycle.ts#launchHost": "24751cfcbe8a055e",
+    "src/host/lifecycle.ts#launchHost": "86c0e12831ba551b",
     "src/host/lifecycle.ts#isProcessAlive": "1ca1fe6ad6c41711",
     "src/host/lifecycle.ts#killProcessBestEffort": "1dd0cb4ee9bbc676",
     "src/host/lifecycle.ts#ownLinuxSessionId": "911643125a4fd21e",
@@ -67,7 +67,7 @@
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "73aaefc573db9511",
-    "skill:scripts/facts.mjs": "e16f9a55aa5b64d4",
+    "skill:scripts/facts.mjs": "3b6cf9948bedac6b",
     "skill:scripts/check.sh": "97acb7fdaaa2c783"
   },
   "callSites": {
