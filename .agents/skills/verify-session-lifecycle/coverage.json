@@ -68,7 +68,7 @@
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "abeeb64f8ca84162",
-    "skill:scripts/facts.mjs": "40e355a0629e9937",
+    "skill:scripts/facts.mjs": "bbe58660ef081ceb",
     "skill:scripts/check.sh": "2083a94d3b85190c"
   },
   "callSites": {
