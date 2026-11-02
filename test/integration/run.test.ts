@@ -1,11 +1,13 @@
 import {
+  existsSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -19,8 +21,10 @@ import {
   type EventRecord,
   type SuccessEnvelope,
 } from '../helpers.js';
+import { sendRpc } from '../../src/host/rpcClient.js';
 import { RUN_MARKER_PATTERN } from '../../src/host/runCompletionSentinel.js';
 import type { CommandErrorEnvelope } from '../../src/protocol/envelope.js';
+import { sessionDir, socketPath } from '../../src/storage/sessionPaths.js';
 
 function expectRunMarker(marker: string): string {
   const match = RUN_MARKER_PATTERN.exec(marker);
@@ -264,6 +268,64 @@ describe('run command integration', { timeout: 45_000 }, () => {
       command: 'echo event-test',
       noWait: true,
     });
+  });
+
+  it('logs input typed during a waited run append in PTY order', async () => {
+    const holdSignal = join(testHome, 'hold-input-run');
+    sessionId = createSession(testHome, ['/bin/sh'], {
+      env: {
+        HISTFILE: '/dev/null',
+        HOLD_INPUT_RUN_SIGNAL: holdSignal,
+        HOLD_INPUT_RUN_MS: '2000',
+        NODE_OPTIONS: [
+          process.env.NODE_OPTIONS ?? '',
+          `--import=${pathToFileURL(resolve('test/fixtures/hold-input-run-append.ts')).href}`,
+        ].join(' '),
+      },
+    });
+    await sleep(500);
+    const socket = socketPath(sessionDir(testHome, sessionId));
+
+    const run = sendRpc(
+      socket,
+      'run',
+      { command: 'echo RUN', timeoutMs: 10_000 },
+      20_000,
+    );
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(holdSignal)) {
+      expect(Date.now()).toBeLessThan(deadline);
+      await sleep(20);
+    }
+    await sendRpc(socket, 'type', { text: 'echo TYPED;' }, 20_000);
+    expect(await run).toMatchObject({ completed: true });
+
+    const [heldAt, releasedAt] = readFileSync(holdSignal, 'utf8')
+      .trim()
+      .split('\n')
+      .map(Number);
+    const echoDeadline = Date.now() + 10_000;
+    let events = await readEvents(testHome, sessionId);
+    while (!collectOutputText(events).includes('echo TYPED;')) {
+      expect(Date.now()).toBeLessThan(echoDeadline);
+      await sleep(20);
+      events = await readEvents(testHome, sessionId);
+    }
+    const inputRun = events.find((event) => event.type === 'input_run');
+    const inputText = events.find((event) => event.type === 'input_text');
+    if (inputRun === undefined || inputText === undefined) {
+      throw new Error('expected input_run and input_text events');
+    }
+    const typedAt = Date.parse(inputText.ts);
+    expect(typedAt).toBeGreaterThanOrEqual(heldAt ?? Number.NaN);
+    expect(typedAt).toBeLessThan(releasedAt ?? Number.NaN);
+
+    const output = collectOutputText(events);
+    const typedEcho = output.indexOf('echo TYPED;');
+    const runEcho = output.indexOf('echo RUN');
+    expect(typedEcho).toBeGreaterThanOrEqual(0);
+    expect(runEcho).toBeGreaterThanOrEqual(0);
+    expect(inputText.seq < inputRun.seq).toBe(typedEcho < runEcho);
   });
 
   it('returns timedOut when run completion is not observed within timeout', async () => {
