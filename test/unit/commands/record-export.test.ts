@@ -38,6 +38,7 @@ const mocks = vi.hoisted(() => ({
   loadPackageMetadata: vi.fn(),
   readFile: vi.fn(),
   stat: vi.fn(),
+  rename: vi.fn(),
 }));
 
 vi.mock('../../../src/cli/output.js', () => ({
@@ -88,6 +89,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
     ...actual,
     stat: mocks.stat,
     readFile: mocks.readFile,
+    rename: mocks.rename,
   };
 });
 
@@ -145,6 +147,7 @@ async function createTemporaryDirectory(prefix: string): Promise<string> {
 describe('record export command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.rename.mockResolvedValue(undefined);
     mocks.resolveHome.mockReturnValue('/tmp/agent-tty');
     mocks.sessionDir.mockImplementation(
       (_home: string, sessionId: string) =>
@@ -414,7 +417,11 @@ describe('record export command', () => {
         payload: { cols: 100, rows: 30 },
       },
     ]);
-    expect(generateWebmExportArgs.outputPath).toBe(
+    expect(generateWebmExportArgs.outputPath).toMatch(
+      /^\/tmp\/agent-tty\/sessions\/session-01\/artifacts\/recording-1-webm\.webm\.tmp-[^/]+\.webm$/u,
+    );
+    expect(mocks.rename).toHaveBeenCalledWith(
+      generateWebmExportArgs.outputPath,
       '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm',
     );
     expect(generateWebmExportArgs.rendererName).toBe('ghostty-web');
@@ -592,6 +599,8 @@ describe('record export command', () => {
     await writeFile(linkTarget, 'session record');
     await symlink(linkTarget, out);
     const webmContent = Buffer.from('webm bytes');
+    const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
+    mocks.rename.mockImplementation(fs.rename);
     mocks.generateWebmExport.mockImplementation(
       async (options: { outputPath: string }) => {
         await writeFile(options.outputPath, webmContent);
@@ -619,7 +628,6 @@ describe('record export command', () => {
       out,
     });
 
-    const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
     expect(await fs.readFile(linkTarget, 'utf8')).toBe('session record');
     expect((await fs.lstat(out)).isSymbolicLink()).toBe(false);
     expect((await fs.readFile(out)).equals(webmContent)).toBe(true);

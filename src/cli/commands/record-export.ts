@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFile, rename, rm, stat } from 'node:fs/promises';
 import { basename, dirname, isAbsolute } from 'node:path';
 
 import { z } from 'zod';
@@ -287,18 +287,26 @@ export async function runRecordExportCommand(
       );
 
       invariant(events.length > 0, 'webm export requires at least one event');
-      const webmResult: WebmExportResult = await generateWebmExport({
-        sessionId: options.sessionId,
-        sessionDir: sessionDirectory,
-        manifest,
-        events,
-        outputPath: artifactOutputPath,
-        ...(webmProfileName !== undefined
-          ? { profileName: webmProfileName }
-          : {}),
-        ...(timingMode !== undefined ? { timingMode } : {}),
-        rendererName: options.context.rendererVisualDefault,
-      });
+      const temporaryOutputPath = `${artifactOutputPath}.tmp-${randomUUID()}.webm`;
+      let webmResult: WebmExportResult;
+      try {
+        webmResult = await generateWebmExport({
+          sessionId: options.sessionId,
+          sessionDir: sessionDirectory,
+          manifest,
+          events,
+          outputPath: temporaryOutputPath,
+          ...(webmProfileName !== undefined
+            ? { profileName: webmProfileName }
+            : {}),
+          ...(timingMode !== undefined ? { timingMode } : {}),
+          rendererName: options.context.rendererVisualDefault,
+        });
+        await rename(temporaryOutputPath, artifactOutputPath);
+      } catch (error) {
+        await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
+        throw error;
+      }
 
       const resolvedProfile = resolveProfile(webmResult.profileName);
       invariant(
