@@ -86,8 +86,6 @@ export function writeHostRecord(
   });
 }
 
-// null for a missing record, as for a session that an older agent-tty
-// started, and for one that cannot be read.
 export async function readHostRecord(
   sessionDirectory: string,
 ): Promise<HostRecord | null> {
@@ -121,10 +119,6 @@ function pidExists(pid: number): boolean {
   }
 }
 
-// dead only on proof: no process has the pid, a zombie has it, or the record
-// names another boot or another start time. A read that fails, as without
-// /proc, a missing record and a CLI in another pid namespace than the host
-// leave the host unknown.
 export function judgeHost(pid: number, record: HostRecord | null): HostVerdict {
   if (record !== null && !inPidNamespace(record.pidNamespace)) {
     return 'unknown';

@@ -630,8 +630,6 @@ describe('a hostPid that may no longer name the host', () => {
     });
   }
 
-  // The record that the host at hostPid wrote at start-up, or, with a start
-  // time, the record of an earlier host whose pid this process got.
   async function seedHost(
     hostPid: number,
     record:

@@ -1411,7 +1411,6 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     },
   );
 
-  // --title makes Node rewrite the host's command line in /proc.
   it.runIf(process.platform === 'linux')(
     'keeps a session running whose host renamed itself, and destroy --force ends it',
     async () => {
