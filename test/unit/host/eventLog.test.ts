@@ -169,6 +169,35 @@ describe('EventLog', () => {
     }
   });
 
+  it('startAppend reserves the seq before its write settles', async () => {
+    const eventLog = await EventLog.open(eventLogPath);
+
+    try {
+      const started = eventLog.startAppend('input_run', {
+        command: 'echo hi',
+        noWait: false,
+        marker: `__AT_MARKER_${'a'.repeat(32)}__`,
+      });
+      expect(started.seq).toBe(0);
+      expect(eventLog.getEvents().map((event) => event.type)).toEqual([
+        'input_run',
+      ]);
+
+      const nextSeq = eventLog.append('input_text', { data: 'x' });
+      await expect(started.written).resolves.toBe(0);
+      await expect(nextSeq).resolves.toBe(1);
+      const lines = (await readFile(eventLogPath, 'utf8')).trim().split('\n');
+      expect(lines.map((line) => JSON.parse(line) as { type: string })).toEqual(
+        [
+          expect.objectContaining({ seq: 0, type: 'input_run' }),
+          expect.objectContaining({ seq: 1, type: 'input_text' }),
+        ],
+      );
+    } finally {
+      await eventLog.close();
+    }
+  });
+
   it('appends run_complete events and round-trips them from JSONL', async () => {
     const eventLog = await EventLog.open(eventLogPath);
 
