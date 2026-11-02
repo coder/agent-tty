@@ -443,6 +443,53 @@ describe('GhosttyWebBackend unit guards', () => {
     }
   });
 
+  it('still returns the screenshot, without missingGlyphs, when the glyph check fails', async () => {
+    const logger = new Logger('debug');
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const backend = new GhosttyWebBackend(
+      'renderer-unit-session',
+      PROFILE,
+      undefined,
+      logger,
+    );
+    // oxfmt-ignore
+    const temporaryDirectory = await realpath(await mkdtemp(join(tmpdir(), 'ghostty-web-backend-glyph-fail-')));
+    const outputPath = join(temporaryDirectory, 'screenshot.png');
+    const pngBuffer = createPngBuffer(80, 60);
+    const evaluate = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('grapheme read failed'));
+    Object.assign(backend as object, {
+      isBooted: true,
+      currentCols: 80,
+      currentRows: 24,
+      lastAppliedSeq: 3,
+      page: {
+        evaluate,
+        isClosed: () => false,
+        locator: () => ({ screenshot: () => Promise.resolve(pngBuffer) }),
+      },
+    });
+
+    try {
+      const result = await backend.screenshot(outputPath);
+
+      expect(result.sha256).toBe(
+        createHash('sha256').update(pngBuffer).digest('hex'),
+      );
+      expect(result).not.toHaveProperty('missingGlyphs');
+      expect(evaluate).toHaveBeenCalledTimes(3);
+      expect(debugSpy).toHaveBeenCalledWith(
+        'Missing-glyph check failed; the screenshot result omits missingGlyphs',
+        'grapheme read failed',
+      );
+    } finally {
+      await rm(temporaryDirectory, { force: true, recursive: true });
+    }
+  });
+
   it('uses initial caret capture when showCursor is enabled', async () => {
     const backend = createBackend();
     // oxfmt-ignore

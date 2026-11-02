@@ -887,7 +887,15 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     );
 
     const sha256 = createHash('sha256').update(pngBuffer).digest('hex');
-    const missingGlyphs = await this.findMissingGlyphs(page);
+    const missingGlyphs = await this.findMissingGlyphs(page).catch(
+      (error: unknown) => {
+        this.logger.debug(
+          'Missing-glyph check failed; the screenshot result omits missingGlyphs',
+          error instanceof Error ? error.message : String(error),
+        );
+        return {};
+      },
+    );
 
     return {
       sessionId: this.sessionId,
