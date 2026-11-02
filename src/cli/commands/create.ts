@@ -8,8 +8,8 @@ import { emitSuccess } from '../output.js';
 import { DEFAULT_IDLE_TIMEOUT_MS } from '../../config/defaults.js';
 import {
   allocateSession,
+  destroySession,
   launchHost,
-  reconcileSession,
 } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
@@ -198,7 +198,6 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
   });
   const sessionDirectory = sessionDir(home, sessionId);
   const socketFile = socketPath(sessionDirectory);
-  let lastError: CliError | null = null;
 
   for (let attempt = 0; attempt < READINESS_MAX_ATTEMPTS; attempt += 1) {
     try {
@@ -230,26 +229,25 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
           return;
         }
 
-        lastError = error;
         if (attempt + 1 < READINESS_MAX_ATTEMPTS) {
           await delay(READINESS_POLL_INTERVAL_MS);
           continue;
         }
+
+        // A host that answers too late would run a session whose create
+        // failed, so the session is stopped before the error is reported.
+        await destroySession(sessionId, true).catch((stopError: unknown) => {
+          options.context.logger.debug('failed to stop the session', {
+            sessionId,
+            error:
+              stopError instanceof Error
+                ? stopError.message
+                : String(stopError),
+          });
+        });
       }
 
       throw error;
     }
   }
-
-  await reconcileSession(sessionDirectory).catch(() => undefined);
-
-  throw makeCliError(ERROR_CODES.HOST_TIMEOUT, {
-    message: `Timed out waiting for session "${sessionId}" to become ready.`,
-    details: {
-      sessionId,
-      sessionDirectory,
-      causeCode: lastError?.code,
-    },
-    cause: lastError,
-  });
 }
