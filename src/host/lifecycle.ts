@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { chmod, mkdir, readdir, stat, unlink } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { chmod, mkdir, readdir, rmdir, stat, unlink } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -273,6 +273,24 @@ async function unlinkIfPresent(path: string): Promise<void> {
     await unlink(path);
   } catch (error) {
     if (hasErrorCode(error, 'ENOENT')) {
+      return;
+    }
+
+    throw error;
+  }
+}
+
+export async function removeSocketDirectoryIfEmpty(
+  socketFile: string,
+): Promise<void> {
+  try {
+    await rmdir(dirname(socketFile));
+  } catch (error) {
+    if (
+      hasErrorCode(error, 'ENOENT') ||
+      hasErrorCode(error, 'ENOTEMPTY') ||
+      hasErrorCode(error, 'EEXIST')
+    ) {
       return;
     }
 
@@ -571,6 +589,7 @@ async function recordDestroyed(
     });
   }
   await unlinkIfPresent(socketFile);
+  await removeSocketDirectoryIfEmpty(socketFile);
 }
 
 async function stopSessionProcesses(
@@ -862,5 +881,7 @@ export async function reconcileSession(
     }
     throw error;
   }
-  await unlinkIfPresent(socketPath(sessionDirectory));
+  const socketFile = socketPath(sessionDirectory);
+  await unlinkIfPresent(socketFile);
+  await removeSocketDirectoryIfEmpty(socketFile);
 }

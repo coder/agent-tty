@@ -9,7 +9,11 @@ import {
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
 import { EventLog } from './eventLog.js';
-import { isProcessAlive, waitForProcessesToExit } from './lifecycle.js';
+import {
+  isProcessAlive,
+  removeSocketDirectoryIfEmpty,
+  waitForProcessesToExit,
+} from './lifecycle.js';
 import { createSerialManifestWriter } from './manifestWriter.js';
 import {
   captureProgram,
@@ -98,6 +102,7 @@ const MANIFEST_WAIT_INTERVAL_MS = 20;
 // How long the host waits after SIGHUP before it kills the program's process
 // group. nvim takes about 1 s to exit on SIGHUP, and `destroy` waits about 5 s.
 const SHUTDOWN_KILL_GRACE_MS = 2_000;
+const SOCKET_LISTEN_ATTEMPTS = 5;
 
 type WaitOutcome = {
   exitCode?: number;
@@ -125,6 +130,23 @@ export function assertSessionCommandable(state: SessionState): void {
       message: 'Session is not running.',
     });
   }
+}
+
+// Another session's destroy removes the Home's socket directory once it holds
+// no socket, so the directory can vanish between the mkdir and the bind. libuv
+// reports a bind in a missing directory as EACCES.
+function isVanishedSocketDirectory(
+  error: unknown,
+  socketDirectory: string,
+): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const { code, path, syscall } = error as NodeJS.ErrnoException;
+  return (
+    (syscall === 'listen' && (code === 'EACCES' || code === 'ENOENT')) ||
+    (syscall === 'chmod' && code === 'ENOENT' && path === socketDirectory)
+  );
 }
 
 function rethrowAsync(error: unknown): void {
@@ -492,6 +514,7 @@ export async function runHost(
           }
 
           await rpcServer.close();
+          await removeSocketDirectoryIfEmpty(sPath);
         }
       }
     })();
@@ -1221,16 +1244,30 @@ export async function runHost(
   try {
     writeProgramRecord(sessDir, program);
     await persistManifest();
-    const socketDirectory = dirname(sPath);
-    await mkdir(socketDirectory, { recursive: true });
-    await chmod(socketDirectory, 0o700);
 
     if (!isSessionCommandable(state)) {
       await initiateShutdown();
       return;
     }
 
-    rpcListenPromise = rpcServer.listen();
+    rpcListenPromise = (async () => {
+      const socketDirectory = dirname(sPath);
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          await mkdir(socketDirectory, { recursive: true });
+          await chmod(socketDirectory, 0o700);
+          await rpcServer.listen();
+          return;
+        } catch (error) {
+          if (
+            attempt === SOCKET_LISTEN_ATTEMPTS ||
+            !isVanishedSocketDirectory(error, socketDirectory)
+          ) {
+            throw error;
+          }
+        }
+      }
+    })();
     await rpcListenPromise;
 
     if (!isSessionCommandable(state)) {
