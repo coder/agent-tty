@@ -723,6 +723,19 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     },
   );
 
+  it.each(['Z', 'ENOENT'] as const)(
+    'gets the kill when a member forks during the scan and then ends %s',
+    (end) => {
+      procShowsTokenGroup('S');
+      forksDuringScan(end);
+      const kill = probeEnds('ok');
+
+      stopProgramGroup(group);
+
+      expect(kill).toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+    },
+  );
+
   it.each(['EPERM', 'EACCES'])(
     'is alive with only a zombie in view while another process refuses its read with %s',
     (readError) => {
