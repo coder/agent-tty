@@ -12,6 +12,7 @@ const fsHooks = vi.hoisted(() => ({
   // /proc/<pid>/stat by pid, or the error that its read throws.
   proc: undefined as Map<string, string | Error> | undefined,
   mountinfo: undefined as string | undefined,
+  ownStatError: undefined as Error | undefined,
 }));
 
 vi.mock('node:fs', async () => {
@@ -24,6 +25,9 @@ vi.mock('node:fs', async () => {
           ...rest,
         )) as typeof actual.readdirSync;
   const readFileSync = ((path: string, ...rest: unknown[]) => {
+    if (fsHooks.ownStatError !== undefined && path === '/proc/self/stat') {
+      throw fsHooks.ownStatError;
+    }
     if (fsHooks.proc !== undefined && path === '/proc/self/mountinfo') {
       if (fsHooks.mountinfo === undefined) {
         throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
@@ -108,6 +112,7 @@ afterEach(async () => {
   fsHooks.afterReadFile = undefined;
   fsHooks.proc = undefined;
   fsHooks.mountinfo = undefined;
+  fsHooks.ownStatError = undefined;
   await rm(home, { recursive: true, force: true });
 });
 
@@ -555,6 +560,18 @@ describe('cliRunsInsideProgramSession', () => {
     "on linux matches the caller's session only",
     async () => {
       await expectMatchesOnly(ownId('sid'));
+    },
+  );
+
+  // A chroot or a container without a mounted /proc has no /proc/self/stat.
+  it.each(['ENOENT', 'EACCES'])(
+    'on linux reads the caller as outside when /proc/self/stat fails with %s',
+    async (code) => {
+      await seedSession(makeRecord({ childPid: CHILD_PID }));
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      fsHooks.ownStatError = errno(code);
+
+      expect(await cliRunsInsideProgramSession('session-01')).toBe(false);
     },
   );
 

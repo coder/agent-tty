@@ -476,6 +476,36 @@ function procShowsSecondThread(thread: string): void {
   );
 }
 
+// The first process of the group forks a live process of the group and then
+// ends, after the scan listed /proc and before it reads that process.
+function forksDuringScan(end: 'Z' | 'ENOENT'): void {
+  const read = autogroupFile.read;
+  let forked = false;
+  autogroupFile.read = (file) => {
+    if (!forked && file === '/proc/100/stat') {
+      forked = true;
+      procHooks.stat?.set(
+        '100',
+        end === 'Z'
+          ? `100 (a) Z 1 ${String(CHILD_PID)} ${String(CHILD_PID)} ${STAT_TAIL}`
+          : errno('ENOENT'),
+      );
+      procHooks.stat?.set(
+        '200',
+        `200 (a) S 100 ${String(CHILD_PID)} ${String(CHILD_PID)} ${STAT_TAIL}`,
+      );
+    }
+    return read?.(file) ?? null;
+  };
+}
+
+const FORK_CASES = [
+  ['ok', 'Z'],
+  ['ok', 'ENOENT'],
+  ['EPERM', 'Z'],
+  ['EPERM', 'ENOENT'],
+] as const;
+
 describe('a program group without a token', () => {
   const group: ProgramRecord = {
     version: 1,
@@ -483,6 +513,18 @@ describe('a program group without a token', () => {
     bootId: null,
     autogroup: null,
   };
+
+  it.each(FORK_CASES)(
+    'on linux, when the probe ends %s and a process forks during the scan and then ends %s, is alive',
+    (outcome, end) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procShowsGroup('S');
+      forksDuringScan(end);
+      probeEnds(outcome);
+
+      expect(isProgramGroupAlive(group)).toBe(true);
+    },
+  );
 
   it.each([
     ['ok', ['Z', 'X'], false],
@@ -667,6 +709,17 @@ describe('a program group with a token, as a faked /proc shows it', () => {
       expect(isProgramGroupAlive(group)).toBe(true);
       stopProgramGroup(group);
       expect(kill).toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+    },
+  );
+
+  it.each(FORK_CASES)(
+    'is alive when the probe ends %s and a member forks during the scan and then ends %s',
+    (outcome, end) => {
+      procShowsTokenGroup('S');
+      forksDuringScan(end);
+      probeEnds(outcome);
+
+      expect(isProgramGroupAlive(group)).toBe(true);
     },
   );
 
