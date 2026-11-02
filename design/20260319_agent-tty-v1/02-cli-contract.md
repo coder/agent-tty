@@ -42,7 +42,7 @@ Human-readable output is allowed, but it is not the primary contract.
 
 ### 1.3 Stable envelope
 
-Every JSON response uses the same top-level envelope fields in the shipped implementation: `ok`, `command`, `timestamp`, and either `result` or `error`. Session-specific identifiers currently live inside command-specific `result` payloads or `error.details` rather than as a top-level envelope `sessionId` field.
+Every JSON response uses the same top-level envelope fields in the shipped implementation: `ok`, `command`, `timestamp`, and either `result` or `error`. Two failures carry both: a timed-out `wait` (`ok: false`, `error.code: "WAIT_TIMEOUT"`, and the wait `result`) and a fail-fast `batch` with a failed step (`ok: false`, the step's `error.code`, and the per-step `result`). Session-specific identifiers currently live inside command-specific `result` payloads or `error.details` rather than as a top-level envelope `sessionId` field.
 
 ```json
 {
@@ -74,19 +74,7 @@ Failure envelope:
 
 ### 1.4 Exit codes
 
-Recommended exit codes:
-
-| Code | Meaning                             |
-| ---- | ----------------------------------- |
-| `0`  | Success                             |
-| `1`  | Generic command failure             |
-| `2`  | Usage / validation error            |
-| `3`  | Session not found                   |
-| `4`  | Session not running / invalid state |
-| `5`  | Wait timed out                      |
-| `6`  | Renderer unavailable                |
-| `7`  | Artifact export failure             |
-| `8`  | Environment / dependency failure    |
+The shipped exit codes are listed in [the Exit Codes section of docs/USAGE.md](../../docs/USAGE.md#exit-codes). A timed-out `wait` exits `11` (`WAIT_TIMEOUT`). Exit `5` is a session host timeout (`HOST_TIMEOUT`).
 
 ## 2. Global flags
 
@@ -485,8 +473,8 @@ agent-tty wait <session-id> --exit
 ### 13.4 Timeout behavior
 
 - default timeout should be finite, e.g. `30000 ms`,
-- timeout should surface exit code `5`,
-- JSON output should include the last observed state summary.
+- a timeout exits `11` (`WAIT_TIMEOUT`),
+- the JSON error envelope keeps the last observed state under `result`.
 
 ### 13.5 Result shape
 

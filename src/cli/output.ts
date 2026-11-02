@@ -2,10 +2,13 @@ import { writeSync } from 'node:fs';
 import process from 'node:process';
 
 import type { CommandEnvelope, CommandError } from '../protocol/envelope.js';
+import type { CliError } from './errors.js';
+
 import {
   createErrorEnvelope,
   createSuccessEnvelope,
 } from '../protocol/envelope.js';
+import { exitCodeForError } from './exitCodes.js';
 
 const ANSI_ESCAPE_PATTERN = new RegExp(
   String.raw`[\u001B\u009B][[\]()#;?]*(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]|(?:[\dA-PR-TZcf-nq-uy=><~]))`,
@@ -28,8 +31,8 @@ export function setColorEnabled(enabled: boolean): void {
   colorEnabled = enabled;
 }
 
-export function writeJsonEnvelope<TResult>(
-  envelope: CommandEnvelope<TResult>,
+export function writeJsonEnvelope<TResult, TErrorResult = never>(
+  envelope: CommandEnvelope<TResult, TErrorResult>,
 ): void {
   process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
 }
@@ -91,13 +94,38 @@ export function emitFailure(options: {
   command: string;
   json: boolean;
   error: CommandError;
+  result?: unknown;
 }): void {
   if (options.json) {
-    writeJsonEnvelope(createErrorEnvelope(options.command, options.error));
+    writeJsonEnvelope(
+      createErrorEnvelope(options.command, options.error, options.result),
+    );
     return;
   }
 
   process.stderr.write(
     `${formatHumanText(`${options.error.code}: ${options.error.message}`)}\n`,
   );
+}
+
+export function jsonOutputRequested(): boolean {
+  const optionsEnd = process.argv.indexOf('--');
+  return process.argv
+    .slice(0, optionsEnd === -1 ? undefined : optionsEnd)
+    .includes('--json');
+}
+
+export function emitCliError(commandName: string, error: CliError): void {
+  emitFailure({
+    command: commandName,
+    json: jsonOutputRequested(),
+    error: {
+      code: error.code,
+      message: error.message,
+      retryable: error.retryable,
+      details: error.details,
+    },
+    result: error.result,
+  });
+  process.exitCode = exitCodeForError(error.code);
 }

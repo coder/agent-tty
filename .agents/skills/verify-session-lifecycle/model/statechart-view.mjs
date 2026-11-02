@@ -47,6 +47,9 @@ export const state = (v) => {
   host += v.left ? ', a process that the program left runs' : '';
   host += v.reused ? ", an unrelated group has the program's group id" : '';
   host += v.hitUnrelated ? ', a kill reached that unrelated group' : '';
+  host += v.passedReused
+    ? ', a wait of destroy read the group gone while that unrelated group ran'
+    : '';
   return { Files: files, Host: host };
 };
 

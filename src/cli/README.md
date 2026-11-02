@@ -11,12 +11,12 @@ This directory is the agent-tty command-line front end. `main.ts` is the bin ent
 - Global options: `--home <path>`, `--timeout-ms <n>`, `--no-color`, `--log-level <level>`, `--profile <name>`, `--renderer <name>`. Each command except `dashboard` (alias `d`) and the hidden `_host` registers its own `--json` option. [main.ts:main]
 - Commands: `version`, `doctor`, `create [command...]`, `list`, `inspect`, `destroy`, `gc`, `type`, `paste`, `run`, `batch`, `mark`, `send-keys`, `mouse`, `resize`, `signal`, `snapshot`, `screenshot`, `dashboard`, `wait`. Groups: `skills list|get|path`, `home list|forget`, `record diff|export`. A hidden `_host <session-id> <creator-pid>` command imports `src/host/hostMain.ts` and runs `runHost(sessionId, Number(creatorPid))`. [main.ts:main]
 - `resolveCommandContext(options, env?, deps?)`, `getCommandContext`, `setCommandContext`, `parseTimeoutMsOption`, `resolveRendererDefault`, `resolveLogLevel`, `clearRendererDefaultProbeCacheForTests`, and the types `GlobalCliOptions` and `CommandContext`. [context.ts:resolveCommandContext] [context.ts:CommandContext]
-- `emitSuccess`, `emitSuccessSync`, `emitFailure`, `formatSuccessOutput`, `writeJsonEnvelope`, `writeHumanLines`, `writeStdoutSync`, `setColorEnabled`. [output.ts:emitSuccess] [output.ts:emitFailure] [output.ts:writeStdoutSync]
+- `emitSuccess`, `emitSuccessSync`, `emitFailure`, `emitCliError`, `jsonOutputRequested`, `formatSuccessOutput`, `writeJsonEnvelope`, `writeHumanLines`, `writeStdoutSync`, `setColorEnabled`. [output.ts:emitSuccess] [output.ts:emitFailure] [output.ts:writeStdoutSync]
 - `resolveCommandTarget(options)` returns a `CommandTarget` (`sessionId`, `sessionDirectory`, `manifestPath`, `socketPath`, `manifest`). Also exports `ResolveCommandTargetOptions` and `CommandTargetManifest`. [commandTarget.ts:resolveCommandTarget] [commandTarget.ts:CommandTarget]
 - `assertSessionCommandable(manifest, sessionId)` and `checkedSessionDir(home, sessionId)`. [sessionGuards.ts:assertSessionCommandable] [sessionGuards.ts:checkedSessionDir]
 - `exitCodeForError(code)`. [exitCodes.ts:exitCodeForError]
 - `warnIfUnsupportedNode(logger, version)`. [nodeRuntime.ts:warnIfUnsupportedNode]
-- `CliError` (`code`, `retryable`, `details`). [errors.ts:CliError]
+- `CliError` (`code`, `retryable`, `details`, `result`). `emitCliError` copies `result` into the error envelope when it is set. [errors.ts:CliError] [output.ts:emitCliError]
 
 ## Invariants
 
@@ -24,7 +24,7 @@ This directory is the agent-tty command-line front end. `main.ts` is the bin ent
 - `wrapAction` turns every error into an error envelope and exit code. An error that is not a `CliError` becomes `INTERNAL_ERROR` with the error's message, and its stack goes to the debug log. [main.ts:wrapAction] [main.ts:toCliError]
 - At top level, a `CommanderError` sets exit code 0 for `commander.helpDisplayed` and 2 otherwise. With `--json` in argv before the first `--`, a `CommanderError` that is not help or version output is also emitted as `INVALID_INPUT` under the command name `agent-tty`, with Commander's message minus its `error: ` prefix. [main.ts:main]
 - The `preAction` hook turns a context resolution error that is not a `CliError` into `INTERNAL_ERROR`. Its stack is not logged, because the log level is not resolved yet. [main.ts:main] [main.ts:toCliError]
-- At top level, a `CliError` thrown outside `wrapAction` (for example from context resolution in the `preAction` hook) resets color from `--no-color` in argv and is emitted through `emitCliError` under the command name `agent-tty`. [main.ts:main] [main.ts:emitCliError]
+- At top level, a `CliError` thrown outside `wrapAction` (for example from context resolution in the `preAction` hook) resets color from `--no-color` in argv and is emitted through `emitCliError` under the command name `agent-tty`. [main.ts:main] [output.ts:emitCliError]
 - Other errors at top level, such as a failure of the hidden `_host` action, are rethrown. [main.ts:main]
 - The envelope shapes come from `src/protocol/envelope.ts` (`createSuccessEnvelope`, `createErrorEnvelope`). `output.ts` defines no schema. [output.ts:emitSuccess]
 - Home precedence is `--home`, then `AGENT_TTY_HOME`, then `resolveHome`. An explicit Home must be non-empty and absolute, else `INVALID_INPUT`. The returned context is frozen with `Object.freeze`. [context.ts:resolveCommandContext]
@@ -38,7 +38,7 @@ This directory is the agent-tty command-line front end. `main.ts` is the bin ent
 
 - `emitSuccess` writes to stdout. `emitFailure` writes the error envelope to stdout with `--json`, or `code: message` to stderr without it. [output.ts:emitSuccess] [output.ts:emitFailure]
 - `writeStdoutSync` writes to fd 1 with `fs.writeSync`. [output.ts:writeStdoutSync]
-- `emitCliError` reads `process.argv` before the first `--` for `--json` and sets `process.exitCode`. [main.ts:emitCliError]
+- `emitCliError` reads `process.argv` before the first `--` for `--json` (through `jsonOutputRequested`) and sets `process.exitCode`. [output.ts:emitCliError]
 - The `preAction` hook writes `AGENT_TTY_HOME`, `AGENT_TTY_LOG_LEVEL` and the host renderer key into `process.env`. It sets or deletes `AGENT_TTY_RENDERER`. It calls `warnIfUnsupportedNode`, which reads `package.json` and logs a warning when the Node version is outside its `engines.node` range. When `package.json` cannot be read or its range uses a comparator that `satisfiesNodeRange` does not support, it logs that at debug and skips the check. [main.ts:main]
 - `resolveCommandContext` reads `AGENT_TTY_HOME`, `AGENT_TTY_LOG_LEVEL`, `AGENT_TTY_PROFILE` and `AGENT_TTY_RENDERER`. It reads the config file through `loadConfigFile(home)` (`src/config/resolveConfig.ts`). When no renderer is configured, it dynamically imports libghostty-vt through `probeLibghosttyVt` and caches the result for the whole process. [context.ts:resolveCommandContext] [src/renderer/readiness.ts:probeLibghosttyVt]
 - `resolveCommandTarget` reads the session manifest through `readManifestIfExists`. [commandTarget.ts:resolveCommandTarget]
