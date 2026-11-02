@@ -643,8 +643,6 @@ async function recordDestroyed(
     'recordDestroyed needs a terminal manifest or dead session processes',
   );
   if (!isDestroyedSessionStatus(manifest.status)) {
-    // A reconcile that read the manifest before this write can still write
-    // over it, and the marker tells that reconcile to restore it.
     await writeDestroyMarker(
       destroyMarkerPath(dirname(manifestFile)),
       manifest.sessionId,
@@ -939,8 +937,6 @@ export async function reconcileSession(
 
   try {
     await writeManifest(manifestFile, reconciledManifest);
-    // A destroy that recorded destroyed after the last read above wrote the
-    // marker first, so this write may have replaced its record.
     if (
       reconciledStatus !== 'destroyed' &&
       existsSync(destroyMarkerPath(sessionDirectory))

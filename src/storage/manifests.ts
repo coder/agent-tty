@@ -231,8 +231,6 @@ export async function readManifestIfExists(
   return readManifestInternal(path, true);
 }
 
-// An empty file that destroy writes before it records destroyed. Like the
-// manifest write, it never creates the session folder.
 export async function writeDestroyMarker(
   path: string,
   sessionId: string,

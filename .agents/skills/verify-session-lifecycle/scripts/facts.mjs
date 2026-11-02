@@ -319,10 +319,6 @@ function shutdownChecksCommandable(runHostBody) {
   return inShutdown && request >= 0 && request < write;
 }
 
-// recordDestroyed writes the destroy marker right before its destroyed
-// write, with writeDestroyMarker, which never creates the folder. In the try
-// of its own write, reconcileSession then writes destroyed again when the
-// marker exists and its write was not destroyed.
 function repairFacts() {
   const lifecycle = 'src/host/lifecycle.ts';
   let marks = false;

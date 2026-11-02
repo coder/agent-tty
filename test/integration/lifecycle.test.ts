@@ -1411,8 +1411,6 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     },
   );
 
-  // The held rename keeps the reconcile of `list` between its last read and
-  // its write, which records failed for the dead host.
   it('a destroy --force that lands during a reconcile write stays destroyed', async () => {
     const sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec cat']);
     const hostPid = inspectSession(testHome, sessionId).hostPid as number;
