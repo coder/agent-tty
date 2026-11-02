@@ -688,6 +688,33 @@ describe('CLI integration', () => {
     expect(result.stderr).toContain("error: unknown option '--bogus'");
   });
 
+  it('ignores a --json after -- for a usage error', () => {
+    const result = runCli(
+      ['create', '--bogus', '--', '/bin/cat', '--json'],
+      testEnv(),
+    );
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain("error: unknown option '--bogus'");
+  });
+
+  it('ignores a --json after -- for a command error', () => {
+    const result = runCli(
+      [
+        'create',
+        '--cwd',
+        join(testHome, 'missing-cwd'),
+        '--',
+        '/bin/sh',
+        '--json',
+      ],
+      testEnv(),
+    );
+    expect(result.status).toBe(8);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toMatch(/^STORAGE_READ_ERROR: /u);
+  });
+
   it('keeps human output free of ANSI sequences when --no-color is set', () => {
     const result = runCli(['--no-color', 'version'], testEnv());
     expect(result.status).toBe(0);
