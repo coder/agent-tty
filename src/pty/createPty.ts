@@ -117,7 +117,7 @@ export function resolvePtyEnv(
 ): Record<string, string> {
   const resolved: Record<string, string> = {};
   for (const [key, value] of Object.entries(baseEnv)) {
-    if (key === HOST_RENDERER_ENV_KEY) {
+    if (key === HOST_RENDERER_ENV_KEY || key === DESTROY_RERUN_ENV_KEY) {
       continue;
     }
     if (value !== undefined) {
@@ -141,8 +141,11 @@ export function resolvePtyEnv(
     resolved.AGENT_TTY_SESSION_ID = sessionId;
   }
 
-  Object.assign(resolved, env);
-  delete resolved[DESTROY_RERUN_ENV_KEY];
+  for (const [key, value] of Object.entries(env)) {
+    if (key !== DESTROY_RERUN_ENV_KEY) {
+      resolved[key] = value;
+    }
+  }
   resolved.TERM = term;
   return resolved;
 }
