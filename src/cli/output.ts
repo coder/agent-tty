@@ -2,10 +2,13 @@ import { writeSync } from 'node:fs';
 import process from 'node:process';
 
 import type { CommandEnvelope, CommandError } from '../protocol/envelope.js';
+import type { CliError } from './errors.js';
+
 import {
   createErrorEnvelope,
   createSuccessEnvelope,
 } from '../protocol/envelope.js';
+import { exitCodeForError } from './exitCodes.js';
 
 const ANSI_ESCAPE_PATTERN = new RegExp(
   String.raw`[\u001B\u009B][[\]()#;?]*(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]|(?:[\dA-PR-TZcf-nq-uy=><~]))`,
@@ -103,4 +106,19 @@ export function emitFailure(options: {
   process.stderr.write(
     `${formatHumanText(`${options.error.code}: ${options.error.message}`)}\n`,
   );
+}
+
+export function emitCliError(commandName: string, error: CliError): void {
+  emitFailure({
+    command: commandName,
+    json: process.argv.includes('--json'),
+    error: {
+      code: error.code,
+      message: error.message,
+      retryable: error.retryable,
+      details: error.details,
+    },
+    result: error.result,
+  });
+  process.exitCode = exitCodeForError(error.code);
 }

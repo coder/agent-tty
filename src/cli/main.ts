@@ -41,8 +41,7 @@ import {
   type GlobalCliOptions,
 } from './context.js';
 import { CliError } from './errors.js';
-import { exitCodeForError } from './exitCodes.js';
-import { emitFailure, setColorEnabled } from './output.js';
+import { emitCliError, setColorEnabled } from './output.js';
 import {
   DEFAULT_COLS,
   DEFAULT_ROWS,
@@ -75,22 +74,6 @@ function parseIntegerTokenOption(value: string): number {
 
 function collectStringOption(value: string, previous: string[] = []): string[] {
   return [...previous, value];
-}
-
-function emitCliError(commandName: string, error: CliError): void {
-  const json = process.argv.includes('--json');
-  emitFailure({
-    command: commandName,
-    json,
-    error: {
-      code: error.code,
-      message: error.message,
-      retryable: error.retryable,
-      details: error.details,
-    },
-    result: error.result,
-  });
-  process.exitCode = exitCodeForError(error.code);
 }
 
 function getActionCommand(rawArgs: readonly unknown[]): Command {

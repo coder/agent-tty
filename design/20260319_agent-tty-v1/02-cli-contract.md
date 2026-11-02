@@ -42,7 +42,7 @@ Human-readable output is allowed, but it is not the primary contract.
 
 ### 1.3 Stable envelope
 
-Every JSON response uses the same top-level envelope fields in the shipped implementation: `ok`, `command`, `timestamp`, and either `result` or `error`. A timed-out `wait` is the one failure that carries both: `ok: false`, `error.code: "WAIT_TIMEOUT"`, and the wait `result`. Session-specific identifiers currently live inside command-specific `result` payloads or `error.details` rather than as a top-level envelope `sessionId` field.
+Every JSON response uses the same top-level envelope fields in the shipped implementation: `ok`, `command`, `timestamp`, and either `result` or `error`. Two failures carry both: a timed-out `wait` (`ok: false`, `error.code: "WAIT_TIMEOUT"`, and the wait `result`) and a fail-fast `batch` with a failed step (`ok: false`, the step's `error.code`, and the per-step `result`). Session-specific identifiers currently live inside command-specific `result` payloads or `error.details` rather than as a top-level envelope `sessionId` field.
 
 ```json
 {
@@ -485,8 +485,8 @@ agent-tty wait <session-id> --exit
 ### 13.4 Timeout behavior
 
 - default timeout should be finite, e.g. `30000 ms`,
-- timeout should surface exit code `5`,
-- JSON output should include the last observed state summary.
+- a timeout exits `11` (`WAIT_TIMEOUT`),
+- the JSON error envelope keeps the last observed state under `result`.
 
 ### 13.5 Result shape
 

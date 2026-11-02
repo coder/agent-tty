@@ -16,12 +16,10 @@ function emitJsonEnvelope(
   process.argv = [...originalArgv, '--json'];
   const write = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
   emitCliError(command, error);
+  const calls = write.mock.calls.map(([chunk]) => String(chunk));
   write.mockRestore();
-  expect(write).toHaveBeenCalledTimes(1);
-  return JSON.parse(String(write.mock.calls[0]?.[0])) as Record<
-    string,
-    unknown
-  >;
+  expect(calls).toHaveLength(1);
+  return JSON.parse(calls[0] ?? '') as Record<string, unknown>;
 }
 
 describe('emitCliError', () => {
