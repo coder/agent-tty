@@ -830,6 +830,22 @@ describe('a hostPid that may no longer name the host', () => {
       expect(await readManifest(manifestPath(directory))).toEqual(record);
     },
   );
+
+  it.skipIf(platform === 'win32')(
+    'on win32 destroy --force never kills the host',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host, 'none');
+      const record = await readManifest(manifestPath(directory));
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      await expect(destroySession('session-01', true)).rejects.toMatchObject({
+        code: 'HOST_TIMEOUT',
+      });
+      expect(isRunning(host)).toBe(true);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+    },
+  );
 });
 
 describe('cliRunsInsideProgramSession', () => {
