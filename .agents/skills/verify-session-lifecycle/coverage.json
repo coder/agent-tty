@@ -1,7 +1,7 @@
 {
   "fingerprints": {
     "src/cli/commands/create.ts#runCreateCommand": "1b2b29a895cde754",
-    "src/cli/commands/destroy.ts#runDestroyCommand": "8a0a0a76d61664bf",
+    "src/cli/commands/destroy.ts#runDestroyCommand": "e17adeccb74c24ac",
     "src/cli/commands/destroy.ts#rerunInNewSession": "573a64e3b1e83612",
     "src/cli/commands/gc.ts#gcSessions": "ac079db2a0199d69",
     "src/host/lifecycle.ts#allocateSession": "8f7eee41b3c56db9",
