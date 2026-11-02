@@ -526,6 +526,33 @@ describe('a program group without a token', () => {
     },
   );
 
+  // The child that the first fork left forks and ends as a zombie while the
+  // second scan runs, so that scan shows only a zombie of the group.
+  it('on linux, when the probe ends EPERM and a process forks during each scan, is alive', () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    procShowsGroup('S');
+    forksDuringScan('ENOENT');
+    const firstFork = autogroupFile.read;
+    let forked = false;
+    autogroupFile.read = (file) => {
+      if (!forked && procHooks.stat?.has('200') && file === '/proc/200/stat') {
+        forked = true;
+        procHooks.stat.set(
+          '200',
+          `200 (a) Z 100 ${String(CHILD_PID)} ${String(CHILD_PID)} ${STAT_TAIL}`,
+        );
+        procHooks.stat.set(
+          '300',
+          `300 (a) S 200 ${String(CHILD_PID)} ${String(CHILD_PID)} ${STAT_TAIL}`,
+        );
+      }
+      return firstFork?.(file) ?? null;
+    };
+    probeEnds('EPERM');
+
+    expect(isProgramGroupAlive(group)).toBe(true);
+  });
+
   it.each([
     ['ok', ['Z', 'X'], false],
     ['ok', ['Z', 'S'], true],
