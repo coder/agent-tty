@@ -10,7 +10,9 @@
     "src/host/lifecycle.ts#killProcessBestEffort": "1dd0cb4ee9bbc676",
     "src/host/lifecycle.ts#ownLinuxSessionId": "911643125a4fd21e",
     "src/host/lifecycle.ts#ownProcessGroupId": "b480c93782250b9a",
-    "src/host/lifecycle.ts#cliRunsInsideProgramSession": "03b559668a9216ce",
+    "src/host/lifecycle.ts#controllingTerminal": "250d1c5beff91cba",
+    "src/host/lifecycle.ts#sharesControllingTerminal": "7820f490ba998a11",
+    "src/host/lifecycle.ts#cliRunsInsideProgramSession": "322f359e9575d783",
     "src/host/lifecycle.ts#readSessionManifestOrThrow": "9709f28e5e9cca4b",
     "src/host/lifecycle.ts#waitForTerminalManifest": "3f14811e8d2f5f7f",
     "src/host/lifecycle.ts#waitForProcessesToExit": "d2eee78697271290",
@@ -65,7 +67,7 @@
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "427078c18d724c82",
-    "skill:scripts/facts.mjs": "ad6f7db805c5d882",
+    "skill:scripts/facts.mjs": "124608a1b33c56e8",
     "skill:scripts/check.sh": "97acb7fdaaa2c783"
   },
   "callSites": {
