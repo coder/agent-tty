@@ -262,6 +262,58 @@ describe('pty-basics integration', { timeout: 30000 }, () => {
     }
   });
 
+  // A destroy that the program runs skips its re-run when it has the marker.
+  it.each([
+    ['inherited by create', [], { AGENT_TTY_DESTROY_RERUN: '1' }],
+    ['set with --env', ['--env', 'AGENT_TTY_DESTROY_RERUN=1'], {}],
+  ])(
+    'keeps the destroy re-run marker %s out of the spawned shell',
+    (_name, flags, env) => {
+      let sessionId = '';
+
+      try {
+        const createResult = runCli(
+          [
+            'create',
+            '--json',
+            ...flags,
+            '--',
+            '/bin/sh',
+            '-c',
+            'printf "marker=%s\\n" "${AGENT_TTY_DESTROY_RERUN-unset}"; exec cat',
+          ],
+          { AGENT_TTY_HOME: testHome, ...env },
+        );
+        expect(createResult.status).toBe(0);
+        sessionId = (
+          JSON.parse(createResult.stdout) as SuccessEnvelope<{
+            sessionId: string;
+          }>
+        ).result.sessionId;
+
+        const waitResult = runCli(
+          [
+            'wait',
+            sessionId,
+            '--text',
+            'marker=unset',
+            '--timeout',
+            '10000',
+            '--json',
+          ],
+          { AGENT_TTY_HOME: testHome },
+          60_000,
+        );
+        expect(JSON.parse(waitResult.stdout)).toMatchObject({
+          ok: true,
+          result: { matched: true, timedOut: false },
+        });
+      } finally {
+        destroySession(testHome, sessionId);
+      }
+    },
+  );
+
   it('resize records resize and inspect reflects new dimensions', async () => {
     let sessionId = '';
 
