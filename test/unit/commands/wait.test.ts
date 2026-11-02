@@ -356,9 +356,9 @@ describe('wait command', () => {
       {
         exit: true,
         idleMs: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -417,9 +417,9 @@ describe('wait command', () => {
       {
         exit: undefined,
         idleMs: 500,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -484,10 +484,10 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         afterSeq: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -517,7 +517,7 @@ describe('wait command', () => {
       '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'waitForRender',
       expect.objectContaining({ rendererName: 'libghostty-vt' }),
-      605_000,
+      35_000,
     );
   });
 
@@ -542,10 +542,10 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         afterSeq: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -579,10 +579,10 @@ describe('wait command', () => {
         cursorRow: 3,
         cursorCol: 4,
         afterSeq: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -613,10 +613,10 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         afterSeq: 5,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -695,10 +695,10 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         afterSeq: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
       {

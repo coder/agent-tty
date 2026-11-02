@@ -210,6 +210,16 @@ describe('CLI integration', () => {
     expect(result.stdout).toContain('List sessions');
   });
 
+  it('shows the finite default of wait --timeout in help', () => {
+    const result = runCli(['wait', '--help'], testEnv());
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout.replaceAll(/\s+/gu, ' ')).toContain(
+      '--timeout <ms> Maximum wait time in milliseconds (0 waits forever) (default: 30000)',
+    );
+  });
+
   it('documents cell-addressed mouse input and its modifiers', () => {
     const result = runCli(['mouse', '--help'], testEnv());
 
