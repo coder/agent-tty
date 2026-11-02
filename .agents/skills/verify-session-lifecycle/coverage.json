@@ -9,7 +9,7 @@
     "src/host/lifecycle.ts#isProcessAlive": "1ca1fe6ad6c41711",
     "src/host/lifecycle.ts#killProcessBestEffort": "1dd0cb4ee9bbc676",
     "src/host/lifecycle.ts#hostOf": "8166ee5d95a5f598",
-    "src/host/lifecycle.ts#runsSessionHost": "8ac91b6a7b41c3e0",
+    "src/host/lifecycle.ts#runsSessionHost": "079f0fc7d59d17cd",
     "src/host/lifecycle.ts#isHostAlive": "89315cd861aba038",
     "src/host/lifecycle.ts#killHostBestEffort": "da7d0a0c37994db4",
     "src/host/lifecycle.ts#ownLinuxSessionId": "2f51d6f7c3c89991",
