@@ -819,7 +819,7 @@ function fallbackFacts() {
 // it destroys anything when cliRunsInsideProgramSession matches. On Linux
 // that check compares the program's pid with the CLI's session id, the
 // fourth field after the command name in /proc/self/stat, and a CLI that
-// cannot read that id counts as inside. Before it reads
+// cannot read that id, or reads 0, counts as inside. Before it reads
 // the manifest, the check matches AGENT_TTY_SESSION_ID, and the copy does
 // not get that variable. Off Linux the check compares the process group and
 // the controlling terminal. The copy gets DESTROY_RERUN_ENV_KEY and skips the
