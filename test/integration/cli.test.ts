@@ -650,6 +650,44 @@ describe('CLI integration', () => {
     expect(envelope.error.message).toContain('contains invalid JSON');
   });
 
+  it.each<[string, string[], string]>([
+    [
+      'an unknown option',
+      ['inspect', 'session-01', '--bogus'],
+      "unknown option '--bogus'",
+    ],
+    [
+      'a missing argument',
+      ['inspect'],
+      "missing required argument 'session-id'",
+    ],
+    [
+      'a missing required option',
+      ['record', 'export', 'session-01'],
+      "required option '--format <format>' not specified",
+    ],
+    ['an unknown command', ['bogus'], "unknown command 'bogus'"],
+  ])(
+    'prints one INVALID_INPUT envelope for %s under --json',
+    (_case, args, message) => {
+      const result = runCli([...args, '--json'], testEnv());
+      expect(result.status, result.stderr).toBe(2);
+
+      const envelope = parseErrorEnvelope(result.stdout);
+      expect(envelope.ok).toBe(false);
+      expect(envelope.command).toBe('agent-tty');
+      expect(envelope.error.code).toBe('INVALID_INPUT');
+      expect(envelope.error.message).toBe(message);
+    },
+  );
+
+  it('keeps the plain Commander text for a usage error without --json', () => {
+    const result = runCli(['inspect', 'session-01', '--bogus'], testEnv());
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain("error: unknown option '--bogus'");
+  });
+
   it('keeps human output free of ANSI sequences when --no-color is set', () => {
     const result = runCli(['--no-color', 'version'], testEnv());
     expect(result.status).toBe(0);
