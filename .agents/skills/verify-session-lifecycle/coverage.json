@@ -1,16 +1,18 @@
 {
   "fingerprints": {
     "src/cli/commands/create.ts#runCreateCommand": "1b2b29a895cde754",
-    "src/cli/commands/destroy.ts#runDestroyCommand": "e17adeccb74c24ac",
-    "src/cli/commands/destroy.ts#rerunInNewSession": "573a64e3b1e83612",
+    "src/cli/commands/destroy.ts#runDestroyCommand": "ecaa8b1d572da7c6",
+    "src/cli/commands/destroy.ts#rerunInNewSession": "14ace5f1e7d356b5",
     "src/cli/commands/gc.ts#gcSessions": "ac079db2a0199d69",
     "src/host/lifecycle.ts#allocateSession": "8f7eee41b3c56db9",
-    "src/host/lifecycle.ts#launchHost": "24751cfcbe8a055e",
+    "src/host/lifecycle.ts#launchHost": "86c0e12831ba551b",
     "src/host/lifecycle.ts#isProcessAlive": "1ca1fe6ad6c41711",
     "src/host/lifecycle.ts#killProcessBestEffort": "1dd0cb4ee9bbc676",
     "src/host/lifecycle.ts#ownLinuxSessionId": "2f51d6f7c3c89991",
     "src/host/lifecycle.ts#ownProcessGroupId": "b480c93782250b9a",
-    "src/host/lifecycle.ts#cliRunsInsideProgramSession": "03b559668a9216ce",
+    "src/host/lifecycle.ts#controllingTerminal": "612ec5fdff4785ef",
+    "src/host/lifecycle.ts#sharesControllingTerminal": "7820f490ba998a11",
+    "src/host/lifecycle.ts#cliRunsInsideProgramSession": "322f359e9575d783",
     "src/host/lifecycle.ts#readSessionManifestOrThrow": "9709f28e5e9cca4b",
     "src/host/lifecycle.ts#waitForTerminalManifest": "3f14811e8d2f5f7f",
     "src/host/lifecycle.ts#waitForProcessesToExit": "d2eee78697271290",
@@ -66,9 +68,9 @@
     "src/host/hostMain.ts#runHost(final try)": "16789dd4e2534bc7",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "f88e3965494098b6",
-    "skill:scripts/facts.mjs": "8df7963a04b35428",
-    "skill:scripts/check.sh": "3fb2130a882e9ab5"
+    "skill:model/SessionLifecycle.tla": "a9f5c1a913a0a6d5",
+    "skill:scripts/facts.mjs": "00c08255117a67fb",
+    "skill:scripts/check.sh": "97acb7fdaaa2c783"
   },
   "callSites": {
     "writeManifest": [

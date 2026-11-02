@@ -874,7 +874,9 @@ function fallbackFacts() {
 // that check compares the program's pid with the CLI's session id, the
 // fourth field after the command name in /proc/self/stat. Before it reads
 // the manifest, the check matches AGENT_TTY_SESSION_ID, and the copy does
-// not get that variable, so it does not start a copy of its own.
+// not get that variable. Off Linux the check compares the process group and
+// the controlling terminal. The copy gets DESTROY_RERUN_ENV_KEY and skips the
+// check, so it never starts a copy of its own.
 function rerunFacts() {
   const destroyFile = 'src/cli/commands/destroy.ts';
   const run = requireDeclaration(destroyFile, 'runDestroyCommand').body;
@@ -882,7 +884,7 @@ function rerunFacts() {
     (st) =>
       ts.isIfStatement(st) &&
       normalize(st.expression.getText()) ===
-        'await cliRunsInsideProgramSession(options.sessionId)' &&
+        "process.env[DESTROY_RERUN_ENV_KEY] !== '1' && (await cliRunsInsideProgramSession(options.sessionId))" &&
       /^\{\s*process\.exitCode = await rerunInNewSession\(\);\s*return;\s*\}$/.test(
         st.thenStatement.getText(),
       ),
@@ -894,23 +896,24 @@ function rerunFacts() {
   );
   const detached =
     spawns.length === 1 && /\bdetached: true\b/.test(spawns[0].getText());
+  const copyEnv =
+    spawns.length === 1
+      ? (/\benv: \{ \.\.\.process\.env, ([^}]*?),? \}/
+          .exec(normalize(spawns[0].getText()))?.[1]
+          .split(', ') ?? [])
+      : [];
+  const copySkipsCheck = copyEnv.includes("[DESTROY_RERUN_ENV_KEY]: '1'");
   const lifecycle = 'src/host/lifecycle.ts';
-  const compares = requireDeclaration(
+  const insideStatements = requireDeclaration(
     lifecycle,
     'cliRunsInsideProgramSession',
-  ).body.statements.some((st) => {
-    if (!ts.isReturnStatement(st) || st.expression === undefined) {
-      return false;
-    }
-    let expression = st.expression;
-    while (ts.isParenthesizedExpression(expression)) {
-      expression = expression.expression;
-    }
-    return (
-      normalize(expression.getText()) ===
-      "manifest.childPid === (process.platform === 'linux' ? ownLinuxSessionId() : ownProcessGroupId())"
-    );
-  });
+  ).body.statements.map((st) => normalize(st.getText()));
+  const compares =
+    insideStatements.includes(
+      "if (process.platform === 'linux') { return manifest.childPid === ownLinuxSessionId(); }",
+    ) &&
+    insideStatements.at(-1) ===
+      'return ( manifest.childPid === ownProcessGroupId() || sharesControllingTerminal(manifest.childPid) );';
   const readsSessionId =
     /stat = readFileSync\('\/proc\/self\/stat', 'utf8'\);[^]*const \{ sid \} = parseProcStat\(stat\)/.test(
       normalize(requireDeclaration(lifecycle, 'ownLinuxSessionId').getText()),
@@ -933,14 +936,15 @@ function rerunFacts() {
     inside,
     /= await readManifestIfExists\(/,
   );
-  const copyDropsId =
-    spawns.length === 1 &&
-    normalize(spawns[0].getText()).includes(
-      'env: { ...process.env, AGENT_TTY_SESSION_ID: undefined }',
-    );
+  const copyDropsId = copyEnv.includes('AGENT_TTY_SESSION_ID: undefined');
   return {
     ReRunsInNewSession:
-      check >= 0 && destroy > check && detached && compares && readsSessionId,
+      check >= 0 &&
+      destroy > check &&
+      detached &&
+      copySkipsCheck &&
+      compares &&
+      readsSessionId,
     InsideCheckReadsEnv:
       readsEnv >= 0 && readsEnv < readsManifest && copyDropsId,
   };
@@ -1027,6 +1031,8 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'killProcessBestEffort'],
   ['src/host/lifecycle.ts', 'ownLinuxSessionId'],
   ['src/host/lifecycle.ts', 'ownProcessGroupId'],
+  ['src/host/lifecycle.ts', 'controllingTerminal'],
+  ['src/host/lifecycle.ts', 'sharesControllingTerminal'],
   ['src/host/lifecycle.ts', 'cliRunsInsideProgramSession'],
   ['src/host/lifecycle.ts', 'readSessionManifestOrThrow'],
   ['src/host/lifecycle.ts', 'waitForTerminalManifest'],
