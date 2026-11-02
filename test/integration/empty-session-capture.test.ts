@@ -102,7 +102,7 @@ describe(
     );
 
     it.each(RENDERERS)(
-      'captures a blank screenshot of the session size with %s',
+      'captures a blank ghostty-web screenshot of the session size with --renderer %s',
       async (renderer) => {
         const { status, envelope } = runJson<ScreenshotResult>(testHome, [
           'screenshot',
@@ -115,6 +115,7 @@ describe(
         expect(envelope.result.capturedAtSeq).toBe(-1);
         expect(envelope.result.cols).toBe(COLS);
         expect(envelope.result.rows).toBe(ROWS);
+        expect(envelope.result.rendererBackend).toBe('ghostty-web');
 
         const clearedId = createSession(
           testHome,
