@@ -6,34 +6,55 @@ import {
   buildMissingGlyphs,
   findGlyphCandidates,
   glyphProbeTexts,
+  type UsedFont,
 } from '../../../src/renderer/ghosttyWeb/missingGlyphs.js';
 import { resolveProfile } from '../../../src/renderer/profiles.js';
 
-const referenceCoverage = profileFontCoverage(resolveProfile('reference-dark'));
+const PROFILE = resolveProfile('reference-dark');
+const referenceCoverage = profileFontCoverage(PROFILE);
 if (referenceCoverage === null) {
   throw new Error('the reference profile must start with a bundled font');
 }
 const coverage = referenceCoverage;
 
+const JETBRAINS: UsedFont = {
+  familyName: 'JetBrains Mono',
+  isCustomFont: true,
+};
+const HOST: UsedFont = { familyName: 'DejaVu Sans', isCustomFont: false };
+
 describe('profileFontCoverage', () => {
   it('covers the bundled fonts of the reference profile', () => {
-    expect(coverage.has(0x41)).toBe(true);
-    expect(coverage.has(0xe0b0)).toBe(true);
-    expect(coverage.has(0x29c9)).toBe(false);
+    expect(coverage.firstFamily).toBe('JetBrains Mono');
+    expect(coverage.union.has(0x41)).toBe(true);
+    expect(coverage.union.has(0xe0b0)).toBe(true);
+    expect(coverage.union.has(0x29c9)).toBe(false);
+    expect(coverage.byFamily.get('JetBrains Mono')?.has(0xe0b0)).toBe(false);
   });
 
   it('returns null when the font stack does not start with a bundled font', () => {
-    const profile = resolveProfile('reference-dark');
-
     expect(
-      profileFontCoverage({ ...profile, fontFamily: 'monospace' }),
+      profileFontCoverage({ ...PROFILE, fontFamily: 'monospace' }),
     ).toBeNull();
     expect(
       profileFontCoverage({
-        ...profile,
-        fontFamily: `monospace, ${profile.fontFamily}`,
+        ...PROFILE,
+        fontFamily: `monospace, ${PROFILE.fontFamily}`,
       }),
     ).toBeNull();
+  });
+
+  it('leaves out bundled fonts that the stack does not name', () => {
+    const jetBrainsOnly = profileFontCoverage({
+      ...PROFILE,
+      fontFamily: '"JetBrains Mono", monospace',
+    });
+
+    expect(jetBrainsOnly?.union.has(0x41)).toBe(true);
+    expect(jetBrainsOnly?.union.has(0xe0b0)).toBe(false);
+    expect([...(jetBrainsOnly?.byFamily.keys() ?? [])]).toEqual([
+      'JetBrains Mono',
+    ]);
   });
 });
 
@@ -41,7 +62,7 @@ describe('findGlyphCandidates', () => {
   it('finds nothing on a screen the bundled fonts cover', () => {
     const candidates = findGlyphCandidates(
       [['$', ' ', 'l', 's', '\ue0b0', '', 'é', '…']],
-      coverage,
+      coverage.union,
     );
 
     expect([...candidates]).toEqual([]);
@@ -50,7 +71,7 @@ describe('findGlyphCandidates', () => {
   it('groups every cell of an uncovered grapheme and skips wide-glyph spacers', () => {
     const candidates = findGlyphCandidates(
       [['[', '\u29c9', ']'], [], ['\u4e2d', '', '\u29c9']],
-      coverage,
+      coverage.union,
     );
 
     expect(Object.fromEntries(candidates)).toEqual({
@@ -68,7 +89,7 @@ describe('findGlyphCandidates', () => {
   it('counts canonical equivalents that the bundled fonts can draw as covered', () => {
     const candidates = findGlyphCandidates(
       [['\u1ebd', '\u212b', 'e\u0303']],
-      coverage,
+      coverage.union,
     );
 
     expect([...candidates]).toEqual([]);
@@ -77,7 +98,7 @@ describe('findGlyphCandidates', () => {
   it('never reports joiners or variation selectors on their own', () => {
     const candidates = findGlyphCandidates(
       [['\u2714\ufe0f', '\u{1f468}\u200d\u{1f469}']],
-      coverage,
+      coverage.union,
     );
 
     expect(
@@ -87,13 +108,14 @@ describe('findGlyphCandidates', () => {
 });
 
 describe('glyphProbeTexts', () => {
-  it('probes each uncovered code point, a combining mark on its base', () => {
+  it('probes each grapheme and each uncovered code point, a mark on its base', () => {
     const candidates = findGlyphCandidates(
-      [['\u{1f600}\u200d', '\u29c9', 'a\u1ab0', '\u29c9']],
-      coverage,
+      [['\u{1f600}\u200d\u29c9', '\u29c9', 'a\u1ab0']],
+      coverage.union,
     );
 
     expect(glyphProbeTexts(candidates)).toEqual([
+      '\u{1f600}\u200d\u29c9',
       '\u{1f600}',
       '\u29c9',
       'a\u1ab0',
@@ -102,24 +124,25 @@ describe('glyphProbeTexts', () => {
 });
 
 describe('buildMissingGlyphs', () => {
-  const candidates = findGlyphCandidates(
-    [
-      ['\u29c9', '\u2502', '\u0378'],
-      ['\u0378', '\u{1f468}\u200d\u{1f469}'],
-    ],
-    coverage,
-  );
+  function report(
+    grid: string[][],
+    fonts: Record<string, readonly UsedFont[]>,
+  ): ReturnType<typeof buildMissingGlyphs> {
+    return buildMissingGlyphs(
+      findGlyphCandidates(grid, coverage.union),
+      new Map(Object.entries(fonts)),
+      coverage,
+    );
+  }
 
-  it('reports the code points that a bundled font drew, in code point order', () => {
-    const drawnByBundledFont = new Map([
-      ['\u29c9', true],
-      ['\u2502', false],
-      ['\u0378', true],
-      ['\u{1f468}', false],
-      ['\u{1f469}', true],
-    ]);
-
-    expect(buildMissingGlyphs(candidates, drawnByBundledFont)).toEqual({
+  it('reports what a bundled font drew and nothing a host font drew, in code point order', () => {
+    expect(
+      report([['\u29c9', '\u2502', '\u0378'], ['\u0378']], {
+        '\u29c9': [JETBRAINS],
+        '\u2502': [{ familyName: 'DejaVu Sans Mono', isCustomFont: false }],
+        '\u0378': [JETBRAINS],
+      }),
+    ).toEqual({
       missingGlyphs: [
         {
           codePoint: 'U+0378',
@@ -129,42 +152,52 @@ describe('buildMissingGlyphs', () => {
           ],
         },
         { codePoint: 'U+29C9', cells: [{ row: 0, col: 0 }] },
-        { codePoint: 'U+1F469', cells: [{ row: 1, col: 1 }] },
       ],
       truncated: false,
     });
   });
 
-  it('reports nothing when host fonts drew every candidate', () => {
-    const drawnByBundledFont = new Map(
-      glyphProbeTexts(candidates).map((text) => [text, false] as const),
-    );
+  it('lists every code point that the first font lacks when it drew the whole cluster', () => {
+    expect(
+      report([['\u2764\u20dd', '\ue0b0\u0302', 'a\u1ab0']], {
+        '\u2764\u20dd': [JETBRAINS],
+        '\ue0b0\u0302': [JETBRAINS],
+        'a\u1ab0': [JETBRAINS],
+      }).missingGlyphs.map((glyph) => glyph.codePoint),
+    ).toEqual(['U+0302', 'U+1AB0', 'U+20DD', 'U+2764', 'U+E0B0']);
+  });
 
-    expect(buildMissingGlyphs(candidates, drawnByBundledFont)).toEqual({
-      missingGlyphs: [],
-      truncated: false,
-    });
+  it('judges a cluster split over a host font and a bundled font per code point', () => {
+    expect(
+      report([['\u{1f600}\u200d\u29c9']], {
+        '\u{1f600}\u200d\u29c9': [HOST, JETBRAINS],
+        '\u{1f600}': [HOST],
+        '\u29c9': [JETBRAINS],
+      }).missingGlyphs,
+    ).toEqual([{ codePoint: 'U+29C9', cells: [{ row: 0, col: 0 }] }]);
+  });
+
+  it('counts a probe with no reported font as drawn by the first font', () => {
+    expect(report([['\u29c9']], { '\u29c9': [] }).missingGlyphs).toEqual([
+      { codePoint: 'U+29C9', cells: [{ row: 0, col: 0 }] },
+    ]);
   });
 
   it('marks the report truncated when a probe result is missing', () => {
-    expect(buildMissingGlyphs(candidates, new Map([['\u29c9', true]]))).toEqual(
-      {
-        missingGlyphs: [{ codePoint: 'U+29C9', cells: [{ row: 0, col: 0 }] }],
-        truncated: true,
-      },
-    );
+    expect(report([['\u29c9', '\u0378']], { '\u29c9': [JETBRAINS] })).toEqual({
+      missingGlyphs: [{ codePoint: 'U+29C9', cells: [{ row: 0, col: 0 }] }],
+      truncated: true,
+    });
   });
 
   it('lists at most MAX_MISSING_GLYPH_CELLS cells', () => {
-    const many = findGlyphCandidates(
+    const result = report(
       [Array.from({ length: MAX_MISSING_GLYPH_CELLS + 5 }, () => '\u0378')],
-      coverage,
+      { '\u0378': [JETBRAINS] },
     );
 
-    const report = buildMissingGlyphs(many, new Map([['\u0378', true]]));
-
-    expect(report.truncated).toBe(true);
-    expect(report.missingGlyphs[0]?.cells).toHaveLength(
+    expect(result.truncated).toBe(true);
+    expect(result.missingGlyphs[0]?.cells).toHaveLength(
       MAX_MISSING_GLYPH_CELLS,
     );
   });

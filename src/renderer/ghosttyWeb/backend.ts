@@ -43,7 +43,10 @@ import type {
   SemanticSnapshot,
 } from '../types.js';
 import { BUNDLED_FONT_ASSETS } from '../bundledFont.js';
-import { profileFontCoverage } from '../fontCoverage.js';
+import {
+  profileFontCoverage,
+  type ProfileFontCoverage,
+} from '../fontCoverage.js';
 import { hashProfile } from '../profiles.js';
 import { iterateInRangeReplayEvents } from '../replayEvents.js';
 import {
@@ -61,7 +64,8 @@ import {
   buildMissingGlyphs,
   findGlyphCandidates,
   glyphProbeTexts,
-  probeBundledFontUse,
+  probeUsedFonts,
+  type UsedFont,
 } from './missingGlyphs.js';
 
 export {
@@ -280,8 +284,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   // duplicate warnings if both bootInternal()'s catch and a concurrent
   // dispose() race on the same scope.
   private readonly loggedScopes = new WeakSet<ResourceScope>();
-  private readonly drawnByBundledFont = new Map<string, boolean>();
-  private glyphCoverage: ReadonlySet<number> | null | undefined;
+  private readonly usedFontsByText = new Map<string, readonly UsedFont[]>();
+  private glyphCoverage: ProfileFontCoverage | null | undefined;
   private initialReplayCols: number | null = null;
   private initialReplayRows: number | null = null;
   private lastAppliedSeq = -1;
@@ -934,23 +938,24 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         ),
       'cell graphemes must be one string per viewport cell',
     );
-    const candidates = findGlyphCandidates(grid, this.glyphCoverage);
+    const candidates = findGlyphCandidates(grid, this.glyphCoverage.union);
     const unprobed = glyphProbeTexts(candidates)
-      .filter((text) => !this.drawnByBundledFont.has(text))
+      .filter((text) => !this.usedFontsByText.has(text))
       .slice(0, MAX_GLYPH_PROBES);
     if (unprobed.length > 0) {
-      const probed = await probeBundledFontUse(
+      const probed = await probeUsedFonts(
         page,
         `${String(this.profile.fontSize)}px ${this.profile.fontFamily}`,
         unprobed,
       );
-      for (const [text, bundled] of probed) {
-        this.drawnByBundledFont.set(text, bundled);
+      for (const [text, fonts] of probed) {
+        this.usedFontsByText.set(text, fonts);
       }
     }
     const { missingGlyphs, truncated } = buildMissingGlyphs(
       candidates,
-      this.drawnByBundledFont,
+      this.usedFontsByText,
+      this.glyphCoverage,
     );
     return {
       missingGlyphs,

@@ -196,14 +196,26 @@ function bundledAssetCoverage(assetIdentity: string): ReadonlySet<number> {
   return coverage;
 }
 
+export interface ProfileFontCoverage {
+  firstFamily: string;
+  byFamily: ReadonlyMap<string, ReadonlySet<number>>;
+  union: ReadonlySet<number>;
+}
+
+function stackFamilies(fontFamily: string): string[] {
+  return fontFamily
+    .split(',')
+    .map((family) => family.trim().replace(/^(["'])(.*)\1$/u, '$2'));
+}
+
 /**
- * The code points that the profile's bundled fonts cover, or null when the
- * profile's font stack does not start with one of them. Only a bundled first
+ * The coverage of the bundled fonts that the profile's font stack names, or
+ * null when the stack does not start with one of them. Only a bundled first
  * font lets a screenshot tell a `.notdef` box from a host font's glyph.
  */
 export function profileFontCoverage(
   profile: RenderProfileConfig,
-): ReadonlySet<number> | null {
+): ProfileFontCoverage | null {
   const fonts =
     profile.fontAssets ??
     (profile.fontAssetIdentity === undefined
@@ -214,19 +226,28 @@ export function profileFontCoverage(
             assetIdentity: profile.fontAssetIdentity,
           },
         ]);
-  const firstFamily = profile.fontFamily
-    .split(',')[0]
-    ?.trim()
-    .replace(/^(["'])(.*)\1$/u, '$2');
-  if (!fonts.some((font) => font.family === firstFamily)) {
+  const families = stackFamilies(profile.fontFamily);
+  const firstFamily = families[0];
+  const byFamily = new Map<string, Set<number>>();
+  for (const font of fonts) {
+    if (!families.includes(font.family)) {
+      continue;
+    }
+    const coverage = byFamily.get(font.family) ?? new Set<number>();
+    for (const codePoint of bundledAssetCoverage(font.assetIdentity)) {
+      coverage.add(codePoint);
+    }
+    byFamily.set(font.family, coverage);
+  }
+  if (firstFamily === undefined || !byFamily.has(firstFamily)) {
     return null;
   }
 
   const union = new Set<number>();
-  for (const font of fonts) {
-    for (const codePoint of bundledAssetCoverage(font.assetIdentity)) {
+  for (const coverage of byFamily.values()) {
+    for (const codePoint of coverage) {
       union.add(codePoint);
     }
   }
-  return union;
+  return { firstFamily, byFamily, union };
 }

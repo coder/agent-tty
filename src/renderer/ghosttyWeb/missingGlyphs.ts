@@ -1,6 +1,7 @@
 import type { Page } from 'playwright';
 
 import type { MissingGlyph } from '../../protocol/schemas.js';
+import type { ProfileFontCoverage } from '../fontCoverage.js';
 
 import { invariant } from '../../util/assert.js';
 
@@ -14,7 +15,7 @@ export const MAX_GLYPH_PROBES = 4096;
 
 interface ProbeElement {
   id: string;
-  style: { cssText: string; font: string };
+  style: { cssText: string; display: string; font: string };
   textContent: string | null;
   readonly offsetWidth: number;
   append(child: ProbeElement): void;
@@ -129,6 +130,7 @@ export function glyphProbeTexts(
 ): string[] {
   const texts = new Set<string>();
   for (const [grapheme, candidate] of candidates) {
+    texts.add(grapheme);
     for (const codePoint of candidate.codePoints) {
       texts.add(probeText(grapheme, codePoint));
     }
@@ -136,33 +138,75 @@ export function glyphProbeTexts(
   return [...texts];
 }
 
+export interface UsedFont {
+  familyName: string;
+  isCustomFont: boolean;
+}
+
 export interface MissingGlyphReport {
   missingGlyphs: MissingGlyph[];
   truncated: boolean;
 }
 
-/**
- * Chromium draws a cluster that no font covers with the first font of the
- * stack. That font is bundled, so it draws `.notdef` boxes for the uncovered
- * code points.
- */
+// Chromium draws a cluster with one font: the first stack font that covers
+// all of it, or else the first font of the stack, which then draws `.notdef`
+// boxes. So the code points of a cluster that one bundled font drew are boxes
+// when that font lacks them. A cluster split over several fonts is judged per
+// code point.
+function boxedCodePoints(
+  grapheme: string,
+  candidate: GlyphCandidate,
+  fontsByText: ReadonlyMap<string, readonly UsedFont[]>,
+  coverage: ProfileFontCoverage,
+): number[] | undefined {
+  const fonts = fontsByText.get(grapheme);
+  if (fonts === undefined) {
+    return undefined;
+  }
+  if (fonts.length > 0 && fonts.every((font) => !font.isCustomFont)) {
+    return [];
+  }
+  if (fonts.length <= 1) {
+    const family = fonts[0]?.familyName ?? coverage.firstFamily;
+    const familyCoverage = coverage.byFamily.get(family);
+    invariant(
+      familyCoverage !== undefined,
+      'a web font in the page must be a bundled font of the stack',
+    );
+    return uncoveredCodePoints(grapheme, familyCoverage);
+  }
+
+  const boxed: number[] = [];
+  for (const codePoint of candidate.codePoints) {
+    const codePointFonts = fontsByText.get(probeText(grapheme, codePoint));
+    if (codePointFonts === undefined) {
+      return undefined;
+    }
+    if (
+      codePointFonts.length === 0 ||
+      codePointFonts.some((font) => font.isCustomFont)
+    ) {
+      boxed.push(codePoint);
+    }
+  }
+  return boxed;
+}
+
 export function buildMissingGlyphs(
   candidates: ReadonlyMap<string, GlyphCandidate>,
-  drawnByBundledFont: ReadonlyMap<string, boolean>,
+  fontsByText: ReadonlyMap<string, readonly UsedFont[]>,
+  coverage: ProfileFontCoverage,
 ): MissingGlyphReport {
   const cellsByCodePoint = new Map<number, GlyphCell[]>();
   let listedCells = 0;
   let truncated = false;
   for (const [grapheme, candidate] of candidates) {
-    for (const codePoint of candidate.codePoints) {
-      const bundled = drawnByBundledFont.get(probeText(grapheme, codePoint));
-      if (bundled === undefined) {
-        truncated = true;
-        continue;
-      }
-      if (!bundled) {
-        continue;
-      }
+    const boxed = boxedCodePoints(grapheme, candidate, fontsByText, coverage);
+    if (boxed === undefined) {
+      truncated = true;
+      continue;
+    }
+    for (const codePoint of boxed) {
       const cells = candidate.cells.slice(
         0,
         MAX_MISSING_GLYPH_CELLS - listedCells,
@@ -192,18 +236,12 @@ export function buildMissingGlyphs(
   return { missingGlyphs, truncated };
 }
 
-function drawnByBundledFontOrUnknown(
-  fonts: readonly { isCustomFont: boolean }[],
-): boolean {
-  return fonts.length === 0 || fonts.some((font) => font.isCustomFont);
-}
-
-export async function probeBundledFontUse(
+export async function probeUsedFonts(
   page: Page,
   font: string,
   texts: readonly string[],
-): Promise<Map<string, boolean>> {
-  invariant(texts.length > 0, 'probeBundledFontUse needs at least one text');
+): Promise<Map<string, readonly UsedFont[]>> {
+  invariant(texts.length > 0, 'probeUsedFonts needs at least one text');
   await page.evaluate(
     ({ rootId, cssFont, probeTexts }) => {
       const { document } = globalThis as unknown as ProbeGlobal;
@@ -214,6 +252,9 @@ export async function probeBundledFontUse(
       for (const text of probeTexts) {
         const span = document.createElement('span');
         span.style.font = cssFont;
+        // Inline spans on one line shape as one run, so a text with no font
+        // would pull its neighbors into the first font.
+        span.style.display = 'block';
         span.textContent = text;
         root.append(span);
       }
@@ -247,7 +288,11 @@ export async function probeBundledFontUse(
       results.map(({ fonts }, index) => {
         const text = texts[index];
         invariant(text !== undefined, 'glyph probe text must exist');
-        return [text, drawnByBundledFontOrUnknown(fonts)] as const;
+        const used = fonts.map(({ familyName, isCustomFont }) => ({
+          familyName,
+          isCustomFont,
+        }));
+        return [text, used] as const;
       }),
     );
   } finally {

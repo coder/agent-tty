@@ -2,12 +2,14 @@ import { mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { Page } from 'playwright';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { resolveDefaultPlaywrightBrowsersPath } from '../../src/renderer/browserPath.js';
 import { resolveProfile } from '../../src/renderer/profiles.js';
 import type { ReplayInput } from '../../src/renderer/types.js';
 import { GhosttyWebBackend } from '../../src/renderer/ghosttyWeb/index.js';
+import { probeUsedFonts } from '../../src/renderer/ghosttyWeb/missingGlyphs.js';
 
 const PROFILE = resolveProfile('reference-dark');
 const SESSION_ID = 'renderer-backend-integration';
@@ -530,6 +532,31 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       expect(nextToBoxes).toEqual(['U+0378', ...alone]);
     } finally {
       await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports the font of every probe text, right after the probe spans appear', async () => {
+    await backend.boot();
+    await backend.replayTo(
+      createReplayInput([
+        { seq: 0, ts: timestampFor(0), type: 'output', payload: { data: 'x' } },
+      ]),
+    );
+    const { page } = backend as unknown as { page: Page };
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const fonts = await probeUsedFonts(
+        page,
+        `${String(PROFILE.fontSize)}px ${PROFILE.fontFamily}`,
+        ['A', '\ue0b0'],
+      );
+
+      expect(fonts.get('A')?.map((font) => font.familyName)).toEqual([
+        'JetBrains Mono',
+      ]);
+      expect(fonts.get('\ue0b0')?.map((font) => font.familyName)).toEqual([
+        'Symbols Nerd Font Mono',
+      ]);
     }
   });
 
