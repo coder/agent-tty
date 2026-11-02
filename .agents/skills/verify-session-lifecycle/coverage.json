@@ -12,7 +12,7 @@
     "src/host/lifecycle.ts#ownProcessGroupId": "b480c93782250b9a",
     "src/host/lifecycle.ts#controllingTerminal": "612ec5fdff4785ef",
     "src/host/lifecycle.ts#sharesControllingTerminal": "7820f490ba998a11",
-    "src/host/lifecycle.ts#cliRunsInsideProgramSession": "322f359e9575d783",
+    "src/host/lifecycle.ts#cliRunsInsideProgramSession": "d74ccfd9314df824",
     "src/host/lifecycle.ts#readSessionManifestOrThrow": "9709f28e5e9cca4b",
     "src/host/lifecycle.ts#waitForTerminalManifest": "3f14811e8d2f5f7f",
     "src/host/lifecycle.ts#waitForProcessesToExit": "d2eee78697271290",
@@ -69,7 +69,7 @@
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "a9f5c1a913a0a6d5",
-    "skill:scripts/facts.mjs": "00c08255117a67fb",
+    "skill:scripts/facts.mjs": "1d02b7927fd9bc3c",
     "skill:scripts/check.sh": "97acb7fdaaa2c783"
   },
   "callSites": {
