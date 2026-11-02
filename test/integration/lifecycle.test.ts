@@ -38,6 +38,7 @@ import {
   inspectSession,
   isGroupAlive,
   killGroupIfAlive,
+  readEvents,
   runCli,
   sleep,
   type EventRecord,
@@ -371,6 +372,43 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       })
       .join('');
     expect(allOutput).toContain('[]');
+    expect(allOutput).not.toContain('inherited-sentinel');
+  });
+
+  it('defaults COLORTERM to truecolor in the spawned shell, overriding an inherited value', async () => {
+    const createResult = runCli(
+      [
+        'create',
+        '--json',
+        '--',
+        '/bin/sh',
+        '-c',
+        'printf "[%s]" "$COLORTERM"; exit 0',
+      ],
+      { AGENT_TTY_HOME: testHome, COLORTERM: 'inherited-sentinel' },
+    );
+    expect(createResult.status).toBe(0);
+    expect(createResult.stderr).toBe('');
+    const sessionId = (
+      JSON.parse(createResult.stdout) as SuccessEnvelope<{ sessionId: string }>
+    ).result.sessionId;
+
+    const output = async (): Promise<string> =>
+      (await readEvents(testHome, sessionId))
+        .filter((event) => event.type === 'output')
+        .map((event) => {
+          const data = event.payload.data;
+          return typeof data === 'string' ? data : '';
+        })
+        .join('');
+    await vi.waitFor(
+      async () => {
+        expect(await output()).toMatch(/\[[^\]]*\]/u);
+      },
+      { timeout: 15_000, interval: 100 },
+    );
+    const allOutput = await output();
+    expect(allOutput).toContain('[truecolor]');
     expect(allOutput).not.toContain('inherited-sentinel');
   });
 
