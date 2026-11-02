@@ -64,9 +64,9 @@
     "src/host/hostMain.ts#runHost(final try)": "5db2f94ef78701a8",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "427078c18d724c82",
-    "skill:scripts/facts.mjs": "ad6f7db805c5d882",
-    "skill:scripts/check.sh": "97acb7fdaaa2c783"
+    "skill:model/SessionLifecycle.tla": "c6646f3f3a042246",
+    "skill:scripts/facts.mjs": "1ceb6f436323e437",
+    "skill:scripts/check.sh": "3fb2130a882e9ab5"
   },
   "callSites": {
     "writeManifest": [
