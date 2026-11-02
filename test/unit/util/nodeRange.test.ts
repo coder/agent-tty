@@ -13,6 +13,8 @@ describe('satisfiesNodeRange', () => {
     ['26.12.1', true],
     ['27.0.0', false],
     ['27.0.0-nightly20261101', false],
+    ['24.0.0-nightly20261001', false],
+    ['26.1.0-rc.1', false],
   ])('checks Node %s against >=24.0.0 <27', (version, expected) => {
     expect(satisfiesNodeRange(version, '>=24.0.0 <27')).toBe(expected);
   });
