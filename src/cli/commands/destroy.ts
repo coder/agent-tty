@@ -5,12 +5,14 @@ import type { DestroyResult } from '../../protocol/messages.js';
 
 import { DESTROY_RERUN_ENV_KEY } from '../../config/defaults.js';
 import { emitSuccess } from '../output.js';
+import { checkedSessionDir } from '../sessionGuards.js';
 import {
   cliRunsInsideProgramSession,
   destroySession,
 } from '../../host/lifecycle.js';
 
 interface CommandOptions {
+  home: string;
   json: boolean;
   sessionId: string;
   force: boolean;
@@ -47,6 +49,8 @@ async function rerunInNewSession(): Promise<number> {
 export async function runDestroyCommand(
   options: CommandOptions,
 ): Promise<void> {
+  checkedSessionDir(options.home, options.sessionId);
+
   if (
     process.env[DESTROY_RERUN_ENV_KEY] !== '1' &&
     (await cliRunsInsideProgramSession(options.sessionId))

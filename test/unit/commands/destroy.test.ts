@@ -23,7 +23,12 @@ vi.mock('../../../src/host/lifecycle.js', () => ({
 
 import { runDestroyCommand } from '../../../src/cli/commands/destroy.js';
 
-const OPTIONS = { json: true, sessionId: 'session-01', force: false };
+const OPTIONS = {
+  home: '/tmp/agent-tty-home',
+  json: true,
+  sessionId: 'session-01',
+  force: false,
+};
 const MAX_SPAWNS = 5;
 
 afterEach(() => {

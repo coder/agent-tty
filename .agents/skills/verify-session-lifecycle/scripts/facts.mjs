@@ -861,7 +861,7 @@ function rerunFacts() {
     insideStatements.at(-1) ===
       'return ( manifest.childPid === ownProcessGroupId() || sharesControllingTerminal(manifest.childPid) );';
   const readsSessionId =
-    /const \{ sid \} = parseProcStat\(readFileSync\('\/proc\/self\/stat', 'utf8'\)\)/.test(
+    /stat = readFileSync\('\/proc\/self\/stat', 'utf8'\);[^]*const \{ sid \} = parseProcStat\(stat\)/.test(
       normalize(requireDeclaration(lifecycle, 'ownLinuxSessionId').getText()),
     ) &&
     /const fields = text\.slice\(close \+ 2\)\.split\(' '\);[^]*sid: Number\(fields\[3\]\)/.test(
@@ -1008,9 +1008,11 @@ const COVERED = [
   ['src/host/programGroup.ts', 'readProgramGroup'],
   ['src/host/programGroup.ts', 'judgeProgramGroup'],
   ['src/host/programGroup.ts', 'readGroupMembers'],
+  ['src/host/programGroup.ts', 'judgeLiveGroup'],
   ['src/host/programGroup.ts', 'processGroupTarget'],
   ['src/host/programGroup.ts', 'procHidesOtherUsers'],
   ['src/host/programGroup.ts', 'groupHasLiveProcess'],
+  ['src/host/programGroup.ts', 'scanGroup'],
   ['src/host/programGroup.ts', 'isProcessGroupAlive'],
   ['src/host/programGroup.ts', 'killProcessGroupBestEffort'],
   ['src/host/programGroup.ts', 'isProgramGroupAlive'],

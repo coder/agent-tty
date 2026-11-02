@@ -6,6 +6,7 @@ import type { MouseInput } from '../protocol/messages.js';
 import { assertValidKeyName } from '../pty/keyEncoder.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { MouseInputSchema } from '../protocol/messages.js';
+import { DEFAULT_WAIT_TIMEOUT_MS } from '../renderWait/limits.js';
 import { prepareRenderWaitCondition } from '../renderWait/matcher.js';
 import { invariant, unreachable } from '../util/assert.js';
 
@@ -40,11 +41,6 @@ const VERB_KEYS = [
 ] as const;
 
 type VerbKey = (typeof VERB_KEYS)[number];
-
-// Default for an omitted `wait` step timeout (the standalone `wait` command
-// defaults to 30 s); an explicit `timeout: 0` still means infinite. Keeps an
-// unattended Batch from hanging forever on a wait whose condition never appears.
-const DEFAULT_WAIT_TIMEOUT_MS = 600_000;
 
 const TypeStepSchema = z.object({ type: z.string().min(1) }).strict();
 const PasteStepSchema = z.object({ paste: z.string().min(1) }).strict();
@@ -218,6 +214,17 @@ function parseWaitStep(
     cursorRow: wait.cursorRow,
     cursorCol: wait.cursorCol,
   });
+
+  if (
+    wait.timeout === undefined &&
+    wait.screenStableMs !== undefined &&
+    wait.screenStableMs >= DEFAULT_WAIT_TIMEOUT_MS
+  ) {
+    invalidInput(
+      `Batch step ${String(index)} wait screenStableMs ${String(wait.screenStableMs)} cannot finish within the default timeout of ${String(DEFAULT_WAIT_TIMEOUT_MS)} ms. Set a larger "timeout", or "timeout": 0 to wait without a limit.`,
+      index,
+    );
+  }
 
   // Absent -> finite default; explicit 0 -> infinite.
   const timeoutMs =

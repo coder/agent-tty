@@ -209,8 +209,16 @@ function killProcessBestEffort(pid: number | null): void {
   }
 }
 
-function ownLinuxSessionId(): number {
-  const { sid } = parseProcStat(readFileSync('/proc/self/stat', 'utf8'));
+// A chroot or a container without a mounted /proc has no /proc/self/stat,
+// and the CLI then counts as outside the session.
+function ownLinuxSessionId(): number | null {
+  let stat: string;
+  try {
+    stat = readFileSync('/proc/self/stat', 'utf8');
+  } catch {
+    return null;
+  }
+  const { sid } = parseProcStat(stat);
   invariant(sid > 0, 'own session id must be a positive integer');
   return sid;
 }
