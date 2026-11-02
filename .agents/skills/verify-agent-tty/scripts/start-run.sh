@@ -95,6 +95,6 @@ q() { printf '%q' "$1"; }
   echo "set -o pipefail"
   echo "# The built CLI, exactly as the agent-tty bin in package.json runs it."
   echo "# HISTFILE reaches the sessions it creates but not the shell that sources this."
-  echo "att() { HISTFILE=$(q "$RUN/evidence/bash_history") node $(q "$REPO/dist/cli/main.js") \"\$@\"; }"
+  echo "att() { HISTFILE=/dev/null node $(q "$REPO/dist/cli/main.js") \"\$@\"; }"
 } >"$RUN/env.sh"
 echo "$RUN/env.sh"
