@@ -42,8 +42,11 @@ import {
 } from './context.js';
 import { CliError } from './errors.js';
 import { warnIfUnsupportedNode } from './nodeRuntime.js';
-import { exitCodeForError } from './exitCodes.js';
-import { emitFailure, setColorEnabled } from './output.js';
+import {
+  emitCliError,
+  jsonOutputRequested,
+  setColorEnabled,
+} from './output.js';
 import {
   DEFAULT_COLS,
   DEFAULT_ROWS,
@@ -78,28 +81,6 @@ function parseIntegerTokenOption(value: string): number {
 
 function collectStringOption(value: string, previous: string[] = []): string[] {
   return [...previous, value];
-}
-
-function jsonOutputRequested(): boolean {
-  const optionsEnd = process.argv.indexOf('--');
-  return process.argv
-    .slice(0, optionsEnd === -1 ? undefined : optionsEnd)
-    .includes('--json');
-}
-
-function emitCliError(commandName: string, error: CliError): void {
-  const json = jsonOutputRequested();
-  emitFailure({
-    command: commandName,
-    json,
-    error: {
-      code: error.code,
-      message: error.message,
-      retryable: error.retryable,
-      details: error.details,
-    },
-  });
-  process.exitCode = exitCodeForError(error.code);
 }
 
 function toCliError(error: unknown, logger?: Logger): CliError {

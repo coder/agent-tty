@@ -66,6 +66,7 @@ export interface MakeCliErrorOptions {
   message?: string;
   retryable?: boolean;
   details?: Record<string, unknown>;
+  result?: unknown;
   cause?: unknown;
 }
 
@@ -76,6 +77,7 @@ export function makeCliError(
   const options: {
     retryable?: boolean;
     details?: Record<string, unknown>;
+    result?: unknown;
     cause?: unknown;
   } = {
     retryable: overrides.retryable ?? DEFAULT_RETRYABLE_CODES.has(code),
@@ -83,6 +85,10 @@ export function makeCliError(
 
   if (overrides.details !== undefined) {
     options.details = overrides.details;
+  }
+
+  if (overrides.result !== undefined) {
+    options.result = overrides.result;
   }
 
   if (overrides.cause !== undefined) {

@@ -2,6 +2,7 @@ export class CliError extends Error {
   public readonly code: string;
   public readonly retryable: boolean;
   public readonly details: Record<string, unknown>;
+  public readonly result: unknown;
 
   public constructor(
     code: string,
@@ -9,6 +10,7 @@ export class CliError extends Error {
     options?: {
       retryable?: boolean;
       details?: Record<string, unknown>;
+      result?: unknown;
       cause?: unknown;
     },
   ) {
@@ -17,5 +19,6 @@ export class CliError extends Error {
     this.code = code;
     this.retryable = options?.retryable ?? false;
     this.details = options?.details ?? {};
+    this.result = options?.result;
   }
 }
