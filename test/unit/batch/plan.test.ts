@@ -111,10 +111,32 @@ describe('parseBatchPlan', () => {
       expect(step).toMatchObject({ kind: 'wait', timeoutMs: undefined });
     });
 
-    it('defaults an absent wait timeout to 600s (parity with the wait command)', () => {
+    it('defaults an absent wait timeout to 30s (parity with the wait command)', () => {
       const step = parse([{ wait: { screenStableMs: 1000 } }]).steps[0];
-      expect(step).toMatchObject({ kind: 'wait', timeoutMs: 600_000 });
+      expect(step).toMatchObject({ kind: 'wait', timeoutMs: 30_000 });
     });
+
+    it('rejects a screenStableMs the default wait timeout cannot fit', () => {
+      expect(() =>
+        parse([{ type: 'x' }, { wait: { screenStableMs: 30_000 } }]),
+      ).toThrow(
+        expect.objectContaining({
+          code: ERROR_CODES.INVALID_INPUT,
+          message:
+            'Batch step 1 wait screenStableMs 30000 cannot finish within the default timeout of 30000 ms. Set a larger "timeout", or "timeout": 0 to wait without a limit.',
+          details: { stepIndex: 1 },
+        }),
+      );
+    });
+
+    it.each([0, 60_000])(
+      'accepts a long screenStableMs with an explicit timeout %d',
+      (timeout) => {
+        const step = parse([{ wait: { screenStableMs: 30_000, timeout } }])
+          .steps[0];
+        expect(step).toMatchObject({ kind: 'wait' });
+      },
+    );
 
     it('compiles a wait regex condition', () => {
       const step = parse([{ wait: { regex: '\\d+ items' } }]).steps[0];
