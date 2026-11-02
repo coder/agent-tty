@@ -136,6 +136,44 @@ describe('mouse command', () => {
   );
 
   itWithNativeMouse(
+    'inspect reports the renderer that mouse input booted',
+    async () => {
+      home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-mouse-')));
+      const session = createSession(home, ['/bin/sh', '-c', 'exec cat']);
+      const env = { AGENT_TTY_HOME: home };
+      const moved = runCli(
+        [
+          '--renderer',
+          'libghostty-vt',
+          'mouse',
+          session,
+          'move',
+          '--row',
+          '0',
+          '--col',
+          '0',
+          '--json',
+        ],
+        env,
+      );
+      expect(moved.status, moved.stdout + moved.stderr).toBe(0);
+
+      const inspected = runCli(['inspect', session, '--json'], env);
+      expect(inspected.status, inspected.stdout + inspected.stderr).toBe(0);
+      expect(JSON.parse(inspected.stdout)).toMatchObject({
+        result: {
+          rendererRuntime: {
+            backend: 'libghostty-vt',
+            profile: 'reference-dark',
+            booted: true,
+          },
+        },
+      });
+    },
+    30_000,
+  );
+
+  itWithNativeMouse(
     'checks cells against the session grid before any output',
     async () => {
       home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-mouse-')));

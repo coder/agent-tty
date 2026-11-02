@@ -198,6 +198,54 @@ describe('EventLog', () => {
     }
   });
 
+  it('rolls back a startAppend whose write fails and keeps the file a valid prefix', async () => {
+    const eventLog = await EventLog.open(eventLogPath);
+    const eventLogInternals = eventLog as unknown as {
+      fileHandle: {
+        appendFile: (data: string, encoding: BufferEncoding) => Promise<void>;
+      };
+      nextSeq: number;
+      writeQueue: Promise<void>;
+    };
+
+    try {
+      await eventLog.append('output', { data: 'prompt$ ' });
+      const appendFileSpy = vi
+        .spyOn(eventLogInternals.fileHandle, 'appendFile')
+        .mockRejectedValueOnce(new Error('EIO'));
+      const started = eventLog.startAppend('input_run', {
+        command: 'echo hi',
+        noWait: false,
+        marker: `__AT_MARKER_${'b'.repeat(32)}__`,
+      });
+      expect(started.seq).toBe(1);
+      const queuedOutput = eventLog.append('output', { data: 'hi\r\n' });
+
+      await expect(started.written).rejects.toThrow('EIO');
+      await expect(queuedOutput).rejects.toThrow('EIO');
+      expect(eventLog.getEvents().map((event) => event.seq)).toEqual([0]);
+      expect(eventLogInternals.nextSeq).toBe(1);
+      appendFileSpy.mockRestore();
+      await expect(
+        eventLog.append('output', { data: 'later' }),
+      ).rejects.toThrow('EIO');
+
+      const lines = (await readFile(eventLogPath, 'utf8')).trim().split('\n');
+      expect(
+        lines.map((line) => (JSON.parse(line) as { seq: number }).seq),
+      ).toEqual([0]);
+      const reopened = await EventLog.open(eventLogPath);
+      try {
+        await expect(reopened.append('output', { data: 'x' })).resolves.toBe(1);
+      } finally {
+        await reopened.close();
+      }
+      eventLogInternals.writeQueue = Promise.resolve();
+    } finally {
+      await eventLog.close();
+    }
+  });
+
   it('appends run_complete events and round-trips them from JSONL', async () => {
     const eventLog = await EventLog.open(eventLogPath);
 
