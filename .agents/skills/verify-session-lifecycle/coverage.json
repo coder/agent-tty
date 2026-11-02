@@ -60,7 +60,7 @@
     "src/storage/manifests.ts#writeValidatedJsonFileSync": "4a5d1cc5f63ae8ce",
     "src/storage/manifests.ts#writeManifest": "1bcc99f09acfc577",
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
-    "src/host/hostMain.ts#runHost(parts)": "b576cb4aaddc11e7",
+    "src/host/hostMain.ts#runHost(parts)": "402885ee8e231aaa",
     "src/host/hostMain.ts#runHost(final try)": "16789dd4e2534bc7",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
