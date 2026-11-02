@@ -1454,4 +1454,35 @@ describe('JSON envelope contracts', () => {
       },
     });
   });
+
+  it('locks the WAIT_TIMEOUT error envelope shape with the wait result', () => {
+    const error = makeCliError(ERROR_CODES.WAIT_TIMEOUT, {
+      message: 'Wait timed out before its condition was met.',
+      details: { sessionId: 'session-01', timeoutMs: 1000 },
+    });
+
+    expect(
+      createErrorEnvelope(
+        'wait',
+        {
+          code: error.code,
+          message: error.message,
+          retryable: error.retryable,
+          details: error.details,
+        },
+        { matched: false, timedOut: true, capturedAtSeq: 7 },
+      ),
+    ).toEqual({
+      ok: false,
+      command: 'wait',
+      timestamp: LOCKED_TIMESTAMP,
+      error: {
+        code: 'WAIT_TIMEOUT',
+        message: 'Wait timed out before its condition was met.',
+        retryable: false,
+        details: { sessionId: 'session-01', timeoutMs: 1000 },
+      },
+      result: { matched: false, timedOut: true, capturedAtSeq: 7 },
+    });
+  });
 });

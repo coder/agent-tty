@@ -44,6 +44,20 @@ export interface SuccessEnvelope<TResult> {
   result: TResult;
 }
 
+export function parseWaitTimeoutEnvelope<TResult>(stdout: string): TResult {
+  const envelope = JSON.parse(stdout) as {
+    ok: boolean;
+    command: string;
+    error?: { code: string; retryable: boolean };
+    result: TResult;
+  };
+  expect(envelope.ok).toBe(false);
+  expect(envelope.command).toBe('wait');
+  expect(envelope.error?.code).toBe('WAIT_TIMEOUT');
+  expect(envelope.error?.retryable).toBe(false);
+  return envelope.result;
+}
+
 export interface SessionRecord {
   version: 1;
   sessionId: string;
