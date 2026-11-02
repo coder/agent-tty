@@ -919,6 +919,28 @@ describe('record export command', () => {
     });
   });
 
+  it('rejects output paths inside session storage', async () => {
+    const home = await createTemporaryDirectory(
+      'agent-tty-record-export-home-',
+    );
+    const sessionDirectory = join(home, 'sessions', 'session-01');
+    await mkdir(join(sessionDirectory, 'artifacts'), { recursive: true });
+    mocks.sessionDir.mockReturnValue(sessionDirectory);
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: false,
+        sessionId: 'session-01',
+        format: 'asciicast',
+        out: join(sessionDirectory, 'artifacts', 'manifest.json'),
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
+    });
+    expect(mocks.writeTextFileAtomic).not.toHaveBeenCalled();
+  });
+
   it('rejects output paths whose parent directory does not exist', async () => {
     const workspaceDirectory = await createTemporaryDirectory(
       'agent-tty-record-export-missing-parent-',

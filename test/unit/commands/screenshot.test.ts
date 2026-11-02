@@ -242,6 +242,7 @@ describe('screenshot command', () => {
 
       expect(mocks.resolveExplicitOutputPath).toHaveBeenCalledWith(
         'out/proof.png',
+        '/tmp/agent-tty/sessions',
       );
       expect(mocks.copyFileReplacing).toHaveBeenCalledWith(
         '/artifacts/shot.png',

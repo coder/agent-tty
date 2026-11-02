@@ -263,7 +263,7 @@ agent-tty record export <session-id> --format asciicast --out ./session.cast --j
 agent-tty record export <session-id> --format webm --timing accelerated --out ./session.webm --json
 ```
 
-`--out <path>` on `screenshot` and `record export` writes the file to that path, so it outlives the Home. A relative path resolves against the working directory, and a file already at the path is replaced. The parent folder must exist: a missing or unwritable parent fails with `EXPORT_ERROR` (exit 7). `screenshot --out` still records the capture in the session's artifact manifest and returns the `--out` path as `artifactPath`.
+`--out <path>` on `screenshot` and `record export` writes the file to that path, so it outlives the Home. A relative path resolves against the working directory, and a file already at the path is replaced. The parent folder must exist: a missing or unwritable parent, or a path inside the Home's `sessions/` folder, fails with `EXPORT_ERROR` (exit 7). `screenshot --out` still records the capture in the session's artifact manifest and returns the `--out` path as `artifactPath`.
 
 WebM export replays with recorded wall-clock timing by default. Pass `--timing accelerated` (idle gaps clamped to 400ms) or `--timing max-speed` for a time-compressed video.
 

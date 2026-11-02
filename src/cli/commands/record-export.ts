@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
-import { basename, isAbsolute } from 'node:path';
+import { basename, dirname, isAbsolute } from 'node:path';
 
 import { z } from 'zod';
 
@@ -145,7 +145,7 @@ async function resolveOutputPath(
     );
   }
 
-  return await resolveExplicitOutputPath(outputPath);
+  return await resolveExplicitOutputPath(outputPath, dirname(sessionDirectory));
 }
 
 async function computeFileHash(filePath: string): Promise<string> {

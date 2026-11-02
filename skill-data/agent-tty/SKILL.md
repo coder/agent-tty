@@ -112,7 +112,7 @@ agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format asciicast --
 agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format webm --json
 ```
 
-To keep proof after the Home is removed, pass `--out <path>` to `screenshot` or `record export`. The file goes to that path and `.result.artifactPath` returns it. The parent folder must already exist.
+To keep proof after the Home is removed, pass `--out <path>` to `screenshot` or `record export`. The file goes to that path and `.result.artifactPath` returns it. The parent folder must already exist, and the path must be outside the Home's `sessions/` folder.
 
 ## Anti-Patterns
 

@@ -1,3 +1,5 @@
+import { dirname } from 'node:path';
+
 import type { ScreenshotResult } from '../../protocol/messages.js';
 
 import type { CommandContext } from '../context.js';
@@ -123,11 +125,14 @@ function outputPathError(
 async function resolveScreenshotOutputPath(
   sessionId: string,
   out: string,
+  sessionsRoot: string,
 ): Promise<string> {
   try {
-    return await resolveExplicitOutputPath(out);
+    return await resolveExplicitOutputPath(out, sessionsRoot);
   } catch (error) {
-    throw outputPathError(sessionId, out, error);
+    throw error instanceof CliError
+      ? error
+      : outputPathError(sessionId, out, error);
   }
 }
 
@@ -194,6 +199,7 @@ export async function runScreenshotCommand(
           path: await resolveScreenshotOutputPath(
             options.sessionId,
             options.out,
+            dirname(sessionDirectory),
           ),
         };
 
