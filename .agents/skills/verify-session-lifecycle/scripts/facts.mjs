@@ -250,8 +250,8 @@ function createFacts() {
 }
 
 // In runCreateCommand, the readiness wait is the only statement of a try
-// whose catch calls host.stop() and then rethrows, so every error after the
-// launch stops the host. Only a win32 create skips the stop while the
+// whose catch calls host.stop() and then rethrows, so every error of the
+// readiness wait stops the host. Only a win32 create skips the stop while the
 // manifest names no program, so on Linux and macOS, which the model covers,
 // it always stops. launchHost's stop sends SIGTERM through the ChildProcess
 // handle, and runHost registers its SIGTERM handler before it waits for the
