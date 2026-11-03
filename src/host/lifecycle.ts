@@ -985,7 +985,7 @@ export async function listSessions(
   return summaries;
 }
 
-function isMarkedDestroyed(
+export function isMarkedDestroyed(
   sessionDirectory: string,
   manifest: SessionRecord,
 ): boolean {

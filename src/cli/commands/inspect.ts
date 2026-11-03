@@ -15,7 +15,7 @@ import {
   countEventLogEntries,
   statEventLogBytes,
 } from '../../host/eventLog.js';
-import { reconcileSession } from '../../host/lifecycle.js';
+import { isMarkedDestroyed, reconcileSession } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import {
   isCommandableSessionStatus,
@@ -206,6 +206,13 @@ export async function runInspectCommand(
         manifestPath: manifestFile,
       },
     });
+  }
+
+  // A reconcile records destroyed for an ended session that a destroy marked
+  // but did not finish (see reconcileSession).
+  if (isMarkedDestroyed(sessionDirectory, session)) {
+    await reconcileSession(sessionDirectory);
+    session = await readManifest(manifestFile);
   }
 
   const isLiveHostEligible = isLiveHostEligibleSessionStatus(session.status);

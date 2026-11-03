@@ -38,11 +38,13 @@ export interface HomeSessionCounts {
 export interface ScanHomeDependencies {
   readdir: (path: string) => Promise<string[]>;
   readManifestIfExists: (path: string) => Promise<SessionRecord | null>;
+  pathExists: (path: string) => boolean;
 }
 
 const defaultScanDependencies: ScanHomeDependencies = {
   readdir,
   readManifestIfExists,
+  pathExists: existsSync,
 };
 
 /**
@@ -89,7 +91,7 @@ export async function scanHome(
     if (
       manifest === null ||
       isDestroyedSessionStatus(manifest.status) ||
-      existsSync(destroyMarkerPath(sessionDir(home, entry)))
+      dependencies.pathExists(destroyMarkerPath(sessionDir(home, entry)))
     ) {
       continue;
     }
