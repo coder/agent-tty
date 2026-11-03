@@ -1244,9 +1244,53 @@ function gcFacts() {
     const rm = indexOfStatement(inner, /dependencies\.rm\(sessionDirectory/);
     finalCheck = check >= 0 && rm > check;
   }
+  // After the collectable guard and before the removal, gc reads whether
+  // program.json proves a live group for a session that is not destroyed,
+  // and skips the session when it does or when the read throws. The
+  // default dependency is provenProgramGroupRuns, which judges the group
+  // that readProvenProgramGroup gives as isProgramGroupAlive does.
+  const groupRead = loop.statements.findIndex(
+    (s) =>
+      ts.isTryStatement(s) &&
+      normalize(s.tryBlock.getText()) ===
+        "{ groupRuns = manifestAfter.status !== 'destroyed' && (await dependencies.provenProgramGroupRuns(sessionDirectory)); }" &&
+      s.catchClause !== undefined &&
+      returnsOrContinues(s.catchClause.block, ts.SyntaxKind.ContinueStatement),
+  );
+  const groupSkip = guardIndex(
+    loop,
+    'groupRuns',
+    ts.SyntaxKind.ContinueStatement,
+  );
+  const defaults = requireDeclaration(
+    'src/cli/commands/gc.ts',
+    'defaultDependencies',
+  ).initializer;
+  const wired =
+    defaults !== undefined &&
+    ts.isObjectLiteralExpression(defaults) &&
+    defaults.properties.some(
+      (p) =>
+        ts.isShorthandPropertyAssignment(p) &&
+        p.name.text === 'provenProgramGroupRuns',
+    );
+  const judges =
+    normalize(
+      requireDeclaration(
+        'src/host/programGroup.ts',
+        'provenProgramGroupRuns',
+      ).body.getText(),
+    ) ===
+    '{ return isProgramGroupAlive(await readProvenProgramGroup(sessionDirectory)); }';
   return {
     GcSkipsNonCollectable: reconcile >= 0 && collectable > reconcile,
     GcFinalCheck: finalCheck,
+    GcKeepsLiveGroup:
+      groupRead > collectable &&
+      groupSkip === groupRead + 1 &&
+      loop.statements.indexOf(removal) > groupSkip &&
+      wired &&
+      judges,
   };
 }
 
@@ -1286,6 +1330,8 @@ const COVERED = [
   ['src/cli/commands/destroy.ts', 'runDestroyCommand'],
   ['src/cli/commands/destroy.ts', 'rerunInNewSession'],
   ['src/cli/commands/gc.ts', 'gcSessions'],
+  ['src/cli/commands/gc.ts', 'defaultDependencies'],
+  ['src/host/programGroup.ts', 'provenProgramGroupRuns'],
   ['src/host/lifecycle.ts', 'allocateSession'],
   ['src/host/lifecycle.ts', 'launchHost'],
   ['src/host/lifecycle.ts', 'isProcessAlive'],

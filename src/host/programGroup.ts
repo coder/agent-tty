@@ -575,6 +575,12 @@ export function isProgramGroupAlive(group: ProgramGroup | null): boolean {
   );
 }
 
+export async function provenProgramGroupRuns(
+  sessionDirectory: string,
+): Promise<boolean> {
+  return isProgramGroupAlive(await readProvenProgramGroup(sessionDirectory));
+}
+
 export function stopProgramGroup(group: ProgramGroup | null): void {
   if (group === null) {
     return;

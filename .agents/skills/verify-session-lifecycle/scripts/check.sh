@@ -3,7 +3,10 @@
 # reconcileSession, gc, and destroy, all acting on one session at the same
 # time.
 #
-#   .agents/skills/verify-session-lifecycle/scripts/check.sh [--update-coverage]
+#   .agents/skills/verify-session-lifecycle/scripts/check.sh [--update-coverage | --drift-only]
+#
+# --drift-only compares the covered code with coverage.json and runs no TLC,
+# so it needs no Java: exit 0 or 3 as below.
 #
 # Exit 0: every TLC run gave the expected result and the covered code is
 #         unchanged since the last sync.
@@ -20,15 +23,19 @@
 set -euo pipefail
 
 UPDATE_COVERAGE=0
+DRIFT_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --update-coverage) UPDATE_COVERAGE=1 ;;
+    --drift-only) DRIFT_ONLY=1 ;;
     *)
-      echo "usage: $0 [--update-coverage]" >&2
+      echo "usage: $0 [--update-coverage | --drift-only]" >&2
       exit 2
       ;;
   esac
 done
+[ $((UPDATE_COVERAGE + DRIFT_ONLY)) -le 1 ] ||
+  { echo "usage: $0 [--update-coverage | --drift-only]" >&2; exit 2; }
 
 SKILL_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 REPO=$(git -C "$SKILL_DIR" rev-parse --show-toplevel)
@@ -60,21 +67,23 @@ case "$JOBS" in
   *[!0-9]* | 0*) die "CHECK_JOBS must be a positive integer, not '$JOBS'" ;;
 esac
 command -v node >/dev/null 2>&1 || die "node is not on PATH"
-# `java -version` prints `version "11.0.2"`, or `version "1.8.0_292"` for Java 8.
-java_out=$("$JAVA" -version 2>&1) || die "Java 11+ is needed (set JAVA=/path/to/java)"
-java_version=$(sed -n 's/.* version "\([^"]*\)".*/\1/p' <<<"$java_out" | head -1)
-[ -n "$java_version" ] || die "Java 11+ is needed (set JAVA=/path/to/java)"
-java_major=${java_version#1.}
-java_major=${java_major%%[!0-9]*}
-[ -n "$java_major" ] && [ "$java_major" -ge 11 ] ||
-  die "Java 11+ is needed, $JAVA is version $java_version (set JAVA=/path/to/java)"
-if [ ! -f "$JAR" ]; then
-  mkdir -p "$(dirname "$JAR")"
-  echo "Fetching TLC $TLC_VERSION into $JAR"
-  curl -fsSL -o "$JAR.part" "$TLC_URL" || die "could not download $TLC_URL"
-  mv "$JAR.part" "$JAR"
+if [ "$DRIFT_ONLY" -eq 0 ]; then
+  # `java -version` prints `version "11.0.2"`, or `version "1.8.0_292"` for Java 8.
+  java_out=$("$JAVA" -version 2>&1) || die "Java 11+ is needed (set JAVA=/path/to/java)"
+  java_version=$(sed -n 's/.* version "\([^"]*\)".*/\1/p' <<<"$java_out" | head -1)
+  [ -n "$java_version" ] || die "Java 11+ is needed (set JAVA=/path/to/java)"
+  java_major=${java_version#1.}
+  java_major=${java_major%%[!0-9]*}
+  [ -n "$java_major" ] && [ "$java_major" -ge 11 ] ||
+    die "Java 11+ is needed, $JAVA is version $java_version (set JAVA=/path/to/java)"
+  if [ ! -f "$JAR" ]; then
+    mkdir -p "$(dirname "$JAR")"
+    echo "Fetching TLC $TLC_VERSION into $JAR"
+    curl -fsSL -o "$JAR.part" "$TLC_URL" || die "could not download $TLC_URL"
+    mv "$JAR.part" "$JAR"
 fi
 [ "$(sha256 "$JAR")" = "$TLC_SHA256" ] || die "$JAR does not match the pinned sha256 of TLC $TLC_VERSION"
+fi
 
 OUT=${CHECK_OUT:-$(mktemp -d "${TMPDIR:-/tmp}/session-lifecycle-check.XXXXXX")}
 mkdir -p "$OUT"
@@ -114,6 +123,17 @@ node -e '
   }
 ' "$OUT/facts.json" "$COVERAGE" >"$OUT/drift.txt"
 
+if [ "$DRIFT_ONLY" -eq 1 ]; then
+  if [ -s "$OUT/drift.txt" ]; then
+    echo "STALE: covered code changed since the last sync. Re-read each item,"
+    echo "update the model if it no longer describes the code, then run with --update-coverage:"
+    sed 's/^/  /' "$OUT/drift.txt"
+    exit 3
+  fi
+  echo "Covered code matches the sync record."
+  exit 0
+fi
+
 COLLECTABLE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Collectable.map((s) => JSON.stringify(s)).join(", ") + "}");
@@ -122,7 +142,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid FreezesUnseenGroup UnsharedGroupReadsUnknown"
+GUARDS="GcSkipsNonCollectable GcFinalCheck GcKeepsLiveGroup ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid FreezesUnseenGroup UnsharedGroupReadsUnknown"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -133,8 +153,9 @@ FACTS_LINE=$(node -e '
 ' "$OUT/facts.json" $GUARDS) || die "facts.json lacks a guard fact"
 
 NO_TOKEN_RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal RecordedExitKept RunningSessionReachable HostStartsWhenCreated TerminalIsLastWrite DestroyedOnlyWhenEnded DestroyEndsDestroyed RemovedFolderStaysRemoved DestroyedProgramStopped LiveGroupStaysNamed DestroyOutlivesProgram FailedCreateStopped DestroyedStaysDestroyed NoUnrelatedHostKilled"
-# R15 and R16 are what the token adds, so only the runs with Token check them.
-RULES="$NO_TOKEN_RULES NoUnrelatedGroupKilled DestroyedSessionStopped"
+# R15, R16 and R20 are what the token adds, so only the runs with Token
+# check them.
+RULES="$NO_TOKEN_RULES NoUnrelatedGroupKilled DestroyedSessionStopped RemovedSessionStopped"
 NO_TOKEN_WITNESSES="WitnessCreateGivesUp WitnessCrashReconciled WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessReconcileRepairs"
 WITNESSES="WitnessGcRemovesSession WitnessCreateGivesUp WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled WitnessDestroyCompletes WitnessSigtermRecorded WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessLeftoverMeetsDestroy WitnessReusedIdMeetsKill WitnessRecordNamesProgram WitnessUnrecordedProgramOutlives WitnessReconcileRepairs WitnessWaitPassesReusedId WitnessReusedHostMeetsKill WitnessUnrecordedHostMeetsKill"
 
@@ -211,6 +232,7 @@ write_run mutant-ReconcileSkipsTerminal pass RecordedExitKept "ReconcileSkipsTer
 write_run mutant-GcSkipsNonCollectable pass NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE" "redundant: the final check still skips"
 write_run mutant-GcFinalCheck pass NoLiveSessionDeleted "GcFinalCheck=FALSE" "redundant: the first check still skips"
 write_run mutant-GcBothChecks violated NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE GcFinalCheck=FALSE" "with neither gc check, gc removes live sessions" NoLiveSessionDeleted
+write_run mutant-GcKeepsLiveGroup violated RemovedSessionStopped "GcKeepsLiveGroup=FALSE" "without the group check, gc removes program.json while a process that the program left runs" RemovedSessionStopped
 write_run mutant-ShutdownChecksCommandable pass TerminalIsFinal "ShutdownChecksCommandable=FALSE" "redundant: the writer writes nothing after a terminal record"
 write_run mutant-ShutdownBothChecks violated TerminalIsFinal "ShutdownChecksCommandable=FALSE HostStopsAfterTerminalWrite=FALSE" "with neither, shutdown writes destroying over an exit record" TerminalIsFinal
 
@@ -252,11 +274,20 @@ run_tlc() {
   echo "$rc" >"$dir/rc"
 }
 
-count=0
+# A pool: a new run starts as soon as one ends. The bash 3.2 of macOS has
+# no `wait -n`, so there each batch of $JOBS runs waits for its slowest.
+running=0
 for name in $RUNS; do
   run_tlc "$name" &
-  count=$((count + 1))
-  if [ $((count % JOBS)) -eq 0 ]; then wait; fi
+  running=$((running + 1))
+  if [ "$running" -ge "$JOBS" ]; then
+    if wait -n 2>/dev/null; then
+      running=$((running - 1))
+    else
+      wait
+      running=0
+    fi
+  fi
 done
 wait
 

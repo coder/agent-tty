@@ -44,6 +44,9 @@ CONSTANTS
     Terminal,               \* statuses whose policy says terminal
     GcSkipsNonCollectable,  \* gc.ts: skip when manifestAfter is not collectable
     GcFinalCheck,           \* gc.ts: re-read before rm, skip if not collectable
+    GcKeepsLiveGroup,       \* gc.ts: skip a session that is not destroyed
+                            \*   while program.json proves that its group
+                            \*   runs
     ReconcileSkipsTerminal, \* lifecycle.ts: return when the manifest is terminal
     ReconcileSkipsLiveHost, \* lifecycle.ts: return when hostPid is set and alive
     CreateRecordsHostPid,   \* lifecycle.ts: launch the host, then write the
@@ -127,7 +130,8 @@ ASSUME MaxListReconciles \in 1..3
 ASSUME Token \in BOOLEAN
 ASSUME Unseen \in BOOLEAN
 ASSUME OtherPidSpace \in BOOLEAN
-ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
+ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, GcKeepsLiveGroup,
+                 ReconcileSkipsTerminal,
                  ReconcileSkipsLiveHost, CreateRecordsHostPid,
                  HostWaitsForManifest, ReconcileRereads,
                  HostSerializesWrites, HostStopsAfterTerminalWrite,
@@ -971,6 +975,20 @@ GcReadsReconciled ==
     /\ pc["gc"] = "readafter"
     /\ IF mst = "none" \/ (GcSkipsNonCollectable /\ mst \notin Collectable)
           THEN GcSkips
+          ELSE GcGoesTo("group")
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, rd,
+                   lruns, destroyVars, groupVars>>
+
+\* provenProgramGroupRuns reads program.json and judges the group, as the
+\* waits of destroy do. With GcKeepsLiveGroup gc skips a session that is not
+\* destroyed while that group reads alive ("the session's program group
+\* still runs"). The code tests the status of manifestAfter, which cannot
+\* turn from destroyed back, so this current status skips no more often.
+GcChecksGroup ==
+    /\ pc["gc"] = "group"
+    /\ IF GcKeepsLiveGroup /\ mst # "destroyed" /\ rec
+          /\ CliGroupSeen("proven")
+          THEN GcSkips
           ELSE GcGoesTo("final")
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, rd,
                    lruns, destroyVars, groupVars>>
@@ -1297,7 +1315,7 @@ Next ==
           \/ ReconcileWrites(p) \/ ReconcileRepairs(p)
           \/ ReconcileUnlinksSocket(p)
     \/ GcFindsDirectory \/ GcReadsManifest \/ GcReadsReconciled
-    \/ GcFinalRead \/ GcRemoves
+    \/ GcChecksGroup \/ GcFinalRead \/ GcRemoves
     \/ ListStartsReconcile
     \/ DestroyChecksSession \/ DestroyReads \/ DestroyMarksFolder
     \/ DestroyWritesDestroyed
@@ -1439,6 +1457,14 @@ DestroyedStaysDestroyed ==
 \* R19: no kill of destroy --force reaches a process that took the host's
 \* pid after the host ended.
 NoUnrelatedHostKilled == ~hitUnrelatedHost
+
+\* R20: gc removes the folder, and with it program.json, only once no
+\* process of the program's group runs, also none that the program left
+\* when it exited on its own. It does not count a program that no
+\* program.json named (see R16), nor a group that no scan shows (Unseen):
+\* gc sends no SIGSTOP.
+RemovedSessionStopped ==
+    (gres = "removed" /\ ~diedUnrecorded /\ ~Unseen) => ~(GroupAlive \/ left)
 
 \* Witnesses. check.sh expects TLC to report each one VIOLATED, which shows
 \* that the model reaches the state: the rules above are not true only
