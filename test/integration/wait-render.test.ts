@@ -524,6 +524,30 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     });
   });
 
+  it.each([
+    ['--screen-stable-ms', '5000'],
+    ['--idle-ms', '5000'],
+  ])(
+    'rejects CLI %s %s that cannot finish within --timeout 2000',
+    (flag, windowMs) => {
+      const result = runCli(
+        ['wait', sessionId, flag, windowMs, '--timeout', '2000', '--json'],
+        { AGENT_TTY_HOME: testHome },
+        10_000,
+      );
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toBe('');
+      const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+      expect(envelope.error.code).toBe('INVALID_DURATION');
+      expect(envelope.error.details).toEqual({
+        flag,
+        windowMs: Number(windowMs),
+        timeoutMs: 2000,
+      });
+    },
+  );
+
   it('rejects non-integer CLI --cursor-row values', () => {
     const result = runCli(
       ['wait', sessionId, '--cursor-row', '1.5', '--json'],
