@@ -11,6 +11,7 @@ import {
 import { programRecordPath } from '../storage/sessionPaths.js';
 import { invariant } from '../util/assert.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
+import { sharesHostPidNamespace } from './hostRecord.js';
 
 const ProgramPidSchema = z.number().int().gt(1);
 // On Linux, setsid() gives the new session a new autogroup, whose id comes
@@ -296,7 +297,11 @@ export async function readProgramGroup(
   if (typeof record === 'object' && hasToken(record)) {
     return record;
   }
-  if (record === 'invalid' || childPid === null) {
+  if (
+    record === 'invalid' ||
+    childPid === null ||
+    !(await sharesHostPidNamespace(sessionDirectory))
+  ) {
     return null;
   }
   return { childPid, sessionDirectory };

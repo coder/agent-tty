@@ -21,6 +21,8 @@ const fsHooks = vi.hoisted(() => ({
   mountinfo: undefined as string | undefined,
   ownStatError: undefined as Error | undefined,
   noProc: false,
+  // The text that a read of /proc/self/stat returns.
+  ownStat: undefined as string | undefined,
   rmdirError: undefined as Error | undefined,
 }));
 
@@ -39,6 +41,9 @@ vi.mock('node:fs', async () => {
     }
     if (fsHooks.noProc && path.startsWith('/proc/')) {
       throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    }
+    if (fsHooks.ownStat !== undefined && path === '/proc/self/stat') {
+      return fsHooks.ownStat;
     }
     if (fsHooks.proc !== undefined && path === '/proc/self/mountinfo') {
       if (fsHooks.mountinfo === undefined) {
@@ -165,6 +170,7 @@ afterEach(async () => {
   psHooks.tty = undefined;
   fsHooks.ownStatError = undefined;
   fsHooks.noProc = false;
+  fsHooks.ownStat = undefined;
   await rm(home, { recursive: true, force: true });
 });
 
@@ -994,15 +1000,25 @@ describe('cliRunsInsideProgramSession', () => {
   );
 
   it.each(['ENOENT', 'EACCES'])(
-    'on linux reads the caller as outside when /proc/self/stat fails with %s',
+    'on linux reads the caller as inside when /proc/self/stat fails with %s',
     async (code) => {
       await seedSession(makeRecord({ childPid: CHILD_PID }));
       Object.defineProperty(process, 'platform', { value: 'linux' });
       fsHooks.ownStatError = errno(code);
 
-      expect(await cliRunsInsideProgramSession('session-01')).toBe(false);
+      expect(await cliRunsInsideProgramSession('session-01')).toBe(true);
     },
   );
+
+  // In a PID namespace whose session leader runs outside it (`unshare -p -f`,
+  // bwrap without --new-session), the kernel reports session id 0.
+  it('on linux reads the caller as inside when /proc/self/stat shows session id 0', async () => {
+    await seedSession(makeRecord({ childPid: CHILD_PID }));
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    fsHooks.ownStat = `${String(process.pid)} (node) S 1 ${String(process.pid)} 0 ${STAT_TAIL}`;
+
+    expect(await cliRunsInsideProgramSession('session-01')).toBe(true);
+  });
 
   it("on darwin matches the caller's process group only", async () => {
     const pgid = ownId('pgid');

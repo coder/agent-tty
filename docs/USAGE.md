@@ -331,7 +331,7 @@ On Linux the host records its pid, the boot id, its start time from `/proc/self/
 Reconcile counts the host as ended only when no process has its pid, when that process is a zombie, or when `host.json` names another boot or another start time than that process has. That covers a crashed host that stays a zombie under a container init that never reaps, and a later process that got the same pid.
 Reconcile then records the session as `failed`. `destroy --force` sends the host SIGKILL only when the boot id and the start time of the process match `host.json`, so it does not signal a process that got the pid before that check.
 The check and the kill are two system calls. A process that gets the pid between them still gets the signal, which needs the host to end, be reaped and its pid to go to a new process in that gap.
-When agent-tty cannot read `/proc` or `host.json`, it counts a host whose pid exists as running and does not kill it. When it runs in another pid namespace than the host, where the recorded pid can name an unrelated process, it counts the host as running and kills nothing, whatever that pid shows.
+When agent-tty cannot read `/proc` or `host.json`, it counts a host whose pid exists as running and does not kill it. When it runs in another pid namespace than the host, where the recorded pid can name an unrelated process, it counts the host as running and kills nothing, whatever that pid shows. Without a session token, it also kills no process group through the program's recorded pid there.
 On macOS and the BSDs, `destroy --force` kills the host only when `/bin/ps` shows the pid running `_host <session id>`, the arguments that agent-tty starts the host with.
 
 Limits:

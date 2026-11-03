@@ -1026,7 +1026,8 @@ function fallbackFacts() {
 // runDestroyCommand runs the same command detached, in a new session, before
 // it destroys anything when cliRunsInsideProgramSession matches. On Linux
 // that check compares the program's pid with the CLI's session id, the
-// fourth field after the command name in /proc/self/stat. Before it reads
+// fourth field after the command name in /proc/self/stat, and a CLI that
+// cannot read that id, or reads 0, counts as inside. Before it reads
 // the manifest, the check matches AGENT_TTY_SESSION_ID, and the copy does
 // not get that variable. Off Linux the check compares the process group and
 // the controlling terminal. The copy gets DESTROY_RERUN_ENV_KEY and skips the
@@ -1058,14 +1059,27 @@ function rerunFacts() {
       : [];
   const copySkipsCheck = copyEnv.includes("[DESTROY_RERUN_ENV_KEY]: '1'");
   const lifecycle = 'src/host/lifecycle.ts';
-  const insideStatements = requireDeclaration(
+  const insideBody = requireDeclaration(
     lifecycle,
     'cliRunsInsideProgramSession',
-  ).body.statements.map((st) => normalize(st.getText()));
+  ).body;
+  const insideStatements = insideBody.statements.map((st) =>
+    normalize(st.getText()),
+  );
+  const linux = insideBody.statements.find(
+    (st) =>
+      ts.isIfStatement(st) &&
+      normalize(st.expression.getText()) === "process.platform === 'linux'",
+  );
+  const linuxStatements =
+    linux !== undefined && ts.isBlock(linux.thenStatement)
+      ? linux.thenStatement.statements.map((st) => normalize(st.getText()))
+      : [];
   const compares =
-    insideStatements.includes(
-      "if (process.platform === 'linux') { return manifest.childPid === ownLinuxSessionId(); }",
-    ) &&
+    linuxStatements.length === 2 &&
+    linuxStatements[0] === 'const sid = ownLinuxSessionId();' &&
+    linuxStatements[1] ===
+      'return sid === null || manifest.childPid === sid;' &&
     insideStatements.at(-1) ===
       'return ( manifest.childPid === ownProcessGroupId() || sharesControllingTerminal(manifest.childPid) );';
   const readsSessionId =

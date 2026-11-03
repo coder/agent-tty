@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readlinkSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,6 +14,7 @@ import {
   judgeProgramGroup,
   parseAutogroup,
   parseProcStat,
+  readProgramGroup,
   stopProgramGroup,
   writeProgramRecord,
   type ProcessRow,
@@ -23,6 +24,7 @@ import {
   programRecordPath,
   sessionDir,
 } from '../../../src/storage/sessionPaths.js';
+import { writeHostRecord } from '../../../src/host/hostRecord.js';
 import { capturesToken } from '../../helpers.js';
 
 import type * as Fs from 'node:fs';
@@ -353,6 +355,61 @@ describe('writeProgramRecord', () => {
         writeProgramRecord(directory, invalid as unknown as ProgramRecord),
       ),
     ).toMatchObject({ code: 'MANIFEST_VALIDATION_ERROR' });
+  });
+});
+
+// Only Linux has /proc/self/ns/pid and host records.
+describe.runIf(platform === 'linux')('readProgramGroup without a token', () => {
+  let home = '';
+  let directory = '';
+
+  beforeEach(async () => {
+    home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-program-')));
+    directory = sessionDir(home, 'session-01');
+    await mkdir(directory, { recursive: true });
+    writeProgramRecord(directory, {
+      version: 1,
+      pid: 4242,
+      bootId: null,
+      autogroup: null,
+    });
+  });
+
+  afterEach(async () => {
+    await rm(home, { recursive: true, force: true });
+  });
+
+  function recordHostIn(pidNamespace: string): void {
+    writeHostRecord(directory, {
+      version: 1,
+      pid: 4141,
+      bootId: 'ce4b84e5-e77e-4d68-bc28-cd04a84f6cd7',
+      startTicks: '100',
+      pidNamespace,
+    });
+  }
+
+  it('falls back to the childPid without a host record', async () => {
+    expect(await readProgramGroup(directory, 4242)).toEqual({
+      childPid: 4242,
+      sessionDirectory: directory,
+    });
+  });
+
+  it("falls back to the childPid in the host's pid namespace", async () => {
+    recordHostIn(readlinkSync('/proc/self/ns/pid'));
+
+    expect(await readProgramGroup(directory, 4242)).toEqual({
+      childPid: 4242,
+      sessionDirectory: directory,
+    });
+  });
+
+  // There the childPid names another process group, if any.
+  it("names no group in a pid namespace other than the host's", async () => {
+    recordHostIn('pid:[1]');
+
+    expect(await readProgramGroup(directory, 4242)).toBeNull();
   });
 });
 

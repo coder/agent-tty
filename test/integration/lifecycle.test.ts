@@ -1829,6 +1829,86 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         expect(await groupEnds(pgid)).toBe(true);
       },
     );
+
+    // Without /proc/self/stat the CLI cannot read its session id, so it runs
+    // again in a new session, and that copy skips the check.
+    it.runIf(process.platform === 'linux')(
+      'destroy typed into an interactive shell that cannot read its session id prints its result',
+      async () => {
+        const out = join(testHome, 'inner-destroy.json');
+        const sessionId = createSession(
+          testHome,
+          ['/bin/bash', '--norc', '--noprofile', '-i'],
+          { env: { HISTFILE: '/dev/null' } },
+        );
+        pgid = inspectSession(testHome, sessionId).childPid as number;
+        const preload = pathToFileURL(
+          resolve('test/fixtures/unreadable-self-stat.ts'),
+        ).href;
+        const command = `unset AGENT_TTY_SESSION_ID; NODE_OPTIONS='--import=${preload}' ${cli.map((part) => `'${part}'`).join(' ')} destroy ${sessionId} --json > '${out}'`;
+        for (const args of [
+          ['type', sessionId, command],
+          ['send-keys', sessionId, 'Enter'],
+        ]) {
+          expect(
+            runCli([...args, '--json'], { AGENT_TTY_HOME: testHome }).status,
+          ).toBe(0);
+        }
+
+        expect(await readEnvelopeOnceWritten(out)).toMatchObject({
+          ok: true,
+          result: { sessionId, destroyed: true },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await groupEnds(pgid)).toBe(true);
+      },
+    );
+
+    // A CLI in a PID namespace whose session leader runs outside it reads
+    // session id 0 and runs again in a new session. When the host runs in
+    // another namespace, the manifest's hostPid can name an unrelated process
+    // in the CLI's one, and the copy's forced destroy must not kill it.
+    it.runIf(process.platform === 'linux')(
+      'destroy --force that reads session id 0 kills no unrelated process that hostPid names',
+      async () => {
+        const sessionId = createSession(testHome, [
+          '/bin/sh',
+          '-c',
+          'trap "" HUP; exec sleep 300',
+        ]);
+        const session = inspectSession(testHome, sessionId);
+        pgid = session.childPid as number;
+        const unrelated = spawn('sleep', ['300'], { stdio: 'ignore' });
+        try {
+          expect(unrelated.pid).toBeTypeOf('number');
+          const directory = sessionDir(testHome, sessionId);
+          await writeManifest(manifestPath(directory), {
+            ...SessionRecordSchema.parse(
+              JSON.parse(await readFile(manifestPath(directory), 'utf8')),
+            ),
+            hostPid: unrelated.pid as number,
+          });
+          const preload = pathToFileURL(
+            resolve('test/fixtures/zero-session-id.ts'),
+          ).href;
+
+          runCli(['destroy', sessionId, '--force', '--json'], {
+            AGENT_TTY_HOME: testHome,
+            NODE_OPTIONS: `--import=${preload}`,
+          });
+
+          expect(await groupEnds(pgid)).toBe(true);
+          await sleep(200);
+          expect(unrelated.signalCode).toBeNull();
+          expect(unrelated.exitCode).toBeNull();
+        } finally {
+          unrelated.kill('SIGKILL');
+          if (session.hostPid !== null && isProcessAlive(session.hostPid)) {
+            process.kill(session.hostPid, 'SIGKILL');
+          }
+        }
+      },
+    );
   });
 
   it('destroyed session rejects commands with SESSION_ALREADY_DESTROYED', () => {

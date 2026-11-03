@@ -273,8 +273,10 @@ function killHostBestEffort(host: SessionHost | null): void {
   }
 }
 
-// A chroot or a container without a mounted /proc has no /proc/self/stat,
-// and the CLI then counts as outside the session.
+// A chroot or a container without a mounted /proc has no /proc/self/stat.
+// In a PID namespace whose session leader runs outside it (`unshare -p -f`,
+// bwrap without --new-session), the kernel shows session id 0. Either way
+// the id is unknown, and the CLI then counts as inside the session.
 function ownLinuxSessionId(): number | null {
   let stat: string;
   try {
@@ -283,8 +285,8 @@ function ownLinuxSessionId(): number | null {
     return null;
   }
   const { sid } = parseProcStat(stat);
-  invariant(sid > 0, 'own session id must be a positive integer');
-  return sid;
+  invariant(sid >= 0, 'own session id must not be negative');
+  return sid === 0 ? null : sid;
 }
 
 // macOS and the BSDs ship ps at /bin/ps, so a restricted PATH cannot hide
@@ -361,7 +363,10 @@ export async function cliRunsInsideProgramSession(
   }
 
   if (process.platform === 'linux') {
-    return manifest.childPid === ownLinuxSessionId();
+    // A CLI that cannot read its session id runs again in a new session,
+    // where the copy skips this check: a needless copy costs one re-run.
+    const sid = ownLinuxSessionId();
+    return sid === null || manifest.childPid === sid;
   }
   return (
     manifest.childPid === ownProcessGroupId() ||
