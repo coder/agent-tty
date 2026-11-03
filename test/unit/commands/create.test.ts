@@ -288,12 +288,87 @@ describe('create command', () => {
     mocks.sendRpc.mockRejectedValue(unreachable);
     mocks.readManifestIfExists.mockResolvedValue(makeManifest());
 
-    await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
-      unreachable,
-    );
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'HOST_UNREACHABLE',
+      message: 'host unreachable',
+      retryable: true,
+      details: { sessionId: 'session-01' },
+      cause: unreachable,
+    });
     expect(mocks.sendRpc).toHaveBeenCalledTimes(50);
     expect(mocks.stopHost).toHaveBeenCalledOnce();
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('keeps the details of the last error and adds the session id', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_TIMEOUT, {
+        message: 'RPC request timed out after 1000ms.',
+        details: { method: 'inspect', timeoutMs: 1000 },
+      }),
+    );
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'HOST_TIMEOUT',
+      details: { method: 'inspect', timeoutMs: 1000, sessionId: 'session-01' },
+    });
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
+  it('stops the host when the manifest is gone after the host answered', async () => {
+    mocks.readManifestIfExists.mockResolvedValue(null);
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      details: { sessionId: 'session-01' },
+    });
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('stops the host when the manifest read fails while the host does not answer', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'host unreachable',
+      }),
+    );
+    mocks.readManifestIfExists.mockRejectedValue(
+      makeCliError(ERROR_CODES.STORAGE_READ_ERROR, {
+        message: 'manifest unreadable',
+      }),
+    );
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'STORAGE_READ_ERROR',
+      message: 'manifest unreadable',
+      details: { sessionId: 'session-01' },
+    });
+    expect(mocks.sendRpc).toHaveBeenCalledOnce();
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
+  it('stops the host on an error that is not a CliError and reports it as INTERNAL_ERROR', async () => {
+    const failure = new TypeError('socket path broke');
+    mocks.sendRpc.mockRejectedValue(failure);
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'socket path broke',
+      details: { sessionId: 'session-01' },
+      cause: failure,
+    });
+    expect(mocks.sendRpc).toHaveBeenCalledOnce();
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
   });
 
   it('on Windows, stops a host that never answers only once the manifest names its program', async () => {
@@ -305,26 +380,51 @@ describe('create command', () => {
     const unreachable = makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
       message: 'host unreachable',
     });
+    const failure = { code: 'HOST_UNREACHABLE', cause: unreachable };
     mocks.sendRpc.mockRejectedValue(unreachable);
 
     mocks.readManifestIfExists.mockResolvedValue(makeManifest());
-    await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
-      unreachable,
-    );
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject(failure);
     expect(mocks.stopHost).not.toHaveBeenCalled();
 
     mocks.readManifestIfExists.mockResolvedValue(null);
-    await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
-      unreachable,
-    );
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject(failure);
     expect(mocks.stopHost).not.toHaveBeenCalled();
 
     mocks.readManifestIfExists.mockResolvedValue(
       makeManifest({ childPid: 4321 }),
     );
-    await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
-      unreachable,
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject(failure);
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
+  it('on Windows, applies the same rule to an error that is not a readiness error', async () => {
+    const platform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    onTestFinished(() => {
+      Object.defineProperty(process, 'platform', { value: platform });
+    });
+    const failure = new TypeError('socket path broke');
+    mocks.sendRpc.mockRejectedValue(failure);
+
+    mocks.readManifestIfExists.mockResolvedValue(makeManifest());
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR', cause: failure });
+    expect(mocks.stopHost).not.toHaveBeenCalled();
+
+    mocks.readManifestIfExists.mockResolvedValue(
+      makeManifest({ childPid: 4321 }),
     );
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR', cause: failure });
     expect(mocks.stopHost).toHaveBeenCalledOnce();
   });
 
