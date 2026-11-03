@@ -245,9 +245,10 @@ jobs:
   # macOS counterpart to the Ubuntu quality gates above. It runs the static
   # checks and the full test suite serially in one job, so PTY spawning,
   # process groups and Unix domain sockets are tested on macOS too.
+  # A passing run takes 18 to 28 minutes, so 45 leaves room for a slow runner.
   quality-gates-macos:
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
