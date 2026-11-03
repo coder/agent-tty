@@ -68,4 +68,61 @@ describe('destroy command', () => {
     expect(mocks.emitSuccess).toHaveBeenCalledTimes(1);
     expect(process.exitCode).toBe(0);
   });
+
+  it.each([
+    ['SIGINT', 130],
+    ['SIGTERM', 143],
+  ] as const)(
+    'forwards %s to the copy and exits as the copy does',
+    async (signal, exitCode) => {
+      mocks.cliRunsInsideProgramSession.mockResolvedValue(true);
+      const child = Object.assign(new EventEmitter(), {
+        kill: vi.fn((sent: NodeJS.Signals) => {
+          setImmediate(() => child.emit('exit', null, sent));
+          return true;
+        }),
+      });
+      mocks.spawn.mockReturnValue(child);
+      const listeners = process.listenerCount(signal);
+
+      const destroy = runDestroyCommand(OPTIONS);
+      await vi.waitFor(() => {
+        expect(mocks.spawn).toHaveBeenCalledOnce();
+      });
+      process.emit(signal, signal);
+      await vi.waitFor(() => {
+        expect(child.kill).toHaveBeenCalledWith(signal);
+      });
+      await destroy;
+
+      expect(process.exitCode).toBe(exitCode);
+      expect(process.listenerCount(signal)).toBe(listeners);
+      expect(mocks.destroySession).not.toHaveBeenCalled();
+    },
+  );
+  // The end of the program's session hangs up the CLI that waits inside it,
+  // and the copy must outlive that to report the destroy.
+  it('does not forward SIGHUP to the copy', async () => {
+    mocks.cliRunsInsideProgramSession.mockResolvedValue(true);
+    const child = Object.assign(new EventEmitter(), {
+      kill: vi.fn(() => true),
+    });
+    mocks.spawn.mockReturnValue(child);
+    const listeners = process.listenerCount('SIGHUP');
+
+    const destroy = runDestroyCommand(OPTIONS);
+    await vi.waitFor(() => {
+      expect(mocks.spawn).toHaveBeenCalledOnce();
+    });
+
+    expect(process.listenerCount('SIGHUP')).toBe(listeners);
+    process.listeners('SIGHUP').forEach((listener) => {
+      listener('SIGHUP');
+    });
+    expect(child.kill).not.toHaveBeenCalled();
+
+    child.emit('exit', 0, null);
+    await destroy;
+    expect(process.exitCode).toBe(0);
+  });
 });
