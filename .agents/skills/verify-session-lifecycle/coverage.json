@@ -28,7 +28,7 @@
     "src/host/lifecycle.ts#waitForProcessesToExit": "bdab1d674a6856b8",
     "src/host/lifecycle.ts#stopSessionProcesses": "131fa8ef2728acfc",
     "src/host/lifecycle.ts#recordDestroyed": "d968f32f58d3920a",
-    "src/host/lifecycle.ts#destroySession": "873354edcae17792",
+    "src/host/lifecycle.ts#destroySession": "e94686556c9d53c2",
     "src/host/lifecycle.ts#reconcileSession": "c2904456d54b87c8",
     "src/host/hostMain.ts#waitForManifestFromCreate": "fd500651f83683eb",
     "src/host/hostMain.ts#isSessionCommandable": "260060f07b068ec1",
@@ -47,8 +47,8 @@
     "src/host/programGroup.ts#captureProgram": "f07d6160f3f22aed",
     "src/host/programGroup.ts#writeProgramRecord": "1845322710155185",
     "src/host/programGroup.ts#readProgramRecord": "b02c48c2bff248a7",
-    "src/host/programGroup.ts#readProvenProgramGroup": "4331f000970ee6cb",
-    "src/host/programGroup.ts#readProgramGroup": "ed16d7d9683bb9f7",
+    "src/host/programGroup.ts#readProvenProgramGroup": "a81172c2ed27f450",
+    "src/host/programGroup.ts#readProgramGroup": "ec7a4a291705bcbc",
     "src/host/programGroup.ts#judgeProgramGroup": "b8b3053a25f95bbf",
     "src/host/programGroup.ts#readGroupMembers": "8f8103d1d5186e91",
     "src/host/programGroup.ts#judgeLiveGroup": "29c9c4bfd01c4338",
@@ -58,8 +58,8 @@
     "src/host/programGroup.ts#scanGroup": "babc9d5767424243",
     "src/host/programGroup.ts#isProcessGroupAlive": "ce1b8fca10085d51",
     "src/host/programGroup.ts#killProcessGroupBestEffort": "6d5d47cb5697681b",
-    "src/host/programGroup.ts#isProgramGroupAlive": "ce64b993c846b40a",
-    "src/host/programGroup.ts#stopProgramGroup": "53d47560e7a1289a",
+    "src/host/programGroup.ts#isProgramGroupAlive": "f6fe01a280824f82",
+    "src/host/programGroup.ts#stopProgramGroup": "42932f7ab75cb613",
     "src/host/rpcClient.ts#toTransportCliError": "dd6531349c62bcbd",
     "src/host/sessionState.ts#SessionState.setDimensions": "08c4f06122d157e9",
     "src/host/sessionState.ts#SessionState.requestDestroy": "f66074e815527ff1",
@@ -79,9 +79,9 @@
     "src/host/hostMain.ts#runHost(final try)": "16789dd4e2534bc7",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "c3e13b1bab88e18f",
-    "skill:scripts/facts.mjs": "ae186f3448932144",
-    "skill:scripts/check.sh": "27da959697f6af33"
+    "skill:model/SessionLifecycle.tla": "60906e515968abd7",
+    "skill:scripts/facts.mjs": "c9aab054744f828d",
+    "skill:scripts/check.sh": "33d064c75e95b91c"
   },
   "callSites": {
     "writeManifest": [
