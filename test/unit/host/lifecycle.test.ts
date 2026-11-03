@@ -8,7 +8,8 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
@@ -160,6 +161,7 @@ import type * as TimersPromises from 'node:timers/promises';
 import {
   allocateSession,
   destroySession,
+  listSessions,
   cliRunsInsideProgramSession,
   reconcileSession,
   removeSocketDirectoryBestEffort,
@@ -180,6 +182,7 @@ import { ensureSocketRoot } from '../../../src/host/socketRoot.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
 import {
+  legacySocketPath,
   manifestPath,
   sessionDir,
   socketPath,
@@ -443,6 +446,166 @@ describe('reconcileSession', () => {
       childPid: null,
     });
     expect(manifest.failureReason).toBeUndefined();
+  });
+
+  it('records destroyed for a failed session whose reconcile died before it repaired a destroy', async () => {
+    const directory = await seedSession(
+      makeRecord({
+        status: 'failed',
+        failureOrigin: 'host-death',
+        failureReason: 'host process died unexpectedly',
+        hostPid: null,
+        childPid: null,
+      }),
+    );
+    writeFileSync(join(directory, 'destroyed'), '');
+
+    await reconcileSession(directory);
+
+    const manifest = await readManifest(manifestPath(directory));
+    expect(manifest).toMatchObject({ status: 'destroyed' });
+    expect(manifest.failureOrigin).toBeUndefined();
+    expect(manifest.failureReason).toBeUndefined();
+  });
+
+  it('records destroyed for an exited session whose destroy failed after the marker', async () => {
+    const directory = await seedSession(
+      makeRecord({
+        status: 'exited',
+        exitCode: 3,
+        hostPid: null,
+        childPid: null,
+      }),
+    );
+    writeFileSync(join(directory, 'destroyed'), '');
+
+    await reconcileSession(directory);
+
+    expect(await readManifest(manifestPath(directory))).toMatchObject({
+      status: 'destroyed',
+      exitCode: 3,
+    });
+  });
+
+  it('list shows destroyed for a failed session next to the destroy marker', async () => {
+    const directory = await seedSession(
+      makeRecord({
+        status: 'failed',
+        failureOrigin: 'host-death',
+        hostPid: null,
+        childPid: null,
+      }),
+    );
+    writeFileSync(join(directory, 'destroyed'), '');
+
+    const [summary] = await listSessions(home, true);
+
+    expect(summary).toMatchObject({
+      sessionId: 'session-01',
+      status: 'destroyed',
+    });
+  });
+
+  it('removes the socket that a dead host left when it repairs a destroy', async () => {
+    const directory = await seedSession(
+      makeRecord({
+        status: 'failed',
+        failureOrigin: 'host-death',
+        hostPid: null,
+        childPid: null,
+      }),
+    );
+    writeFileSync(join(directory, 'destroyed'), '');
+    const socketFile = socketPath(directory);
+    await mkdir(dirname(socketFile), { recursive: true, mode: 0o700 });
+    writeFileSync(socketFile, '');
+
+    try {
+      await reconcileSession(directory);
+
+      expect(existsSync(socketFile)).toBe(false);
+      expect(existsSync(dirname(socketFile))).toBe(false);
+    } finally {
+      await rm(dirname(socketFile), { recursive: true, force: true });
+    }
+  });
+
+  it('leaves a running session with a live host as it is next to the destroy marker', async () => {
+    const running = makeRecord({ hostPid: process.pid, childPid: null });
+    const directory = await seedSession(running);
+    const own = captureHost(process.pid);
+    if (own !== null) {
+      writeHostRecord(directory, own);
+    }
+    writeFileSync(join(directory, 'destroyed'), '');
+
+    await reconcileSession(directory);
+    expect(await readManifest(manifestPath(directory))).toEqual(running);
+    expect(await listSessions(home, true)).toMatchObject([
+      { sessionId: 'session-01', status: 'running' },
+    ]);
+  });
+
+  it('list shows destroyed when the socket cleanup fails after the repair write', async () => {
+    const directory = await seedSession(
+      makeRecord({
+        status: 'failed',
+        failureOrigin: 'host-death',
+        hostPid: null,
+        childPid: null,
+      }),
+    );
+    writeFileSync(join(directory, 'destroyed'), '');
+    // unlink of a directory fails with EISDIR (EPERM on macOS).
+    const socketFile = socketPath(directory);
+    await mkdir(socketFile, { recursive: true });
+
+    try {
+      expect(await listSessions(home, true)).toMatchObject([
+        { sessionId: 'session-01', status: 'destroyed' },
+      ]);
+    } finally {
+      await rm(dirname(socketFile), { recursive: true, force: true });
+    }
+  });
+
+  // A root process can write into a folder of mode 0500.
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'list keeps a marked failed session when its repair write fails',
+    async () => {
+      const directory = await seedSession(
+        makeRecord({
+          status: 'failed',
+          failureOrigin: 'host-death',
+          hostPid: null,
+          childPid: null,
+        }),
+      );
+      writeFileSync(join(directory, 'destroyed'), '');
+      await chmod(directory, 0o500);
+
+      try {
+        expect(await listSessions(home, true)).toMatchObject([
+          { sessionId: 'session-01', status: 'failed' },
+        ]);
+      } finally {
+        await chmod(directory, 0o700);
+      }
+    },
+  );
+
+  it('leaves an exited session without the marker as it is', async () => {
+    const exited = makeRecord({
+      status: 'exited',
+      exitCode: 0,
+      hostPid: null,
+      childPid: null,
+    });
+    const directory = await seedSession(exited);
+
+    await reconcileSession(directory);
+
+    expect(await readManifest(manifestPath(directory))).toEqual(exited);
   });
 
   it('writes nothing while the program group survives its kill', async () => {
@@ -1483,6 +1646,64 @@ describe('removeSocketDirectoryBestEffort', () => {
     );
   });
 });
+
+// A host of an older version listens at the old path under /tmp/agent-tty.
+describe.skipIf(process.platform === 'win32')(
+  'the old socket of a destroyed session',
+  () => {
+    let oldSocketFile = '';
+    let server: Server | undefined;
+
+    beforeEach(async () => {
+      vi.stubEnv('AGENT_TTY_HOME', home);
+      const old = legacySocketPath(socketPath(sessionDir(home, 'session-01')));
+      expect(old).not.toBeNull();
+      oldSocketFile = old as string;
+      await mkdir(dirname(oldSocketFile), { recursive: true, mode: 0o700 });
+      const listening = createServer();
+      server = listening;
+      await new Promise<void>((resolve) => {
+        listening.listen(oldSocketFile, resolve);
+      });
+    });
+
+    afterEach(async () => {
+      await new Promise((resolve) => server?.close(resolve));
+      server = undefined;
+      await rm(dirname(oldSocketFile), { recursive: true, force: true });
+    });
+
+    it('destroy removes it when the host is dead', async () => {
+      await seedSession(makeRecord({ status: 'destroyed', childPid: null }));
+      killProbeReportsDead();
+
+      await expect(destroySession('session-01')).rejects.toMatchObject({
+        code: 'SESSION_ALREADY_DESTROYED',
+      });
+      expect(existsSync(oldSocketFile)).toBe(false);
+    });
+
+    it('destroy keeps it when the host check throws', async () => {
+      await seedSession(makeRecord({ status: 'destroyed', childPid: null }));
+      const failure = Object.assign(new Error('kill EINVAL'), {
+        code: 'EINVAL',
+      });
+      vi.spyOn(process, 'kill').mockImplementation(() => {
+        throw failure;
+      });
+      const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+      await expect(destroySession('session-01')).rejects.toMatchObject({
+        code: 'SESSION_ALREADY_DESTROYED',
+      });
+      expect(existsSync(oldSocketFile)).toBe(true);
+      expect(debug).toHaveBeenCalledWith(
+        expect.stringContaining('could not judge the host'),
+        failure,
+      );
+    });
+  },
+);
 
 describe.skipIf(process.platform === 'win32')(
   'destroy of a destroyed session',

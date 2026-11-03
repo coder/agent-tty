@@ -460,10 +460,18 @@ export async function removeDeadHostSocket(
   manifest: SessionRecord,
 ): Promise<void> {
   const socketFile = socketPath(sessionDirectory);
+  let alive: boolean;
   try {
-    if (isHostAlive(await readSessionHost(sessionDirectory, manifest))) {
-      return;
-    }
+    alive = isHostAlive(await readSessionHost(sessionDirectory, manifest));
+  } catch (error) {
+    // A host that the check cannot judge may still listen on either socket.
+    console.debug('could not judge the host of a socket:', error);
+    return;
+  }
+  if (alive) {
+    return;
+  }
+  try {
     await unlinkIfPresent(socketFile);
     await removeSocketDirectoryIfEmpty(socketFile);
   } catch (error) {
@@ -1041,12 +1049,21 @@ export async function listSessions(
       continue;
     }
 
-    if (isActiveSessionStatus(manifest.status)) {
+    if (
+      isActiveSessionStatus(manifest.status) ||
+      isMarkedDestroyed(sessionDirectory, manifest)
+    ) {
+      const read = manifest;
       try {
         await reconcileSession(sessionDirectory);
         manifest = await readManifestIfExists(manifestFile);
       } catch {
-        continue;
+        if (isActiveSessionStatus(read.status)) {
+          continue;
+        }
+        // A marked session that ended lists as it reads when its repair
+        // fails. The repair write can have landed before a later step threw.
+        manifest = await readManifestIfExists(manifestFile).catch(() => read);
       }
 
       if (manifest === null) {
@@ -1071,12 +1088,57 @@ export async function listSessions(
   return summaries;
 }
 
+export function isMarkedDestroyed(
+  sessionDirectory: string,
+  manifest: SessionRecord,
+): boolean {
+  return (
+    isTerminalSessionStatus(manifest.status) &&
+    !isDestroyedSessionStatus(manifest.status) &&
+    existsSync(destroyMarkerPath(sessionDirectory))
+  );
+}
+
+// false when gc removed the session folder.
+async function writeMarkedDestroyed(
+  manifestFile: string,
+  manifest: SessionRecord,
+): Promise<boolean> {
+  const { failureReason: _reason, failureOrigin: _origin, ...rest } = manifest;
+  try {
+    await writeManifest(manifestFile, {
+      ...rest,
+      status: 'destroyed',
+      updatedAt: new Date().toISOString(),
+      hostPid: null,
+      childPid: null,
+    });
+    return true;
+  } catch (error) {
+    if (
+      error instanceof CliError &&
+      error.code === ERROR_CODES.SESSION_NOT_FOUND
+    ) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 export async function reconcileSession(
   sessionDirectory: string,
 ): Promise<void> {
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
 
+  if (manifest !== null && isMarkedDestroyed(sessionDirectory, manifest)) {
+    if (await writeMarkedDestroyed(manifestFile, manifest)) {
+      const socketFile = socketPath(sessionDirectory);
+      await unlinkIfPresent(socketFile);
+      await removeSocketDirectoryIfEmpty(socketFile);
+    }
+    return;
+  }
   if (manifest === null || isTerminalSessionStatus(manifest.status)) {
     return;
   }
