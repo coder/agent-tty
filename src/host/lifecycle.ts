@@ -830,10 +830,16 @@ export async function destroySession(
   const stopLeftoversThenRecordDestroyed = async (
     terminal: SessionRecord,
   ): Promise<void> => {
+    const group = await readProvenProgramGroup(sessionDirectory);
+    // Only a process that sees the program's group records destroyed, after
+    // a wait that read the group gone. So a destroyed record needs no wait
+    // for a group out of view.
     await stopSessionProcesses(
       sessionId,
       null,
-      await readProvenProgramGroup(sessionDirectory),
+      terminal.status === 'destroyed' && group !== null && 'unshared' in group
+        ? null
+        : group,
       sessionDirectory,
       signal,
     );
