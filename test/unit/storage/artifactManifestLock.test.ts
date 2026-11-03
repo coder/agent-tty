@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import {
@@ -305,6 +306,94 @@ describe('artifact manifest lock', () => {
         FAST,
       ),
     ).resolves.toBe('ran');
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
+  });
+
+  it("lets one breaker act at a time when one stops while it removes a dead breaker's break file", async () => {
+    // The trace: W2 judges a dead breaker's break file and stops before its
+    // rm. W1 then takes a new break file, reads the dead owner's lock and
+    // stops before its rm. W2 resumes, removes W1's break file by path,
+    // breaks the lock and enters. W1 resumes and removes W2's fresh lock.
+    await writeFile(lockPath, await deadOwnerRecord());
+    await writeFile(`${lockPath}.break`, await deadOwnerRecord());
+    const writer = new AsyncLocalStorage<string>();
+    const deferred = (): { promise: Promise<void>; resolve: () => void } => {
+      let resolve = (): void => undefined;
+      const promise = new Promise<void>((done) => {
+        resolve = done;
+      });
+      return { promise, resolve };
+    };
+    const w2AtBreakRm = deferred();
+    const resumeW2 = deferred();
+    const w1AtLockRm = deferred();
+    const resumeW1 = deferred();
+    const firstInside = deferred();
+    const secondInside = deferred();
+    const leave = deferred();
+    let w2Paused = false;
+    let w2Resumed = false;
+    let w1Paused = false;
+    fsHooks.beforeRm = async (path) => {
+      const who = writer.getStore();
+      if (who === 'W2' && path === `${lockPath}.break` && !w2Paused) {
+        w2Paused = true;
+        w2AtBreakRm.resolve();
+        await resumeW2.promise;
+      }
+      if (who === 'W1' && path === lockPath && !w2Resumed && !w1Paused) {
+        w1Paused = true;
+        w1AtLockRm.resolve();
+        await resumeW1.promise;
+      }
+    };
+    let inside = 0;
+    let maxInside = 0;
+    const update = async (): Promise<void> => {
+      inside += 1;
+      maxInside = Math.max(maxInside, inside);
+      (inside === 1 ? firstInside : secondInside).resolve();
+      await leave.promise;
+      inside -= 1;
+    };
+    const contend = (who: string): Promise<void> =>
+      writer.run(who, () =>
+        withArtifactManifestLock(sessionDirectory, update, {
+          waitMs: 10_000,
+          unknownOwnerStaleMs: 60_000,
+        }),
+      );
+
+    const w2 = contend('W2');
+    await w2AtBreakRm.promise;
+    const w1 = contend('W1');
+    await Promise.race([w1AtLockRm.promise, sleep(300)]);
+    w2Resumed = true;
+    resumeW2.resolve();
+    await firstInside.promise;
+    resumeW1.resolve();
+    await Promise.race([secondInside.promise, sleep(300)]);
+    leave.resolve();
+    await Promise.all([w1, w2]);
+
+    expect(maxInside).toBe(1);
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
+  });
+
+  it("removes a dead breaker's fresh break file once it had to wait for a live lock", async () => {
+    await writeFile(lockPath, ownerRecord(process.pid, true));
+    await writeFile(`${lockPath}.break`, await deadOwnerRecord());
+    freezeLockClock();
+    let refreshes = 0;
+    fsHooks.beforeUtimes = async (path) => {
+      if (path.startsWith(`${lockPath}.tmp-`) && (refreshes += 1) === 2) {
+        await rm(lockPath);
+      }
+    };
+
+    await withArtifactManifestLock(sessionDirectory, () => Promise.resolve());
+
+    expect(refreshes).toBe(2);
     expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
   });
 
