@@ -1010,6 +1010,22 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     },
   );
 
+  // Only a missing /proc shows no member. A /proc that is a file or that
+  // refuses the listing is not a setup that the probe can answer for.
+  it.each(['EACCES', 'ENOTDIR'])(
+    'throws when the /proc listing fails with %s',
+    (code) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procHooks.listError = errno(code);
+      probeEnds('ok');
+
+      expect(() => isProgramGroupAlive(group)).toThrow(code);
+      expect(() => {
+        stopProgramGroup(group);
+      }).toThrow(code);
+    },
+  );
+
   it('is alive with no member in view when /proc hides other users and the probe ends EPERM', () => {
     procShowsTokenGroup();
     procHooks.mountinfo = procMount('rw,hidepid=2');

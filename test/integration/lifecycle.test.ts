@@ -1442,6 +1442,45 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     },
   );
 
+  // Without /proc nothing proves the group or the host, so --force kills
+  // nothing and names the ways out.
+  it.runIf(process.platform === 'linux')(
+    'destroy --force from a CLI that sees no /proc fails with HOST_TIMEOUT and kills nothing',
+    async () => {
+      vi.stubEnv('XDG_STATE_HOME', join(testHome, 'state'));
+      try {
+        const sessionId = createSession(testHome, [
+          '/bin/sh',
+          '-c',
+          'exec sleep 300',
+        ]);
+        const pgid = inspectSession(testHome, sessionId).childPid as number;
+        const preload = pathToFileURL(resolve('test/fixtures/no-proc.ts')).href;
+
+        const result = runCli(['destroy', sessionId, '--force', '--json'], {
+          AGENT_TTY_HOME: testHome,
+          NODE_OPTIONS: `--import=${preload}`,
+        });
+
+        expect(result.status).toBe(5);
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          ok: false,
+          error: {
+            code: 'HOST_TIMEOUT',
+            message: expect.stringContaining('plain destroy') as string,
+          },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('running');
+        expect(isGroupAlive(pgid)).toBe(true);
+
+        destroySession(testHome, sessionId);
+        expect(await groupEnds(pgid)).toBe(true);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it.runIf(process.platform === 'linux')(
     'keeps a session running whose host renamed itself, and destroy --force ends it',
     async () => {
