@@ -1134,6 +1134,30 @@ describe('RPC message schemas', () => {
     );
   });
 
+  it('rejects glyph fields on an asciicast record export result', () => {
+    const result = {
+      sessionId: 'session-01',
+      format: 'asciicast',
+      artifactPath: '/tmp/session-01/artifacts/recording-7.cast',
+      bytes: 4096,
+      sha256: 'abc123',
+      capturedAtSeq: 7,
+      metadata: {},
+    };
+
+    expect(RecordExportResultSchema.safeParse(result).success).toBe(true);
+    expect(
+      RecordExportResultSchema.safeParse({ ...result, missingGlyphs: [] })
+        .success,
+    ).toBe(false);
+    expect(
+      RecordExportResultSchema.safeParse({
+        ...result,
+        missingGlyphsTruncated: true,
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects invalid record export results', () => {
     expect(
       RecordExportResultSchema.safeParse({
