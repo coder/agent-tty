@@ -497,17 +497,34 @@ describe('wait render integration', { timeout: 120_000 }, () => {
   });
 
   it('exits 11 with a WAIT_TIMEOUT error envelope when legacy CLI --idle-ms times out', () => {
-    const result = runCli(
-      ['wait', sessionId, '--idle-ms', '10000', '--timeout', '1000', '--json'],
-      { AGENT_TTY_HOME: testHome },
-      10_000,
-    );
+    const tickingSessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      'while :; do echo tick; sleep 0.05; done',
+    ]);
+    try {
+      const result = runCli(
+        [
+          'wait',
+          tickingSessionId,
+          '--idle-ms',
+          '250',
+          '--timeout',
+          '1000',
+          '--json',
+        ],
+        { AGENT_TTY_HOME: testHome },
+        10_000,
+      );
 
-    expect(result.exitCode).toBe(11);
-    expect(result.stderr).toBe('');
-    expect(parseWaitTimeoutEnvelope(result.stdout)).toEqual({
-      timedOut: true,
-    });
+      expect(result.exitCode).toBe(11);
+      expect(result.stderr).toBe('');
+      expect(parseWaitTimeoutEnvelope(result.stdout)).toEqual({
+        timedOut: true,
+      });
+    } finally {
+      destroySession(testHome, tickingSessionId);
+    }
   });
 
   it('exits 11 with a WAIT_TIMEOUT error envelope when legacy CLI --exit times out', () => {
@@ -523,6 +540,30 @@ describe('wait render integration', { timeout: 120_000 }, () => {
       timedOut: true,
     });
   });
+
+  it.each([
+    ['--screen-stable-ms', '5000'],
+    ['--idle-ms', '5000'],
+  ])(
+    'rejects CLI %s %s that cannot finish within --timeout 2000',
+    (flag, windowMs) => {
+      const result = runCli(
+        ['wait', sessionId, flag, windowMs, '--timeout', '2000', '--json'],
+        { AGENT_TTY_HOME: testHome },
+        10_000,
+      );
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toBe('');
+      const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+      expect(envelope.error.code).toBe('INVALID_DURATION');
+      expect(envelope.error.details).toEqual({
+        flag,
+        windowMs: Number(windowMs),
+        timeoutMs: 2000,
+      });
+    },
+  );
 
   it('rejects non-integer CLI --cursor-row values', () => {
     const result = runCli(
