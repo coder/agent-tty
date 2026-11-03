@@ -150,10 +150,11 @@ describe('TerminalQueryResponder', () => {
   describe('XTGETTCAP and DECRQSS', () => {
     const ESC = '\x1b';
     const ST = `${ESC}\\`;
-    const upperHex = (text: string): string =>
-      Buffer.from(text, 'ascii').toString('hex').toUpperCase();
-    const SETRGBF_VALUE = upperHex('\\E[38;2;%p1%d;%p2%d;%p3%dm');
-    const SETRGBB_VALUE = upperHex('\\E[48;2;%p1%d;%p2%d;%p3%dm');
+    // Hex of the terminfo source strings `\E[38;2;%p1%d;%p2%d;%p3%dm` and `\E[48;...`.
+    const SETRGBF_VALUE =
+      '5C455B33383B323B25703125643B25703225643B25703325646D';
+    const SETRGBB_VALUE =
+      '5C455B34383B323B25703125643B25703225643B25703325646D';
     const TC = '5463';
     const RGB = '524742';
     const SETRGBF = '73657472676266';
@@ -179,12 +180,6 @@ describe('TerminalQueryResponder', () => {
           `${ESC}P1+r${SETRGBF}=${SETRGBF_VALUE}${ST}`,
           `${ESC}P1+r${SETRGBB}=${SETRGBB_VALUE}${ST}`,
         ].join(''),
-      );
-    });
-
-    it('hex-encodes the terminfo source form of setrgbf', () => {
-      expect(SETRGBF_VALUE).toBe(
-        '5C455B33383B323B25703125643B25703225643B25703325646D',
       );
     });
 

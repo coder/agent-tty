@@ -50,8 +50,29 @@ const NVIM_PROBE_CHILD_SCRIPT = [
   '}, 1800);',
 ].join('\n');
 
-function hexUpper(text: string): string {
-  return Buffer.from(text, 'ascii').toString('hex').toUpperCase();
+// Poll the on-disk event log instead of sleeping a fixed duration: return as
+// soon as the pattern lands, capped at the deadline so a real failure still
+// surfaces (instead of paying the full wait on every green run).
+async function readOutputUntil(
+  home: string,
+  sessionId: string,
+  pattern: RegExp,
+  deadlineMs: number,
+): Promise<string> {
+  const pollMs = 100;
+  for (let waited = 0; ; waited += pollMs) {
+    const events = await readEvents(home, sessionId);
+    const output = events
+      .filter((event) => event.type === 'output')
+      .map((event) =>
+        typeof event.payload.data === 'string' ? event.payload.data : '',
+      )
+      .join('');
+    if (pattern.test(output) || waited >= deadlineMs) {
+      return output;
+    }
+    await sleep(pollMs);
+  }
 }
 
 // `#1e1e2e` (the default `reference-dark` background) in xterm OSC reply form.
@@ -83,25 +104,12 @@ describe('terminal-query-responder integration', { timeout: 30000 }, () => {
         `REPLY="[^"]*${EXPECTED_BACKGROUND_REPLY}`,
       );
 
-      // Poll the on-disk event log instead of sleeping a fixed duration: exit as
-      // soon as the round-trip lands, capped at the deadline so a real failure
-      // still surfaces (instead of paying the full wait on every green run).
-      const deadlineMs = 4000;
-      const pollMs = 100;
-      let output = '';
-      for (let waited = 0; ; waited += pollMs) {
-        const events = await readEvents(testHome, sessionId);
-        output = events
-          .filter((event) => event.type === 'output')
-          .map((event) =>
-            typeof event.payload.data === 'string' ? event.payload.data : '',
-          )
-          .join('');
-        if (replyRoundTrip.test(output) || waited >= deadlineMs) {
-          break;
-        }
-        await sleep(pollMs);
-      }
+      const output = await readOutputUntil(
+        testHome,
+        sessionId,
+        replyRoundTrip,
+        4000,
+      );
 
       expect(output).toMatch(replyRoundTrip);
     } finally {
@@ -120,32 +128,21 @@ describe('terminal-query-responder integration', { timeout: 30000 }, () => {
       ]);
 
       const replyLine = /REPLY=("(?:[^"\\]|\\.)*")/u;
-      const deadlineMs = 5000;
-      const pollMs = 100;
-      let output = '';
-      for (let waited = 0; ; waited += pollMs) {
-        const events = await readEvents(testHome, sessionId);
-        output = events
-          .filter((event) => event.type === 'output')
-          .map((event) =>
-            typeof event.payload.data === 'string' ? event.payload.data : '',
-          )
-          .join('');
-        if (replyLine.test(output) || waited >= deadlineMs) {
-          break;
-        }
-        await sleep(pollMs);
-      }
+      const output = await readOutputUntil(
+        testHome,
+        sessionId,
+        replyLine,
+        5000,
+      );
 
-      const match = replyLine.exec(output);
-      expect(match).not.toBeNull();
-      const reply = JSON.parse((match as RegExpExecArray)[1] as string);
+      const reply = JSON.parse(replyLine.exec(output)?.[1] ?? '""') as string;
       expect(reply).toBe(
         [
           '\x1bP1+r5463\x1b\\',
           '\x1bP1+r524742\x1b\\',
-          `\x1bP1+r73657472676266=${hexUpper('\\E[38;2;%p1%d;%p2%d;%p3%dm')}\x1b\\`,
-          `\x1bP1+r73657472676262=${hexUpper('\\E[48;2;%p1%d;%p2%d;%p3%dm')}\x1b\\`,
+          // Hex of `\E[38;2;%p1%d;%p2%d;%p3%dm` and `\E[48;2;%p1%d;%p2%d;%p3%dm`.
+          '\x1bP1+r73657472676266=5C455B33383B323B25703125643B25703225643B25703325646D\x1b\\',
+          '\x1bP1+r73657472676262=5C455B34383B323B25703125643B25703225643B25703325646D\x1b\\',
           '\x1bP0$r\x1b\\',
         ].join(''),
       );

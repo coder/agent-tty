@@ -364,7 +364,7 @@ Avoid writing automated sessions into the default `~/.agent-tty` unless you inte
 
 `create` spawns the shell with your inherited environment plus `TERM` (from `--term`), a default `PROMPT_EOL_MARK=` (empty) and a default `COLORTERM=truecolor`. The empty `PROMPT_EOL_MARK` suppresses the inverse-video `%` that `zsh` prints at the end of any output without a trailing newline; without it, agent-tty's hidden per-`run` completion marker leaves a stray `%` in snapshots, screenshots, and recordings. The variable is zsh-only and inert in other shells.
 
-The `COLORTERM=truecolor` default says that the renderer draws 24-bit color. Neovim turns on 24-bit color when it sees that value. When `COLORTERM` is unset, Neovim asks the terminal instead, and agent-tty does not answer that query, so a screenshot loses the colors that the 256-color palette cannot show. An inherited `COLORTERM` describes the terminal that launched agent-tty, not the session's renderer, so the default replaces it.
+The `COLORTERM=truecolor` default says that the renderer draws 24-bit color. Neovim turns on 24-bit color when it sees that value. When `COLORTERM` is unset or empty, Neovim asks the terminal instead. agent-tty answers that XTGETTCAP query (`Tc`, `RGB`), so Neovim still detects 24-bit color. An inherited `COLORTERM` describes the terminal that launched agent-tty, not the session's renderer, so the default replaces it.
 
 The shell also receives two session variables, so scripts inside a session can detect agent-tty and find their own session:
 
@@ -381,8 +381,9 @@ Any `--env` value always wins, so you can opt back into the shell's native behav
 # Restore zsh's styled default marker:
 agent-tty create --env PROMPT_EOL_MARK='%B%S%#%s%b' -- /bin/zsh
 
-# Hide 24-bit color support from the program:
-agent-tty create --env COLORTERM= -- nvim
+# Hide 24-bit color support from Neovim (an empty COLORTERM would not,
+# because Neovim then asks the terminal, and agent-tty answers yes):
+agent-tty create --env COLORTERM=256color -- nvim
 ```
 
 A lone `'%'` does **not** restore the marker (zsh treats it as a prompt escape that expands to nothing); use `'%B%S%#%s%b'` for the styled default or `'%%'` for a plain percent. The default is applied at spawn time and is not stored in the manifest, so it does not appear in `inspect`, `list`, or `create --json` output. If your `~/.zshrc` assigns `PROMPT_EOL_MARK` it runs after the environment is imported and wins, so the marker can reappear — remove that line or set the value you want via `--env`.

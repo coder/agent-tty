@@ -84,7 +84,7 @@ These renderers give repeatable artifacts for review and automation, but they do
 
 ## A Program Ignores an Exported `COLORTERM`
 
-agent-tty spawns every session program with `COLORTERM=truecolor`, so an exported `COLORTERM` in the shell that runs `agent-tty create` does not reach the session. To hide 24-bit color support from a program, pass `--env COLORTERM=` (or another value) to `create`.
+agent-tty spawns every session program with `COLORTERM=truecolor`, so an exported `COLORTERM` in the shell that runs `agent-tty create` does not reach the session. To change what a program reads, pass `--env COLORTERM=<value>` to `create`. An unset or empty `COLORTERM` still lets a program that queries the terminal, such as Neovim, detect 24-bit color, because agent-tty answers the XTGETTCAP `Tc`/`RGB` query. To hide 24-bit color from Neovim, use another value, for example `--env COLORTERM=256color`.
 
 ## Stray `%` at the End of Captured Output
 
