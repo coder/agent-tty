@@ -190,24 +190,27 @@ jobs:
       - name: Test with another user's process
         run: npx vitest run --maxWorkers=1 --retry=2 test/integration/other-user-group.test.ts
 
-      # A new proc instance, not a remount: a remount of /proc changes the
-      # superblock that the runner's own /proc shares.
+      # The runner's sudo refuses -E, so env hands the runner's environment
+      # on to the namespace. A new proc instance, not a remount: a remount of
+      # /proc changes the superblock that the runner's own /proc shares.
       - name: Test under a /proc mounted with hidepid=2
         run: |
-          sudo -E unshare --mount --propagation private -- sh -euc '
+          mapfile -d '' -t vars < <(env -0)
+          sudo env "${vars[@]}" unshare --mount --propagation private -- sh -euc '
             mount -t proc -o hidepid=2 proc /proc
             grep " /proc " /proc/self/mountinfo | tail -n 1 | grep -Eq "hidepid=(2|invisible)"
-            exec setpriv --reuid="$1" --regid="$2" --init-groups -- env PATH="$3" HOME="$4" \
+            exec setpriv --reuid="$1" --regid="$2" --init-groups -- \
               npx vitest run --maxWorkers=1 --retry=2 test/integration/lifecycle.test.ts test/integration/gc.test.ts test/integration/other-user-group.test.ts
-          ' sh "$(id -un)" "$(id -gn)" "$PATH" "$HOME"
+          ' sh "$(id -un)" "$(id -gn)"
 
       # Node does not reap orphans, so a shell runs as PID 1 and its wait
       # reaps the hosts reparented to it. non-reaping-init.test.ts covers an
       # init that never reaps.
       - name: Test in a private PID namespace
         run: |
-          sudo -E unshare --pid --fork --mount-proc -- \
-            setpriv --reuid="$(id -un)" --regid="$(id -gn)" --init-groups -- env PATH="$PATH" HOME="$HOME" \
+          mapfile -d '' -t vars < <(env -0)
+          sudo env "${vars[@]}" unshare --pid --fork --mount-proc -- \
+            setpriv --reuid="$(id -un)" --regid="$(id -gn)" --init-groups -- \
             sh -c '"$@" & wait $!' sh \
             npx vitest run --maxWorkers=1 --retry=2 test/integration/lifecycle.test.ts test/integration/gc.test.ts test/integration/other-user-group.test.ts
 
