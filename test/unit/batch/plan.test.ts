@@ -116,17 +116,42 @@ describe('parseBatchPlan', () => {
       expect(step).toMatchObject({ kind: 'wait', timeoutMs: 30_000 });
     });
 
-    it('rejects a screenStableMs the default wait timeout cannot fit', () => {
-      expect(() =>
-        parse([{ type: 'x' }, { wait: { screenStableMs: 30_000 } }]),
-      ).toThrow(
-        expect.objectContaining({
-          code: ERROR_CODES.INVALID_INPUT,
-          message:
-            'Batch step 1 wait screenStableMs 30000 cannot finish within the default timeout of 30000 ms. Set a larger "timeout", or "timeout": 0 to wait without a limit.',
-          details: { stepIndex: 1 },
-        }),
-      );
+    it.each([
+      [
+        { screenStableMs: 29_800 },
+        'Batch step 1 wait screenStableMs 29800 cannot finish within the default timeout of 30000 ms. It needs more than 30000 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Set a larger "timeout", or "timeout": 0 to wait without a limit.',
+      ],
+      [
+        { screenStableMs: 5000, timeout: 2000 },
+        'Batch step 1 wait screenStableMs 5000 cannot finish within its timeout of 2000 ms. It needs more than 5200 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Set a larger "timeout", or "timeout": 0 to wait without a limit.',
+      ],
+      [
+        { screenStableMs: 1800, timeout: 2000 },
+        'Batch step 1 wait screenStableMs 1800 cannot finish within its timeout of 2000 ms. It needs more than 2000 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Set a larger "timeout", or "timeout": 0 to wait without a limit.',
+      ],
+      [
+        { screenStableMs: 1, timeout: 202 },
+        'Batch step 1 wait screenStableMs 1 cannot finish within its timeout of 202 ms. It needs more than 400 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Set a larger "timeout", or "timeout": 0 to wait without a limit.',
+      ],
+    ])(
+      'rejects a screenStableMs its timeout cannot fit: %o',
+      (wait, message) => {
+        expect(() => parse([{ type: 'x' }, { wait }])).toThrow(
+          expect.objectContaining({
+            code: ERROR_CODES.INVALID_INPUT,
+            message,
+            details: { stepIndex: 1 },
+          }),
+        );
+      },
+    );
+
+    it.each([
+      { screenStableMs: 29_799 },
+      { screenStableMs: 1799, timeout: 2000 },
+      { screenStableMs: 1, timeout: 401 },
+    ])('accepts a screenStableMs its timeout can fit: %o', (wait) => {
+      expect(parse([{ wait }]).steps[0]).toMatchObject({ kind: 'wait' });
     });
 
     it.each([0, 60_000])(

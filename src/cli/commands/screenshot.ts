@@ -20,6 +20,7 @@ import { readManifestIfExists } from '../../storage/manifests.js';
 import {
   copyFileReplacing,
   resolveExplicitOutputPath,
+  type ExplicitOutputPath,
 } from '../../storage/outputPath.js';
 import { manifestPath, socketPath } from '../../storage/sessionPaths.js';
 import { checkedSessionDir } from '../sessionGuards.js';
@@ -125,7 +126,7 @@ async function resolveScreenshotOutputPath(
   sessionId: string,
   out: string,
   sessionsRoot: string,
-): Promise<string> {
+): Promise<ExplicitOutputPath> {
   try {
     return await resolveExplicitOutputPath(out, sessionsRoot);
   } catch (error) {
@@ -183,7 +184,7 @@ export async function runScreenshotCommand(
       ? undefined
       : {
           out: options.out,
-          path: await resolveScreenshotOutputPath(
+          target: await resolveScreenshotOutputPath(
             options.sessionId,
             options.out,
             dirname(sessionDirectory),
@@ -236,14 +237,14 @@ export async function runScreenshotCommand(
 
   if (output !== undefined) {
     try {
-      await copyFileReplacing(result.artifactPath, output.path);
+      await copyFileReplacing(result.artifactPath, output.target);
     } catch (error) {
       const removed = await sessionNotFoundIfRemoved(sessionDirectory, error);
-      throw removed === error
-        ? outputPathError(options.sessionId, output.out, error)
-        : removed;
+      throw removed !== error || error instanceof CliError
+        ? removed
+        : outputPathError(options.sessionId, output.out, error);
     }
-    result = { ...result, artifactPath: output.path };
+    result = { ...result, artifactPath: output.target.path };
   }
 
   emitSuccess({

@@ -115,7 +115,11 @@ describe('io-loop integration', { timeout: 30000 }, () => {
     let sessionId = '';
 
     try {
-      sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec cat']);
+      sessionId = createSession(testHome, [
+        '/bin/sh',
+        '-c',
+        'while :; do echo tick; sleep 0.05; done',
+      ]);
       await sleep(500);
 
       const typeResult = runCli(['type', sessionId, 'keepalive', '--json'], {
@@ -134,7 +138,7 @@ describe('io-loop integration', { timeout: 30000 }, () => {
       expect(sendKeysResult.stderr).toBe('');
 
       const waitResult = runCli(
-        ['wait', sessionId, '--idle-ms', '60000', '--timeout', '300', '--json'],
+        ['wait', sessionId, '--idle-ms', '250', '--timeout', '1000', '--json'],
         { AGENT_TTY_HOME: testHome },
         30000,
       );

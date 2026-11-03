@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, realpath } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
+import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -400,6 +401,49 @@ describe('record export integration', { timeout: 120_000 }, () => {
 
     destroySession(testHome, sessionId);
   });
+
+  it.skipIf(process.getuid?.() === 0)(
+    'fails with EXPORT_ERROR when the --out parent folder cannot be searched',
+    async () => {
+      const sessionId = createSession(testHome, [
+        '/bin/sh',
+        '-c',
+        "printf 'done\\n'; exit 0",
+      ]);
+      waitForExit(testHome, sessionId);
+      const writeOnly = join(testHome, 'write-only');
+      await mkdir(writeOnly, { mode: 0o200 });
+      await chmod(writeOnly, 0o200);
+      const out = join(writeOnly, 'session.cast');
+
+      try {
+        const result = runCli(
+          [
+            'record',
+            'export',
+            sessionId,
+            '--format',
+            'asciicast',
+            '--out',
+            out,
+            '--json',
+          ],
+          { AGENT_TTY_HOME: testHome },
+          15_000,
+        );
+
+        expect(result.status).toBe(7);
+        expect(result.stderr).toBe('');
+        const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+        expect(envelope.error).toMatchObject({
+          code: 'EXPORT_ERROR',
+          details: { sessionId, out },
+        });
+      } finally {
+        await chmod(writeOnly, 0o700);
+      }
+    },
+  );
 
   it('rejects invalid export formats', () => {
     const result = runCli(

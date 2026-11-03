@@ -41,7 +41,11 @@ import {
   readManifestIfExists,
   writeTextFileAtomic,
 } from '../../storage/manifests.js';
-import { resolveExplicitOutputPath } from '../../storage/outputPath.js';
+import {
+  assertOutputParentUnchanged,
+  resolveExplicitOutputPath,
+  type ExplicitOutputPath,
+} from '../../storage/outputPath.js';
 import { eventLogPath, manifestPath } from '../../storage/sessionPaths.js';
 import { invariant } from '../../util/assert.js';
 import { loadPackageMetadata } from '../../util/packageMetadata.js';
@@ -135,16 +139,23 @@ async function resolveOutputPath(
   capturedAtSeq: number,
   format: RecordExportFormat,
   outputPath: string | undefined,
-): Promise<string> {
+): Promise<{ path: string; explicitOutput: ExplicitOutputPath | undefined }> {
   if (outputPath === undefined) {
     await ensureArtifactsDir(sessionDirectory);
-    return artifactPath(
-      sessionDirectory,
-      recordingFilename(capturedAtSeq, format),
-    );
+    return {
+      path: artifactPath(
+        sessionDirectory,
+        recordingFilename(capturedAtSeq, format),
+      ),
+      explicitOutput: undefined,
+    };
   }
 
-  return await resolveExplicitOutputPath(outputPath, dirname(sessionDirectory));
+  const explicitOutput = await resolveExplicitOutputPath(
+    outputPath,
+    dirname(sessionDirectory),
+  );
+  return { path: explicitOutput.path, explicitOutput };
 }
 
 async function computeFileHash(filePath: string): Promise<string> {
@@ -196,12 +207,13 @@ export async function runRecordExportCommand(
     const eventsFile = eventLogPath(sessionDirectory);
     const events = await readEventLogRecords(eventsFile);
     const defaultCapturedAtSeq = resolveCapturedAtSeq(events);
-    const artifactOutputPath = await resolveOutputPath(
-      sessionDirectory,
-      defaultCapturedAtSeq,
-      format,
-      options.out,
-    );
+    const { path: artifactOutputPath, explicitOutput } =
+      await resolveOutputPath(
+        sessionDirectory,
+        defaultCapturedAtSeq,
+        format,
+        options.out,
+      );
 
     invariant(
       isAbsolute(artifactOutputPath),
@@ -264,6 +276,11 @@ export async function runRecordExportCommand(
         contents: exportArtifact.contents,
         writeErrorMessage: `Failed to write record export artifact at ${artifactOutputPath}.`,
         createParentFolders: false,
+        ...(explicitOutput === undefined
+          ? {}
+          : {
+              beforeRename: () => assertOutputParentUnchanged(explicitOutput),
+            }),
       });
 
       bytes = contentsBuffer.byteLength;
@@ -294,6 +311,9 @@ export async function runRecordExportCommand(
           ...(timingMode !== undefined ? { timingMode } : {}),
           rendererName: options.context.rendererVisualDefault,
         });
+        if (explicitOutput !== undefined) {
+          await assertOutputParentUnchanged(explicitOutput);
+        }
         await rename(temporaryOutputPath, artifactOutputPath);
       } catch (error) {
         await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
