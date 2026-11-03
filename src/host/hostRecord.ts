@@ -120,7 +120,11 @@ function pidExists(pid: number): boolean {
 }
 
 export function judgeHost(pid: number, record: HostRecord | null): HostVerdict {
-  if (record !== null && !inPidNamespace(record.pidNamespace)) {
+  if (
+    process.platform === 'linux' &&
+    record !== null &&
+    !inPidNamespace(record.pidNamespace)
+  ) {
     return 'unknown';
   }
   if (!pidExists(pid)) {
