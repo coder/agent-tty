@@ -95,6 +95,23 @@ describe('artifact paths', () => {
     });
   });
 
+  it('names the stat error and keeps it as the cause when the artifacts path cannot be checked', async () => {
+    const sessionDir = await createSessionDir();
+    const artifactsPath = join(sessionDir, 'artifacts');
+    await symlink(artifactsPath, artifactsPath);
+
+    const error: unknown = await ensureArtifactsDir(sessionDir).catch(
+      (thrown: unknown) => thrown,
+    );
+
+    expect(error).toMatchObject({
+      code: 'STORAGE_WRITE_ERROR',
+      message: `Failed to check artifacts path ${artifactsPath} (ELOOP).`,
+      details: { path: artifactsPath, errno: 'ELOOP' },
+      cause: { code: 'ELOOP' },
+    });
+  });
+
   it('generates recording filenames for webm format', () => {
     expect(recordingFilename(7, 'webm')).toBe('recording-7-webm.webm');
   });

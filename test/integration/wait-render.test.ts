@@ -498,22 +498,29 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     expect(result.stderr).toBe('WAIT_TIMEOUT: Wait timed out after 1000 ms.\n');
   });
 
+  function failingRendererEnv(failures?: number): Record<string, string> {
+    const preload = pathToFileURL(
+      resolve('test/fixtures/fail-chromium-launch.ts'),
+    );
+    return {
+      NODE_OPTIONS: [
+        process.env.NODE_OPTIONS ?? '',
+        `--import=${preload.href}`,
+      ].join(' '),
+      ...(failures === undefined
+        ? {}
+        : { AGENT_TTY_TEST_CHROMIUM_FAILURES: String(failures) }),
+    };
+  }
+
   it.each(['0', '20000'])(
-    'keeps the generic WAIT_TIMEOUT text when the renderer fails before --timeout %s runs out',
+    'returns the renderer error, not WAIT_TIMEOUT, when every render poll fails (--timeout %s)',
     (timeout) => {
-      const preload = pathToFileURL(
-        resolve('test/fixtures/fail-chromium-launch.ts'),
-      );
       const failingSessionId = createSession(testHome, undefined, {
-        env: {
-          NODE_OPTIONS: [
-            process.env.NODE_OPTIONS ?? '',
-            `--import=${preload.href}`,
-          ].join(' '),
-        },
+        env: failingRendererEnv(),
       });
       try {
-        const result = runCli(
+        const human = runCli(
           [
             '--renderer',
             'ghostty-web',
@@ -528,16 +535,76 @@ describe('wait render integration', { timeout: 120_000 }, () => {
           30_000,
         );
 
-        expect(result.exitCode).toBe(11);
-        expect(result.stdout).toBe('');
-        expect(result.stderr).toBe(
-          'WAIT_TIMEOUT: Wait timed out before its condition was met.\n',
+        expect(human.exitCode, human.stderr).toBe(9);
+        expect(human.stdout).toBe('');
+        expect(human.stderr).toMatch(
+          /^RPC_ERROR: failed to boot GhosttyWebBackend: .*injected Chromium launch failure/u,
         );
+
+        const json = runCli(
+          [
+            '--renderer',
+            'ghostty-web',
+            'wait',
+            failingSessionId,
+            '--text',
+            'NEVER',
+            '--timeout',
+            timeout,
+            '--json',
+          ],
+          { AGENT_TTY_HOME: testHome },
+          30_000,
+        );
+
+        expect(json.exitCode, json.stderr).toBe(9);
+        const envelope = JSON.parse(json.stdout) as ErrorEnvelope & {
+          result?: unknown;
+        };
+        expect(envelope.error).toMatchObject({
+          code: 'RPC_ERROR',
+          retryable: true,
+        });
+        expect(envelope).not.toHaveProperty('result');
       } finally {
         destroySession(testHome, failingSessionId);
       }
     },
   );
+
+  it('keeps polling through fewer failed render polls than the cap and matches', () => {
+    const marker = 'renderer-recovered';
+    const recoveringSessionId = createSession(
+      testHome,
+      ['/bin/sh', '-c', `echo ${marker}; exec cat`],
+      { env: failingRendererEnv(3) },
+    );
+    try {
+      const result = runCli(
+        [
+          '--renderer',
+          'ghostty-web',
+          'wait',
+          recoveringSessionId,
+          '--text',
+          marker,
+          '--timeout',
+          '20000',
+          '--json',
+        ],
+        { AGENT_TTY_HOME: testHome },
+        30_000,
+      );
+
+      expect(result.exitCode, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        ok: true,
+        result: { matched: true, timedOut: false },
+      });
+    } finally {
+      destroySession(testHome, recoveringSessionId);
+    }
+  });
 
   it('exits 11 with a WAIT_TIMEOUT error envelope when legacy CLI --idle-ms times out', () => {
     const tickingSessionId = createSession(testHome, [
