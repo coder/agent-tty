@@ -194,6 +194,17 @@ export function isProcessAlive(pid: number | null): boolean {
   }
 }
 
+// Any answer but ESRCH, such as EPERM, means that a process has the pid.
+function pidInUse(pid: number): boolean {
+  assertPositiveInteger(pid, 'pid');
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return !hasErrorCode(error, 'ESRCH');
+  }
+}
+
 function killProcessBestEffort(pid: number | null): void {
   if (pid === null) {
     return;
@@ -789,11 +800,11 @@ async function stopSessionProcesses(
   if (!stopped) {
     // Without /proc nothing proves the program's group or the host. An empty
     // /proc mount point has no /proc/self. Only a host can end the session
-    // for a plain destroy.
+    // for a plain destroy, and a pid that no process has proves it gone.
     const hint =
       process.platform === 'linux' && !existsSync('/proc/self')
         ? ` This process cannot read /proc, so it cannot prove which processes are the session's. ${
-            host === null
+            host === null || !pidInUse(host.pid)
               ? 'Run destroy where /proc is mounted.'
               : 'End the session with a plain destroy, or run destroy --force where /proc is mounted.'
           }`
