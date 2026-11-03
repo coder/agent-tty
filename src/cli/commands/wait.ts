@@ -22,7 +22,7 @@ import {
 import {
   DEFAULT_WAIT_TIMEOUT_MS,
   RENDER_WAIT_POLL_INTERVAL_MS,
-  screenStableWindowFits,
+  screenStableMinimumMs,
 } from '../../renderWait/limits.js';
 import { computeScreenHash } from '../../renderer/canonicalScreen.js';
 import { isTerminalSessionStatus } from '../../protocol/sessionStatusPolicy.js';
@@ -69,10 +69,8 @@ function assertWindowFitsTimeout(
 
   const timeoutMs = timeout ?? DEFAULT_WAIT_TIMEOUT_MS;
   const screenStable = flag === '--screen-stable-ms';
-  const fits = screenStable
-    ? screenStableWindowFits(windowMs, timeoutMs)
-    : windowMs < timeoutMs;
-  if (fits) {
+  const minimumMs = screenStable ? screenStableMinimumMs(windowMs) : windowMs;
+  if (minimumMs < timeoutMs) {
     return;
   }
 
@@ -81,7 +79,7 @@ function assertWindowFitsTimeout(
       ? `the default --timeout of ${String(timeoutMs)} ms`
       : `--timeout ${String(timeoutMs)}`;
   const pollNote = screenStable
-    ? ` It needs one render poll (${String(RENDER_WAIT_POLL_INTERVAL_MS)} ms) more than its length.`
+    ? ` It needs more than ${String(minimumMs)} ms, because the stable clock starts at the first render poll (every ${String(RENDER_WAIT_POLL_INTERVAL_MS)} ms) and a later poll must confirm it.`
     : '';
   throw makeCliError(ERROR_CODES.INVALID_DURATION, {
     message: `${flag} ${String(windowMs)} cannot finish within ${limit}.${pollNote} Pass a larger --timeout, or --timeout 0 to wait without a limit.`,

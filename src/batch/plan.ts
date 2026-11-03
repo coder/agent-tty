@@ -9,7 +9,7 @@ import { MouseInputSchema } from '../protocol/messages.js';
 import {
   DEFAULT_WAIT_TIMEOUT_MS,
   RENDER_WAIT_POLL_INTERVAL_MS,
-  screenStableWindowFits,
+  screenStableMinimumMs,
 } from '../renderWait/limits.js';
 import { prepareRenderWaitCondition } from '../renderWait/matcher.js';
 import { invariant, unreachable } from '../util/assert.js';
@@ -230,14 +230,14 @@ function parseWaitStep(
   if (
     wait.screenStableMs !== undefined &&
     timeoutMs !== undefined &&
-    !screenStableWindowFits(wait.screenStableMs, timeoutMs)
+    screenStableMinimumMs(wait.screenStableMs) >= timeoutMs
   ) {
     const limit =
       wait.timeout === undefined
         ? `the default timeout of ${String(timeoutMs)} ms`
         : `its timeout of ${String(timeoutMs)} ms`;
     invalidInput(
-      `Batch step ${String(index)} wait screenStableMs ${String(wait.screenStableMs)} cannot finish within ${limit}. It needs one render poll (${String(RENDER_WAIT_POLL_INTERVAL_MS)} ms) more than its length. Set a larger "timeout", or "timeout": 0 to wait without a limit.`,
+      `Batch step ${String(index)} wait screenStableMs ${String(wait.screenStableMs)} cannot finish within ${limit}. It needs more than ${String(screenStableMinimumMs(wait.screenStableMs))} ms, because the stable clock starts at the first render poll (every ${String(RENDER_WAIT_POLL_INTERVAL_MS)} ms) and a later poll must confirm it. Set a larger "timeout", or "timeout": 0 to wait without a limit.`,
       index,
     );
   }
