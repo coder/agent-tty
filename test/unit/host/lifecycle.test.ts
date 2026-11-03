@@ -74,6 +74,11 @@ vi.mock('node:fs', async () => {
     }
     return stat;
   }) as typeof actual.readFileSync;
+  // noProc leaves /proc an empty mount point.
+  const existsSync = ((path: Fs.PathLike) =>
+    fsHooks.noProc && typeof path === 'string' && path.startsWith('/proc/')
+      ? false
+      : actual.existsSync(path)) as typeof actual.existsSync;
   const readlinkSync = ((path: string, ...rest: unknown[]) => {
     const link = fsHooks.links?.get(path);
     if (link instanceof Error) {
@@ -84,7 +89,7 @@ vi.mock('node:fs', async () => {
       (actual.readlinkSync as (...args: unknown[]) => unknown)(path, ...rest)
     );
   }) as typeof actual.readlinkSync;
-  return { ...actual, readdirSync, readFileSync, readlinkSync };
+  return { ...actual, existsSync, readdirSync, readFileSync, readlinkSync };
 });
 
 // The controlling terminal that /bin/ps prints for a pid, or null when ps
@@ -330,6 +335,19 @@ describe('allocateSession', () => {
       allocateSession(makeConfig({ cwd: join(home, 'missing') }), launch),
     ).rejects.toMatchObject({ code: 'STORAGE_READ_ERROR' });
     expect(launch).not.toHaveBeenCalled();
+  });
+
+  // The program never gets the destroy re-run marker, so the manifest that
+  // inspect shows does not name it either.
+  it.each([
+    [{ FOO: 'bar', AGENT_TTY_DESTROY_RERUN: '1' }, { FOO: 'bar' }],
+    [{ AGENT_TTY_DESTROY_RERUN: '1' }, undefined],
+  ])('records the env %o as %o', async (env, recorded) => {
+    const result = await allocateSession(makeConfig({ env }), () => 4242);
+
+    expect(
+      (await readManifest(manifestPath(result.sessionDirectory))).env,
+    ).toEqual(recorded);
   });
 
   it('does not launch a host when the shell does not exist', async () => {
@@ -866,9 +884,38 @@ describe('a hostPid that may no longer name the host', () => {
 
       await expect(destroySession('session-01', true)).rejects.toMatchObject({
         code: 'HOST_TIMEOUT',
+        message: (gap === 'none'
+          ? expect.stringContaining('cannot read /proc')
+          : expect.not.stringContaining('/proc')) as string,
       });
       expect(isRunning(host)).toBe(true);
       expect(await readManifest(manifestPath(directory))).toEqual(record);
+    },
+  );
+
+  // Without /proc a host.json makes even a dead host read unknown, but no
+  // process with its pid proves that no host can end the session.
+  it.runIf(platform === 'linux')(
+    'on linux destroy --force without /proc names no plain destroy once no process has the host pid',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      await seedHost(host);
+      process.kill(host, 'SIGKILL');
+      await vi.waitFor(() => {
+        expect(isRunning(host)).toBe(false);
+      });
+      fsHooks.noProc = true;
+      fsHooks.links = new Map([['/proc/self/ns/pid', errno('ENOENT')]]);
+
+      const error: unknown = await destroySession('session-01', true).catch(
+        (thrown: unknown) => thrown,
+      );
+
+      expect(error).toMatchObject({ code: 'HOST_TIMEOUT' });
+      expect((error as Error).message).toContain(
+        'Run destroy where /proc is mounted.',
+      );
+      expect((error as Error).message).not.toContain('plain destroy');
     },
   );
 
@@ -1264,7 +1311,10 @@ describe('cliRunsInsideProgramSession', () => {
   it.each([
     ['ttys003', 'ttys003', true],
     ['pts/3', 'pts/3', true],
+    ['ttypa', 'ttypa', true],
+    ['ttyPz', 'ttyPz', true],
     ['ttys003', 'ttys004', false],
+    ['ttypa', 'ttypb', false],
     ['??', '??', false],
     ['?', '?', false],
     ['-', '-', false],

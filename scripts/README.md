@@ -2,7 +2,7 @@
 
 ## Overview
 
-Plain Node `.mjs` scripts for the build, packaging and install-smoke steps. They run with `node` and do not import the TypeScript build output. `smoke-install.mjs` with `--skip-build` still packs the existing `dist/` and asserts that its files are present. `copy-renderer-assets.mjs` gives the reason in a comment: it runs after `tsc` as part of `npm run build`. Release CI and the `ci` mise chain call these scripts through package.json scripts.
+Plain Node `.mjs` scripts for the build, packaging and install-smoke steps, plus `subset-symbol-fonts.sh`, a Bash script that a maintainer runs by hand to rebuild the bundled Noto fonts. They run with `node` and do not import the TypeScript build output. `smoke-install.mjs` with `--skip-build` still packs the existing `dist/` and asserts that its files are present. `copy-renderer-assets.mjs` gives the reason in a comment: it runs after `tsc` as part of `npm run build`. Release CI and the `ci` mise chain call these scripts through package.json scripts.
 
 ## Interface
 
@@ -10,6 +10,7 @@ Plain Node `.mjs` scripts for the build, packaging and install-smoke steps. They
 - `pack-release.mjs`: flags `--build`, `--pack-destination <dir>` (default: the project root) and `--metadata-file <path>`. Runs `npm pack`, writes a `.sha256` file next to the tarball, and prints package metadata JSON to stdout. Callers: the package.json `pack:release` script, `.github/workflows/release.yml` and `docs/RELEASE-PROCESS.md`. [pack-release.mjs:parseCliArgs] [pack-release.mjs:main]
 - `packRelease(options)`: the exported function behind `pack-release.mjs`. Returns `{ packageName, packageVersion, tarballFilename, tarballPath, tarballSizeBytes, checksumFilename, checksumPath, checksumSha256, npmShasum, packedPaths }`. `smoke-install.mjs` imports it. [pack-release.mjs:packRelease]
 - `smoke-install.mjs`: flags `--skip-build` and `--exercise-git-install`. Packs the tarball, installs it into a temp prefix, and runs the installed CLI. With `--exercise-git-install` it also installs from a temporary git copy of the repo. Callers: the package.json `smoke:install` script and the mise task `install-smoke` (`npm run smoke:install -- --skip-build`), which `.github/workflows/ci.yml` runs. [smoke-install.mjs:supportedArgs] [smoke-install.mjs:verifyInstalledCli]
+- `subset-symbol-fonts.sh`: takes no arguments. Downloads the pinned Noto Sans Symbols 2 and Noto Sans Math TTFs, checks their SHA-256, drops every code point with the Unicode Emoji property, and writes the WOFF2 subsets into `src/renderer/ghosttyWeb/assets` with `uvx` fonttools 4.68.0. It replaces an asset only when the output matches the pinned SHA-256, and otherwise exits 1 and leaves the asset unchanged. Needs `curl`, `sha256sum`, `node` with this repo's dependencies, and `uvx`. No caller. [subset-symbol-fonts.sh]
 - `seed-canonical-manifest.mjs`: `node ./scripts/seed-canonical-manifest.mjs <bundle-dir> < list.txt`, where each stdin line is `<relative-path>\t<description>`. Prints `{ artifacts: [{ path, description, sha256, bytes }] }` for a canonical `manifest.json`. Its header calls it a one-time helper. No package.json script, mise task or workflow calls it. [seed-canonical-manifest.mjs:main]
 
 ## Invariants

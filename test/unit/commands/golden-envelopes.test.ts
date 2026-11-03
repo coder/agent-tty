@@ -1144,6 +1144,8 @@ const goldenResultContracts: readonly GoldenResultContractCase[] = [
         height: 24,
         profileName: 'default',
       },
+      missingGlyphs: [{ codePoint: 'U+0378' }],
+      missingGlyphsTruncated: true,
     },
     invalidResult: {
       sessionId: '01J0000000TEST000000000000',

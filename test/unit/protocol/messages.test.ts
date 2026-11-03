@@ -1115,6 +1115,61 @@ describe('RPC message schemas', () => {
     ).toBe(true);
   });
 
+  it('accepts webm missingGlyphs without cells and rejects malformed entries', () => {
+    const result = {
+      sessionId: 'session-01',
+      format: 'webm',
+      artifactPath: '/tmp/session-01/artifacts/recording-7-webm.webm',
+      bytes: 4096,
+      sha256: 'abc123',
+      capturedAtSeq: 7,
+      metadata: {},
+    };
+    const parse = (fields: Record<string, unknown>) =>
+      RecordExportResultSchema.safeParse({ ...result, ...fields }).success;
+
+    expect(parse({ missingGlyphs: [] })).toBe(true);
+    expect(
+      parse({
+        missingGlyphs: [{ codePoint: 'U+0378' }, { codePoint: 'U+1F468' }],
+        missingGlyphsTruncated: true,
+      }),
+    ).toBe(true);
+    expect(
+      parse({
+        missingGlyphs: [{ codePoint: 'U+0378', cells: [{ row: 0, col: 0 }] }],
+      }),
+    ).toBe(false);
+    expect(parse({ missingGlyphs: [{ codePoint: 'U+29c9' }] })).toBe(false);
+    expect(parse({ missingGlyphs: [], missingGlyphsTruncated: false })).toBe(
+      false,
+    );
+  });
+
+  it('rejects glyph fields on an asciicast record export result', () => {
+    const result = {
+      sessionId: 'session-01',
+      format: 'asciicast',
+      artifactPath: '/tmp/session-01/artifacts/recording-7.cast',
+      bytes: 4096,
+      sha256: 'abc123',
+      capturedAtSeq: 7,
+      metadata: {},
+    };
+
+    expect(RecordExportResultSchema.safeParse(result).success).toBe(true);
+    expect(
+      RecordExportResultSchema.safeParse({ ...result, missingGlyphs: [] })
+        .success,
+    ).toBe(false);
+    expect(
+      RecordExportResultSchema.safeParse({
+        ...result,
+        missingGlyphsTruncated: true,
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects invalid record export results', () => {
     expect(
       RecordExportResultSchema.safeParse({

@@ -6,7 +6,9 @@ import { z } from 'zod';
 
 import type { CommandContext } from '../context.js';
 
+import { missingGlyphLines } from '../missingGlyphLines.js';
 import { emitSuccess } from '../output.js';
+import type { RecordedGlyphFields } from '../../renderer/backend.js';
 import { generateAsciicast } from '../../export/asciicast.js';
 import {
   generateWebmExport,
@@ -176,6 +178,7 @@ function buildResultLines(result: RecordExportResult): string[] {
     `Bytes: ${String(result.bytes)}`,
     `SHA256: ${result.sha256}`,
     `Duration: ${String(result.durationMs ?? 0)} ms`,
+    ...(result.format === 'webm' ? missingGlyphLines(result) : []),
   ];
 }
 
@@ -224,6 +227,7 @@ export async function runRecordExportCommand(
     let resultMetadata: Record<string, unknown>;
     let bytes: number;
     let sha256: string;
+    let glyphFields: RecordedGlyphFields = {};
 
     if (format === 'asciicast') {
       const packageMetadata = await loadPackageMetadata();
@@ -325,6 +329,14 @@ export async function runRecordExportCommand(
 
       capturedAtSeq = webmResult.capturedAtSeq;
       durationMs = webmResult.durationMs;
+      glyphFields = {
+        ...(webmResult.missingGlyphs !== undefined && {
+          missingGlyphs: webmResult.missingGlyphs,
+        }),
+        ...(webmResult.missingGlyphsTruncated && {
+          missingGlyphsTruncated: true,
+        }),
+      };
       artifactKind = 'video';
       artifactMetadata = {
         format,
@@ -392,6 +404,7 @@ export async function runRecordExportCommand(
       capturedAtSeq,
       durationMs,
       metadata: resultMetadata,
+      ...glyphFields,
     };
     const parsedResult = RecordExportResultSchema.safeParse(rawResult);
 

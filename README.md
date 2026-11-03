@@ -169,7 +169,7 @@ The `agent-tty` CLI (`src/cli/main.ts`) starts one detached host process per ses
 
 ### Local interface and invariants
 
-- `vitest.config.ts` runs `test/**/*.test.ts` in the `node` environment with the setup file `test/setup-node-options.ts`. It sets no timeouts, pool or worker limit. `npm test` adds `--retry=2`, and `npm run test:integration` and `npm run test:e2e` add `--maxWorkers=1`. [vitest.config.ts:include] [vitest.config.ts:setupFiles] [package.json:scripts]
+- `vitest.config.ts` runs `test/**/*.test.ts` in the `node` environment with the setup files `test/setup-node-options.ts` and `test/setup-state-home.ts`. The second gives each test file a temp `XDG_STATE_HOME`, so a spawned CLI never writes the real Home Registry. It sets no timeouts, pool or worker limit. `npm test` adds `--retry=2`, and `npm run test:integration` and `npm run test:e2e` add `--maxWorkers=1`. [vitest.config.ts:include] [vitest.config.ts:setupFiles] [package.json:scripts]
 
 ### Subdirectories and system boundaries
 

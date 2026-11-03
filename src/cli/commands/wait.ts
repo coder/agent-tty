@@ -143,15 +143,32 @@ function renderWaitLines(result: WaitForRenderResult): string[] {
   return lines;
 }
 
+// The host also reports timedOut after repeated renderer failures, early and
+// even without a timeout, so only a wait that lasted its timeout names it.
+function timeoutMessage(
+  options: CommandOptions,
+  timeoutMs: number,
+  elapsedMs: number,
+): string {
+  if (options.json || timeoutMs === 0 || elapsedMs < timeoutMs) {
+    return 'Wait timed out before its condition was met.';
+  }
+  if (options.timeout === undefined) {
+    return `Wait timed out after ${String(timeoutMs)} ms (the default; pass --timeout <ms>, or --timeout 0 to wait without a limit).`;
+  }
+  return `Wait timed out after ${String(timeoutMs)} ms.`;
+}
+
 function throwIfTimedOut(
   result: WaitResult | WaitForRenderResult,
-  sessionId: string,
+  options: CommandOptions,
   timeoutMs: number,
+  elapsedMs: number,
 ): void {
   if (result.timedOut) {
     throw makeCliError(ERROR_CODES.WAIT_TIMEOUT, {
-      message: 'Wait timed out before its condition was met.',
-      details: { sessionId, timeoutMs },
+      message: timeoutMessage(options, timeoutMs, elapsedMs),
+      details: { sessionId: options.sessionId, timeoutMs },
       result,
     });
   }
@@ -326,6 +343,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       rendererName: options.context.rendererDefault,
     };
     const clientTimeout = effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
+    const startedAt = performance.now();
     let rawResult: unknown;
     try {
       rawResult = await sendRpc(
@@ -356,7 +374,12 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       });
     }
     const result: WaitForRenderResult = parsedResult.data;
-    throwIfTimedOut(result, options.sessionId, effectiveTimeout);
+    throwIfTimedOut(
+      result,
+      options,
+      effectiveTimeout,
+      performance.now() - startedAt,
+    );
 
     emitSuccess({
       command: 'wait',
@@ -426,6 +449,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     timeoutMs: effectiveTimeout === 0 ? undefined : effectiveTimeout,
   };
   const clientTimeout = effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
+  const startedAt = performance.now();
   const rawResult: unknown = await sendRpc(
     socketPath(sessionDirectory),
     'wait',
@@ -440,7 +464,12 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     });
   }
   const result: WaitResult = parsedResult.data;
-  throwIfTimedOut(result, options.sessionId, effectiveTimeout);
+  throwIfTimedOut(
+    result,
+    options,
+    effectiveTimeout,
+    performance.now() - startedAt,
+  );
 
   emitSuccess({
     command: 'wait',
