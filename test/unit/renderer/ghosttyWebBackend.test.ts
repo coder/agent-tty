@@ -954,21 +954,39 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     ]);
   });
 
-  it('shows max-speed progress frame by frame, not as one jump', async () => {
+  it('keeps max-speed outputs in one flush so frame holds cannot outlast the export timeout', async () => {
     const flushes = await replayAndRecordFlushes(
       [outputEvent(0, 0), outputEvent(1, 200), outputEvent(2, 400)],
       MAX_SPEED,
     );
 
-    expect(flushes.map((flush) => flush.chunks)).toEqual([
-      ['out0'],
-      ['out1'],
-      ['out2'],
+    expect(flushes).toEqual([
+      { atMs: FIRST_EVENT_AT_MS, chunks: ['out0', 'out1', 'out2'] },
     ]);
-    expect(flushes.map((flush) => flush.atMs)).toEqual([
-      FIRST_EVENT_AT_MS,
-      FIRST_EVENT_AT_MS + 16,
-      FIRST_EVENT_AT_MS + 32,
-    ]);
+  });
+
+  it('refreshes continuous output at least once per frame hold', async () => {
+    const events = Array.from({ length: 21 }, (_, index) =>
+      outputEvent(index, index * 10),
+    );
+    events.push(exitEvent(21, 300));
+    const flushes = await replayAndRecordFlushes(events, RECORDED);
+
+    expect(flushes.length).toBeGreaterThanOrEqual(8);
+    expect(flushes[0]?.atMs).toBeLessThanOrEqual(FIRST_EVENT_AT_MS + 20);
+    expect(flushes.flatMap((flush) => flush.chunks)).toEqual(
+      events.slice(0, 21).map((event) => `out${String(event.seq)}`),
+    );
+  });
+
+  it('keeps the recorded pace when continuous output fills every frame hold', async () => {
+    const events = Array.from({ length: 101 }, (_, index) =>
+      outputEvent(index, index * 10),
+    );
+    events.push(exitEvent(101, 1_000));
+    const flushes = await replayAndRecordFlushes(events, RECORDED);
+
+    expect(flushes.length).toBeGreaterThanOrEqual(30);
+    expect(flushes.at(-1)?.atMs).toBeLessThanOrEqual(FIRST_EVENT_AT_MS + 1_020);
   });
 });
