@@ -1,5 +1,6 @@
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -678,47 +679,144 @@ describe('CLI integration', () => {
     },
   );
 
-  it('prints one INTERNAL_ERROR envelope without a stack for an unexpected command error', () => {
+  describe('on an unexpected command error', () => {
+    function failPackageReadEnv(): Record<string, string> {
+      const preload = pathToFileURL(
+        resolve('test/fixtures/fail-read-open-handle.ts'),
+      );
+      return {
+        ...testEnv(),
+        AGENT_TTY_TEST_FAIL_READ: 'package.json',
+        NODE_OPTIONS: [
+          process.env.NODE_OPTIONS ?? '',
+          `--import=${preload.href}`,
+        ].join(' '),
+      };
+    }
+
+    it('prints one INTERNAL_ERROR envelope without a stack and exits although a handle stays open', () => {
+      const result = runCli(['version', '--json'], failPackageReadEnv());
+      expect(result.status, result.stderr).toBe(1);
+      expect(result.stderr).not.toMatch(/^\s+at /mu);
+
+      const envelope = parseErrorEnvelope(result.stdout);
+      expect(envelope.ok).toBe(false);
+      expect(envelope.command).toBe('version');
+      expect(envelope.error.code).toBe('INTERNAL_ERROR');
+      expect(envelope.error.message).toBe('fixture: package.json read failed');
+    });
+
+    it('prints the stack at --log-level debug', () => {
+      const result = runCli(
+        ['--log-level', 'debug', 'version', '--json'],
+        failPackageReadEnv(),
+      );
+      expect(result.status, result.stderr).toBe(1);
+      expect(result.stderr).toMatch(/^\s+at /mu);
+
+      const envelope = parseErrorEnvelope(result.stdout);
+      expect(envelope.command).toBe('version');
+      expect(envelope.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  it('returns STORAGE_READ_ERROR when the sessions path is not a folder', () => {
     writeFileSync(join(testHome, 'sessions'), '');
 
     const result = runCli(['list', '--json'], testEnv());
-    expect(result.status, result.stderr).toBe(1);
-    expect(result.stderr).not.toMatch(/^\s+at /mu);
-
-    const envelope = parseErrorEnvelope(result.stdout);
-    expect(envelope.ok).toBe(false);
-    expect(envelope.command).toBe('list');
-    expect(envelope.error.code).toBe('INTERNAL_ERROR');
-    expect(envelope.error.message).toContain('ENOTDIR');
-  });
-
-  it('prints the stack of an unexpected command error at --log-level debug', () => {
-    writeFileSync(join(testHome, 'sessions'), '');
-
-    const result = runCli(
-      ['--log-level', 'debug', 'list', '--json'],
-      testEnv(),
-    );
-    expect(result.status, result.stderr).toBe(1);
-    expect(result.stderr).toMatch(/^\s+at /mu);
+    expect(result.status, result.stderr).toBe(8);
 
     const envelope = parseErrorEnvelope(result.stdout);
     expect(envelope.command).toBe('list');
-    expect(envelope.error.code).toBe('INTERNAL_ERROR');
+    expect(envelope.error.code).toBe('STORAGE_READ_ERROR');
+    expect(envelope.error.details).toEqual({
+      sessionsRoot: join(testHome, 'sessions'),
+    });
   });
 
-  it('prints one INTERNAL_ERROR envelope for an unexpected error before the command runs', () => {
-    writeFileSync(join(testHome, 'config.json'), '{');
+  it.each<[string, string, string]>([
+    ['invalid JSON', '{', 'contains invalid JSON'],
+    ['an unknown key', '{"bogus":1}', 'is invalid: <root>:'],
+  ])(
+    'returns INVALID_INPUT for a config.json with %s',
+    (_case, contents, message) => {
+      const configPath = join(testHome, 'config.json');
+      writeFileSync(configPath, contents);
+
+      const result = runCli(['version', '--json'], testEnv());
+      expect(result.status, result.stderr).toBe(2);
+      expect(result.stderr).toBe('');
+
+      const envelope = parseErrorEnvelope(result.stdout);
+      expect(envelope.command).toBe('agent-tty');
+      expect(envelope.error.code).toBe('INVALID_INPUT');
+      expect(envelope.error.message).toContain(message);
+      expect(envelope.error.details).toEqual({ configPath });
+    },
+  );
+
+  it('returns STORAGE_READ_ERROR when config.json cannot be read', () => {
+    const configPath = join(testHome, 'config.json');
+    mkdirSync(configPath);
 
     const result = runCli(['version', '--json'], testEnv());
-    expect(result.status, result.stderr).toBe(1);
-    expect(result.stderr).not.toMatch(/^\s+at /mu);
+    expect(result.status, result.stderr).toBe(8);
 
     const envelope = parseErrorEnvelope(result.stdout);
-    expect(envelope.ok).toBe(false);
     expect(envelope.command).toBe('agent-tty');
-    expect(envelope.error.code).toBe('INTERNAL_ERROR');
-    expect(envelope.error.message).toContain('contains invalid JSON');
+    expect(envelope.error.code).toBe('STORAGE_READ_ERROR');
+    expect(envelope.error.message).toBe(
+      `Failed to read config file at ${configPath}.`,
+    );
+    expect(envelope.error.details).toEqual({ configPath });
+  });
+
+  it.each<[string, string[]]>([
+    ['help', ['help']],
+    ['help for a command', ['help', 'inspect']],
+    ['help --json', ['help', '--json']],
+  ])('exits 0 for %s', (_case, args) => {
+    const result = runCli(args, testEnv());
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('Usage: agent-tty');
+  });
+
+  it('exits 2 and prints the help on stderr without a command', () => {
+    const result = runCli([], testEnv());
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('Usage: agent-tty');
+  });
+
+  it('prints the error envelope when --json follows -- as an option value', () => {
+    const result = runCli(
+      ['wait', 'missing', '--text', '--', '--json'],
+      testEnv(),
+    );
+    expect(result.status, result.stderr).toBe(3);
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.command).toBe('wait');
+    expect(envelope.error.code).toBe('SESSION_NOT_FOUND');
+  });
+
+  it('prints a human error when --json is the value of an option', () => {
+    const result = runCli(['wait', 'missing', '--text', '--json'], testEnv());
+    expect(result.status).toBe(3);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toMatch(/^SESSION_NOT_FOUND: /u);
+  });
+
+  it('prints the error envelope for a global option error when --json follows -- as an option value', () => {
+    const result = runCli(
+      ['--home', 'relative', 'wait', 'missing', '--text', '--', '--json'],
+      testEnv(),
+    );
+    expect(result.status, result.stderr).toBe(2);
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.command).toBe('agent-tty');
+    expect(envelope.error.code).toBe('INVALID_INPUT');
   });
 
   it.each<[string, string[], string]>([

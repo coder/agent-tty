@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -58,7 +58,11 @@ describe('loadConfigFile', () => {
     const home = await createTemporaryHome();
     await writeFile(join(home, 'config.json'), '{"logLevel":', 'utf8');
 
-    await expect(loadConfigFile(home)).rejects.toThrow(/contains invalid JSON/);
+    await expect(loadConfigFile(home)).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      message: expect.stringContaining('contains invalid JSON'),
+      details: { configPath: join(home, 'config.json') },
+    });
   });
 
   it('throws when the config file fails schema validation', async () => {
@@ -69,7 +73,23 @@ describe('loadConfigFile', () => {
       'utf8',
     );
 
-    await expect(loadConfigFile(home)).rejects.toThrow(/logLevel/);
+    await expect(loadConfigFile(home)).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      message: expect.stringContaining('logLevel'),
+      details: { configPath: join(home, 'config.json') },
+    });
+  });
+
+  it('throws STORAGE_READ_ERROR when the config file cannot be read', async () => {
+    const home = await createTemporaryHome();
+    const configPath = join(home, 'config.json');
+    await mkdir(configPath);
+
+    await expect(loadConfigFile(home)).rejects.toMatchObject({
+      code: 'STORAGE_READ_ERROR',
+      message: `Failed to read config file at ${configPath}.`,
+      details: { configPath },
+    });
   });
 });
 

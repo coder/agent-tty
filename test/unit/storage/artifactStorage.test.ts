@@ -72,6 +72,18 @@ describe('artifact paths', () => {
     await expect(access(artifactsDir)).resolves.toBeUndefined();
   });
 
+  it('rejects an artifacts path that is a file with STORAGE_WRITE_ERROR', async () => {
+    const sessionDir = await createSessionDir();
+    const artifactsPath = join(sessionDir, 'artifacts');
+    await writeFile(artifactsPath, '');
+
+    await expect(ensureArtifactsDir(sessionDir)).rejects.toMatchObject({
+      code: 'STORAGE_WRITE_ERROR',
+      message: `Artifacts path ${artifactsPath} is not a folder.`,
+      details: { path: artifactsPath },
+    });
+  });
+
   it('generates recording filenames for webm format', () => {
     expect(recordingFilename(7, 'webm')).toBe('recording-7-webm.webm');
   });
