@@ -96,8 +96,8 @@ caller_session=$(session_of $$)
 # A pid reused during a walk can make the parents loop, so a walk stops after
 # max_hops parents, and the parents it did not reach count as not ours.
 max_hops=1024
-own_ancestors=" "
-pid=$$
+own_ancestors=" $$ "
+pid=$(parent_of $$)
 hops=0
 while [ -n "$pid" ] && [ "$pid" -gt 1 ] && [ "$hops" -lt "$max_hops" ]; do
   own_ancestors="$own_ancestors$pid "
@@ -108,10 +108,13 @@ is_own_ancestor() {
   case "$own_ancestors" in *" $1 "*) return 0 ;; esac
   return 1
 }
+# As pid 1 of a pid namespace, cleanup.sh started every process whose parents
+# reach pid 1. A process that joined from outside (docker exec) has parent 0.
 is_own_descendant() {
   local walk=$1 hops=0
-  while [ -n "$walk" ] && [ "$walk" -gt 1 ] && [ "$hops" -lt "$max_hops" ]; do
+  while [ -n "$walk" ] && [ "$hops" -lt "$max_hops" ]; do
     [ "$walk" = "$$" ] && return 0
+    [ "$walk" -gt 1 ] || return 1
     walk=$(parent_of "$walk")
     hops=$((hops + 1))
   done
