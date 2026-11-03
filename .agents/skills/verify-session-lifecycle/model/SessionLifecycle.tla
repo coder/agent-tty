@@ -149,8 +149,8 @@ VARIABLES
     dmark,       \* the destroy marker file exists in the session directory
     rec,         \* program.json names the program with its token
     startFailed, \* ghost: the host died because its files were missing
-    readRepaired, \* ghost: a reconcile's first read wrote destroyed next to
-                 \*   the destroy marker
+    readRepaired, \* ghost: a reconcile wrote destroyed from its first read
+                 \*   next to the destroy marker
     sock,        \* the RPC socket file exists (it is outside the directory)
     cpc,         \* create: "alloc", "write", "launch", "done", "failed"
                  \*   (it gave up on its host)
@@ -776,18 +776,18 @@ AfterReconcile(p) == IF p = "gc" THEN "readafter" ELSE "idle"
 SkipsHost(read) == ReconcileSkipsLiveHost /\ read.pid /\ hostAlive
 
 \* readManifestIfExists. With ReconcileRepairsMarked, a terminal manifest
-\* other than destroyed next to the destroy marker gets destroyed from this
-\* copy (writeMarkedDestroyed), with hostPid and childPid null and the exit
-\* code kept, and reconcile unlinks the socket and returns. Otherwise it
-\* returns when the manifest is null or terminal.
+\* other than destroyed next to the destroy marker (isMarkedDestroyed) goes
+\* to the repair write from this copy ("r_marked"). Otherwise it returns when
+\* the manifest is null or terminal.
 ReconcileReads(p) ==
     /\ pc[p] = "r_read"
     /\ IF ReconcileRepairsMarked /\ dmark /\ mst \in Terminal
           /\ mst # "destroyed"
-          THEN /\ Write("destroyed", FALSE, "none", mcode, FALSE)
-               /\ pc' = [pc EXCEPT ![p] = "r_unlink"]
-               /\ readRepaired' = TRUE
-               /\ UNCHANGED rd
+          THEN /\ pc' = [pc EXCEPT ![p] = "r_marked"]
+               /\ rd' = [rd EXCEPT ![p] = [st |-> mst, pid |-> mpid,
+                                           code |-> mcode, child |-> mchild,
+                                           grp |-> "none"]]
+               /\ UNCHANGED <<diskVars, readRepaired>>
        ELSE IF mst = "none" \/ (ReconcileSkipsTerminal /\ mst \in Terminal)
           THEN /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
                /\ UNCHANGED <<rd, diskVars, readRepaired>>
@@ -903,6 +903,21 @@ ReconcileRepairs(p) ==
           ELSE UNCHANGED diskVars
     /\ pc' = [pc EXCEPT ![p] = "r_unlink"]
     /\ UNCHANGED <<ghostVars, sock, cpc, hostVars, shutVars, rd, gres, lruns,
+                   destroyVars, groupVars>>
+
+\* writeMarkedDestroyed: writeManifest destroyed from the copy that the read
+\* took, with hostPid and childPid null and the exit code kept. When gc
+\* removed the folder in the meantime, the write throws SESSION_NOT_FOUND,
+\* and reconcile returns. Otherwise it unlinks the socket and returns.
+ReconcileWritesMarked(p) ==
+    /\ pc[p] = "r_marked"
+    /\ IF WriteLands
+          THEN /\ Write("destroyed", FALSE, "none", rd[p].code, FALSE)
+               /\ pc' = [pc EXCEPT ![p] = "r_unlink"]
+               /\ readRepaired' = TRUE
+          ELSE /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
+               /\ UNCHANGED <<diskVars, readRepaired>>
+    /\ UNCHANGED <<startFailed, sock, cpc, hostVars, shutVars, rd, gres, lruns,
                    destroyVars, groupVars>>
 
 \* unlinkIfPresent(socketPath(sessionDirectory))
@@ -1259,7 +1274,7 @@ Next ==
           \/ ReconcileRereadsManifest(p) \/ ReconcileReadsRecord(p)
           \/ ReconcilePollsGroup(p)
           \/ ReconcileWrites(p) \/ ReconcileRepairs(p)
-          \/ ReconcileUnlinksSocket(p)
+          \/ ReconcileWritesMarked(p) \/ ReconcileUnlinksSocket(p)
     \/ GcFindsDirectory \/ GcReadsManifest \/ GcReadsReconciled
     \/ GcFinalRead \/ GcRemoves
     \/ ListStartsReconcile
