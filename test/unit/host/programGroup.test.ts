@@ -38,6 +38,8 @@ const procHooks = vi.hoisted(() => ({
   // Pids whose /proc/<pid>/task listing fails with this error.
   taskErrors: new Map<string, Error>(),
   mountinfo: undefined as string | undefined,
+  // The error that the /proc listing throws.
+  listError: undefined as Error | undefined,
 }));
 
 const autogroupFile = vi.hoisted(() => ({
@@ -55,6 +57,9 @@ vi.mock('node:fs', async () => {
       );
     }
     if (pid === undefined) {
+      if (procHooks.listError !== undefined) {
+        throw procHooks.listError;
+      }
       return ['self', ...procHooks.stat.keys()];
     }
     if (!procHooks.stat.has(pid)) {
@@ -110,6 +115,7 @@ afterEach(() => {
   procHooks.threads.clear();
   procHooks.taskErrors.clear();
   procHooks.mountinfo = undefined;
+  procHooks.listError = undefined;
   autogroupFile.read = null;
   Object.defineProperty(process, 'platform', { value: platform });
 });
@@ -1076,6 +1082,50 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     }).toThrow('EIO');
     expect(kill.mock.calls).toEqual([
       [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
+  it('continues a frozen group when the /proc listing after the SIGSTOP throws', () => {
+    procShowsTokenGroup();
+    const kill = vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          procHooks.listError = errno('EMFILE');
+        }
+        return true;
+      });
+
+    expect(() => {
+      stopProgramGroup(group);
+    }).toThrow('EMFILE');
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
+  it('continues a frozen group whose kill throws', () => {
+    procShowsTokenGroup();
+    const kill = vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          procShowsTokenGroup('T');
+        }
+        if (signal === 'SIGKILL') {
+          throw errno('EINVAL');
+        }
+        return true;
+      });
+
+    expect(() => {
+      stopProgramGroup(group);
+    }).toThrow('EINVAL');
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGKILL'],
       [-CHILD_PID, 'SIGCONT'],
     ]);
   });
