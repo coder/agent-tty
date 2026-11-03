@@ -363,7 +363,7 @@ Each session's RPC socket lies outside the Home, at `/tmp/agent-tty-<uid>/<8 hex
 
 Known limits:
 
-1. Any user can create `/tmp/agent-tty-<uid>` before you do, because `/tmp` is shared. `create`, and every command that talks to a host, then fails as above until that user or an admin removes it. agent-tty never connects to a socket in such a folder.
+1. Any user can create `/tmp/agent-tty-<uid>` before you do, because `/tmp` is shared. `create`, and every command that talks to a host that this version started, then fails as above until that user or an admin removes it. agent-tty never connects to a socket in such a folder. A host that an older version started stays reachable at the old path (limit 2).
 2. A host that an older version started listens at `/tmp/agent-tty/<8 hex>/<12 hex>`. This version still reaches it there when that socket and its folder belong to your uid, no other user can write the folder, and `/tmp/agent-tty` belongs to you or to root and either no other user can write it or it has the sticky bit. `destroy` and `gc` remove that old socket. An older version cannot reach a host that this version started: destroy your sessions before you downgrade.
 
 For tests and automation, prefer an absolute temp directory:

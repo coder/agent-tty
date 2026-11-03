@@ -121,24 +121,35 @@ export async function sendRpc(
   if (oldSocketPath === null) {
     return await sendRpcAt(socketPath, method, params, timeoutMs, signal);
   }
+  // A missing root, or one that another user holds, has no socket of ours.
+  let rootError: unknown = toTransportCliError(
+    Object.assign(new Error(`connect ENOENT ${socketPath}`), {
+      code: 'ENOENT',
+    }),
+    socketPath,
+    method,
+    timeoutMs ?? DEFAULT_TIMEOUT_MS,
+  );
+  let rootUsable = false;
   try {
-    if (!(await socketRootExists())) {
-      throw toTransportCliError(
-        Object.assign(new Error(`connect ENOENT ${socketPath}`), {
-          code: 'ENOENT',
-        }),
-        socketPath,
-        method,
-        timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      );
-    }
-    return await sendRpcAt(socketPath, method, params, timeoutMs, signal);
+    rootUsable = await socketRootExists();
   } catch (error) {
-    if (!isMissingSocket(error) || !(await isOwnLegacySocket(oldSocketPath))) {
-      throw error;
-    }
-    return await sendRpcAt(oldSocketPath, method, params, timeoutMs, signal);
+    rootError = error;
   }
+  if (rootUsable) {
+    try {
+      return await sendRpcAt(socketPath, method, params, timeoutMs, signal);
+    } catch (error) {
+      if (!isMissingSocket(error)) {
+        throw error;
+      }
+      rootError = error;
+    }
+  }
+  if (!(await isOwnLegacySocket(oldSocketPath))) {
+    throw rootError;
+  }
+  return await sendRpcAt(oldSocketPath, method, params, timeoutMs, signal);
 }
 
 async function sendRpcAt(

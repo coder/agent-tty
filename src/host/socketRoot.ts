@@ -50,13 +50,21 @@ export async function ensureSocketRoot(
       });
     }
   }
-  const stats = await lstat(root);
+  await checkSocketRoot(root, await lstat(root), uid);
+}
+
+// A create in another process that umask took owner bits from shows mode
+// 000 until its chmod, and a create killed before its chmod leaves that mode.
+// Only this uid or root can replace the entry in the sticky /tmp, so the chmod
+// reaches the directory that lstat showed.
+async function checkSocketRoot(
+  root: string,
+  stats: Stats,
+  uid: number,
+): Promise<void> {
   if (!isPrivateRoot(stats, uid)) {
     throw unsafeRootError(root, stats, uid);
   }
-  // A create in another process that umask took owner bits from shows mode
-  // 000 until its chmod. Only this uid or root can replace the entry in the
-  // sticky /tmp, so this chmod reaches the directory that lstat showed.
   if ((stats.mode & 0o700) !== 0o700) {
     await chmod(root, 0o700);
   }
@@ -81,9 +89,7 @@ export async function socketRootExists(
     }
     throw error;
   }
-  if (!isPrivateRoot(stats, uid)) {
-    throw unsafeRootError(root, stats, uid);
-  }
+  await checkSocketRoot(root, stats, uid);
   return true;
 }
 
