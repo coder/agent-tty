@@ -461,13 +461,18 @@ describe('run command integration', { timeout: 45_000 }, () => {
     expectCompletionArtifactsClean(outputText, marker);
   });
 
-  it('detects session exit during wait before timing out', async () => {
+  it('detects session exit during wait before timing out', () => {
     sessionId = createSession(testHome, [
       '/bin/sh',
       '-c',
-      'stty -echo; exec sleep 2',
+      'stty -echo; echo ready; read -r line; exit 0',
     ]);
-    await sleep(500);
+    const ready = runCli(
+      ['wait', sessionId, '--text', 'ready', '--timeout', '20000', '--json'],
+      testEnv(),
+      30_000,
+    );
+    expect(ready.status, ready.stderr).toBe(0);
 
     const result = runCli(
       ['run', sessionId, 'echo never-runs', '--timeout', '10000', '--json'],
