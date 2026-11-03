@@ -89,9 +89,10 @@ function runCleanup(
       timeout: CLEANUP_TIMEOUT_MS,
       stdio: ['ignore', 'pipe', stderrFd ?? 'pipe'],
     });
-    // With stderr sent to a file, spawnSync returns null for it.
-    const stderr: string | null = result.stderr;
-    return { status: result.status, stderr: stderr ?? '' };
+    return {
+      status: result.status,
+      stderr: stderrFd === undefined ? result.stderr : '',
+    };
   } finally {
     if (stderrFd !== undefined) {
       closeSync(stderrFd);
