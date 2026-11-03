@@ -31,3 +31,20 @@ for (const name of ['readFileSync', 'readdirSync', 'readlinkSync'] as const) {
 const existsSync = fs.existsSync;
 fs.existsSync = (path) => !underProc(path) && existsSync(path);
 syncBuiltinESMExports();
+
+// AGENT_TTY_TEST_OTHER_PIDS=1 also puts this process in another pid
+// namespace than the session's host, where no signal reaches a process
+// group of the host's namespace.
+if (process.env.AGENT_TTY_TEST_OTHER_PIDS === '1') {
+  const kill = process.kill.bind(process);
+  process.kill = ((pid: number, signal?: string | number) => {
+    if (pid < -1) {
+      throw Object.assign(new Error('kill ESRCH'), {
+        errno: -3,
+        code: 'ESRCH',
+        syscall: 'kill',
+      });
+    }
+    return kill(pid, signal);
+  }) as typeof process.kill;
+}

@@ -674,9 +674,36 @@ describe('reconcileSession', () => {
           if (pid === HOST_PID) {
             throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
           }
-          return send(pid, signal);
+          const sent = send(pid, signal);
+          if (pid === -group && signal === 'SIGKILL') {
+            waitUntilDead(group);
+          }
+          return sent;
         });
       return { directory, kill };
+    }
+
+    // The mocked timers make the wait after the kill a few event-loop turns
+    // long, so the kill waits here until the kernel has ended the process.
+    function waitUntilDead(pid: number): void {
+      const deadline = Date.now() + 10_000;
+      for (;;) {
+        let stat: string;
+        try {
+          stat = readFileSync(`/proc/${String(pid)}/stat`, 'utf8');
+        } catch {
+          return;
+        }
+        const state = stat.slice(
+          stat.lastIndexOf(')') + 2,
+          stat.lastIndexOf(')') + 3,
+        );
+        if (state === 'Z' || state === 'X') {
+          return;
+        }
+        expect(Date.now()).toBeLessThan(deadline);
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+      }
     }
 
     it('kills the group that the record proves', async () => {
@@ -835,6 +862,49 @@ describe('destroySession', () => {
         });
         expect(await readManifest(manifestPath(directory))).toEqual(exited);
       });
+
+      // From another pid namespace no scan or probe shows the group, and a
+      // CLI without /proc cannot read its own pid namespace either.
+      it.each([
+        ['host.json names another pid namespace', 'namespace' as const],
+        ['the CLI cannot read /proc', 'noProc' as const],
+      ])(
+        'times out without a signal to the group when %s and no probe finds it',
+        async (_, gap) => {
+          const directory = await seedLeftover();
+          const own = captureHost(process.pid);
+          expect(own).not.toBeNull();
+          writeHostRecord(directory, {
+            ...(own as HostRecord),
+            ...(gap === 'namespace' && { pidNamespace: 'pid:[1]' }),
+          });
+          fsHooks.proc = new Map();
+          if (gap === 'noProc') {
+            fsHooks.noProc = true;
+            fsHooks.links = new Map([['/proc/self/ns/pid', errno('ENOENT')]]);
+          }
+          const send = process.kill.bind(process);
+          const kill = vi
+            .spyOn(process, 'kill')
+            .mockImplementation((pid, signal) => {
+              if (pid === -group) {
+                throw errno('ESRCH');
+              }
+              return send(pid, signal);
+            });
+
+          await expect(destroySession('session-01')).rejects.toMatchObject({
+            code: 'HOST_TIMEOUT',
+            message: expect.stringContaining(
+              gap === 'namespace'
+                ? "Run destroy from the host's pid namespace on the host's machine."
+                : 'Run destroy where /proc is mounted.',
+            ) as string,
+          });
+          expect(kill.mock.calls.filter(([pid]) => pid === -group)).toEqual([]);
+          expect(await readManifest(manifestPath(directory))).toEqual(exited);
+        },
+      );
     });
   });
 });

@@ -45,7 +45,17 @@ interface ChildPidGroup {
   readonly sessionDirectory: string;
 }
 
-export type ProgramGroup = ProgramRecord | ChildPidGroup;
+// A group with a token in a pid space that this process cannot prove it
+// shares with the host: without /proc, with an empty /proc, in another pid
+// namespace or on another machine. No scan or probe here shows the
+// program's processes, so the group reads alive and gets no kill.
+interface UnsharedGroup {
+  readonly unshared: true;
+}
+
+const UNSHARED_GROUP: UnsharedGroup = { unshared: true };
+
+export type ProgramGroup = ProgramRecord | ChildPidGroup | UnsharedGroup;
 
 const CAPTURE_BUDGET_MS = 250;
 const STOP_ATTEMPTS = 5;
@@ -284,9 +294,12 @@ async function readProgramRecord(
 
 export async function readProvenProgramGroup(
   sessionDirectory: string,
-): Promise<ProvenRecord | null> {
+): Promise<ProvenRecord | UnsharedGroup | null> {
   const record = await readProgramRecord(sessionDirectory);
-  return typeof record === 'object' && hasToken(record) ? record : null;
+  if (typeof record !== 'object' || !hasToken(record)) {
+    return null;
+  }
+  return (await sharesHostPids(sessionDirectory)) ? record : UNSHARED_GROUP;
 }
 
 export async function readProgramGroup(
@@ -295,7 +308,7 @@ export async function readProgramGroup(
 ): Promise<ProgramGroup | null> {
   const record = await readProgramRecord(sessionDirectory);
   if (typeof record === 'object' && hasToken(record)) {
-    return record;
+    return (await sharesHostPids(sessionDirectory)) ? record : UNSHARED_GROUP;
   }
   if (
     record === 'invalid' ||
@@ -543,6 +556,9 @@ export function isProgramGroupAlive(group: ProgramGroup | null): boolean {
       existsSync(group.sessionDirectory) && isProcessGroupAlive(group.childPid)
     );
   }
+  if ('unshared' in group) {
+    return true;
+  }
   if (!hasToken(group)) {
     return isProcessGroupAlive(group.pid);
   }
@@ -567,6 +583,9 @@ export function stopProgramGroup(group: ProgramGroup | null): void {
     if (existsSync(group.sessionDirectory)) {
       killProcessGroupBestEffort(group.childPid);
     }
+    return;
+  }
+  if ('unshared' in group) {
     return;
   }
   if (!hasToken(group)) {
