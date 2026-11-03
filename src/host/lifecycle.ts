@@ -946,7 +946,11 @@ export async function listSessions(
       continue;
     }
 
-    if (isActiveSessionStatus(manifest.status)) {
+    if (
+      isActiveSessionStatus(manifest.status) ||
+      (!isDestroyedSessionStatus(manifest.status) &&
+        existsSync(destroyMarkerPath(sessionDirectory)))
+    ) {
       try {
         await reconcileSession(sessionDirectory);
         manifest = await readManifestIfExists(manifestFile);
