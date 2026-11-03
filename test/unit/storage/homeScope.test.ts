@@ -73,8 +73,6 @@ describe('scanHome (read-only Session counts)', () => {
     });
   });
 
-  // A reconcile that wrote failed over a destroy and has not yet written
-  // destroyed again, or was killed before it could.
   it('skips a failed Session whose folder holds the destroy marker', async () => {
     await seedSession({ sessionId: 'failed-1', status: 'failed' });
     await writeFile(join(sessionDir(home, 'failed-1'), 'destroyed'), '');

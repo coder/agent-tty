@@ -980,9 +980,6 @@ export async function listSessions(
   return summaries;
 }
 
-// Only a destroy writes the marker, after it stopped the session and right
-// before its destroyed write, so a terminal record next to the marker is one
-// that replaced that write or that the write never replaced.
 async function writeMarkedDestroyed(
   manifestFile: string,
   manifest: SessionRecord,
