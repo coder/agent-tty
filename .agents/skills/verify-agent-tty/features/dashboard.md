@@ -17,14 +17,14 @@ A user opens `agent-tty dashboard` to watch a Home's sessions live, without send
 ## How to get to it (user POV)
 
 - `agent-tty dashboard` (alias `d`), with `--all` and `--session <id>`.
-- Inside it: `Tab`, `↑`/`↓`, `j`/`k`, Enter, `a`, `H`, `z`, `q`, as the footer lists them.
+- Inside it: `Tab`, `↑`/`↓`, `j`/`k`, Enter, `a`, `H`, `z`, `q`, as the footer lists them. `Esc` restores a maximized view and closes the Home picker.
 
 ## Driving it with att
 
 Preconditions:
 
 - `mkdir -p "$EVIDENCE/dashboard"` has run. The recipe saves its proof there.
-- The baseline preconditions in the README hold, and the run's Home has no active session (`att list --json` shows `"sessions":[]`).
+- The baseline preconditions in the README hold, and the run's Home has no sessions (`att list --all --json | jq -e '.result.sessions == []'` passes). Finished sessions count too: the `all (3)` and `all (4)` steps below fail if another recipe left one. Start a new run for this recipe. Do not `gc` a Home that holds another recipe's sessions: `gc` deletes the session files that `cleanup.sh` keeps as proof.
 - A session to watch: `W=$(att create --json --name watched --env 'PS1=$ ' -- /bin/bash --noprofile --norc | jq -r .result.sessionId)`, then `att run "$W" 'echo watched-output-123' --json` returns `completed: true`.
 - A finished session: `F=$(att create --json --name finished -- /bin/sh -c 'exit 0' | jq -r .result.sessionId)`, then `att wait "$F" --exit --timeout 10000 --json` returns `exitCode: 0`.
 
@@ -36,6 +36,7 @@ Preconditions:
 - **Maximize.** Run `att send-keys "$D" Enter --json`, then `att wait "$D" --text 'esc/⏎ restore' --timeout 15000 --json`. The footer is `maximized · ↑/↓ h/j/k/l pan · z overview · esc/⏎ restore · q quit`, and a snapshot shows the screen of `W` across the full width, with no `Sessions ·` line.
 - **Overview.** Run `att send-keys "$D" z --json`, then `att wait "$D" --text '[overview]' --timeout 15000 --json`. The live view header reads `screen 80×24 [overview]`. Run `att send-keys "$D" z --json` again, and `att wait "$D" --regex 'screen 80×24 +│' --timeout 15000 --json` matches: the header is back to `screen 80×24`. Run `att send-keys "$D" Enter --json`, and `att wait "$D" --text 'focus:list' --timeout 15000 --json` matches: the list is back.
 - **Home picker.** Run `att send-keys "$D" H --json`, then `att wait "$D" --text 'choosing Home' --timeout 15000 --json`. The picker replaces both panes. It shows `Switch Home · active (1)`, one row for the run's Home with `◉` (the current Home) and `2 active / 3`, and the footer `↑/↓ j/k select Home · ⏎ open · a scope · esc cancel · q quit`. Run `att send-keys "$D" H --json` again, and `att wait "$D" --text 'focus:list' --timeout 15000 --json` matches.
+- **Esc.** Run `att send-keys "$D" Enter --json`, and `att wait "$D" --text 'esc/⏎ restore' --timeout 15000 --json` matches. Then `att send-keys "$D" Escape --json`: `att wait "$D" --text 'focus:list' --timeout 15000 --json` matches, and a snapshot shows the `Sessions ·` line again. Run `att send-keys "$D" H --json`, and `att wait "$D" --text 'choosing Home' --timeout 15000 --json` matches. Then `att send-keys "$D" Escape --json`: the wait for `focus:list` matches, and `choosing Home` is gone.
 - **Read-only.** Run `att inspect "$W" --json` before and after the steps above. `eventCount` changes only by the events of your own `att run`, never by a dashboard key.
 - **Quit.** Run `att send-keys "$D" q --json`, then `att wait "$D" --exit --timeout 15000 --json`. `.result.exitCode` is `0`.
 - **Start with all sessions.** Run `D2=$(att create --json --name dash-all --cols 120 --rows 30 -- node "$AGENT_TTY_REPO/dist/cli/main.js" dashboard --all | jq -r .result.sessionId)`, then `att wait "$D2" --text 'Sessions · all (4)' --timeout 15000 --json`. The wait matches: the list has `W`, `F`, the exited `dash` session and `D2`, and the finished rows have `○`. Quit it with `att send-keys "$D2" q --json`.

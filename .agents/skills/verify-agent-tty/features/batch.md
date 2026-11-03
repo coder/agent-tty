@@ -1,11 +1,11 @@
 # Batch
 
-A user sends an ordered list of input and wait steps to one session in a single `batch` call. Each wait step only sees screens produced after the step before it (its Wait Baseline). The batch stops at the first failed step unless the user passes `--keep-going`.
+A user sends an ordered list of input and wait steps to one session in a single `batch` call. Each wait step only sees screens produced after the latest earlier input step (its Wait Baseline). The batch stops at the first failed step unless the user passes `--keep-going`.
 
 ## Sub-features
 
-- `batch-steps` runs `type`, `paste`, `sendKeys`, `run` and `wait` steps in order.
-- `batch-baseline` anchors each wait step to the event-log sequence of the step before it.
+- `batch-steps` runs `type`, `paste`, `sendKeys`, `run`, `mouse` and `wait` steps in order. [Mouse](./mouse.md) drives the `mouse` step.
+- `batch-baseline` anchors each wait step to the event-log sequence of the latest earlier input step. A wait step does not move the baseline.
 - `batch-fail-fast` stops at the first failed step and marks later steps `not-run`.
 - `batch-keep-going` runs every step and reports each failure.
 - `batch-file` reads the steps from a JSON file.
@@ -29,6 +29,7 @@ Preconditions:
 - **All steps pass.** Run `att batch "$H" '[{"type":"one"},{"sendKeys":["Enter"]},{"wait":{"text":"ECHO: one","timeout":5000}}]' --json | tee "$EVIDENCE/batch/pass.json"`. Exit code 0. `.result.steps` has three entries with `status: "completed"`, and the wait step has `waitBaseline` equal to the `seq` of the `sendKeys` step and `matched: true`.
 - **Paste step.** Run `att batch "$H" '[{"paste":"pasted-in-batch"},{"sendKeys":["Enter"]},{"wait":{"text":"ECHO: pasted-in-batch","timeout":5000}}]' --json | tee "$EVIDENCE/batch/paste.json"`. Exit code 0. Step 0 has `kind: "paste"`, `status: "completed"` and a `seq`, and the wait step has `matched: true`. `events.jsonl` of `H` has an `input_paste` event at that `seq`, and a snapshot shows the input line as `READY> ^[[200~pasted-in-batch^[[201~`.
 - **Run step.** Run `att batch "$B" '[{"run":"echo batch-$((40+2))","timeout":10000},{"wait":{"text":"batch-42","timeout":5000}}]' --json | tee "$EVIDENCE/batch/run.json"`. Exit code 0. Step 0 has `kind: "run"`, `noWait: false`, `completed: true` and `runOutcome: "completed"`, and the wait step has `matchedText: "batch-42"`. The shell expands `$((40+2))`, so only the output line contains `batch-42`, not the echoed command. `events.jsonl` of `B` has an `input_run` event at the step's `seq`, then a `run_complete` event.
+- **Consecutive waits.** Run `att batch "$H" '[{"type":"five"},{"sendKeys":["Enter"]},{"wait":{"text":"ECHO: five","timeout":5000}},{"wait":{"text":"ECHO: five","timeout":5000}}]' --json | tee "$EVIDENCE/batch/two-waits.json"`. Exit code 0, and both wait steps have `waitBaseline` equal to the `seq` of the `sendKeys` step: a wait step does not move the baseline.
 - **Fail fast.** Run `att batch "$H" '[{"wait":{"text":"never-there","timeout":500}},{"type":"two"}]' --json | tee "$EVIDENCE/batch/fail-fast.json"`. Exit code 11 (the failed step's `WAIT_TIMEOUT`), `.ok` is `false`, `.error.code` is `WAIT_TIMEOUT`, `.result.failedIndices` is `[0]`, and step 1 has `status: "not-run"`. A snapshot shows no `two` typed after the prompt.
 - **Keep going.** Run `att batch "$H" '[{"wait":{"text":"never-there","timeout":300}},{"type":"three"},{"sendKeys":["Enter"]},{"wait":{"text":"ECHO: three","timeout":5000}}]' --keep-going --json`. Exit code 1. Step 0 is `failed`, and steps 1 to 3 are `completed`.
 - **From a file.** Write `[{"type":"four"},{"sendKeys":["Enter"]},{"wait":{"text":"ECHO: four","timeout":5000}}]` to `$EVIDENCE/batch/steps.json` and run `att batch "$H" --file "$EVIDENCE/batch/steps.json" --json`. Exit code 0, three completed steps.
@@ -40,4 +41,5 @@ Preconditions:
 - A wait step without `timeout` waits up to 30 s, like `wait`.
 - A `run` step needs a shell. Sent to `hello-prompt`, it fails with `WAIT_TIMEOUT` (exit 11), because the program never prints the Run Completion marker.
 - A fail-fast batch with a failed step prints `"ok": false` and the step's error, and keeps the per-step `result`. A `--keep-going` batch with failures still prints `"ok": true`: there the exit code and `failedIndices` report the failure.
+- In `[type, sendKeys, wait, wait]`, both wait steps have the `waitBaseline` of the `sendKeys` step. A wait step with no input step before it has no `waitBaseline` and can match the screen as it already is.
 - Wait Baselines keep a wait step from matching an older screen, but text that the program printed earlier can still be on the screen. Wait for text that only the new output contains.
