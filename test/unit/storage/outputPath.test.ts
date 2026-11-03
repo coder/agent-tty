@@ -17,7 +17,9 @@ import process from 'node:process';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
+import { writeTextFileAtomic } from '../../../src/storage/manifests.js';
 import {
+  assertOutputParentUnchanged,
   copyFileReplacing,
   resolveExplicitOutputPath,
   type ExplicitOutputPath,
@@ -183,5 +185,50 @@ describe('explicit output paths', () => {
       code: ERROR_CODES.EXPORT_ERROR,
     });
     expect(await readdir(join(workspace, 'exports'))).toEqual([]);
+  });
+  it('refuses to write when an ancestor became a link to the same folder', async () => {
+    await mkdir(join(workspace, 'a', 'exports'), { recursive: true });
+    const source = join(workspace, 'source.png');
+    await writeFile(source, 'png bytes');
+    const output = await resolveOut(
+      join(workspace, 'a', 'exports', 'shot.png'),
+    );
+
+    await rename(join(workspace, 'a'), join(workspace, 'a-moved'));
+    await symlink(join(workspace, 'a-moved'), join(workspace, 'a'));
+
+    await expect(copyFileReplacing(source, output)).rejects.toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
+    });
+    expect(await readdir(join(workspace, 'a-moved', 'exports'))).toEqual([]);
+  });
+
+  it('reports EXPORT_ERROR when the parent folder is gone before the rename', async () => {
+    await mkdir(join(workspace, 'exports'));
+    const output = await resolveOut(join(workspace, 'exports', 'shot.png'));
+    await rm(join(workspace, 'exports'), { recursive: true });
+
+    await expect(assertOutputParentUnchanged(output)).rejects.toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
+    });
+  });
+
+  it('gives a text write through the check EXPORT_ERROR when its folder goes away', async () => {
+    await mkdir(join(workspace, 'exports'));
+    const output = await resolveOut(join(workspace, 'exports', 'session.cast'));
+
+    await expect(
+      writeTextFileAtomic({
+        path: output.path,
+        pathLabel: 'record export path',
+        contents: 'cast',
+        writeErrorMessage: 'write failed',
+        createParentFolders: false,
+        beforeRename: async () => {
+          await rm(join(workspace, 'exports'), { recursive: true });
+          await assertOutputParentUnchanged(output);
+        },
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.EXPORT_ERROR });
   });
 });
