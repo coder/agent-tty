@@ -612,6 +612,18 @@ describe('wait command', () => {
         message: 'Wait timed out before its condition was met.',
       });
     });
+
+    it('keeps the generic text under --json when the timeout ran out', async () => {
+      resolveTimedOutAfter(30_000, { timedOut: true });
+
+      await expect(
+        runWaitCommand(createOptions({ json: true, waitForExit: true })),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.WAIT_TIMEOUT,
+        message: 'Wait timed out before its condition was met.',
+        details: { sessionId: 'session-01', timeoutMs: 30000 },
+      });
+    });
   });
 
   it('keeps the WAIT_TIMEOUT message of the JSON envelope', async () => {
