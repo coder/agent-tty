@@ -218,12 +218,17 @@ jobs:
 
   # Model-checks the session lifecycle with the verify-session-lifecycle
   # skill. Every run checks that coverage.json matches the covered code. The
-  # TLC runs take about two CPU-hours, so they run only when coverage.json
-  # differs from the base, which every change to the model, its scripts or
-  # the covered code needs.
+  # TLC runs took 63 min in one job of 4 vCPUs, so they run in 4 shares, and
+  # only when coverage.json differs from the base, which every change to the
+  # model, its scripts or the covered code needs.
   lifecycle-model:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    name: lifecycle-model (${{ matrix.shard }}/4)
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -258,6 +263,7 @@ jobs:
         if: steps.inputs.outputs.tlc == 'true'
         env:
           CHECK_JOBS: '4'
+          CHECK_SHARD: ${{ matrix.shard }}/4
         run: .agents/skills/verify-session-lifecycle/scripts/check.sh
 
   quality-gates:

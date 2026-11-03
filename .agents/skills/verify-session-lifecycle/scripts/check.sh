@@ -19,7 +19,9 @@
 #
 # Needs: node (the repo's), Java 11 or newer, and the network once, to fetch
 # the pinned TLC jar. Env: JAVA (default java), TLA2TOOLS_JAR (use this jar),
-# CHECK_OUT (keep the results in this folder), CHECK_JOBS (default 4).
+# CHECK_OUT (keep the results in this folder), CHECK_JOBS (default 4),
+# CHECK_SHARD=<i>/<n> (run only the i-th of n shares of the runs; CI runs
+# the shares in parallel jobs).
 set -euo pipefail
 
 UPDATE_COVERAGE=0
@@ -43,6 +45,7 @@ SPEC="$SKILL_DIR/model/SessionLifecycle.tla"
 COVERAGE="$SKILL_DIR/coverage.json"
 JAVA=${JAVA:-java}
 JOBS=${CHECK_JOBS:-4}
+SHARD=${CHECK_SHARD:-1/1}
 TLC_VERSION=1.7.4
 TLC_SHA256=936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
 TLC_URL="https://github.com/tlaplus/tlaplus/releases/download/v$TLC_VERSION/tla2tools.jar"
@@ -66,6 +69,10 @@ sha256() {
 case "$JOBS" in
   *[!0-9]* | 0*) die "CHECK_JOBS must be a positive integer, not '$JOBS'" ;;
 esac
+SHARD_INDEX=${SHARD%%/*}
+SHARD_COUNT=${SHARD#*/}
+[[ $SHARD =~ ^[1-9][0-9]*/[1-9][0-9]*$ ]] && [ "$SHARD_INDEX" -le "$SHARD_COUNT" ] ||
+  die "CHECK_SHARD must be <i>/<n> with 1 <= i <= n, not '$SHARD'"
 command -v node >/dev/null 2>&1 || die "node is not on PATH"
 if [ "$DRIFT_ONLY" -eq 0 ]; then
   # `java -version` prints `version "11.0.2"`, or `version "1.8.0_292"` for Java 8.
@@ -266,6 +273,26 @@ write_run mutant-KillsProgramGroup-no-token violated DestroyedProgramStopped "Ki
 write_run mutant-HostWaitsForGroup-no-token violated DestroyedProgramStopped "HostWaitsForGroup=FALSE" "without a token, the host records destroyed while a process of another user runs" DestroyedProgramStopped
 write_run mutant-ReconcileWaitsForGroup-no-token violated LiveGroupStaysNamed "ReconcileWaitsForGroup=FALSE" "without a token, reconcile drops childPid while the group runs" LiveGroupStaysNamed
 
+# A run that expects pass explores the whole model and takes minutes, and a
+# run that expects a violation stops at the first one, mostly in seconds. So
+# a share takes every n-th run of each kind, which spreads the long runs.
+if [ "$SHARD_COUNT" -gt 1 ]; then
+  passes=0
+  others=0
+  share=""
+  for name in $RUNS; do
+    if [ "$(cut -f1 "$OUT/$name/expect.txt")" = pass ]; then
+      [ $((passes % SHARD_COUNT + 1)) -eq "$SHARD_INDEX" ] && share="$share $name"
+      passes=$((passes + 1))
+    else
+      [ $((others % SHARD_COUNT + 1)) -eq "$SHARD_INDEX" ] && share="$share $name"
+      others=$((others + 1))
+    fi
+  done
+  RUNS=$share
+  echo "Share $SHARD of the runs:$RUNS"
+fi
+
 run_tlc() {
   local dir rc=0
   dir=$(cd "$OUT/$1" && pwd)
@@ -339,6 +366,7 @@ echo
 echo "Facts: $FACTS_LINE"
 echo "       Collectable=$COLLECTABLE Terminal=$TERMINAL"
 for name in current current-no-token; do
+  case " $RUNS " in *" $name "*) ;; *) continue ;; esac
   echo "Distinct states of $name: $(sed -n 's/.* \([0-9]*\) distinct states found.*/\1/p' "$OUT/$name/tlc.out" | tail -1)."
 done
 echo "A violated run stops at its first violation."

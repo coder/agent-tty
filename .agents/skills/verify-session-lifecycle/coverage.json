@@ -94,7 +94,7 @@
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "57342e142bf3b9fe",
     "skill:scripts/facts.mjs": "c4733ce37c35ff33",
-    "skill:scripts/check.sh": "55930dbbd5a93ef3"
+    "skill:scripts/check.sh": "0b31e02e391b203f"
   },
   "callSites": {
     "writeManifest": [
