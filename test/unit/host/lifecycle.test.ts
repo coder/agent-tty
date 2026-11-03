@@ -4,6 +4,7 @@ import {
   existsSync,
   lstatSync,
   readFileSync,
+  readlinkSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -25,7 +26,7 @@ const fsHooks = vi.hoisted(() => ({
   ownStat: undefined as string | undefined,
   rmdirError: undefined as Error | undefined,
   files: undefined as Map<string, string | Error> | undefined,
-  links: undefined as Map<string, string> | undefined,
+  links: undefined as Map<string, string | Error> | undefined,
 }));
 
 vi.mock('node:fs', async () => {
@@ -73,12 +74,16 @@ vi.mock('node:fs', async () => {
     }
     return stat;
   }) as typeof actual.readFileSync;
-  const readlinkSync = ((path: string, ...rest: unknown[]) =>
-    fsHooks.links?.get(path) ??
-    (actual.readlinkSync as (...args: unknown[]) => unknown)(
-      path,
-      ...rest,
-    )) as typeof actual.readlinkSync;
+  const readlinkSync = ((path: string, ...rest: unknown[]) => {
+    const link = fsHooks.links?.get(path);
+    if (link instanceof Error) {
+      throw link;
+    }
+    return (
+      link ??
+      (actual.readlinkSync as (...args: unknown[]) => unknown)(path, ...rest)
+    );
+  }) as typeof actual.readlinkSync;
   return { ...actual, readdirSync, readFileSync, readlinkSync };
 });
 
@@ -965,6 +970,20 @@ describe('a hostPid that may no longer name the host', () => {
       ]);
 
       expect(captureHost(process.pid)).toMatchObject({ machineId: expected });
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux the host record keeps the pid namespace when /proc refuses its time namespace',
+    () => {
+      fsHooks.links = new Map<string, string | Error>([
+        [`/proc/${String(process.pid)}/ns/time`, errno('EACCES')],
+      ]);
+
+      expect(captureHost(process.pid)).toMatchObject({
+        pidNamespace: readlinkSync('/proc/self/ns/pid'),
+        timeNamespace: null,
+      });
     },
   );
 
