@@ -114,17 +114,17 @@ describe.skipIf(process.platform === 'win32')('ensureSocketRoot', () => {
     });
   });
 
-  it.each(['500', '600'])(
-    'refuses a directory of this uid with mode %s',
+  // A concurrent create whose umask took owner bits shows mode 000 until its
+  // chmod.
+  it.each(['0', '500', '600'])(
+    'gives the owner bits back to a directory of this uid with mode %s',
     async (mode) => {
       await mkdir(root, { mode: 0o700 });
       await chmod(root, Number.parseInt(mode, 8));
 
       try {
-        await expect(ensureSocketRoot(root)).rejects.toMatchObject({
-          code: 'STORAGE_WRITE_ERROR',
-          details: { path: root, mode },
-        });
+        await ensureSocketRoot(root);
+        expect((await lstat(root)).mode & 0o777).toBe(0o700);
       } finally {
         await chmod(root, 0o700);
       }
