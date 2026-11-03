@@ -654,6 +654,44 @@ describe('destroySession', () => {
         });
         expect(await readManifest(manifestPath(directory))).toEqual(exited);
       });
+
+      // From another pid namespace no scan or probe shows the group, and a
+      // CLI without /proc cannot read its own pid namespace either.
+      it.each([
+        ['host.json names another pid namespace', 'namespace' as const],
+        ['the CLI cannot read /proc', 'noProc' as const],
+      ])(
+        'times out without a signal to the group when %s and no probe finds it',
+        async (_, gap) => {
+          const directory = await seedLeftover();
+          const own = captureHost(process.pid);
+          expect(own).not.toBeNull();
+          writeHostRecord(directory, {
+            ...(own as HostRecord),
+            ...(gap === 'namespace' && { pidNamespace: 'pid:[1]' }),
+          });
+          fsHooks.proc = new Map();
+          if (gap === 'noProc') {
+            fsHooks.noProc = true;
+            fsHooks.links = new Map([['/proc/self/ns/pid', errno('ENOENT')]]);
+          }
+          const send = process.kill.bind(process);
+          const kill = vi
+            .spyOn(process, 'kill')
+            .mockImplementation((pid, signal) => {
+              if (pid === -group) {
+                throw errno('ESRCH');
+              }
+              return send(pid, signal);
+            });
+
+          await expect(destroySession('session-01')).rejects.toMatchObject({
+            code: 'HOST_TIMEOUT',
+          });
+          expect(kill.mock.calls.filter(([pid]) => pid === -group)).toEqual([]);
+          expect(await readManifest(manifestPath(directory))).toEqual(exited);
+        },
+      );
     });
   });
 });
