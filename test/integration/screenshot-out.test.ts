@@ -197,6 +197,7 @@ describe('screenshot --out', { timeout: 120_000 }, () => {
     const expectedError = {
       code: 'STORAGE_WRITE_ERROR',
       message: `Artifacts path ${artifactsPath} is not a folder.`,
+      details: { path: artifactsPath },
     };
 
     const live = screenshot([]);
