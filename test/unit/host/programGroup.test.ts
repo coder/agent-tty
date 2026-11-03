@@ -874,8 +874,9 @@ describe('a program group with a token, as a faked /proc shows it', () => {
           : null;
   }
 
-  // gc sends no SIGSTOP, so a fork chain that no scan shows reads gone.
-  describe('provenProgramGroupRuns', () => {
+  // gc sends no SIGSTOP, so a fork chain that no scan shows reads gone. The
+  // records name this process's pid space, which only Linux records.
+  describe.runIf(platform === 'linux')('provenProgramGroupRuns', () => {
     async function recordedSession(): Promise<string> {
       const directory = await mkdtemp(join(tmpdir(), 'agent-tty-runs-'));
       writeProgramRecord(directory, group);
