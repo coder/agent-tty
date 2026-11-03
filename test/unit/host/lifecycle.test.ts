@@ -949,6 +949,25 @@ describe('a hostPid that may no longer name the host', () => {
     },
   );
 
+  it.runIf(platform === 'linux').each([
+    [
+      'uninitialized\n',
+      'fedcba9876543210fedcba9876543210\n',
+      'fedcba9876543210fedcba9876543210',
+    ],
+    ['uninitialized\n', 'not-a-machine-id\n', null],
+  ])(
+    'on linux the host record reads /etc/machine-id %j and the dbus id %j as machine id %j',
+    (etc, dbus, expected) => {
+      fsHooks.files = new Map<string, string | Error>([
+        ['/etc/machine-id', etc],
+        ['/var/lib/dbus/machine-id', dbus],
+      ]);
+
+      expect(captureHost(process.pid)).toMatchObject({ machineId: expected });
+    },
+  );
+
   it.runIf(platform === 'linux')(
     'on linux the host record takes the dbus machine id when /etc/machine-id cannot be read',
     () => {
