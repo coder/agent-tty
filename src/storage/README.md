@@ -42,7 +42,7 @@
 - `computeArtifactHealth` maps only `MANIFEST_VALIDATION_ERROR` to health `manifest-invalid` and rethrows other errors. It validates its result with `ArtifactHealthSummarySchema`. [artifactHealth.ts:computeArtifactHealth]
 - The registry read returns `[]` on a read error, invalid JSON or a schema failure. The read checks each `homes` entry on its own and drops an invalid entry, so the valid entries survive. `resolveHomeRegistryPath` ignores an empty or relative `XDG_STATE_HOME`. [homeRegistry.ts:createHomeRegistry] [homeRegistry.ts:resolveHomeRegistryPath]
 - `upsert` reads and then writes the registry with no lock. A code comment states that concurrent creates can race and drop an entry, which registers again on the next create. [homeRegistry.ts:createHomeRegistry]
-- The `scanHome` doc comment states that it does not reconcile sessions, does not write manifests and does not throw. It skips destroyed sessions and unreadable manifests. [homeScope.ts:scanHome]
+- The `scanHome` doc comment states that it does not reconcile sessions, does not write manifests and does not throw. It skips destroyed sessions, ended sessions whose folder holds the destroy marker, and unreadable manifests. [homeScope.ts:scanHome]
 - `listRegisteredHomes` leaves out Homes with no visible sessions, and the `active` scope also leaves out Homes with no active session. Its doc comment states that it does not rewrite the registry file. [homeScope.ts:listRegisteredHomes]
 
 ## Side Effects
@@ -57,7 +57,7 @@
 - `publishArtifactWithRollback` has the side effects of `publishArtifactFile` and `appendArtifactWithRollback`. It also removes the temp file with `rm({ force: true })` when an earlier failure in the queue stops its publish step from running. [artifactManifest.ts:publishArtifactWithRollback]
 - `computeArtifactHealth` calls `fs.promises.access` on each artifact file. [artifactHealth.ts:computeArtifactHealth]
 - `resolveHomeRegistryPath` reads `XDG_STATE_HOME` and calls `os.homedir()`. `upsertHome` and `forgetHome` read and write the real `homes.json`. `readHomeRegistry` only reads it. [homeRegistry.ts:resolveHomeRegistryPath] [homeRegistry.ts:upsertHome] [homeRegistry.ts:readHomeRegistry]
-- `scanHome` and `listRegisteredHomes` only read: `readdir(<home>/sessions)`, each `session.json` and the registry. [homeScope.ts:scanHome] [homeScope.ts:listRegisteredHomes]
+- `scanHome` and `listRegisteredHomes` only read: `readdir(<home>/sessions)`, each `session.json`, whether each `destroyed` marker exists, and the registry. [homeScope.ts:scanHome] [homeScope.ts:listRegisteredHomes]
 
 ## Verification
 

@@ -464,12 +464,36 @@ function repairFacts() {
     'src/storage/manifests.ts',
     'writeDestroyMarker',
   ).getText();
+  const reconcile = requireDeclaration(lifecycle, 'reconcileSession').body;
+  const marked = indexOfStatement(
+    reconcile,
+    /^if \(manifest !== null && isMarkedDestroyed\(sessionDirectory, manifest\)\) \{\s*if \(await writeMarkedDestroyed\(manifestFile, manifest\)\) \{\s*const socketFile = socketPath\(sessionDirectory\);\s*await unlinkIfPresent\(socketFile\);\s*await removeSocketDirectoryIfEmpty\(socketFile\);\s*\}\s*return;\s*\}$/,
+  );
+  const markedCheck = normalize(
+    requireDeclaration(lifecycle, 'isMarkedDestroyed').body.getText(),
+  );
+  const terminal = guardIndex(
+    reconcile,
+    'manifest === null || isTerminalSessionStatus(manifest.status)',
+    ts.SyntaxKind.ReturnStatement,
+  );
+  const rewrite = normalize(
+    requireDeclaration(lifecycle, 'writeMarkedDestroyed').body.getText(),
+  );
   return {
     ReconcileRepairsDestroyed:
       marks &&
       repairs &&
       marker.includes("await replaceFileAtomic(path, '')") &&
       !marker.includes('mkdir'),
+    ReconcileRepairsMarked:
+      marked >= 0 &&
+      marked < terminal &&
+      markedCheck ===
+        '{ return ( isTerminalSessionStatus(manifest.status) && !isDestroyedSessionStatus(manifest.status) && existsSync(destroyMarkerPath(sessionDirectory)) ); }' &&
+      rewrite.includes(
+        "await writeManifest(manifestFile, { ...rest, status: 'destroyed',",
+      ),
   };
 }
 
@@ -1318,6 +1342,8 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'recordDestroyed'],
   ['src/host/lifecycle.ts', 'removeDeadHostSocket'],
   ['src/host/lifecycle.ts', 'destroySession'],
+  ['src/host/lifecycle.ts', 'isMarkedDestroyed'],
+  ['src/host/lifecycle.ts', 'writeMarkedDestroyed'],
   ['src/host/lifecycle.ts', 'reconcileSession'],
   ['src/host/hostMain.ts', 'waitForManifestFromCreate'],
   ['src/host/hostMain.ts', 'isSessionCommandable'],

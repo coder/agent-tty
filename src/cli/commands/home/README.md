@@ -16,7 +16,7 @@ This directory holds the handlers for the `home list` and `home forget` CLI subc
 - The Home path must be a non-empty string. `normalizeHomePath` enforces this with `invariant` before the registry is called. [src/storage/homeRegistry.ts:normalizeHomePath]
 - `forget` returns `null` and writes nothing when no entry matches the path as written or its normalized form. [src/storage/homeRegistry.ts:createHomeRegistry]
 - The registry path must be absolute (`invariant`). A relative `XDG_STATE_HOME` is ignored. [src/storage/homeRegistry.ts:resolveHomeRegistryPath]
-- `listRegisteredHomes` drops Homes with zero visible sessions. The count leaves out destroyed sessions and sessions whose manifest is missing or unreadable, so a Home whose sessions are all destroyed is dropped too. In `'active'` scope it also drops Homes with zero active sessions. It sorts the result by `lastSeenAt`, newest first. [src/storage/homeScope.ts:listRegisteredHomes] [src/storage/homeScope.ts:scanHome]
+- `listRegisteredHomes` drops Homes with zero visible sessions. The count leaves out destroyed sessions, ended sessions whose folder holds the destroy marker, and sessions whose manifest is missing or unreadable, so a Home whose sessions are all destroyed is dropped too. In `'active'` scope it also drops Homes with zero active sessions. It sorts the result by `lastSeenAt`, newest first. [src/storage/homeScope.ts:listRegisteredHomes] [src/storage/homeScope.ts:scanHome]
 - With an empty list, human output is the single line `No registered Homes.`. [list.ts:buildHomeListLines]
 
 ## Side Effects

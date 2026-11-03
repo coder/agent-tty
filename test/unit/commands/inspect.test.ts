@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   deriveTerminationCategory: vi.fn(),
   emitSuccess: vi.fn(),
   reconcileSession: vi.fn(),
+  isMarkedDestroyed: vi.fn(),
   sendRpc: vi.fn(),
   readManifest: vi.fn(),
   readManifestIfExists: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock('../../../src/host/eventLog.js', () => ({
 
 vi.mock('../../../src/host/lifecycle.js', () => ({
   reconcileSession: mocks.reconcileSession,
+  isMarkedDestroyed: mocks.isMarkedDestroyed,
 }));
 
 vi.mock('../../../src/host/rpcClient.js', () => ({
@@ -408,6 +410,79 @@ describe('inspect command', () => {
         'Termination: clean-exit',
       ]),
     );
+  });
+
+  it('reconciles a failed session that a destroy marked and reports destroyed', async () => {
+    const failedSession = createSessionRecord('failed');
+    mocks.readManifestIfExists.mockResolvedValueOnce(failedSession);
+    mocks.isMarkedDestroyed.mockReturnValueOnce(true);
+    mocks.readManifest.mockResolvedValueOnce({
+      ...failedSession,
+      status: 'destroyed',
+    });
+    mocks.countEventLogEntries.mockResolvedValueOnce(3);
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    expect(mocks.reconcileSession).toHaveBeenCalledTimes(1);
+    const emitted = getLastEmitSuccessPayload() as {
+      result: { session: { status: string } };
+    };
+    expect(emitted.result.session.status).toBe('destroyed');
+  });
+
+  it('shows the record it read when the repair of a marked session fails', async () => {
+    const failedSession = createSessionRecord('failed');
+    mocks.readManifestIfExists
+      .mockResolvedValueOnce(failedSession)
+      .mockResolvedValueOnce(failedSession);
+    mocks.isMarkedDestroyed.mockReturnValueOnce(true);
+    mocks.reconcileSession.mockRejectedValueOnce(
+      makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+        message: 'disk full',
+      }),
+    );
+    mocks.countEventLogEntries.mockResolvedValueOnce(3);
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    const emitted = getLastEmitSuccessPayload() as {
+      result: { session: { status: string } };
+    };
+    expect(emitted.result.session.status).toBe('failed');
+  });
+
+  it('shows destroyed when the repair write of a marked session landed before a later step threw', async () => {
+    const failedSession = createSessionRecord('failed');
+    mocks.readManifestIfExists
+      .mockResolvedValueOnce(failedSession)
+      .mockResolvedValueOnce({ ...failedSession, status: 'destroyed' });
+    mocks.isMarkedDestroyed.mockReturnValueOnce(true);
+    mocks.reconcileSession.mockRejectedValueOnce(
+      Object.assign(new Error('EPERM: operation not permitted, unlink'), {
+        code: 'EPERM',
+      }),
+    );
+    mocks.countEventLogEntries.mockResolvedValueOnce(3);
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    const emitted = getLastEmitSuccessPayload() as {
+      result: { session: { status: string } };
+    };
+    expect(emitted.result.session.status).toBe('destroyed');
   });
 
   it('reports offline replay renderer runtime for exited sessions', async () => {
