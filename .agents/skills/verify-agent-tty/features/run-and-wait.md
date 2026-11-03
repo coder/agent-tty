@@ -57,5 +57,5 @@ Preconditions:
 - Without `NODE_OPTIONS=--disable-warning=DEP0205` (set by `env.sh`), Node 26 prints a tsx deprecation warning after the fixture's prompt, and a cursor-line wait for `READY>$` never matches.
 - `hello-prompt` exits on Ctrl+C. Input after that fails with `SESSION_NOT_RUNNING` (exit 4).
 - `type` and `send-keys` return once the input is written, not when the program has reacted. Always follow them with a `wait`.
-- A waited `run` that times out exits 0, with `ok: true`, `timedOut: true` and `completed: false`. Only `wait` exits 11 on a time-out. Check `.result.timedOut` after each `run`.
+- A waited `run` that times out exits 0, with `ok: true`, `timedOut: true` and `completed: false`. `wait`, and a `batch` whose `wait` or `run` step times out, exit 11. Check `.result.timedOut` after each `run`.
 - `wait --idle-ms` or `--screen-stable-ms` of 30000 ms or more without `--timeout` exits 2 with `INVALID_DURATION`, because the window does not fit in the 30 s default. Pass a larger `--timeout`.
