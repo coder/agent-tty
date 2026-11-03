@@ -980,13 +980,19 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     },
   );
 
-  // A fork chain: each member forks its successor and ends between scans.
-  function stopShowsGroup(...states: string[]) {
+  // A fork chain: each member forks its successor and ends between scans,
+  // until SIGSTOP shows a stopped member, whose autogroup `autogroup` reads.
+  function stopShowsMember(autogroup = '/autogroup-7 nice 0\n') {
     return vi
       .spyOn(process, 'kill')
       .mockImplementation((_pid: number, signal?: string | number) => {
         if (signal === 'SIGSTOP') {
-          procShowsTokenGroup(...states);
+          procShowsTokenGroup('T');
+          const tokenRead = autogroupFile.read;
+          autogroupFile.read = (file) =>
+            file === '/proc/100/autogroup'
+              ? autogroup
+              : (tokenRead?.(file) ?? null);
         }
         return true;
       });
@@ -994,7 +1000,7 @@ describe('a program group with a token, as a faked /proc shows it', () => {
 
   it('freezes a group that no scan shows and kills it once a stopped member carries the token', () => {
     procShowsTokenGroup();
-    const kill = stopShowsGroup('T');
+    const kill = stopShowsMember();
 
     stopProgramGroup(group);
 
@@ -1006,12 +1012,7 @@ describe('a program group with a token, as a faked /proc shows it', () => {
 
   it('continues a frozen group whose stopped member names another autogroup', () => {
     procShowsTokenGroup();
-    const kill = stopShowsGroup('T');
-    const tokenRead = autogroupFile.read;
-    autogroupFile.read = (file) =>
-      file === '/proc/100/autogroup'
-        ? '/autogroup-8 nice 0\n'
-        : (tokenRead?.(file) ?? null);
+    const kill = stopShowsMember('/autogroup-8 nice 0\n');
 
     stopProgramGroup(group);
 
@@ -1131,7 +1132,8 @@ describe.runIf(capturesToken)('a program group with a token', () => {
 
     stopProgramGroup(record);
 
-    expect(kill).not.toHaveBeenCalled();
+    expect(kill).not.toHaveBeenCalledWith(-record.pid, 'SIGKILL');
+    expect(kill).not.toHaveBeenCalledWith(-record.pid, 'SIGCONT');
     expect(isProgramGroupAlive(record)).toBe(false);
   });
 });

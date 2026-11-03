@@ -505,6 +505,24 @@ function killProcessGroupBestEffort(pgid: number): void {
   }
 }
 
+// Whether the signal reached a process of the group. ESRCH: none is left.
+// EPERM: only processes of another user are.
+function signalProcessGroup(
+  pgid: number,
+  signal: 'SIGSTOP' | 'SIGCONT',
+): boolean {
+  try {
+    process.kill(processGroupTarget(pgid), signal);
+    return true;
+  } catch (error) {
+    if (hasErrorCode(error, 'ESRCH') || hasErrorCode(error, 'EPERM')) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
 export function isProgramGroupAlive(group: ProgramGroup | null): boolean {
   if (group === null) {
     return false;
@@ -545,10 +563,21 @@ export function stopProgramGroup(group: ProgramGroup | null): void {
     return;
   }
 
+  // A member that forks its successor and ends between scans is never in
+  // view. SIGSTOP freezes the group, also a child that a member forks while
+  // the kernel delivers it, and a stopped member stays in view. A frozen
+  // group that the scans do not prove ours gets SIGCONT.
+  let frozen = false;
   for (let attempt = 0; attempt < STOP_ATTEMPTS; attempt += 1) {
     const judgement = judgeLiveGroup(group);
+    if (judgement.verdict === 'gone' && !frozen) {
+      frozen = signalProcessGroup(group.pid, 'SIGSTOP');
+      if (frozen) {
+        continue;
+      }
+    }
     if (judgement.verdict !== 'owned') {
-      return;
+      break;
     }
     // No pidfd exists for a process group, so the kill races a reused group
     // id. Reading the witness again shrinks that race to the time between
@@ -561,5 +590,8 @@ export function stopProgramGroup(group: ProgramGroup | null): void {
       killProcessGroupBestEffort(group.pid);
       return;
     }
+  }
+  if (frozen) {
+    signalProcessGroup(group.pid, 'SIGCONT');
   }
 }
