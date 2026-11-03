@@ -159,6 +159,7 @@ describe(
       expect(cast.envelope.result).toMatchObject({
         capturedAtSeq: -1,
         durationMs: 0,
+        metadata: expect.objectContaining({ outputEventCount: 0 }) as unknown,
       });
 
       const webm = runJson<RecordExportResult>(testHome, [
