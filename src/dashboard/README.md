@@ -28,7 +28,7 @@ The Session Dashboard is an Ink/React terminal UI that lists the Sessions in a h
 ## Side Effects
 
 - `EventLogTailSource.poll()` reads the Event Log with `node:fs/promises` `stat` and `open`/`read`/`close`. [eventSource.ts:EventLogTailSource]
-- `listDashboardSessions` reads manifests through `listSessions` (`src/host/lifecycle.ts`) and `readManifestIfExists` (`src/storage/manifests.ts`). `listSessions` calls `reconcileSession` for active Sessions, and that function can rewrite a manifest with `writeManifest` and remove the socket file. [sessionScope.ts:listDashboardSessions]
+- `listDashboardSessions` reads manifests through `listSessions` (`src/host/lifecycle.ts`) and `readManifestIfExists` (`src/storage/manifests.ts`). `listSessions` calls `reconcileSession` for active Sessions and for ended Sessions other than destroyed whose folder holds the destroy marker, and that function can rewrite a manifest with `writeManifest` and remove the socket file. [sessionScope.ts:listDashboardSessions]
 - `runDashboardApp` renders to the terminal with Ink `render()` and waits for `waitUntilExit()`. `App` reads keys with `useInput`, and `q` or Ctrl-C calls `exit()`. [app.tsx:runDashboardApp] [app.tsx:App]
 - `useFollower` polls with `setInterval` every 33 ms (`FRAME_INTERVAL_MS`) and creates a `libghostty-vt` renderer backend with `createRendererBackend` and the `reference-dark` profile. Cleanup aborts, clears the interval and disposes the follower. [app.tsx:useFollower]
 - `App` refreshes the Session list with `setInterval` every 1500 ms (`LIST_REFRESH_MS`) and calls `listRegisteredHomes` (`src/storage/homeScope.ts`) for the home picker. [app.tsx:App]
