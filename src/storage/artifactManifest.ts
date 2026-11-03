@@ -1,18 +1,33 @@
-import { rm } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { link, lstat, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
+import process from 'node:process';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 import { ulid } from 'ulid';
 import { z } from 'zod';
 
+import {
+  captureHost,
+  HostRecordSchema,
+  judgeHost,
+} from '../host/hostRecord.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { ReplaySeqSchema } from '../protocol/schemas.js';
 import { readValidatedJsonFile, writeValidatedJsonFile } from './manifests.js';
 import { publishArtifactFile } from './artifactFiles.js';
-import { artifactPath, ensureArtifactsDir } from './artifactPaths.js';
+import {
+  artifactPath,
+  ensureArtifactsDir,
+  sessionNotFoundIfRemoved,
+} from './artifactPaths.js';
 import { invariant } from '../util/assert.js';
+import { hasErrorCode } from '../util/hasErrorCode.js';
 import { KeyedSerializer } from '../util/keyedSerializer.js';
 
 const ARTIFACT_MANIFEST_FILENAME = 'manifest.json';
+const ARTIFACT_MANIFEST_LOCK_FILENAME = 'manifest.json.lock';
+const MAX_LOCK_POLL_MS = 50;
 const NonEmptyStringSchema = z.string().min(1);
 const IsoDatetimeSchema = z.iso.datetime();
 const ArtifactKindSchema = z.enum([
@@ -54,6 +69,25 @@ export const ArtifactManifestSchema = z
   })
   .strict();
 export type ArtifactManifest = z.infer<typeof ArtifactManifestSchema>;
+
+const ManifestLockOwnerSchema = z
+  .object({
+    version: z.literal(1),
+    token: NonEmptyStringSchema,
+    pid: z.number().int().positive(),
+    process: HostRecordSchema.nullable(),
+  })
+  .strict();
+
+export interface ManifestLockTiming {
+  waitMs: number;
+  unknownOwnerStaleMs: number;
+}
+
+const DEFAULT_MANIFEST_LOCK_TIMING: ManifestLockTiming = {
+  waitMs: 10_000,
+  unknownOwnerStaleMs: 60_000,
+};
 
 const appendSerializer = new KeyedSerializer<string>();
 
@@ -175,6 +209,159 @@ export async function writeArtifactManifest(
   });
 }
 
+type ManifestLockOwner = z.infer<typeof ManifestLockOwnerSchema>;
+
+function parseLockOwner(contents: string): ManifestLockOwner | null {
+  try {
+    const parsed = ManifestLockOwnerSchema.safeParse(JSON.parse(contents));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Breaks the lock when its owner is proven gone, or when the owner cannot be
+ * judged and the lock is older than `unknownOwnerStaleMs`. The lock is moved
+ * aside first, and put back when it is not the lock that was judged.
+ * Returns true when the caller should try to take the lock again at once.
+ */
+async function breakStaleManifestLock(
+  lockPath: string,
+  timing: ManifestLockTiming,
+): Promise<boolean> {
+  let observed: string;
+  let modifiedAtMs: number;
+  try {
+    observed = await readFile(lockPath, 'utf8');
+    modifiedAtMs = (await lstat(lockPath)).mtimeMs;
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      return true;
+    }
+    throw error;
+  }
+
+  const owner = parseLockOwner(observed);
+  const verdict =
+    owner === null ? 'unknown' : judgeHost(owner.pid, owner.process);
+  const stale =
+    verdict === 'unknown'
+      ? Date.now() - modifiedAtMs > timing.unknownOwnerStaleMs
+      : verdict === 'dead';
+  if (!stale) {
+    return false;
+  }
+
+  const movedPath = `${lockPath}.broken-${randomUUID()}`;
+  try {
+    await rename(lockPath, movedPath);
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      return true;
+    }
+    throw error;
+  }
+  try {
+    if ((await readFile(movedPath, 'utf8')) !== observed) {
+      await link(movedPath, lockPath).catch((error: unknown) => {
+        if (!hasErrorCode(error, 'EEXIST')) {
+          throw error;
+        }
+      });
+    }
+  } finally {
+    await rm(movedPath, { force: true });
+  }
+  return true;
+}
+
+async function acquireManifestLock(
+  lockPath: string,
+  contents: string,
+  timing: ManifestLockTiming,
+): Promise<void> {
+  const temporaryPath = `${lockPath}.tmp-${randomUUID()}`;
+  await writeFile(temporaryPath, contents, { flag: 'wx', mode: 0o600 });
+  try {
+    const deadline = Date.now() + timing.waitMs;
+    let pollMs = 2;
+    for (;;) {
+      try {
+        await link(temporaryPath, lockPath);
+        return;
+      } catch (error) {
+        if (!hasErrorCode(error, 'EEXIST')) {
+          throw error;
+        }
+      }
+      if (await breakStaleManifestLock(lockPath, timing)) {
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        const holder = await readFile(lockPath, 'utf8').catch(() => '');
+        throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+          message: `Timed out after ${String(timing.waitMs)} ms waiting for the artifact manifest lock at ${lockPath}.`,
+          retryable: true,
+          details: { lockPath, holderPid: parseLockOwner(holder)?.pid ?? null },
+        });
+      }
+      await sleep(pollMs);
+      pollMs = Math.min(pollMs * 2, MAX_LOCK_POLL_MS);
+    }
+  } finally {
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+  }
+}
+
+async function releaseManifestLock(
+  lockPath: string,
+  contents: string,
+): Promise<void> {
+  const current = await readFile(lockPath, 'utf8').catch(() => null);
+  if (current === contents) {
+    await rm(lockPath, { force: true });
+  }
+}
+
+/**
+ * Runs `update` while this process holds `<sessionDir>/artifacts/manifest.json.lock`,
+ * so manifest updates from the host and from CLI processes do not overwrite
+ * each other. The lock file names its owner's pid and process identity.
+ */
+export async function withArtifactManifestLock<T>(
+  sessionDir: string,
+  update: () => Promise<T>,
+  timing: ManifestLockTiming = DEFAULT_MANIFEST_LOCK_TIMING,
+): Promise<T> {
+  invariant(timing.waitMs >= 0, 'lock waitMs must not be negative');
+  invariant(
+    timing.unknownOwnerStaleMs >= 0,
+    'lock unknownOwnerStaleMs must not be negative',
+  );
+  await ensureArtifactsDir(sessionDir);
+  const lockPath = artifactPath(sessionDir, ARTIFACT_MANIFEST_LOCK_FILENAME);
+  const contents = JSON.stringify(
+    ManifestLockOwnerSchema.parse({
+      version: 1,
+      token: randomUUID(),
+      pid: process.pid,
+      process: captureHost(process.pid),
+    }),
+  );
+
+  try {
+    await acquireManifestLock(lockPath, contents, timing);
+  } catch (error) {
+    throw await sessionNotFoundIfRemoved(sessionDir, error);
+  }
+  try {
+    return await update();
+  } finally {
+    await releaseManifestLock(lockPath, contents).catch(() => undefined);
+  }
+}
+
 export interface AppendArtifactWithRollbackOptions {
   sessionDir: string;
   entry: ArtifactEntry;
@@ -190,24 +377,28 @@ async function appendArtifact(
 ): Promise<ArtifactEntry> {
   const resolvedSessionDir = resolve(sessionDir);
   const expectedSessionId = sessionIdFromSessionDir(resolvedSessionDir);
-  return await appendSerializer.run(resolvedSessionDir, async () => {
-    const { entry, rollbackArtifactPath } = await prepare();
-    try {
-      const validatedEntry = validateArtifactEntry(entry, expectedSessionId);
-      const manifest = await readArtifactManifest(resolvedSessionDir);
-      await writeArtifactManifest(resolvedSessionDir, {
-        ...manifest,
-        artifacts: [...manifest.artifacts, validatedEntry],
-      });
-      return validatedEntry;
-    } catch (error) {
-      if (rollbackArtifactPath !== undefined) {
-        // Best-effort: swallow rm errors so the original manifest failure propagates.
-        await rm(rollbackArtifactPath, { force: true }).catch(() => undefined);
+  return await appendSerializer.run(resolvedSessionDir, () =>
+    withArtifactManifestLock(resolvedSessionDir, async () => {
+      const { entry, rollbackArtifactPath } = await prepare();
+      try {
+        const validatedEntry = validateArtifactEntry(entry, expectedSessionId);
+        const manifest = await readArtifactManifest(resolvedSessionDir);
+        await writeArtifactManifest(resolvedSessionDir, {
+          ...manifest,
+          artifacts: [...manifest.artifacts, validatedEntry],
+        });
+        return validatedEntry;
+      } catch (error) {
+        if (rollbackArtifactPath !== undefined) {
+          // Best-effort: swallow rm errors so the original manifest failure propagates.
+          await rm(rollbackArtifactPath, { force: true }).catch(
+            () => undefined,
+          );
+        }
+        throw error;
       }
-      throw error;
-    }
-  });
+    }),
+  );
 }
 
 /**

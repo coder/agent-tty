@@ -15,7 +15,7 @@ import { readBootId, readProcStat } from './programGroup.js';
 // A pid can name a new process after the host ends, but not with the host's
 // start time on the same boot. The pid means that process only in the
 // host's pid namespace.
-const HostRecordSchema = z
+export const HostRecordSchema = z
   .object({
     version: z.literal(1),
     pid: z.number().int().positive(),
