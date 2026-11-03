@@ -866,10 +866,9 @@ describe('a hostPid that may no longer name the host', () => {
 
       await expect(destroySession('session-01', true)).rejects.toMatchObject({
         code: 'HOST_TIMEOUT',
-        message:
-          gap === 'none'
-            ? expect.stringContaining('cannot read /proc')
-            : expect.not.stringContaining('/proc'),
+        message: (gap === 'none'
+          ? expect.stringContaining('cannot read /proc')
+          : expect.not.stringContaining('/proc')) as string,
       });
       expect(isRunning(host)).toBe(true);
       expect(await readManifest(manifestPath(directory))).toEqual(record);
