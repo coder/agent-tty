@@ -1,6 +1,7 @@
 {
   "fingerprints": {
-    "src/cli/commands/create.ts#runCreateCommand": "5135dd8d24063c90",
+    "src/cli/commands/create.ts#runCreateCommand": "635715a49fa0273e",
+    "src/cli/commands/create.ts#waitForReadyHost": "a7fd2ba345b6bfd6",
     "src/cli/commands/destroy.ts#runDestroyCommand": "ecaa8b1d572da7c6",
     "src/cli/commands/destroy.ts#rerunInNewSession": "cf32d7d082758522",
     "src/cli/commands/gc.ts#gcSessions": "667e4ebc3ca3029c",
@@ -88,7 +89,7 @@
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "e6d79fb59b23b4e6",
-    "skill:scripts/facts.mjs": "c9104f32c0f98233",
+    "skill:scripts/facts.mjs": "667e94303b024013",
     "skill:scripts/check.sh": "2609b5abb529c8ee"
   },
   "callSites": {
@@ -123,6 +124,7 @@
       "src/cli/commandTarget.ts#resolveCommandTarget",
       "src/cli/commands/create.ts#readCreateResult",
       "src/cli/commands/create.ts#runCreateCommand",
+      "src/cli/commands/create.ts#waitForReadyHost",
       "src/cli/commands/gc.ts#gcSessions",
       "src/cli/commands/inspect.ts#runInspectCommand",
       "src/cli/commands/record-diff.ts#resolveSessionDirectory",
