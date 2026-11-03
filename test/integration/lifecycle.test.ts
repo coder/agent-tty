@@ -1411,6 +1411,37 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     },
   );
 
+  // A chroot or a container without a mounted /proc.
+  it.runIf(process.platform === 'linux')(
+    'destroy from a CLI that sees no /proc prints its result',
+    async () => {
+      vi.stubEnv('XDG_STATE_HOME', join(testHome, 'state'));
+      try {
+        const sessionId = createSession(testHome, [
+          '/bin/sh',
+          '-c',
+          'exec sleep 300',
+        ]);
+        const pgid = inspectSession(testHome, sessionId).childPid as number;
+        const preload = pathToFileURL(resolve('test/fixtures/no-proc.ts')).href;
+
+        const result = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+          NODE_OPTIONS: `--import=${preload}`,
+        });
+
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          ok: true,
+          result: { sessionId, destroyed: true },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await groupEnds(pgid)).toBe(true);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it.runIf(process.platform === 'linux')(
     'keeps a session running whose host renamed itself, and destroy --force ends it',
     async () => {

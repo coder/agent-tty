@@ -38,6 +38,8 @@ const procHooks = vi.hoisted(() => ({
   // Pids whose /proc/<pid>/task listing fails with this error.
   taskErrors: new Map<string, Error>(),
   mountinfo: undefined as string | undefined,
+  // The error that the /proc listing throws.
+  listError: undefined as Error | undefined,
 }));
 
 const autogroupFile = vi.hoisted(() => ({
@@ -47,6 +49,9 @@ const autogroupFile = vi.hoisted(() => ({
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof Fs>('node:fs');
   const readdirSync = ((path: string, ...rest: unknown[]) => {
+    if (procHooks.listError !== undefined && path === '/proc') {
+      throw procHooks.listError;
+    }
     const pid = /^\/proc\/(\d+)\/task$/.exec(path)?.[1];
     if (procHooks.stat === undefined || (path !== '/proc' && !pid)) {
       return (actual.readdirSync as (...args: unknown[]) => unknown)(
@@ -110,6 +115,7 @@ afterEach(() => {
   procHooks.threads.clear();
   procHooks.taskErrors.clear();
   procHooks.mountinfo = undefined;
+  procHooks.listError = undefined;
   autogroupFile.read = null;
   Object.defineProperty(process, 'platform', { value: platform });
 });
@@ -975,6 +981,30 @@ describe('a program group with a token, as a faked /proc shows it', () => {
       const kill = probeEnds('ok');
 
       expect(isProgramGroupAlive(group)).toBe(true);
+      stopProgramGroup(group);
+      expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+    },
+  );
+
+  // A chroot or a container without a mounted /proc.
+  it.each([
+    ['ok', true],
+    ['EPERM', true],
+    ['ESRCH', false],
+  ] as const)(
+    'without /proc, takes the probe that ends %s as the answer and gets no kill',
+    (probe, alive) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procHooks.listError = errno('ENOENT');
+      autogroupFile.read = (file) => {
+        if (file.startsWith('/proc/')) {
+          throw errno('ENOENT');
+        }
+        return null;
+      };
+      const kill = probe === 'ok' ? probeEnds(probe) : killFailsWith(probe);
+
+      expect(isProgramGroupAlive(group)).toBe(alive);
       stopProgramGroup(group);
       expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
     },
