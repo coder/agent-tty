@@ -54,8 +54,9 @@ const defaultScanDependencies: ScanHomeDependencies = {
  * still shows `running` until something reconciles it); entering a Home in the
  * dashboard, or running `gc`, reconciles for real.
  *
- * "Visible" excludes destroyed Sessions, mirroring the dashboard's `all` scope
- * (a destroyed Session's Event Log may already be collected). It never throws:
+ * "Visible" excludes destroyed Sessions and Sessions whose folder holds the
+ * destroy marker, mirroring the dashboard's `all` scope (a destroyed Session's
+ * Event Log may already be collected). It never throws:
  * a missing/unreadable sessions tree, or a corrupt individual manifest, counts
  * as zero/skip so a single bad Session can't break discovery.
  */
