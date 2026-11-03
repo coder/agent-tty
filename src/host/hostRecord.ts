@@ -23,8 +23,8 @@ const HostRecordSchema = z
     bootId: z.string().min(1),
     startTicks: z.string().regex(/^\d+$/),
     pidNamespace: z.string().min(1),
-    timeNamespace: z.string().min(1).nullable(),
-    machineId: z.string().min(1).nullable(),
+    timeNamespace: z.string().min(1).nullable().optional(),
+    machineId: z.string().min(1).nullable().optional(),
   })
   .strict();
 
@@ -88,7 +88,10 @@ function readTimeNamespace(pid: number | 'self'): string | null {
   }
 }
 
-function inTimeNamespace(timeNamespace: string | null): boolean {
+function inTimeNamespace(timeNamespace: string | null | undefined): boolean {
+  if (timeNamespace === undefined) {
+    return true;
+  }
   try {
     return readTimeNamespace('self') === timeNamespace;
   } catch {
@@ -113,7 +116,8 @@ function readMachineId(): string | null {
 
 function inHostPidSpace(record: HostRecord): boolean {
   return (
-    inPidNamespace(record.pidNamespace) && readMachineId() === record.machineId
+    inPidNamespace(record.pidNamespace) &&
+    (record.machineId === undefined || readMachineId() === record.machineId)
   );
 }
 
