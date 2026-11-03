@@ -1,7 +1,11 @@
 import type { Page } from 'playwright';
 
-import type { MissingGlyph } from '../../protocol/schemas.js';
-import type { ProfileFontCoverage } from '../fontCoverage.js';
+import {
+  profileFaces,
+  type BundledFace,
+  type FamilyFaces,
+  type StackFaces,
+} from '../fontCoverage.js';
 import type { RenderProfileConfig, ScreenshotResult } from '../types.js';
 
 import { invariant } from '../../util/assert.js';
@@ -43,17 +47,27 @@ interface GlyphCell {
   col: number;
 }
 
-export interface GlyphCandidate {
-  codePoints: readonly number[];
-  cells: GlyphCell[];
-}
+type Has = (codePoint: number) => boolean;
 
-function isTextCovered(text: string, coverage: ReadonlySet<number>): boolean {
+const faceHas =
+  (face: BundledFace): Has =>
+  (codePoint) =>
+    face.coverage.has(codePoint);
+const familyHas =
+  (family: FamilyFaces): Has =>
+  (codePoint) =>
+    family.every((face) => face.coverage.has(codePoint));
+const someFaceHas =
+  (faces: StackFaces): Has =>
+  (codePoint) =>
+    faces.some((family) => family.some((face) => face.coverage.has(codePoint)));
+
+function isTextCovered(text: string, has: Has): boolean {
   for (const char of text) {
     if (
       !DEFAULT_IGNORABLE.test(char) &&
       !FALLBACK_SPACE.test(char) &&
-      !coverage.has(char.codePointAt(0) ?? -1)
+      !has(char.codePointAt(0) ?? -1)
     ) {
       return false;
     }
@@ -64,56 +78,31 @@ function isTextCovered(text: string, coverage: ReadonlySet<number>): boolean {
 // HarfBuzz composes or decomposes a cluster when the font has the other
 // canonical form, so `ẽ` (U+1EBD) draws from `e` + U+0303 and `Å` (U+212B)
 // draws from U+00C5.
-function isCanonicallyCovered(
-  text: string,
-  coverage: ReadonlySet<number>,
-): boolean {
+function isCanonicallyCovered(text: string, has: Has): boolean {
   return [text, text.normalize('NFC'), text.normalize('NFD')].some((form) =>
-    isTextCovered(form, coverage),
+    isTextCovered(form, has),
   );
 }
 
-function uncoveredCodePoints(
-  grapheme: string,
-  coverage: ReadonlySet<number>,
-): number[] {
-  if (isCanonicallyCovered(grapheme, coverage)) {
+function uncoveredCodePoints(grapheme: string, has: Has): number[] {
+  if (isCanonicallyCovered(grapheme, has)) {
     return [];
   }
   const codePoints = new Set<number>();
   for (const char of grapheme) {
-    if (!isCanonicallyCovered(char, coverage)) {
+    if (!isCanonicallyCovered(char, has)) {
       codePoints.add(char.codePointAt(0) ?? -1);
     }
   }
   return [...codePoints];
 }
 
-export function findGlyphCandidates(
-  grid: readonly (readonly string[])[],
-  coverage: ReadonlySet<number>,
-): Map<string, GlyphCandidate> {
-  const candidates = new Map<string, GlyphCandidate>();
-  const covered = new Set<string>();
-  grid.forEach((graphemes, row) => {
-    graphemes.forEach((grapheme, col) => {
-      if (grapheme === '' || covered.has(grapheme)) {
-        return;
-      }
-      let candidate = candidates.get(grapheme);
-      if (candidate === undefined) {
-        const codePoints = uncoveredCodePoints(grapheme, coverage);
-        if (codePoints.length === 0) {
-          covered.add(grapheme);
-          return;
-        }
-        candidate = { codePoints, cells: [] };
-        candidates.set(grapheme, candidate);
-      }
-      candidate.cells.push({ row, col });
-    });
-  });
-  return candidates;
+// One family has the whole grapheme in every face, so the face that a cell's
+// style picks draws it, and Chromium never falls back to a box.
+function drawsWhole(grapheme: string, faces: StackFaces): boolean {
+  return faces.some((family) =>
+    isCanonicallyCovered(grapheme, familyHas(family)),
+  );
 }
 
 function formatCodePoint(codePoint: number): string {
@@ -137,13 +126,14 @@ export function probeText(grapheme: string, codePoint: number): string {
   return COMBINING_MARK.test(char) && base !== char ? base + char : char;
 }
 
-export function glyphProbeTexts(
-  candidates: ReadonlyMap<string, GlyphCandidate>,
+// Each candidate maps to the code points that no bundled face has.
+function glyphProbeTexts(
+  candidates: ReadonlyMap<string, readonly number[]>,
 ): string[] {
   const texts = new Set<string>();
-  for (const [grapheme, candidate] of candidates) {
+  for (const [grapheme, codePoints] of candidates) {
     texts.add(grapheme);
-    for (const codePoint of candidate.codePoints) {
+    for (const codePoint of codePoints) {
       const text = probeText(grapheme, codePoint);
       texts.add(text);
       if (text !== String.fromCodePoint(codePoint)) {
@@ -160,42 +150,36 @@ export interface UsedFont {
   isCustomFont: boolean;
 }
 
+type FontsByText = ReadonlyMap<string, readonly UsedFont[]>;
+
 export type ScreenGlyphFields = Pick<
   ScreenshotResult,
   'missingGlyphs' | 'missingGlyphsTruncated'
 >;
 
-export class GlyphCheck {
-  public static forProfile(profile: RenderProfileConfig): GlyphCheck | null {
-    void profile;
-    throw new Error('not implemented');
-  }
-
-  public screen(
-    page: Page,
-    grid: readonly (readonly string[])[],
-  ): Promise<ScreenGlyphFields> {
-    void page;
-    void grid;
-    throw new Error('not implemented');
-  }
-}
-
-export interface MissingGlyphReport {
-  missingGlyphs: MissingGlyph[];
-  truncated: boolean;
+// CDP names a web font by the PostScript name in its file, whatever family
+// alias the profile gave it.
+function faceOf(font: UsedFont, faces: StackFaces): BundledFace {
+  const face = faces
+    .flat()
+    .find((candidate) => candidate.postScriptName === font.postScriptName);
+  invariant(
+    face !== undefined,
+    'a web font in the page must be a bundled face of the stack',
+  );
+  return face;
 }
 
 // Chromium draws a cluster with one font: the first stack font that covers
 // all of it, or else the first font of the stack, which then draws `.notdef`
-// boxes. So the code points of a cluster that one bundled font drew are boxes
-// when that font lacks them. A cluster split over several fonts is judged per
-// code point.
+// boxes. So the code points of a cluster that one bundled face drew are boxes
+// when that face lacks them. A cluster split over several fonts is judged per
+// code point, over the code points that no bundled face has.
 function boxedCodePoints(
   grapheme: string,
-  candidate: GlyphCandidate,
-  fontsByText: ReadonlyMap<string, readonly UsedFont[]>,
-  coverage: ProfileFontCoverage,
+  unbundledCodePoints: readonly number[],
+  fontsByText: FontsByText,
+  faces: StackFaces,
 ): number[] | undefined {
   const fonts = fontsByText.get(grapheme);
   if (fonts === undefined) {
@@ -204,18 +188,16 @@ function boxedCodePoints(
   if (fonts.length > 0 && fonts.every((font) => !font.isCustomFont)) {
     return [];
   }
-  if (fonts.length <= 1) {
-    const family = fonts[0]?.familyName.toLowerCase() ?? coverage.firstFamily;
-    const familyCoverage = coverage.byFamily.get(family);
-    invariant(
-      familyCoverage !== undefined,
-      'a web font in the page must be a bundled font of the stack',
-    );
-    return uncoveredCodePoints(grapheme, familyCoverage);
+  const [font, ...otherFonts] = fonts;
+  if (font === undefined) {
+    return uncoveredCodePoints(grapheme, familyHas(faces[0]));
+  }
+  if (otherFonts.length === 0) {
+    return uncoveredCodePoints(grapheme, faceHas(faceOf(font, faces)));
   }
 
   const boxed: number[] = [];
-  for (const codePoint of candidate.codePoints) {
+  for (const codePoint of unbundledCodePoints) {
     const text = probeText(grapheme, codePoint);
     let codePointFonts = fontsByText.get(text);
     if (text !== String.fromCodePoint(codePoint)) {
@@ -224,9 +206,9 @@ function boxedCodePoints(
         return undefined;
       }
       const markFonts = codePointFonts.filter(
-        (font) =>
+        (markFont) =>
           !baseFonts.some(
-            (baseFont) => baseFont.familyName === font.familyName,
+            (baseFont) => baseFont.postScriptName === markFont.postScriptName,
           ),
       );
       if (markFonts.length > 0) {
@@ -236,55 +218,139 @@ function boxedCodePoints(
     if (codePointFonts === undefined) {
       return undefined;
     }
-    if (codePointFonts.every((font) => font.isCustomFont)) {
+    if (codePointFonts.every((codePointFont) => codePointFont.isCustomFont)) {
       boxed.push(codePoint);
     }
   }
   return boxed;
 }
 
-export function buildMissingGlyphs(
-  candidates: ReadonlyMap<string, GlyphCandidate>,
-  fontsByText: ReadonlyMap<string, readonly UsedFont[]>,
-  coverage: ProfileFontCoverage,
-): MissingGlyphReport {
-  const cellsByCodePoint = new Map<number, GlyphCell[]>();
-  let listedCells = 0;
-  let truncated = false;
-  for (const [grapheme, candidate] of candidates) {
-    const boxed = boxedCodePoints(grapheme, candidate, fontsByText, coverage);
-    if (boxed === undefined) {
-      truncated = true;
-      continue;
-    }
-    for (const codePoint of boxed) {
-      const cells = candidate.cells.slice(
-        0,
-        MAX_MISSING_GLYPH_CELLS - listedCells,
-      );
-      if (cells.length < candidate.cells.length) {
-        truncated = true;
-      }
-      if (cells.length === 0) {
-        continue;
-      }
-      listedCells += cells.length;
-      cellsByCodePoint.set(codePoint, [
-        ...(cellsByCodePoint.get(codePoint) ?? []),
-        ...cells,
-      ]);
-    }
+/**
+ * Finds the glyphs that the bundled fonts of a profile draw as `.notdef`
+ * boxes. It keeps the fonts that Chromium reported per probe text, so a text
+ * is probed once per backend.
+ */
+export class GlyphCheck {
+  private readonly faces: StackFaces;
+  private readonly cssFont: string;
+  private readonly fontsByText = new Map<string, readonly UsedFont[]>();
+
+  private constructor(faces: StackFaces, cssFont: string) {
+    this.faces = faces;
+    this.cssFont = cssFont;
   }
 
-  const missingGlyphs = [...cellsByCodePoint]
-    .sort(([left], [right]) => left - right)
-    .map(([codePoint, cells]) => ({
-      codePoint: formatCodePoint(codePoint),
-      cells: cells.sort(
-        (left, right) => left.row - right.row || left.col - right.col,
-      ),
-    }));
-  return { missingGlyphs, truncated };
+  /** Null when the profile's font stack does not start with a bundled font. */
+  public static forProfile(profile: RenderProfileConfig): GlyphCheck | null {
+    const faces = profileFaces(profile);
+    return faces === null
+      ? null
+      : new GlyphCheck(
+          faces,
+          `${String(profile.fontSize)}px ${profile.fontFamily}`,
+        );
+  }
+
+  /** The boxed code points of one screen, each with its cells. */
+  public async screen(
+    page: Page,
+    grid: readonly (readonly string[])[],
+  ): Promise<ScreenGlyphFields> {
+    const { boxed, complete } = await this.judge(page, new Set(grid.flat()));
+    const cellsByGrapheme = new Map<string, GlyphCell[]>();
+    grid.forEach((graphemes, row) => {
+      graphemes.forEach((grapheme, col) => {
+        if (!boxed.has(grapheme)) {
+          return;
+        }
+        let cells = cellsByGrapheme.get(grapheme);
+        if (cells === undefined) {
+          cells = [];
+          cellsByGrapheme.set(grapheme, cells);
+        }
+        cells.push({ row, col });
+      });
+    });
+
+    const cellsByCodePoint = new Map<number, GlyphCell[]>();
+    let listedCells = 0;
+    let truncated = !complete;
+    for (const [grapheme, cells] of cellsByGrapheme) {
+      for (const codePoint of boxed.get(grapheme) ?? []) {
+        const listed = cells.slice(0, MAX_MISSING_GLYPH_CELLS - listedCells);
+        if (listed.length < cells.length) {
+          truncated = true;
+        }
+        if (listed.length === 0) {
+          continue;
+        }
+        listedCells += listed.length;
+        cellsByCodePoint.set(codePoint, [
+          ...(cellsByCodePoint.get(codePoint) ?? []),
+          ...listed,
+        ]);
+      }
+    }
+
+    const missingGlyphs = [...cellsByCodePoint]
+      .sort(([left], [right]) => left - right)
+      .map(([codePoint, cells]) => ({
+        codePoint: formatCodePoint(codePoint),
+        cells: cells.sort(
+          (left, right) => left.row - right.row || left.col - right.col,
+        ),
+      }));
+    return {
+      missingGlyphs,
+      ...(truncated && { missingGlyphsTruncated: true }),
+    };
+  }
+
+  // Maps each grapheme with a box to its boxed code points. `complete` is
+  // false when a probe limit or the time budget left a grapheme unjudged.
+  private async judge(
+    page: Page,
+    graphemes: Iterable<string>,
+  ): Promise<{ boxed: Map<string, number[]>; complete: boolean }> {
+    const bundled = someFaceHas(this.faces);
+    const candidates = new Map<string, number[]>();
+    for (const grapheme of graphemes) {
+      if (grapheme !== '' && !drawsWhole(grapheme, this.faces)) {
+        candidates.set(grapheme, uncoveredCodePoints(grapheme, bundled));
+      }
+    }
+
+    const texts = glyphProbeTexts(candidates);
+    if (this.fontsByText.size + texts.length > MAX_CACHED_GLYPH_PROBES) {
+      this.fontsByText.clear();
+    }
+    const unprobed = texts
+      .filter((text) => !this.fontsByText.has(text))
+      .slice(0, MAX_GLYPH_PROBES);
+    if (unprobed.length > 0) {
+      const probed = await probeUsedFonts(page, this.cssFont, unprobed);
+      for (const [text, fonts] of probed) {
+        this.fontsByText.set(text, fonts);
+      }
+    }
+
+    const boxed = new Map<string, number[]>();
+    let complete = true;
+    for (const [grapheme, unbundledCodePoints] of candidates) {
+      const codePoints = boxedCodePoints(
+        grapheme,
+        unbundledCodePoints,
+        this.fontsByText,
+        this.faces,
+      );
+      if (codePoints === undefined) {
+        complete = false;
+      } else if (codePoints.length > 0) {
+        boxed.set(grapheme, codePoints);
+      }
+    }
+    return { boxed, complete };
+  }
 }
 
 export async function probeUsedFonts(

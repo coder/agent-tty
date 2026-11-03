@@ -43,10 +43,6 @@ import type {
   SemanticSnapshot,
 } from '../types.js';
 import { BUNDLED_FONT_ASSETS } from '../bundledFont.js';
-import {
-  profileFontCoverage,
-  type ProfileFontCoverage,
-} from '../fontCoverage.js';
 import { hashProfile } from '../profiles.js';
 import { iterateInRangeReplayEvents } from '../replayEvents.js';
 import {
@@ -59,15 +55,7 @@ import {
   validateHarnessSnapshot,
 } from './harnessDecoding.js';
 import type { GhosttyHarnessSnapshot } from './harnessDecoding.js';
-import {
-  MAX_CACHED_GLYPH_PROBES,
-  MAX_GLYPH_PROBES,
-  buildMissingGlyphs,
-  findGlyphCandidates,
-  glyphProbeTexts,
-  probeUsedFonts,
-  type UsedFont,
-} from './missingGlyphs.js';
+import { GlyphCheck, type ScreenGlyphFields } from './missingGlyphs.js';
 
 export {
   assembleCanonicalLine,
@@ -285,8 +273,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   // duplicate warnings if both bootInternal()'s catch and a concurrent
   // dispose() race on the same scope.
   private readonly loggedScopes = new WeakSet<ResourceScope>();
-  private readonly usedFontsByText = new Map<string, readonly UsedFont[]>();
-  private glyphCoverage: ProfileFontCoverage | null | undefined;
+  private glyphCheckMemo: GlyphCheck | null | undefined;
   private initialReplayCols: number | null = null;
   private initialReplayRows: number | null = null;
   private lastAppliedSeq = -1;
@@ -915,15 +902,16 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     };
   }
 
-  private async findMissingGlyphs(
-    page: Page,
-  ): Promise<
-    Pick<ScreenshotResult, 'missingGlyphs' | 'missingGlyphsTruncated'>
-  > {
-    if (this.glyphCoverage === undefined) {
-      this.glyphCoverage = profileFontCoverage(this.profile);
+  private glyphCheck(): GlyphCheck | null {
+    if (this.glyphCheckMemo === undefined) {
+      this.glyphCheckMemo = GlyphCheck.forProfile(this.profile);
     }
-    if (this.glyphCoverage === null) {
+    return this.glyphCheckMemo;
+  }
+
+  private async findMissingGlyphs(page: Page): Promise<ScreenGlyphFields> {
+    const check = this.glyphCheck();
+    if (check === null) {
       return {};
     }
     const grid = await page.evaluate(() => {
@@ -947,33 +935,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         ),
       'cell graphemes must be one string per viewport cell',
     );
-    const candidates = findGlyphCandidates(grid, this.glyphCoverage.union);
-    const texts = glyphProbeTexts(candidates);
-    if (this.usedFontsByText.size + texts.length > MAX_CACHED_GLYPH_PROBES) {
-      this.usedFontsByText.clear();
-    }
-    const unprobed = texts
-      .filter((text) => !this.usedFontsByText.has(text))
-      .slice(0, MAX_GLYPH_PROBES);
-    if (unprobed.length > 0) {
-      const probed = await probeUsedFonts(
-        page,
-        `${String(this.profile.fontSize)}px ${this.profile.fontFamily}`,
-        unprobed,
-      );
-      for (const [text, fonts] of probed) {
-        this.usedFontsByText.set(text, fonts);
-      }
-    }
-    const { missingGlyphs, truncated } = buildMissingGlyphs(
-      candidates,
-      this.usedFontsByText,
-      this.glyphCoverage,
-    );
-    return {
-      missingGlyphs,
-      ...(truncated && { missingGlyphsTruncated: true }),
-    };
+    return check.screen(page, grid);
   }
 
   public async finalizeVideo(outputPath: string): Promise<void> {
