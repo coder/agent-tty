@@ -152,14 +152,19 @@ export async function readHostRecord(
   }
 }
 
+// Without host.json nothing names the host's pid space: a session from an
+// agent-tty version before it, or one whose create and host could not read
+// /proc. Since the host writes host.json before program.json, only a version
+// between the two files, which no release holds, wrote a token without it.
 export async function sharesHostPids(
   sessionDirectory: string,
+  sharedWithoutRecord: boolean,
 ): Promise<boolean> {
   if (process.platform !== 'linux') {
     return true;
   }
   const record = await readHostRecord(sessionDirectory);
-  return record === null || inHostPidSpace(record);
+  return record === null ? sharedWithoutRecord : inHostPidSpace(record);
 }
 
 function pidExists(pid: number): boolean {

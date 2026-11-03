@@ -41,7 +41,13 @@ import {
   stopProgramGroup,
   type ProgramGroup,
 } from './programGroup.js';
-import { judgeHost, readHostRecord, type HostRecord } from './hostRecord.js';
+import {
+  captureHost,
+  judgeHost,
+  readHostRecord,
+  writeHostRecord,
+  type HostRecord,
+} from './hostRecord.js';
 import { sendRpc } from './rpcClient.js';
 import { ensureSocketRoot, isOwnLegacySocket } from './socketRoot.js';
 
@@ -709,6 +715,13 @@ export async function allocateSession(
   await chmod(sessionDirectory, 0o700);
 
   const hostPid = launch(sessionId);
+  // Before the first manifest names the host, so that a CLI in another pid
+  // namespace reads the starting host by its record, not by a pid that its
+  // own namespace lacks. The host writes the record again once it starts.
+  const hostRecord = captureHost(hostPid);
+  if (hostRecord !== null) {
+    writeHostRecord(sessionDirectory, hostRecord);
+  }
 
   const now = new Date().toISOString();
   await writeManifest(manifestPath(sessionDirectory), {
