@@ -126,6 +126,66 @@ describe('GhosttyWebBackend unit guards', () => {
     ]);
   });
 
+  it('notes painted graphemes after each output flush of a timed replay', async () => {
+    const backend = createBackend();
+    const calls: string[] = [];
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: { isClosed: () => false },
+      resizeBridge: () => Promise.resolve(),
+      writeBatchBridge: (_page: object, dataChunks: string[]) => {
+        calls.push(`write ${dataChunks.join(',')}`);
+        return Promise.resolve();
+      },
+      notePaintedGraphemes: () => {
+        calls.push('note');
+        return Promise.resolve();
+      },
+      checkPaintedGlyphs: () => Promise.resolve({}),
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 80,
+            rows: 24,
+            cursorRow: 0,
+            cursorCol: 0,
+          }),
+        ),
+    });
+
+    await backend.replayWithTiming(
+      {
+        sessionId: 'renderer-unit-session',
+        initialCols: 80,
+        initialRows: 24,
+        targetSeq: 2,
+        events: [
+          {
+            seq: 0,
+            ts: '2026-03-19T12:00:00.000Z',
+            type: 'output',
+            payload: { data: 'first' },
+          },
+          {
+            seq: 1,
+            ts: '2026-03-19T12:00:00.010Z',
+            type: 'input_text',
+            payload: { text: 'x' },
+          },
+          {
+            seq: 2,
+            ts: '2026-03-19T12:00:00.020Z',
+            type: 'output',
+            payload: { data: 'second' },
+          },
+        ],
+      },
+      { mode: 'max-speed', minFrameHoldMs: 0, finalFrameHoldMs: 0 },
+    );
+
+    expect(calls).toEqual(['write first', 'note', 'write second', 'note']);
+  });
+
   it('retries the painted-grapheme note after the backend reboots', async () => {
     const backend = createBackend();
     const graphemes = vi.fn(() => Promise.resolve({ missingGlyphs: [] }));

@@ -67,7 +67,7 @@ describe('readFontFile', () => {
     );
   });
 
-  it('reads the bundled Noto symbol subsets, which hold no emoji-presentation code point', () => {
+  it('reads the bundled Noto symbol subsets, which hold no Emoji code point', () => {
     const files = ['noto-sans-symbols-2-regular', 'noto-sans-math-regular'].map(
       (assetKey) => {
         const asset = BUNDLED_FONT_ASSETS.find(
@@ -89,7 +89,7 @@ describe('readFontFile', () => {
     expect(math?.coverage.has(0x29c9)).toBe(true);
     for (const file of files) {
       const emoji = [...file.coverage].filter((codePoint) =>
-        /^\p{Emoji_Presentation}$/u.test(String.fromCodePoint(codePoint)),
+        /^\p{Emoji}$/u.test(String.fromCodePoint(codePoint)),
       );
       expect(emoji, file.postScriptName).toEqual([]);
     }
