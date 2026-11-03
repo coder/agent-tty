@@ -948,8 +948,7 @@ export async function listSessions(
 
     if (
       isActiveSessionStatus(manifest.status) ||
-      (!isDestroyedSessionStatus(manifest.status) &&
-        existsSync(destroyMarkerPath(sessionDirectory)))
+      isMarkedDestroyed(sessionDirectory, manifest)
     ) {
       try {
         await reconcileSession(sessionDirectory);
@@ -978,6 +977,17 @@ export async function listSessions(
   }
 
   return summaries;
+}
+
+function isMarkedDestroyed(
+  sessionDirectory: string,
+  manifest: SessionRecord,
+): boolean {
+  return (
+    isTerminalSessionStatus(manifest.status) &&
+    !isDestroyedSessionStatus(manifest.status) &&
+    existsSync(destroyMarkerPath(sessionDirectory))
+  );
 }
 
 async function writeMarkedDestroyed(
@@ -1010,12 +1020,7 @@ export async function reconcileSession(
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
 
-  if (
-    manifest !== null &&
-    isTerminalSessionStatus(manifest.status) &&
-    !isDestroyedSessionStatus(manifest.status) &&
-    existsSync(destroyMarkerPath(sessionDirectory))
-  ) {
+  if (manifest !== null && isMarkedDestroyed(sessionDirectory, manifest)) {
     await writeMarkedDestroyed(manifestFile, manifest);
     return;
   }
