@@ -24,7 +24,7 @@ A user opens `agent-tty dashboard` to watch a Home's sessions live, without send
 Preconditions:
 
 - `mkdir -p "$EVIDENCE/dashboard"` has run. The recipe saves its proof there.
-- The baseline preconditions in the README hold, and the run's Home has no sessions (`att list --all --json | jq -e '.result.sessions == []'` passes). Finished sessions count too: the `all (3)` and `all (4)` steps below fail if another recipe left one. Start a new run for this recipe, or destroy every running session (`for s in $(att list --json | jq -r '.result.sessions[].sessionId'); do att destroy "$s" --json; done`) and then run `att gc --json`, which skips running sessions.
+- The baseline preconditions in the README hold, and the run's Home has no sessions (`att list --all --json | jq -e '.result.sessions == []'` passes). Finished sessions count too: the `all (3)` and `all (4)` steps below fail if another recipe left one. Start a new run for this recipe. Do not `gc` a Home that holds another recipe's sessions: `gc` deletes the session files that `cleanup.sh` keeps as proof.
 - A session to watch: `W=$(att create --json --name watched --env 'PS1=$ ' -- /bin/bash --noprofile --norc | jq -r .result.sessionId)`, then `att run "$W" 'echo watched-output-123' --json` returns `completed: true`.
 - A finished session: `F=$(att create --json --name finished -- /bin/sh -c 'exit 0' | jq -r .result.sessionId)`, then `att wait "$F" --exit --timeout 10000 --json` returns `exitCode: 0`.
 
