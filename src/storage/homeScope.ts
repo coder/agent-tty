@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
@@ -8,7 +9,7 @@ import {
 import type { SessionRecord } from '../protocol/schemas.js';
 import { createHomeRegistry, type HomeRegistry } from './homeRegistry.js';
 import { readManifestIfExists } from './manifests.js';
-import { manifestPath, sessionDir } from './sessionPaths.js';
+import { destroyMarkerPath, manifestPath, sessionDir } from './sessionPaths.js';
 
 /**
  * Active/all scope for listing Homes. Structurally identical to the dashboard's
@@ -84,7 +85,11 @@ export async function scanHome(
       continue;
     }
 
-    if (manifest === null || isDestroyedSessionStatus(manifest.status)) {
+    if (
+      manifest === null ||
+      isDestroyedSessionStatus(manifest.status) ||
+      existsSync(destroyMarkerPath(sessionDir(home, entry)))
+    ) {
       continue;
     }
 

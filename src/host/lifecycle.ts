@@ -976,12 +976,48 @@ export async function listSessions(
   return summaries;
 }
 
+// Only a destroy writes the marker, after it stopped the session and right
+// before its destroyed write, so a terminal record next to the marker is one
+// that replaced that write or that the write never replaced.
+async function writeMarkedDestroyed(
+  manifestFile: string,
+  manifest: SessionRecord,
+): Promise<void> {
+  const { failureReason: _reason, failureOrigin: _origin, ...rest } = manifest;
+  try {
+    await writeManifest(manifestFile, {
+      ...rest,
+      status: 'destroyed',
+      updatedAt: new Date().toISOString(),
+      hostPid: null,
+      childPid: null,
+    });
+  } catch (error) {
+    if (
+      error instanceof CliError &&
+      error.code === ERROR_CODES.SESSION_NOT_FOUND
+    ) {
+      return;
+    }
+    throw error;
+  }
+}
+
 export async function reconcileSession(
   sessionDirectory: string,
 ): Promise<void> {
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
 
+  if (
+    manifest !== null &&
+    isTerminalSessionStatus(manifest.status) &&
+    !isDestroyedSessionStatus(manifest.status) &&
+    existsSync(destroyMarkerPath(sessionDirectory))
+  ) {
+    await writeMarkedDestroyed(manifestFile, manifest);
+    return;
+  }
   if (manifest === null || isTerminalSessionStatus(manifest.status)) {
     return;
   }
