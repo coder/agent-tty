@@ -24,7 +24,7 @@ const fsHooks = vi.hoisted(() => ({
   // The text that a read of /proc/self/stat returns.
   ownStat: undefined as string | undefined,
   rmdirError: undefined as Error | undefined,
-  files: undefined as Map<string, string> | undefined,
+  files: undefined as Map<string, string | Error> | undefined,
   links: undefined as Map<string, string> | undefined,
 }));
 
@@ -39,6 +39,9 @@ vi.mock('node:fs', async () => {
         )) as typeof actual.readdirSync;
   const readFileSync = ((path: string, ...rest: unknown[]) => {
     const file = fsHooks.files?.get(path);
+    if (file instanceof Error) {
+      throw file;
+    }
     if (file !== undefined) {
       return file;
     }
@@ -919,6 +922,20 @@ describe('a hostPid that may no longer name the host', () => {
       });
       expect(kill).not.toHaveBeenCalledWith(host, 'SIGKILL');
       expect(isRunning(host)).toBe(true);
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux the host record takes the dbus machine id when /etc/machine-id cannot be read',
+    () => {
+      fsHooks.files = new Map<string, string | Error>([
+        ['/etc/machine-id', errno('EACCES')],
+        ['/var/lib/dbus/machine-id', 'fedcba9876543210fedcba9876543210\n'],
+      ]);
+
+      expect(captureHost(process.pid)).toMatchObject({
+        machineId: 'fedcba9876543210fedcba9876543210',
+      });
     },
   );
 
