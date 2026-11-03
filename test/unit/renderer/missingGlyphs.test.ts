@@ -6,6 +6,7 @@ import {
   BUNDLED_SYMBOLS_FONT_ASSET,
 } from '../../../src/renderer/bundledFont.js';
 import {
+  GLYPH_PROBE_BUDGET_MS,
   GlyphCheck,
   MAX_GLYPH_PROBES,
   MAX_MISSING_GLYPH_CELLS,
@@ -396,6 +397,7 @@ describe('GlyphCheck.graphemes', () => {
         page,
         new Set(['\u29c9', 'a', '\u2502', '\u0378']),
         true,
+        GLYPH_PROBE_BUDGET_MS,
       ),
     ).resolves.toEqual({
       missingGlyphs: [{ codePoint: 'U+0378' }, { codePoint: 'U+29C9' }],
@@ -406,7 +408,12 @@ describe('GlyphCheck.graphemes', () => {
     const { page } = fakePage({ '\u0378': [JETBRAINS] });
 
     await expect(
-      check().graphemes(page, new Set(['\u0378']), false),
+      check().graphemes(
+        page,
+        new Set(['\u0378']),
+        false,
+        GLYPH_PROBE_BUDGET_MS,
+      ),
     ).resolves.toEqual({
       missingGlyphs: [{ codePoint: 'U+0378' }],
       missingGlyphsTruncated: true,
@@ -420,7 +427,12 @@ describe('GlyphCheck.graphemes', () => {
         String.fromCodePoint(0x4e00 + index),
       ),
     );
-    const result = await check().graphemes(page, graphemes, true);
+    const result = await check().graphemes(
+      page,
+      graphemes,
+      true,
+      GLYPH_PROBE_BUDGET_MS,
+    );
 
     expect(result.missingGlyphsTruncated).toBe(true);
     expect(result.missingGlyphs).toHaveLength(MAX_GLYPH_PROBES);

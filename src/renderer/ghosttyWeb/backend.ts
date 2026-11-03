@@ -57,6 +57,7 @@ import {
 } from './harnessDecoding.js';
 import type { GhosttyHarnessSnapshot } from './harnessDecoding.js';
 import {
+  GLYPH_PROBE_BUDGET_MS,
   GlyphCheck,
   MAX_CACHED_GLYPH_PROBES,
   type ScreenGlyphFields,
@@ -281,6 +282,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   private readonly loggedScopes = new WeakSet<ResourceScope>();
   private glyphCheckMemo: GlyphCheck | null | undefined;
   private paintedNoteFailed = false;
+  private recordedGlyphs: RecordedGlyphFields | undefined;
   private initialReplayCols: number | null = null;
   private initialReplayRows: number | null = null;
   private lastAppliedSeq = -1;
@@ -754,7 +756,16 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     );
 
     if (highestProcessedSeq !== this.lastAppliedSeq) {
-      await waitForDelay(finalFrameHoldMs);
+      // The probes draw off screen, so the check runs while the video holds
+      // the final frame instead of lengthening it.
+      await Promise.all([
+        waitForDelay(finalFrameHoldMs),
+        this.checkPaintedGlyphs(Math.max(1, finalFrameHoldMs)).then(
+          (fields) => {
+            this.recordedGlyphs = fields;
+          },
+        ),
+      ]);
     }
 
     if (highestProcessedSeq < 0) {
@@ -992,12 +1003,20 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   }
 
   public async recordedMissingGlyphs(): Promise<RecordedGlyphFields> {
+    return (
+      this.recordedGlyphs ?? this.checkPaintedGlyphs(GLYPH_PROBE_BUDGET_MS)
+    );
+  }
+
+  private async checkPaintedGlyphs(
+    budgetMs: number,
+  ): Promise<RecordedGlyphFields> {
     try {
       const check = this.glyphCheck();
       if (check === null || this.paintedNoteFailed) {
         return {};
       }
-      const page = this.requireOperationalPage('recordedMissingGlyphs()');
+      const page = this.requireOperationalPage('checkPaintedGlyphs()');
       const painted = await page.evaluate(() => {
         const state = (globalThis as GhosttyBrowserGlobal).__agentTtyPainted;
         return {
@@ -1015,6 +1034,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         page,
         new Set(painted.seen),
         painted.complete,
+        budgetMs,
       );
     } catch (error) {
       this.logger.debug(
@@ -1413,6 +1433,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       this.initialReplayRows = null;
       this.lastAppliedSeq = -1;
       this.paintedNoteFailed = false;
+      this.recordedGlyphs = undefined;
       this.pageAndContextReleasedExternally = false;
     }
   }

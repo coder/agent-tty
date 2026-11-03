@@ -306,8 +306,9 @@ export class GlyphCheck {
     page: Page,
     graphemes: ReadonlySet<string>,
     complete: boolean,
+    budgetMs: number,
   ): Promise<RecordedGlyphFields> {
-    const judged = await this.judge(page, graphemes);
+    const judged = await this.judge(page, graphemes, budgetMs);
     const codePoints = new Set([...judged.boxedByGrapheme.values()].flat());
     return {
       missingGlyphs: [...codePoints]
@@ -320,6 +321,7 @@ export class GlyphCheck {
   private async judge(
     page: Page,
     graphemes: Iterable<string>,
+    budgetMs: number = GLYPH_PROBE_BUDGET_MS,
   ): Promise<{
     boxedByGrapheme: Map<string, number[]>;
     allJudged: boolean;
@@ -343,7 +345,12 @@ export class GlyphCheck {
       .filter((text) => !this.fontsByText.has(text))
       .slice(0, MAX_GLYPH_PROBES);
     if (unprobed.length > 0) {
-      const probed = await probeUsedFonts(page, this.cssFont, unprobed);
+      const probed = await probeUsedFonts(
+        page,
+        this.cssFont,
+        unprobed,
+        budgetMs,
+      );
       for (const [text, fonts] of probed) {
         this.fontsByText.set(text, fonts);
       }

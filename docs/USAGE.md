@@ -278,7 +278,7 @@ agent-tty screenshot <session-id> --json | jq -c '.result.missingGlyphs'
 # [{"codePoint":"U+0378","cells":[{"row":0,"col":6}]}]
 ```
 
-`record export --format webm` lists `missingGlyphs` as well: each code point that a bundled font drew as a box in at least one frame of the video. The entries have no `cells`, because a cell names a place in one frame. The check reads the screen after each output batch and each resize of the replay, so a box that a later frame clears is still listed, even when it shows for less than one video frame. The limits, the caps and `missingGlyphsTruncated` work as for `screenshot`. An empty array means the check found no box, and a result without `missingGlyphs` means the check did not run or failed. Asciicast results never have the field.
+`record export --format webm` lists `missingGlyphs` as well: each code point that a bundled font drew as a box in at least one frame of the video. The entries have no `cells`, because a cell names a place in one frame. The check reads the screen after each output batch and each resize of the replay, so a box that a later frame clears is still listed, even when it shows for less than one video frame. The check runs while the video holds its last frame and gets that hold as its time budget, so it does not lengthen the video. The limits, the caps and `missingGlyphsTruncated` work as for `screenshot`. An empty array means the check found no box, and a result without `missingGlyphs` means the check did not run or failed. Asciicast results never have the field.
 
 ```bash
 agent-tty record export <session-id> --format webm --json | jq -c '.result.missingGlyphs'

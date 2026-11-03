@@ -37,11 +37,12 @@ for entry in "${fonts[@]}"; do
     --name-languages='*' \
     --notdef-outline \
     --flavor=woff2 \
-    --output-file="$assets/$name.woff2"
-  actual=$(sha256sum "$assets/$name.woff2" | cut -d' ' -f1)
-  if [ "$actual" = "$woff2_sha256" ]; then
-    echo "$name.woff2 $actual matches the pinned build"
-  else
-    echo "$name.woff2 $actual differs from the pinned build $woff2_sha256 (Node $(node -p process.versions.node), Unicode $(node -p process.versions.unicode))"
+    --output-file="$work/$name.woff2"
+  actual=$(sha256sum "$work/$name.woff2" | cut -d' ' -f1)
+  if [ "$actual" != "$woff2_sha256" ]; then
+    echo "$name.woff2 $actual differs from the pinned build $woff2_sha256 (Node $(node -p process.versions.node), Unicode $(node -p process.versions.unicode)); the asset is unchanged" >&2
+    exit 1
   fi
+  cp "$work/$name.woff2" "$assets/$name.woff2"
+  echo "$name.woff2 $actual matches the pinned build"
 done
