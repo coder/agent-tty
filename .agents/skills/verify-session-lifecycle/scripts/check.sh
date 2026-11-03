@@ -122,7 +122,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid FreezesUnseenGroup"
+GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid FreezesUnseenGroup UnsharedGroupReadsUnknown"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -136,7 +136,7 @@ NO_TOKEN_RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal Recor
 # R15 and R16 are what the token adds, so only the runs with Token check them.
 RULES="$NO_TOKEN_RULES NoUnrelatedGroupKilled DestroyedSessionStopped"
 NO_TOKEN_WITNESSES="WitnessCreateGivesUp WitnessCrashReconciled WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessReconcileRepairs"
-WITNESSES="WitnessGcRemovesSession WitnessCreateGivesUp WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled WitnessDestroyCompletes WitnessSigtermRecorded WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessLeftoverMeetsDestroy WitnessReusedIdMeetsKill WitnessRecordNamesProgram WitnessUnrecordedProgramOutlives WitnessReconcileRepairs WitnessWaitPassesReusedId WitnessReusedHostMeetsKill WitnessUnrecordedHostMeetsKill"
+WITNESSES="WitnessGcRemovesSession WitnessCreateGivesUp WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled WitnessDestroyCompletes WitnessSigtermRecorded WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessLeftoverMeetsDestroy WitnessReusedIdMeetsKill WitnessRecordNamesProgram WitnessUnrecordedProgramOutlives WitnessReconcileRepairs WitnessMarkedRepaired WitnessWaitPassesReusedId WitnessReusedHostMeetsKill WitnessUnrecordedHostMeetsKill"
 
 # --- runs ----------------------------------------------------------------
 
@@ -147,6 +147,8 @@ RUNS=""
 TOKEN=TRUE
 # UNSEEN: whether no scan of /proc shows a live process of the program.
 UNSEEN=FALSE
+# OTHER: whether destroy, list and gc run in another pid space than the host.
+OTHER=FALSE
 write_run() {
   local name=$1 expect=$2 invariants=$3 overrides=$4 note=$5 must=${6:-}
   local dir="$OUT/$name" fact guard value
@@ -167,6 +169,7 @@ write_run() {
     done
     echo "  Token = $TOKEN"
     echo "  Unseen = $UNSEEN"
+    echo "  OtherPidSpace = $OTHER"
     echo "  MaxListReconciles = 2"
     echo "SPECIFICATION Spec"
     echo "CHECK_DEADLOCK TRUE"
@@ -204,6 +207,7 @@ write_run mutant-CreateStopsOnGiveUp violated FailedCreateStopped "CreateStopsOn
 write_run mutant-TokenNamesProgram violated DestroyedSessionStopped "TokenNamesProgram=FALSE" "with the host's autogroup as the token, no member carries it, and destroy records destroyed while the program's group runs" DestroyedSessionStopped
 write_run mutant-ReusedIdReadsGone pass WitnessWaitPassesReusedId "ReusedIdReadsGone=FALSE" "with a group that took the id read alive, no wait of destroy passes while that group runs"
 write_run mutant-ProvesHostPid violated NoUnrelatedHostKilled "ProvesHostPid=FALSE" "without the start-up record, destroy --force kills a process that took the host's pid" NoUnrelatedHostKilled
+write_run mutant-ReconcileRepairsMarked pass DestroyedStaysDestroyed "ReconcileRepairsMarked=FALSE" "redundant in the model: it has no crash of a reconciling process, so the repair after the reconcile's own write always runs"
 write_run mutant-ReconcileSkipsTerminal pass RecordedExitKept "ReconcileSkipsTerminal=FALSE" "redundant: the re-read returns on a terminal manifest"
 write_run mutant-GcSkipsNonCollectable pass NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE" "redundant: the final check still skips"
 write_run mutant-GcFinalCheck pass NoLiveSessionDeleted "GcFinalCheck=FALSE" "redundant: the first check still skips"
@@ -218,6 +222,14 @@ UNSEEN=TRUE
 write_run current-unseen pass "$RULES" "" "the code with a program that no scan shows: every rule holds"
 write_run mutant-FreezesUnseenGroup-unseen violated DestroyedProgramStopped "FreezesUnseenGroup=FALSE" "without the freeze, the kill finds no member in view, and destroy records destroyed while a fork chain runs" DestroyedProgramStopped
 UNSEEN=FALSE
+
+# destroy, list and gc run without /proc, or in another pid namespace or on
+# another machine than the host, so they cannot see the program's group.
+OTHER=TRUE
+write_run current-otherspace pass "$RULES" "" "the code with destroy, list and gc in another pid space: every rule holds"
+write_run witness-WitnessUnsharedDestroyCompletes-otherspace violated WitnessUnsharedDestroyCompletes "" "a plain destroy from another pid space still succeeds"
+write_run mutant-UnsharedGroupReadsUnknown-otherspace violated DestroyedSessionStopped "UnsharedGroupReadsUnknown=FALSE" "with the group read gone where no scan or probe shows it, destroy of an exited session records destroyed while a process it left runs" DestroyedSessionStopped
+OTHER=FALSE
 
 # Without a token every kill falls back to the id that a manifest or the
 # host's own record names, as before program.json existed.

@@ -19,6 +19,7 @@ import {
   assertLlmCredentials,
   buildCommuniqueArgs,
   createCommuniqueChangelogNotes,
+  describeCommuniqueFailure,
   formatChangelogSection,
   formatPullRequestOutputs,
   formatReleaseOutputs,
@@ -388,6 +389,56 @@ describe('createCommuniqueChangelogNotes', () => {
         targetBranch: 'main',
       }),
     ).rejects.toThrow('ANTHROPIC_API_KEY or OPENAI_API_KEY');
+  });
+});
+
+describe('describeCommuniqueFailure', () => {
+  const args = ['generate', 'HEAD', 'v0.5.0', '--concise'];
+
+  it('points a malformed submission at the max_tokens ceiling', () => {
+    const stderr = [
+      'Error: communique::malformed_submission',
+      '  × submit_release_notes was malformed 3 times',
+    ].join('\n');
+
+    const message = describeCommuniqueFailure(args, stderr);
+
+    expect(message).toContain(
+      `communique ${args.join(' ')} failed:\n${stderr}`,
+    );
+    expect(message).toContain('max_tokens');
+    expect(message).toContain('communique.toml');
+  });
+
+  it('adds no hint to other failures', () => {
+    expect(
+      describeCommuniqueFailure(args, 'Error: ANTHROPIC_API_KEY not set'),
+    ).toBe(
+      `communique ${args.join(' ')} failed:\nError: ANTHROPIC_API_KEY not set`,
+    );
+    expect(describeCommuniqueFailure(args, '')).toBe(
+      `communique ${args.join(' ')} failed`,
+    );
+  });
+});
+
+describe('communique.toml', () => {
+  // Communique 1.1.3 sends 4096 as the response ceiling when this key is
+  // missing, and cuts every submit_release_notes call off at that size once a
+  // release has ~15 commits (Release Please then fails with
+  // communique::malformed_submission). A key outside [defaults] is ignored
+  // silently, so check the section too.
+  it('sets a response ceiling above the communique 1.1.3 default in [defaults]', () => {
+    const toml = readFileSync(
+      new URL('../../../communique.toml', import.meta.url),
+      'utf8',
+    );
+    const defaults = toml.split(/^\[defaults\]\s*$/m)[1];
+    expect(defaults).toBeDefined();
+    const section = (defaults ?? '').split(/^\[/m)[0] ?? '';
+    const match = /^max_tokens\s*=\s*(\d+)\s*$/m.exec(section);
+    expect(match).not.toBeNull();
+    expect(Number(match?.[1])).toBeGreaterThanOrEqual(16384);
   });
 });
 

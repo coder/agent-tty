@@ -454,10 +454,18 @@ export async function removeDeadHostSocket(
   manifest: SessionRecord,
 ): Promise<void> {
   const socketFile = socketPath(sessionDirectory);
+  let alive: boolean;
   try {
-    if (isHostAlive(await readSessionHost(sessionDirectory, manifest))) {
-      return;
-    }
+    alive = isHostAlive(await readSessionHost(sessionDirectory, manifest));
+  } catch (error) {
+    // A host that the check cannot judge may still listen on either socket.
+    console.debug('could not judge the host of a socket:', error);
+    return;
+  }
+  if (alive) {
+    return;
+  }
+  try {
     await unlinkIfPresent(socketFile);
     await removeSocketDirectoryIfEmpty(socketFile);
   } catch (error) {
@@ -846,7 +854,8 @@ async function stopSessionProcesses(
   if (!stopped) {
     // Without /proc nothing proves the program's group or the host. An empty
     // /proc mount point has no /proc/self. Only a host can end the session
-    // for a plain destroy, and a pid that no process has proves it gone.
+    // for a plain destroy, and a pid that no process has proves it gone. An
+    // unshared group is out of view of this process even with /proc.
     const hint =
       process.platform === 'linux' && !existsSync('/proc/self')
         ? ` This process cannot read /proc, so it cannot prove which processes are the session's. ${
@@ -854,7 +863,9 @@ async function stopSessionProcesses(
               ? 'Run destroy where /proc is mounted.'
               : 'End the session with a plain destroy, or run destroy --force where /proc is mounted.'
           }`
-        : '';
+        : group !== null && 'unshared' in group
+          ? " This process runs in another pid namespace or on another machine than the session's host, so it cannot prove which processes are the session's. Run destroy from the host's pid namespace on the host's machine."
+          : '';
     throw makeCliError(ERROR_CODES.HOST_TIMEOUT, {
       message: `Timed out forcing session "${sessionId}" to exit.${hint}`,
       details: { sessionId, sessionDirectory },
@@ -888,10 +899,16 @@ export async function destroySession(
   const stopLeftoversThenRecordDestroyed = async (
     terminal: SessionRecord,
   ): Promise<void> => {
+    const group = await readProvenProgramGroup(sessionDirectory);
+    // Only a process that sees the program's group records destroyed, after
+    // a wait that read the group gone. So a destroyed record needs no wait
+    // for a group out of view.
     await stopSessionProcesses(
       sessionId,
       null,
-      await readProvenProgramGroup(sessionDirectory),
+      terminal.status === 'destroyed' && group !== null && 'unshared' in group
+        ? null
+        : group,
       sessionDirectory,
       signal,
     );
@@ -1019,12 +1036,21 @@ export async function listSessions(
       continue;
     }
 
-    if (isActiveSessionStatus(manifest.status)) {
+    if (
+      isActiveSessionStatus(manifest.status) ||
+      isMarkedDestroyed(sessionDirectory, manifest)
+    ) {
+      const read = manifest;
       try {
         await reconcileSession(sessionDirectory);
         manifest = await readManifestIfExists(manifestFile);
       } catch {
-        continue;
+        if (isActiveSessionStatus(read.status)) {
+          continue;
+        }
+        // A marked session that ended lists as it reads when its repair
+        // fails. The repair write can have landed before a later step threw.
+        manifest = await readManifestIfExists(manifestFile).catch(() => read);
       }
 
       if (manifest === null) {
@@ -1049,12 +1075,57 @@ export async function listSessions(
   return summaries;
 }
 
+export function isMarkedDestroyed(
+  sessionDirectory: string,
+  manifest: SessionRecord,
+): boolean {
+  return (
+    isTerminalSessionStatus(manifest.status) &&
+    !isDestroyedSessionStatus(manifest.status) &&
+    existsSync(destroyMarkerPath(sessionDirectory))
+  );
+}
+
+// false when gc removed the session folder.
+async function writeMarkedDestroyed(
+  manifestFile: string,
+  manifest: SessionRecord,
+): Promise<boolean> {
+  const { failureReason: _reason, failureOrigin: _origin, ...rest } = manifest;
+  try {
+    await writeManifest(manifestFile, {
+      ...rest,
+      status: 'destroyed',
+      updatedAt: new Date().toISOString(),
+      hostPid: null,
+      childPid: null,
+    });
+    return true;
+  } catch (error) {
+    if (
+      error instanceof CliError &&
+      error.code === ERROR_CODES.SESSION_NOT_FOUND
+    ) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 export async function reconcileSession(
   sessionDirectory: string,
 ): Promise<void> {
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
 
+  if (manifest !== null && isMarkedDestroyed(sessionDirectory, manifest)) {
+    if (await writeMarkedDestroyed(manifestFile, manifest)) {
+      const socketFile = socketPath(sessionDirectory);
+      await unlinkIfPresent(socketFile);
+      await removeSocketDirectoryIfEmpty(socketFile);
+    }
+    return;
+  }
   if (manifest === null || isTerminalSessionStatus(manifest.status)) {
     return;
   }

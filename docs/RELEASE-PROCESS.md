@@ -243,6 +243,12 @@ gh workflow run release-please.yml
 
 Wrong version → land a `Release-As` commit. Wrong notes → fix the merged feature PR bodies (or add `BEGIN_COMMIT_OVERRIDE` blocks) and rerun. Never edit the release PR directly; edits are overwritten.
 
+### Release Please fails with `communique::malformed_submission`
+
+Communique gave up after three `submit_release_notes` calls that lacked a required field (`changelog`, `release_title` or `release_body`). The cause seen so far is the model answer being cut off at Communique's response limit, `max_tokens`. Communique 1.1.3 uses 4096 when `communique.toml` does not set it, and one call needs more than that once a release has about 15 commits. `communique.toml` therefore sets `max_tokens = 16384` under `[defaults]`. A key outside `[defaults]` is silently ignored.
+
+A run log that shows `WARN submit_release_notes was malformed 3 times ... salvaging the last attempt` hit the same cut-off and only passed because the last attempt kept its changelog. If the error returns, raise `max_tokens` before rerunning.
+
 ### The release PR merged but no tag or GitHub Release appeared
 
 The Release Please run triggered by the merge failed before `createReleases()` finished. Rerun it — release creation is idempotent (it finds merged release PRs still labeled `autorelease: pending`):

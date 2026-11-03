@@ -1518,9 +1518,13 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
   // An exited session has no host to end it, so its leftover needs a destroy
   // from a process that can read /proc.
-  it.runIf(capturesToken)(
-    'destroy of an exited session from a CLI that sees no /proc names /proc while its leftover runs',
-    async () => {
+  // In another pid namespace no probe finds the leftover either.
+  it.runIf(capturesToken).each([
+    ['in the pid namespace of the host', '0'],
+    ['in another pid namespace', '1'],
+  ])(
+    'destroy of an exited session from a CLI that sees no /proc, %s, names /proc while its leftover runs',
+    async (_, otherPids) => {
       vi.stubEnv('XDG_STATE_HOME', join(testHome, 'state'));
       let pgid = 0;
       try {
@@ -1540,6 +1544,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
         const result = runCli(['destroy', sessionId, '--json'], {
           AGENT_TTY_HOME: testHome,
+          AGENT_TTY_TEST_OTHER_PIDS: otherPids,
           NODE_OPTIONS: `--import=${preload}`,
         });
 
@@ -1548,6 +1553,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         expect(error.code).toBe('HOST_TIMEOUT');
         expect(error.message).toContain('where /proc is mounted');
         expect(error.message).not.toContain('plain destroy');
+        expect(inspectSession(testHome, sessionId).status).toBe('exited');
         expect(isGroupAlive(pgid)).toBe(true);
 
         destroySession(testHome, sessionId);

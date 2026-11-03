@@ -460,12 +460,36 @@ function repairFacts() {
     'src/storage/manifests.ts',
     'writeDestroyMarker',
   ).getText();
+  const reconcile = requireDeclaration(lifecycle, 'reconcileSession').body;
+  const marked = indexOfStatement(
+    reconcile,
+    /^if \(manifest !== null && isMarkedDestroyed\(sessionDirectory, manifest\)\) \{\s*if \(await writeMarkedDestroyed\(manifestFile, manifest\)\) \{\s*const socketFile = socketPath\(sessionDirectory\);\s*await unlinkIfPresent\(socketFile\);\s*await removeSocketDirectoryIfEmpty\(socketFile\);\s*\}\s*return;\s*\}$/,
+  );
+  const markedCheck = normalize(
+    requireDeclaration(lifecycle, 'isMarkedDestroyed').body.getText(),
+  );
+  const terminal = guardIndex(
+    reconcile,
+    'manifest === null || isTerminalSessionStatus(manifest.status)',
+    ts.SyntaxKind.ReturnStatement,
+  );
+  const rewrite = normalize(
+    requireDeclaration(lifecycle, 'writeMarkedDestroyed').body.getText(),
+  );
   return {
     ReconcileRepairsDestroyed:
       marks &&
       repairs &&
       marker.includes("await replaceFileAtomic(path, '')") &&
       !marker.includes('mkdir'),
+    ReconcileRepairsMarked:
+      marked >= 0 &&
+      marked < terminal &&
+      markedCheck ===
+        '{ return ( isTerminalSessionStatus(manifest.status) && !isDestroyedSessionStatus(manifest.status) && existsSync(destroyMarkerPath(sessionDirectory)) ); }' &&
+      rewrite.includes(
+        "await writeManifest(manifestFile, { ...rest, status: 'destroyed',",
+      ),
   };
 }
 
@@ -600,7 +624,17 @@ function destroyFacts() {
 // The statements of destroySession's local stopLeftoversThenRecordDestroyed:
 // with DestroyStopsLeftovers it stops the group that program.json proves,
 // waits for it, and only then records destroyed. readProvenProgramGroup
-// returns the record whenever it has a token.
+// returns the record whenever it has a token, or the unshared group when
+// this process cannot prove that it shares the host's pid space. A session
+// that a process which saw the group recorded destroyed gets no wait for an
+// unshared group (trustsDestroyed).
+const UNSHARED_RETURN =
+  'return (await sharesHostPids(sessionDirectory)) ? record : UNSHARED_GROUP;';
+const STOP_UNLESS_TRUSTED =
+  "await stopSessionProcesses( sessionId, null, terminal.status === 'destroyed' && group !== null && 'unshared' in group ? null : group, sessionDirectory, signal, );";
+const STOP_ALWAYS =
+  'await stopSessionProcesses( sessionId, null, group, sessionDirectory, signal, );';
+
 function stopLeftoversThenRecordDestroyed(destroy) {
   let found = [];
   walk(destroy.body, (node) => {
@@ -623,14 +657,16 @@ function stopLeftoversThenRecordDestroyed(destroy) {
         found.at(-1),
       ),
     stops:
-      found.length === 2 &&
+      found.length === 3 &&
       found[0] ===
-        'await stopSessionProcesses( sessionId, null, await readProvenProgramGroup(sessionDirectory), sessionDirectory, signal, );' &&
+        'const group = await readProvenProgramGroup(sessionDirectory);' &&
+      [STOP_UNLESS_TRUSTED, STOP_ALWAYS].includes(found[1]) &&
       bodyIs(
         'readProvenProgramGroup',
-        "const record = await readProgramRecord(sessionDirectory); return typeof record === 'object' && hasToken(record) ? record : null;",
+        `const record = await readProgramRecord(sessionDirectory); if (typeof record !== 'object' || !hasToken(record)) { return null; } ${UNSHARED_RETURN}`,
       ) &&
       bodyIs('hasToken', 'return record.bootId !== null;'),
+    trustsDestroyed: found[1] === STOP_UNLESS_TRUSTED,
   };
 }
 
@@ -1061,6 +1097,40 @@ function fallbackFacts() {
   };
 }
 
+// A group with a token that this process cannot prove it shares the host's
+// pid space with (sharesHostPids reads false: no /proc, an empty /proc,
+// another pid namespace or another machine) is the unshared group:
+// readProgramGroup and readProvenProgramGroup return it, it reads alive and
+// it gets no kill. destroy trusts a destroyed record of such a session.
+function unsharedFacts() {
+  const module = 'src/host/programGroup.ts';
+  const statement = (name, index) =>
+    normalize(
+      requireDeclaration(module, name).body.statements[index]?.getText() ?? '',
+    );
+  const shares = normalize(
+    requireDeclaration(
+      'src/host/hostRecord.ts',
+      'sharesHostPids',
+    ).body.getText(),
+  );
+  return {
+    UnsharedGroupReadsUnknown:
+      statement('readProgramGroup', 1) ===
+        `if (typeof record === 'object' && hasToken(record)) { ${UNSHARED_RETURN} }` &&
+      statement('readProvenProgramGroup', 2) === UNSHARED_RETURN &&
+      statement('isProgramGroupAlive', 2) ===
+        "if ('unshared' in group) { return true; }" &&
+      statement('stopProgramGroup', 2) ===
+        "if ('unshared' in group) { return; }" &&
+      shares ===
+        "{ if (process.platform !== 'linux') { return true; } const record = await readHostRecord(sessionDirectory); return record === null || inHostPidSpace(record); }" &&
+      stopLeftoversThenRecordDestroyed(
+        requireDeclaration('src/host/lifecycle.ts', 'destroySession'),
+      ).trustsDestroyed,
+  };
+}
+
 // runDestroyCommand runs the same command detached, in a new session, before
 // it destroys anything when cliRunsInsideProgramSession matches. On Linux
 // that check compares the program's pid with the CLI's session id, the
@@ -1269,6 +1339,8 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'recordDestroyed'],
   ['src/host/lifecycle.ts', 'removeDeadHostSocket'],
   ['src/host/lifecycle.ts', 'destroySession'],
+  ['src/host/lifecycle.ts', 'isMarkedDestroyed'],
+  ['src/host/lifecycle.ts', 'writeMarkedDestroyed'],
   ['src/host/lifecycle.ts', 'reconcileSession'],
   ['src/host/hostMain.ts', 'waitForManifestFromCreate'],
   ['src/host/hostMain.ts', 'isSessionCommandable'],
@@ -1546,6 +1618,7 @@ const constants = {
   ...programRecordFacts(),
   ...ownershipFacts(),
   ...fallbackFacts(),
+  ...unsharedFacts(),
   ...tokenFacts(),
   ...rerunFacts(),
   ...policyFacts(),
