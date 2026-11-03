@@ -64,8 +64,9 @@
     "src/host/programGroup.ts#scanGroup": "babc9d5767424243",
     "src/host/programGroup.ts#isProcessGroupAlive": "ce1b8fca10085d51",
     "src/host/programGroup.ts#killProcessGroupBestEffort": "6d5d47cb5697681b",
+    "src/host/programGroup.ts#signalProcessGroup": "c5a3a84361b67aa1",
     "src/host/programGroup.ts#isProgramGroupAlive": "ce64b993c846b40a",
-    "src/host/programGroup.ts#stopProgramGroup": "53d47560e7a1289a",
+    "src/host/programGroup.ts#stopProgramGroup": "cb3588a01b119154",
     "src/host/rpcClient.ts#toTransportCliError": "dd6531349c62bcbd",
     "src/host/sessionState.ts#SessionState.setDimensions": "08c4f06122d157e9",
     "src/host/sessionState.ts#SessionState.requestDestroy": "f66074e815527ff1",
@@ -85,9 +86,9 @@
     "src/host/hostMain.ts#runHost(final try)": "16789dd4e2534bc7",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "c3e13b1bab88e18f",
-    "skill:scripts/facts.mjs": "ca20dfc5f76dcab5",
-    "skill:scripts/check.sh": "27da959697f6af33"
+    "skill:model/SessionLifecycle.tla": "2e3796da492e033d",
+    "skill:scripts/facts.mjs": "bbc2ca82c8f220db",
+    "skill:scripts/check.sh": "2609b5abb529c8ee"
   },
   "callSites": {
     "writeManifest": [

@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { once } from 'node:events';
 import {
   chmod,
@@ -47,6 +48,7 @@ import {
 } from '../helpers.js';
 
 const zombieLeader = resolve('test/fixtures/zombie-leader.py');
+const forkChain = resolve('test/fixtures/fork-chain.py');
 
 function groupStates(group: number): string[] {
   return execFileSync('ps', ['-eo', 'pgid=,s='], { encoding: 'utf8' })
@@ -1064,6 +1066,39 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
         expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
         expect(await groupEnds(pgid)).toBe(true);
+      },
+    );
+
+    // The beat file changes while the chain runs.
+    async function chainRuns(beat: string): Promise<boolean> {
+      const before = await readFile(beat, 'utf8');
+      await sleep(1_000);
+      return (await readFile(beat, 'utf8')) !== before;
+    }
+
+    // Each process of a fork chain forks its successor and ends within about
+    // 2 ms, so a scan of /proc almost never shows a live one.
+    it.runIf(capturesToken)(
+      'destroy ends a fork chain that no scan of /proc shows',
+      async () => {
+        const beat = join(testHome, 'beat');
+        const sessionId = await createProgram(
+          `python3 '${forkChain}' 60 0.002 '${beat}' & touch "$0"; wait`,
+        );
+        const deadline = Date.now() + 10_000;
+        while (!existsSync(beat)) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(50);
+        }
+        expect(await chainRuns(beat)).toBe(true);
+
+        const result = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+
+        expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await chainRuns(beat)).toBe(false);
       },
     );
 
