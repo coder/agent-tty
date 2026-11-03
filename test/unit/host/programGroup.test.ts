@@ -1022,6 +1022,64 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     ]);
   });
 
+  it('judges a frozen group again until a stopped member comes into view', () => {
+    procShowsTokenGroup();
+    let judged = 0;
+    const kill = vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          autogroupFile.read = (file) => {
+            // Each judge reads the boot id once. The first judge after the
+            // SIGSTOP still shows no member.
+            if (file === '/proc/sys/kernel/random/boot_id') {
+              judged += 1;
+              if (judged === 2) {
+                procShowsTokenGroup('T');
+              }
+              return `${BOOT}\n`;
+            }
+            return /^\/proc\/\d+\/autogroup$/.test(file)
+              ? '/autogroup-7 nice 0\n'
+              : null;
+          };
+        }
+        return true;
+      });
+
+    stopProgramGroup(group);
+
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGKILL'],
+    ]);
+  });
+
+  it('continues a frozen group when a scan after the SIGSTOP throws', () => {
+    procShowsTokenGroup();
+    const kill = vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          autogroupFile.read = (file) => {
+            if (file === '/proc/sys/kernel/random/boot_id') {
+              throw errno('EIO');
+            }
+            return null;
+          };
+        }
+        return true;
+      });
+
+    expect(() => {
+      stopProgramGroup(group);
+    }).toThrow('EIO');
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
   it.each(['ESRCH', 'EPERM'])(
     'gets no kill when the SIGSTOP of a group that no scan shows ends %s',
     (code) => {
