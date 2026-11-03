@@ -117,6 +117,6 @@ export interface VideoCapableRendererBackend extends RendererBackend {
 }
 
 export type RecordedGlyphFields = Pick<
-  RecordExportResult,
+  Extract<RecordExportResult, { format: 'webm' }>,
   'missingGlyphs' | 'missingGlyphsTruncated'
 >;

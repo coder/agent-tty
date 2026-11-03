@@ -167,7 +167,7 @@ function buildResultLines(result: RecordExportResult): string[] {
     `Bytes: ${String(result.bytes)}`,
     `SHA256: ${result.sha256}`,
     `Duration: ${String(result.durationMs ?? 0)} ms`,
-    ...missingGlyphLines(result),
+    ...(result.format === 'webm' ? missingGlyphLines(result) : []),
   ];
 }
 

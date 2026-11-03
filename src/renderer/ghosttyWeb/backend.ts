@@ -659,9 +659,10 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         return;
       }
 
-      await this.flushOutputBatch(page, pendingOutputChunks);
+      await this.flushOutputBatch(page, pendingOutputChunks, () =>
+        this.notePaintedGraphemes(page),
+      );
       pendingOutputChunks = [];
-      await this.notePaintedGraphemes(page);
       await waitForDelay(resolvedMinFrameHoldMs);
     };
 
@@ -1411,6 +1412,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       this.initialReplayCols = null;
       this.initialReplayRows = null;
       this.lastAppliedSeq = -1;
+      this.paintedNoteFailed = false;
       this.pageAndContextReleasedExternally = false;
     }
   }
@@ -1617,6 +1619,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   private async flushOutputBatch(
     page: Page,
     dataChunks: string[],
+    afterEachBatch?: () => Promise<void>,
   ): Promise<void> {
     invariant(
       dataChunks.length > 0,
@@ -1638,6 +1641,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         'flushOutputBatch batch size must respect MAX_REPLAY_BATCH_SIZE',
       );
       await this.writeBatchBridge(page, batch);
+      await afterEachBatch?.();
     }
   }
 
