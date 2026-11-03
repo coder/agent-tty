@@ -1011,6 +1011,53 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       },
     );
 
+    // gc would delete program.json, the only record that proves the group.
+    it.runIf(capturesToken)(
+      'gc keeps an exited session while a process that the program left runs',
+      async () => {
+        const sessionId = await createProgram(
+          'trap "" HUP; sleep 300 & touch "$0"; exit 0',
+        );
+        const deadline = Date.now() + 10_000;
+        while (inspectSession(testHome, sessionId).status !== 'exited') {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
+
+        const kept = runCli(['gc', '--json'], { AGENT_TTY_HOME: testHome });
+        expect(kept.status).toBe(0);
+        expect(JSON.parse(kept.stdout)).toMatchObject({
+          ok: true,
+          result: {
+            removedSessionCount: 0,
+            homes: [
+              {
+                skippedSessions: [
+                  {
+                    sessionId,
+                    reason: expect.stringContaining('destroy') as string,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('exited');
+        expect(isGroupAlive(pgid)).toBe(true);
+
+        const destroyed = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(JSON.parse(destroyed.stdout)).toMatchObject({ ok: true });
+        expect(await groupEnds(pgid)).toBe(true);
+        const removed = runCli(['gc', '--json'], { AGENT_TTY_HOME: testHome });
+        expect(JSON.parse(removed.stdout)).toMatchObject({
+          ok: true,
+          result: { removedSessionCount: 1 },
+        });
+      },
+    );
+
     // Only a session with a token checks the autogroup.
     it.runIf(capturesToken)(
       'destroy times out while it cannot read the autogroup of a process that the program left',

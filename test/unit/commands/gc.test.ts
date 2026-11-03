@@ -37,6 +37,7 @@ interface MockSessionState {
   manifestReads?: Array<SessionRecord | null>;
   reconciledManifest?: SessionRecord | null;
   isDirectory?: boolean;
+  groupRuns?: boolean;
 }
 
 function createSessionRecord(options: {
@@ -86,6 +87,7 @@ function createMockDependencies(
   const manifestStore = new Map<string, SessionRecord | null>();
   const manifestReadSequences = new Map<string, Array<SessionRecord | null>>();
   const reconcileStore = new Map<string, SessionRecord | null | undefined>();
+  const runningGroups = new Set<string>();
   const removedPaths: string[] = [];
   const socketCleanups: string[] = [];
   const bytesBySession = new Map<string, number>();
@@ -141,6 +143,9 @@ function createMockDependencies(
     manifestStore.set(manifestFile, sessionState.manifest);
     if ('reconciledManifest' in sessionState) {
       reconcileStore.set(sessionDirectory, sessionState.reconciledManifest);
+    }
+    if (sessionState.groupRuns === true) {
+      runningGroups.add(sessionDirectory);
     }
   }
 
@@ -202,6 +207,8 @@ function createMockDependencies(
       socketCleanups.push(`${sessionDirectory} ${manifest.status}`);
       return Promise.resolve();
     },
+    provenProgramGroupRuns: (sessionDirectory: string) =>
+      Promise.resolve(runningGroups.has(sessionDirectory)),
   };
 
   return {
@@ -360,6 +367,45 @@ describe('gc command helpers', () => {
       totalBytesFreed: 0,
     });
     expect(removedPaths).toEqual([]);
+  });
+
+  it('keeps a terminal session whose proven program group still runs', async () => {
+    const home = '/tmp/agent-tty';
+    const exitedManifest = createSessionRecord({
+      sessionId: 'leftover-01',
+      status: 'exited',
+      createdAt: '2026-03-20T08:00:00.000Z',
+    });
+    const { dependencies, removedPaths, socketCleanups } =
+      createMockDependencies(home, {
+        'leftover-01': { manifest: exitedManifest, groupRuns: true },
+        'destroyed-01': {
+          manifest: {
+            ...exitedManifest,
+            sessionId: 'destroyed-01',
+            status: 'destroyed',
+          },
+          groupRuns: true,
+        },
+      });
+
+    for (const dryRun of [true, false]) {
+      const result = await gcSessions(
+        home,
+        { dryRun, staleOnly: false, olderThanMs: null },
+        dependencies,
+      );
+
+      expect(result.skippedSessions).toEqual([
+        {
+          sessionId: 'leftover-01',
+          reason: "the session's program group still runs (destroy ends it)",
+        },
+      ]);
+      expect(result.removedSessions).toEqual(['destroyed-01']);
+    }
+    expect(removedPaths).toEqual([`${home}/sessions/destroyed-01`]);
+    expect(socketCleanups).toEqual([`${home}/sessions/destroyed-01 destroyed`]);
   });
 
   it('reports removals in dry-run mode without deleting anything', async () => {
