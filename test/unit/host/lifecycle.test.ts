@@ -177,6 +177,7 @@ import {
   writeHostRecord,
   type HostRecord,
 } from '../../../src/host/hostRecord.js';
+import { ensureSocketRoot } from '../../../src/host/socketRoot.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
 import {
@@ -898,7 +899,7 @@ describe('a hostPid that may no longer name the host', () => {
 
   async function seedHost(
     hostPid: number,
-    record: 'none' | 'own' | 'earlierHost' | { pidNamespace: string } = 'own',
+    record: 'none' | 'own' | 'earlierHost' | Partial<HostRecord> = 'own',
   ): Promise<string> {
     vi.stubEnv('AGENT_TTY_HOME', home);
     const directory = await seedSession(
@@ -1199,6 +1200,47 @@ describe('a hostPid that may no longer name the host', () => {
     },
   );
 
+  // A host on a kernel without time namespaces, or one whose /proc refused
+  // the link, records a null time namespace.
+  it.runIf(platform === 'linux')(
+    'on linux a host record without a time namespace proves the host to a CLI whose kernel has none either',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      await seedHost(host, { timeNamespace: null });
+      fsHooks.links = new Map([['/proc/self/ns/time', errno('ENOENT')]]);
+      const kill = reapAsInitAfterKill(host);
+
+      await destroySession('session-01', true);
+
+      expect(kill).toHaveBeenCalledWith(host, 'SIGKILL');
+    },
+  );
+
+  it.runIf(platform === 'linux').each([
+    ['has one', 'time:[1]'],
+    ['refuses its own', errno('EACCES')],
+  ])(
+    'on linux a host record without a time namespace leaves the host running for a CLI whose kernel %s',
+    async (_, ownLink) => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host, { timeNamespace: null });
+      const record = await readManifest(manifestPath(directory));
+      fsHooks.links = new Map<string, string | Error>([
+        ['/proc/self/ns/time', ownLink],
+      ]);
+      const kill = vi.spyOn(process, 'kill');
+
+      await reconcileSession(directory);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+
+      await expect(destroySession('session-01', true)).rejects.toMatchObject({
+        code: 'HOST_TIMEOUT',
+      });
+      expect(kill).not.toHaveBeenCalledWith(host, 'SIGKILL');
+      expect(isRunning(host)).toBe(true);
+    },
+  );
+
   it.runIf(platform === 'linux')(
     'on linux the host record takes the dbus machine id when /etc/machine-id cannot be read',
     () => {
@@ -1492,3 +1534,55 @@ describe('removeSocketDirectoryBestEffort', () => {
     );
   });
 });
+
+describe.skipIf(process.platform === 'win32')(
+  'destroy of a destroyed session',
+  () => {
+    let socketFile = '';
+
+    beforeEach(async () => {
+      vi.stubEnv('AGENT_TTY_HOME', home);
+      socketFile = socketPath(sessionDir(home, 'session-01'));
+      await ensureSocketRoot();
+      await mkdir(dirname(socketFile), { recursive: true, mode: 0o700 });
+      writeFileSync(socketFile, '');
+    });
+
+    afterEach(async () => {
+      await rm(dirname(socketFile), { recursive: true, force: true });
+    });
+
+    it('removes the socket that a dead host left, then reports SESSION_ALREADY_DESTROYED', async () => {
+      await seedSession(makeRecord({ status: 'destroyed', childPid: null }));
+      killProbeReportsDead();
+
+      await expect(destroySession('session-01')).rejects.toMatchObject({
+        code: 'SESSION_ALREADY_DESTROYED',
+      });
+      expect(existsSync(socketFile)).toBe(false);
+      expect(existsSync(dirname(socketFile))).toBe(false);
+    });
+
+    it('keeps the socket of a host that still runs', async () => {
+      const directory = await seedSession(
+        makeRecord({
+          status: 'destroyed',
+          hostPid: process.pid,
+          childPid: null,
+        }),
+      );
+      // Off Linux there is no host.json, and a host whose pid exists reads
+      // as running.
+      const own = captureHost(process.pid);
+      expect(own !== null).toBe(process.platform === 'linux');
+      if (own !== null) {
+        writeHostRecord(directory, own);
+      }
+
+      await expect(destroySession('session-01')).rejects.toMatchObject({
+        code: 'SESSION_ALREADY_DESTROYED',
+      });
+      expect(existsSync(socketFile)).toBe(true);
+    });
+  },
+);

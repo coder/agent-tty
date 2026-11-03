@@ -1294,6 +1294,7 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'waitForProcessesToExit'],
   ['src/host/lifecycle.ts', 'stopSessionProcesses'],
   ['src/host/lifecycle.ts', 'recordDestroyed'],
+  ['src/host/lifecycle.ts', 'removeDeadHostSocket'],
   ['src/host/lifecycle.ts', 'destroySession'],
   ['src/host/lifecycle.ts', 'isMarkedDestroyed'],
   ['src/host/lifecycle.ts', 'writeMarkedDestroyed'],

@@ -13,7 +13,7 @@ one resolved for that invocation.
 
 There is no way to enumerate **Homes**. The only cross-**Home** artifact is the
 per-**Home** socket directory at `/tmp/agent-tty/<sha256(home)[:8]>/`
-(`src/storage/sessionPaths.ts`), and that is a dead end for discovery: the name
+(`src/storage/sessionPaths.ts`; since #252 under `/tmp/agent-tty-<uid>/`), and that is a dead end for discovery: the name
 is a one-way hash (the **Home** path cannot be recovered from it), the directory
 is created but never removed when hosts die (`src/host/rpcServer.ts` only
 unlinks the per-**Session** socket _file_), and `/tmp` is reboot-ephemeral.
