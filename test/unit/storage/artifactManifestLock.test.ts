@@ -14,7 +14,26 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
+import type * as FsPromises from 'node:fs/promises';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const fsHooks = vi.hoisted(() => ({
+  beforeRename: undefined as
+    | ((from: string, to: string) => Promise<void>)
+    | undefined,
+}));
+
+vi.mock('node:fs/promises', async () => {
+  const actual = await vi.importActual<typeof FsPromises>('node:fs/promises');
+  return {
+    ...actual,
+    rename: async (...args: Parameters<typeof actual.rename>) => {
+      await fsHooks.beforeRename?.(String(args[0]), String(args[1]));
+      return actual.rename(...args);
+    },
+  };
+});
 
 import { captureHost } from '../../../src/host/hostRecord.js';
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
@@ -50,6 +69,7 @@ describe('artifact manifest lock', () => {
   });
 
   afterEach(async () => {
+    fsHooks.beforeRename = undefined;
     await rm(home, { recursive: true, force: true });
   });
 
@@ -112,7 +132,7 @@ describe('artifact manifest lock', () => {
 
   it.each([
     ['an owner it cannot judge', () => ownerRecord(process.pid, false)],
-    ['an unreadable lock file', () => 'not json'],
+    ['a lock file that does not parse', () => 'not json'],
   ])(
     'breaks a lock with %s only once the lock is older than unknownOwnerStaleMs',
     async (_label, contents) => {
@@ -132,6 +152,27 @@ describe('artifact manifest lock', () => {
       expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
     },
   );
+
+  it('puts back a lock that a live owner took after the dead owner was judged', async () => {
+    await writeFile(lockPath, ownerRecord(deadPid(), false));
+    const live = ownerRecord(process.pid, true);
+    fsHooks.beforeRename = async (from) => {
+      if (from === lockPath) {
+        fsHooks.beforeRename = undefined;
+        await writeFile(lockPath, live);
+      }
+    };
+    const update = vi.fn(() => Promise.resolve());
+
+    await expect(
+      withArtifactManifestLock(sessionDirectory, update, FAST),
+    ).rejects.toMatchObject({ code: ERROR_CODES.STORAGE_WRITE_ERROR });
+    expect(update).not.toHaveBeenCalled();
+    expect(await readFile(lockPath, 'utf8')).toBe(live);
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([
+      'manifest.json.lock',
+    ]);
+  });
 
   it('leaves a lock that another owner took over in the meantime', async () => {
     const other = ownerRecord(process.pid, true);

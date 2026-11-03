@@ -220,16 +220,10 @@ function parseLockOwner(contents: string): ManifestLockOwner | null {
   }
 }
 
-/**
- * Breaks the lock when its owner is proven gone, or when the owner cannot be
- * judged and the lock is older than `unknownOwnerStaleMs`. The lock is moved
- * aside first, and put back when it is not the lock that was judged.
- * Returns true when the caller should try to take the lock again at once.
- */
 async function breakStaleManifestLock(
   lockPath: string,
   timing: ManifestLockTiming,
-): Promise<boolean> {
+): Promise<'retry' | 'held'> {
   let observed: string;
   let modifiedAtMs: number;
   try {
@@ -237,7 +231,7 @@ async function breakStaleManifestLock(
     modifiedAtMs = (await lstat(lockPath)).mtimeMs;
   } catch (error) {
     if (hasErrorCode(error, 'ENOENT')) {
-      return true;
+      return 'retry';
     }
     throw error;
   }
@@ -250,7 +244,7 @@ async function breakStaleManifestLock(
       ? Date.now() - modifiedAtMs > timing.unknownOwnerStaleMs
       : verdict === 'dead';
   if (!stale) {
-    return false;
+    return 'held';
   }
 
   const movedPath = `${lockPath}.broken-${randomUUID()}`;
@@ -258,7 +252,7 @@ async function breakStaleManifestLock(
     await rename(lockPath, movedPath);
   } catch (error) {
     if (hasErrorCode(error, 'ENOENT')) {
-      return true;
+      return 'retry';
     }
     throw error;
   }
@@ -273,7 +267,7 @@ async function breakStaleManifestLock(
   } finally {
     await rm(movedPath, { force: true });
   }
-  return true;
+  return 'retry';
 }
 
 async function acquireManifestLock(
@@ -295,7 +289,7 @@ async function acquireManifestLock(
           throw error;
         }
       }
-      if (await breakStaleManifestLock(lockPath, timing)) {
+      if ((await breakStaleManifestLock(lockPath, timing)) === 'retry') {
         continue;
       }
       if (Date.now() >= deadline) {
