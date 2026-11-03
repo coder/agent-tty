@@ -950,11 +950,17 @@ export async function listSessions(
       isActiveSessionStatus(manifest.status) ||
       isMarkedDestroyed(sessionDirectory, manifest)
     ) {
+      const read = manifest;
       try {
         await reconcileSession(sessionDirectory);
         manifest = await readManifestIfExists(manifestFile);
       } catch {
-        continue;
+        // A marked session that ended lists as it reads when its repair
+        // write fails.
+        if (isActiveSessionStatus(read.status)) {
+          continue;
+        }
+        manifest = read;
       }
 
       if (manifest === null) {
@@ -990,10 +996,11 @@ function isMarkedDestroyed(
   );
 }
 
+// false when gc removed the session folder.
 async function writeMarkedDestroyed(
   manifestFile: string,
   manifest: SessionRecord,
-): Promise<void> {
+): Promise<boolean> {
   const { failureReason: _reason, failureOrigin: _origin, ...rest } = manifest;
   try {
     await writeManifest(manifestFile, {
@@ -1003,12 +1010,13 @@ async function writeMarkedDestroyed(
       hostPid: null,
       childPid: null,
     });
+    return true;
   } catch (error) {
     if (
       error instanceof CliError &&
       error.code === ERROR_CODES.SESSION_NOT_FOUND
     ) {
-      return;
+      return false;
     }
     throw error;
   }
@@ -1021,7 +1029,11 @@ export async function reconcileSession(
   const manifest = await readManifestIfExists(manifestFile);
 
   if (manifest !== null && isMarkedDestroyed(sessionDirectory, manifest)) {
-    await writeMarkedDestroyed(manifestFile, manifest);
+    if (await writeMarkedDestroyed(manifestFile, manifest)) {
+      const socketFile = socketPath(sessionDirectory);
+      await unlinkIfPresent(socketFile);
+      await removeSocketDirectoryIfEmpty(socketFile);
+    }
     return;
   }
   if (manifest === null || isTerminalSessionStatus(manifest.status)) {
