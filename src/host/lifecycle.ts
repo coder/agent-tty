@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { chmod, mkdir, readdir, rmdir, stat, unlink } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import process from 'node:process';
@@ -20,9 +20,11 @@ import { ensureHome, resolveHome } from '../storage/home.js';
 import {
   readManifest,
   readManifestIfExists,
+  writeDestroyMarker,
   writeManifest,
 } from '../storage/manifests.js';
 import {
+  destroyMarkerPath,
   manifestPath,
   sessionDir,
   socketPath,
@@ -38,6 +40,7 @@ import {
   stopProgramGroup,
   type ProgramGroup,
 } from './programGroup.js';
+import { judgeHost, readHostRecord, type HostRecord } from './hostRecord.js';
 import { sendRpc } from './rpcClient.js';
 
 const DESTROY_POLL_INTERVAL_MS = 100;
@@ -206,6 +209,67 @@ function killProcessBestEffort(pid: number | null): void {
     }
 
     throw error;
+  }
+}
+
+const HOST_SUBCOMMAND = '_host';
+
+interface SessionHost {
+  readonly pid: number;
+  readonly sessionId: string;
+  readonly record: HostRecord | null;
+}
+
+async function readSessionHost(
+  sessionDirectory: string,
+  manifest: SessionRecord,
+): Promise<SessionHost | null> {
+  return manifest.hostPid === null
+    ? null
+    : {
+        pid: manifest.hostPid,
+        sessionId: manifest.sessionId,
+        record: await readHostRecord(sessionDirectory),
+      };
+}
+
+function psShowsSessionHost(host: SessionHost): boolean {
+  if (process.platform === 'win32') {
+    return false;
+  }
+  let args: string[];
+  try {
+    args = execFileSync(
+      '/bin/ps',
+      ['-ww', '-o', 'command=', '-p', String(host.pid)],
+      { encoding: 'utf8' },
+    )
+      .trim()
+      .split(/\s+/);
+  } catch {
+    return false;
+  }
+  return args.some(
+    (arg, index) =>
+      arg === HOST_SUBCOMMAND && args[index + 1] === host.sessionId,
+  );
+}
+
+function isHostAlive(host: SessionHost | null): boolean {
+  return host !== null && judgeHost(host.pid, host.record) !== 'dead';
+}
+
+function hostMatches(host: SessionHost): boolean {
+  return process.platform === 'linux'
+    ? judgeHost(host.pid, host.record) === 'alive'
+    : psShowsSessionHost(host);
+}
+
+function killHostBestEffort(host: SessionHost | null): void {
+  // Node has no pidfd API, so the kill races a pid that the host gives up
+  // after hostMatches read it.
+  if (host !== null && hostMatches(host)) {
+    killProcessBestEffort(host.pid);
   }
 }
 
@@ -462,7 +526,7 @@ async function waitForTerminalManifest(
 }
 
 export async function waitForProcessesToExit(
-  hostPid: number | null,
+  host: SessionHost | null,
   group: ProgramGroup | null,
   maxAttempts: number = DESTROY_MAX_ATTEMPTS,
   intervalMs: number = DESTROY_POLL_INTERVAL_MS,
@@ -482,7 +546,7 @@ export async function waitForProcessesToExit(
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     throwIfAborted(signal);
-    if (!isProcessAlive(hostPid) && !isProgramGroupAlive(group)) {
+    if (!isHostAlive(host) && !isProgramGroupAlive(group)) {
       return true;
     }
 
@@ -619,7 +683,16 @@ export async function allocateSession(
   return { sessionId, sessionDirectory };
 }
 
-export function launchHost(config: LaunchHostConfig): number {
+export interface LaunchedHost {
+  readonly pid: number;
+  // Sends the host SIGTERM, which makes it stop its program and end the
+  // session. It sends nothing once the host has exited, so a reused pid
+  // never gets the signal. On Windows, SIGTERM ends the host at once, without
+  // its shutdown.
+  stop(): void;
+}
+
+export function launchHost(config: LaunchHostConfig): LaunchedHost {
   assertNonEmptyString(config.sessionId, 'sessionId');
   assertNonEmptyString(config.home, 'home');
   assertStringRecord(config.env, 'env');
@@ -637,7 +710,7 @@ export function launchHost(config: LaunchHostConfig): number {
     [
       ...process.execArgv,
       entrypoint,
-      '_host',
+      HOST_SUBCOMMAND,
       config.sessionId,
       // The host waits for the first manifest while this process lives.
       String(process.pid),
@@ -661,7 +734,12 @@ export function launchHost(config: LaunchHostConfig): number {
     'Detached host process must expose a positive PID',
   );
 
-  return child.pid;
+  return {
+    pid: child.pid,
+    stop: () => {
+      child.kill('SIGTERM');
+    },
+  };
 }
 
 async function recordDestroyed(
@@ -672,10 +750,15 @@ async function recordDestroyed(
 ): Promise<void> {
   invariant(
     isTerminalSessionStatus(manifest.status) ||
-      (!isProcessAlive(manifest.hostPid) && !isProgramGroupAlive(group)),
+      (!isHostAlive(await readSessionHost(dirname(manifestFile), manifest)) &&
+        !isProgramGroupAlive(group)),
     'recordDestroyed needs a terminal manifest or dead session processes',
   );
   if (!isDestroyedSessionStatus(manifest.status)) {
+    await writeDestroyMarker(
+      destroyMarkerPath(dirname(manifestFile)),
+      manifest.sessionId,
+    );
     await writeManifest(manifestFile, {
       ...manifest,
       status: 'destroyed',
@@ -688,16 +771,16 @@ async function recordDestroyed(
 
 async function stopSessionProcesses(
   sessionId: string,
-  hostPid: number | null,
+  host: SessionHost | null,
   group: ProgramGroup | null,
   sessionDirectory: string,
   signal: AbortSignal | undefined,
 ): Promise<void> {
   stopProgramGroup(group);
-  killProcessBestEffort(hostPid);
+  killHostBestEffort(host);
 
   const stopped = await waitForProcessesToExit(
-    hostPid,
+    host,
     group,
     DESTROY_MAX_ATTEMPTS,
     DESTROY_POLL_INTERVAL_MS,
@@ -754,7 +837,7 @@ export async function destroySession(
   if (force === true) {
     await stopSessionProcesses(
       sessionId,
-      manifest.hostPid,
+      await readSessionHost(sessionDirectory, manifest),
       await readProgramGroup(sessionDirectory, manifest.childPid),
       sessionDirectory,
       signal,
@@ -765,7 +848,7 @@ export async function destroySession(
     const group = await readProgramGroup(sessionDirectory, current.childPid);
     await stopSessionProcesses(
       sessionId,
-      current.hostPid,
+      await readSessionHost(sessionDirectory, current),
       group,
       sessionDirectory,
       signal,
@@ -903,7 +986,9 @@ export async function reconcileSession(
     return;
   }
 
-  const hostAlive = isProcessAlive(manifest.hostPid);
+  const hostAlive = isHostAlive(
+    await readSessionHost(sessionDirectory, manifest),
+  );
   if (manifest.hostPid !== null && hostAlive) {
     return;
   }
@@ -966,6 +1051,18 @@ export async function reconcileSession(
 
   try {
     await writeManifest(manifestFile, reconciledManifest);
+    if (
+      reconciledStatus !== 'destroyed' &&
+      existsSync(destroyMarkerPath(sessionDirectory))
+    ) {
+      await writeManifest(manifestFile, {
+        ...latest,
+        status: 'destroyed',
+        updatedAt: new Date().toISOString(),
+        hostPid: null,
+        childPid: null,
+      });
+    }
   } catch (error) {
     if (
       error instanceof CliError &&

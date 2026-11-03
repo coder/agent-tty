@@ -128,7 +128,7 @@ function reconcileFacts() {
   );
   const aliveRead = indexOfStatement(
     body,
-    /^const hostAlive = isProcessAlive\(manifest\.hostPid\);$/,
+    /^const hostAlive = isHostAlive\(\s*await readSessionHost\(sessionDirectory, manifest\),?\s*\);$/,
   );
   const alive = guardIndex(
     body,
@@ -245,7 +245,61 @@ function createFacts() {
   return {
     CreateRecordsHostPid:
       launch >= 0 && launch < write && pidInManifest && onlyThroughCallback,
+    CreateStopsOnGiveUp: stopsOnGiveUp(create.body),
   };
+}
+
+// In runCreateCommand's readiness loop, the catch of an unreachable host
+// ends with host.stop() right after its last retry and before it rethrows
+// the error. Only a win32 create skips the stop while the manifest names
+// no program, so on Linux and macOS, which the model covers, it always stops. launchHost's stop sends SIGTERM through the ChildProcess
+// handle, and runHost registers its SIGTERM handler before it spawns the
+// program and skips the spawn when a SIGTERM came first.
+function stopsOnGiveUp(body) {
+  let stops = false;
+  walk(body, (node) => {
+    if (!ts.isCatchClause(node)) {
+      return;
+    }
+    const last = node.block.statements.at(-1);
+    if (last === undefined || normalize(last.getText()) !== 'throw error;') {
+      return;
+    }
+    walk(node.block, (inner) => {
+      if (!ts.isIfStatement(inner) || !ts.isBlock(inner.thenStatement)) {
+        return;
+      }
+      const st = inner.thenStatement.statements.map((s) =>
+        normalize(s.getText()),
+      );
+      const retry = st.findIndex((s) =>
+        s.startsWith('if (attempt + 1 < READINESS_MAX_ATTEMPTS) {'),
+      );
+      stops ||=
+        retry >= 0 &&
+        retry === st.length - 3 &&
+        st[retry + 1].startsWith('invariant(host !== undefined,') &&
+        st[retry + 2] ===
+          "if (process.platform !== 'win32' || manifest?.childPid != null) { host.stop(); }";
+    });
+  });
+  const launch = normalize(
+    requireDeclaration('src/host/lifecycle.ts', 'launchHost').getText(),
+  );
+  const run = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
+  const handler = indexOfStatement(run, /^process\.on\('SIGTERM'/);
+  const skip = indexOfStatement(
+    run,
+    /^if \(sigterm\.received\) \{\s*await eventLog\.close\(\);\s*return;\s*\}$/,
+  );
+  const spawn = indexOfStatement(run, /= createPty\(/);
+  return (
+    stops &&
+    /stop: \(\) => \{ child\.kill\('SIGTERM'\); \}/.test(launch) &&
+    handler >= 0 &&
+    handler < skip &&
+    skip === spawn - 1
+  );
 }
 
 // runHost waits for create's manifest, and every host write of session.json
@@ -319,6 +373,106 @@ function shutdownChecksCommandable(runHostBody) {
   return inShutdown && request >= 0 && request < write;
 }
 
+// destroy --force kills the host only when hostMatches proves it: on Linux
+// judgeHost reads the recorded boot id and start time again, elsewhere ps
+// shows `_host <session id>`. Liveness reads dead only on judgeHost's proof,
+// and runHost records the host right after it read its manifest.
+function hostProofFacts() {
+  const lifecycle = 'src/host/lifecycle.ts';
+  const kill = requireDeclaration(lifecycle, 'killHostBestEffort').body;
+  const killsOnMatch =
+    kill.statements.length === 1 &&
+    ts.isIfStatement(kill.statements[0]) &&
+    normalize(kill.statements[0].expression.getText()) ===
+      'host !== null && hostMatches(host)' &&
+    normalize(kill.statements[0].thenStatement.getText()) ===
+      '{ killProcessBestEffort(host.pid); }';
+  const matches = normalize(
+    requireDeclaration(lifecycle, 'hostMatches').body.getText(),
+  );
+  const matchesOnProof = matches.includes(
+    "process.platform === 'linux' ? judgeHost(host.pid, host.record) === 'alive' : psShowsSessionHost(host)",
+  );
+  const alive = normalize(
+    requireDeclaration(lifecycle, 'isHostAlive').body.getText(),
+  );
+  const aliveUntilProof = alive.includes(
+    "host !== null && judgeHost(host.pid, host.record) !== 'dead'",
+  );
+  const judge = normalize(
+    requireDeclaration('src/host/hostRecord.ts', 'judgeHost').body.getText(),
+  );
+  const judgesIdentity = judge.includes(
+    'record.bootId === bootId && record.startTicks === stat.startTicks',
+  );
+  const body = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
+  const check = indexOfStatement(
+    body,
+    /^invariant\(\s*manifest\.hostPid === process\.pid/,
+  );
+  const records =
+    check >= 0 &&
+    normalize(body.statements[check + 1]?.getText() ?? '') ===
+      'const hostRecord = captureHost(process.pid);' &&
+    normalize(body.statements[check + 2]?.getText() ?? '') ===
+      'if (hostRecord !== null) { writeHostRecord(sessDir, hostRecord); }';
+  return {
+    ProvesHostPid:
+      killsOnMatch &&
+      matchesOnProof &&
+      aliveUntilProof &&
+      judgesIdentity &&
+      records,
+  };
+}
+
+function repairFacts() {
+  const lifecycle = 'src/host/lifecycle.ts';
+  let marks = false;
+  walk(requireDeclaration(lifecycle, 'recordDestroyed').body, (node) => {
+    if (!ts.isIfStatement(node) || !ts.isBlock(node.thenStatement)) {
+      return;
+    }
+    const st = node.thenStatement.statements.map((s) => normalize(s.getText()));
+    marks ||=
+      st.length === 2 &&
+      st[0].startsWith(
+        'await writeDestroyMarker( destroyMarkerPath(dirname(manifestFile)),',
+      ) &&
+      st[1].startsWith('await writeManifest(manifestFile, {') &&
+      st[1].includes("status: 'destroyed'");
+  });
+  let repairs = false;
+  walk(requireDeclaration(lifecycle, 'reconcileSession').body, (node) => {
+    if (!ts.isTryStatement(node)) {
+      return;
+    }
+    const [write, check] = node.tryBlock.statements;
+    repairs ||=
+      write !== undefined &&
+      normalize(write.getText()) ===
+        'await writeManifest(manifestFile, reconciledManifest);' &&
+      check !== undefined &&
+      ts.isIfStatement(check) &&
+      normalize(check.expression.getText()) ===
+        "reconciledStatus !== 'destroyed' && existsSync(destroyMarkerPath(sessionDirectory))" &&
+      /^\{ await writeManifest\(manifestFile, \{[^]*status: 'destroyed'[^]*\}\); \}$/.test(
+        normalize(check.thenStatement.getText()),
+      );
+  });
+  const marker = requireDeclaration(
+    'src/storage/manifests.ts',
+    'writeDestroyMarker',
+  ).getText();
+  return {
+    ReconcileRepairsDestroyed:
+      marks &&
+      repairs &&
+      marker.includes("await replaceFileAtomic(path, '')") &&
+      !marker.includes('mkdir'),
+  };
+}
+
 function destroyFacts() {
   const destroy = requireDeclaration('src/host/lifecycle.ts', 'destroySession');
   const returns = [];
@@ -380,7 +534,7 @@ function destroyFacts() {
     const block = force.thenStatement;
     const first = indexOfStatement(
       block,
-      /^await stopSessionProcesses\(\s*sessionId,\s*manifest\.hostPid,\s*await readProgramGroup\(/,
+      /^await stopSessionProcesses\(\s*sessionId,\s*await readSessionHost\(sessionDirectory, manifest\),\s*await readProgramGroup\(/,
     );
     const reread = indexOfStatement(
       block,
@@ -392,7 +546,7 @@ function destroyFacts() {
     );
     const second = indexOfStatement(
       block,
-      /^await stopSessionProcesses\(\s*sessionId,\s*current\.hostPid,\s*group,/,
+      /^await stopSessionProcesses\(\s*sessionId,\s*await readSessionHost\(sessionDirectory, current\),\s*group,/,
     );
     const records = indexOfStatement(
       block,
@@ -412,7 +566,7 @@ function destroyFacts() {
   ).body;
   const stopWaits =
     indexOfStatement(stop, /^stopProgramGroup\(group\);$/) >= 0 &&
-    indexOfStatement(stop, /^killProcessBestEffort\(hostPid\);$/) >= 0 &&
+    indexOfStatement(stop, /^killHostBestEffort\(host\);$/) >= 0 &&
     indexOfStatement(stop, /^const stopped = await waitForProcessesToExit\(/) >=
       0 &&
     guardIndex(stop, '!stopped', ts.SyntaxKind.ThrowStatement) >= 0;
@@ -421,7 +575,7 @@ function destroyFacts() {
     'waitForProcessesToExit',
   );
   const waitsForProcessesOnly =
-    calls(wait.body, 'isProcessAlive').length === 1 &&
+    calls(wait.body, 'isHostAlive').length === 1 &&
     calls(wait.body, 'isProgramGroupAlive').length === 1 &&
     calls(wait.body, 'stat').length === 0 &&
     calls(wait.body, 'pathExists').length === 0;
@@ -1043,6 +1197,16 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'launchHost'],
   ['src/host/lifecycle.ts', 'isProcessAlive'],
   ['src/host/lifecycle.ts', 'killProcessBestEffort'],
+  ['src/host/lifecycle.ts', 'readSessionHost'],
+  ['src/host/lifecycle.ts', 'psShowsSessionHost'],
+  ['src/host/lifecycle.ts', 'isHostAlive'],
+  ['src/host/lifecycle.ts', 'hostMatches'],
+  ['src/host/lifecycle.ts', 'killHostBestEffort'],
+  ['src/host/hostRecord.ts', 'captureHost'],
+  ['src/host/hostRecord.ts', 'writeHostRecord'],
+  ['src/host/hostRecord.ts', 'readHostRecord'],
+  ['src/host/hostRecord.ts', 'pidExists'],
+  ['src/host/hostRecord.ts', 'judgeHost'],
   ['src/host/lifecycle.ts', 'ownLinuxSessionId'],
   ['src/host/lifecycle.ts', 'ownProcessGroupId'],
   ['src/host/lifecycle.ts', 'controllingTerminal'],
@@ -1098,6 +1262,7 @@ const COVERED = [
   ['src/storage/manifests.ts', 'replaceFileAtomicSync'],
   ['src/storage/manifests.ts', 'writeValidatedJsonFileSync'],
   ['src/storage/manifests.ts', 'writeManifest'],
+  ['src/storage/manifests.ts', 'writeDestroyMarker'],
   ['src/protocol/sessionStatusPolicy.ts', 'SESSION_STATUS_POLICIES'],
 ];
 
@@ -1116,6 +1281,10 @@ const RUN_HOST_PARTS = [
   /^const handlePtyExit = /,
   /^pty\.onExit\(/,
   /^process\.on\('SIGTERM'/,
+  /^let onSigterm = /,
+  /^if \(sigterm\.received\) \{/,
+  /^invariant\(!sigterm\.received/,
+  /^onSigterm = startShutdown;/,
 ];
 
 function runHostFingerprints() {
@@ -1316,6 +1485,8 @@ const constants = {
   ...createFacts(),
   ...hostFacts(),
   ...destroyFacts(),
+  ...hostProofFacts(),
+  ...repairFacts(),
   ...manifestWriteFacts(),
   ...programGroupFacts(),
   ...deniedProbeFacts(),

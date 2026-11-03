@@ -307,6 +307,15 @@ On Linux it also ends those processes when the program has already exited or the
 `list`, `inspect`, `destroy` and `gc` reconcile a session whose host died: they kill the program's group and record the session as `failed` (or `exited` or `destroyed`).
 A `destroy` that runs inside the session, such as one typed into the session's shell, runs again outside the session and prints its result once the session has ended.
 The session's terminal is closed by then, so redirect stdout to keep the result, for example `agent-tty destroy "$AGENT_TTY_SESSION_ID" --json > destroy.json`.
+When `destroy` records `destroyed` itself, as with `--force`, for a session whose host died or for a session that has already ended, it first writes an empty internal file, `destroyed`, in the session folder. When the host records `destroyed`, as after a plain `destroy` of a live session, nobody writes that file.
+A reconcile that writes over the record at the same moment finds the file right after its own write and records `destroyed` again.
+A `list`, `inspect` or `gc` that reads the session between those two writes sees `failed`. If the reconciling process is killed between them, the session stays `failed`.
+If `destroy` fails after it wrote the file, for example because its manifest write fails, the file stays. For a session that had not ended yet, the next reconcile then records it as `destroyed`. A reconcile skips a session that has already ended, so for such a session run `destroy` again.
+When `create` cannot reach its new host within about 6 s, it fails with `HOST_UNREACHABLE` or `HOST_TIMEOUT` and tells the host to stop.
+On Linux and macOS it sends the host SIGTERM, and the host stops the program the way `destroy` does and records the session as `destroyed` once the program's group has ended, also while its start-up is still slow.
+A host that has already died, or that gets the SIGTERM before it spawns the program, leaves the session to the reconcile above: the session reads `running` until the next reconcile records it `failed`, and no program runs.
+When the host cannot end the program's group, for example a process of another user, the session stays `destroying` with the host alive. That host never listened, so a plain `destroy` then fails with `HOST_UNREACHABLE` (exit 6), and only `destroy --force` can end the session.
+On Windows, SIGTERM ends the host at once, so the host cannot stop the program itself. There `create` sends it only once the manifest names the program: the session then reads `running` with a dead host until the next reconcile records it `failed` and ends the program. Before the host's first manifest write, `create` leaves the host alone, as before this change, so a host that starts late can still serve the session.
 
 On Linux, `destroy` and reconcile never kill a process group that they cannot prove is the session's.
 When the host starts the program, it records the program's pid, the boot id and the program's autogroup id in an internal file, `program.json`.
@@ -316,6 +325,14 @@ If no process passes the check, agent-tty kills nothing, for example when an unr
 If `/proc` refuses to show the boot id, or shows no autogroup id for a live process whose group and session id are the program's pid (it refuses the read, or the file is empty or malformed), agent-tty cannot run the check.
 It then kills nothing and counts the group as running.
 If the proven group, or a group that agent-tty cannot check, does not end within the destroy wait (about 5 s), `destroy` fails with `HOST_TIMEOUT` and does not record the session as `destroyed`.
+
+`destroy --force` and reconcile also check the host's pid from `session.json` before they trust it.
+On Linux the host records its pid, the boot id, its start time from `/proc/self/stat` and its pid namespace in an internal file, `host.json`, when it starts.
+Reconcile counts the host as ended only when no process has its pid, when that process is a zombie, or when `host.json` names another boot or another start time than that process has. That covers a crashed host that stays a zombie under a container init that never reaps, and a later process that got the same pid.
+Reconcile then records the session as `failed`. `destroy --force` sends the host SIGKILL only when the boot id and the start time of the process match `host.json`, so it does not signal a process that got the pid before that check.
+The check and the kill are two system calls. A process that gets the pid between them still gets the signal, which needs the host to end, be reaped and its pid to go to a new process in that gap.
+When agent-tty cannot read `/proc` or `host.json`, it counts a host whose pid exists as running and does not kill it. When it runs in another pid namespace than the host, where the recorded pid can name an unrelated process, it counts the host as running and kills nothing, whatever that pid shows.
+On macOS and the BSDs, `destroy --force` kills the host only when `/bin/ps` shows the pid running `_host <session id>`, the arguments that agent-tty starts the host with.
 
 Limits:
 
@@ -327,6 +344,7 @@ Limits:
 6. Two cases where agent-tty cannot run the check end differently from a session that stays running:
    - At the idle time-out, a host that cannot run the check kills nothing, but it still records the session as `exited` once the program has exited, while a process that the program left can still run. A later `destroy` then fails with `HOST_TIMEOUT`, and `gc` can remove the session folder.
    - When `/proc` hides the processes of other users (mounted with `hidepid=2`, `hidepid=4`, `hidepid=invisible` or `hidepid=ptraceable`), a group whose processes agent-tty cannot see counts as running. A `destroy` that cannot prove such a group gone fails with `HOST_TIMEOUT` and does not record the session as `destroyed`.
+7. Off Linux, reconcile counts the host as alive while any process has its pid. A crashed host that stays a zombie, or a process that got its pid, keeps the session `running`, and `destroy --force` kills nothing and fails with `HOST_TIMEOUT`. On Linux, the same happens when `/proc` is not mounted or refuses to show the host, and for a session that an agent-tty version without `host.json` started. On Windows, `destroy --force` never kills the host: it kills the program, and a host that hangs makes it fail with `HOST_TIMEOUT`. End such a host yourself with the Host PID that `inspect` shows (`taskkill /pid <pid> /f`), then run `destroy --force` again.
 
 ## Isolation
 

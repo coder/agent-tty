@@ -1,5 +1,12 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, writeFileSync } from 'node:fs';
+import { once } from 'node:events';
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,6 +20,7 @@ const fsHooks = vi.hoisted(() => ({
   proc: undefined as Map<string, string | Error> | undefined,
   mountinfo: undefined as string | undefined,
   ownStatError: undefined as Error | undefined,
+  noProc: false,
   // The text that a read of /proc/self/stat returns.
   ownStat: undefined as string | undefined,
   rmdirError: undefined as Error | undefined,
@@ -30,6 +38,9 @@ vi.mock('node:fs', async () => {
   const readFileSync = ((path: string, ...rest: unknown[]) => {
     if (fsHooks.ownStatError !== undefined && path === '/proc/self/stat') {
       throw fsHooks.ownStatError;
+    }
+    if (fsHooks.noProc && path.startsWith('/proc/')) {
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
     }
     if (fsHooks.ownStat !== undefined && path === '/proc/self/stat') {
       return fsHooks.ownStat;
@@ -135,6 +146,7 @@ import {
   writeProgramRecord,
   type ProgramRecord,
 } from '../../../src/host/programGroup.js';
+import { captureHost, writeHostRecord } from '../../../src/host/hostRecord.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
 import { manifestPath, sessionDir } from '../../../src/storage/sessionPaths.js';
@@ -157,6 +169,7 @@ afterEach(async () => {
   fsHooks.mountinfo = undefined;
   psHooks.tty = undefined;
   fsHooks.ownStatError = undefined;
+  fsHooks.noProc = false;
   fsHooks.ownStat = undefined;
   await rm(home, { recursive: true, force: true });
 });
@@ -329,6 +342,22 @@ describe('reconcileSession', () => {
     });
   });
 
+  it('restores destroyed when a destroy marked the folder before this write', async () => {
+    const directory = await seedSession(makeRecord());
+    killProbeReportsDead();
+    writeFileSync(join(directory, 'destroyed'), '');
+
+    await reconcileSession(directory);
+
+    const manifest = await readManifest(manifestPath(directory));
+    expect(manifest).toMatchObject({
+      status: 'destroyed',
+      hostPid: null,
+      childPid: null,
+    });
+    expect(manifest.failureReason).toBeUndefined();
+  });
+
   it('writes nothing while the program group survives its kill', async () => {
     const record = makeRecord();
     const directory = await seedSession(record);
@@ -491,6 +520,35 @@ describe('destroySession', () => {
     expect(existsSync(directory)).toBe(false);
   });
 
+  it('marks the folder before it records destroyed', async () => {
+    vi.stubEnv('AGENT_TTY_HOME', home);
+    const directory = await seedSession(makeRecord());
+    killProbeReportsDead();
+
+    await destroySession('session-01', true);
+
+    expect(existsSync(join(directory, 'destroyed'))).toBe(true);
+    expect(await readManifest(manifestPath(directory))).toMatchObject({
+      status: 'destroyed',
+    });
+  });
+
+  it('replaces a symlink at the marker path instead of writing through it', async () => {
+    vi.stubEnv('AGENT_TTY_HOME', home);
+    const directory = await seedSession(makeRecord());
+    const outside = join(home, 'outside.txt');
+    writeFileSync(outside, 'keep');
+    symlinkSync(outside, join(directory, 'destroyed'));
+    killProbeReportsDead();
+
+    await destroySession('session-01', true);
+
+    expect(readFileSync(outside, 'utf8')).toBe('keep');
+    const marker = lstatSync(join(directory, 'destroyed'));
+    expect(marker.isFile()).toBe(true);
+    expect(marker.size).toBe(0);
+  });
+
   describe('of a session whose program exited', () => {
     const exited = makeRecord({ status: 'exited', exitCode: 0 });
 
@@ -567,6 +625,339 @@ describe('destroySession', () => {
       });
     });
   });
+});
+
+describe('a hostPid that may no longer name the host', () => {
+  const platform = process.platform;
+  const started: ReturnType<typeof spawn>[] = [];
+
+  function startProcess(...args: string[]): number {
+    const child = spawn(
+      process.execPath,
+      ['-e', 'setInterval(() => {}, 1000)', ...args],
+      { stdio: 'ignore' },
+    );
+    started.push(child);
+    expect(child.pid).toBeTypeOf('number');
+    return child.pid as number;
+  }
+
+  async function startZombie(): Promise<number> {
+    const parent = spawn(
+      '/bin/sh',
+      ['-c', 'sleep 0 & echo $!; exec sleep 30'],
+      {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    );
+    started.push(parent);
+    const [line] = (await once(parent.stdout, 'data')) as [Buffer];
+    const pid = Number(line.toString().trim());
+    await vi.waitFor(
+      () => {
+        expect(
+          execFileSync('ps', ['-o', 's=', '-p', String(pid)], {
+            encoding: 'utf8',
+          }).trim(),
+        ).toBe('Z');
+      },
+      { timeout: 5000 },
+    );
+    return pid;
+  }
+
+  function isRunning(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function reapAsInitAfterKill(host: number) {
+    const send = process.kill.bind(process);
+    let killed = false;
+    return vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (pid === host && killed && signal === 0) {
+        throw errno('ESRCH');
+      }
+      killed ||= pid === host && signal === 'SIGKILL';
+      return send(pid, signal);
+    });
+  }
+
+  async function seedHost(
+    hostPid: number,
+    record: 'none' | 'own' | 'earlierHost' | { pidNamespace: string } = 'own',
+  ): Promise<string> {
+    vi.stubEnv('AGENT_TTY_HOME', home);
+    const directory = await seedSession(
+      makeRecord({ hostPid, childPid: null }),
+    );
+    const own = record === 'none' ? null : captureHost(hostPid);
+    if (own !== null && record !== 'none') {
+      writeHostRecord(
+        directory,
+        record === 'own'
+          ? own
+          : record === 'earlierHost'
+            ? { ...own, startTicks: '1' }
+            : { ...own, ...record },
+      );
+    }
+    return directory;
+  }
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: platform });
+    for (const child of started.splice(0)) {
+      child.kill('SIGKILL');
+    }
+  });
+
+  it.each([
+    ['runs the host of that session', ['_host', 'session-01', '1']],
+    ['has an earlier _host argument', ['_host', 'x', '_host', 'session-01']],
+    ['has no _host argument', []],
+  ])(
+    'reconcile leaves the session running while its hostPid %s',
+    async (_, args) => {
+      const directory = await seedHost(startProcess(...args));
+      const record = await readManifest(manifestPath(directory));
+
+      await reconcileSession(directory);
+
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux destroy --force kills a host whose title replaced its command line',
+    async () => {
+      const child = spawn(
+        process.execPath,
+        ['--title=renamed-host', '-e', 'setInterval(() => {}, 1000)'],
+        { stdio: 'ignore' },
+      );
+      started.push(child);
+      const host = child.pid as number;
+      await vi.waitFor(() => {
+        expect(readFileSync(`/proc/${String(host)}/cmdline`, 'utf8')).toMatch(
+          /^renamed-host/,
+        );
+      });
+      const directory = await seedHost(host);
+      const kill = reapAsInitAfterKill(host);
+
+      await destroySession('session-01', true);
+
+      expect(kill).toHaveBeenCalledWith(host, 'SIGKILL');
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'destroyed',
+      });
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux reconcile records failed when another process got the hostPid',
+    async () => {
+      const directory = await seedHost(startProcess(), 'earlierHost');
+
+      await reconcileSession(directory);
+
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'failed',
+        failureOrigin: 'host-death',
+      });
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux reconcile records failed when the host stays a zombie',
+    async () => {
+      const directory = await seedHost(await startZombie(), 'none');
+
+      await reconcileSession(directory);
+
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'failed',
+      });
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux destroy --force records destroyed without killing a process that got the hostPid',
+    async () => {
+      const other = startProcess();
+      const directory = await seedHost(other, 'earlierHost');
+
+      await destroySession('session-01', true);
+
+      expect(isRunning(other)).toBe(true);
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'destroyed',
+      });
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux destroy --force records destroyed when the host stays a zombie',
+    async () => {
+      const directory = await seedHost(await startZombie(), 'none');
+
+      await destroySession('session-01', true);
+
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'destroyed',
+      });
+    },
+  );
+
+  it.runIf(platform === 'linux').each([
+    ['/proc is not mounted', 'none' as const],
+    ['/proc refuses the stat of the host', 'refused' as const],
+    ['no host record exists', 'record' as const],
+  ])(
+    'on linux, when %s, a live host stays running and gets no kill',
+    async (_, gap) => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host, gap === 'record' ? 'none' : 'own');
+      const record = await readManifest(manifestPath(directory));
+      if (gap === 'none') {
+        fsHooks.noProc = true;
+      } else if (gap === 'refused') {
+        fsHooks.proc = new Map([[String(host), errno('EACCES')]]);
+      }
+
+      await reconcileSession(directory);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+
+      await expect(destroySession('session-01', true)).rejects.toMatchObject({
+        code: 'HOST_TIMEOUT',
+      });
+      expect(isRunning(host)).toBe(true);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+    },
+  );
+
+  it.runIf(platform === 'linux').each([
+    ['an unrelated live process', 'live' as const],
+    ['no process', 'free' as const],
+  ])(
+    'on linux a hostPid that a host in another pid namespace recorded, which names %s here, gets no kill and no record',
+    async (_, here) => {
+      const other = startProcess();
+      const directory = await seedHost(other, { pidNamespace: 'pid:[1]' });
+      if (here === 'free') {
+        process.kill(other, 'SIGKILL');
+        await vi.waitFor(() => {
+          expect(isRunning(other)).toBe(false);
+        });
+      }
+      const record = await readManifest(manifestPath(directory));
+      const kill = vi.spyOn(process, 'kill');
+
+      await reconcileSession(directory);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+
+      await expect(destroySession('session-01', true)).rejects.toMatchObject({
+        code: 'HOST_TIMEOUT',
+      });
+      expect(kill).not.toHaveBeenCalledWith(other, 'SIGKILL');
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+    },
+  );
+
+  it.skipIf(platform === 'win32').each([
+    ['runs the host of that session', ['_host', 'session-01', '1']],
+    ['has an earlier _host argument', ['_host', 'x', '_host', 'session-01']],
+  ])('destroy --force kills a host that %s', async (_, args) => {
+    const host = startProcess(...args);
+    const directory = await seedHost(host);
+    const kill = reapAsInitAfterKill(host);
+
+    await destroySession('session-01', true);
+
+    expect(kill).toHaveBeenCalledWith(host, 'SIGKILL');
+    expect(await readManifest(manifestPath(directory))).toMatchObject({
+      status: 'destroyed',
+    });
+  });
+
+  it.skipIf(platform === 'win32')(
+    'on darwin destroy --force kills a host that ps shows',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host, 'none');
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+      const kill = reapAsInitAfterKill(host);
+
+      await destroySession('session-01', true);
+
+      expect(kill).toHaveBeenCalledWith(host, 'SIGKILL');
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'destroyed',
+      });
+    },
+  );
+
+  it.skipIf(platform === 'win32')(
+    'on darwin destroy --force does not kill a hostPid that runs another program',
+    async () => {
+      const other = startProcess();
+      const directory = await seedHost(other, 'none');
+      const record = await readManifest(manifestPath(directory));
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+      await expect(destroySession('session-01', true)).rejects.toMatchObject({
+        code: 'HOST_TIMEOUT',
+      });
+      expect(isRunning(other)).toBe(true);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+    },
+  );
+
+  it.skipIf(platform === 'win32')(
+    'on darwin reconcile records failed when no process has the pid that a linux host record names',
+    async () => {
+      const ended = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' });
+      await once(ended, 'exit');
+      const pid = ended.pid as number;
+      expect(isRunning(pid)).toBe(false);
+      const directory = await seedHost(pid, 'none');
+      writeHostRecord(directory, {
+        version: 1,
+        pid,
+        bootId: 'linux-boot',
+        startTicks: '1',
+        pidNamespace: 'pid:[1]',
+      });
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+      await reconcileSession(directory);
+
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'failed',
+      });
+    },
+  );
+
+  it.skipIf(platform === 'win32')(
+    'on win32 destroy --force never kills the host',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host, 'none');
+      const record = await readManifest(manifestPath(directory));
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      await expect(destroySession('session-01', true)).rejects.toMatchObject({
+        code: 'HOST_TIMEOUT',
+      });
+      expect(isRunning(host)).toBe(true);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+    },
+  );
 });
 
 describe('cliRunsInsideProgramSession', () => {

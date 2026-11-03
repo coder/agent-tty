@@ -7,6 +7,7 @@ import {
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
 import { EventLog } from './eventLog.js';
+import { captureHost, writeHostRecord } from './hostRecord.js';
 import {
   isProcessAlive,
   listenInSocketDirectory,
@@ -204,6 +205,18 @@ export async function runHost(
   const ePath = eventLogPath(sessDir);
   const sPath = socketPath(sessDir);
 
+  // A create that gives up sends SIGTERM at any point of the start-up. With
+  // the default action, one that came between the spawn and program.json
+  // would end the host and leave a program that no file names. Before the
+  // spawn the host only notes it, and from then on it shuts down.
+  const sigterm = { received: false };
+  let onSigterm = (): void => {
+    sigterm.received = true;
+  };
+  process.on('SIGTERM', () => {
+    onSigterm();
+  });
+
   const manifest = await waitForManifestFromCreate(mPath, creatorPid);
   invariant(
     manifest.sessionId === sessionId,
@@ -213,6 +226,10 @@ export async function runHost(
     manifest.hostPid === process.pid,
     'session manifest hostPid must be this host process',
   );
+  const hostRecord = captureHost(process.pid);
+  if (hostRecord !== null) {
+    writeHostRecord(sessDir, hostRecord);
+  }
   const idleTimeoutMs = manifest.idleTimeoutMs ?? 0;
   invariant(
     Number.isInteger(idleTimeoutMs) && idleTimeoutMs >= 0,
@@ -309,6 +326,10 @@ export async function runHost(
     };
   });
 
+  if (sigterm.received) {
+    await eventLog.close();
+    return;
+  }
   const pty = createPty({
     command: manifest.command,
     cwd: manifest.cwd,
@@ -1232,9 +1253,9 @@ export async function runHost(
 
   startIdlePolling();
 
-  process.on('SIGTERM', () => {
-    startShutdown();
-  });
+  // No handler runs between the check before createPty and here.
+  invariant(!sigterm.received, 'SIGTERM is handled only after the spawn block');
+  onSigterm = startShutdown;
 
   try {
     writeProgramRecord(sessDir, program);
