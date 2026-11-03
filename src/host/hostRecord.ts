@@ -113,7 +113,7 @@ function readMachineId(): string | null {
   return null;
 }
 
-function sharesHostPids(record: HostRecord): boolean {
+function inHostPidSpace(record: HostRecord): boolean {
   try {
     return (
       inPidNamespace(record.pidNamespace) &&
@@ -157,14 +157,14 @@ export async function readHostRecord(
   }
 }
 
-export async function sharesHostPidNamespace(
+export async function sharesHostPids(
   sessionDirectory: string,
 ): Promise<boolean> {
   if (process.platform !== 'linux') {
     return true;
   }
   const record = await readHostRecord(sessionDirectory);
-  return record === null || sharesHostPids(record);
+  return record === null || inHostPidSpace(record);
 }
 
 function pidExists(pid: number): boolean {
@@ -186,7 +186,7 @@ export function judgeHost(pid: number, record: HostRecord | null): HostVerdict {
   if (
     process.platform === 'linux' &&
     record !== null &&
-    !sharesHostPids(record)
+    !inHostPidSpace(record)
   ) {
     return 'unknown';
   }
