@@ -24,6 +24,10 @@ const fsHooks = vi.hoisted(() => ({
   // The text that a read of /proc/self/stat returns.
   ownStat: undefined as string | undefined,
   rmdirError: undefined as Error | undefined,
+  // Other contents for a path that readFileSync reads.
+  files: undefined as Map<string, string> | undefined,
+  // Other targets for a link that readlinkSync reads.
+  links: undefined as Map<string, string> | undefined,
 }));
 
 vi.mock('node:fs', async () => {
@@ -36,6 +40,10 @@ vi.mock('node:fs', async () => {
           ...rest,
         )) as typeof actual.readdirSync;
   const readFileSync = ((path: string, ...rest: unknown[]) => {
+    const file = fsHooks.files?.get(path);
+    if (file !== undefined) {
+      return file;
+    }
     if (fsHooks.ownStatError !== undefined && path === '/proc/self/stat') {
       throw fsHooks.ownStatError;
     }
@@ -64,7 +72,13 @@ vi.mock('node:fs', async () => {
     }
     return stat;
   }) as typeof actual.readFileSync;
-  return { ...actual, readdirSync, readFileSync };
+  const readlinkSync = ((path: string, ...rest: unknown[]) =>
+    fsHooks.links?.get(path) ??
+    (actual.readlinkSync as (...args: unknown[]) => unknown)(
+      path,
+      ...rest,
+    )) as typeof actual.readlinkSync;
+  return { ...actual, readdirSync, readFileSync, readlinkSync };
 });
 
 // The controlling terminal that /bin/ps prints for a pid, or null when ps
@@ -171,6 +185,8 @@ afterEach(async () => {
   fsHooks.ownStatError = undefined;
   fsHooks.noProc = false;
   fsHooks.ownStat = undefined;
+  fsHooks.files = undefined;
+  fsHooks.links = undefined;
   await rm(home, { recursive: true, force: true });
 });
 
@@ -866,6 +882,67 @@ describe('a hostPid that may no longer name the host', () => {
       });
       expect(kill).not.toHaveBeenCalledWith(other, 'SIGKILL');
       expect(await readManifest(manifestPath(directory))).toEqual(record);
+    },
+  );
+
+  function shiftStartTicks(stat: string, ticks: bigint): string {
+    const close = stat.lastIndexOf(')');
+    const fields = stat.slice(close + 2).split(' ');
+    fields[19] = String(BigInt(fields[19] ?? '') + ticks);
+    return `${stat.slice(0, close + 2)}${fields.join(' ')}`;
+  }
+
+  // /proc/<pid>/stat shows the start time with the reader's boottime offset.
+  it.runIf(platform === 'linux')(
+    'on linux a CLI in another time namespace leaves a live host running and kills nothing',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host);
+      const record = await readManifest(manifestPath(directory));
+      const statPath = `/proc/${String(host)}/stat`;
+      fsHooks.files = new Map([
+        [
+          statPath,
+          shiftStartTicks(readFileSync(statPath, 'utf8'), 10_000_000n),
+        ],
+      ]);
+      fsHooks.links = new Map([['/proc/self/ns/time', 'time:[1]']]);
+      const kill = vi.spyOn(process, 'kill');
+
+      await reconcileSession(directory);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+
+      await expect(destroySession('session-01', true)).rejects.toMatchObject({
+        code: 'HOST_TIMEOUT',
+      });
+      expect(kill).not.toHaveBeenCalledWith(host, 'SIGKILL');
+      expect(isRunning(host)).toBe(true);
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux a CLI on another machine that shares the Home leaves the host running and kills nothing',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host);
+      const record = await readManifest(manifestPath(directory));
+      fsHooks.files = new Map([
+        [
+          '/proc/sys/kernel/random/boot_id',
+          '4f2f7a8e-0c5e-4d34-9b6a-1c1d2e3f4a5b\n',
+        ],
+        ['/etc/machine-id', '0123456789abcdef0123456789abcdef\n'],
+      ]);
+      const kill = vi.spyOn(process, 'kill');
+
+      await reconcileSession(directory);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+
+      await expect(destroySession('session-01', true)).rejects.toMatchObject({
+        code: 'HOST_TIMEOUT',
+      });
+      expect(kill).not.toHaveBeenCalledWith(host, 'SIGKILL');
+      expect(isRunning(host)).toBe(true);
     },
   );
 

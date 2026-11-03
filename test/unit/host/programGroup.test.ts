@@ -411,6 +411,20 @@ describe.runIf(platform === 'linux')('readProgramGroup without a token', () => {
 
     expect(await readProgramGroup(directory, 4242)).toBeNull();
   });
+
+  it('names no group for a host record from another machine', async () => {
+    writeHostRecord(directory, {
+      version: 1,
+      pid: 4141,
+      bootId: 'ce4b84e5-e77e-4d68-bc28-cd04a84f6cd7',
+      startTicks: '100',
+      pidNamespace: readlinkSync('/proc/self/ns/pid'),
+      timeNamespace: null,
+      machineId: 'another-machine',
+    });
+
+    expect(await readProgramGroup(directory, 4242)).toBeNull();
+  });
 });
 
 describe('judgeProgramGroup', () => {
