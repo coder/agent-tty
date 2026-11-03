@@ -1,18 +1,20 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import {
+  closeSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { cleanupHome, createSession } from '../helpers.js';
 import { invariant } from '../../src/util/assert.js';
@@ -36,7 +38,9 @@ function quote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-function makeRun(envExtra: string[] = []): Run {
+function makeRun(
+  options: { envExtra?: string[]; relativeTo?: 'parent' } = {},
+): Run {
   // oxfmt-ignore
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tty-verify-cleanup-')));
   const run = {
@@ -49,16 +53,17 @@ function makeRun(envExtra: string[] = []): Run {
   for (const folder of [run.home, run.state, run.evidence]) {
     mkdirSync(folder);
   }
+  const written = options.relativeTo === 'parent' ? basename(root) : root;
   writeFileSync(
     run.envFile,
     [
-      `export VERIFY_RUN=${quote(run.root)}`,
-      `export AGENT_TTY_HOME=${quote(run.home)}`,
-      `export XDG_STATE_HOME=${quote(run.state)}`,
-      `export EVIDENCE=${quote(run.evidence)}`,
+      `export VERIFY_RUN=${quote(written)}`,
+      `export AGENT_TTY_HOME=${quote(join(written, 'home'))}`,
+      `export XDG_STATE_HOME=${quote(join(written, 'state'))}`,
+      `export EVIDENCE=${quote(join(written, 'evidence'))}`,
       'export NODE_OPTIONS="--disable-warning=DEP0205"',
       `att() { node --import ${quote(TSX_LOADER)} ${quote(CLI)} "$@"; }`,
-      ...envExtra,
+      ...(options.envExtra ?? []),
       '',
     ].join('\n'),
   );
@@ -68,17 +73,30 @@ function makeRun(envExtra: string[] = []): Run {
 function runCleanup(
   run: Run,
   cwd: string,
-  prefix: string[] = [],
+  options: { prefix?: string[]; stderrPath?: string } = {},
 ): { status: number | null; stderr: string } {
-  const command = [...prefix, 'bash', CLEANUP, run.envFile];
+  const command = [...(options.prefix ?? []), 'bash', CLEANUP, run.envFile];
   const [file, ...args] = command;
   invariant(file !== undefined, 'cleanup command must not be empty');
-  const result = spawnSync(file, args, {
-    cwd,
-    encoding: 'utf8',
-    timeout: CLEANUP_TIMEOUT_MS,
-  });
-  return { status: result.status, stderr: result.stderr };
+  const stderrFd =
+    options.stderrPath === undefined
+      ? undefined
+      : openSync(options.stderrPath, 'w');
+  try {
+    const result = spawnSync(file, args, {
+      cwd,
+      encoding: 'utf8',
+      timeout: CLEANUP_TIMEOUT_MS,
+      stdio: ['ignore', 'pipe', stderrFd ?? 'pipe'],
+    });
+    // With stderr sent to a file, spawnSync returns null for it.
+    const stderr: string | null = result.stderr;
+    return { status: result.status, stderr: stderr ?? '' };
+  } finally {
+    if (stderrFd !== undefined) {
+      closeSync(stderrFd);
+    }
+  }
 }
 
 function isAlive(pid: number): boolean {
@@ -88,28 +106,6 @@ function isAlive(pid: number): boolean {
   } catch {
     return false;
   }
-}
-
-function canRunAsPidOne(): boolean {
-  const probe = spawnSync(
-    'sudo',
-    [
-      '-n',
-      'unshare',
-      '--pid',
-      '--fork',
-      '--mount-proc',
-      'setpriv',
-      `--reuid=${String(process.getuid?.())}`,
-      `--regid=${String(process.getgid?.())}`,
-      '--init-groups',
-      'sh',
-      '-c',
-      'echo $$',
-    ],
-    { encoding: 'utf8', timeout: 10_000 },
-  );
-  return probe.status === 0 && probe.stdout.trim() === '1';
 }
 
 function pidOnePrefix(): string[] {
@@ -129,6 +125,21 @@ function pidOnePrefix(): string[] {
     '--init-groups',
   ];
 }
+
+function canRunAsPidOne(): boolean {
+  const [file, ...args] = pidOnePrefix();
+  invariant(file !== undefined, 'pid 1 prefix must not be empty');
+  const probe = spawnSync(file, [...args, 'sh', '-c', 'echo $$'], {
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  return probe.status === 0 && probe.stdout.trim() === '1';
+}
+
+const PID_ONE_AVAILABLE = process.platform === 'linux' && canRunAsPidOne();
+// CI sets AGENT_TTY_REQUIRE_PID1_UNSHARE=1, so a runner without passwordless
+// sudo, unshare or setpriv fails the pid 1 tests there instead of skipping them.
+const REQUIRE_PID_ONE = process.env.AGENT_TTY_REQUIRE_PID1_UNSHARE === '1';
 
 describe.skipIf(process.platform !== 'linux')(
   'verify-agent-tty cleanup.sh',
@@ -208,31 +219,57 @@ describe.skipIf(process.platform !== 'linux')(
       expect(existsSync(run.home)).toBe(false);
     });
 
-    it.skipIf(!canRunAsPidOne())(
-      'removes home/ when cleanup.sh runs as pid 1 inside it',
-      () => {
+    it('removes home/ and state/ of a run whose env.sh uses paths relative to the caller', () => {
+      run = makeRun({ relativeTo: 'parent' });
+
+      const result = runCleanup(run, dirname(run.root));
+
+      expect(result.status, result.stderr).toBe(0);
+      expect(existsSync(run.home)).toBe(false);
+      expect(existsSync(run.state)).toBe(false);
+      expect(existsSync(run.evidence)).toBe(true);
+    });
+
+    describe.runIf(PID_ONE_AVAILABLE || REQUIRE_PID_ONE)('as pid 1', () => {
+      beforeEach(() => {
+        expect(
+          PID_ONE_AVAILABLE,
+          'AGENT_TTY_REQUIRE_PID1_UNSHARE=1 needs passwordless sudo, unshare and setpriv',
+        ).toBe(true);
+      });
+
+      it('removes home/ when cleanup.sh starts inside it', () => {
         run = makeRun();
 
-        const result = runCleanup(run, run.home, pidOnePrefix());
+        const result = runCleanup(run, run.home, { prefix: pidOnePrefix() });
 
         expect(result.status, result.stderr).toBe(0);
         expect(existsSync(run.home)).toBe(false);
-      },
-    );
+      });
 
-    it.skipIf(!canRunAsPidOne())(
-      'keeps home/ when a process that pid 1 adopted holds a path in it',
-      () => {
-        run = makeRun([ADOPTED_HOLDER_IN_HOME]);
+      it('removes home/ when its own stderr goes to a file in home/', () => {
+        run = makeRun();
 
-        const result = runCleanup(run, run.root, pidOnePrefix());
+        const result = runCleanup(run, run.root, {
+          prefix: pidOnePrefix(),
+          stderrPath: join(run.home, 'cleanup.log'),
+        });
+
+        expect(result.status).toBe(0);
+        expect(existsSync(run.home)).toBe(false);
+      });
+
+      it('keeps home/ when a process that pid 1 adopted holds a path in it', () => {
+        run = makeRun({ envExtra: [ADOPTED_HOLDER_IN_HOME] });
+
+        const result = runCleanup(run, run.root, { prefix: pidOnePrefix() });
 
         expect(result.status).toBe(1);
         expect(result.stderr).toMatch(
           / sleep 60 {2}\(uses a path in the run\)/u,
         );
         expect(existsSync(run.home)).toBe(true);
-      },
-    );
+      });
+    });
   },
 );
