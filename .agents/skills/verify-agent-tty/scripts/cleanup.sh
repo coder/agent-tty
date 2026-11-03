@@ -6,7 +6,8 @@
 # fails, while a process outside the caller's terminal session still carries
 # this run's AGENT_TTY_HOME or is yours, hides its environment and started
 # after the run, or while any process but cleanup.sh, the processes that
-# started it and its own children has its working directory or an open file in
+# started it and its own children (none when it runs as pid 1, which also
+# adopts orphans) has its working directory or an open file in
 # home/, state/ or removing/. It also exits 1 when the removal fails, or when a process
 # that started during the removal still holds the run's folders.
 #
@@ -110,7 +111,6 @@ is_own_ancestor() {
 }
 is_own_descendant() {
   local walk=$1 hops=0
-  [ "$$" -ne 1 ] || return 1
   while [ -n "$walk" ] && [ "$walk" -gt 1 ] && [ "$hops" -lt "$max_hops" ]; do
     [ "$walk" = "$$" ] && return 0
     walk=$(parent_of "$walk")
@@ -150,7 +150,6 @@ for dir in "$run_real/home" "$run_real/state" "$run_real/removing"; do
   path_tests+=(-o -lname "$pattern" -o -lname "$pattern/*" -o -lname "$pattern (deleted)")
 done
 find_holders() {
-  cd / || exit 1
   holders=""
   holder_pids=" "
   for file in $(grep -lzxF "AGENT_TTY_HOME=$AGENT_TTY_HOME" /proc/[0-9]*/environ 2>/dev/null); do

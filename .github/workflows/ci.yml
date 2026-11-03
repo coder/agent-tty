@@ -125,6 +125,9 @@ jobs:
         run: npm run test:integration -- --shard=${{ matrix.shard }}
         env:
           AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
+          # verify-cleanup.test.ts runs cleanup.sh as pid 1 through
+          # passwordless sudo, unshare and setpriv, which these runners have.
+          AGENT_TTY_REQUIRE_PID1_UNSHARE: '1'
 
   test-e2e:
     runs-on: ubuntu-latest
