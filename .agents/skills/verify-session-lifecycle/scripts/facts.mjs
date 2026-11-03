@@ -916,7 +916,7 @@ function ownershipFacts() {
       st[0] === 'const judgement = judgeLiveGroup(group);' &&
       owned > 0 &&
       st[owned + 1] === 'const witness = readProcessRow(judgement.witness);' &&
-      /^if \( witness !== null && judgeProgramGroup\(group, group\.bootId, \[witness\]\)\.verdict === 'owned' \) \{ killProcessGroupBestEffort\(group\.pid\); return; \}$/.test(
+      /^if \( witness !== null && judgeProgramGroup\(group, group\.bootId, \[witness\]\)\.verdict === 'owned' \) \{ killProcessGroupBestEffort\(group\.pid\); (killed = true; )?return; \}$/.test(
         st[owned + 2] ?? '',
       );
   });
@@ -974,28 +974,32 @@ function ownershipFacts() {
   };
 }
 
-// In stopProgramGroup's loop, a judgement of gone before any freeze sends
-// SIGSTOP to the group and judges again, so a member that a scan never shows
-// stops and comes into view. After the loop, a frozen group that got no
-// kill gets SIGCONT.
+// In stopProgramGroup's loop, a judgement of gone sends SIGSTOP to the
+// group once and judges again, so a member that a scan never shows stops and
+// comes into view. The finally block sends a frozen group that got no kill
+// SIGCONT, also when a scan throws.
 function freezeFacts(body) {
-  const loop = body.statements.find(ts.isForStatement);
-  if (loop === undefined || !ts.isBlock(loop.statement)) {
+  const guarded = body.statements.find(ts.isTryStatement);
+  const loop = guarded?.tryBlock.statements.find(ts.isForStatement);
+  if (
+    guarded?.finallyBlock === undefined ||
+    loop === undefined ||
+    !ts.isBlock(loop.statement)
+  ) {
     return false;
   }
   const st = loop.statement.statements.map((s) => normalize(s.getText()));
-  const after = body.statements
-    .slice(body.statements.indexOf(loop) + 1)
-    .map((s) => normalize(s.getText()));
   const before = body.statements
-    .slice(0, body.statements.indexOf(loop))
+    .slice(0, body.statements.indexOf(guarded))
     .map((s) => normalize(s.getText()));
   return (
-    before.at(-1) === 'let frozen = false;' &&
+    before.at(-2) === 'let frozen = false;' &&
+    before.at(-1) === 'let killed = false;' &&
+    guarded.tryBlock.statements.length === 1 &&
     st[1] ===
-      "if (judgement.verdict === 'gone' && !frozen) { frozen = signalProcessGroup(group.pid, 'SIGSTOP'); if (frozen) { continue; } }" &&
-    after.length === 1 &&
-    after[0] === "if (frozen) { signalProcessGroup(group.pid, 'SIGCONT'); }"
+      "if (judgement.verdict === 'gone') { frozen ||= signalProcessGroup(group.pid, 'SIGSTOP'); if (frozen) { continue; } }" &&
+    normalize(guarded.finallyBlock.getText()) ===
+      "{ if (frozen && !killed) { signalProcessGroup(group.pid, 'SIGCONT'); } }"
   );
 }
 
