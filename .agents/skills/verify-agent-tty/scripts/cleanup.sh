@@ -108,13 +108,12 @@ is_own_ancestor() {
   case "$own_ancestors" in *" $1 "*) return 0 ;; esac
   return 1
 }
-# As pid 1 of a pid namespace, cleanup.sh started every process whose parents
-# reach pid 1. A process that joined from outside (docker exec) has parent 0.
+# As pid 1, cleanup.sh counts no process as its own child: pid 1 also adopts
+# orphans, so a parent walk cannot tell its children from an adopted process.
 is_own_descendant() {
   local walk=$1 hops=0
-  while [ -n "$walk" ] && [ "$hops" -lt "$max_hops" ]; do
+  while [ -n "$walk" ] && [ "$walk" -gt 1 ] && [ "$hops" -lt "$max_hops" ]; do
     [ "$walk" = "$$" ] && return 0
-    [ "$walk" -gt 1 ] || return 1
     walk=$(parent_of "$walk")
     hops=$((hops + 1))
   done
@@ -177,6 +176,9 @@ keep_home() {
   echo "cleanup.sh: kept $kept. Then run cleanup.sh again." >&2
   exit 1
 }
+# The scans below run as children of cleanup.sh. Leave the run's folders, so
+# they do not hold a path in it through the working directory they inherit.
+cd / || exit 1
 find_holders
 [ -z "$pids_failed$holders" ] || keep_home
 
