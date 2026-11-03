@@ -26,7 +26,7 @@
     "src/host/lifecycle.ts#readSessionManifestOrThrow": "9709f28e5e9cca4b",
     "src/host/lifecycle.ts#waitForTerminalManifest": "3f14811e8d2f5f7f",
     "src/host/lifecycle.ts#waitForProcessesToExit": "bdab1d674a6856b8",
-    "src/host/lifecycle.ts#stopSessionProcesses": "cb3c36e2b49e5d3f",
+    "src/host/lifecycle.ts#stopSessionProcesses": "131fa8ef2728acfc",
     "src/host/lifecycle.ts#recordDestroyed": "d968f32f58d3920a",
     "src/host/lifecycle.ts#destroySession": "873354edcae17792",
     "src/host/lifecycle.ts#reconcileSession": "c2904456d54b87c8",
