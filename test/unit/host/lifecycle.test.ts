@@ -64,7 +64,12 @@ vi.mock('node:fs', async () => {
     }
     return stat;
   }) as typeof actual.readFileSync;
-  return { ...actual, readdirSync, readFileSync };
+  // noProc leaves /proc an empty mount point.
+  const existsSync = ((path: Fs.PathLike) =>
+    fsHooks.noProc && typeof path === 'string' && path.startsWith('/proc/')
+      ? false
+      : actual.existsSync(path)) as typeof actual.existsSync;
+  return { ...actual, existsSync, readdirSync, readFileSync };
 });
 
 // The controlling terminal that /bin/ps prints for a pid, or null when ps
@@ -835,6 +840,10 @@ describe('a hostPid that may no longer name the host', () => {
 
       await expect(destroySession('session-01', true)).rejects.toMatchObject({
         code: 'HOST_TIMEOUT',
+        message:
+          gap === 'none'
+            ? expect.stringContaining('cannot read /proc')
+            : expect.not.stringContaining('/proc'),
       });
       expect(isRunning(host)).toBe(true);
       expect(await readManifest(manifestPath(directory))).toEqual(record);

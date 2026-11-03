@@ -1481,6 +1481,51 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     },
   );
 
+  // An exited session has no host to end it, so its leftover needs a destroy
+  // from a process that can read /proc.
+  it.runIf(capturesToken)(
+    'destroy of an exited session from a CLI that sees no /proc names /proc while its leftover runs',
+    async () => {
+      vi.stubEnv('XDG_STATE_HOME', join(testHome, 'state'));
+      let pgid = 0;
+      try {
+        const sessionId = createSession(testHome, [
+          '/bin/sh',
+          '-c',
+          'trap "" HUP; sleep 300 & exit 0',
+        ]);
+        pgid = inspectSession(testHome, sessionId).childPid as number;
+        const deadline = Date.now() + 10_000;
+        while (inspectSession(testHome, sessionId).status !== 'exited') {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(50);
+        }
+        expect(isGroupAlive(pgid)).toBe(true);
+        const preload = pathToFileURL(resolve('test/fixtures/no-proc.ts')).href;
+
+        const result = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+          NODE_OPTIONS: `--import=${preload}`,
+        });
+
+        expect(result.status).toBe(5);
+        const { error } = JSON.parse(result.stdout) as ErrorEnvelope;
+        expect(error.code).toBe('HOST_TIMEOUT');
+        expect(error.message).toContain('where /proc is mounted');
+        expect(error.message).not.toContain('plain destroy');
+        expect(isGroupAlive(pgid)).toBe(true);
+
+        destroySession(testHome, sessionId);
+        expect(await groupEnds(pgid)).toBe(true);
+      } finally {
+        if (pgid > 1) {
+          killGroupIfAlive(pgid);
+        }
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it.runIf(process.platform === 'linux')(
     'keeps a session running whose host renamed itself, and destroy --force ends it',
     async () => {
