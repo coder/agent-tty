@@ -363,8 +363,8 @@ async function acquireManifestLock(
   timing: ManifestLockTiming,
 ): Promise<void> {
   const temporaryPath = `${lockPath}.tmp-${randomUUID()}`;
-  await writeFile(temporaryPath, contents, { flag: 'wx', mode: 0o600 });
   try {
+    await writeFile(temporaryPath, contents, { flag: 'wx', mode: 0o600 });
     const deadline = Date.now() + timing.waitMs;
     let pollMs = 2;
     for (;;) {
