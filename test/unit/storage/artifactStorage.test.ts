@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 
 import { join } from 'node:path';
 
@@ -80,6 +80,17 @@ describe('artifact paths', () => {
     await expect(ensureArtifactsDir(sessionDir)).rejects.toMatchObject({
       code: 'STORAGE_WRITE_ERROR',
       message: `Artifacts path ${artifactsPath} is not a folder.`,
+      details: { path: artifactsPath },
+    });
+  });
+
+  it('rejects a dangling artifacts symlink with STORAGE_WRITE_ERROR', async () => {
+    const sessionDir = await createSessionDir();
+    const artifactsPath = join(sessionDir, 'artifacts');
+    await symlink(join(sessionDir, 'missing-target'), artifactsPath);
+
+    await expect(ensureArtifactsDir(sessionDir)).rejects.toMatchObject({
+      code: 'STORAGE_WRITE_ERROR',
       details: { path: artifactsPath },
     });
   });
