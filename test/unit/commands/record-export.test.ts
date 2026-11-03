@@ -737,11 +737,45 @@ describe('record export command', () => {
       }),
     ).rejects.toMatchObject({
       code: ERROR_CODES.EXPORT_ERROR,
-      message: expect.stringContaining('was replaced during the export'),
+      message: expect.stringContaining(
+        'was replaced during the export',
+      ) as unknown,
     });
     expect(mocks.rename).not.toHaveBeenCalled();
     const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
     expect(await fs.readdir(elsewhereDirectory)).toEqual([]);
+    expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
+  });
+
+  it('refuses the asciicast when the --out folder is replaced before the rename', async () => {
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-cast-swap-',
+    );
+    const exportsDirectory = join(workspaceDirectory, 'exports');
+    await mkdir(exportsDirectory);
+    mocks.writeTextFileAtomic.mockImplementation(
+      async (options: { beforeRename?: () => Promise<void> }) => {
+        const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
+        await fs.rename(exportsDirectory, join(workspaceDirectory, 'moved'));
+        await mkdir(exportsDirectory);
+        await options.beforeRename?.();
+      },
+    );
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'asciicast',
+        out: join(exportsDirectory, 'session.cast'),
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
+      message: expect.stringContaining(
+        'was replaced during the export',
+      ) as unknown,
+    });
     expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
   });
 

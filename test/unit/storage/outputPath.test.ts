@@ -1,9 +1,11 @@
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
   readdir,
   realpath,
+  rename,
   rm,
   symlink,
   writeFile,
@@ -18,11 +20,14 @@ import { ERROR_CODES } from '../../../src/protocol/errors.js';
 import {
   copyFileReplacing,
   resolveExplicitOutputPath,
+  type ExplicitOutputPath,
 } from '../../../src/storage/outputPath.js';
 
 describe('explicit output paths', () => {
   let workspace = '';
   const sessionsRoot = (): string => join(workspace, 'home', 'sessions');
+  const resolveOut = (out: string): Promise<ExplicitOutputPath> =>
+    resolveExplicitOutputPath(out, sessionsRoot());
 
   beforeEach(async () => {
     workspace = await realpath(
@@ -39,9 +44,9 @@ describe('explicit output paths', () => {
     await mkdir(join(workspace, 'exports'));
     vi.spyOn(process, 'cwd').mockReturnValue(workspace);
 
-    await expect(
-      resolveExplicitOutputPath('exports/shot.png', sessionsRoot()),
-    ).resolves.toBe(join(workspace, 'exports', 'shot.png'));
+    await expect(resolveOut('exports/shot.png')).resolves.toMatchObject({
+      path: join(workspace, 'exports', 'shot.png'),
+    });
   });
 
   it('resolves a symlinked parent folder to its real path', async () => {
@@ -49,11 +54,8 @@ describe('explicit output paths', () => {
     await symlink(join(workspace, 'real'), join(workspace, 'linked'));
 
     await expect(
-      resolveExplicitOutputPath(
-        join(workspace, 'linked', 'shot.png'),
-        sessionsRoot(),
-      ),
-    ).resolves.toBe(join(workspace, 'real', 'shot.png'));
+      resolveOut(join(workspace, 'linked', 'shot.png')),
+    ).resolves.toMatchObject({ path: join(workspace, 'real', 'shot.png') });
   });
 
   it('rejects a missing parent folder without creating it', async () => {
@@ -65,6 +67,23 @@ describe('explicit output paths', () => {
     ).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readdir(workspace)).toEqual([]);
   });
+
+  it.skipIf(process.getuid?.() === 0)(
+    'rejects a parent folder it can write but not search',
+    async () => {
+      const writeOnly = join(workspace, 'write-only');
+      await mkdir(writeOnly);
+      await chmod(writeOnly, 0o200);
+
+      try {
+        await expect(
+          resolveOut(join(writeOnly, 'shot.png')),
+        ).rejects.toMatchObject({ code: 'EACCES' });
+      } finally {
+        await chmod(writeOnly, 0o700);
+      }
+    },
+  );
 
   it('rejects a parent that is a file', async () => {
     await writeFile(join(workspace, 'file'), 'x');
@@ -99,17 +118,13 @@ describe('explicit output paths', () => {
     });
 
     await expect(
-      resolveExplicitOutputPath(
-        join(workspace, 'home', 'sessions-evidence', 'shot.png'),
-        sessionsRoot(),
-      ),
-    ).resolves.toBe(join(workspace, 'home', 'sessions-evidence', 'shot.png'));
+      resolveOut(join(workspace, 'home', 'sessions-evidence', 'shot.png')),
+    ).resolves.toMatchObject({
+      path: join(workspace, 'home', 'sessions-evidence', 'shot.png'),
+    });
     await expect(
-      resolveExplicitOutputPath(
-        join(workspace, 'home', 'shot.png'),
-        sessionsRoot(),
-      ),
-    ).resolves.toBe(join(workspace, 'home', 'shot.png'));
+      resolveOut(join(workspace, 'home', 'shot.png')),
+    ).resolves.toMatchObject({ path: join(workspace, 'home', 'shot.png') });
   });
 
   it('replaces an existing file and leaves no temporary file', async () => {
@@ -118,7 +133,7 @@ describe('explicit output paths', () => {
     await writeFile(source, 'new bytes');
     await writeFile(output, 'old bytes');
 
-    await copyFileReplacing(source, output);
+    await copyFileReplacing(source, await resolveOut(output));
 
     expect(await readFile(output, 'utf8')).toBe('new bytes');
     expect((await readdir(workspace)).sort()).toEqual([
@@ -131,9 +146,42 @@ describe('explicit output paths', () => {
     await expect(
       copyFileReplacing(
         join(workspace, 'gone.png'),
-        join(workspace, 'out.png'),
+        await resolveOut(join(workspace, 'out.png')),
       ),
     ).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readdir(workspace)).toEqual([]);
+  });
+
+  it('refuses to write when the parent folder became a link into session storage', async () => {
+    const artifacts = join(sessionsRoot(), 'session-01', 'artifacts');
+    await mkdir(artifacts, { recursive: true });
+    await mkdir(join(workspace, 'exports'));
+    const source = join(workspace, 'source.png');
+    await writeFile(source, 'png bytes');
+    const output = await resolveOut(join(workspace, 'exports', 'shot.png'));
+
+    await rename(join(workspace, 'exports'), join(workspace, 'moved'));
+    await symlink(artifacts, join(workspace, 'exports'));
+
+    await expect(copyFileReplacing(source, output)).rejects.toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
+    });
+    expect(await readdir(artifacts)).toEqual([]);
+    expect(await readdir(join(workspace, 'moved'))).toEqual([]);
+  });
+
+  it('refuses to write when the parent folder was replaced by another folder', async () => {
+    await mkdir(join(workspace, 'exports'));
+    const source = join(workspace, 'source.png');
+    await writeFile(source, 'png bytes');
+    const output = await resolveOut(join(workspace, 'exports', 'shot.png'));
+
+    await rename(join(workspace, 'exports'), join(workspace, 'moved'));
+    await mkdir(join(workspace, 'exports'));
+
+    await expect(copyFileReplacing(source, output)).rejects.toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
+    });
+    expect(await readdir(join(workspace, 'exports'))).toEqual([]);
   });
 });
