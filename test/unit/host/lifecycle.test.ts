@@ -493,9 +493,36 @@ describe('reconcileSession', () => {
           if (pid === HOST_PID) {
             throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
           }
-          return send(pid, signal);
+          const sent = send(pid, signal);
+          if (pid === -group && signal === 'SIGKILL') {
+            waitUntilDead(group);
+          }
+          return sent;
         });
       return { directory, kill };
+    }
+
+    // The mocked timers make the wait after the kill a few event-loop turns
+    // long, so the kill waits here until the kernel has ended the process.
+    function waitUntilDead(pid: number): void {
+      const deadline = Date.now() + 10_000;
+      for (;;) {
+        let stat: string;
+        try {
+          stat = readFileSync(`/proc/${String(pid)}/stat`, 'utf8');
+        } catch {
+          return;
+        }
+        const state = stat.slice(
+          stat.lastIndexOf(')') + 2,
+          stat.lastIndexOf(')') + 3,
+        );
+        if (state === 'Z' || state === 'X') {
+          return;
+        }
+        expect(Date.now()).toBeLessThan(deadline);
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+      }
     }
 
     it('kills the group that the record proves', async () => {
