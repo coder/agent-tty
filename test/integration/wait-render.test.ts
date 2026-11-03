@@ -493,7 +493,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
     expect(result.exitCode).toBe(11);
     expect(result.stdout).toBe('');
-    expect(result.stderr).toMatch(/^WAIT_TIMEOUT: /u);
+    expect(result.stderr).toBe('WAIT_TIMEOUT: Wait timed out after 1000 ms.\n');
   });
 
   it('exits 11 with a WAIT_TIMEOUT error envelope when legacy CLI --idle-ms times out', () => {

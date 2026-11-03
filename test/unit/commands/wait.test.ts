@@ -489,6 +489,39 @@ describe('wait command', () => {
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [{ timeout: 1000 }, 'Wait timed out after 1000 ms.'],
+    [
+      {},
+      'Wait timed out after 30000 ms (the default; pass --timeout <ms>, or --timeout 0 to wait without a limit).',
+    ],
+  ])(
+    'names the timeout in the human-mode WAIT_TIMEOUT message for %o',
+    async (timeoutOverride, message) => {
+      mocks.sendRpc.mockResolvedValue({
+        matched: false,
+        timedOut: true,
+        capturedAtSeq: 7,
+      });
+
+      await expect(
+        runWaitCommand(createOptions({ text: 'missing', ...timeoutOverride })),
+      ).rejects.toMatchObject({ code: ERROR_CODES.WAIT_TIMEOUT, message });
+    },
+  );
+
+  it('keeps the WAIT_TIMEOUT message of the JSON envelope', async () => {
+    mocks.sendRpc.mockResolvedValue({ timedOut: true });
+
+    await expect(
+      runWaitCommand(createOptions({ json: true, waitForExit: true })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.WAIT_TIMEOUT,
+      message: 'Wait timed out before its condition was met.',
+      details: { sessionId: 'session-01', timeoutMs: 30000 },
+    });
+  });
+
   it('routes --text waits to the render wait RPC', async () => {
     const result = {
       matched: true,
