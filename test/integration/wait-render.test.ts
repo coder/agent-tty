@@ -1,6 +1,8 @@
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -495,6 +497,47 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     expect(result.stdout).toBe('');
     expect(result.stderr).toBe('WAIT_TIMEOUT: Wait timed out after 1000 ms.\n');
   });
+
+  it.each(['0', '20000'])(
+    'keeps the generic WAIT_TIMEOUT text when the renderer fails before --timeout %s runs out',
+    (timeout) => {
+      const preload = pathToFileURL(
+        resolve('test/fixtures/fail-chromium-launch.ts'),
+      );
+      const failingSessionId = createSession(testHome, undefined, {
+        env: {
+          NODE_OPTIONS: [
+            process.env.NODE_OPTIONS ?? '',
+            `--import=${preload.href}`,
+          ].join(' '),
+        },
+      });
+      try {
+        const result = runCli(
+          [
+            '--renderer',
+            'ghostty-web',
+            'wait',
+            failingSessionId,
+            '--text',
+            'NEVER',
+            '--timeout',
+            timeout,
+          ],
+          { AGENT_TTY_HOME: testHome },
+          30_000,
+        );
+
+        expect(result.exitCode).toBe(11);
+        expect(result.stdout).toBe('');
+        expect(result.stderr).toBe(
+          'WAIT_TIMEOUT: Wait timed out before its condition was met.\n',
+        );
+      } finally {
+        destroySession(testHome, failingSessionId);
+      }
+    },
+  );
 
   it('exits 11 with a WAIT_TIMEOUT error envelope when legacy CLI --idle-ms times out', () => {
     const result = runCli(

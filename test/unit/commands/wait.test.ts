@@ -489,26 +489,75 @@ describe('wait command', () => {
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
-  it.each([
-    [{ timeout: 1000 }, 'Wait timed out after 1000 ms.'],
-    [
-      {},
-      'Wait timed out after 30000 ms (the default; pass --timeout <ms>, or --timeout 0 to wait without a limit).',
-    ],
-  ])(
-    'names the timeout in the human-mode WAIT_TIMEOUT message for %o',
-    async (timeoutOverride, message) => {
-      mocks.sendRpc.mockResolvedValue({
-        matched: false,
-        timedOut: true,
-        capturedAtSeq: 7,
+  describe('human-mode WAIT_TIMEOUT message', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function resolveTimedOutAfter(elapsedMs: number, result: object): void {
+      mocks.sendRpc.mockImplementation(() => {
+        vi.setSystemTime(Date.now() + elapsedMs);
+        return Promise.resolve(result);
       });
+    }
+
+    const renderTimeout = { matched: false, timedOut: true, capturedAtSeq: 7 };
+
+    it.each([
+      [
+        'an explicit --timeout',
+        { text: 'missing', timeout: 1000 },
+        1000,
+        renderTimeout,
+        'Wait timed out after 1000 ms.',
+      ],
+      [
+        'the default timeout',
+        { text: 'missing' },
+        30_000,
+        renderTimeout,
+        'Wait timed out after 30000 ms (the default; pass --timeout <ms>, or --timeout 0 to wait without a limit).',
+      ],
+      [
+        'the --timeout of an --idle-ms wait',
+        { idleMs: 500, timeout: 1000 },
+        1000,
+        { timedOut: true },
+        'Wait timed out after 1000 ms.',
+      ],
+    ])(
+      'names %s that ran out',
+      async (_case, overrides, elapsedMs, result, message) => {
+        resolveTimedOutAfter(elapsedMs, result);
+
+        await expect(
+          runWaitCommand(createOptions(overrides)),
+        ).rejects.toMatchObject({ code: ERROR_CODES.WAIT_TIMEOUT, message });
+      },
+    );
+
+    it.each([
+      ['--timeout 0', { text: 'missing', timeout: 0 }],
+      [
+        'a --timeout that did not run out',
+        { text: 'missing', timeout: 20_000 },
+      ],
+      ['a default timeout that did not run out', { text: 'missing' }],
+    ])('keeps the generic text for %s', async (_case, overrides) => {
+      resolveTimedOutAfter(3000, renderTimeout);
 
       await expect(
-        runWaitCommand(createOptions({ text: 'missing', ...timeoutOverride })),
-      ).rejects.toMatchObject({ code: ERROR_CODES.WAIT_TIMEOUT, message });
-    },
-  );
+        runWaitCommand(createOptions(overrides)),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.WAIT_TIMEOUT,
+        message: 'Wait timed out before its condition was met.',
+      });
+    });
+  });
 
   it('keeps the WAIT_TIMEOUT message of the JSON envelope', async () => {
     mocks.sendRpc.mockResolvedValue({ timedOut: true });
