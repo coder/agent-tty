@@ -24,7 +24,7 @@ import {
   programRecordPath,
   sessionDir,
 } from '../../../src/storage/sessionPaths.js';
-import { writeHostRecord } from '../../../src/host/hostRecord.js';
+import { captureHost, writeHostRecord } from '../../../src/host/hostRecord.js';
 import { capturesToken } from '../../helpers.js';
 
 import type * as Fs from 'node:fs';
@@ -386,6 +386,8 @@ describe.runIf(platform === 'linux')('readProgramGroup without a token', () => {
       bootId: 'ce4b84e5-e77e-4d68-bc28-cd04a84f6cd7',
       startTicks: '100',
       pidNamespace,
+      timeNamespace: null,
+      machineId: captureHost(process.pid)?.machineId ?? null,
     });
   }
 

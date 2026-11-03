@@ -1009,6 +1009,8 @@ describe('a hostPid that may no longer name the host', () => {
         bootId: 'linux-boot',
         startTicks: '1',
         pidNamespace: 'pid:[1]',
+        timeNamespace: null,
+        machineId: null,
       });
       Object.defineProperty(process, 'platform', { value: 'darwin' });
 
