@@ -497,17 +497,34 @@ describe('wait render integration', { timeout: 120_000 }, () => {
   });
 
   it('exits 11 with a WAIT_TIMEOUT error envelope when legacy CLI --idle-ms times out', () => {
-    const result = runCli(
-      ['wait', sessionId, '--idle-ms', '10000', '--timeout', '1000', '--json'],
-      { AGENT_TTY_HOME: testHome },
-      10_000,
-    );
+    const tickingSessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      'while :; do echo tick; sleep 0.05; done',
+    ]);
+    try {
+      const result = runCli(
+        [
+          'wait',
+          tickingSessionId,
+          '--idle-ms',
+          '250',
+          '--timeout',
+          '1000',
+          '--json',
+        ],
+        { AGENT_TTY_HOME: testHome },
+        10_000,
+      );
 
-    expect(result.exitCode).toBe(11);
-    expect(result.stderr).toBe('');
-    expect(parseWaitTimeoutEnvelope(result.stdout)).toEqual({
-      timedOut: true,
-    });
+      expect(result.exitCode).toBe(11);
+      expect(result.stderr).toBe('');
+      expect(parseWaitTimeoutEnvelope(result.stdout)).toEqual({
+        timedOut: true,
+      });
+    } finally {
+      destroySession(testHome, tickingSessionId);
+    }
   });
 
   it('exits 11 with a WAIT_TIMEOUT error envelope when legacy CLI --exit times out', () => {
