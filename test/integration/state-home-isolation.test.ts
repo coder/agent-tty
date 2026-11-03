@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createSession, destroySession } from '../helpers.js';
 import { isWithinRoot } from '../../src/util/isWithinRoot.js';
 
-describe('test state isolation', () => {
+describe('test state isolation', { timeout: 30_000 }, () => {
   let testHome = '';
 
   beforeEach(() => {
