@@ -440,7 +440,10 @@ describe('executeBatch', () => {
         waitResults: [{ matched: false, timedOut: true, capturedAtSeq: 5 }],
       });
       const result = await executeBatch({
-        plan: plan([{ type: 'go' }, { wait: { text: 'never' } }]),
+        plan: plan([
+          { type: 'go' },
+          { wait: { text: 'never', timeout: 1000 } },
+        ]),
         driver,
         keepGoing: false,
       });
@@ -452,7 +455,28 @@ describe('executeBatch', () => {
         timedOut: true,
         capturedAtSeq: 5,
         waitBaseline: 3,
-        error: { code: 'WAIT_TIMEOUT' },
+        error: {
+          code: 'WAIT_TIMEOUT',
+          message: 'Render wait at step 1 timed out after 1000 ms.',
+        },
+      });
+    });
+
+    it('names the default timeout of a wait step without a timeout', async () => {
+      const { driver } = createFakeDriver({
+        waitResults: [{ matched: false, timedOut: true, capturedAtSeq: 5 }],
+      });
+      const result = await executeBatch({
+        plan: plan([{ wait: { text: 'never' } }]),
+        driver,
+        keepGoing: false,
+      });
+
+      expect(result.steps[0]).toMatchObject({
+        error: {
+          code: 'WAIT_TIMEOUT',
+          message: 'Render wait at step 0 timed out after 30000 ms.',
+        },
       });
     });
 
@@ -469,8 +493,32 @@ describe('executeBatch', () => {
       expect(result.steps[0]).toMatchObject({
         kind: 'wait',
         status: 'failed',
-        error: { code: 'WAIT_TIMEOUT' },
+        error: {
+          code: 'WAIT_TIMEOUT',
+          message:
+            'Render wait at step 0 timed out before its condition was met.',
+        },
       });
+    });
+
+    it('records a renderer error from the wait with its own code and no timedOut', async () => {
+      const { driver } = createFakeDriver();
+      driver.wait = () =>
+        Promise.reject(
+          makeCliError('RPC_ERROR', { message: 'renderer failed' }),
+        );
+      const result = await executeBatch({
+        plan: plan([{ wait: { text: 'never', timeout: 1000 } }]),
+        driver,
+        keepGoing: false,
+      });
+
+      expect(result.steps[0]).toMatchObject({
+        kind: 'wait',
+        status: 'failed',
+        error: { code: 'RPC_ERROR', message: 'renderer failed' },
+      });
+      expect(result.steps[0]).not.toHaveProperty('timedOut');
     });
   });
 

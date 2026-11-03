@@ -155,7 +155,15 @@ export async function ensureArtifactsDir(sessionDir: string): Promise<string> {
       if (removed !== statError) {
         throw removed;
       }
-      return undefined;
+      if (hasErrorCode(statError, 'ENOENT')) {
+        return undefined;
+      }
+      const errno = (statError as NodeJS.ErrnoException).code ?? 'unknown';
+      throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+        message: `Failed to check artifacts path ${directory} (${errno}).`,
+        details: { path: directory, errno },
+        cause: statError,
+      });
     });
     if (stats?.isDirectory() !== true) {
       throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {

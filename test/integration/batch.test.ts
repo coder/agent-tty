@@ -1,6 +1,8 @@
 import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -221,7 +223,7 @@ describe('batch command integration', { timeout: 45_000 }, () => {
     expect(envelope.ok).toBe(false);
     expect(envelope.error).toEqual({
       code: 'WAIT_TIMEOUT',
-      message: 'Render wait at step 0 timed out before its condition was met.',
+      message: 'Render wait at step 0 timed out after 1000 ms.',
       retryable: false,
       details: { sessionId, stepIndex: 0 },
     });
@@ -257,7 +259,48 @@ describe('batch command integration', { timeout: 45_000 }, () => {
     expect(result.status).toBe(11);
     expect(result.stderr).toBe('');
     expect(result.stdout).toContain('[1] type not-run');
-    expect(result.stdout).toContain('failed at step 0: WAIT_TIMEOUT: ');
+    expect(result.stdout).toContain(
+      'failed at step 0: WAIT_TIMEOUT: Render wait at step 0 timed out after 1000 ms.',
+    );
+  });
+
+  it('fails a wait step with the renderer error, not WAIT_TIMEOUT, when every render poll fails', () => {
+    const preload = pathToFileURL(
+      resolve('test/fixtures/fail-chromium-launch.ts'),
+    );
+    sessionId = createSession(testHome, undefined, {
+      env: {
+        NODE_OPTIONS: [
+          process.env.NODE_OPTIONS ?? '',
+          `--import=${preload.href}`,
+        ].join(' '),
+      },
+    });
+    const steps = JSON.stringify([
+      { wait: { text: 'never-appears', timeout: 20000 } },
+      { type: 'unreached' },
+    ]);
+
+    const result = runCli(
+      ['--renderer', 'ghostty-web', 'batch', sessionId, steps, '--json'],
+      testEnv(),
+      30_000,
+    );
+
+    expect(result.status, result.stderr).toBe(9);
+    const envelope = JSON.parse(result.stdout) as FailedBatchEnvelope;
+    expect(envelope.error).toMatchObject({
+      code: 'RPC_ERROR',
+      details: { sessionId, stepIndex: 0 },
+    });
+    const [waitStep, typeStep] = envelope.result.steps;
+    expect(waitStep).toMatchObject({
+      kind: 'wait',
+      status: 'failed',
+      error: { code: 'RPC_ERROR' },
+    });
+    expect(waitStep).not.toHaveProperty('timedOut');
+    expect(typeStep).toMatchObject({ kind: 'type', status: 'not-run' });
   });
 
   it('exits non-zero with a full envelope under --keep-going on failure', async () => {
