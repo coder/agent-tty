@@ -60,7 +60,7 @@ describe('loadConfigFile', () => {
 
     await expect(loadConfigFile(home)).rejects.toMatchObject({
       code: 'INVALID_INPUT',
-      message: expect.stringContaining('contains invalid JSON'),
+      message: expect.stringContaining('contains invalid JSON') as string,
       details: { configPath: join(home, 'config.json') },
     });
   });
@@ -75,7 +75,7 @@ describe('loadConfigFile', () => {
 
     await expect(loadConfigFile(home)).rejects.toMatchObject({
       code: 'INVALID_INPUT',
-      message: expect.stringContaining('logLevel'),
+      message: expect.stringContaining('logLevel') as string,
       details: { configPath: join(home, 'config.json') },
     });
   });

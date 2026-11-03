@@ -97,14 +97,8 @@ function toCliError(error: unknown, logger?: Logger): CliError {
   });
 }
 
-function reportCliError(
-  commandName: string,
-  error: CliError,
-  json: boolean,
-): void {
-  emitCliError(commandName, error, json);
+function exitOnInternalError(error: CliError): void {
   if (error.code === ERROR_CODES.INTERNAL_ERROR) {
-    // An unexpected error can leave a socket, browser or timer open.
     exitAfterOutputFlush();
   }
 }
@@ -139,16 +133,17 @@ function wrapAction<Args extends unknown[]>(
       await fn(...([...args, context] as [...Args, CommandContext]));
       context.logger.debug(`completed ${commandName} command`);
     } catch (error: unknown) {
-      reportCliError(
+      const cliError = toCliError(error, logger);
+      emitCliError(
         commandName,
-        toCliError(error, logger),
+        cliError,
         command.opts<{ json?: boolean }>().json === true,
       );
+      exitOnInternalError(cliError);
     }
   };
 }
 
-// Output options as Commander parsed them, set once the preAction hook runs.
 let parsedOutputOptions: { json: boolean; color: boolean } | undefined;
 
 const HELP_OUTPUT_CODES: ReadonlySet<string> = new Set([
@@ -1108,7 +1103,8 @@ try {
       color: !argvHasFlag('--no-color'),
     };
     setColorEnabled(output.color);
-    reportCliError('agent-tty', error, output.json);
+    emitCliError('agent-tty', error, output.json);
+    exitOnInternalError(error);
   } else {
     throw error;
   }

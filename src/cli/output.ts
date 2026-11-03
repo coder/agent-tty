@@ -119,10 +119,6 @@ export function argvHasFlag(flag: string): boolean {
     .includes(flag);
 }
 
-/**
- * Emit the error and set its exit code. When a JSON envelope is already on
- * stdout, the error goes to stderr as text, so stdout keeps one envelope.
- */
 export function emitCliError(
   commandName: string,
   error: CliError,
@@ -142,7 +138,6 @@ export function emitCliError(
   process.exitCode = exitCodeForError(error.code);
 }
 
-/** Exit with `process.exitCode` once stdout and stderr have flushed. */
 export function exitAfterOutputFlush(): void {
   process.stdout.write('', () => {
     process.stderr.write('', () => {

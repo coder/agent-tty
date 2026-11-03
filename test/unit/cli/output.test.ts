@@ -3,16 +3,13 @@ import process from 'node:process';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CliError } from '../../../src/cli/errors.js';
+import type * as OutputModule from '../../../src/cli/output.js';
 
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 
-type OutputModule = typeof import('../../../src/cli/output.js');
-
 const originalArgv = process.argv;
-let output: OutputModule;
+let output: typeof OutputModule;
 
-// output.ts remembers whether it wrote a JSON envelope, so each test gets a
-// fresh module.
 beforeEach(async () => {
   vi.resetModules();
   output = await import('../../../src/cli/output.js');

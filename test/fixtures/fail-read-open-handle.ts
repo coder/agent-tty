@@ -1,16 +1,16 @@
+import type * as FsPromises from 'node:fs/promises';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { basename } from 'node:path';
 import process from 'node:process';
 
-// Models a command that throws an unexpected error and leaves a handle open:
-// readFile rejects for the file named in AGENT_TTY_TEST_FAIL_READ, and a ref'd
-// interval keeps the event loop alive until something calls process.exit().
-const failName = process.env.AGENT_TTY_TEST_FAIL_READ;
-if (failName !== undefined) {
+function keepEventLoopAlive(): void {
   setInterval(() => undefined, 60_000);
+}
+
+function failReadFileNamed(failName: string): void {
   const fsPromises = createRequire(import.meta.url)(
     'node:fs/promises',
-  ) as typeof import('node:fs/promises');
+  ) as typeof FsPromises;
   const readFile = fsPromises.readFile as (...args: unknown[]) => unknown;
   fsPromises.readFile = ((path: unknown, ...rest: unknown[]) => {
     const name = basename(path instanceof URL ? path.pathname : String(path));
@@ -20,4 +20,10 @@ if (failName !== undefined) {
     return readFile(path, ...rest);
   }) as typeof fsPromises.readFile;
   syncBuiltinESMExports();
+}
+
+const failName = process.env.AGENT_TTY_TEST_FAIL_READ;
+if (failName !== undefined) {
+  keepEventLoopAlive();
+  failReadFileNamed(failName);
 }
