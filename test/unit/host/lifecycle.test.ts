@@ -98,9 +98,22 @@ const psHooks = vi.hoisted(() => ({
   tty: undefined as ((pid: number) => string | null) | undefined,
 }));
 
+// The last ChildProcess that spawn returned, so a test can watch the host
+// that launchHost started.
+const spawnHooks = vi.hoisted(() => ({
+  last: undefined as unknown,
+}));
+
 vi.mock('node:child_process', async () => {
   const actual =
     await vi.importActual<typeof ChildProcess>('node:child_process');
+  const spawn = ((...args: unknown[]) => {
+    const child = (
+      actual.spawn as (...all: unknown[]) => ChildProcess.ChildProcess
+    )(...args);
+    spawnHooks.last = child;
+    return child;
+  }) as typeof actual.spawn;
   const execFileSync = ((file: string, args: readonly string[], ...rest) => {
     if (psHooks.tty !== undefined && file === '/bin/ps' && args[1] === 'tty=') {
       const tty = psHooks.tty(Number(args[3]));
@@ -115,7 +128,7 @@ vi.mock('node:child_process', async () => {
       ...rest,
     );
   }) as typeof actual.execFileSync;
-  return { ...actual, execFileSync };
+  return { ...actual, execFileSync, spawn };
 });
 
 vi.mock('node:fs/promises', async () => {
@@ -161,6 +174,7 @@ import {
   allocateSession,
   destroySession,
   cliRunsInsideProgramSession,
+  launchHost,
   reconcileSession,
   removeSocketDirectoryBestEffort,
   removeSocketDirectoryIfEmpty,
@@ -355,6 +369,53 @@ describe('allocateSession', () => {
       ),
     ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
     expect(launch).not.toHaveBeenCalled();
+  });
+});
+
+describe('launchHost', () => {
+  function launchFixture(source: string): {
+    stop: () => void;
+    child: ChildProcess.ChildProcess;
+  } {
+    const entrypoint = join(home, 'host.mjs');
+    writeFileSync(entrypoint, source);
+    const cliEntrypoint = process.argv[1];
+    process.argv[1] = entrypoint;
+    try {
+      const host = launchHost({
+        sessionId: 'session-01',
+        home,
+        env: {},
+        term: 'xterm-256color',
+      });
+      const child = spawnHooks.last as ChildProcess.ChildProcess;
+      expect(child.pid).toBe(host.pid);
+      return { stop: host.stop, child };
+    } finally {
+      process.argv[1] = cliEntrypoint;
+    }
+  }
+
+  it('stop sends a running host SIGTERM', async () => {
+    const { stop, child } = launchFixture('setInterval(() => {}, 1000);\n');
+    const exit = once(child, 'exit');
+
+    stop();
+
+    expect(child.killed).toBe(true);
+    expect(await exit).toEqual([null, 'SIGTERM']);
+  });
+
+  it('stop sends nothing once the host has exited', async () => {
+    const { stop, child } = launchFixture('process.exit(0);\n');
+    const errors: unknown[] = [];
+    child.on('error', (error) => errors.push(error));
+    expect(await once(child, 'exit')).toEqual([0, null]);
+
+    expect(stop).not.toThrow();
+
+    expect(child.killed).toBe(false);
+    expect(errors).toEqual([]);
   });
 });
 
