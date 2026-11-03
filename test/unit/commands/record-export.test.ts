@@ -738,7 +738,7 @@ describe('record export command', () => {
     ).rejects.toMatchObject({
       code: ERROR_CODES.EXPORT_ERROR,
       message: expect.stringContaining(
-        'was replaced during the export',
+        'was replaced while the command ran',
       ) as unknown,
     });
     expect(mocks.rename).not.toHaveBeenCalled();
@@ -773,7 +773,7 @@ describe('record export command', () => {
     ).rejects.toMatchObject({
       code: ERROR_CODES.EXPORT_ERROR,
       message: expect.stringContaining(
-        'was replaced during the export',
+        'was replaced while the command ran',
       ) as unknown,
     });
     expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();

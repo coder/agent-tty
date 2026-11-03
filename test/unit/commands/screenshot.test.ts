@@ -304,10 +304,10 @@ describe('screenshot command', () => {
       expect(mocks.emitSuccess).not.toHaveBeenCalled();
     });
 
-    it('passes on the EXPORT_ERROR when the --out folder was replaced before the copy', async () => {
+    it('passes on the EXPORT_ERROR when the --out folder was replaced before the rename', async () => {
       const replaced = new CliError(
         ERROR_CODES.EXPORT_ERROR,
-        'Output folder /real/out was replaced during the export.',
+        'Output folder /real/out was replaced while the command ran.',
       );
       mocks.sendRpc.mockResolvedValue(createScreenshotResult());
       mocks.resolveExplicitOutputPath.mockResolvedValue(outTarget);

@@ -100,7 +100,7 @@ export async function assertOutputParentUnchanged(
     parentStats.ino !== output.parentIno
   ) {
     throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
-      message: `Output folder ${parentDirectory} was replaced during the export. Nothing was written to ${output.path}.`,
+      message: `Output folder ${parentDirectory} was replaced while the command ran. Nothing was written to ${output.path}.`,
       details: { outputPath: output.path },
     });
   }
