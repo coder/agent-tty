@@ -926,7 +926,11 @@ export async function listSessions(
       return [];
     }
 
-    throw error;
+    throw makeCliError(ERROR_CODES.STORAGE_READ_ERROR, {
+      message: `Failed to read sessions directory at ${sessionsRoot}.`,
+      details: { sessionsRoot },
+      cause: error,
+    });
   }
 
   const summaries: SessionSummary[] = [];

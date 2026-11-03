@@ -149,6 +149,13 @@ export async function ensureArtifactsDir(sessionDir: string): Promise<string> {
     if (!hasErrorCode(error, 'EEXIST')) {
       throw error;
     }
+
+    if (!(await stat(directory)).isDirectory()) {
+      throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+        message: `Artifacts path ${directory} is not a folder.`,
+        details: { path: directory },
+      });
+    }
   }
 
   return directory;

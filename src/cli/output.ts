@@ -16,6 +16,7 @@ const ANSI_ESCAPE_PATTERN = new RegExp(
 );
 
 let colorEnabled = true;
+let jsonEnvelopeWritten = false;
 
 const STDOUT_FD = 1;
 
@@ -35,6 +36,7 @@ export function writeJsonEnvelope<TResult, TErrorResult = never>(
   envelope: CommandEnvelope<TResult, TErrorResult>,
 ): void {
   process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+  jsonEnvelopeWritten = true;
 }
 
 export function writeHumanLines(lines: readonly string[]): void {
@@ -58,6 +60,7 @@ export function formatSuccessOutput(options: SuccessOutputOptions): string {
 
 export function emitSuccess(options: SuccessOutputOptions): void {
   process.stdout.write(formatSuccessOutput(options));
+  jsonEnvelopeWritten ||= options.json;
 }
 
 /**
@@ -88,6 +91,7 @@ export function writeStdoutSync(text: string): void {
 
 export function emitSuccessSync(options: SuccessOutputOptions): void {
   writeStdoutSync(formatSuccessOutput(options));
+  jsonEnvelopeWritten ||= options.json;
 }
 
 export function emitFailure(options: {
@@ -108,17 +112,25 @@ export function emitFailure(options: {
   );
 }
 
-export function jsonOutputRequested(): boolean {
+export function argvHasFlag(flag: string): boolean {
   const optionsEnd = process.argv.indexOf('--');
   return process.argv
     .slice(0, optionsEnd === -1 ? undefined : optionsEnd)
-    .includes('--json');
+    .includes(flag);
 }
 
-export function emitCliError(commandName: string, error: CliError): void {
+/**
+ * Emit the error and set its exit code. When a JSON envelope is already on
+ * stdout, the error goes to stderr as text, so stdout keeps one envelope.
+ */
+export function emitCliError(
+  commandName: string,
+  error: CliError,
+  json: boolean,
+): void {
   emitFailure({
     command: commandName,
-    json: jsonOutputRequested(),
+    json: json && !jsonEnvelopeWritten,
     error: {
       code: error.code,
       message: error.message,
@@ -128,4 +140,13 @@ export function emitCliError(commandName: string, error: CliError): void {
     result: error.result,
   });
   process.exitCode = exitCodeForError(error.code);
+}
+
+/** Exit with `process.exitCode` once stdout and stderr have flushed. */
+export function exitAfterOutputFlush(): void {
+  process.stdout.write('', () => {
+    process.stderr.write('', () => {
+      process.exit();
+    });
+  });
 }

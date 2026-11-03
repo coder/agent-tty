@@ -1,20 +1,29 @@
 import process from 'node:process';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CliError } from '../../../src/cli/errors.js';
 
-import { argvHasFlag, emitCliError } from '../../../src/cli/output.js';
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 
+type OutputModule = typeof import('../../../src/cli/output.js');
+
 const originalArgv = process.argv;
+let output: OutputModule;
+
+// output.ts remembers whether it wrote a JSON envelope, so each test gets a
+// fresh module.
+beforeEach(async () => {
+  vi.resetModules();
+  output = await import('../../../src/cli/output.js');
+});
 
 function emitJsonEnvelope(
   command: string,
   error: CliError,
 ): Record<string, unknown> {
   const write = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
-  emitCliError(command, error, true);
+  output.emitCliError(command, error, true);
   const calls = write.mock.calls.map(([chunk]) => String(chunk));
   write.mockRestore();
   expect(calls).toHaveLength(1);
@@ -60,10 +69,8 @@ describe('emitCliError', () => {
     expect(process.exitCode).toBe(3);
   });
 
-  it('writes the error to stderr when a JSON envelope is already on stdout', async () => {
+  it('writes the error to stderr when a JSON envelope is already on stdout', () => {
     process.argv = [...originalArgv, '--json'];
-    vi.resetModules();
-    const output = await import('../../../src/cli/output.js');
     const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
     const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
@@ -97,10 +104,10 @@ describe('argvHasFlag', () => {
 
   it('finds a flag only before the first --', () => {
     process.argv = ['node', 'main.ts', '--no-color', 'create', '--json'];
-    expect(argvHasFlag('--no-color')).toBe(true);
-    expect(argvHasFlag('--json')).toBe(true);
+    expect(output.argvHasFlag('--no-color')).toBe(true);
+    expect(output.argvHasFlag('--json')).toBe(true);
 
     process.argv = ['node', 'main.ts', 'create', '--', 'sh', '--no-color'];
-    expect(argvHasFlag('--no-color')).toBe(false);
+    expect(output.argvHasFlag('--no-color')).toBe(false);
   });
 });
