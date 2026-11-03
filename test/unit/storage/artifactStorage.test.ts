@@ -259,9 +259,12 @@ describe('artifact manifest storage', () => {
       await ensureArtifactsDir(sessionDir);
       const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
       // Another spelling of the same file, as on a case-insensitive file
-      // system.
-      const aliasPath = join(sessionDir, 'alias.cast');
+      // system. A symlink stands in for it on a case-sensitive one.
+      const aliasPath = artifactPath(sessionDir, 'RECORDING-4-ASCIICAST.cast');
       await symlink(castPath, aliasPath);
+      // A symlink whose path differs in more than case is not read.
+      const otherAliasPath = join(sessionDir, 'other-alias.cast');
+      await symlink(castPath, otherAliasPath);
       const otherPath = join(sessionDir, 'other.cast');
       await writeFile(otherPath, 'other');
       await exportTo(castPath, 'first');
@@ -270,6 +273,7 @@ describe('artifact manifest storage', () => {
         exportEntry('01JQ0000000000000000000002', otherPath),
         exportEntry('01JQ0000000000000000000003', aliasPath),
         createArtifactEntry({ id: '01JQ0000000000000000000004' }),
+        exportEntry('01JQ0000000000000000000006', otherAliasPath),
       ]) {
         await appendArtifactWithRollback({ sessionDir, entry });
       }
@@ -283,6 +287,7 @@ describe('artifact manifest storage', () => {
       expect(await ids(sessionDir)).toEqual([
         '01JQ0000000000000000000002',
         '01JQ0000000000000000000004',
+        '01JQ0000000000000000000006',
         '01JQ0000000000000000000005',
       ]);
     });

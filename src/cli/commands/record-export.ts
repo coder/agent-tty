@@ -280,13 +280,14 @@ export async function runRecordExportCommand(
         contents: exportArtifact.contents,
         writeErrorMessage: `Failed to write record export artifact at ${artifactOutputPath}.`,
         createParentFolders: false,
-        ...(explicitOutput === undefined
-          ? {}
-          : {
-              beforeRename: () => assertOutputParentUnchanged(explicitOutput),
-            }),
+        beforeRename: async (temporaryPath) => {
+          if (explicitOutput !== undefined) {
+            await assertOutputParentUnchanged(explicitOutput);
+          }
+          // The rename keeps the temp file's inode.
+          outputFileIdentity = await fileIdentity(temporaryPath);
+        },
       });
-      outputFileIdentity = await fileIdentity(artifactOutputPath);
 
       bytes = contentsBuffer.byteLength;
       invariant(bytes > 0, 'asciicast export artifact must not be empty');

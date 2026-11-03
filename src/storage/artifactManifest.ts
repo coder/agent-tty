@@ -482,11 +482,16 @@ export interface AppendArtifactWithRollbackOptions {
  */
 export async function fileIdentity(path: string): Promise<string | null> {
   try {
-    const stats = await stat(path);
+    // bigint keeps device and inode numbers above 2^53 exact.
+    const stats = await stat(path, { bigint: true });
     return `${String(stats.dev)}:${String(stats.ino)}`;
   } catch {
     return null;
   }
+}
+
+function pathSpelling(path: string): string {
+  return path.normalize('NFC').toLowerCase();
 }
 
 /**
@@ -502,13 +507,17 @@ async function entriesKeptBeside(
   if ((await fileIdentity(outputPath)) !== identity) {
     return null;
   }
+  // Only a path that differs at most in case can name the same file, so the
+  // append reads no other entry's path, which can be on a slow mount.
+  const spelling = pathSpelling(outputPath);
   const kept: ArtifactEntry[] = [];
   for (const listed of artifacts) {
     const listedPath = listed.metadata.outputPath;
-    if (
-      typeof listedPath !== 'string' ||
-      (await fileIdentity(listedPath)) !== identity
-    ) {
+    const sameFile =
+      typeof listedPath === 'string' &&
+      pathSpelling(listedPath) === spelling &&
+      (await fileIdentity(listedPath)) === identity;
+    if (!sameFile) {
       kept.push(listed);
     }
   }
