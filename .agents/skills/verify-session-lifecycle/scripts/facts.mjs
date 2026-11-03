@@ -1072,8 +1072,9 @@ function fallbackFacts() {
 // cannot read that id, or reads 0, counts as inside. Before it reads
 // the manifest, the check matches AGENT_TTY_SESSION_ID, and the copy does
 // not get that variable. Off Linux the check compares the process group and
-// the controlling terminal. The copy gets DESTROY_RERUN_ENV_KEY and skips the
-// check, so it never starts a copy of its own.
+// the controlling terminal, which matches only when the CLI has one. The
+// copy gets DESTROY_RERUN_ENV_KEY and skips the check, so it never starts a
+// copy of its own.
 function rerunFacts() {
   const destroyFile = 'src/cli/commands/destroy.ts';
   const run = requireDeclaration(destroyFile, 'runDestroyCommand').body;
@@ -1123,7 +1124,11 @@ function rerunFacts() {
     linuxStatements[1] ===
       'return sid === null || manifest.childPid === sid;' &&
     insideStatements.at(-1) ===
-      'return ( manifest.childPid === ownProcessGroupId() || sharesControllingTerminal(manifest.childPid) );';
+      'return ( manifest.childPid === ownProcessGroupId() || sharesControllingTerminal(manifest.childPid) );' &&
+    normalize(
+      requireDeclaration(lifecycle, 'sharesControllingTerminal').body.getText(),
+    ) ===
+      '{ const own = controllingTerminal(process.pid); return own !== null && own === controllingTerminal(pid); }';
   const readsSessionId =
     /stat = readFileSync\('\/proc\/self\/stat', 'utf8'\);[^]*const \{ sid \} = parseProcStat\(stat\)/.test(
       normalize(requireDeclaration(lifecycle, 'ownLinuxSessionId').getText()),
@@ -1249,6 +1254,12 @@ const COVERED = [
   ['src/host/hostRecord.ts', 'readHostRecord'],
   ['src/host/hostRecord.ts', 'pidExists'],
   ['src/host/hostRecord.ts', 'judgeHost'],
+  ['src/host/hostRecord.ts', 'inPidNamespace'],
+  ['src/host/hostRecord.ts', 'readTimeNamespace'],
+  ['src/host/hostRecord.ts', 'inTimeNamespace'],
+  ['src/host/hostRecord.ts', 'readMachineId'],
+  ['src/host/hostRecord.ts', 'inHostPidSpace'],
+  ['src/host/hostRecord.ts', 'sharesHostPids'],
   ['src/host/lifecycle.ts', 'ownLinuxSessionId'],
   ['src/host/lifecycle.ts', 'ownProcessGroupId'],
   ['src/host/lifecycle.ts', 'controllingTerminal'],

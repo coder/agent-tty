@@ -57,6 +57,9 @@ const autogroupFile = vi.hoisted(() => ({
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof Fs>('node:fs');
   const readdirSync = ((path: string, ...rest: unknown[]) => {
+    if (procHooks.listError !== undefined && path === '/proc') {
+      throw procHooks.listError;
+    }
     const pid = /^\/proc\/(\d+)\/task$/.exec(path)?.[1];
     if (procHooks.stat === undefined || (path !== '/proc' && !pid)) {
       return (actual.readdirSync as (...args: unknown[]) => unknown)(
@@ -1202,6 +1205,46 @@ describe('a program group with a token, as a faked /proc shows it', () => {
       stopProgramGroup(group);
 
       expect(kill.mock.calls).toEqual([[-CHILD_PID, 'SIGSTOP']]);
+    },
+  );
+
+  // A chroot or a container without a mounted /proc.
+  it.each([
+    ['ok', true],
+    ['EPERM', true],
+    ['ESRCH', false],
+  ] as const)(
+    'without /proc, takes the probe that ends %s as the answer and gets no kill',
+    (probe, alive) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procHooks.listError = errno('ENOENT');
+      autogroupFile.read = (file) => {
+        if (file.startsWith('/proc/')) {
+          throw errno('ENOENT');
+        }
+        return null;
+      };
+      const kill = probe === 'ok' ? probeEnds(probe) : killFailsWith(probe);
+
+      expect(isProgramGroupAlive(group)).toBe(alive);
+      stopProgramGroup(group);
+      expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+    },
+  );
+
+  // Only a missing /proc shows no member. A /proc that is a file or that
+  // refuses the listing is not a setup that the probe can answer for.
+  it.each(['EACCES', 'ENOTDIR'])(
+    'throws when the /proc listing fails with %s',
+    (code) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procHooks.listError = errno(code);
+      probeEnds('ok');
+
+      expect(() => isProgramGroupAlive(group)).toThrow(code);
+      expect(() => {
+        stopProgramGroup(group);
+      }).toThrow(code);
     },
   );
 

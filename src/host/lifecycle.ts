@@ -194,6 +194,17 @@ export function isProcessAlive(pid: number | null): boolean {
   }
 }
 
+// Any answer but ESRCH, such as EPERM, means that a process has the pid.
+function pidInUse(pid: number): boolean {
+  assertPositiveInteger(pid, 'pid');
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return !hasErrorCode(error, 'ESRCH');
+  }
+}
+
 function killProcessBestEffort(pid: number | null): void {
   if (pid === null) {
     return;
@@ -322,11 +333,12 @@ function controllingTerminal(pid: number): string | null {
     return null;
   }
   const tty = output.trim();
-  // A terminal name such as ttys001 or pts/3 starts with a letter and ends
-  // with a digit. For a process without a terminal ps prints ?? (macOS,
-  // OpenBSD), ? (procps, NetBSD) or - (FreeBSD), and any other value that
-  // names no terminal reads as none too, so two of them never match.
-  return /^[a-z][\w/]*\d$/i.test(tty) ? tty : null;
+  // For a process without a terminal ps prints ?? (macOS, OpenBSD), ?
+  // (procps, NetBSD) or - (FreeBSD), so two of them never match. The console
+  // is the terminal of many unrelated processes. Any other name, such as
+  // ttys001, pts/3 or the BSD pty ttypa, is a terminal. A wrong match costs
+  // one re-run, since the copy skips this check.
+  return ['', '-', '?', '??', 'console'].includes(tty) ? null : tty;
 }
 
 // A terminal is the controlling terminal of at most one session and of
@@ -646,6 +658,11 @@ export async function allocateSession(
     assertNonEmptyString(commandPart, 'command segment');
   }
 
+  // The program never gets the destroy re-run marker, see resolvePtyEnv.
+  const env = Object.fromEntries(
+    Object.entries(config.env).filter(([key]) => key !== DESTROY_RERUN_ENV_KEY),
+  );
+
   const sessionDirectory = sessionDir(home, sessionId);
   await mkdir(sessionDirectory, { recursive: true });
   // Owner-only: this directory holds the event log and all artifacts, so 0o700
@@ -675,7 +692,7 @@ export async function allocateSession(
       ? { idleTimeoutMs: config.idleTimeoutMs }
       : {}),
     ...(config.name !== undefined ? { name: config.name } : {}),
-    ...(Object.keys(config.env).length > 0 ? { env: { ...config.env } } : {}),
+    ...(Object.keys(env).length > 0 ? { env } : {}),
     shell: resolvedShellPath,
     term: config.term,
   });
@@ -787,8 +804,19 @@ async function stopSessionProcesses(
     pollOptions(signal),
   );
   if (!stopped) {
+    // Without /proc nothing proves the program's group or the host. An empty
+    // /proc mount point has no /proc/self. Only a host can end the session
+    // for a plain destroy, and a pid that no process has proves it gone.
+    const hint =
+      process.platform === 'linux' && !existsSync('/proc/self')
+        ? ` This process cannot read /proc, so it cannot prove which processes are the session's. ${
+            host === null || !pidInUse(host.pid)
+              ? 'Run destroy where /proc is mounted.'
+              : 'End the session with a plain destroy, or run destroy --force where /proc is mounted.'
+          }`
+        : '';
     throw makeCliError(ERROR_CODES.HOST_TIMEOUT, {
-      message: `Timed out forcing session "${sessionId}" to exit.`,
+      message: `Timed out forcing session "${sessionId}" to exit.${hint}`,
       details: { sessionId, sessionDirectory },
     });
   }

@@ -7,7 +7,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { resolveDefaultPlaywrightBrowsersPath } from '../../src/renderer/browserPath.js';
 import { resolveProfile } from '../../src/renderer/profiles.js';
-import type { ReplayInput } from '../../src/renderer/types.js';
+import type {
+  RenderProfileConfig,
+  ReplayInput,
+} from '../../src/renderer/types.js';
 import { GhosttyWebBackend } from '../../src/renderer/ghosttyWeb/index.js';
 import { probeUsedFonts } from '../../src/renderer/ghosttyWeb/missingGlyphs.js';
 
@@ -69,6 +72,36 @@ async function readValidPngFile(
   }
 
   return pngBuffer;
+}
+
+async function listedGlyphs(
+  profile: RenderProfileConfig,
+  text: string,
+): Promise<string[]> {
+  const renderer = new GhosttyWebBackend(SESSION_ID, profile);
+  // oxfmt-ignore
+  const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-faces-')));
+  try {
+    await renderer.boot();
+    await renderer.replayTo(
+      createReplayInput([
+        {
+          seq: 0,
+          ts: timestampFor(0),
+          type: 'output',
+          payload: { data: `${text}\r\n` },
+        },
+      ]),
+    );
+    const shot = await renderer.screenshot(join(outputDir, 'faces.png'));
+    if (shot.missingGlyphs === undefined) {
+      throw new Error('the screenshot must run the glyph check');
+    }
+    return shot.missingGlyphs.map((glyph) => glyph.codePoint);
+  } finally {
+    await renderer.dispose();
+    await rm(outputDir, { recursive: true, force: true });
+  }
 }
 
 describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
@@ -462,6 +495,79 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     }
   });
 
+  it('draws the block cursor in a screenshot only when showCursor is true', async () => {
+    const prompt = 'READY> ';
+    await backend.boot();
+    await backend.replayTo(
+      createReplayInput([
+        {
+          seq: 0,
+          ts: timestampFor(0),
+          type: 'output',
+          payload: { data: prompt },
+        },
+      ]),
+    );
+
+    // The program hid the cursor itself (DECTCEM), so no block is painted
+    // whatever the screenshot option says. That makes it the reference for
+    // "no cursor block".
+    const referenceBackend = new GhosttyWebBackend(
+      `${SESSION_ID}-no-cursor`,
+      PROFILE,
+    );
+    // oxfmt-ignore
+    const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-cursor-')));
+
+    try {
+      await referenceBackend.boot();
+      await referenceBackend.replayTo(
+        createReplayInput(
+          [
+            {
+              seq: 0,
+              ts: timestampFor(0),
+              type: 'output',
+              payload: { data: `${prompt}\u001b[?25l` },
+            },
+          ],
+          { sessionId: `${SESSION_ID}-no-cursor` },
+        ),
+      );
+      const noCursor = await referenceBackend.screenshot(
+        join(outputDir, 'no-cursor.png'),
+        { showCursor: true },
+      );
+
+      // Show first: the harness paints the cursor before any screenshot, so
+      // the hide that follows has to erase a block that is already on canvas.
+      const shown = await backend.screenshot(join(outputDir, 'shown.png'), {
+        showCursor: true,
+      });
+      const hidden = await backend.screenshot(join(outputDir, 'hidden.png'), {
+        showCursor: false,
+      });
+      const byDefault = await backend.screenshot(
+        join(outputDir, 'default.png'),
+      );
+      const shownAgain = await backend.screenshot(
+        join(outputDir, 'shown-again.png'),
+        { showCursor: true },
+      );
+
+      expect(shown.cursorVisible).toBe(true);
+      expect(hidden.cursorVisible).toBe(false);
+      expect(byDefault.cursorVisible).toBe(false);
+      expect(hidden.sha256).toBe(noCursor.sha256);
+      expect(byDefault.sha256).toBe(noCursor.sha256);
+      expect(shown.sha256).not.toBe(hidden.sha256);
+      expect(shownAgain.sha256).toBe(shown.sha256);
+    } finally {
+      await referenceBackend.dispose();
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
   it('reports glyphs that no font draws as missingGlyphs, and the check leaves the PNG unchanged', async () => {
     await backend.boot();
     await backend.replayTo(
@@ -561,6 +667,61 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     }
   });
 
+  it('checks a glyph against the face that drew it when one family has two faces', async () => {
+    const [jetBrains, symbols] = PROFILE.fontAssets ?? [];
+    if (jetBrains === undefined || symbols === undefined) {
+      throw new Error('the reference profile must bundle two fonts');
+    }
+    const profile = {
+      ...PROFILE,
+      name: 'two-faces',
+      fontFamily: '"Term", monospace',
+      fontAssets: [
+        { ...jetBrains, family: 'Term', weight: '400' },
+        { ...symbols, family: 'Term', weight: '700' },
+      ],
+    };
+
+    expect(await listedGlyphs(profile, 'x \ue0b0 y')).toEqual(['U+E0B0']);
+  });
+
+  it('finds the drawing face when the profile gives its family another name', async () => {
+    const [jetBrains] = PROFILE.fontAssets ?? [];
+    if (jetBrains === undefined) {
+      throw new Error('the reference profile must bundle JetBrains Mono');
+    }
+    const profile = {
+      ...PROFILE,
+      name: 'aliased-family',
+      fontFamily: '"Term Mono", monospace',
+      fontAssets: [{ ...jetBrains, family: 'Term Mono' }],
+    };
+
+    expect(await listedGlyphs(profile, 'x \u0378 y')).toEqual(['U+0378']);
+  });
+
+  it('lists the part of a cluster that the font drawing it lacks', async () => {
+    expect(await listedGlyphs(PROFILE, 'x \ue0b0\u0301 y')).toEqual(['U+E0B0']);
+  });
+
+  it('counts a bundled font that the stack names after the generic family', async () => {
+    const profile = {
+      ...PROFILE,
+      name: 'symbols-after-generic',
+      fontFamily: '"JetBrains Mono", monospace, "Symbols Nerd Font Mono"',
+    };
+
+    expect(await listedGlyphs(profile, 'x \ue0b0 \u0378 y')).toEqual([
+      'U+0378',
+    ]);
+  });
+
+  it('draws math and legacy-computing symbols with the bundled Noto fonts', async () => {
+    expect(await listedGlyphs(PROFILE, 'x \u29c9 \u{1fb00} \u0378 y')).toEqual([
+      'U+0378',
+    ]);
+  });
+
   it('reports the font of every probe text, right after the probe spans appear', async () => {
     await backend.boot();
     await backend.replayTo(
@@ -577,11 +738,19 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
         ['A', '\ue0b0'],
       );
 
-      expect(fonts.get('A')?.map((font) => font.familyName)).toEqual([
-        'JetBrains Mono',
+      expect(fonts.get('A')).toEqual([
+        {
+          familyName: 'JetBrains Mono',
+          postScriptName: 'JetBrainsMono-Regular',
+          isCustomFont: true,
+        },
       ]);
-      expect(fonts.get('\ue0b0')?.map((font) => font.familyName)).toEqual([
-        'Symbols Nerd Font Mono',
+      expect(fonts.get('\ue0b0')).toEqual([
+        {
+          familyName: 'Symbols Nerd Font Mono',
+          postScriptName: 'SymbolsNFM',
+          isCustomFont: true,
+        },
       ]);
     }
   });

@@ -703,9 +703,17 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
             return;
           }
 
-          if (typeof terminal.requestRender === 'function') {
-            terminal.requestRender();
-          }
+          // ghostty-web paints the cursor into the canvas and then redraws only
+          // the rows that changed. Flipping cursorVisible alone would leave the
+          // old block on the canvas, or never paint a new one, until its row
+          // changes. A full redraw makes the next PNG match the setting.
+          terminal.renderer.render(
+            terminal.wasmTerm,
+            true,
+            terminal.viewportY,
+            terminal,
+            terminal.scrollbarOpacity,
+          );
         },
       };
 

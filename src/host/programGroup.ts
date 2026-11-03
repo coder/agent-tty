@@ -357,8 +357,19 @@ function readProcessRow(pid: number): ProcessRow | null {
 }
 
 function readGroupMembers(pgid: number): ProcessRow[] {
+  let entries: string[];
+  try {
+    entries = readdirSync('/proc');
+  } catch (error) {
+    // A chroot or a container without a mounted /proc shows no member, so
+    // the probe answers alone and nothing proves a kill.
+    if (hasErrorCode(error, 'ENOENT')) {
+      return [];
+    }
+    throw error;
+  }
   const members: ProcessRow[] = [];
-  for (const entry of readdirSync('/proc')) {
+  for (const entry of entries) {
     if (!/^\d+$/.test(entry)) {
       continue;
     }
