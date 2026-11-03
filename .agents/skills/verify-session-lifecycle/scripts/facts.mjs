@@ -895,7 +895,8 @@ function programRecordFacts() {
 // Every group kill goes through stopProgramGroup. It is synchronous, and
 // with a token it kills only right after it read a live member of the group
 // again and found the program's session id, autogroup and boot id on it.
-// No other code calls the raw group kill or builds a group target.
+// No other code calls the raw group kill or builds a group target, and only
+// stopProgramGroup sends the SIGSTOP and SIGCONT of signalProcessGroup.
 function ownershipFacts() {
   const module = 'src/host/programGroup.ts';
   const stop = requireDeclaration(module, 'stopProgramGroup');
@@ -908,14 +909,15 @@ function ownershipFacts() {
       return;
     }
     const st = node.statement.statements.map((s) => normalize(s.getText()));
+    const owned = st.findIndex((s) =>
+      /^if \(judgement\.verdict !== 'owned'\) \{ (return|break); \}$/.test(s),
+    );
     checkedKill =
       st[0] === 'const judgement = judgeLiveGroup(group);' &&
-      /^if \(judgement\.verdict !== 'owned'\) \{ return; \}$/.test(
-        st[1] ?? '',
-      ) &&
-      st[2] === 'const witness = readProcessRow(judgement.witness);' &&
+      owned > 0 &&
+      st[owned + 1] === 'const witness = readProcessRow(judgement.witness);' &&
       /^if \( witness !== null && judgeProgramGroup\(group, group\.bootId, \[witness\]\)\.verdict === 'owned' \) \{ killProcessGroupBestEffort\(group\.pid\); return; \}$/.test(
-        st[3] ?? '',
+        st[owned + 2] ?? '',
       );
   });
   const judge = normalize(
@@ -936,7 +938,10 @@ function ownershipFacts() {
   let stray = false;
   for (const file of listSources('src')) {
     walk(source(file), (node) => {
-      if (isCall(node, 'killProcessGroupBestEffort')) {
+      if (
+        isCall(node, 'killProcessGroupBestEffort') ||
+        isCall(node, 'signalProcessGroup')
+      ) {
         rawKills += 1;
         stray ||= file !== module || ownerPath(node) !== 'stopProgramGroup';
       }
@@ -944,21 +949,54 @@ function ownershipFacts() {
         targets += 1;
         stray ||=
           file !== module ||
-          !['isProcessGroupAlive', 'killProcessGroupBestEffort'].includes(
-            ownerPath(node),
-          );
+          ![
+            'isProcessGroupAlive',
+            'killProcessGroupBestEffort',
+            'signalProcessGroup',
+          ].includes(ownerPath(node));
       }
     });
   }
+  const signalParam = normalize(
+    requireDeclaration(module, 'signalProcessGroup').parameters[1]?.getText() ??
+      '',
+  );
   return {
     ProvesGroupOwnership:
       synchronous &&
       checkedKill &&
       judgesToken &&
       rawKills > 0 &&
-      targets === 2 &&
+      targets === 3 &&
+      signalParam === "signal: 'SIGSTOP' | 'SIGCONT'" &&
       !stray,
+    FreezesUnseenGroup: freezeFacts(stop.body),
   };
+}
+
+// In stopProgramGroup's loop, a judgement of gone before any freeze sends
+// SIGSTOP to the group and judges again, so a member that a scan never shows
+// stops and comes into view. After the loop, a frozen group that got no
+// kill gets SIGCONT.
+function freezeFacts(body) {
+  const loop = body.statements.find(ts.isForStatement);
+  if (loop === undefined || !ts.isBlock(loop.statement)) {
+    return false;
+  }
+  const st = loop.statement.statements.map((s) => normalize(s.getText()));
+  const after = body.statements
+    .slice(body.statements.indexOf(loop) + 1)
+    .map((s) => normalize(s.getText()));
+  const before = body.statements
+    .slice(0, body.statements.indexOf(loop))
+    .map((s) => normalize(s.getText()));
+  return (
+    before.at(-1) === 'let frozen = false;' &&
+    st[1] ===
+      "if (judgement.verdict === 'gone' && !frozen) { frozen = signalProcessGroup(group.pid, 'SIGSTOP'); if (frozen) { continue; } }" &&
+    after.length === 1 &&
+    after[0] === "if (frozen) { signalProcessGroup(group.pid, 'SIGCONT'); }"
+  );
 }
 
 // captureToken reads the program's autogroup between two reads of its stat,
@@ -1247,6 +1285,7 @@ const COVERED = [
   ['src/host/programGroup.ts', 'scanGroup'],
   ['src/host/programGroup.ts', 'isProcessGroupAlive'],
   ['src/host/programGroup.ts', 'killProcessGroupBestEffort'],
+  ['src/host/programGroup.ts', 'signalProcessGroup'],
   ['src/host/programGroup.ts', 'isProgramGroupAlive'],
   ['src/host/programGroup.ts', 'stopProgramGroup'],
   ['src/host/rpcClient.ts', 'toTransportCliError'],

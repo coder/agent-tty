@@ -303,6 +303,7 @@ agent-tty record diff <session-id> <session-id> --at-seq-a 0 --json
 
 `destroy` ends the session's program and every process that the program left in its process group, then records the session as `destroyed`.
 On Linux it also ends those processes when the program has already exited or the session has failed.
+A group whose processes each fork their successor and end too fast for any scan of `/proc` to show one, a fork chain, gets SIGSTOP first. Its stopped processes stay in view, so `destroy` can prove the group and kill it. A frozen group that agent-tty cannot prove is the session's gets SIGCONT.
 `destroy --force` kills the host and the program's group without asking the host first.
 `list`, `inspect`, `destroy` and `gc` reconcile a session whose host died: they kill the program's group and record the session as `failed` (or `exited` or `destroyed`).
 A `destroy` that runs inside the session, such as one typed into the session's shell, runs again outside the session and prints its result once the session has ended.
