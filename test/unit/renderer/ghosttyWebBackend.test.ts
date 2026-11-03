@@ -995,6 +995,33 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     ]);
   });
 
+  it('paces accelerated output on the capped schedule with its own frame hold', async () => {
+    const accelerated: ReplayTimingOptions = {
+      mode: 'accelerated',
+      maxGapMs: 400,
+      minFrameHoldMs: 100,
+      finalFrameHoldMs: 1_000,
+    };
+    const flushes = await replayAndRecordFlushes(
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 150),
+        outputEvent(2, 300),
+        outputEvent(3, 340),
+        outputEvent(4, 2_300),
+        exitEvent(5, 2_500),
+      ],
+      accelerated,
+    );
+
+    expect(flushes).toEqual([
+      { atMs: 100, chunks: ['out0'] },
+      { atMs: 250, chunks: ['out1'] },
+      { atMs: 440, chunks: ['out2', 'out3'] },
+      { atMs: 840, chunks: ['out4'] },
+    ]);
+  });
+
   it('keeps max-speed outputs in one flush so frame holds cannot outlast the export timeout', async () => {
     const flushes = await replayAndRecordFlushes(
       [outputEvent(0, 0), outputEvent(1, 200), outputEvent(2, 400)],
