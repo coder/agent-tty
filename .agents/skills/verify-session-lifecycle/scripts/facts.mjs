@@ -467,7 +467,7 @@ function repairFacts() {
   const reconcile = requireDeclaration(lifecycle, 'reconcileSession').body;
   const marked = indexOfStatement(
     reconcile,
-    /^if \(manifest !== null && isMarkedDestroyed\(sessionDirectory, manifest\)\) \{\s*await writeMarkedDestroyed\(manifestFile, manifest\);\s*return;\s*\}$/,
+    /^if \(manifest !== null && isMarkedDestroyed\(sessionDirectory, manifest\)\) \{\s*if \(await writeMarkedDestroyed\(manifestFile, manifest\)\) \{\s*const socketFile = socketPath\(sessionDirectory\);\s*await unlinkIfPresent\(socketFile\);\s*await removeSocketDirectoryIfEmpty\(socketFile\);\s*\}\s*return;\s*\}$/,
   );
   const markedCheck = normalize(
     requireDeclaration(lifecycle, 'isMarkedDestroyed').body.getText(),
