@@ -495,6 +495,79 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     }
   });
 
+  it('draws the block cursor in a screenshot only when showCursor is true', async () => {
+    const prompt = 'READY> ';
+    await backend.boot();
+    await backend.replayTo(
+      createReplayInput([
+        {
+          seq: 0,
+          ts: timestampFor(0),
+          type: 'output',
+          payload: { data: prompt },
+        },
+      ]),
+    );
+
+    // The program hid the cursor itself (DECTCEM), so no block is painted
+    // whatever the screenshot option says. That makes it the reference for
+    // "no cursor block".
+    const referenceBackend = new GhosttyWebBackend(
+      `${SESSION_ID}-no-cursor`,
+      PROFILE,
+    );
+    // oxfmt-ignore
+    const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-cursor-')));
+
+    try {
+      await referenceBackend.boot();
+      await referenceBackend.replayTo(
+        createReplayInput(
+          [
+            {
+              seq: 0,
+              ts: timestampFor(0),
+              type: 'output',
+              payload: { data: `${prompt}\u001b[?25l` },
+            },
+          ],
+          { sessionId: `${SESSION_ID}-no-cursor` },
+        ),
+      );
+      const noCursor = await referenceBackend.screenshot(
+        join(outputDir, 'no-cursor.png'),
+        { showCursor: true },
+      );
+
+      // Show first: the harness paints the cursor before any screenshot, so
+      // the hide that follows has to erase a block that is already on canvas.
+      const shown = await backend.screenshot(join(outputDir, 'shown.png'), {
+        showCursor: true,
+      });
+      const hidden = await backend.screenshot(join(outputDir, 'hidden.png'), {
+        showCursor: false,
+      });
+      const byDefault = await backend.screenshot(
+        join(outputDir, 'default.png'),
+      );
+      const shownAgain = await backend.screenshot(
+        join(outputDir, 'shown-again.png'),
+        { showCursor: true },
+      );
+
+      expect(shown.cursorVisible).toBe(true);
+      expect(hidden.cursorVisible).toBe(false);
+      expect(byDefault.cursorVisible).toBe(false);
+      expect(hidden.sha256).toBe(noCursor.sha256);
+      expect(byDefault.sha256).toBe(noCursor.sha256);
+      expect(shown.sha256).not.toBe(hidden.sha256);
+      expect(shownAgain.sha256).toBe(shown.sha256);
+    } finally {
+      await referenceBackend.dispose();
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
   it('reports glyphs that no font draws as missingGlyphs, and the check leaves the PNG unchanged', async () => {
     await backend.boot();
     await backend.replayTo(
