@@ -1219,8 +1219,9 @@ export async function runHost(
     });
     // Reply to terminal-capability queries (OSC 10/11, DSR, XTGETTCAP,
     // DECRQSS) in this chunk. This runs after queuing ingestion so the
-    // canonical output path is never gated on the reply. The reply is written to the child as input and is not
-    // appended to the event log, so it is absent from snapshots/recordings;
+    // canonical output path is never gated on the reply. The reply is written
+    // to the child as input and is not appended to the event log, so it is
+    // absent from snapshots/recordings;
     // programs that emit these queries put the terminal in raw mode, so the
     // reply is consumed rather than echoed back into the output stream.
     const queryReply = terminalQueryResponder.consume(data);
