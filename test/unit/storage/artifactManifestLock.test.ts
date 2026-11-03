@@ -283,6 +283,31 @@ describe('artifact manifest lock', () => {
     expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
   });
 
+  it('keeps the break file of a live breaker until it is older than unknownOwnerStaleMs', async () => {
+    const breakPath = `${lockPath}.break`;
+    await writeFile(lockPath, await deadOwnerRecord());
+    await writeFile(breakPath, ownerRecord(process.pid, true));
+
+    await expect(
+      withArtifactManifestLock(sessionDirectory, () => Promise.resolve(), FAST),
+    ).rejects.toMatchObject({ code: ERROR_CODES.STORAGE_WRITE_ERROR });
+    expect(await readFile(breakPath, 'utf8')).toBe(
+      ownerRecord(process.pid, true),
+    );
+
+    const twoMinutesAgo = new Date(Date.now() - 120_000);
+    await utimes(breakPath, twoMinutesAgo, twoMinutesAgo);
+    freezeLockClock();
+    await expect(
+      withArtifactManifestLock(
+        sessionDirectory,
+        () => Promise.resolve('ran'),
+        FAST,
+      ),
+    ).resolves.toBe('ran');
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
+  });
+
   it('writes its temp file again when another writer removed it during the wait', async () => {
     await writeFile(lockPath, ownerRecord(process.pid, true));
     freezeLockClock();

@@ -286,6 +286,17 @@ function isOwnerGone(
     : verdict === 'dead';
 }
 
+// A break file is a lease: it also expires after unknownOwnerStaleMs while
+// its breaker lives, so a stopped breaker cannot block every writer.
+function isStaleBreakFile(
+  state: LockFileState,
+  timing: ManifestLockTiming,
+): boolean {
+  return (
+    isOwnerGone(state, timing) || isOlderThan(state, timing.unknownOwnerStaleMs)
+  );
+}
+
 function isStaleLock(
   lockPath: string,
   state: LockFileState,
@@ -328,7 +339,7 @@ async function breakStaleManifestLock(
   const breakPath = `${lockPath}.break`;
   if (!(await createWithoutReplacing(temporaryPath, breakPath))) {
     const breaker = await readLockFileState(breakPath);
-    if (breaker !== null && isOwnerGone(breaker, timing)) {
+    if (breaker !== null && isStaleBreakFile(breaker, timing)) {
       await removeIfUnchanged(breakPath, breaker.contents);
     }
     return 'held';
@@ -361,7 +372,14 @@ async function removeOldLockFiles(
       continue;
     }
     const state = await readLockFileState(path).catch(() => null);
-    if (state !== null && isOwnerGone(state, timing)) {
+    if (state === null) {
+      continue;
+    }
+    const stale =
+      name === `${lockName}.break`
+        ? isStaleBreakFile(state, timing)
+        : isOwnerGone(state, timing);
+    if (stale) {
       await removeIfUnchanged(path, state.contents).catch(() => undefined);
     }
   }
