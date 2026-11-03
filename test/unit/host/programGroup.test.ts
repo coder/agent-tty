@@ -980,6 +980,59 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     },
   );
 
+  // A fork chain: each member forks its successor and ends between scans.
+  function stopShowsGroup(...states: string[]) {
+    return vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          procShowsTokenGroup(...states);
+        }
+        return true;
+      });
+  }
+
+  it('freezes a group that no scan shows and kills it once a stopped member carries the token', () => {
+    procShowsTokenGroup();
+    const kill = stopShowsGroup('T');
+
+    stopProgramGroup(group);
+
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGKILL'],
+    ]);
+  });
+
+  it('continues a frozen group whose stopped member names another autogroup', () => {
+    procShowsTokenGroup();
+    const kill = stopShowsGroup('T');
+    const tokenRead = autogroupFile.read;
+    autogroupFile.read = (file) =>
+      file === '/proc/100/autogroup'
+        ? '/autogroup-8 nice 0\n'
+        : (tokenRead?.(file) ?? null);
+
+    stopProgramGroup(group);
+
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
+  it.each(['ESRCH', 'EPERM'])(
+    'gets no kill when the SIGSTOP of a group that no scan shows ends %s',
+    (code) => {
+      procShowsTokenGroup();
+      const kill = killFailsWith(code);
+
+      stopProgramGroup(group);
+
+      expect(kill.mock.calls).toEqual([[-CHILD_PID, 'SIGSTOP']]);
+    },
+  );
+
   it('is alive with no member in view when /proc hides other users and the probe ends EPERM', () => {
     procShowsTokenGroup();
     procHooks.mountinfo = procMount('rw,hidepid=2');
