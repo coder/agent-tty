@@ -12,6 +12,7 @@ import {
   type LaunchedHost,
 } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
+import { ensureSocketRoot } from '../../host/socketRoot.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import type { SessionRecord } from '../../protocol/schemas.js';
 import { upsertHome } from '../../storage/homeRegistry.js';
@@ -185,6 +186,10 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
       details: { idleTimeoutMs },
     });
   }
+
+  // The host's stdio goes nowhere, so a socket root that its listen would
+  // refuse is reported here.
+  await ensureSocketRoot();
 
   let sessionId: string | undefined;
   let host: LaunchedHost | undefined;

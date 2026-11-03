@@ -27,7 +27,7 @@ if (removeBefore === 'bind') {
     if (
       !removed &&
       typeof path === 'string' &&
-      path.startsWith('/tmp/agent-tty/')
+      path.startsWith(`/tmp/agent-tty-${String(process.getuid?.())}/`)
     ) {
       removed = true;
       rmdirSync(path);

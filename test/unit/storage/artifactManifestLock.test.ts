@@ -64,6 +64,13 @@ import {
 
 const FAST = { waitMs: 100, unknownOwnerStaleMs: 60_000 };
 
+// The lock reads time only through Date. A frozen Date keeps the wait
+// deadline from passing, so a call that must take the lock cannot lose a race
+// with a slow runner, and only the lock's age or owner can let it in.
+function freezeLockClock(): void {
+  vi.useFakeTimers({ toFake: ['Date'] });
+}
+
 function ownerRecord(pid: number, withProcess: boolean): string {
   return JSON.stringify({
     version: 1,
@@ -112,6 +119,7 @@ describe('artifact manifest lock', () => {
     fsHooks.beforeLink = undefined;
     fsHooks.beforeRm = undefined;
     fsHooks.beforeWriteFile = undefined;
+    vi.useRealTimers();
     await rm(home, { recursive: true, force: true });
   });
 
@@ -188,6 +196,7 @@ describe('artifact manifest lock', () => {
     await writeFile(lockPath, 'not json');
     const inTwoMinutes = new Date(Date.now() + 120_000);
     await utimes(lockPath, inTwoMinutes, inTwoMinutes);
+    freezeLockClock();
 
     await expect(
       withArtifactManifestLock(
@@ -234,6 +243,7 @@ describe('artifact manifest lock', () => {
 
   it('breaks a lock whose owner is gone', async () => {
     await writeFile(lockPath, await deadOwnerRecord());
+    freezeLockClock();
 
     await expect(
       withArtifactManifestLock(
@@ -261,6 +271,7 @@ describe('artifact manifest lock', () => {
 
       const twoMinutesAgo = new Date(Date.now() - 120_000);
       await utimes(lockPath, twoMinutesAgo, twoMinutesAgo);
+      freezeLockClock();
       await expect(
         withArtifactManifestLock(sessionDirectory, update, FAST),
       ).resolves.toBe('ran');
@@ -306,16 +317,31 @@ describe('artifact manifest lock', () => {
 
   it('dates the lock from when it was taken, not from when the wait began', async () => {
     await writeFile(lockPath, ownerRecord(process.pid, true));
+    freezeLockClock();
     const waitStartedAt = Date.now();
-    const pending = withArtifactManifestLock(
-      sessionDirectory,
-      async () => (await stat(lockPath)).mtimeMs,
-      { waitMs: 5_000, unknownOwnerStaleMs: 60_000 },
-    );
-    await sleep(1_200);
-    await rm(lockPath);
+    let attempts = 0;
+    // The first attempt finds the lock held, and the clock moves on. The
+    // owner lets go just before the second attempt links.
+    fsHooks.beforeLink = async (to) => {
+      if (to !== lockPath) {
+        return;
+      }
+      attempts += 1;
+      if (attempts === 1) {
+        vi.setSystemTime(waitStartedAt + 1_200);
+      } else if (attempts === 2) {
+        await rm(lockPath);
+      }
+    };
 
-    expect(await pending).toBeGreaterThanOrEqual(waitStartedAt + 1_000);
+    await expect(
+      withArtifactManifestLock(
+        sessionDirectory,
+        async () => (await stat(lockPath)).mtimeMs,
+        { waitMs: 5_000, unknownOwnerStaleMs: 60_000 },
+      ),
+    ).resolves.toBeGreaterThanOrEqual(waitStartedAt + 1_000);
+    expect(attempts).toBe(2);
   });
 
   it('breaks its own lock on the next update when the release failed', async () => {
@@ -341,6 +367,7 @@ describe('artifact manifest lock', () => {
     ]);
 
     fsHooks.beforeRm = undefined;
+    freezeLockClock();
     await expect(
       withArtifactManifestLock(
         sessionDirectory,
@@ -418,6 +445,7 @@ describe('artifact manifest lock', () => {
 
     const twoMinutesAgo = new Date(Date.now() - 120_000);
     await utimes(lockPath, twoMinutesAgo, twoMinutesAgo);
+    freezeLockClock();
     await expect(
       withArtifactManifestLock(sessionDirectory, update, FAST),
     ).resolves.toBe('ran');

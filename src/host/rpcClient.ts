@@ -19,8 +19,10 @@ import {
   makeAbortError,
   throwIfAborted,
 } from '../util/abort.js';
+import { legacySocketPath } from '../storage/sessionPaths.js';
 import { invariant } from '../util/assert.js';
 import { ResourceScope } from '../util/resourceScope.js';
+import { isOwnLegacySocket, socketRootExists } from './socketRoot.js';
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_RPC_BUFFER_BYTES = 1_048_576;
@@ -97,7 +99,60 @@ function toResponseCliError(code: string, message: string): CliError {
   return new CliError(code, message);
 }
 
+function isMissingSocket(error: unknown): boolean {
+  return (
+    error instanceof CliError &&
+    error.code === ERROR_CODES.HOST_UNREACHABLE &&
+    error.details.errno === 'ENOENT'
+  );
+}
+
 export async function sendRpc(
+  socketPath: string,
+  method: string,
+  params?: Record<string, unknown>,
+  timeoutMs?: number,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  throwIfAborted(signal);
+  // A host that an older version started listens at the old path. Remove
+  // this fallback after one minor release.
+  const oldSocketPath = legacySocketPath(socketPath);
+  if (oldSocketPath === null) {
+    return await sendRpcAt(socketPath, method, params, timeoutMs, signal);
+  }
+  // A missing root, or one that another user holds, has no socket of ours.
+  let rootError: unknown = toTransportCliError(
+    Object.assign(new Error(`connect ENOENT ${socketPath}`), {
+      code: 'ENOENT',
+    }),
+    socketPath,
+    method,
+    timeoutMs ?? DEFAULT_TIMEOUT_MS,
+  );
+  let rootUsable = false;
+  try {
+    rootUsable = await socketRootExists();
+  } catch (error) {
+    rootError = error;
+  }
+  if (rootUsable) {
+    try {
+      return await sendRpcAt(socketPath, method, params, timeoutMs, signal);
+    } catch (error) {
+      if (!isMissingSocket(error)) {
+        throw error;
+      }
+      rootError = error;
+    }
+  }
+  if (!(await isOwnLegacySocket(oldSocketPath))) {
+    throw rootError;
+  }
+  return await sendRpcAt(oldSocketPath, method, params, timeoutMs, signal);
+}
+
+async function sendRpcAt(
   socketPath: string,
   method: string,
   params?: Record<string, unknown>,
