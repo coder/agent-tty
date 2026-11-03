@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { chmod, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
@@ -181,6 +182,7 @@ import { ensureSocketRoot } from '../../../src/host/socketRoot.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
 import {
+  legacySocketPath,
   manifestPath,
   sessionDir,
   socketPath,
@@ -1534,6 +1536,64 @@ describe('removeSocketDirectoryBestEffort', () => {
     );
   });
 });
+
+// A host of an older version listens at the old path under /tmp/agent-tty.
+describe.skipIf(process.platform === 'win32')(
+  'the old socket of a destroyed session',
+  () => {
+    let oldSocketFile = '';
+    let server: Server | undefined;
+
+    beforeEach(async () => {
+      vi.stubEnv('AGENT_TTY_HOME', home);
+      const old = legacySocketPath(socketPath(sessionDir(home, 'session-01')));
+      expect(old).not.toBeNull();
+      oldSocketFile = old as string;
+      await mkdir(dirname(oldSocketFile), { recursive: true, mode: 0o700 });
+      const listening = createServer();
+      server = listening;
+      await new Promise<void>((resolve) => {
+        listening.listen(oldSocketFile, resolve);
+      });
+    });
+
+    afterEach(async () => {
+      await new Promise((resolve) => server?.close(resolve));
+      server = undefined;
+      await rm(dirname(oldSocketFile), { recursive: true, force: true });
+    });
+
+    it('destroy removes it when the host is dead', async () => {
+      await seedSession(makeRecord({ status: 'destroyed', childPid: null }));
+      killProbeReportsDead();
+
+      await expect(destroySession('session-01')).rejects.toMatchObject({
+        code: 'SESSION_ALREADY_DESTROYED',
+      });
+      expect(existsSync(oldSocketFile)).toBe(false);
+    });
+
+    it('destroy keeps it when the host check throws', async () => {
+      await seedSession(makeRecord({ status: 'destroyed', childPid: null }));
+      const failure = Object.assign(new Error('kill EINVAL'), {
+        code: 'EINVAL',
+      });
+      vi.spyOn(process, 'kill').mockImplementation(() => {
+        throw failure;
+      });
+      const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+      await expect(destroySession('session-01')).rejects.toMatchObject({
+        code: 'SESSION_ALREADY_DESTROYED',
+      });
+      expect(existsSync(oldSocketFile)).toBe(true);
+      expect(debug).toHaveBeenCalledWith(
+        expect.stringContaining('could not judge the host'),
+        failure,
+      );
+    });
+  },
+);
 
 describe.skipIf(process.platform === 'win32')(
   'destroy of a destroyed session',
