@@ -1677,6 +1677,15 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         `--import=${pathToFileURL(resolve('test/fixtures/denied-autogroup.ts')).href}`,
       ],
     ],
+    // create skips the SIGTERM while the manifest names no program, and the
+    // host finds the create-failed marker after its start-up write.
+    [
+      'on Windows, where SIGTERM ends the host at once',
+      [
+        `--import=${pathToFileURL(resolve('test/fixtures/denied-autogroup.ts')).href}`,
+        `--import=${pathToFileURL(resolve('test/fixtures/fake-win32-create.ts')).href}`,
+      ],
+    ],
   ])('a create that gives up %s', (_name, preloads) => {
     let pgid = 0;
 
