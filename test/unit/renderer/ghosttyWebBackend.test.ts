@@ -874,6 +874,7 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
   async function replayAndRecordFlushes(
     events: ReplayInput['events'],
     timing: ReplayTimingOptions,
+    flushCostMs = 0,
   ): Promise<{ atMs: number; chunks: string[] }[]> {
     vi.useFakeTimers();
     const backend = createBackend();
@@ -889,7 +890,9 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
       },
       flushOutputBatch: (_page: object, dataChunks: string[]) => {
         flushes.push({ atMs: Date.now(), chunks: [...dataChunks] });
-        return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          setTimeout(resolve, flushCostMs);
+        });
       },
       readHarnessSnapshot: () =>
         Promise.resolve(
@@ -952,6 +955,20 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     expect(flushes).toEqual([
       { atMs: FIRST_EVENT_AT_MS + 10, chunks: ['out0', 'out1', 'out2'] },
     ]);
+  });
+
+  it('keeps the recorded pace when each flush costs more than a frame hold', async () => {
+    const events = Array.from({ length: 101 }, (_, index) =>
+      outputEvent(index, index * 10),
+    );
+    events.push(exitEvent(101, 1_000));
+    const flushes = await replayAndRecordFlushes(events, RECORDED, 30);
+
+    expect(flushes.length).toBeGreaterThanOrEqual(10);
+    expect(flushes.at(-1)?.atMs).toBeLessThanOrEqual(FIRST_EVENT_AT_MS + 1_060);
+    expect(flushes.flatMap((flush) => flush.chunks)).toEqual(
+      events.slice(0, 101).map((event) => `out${String(event.seq)}`),
+    );
   });
 
   it('keeps max-speed outputs in one flush so frame holds cannot outlast the export timeout', async () => {
