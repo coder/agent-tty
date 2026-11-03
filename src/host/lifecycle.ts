@@ -325,7 +325,7 @@ function controllingTerminal(pid: number): string | null {
   // For a process without a terminal ps prints ?? (macOS, OpenBSD), ?
   // (procps, NetBSD) or - (FreeBSD), so two of them never match. The console
   // is the terminal of many unrelated processes. Any other name, such as
-  // ttys001, pts/3 or the BSD pty ttypa, is a terminal: a wrong match costs
+  // ttys001, pts/3 or the BSD pty ttypa, is a terminal. A wrong match costs
   // one re-run, since the copy skips this check.
   return ['', '-', '?', '??', 'console'].includes(tty) ? null : tty;
 }
