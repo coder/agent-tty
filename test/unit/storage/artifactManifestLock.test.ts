@@ -380,6 +380,40 @@ describe('artifact manifest lock', () => {
     expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
   });
 
+  it("lets 30 writers through a dead owner's lock when the artifacts folder holds 20000 files", async () => {
+    const artifacts = join(sessionDirectory, 'artifacts');
+    for (let start = 0; start < 20_000; start += 200) {
+      await Promise.all(
+        Array.from({ length: 200 }, (_, index) =>
+          writeFile(join(artifacts, `f${String(start + index)}.png`), ''),
+        ),
+      );
+    }
+    await writeFile(lockPath, await deadOwnerRecord());
+    let inside = 0;
+    let maxInside = 0;
+    const update = async (): Promise<void> => {
+      inside += 1;
+      maxInside = Math.max(maxInside, inside);
+      await sleep(1);
+      inside -= 1;
+    };
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 30 }, () =>
+        withArtifactManifestLock(sessionDirectory, update, {
+          waitMs: 10_000,
+          unknownOwnerStaleMs: 60_000,
+        }),
+      ),
+    );
+
+    expect(results.filter((result) => result.status === 'rejected')).toEqual(
+      [],
+    );
+    expect(maxInside).toBe(1);
+  }, 60_000);
+
   it("removes a dead breaker's fresh break file once it had to wait for a live lock", async () => {
     await writeFile(lockPath, ownerRecord(process.pid, true));
     await writeFile(`${lockPath}.break`, await deadOwnerRecord());
