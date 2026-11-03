@@ -135,6 +135,7 @@ import type * as TimersPromises from 'node:timers/promises';
 import {
   allocateSession,
   destroySession,
+  listSessions,
   cliRunsInsideProgramSession,
   reconcileSession,
   removeSocketDirectoryBestEffort,
@@ -394,6 +395,25 @@ describe('reconcileSession', () => {
     expect(await readManifest(manifestPath(directory))).toMatchObject({
       status: 'destroyed',
       exitCode: 3,
+    });
+  });
+
+  it('list shows destroyed for a failed session next to the destroy marker', async () => {
+    const directory = await seedSession(
+      makeRecord({
+        status: 'failed',
+        failureOrigin: 'host-death',
+        hostPid: null,
+        childPid: null,
+      }),
+    );
+    writeFileSync(join(directory, 'destroyed'), '');
+
+    const [summary] = await listSessions(home, true);
+
+    expect(summary).toMatchObject({
+      sessionId: 'session-01',
+      status: 'destroyed',
     });
   });
 
