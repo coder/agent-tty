@@ -62,13 +62,13 @@ From the repo root:
 .agents/skills/verify-session-lifecycle/scripts/check.sh
 ```
 
-It needs `node`, Java 11 or newer (`java -version`), and the network once: the first run downloads `tla2tools.jar` 1.7.4 into this skill's `.cache/` folder (git ignores it) and checks its sha256. On this repo it takes about eleven minutes with the default `CHECK_JOBS` of 4. Seven runs explore the whole model, so `CHECK_JOBS=66` starts every run at once and takes about as long as the longest run. `JAVA=/path/to/java` picks another Java. `TLA2TOOLS_JAR=/path/to/tla2tools.jar` uses a jar you already have, which must be the same 1.7.4 build. `CHECK_OUT=<folder>` keeps the results in that folder (default: a new temp folder, printed at the end).
+It needs `node`, Java 11 or newer (`java -version`), and the network once: the first run downloads `tla2tools.jar` 1.7.4 into this skill's `.cache/` folder (git ignores it) and checks its sha256. On this repo it takes about eleven minutes with the default `CHECK_JOBS` of 4. Seven runs explore the whole model, so `CHECK_JOBS=68` starts every run at once and takes about as long as the longest run. `JAVA=/path/to/java` picks another Java. `TLA2TOOLS_JAR=/path/to/tla2tools.jar` uses a jar you already have, which must be the same 1.7.4 build. `CHECK_OUT=<folder>` keeps the results in that folder (default: a new temp folder, printed at the end).
 
 What it does:
 
-1. `scripts/facts.mjs` reads the code with the TypeScript compiler. It finds the twenty-nine guards that the rules depend on and the status sets of the policy table, and it hashes each covered function with comments and layout removed.
+1. `scripts/facts.mjs` reads the code with the TypeScript compiler. It finds the thirty guards that the rules depend on and the status sets of the policy table, and it hashes each covered function with comments and layout removed.
 2. It writes one TLC config per run, with those facts as constants. A guard that is not in the code, in the expected place and order, reads FALSE, and the model then runs without it.
-3. It runs TLC 66 times and prints one line per run.
+3. It runs TLC 68 times and prints one line per run.
 4. It compares the hashes and call sites with `coverage.json`.
 
 Exit codes: 0 means every run gave the expected result and the covered code matches the sync record. 1 means at least one run gave an unexpected result; the line says `UNEXPECTED`. 3 means every result was as expected, but covered code changed since the sync commit; that is not a pass, so follow "When you change covered code on purpose". 2 means a tool could not run. When both 1 and 3 apply, the exit code is 1.
