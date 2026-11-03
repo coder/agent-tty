@@ -417,6 +417,7 @@ Every command exits with a stable code, so scripts can branch without parsing ou
 | `12`      | A requested runtime capability is unavailable (`CAPABILITY_UNAVAILABLE`).                                                   |
 | `130`     | Interrupted by SIGINT: a `batch` that flushed its partial result, or a `destroy` whose copy in a new session SIGINT ended.  |
 | `143`     | Ended by SIGTERM: a `batch` that flushed its partial result, or a `destroy` whose copy in a new session SIGTERM ended.      |
+| `128+n`   | Ended by signal `n`: a `destroy` whose copy in a new session that signal ended, such as `129` (SIGHUP) or `137` (SIGKILL).  |
 
 A fail-fast `batch` exits with the failed step's code (for example `11` for a wait timeout); `--keep-going` exits `1` if any step failed.
 
