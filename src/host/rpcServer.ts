@@ -145,6 +145,9 @@ function buildCliErrorResponse(id: string, error: CliError): RpcResponse {
     error: {
       code: error.code,
       message: error.message,
+      ...(Object.keys(error.details).length === 0
+        ? {}
+        : { details: error.details }),
     },
   } as const;
   const responseResult = RpcResponseSchema.safeParse(response);
