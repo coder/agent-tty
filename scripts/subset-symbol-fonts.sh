@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The subsets drop every Emoji_Presentation code point, so a host color emoji
+# The subsets drop every Emoji code point, so a host color emoji
 # font keeps drawing emoji.
 set -euo pipefail
 
@@ -9,8 +9,8 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 fonts=(
-  "NotoSansSymbols2-Regular https://raw.githubusercontent.com/notofonts/notofonts.github.io/c16b117609abbe4e60b3f2bd4433bdb3d0accb2e/fonts/NotoSansSymbols2/unhinted/ttf/NotoSansSymbols2-Regular.ttf c4a0a80f0041ce4be81e2478faad22776d23edb98ae3f0d19bd37044820ecf9d 4a0c4504d6af3990b551b213772367ce97e0099c70175cdf6331047e54bafd88"
-  "NotoSansMath-Regular https://raw.githubusercontent.com/notofonts/notofonts.github.io/55773c3eb233b5a0eaa07de6226da189b136b4f0/fonts/NotoSansMath/unhinted/ttf/NotoSansMath-Regular.ttf b127e84699212b6b2ef50aff58e0ebebeec04ffe6db1b9eb9e209c8c3d97b4aa 1dce18ab72e9e531adfdbc7f870570e733e947d369094efc646fda3605e44e51"
+  "NotoSansSymbols2-Regular https://raw.githubusercontent.com/notofonts/notofonts.github.io/c16b117609abbe4e60b3f2bd4433bdb3d0accb2e/fonts/NotoSansSymbols2/unhinted/ttf/NotoSansSymbols2-Regular.ttf c4a0a80f0041ce4be81e2478faad22776d23edb98ae3f0d19bd37044820ecf9d 53ee6e9ef5711f259c9c158cb9b782e33187ddf8c7dc0e82af110b9eccbd3639"
+  "NotoSansMath-Regular https://raw.githubusercontent.com/notofonts/notofonts.github.io/55773c3eb233b5a0eaa07de6226da189b136b4f0/fonts/NotoSansMath/unhinted/ttf/NotoSansMath-Regular.ttf b127e84699212b6b2ef50aff58e0ebebeec04ffe6db1b9eb9e209c8c3d97b4aa 43e928d2a9247c668caaf4ec26ad9d0a931a7733c42e9e75c136540e66017a44"
 )
 
 for entry in "${fonts[@]}"; do
@@ -25,7 +25,7 @@ for entry in "${fonts[@]}"; do
     import { readFontFile } from './src/renderer/fontCoverage.ts';
     const { coverage } = readFontFile(readFileSync(process.argv[1]));
     const keep = [...coverage]
-      .filter((codePoint) => !/^\p{Emoji_Presentation}$/u.test(String.fromCodePoint(codePoint)))
+      .filter((codePoint) => !/^\p{Emoji}$/u.test(String.fromCodePoint(codePoint)))
       .sort((left, right) => left - right);
     process.stdout.write(keep.map((codePoint) => 'U+' + codePoint.toString(16).toUpperCase()).join(','));
   " "$ttf") >"$keep"
