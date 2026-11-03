@@ -147,9 +147,7 @@
       "src/host/lifecycle.ts#destroySession",
       "src/host/lifecycle.ts#listSessions"
     ],
-    "writeProgramRecord": [
-      "src/host/hostMain.ts#runHost"
-    ],
+    "writeProgramRecord": ["src/host/hostMain.ts#runHost"],
     "stopProgramGroup": [
       "src/host/hostMain.ts#runHost>handlePtyExit",
       "src/host/hostMain.ts#runHost>handlePtyExit",
