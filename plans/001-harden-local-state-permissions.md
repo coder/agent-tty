@@ -318,4 +318,6 @@ Stop and report back (do not improvise) if:
 - Deferred out of this plan: hardening the _parent_ `/tmp/agent-tty/` root mode
   (left at default; per-Home `0o700` already prevents traversal into a Home's
   sockets) and any audit-logging of rejected connections. Not needed for the
-  boundary this plan establishes.
+  boundary this plan establishes. The root hardening landed in #252: the root
+  is now `/tmp/agent-tty-<uid>/`, created `0o700` and checked for its owner,
+  its mode and a symlink.
