@@ -1,8 +1,13 @@
 import type { Page } from 'playwright';
 import { describe, expect, it, vi } from 'vitest';
 
+import {
+  BUNDLED_PRIMARY_FONT_ASSET,
+  BUNDLED_SYMBOLS_FONT_ASSET,
+} from '../../../src/renderer/bundledFont.js';
 import { profileFontCoverage } from '../../../src/renderer/fontCoverage.js';
 import {
+  GlyphCheck,
   MAX_MISSING_GLYPH_CELLS,
   buildMissingGlyphs,
   findGlyphCandidates,
@@ -11,6 +16,7 @@ import {
   type UsedFont,
 } from '../../../src/renderer/ghosttyWeb/missingGlyphs.js';
 import { resolveProfile } from '../../../src/renderer/profiles.js';
+import type { RenderProfileConfig } from '../../../src/renderer/types.js';
 
 const PROFILE = resolveProfile('reference-dark');
 const referenceCoverage = profileFontCoverage(PROFILE);
@@ -21,9 +27,126 @@ const coverage = referenceCoverage;
 
 const JETBRAINS: UsedFont = {
   familyName: 'JetBrains Mono',
+  postScriptName: 'JetBrainsMono-Regular',
   isCustomFont: true,
 };
-const HOST: UsedFont = { familyName: 'DejaVu Sans', isCustomFont: false };
+const HOST: UsedFont = {
+  familyName: 'DejaVu Sans',
+  postScriptName: 'DejaVuSans',
+  isCustomFont: false,
+};
+
+function bundledFace(
+  asset: typeof BUNDLED_PRIMARY_FONT_ASSET,
+  family: string,
+  weight = '400',
+) {
+  return {
+    family,
+    assetIdentity: asset.assetIdentity,
+    route: asset.route,
+    weight,
+    style: 'normal' as const,
+  };
+}
+
+// A page whose CDP reports, for each probe span, the fonts listed for its text.
+function fakePage(fonts: Record<string, readonly UsedFont[]>): {
+  page: Page;
+  probed: string[];
+} {
+  const fontsByText = new Map(Object.entries(fonts));
+  const probed: string[] = [];
+  let spans: string[] = [];
+  const send = vi.fn((method: string, params?: { nodeId?: number }) => {
+    if (method === 'DOM.getDocument') {
+      return Promise.resolve({ root: { nodeId: 1 } });
+    }
+    if (method === 'DOM.querySelectorAll') {
+      return Promise.resolve({ nodeIds: spans.map((_, index) => index + 2) });
+    }
+    if (method === 'CSS.getPlatformFontsForNode') {
+      const text = spans[(params?.nodeId ?? 0) - 2] ?? '';
+      const used = fontsByText.get(text);
+      if (used === undefined) {
+        return Promise.reject(new Error(`no fake fonts for ${text}`));
+      }
+      return Promise.resolve({
+        fonts: used.map((font) => ({ ...font, glyphCount: 1 })),
+      });
+    }
+    return Promise.resolve({});
+  });
+  const page = {
+    evaluate: vi.fn((_script: unknown, arg: unknown) => {
+      if (typeof arg === 'object' && arg !== null && 'probeTexts' in arg) {
+        spans = [...(arg as { probeTexts: string[] }).probeTexts];
+        probed.push(...spans);
+      }
+      return Promise.resolve(0);
+    }),
+    context: () => ({
+      newCDPSession: () =>
+        Promise.resolve({ send, detach: () => Promise.resolve() }),
+    }),
+  } as unknown as Page;
+  return { page, probed };
+}
+
+function check(profile: RenderProfileConfig = PROFILE): GlyphCheck {
+  const glyphCheck = GlyphCheck.forProfile(profile);
+  if (glyphCheck === null) {
+    throw new Error('the profile must start with a bundled font');
+  }
+  return glyphCheck;
+}
+
+describe('GlyphCheck', () => {
+  it('checks a probe against the face that drew it, not every face of its family', async () => {
+    const { page } = fakePage({ '\ue0b0': [JETBRAINS] });
+    const profile = {
+      ...PROFILE,
+      fontFamily: '"Term", monospace',
+      fontAssets: [
+        bundledFace(BUNDLED_PRIMARY_FONT_ASSET, 'Term', '400'),
+        bundledFace(BUNDLED_SYMBOLS_FONT_ASSET, 'Term', '700'),
+      ],
+    };
+
+    await expect(check(profile).screen(page, [['\ue0b0']])).resolves.toEqual({
+      missingGlyphs: [{ codePoint: 'U+E0B0', cells: [{ row: 0, col: 0 }] }],
+    });
+  });
+
+  it('finds the drawing face by its PostScript name when the profile aliases its family', async () => {
+    const { page } = fakePage({ '\u0378': [JETBRAINS] });
+    const profile = {
+      ...PROFILE,
+      fontFamily: '"Term Mono", monospace',
+      fontAssets: [bundledFace(BUNDLED_PRIMARY_FONT_ASSET, 'Term Mono')],
+    };
+
+    await expect(check(profile).screen(page, [['\u0378']])).resolves.toEqual({
+      missingGlyphs: [{ codePoint: 'U+0378', cells: [{ row: 0, col: 0 }] }],
+    });
+  });
+
+  it('checks a cluster that the bundled fonts cover only between them', async () => {
+    const { page } = fakePage({ '\ue0b0\u0301': [JETBRAINS] });
+
+    await expect(check().screen(page, [['\ue0b0\u0301']])).resolves.toEqual({
+      missingGlyphs: [{ codePoint: 'U+E0B0', cells: [{ row: 0, col: 0 }] }],
+    });
+  });
+
+  it('never lists a glyph that one bundled font has whole', async () => {
+    const { page } = fakePage({ '\ue0b0': [JETBRAINS] });
+
+    await expect(check().screen(page, [['\ue0b0']])).resolves.toEqual({
+      missingGlyphs: [],
+    });
+  });
+});
 
 describe('profileFontCoverage', () => {
   it('covers the bundled fonts of the reference profile', () => {
@@ -170,7 +293,13 @@ describe('buildMissingGlyphs', () => {
     expect(
       report([['\u29c9', '\u2502', '\u0378'], ['\u0378']], {
         '\u29c9': [JETBRAINS],
-        '\u2502': [{ familyName: 'DejaVu Sans Mono', isCustomFont: false }],
+        '\u2502': [
+          {
+            familyName: 'DejaVu Sans Mono',
+            postScriptName: 'DejaVuSansMono',
+            isCustomFont: false,
+          },
+        ],
         '\u0378': [JETBRAINS],
       }),
     ).toEqual({
@@ -264,7 +393,7 @@ describe('probeUsedFonts', () => {
       if (method === 'CSS.getPlatformFontsForNode') {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
         return {
-          fonts: [{ ...JETBRAINS, postScriptName: 'x', glyphCount: 1 }],
+          fonts: [{ ...JETBRAINS, glyphCount: 1 }],
         };
       }
       return {};

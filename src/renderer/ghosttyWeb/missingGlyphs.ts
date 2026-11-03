@@ -2,6 +2,7 @@ import type { Page } from 'playwright';
 
 import type { MissingGlyph } from '../../protocol/schemas.js';
 import type { ProfileFontCoverage } from '../fontCoverage.js';
+import type { RenderProfileConfig, ScreenshotResult } from '../types.js';
 
 import { invariant } from '../../util/assert.js';
 
@@ -155,7 +156,29 @@ export function glyphProbeTexts(
 
 export interface UsedFont {
   familyName: string;
+  postScriptName: string;
   isCustomFont: boolean;
+}
+
+export type ScreenGlyphFields = Pick<
+  ScreenshotResult,
+  'missingGlyphs' | 'missingGlyphsTruncated'
+>;
+
+export class GlyphCheck {
+  public static forProfile(profile: RenderProfileConfig): GlyphCheck | null {
+    void profile;
+    throw new Error('not implemented');
+  }
+
+  public screen(
+    page: Page,
+    grid: readonly (readonly string[])[],
+  ): Promise<ScreenGlyphFields> {
+    void page;
+    void grid;
+    throw new Error('not implemented');
+  }
 }
 
 export interface MissingGlyphReport {
@@ -326,8 +349,9 @@ export async function probeUsedFonts(
         invariant(text !== undefined, 'glyph probe text must exist');
         probed.set(
           text,
-          fonts.map(({ familyName, isCustomFont }) => ({
+          fonts.map(({ familyName, postScriptName, isCustomFont }) => ({
             familyName,
+            postScriptName,
             isCustomFont,
           })),
         );

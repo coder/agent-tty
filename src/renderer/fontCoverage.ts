@@ -183,6 +183,25 @@ export function readFontCoverage(bytes: Buffer): ReadonlySet<number> {
   return codePoints;
 }
 
+export interface FontFile {
+  postScriptName: string;
+  coverage: ReadonlySet<number>;
+}
+
+export function readFontFile(bytes: Buffer): FontFile {
+  void bytes;
+  throw new Error('not implemented');
+}
+
+export type BundledFace = FontFile;
+export type FamilyFaces = readonly [BundledFace, ...BundledFace[]];
+export type StackFaces = readonly [FamilyFaces, ...FamilyFaces[]];
+
+export function profileFaces(profile: RenderProfileConfig): StackFaces | null {
+  void profile;
+  throw new Error('not implemented');
+}
+
 const coverageByIdentity = new Map<string, ReadonlySet<number>>();
 
 function bundledAssetCoverage(assetIdentity: string): ReadonlySet<number> {
