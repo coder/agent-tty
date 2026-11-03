@@ -16,7 +16,7 @@ A user captures what a session showed: a semantic snapshot of the screen, a rend
 ## How to get to it (user POV)
 
 - `agent-tty snapshot <id>`, with `--format text|structured`, `--include-scrollback`, `--include-cells`.
-- `agent-tty screenshot <id>`, with `--profile reference-dark|reference-light`, `--show-cursor`, `--hide-cursor`. The PNG has no cursor block unless you pass `--show-cursor`, and `cursorVisible` in the result says which one you got.
+- `agent-tty screenshot <id>`, with `--profile reference-dark|reference-light`, `--show-cursor`, `--hide-cursor`. The PNG has no cursor block unless you pass `--show-cursor`. `cursorVisible` in the result reports the flag's choice, not the PNG: when the program hid its cursor itself (`ESC[?25l`), `--show-cursor` reports `true` and the PNG still has no block.
 - `agent-tty record export <id> --format asciicast|webm`, with `--out <path>`, `--profile`, `--timing recorded|accelerated|max-speed`.
 - `agent-tty record diff <id-a> <id-b>`, with `--at-seq-a`, `--at-seq-b`.
 
