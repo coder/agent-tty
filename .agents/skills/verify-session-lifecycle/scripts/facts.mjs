@@ -604,7 +604,17 @@ function destroyFacts() {
 // The statements of destroySession's local stopLeftoversThenRecordDestroyed:
 // with DestroyStopsLeftovers it stops the group that program.json proves,
 // waits for it, and only then records destroyed. readProvenProgramGroup
-// returns the record whenever it has a token.
+// returns the record whenever it has a token, or the unshared group when
+// this process cannot prove that it shares the host's pid space. A session
+// that a process which saw the group recorded destroyed gets no wait for an
+// unshared group (trustsDestroyed).
+const UNSHARED_RETURN =
+  'return (await sharesHostPids(sessionDirectory)) ? record : UNSHARED_GROUP;';
+const STOP_UNLESS_TRUSTED =
+  "await stopSessionProcesses( sessionId, null, terminal.status === 'destroyed' && group !== null && 'unshared' in group ? null : group, sessionDirectory, signal, );";
+const STOP_ALWAYS =
+  'await stopSessionProcesses( sessionId, null, group, sessionDirectory, signal, );';
+
 function stopLeftoversThenRecordDestroyed(destroy) {
   let found = [];
   walk(destroy.body, (node) => {
@@ -627,14 +637,16 @@ function stopLeftoversThenRecordDestroyed(destroy) {
         found.at(-1),
       ),
     stops:
-      found.length === 2 &&
+      found.length === 3 &&
       found[0] ===
-        'await stopSessionProcesses( sessionId, null, await readProvenProgramGroup(sessionDirectory), sessionDirectory, signal, );' &&
+        'const group = await readProvenProgramGroup(sessionDirectory);' &&
+      [STOP_UNLESS_TRUSTED, STOP_ALWAYS].includes(found[1]) &&
       bodyIs(
         'readProvenProgramGroup',
-        "const record = await readProgramRecord(sessionDirectory); return typeof record === 'object' && hasToken(record) ? record : null;",
+        `const record = await readProgramRecord(sessionDirectory); if (typeof record !== 'object' || !hasToken(record)) { return null; } ${UNSHARED_RETURN}`,
       ) &&
       bodyIs('hasToken', 'return record.bootId !== null;'),
+    trustsDestroyed: found[1] === STOP_UNLESS_TRUSTED,
   };
 }
 
@@ -1062,6 +1074,40 @@ function fallbackFacts() {
         "if ('childPid' in group) { return ( existsSync(group.sessionDirectory) && isProcessGroupAlive(group.childPid) ); }" &&
       normalize(read.at(-1)?.getText() ?? '') ===
         'return { childPid, sessionDirectory };',
+  };
+}
+
+// A group with a token that this process cannot prove it shares the host's
+// pid space with (sharesHostPids reads false: no /proc, an empty /proc,
+// another pid namespace or another machine) is the unshared group:
+// readProgramGroup and readProvenProgramGroup return it, it reads alive and
+// it gets no kill. destroy trusts a destroyed record of such a session.
+function unsharedFacts() {
+  const module = 'src/host/programGroup.ts';
+  const statement = (name, index) =>
+    normalize(
+      requireDeclaration(module, name).body.statements[index]?.getText() ?? '',
+    );
+  const shares = normalize(
+    requireDeclaration(
+      'src/host/hostRecord.ts',
+      'sharesHostPids',
+    ).body.getText(),
+  );
+  return {
+    UnsharedGroupReadsUnknown:
+      statement('readProgramGroup', 1) ===
+        `if (typeof record === 'object' && hasToken(record)) { ${UNSHARED_RETURN} }` &&
+      statement('readProvenProgramGroup', 2) === UNSHARED_RETURN &&
+      statement('isProgramGroupAlive', 2) ===
+        "if ('unshared' in group) { return true; }" &&
+      statement('stopProgramGroup', 2) ===
+        "if ('unshared' in group) { return; }" &&
+      shares ===
+        "{ if (process.platform !== 'linux') { return true; } const record = await readHostRecord(sessionDirectory); return record === null || inHostPidSpace(record); }" &&
+      stopLeftoversThenRecordDestroyed(
+        requireDeclaration('src/host/lifecycle.ts', 'destroySession'),
+      ).trustsDestroyed,
   };
 }
 
@@ -1549,6 +1595,7 @@ const constants = {
   ...programRecordFacts(),
   ...ownershipFacts(),
   ...fallbackFacts(),
+  ...unsharedFacts(),
   ...tokenFacts(),
   ...rerunFacts(),
   ...policyFacts(),

@@ -106,16 +106,27 @@ CONSTANTS
     FreezesUnseenGroup,     \* programGroup.ts: stopProgramGroup sends
                             \*   SIGSTOP to a group that no scan shows and
                             \*   judges it again
+    UnsharedGroupReadsUnknown, \* programGroup.ts, lifecycle.ts: a group with
+                            \*   a token that the caller cannot prove it
+                            \*   shares the host's pid space with reads
+                            \*   alive and gets no kill, and destroy trusts
+                            \*   a destroyed record of such a session
     Token,                  \* the environment: the host's capture finds the
                             \*   program's session token
     Unseen,                 \* the environment: no scan of /proc shows a
                             \*   live process of the program, as for a fork
                             \*   chain whose processes each live about 2 ms
+    OtherPidSpace,          \* the environment: destroy, list and gc run
+                            \*   where no scan and no probe shows the host's
+                            \*   processes (no /proc, an empty /proc,
+                            \*   another pid namespace or another machine),
+                            \*   and host.json names the host's pid space
     MaxListReconciles       \* how many times the "list" process reconciles
 
 ASSUME MaxListReconciles \in 1..3
 ASSUME Token \in BOOLEAN
 ASSUME Unseen \in BOOLEAN
+ASSUME OtherPidSpace \in BOOLEAN
 ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  ReconcileSkipsLiveHost, CreateRecordsHostPid,
                  HostWaitsForManifest, ReconcileRereads,
@@ -130,7 +141,7 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  FallbackNeedsFolder, CreateStopsOnGiveUp,
                  ReconcileRepairsDestroyed, TokenNamesProgram,
                  ReusedIdReadsGone, ProvesHostPid,
-                 FreezesUnseenGroup} : b \in BOOLEAN
+                 FreezesUnseenGroup, UnsharedGroupReadsUnknown} : b \in BOOLEAN
 
 Readers == {"gc", "list"}   \* the two processes that run reconcileSession
 \* The group that a kill went through, and that the wait after it probes:
@@ -361,6 +372,21 @@ GroupSeen(kind) ==
        \/ kind = "proven" /\ ~ReusedIdReadsGone /\ reused
        \/ kind = "bare" /\ ProbeSees
        \/ kind = "numeric" /\ FallbackReaches /\ ProbeSees
+
+\* The group as destroy and reconcile see it. With OtherPidSpace no scan and
+\* no probe of theirs shows the program's processes: a group with a token
+\* reads gone, and gets no kill, because no member is in view.
+\* readProgramGroup gives no group without a token there, because
+\* sharesHostPids reads host.json. With UnsharedGroupReadsUnknown,
+\* readProgramGroup and readProvenProgramGroup give a group with a token
+\* that reads alive instead, so their waits time out. The host always runs
+\* in its own pid space, so it keeps GroupSeen and HostKill. OtherPidSpace
+\* leaves the CLI's view of the host as it is (see Scope).
+CliGroupSeen(kind) ==
+    IF OtherPidSpace
+    THEN kind = "proven" /\ UnsharedGroupReadsUnknown
+    ELSE GroupSeen(kind)
+CliKillThrough(named) == IF OtherPidSpace THEN NoKill ELSE KillThrough(named)
 
 \* The host fails to start because its files are missing or were rewritten.
 HostFailsToStart ==
@@ -814,7 +840,7 @@ ReconcileChecksHost(p) ==
                 ELSE AfterGroupKill]
     /\ IF SkipsHost(rd[p]) \/ ReconcileRereads
           THEN NoKill /\ UNCHANGED rd
-          ELSE /\ KillThrough(rd[p].child)
+          ELSE /\ CliKillThrough(rd[p].child)
                /\ rd' = [rd EXCEPT ![p].grp = KindThrough(rd[p].child)]
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, hex, rsz,
                    foreign, shutVars, gres, lruns, destroyVars, rec, reused,
@@ -841,7 +867,7 @@ ReconcileRereadsManifest(p) ==
 \* current.childPid)` reads program.json, then stopProgramGroup(group).
 ReconcileReadsRecord(p) ==
     /\ pc[p] = "r_record"
-    /\ KillThrough(rd[p].child)
+    /\ CliKillThrough(rd[p].child)
     /\ rd' = [rd EXCEPT ![p].grp = KindThrough(rd[p].child)]
     /\ pc' = [pc EXCEPT ![p] = AfterGroupKill]
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, hex, rsz,
@@ -863,7 +889,7 @@ ReconcileReadsRecord(p) ==
 \* with ReconcileRepairsDestroyed, ReconcileRepairs then restores destroyed.
 ReconcilePollsGroup(p) ==
     /\ pc[p] = "r_wait"
-    /\ pc' = [pc EXCEPT ![p] = IF GroupSeen(rd[p].grp)
+    /\ pc' = [pc EXCEPT ![p] = IF CliGroupSeen(rd[p].grp)
                                THEN AfterReconcile(p) ELSE "r_write"]
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, rd, gres,
                    lruns, destroyVars, groupVars>>
@@ -1056,7 +1082,9 @@ DestroyFinishes ==
     THEN /\ dpc' = "done" /\ dres' = "ok" /\ drd' = NoRead
          /\ dsaw' = (mst = "destroyed")
     ELSE IF mst = "destroyed"
-    THEN /\ dpc' = AfterTerminalRead("tunlink") /\ dsaw' = TRUE
+    THEN /\ dpc' = IF OtherPidSpace /\ UnsharedGroupReadsUnknown
+                   THEN "tunlink" ELSE AfterTerminalRead("tunlink")
+         /\ dsaw' = TRUE
          /\ drd' = NoRead /\ UNCHANGED dres
     ELSE /\ dpc' = AfterTerminalRead(Records) /\ drd' = ReadCopy
          /\ UNCHANGED <<dres, dsaw>>
@@ -1088,7 +1116,7 @@ DestroyReads ==
 \* Then waitForProcessesToExit (DestroyPollsGroup, at "twait").
 DestroyKillsLeftovers ==
     /\ DestroyAt({"tkill"})
-    /\ IF rec THEN ProvenKill ELSE NoKill
+    /\ IF rec /\ ~OtherPidSpace THEN ProvenKill ELSE NoKill
     /\ drd' = [drd EXCEPT !.grp = IF rec THEN "proven" ELSE "none"]
     /\ dpc' = "twait"
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, hex, rsz,
@@ -1155,7 +1183,7 @@ KillsHost ==
 \* wait ("rkill").
 DestroyKills ==
     /\ DestroyAt({"kill", "rkill"})
-    /\ KillThrough(drd.child)
+    /\ CliKillThrough(drd.child)
     /\ KillsHost
     /\ drd' = [drd EXCEPT !.grp = KindThrough(drd.child)]
     /\ dpc' = IF dpc = "kill" THEN "kwait" ELSE "rwait"
@@ -1175,8 +1203,8 @@ DestroyKills ==
 DestroyPollsGroup ==
     /\ DestroyAt({"kwait", "rwait", "twait"})
     /\ passedReused' = (passedReused \/
-                         (reused /\ drd.grp = "proven" /\ ~GroupSeen(drd.grp)))
-    /\ IF GroupSeen(drd.grp) \/ (dpc # "twait" /\ drd.pid /\ hostAlive)
+                         (reused /\ drd.grp = "proven" /\ ~CliGroupSeen(drd.grp)))
+    /\ IF CliGroupSeen(drd.grp) \/ (dpc # "twait" /\ drd.pid /\ hostAlive)
           THEN DestroyEnds("error")
           ELSE IF dpc = "kwait"
           THEN /\ dpc' = IF DestroyRecordsDestroyed THEN "reread" ELSE "final"
@@ -1451,4 +1479,9 @@ WitnessRecordNamesProgram ==
 WitnessUnrecordedProgramOutlives ==
     ~(diedUnrecorded /\ prog /\ mst = "destroyed")
 WitnessWaitPassesReusedId == ~passedReused
+\* With OtherPidSpace a plain destroy of a session whose program ran still
+\* reports success: the host ends the session, and destroy trusts its
+\* destroyed record.
+WitnessUnsharedDestroyCompletes ==
+    ~(OtherPidSpace /\ ~dforce /\ wasNamed /\ dres = "ok")
 =============================================================================

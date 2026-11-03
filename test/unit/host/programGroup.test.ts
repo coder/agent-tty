@@ -23,6 +23,7 @@ import {
   parseAutogroup,
   parseProcStat,
   readProgramGroup,
+  readProvenProgramGroup,
   stopProgramGroup,
   writeProgramRecord,
   type ProcessRow,
@@ -1349,5 +1350,62 @@ describe.runIf(capturesToken)('a program group with a token', () => {
     expect(kill).not.toHaveBeenCalledWith(-record.pid, 'SIGKILL');
     expect(kill).not.toHaveBeenCalledWith(-record.pid, 'SIGCONT');
     expect(isProgramGroupAlive(record)).toBe(false);
+  });
+});
+
+describe.runIf(platform === 'linux')('a program record with a token', () => {
+  let home = '';
+  let directory = '';
+  const record = {
+    version: 1,
+    pid: 4242,
+    bootId: 'ce4b84e5-e77e-4d68-bc28-cd04a84f6cd7',
+    autogroup: 7,
+  } as const;
+
+  beforeEach(async () => {
+    home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-program-')));
+    directory = sessionDir(home, 'session-01');
+    await mkdir(directory, { recursive: true });
+    writeProgramRecord(directory, record);
+  });
+
+  afterEach(async () => {
+    await rm(home, { recursive: true, force: true });
+  });
+
+  function recordHostIn(pidNamespace: string): void {
+    writeHostRecord(directory, {
+      version: 1,
+      pid: 4141,
+      bootId: record.bootId,
+      startTicks: '100',
+      pidNamespace,
+      timeNamespace: null,
+      machineId: captureHost(process.pid)?.machineId ?? null,
+    });
+  }
+
+  it("names the program's group in the host's pid namespace", async () => {
+    recordHostIn(readlinkSync('/proc/self/ns/pid'));
+
+    expect(await readProgramGroup(directory, 4242)).toEqual(record);
+    expect(await readProvenProgramGroup(directory)).toEqual(record);
+  });
+
+  // No scan or probe here shows the program's processes.
+  it("reads alive and gets no kill in a pid namespace other than the host's", async () => {
+    recordHostIn('pid:[1]');
+    const kill = vi.spyOn(process, 'kill');
+
+    for (const group of [
+      await readProgramGroup(directory, 4242),
+      await readProvenProgramGroup(directory),
+    ]) {
+      expect(group).toEqual({ unshared: true });
+      expect(isProgramGroupAlive(group)).toBe(true);
+      stopProgramGroup(group);
+    }
+    expect(kill).not.toHaveBeenCalled();
   });
 });
