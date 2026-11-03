@@ -216,6 +216,50 @@ jobs:
             sh -c '"$@" & wait $!' sh \
             npx vitest run --maxWorkers=1 --retry=2 test/integration/lifecycle.test.ts test/integration/gc.test.ts test/integration/other-user-group.test.ts
 
+  # Model-checks the session lifecycle with the verify-session-lifecycle
+  # skill. Every run checks that coverage.json matches the covered code. The
+  # TLC runs take about two CPU-hours, so they run only when coverage.json
+  # differs from the base, which every change to the model, its scripts or
+  # the covered code needs.
+  lifecycle-model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          install_args: --locked node python aube
+
+      - name: Install CI dependencies
+        run: mise run bootstrap-ci
+
+      - name: Check that coverage.json matches the covered code
+        run: .agents/skills/verify-session-lifecycle/scripts/check.sh --drift-only
+
+      - name: Decide whether the model checker must run
+        id: inputs
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          if [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null &&
+            git diff --quiet "$BASE" HEAD -- .agents/skills/verify-session-lifecycle/coverage.json; then
+            echo "tlc=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "tlc=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Model-check the session lifecycle
+        if: steps.inputs.outputs.tlc == 'true'
+        env:
+          CHECK_JOBS: '4'
+        run: .agents/skills/verify-session-lifecycle/scripts/check.sh
+
   quality-gates:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -225,6 +269,7 @@ jobs:
       - test-integration
       - test-e2e
       - proc-isolation
+      - lifecycle-model
     if: ${{ always() }}
     steps:
       - name: Report Linux quality gate results
@@ -234,6 +279,7 @@ jobs:
           echo "test-integration: ${{ needs.test-integration.result }}"
           echo "test-e2e: ${{ needs.test-e2e.result }}"
           echo "proc-isolation: ${{ needs.proc-isolation.result }}"
+          echo "lifecycle-model: ${{ needs.lifecycle-model.result }}"
 
       - name: Fail if any Linux quality gate failed
         if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}

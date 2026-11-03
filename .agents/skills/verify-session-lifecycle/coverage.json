@@ -3,7 +3,9 @@
     "src/cli/commands/create.ts#runCreateCommand": "5135dd8d24063c90",
     "src/cli/commands/destroy.ts#runDestroyCommand": "ecaa8b1d572da7c6",
     "src/cli/commands/destroy.ts#rerunInNewSession": "cf32d7d082758522",
-    "src/cli/commands/gc.ts#gcSessions": "667e4ebc3ca3029c",
+    "src/cli/commands/gc.ts#gcSessions": "a2ac8bd10f100332",
+    "src/cli/commands/gc.ts#defaultDependencies": "81a9894438cb5be7",
+    "src/host/programGroup.ts#provenProgramGroupRuns": "80ea01be23763792",
     "src/host/lifecycle.ts#allocateSession": "77dab09b34fedce5",
     "src/host/lifecycle.ts#launchHost": "597a5a6b9eb58cc8",
     "src/host/lifecycle.ts#isProcessAlive": "1ca1fe6ad6c41711",
@@ -87,9 +89,9 @@
     "src/host/hostMain.ts#runHost(final try)": "16789dd4e2534bc7",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "25bc78980b0d67cd",
-    "skill:scripts/facts.mjs": "86ec94456c10cb37",
-    "skill:scripts/check.sh": "422878fda4460ac0"
+    "skill:model/SessionLifecycle.tla": "f6e5e97a2a5defc1",
+    "skill:scripts/facts.mjs": "c859e87c2e9ac81a",
+    "skill:scripts/check.sh": "8f5abb45097333f2"
   },
   "callSites": {
     "writeManifest": [
@@ -146,7 +148,9 @@
       "src/host/lifecycle.ts#destroySession",
       "src/host/lifecycle.ts#listSessions"
     ],
-    "writeProgramRecord": ["src/host/hostMain.ts#runHost"],
+    "writeProgramRecord": [
+      "src/host/hostMain.ts#runHost"
+    ],
     "stopProgramGroup": [
       "src/host/hostMain.ts#runHost>handlePtyExit",
       "src/host/hostMain.ts#runHost>handlePtyExit",

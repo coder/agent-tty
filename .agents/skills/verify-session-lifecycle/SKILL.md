@@ -55,6 +55,8 @@ Yes, when the diff changes any of these:
 
 You do not have to judge this by hand. The check prints `STALE` when any of these changed since the sync commit.
 
+CI runs the check in the `lifecycle-model` job. Every run of it calls `scripts/check.sh --drift-only`, which compares the covered code with `coverage.json` and needs no Java, and fails on `STALE`. The whole check runs only when `coverage.json` differs from the base of the pull request or merge group.
+
 ## Run it
 
 From the repo root:
@@ -501,7 +503,7 @@ To bring the check back in line after changes that skipped it, use `/maintain-fo
 
 ## Scope
 
-The model checks every order of these steps for one session: one `create` that can give up on its host, its host, one `gc` pass over that session (not `--dry-run`), one other command that reconciles twice, one resize, one `destroy` (with or without `--force`, from outside or from inside the program's session), one SIGTERM to the host, a program exit at any time, a process of another user in the program's group that starts and ends at any time, a process that the program leaves when it exits on its own, the host's `host.json` and `program.json` writes, an unrelated group that takes the program's group id once the whole group has ended, an unrelated process that takes the host's pid once the host has ended, the kill timer of the host's shutdown, and a host crash at any time. With a token the model has 23,479,528 distinct states, and without one 22,893,820. The check prints both counts.
+The model checks every order of these steps for one session: one `create` that can give up on its host, its host, one `gc` pass over that session (not `--dry-run`), one other command that reconciles twice, one resize, one `destroy` (with or without `--force`, from outside or from inside the program's session), one SIGTERM to the host, a program exit at any time, a process of another user in the program's group that starts and ends at any time, a process that the program leaves when it exits on its own, the host's `host.json` and `program.json` writes, an unrelated group that takes the program's group id once the whole group has ended, an unrelated process that takes the host's pid once the host has ended, the kill timer of the host's shutdown, and a host crash at any time. With a token the model has 25,302,052 distinct states, and without one 24,834,276. The check prints both counts.
 
 It assumes:
 
