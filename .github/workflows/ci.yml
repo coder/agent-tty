@@ -155,6 +155,65 @@ jobs:
         env:
           AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
 
+  # Destroy and reconcile under the /proc isolation that containers and
+  # hardened hosts use: a /proc that hides the processes of other users
+  # (hidepid=2) and a private PID namespace. Each namespace step starts as
+  # root, sets up the namespace, and drops back to the runner user with
+  # setpriv before the tests start. other-user-group.test.ts starts a process
+  # of the nobody user in the program's group with a setpriv copy that has the
+  # cap_setuid and cap_setgid file capabilities. Without
+  # AGENT_TTY_TEST_SETPRIV it skips, as in the jobs above.
+  proc-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          install_args: --locked
+
+      - name: Install CI dependencies
+        run: mise run bootstrap-ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Make the other-user helper
+        run: |
+          install -m 0755 "$(command -v setpriv)" "$RUNNER_TEMP/setpriv-as"
+          sudo setcap cap_setuid,cap_setgid+ep "$RUNNER_TEMP/setpriv-as"
+          echo "AGENT_TTY_TEST_SETPRIV=$RUNNER_TEMP/setpriv-as" >> "$GITHUB_ENV"
+
+      - name: Test with another user's process
+        run: npx vitest run --maxWorkers=1 --retry=2 test/integration/other-user-group.test.ts
+
+      # This mounts a new proc instance in a private mount namespace. A
+      # remount of /proc would change the runner's own /proc, which shares the
+      # same superblock.
+      - name: Test under a /proc mounted with hidepid=2
+        run: |
+          sudo -E unshare --mount --propagation private -- sh -euc '
+            mount -t proc -o hidepid=2 proc /proc
+            grep " /proc " /proc/self/mountinfo | tail -n 1 | grep -Eq "hidepid=(2|invisible)"
+            exec setpriv --reuid="$1" --regid="$2" --init-groups -- env PATH="$3" HOME="$4" \
+              npx vitest run --maxWorkers=1 --retry=2 test/integration/lifecycle.test.ts test/integration/gc.test.ts test/integration/other-user-group.test.ts
+          ' sh "$(id -un)" "$(id -gn)" "$PATH" "$HOME"
+
+      # PID 1 of the namespace is a shell that waits for the tests. Its wait
+      # also reaps the hosts that outlive their CLI, as an init does.
+      # non-reaping-init.test.ts covers an init that never reaps.
+      - name: Test in a private PID namespace
+        run: |
+          sudo -E unshare --pid --fork --mount-proc -- \
+            setpriv --reuid="$(id -un)" --regid="$(id -gn)" --init-groups -- env PATH="$PATH" HOME="$HOME" \
+            sh -c '"$@" & wait $!' sh \
+            npx vitest run --maxWorkers=1 --retry=2 test/integration/lifecycle.test.ts test/integration/gc.test.ts test/integration/other-user-group.test.ts
+
   quality-gates:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -163,6 +222,7 @@ jobs:
       - test-unit
       - test-integration
       - test-e2e
+      - proc-isolation
     if: ${{ always() }}
     steps:
       - name: Report Linux quality gate results
@@ -171,6 +231,7 @@ jobs:
           echo "test-unit: ${{ needs.test-unit.result }}"
           echo "test-integration: ${{ needs.test-integration.result }}"
           echo "test-e2e: ${{ needs.test-e2e.result }}"
+          echo "proc-isolation: ${{ needs.proc-isolation.result }}"
 
       - name: Fail if any Linux quality gate failed
         if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
