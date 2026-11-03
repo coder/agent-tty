@@ -136,6 +136,64 @@ describe('mouse command', () => {
   );
 
   itWithNativeMouse(
+    'keeps same-cell motion deduplicated after the program prints output',
+    async () => {
+      home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-mouse-')));
+      // The program prints a line for each input it reads, so the output sits
+      // between the two same-cell moves.
+      const session = createSession(home, [
+        process.execPath,
+        '-e',
+        "process.stdin.setRawMode(true);process.stdin.resume();process.stdout.write('\\x1b[?1003h\\x1b[?1006hREADY');let n=0;process.stdin.on('data',()=>process.stdout.write('\\r\\nGOT'+(++n)));",
+      ]);
+      const env = { AGENT_TTY_HOME: home };
+      const waitFor = (text: string) =>
+        runCli(
+          ['wait', session, '--text', text, '--timeout', '10000', '--json'],
+          env,
+        );
+      const move = (col: string) =>
+        runCli(
+          [
+            '--renderer',
+            'libghostty-vt',
+            'mouse',
+            session,
+            'move',
+            '--row',
+            '2',
+            '--col',
+            col,
+            '--json',
+          ],
+          env,
+        );
+      const ready = waitFor('READY');
+      expect(ready.status, ready.stdout + ready.stderr).toBe(0);
+
+      const first = move('3');
+      expect(first.status, first.stdout + first.stderr).toBe(0);
+      expect(JSON.parse(first.stdout)).toMatchObject({
+        result: { reported: true },
+      });
+      const output = waitFor('GOT1');
+      expect(output.status, output.stdout + output.stderr).toBe(0);
+
+      const sameCell = move('3');
+      expect(sameCell.status, sameCell.stdout + sameCell.stderr).toBe(0);
+      expect(JSON.parse(sameCell.stdout)).toMatchObject({
+        result: { reported: false, bytesWritten: 0 },
+      });
+      const otherCell = move('4');
+      expect(otherCell.status, otherCell.stdout + otherCell.stderr).toBe(0);
+      expect(JSON.parse(otherCell.stdout)).toMatchObject({
+        result: { reported: true },
+      });
+    },
+    60_000,
+  );
+
+  itWithNativeMouse(
     'inspect reports the renderer that mouse input booted',
     async () => {
       home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-mouse-')));
