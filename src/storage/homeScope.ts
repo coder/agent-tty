@@ -1,14 +1,16 @@
+import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import {
   isActiveSessionStatus,
   isDestroyedSessionStatus,
+  isTerminalSessionStatus,
 } from '../protocol/sessionStatusPolicy.js';
 import type { SessionRecord } from '../protocol/schemas.js';
 import { createHomeRegistry, type HomeRegistry } from './homeRegistry.js';
 import { readManifestIfExists } from './manifests.js';
-import { manifestPath, sessionDir } from './sessionPaths.js';
+import { destroyMarkerPath, manifestPath, sessionDir } from './sessionPaths.js';
 
 /**
  * Active/all scope for listing Homes. Structurally identical to the dashboard's
@@ -37,11 +39,13 @@ export interface HomeSessionCounts {
 export interface ScanHomeDependencies {
   readdir: (path: string) => Promise<string[]>;
   readManifestIfExists: (path: string) => Promise<SessionRecord | null>;
+  pathExists: (path: string) => boolean;
 }
 
 const defaultScanDependencies: ScanHomeDependencies = {
   readdir,
   readManifestIfExists,
+  pathExists: existsSync,
 };
 
 /**
@@ -53,8 +57,9 @@ const defaultScanDependencies: ScanHomeDependencies = {
  * still shows `running` until something reconciles it); entering a Home in the
  * dashboard, or running `gc`, reconciles for real.
  *
- * "Visible" excludes destroyed Sessions, mirroring the dashboard's `all` scope
- * (a destroyed Session's Event Log may already be collected). It never throws:
+ * "Visible" excludes destroyed Sessions and ended Sessions whose folder holds
+ * the destroy marker, mirroring the dashboard's `all` scope (a destroyed Session's
+ * Event Log may already be collected). It never throws:
  * a missing/unreadable sessions tree, or a corrupt individual manifest, counts
  * as zero/skip so a single bad Session can't break discovery.
  */
@@ -84,7 +89,12 @@ export async function scanHome(
       continue;
     }
 
-    if (manifest === null || isDestroyedSessionStatus(manifest.status)) {
+    if (
+      manifest === null ||
+      isDestroyedSessionStatus(manifest.status) ||
+      (isTerminalSessionStatus(manifest.status) &&
+        dependencies.pathExists(destroyMarkerPath(sessionDir(home, entry))))
+    ) {
       continue;
     }
 
