@@ -572,6 +572,45 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     },
   );
 
+  it('keeps the code of a CliError that every render poll throws', () => {
+    const preload = pathToFileURL(resolve('test/fixtures/fail-render-poll.ts'));
+    const failingSessionId = createSession(testHome, undefined, {
+      env: {
+        NODE_OPTIONS: [
+          process.env.NODE_OPTIONS ?? '',
+          `--import=${preload.href}`,
+        ].join(' '),
+      },
+    });
+    try {
+      const result = runCli(
+        [
+          'wait',
+          failingSessionId,
+          '--text',
+          'NEVER',
+          '--timeout',
+          '20000',
+          '--json',
+        ],
+        { AGENT_TTY_HOME: testHome },
+        30_000,
+      );
+
+      expect(result.exitCode, result.stderr).toBe(10);
+      const envelope = JSON.parse(result.stdout) as ErrorEnvelope & {
+        result?: unknown;
+      };
+      expect(envelope.error).toMatchObject({
+        code: 'REPLAY_ERROR',
+        message: 'fixture: replay failed',
+      });
+      expect(envelope).not.toHaveProperty('result');
+    } finally {
+      destroySession(testHome, failingSessionId);
+    }
+  });
+
   it('keeps polling through fewer failed render polls than the cap and matches', () => {
     const marker = 'renderer-recovered';
     const recoveringSessionId = createSession(

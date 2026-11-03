@@ -143,8 +143,8 @@ function renderWaitLines(result: WaitForRenderResult): string[] {
   return lines;
 }
 
-// The host also reports timedOut after repeated renderer failures, early and
-// even without a timeout, so only a wait that lasted its timeout names it.
+// A host timer can fire a millisecond before the CLI clock reaches the
+// timeout, so the message names the timeout only when the CLI measured it.
 function timeoutMessage(
   options: CommandOptions,
   timeoutMs: number,
