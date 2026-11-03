@@ -7,6 +7,7 @@ import process from 'node:process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SessionRecordSchema } from '../../src/protocol/schemas.js';
+import { hasErrorCode } from '../../src/util/hasErrorCode.js';
 import {
   cleanupHome,
   crashSession,
@@ -20,6 +21,9 @@ import {
 // Path to a setpriv copy with the cap_setuid and cap_setgid file
 // capabilities. A plain setpriv cannot change the user.
 const setpriv = process.env.AGENT_TTY_TEST_SETPRIV;
+// CI sets AGENT_TTY_REQUIRE_SETPRIV=1, so a missing helper fails these tests
+// there instead of skipping them.
+const requireSetpriv = process.env.AGENT_TTY_REQUIRE_SETPRIV === '1';
 const nobody = '65534';
 
 function asNobody(args: string[]): { status: number | null; stdout: string } {
@@ -44,7 +48,9 @@ function nobodySleepIn(group: number): boolean {
 
 const shellWaitingOnHangupProofNobodySleep = `"$0" --reuid=${nobody} --regid=${nobody} --clear-groups /bin/sh -c 'trap "" HUP; exec sleep 300' & wait`;
 
-describe.runIf(process.platform === 'linux' && setpriv !== undefined)(
+describe.runIf(
+  process.platform === 'linux' && (setpriv !== undefined || requireSetpriv),
+)(
   "a program group that holds another user's process",
   { timeout: 60_000 },
   () => {
@@ -52,17 +58,34 @@ describe.runIf(process.platform === 'linux' && setpriv !== undefined)(
     let pgid = 0;
 
     beforeEach(async () => {
+      expect(
+        setpriv,
+        'AGENT_TTY_REQUIRE_SETPRIV=1 needs AGENT_TTY_TEST_SETPRIV',
+      ).toBeDefined();
       // oxfmt-ignore
       testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
     });
 
     afterEach(async () => {
-      if (pgid > 1) {
-        asNobody(['pkill', '-KILL', '-U', nobody, '-g', String(pgid)]);
-        killGroupIfAlive(pgid);
+      try {
+        if (pgid > 1) {
+          asNobody(['pkill', '-KILL', '-U', nobody, '-g', String(pgid)]);
+          try {
+            killGroupIfAlive(pgid);
+          } catch (error) {
+            // The killed nobody process stays in the group as a zombie until
+            // it is reaped, and kill(-pgid) refuses a group that holds only
+            // processes of another user.
+            if (!hasErrorCode(error, 'EPERM')) {
+              throw error;
+            }
+          }
+        }
+      } finally {
+        pgid = 0;
+        await cleanupHome(testHome);
+        testHome = '';
       }
-      pgid = 0;
-      await cleanupHome(testHome);
     });
 
     async function createGroupWithNobodyProcess(): Promise<string> {

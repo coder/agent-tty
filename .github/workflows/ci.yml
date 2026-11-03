@@ -164,6 +164,8 @@ jobs:
   proc-isolation:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      AGENT_TTY_REQUIRE_SETPRIV: '1'
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -183,7 +185,7 @@ jobs:
 
       - name: Make the other-user helper
         run: |
-          install -m 0755 "$(command -v setpriv)" "$RUNNER_TEMP/setpriv-as"
+          install -m 0700 "$(command -v setpriv)" "$RUNNER_TEMP/setpriv-as"
           sudo setcap cap_setuid,cap_setgid+ep "$RUNNER_TEMP/setpriv-as"
           echo "AGENT_TTY_TEST_SETPRIV=$RUNNER_TEMP/setpriv-as" >> "$GITHUB_ENV"
 
