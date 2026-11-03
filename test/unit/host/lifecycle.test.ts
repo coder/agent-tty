@@ -445,6 +445,29 @@ describe('reconcileSession', () => {
     }
   });
 
+  it('list shows destroyed when the socket cleanup fails after the repair write', async () => {
+    const directory = await seedSession(
+      makeRecord({
+        status: 'failed',
+        failureOrigin: 'host-death',
+        hostPid: null,
+        childPid: null,
+      }),
+    );
+    writeFileSync(join(directory, 'destroyed'), '');
+    // unlink of a directory fails with EISDIR (EPERM on macOS).
+    const socketFile = socketPath(directory);
+    await mkdir(socketFile, { recursive: true });
+
+    try {
+      expect(await listSessions(home, true)).toMatchObject([
+        { sessionId: 'session-01', status: 'destroyed' },
+      ]);
+    } finally {
+      await rm(dirname(socketFile), { recursive: true, force: true });
+    }
+  });
+
   // A root process can write into a folder of mode 0500.
   it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
     'list keeps a marked failed session when its repair write fails',
