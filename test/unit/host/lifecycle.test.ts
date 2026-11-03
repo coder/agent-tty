@@ -720,7 +720,7 @@ describe('a hostPid that may no longer name the host', () => {
 
   async function seedHost(
     hostPid: number,
-    record: 'none' | 'own' | 'earlierHost' | { pidNamespace: string } = 'own',
+    record: 'none' | 'own' | 'earlierHost' | Partial<HostRecord> = 'own',
   ): Promise<string> {
     vi.stubEnv('AGENT_TTY_HOME', home);
     const directory = await seedSession(
@@ -989,6 +989,47 @@ describe('a hostPid that may no longer name the host', () => {
         pidNamespace: readlinkSync('/proc/self/ns/pid'),
         timeNamespace: null,
       });
+    },
+  );
+
+  // A host on a kernel without time namespaces, or one whose /proc refused
+  // the link, records a null time namespace.
+  it.runIf(platform === 'linux')(
+    'on linux a host record without a time namespace proves the host to a CLI whose kernel has none either',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      await seedHost(host, { timeNamespace: null });
+      fsHooks.links = new Map([['/proc/self/ns/time', errno('ENOENT')]]);
+      const kill = reapAsInitAfterKill(host);
+
+      await destroySession('session-01', true);
+
+      expect(kill).toHaveBeenCalledWith(host, 'SIGKILL');
+    },
+  );
+
+  it.runIf(platform === 'linux').each([
+    ['has one', 'time:[1]'],
+    ['refuses its own', errno('EACCES')],
+  ])(
+    'on linux a host record without a time namespace leaves the host running for a CLI whose kernel %s',
+    async (_, ownLink) => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host, { timeNamespace: null });
+      const record = await readManifest(manifestPath(directory));
+      fsHooks.links = new Map<string, string | Error>([
+        ['/proc/self/ns/time', ownLink],
+      ]);
+      const kill = vi.spyOn(process, 'kill');
+
+      await reconcileSession(directory);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+
+      await expect(destroySession('session-01', true)).rejects.toMatchObject({
+        code: 'HOST_TIMEOUT',
+      });
+      expect(kill).not.toHaveBeenCalledWith(host, 'SIGKILL');
+      expect(isRunning(host)).toBe(true);
     },
   );
 
