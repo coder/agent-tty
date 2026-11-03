@@ -103,6 +103,13 @@ function exitOnInternalError(error: CliError): void {
   }
 }
 
+function parsedJsonOption(command: Command): boolean {
+  return (
+    command.opts<{ json?: boolean }>().json === true ||
+    command.commands.some(parsedJsonOption)
+  );
+}
+
 function getActionCommand(rawArgs: readonly unknown[]): Command {
   const maybeCommand = rawArgs.at(-1);
   invariant(
@@ -1080,15 +1087,15 @@ async function main(): Promise<void> {
       await runHost(sessionId, Number(creatorPid));
     });
 
-  await program.parseAsync();
-}
-
-try {
-  await main();
-} catch (error: unknown) {
-  if (error instanceof CommanderError) {
+  try {
+    await program.parseAsync();
+  } catch (error: unknown) {
+    if (!(error instanceof CommanderError)) {
+      throw error;
+    }
     process.exitCode = error.exitCode === 0 ? 0 : 2;
-    if (!HELP_OUTPUT_CODES.has(error.code) && argvHasFlag('--json')) {
+    const json = argvHasFlag('--json') || parsedJsonOption(program);
+    if (!HELP_OUTPUT_CODES.has(error.code) && json) {
       emitCliError(
         'agent-tty',
         makeCliError(ERROR_CODES.INVALID_INPUT, {
@@ -1097,7 +1104,13 @@ try {
         true,
       );
     }
-  } else if (error instanceof CliError) {
+  }
+}
+
+try {
+  await main();
+} catch (error: unknown) {
+  if (error instanceof CliError) {
     const output = parsedOutputOptions ?? {
       json: argvHasFlag('--json'),
       color: !argvHasFlag('--no-color'),
