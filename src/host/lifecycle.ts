@@ -454,10 +454,18 @@ export async function removeDeadHostSocket(
   manifest: SessionRecord,
 ): Promise<void> {
   const socketFile = socketPath(sessionDirectory);
+  let alive: boolean;
   try {
-    if (isHostAlive(await readSessionHost(sessionDirectory, manifest))) {
-      return;
-    }
+    alive = isHostAlive(await readSessionHost(sessionDirectory, manifest));
+  } catch (error) {
+    // A host that the check cannot judge may still listen on either socket.
+    console.debug('could not judge the host of a socket:', error);
+    return;
+  }
+  if (alive) {
+    return;
+  }
+  try {
     await unlinkIfPresent(socketFile);
     await removeSocketDirectoryIfEmpty(socketFile);
   } catch (error) {
