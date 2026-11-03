@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { once } from 'node:events';
 import {
   chmod,
@@ -47,6 +48,7 @@ import {
 } from '../helpers.js';
 
 const zombieLeader = resolve('test/fixtures/zombie-leader.py');
+const forkChain = resolve('test/fixtures/fork-chain.py');
 
 function groupStates(group: number): string[] {
   return execFileSync('ps', ['-eo', 'pgid=,s='], { encoding: 'utf8' })
@@ -1067,6 +1069,39 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       },
     );
 
+    // The beat file changes while the chain runs.
+    async function chainRuns(beat: string): Promise<boolean> {
+      const before = await readFile(beat, 'utf8');
+      await sleep(1_000);
+      return (await readFile(beat, 'utf8')) !== before;
+    }
+
+    // Each process of a fork chain forks its successor and ends within about
+    // 2 ms, so a scan of /proc almost never shows a live one.
+    it.runIf(capturesToken)(
+      'destroy ends a fork chain that no scan of /proc shows',
+      async () => {
+        const beat = join(testHome, 'beat');
+        const sessionId = await createProgram(
+          `python3 '${forkChain}' 60 0.002 '${beat}' & touch "$0"; wait`,
+        );
+        const deadline = Date.now() + 10_000;
+        while (!existsSync(beat)) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(50);
+        }
+        expect(await chainRuns(beat)).toBe(true);
+
+        const result = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+
+        expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await chainRuns(beat)).toBe(false);
+      },
+    );
+
     it('a reconcile after a host crash ends the program and its background process', async () => {
       const sessionId = await createProgram(
         'trap "" TERM HUP; sleep 300 & touch "$0"; wait',
@@ -1408,6 +1443,121 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
         expect(await groupEnds(pgid)).toBe(true);
       });
+    },
+  );
+
+  // A chroot or a container without a mounted /proc.
+  it.runIf(process.platform === 'linux')(
+    'destroy from a CLI that sees no /proc prints its result',
+    async () => {
+      vi.stubEnv('XDG_STATE_HOME', join(testHome, 'state'));
+      try {
+        const sessionId = createSession(testHome, [
+          '/bin/sh',
+          '-c',
+          'exec sleep 300',
+        ]);
+        const pgid = inspectSession(testHome, sessionId).childPid as number;
+        const preload = pathToFileURL(resolve('test/fixtures/no-proc.ts')).href;
+
+        const result = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+          NODE_OPTIONS: `--import=${preload}`,
+        });
+
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          ok: true,
+          result: { sessionId, destroyed: true },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await groupEnds(pgid)).toBe(true);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
+  // Without /proc nothing proves the group or the host, so --force kills
+  // nothing and names the ways out.
+  it.runIf(process.platform === 'linux')(
+    'destroy --force from a CLI that sees no /proc fails with HOST_TIMEOUT and kills nothing',
+    async () => {
+      vi.stubEnv('XDG_STATE_HOME', join(testHome, 'state'));
+      try {
+        const sessionId = createSession(testHome, [
+          '/bin/sh',
+          '-c',
+          'exec sleep 300',
+        ]);
+        const pgid = inspectSession(testHome, sessionId).childPid as number;
+        const preload = pathToFileURL(resolve('test/fixtures/no-proc.ts')).href;
+
+        const result = runCli(['destroy', sessionId, '--force', '--json'], {
+          AGENT_TTY_HOME: testHome,
+          NODE_OPTIONS: `--import=${preload}`,
+        });
+
+        expect(result.status).toBe(5);
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          ok: false,
+          error: {
+            code: 'HOST_TIMEOUT',
+            message: expect.stringContaining('plain destroy') as string,
+          },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('running');
+        expect(isGroupAlive(pgid)).toBe(true);
+
+        destroySession(testHome, sessionId);
+        expect(await groupEnds(pgid)).toBe(true);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
+  // An exited session has no host to end it, so its leftover needs a destroy
+  // from a process that can read /proc.
+  it.runIf(capturesToken)(
+    'destroy of an exited session from a CLI that sees no /proc names /proc while its leftover runs',
+    async () => {
+      vi.stubEnv('XDG_STATE_HOME', join(testHome, 'state'));
+      let pgid = 0;
+      try {
+        const sessionId = createSession(testHome, [
+          '/bin/sh',
+          '-c',
+          'trap "" HUP; sleep 300 & exit 0',
+        ]);
+        pgid = inspectSession(testHome, sessionId).childPid as number;
+        const deadline = Date.now() + 10_000;
+        while (inspectSession(testHome, sessionId).status !== 'exited') {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(50);
+        }
+        expect(isGroupAlive(pgid)).toBe(true);
+        const preload = pathToFileURL(resolve('test/fixtures/no-proc.ts')).href;
+
+        const result = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+          NODE_OPTIONS: `--import=${preload}`,
+        });
+
+        expect(result.status).toBe(5);
+        const { error } = JSON.parse(result.stdout) as ErrorEnvelope;
+        expect(error.code).toBe('HOST_TIMEOUT');
+        expect(error.message).toContain('where /proc is mounted');
+        expect(error.message).not.toContain('plain destroy');
+        expect(isGroupAlive(pgid)).toBe(true);
+
+        destroySession(testHome, sessionId);
+        expect(await groupEnds(pgid)).toBe(true);
+      } finally {
+        if (pgid > 1) {
+          killGroupIfAlive(pgid);
+        }
+        vi.unstubAllEnvs();
+      }
     },
   );
 

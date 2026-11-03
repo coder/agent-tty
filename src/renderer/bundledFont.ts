@@ -38,6 +38,22 @@ const BUNDLED_FONT_ASSET_SOURCES = [
     style: 'normal',
     weight: '400',
   },
+  {
+    assetKey: 'noto-sans-symbols-2-regular',
+    contentType: 'font/woff2',
+    family: 'Noto Sans Symbols 2',
+    filename: 'NotoSansSymbols2-Regular.woff2',
+    style: 'normal',
+    weight: '400',
+  },
+  {
+    assetKey: 'noto-sans-math-regular',
+    contentType: 'font/woff2',
+    family: 'Noto Sans Math',
+    filename: 'NotoSansMath-Regular.woff2',
+    style: 'normal',
+    weight: '400',
+  },
 ] as const satisfies readonly BundledFontAssetSource[];
 
 function loadBundledFontAsset(

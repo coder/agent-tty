@@ -97,6 +97,23 @@ describe('batch command integration', { timeout: 45_000 }, () => {
     expect(envelope.error.message).toContain('mutually exclusive');
   });
 
+  it('rejects a wait step whose screenStableMs cannot fit its timeout', () => {
+    const steps = JSON.stringify([
+      { wait: { screenStableMs: 5000, timeout: 2000 } },
+    ]);
+    const result = runCli(
+      ['batch', 'some-session', steps, '--json'],
+      testEnv(),
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe('');
+
+    const envelope = JSON.parse(result.stdout) as CommandErrorEnvelope;
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.details).toEqual({ stepIndex: 0 });
+  });
+
   it('rejects neither inline steps nor --file with INVALID_INPUT', () => {
     const result = runCli(['batch', 'some-session', '--json'], testEnv());
 

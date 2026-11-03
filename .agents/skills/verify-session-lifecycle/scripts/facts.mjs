@@ -919,7 +919,8 @@ function programRecordFacts() {
 // Every group kill goes through stopProgramGroup. It is synchronous, and
 // with a token it kills only right after it read a live member of the group
 // again and found the program's session id, autogroup and boot id on it.
-// No other code calls the raw group kill or builds a group target.
+// No other code calls the raw group kill or builds a group target, and only
+// stopProgramGroup sends the SIGSTOP and SIGCONT of signalProcessGroup.
 function ownershipFacts() {
   const module = 'src/host/programGroup.ts';
   const stop = requireDeclaration(module, 'stopProgramGroup');
@@ -932,14 +933,15 @@ function ownershipFacts() {
       return;
     }
     const st = node.statement.statements.map((s) => normalize(s.getText()));
+    const owned = st.findIndex((s) =>
+      /^if \(judgement\.verdict !== 'owned'\) \{ (return|break); \}$/.test(s),
+    );
     checkedKill =
       st[0] === 'const judgement = judgeLiveGroup(group);' &&
-      /^if \(judgement\.verdict !== 'owned'\) \{ return; \}$/.test(
-        st[1] ?? '',
-      ) &&
-      st[2] === 'const witness = readProcessRow(judgement.witness);' &&
-      /^if \( witness !== null && judgeProgramGroup\(group, group\.bootId, \[witness\]\)\.verdict === 'owned' \) \{ killProcessGroupBestEffort\(group\.pid\); return; \}$/.test(
-        st[3] ?? '',
+      owned > 0 &&
+      st[owned + 1] === 'const witness = readProcessRow(judgement.witness);' &&
+      /^if \( witness !== null && judgeProgramGroup\(group, group\.bootId, \[witness\]\)\.verdict === 'owned' \) \{ killProcessGroupBestEffort\(group\.pid\); killed = true; return; \}$/.test(
+        st[owned + 2] ?? '',
       );
   });
   const judge = normalize(
@@ -960,7 +962,10 @@ function ownershipFacts() {
   let stray = false;
   for (const file of listSources('src')) {
     walk(source(file), (node) => {
-      if (isCall(node, 'killProcessGroupBestEffort')) {
+      if (
+        isCall(node, 'killProcessGroupBestEffort') ||
+        isCall(node, 'signalProcessGroup')
+      ) {
         rawKills += 1;
         stray ||= file !== module || ownerPath(node) !== 'stopProgramGroup';
       }
@@ -968,21 +973,58 @@ function ownershipFacts() {
         targets += 1;
         stray ||=
           file !== module ||
-          !['isProcessGroupAlive', 'killProcessGroupBestEffort'].includes(
-            ownerPath(node),
-          );
+          ![
+            'isProcessGroupAlive',
+            'killProcessGroupBestEffort',
+            'signalProcessGroup',
+          ].includes(ownerPath(node));
       }
     });
   }
+  const signalParam = normalize(
+    requireDeclaration(module, 'signalProcessGroup').parameters[1]?.getText() ??
+      '',
+  );
   return {
     ProvesGroupOwnership:
       synchronous &&
       checkedKill &&
       judgesToken &&
       rawKills > 0 &&
-      targets === 2 &&
+      targets === 3 &&
+      signalParam === "signal: 'SIGSTOP' | 'SIGCONT'" &&
       !stray,
+    FreezesUnseenGroup: freezeFacts(stop.body),
   };
+}
+
+// In stopProgramGroup's loop, a judgement of gone sends SIGSTOP to the
+// group once and judges again, so a member that a scan never shows stops and
+// comes into view. The finally block sends a frozen group that got no kill
+// SIGCONT, also when a scan throws.
+function freezeFacts(body) {
+  const guarded = body.statements.find(ts.isTryStatement);
+  const loop = guarded?.tryBlock.statements.find(ts.isForStatement);
+  if (
+    guarded?.finallyBlock === undefined ||
+    loop === undefined ||
+    !ts.isBlock(loop.statement)
+  ) {
+    return false;
+  }
+  const st = loop.statement.statements.map((s) => normalize(s.getText()));
+  const before = body.statements
+    .slice(0, body.statements.indexOf(guarded))
+    .map((s) => normalize(s.getText()));
+  return (
+    before.at(-2) === 'let frozen = false;' &&
+    before.at(-1) === 'let killed = false;' &&
+    guarded.tryBlock.statements.length === 1 &&
+    st[1] ===
+      "if (judgement.verdict === 'gone') { frozen ||= signalProcessGroup(group.pid, 'SIGSTOP'); if (frozen) { continue; } }" &&
+    normalize(guarded.finallyBlock.getText()) ===
+      "{ if (frozen && !killed) { signalProcessGroup(group.pid, 'SIGCONT'); } }"
+  );
 }
 
 // captureToken reads the program's autogroup between two reads of its stat,
@@ -1054,8 +1096,9 @@ function fallbackFacts() {
 // cannot read that id, or reads 0, counts as inside. Before it reads
 // the manifest, the check matches AGENT_TTY_SESSION_ID, and the copy does
 // not get that variable. Off Linux the check compares the process group and
-// the controlling terminal. The copy gets DESTROY_RERUN_ENV_KEY and skips the
-// check, so it never starts a copy of its own.
+// the controlling terminal, which matches only when the CLI has one. The
+// copy gets DESTROY_RERUN_ENV_KEY and skips the check, so it never starts a
+// copy of its own.
 function rerunFacts() {
   const destroyFile = 'src/cli/commands/destroy.ts';
   const run = requireDeclaration(destroyFile, 'runDestroyCommand').body;
@@ -1105,7 +1148,11 @@ function rerunFacts() {
     linuxStatements[1] ===
       'return sid === null || manifest.childPid === sid;' &&
     insideStatements.at(-1) ===
-      'return ( manifest.childPid === ownProcessGroupId() || sharesControllingTerminal(manifest.childPid) );';
+      'return ( manifest.childPid === ownProcessGroupId() || sharesControllingTerminal(manifest.childPid) );' &&
+    normalize(
+      requireDeclaration(lifecycle, 'sharesControllingTerminal').body.getText(),
+    ) ===
+      '{ const own = controllingTerminal(process.pid); return own !== null && own === controllingTerminal(pid); }';
   const readsSessionId =
     /stat = readFileSync\('\/proc\/self\/stat', 'utf8'\);[^]*const \{ sid \} = parseProcStat\(stat\)/.test(
       normalize(requireDeclaration(lifecycle, 'ownLinuxSessionId').getText()),
@@ -1231,6 +1278,12 @@ const COVERED = [
   ['src/host/hostRecord.ts', 'readHostRecord'],
   ['src/host/hostRecord.ts', 'pidExists'],
   ['src/host/hostRecord.ts', 'judgeHost'],
+  ['src/host/hostRecord.ts', 'inPidNamespace'],
+  ['src/host/hostRecord.ts', 'readTimeNamespace'],
+  ['src/host/hostRecord.ts', 'inTimeNamespace'],
+  ['src/host/hostRecord.ts', 'readMachineId'],
+  ['src/host/hostRecord.ts', 'inHostPidSpace'],
+  ['src/host/hostRecord.ts', 'sharesHostPids'],
   ['src/host/lifecycle.ts', 'ownLinuxSessionId'],
   ['src/host/lifecycle.ts', 'ownProcessGroupId'],
   ['src/host/lifecycle.ts', 'controllingTerminal'],
@@ -1273,6 +1326,7 @@ const COVERED = [
   ['src/host/programGroup.ts', 'scanGroup'],
   ['src/host/programGroup.ts', 'isProcessGroupAlive'],
   ['src/host/programGroup.ts', 'killProcessGroupBestEffort'],
+  ['src/host/programGroup.ts', 'signalProcessGroup'],
   ['src/host/programGroup.ts', 'isProgramGroupAlive'],
   ['src/host/programGroup.ts', 'stopProgramGroup'],
   ['src/host/rpcClient.ts', 'toTransportCliError'],

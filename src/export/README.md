@@ -11,7 +11,7 @@ This directory converts a session's event log into recording exports. `generateA
 - `generateAsciicast(sessionId, manifest, events, toolVersion?)` returns an `AsciicastExport`. It runs synchronously [asciicast.ts:generateAsciicast].
 - `WebmExportOptions`: `sessionId`, `sessionDir`, `manifest`, `events`, `outputPath`, and optional `targetSeq`, `profileName`, `timingMode` and `rendererName` [webm.ts:WebmExportOptions].
 - `WebmExportDeps`: optional `backendFactory` and `replayTimeoutMs`, for tests and callers that supply their own backend [webm.ts:WebmExportDeps].
-- `WebmExportResult`: `capturedAtSeq`, `durationMs`, `outputEventCount`, `resizeEventCount`, `cols`, `rows`, `profileName`, `timingMode` and `rendererBackend` [webm.ts:WebmExportResult].
+- `WebmExportResult`: `capturedAtSeq`, `durationMs`, `outputEventCount`, `resizeEventCount`, `cols`, `rows`, `profileName`, `timingMode` and `rendererBackend`, plus the optional `missingGlyphs` and `missingGlyphsTruncated` of `RecordedGlyphFields` [webm.ts:WebmExportResult].
 - `generateWebmExport(options, deps?)` returns a `Promise<WebmExportResult>` [webm.ts:generateWebmExport].
 
 ## Invariants
@@ -19,7 +19,8 @@ This directory converts a session's event log into recording exports. `generateA
 - `generateAsciicast` asserts a non-empty `sessionId` equal to `manifest.sessionId`, positive `manifest.cols` and `manifest.rows`, and a non-empty `toolVersion` when given [asciicast.ts:generateAsciicast]. `manifest.createdAt` must parse as a valid timestamp even when there are events. The header uses it when `events` is empty [asciicast.ts:parseTimestamp].
 - Event timestamps must parse to finite numbers [asciicast.ts:parseTimestamp]. They must not decrease from one event to the next [asciicast.ts:generateAsciicast].
 - Event mapping: `output` becomes `o`, `resize` becomes `r` with `COLSxROWS`, and `marker` becomes `m`. Input, run, signal and exit events are skipped. An unknown type reaches `unreachable()` [asciicast.ts:generateAsciicast].
-- `generateWebmExport` asserts a non-empty `sessionId`, absolute `sessionDir` and `outputPath`, a non-empty event list, and positive initial dimensions [webm.ts:generateWebmExport].
+- `generateWebmExport` asserts a non-empty `sessionId`, absolute `sessionDir` and `outputPath`, and positive initial dimensions. An empty event list gives a blank video with `capturedAtSeq` -1 and `durationMs` 0 [webm.ts:generateWebmExport].
+- `generateAsciicast` reports `capturedAtSeq` -1 for an empty event list [asciicast.ts:generateAsciicast].
 - Defaults: timing mode `recorded` and profile `reference-dark` [webm.ts:generateWebmExport].
 - A requested `libghostty-vt` renderer is replaced with `ghostty-web`. A code comment says `libghostty-vt` is semantic-only [webm.ts:generateWebmExport].
 - The default backend factory accepts only `ghostty-web` [webm.ts:createDefaultBackend].
@@ -32,7 +33,7 @@ This directory converts a session's event log into recording exports. `generateA
 - `generateWebmExport` creates a temporary video directory with `mkdtemp` under `os.tmpdir()` (prefix `agent-tty-webm-`) and sets its mode to `0o700` [webm.ts:generateWebmExport].
 - It builds the replay input with `buildReplayInput` from `src/host/replay.ts` and the profile with `resolveProfile` from `src/renderer/profiles.ts` [webm.ts:generateWebmExport].
 - The default backend is a `GhosttyWebBackend` that records video into the temporary directory [webm.ts:createDefaultBackend].
-- The `.webm` file is written only by `backend.finalizeVideo(outputPath)` [webm.ts:generateWebmExport].
+- The `.webm` file is written only by `backend.finalizeVideo(outputPath)`. `backend.recordedMissingGlyphs()` runs before it, because `finalizeVideo` closes the page that the glyph check probes [webm.ts:generateWebmExport].
 - In `finally` it awaits `backend.dispose()` without a catch, so dispose errors propagate. Then it removes the temporary directory with `rm({ recursive: true, force: true })` and ignores `rm` errors. A throwing `dispose()` skips the `rm` [webm.ts:generateWebmExport].
 
 ## Verification

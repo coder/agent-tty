@@ -4,6 +4,7 @@ import type { ScreenshotResult } from '../../protocol/messages.js';
 
 import type { CommandContext } from '../context.js';
 
+import { missingGlyphLines } from '../missingGlyphLines.js';
 import { emitSuccess } from '../output.js';
 import { CliError } from '../../cli/errors.js';
 import { sendRpc } from '../../host/rpcClient.js';
@@ -19,6 +20,7 @@ import { readManifestIfExists } from '../../storage/manifests.js';
 import {
   copyFileReplacing,
   resolveExplicitOutputPath,
+  type ExplicitOutputPath,
 } from '../../storage/outputPath.js';
 import { manifestPath, socketPath } from '../../storage/sessionPaths.js';
 import { checkedSessionDir } from '../sessionGuards.js';
@@ -103,17 +105,7 @@ function formatScreenshotLines(result: ScreenshotResult): string[] {
   if (result.renderProfileHash !== undefined) {
     lines.push(`Render profile hash: ${result.renderProfileHash}`);
   }
-  const missingCodePoints = (result.missingGlyphs ?? []).map(
-    (glyph) => glyph.codePoint,
-  );
-  if (result.missingGlyphsTruncated === true) {
-    missingCodePoints.push('and more');
-  }
-  if (missingCodePoints.length > 0) {
-    lines.push(
-      `Missing glyphs (drawn as boxes): ${missingCodePoints.join(', ')}`,
-    );
-  }
+  lines.push(...missingGlyphLines(result));
 
   return lines;
 }
@@ -134,7 +126,7 @@ async function resolveScreenshotOutputPath(
   sessionId: string,
   out: string,
   sessionsRoot: string,
-): Promise<string> {
+): Promise<ExplicitOutputPath> {
   try {
     return await resolveExplicitOutputPath(out, sessionsRoot);
   } catch (error) {
@@ -192,7 +184,7 @@ export async function runScreenshotCommand(
       ? undefined
       : {
           out: options.out,
-          path: await resolveScreenshotOutputPath(
+          target: await resolveScreenshotOutputPath(
             options.sessionId,
             options.out,
             dirname(sessionDirectory),
@@ -245,14 +237,14 @@ export async function runScreenshotCommand(
 
   if (output !== undefined) {
     try {
-      await copyFileReplacing(result.artifactPath, output.path);
+      await copyFileReplacing(result.artifactPath, output.target);
     } catch (error) {
       const removed = await sessionNotFoundIfRemoved(sessionDirectory, error);
-      throw removed === error
-        ? outputPathError(options.sessionId, output.out, error)
-        : removed;
+      throw removed !== error || error instanceof CliError
+        ? removed
+        : outputPathError(options.sessionId, output.out, error);
     }
-    result = { ...result, artifactPath: output.path };
+    result = { ...result, artifactPath: output.target.path };
   }
 
   emitSuccess({

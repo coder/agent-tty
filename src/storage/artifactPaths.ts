@@ -95,7 +95,7 @@ function recordingExtension(format: string): string {
 }
 
 export function recordingFilename(seq: number, format: string): string {
-  assertNonNegativeInteger(seq, 'seq');
+  assertReplaySeq(seq);
   const sanitizedFormat = sanitizeFilenameComponent(format, 'format');
   const extension = recordingExtension(sanitizedFormat);
   return `recording-${String(seq)}-${sanitizedFormat}.${extension}`;
@@ -148,6 +148,20 @@ export async function ensureArtifactsDir(sessionDir: string): Promise<string> {
 
     if (!hasErrorCode(error, 'EEXIST')) {
       throw error;
+    }
+
+    const stats = await stat(directory).catch(async (statError: unknown) => {
+      const removed = await sessionNotFoundIfRemoved(sessionDir, statError);
+      if (removed !== statError) {
+        throw removed;
+      }
+      return undefined;
+    });
+    if (stats?.isDirectory() !== true) {
+      throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+        message: `Artifacts path ${directory} is not a folder.`,
+        details: { path: directory },
+      });
     }
   }
 

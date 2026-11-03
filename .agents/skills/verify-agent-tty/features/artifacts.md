@@ -1,6 +1,6 @@
 # Artifacts
 
-A user captures what a session showed: a semantic snapshot of the screen, a rendered PNG screenshot, a recording as an asciicast `.cast` or a WebM video, and a diff of the visible screens of two sessions. Each artifact is listed in the session's artifact manifest and can be rebuilt from the event log.
+A user captures what a session showed: a semantic snapshot of the screen, a rendered PNG screenshot, a recording as an asciicast `.cast` or a WebM video, and a diff of the visible screens of two sessions. Each snapshot, screenshot and recording is listed in the session's artifact manifest and can be rebuilt from the event log. `record diff` writes no file and no manifest entry: its result is only in the envelope.
 
 ## Sub-features
 
@@ -16,7 +16,7 @@ A user captures what a session showed: a semantic snapshot of the screen, a rend
 ## How to get to it (user POV)
 
 - `agent-tty snapshot <id>`, with `--format text|structured`, `--include-scrollback`, `--include-cells`.
-- `agent-tty screenshot <id>`, with `--profile reference-dark|reference-light`, `--show-cursor`, `--hide-cursor`.
+- `agent-tty screenshot <id>`, with `--profile reference-dark|reference-light`, `--show-cursor`, `--hide-cursor`. The PNG has no cursor block unless you pass `--show-cursor`. `cursorVisible` in the result reports the flag's choice, not the PNG: when the program hid its cursor itself (`ESC[?25l`), `--show-cursor` reports `true` and the PNG still has no block.
 - `agent-tty record export <id> --format asciicast|webm`, with `--out <path>`, `--profile`, `--timing recorded|accelerated|max-speed`.
 - `agent-tty record diff <id-a> <id-b>`, with `--at-seq-a`, `--at-seq-b`.
 
@@ -37,7 +37,8 @@ Preconditions:
 - **Asciicast.** Run `att record export "$H" --format asciicast --json`. `.result.artifactPath` ends in `.cast`, and the file's first line is a JSON header with `"width":80` and `"height":24`.
 - **WebM.** Run `att record export "$H" --format webm --json`. `.result.artifactPath` ends in `.webm`, and `.result.bytes` is larger than 0. It can take tens of seconds on a long session.
 - **Manifest.** Run `jq -c '[.artifacts[].kind]' "$AGENT_TTY_HOME/sessions/$H/artifacts/manifest.json"`. It lists one entry per artifact of `H` above: `snapshot` (twice: the text and the structured snapshot), `screenshot` (twice), `recording` (the `.cast`) and `video` (the `.webm`). The snapshot of `B` is in the manifest of `B`.
-- **Diff.** Create a second `hello-prompt` session `H2` and wait for its prompt, then run `att record diff "$H" "$H2" --json`. `.result.identical` is `false`, and `.result.diff` starts with `delete` entries for `READY> artifact-proof` and `ECHO: artifact-proof` (rows of session A), then an `equal` entry for `READY>`.
+- **Diff.** Create a second `hello-prompt` session `H2` and wait for its prompt. Save `find "$AGENT_TTY_HOME/sessions/$H/artifacts" -type f | sort > "$EVIDENCE/art/files-before.txt"` and `jq '.artifacts | length' "$AGENT_TTY_HOME/sessions/$H/artifacts/manifest.json" > "$EVIDENCE/art/manifest-count-before.txt"`, then run `att record diff "$H" "$H2" --json | tee "$EVIDENCE/art/diff.json"`. `.result.identical` is `false`, and `.result.diff` starts with `delete` entries for `READY> artifact-proof` and `ECHO: artifact-proof` (rows of session A), then an `equal` entry for `READY>`. The same two commands, written to `files-after.txt` and `manifest-count-after.txt`, give the same output: `record diff` writes no artifact.
+- **Empty session.** Run `E=$(att create --json -- sleep 600 | jq -r .result.sessionId)`. The program prints nothing, so the session has no events. `att snapshot "$E" --format text --json | tee "$EVIDENCE/art/empty-snapshot.json"` has `capturedAtSeq: -1` and a blank `text`. `att screenshot "$E" --json | tee "$EVIDENCE/art/empty-screenshot.json"` has `capturedAtSeq: -1`, and its `artifactPath` ends in `screenshot--1-reference-dark.png`. `cursorVisible` is `false`. Copy that PNG to `$EVIDENCE/art/`: it shows a dark screen with no text and no cursor block. `att screenshot "$E" --show-cursor --json` draws a block at the top left (row 0, col 0) and reports `cursorVisible: true`, so its `sha256` differs.
 - **Offline export.** Run `att send-keys "$H" Ctrl+C --json` and `att wait "$H" --exit --timeout 10000 --json`, then `att screenshot "$H" --json`. The export still succeeds (`ok: true`, a new `screenshot-<seq>-reference-dark.png`), rendered from the event log of the exited session.
 
 ## Gotchas

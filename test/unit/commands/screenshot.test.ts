@@ -226,11 +226,17 @@ describe('screenshot command', () => {
   });
 
   describe('--out', () => {
+    const outTarget = {
+      path: '/real/out/proof.png',
+      parentDev: 1n,
+      parentIno: 2n,
+    };
+
     it('copies the captured PNG to the resolved --out path and returns that path', async () => {
       mocks.sendRpc.mockResolvedValue(
         createScreenshotResult({ artifactPath: '/artifacts/shot.png' }),
       );
-      mocks.resolveExplicitOutputPath.mockResolvedValue('/real/out/proof.png');
+      mocks.resolveExplicitOutputPath.mockResolvedValue(outTarget);
       mocks.copyFileReplacing.mockResolvedValue(undefined);
 
       await runScreenshotCommand({
@@ -246,7 +252,7 @@ describe('screenshot command', () => {
       );
       expect(mocks.copyFileReplacing).toHaveBeenCalledWith(
         '/artifacts/shot.png',
-        '/real/out/proof.png',
+        outTarget,
       );
       expect(mocks.emitSuccess).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -279,7 +285,7 @@ describe('screenshot command', () => {
 
     it('fails with EXPORT_ERROR when the copy to --out fails', async () => {
       mocks.sendRpc.mockResolvedValue(createScreenshotResult());
-      mocks.resolveExplicitOutputPath.mockResolvedValue('/real/out/proof.png');
+      mocks.resolveExplicitOutputPath.mockResolvedValue(outTarget);
       mocks.copyFileReplacing.mockRejectedValue(
         Object.assign(new Error('disk full'), { code: 'ENOSPC' }),
       );
@@ -298,13 +304,33 @@ describe('screenshot command', () => {
       expect(mocks.emitSuccess).not.toHaveBeenCalled();
     });
 
+    it('passes on the EXPORT_ERROR when the --out folder was replaced before the rename', async () => {
+      const replaced = new CliError(
+        ERROR_CODES.EXPORT_ERROR,
+        'Output folder /real/out was replaced while the command ran.',
+      );
+      mocks.sendRpc.mockResolvedValue(createScreenshotResult());
+      mocks.resolveExplicitOutputPath.mockResolvedValue(outTarget);
+      mocks.copyFileReplacing.mockRejectedValue(replaced);
+
+      await expect(
+        runScreenshotCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          out: '/real/out/proof.png',
+        }),
+      ).rejects.toBe(replaced);
+      expect(mocks.emitSuccess).not.toHaveBeenCalled();
+    });
+
     it('reports SESSION_NOT_FOUND when the session folder is gone before the copy', async () => {
       const removed = new CliError(
         ERROR_CODES.SESSION_NOT_FOUND,
         'Session folder was removed.',
       );
       mocks.sendRpc.mockResolvedValue(createScreenshotResult());
-      mocks.resolveExplicitOutputPath.mockResolvedValue('/real/out/proof.png');
+      mocks.resolveExplicitOutputPath.mockResolvedValue(outTarget);
       mocks.copyFileReplacing.mockRejectedValue(
         Object.assign(new Error('gone'), { code: 'ENOENT' }),
       );
@@ -383,12 +409,10 @@ describe('screenshot command', () => {
     );
   });
 
-  it('says when the missing glyph list is truncated', async () => {
-    const result = createScreenshotResult({
-      missingGlyphs: [{ codePoint: 'U+0378', cells: [{ row: 1, col: 6 }] }],
-      missingGlyphsTruncated: true,
-    });
-    mocks.sendRpc.mockResolvedValue(result);
+  async function glyphLines(
+    fields: Pick<ScreenshotResult, 'missingGlyphs' | 'missingGlyphsTruncated'>,
+  ): Promise<string[]> {
+    mocks.sendRpc.mockResolvedValue(createScreenshotResult(fields));
 
     await runScreenshotCommand({
       context: TEST_CONTEXT,
@@ -396,13 +420,32 @@ describe('screenshot command', () => {
       sessionId: 'session-01',
     });
 
-    expect(mocks.emitSuccess).toHaveBeenCalledWith(
-      expect.objectContaining({
-        lines: expect.arrayContaining([
-          'Missing glyphs (drawn as boxes): U+0378, and more',
-        ]) as unknown,
+    const [output] = mocks.emitSuccess.mock.calls.at(-1) as [
+      { lines: string[] },
+    ];
+    return output.lines.filter((line) => /glyph/iu.test(line));
+  }
+
+  it('says on its own line when the glyph check stopped early', async () => {
+    expect(
+      await glyphLines({
+        missingGlyphs: [{ codePoint: 'U+0378', cells: [{ row: 1, col: 6 }] }],
+        missingGlyphsTruncated: true,
       }),
-    );
+    ).toEqual([
+      'Missing glyphs (drawn as boxes): U+0378',
+      'Glyph check incomplete',
+    ]);
+  });
+
+  it('claims no box when an incomplete glyph check found none', async () => {
+    expect(
+      await glyphLines({ missingGlyphs: [], missingGlyphsTruncated: true }),
+    ).toEqual(['Glyph check incomplete']);
+  });
+
+  it('prints no glyph line when the check found no box', async () => {
+    expect(await glyphLines({ missingGlyphs: [] })).toEqual([]);
   });
 
   it('threads showCursor to running-session screenshot RPC requests', async () => {

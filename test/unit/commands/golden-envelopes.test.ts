@@ -1144,6 +1144,8 @@ const goldenResultContracts: readonly GoldenResultContractCase[] = [
         height: 24,
         profileName: 'default',
       },
+      missingGlyphs: [{ codePoint: 'U+0378' }],
+      missingGlyphsTruncated: true,
     },
     invalidResult: {
       sessionId: '01J0000000TEST000000000000',
@@ -1151,7 +1153,7 @@ const goldenResultContracts: readonly GoldenResultContractCase[] = [
       artifactPath: '/tmp/test.webm',
       bytes: 2048,
       sha256: 'def456',
-      capturedAtSeq: -1,
+      capturedAtSeq: -2,
       metadata: {},
     },
     extraFieldResult: {

@@ -3,6 +3,7 @@ import { renameSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute } from 'node:path';
 
+import { CliError } from '../cli/errors.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { SessionRecordSchema } from '../protocol/schemas.js';
 import { invariant } from '../util/assert.js';
@@ -41,6 +42,11 @@ export interface WriteTextFileAtomicOptions {
    * creating the folder again.
    */
   createParentFolders?: boolean;
+  /**
+   * Runs after the temp file is written and before the rename. A `CliError`
+   * it throws is passed on as is.
+   */
+  beforeRename?: () => Promise<void>;
 }
 
 function assertAbsoluteStoragePath(path: string, label: string): void {
@@ -108,11 +114,13 @@ export async function readValidatedJsonFile<T>(
 async function replaceFileAtomic(
   path: string,
   contents: string,
+  beforeRename?: () => Promise<void>,
 ): Promise<void> {
   const temporaryPath = `${path}.tmp-${randomUUID()}`;
 
   try {
     await writeFile(temporaryPath, contents, { encoding: 'utf8', mode: 0o600 });
+    await beforeRename?.();
     await rename(temporaryPath, path);
   } catch (error) {
     await rm(temporaryPath, { force: true }).catch(() => undefined);
@@ -141,8 +149,15 @@ export async function writeTextFileAtomic(
     if (options.createParentFolders !== false) {
       await mkdir(dirname(options.path), { recursive: true });
     }
-    await replaceFileAtomic(options.path, options.contents);
+    await replaceFileAtomic(
+      options.path,
+      options.contents,
+      options.beforeRename,
+    );
   } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
     throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
       message: options.writeErrorMessage,
       details: { path: options.path },

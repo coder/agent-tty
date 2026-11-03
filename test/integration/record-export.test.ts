@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, realpath } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
+import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -34,6 +35,8 @@ interface RecordExportResult {
   capturedAtSeq: number;
   durationMs?: number;
   metadata: Record<string, unknown>;
+  missingGlyphs?: { codePoint: string }[];
+  missingGlyphsTruncated?: true;
 }
 
 async function readJsonFile<T>(path: string): Promise<T> {
@@ -274,6 +277,7 @@ describe('record export integration', { timeout: 120_000 }, () => {
     expect(envelope.result.artifactPath.endsWith('.webm')).toBe(true);
     expect(envelope.result.bytes).toBeGreaterThan(0);
     expect(envelope.result.capturedAtSeq).toBeGreaterThanOrEqual(0);
+    expect(envelope.result.missingGlyphs).toEqual([]);
 
     const contents = await readFile(envelope.result.artifactPath);
     expect(contents.byteLength).toBe(envelope.result.bytes);
@@ -359,6 +363,118 @@ describe('record export integration', { timeout: 120_000 }, () => {
         bytes: envelope.result.bytes,
       }),
     );
+  });
+
+  it('lists a glyph that a webm frame drew as a box although the last frame is clean, and asciicast lists none', () => {
+    const sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      "printf 'box \\315\\270\\n'; read line; printf '\\033[2J\\033[Hclean\\n'; exec cat",
+    ]);
+
+    waitForIdle(testHome, sessionId);
+    const enterResult = runCli(['send-keys', sessionId, 'Enter', '--json'], {
+      AGENT_TTY_HOME: testHome,
+    });
+    expect(enterResult.status).toBe(0);
+    const waitResult = runCli(
+      ['wait', sessionId, '--text', 'clean', '--timeout', '10000', '--json'],
+      { AGENT_TTY_HOME: testHome },
+      15_000,
+    );
+    expect(waitResult.status).toBe(0);
+    waitForIdle(testHome, sessionId);
+
+    const exportAs = (format: 'asciicast' | 'webm') => {
+      const result = runCli(
+        ['record', 'export', sessionId, '--format', format, '--json'],
+        { AGENT_TTY_HOME: testHome },
+        120_000,
+      );
+      expect(result.status).toBe(0);
+      return (JSON.parse(result.stdout) as SuccessEnvelope<RecordExportResult>)
+        .result;
+    };
+
+    expect(exportAs('webm').missingGlyphs).toEqual([{ codePoint: 'U+0378' }]);
+    expect(exportAs('asciicast')).not.toHaveProperty('missingGlyphs');
+
+    destroySession(testHome, sessionId);
+  });
+
+  it.skipIf(process.getuid?.() === 0)(
+    'fails with EXPORT_ERROR when the --out parent folder cannot be searched',
+    async () => {
+      const sessionId = createSession(testHome, [
+        '/bin/sh',
+        '-c',
+        "printf 'done\\n'; exit 0",
+      ]);
+      waitForExit(testHome, sessionId);
+      const writeOnly = join(testHome, 'write-only');
+      await mkdir(writeOnly, { mode: 0o200 });
+      await chmod(writeOnly, 0o200);
+      const out = join(writeOnly, 'session.cast');
+
+      try {
+        const result = runCli(
+          [
+            'record',
+            'export',
+            sessionId,
+            '--format',
+            'asciicast',
+            '--out',
+            out,
+            '--json',
+          ],
+          { AGENT_TTY_HOME: testHome },
+          15_000,
+        );
+
+        expect(result.status).toBe(7);
+        expect(result.stderr).toBe('');
+        const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+        expect(envelope.error).toMatchObject({
+          code: 'EXPORT_ERROR',
+          details: { sessionId, out },
+        });
+      } finally {
+        await chmod(writeOnly, 0o700);
+      }
+    },
+  );
+
+  it('creates missing parent folders of --out', async () => {
+    const sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      "printf 'done\\n'; exit 0",
+    ]);
+    waitForExit(testHome, sessionId);
+    const out = join(testHome, 'exports', 'nested', 'session.cast');
+
+    const result = runCli(
+      [
+        'record',
+        'export',
+        sessionId,
+        '--format',
+        'asciicast',
+        '--out',
+        out,
+        '--json',
+      ],
+      { AGENT_TTY_HOME: testHome },
+      15_000,
+    );
+
+    expect(result.status).toBe(0);
+    const envelope = JSON.parse(
+      result.stdout,
+    ) as SuccessEnvelope<RecordExportResult>;
+    expect(envelope.result.artifactPath).toBe(out);
+    expect(await readFile(out, 'utf8')).toContain('done');
   });
 
   it('rejects invalid export formats', () => {

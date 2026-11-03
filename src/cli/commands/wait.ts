@@ -19,7 +19,11 @@ import {
   matchRenderWaitSnapshot,
   prepareRenderWaitCondition,
 } from '../../renderWait/matcher.js';
-import { DEFAULT_WAIT_TIMEOUT_MS } from '../../renderWait/limits.js';
+import {
+  DEFAULT_WAIT_TIMEOUT_MS,
+  RENDER_WAIT_POLL_INTERVAL_MS,
+  screenStableMinimumMs,
+} from '../../renderWait/limits.js';
 import { computeScreenHash } from '../../renderer/canonicalScreen.js';
 import { isTerminalSessionStatus } from '../../protocol/sessionStatusPolicy.js';
 import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
@@ -54,21 +58,36 @@ function isNonNegativeInteger(value: number | undefined): value is number {
   return value !== undefined && Number.isInteger(value) && value >= 0;
 }
 
-function assertFitsDefaultTimeout(
+function assertWindowFitsTimeout(
   flag: '--idle-ms' | '--screen-stable-ms',
   windowMs: number | undefined,
   timeout: number | undefined,
 ): void {
-  if (
-    timeout === undefined &&
-    windowMs !== undefined &&
-    windowMs >= DEFAULT_WAIT_TIMEOUT_MS
-  ) {
-    throw makeCliError(ERROR_CODES.INVALID_DURATION, {
-      message: `${flag} ${String(windowMs)} cannot finish within the default --timeout of ${String(DEFAULT_WAIT_TIMEOUT_MS)} ms. Pass a larger --timeout, or --timeout 0 to wait without a limit.`,
-      details: { flag, windowMs, defaultTimeoutMs: DEFAULT_WAIT_TIMEOUT_MS },
-    });
+  if (windowMs === undefined || timeout === 0) {
+    return;
   }
+
+  const timeoutMs = timeout ?? DEFAULT_WAIT_TIMEOUT_MS;
+  const screenStable = flag === '--screen-stable-ms';
+  const minimumMs = screenStable ? screenStableMinimumMs(windowMs) : windowMs;
+  if (minimumMs < timeoutMs) {
+    return;
+  }
+
+  const limit =
+    timeout === undefined
+      ? `the default --timeout of ${String(timeoutMs)} ms`
+      : `--timeout ${String(timeoutMs)}`;
+  const pollNote = screenStable
+    ? ` It needs more than ${String(minimumMs)} ms, because the stable clock starts at the first render poll (every ${String(RENDER_WAIT_POLL_INTERVAL_MS)} ms) and a later poll must confirm it.`
+    : '';
+  throw makeCliError(ERROR_CODES.INVALID_DURATION, {
+    message: `${flag} ${String(windowMs)} cannot finish within ${limit}.${pollNote} Pass a larger --timeout, or --timeout 0 to wait without a limit.`,
+    details:
+      timeout === undefined
+        ? { flag, windowMs, defaultTimeoutMs: timeoutMs }
+        : { flag, windowMs, timeoutMs },
+  });
 }
 
 function isRenderWaitMode(options: CommandOptions): boolean {
@@ -124,15 +143,32 @@ function renderWaitLines(result: WaitForRenderResult): string[] {
   return lines;
 }
 
+// The host also reports timedOut after repeated renderer failures, early and
+// even without a timeout, so only a wait that lasted its timeout names it.
+function timeoutMessage(
+  options: CommandOptions,
+  timeoutMs: number,
+  elapsedMs: number,
+): string {
+  if (options.json || timeoutMs === 0 || elapsedMs < timeoutMs) {
+    return 'Wait timed out before its condition was met.';
+  }
+  if (options.timeout === undefined) {
+    return `Wait timed out after ${String(timeoutMs)} ms (the default; pass --timeout <ms>, or --timeout 0 to wait without a limit).`;
+  }
+  return `Wait timed out after ${String(timeoutMs)} ms.`;
+}
+
 function throwIfTimedOut(
   result: WaitResult | WaitForRenderResult,
-  sessionId: string,
+  options: CommandOptions,
   timeoutMs: number,
+  elapsedMs: number,
 ): void {
   if (result.timedOut) {
     throw makeCliError(ERROR_CODES.WAIT_TIMEOUT, {
-      message: 'Wait timed out before its condition was met.',
-      details: { sessionId, timeoutMs },
+      message: timeoutMessage(options, timeoutMs, elapsedMs),
+      details: { sessionId: options.sessionId, timeoutMs },
       result,
     });
   }
@@ -277,7 +313,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       });
     }
 
-    assertFitsDefaultTimeout(
+    assertWindowFitsTimeout(
       '--screen-stable-ms',
       options.screenStableMs,
       options.timeout,
@@ -307,6 +343,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       rendererName: options.context.rendererDefault,
     };
     const clientTimeout = effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
+    const startedAt = performance.now();
     let rawResult: unknown;
     try {
       rawResult = await sendRpc(
@@ -337,7 +374,12 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       });
     }
     const result: WaitForRenderResult = parsedResult.data;
-    throwIfTimedOut(result, options.sessionId, effectiveTimeout);
+    throwIfTimedOut(
+      result,
+      options,
+      effectiveTimeout,
+      performance.now() - startedAt,
+    );
 
     emitSuccess({
       command: 'wait',
@@ -377,7 +419,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  assertFitsDefaultTimeout('--idle-ms', options.idleMs, options.timeout);
+  assertWindowFitsTimeout('--idle-ms', options.idleMs, options.timeout);
 
   const manifestStatus = manifest.status;
 
@@ -407,6 +449,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     timeoutMs: effectiveTimeout === 0 ? undefined : effectiveTimeout,
   };
   const clientTimeout = effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
+  const startedAt = performance.now();
   const rawResult: unknown = await sendRpc(
     socketPath(sessionDirectory),
     'wait',
@@ -421,7 +464,12 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     });
   }
   const result: WaitResult = parsedResult.data;
-  throwIfTimedOut(result, options.sessionId, effectiveTimeout);
+  throwIfTimedOut(
+    result,
+    options,
+    effectiveTimeout,
+    performance.now() - startedAt,
+  );
 
   emitSuccess({
     command: 'wait',

@@ -3,6 +3,7 @@ import { AssertionError } from 'node:assert';
 import { describe, expect, it } from 'vitest';
 
 import {
+  BUNDLED_FONT_ASSETS,
   BUNDLED_FONT_FAMILY,
   BUNDLED_PRIMARY_FONT_ASSET,
   BUNDLED_SYMBOLS_FONT_ASSET,
@@ -43,22 +44,15 @@ describe('renderer profiles', () => {
       backgroundColor: '#1e1e2e',
       foregroundColor: '#cdd6f4',
     });
-    expect(profile.fontAssets).toEqual([
-      {
-        family: BUNDLED_PRIMARY_FONT_ASSET.family,
-        assetIdentity: BUNDLED_PRIMARY_FONT_ASSET.assetIdentity,
-        route: BUNDLED_PRIMARY_FONT_ASSET.route,
-        weight: BUNDLED_PRIMARY_FONT_ASSET.weight,
-        style: BUNDLED_PRIMARY_FONT_ASSET.style,
-      },
-      {
-        family: BUNDLED_SYMBOLS_FONT_ASSET.family,
-        assetIdentity: BUNDLED_SYMBOLS_FONT_ASSET.assetIdentity,
-        route: BUNDLED_SYMBOLS_FONT_ASSET.route,
-        weight: BUNDLED_SYMBOLS_FONT_ASSET.weight,
-        style: BUNDLED_SYMBOLS_FONT_ASSET.style,
-      },
-    ]);
+    expect(profile.fontAssets).toEqual(
+      BUNDLED_FONT_ASSETS.map((asset) => ({
+        family: asset.family,
+        assetIdentity: asset.assetIdentity,
+        route: asset.route,
+        weight: asset.weight,
+        style: asset.style,
+      })),
+    );
 
     profile.fontFamily = 'mutated';
     profile.fontAssetIdentity = BUNDLED_SYMBOLS_FONT_ASSET.assetIdentity;
@@ -73,6 +67,30 @@ describe('renderer profiles', () => {
     expect(secondRead.fontAssets?.[0]?.family).toBe(BUNDLED_FONT_FAMILY);
   });
 
+  it('falls back to the Noto symbol fonts after the host monospace font', () => {
+    expect(REFERENCE_PROFILE_FONT_STACK).toBe(
+      '"JetBrains Mono", "Symbols Nerd Font Mono", monospace, "Noto Sans Symbols 2", "Noto Sans Math"',
+    );
+    expect(
+      BUNDLED_FONT_ASSETS.map(({ family, filename, contentType }) => ({
+        family,
+        filename,
+        contentType,
+      })).slice(2),
+    ).toEqual([
+      {
+        family: 'Noto Sans Symbols 2',
+        filename: 'NotoSansSymbols2-Regular.woff2',
+        contentType: 'font/woff2',
+      },
+      {
+        family: 'Noto Sans Math',
+        filename: 'NotoSansMath-Regular.woff2',
+        contentType: 'font/woff2',
+      },
+    ]);
+  });
+
   it('uses the bundled font stack for built-in profiles', () => {
     for (const profileName of BUILTIN_PROFILE_NAMES) {
       const profile = resolveProfile(profileName);
@@ -83,10 +101,7 @@ describe('renderer profiles', () => {
       );
       expect(
         profile.fontAssets?.map((fontAsset) => fontAsset.assetIdentity),
-      ).toEqual([
-        BUNDLED_PRIMARY_FONT_ASSET.assetIdentity,
-        BUNDLED_SYMBOLS_FONT_ASSET.assetIdentity,
-      ]);
+      ).toEqual(BUNDLED_FONT_ASSETS.map((asset) => asset.assetIdentity));
     }
   });
 
@@ -100,7 +115,7 @@ describe('renderer profiles', () => {
       backgroundColor: '#1e1e2e',
       foregroundColor: '#cdd6f4',
     });
-    expect(resolveProfile('reference-dark').fontAssets).toHaveLength(2);
+    expect(resolveProfile('reference-dark').fontAssets).toHaveLength(4);
 
     const customProfile = resolveProfile({
       name: 'custom',

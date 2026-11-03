@@ -1,7 +1,15 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { readFileSync, readlinkSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -24,7 +32,7 @@ import {
   programRecordPath,
   sessionDir,
 } from '../../../src/storage/sessionPaths.js';
-import { writeHostRecord } from '../../../src/host/hostRecord.js';
+import { captureHost, writeHostRecord } from '../../../src/host/hostRecord.js';
 import { capturesToken } from '../../helpers.js';
 
 import type * as Fs from 'node:fs';
@@ -38,6 +46,8 @@ const procHooks = vi.hoisted(() => ({
   // Pids whose /proc/<pid>/task listing fails with this error.
   taskErrors: new Map<string, Error>(),
   mountinfo: undefined as string | undefined,
+  // The error that the /proc listing throws.
+  listError: undefined as Error | undefined,
 }));
 
 const autogroupFile = vi.hoisted(() => ({
@@ -47,6 +57,9 @@ const autogroupFile = vi.hoisted(() => ({
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof Fs>('node:fs');
   const readdirSync = ((path: string, ...rest: unknown[]) => {
+    if (procHooks.listError !== undefined && path === '/proc') {
+      throw procHooks.listError;
+    }
     const pid = /^\/proc\/(\d+)\/task$/.exec(path)?.[1];
     if (procHooks.stat === undefined || (path !== '/proc' && !pid)) {
       return (actual.readdirSync as (...args: unknown[]) => unknown)(
@@ -55,6 +68,9 @@ vi.mock('node:fs', async () => {
       );
     }
     if (pid === undefined) {
+      if (procHooks.listError !== undefined) {
+        throw procHooks.listError;
+      }
       return ['self', ...procHooks.stat.keys()];
     }
     if (!procHooks.stat.has(pid)) {
@@ -110,6 +126,7 @@ afterEach(() => {
   procHooks.threads.clear();
   procHooks.taskErrors.clear();
   procHooks.mountinfo = undefined;
+  procHooks.listError = undefined;
   autogroupFile.read = null;
   Object.defineProperty(process, 'platform', { value: platform });
 });
@@ -386,6 +403,8 @@ describe.runIf(platform === 'linux')('readProgramGroup without a token', () => {
       bootId: 'ce4b84e5-e77e-4d68-bc28-cd04a84f6cd7',
       startTicks: '100',
       pidNamespace,
+      timeNamespace: null,
+      machineId: captureHost(process.pid)?.machineId ?? null,
     });
   }
 
@@ -408,6 +427,35 @@ describe.runIf(platform === 'linux')('readProgramGroup without a token', () => {
   // There the childPid names another process group, if any.
   it("names no group in a pid namespace other than the host's", async () => {
     recordHostIn('pid:[1]');
+
+    expect(await readProgramGroup(directory, 4242)).toBeNull();
+  });
+
+  it('names no group when a host record from before the identity fields names another pid namespace', async () => {
+    await writeFile(
+      join(directory, 'host.json'),
+      JSON.stringify({
+        version: 1,
+        pid: 4141,
+        bootId: 'ce4b84e5-e77e-4d68-bc28-cd04a84f6cd7',
+        startTicks: '100',
+        pidNamespace: 'pid:[1]',
+      }),
+    );
+
+    expect(await readProgramGroup(directory, 4242)).toBeNull();
+  });
+
+  it('names no group for a host record from another machine', async () => {
+    writeHostRecord(directory, {
+      version: 1,
+      pid: 4141,
+      bootId: 'ce4b84e5-e77e-4d68-bc28-cd04a84f6cd7',
+      startTicks: '100',
+      pidNamespace: readlinkSync('/proc/self/ns/pid'),
+      timeNamespace: null,
+      machineId: 'another-machine',
+    });
 
     expect(await readProgramGroup(directory, 4242)).toBeNull();
   });
@@ -980,6 +1028,226 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     },
   );
 
+  // A fork chain: each member forks its successor and ends between scans,
+  // until SIGSTOP shows a stopped member, whose autogroup `autogroup` reads.
+  function stopShowsMember(autogroup = '/autogroup-7 nice 0\n') {
+    return vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          procShowsTokenGroup('T');
+          const tokenRead = autogroupFile.read;
+          autogroupFile.read = (file) =>
+            file === '/proc/100/autogroup'
+              ? autogroup
+              : (tokenRead?.(file) ?? null);
+        }
+        return true;
+      });
+  }
+
+  it('freezes a group that no scan shows and kills it once a stopped member carries the token', () => {
+    procShowsTokenGroup();
+    const kill = stopShowsMember();
+
+    stopProgramGroup(group);
+
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGKILL'],
+    ]);
+  });
+
+  it('continues a frozen group whose stopped member names another autogroup', () => {
+    procShowsTokenGroup();
+    const kill = stopShowsMember('/autogroup-8 nice 0\n');
+
+    stopProgramGroup(group);
+
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
+  it('judges a frozen group again until a stopped member comes into view', () => {
+    procShowsTokenGroup();
+    let judged = 0;
+    const kill = vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          autogroupFile.read = (file) => {
+            // Each judge reads the boot id once. The first judge after the
+            // SIGSTOP still shows no member.
+            if (file === '/proc/sys/kernel/random/boot_id') {
+              judged += 1;
+              if (judged === 2) {
+                procShowsTokenGroup('T');
+              }
+              return `${BOOT}\n`;
+            }
+            return /^\/proc\/\d+\/autogroup$/.test(file)
+              ? '/autogroup-7 nice 0\n'
+              : null;
+          };
+        }
+        return true;
+      });
+
+    stopProgramGroup(group);
+
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGKILL'],
+    ]);
+  });
+
+  it('continues a frozen group that reads gone at each of its 5 judgements', () => {
+    procShowsTokenGroup();
+    let judged = 0;
+    autogroupFile.read = (file) => {
+      // Each judgement reads the boot id once.
+      if (file === '/proc/sys/kernel/random/boot_id') {
+        judged += 1;
+        return `${BOOT}\n`;
+      }
+      return /^\/proc\/\d+\/autogroup$/.test(file)
+        ? '/autogroup-7 nice 0\n'
+        : null;
+    };
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+    stopProgramGroup(group);
+
+    expect(judged).toBe(5);
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
+  it('continues a frozen group when a scan after the SIGSTOP throws', () => {
+    procShowsTokenGroup();
+    const kill = vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          autogroupFile.read = (file) => {
+            if (file === '/proc/sys/kernel/random/boot_id') {
+              throw errno('EIO');
+            }
+            return null;
+          };
+        }
+        return true;
+      });
+
+    expect(() => {
+      stopProgramGroup(group);
+    }).toThrow('EIO');
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
+  it('continues a frozen group when the /proc listing after the SIGSTOP throws', () => {
+    procShowsTokenGroup();
+    const kill = vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          procHooks.listError = errno('EMFILE');
+        }
+        return true;
+      });
+
+    expect(() => {
+      stopProgramGroup(group);
+    }).toThrow('EMFILE');
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
+  it('continues a frozen group whose kill throws', () => {
+    procShowsTokenGroup();
+    const kill = vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          procShowsTokenGroup('T');
+        }
+        if (signal === 'SIGKILL') {
+          throw errno('EINVAL');
+        }
+        return true;
+      });
+
+    expect(() => {
+      stopProgramGroup(group);
+    }).toThrow('EINVAL');
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGKILL'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
+  it.each(['ESRCH', 'EPERM'])(
+    'gets no kill when the SIGSTOP of a group that no scan shows ends %s',
+    (code) => {
+      procShowsTokenGroup();
+      const kill = killFailsWith(code);
+
+      stopProgramGroup(group);
+
+      expect(kill.mock.calls).toEqual([[-CHILD_PID, 'SIGSTOP']]);
+    },
+  );
+
+  // A chroot or a container without a mounted /proc.
+  it.each([
+    ['ok', true],
+    ['EPERM', true],
+    ['ESRCH', false],
+  ] as const)(
+    'without /proc, takes the probe that ends %s as the answer and gets no kill',
+    (probe, alive) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procHooks.listError = errno('ENOENT');
+      autogroupFile.read = (file) => {
+        if (file.startsWith('/proc/')) {
+          throw errno('ENOENT');
+        }
+        return null;
+      };
+      const kill = probe === 'ok' ? probeEnds(probe) : killFailsWith(probe);
+
+      expect(isProgramGroupAlive(group)).toBe(alive);
+      stopProgramGroup(group);
+      expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+    },
+  );
+
+  // Only a missing /proc shows no member. A /proc that is a file or that
+  // refuses the listing is not a setup that the probe can answer for.
+  it.each(['EACCES', 'ENOTDIR'])(
+    'throws when the /proc listing fails with %s',
+    (code) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procHooks.listError = errno(code);
+      probeEnds('ok');
+
+      expect(() => isProgramGroupAlive(group)).toThrow(code);
+      expect(() => {
+        stopProgramGroup(group);
+      }).toThrow(code);
+    },
+  );
+
   it('is alive with no member in view when /proc hides other users and the probe ends EPERM', () => {
     procShowsTokenGroup();
     procHooks.mountinfo = procMount('rw,hidepid=2');
@@ -1078,7 +1346,8 @@ describe.runIf(capturesToken)('a program group with a token', () => {
 
     stopProgramGroup(record);
 
-    expect(kill).not.toHaveBeenCalled();
+    expect(kill).not.toHaveBeenCalledWith(-record.pid, 'SIGKILL');
+    expect(kill).not.toHaveBeenCalledWith(-record.pid, 'SIGCONT');
     expect(isProgramGroupAlive(record)).toBe(false);
   });
 });

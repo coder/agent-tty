@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import {
   mkdir,
   mkdtemp,
+  readFile,
+  readdir,
   realpath,
   rm,
   stat,
@@ -12,6 +14,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import {
   manifestPath,
@@ -24,6 +27,7 @@ import {
   readManifest,
   readManifestIfExists,
   writeManifest,
+  writeTextFileAtomic,
 } from '../../../src/storage/manifests.js';
 
 function createSessionRecord(): SessionRecord {
@@ -120,6 +124,36 @@ describe('manifest storage', () => {
       writeManifest(manifestPath(directory), createSessionRecord()),
     ).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' });
     await expect(stat(directory)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('runs beforeRename after the temp write and passes on its CliError', async () => {
+    // oxfmt-ignore
+    const directory = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-write-')));
+    temporaryDirectories.push(directory);
+    const path = join(directory, 'out.cast');
+    await writeFile(path, 'old');
+    const refused = makeCliError(ERROR_CODES.EXPORT_ERROR, {
+      message: 'refused',
+    });
+    let entriesSeenByHook: string[] = [];
+
+    await expect(
+      writeTextFileAtomic({
+        path,
+        pathLabel: 'test path',
+        contents: 'new',
+        writeErrorMessage: 'write failed',
+        createParentFolders: false,
+        beforeRename: async () => {
+          entriesSeenByHook = await readdir(directory);
+          throw refused;
+        },
+      }),
+    ).rejects.toBe(refused);
+
+    expect(entriesSeenByHook).toHaveLength(2);
+    expect(await readdir(directory)).toEqual(['out.cast']);
+    expect(await readFile(path, 'utf8')).toBe('old');
   });
 
   it('returns null when a manifest does not exist', async () => {
