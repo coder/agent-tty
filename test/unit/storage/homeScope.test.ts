@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -70,6 +70,18 @@ describe('scanHome (read-only Session counts)', () => {
     expect(await scanHome(home)).toEqual({
       activeSessions: 1,
       totalSessions: 2,
+    });
+  });
+
+  // A reconcile that wrote failed over a destroy and has not yet written
+  // destroyed again, or was killed before it could.
+  it('skips a failed Session whose folder holds the destroy marker', async () => {
+    await seedSession({ sessionId: 'failed-1', status: 'failed' });
+    await writeFile(join(sessionDir(home, 'failed-1'), 'destroyed'), '');
+
+    expect(await scanHome(home)).toEqual({
+      activeSessions: 0,
+      totalSessions: 0,
     });
   });
 

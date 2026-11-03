@@ -358,6 +358,59 @@ describe('reconcileSession', () => {
     expect(manifest.failureReason).toBeUndefined();
   });
 
+  it('records destroyed for a failed session whose reconcile died before it repaired a destroy', async () => {
+    const directory = await seedSession(
+      makeRecord({
+        status: 'failed',
+        failureOrigin: 'host-death',
+        failureReason: 'host process died unexpectedly',
+        hostPid: null,
+        childPid: null,
+      }),
+    );
+    writeFileSync(join(directory, 'destroyed'), '');
+
+    await reconcileSession(directory);
+
+    const manifest = await readManifest(manifestPath(directory));
+    expect(manifest).toMatchObject({ status: 'destroyed' });
+    expect(manifest.failureOrigin).toBeUndefined();
+    expect(manifest.failureReason).toBeUndefined();
+  });
+
+  it('records destroyed for an exited session whose destroy failed after the marker', async () => {
+    const directory = await seedSession(
+      makeRecord({
+        status: 'exited',
+        exitCode: 3,
+        hostPid: null,
+        childPid: null,
+      }),
+    );
+    writeFileSync(join(directory, 'destroyed'), '');
+
+    await reconcileSession(directory);
+
+    expect(await readManifest(manifestPath(directory))).toMatchObject({
+      status: 'destroyed',
+      exitCode: 3,
+    });
+  });
+
+  it('leaves an exited session without the marker as it is', async () => {
+    const exited = makeRecord({
+      status: 'exited',
+      exitCode: 0,
+      hostPid: null,
+      childPid: null,
+    });
+    const directory = await seedSession(exited);
+
+    await reconcileSession(directory);
+
+    expect(await readManifest(manifestPath(directory))).toEqual(exited);
+  });
+
   it('writes nothing while the program group survives its kill', async () => {
     const record = makeRecord();
     const directory = await seedSession(record);
