@@ -29,7 +29,7 @@
     "src/host/lifecycle.ts#stopSessionProcesses": "74794e19bc382784",
     "src/host/lifecycle.ts#recordDestroyed": "d968f32f58d3920a",
     "src/host/lifecycle.ts#destroySession": "873354edcae17792",
-    "src/host/lifecycle.ts#isMarkedDestroyed": "c1d455f730e8e309",
+    "src/host/lifecycle.ts#isMarkedDestroyed": "d178f4a63473915c",
     "src/host/lifecycle.ts#writeMarkedDestroyed": "4863c35f70699757",
     "src/host/lifecycle.ts#reconcileSession": "4e5dac8144a0d9fb",
     "src/host/hostMain.ts#waitForManifestFromCreate": "fd500651f83683eb",
@@ -81,7 +81,7 @@
     "src/host/hostMain.ts#runHost(final try)": "16789dd4e2534bc7",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "e0bda9b1b76958e4",
+    "skill:model/SessionLifecycle.tla": "b7d5fd88f74e673f",
     "skill:scripts/facts.mjs": "a2b23bd2f95e4363",
     "skill:scripts/check.sh": "a7840ba3b1d5c554"
   },
@@ -136,6 +136,7 @@
     ],
     "reconcileSession": [
       "src/cli/commands/gc.ts#gcSessions",
+      "src/cli/commands/inspect.ts#runInspectCommand",
       "src/cli/commands/inspect.ts#runInspectCommand",
       "src/host/lifecycle.ts#destroySession",
       "src/host/lifecycle.ts#destroySession",
