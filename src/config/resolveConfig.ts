@@ -11,6 +11,7 @@ import {
   MANIFEST_FILENAME,
   SOCKET_FILENAME,
 } from './defaults.js';
+import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { resolveHome } from '../storage/home.js';
 import { invariant } from '../util/assert.js';
 
@@ -78,7 +79,9 @@ export async function loadConfigFile(home: string): Promise<ConfigFile | null> {
       return null;
     }
 
-    throw new Error(`Failed to read config file at ${configPath}.`, {
+    throw makeCliError(ERROR_CODES.STORAGE_READ_ERROR, {
+      message: `Failed to read config file at ${configPath}.`,
+      details: { configPath },
       cause: error,
     });
   }
@@ -87,14 +90,18 @@ export async function loadConfigFile(home: string): Promise<ConfigFile | null> {
   try {
     parsedConfig = JSON.parse(rawConfigFile) as unknown;
   } catch (error) {
-    throw new Error(`Config file at ${configPath} contains invalid JSON.`, {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: `Config file at ${configPath} contains invalid JSON.`,
+      details: { configPath },
       cause: error,
     });
   }
 
   const result = ConfigFileSchema.safeParse(parsedConfig);
   if (!result.success) {
-    throw new Error(formatConfigIssues(configPath, result.error.issues), {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: formatConfigIssues(configPath, result.error.issues),
+      details: { configPath },
       cause: result.error,
     });
   }

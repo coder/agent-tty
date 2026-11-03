@@ -103,12 +103,19 @@ CONSTANTS
     ProvesHostPid,          \* lifecycle.ts, hostRecord.ts: destroy --force
                             \*   kills the host only while its pid shows the
                             \*   boot id and start time that host.json holds
+    FreezesUnseenGroup,     \* programGroup.ts: stopProgramGroup sends
+                            \*   SIGSTOP to a group that no scan shows and
+                            \*   judges it again
     Token,                  \* the environment: the host's capture finds the
                             \*   program's session token
+    Unseen,                 \* the environment: no scan of /proc shows a
+                            \*   live process of the program, as for a fork
+                            \*   chain whose processes each live about 2 ms
     MaxListReconciles       \* how many times the "list" process reconciles
 
 ASSUME MaxListReconciles \in 1..3
 ASSUME Token \in BOOLEAN
+ASSUME Unseen \in BOOLEAN
 ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  ReconcileSkipsLiveHost, CreateRecordsHostPid,
                  HostWaitsForManifest, ReconcileRereads,
@@ -122,7 +129,8 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  ProvesGroupOwnership, DestroyStopsLeftovers,
                  FallbackNeedsFolder, CreateStopsOnGiveUp,
                  ReconcileRepairsDestroyed, TokenNamesProgram,
-                 ReusedIdReadsGone, ProvesHostPid} : b \in BOOLEAN
+                 ReusedIdReadsGone, ProvesHostPid,
+                 FreezesUnseenGroup} : b \in BOOLEAN
 
 Readers == {"gc", "list"}   \* the two processes that run reconcileSession
 \* The group that a kill went through, and that the wait after it probes:
@@ -288,10 +296,17 @@ NoKill == UNCHANGED <<prog, left, hitUnrelated>>
 \* ProvesGroupOwnership the code kills the id as it is. Without
 \* TokenNamesProgram the capture can read the program's autogroup before the
 \* program called setsid(), so the record holds the host's autogroup, which
-\* no member of the group carries, and the kill never comes.
+\* no member of the group carries, and the kill never comes. With Unseen no
+\* scan shows a process of the program, so unless a process of another user
+\* in the group is the witness, the group reads gone and gets no kill.
+\* FreezesUnseenGroup then sends the group SIGSTOP, which every member gets,
+\* also one forked during the delivery, and a stopped member stays in view,
+\* so the next judge finds the witness.
 ProvenKill ==
     IF ~TokenNamesProgram THEN NoKill
-    ELSE IF ProvesGroupOwnership /\ reused THEN NoKill ELSE KillsGroupId
+    ELSE IF ProvesGroupOwnership /\ reused THEN NoKill
+    ELSE IF Unseen /\ ~FreezesUnseenGroup /\ ~reused /\ ~foreign THEN NoKill
+    ELSE KillsGroupId
 
 \* Without a token, readProgramGroup falls back to the childPid of the
 \* manifest copy that the caller read before it, `named`. With
@@ -336,10 +351,13 @@ ProbeSees == prog \/ left \/ reused \/ (ProbeCountsDeniedGroup /\ foreign)
 \* comes after the program's kill or exit, so it reads gone. Without
 \* TokenNamesProgram no member carries the recorded autogroup, so the group
 \* reads gone. Without ReusedIdReadsGone a group that took the id reads
-\* alive, because its members carry another autogroup.
+\* alive, because its members carry another autogroup. With Unseen the scans
+\* show no process of the program, and the probe after them reads the
+\* group gone, since the wait does not freeze it.
 GroupSeen(kind) ==
     /\ KillsProgramGroup
-    /\ \/ kind = "proven" /\ TokenNamesProgram /\ (prog \/ left \/ foreign)
+    /\ \/ kind = "proven" /\ TokenNamesProgram
+          /\ (((prog \/ left) /\ ~Unseen) \/ foreign)
        \/ kind = "proven" /\ ~ReusedIdReadsGone /\ reused
        \/ kind = "bare" /\ ProbeSees
        \/ kind = "numeric" /\ FallbackReaches /\ ProbeSees

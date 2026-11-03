@@ -312,6 +312,7 @@ agent-tty record diff <session-id> <session-id> --at-seq-a 0 --json
 
 `destroy` ends the session's program and every process that the program left in its process group, then records the session as `destroyed`.
 On Linux it also ends those processes when the program has already exited or the session has failed.
+A group whose processes each fork their successor and end too fast for any scan of `/proc` to show one, a fork chain, gets SIGSTOP first. Its stopped processes stay in view, so `destroy` can prove the group and kill it. A frozen group that agent-tty cannot prove is the session's gets SIGCONT.
 `destroy --force` kills the host and the program's group without asking the host first.
 `list`, `inspect`, `destroy` and `gc` reconcile a session whose host died: they kill the program's group and record the session as `failed` (or `exited` or `destroyed`).
 A `destroy` that runs inside the session, such as one typed into the session's shell, runs again outside the session and prints its result once the session has ended.
@@ -354,7 +355,7 @@ Limits:
 
 1. `destroy` does not kill a process that has left the program's process group. A process leaves the group when it calls `setsid` (for example `setsid cmd` or a daemon), or when an interactive shell with job control runs it as a job (for example `cmd &` typed into `bash -i`). Stop such a process yourself, or keep it in the program's group.
 2. Some sessions have no autogroup record: sessions on macOS and Windows, on Linux kernels without autogroups (`/proc/self/autogroup` is missing), on Linux when `/proc` refuses to show the autogroup or the boot id at start-up, and sessions that an agent-tty version without `program.json` created. For these sessions, `destroy --force`, reconcile and the host's own kill at shutdown or at the idle time-out kill the process group (on Windows, the process) that `session.json` names, without the check, so such a kill can reach an unrelated process that took the group id after the program's group ended. `destroy` of a session whose program has already exited kills nothing. A `program.json` that agent-tty cannot read as a record, for example one that a newer version wrote, proves nothing: `destroy` and reconcile kill nothing for that session.
-3. The check and the kill are separate system calls, a few microseconds apart. If every process of the group exits and an unrelated process takes the group id in that time, the kill reaches the unrelated process. No system call kills a process group through a handle, so this window remains.
+3. The check and the kill are separate system calls, a few microseconds apart. If every process of the group exits and an unrelated process takes the group id in that time, the kill reaches the unrelated process. No system call kills a process group through a handle, so this window remains. A group that no scan shows gets SIGSTOP before the check and SIGCONT when the check fails. If agent-tty itself dies between the two signals (SIGKILL, SIGINT, SIGTERM, SIGHUP, or the out-of-memory killer), an unrelated group that took the id stays stopped, and a later `destroy` does not resume it. Resume it with `kill -CONT -- -<pgid>`, where `<pgid>` is the Child PID that `inspect` shows.
 4. The host writes `program.json` a few milliseconds after it starts the program. We timed 150 `create` calls on Linux, from the return of node-pty's spawn to the renamed `program.json`, at 1-minute load averages of 38 to 83: the median was 2.8 ms, the 90th percentile 4.3 ms, and the longest 66 ms. If the host dies in that window and the program ignores the hang-up signal, no file names the program, and `destroy` cannot end it.
 5. `gc` removes `program.json` with the session folder, and `gc` kills nothing. Run `destroy` before `gc` when a program can leave processes behind.
 6. Two cases where agent-tty cannot run the check end differently from a session that stays running:
@@ -440,7 +441,11 @@ Every command exits with a stable code, so scripts can branch without parsing ou
 
 A fail-fast `batch` exits with the failed step's code (for example `11` for a wait timeout); `--keep-going` exits `1` if any step failed.
 
-An unexpected failure prints an `INTERNAL_ERROR` envelope and exits `1`. Add `--log-level debug` to also print its stack on stderr. A failure while the CLI reads the global options and the config file prints no stack, because the log level is not known yet. With `--json`, a usage error (unknown command or flag, missing argument or required option) prints an `INVALID_INPUT` envelope under the command name `agent-tty` and exits `2`. The usage text still goes to stderr.
+`agent-tty help` and `agent-tty help <command>` exit `0`. Without a command, the CLI prints the help on stderr and exits `2`.
+
+An unreadable Home `config.json` gives `STORAGE_READ_ERROR` (exit `8`). Invalid JSON or an invalid field in it gives `INVALID_INPUT` (exit `2`). Both errors carry `details.configPath`.
+
+An unexpected failure prints an `INTERNAL_ERROR` envelope and exits `1` once the output is flushed, even when the failed code left a handle open. Add `--log-level debug` to also print its stack on stderr. A failure while the CLI reads the global options and the config file prints no stack, because the log level is not known yet. With `--json`, a usage error (unknown command or flag, missing argument or required option) prints an `INVALID_INPUT` envelope under the command name `agent-tty` and exits `2`. The usage text still goes to stderr.
 
 ## Anti-Patterns
 

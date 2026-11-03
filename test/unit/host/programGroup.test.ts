@@ -68,6 +68,9 @@ vi.mock('node:fs', async () => {
       );
     }
     if (pid === undefined) {
+      if (procHooks.listError !== undefined) {
+        throw procHooks.listError;
+      }
       return ['self', ...procHooks.stat.keys()];
     }
     if (!procHooks.stat.has(pid)) {
@@ -1025,6 +1028,186 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     },
   );
 
+  // A fork chain: each member forks its successor and ends between scans,
+  // until SIGSTOP shows a stopped member, whose autogroup `autogroup` reads.
+  function stopShowsMember(autogroup = '/autogroup-7 nice 0\n') {
+    return vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          procShowsTokenGroup('T');
+          const tokenRead = autogroupFile.read;
+          autogroupFile.read = (file) =>
+            file === '/proc/100/autogroup'
+              ? autogroup
+              : (tokenRead?.(file) ?? null);
+        }
+        return true;
+      });
+  }
+
+  it('freezes a group that no scan shows and kills it once a stopped member carries the token', () => {
+    procShowsTokenGroup();
+    const kill = stopShowsMember();
+
+    stopProgramGroup(group);
+
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGKILL'],
+    ]);
+  });
+
+  it('continues a frozen group whose stopped member names another autogroup', () => {
+    procShowsTokenGroup();
+    const kill = stopShowsMember('/autogroup-8 nice 0\n');
+
+    stopProgramGroup(group);
+
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
+  it('judges a frozen group again until a stopped member comes into view', () => {
+    procShowsTokenGroup();
+    let judged = 0;
+    const kill = vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          autogroupFile.read = (file) => {
+            // Each judge reads the boot id once. The first judge after the
+            // SIGSTOP still shows no member.
+            if (file === '/proc/sys/kernel/random/boot_id') {
+              judged += 1;
+              if (judged === 2) {
+                procShowsTokenGroup('T');
+              }
+              return `${BOOT}\n`;
+            }
+            return /^\/proc\/\d+\/autogroup$/.test(file)
+              ? '/autogroup-7 nice 0\n'
+              : null;
+          };
+        }
+        return true;
+      });
+
+    stopProgramGroup(group);
+
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGKILL'],
+    ]);
+  });
+
+  it('continues a frozen group that reads gone at each of its 5 judgements', () => {
+    procShowsTokenGroup();
+    let judged = 0;
+    autogroupFile.read = (file) => {
+      // Each judgement reads the boot id once.
+      if (file === '/proc/sys/kernel/random/boot_id') {
+        judged += 1;
+        return `${BOOT}\n`;
+      }
+      return /^\/proc\/\d+\/autogroup$/.test(file)
+        ? '/autogroup-7 nice 0\n'
+        : null;
+    };
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+    stopProgramGroup(group);
+
+    expect(judged).toBe(5);
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
+  it('continues a frozen group when a scan after the SIGSTOP throws', () => {
+    procShowsTokenGroup();
+    const kill = vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          autogroupFile.read = (file) => {
+            if (file === '/proc/sys/kernel/random/boot_id') {
+              throw errno('EIO');
+            }
+            return null;
+          };
+        }
+        return true;
+      });
+
+    expect(() => {
+      stopProgramGroup(group);
+    }).toThrow('EIO');
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
+  it('continues a frozen group when the /proc listing after the SIGSTOP throws', () => {
+    procShowsTokenGroup();
+    const kill = vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          procHooks.listError = errno('EMFILE');
+        }
+        return true;
+      });
+
+    expect(() => {
+      stopProgramGroup(group);
+    }).toThrow('EMFILE');
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
+  it('continues a frozen group whose kill throws', () => {
+    procShowsTokenGroup();
+    const kill = vi
+      .spyOn(process, 'kill')
+      .mockImplementation((_pid: number, signal?: string | number) => {
+        if (signal === 'SIGSTOP') {
+          procShowsTokenGroup('T');
+        }
+        if (signal === 'SIGKILL') {
+          throw errno('EINVAL');
+        }
+        return true;
+      });
+
+    expect(() => {
+      stopProgramGroup(group);
+    }).toThrow('EINVAL');
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGKILL'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
+  it.each(['ESRCH', 'EPERM'])(
+    'gets no kill when the SIGSTOP of a group that no scan shows ends %s',
+    (code) => {
+      procShowsTokenGroup();
+      const kill = killFailsWith(code);
+
+      stopProgramGroup(group);
+
+      expect(kill.mock.calls).toEqual([[-CHILD_PID, 'SIGSTOP']]);
+    },
+  );
+
   // A chroot or a container without a mounted /proc.
   it.each([
     ['ok', true],
@@ -1163,7 +1346,8 @@ describe.runIf(capturesToken)('a program group with a token', () => {
 
     stopProgramGroup(record);
 
-    expect(kill).not.toHaveBeenCalled();
+    expect(kill).not.toHaveBeenCalledWith(-record.pid, 'SIGKILL');
+    expect(kill).not.toHaveBeenCalledWith(-record.pid, 'SIGCONT');
     expect(isProgramGroupAlive(record)).toBe(false);
   });
 });
