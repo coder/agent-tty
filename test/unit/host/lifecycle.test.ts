@@ -7,9 +7,9 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -150,7 +150,11 @@ import {
 import { captureHost, writeHostRecord } from '../../../src/host/hostRecord.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
-import { manifestPath, sessionDir } from '../../../src/storage/sessionPaths.js';
+import {
+  manifestPath,
+  sessionDir,
+  socketPath,
+} from '../../../src/storage/sessionPaths.js';
 import { capturesToken, killGroupIfAlive } from '../../helpers.js';
 
 const HOST_PID = 2_147_483_646;
@@ -416,6 +420,55 @@ describe('reconcileSession', () => {
       status: 'destroyed',
     });
   });
+
+  it('removes the socket that a dead host left when it repairs a destroy', async () => {
+    const directory = await seedSession(
+      makeRecord({
+        status: 'failed',
+        failureOrigin: 'host-death',
+        hostPid: null,
+        childPid: null,
+      }),
+    );
+    writeFileSync(join(directory, 'destroyed'), '');
+    const socketFile = socketPath(directory);
+    await mkdir(dirname(socketFile), { recursive: true, mode: 0o700 });
+    writeFileSync(socketFile, '');
+
+    try {
+      await reconcileSession(directory);
+
+      expect(existsSync(socketFile)).toBe(false);
+      expect(existsSync(dirname(socketFile))).toBe(false);
+    } finally {
+      await rm(dirname(socketFile), { recursive: true, force: true });
+    }
+  });
+
+  // A root process can write into a folder of mode 0500.
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'list keeps a marked failed session when its repair write fails',
+    async () => {
+      const directory = await seedSession(
+        makeRecord({
+          status: 'failed',
+          failureOrigin: 'host-death',
+          hostPid: null,
+          childPid: null,
+        }),
+      );
+      writeFileSync(join(directory, 'destroyed'), '');
+      await chmod(directory, 0o500);
+
+      try {
+        expect(await listSessions(home, true)).toMatchObject([
+          { sessionId: 'session-01', status: 'failed' },
+        ]);
+      } finally {
+        await chmod(directory, 0o700);
+      }
+    },
+  );
 
   it('leaves an exited session without the marker as it is', async () => {
     const exited = makeRecord({
