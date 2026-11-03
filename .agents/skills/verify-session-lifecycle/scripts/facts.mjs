@@ -916,7 +916,7 @@ function ownershipFacts() {
       st[0] === 'const judgement = judgeLiveGroup(group);' &&
       owned > 0 &&
       st[owned + 1] === 'const witness = readProcessRow(judgement.witness);' &&
-      /^if \( witness !== null && judgeProgramGroup\(group, group\.bootId, \[witness\]\)\.verdict === 'owned' \) \{ killProcessGroupBestEffort\(group\.pid\); (killed = true; )?return; \}$/.test(
+      /^if \( witness !== null && judgeProgramGroup\(group, group\.bootId, \[witness\]\)\.verdict === 'owned' \) \{ killProcessGroupBestEffort\(group\.pid\); killed = true; return; \}$/.test(
         st[owned + 2] ?? '',
       );
   });
