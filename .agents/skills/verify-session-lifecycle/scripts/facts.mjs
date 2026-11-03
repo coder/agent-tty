@@ -1213,6 +1213,7 @@ const COVERED = [
   ['src/host/hostRecord.ts', 'pidExists'],
   ['src/host/hostRecord.ts', 'judgeHost'],
   ['src/host/hostRecord.ts', 'inPidNamespace'],
+  ['src/host/hostRecord.ts', 'readTimeNamespace'],
   ['src/host/hostRecord.ts', 'inTimeNamespace'],
   ['src/host/hostRecord.ts', 'readMachineId'],
   ['src/host/hostRecord.ts', 'inHostPidSpace'],

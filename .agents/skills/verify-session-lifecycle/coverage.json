@@ -19,6 +19,7 @@
     "src/host/hostRecord.ts#pidExists": "d539275a0f6041ea",
     "src/host/hostRecord.ts#judgeHost": "85b37d524df156a4",
     "src/host/hostRecord.ts#inPidNamespace": "4f4858fadf4acf81",
+    "src/host/hostRecord.ts#readTimeNamespace": "cd26abbdf639f1b8",
     "src/host/hostRecord.ts#inTimeNamespace": "3aa522616ace5b7a",
     "src/host/hostRecord.ts#readMachineId": "0873b5375df35f8f",
     "src/host/hostRecord.ts#inHostPidSpace": "66124bf9c4e33e0b",
@@ -85,7 +86,7 @@
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "c3e13b1bab88e18f",
-    "skill:scripts/facts.mjs": "c0ad109238c89bd2",
+    "skill:scripts/facts.mjs": "ca20dfc5f76dcab5",
     "skill:scripts/check.sh": "27da959697f6af33"
   },
   "callSites": {
