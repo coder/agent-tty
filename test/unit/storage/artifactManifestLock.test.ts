@@ -6,6 +6,7 @@ import {
   readFile,
   realpath,
   rm,
+  stat,
   utimes,
   writeFile,
 } from 'node:fs/promises';
@@ -22,6 +23,8 @@ const fsHooks = vi.hoisted(() => ({
   beforeRename: undefined as
     | ((from: string, to: string) => Promise<void>)
     | undefined,
+  beforeLink: undefined as ((to: string) => Promise<void>) | undefined,
+  beforeRm: undefined as ((path: string) => Promise<void>) | undefined,
 }));
 
 vi.mock('node:fs/promises', async () => {
@@ -31,6 +34,14 @@ vi.mock('node:fs/promises', async () => {
     rename: async (...args: Parameters<typeof actual.rename>) => {
       await fsHooks.beforeRename?.(String(args[0]), String(args[1]));
       return actual.rename(...args);
+    },
+    link: async (...args: Parameters<typeof actual.link>) => {
+      await fsHooks.beforeLink?.(String(args[1]));
+      return actual.link(...args);
+    },
+    rm: async (...args: Parameters<typeof actual.rm>) => {
+      await fsHooks.beforeRm?.(String(args[0]));
+      return actual.rm(...args);
     },
   };
 });
@@ -70,6 +81,8 @@ describe('artifact manifest lock', () => {
 
   afterEach(async () => {
     fsHooks.beforeRename = undefined;
+    fsHooks.beforeLink = undefined;
+    fsHooks.beforeRm = undefined;
     await rm(home, { recursive: true, force: true });
   });
 
@@ -172,6 +185,68 @@ describe('artifact manifest lock', () => {
     expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([
       'manifest.json.lock',
     ]);
+  });
+
+  it('takes the lock on a filesystem without hard links', async () => {
+    fsHooks.beforeLink = () =>
+      Promise.reject(Object.assign(new Error('no links'), { code: 'EPERM' }));
+
+    await expect(
+      withArtifactManifestLock(sessionDirectory, async () => {
+        const owner = JSON.parse(await readFile(lockPath, 'utf8')) as {
+          pid: number;
+        };
+        return owner.pid;
+      }),
+    ).resolves.toBe(process.pid);
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
+  });
+
+  it('dates the lock from when it was taken, not from when the wait began', async () => {
+    await writeFile(lockPath, ownerRecord(process.pid, true));
+    const waitStartedAt = Date.now();
+    const pending = withArtifactManifestLock(
+      sessionDirectory,
+      async () => (await stat(lockPath)).mtimeMs,
+      { waitMs: 5_000, unknownOwnerStaleMs: 60_000 },
+    );
+    await sleep(1_200);
+    await rm(lockPath);
+
+    expect(await pending).toBeGreaterThanOrEqual(waitStartedAt + 1_000);
+  });
+
+  it('breaks its own lock on the next update when the release failed', async () => {
+    let failures = 0;
+    fsHooks.beforeRm = (path) => {
+      if (path !== lockPath) {
+        return Promise.resolve();
+      }
+      failures += 1;
+      return Promise.reject(
+        Object.assign(new Error('denied'), { code: 'EACCES' }),
+      );
+    };
+
+    await expect(
+      withArtifactManifestLock(sessionDirectory, () =>
+        Promise.resolve('first'),
+      ),
+    ).resolves.toBe('first');
+    expect(failures).toBe(3);
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([
+      'manifest.json.lock',
+    ]);
+
+    fsHooks.beforeRm = undefined;
+    await expect(
+      withArtifactManifestLock(
+        sessionDirectory,
+        () => Promise.resolve('second'),
+        FAST,
+      ),
+    ).resolves.toBe('second');
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
   });
 
   it('leaves a lock that another owner took over in the meantime', async () => {

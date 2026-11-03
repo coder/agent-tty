@@ -1,5 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { link, lstat, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  readFile,
+  rename,
+  rm,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
 import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -15,7 +22,10 @@ import {
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { ReplaySeqSchema } from '../protocol/schemas.js';
 import { readValidatedJsonFile, writeValidatedJsonFile } from './manifests.js';
-import { publishArtifactFile } from './artifactFiles.js';
+import {
+  createWithoutReplacing,
+  publishArtifactFile,
+} from './artifactFiles.js';
 import {
   artifactPath,
   ensureArtifactsDir,
@@ -28,6 +38,7 @@ import { KeyedSerializer } from '../util/keyedSerializer.js';
 const ARTIFACT_MANIFEST_FILENAME = 'manifest.json';
 const ARTIFACT_MANIFEST_LOCK_FILENAME = 'manifest.json.lock';
 const MAX_LOCK_POLL_MS = 50;
+const MAX_LOCK_RELEASE_ATTEMPTS = 3;
 const NonEmptyStringSchema = z.string().min(1);
 const IsoDatetimeSchema = z.iso.datetime();
 const ArtifactKindSchema = z.enum([
@@ -90,6 +101,9 @@ const DEFAULT_MANIFEST_LOCK_TIMING: ManifestLockTiming = {
 };
 
 const appendSerializer = new KeyedSerializer<string>();
+// Locks this process took but could not remove, by lock path. The next
+// acquisition in this process breaks such a lock instead of waiting for it.
+const unreleasedLocks = new Map<string, string>();
 
 function artifactManifestPath(sessionDir: string): string {
   return artifactPath(sessionDir, ARTIFACT_MANIFEST_FILENAME);
@@ -240,9 +254,10 @@ async function breakStaleManifestLock(
   const verdict =
     owner === null ? 'unknown' : judgeHost(owner.pid, owner.process);
   const stale =
-    verdict === 'unknown'
+    unreleasedLocks.get(lockPath) === observed ||
+    (verdict === 'unknown'
       ? Date.now() - modifiedAtMs > timing.unknownOwnerStaleMs
-      : verdict === 'dead';
+      : verdict === 'dead');
   if (!stale) {
     return 'held';
   }
@@ -257,12 +272,12 @@ async function breakStaleManifestLock(
     throw error;
   }
   try {
-    if ((await readFile(movedPath, 'utf8')) !== observed) {
-      await link(movedPath, lockPath).catch((error: unknown) => {
-        if (!hasErrorCode(error, 'EEXIST')) {
-          throw error;
-        }
-      });
+    const moved = await readFile(movedPath, 'utf8');
+    if (moved === unreleasedLocks.get(lockPath)) {
+      unreleasedLocks.delete(lockPath);
+    }
+    if (moved !== observed) {
+      await createWithoutReplacing(movedPath, lockPath);
     }
   } finally {
     await rm(movedPath, { force: true });
@@ -281,13 +296,10 @@ async function acquireManifestLock(
     const deadline = Date.now() + timing.waitMs;
     let pollMs = 2;
     for (;;) {
-      try {
-        await link(temporaryPath, lockPath);
+      const now = new Date();
+      await utimes(temporaryPath, now, now);
+      if (await createWithoutReplacing(temporaryPath, lockPath)) {
         return;
-      } catch (error) {
-        if (!hasErrorCode(error, 'EEXIST')) {
-          throw error;
-        }
       }
       if ((await breakStaleManifestLock(lockPath, timing)) === 'retry') {
         continue;
@@ -312,9 +324,27 @@ async function releaseManifestLock(
   lockPath: string,
   contents: string,
 ): Promise<void> {
-  const current = await readFile(lockPath, 'utf8').catch(() => null);
-  if (current === contents) {
-    await rm(lockPath, { force: true });
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      const current = await readFile(lockPath, 'utf8').catch(
+        (error: unknown) => {
+          if (hasErrorCode(error, 'ENOENT')) {
+            return null;
+          }
+          throw error;
+        },
+      );
+      if (current === contents) {
+        await rm(lockPath, { force: true });
+      }
+      return;
+    } catch {
+      if (attempt >= MAX_LOCK_RELEASE_ATTEMPTS) {
+        unreleasedLocks.set(lockPath, contents);
+        return;
+      }
+      await sleep(10 * attempt);
+    }
   }
 }
 
@@ -352,7 +382,7 @@ export async function withArtifactManifestLock<T>(
   try {
     return await update();
   } finally {
-    await releaseManifestLock(lockPath, contents).catch(() => undefined);
+    await releaseManifestLock(lockPath, contents);
   }
 }
 

@@ -26,7 +26,7 @@ const NO_HARD_LINK_ERROR_CODES = ['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS'];
 const MAX_VANISHED_FILE_RETRIES = 3;
 
 /** Returns false when `path` already exists. */
-async function createWithoutReplacing(
+export async function createWithoutReplacing(
   temporaryPath: string,
   path: string,
 ): Promise<boolean> {
