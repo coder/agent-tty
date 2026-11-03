@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import { access, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -219,37 +220,81 @@ describe('artifact manifest storage', () => {
     });
   });
 
-  it('replaces the entries of an earlier export to the same output path', async () => {
-    const sessionDir = await createSessionDir();
-    const exportEntry = (id: string, outputPath: string): ArtifactEntry =>
+  describe('an export that replaces its output path', () => {
+    const sha = (text: string): string =>
+      createHash('sha256').update(text).digest('hex');
+    const exportEntry = (
+      id: string,
+      outputPath: string,
+      contents: string,
+    ): ArtifactEntry =>
       createArtifactEntry({
         id,
         kind: 'recording',
-        filename: 'recording-4-asciicast.cast',
+        filename: basename(outputPath),
+        sha256: sha(contents),
         metadata: { format: 'asciicast', outputPath },
       });
-    const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
-    const outPath = '/tmp/exports/recording-4-asciicast.cast';
-    for (const entry of [
-      exportEntry('01JQ0000000000000000000001', castPath),
-      exportEntry('01JQ0000000000000000000002', outPath),
-      createArtifactEntry({ id: '01JQ0000000000000000000003' }),
-    ]) {
-      await appendArtifactWithRollback({ sessionDir, entry });
-    }
+    const ids = async (sessionDir: string): Promise<string[]> =>
+      (await readArtifactManifest(sessionDir)).artifacts.map(
+        (entry) => entry.id,
+      );
 
-    await appendArtifactWithRollback({
-      sessionDir,
-      entry: exportEntry('01JQ0000000000000000000004', castPath),
-      replacesSameOutputPath: true,
+    it('drops the entries of earlier exports to the same file', async () => {
+      const sessionDir = await createSessionDir();
+      await ensureArtifactsDir(sessionDir);
+      const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
+      // Another spelling of the same file, as on a case-insensitive file
+      // system.
+      const aliasPath = join(sessionDir, 'alias.cast');
+      await symlink(castPath, aliasPath);
+      const otherPath = join(sessionDir, 'other.cast');
+      await writeFile(otherPath, 'other');
+      await writeFile(castPath, 'first');
+      for (const entry of [
+        exportEntry('01JQ0000000000000000000001', castPath, 'first'),
+        exportEntry('01JQ0000000000000000000002', otherPath, 'other'),
+        exportEntry('01JQ0000000000000000000003', aliasPath, 'first'),
+        createArtifactEntry({ id: '01JQ0000000000000000000004' }),
+      ]) {
+        await appendArtifactWithRollback({ sessionDir, entry });
+      }
+
+      await writeFile(castPath, 'second');
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000005', castPath, 'second'),
+        replacesSameOutputPath: true,
+      });
+
+      expect(await ids(sessionDir)).toEqual([
+        '01JQ0000000000000000000002',
+        '01JQ0000000000000000000004',
+        '01JQ0000000000000000000005',
+      ]);
     });
 
-    const manifest = await readArtifactManifest(sessionDir);
-    expect(manifest.artifacts.map((entry) => entry.id)).toEqual([
-      '01JQ0000000000000000000002',
-      '01JQ0000000000000000000003',
-      '01JQ0000000000000000000004',
-    ]);
+    it('adds nothing when a later export already replaced its file', async () => {
+      const sessionDir = await createSessionDir();
+      await ensureArtifactsDir(sessionDir);
+      const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
+      await writeFile(castPath, 'later');
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000002', castPath, 'later'),
+        replacesSameOutputPath: true,
+      });
+
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000001', castPath, 'earlier'),
+        replacesSameOutputPath: true,
+        rollbackArtifactPath: castPath,
+      });
+
+      expect(await ids(sessionDir)).toEqual(['01JQ0000000000000000000002']);
+      await expect(readFile(castPath, 'utf8')).resolves.toBe('later');
+    });
   });
 
   it('removes the last entry of a capture and its file once no entry lists the file', async () => {

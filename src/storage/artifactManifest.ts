@@ -1,5 +1,13 @@
-import { randomUUID } from 'node:crypto';
-import { lstat, readdir, rm, utimes, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  lstat,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -466,10 +474,53 @@ export interface AppendArtifactWithRollbackOptions {
   entry: ArtifactEntry;
   rollbackArtifactPath?: string;
   /**
-   * The append drops the entries whose `metadata.outputPath` equals the
-   * entry's: the entry's file replaced theirs.
+   * The append drops the entries whose `metadata.outputPath` names the same
+   * file as the entry's: the entry's file replaced theirs. When a later
+   * write already replaced the entry's file, the append adds nothing.
    */
   replacesSameOutputPath?: boolean;
+}
+
+// Device and inode, so two spellings of one path (a case-insensitive file
+// system, a symlink) match. null when the path does not resolve.
+async function fileIdentity(path: string): Promise<string | null> {
+  try {
+    const stats = await stat(path);
+    return `${String(stats.dev)}:${String(stats.ino)}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns the entries to keep beside `entry`, or null when the file at
+ * `outputPath` no longer holds the entry's bytes: a later export to the same
+ * path replaced it, and that export's entry describes the file.
+ */
+async function entriesKeptBeside(
+  artifacts: readonly ArtifactEntry[],
+  entry: ArtifactEntry,
+  outputPath: string,
+): Promise<ArtifactEntry[] | null> {
+  const contents = await readFile(outputPath).catch(() => null);
+  if (
+    contents === null ||
+    createHash('sha256').update(contents).digest('hex') !== entry.sha256
+  ) {
+    return null;
+  }
+  const identity = await fileIdentity(outputPath);
+  const kept: ArtifactEntry[] = [];
+  for (const listed of artifacts) {
+    const listedPath = listed.metadata.outputPath;
+    if (
+      typeof listedPath !== 'string' ||
+      (await fileIdentity(listedPath)) !== identity
+    ) {
+      kept.push(listed);
+    }
+  }
+  return kept;
 }
 
 // Removes a rolled-back artifact unless the manifest already lists a file of
@@ -510,9 +561,14 @@ async function appendArtifact(
         const kept =
           replacedOutputPath === undefined
             ? manifest.artifacts
-            : manifest.artifacts.filter(
-                (listed) => listed.metadata.outputPath !== replacedOutputPath,
+            : await entriesKeptBeside(
+                manifest.artifacts,
+                validatedEntry,
+                replacedOutputPath,
               );
+        if (kept === null) {
+          return validatedEntry;
+        }
         await writeArtifactManifest(resolvedSessionDir, {
           ...manifest,
           artifacts: [...kept, validatedEntry],
@@ -565,6 +621,10 @@ export async function appendArtifactWithRollback(
     invariant(
       typeof outputPath === 'string' && isAbsolute(outputPath),
       'an entry that replaces its output path must name an absolute metadata.outputPath',
+    );
+    invariant(
+      options.entry.sha256 !== undefined,
+      'an entry that replaces its output path must have a sha256',
     );
     replacedOutputPath = outputPath;
   }
