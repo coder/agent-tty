@@ -1,7 +1,15 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { readFileSync, readlinkSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -24,7 +32,7 @@ import {
   programRecordPath,
   sessionDir,
 } from '../../../src/storage/sessionPaths.js';
-import { writeHostRecord } from '../../../src/host/hostRecord.js';
+import { captureHost, writeHostRecord } from '../../../src/host/hostRecord.js';
 import { capturesToken } from '../../helpers.js';
 
 import type * as Fs from 'node:fs';
@@ -392,6 +400,8 @@ describe.runIf(platform === 'linux')('readProgramGroup without a token', () => {
       bootId: 'ce4b84e5-e77e-4d68-bc28-cd04a84f6cd7',
       startTicks: '100',
       pidNamespace,
+      timeNamespace: null,
+      machineId: captureHost(process.pid)?.machineId ?? null,
     });
   }
 
@@ -414,6 +424,35 @@ describe.runIf(platform === 'linux')('readProgramGroup without a token', () => {
   // There the childPid names another process group, if any.
   it("names no group in a pid namespace other than the host's", async () => {
     recordHostIn('pid:[1]');
+
+    expect(await readProgramGroup(directory, 4242)).toBeNull();
+  });
+
+  it('names no group when a host record from before the identity fields names another pid namespace', async () => {
+    await writeFile(
+      join(directory, 'host.json'),
+      JSON.stringify({
+        version: 1,
+        pid: 4141,
+        bootId: 'ce4b84e5-e77e-4d68-bc28-cd04a84f6cd7',
+        startTicks: '100',
+        pidNamespace: 'pid:[1]',
+      }),
+    );
+
+    expect(await readProgramGroup(directory, 4242)).toBeNull();
+  });
+
+  it('names no group for a host record from another machine', async () => {
+    writeHostRecord(directory, {
+      version: 1,
+      pid: 4141,
+      bootId: 'ce4b84e5-e77e-4d68-bc28-cd04a84f6cd7',
+      startTicks: '100',
+      pidNamespace: readlinkSync('/proc/self/ns/pid'),
+      timeNamespace: null,
+      machineId: 'another-machine',
+    });
 
     expect(await readProgramGroup(directory, 4242)).toBeNull();
   });
