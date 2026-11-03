@@ -95,7 +95,7 @@ function recordingExtension(format: string): string {
 }
 
 export function recordingFilename(seq: number, format: string): string {
-  assertNonNegativeInteger(seq, 'seq');
+  assertReplaySeq(seq);
   const sanitizedFormat = sanitizeFilenameComponent(format, 'format');
   const extension = recordingExtension(sanitizedFormat);
   return `recording-${String(seq)}-${sanitizedFormat}.${extension}`;
