@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type {
+  RecordExportResult,
   ScreenshotResult,
   SnapshotResult,
   WaitForRenderResult,
@@ -145,6 +146,42 @@ describe(
         }
       },
     );
+
+    it('exports a header-only asciicast and a blank WebM at seq -1', () => {
+      const cast = runJson<RecordExportResult>(testHome, [
+        'record',
+        'export',
+        sessionId,
+        '--format',
+        'asciicast',
+      ]);
+      expect(cast.status).toBe(0);
+      expect(cast.envelope.result).toMatchObject({
+        capturedAtSeq: -1,
+        durationMs: 0,
+      });
+
+      const webm = runJson<RecordExportResult>(testHome, [
+        'record',
+        'export',
+        sessionId,
+        '--format',
+        'webm',
+        '--timing',
+        'max-speed',
+      ]);
+      expect(webm.status).toBe(0);
+      expect(webm.envelope.result).toMatchObject({
+        capturedAtSeq: -1,
+        durationMs: 0,
+        metadata: expect.objectContaining({
+          width: COLS,
+          height: ROWS,
+          outputEventCount: 0,
+        }) as unknown,
+      });
+      expect(webm.envelope.result.bytes).toBeGreaterThan(0);
+    });
 
     it('matches a screen-stable render wait on the empty screen', () => {
       const { status, envelope } = runJson<WaitForRenderResult>(testHome, [
