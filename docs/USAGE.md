@@ -326,6 +326,14 @@ If `/proc` refuses to show the boot id, or shows no autogroup id for a live proc
 It then kills nothing and counts the group as running.
 If the proven group, or a group that agent-tty cannot check, does not end within the destroy wait (about 5 s), `destroy` fails with `HOST_TIMEOUT` and does not record the session as `destroyed`.
 
+`destroy --force` and reconcile also check the host's pid from `session.json` before they trust it.
+On Linux the host records its pid, the boot id, its start time from `/proc/self/stat` and its pid namespace in an internal file, `host.json`, when it starts.
+Reconcile counts the host as ended only when no process has its pid, when that process is a zombie, or when `host.json` names another boot or another start time than that process has. That covers a crashed host that stays a zombie under a container init that never reaps, and a later process that got the same pid.
+Reconcile then records the session as `failed`. `destroy --force` sends the host SIGKILL only when the boot id and the start time of the process match `host.json`, so it does not signal a process that got the pid before that check.
+The check and the kill are two system calls. A process that gets the pid between them still gets the signal, which needs the host to end, be reaped and its pid to go to a new process in that gap.
+When agent-tty cannot read `/proc` or `host.json`, it counts a host whose pid exists as running and does not kill it. When it runs in another pid namespace than the host, where the recorded pid can name an unrelated process, it counts the host as running and kills nothing, whatever that pid shows.
+On macOS and the BSDs, `destroy --force` kills the host only when `/bin/ps` shows the pid running `_host <session id>`, the arguments that agent-tty starts the host with.
+
 Limits:
 
 1. `destroy` does not kill a process that has left the program's process group. A process leaves the group when it calls `setsid` (for example `setsid cmd` or a daemon), or when an interactive shell with job control runs it as a job (for example `cmd &` typed into `bash -i`). Stop such a process yourself, or keep it in the program's group.
@@ -336,6 +344,7 @@ Limits:
 6. Two cases where agent-tty cannot run the check end differently from a session that stays running:
    - At the idle time-out, a host that cannot run the check kills nothing, but it still records the session as `exited` once the program has exited, while a process that the program left can still run. A later `destroy` then fails with `HOST_TIMEOUT`, and `gc` can remove the session folder.
    - When `/proc` hides the processes of other users (mounted with `hidepid=2`, `hidepid=4`, `hidepid=invisible` or `hidepid=ptraceable`), a group whose processes agent-tty cannot see counts as running. A `destroy` that cannot prove such a group gone fails with `HOST_TIMEOUT` and does not record the session as `destroyed`.
+7. Off Linux, reconcile counts the host as alive while any process has its pid. A crashed host that stays a zombie, or a process that got its pid, keeps the session `running`, and `destroy --force` kills nothing and fails with `HOST_TIMEOUT`. On Linux, the same happens when `/proc` is not mounted or refuses to show the host, and for a session that an agent-tty version without `host.json` started. On Windows, `destroy --force` never kills the host: it kills the program, and a host that hangs makes it fail with `HOST_TIMEOUT`. End such a host yourself with the Host PID that `inspect` shows (`taskkill /pid <pid> /f`), then run `destroy --force` again.
 
 ## Isolation
 

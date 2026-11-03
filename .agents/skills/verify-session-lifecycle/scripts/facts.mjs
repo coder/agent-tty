@@ -128,7 +128,7 @@ function reconcileFacts() {
   );
   const aliveRead = indexOfStatement(
     body,
-    /^const hostAlive = isProcessAlive\(manifest\.hostPid\);$/,
+    /^const hostAlive = isHostAlive\(\s*await readSessionHost\(sessionDirectory, manifest\),?\s*\);$/,
   );
   const alive = guardIndex(
     body,
@@ -373,6 +373,59 @@ function shutdownChecksCommandable(runHostBody) {
   return inShutdown && request >= 0 && request < write;
 }
 
+// destroy --force kills the host only when hostMatches proves it: on Linux
+// judgeHost reads the recorded boot id and start time again, elsewhere ps
+// shows `_host <session id>`. Liveness reads dead only on judgeHost's proof,
+// and runHost records the host right after it read its manifest.
+function hostProofFacts() {
+  const lifecycle = 'src/host/lifecycle.ts';
+  const kill = requireDeclaration(lifecycle, 'killHostBestEffort').body;
+  const killsOnMatch =
+    kill.statements.length === 1 &&
+    ts.isIfStatement(kill.statements[0]) &&
+    normalize(kill.statements[0].expression.getText()) ===
+      'host !== null && hostMatches(host)' &&
+    normalize(kill.statements[0].thenStatement.getText()) ===
+      '{ killProcessBestEffort(host.pid); }';
+  const matches = normalize(
+    requireDeclaration(lifecycle, 'hostMatches').body.getText(),
+  );
+  const matchesOnProof = matches.includes(
+    "process.platform === 'linux' ? judgeHost(host.pid, host.record) === 'alive' : psShowsSessionHost(host)",
+  );
+  const alive = normalize(
+    requireDeclaration(lifecycle, 'isHostAlive').body.getText(),
+  );
+  const aliveUntilProof = alive.includes(
+    "host !== null && judgeHost(host.pid, host.record) !== 'dead'",
+  );
+  const judge = normalize(
+    requireDeclaration('src/host/hostRecord.ts', 'judgeHost').body.getText(),
+  );
+  const judgesIdentity = judge.includes(
+    'record.bootId === bootId && record.startTicks === stat.startTicks',
+  );
+  const body = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
+  const check = indexOfStatement(
+    body,
+    /^invariant\(\s*manifest\.hostPid === process\.pid/,
+  );
+  const records =
+    check >= 0 &&
+    normalize(body.statements[check + 1]?.getText() ?? '') ===
+      'const hostRecord = captureHost(process.pid);' &&
+    normalize(body.statements[check + 2]?.getText() ?? '') ===
+      'if (hostRecord !== null) { writeHostRecord(sessDir, hostRecord); }';
+  return {
+    ProvesHostPid:
+      killsOnMatch &&
+      matchesOnProof &&
+      aliveUntilProof &&
+      judgesIdentity &&
+      records,
+  };
+}
+
 function repairFacts() {
   const lifecycle = 'src/host/lifecycle.ts';
   let marks = false;
@@ -481,7 +534,7 @@ function destroyFacts() {
     const block = force.thenStatement;
     const first = indexOfStatement(
       block,
-      /^await stopSessionProcesses\(\s*sessionId,\s*manifest\.hostPid,\s*await readProgramGroup\(/,
+      /^await stopSessionProcesses\(\s*sessionId,\s*await readSessionHost\(sessionDirectory, manifest\),\s*await readProgramGroup\(/,
     );
     const reread = indexOfStatement(
       block,
@@ -493,7 +546,7 @@ function destroyFacts() {
     );
     const second = indexOfStatement(
       block,
-      /^await stopSessionProcesses\(\s*sessionId,\s*current\.hostPid,\s*group,/,
+      /^await stopSessionProcesses\(\s*sessionId,\s*await readSessionHost\(sessionDirectory, current\),\s*group,/,
     );
     const records = indexOfStatement(
       block,
@@ -513,7 +566,7 @@ function destroyFacts() {
   ).body;
   const stopWaits =
     indexOfStatement(stop, /^stopProgramGroup\(group\);$/) >= 0 &&
-    indexOfStatement(stop, /^killProcessBestEffort\(hostPid\);$/) >= 0 &&
+    indexOfStatement(stop, /^killHostBestEffort\(host\);$/) >= 0 &&
     indexOfStatement(stop, /^const stopped = await waitForProcessesToExit\(/) >=
       0 &&
     guardIndex(stop, '!stopped', ts.SyntaxKind.ThrowStatement) >= 0;
@@ -522,7 +575,7 @@ function destroyFacts() {
     'waitForProcessesToExit',
   );
   const waitsForProcessesOnly =
-    calls(wait.body, 'isProcessAlive').length === 1 &&
+    calls(wait.body, 'isHostAlive').length === 1 &&
     calls(wait.body, 'isProgramGroupAlive').length === 1 &&
     calls(wait.body, 'stat').length === 0 &&
     calls(wait.body, 'pathExists').length === 0;
@@ -1130,6 +1183,16 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'launchHost'],
   ['src/host/lifecycle.ts', 'isProcessAlive'],
   ['src/host/lifecycle.ts', 'killProcessBestEffort'],
+  ['src/host/lifecycle.ts', 'readSessionHost'],
+  ['src/host/lifecycle.ts', 'psShowsSessionHost'],
+  ['src/host/lifecycle.ts', 'isHostAlive'],
+  ['src/host/lifecycle.ts', 'hostMatches'],
+  ['src/host/lifecycle.ts', 'killHostBestEffort'],
+  ['src/host/hostRecord.ts', 'captureHost'],
+  ['src/host/hostRecord.ts', 'writeHostRecord'],
+  ['src/host/hostRecord.ts', 'readHostRecord'],
+  ['src/host/hostRecord.ts', 'pidExists'],
+  ['src/host/hostRecord.ts', 'judgeHost'],
   ['src/host/lifecycle.ts', 'ownLinuxSessionId'],
   ['src/host/lifecycle.ts', 'ownProcessGroupId'],
   ['src/host/lifecycle.ts', 'controllingTerminal'],
@@ -1408,6 +1471,7 @@ const constants = {
   ...createFacts(),
   ...hostFacts(),
   ...destroyFacts(),
+  ...hostProofFacts(),
   ...repairFacts(),
   ...manifestWriteFacts(),
   ...programGroupFacts(),

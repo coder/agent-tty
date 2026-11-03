@@ -122,7 +122,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone"
+GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -132,11 +132,11 @@ FACTS_LINE=$(node -e '
   }).join(" "));
 ' "$OUT/facts.json" $GUARDS) || die "facts.json lacks a guard fact"
 
-NO_TOKEN_RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal RecordedExitKept RunningSessionReachable HostStartsWhenCreated TerminalIsLastWrite DestroyedOnlyWhenEnded DestroyEndsDestroyed RemovedFolderStaysRemoved DestroyedProgramStopped LiveGroupStaysNamed DestroyOutlivesProgram FailedCreateStopped DestroyedStaysDestroyed"
+NO_TOKEN_RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal RecordedExitKept RunningSessionReachable HostStartsWhenCreated TerminalIsLastWrite DestroyedOnlyWhenEnded DestroyEndsDestroyed RemovedFolderStaysRemoved DestroyedProgramStopped LiveGroupStaysNamed DestroyOutlivesProgram FailedCreateStopped DestroyedStaysDestroyed NoUnrelatedHostKilled"
 # R15 and R16 are what the token adds, so only the runs with Token check them.
 RULES="$NO_TOKEN_RULES NoUnrelatedGroupKilled DestroyedSessionStopped"
 NO_TOKEN_WITNESSES="WitnessCreateGivesUp WitnessCrashReconciled WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessReconcileRepairs"
-WITNESSES="WitnessGcRemovesSession WitnessCreateGivesUp WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled WitnessDestroyCompletes WitnessSigtermRecorded WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessLeftoverMeetsDestroy WitnessReusedIdMeetsKill WitnessRecordNamesProgram WitnessUnrecordedProgramOutlives WitnessReconcileRepairs WitnessWaitPassesReusedId"
+WITNESSES="WitnessGcRemovesSession WitnessCreateGivesUp WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled WitnessDestroyCompletes WitnessSigtermRecorded WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessLeftoverMeetsDestroy WitnessReusedIdMeetsKill WitnessRecordNamesProgram WitnessUnrecordedProgramOutlives WitnessReconcileRepairs WitnessWaitPassesReusedId WitnessReusedHostMeetsKill WitnessUnrecordedHostMeetsKill"
 
 # --- runs ----------------------------------------------------------------
 
@@ -200,6 +200,7 @@ write_run mutant-ReconcileRepairsDestroyed violated DestroyedStaysDestroyed "Rec
 write_run mutant-CreateStopsOnGiveUp violated FailedCreateStopped "CreateStopsOnGiveUp=FALSE" "without the SIGTERM, a create that gave up leaves its host serving the session" FailedCreateStopped
 write_run mutant-TokenNamesProgram violated DestroyedSessionStopped "TokenNamesProgram=FALSE" "with the host's autogroup as the token, no member carries it, and destroy records destroyed while the program's group runs" DestroyedSessionStopped
 write_run mutant-ReusedIdReadsGone pass WitnessWaitPassesReusedId "ReusedIdReadsGone=FALSE" "with a group that took the id read alive, no wait of destroy passes while that group runs"
+write_run mutant-ProvesHostPid violated NoUnrelatedHostKilled "ProvesHostPid=FALSE" "without the start-up record, destroy --force kills a process that took the host's pid" NoUnrelatedHostKilled
 write_run mutant-ReconcileSkipsTerminal pass RecordedExitKept "ReconcileSkipsTerminal=FALSE" "redundant: the re-read returns on a terminal manifest"
 write_run mutant-GcSkipsNonCollectable pass NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE" "redundant: the final check still skips"
 write_run mutant-GcFinalCheck pass NoLiveSessionDeleted "GcFinalCheck=FALSE" "redundant: the first check still skips"
@@ -210,7 +211,7 @@ write_run mutant-ShutdownBothChecks violated TerminalIsFinal "ShutdownChecksComm
 # Without a token every kill falls back to the id that a manifest or the
 # host's own record names, as before program.json existed.
 TOKEN=FALSE
-write_run current-no-token pass "$NO_TOKEN_RULES" "" "the code without a token: R1 to R14, R17 and R18 hold"
+write_run current-no-token pass "$NO_TOKEN_RULES" "" "the code without a token: R1 to R14 and R17 to R19 hold"
 for witness in $NO_TOKEN_WITNESSES; do
   write_run "witness-$witness-no-token" violated "$witness" "" "the model reaches this state without a token"
 done

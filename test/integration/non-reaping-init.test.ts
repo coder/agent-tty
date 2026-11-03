@@ -1,6 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, realpath, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import process from 'node:process';
@@ -26,6 +26,13 @@ function groupStates(group: number): string[] {
     const [id, state] = line.trim().split(/\s+/);
     return Number(id) === group && state !== undefined ? [state] : [];
   });
+}
+
+function processState(pid: number): string {
+  const ps = spawnSync('ps', ['-o', 's=', '-p', String(pid)], {
+    encoding: 'utf8',
+  });
+  return ps.stdout.trim();
 }
 
 // PR_SET_CHILD_SUBREAPER, which the helper uses, exists only on Linux.
@@ -110,6 +117,53 @@ describe.runIf(process.platform === 'linux')(
       }
       return sessionId;
     }
+
+    async function crashHostIntoZombie(sessionId: string): Promise<void> {
+      const { hostPid } = JSON.parse(
+        await readFile(
+          join(testHome, 'sessions', sessionId, 'session.json'),
+          'utf8',
+        ),
+      ) as { hostPid: number };
+      process.kill(hostPid, 'SIGKILL');
+      const deadline = Date.now() + 10_000;
+      while (processState(hostPid) !== 'Z') {
+        expect(Date.now()).toBeLessThan(deadline);
+        await sleep(50);
+      }
+    }
+
+    it('list records failed for a session whose crashed host stays a zombie', async () => {
+      const sessionId = await createUnderSubreaper(
+        'touch "$0"; exec sleep 300',
+      );
+      await crashHostIntoZombie(sessionId);
+
+      const list = runCli(['list', '--all', '--json'], {
+        AGENT_TTY_HOME: testHome,
+      });
+      expect(list.status).toBe(0);
+      expect(JSON.parse(list.stdout)).toMatchObject({
+        ok: true,
+        result: { sessions: [{ sessionId, status: 'failed' }] },
+      });
+    });
+
+    it('destroy --force records destroyed for a session whose crashed host stays a zombie', async () => {
+      const sessionId = await createUnderSubreaper(
+        'touch "$0"; exec sleep 300',
+      );
+      await crashHostIntoZombie(sessionId);
+
+      const destroy = runCli(['destroy', sessionId, '--force', '--json'], {
+        AGENT_TTY_HOME: testHome,
+      });
+      expect(JSON.parse(destroy.stdout)).toMatchObject({
+        ok: true,
+        result: { sessionId, destroyed: true },
+      });
+      expect(destroy.status).toBe(0);
+    });
 
     it('destroy ends a program whose killed background process stays a zombie', async () => {
       const sessionId = await createUnderSubreaper(

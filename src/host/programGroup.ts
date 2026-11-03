@@ -133,7 +133,7 @@ function readLiveThreadState(pid: number): string | null {
 
 // A process whose main thread called pthread_exit shows Z while another of
 // its threads runs, so it takes the state of that thread.
-function readProcStat(pid: number): ProcStat | null {
+export function readProcStat(pid: number): ProcStat | null {
   const text = readProcFileIfExists(`/proc/${String(pid)}/stat`);
   if (text === null) {
     return null;
@@ -173,7 +173,7 @@ function readAutogroup(pid: number | 'self'): number | null {
 }
 
 // A hardened /proc can refuse the boot id and still show the autogroups.
-function readBootId(): string | null {
+export function readBootId(): string | null {
   try {
     const bootId = readProcFileIfExists(
       '/proc/sys/kernel/random/boot_id',

@@ -1411,6 +1411,47 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     },
   );
 
+  it.runIf(process.platform === 'linux')(
+    'keeps a session running whose host renamed itself, and destroy --force ends it',
+    async () => {
+      const env = {
+        AGENT_TTY_HOME: testHome,
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --title=renamed-host`,
+      };
+      const created = runCli(
+        ['create', '--json', '--', '/bin/sh', '-c', 'exec cat'],
+        env,
+      );
+      expect(created.status).toBe(0);
+      const { sessionId } = (
+        JSON.parse(created.stdout) as SuccessEnvelope<{ sessionId: string }>
+      ).result;
+      const { hostPid } = SessionRecordSchema.parse(
+        JSON.parse(
+          await readFile(manifestPath(sessionDir(testHome, sessionId)), 'utf8'),
+        ),
+      );
+      expect(
+        await readFile(`/proc/${String(hostPid)}/cmdline`, 'utf8'),
+      ).toMatch(/^renamed-host/);
+
+      const list = runCli(['list', '--json'], { AGENT_TTY_HOME: testHome });
+      expect(JSON.parse(list.stdout)).toMatchObject({
+        ok: true,
+        result: { sessions: [{ sessionId, status: 'running' }] },
+      });
+
+      const destroy = runCli(['destroy', sessionId, '--force', '--json'], {
+        AGENT_TTY_HOME: testHome,
+      });
+      expect(JSON.parse(destroy.stdout)).toMatchObject({
+        ok: true,
+        result: { sessionId, destroyed: true },
+      });
+      expect(isProcessAlive(hostPid)).toBe(false);
+    },
+  );
+
   it('a destroy --force that lands during a reconcile write stays destroyed', async () => {
     const sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec cat']);
     const hostPid = inspectSession(testHome, sessionId).hostPid as number;

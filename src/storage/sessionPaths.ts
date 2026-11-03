@@ -4,6 +4,7 @@ import { basename, dirname, isAbsolute, resolve } from 'node:path';
 import {
   DESTROY_MARKER_FILENAME,
   EVENT_LOG_FILENAME,
+  HOST_RECORD_FILENAME,
   MANIFEST_FILENAME,
   PROGRAM_RECORD_FILENAME,
 } from '../config/defaults.js';
@@ -74,6 +75,10 @@ export function eventLogPath(sessionDirectory: string): string {
 
 export function programRecordPath(sessionDirectory: string): string {
   return childPath(sessionDirectory, PROGRAM_RECORD_FILENAME);
+}
+
+export function hostRecordPath(sessionDirectory: string): string {
+  return childPath(sessionDirectory, HOST_RECORD_FILENAME);
 }
 
 export function destroyMarkerPath(sessionDirectory: string): string {
