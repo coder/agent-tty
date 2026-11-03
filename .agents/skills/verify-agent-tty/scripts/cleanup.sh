@@ -3,11 +3,12 @@
 # stops only the processes that run-pids.sh ties to this run, copies each
 # session's files into evidence/sessions/, then removes home/ and state/.
 # evidence/ stays. It keeps home/ and state/ and exits 1 when run-pids.sh
-# fails, or while a process outside the caller's terminal session still
-# carries this run's AGENT_TTY_HOME, has its working directory or an open file
-# in home/, state/ or removing/, or is yours, hides its environment and started
-# after the run. It also exits 1 when the removal fails, or when a process that started
-# during the removal still holds the run's folders.
+# fails, while a process outside the caller's terminal session still carries
+# this run's AGENT_TTY_HOME or is yours, hides its environment and started
+# after the run, or while any process but cleanup.sh, the shells that started
+# it and its own children has its working directory or an open file in home/,
+# state/ or removing/. It also exits 1 when the removal fails, or when a process
+# that started during the removal still holds the run's folders.
 #
 #   .agents/skills/verify-agent-tty/scripts/cleanup.sh <run>/env.sh
 set -uo pipefail
@@ -88,11 +89,31 @@ fi
 session_of() {
   { sed 's/.*) //' "/proc/$1/stat"; } 2>/dev/null | cut -d' ' -f4
 }
+parent_of() {
+  { sed 's/.*) //' "/proc/$1/stat"; } 2>/dev/null | cut -d' ' -f2
+}
 caller_session=$(session_of $$)
+own_ancestors=" "
+pid=$$
+while [ -n "$pid" ] && [ "$pid" -gt 1 ]; do
+  own_ancestors="$own_ancestors$pid "
+  pid=$(parent_of "$pid")
+done
+# A path match spares only this script, the shells that started it, and its
+# own children, which inherit its working directory.
+in_own_lineage() {
+  case "$own_ancestors" in *" $1 "*) return 0 ;; esac
+  pid=$1
+  while [ -n "$pid" ] && [ "$pid" -gt 1 ]; do
+    [ "$pid" = "$$" ] && return 0
+    pid=$(parent_of "$pid")
+  done
+  return 1
+}
 add_holder() {
   case "$holder_pids" in *" $1 "*) return ;; esac
   args=$({ tr '\0' ' ' <"/proc/$1/cmdline"; } 2>/dev/null)
-  [ -z "$args" ] || [ "$(session_of "$1")" = "$caller_session" ] || {
+  [ -z "$args" ] || {
     holders="$holders  $1 $args$2"$'\n'
     holder_pids="$holder_pids$1 "
   }
@@ -125,22 +146,24 @@ find_holders() {
   holder_pids=" "
   for file in $(grep -lzxF "AGENT_TTY_HOME=$AGENT_TTY_HOME" /proc/[0-9]*/environ 2>/dev/null); do
     pid=${file#/proc/}
-    add_holder "${pid%/environ}" ""
+    pid=${pid%/environ}
+    [ "$(session_of "$pid")" = "$caller_session" ] || add_holder "$pid" ""
   done
   for file in /proc/[0-9]*/environ; do
     { : <"$file"; } 2>/dev/null && continue
     pid=${file#/proc/}
     pid=${pid%/environ}
     owner=$(awk '/^Uid:/ { print $2; exit }' "/proc/$pid/status" 2>/dev/null)
-    [ "$owner" = "$uid" ] && started_after_run "$pid" && add_holder "$pid" " (environment hidden)"
+    [ "$owner" = "$uid" ] && started_after_run "$pid" &&
+      [ "$(session_of "$pid")" != "$caller_session" ] && add_holder "$pid" " (environment hidden)"
   done
-  for pid in $(find /proc/[0-9]*/cwd /proc/[0-9]*/fd -maxdepth 1 \( -false "${path_tests[@]}" \) 2>/dev/null | cut -d/ -f3 | sort -un); do
-    add_holder "$pid" " (uses a path in the run)"
+  for path_pid in $(find /proc/[0-9]*/cwd /proc/[0-9]*/fd -maxdepth 1 \( -false "${path_tests[@]}" \) 2>/dev/null | cut -d/ -f3 | sort -un); do
+    in_own_lineage "$path_pid" || add_holder "$path_pid" " (uses a path in the run)"
   done
 }
 keep_home() {
   [ -z "$pids_failed" ] || echo "cleanup.sh: run-pids.sh failed, so cleanup.sh cannot prove that every process of this run has ended. Fix what run-pids.sh reports." >&2
-  [ -z "$holders" ] || printf 'cleanup.sh: these processes outside your terminal session still carry AGENT_TTY_HOME=%s, use a path in the run'"'"'s home/, state/ or removing/, or hide their environment and started after the run. Stop them (kill <pid>) or let them end:\n%s' "$AGENT_TTY_HOME" "$holders" >&2
+  [ -z "$holders" ] || printf 'cleanup.sh: these processes still hold the run: outside your terminal session they carry AGENT_TTY_HOME=%s or hide their environment and started after the run, or they use a path in the run'"'"'s home/, state/ or removing/. Stop them (kill <pid>) or let them end:\n%s' "$AGENT_TTY_HOME" "$holders" >&2
   echo "cleanup.sh: kept $kept. Then run cleanup.sh again." >&2
   exit 1
 }
