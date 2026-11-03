@@ -76,15 +76,12 @@ function inPidNamespace(pidNamespace: string): boolean {
   }
 }
 
-// null on a kernel without time namespaces.
-function readTimeNamespace(pid: number | 'self'): string | null {
+// null on a kernel without time namespaces, and when /proc refuses the link.
+function readTimeNamespace(pid: number): string | null {
   try {
     return readlinkSync(`/proc/${String(pid)}/ns/time`);
-  } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) {
-      return null;
-    }
-    throw error;
+  } catch {
+    return null;
   }
 }
 
@@ -93,9 +90,9 @@ function inTimeNamespace(timeNamespace: string | null | undefined): boolean {
     return true;
   }
   try {
-    return readTimeNamespace('self') === timeNamespace;
-  } catch {
-    return false;
+    return readlinkSync('/proc/self/ns/time') === timeNamespace;
+  } catch (error) {
+    return hasErrorCode(error, 'ENOENT') && timeNamespace === null;
   }
 }
 
