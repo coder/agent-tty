@@ -698,7 +698,15 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           interEventDelayMs >= 0,
           'replay event timestamps must be ordered non-decreasingly',
         );
-        await waitForDelay(computeInterEventDelay(interEventDelayMs));
+        let delayMs = computeInterEventDelay(interEventDelayMs);
+        if (
+          pendingOutputChunks.length > 0 &&
+          interEventDelayMs >= resolvedMinFrameHoldMs
+        ) {
+          await flushOutputBatch();
+          delayMs = Math.max(0, delayMs - resolvedMinFrameHoldMs);
+        }
+        await waitForDelay(delayMs);
       }
       previousProcessedEventTimestampMs = eventTimestampMs;
 

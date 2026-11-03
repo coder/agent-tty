@@ -901,14 +901,12 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
         ),
     });
 
-    const lastEvent = events.at(-1);
-    expect(lastEvent).toBeDefined();
     const replay = backend.replayWithTiming(
       {
         sessionId: 'renderer-unit-session',
         initialCols: 80,
         initialRows: 24,
-        targetSeq: lastEvent?.seq ?? -1,
+        targetSeq: Math.max(...events.map((event) => event.seq)),
         events,
       },
       timing,
