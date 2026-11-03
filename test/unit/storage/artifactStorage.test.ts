@@ -1,5 +1,12 @@
-import { createHash } from 'node:crypto';
-import { access, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 
 import { basename, join } from 'node:path';
 
@@ -14,6 +21,7 @@ import type {
 import {
   appendArtifactWithRollback,
   ArtifactEntrySchema,
+  fileIdentity,
   readArtifactManifest,
   removeArtifactEntry,
   writeArtifactManifest,
@@ -221,24 +229,30 @@ describe('artifact manifest storage', () => {
   });
 
   describe('an export that replaces its output path', () => {
-    const sha = (text: string): string =>
-      createHash('sha256').update(text).digest('hex');
-    const exportEntry = (
-      id: string,
-      outputPath: string,
-      contents: string,
-    ): ArtifactEntry =>
+    const exportEntry = (id: string, outputPath: string): ArtifactEntry =>
       createArtifactEntry({
         id,
         kind: 'recording',
         filename: basename(outputPath),
-        sha256: sha(contents),
         metadata: { format: 'asciicast', outputPath },
       });
     const ids = async (sessionDir: string): Promise<string[]> =>
       (await readArtifactManifest(sessionDir)).artifacts.map(
         (entry) => entry.id,
       );
+    // Writes a new file at `path`, as an export does with a temp file and
+    // a rename, and returns its identity.
+    const exportTo = async (
+      path: string,
+      contents: string,
+    ): Promise<string> => {
+      const temporaryPath = `${path}.tmp`;
+      await writeFile(temporaryPath, contents);
+      await rename(temporaryPath, path);
+      const identity = await fileIdentity(path);
+      expect(identity).not.toBeNull();
+      return identity ?? '';
+    };
 
     it('drops the entries of earlier exports to the same file', async () => {
       const sessionDir = await createSessionDir();
@@ -250,21 +264,20 @@ describe('artifact manifest storage', () => {
       await symlink(castPath, aliasPath);
       const otherPath = join(sessionDir, 'other.cast');
       await writeFile(otherPath, 'other');
-      await writeFile(castPath, 'first');
+      await exportTo(castPath, 'first');
       for (const entry of [
-        exportEntry('01JQ0000000000000000000001', castPath, 'first'),
-        exportEntry('01JQ0000000000000000000002', otherPath, 'other'),
-        exportEntry('01JQ0000000000000000000003', aliasPath, 'first'),
+        exportEntry('01JQ0000000000000000000001', castPath),
+        exportEntry('01JQ0000000000000000000002', otherPath),
+        exportEntry('01JQ0000000000000000000003', aliasPath),
         createArtifactEntry({ id: '01JQ0000000000000000000004' }),
       ]) {
         await appendArtifactWithRollback({ sessionDir, entry });
       }
 
-      await writeFile(castPath, 'second');
       await appendArtifactWithRollback({
         sessionDir,
-        entry: exportEntry('01JQ0000000000000000000005', castPath, 'second'),
-        replacesSameOutputPath: true,
+        entry: exportEntry('01JQ0000000000000000000005', castPath),
+        outputFileIdentity: await exportTo(castPath, 'second'),
       });
 
       expect(await ids(sessionDir)).toEqual([
@@ -278,22 +291,45 @@ describe('artifact manifest storage', () => {
       const sessionDir = await createSessionDir();
       await ensureArtifactsDir(sessionDir);
       const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
-      await writeFile(castPath, 'later');
+      const earlier = await exportTo(castPath, 'earlier');
       await appendArtifactWithRollback({
         sessionDir,
-        entry: exportEntry('01JQ0000000000000000000002', castPath, 'later'),
-        replacesSameOutputPath: true,
+        entry: exportEntry('01JQ0000000000000000000002', castPath),
+        outputFileIdentity: await exportTo(castPath, 'later'),
       });
 
       await appendArtifactWithRollback({
         sessionDir,
-        entry: exportEntry('01JQ0000000000000000000001', castPath, 'earlier'),
-        replacesSameOutputPath: true,
+        entry: exportEntry('01JQ0000000000000000000001', castPath),
+        outputFileIdentity: earlier,
         rollbackArtifactPath: castPath,
       });
 
       expect(await ids(sessionDir)).toEqual(['01JQ0000000000000000000002']);
       await expect(readFile(castPath, 'utf8')).resolves.toBe('later');
+    });
+
+    it('adds nothing when its file is gone and keeps the entries of other missing files', async () => {
+      const sessionDir = await createSessionDir();
+      await ensureArtifactsDir(sessionDir);
+      const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry(
+          '01JQ0000000000000000000001',
+          join(sessionDir, 'missing.cast'),
+        ),
+      });
+      const identity = await exportTo(castPath, 'gone');
+      await rm(castPath);
+
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000002', castPath),
+        outputFileIdentity: identity,
+      });
+
+      expect(await ids(sessionDir)).toEqual(['01JQ0000000000000000000001']);
     });
   });
 

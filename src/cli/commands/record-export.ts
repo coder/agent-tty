@@ -27,6 +27,7 @@ import {
 import {
   appendArtifactWithRollback,
   createArtifactEntry,
+  fileIdentity,
 } from '../../storage/artifactManifest.js';
 import {
   ReplayTimingModeSchema,
@@ -228,6 +229,9 @@ export async function runRecordExportCommand(
     let bytes: number;
     let sha256: string;
     let glyphFields: RecordedGlyphFields = {};
+    // Names the exported file, so a second export to the same path can
+    // replace this export's manifest entry.
+    let outputFileIdentity: string | null = null;
 
     if (format === 'asciicast') {
       const packageMetadata = await loadPackageMetadata();
@@ -282,6 +286,7 @@ export async function runRecordExportCommand(
               beforeRename: () => assertOutputParentUnchanged(explicitOutput),
             }),
       });
+      outputFileIdentity = await fileIdentity(artifactOutputPath);
 
       bytes = contentsBuffer.byteLength;
       invariant(bytes > 0, 'asciicast export artifact must not be empty');
@@ -314,6 +319,8 @@ export async function runRecordExportCommand(
         if (explicitOutput !== undefined) {
           await assertOutputParentUnchanged(explicitOutput);
         }
+        // The rename keeps the temp file's inode.
+        outputFileIdentity = await fileIdentity(temporaryOutputPath);
         await rename(temporaryOutputPath, artifactOutputPath);
       } catch (error) {
         await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
@@ -387,11 +394,14 @@ export async function runRecordExportCommand(
     // Explicit --out files belong to the user and are valid without a
     // manifest entry; only clean up default in-session artifacts that would
     // otherwise be orphaned.
+    invariant(
+      outputFileIdentity !== null,
+      'the exported file must exist after the write',
+    );
     await appendArtifactWithRollback({
       sessionDir: sessionDirectory,
       entry: artifactEntry,
-      // A second export to the same path replaced the file of the first.
-      replacesSameOutputPath: true,
+      outputFileIdentity,
       ...(options.out === undefined
         ? { rollbackArtifactPath: artifactOutputPath }
         : {}),

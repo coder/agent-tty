@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   eventLogPath: vi.fn(),
   writeTextFileAtomic: vi.fn(),
   appendArtifactWithRollback: vi.fn(),
+  fileIdentity: vi.fn(),
   // Test-internal delegate used by the appendArtifactWithRollback mock.
   appendArtifact: vi.fn(),
   createArtifactEntry: vi.fn(),
@@ -70,6 +71,7 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
   appendArtifactWithRollback: mocks.appendArtifactWithRollback,
   createArtifactEntry: mocks.createArtifactEntry,
+  fileIdentity: mocks.fileIdentity,
 }));
 
 vi.mock('../../../src/storage/artifactPaths.js', () => ({
@@ -209,6 +211,9 @@ describe('record export command', () => {
       },
     );
     mocks.appendArtifact.mockResolvedValue(undefined);
+    mocks.fileIdentity.mockImplementation((path: string) =>
+      Promise.resolve(`identity of ${path}`),
+    );
     mocks.createArtifactEntry.mockImplementation((entry: unknown) => ({
       id: 'artifact-01',
       createdAt: '2026-03-19T12:00:04.000Z',
@@ -312,6 +317,8 @@ describe('record export command', () => {
       sessionDir: '/tmp/agent-tty/sessions/session-01',
       rollbackArtifactPath:
         '/tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast',
+      outputFileIdentity:
+        'identity of /tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast',
     });
     expect(appendCall[0].entry).toMatchObject({
       kind: 'recording',
@@ -426,6 +433,12 @@ describe('record export command', () => {
     expect(mocks.rename).toHaveBeenCalledWith(
       generateWebmExportArgs.outputPath,
       '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm',
+    );
+    // The temp file's identity, which the rename keeps.
+    expect(mocks.appendArtifactWithRollback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outputFileIdentity: `identity of ${generateWebmExportArgs.outputPath}`,
+      }),
     );
     expect(generateWebmExportArgs.rendererName).toBe('ghostty-web');
     expect(mocks.writeTextFileAtomic).not.toHaveBeenCalled();
