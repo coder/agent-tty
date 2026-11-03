@@ -343,7 +343,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       rendererName: options.context.rendererDefault,
     };
     const clientTimeout = effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
-    const startedAt = Date.now();
+    const startedAt = performance.now();
     let rawResult: unknown;
     try {
       rawResult = await sendRpc(
@@ -374,7 +374,12 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       });
     }
     const result: WaitForRenderResult = parsedResult.data;
-    throwIfTimedOut(result, options, effectiveTimeout, Date.now() - startedAt);
+    throwIfTimedOut(
+      result,
+      options,
+      effectiveTimeout,
+      performance.now() - startedAt,
+    );
 
     emitSuccess({
       command: 'wait',
@@ -444,7 +449,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     timeoutMs: effectiveTimeout === 0 ? undefined : effectiveTimeout,
   };
   const clientTimeout = effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
-  const startedAt = Date.now();
+  const startedAt = performance.now();
   const rawResult: unknown = await sendRpc(
     socketPath(sessionDirectory),
     'wait',
@@ -459,7 +464,12 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     });
   }
   const result: WaitResult = parsedResult.data;
-  throwIfTimedOut(result, options, effectiveTimeout, Date.now() - startedAt);
+  throwIfTimedOut(
+    result,
+    options,
+    effectiveTimeout,
+    performance.now() - startedAt,
+  );
 
   emitSuccess({
     command: 'wait',
