@@ -1100,6 +1100,30 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     ]);
   });
 
+  it('continues a frozen group that reads gone at each of its 5 judgements', () => {
+    procShowsTokenGroup();
+    let judged = 0;
+    autogroupFile.read = (file) => {
+      // Each judgement reads the boot id once.
+      if (file === '/proc/sys/kernel/random/boot_id') {
+        judged += 1;
+        return `${BOOT}\n`;
+      }
+      return /^\/proc\/\d+\/autogroup$/.test(file)
+        ? '/autogroup-7 nice 0\n'
+        : null;
+    };
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+    stopProgramGroup(group);
+
+    expect(judged).toBe(5);
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGCONT'],
+    ]);
+  });
+
   it('continues a frozen group when a scan after the SIGSTOP throws', () => {
     procShowsTokenGroup();
     const kill = vi
