@@ -76,7 +76,7 @@ async function createMissingFolders(
     }
     if ((await realpath(current)) !== current) {
       throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
-        message: `Output folder ${current} was replaced while it was being created.`,
+        message: `Output folder ${current} resolved to another place while it was being created.`,
         details: { outputPath: current },
       });
     }

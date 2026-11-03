@@ -1140,7 +1140,7 @@ describe('record export command', () => {
     expect(mocks.writeTextFileAtomic).not.toHaveBeenCalled();
   });
 
-  it('creates missing parent directories of explicit output paths', async () => {
+  it('creates missing parent folders of --out', async () => {
     const workspaceDirectory = await createTemporaryDirectory(
       'agent-tty-record-export-missing-parent-',
     );
