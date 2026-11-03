@@ -99,14 +99,15 @@ while [ -n "$pid" ] && [ "$pid" -gt 1 ]; do
   own_ancestors="$own_ancestors$pid "
   pid=$(parent_of "$pid")
 done
-# A path match spares only this script, the shells that started it, and its
-# own children, which inherit its working directory.
-in_own_lineage() {
+is_own_ancestor() {
   case "$own_ancestors" in *" $1 "*) return 0 ;; esac
-  pid=$1
-  while [ -n "$pid" ] && [ "$pid" -gt 1 ]; do
-    [ "$pid" = "$$" ] && return 0
-    pid=$(parent_of "$pid")
+  return 1
+}
+is_own_descendant() {
+  local walk=$1
+  while [ -n "$walk" ] && [ "$walk" -gt 1 ]; do
+    [ "$walk" = "$$" ] && return 0
+    walk=$(parent_of "$walk")
   done
   return 1
 }
@@ -157,8 +158,8 @@ find_holders() {
     [ "$owner" = "$uid" ] && started_after_run "$pid" &&
       [ "$(session_of "$pid")" != "$caller_session" ] && add_holder "$pid" " (environment hidden)"
   done
-  for path_pid in $(find /proc/[0-9]*/cwd /proc/[0-9]*/fd -maxdepth 1 \( -false "${path_tests[@]}" \) 2>/dev/null | cut -d/ -f3 | sort -un); do
-    in_own_lineage "$path_pid" || add_holder "$path_pid" " (uses a path in the run)"
+  for pid in $(find /proc/[0-9]*/cwd /proc/[0-9]*/fd -maxdepth 1 \( -false "${path_tests[@]}" \) 2>/dev/null | cut -d/ -f3 | sort -un); do
+    is_own_ancestor "$pid" || is_own_descendant "$pid" || add_holder "$pid" " (uses a path in the run)"
   done
 }
 keep_home() {
