@@ -124,15 +124,25 @@ function renderWaitLines(result: WaitForRenderResult): string[] {
   return lines;
 }
 
+function timeoutMessage(options: CommandOptions, timeoutMs: number): string {
+  if (options.json) {
+    return 'Wait timed out before its condition was met.';
+  }
+  if (options.timeout === undefined) {
+    return `Wait timed out after ${String(timeoutMs)} ms (the default; pass --timeout <ms>, or --timeout 0 to wait without a limit).`;
+  }
+  return `Wait timed out after ${String(timeoutMs)} ms.`;
+}
+
 function throwIfTimedOut(
   result: WaitResult | WaitForRenderResult,
-  sessionId: string,
+  options: CommandOptions,
   timeoutMs: number,
 ): void {
   if (result.timedOut) {
     throw makeCliError(ERROR_CODES.WAIT_TIMEOUT, {
-      message: 'Wait timed out before its condition was met.',
-      details: { sessionId, timeoutMs },
+      message: timeoutMessage(options, timeoutMs),
+      details: { sessionId: options.sessionId, timeoutMs },
       result,
     });
   }
@@ -337,7 +347,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       });
     }
     const result: WaitForRenderResult = parsedResult.data;
-    throwIfTimedOut(result, options.sessionId, effectiveTimeout);
+    throwIfTimedOut(result, options, effectiveTimeout);
 
     emitSuccess({
       command: 'wait',
@@ -421,7 +431,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     });
   }
   const result: WaitResult = parsedResult.data;
-  throwIfTimedOut(result, options.sessionId, effectiveTimeout);
+  throwIfTimedOut(result, options, effectiveTimeout);
 
   emitSuccess({
     command: 'wait',

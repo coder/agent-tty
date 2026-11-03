@@ -147,7 +147,7 @@ Useful flags:
 - `--exit`: wait for the process to exit.
 - `--timeout <ms>`: maximum wait time in milliseconds. The default is `30000` (30 s). `0` waits without a limit. An `--idle-ms` or `--screen-stable-ms` of `30000` or more cannot finish within the default, so `wait` rejects it with `INVALID_DURATION` unless you pass `--timeout`.
 
-On timeout, a standalone `wait` exits `11` and prints an error envelope: `ok: false`, `error.code: "WAIT_TIMEOUT"`, and the wait result under `result` (`timedOut: true`, and `matched: false` for render waits). Without `--json`, it prints `WAIT_TIMEOUT: <message>` to stderr. Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast.
+On timeout, a standalone `wait` exits `11` and prints an error envelope: `ok: false`, `error.code: "WAIT_TIMEOUT"`, and the wait result under `result` (`timedOut: true`, and `matched: false` for render waits). Without `--json`, it prints `WAIT_TIMEOUT: <message>` to stderr, and the message names the timeout, for example `Wait timed out after 30000 ms (the default; pass --timeout <ms>, or --timeout 0 to wait without a limit).` Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast.
 
 ### Echo-Match
 
