@@ -324,7 +324,7 @@ Before each kill, agent-tty checks that a live process in the group has that aut
 If no process passes the check, agent-tty kills nothing, for example when an unrelated program now uses the group id.
 If `/proc` refuses to show the boot id, or shows no autogroup id for a live process whose group and session id are the program's pid (it refuses the read, or the file is empty or malformed), agent-tty cannot run the check.
 It then kills nothing and counts the group as running.
-When the CLI cannot list `/proc` at all, as in a chroot or a container without it, it sees no process of the group. The group then counts as running while `kill(-pgid, 0)` finds a process, and nothing proves a kill. A plain `destroy` still ends the session through its host, and `destroy --force` of such a session fails with `HOST_TIMEOUT`.
+When the CLI cannot list `/proc` at all, as in a chroot or a container without it, it sees no process of the group. The group then counts as running while `kill(-pgid, 0)` finds a process, and nothing proves a kill. A plain `destroy` still ends the session through its host, and `destroy --force` of such a session fails with `HOST_TIMEOUT`. End it with a plain `destroy`, or run `destroy --force` from a process that can read `/proc`.
 If the proven group, or a group that agent-tty cannot check, does not end within the destroy wait (about 5 s), `destroy` fails with `HOST_TIMEOUT` and does not record the session as `destroyed`.
 
 `destroy --force` and reconcile also check the host's pid from `session.json` before they trust it.
