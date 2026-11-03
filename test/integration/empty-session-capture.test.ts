@@ -1,6 +1,6 @@
-import { mkdtemp, realpath } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -11,6 +11,8 @@ import type {
   WaitForRenderResult,
 } from '../../src/protocol/messages.js';
 import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
+import { readArtifactManifest } from '../../src/storage/artifactManifest.js';
+import { sessionDir } from '../../src/storage/sessionPaths.js';
 import {
   cleanupHome,
   crashSession,
@@ -147,7 +149,7 @@ describe(
       },
     );
 
-    it('exports a header-only asciicast and a blank WebM at seq -1', () => {
+    it('exports a header-only asciicast and a blank WebM at seq -1', async () => {
       const cast = runJson<RecordExportResult>(testHome, [
         'record',
         'export',
@@ -161,6 +163,14 @@ describe(
         durationMs: 0,
         metadata: expect.objectContaining({ outputEventCount: 0 }) as unknown,
       });
+      expect(basename(cast.envelope.result.artifactPath)).toBe(
+        'recording--1-asciicast.cast',
+      );
+      const castContents = await readFile(
+        cast.envelope.result.artifactPath,
+        'utf8',
+      );
+      expect(castContents.trimEnd().split('\n')).toHaveLength(1);
 
       const webm = runJson<RecordExportResult>(testHome, [
         'record',
@@ -182,6 +192,31 @@ describe(
         }) as unknown,
       });
       expect(webm.envelope.result.bytes).toBeGreaterThan(0);
+      expect(basename(webm.envelope.result.artifactPath)).toBe(
+        'recording--1-webm.webm',
+      );
+
+      const manifest = await readArtifactManifest(
+        sessionDir(testHome, sessionId),
+      );
+      expect(
+        manifest.artifacts.map(({ kind, filename, capturedAtSeq }) => ({
+          kind,
+          filename,
+          capturedAtSeq,
+        })),
+      ).toEqual([
+        {
+          kind: 'recording',
+          filename: 'recording--1-asciicast.cast',
+          capturedAtSeq: -1,
+        },
+        {
+          kind: 'video',
+          filename: 'recording--1-webm.webm',
+          capturedAtSeq: -1,
+        },
+      ]);
     });
 
     it('matches a screen-stable render wait on the empty screen', () => {
