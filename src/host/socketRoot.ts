@@ -9,11 +9,10 @@ import { socketRootDirectory } from '../storage/sessionPaths.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
 
 // Other users can create entries in /tmp. Only a directory of this uid with
-// mode 0700, not a symlink, keeps their sockets and folders out of the root.
+// no group or other bits, not a symlink, keeps their sockets and folders out
+// of the root.
 function isPrivateRoot(stats: Stats, uid: number): boolean {
-  return (
-    stats.isDirectory() && stats.uid === uid && (stats.mode & 0o777) === 0o700
-  );
+  return stats.isDirectory() && stats.uid === uid && (stats.mode & 0o077) === 0;
 }
 
 function unsafeRootError(root: string, stats: Stats, uid: number): CliError {
@@ -54,6 +53,12 @@ export async function ensureSocketRoot(
   const stats = await lstat(root);
   if (!isPrivateRoot(stats, uid)) {
     throw unsafeRootError(root, stats, uid);
+  }
+  // A create in another process that umask took owner bits from shows mode
+  // 000 until its chmod. Only this uid or root can replace the entry in the
+  // sticky /tmp, so this chmod reaches the directory that lstat showed.
+  if ((stats.mode & 0o700) !== 0o700) {
+    await chmod(root, 0o700);
   }
 }
 

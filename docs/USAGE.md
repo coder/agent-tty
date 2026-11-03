@@ -359,7 +359,7 @@ Limits:
 Pass the same `--home` value to every command in a workflow.
 
 Each session's RPC socket lies outside the Home, at `/tmp/agent-tty-<uid>/<8 hex>/<12 hex>` (on Windows under `/tmp/agent-tty/`). `inspect --json` shows it as `host.rpcSocketPath`.
-`create`, the host and `doctor` create `/tmp/agent-tty-<uid>` with mode `0700`. When that path is not a directory of your uid with mode `0700`, for example a symlink or a folder of another user, `create` fails with `STORAGE_WRITE_ERROR` (exit 8) and names the path and its owner.
+`create`, the host and `doctor` create `/tmp/agent-tty-<uid>` with mode `0700`. When that path is not a directory of your uid that no group or other user can use, for example a symlink or a folder of another user, `create` fails with `STORAGE_WRITE_ERROR` (exit 8) and names the path and its owner.
 
 Known limits:
 
