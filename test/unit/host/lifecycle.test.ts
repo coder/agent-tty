@@ -210,6 +210,14 @@ afterEach(async () => {
   await rm(home, { recursive: true, force: true });
 });
 
+// A token proves the group only with a host.json that names this pid space.
+function recordOwnPidSpace(directory: string): void {
+  writeHostRecord(directory, {
+    ...(captureHost(process.pid) as HostRecord),
+    pid: HOST_PID,
+  });
+}
+
 function errno(code: string): Error {
   return Object.assign(new Error(code), { code });
 }
@@ -327,6 +335,36 @@ describe('allocateSession', () => {
       childPid: null,
     });
   });
+
+  // A CLI in another pid namespace finds no process with the host's pid. A
+  // host.json from the start on keeps it from reading the host dead.
+  it.runIf(process.platform === 'linux')(
+    'records the host before the first manifest names it',
+    async () => {
+      const host = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' });
+      try {
+        await once(host, 'spawn');
+        const hostPid = host.pid as number;
+        const result = await allocateSession(makeConfig(), () => hostPid);
+        fsHooks.links = new Map([['/proc/self/ns/pid', 'pid:[1]']]);
+        const kill = process.kill.bind(process);
+        vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+          if (pid === hostPid && signal === 0) {
+            throw errno('ESRCH');
+          }
+          return kill(pid, signal);
+        });
+
+        await reconcileSession(result.sessionDirectory);
+
+        expect(
+          await readManifest(manifestPath(result.sessionDirectory)),
+        ).toMatchObject({ status: 'running', hostPid });
+      } finally {
+        host.kill('SIGKILL');
+      }
+    },
+  );
 
   it('does not launch a host when the working directory does not exist', async () => {
     const launch = vi.fn(() => 4242);
@@ -504,6 +542,7 @@ describe('reconcileSession', () => {
       expect(record.autogroup).not.toBeNull();
       const directory = await seedSession(makeRecord({ childPid: group }));
       writeProgramRecord(directory, change(record));
+      recordOwnPidSpace(directory);
       const send = process.kill.bind(process);
       const kill = vi
         .spyOn(process, 'kill')
@@ -668,6 +707,7 @@ describe('destroySession', () => {
         expect(record.autogroup).not.toBeNull();
         const directory = await seedSession(exited);
         writeProgramRecord(directory, record);
+        recordOwnPidSpace(directory);
         return directory;
       }
 
