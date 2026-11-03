@@ -1,3 +1,5 @@
+import { dirname } from 'node:path';
+
 import type { ScreenshotResult } from '../../protocol/messages.js';
 
 import type { CommandContext } from '../context.js';
@@ -12,12 +14,14 @@ import {
   captureScreenshotResult,
   parseScreenshotResult,
 } from '../../screenshot/capture.js';
+import { sessionNotFoundIfRemoved } from '../../storage/artifactPaths.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
-  manifestPath,
-  sessionDir,
-  socketPath,
-} from '../../storage/sessionPaths.js';
+  copyFileReplacing,
+  resolveExplicitOutputPath,
+} from '../../storage/outputPath.js';
+import { manifestPath, socketPath } from '../../storage/sessionPaths.js';
+import { checkedSessionDir } from '../sessionGuards.js';
 
 const DEFAULT_SCREENSHOT_PROFILE = 'reference-dark';
 
@@ -27,6 +31,7 @@ interface CommandOptions {
   sessionId: string;
   profile?: string;
   showCursor?: boolean;
+  out?: string;
 }
 
 interface ResolvedScreenshotRequest {
@@ -98,8 +103,45 @@ function formatScreenshotLines(result: ScreenshotResult): string[] {
   if (result.renderProfileHash !== undefined) {
     lines.push(`Render profile hash: ${result.renderProfileHash}`);
   }
+  const missingCodePoints = (result.missingGlyphs ?? []).map(
+    (glyph) => glyph.codePoint,
+  );
+  if (result.missingGlyphsTruncated === true) {
+    missingCodePoints.push('and more');
+  }
+  if (missingCodePoints.length > 0) {
+    lines.push(
+      `Missing glyphs (drawn as boxes): ${missingCodePoints.join(', ')}`,
+    );
+  }
 
   return lines;
+}
+
+function outputPathError(
+  sessionId: string,
+  out: string,
+  error: unknown,
+): CliError {
+  return makeCliError(ERROR_CODES.EXPORT_ERROR, {
+    message: `Failed to write the screenshot of session "${sessionId}" to ${out}.`,
+    details: { sessionId, out },
+    cause: error,
+  });
+}
+
+async function resolveScreenshotOutputPath(
+  sessionId: string,
+  out: string,
+  sessionsRoot: string,
+): Promise<string> {
+  try {
+    return await resolveExplicitOutputPath(out, sessionsRoot);
+  } catch (error) {
+    throw error instanceof CliError
+      ? error
+      : outputPathError(sessionId, out, error);
+  }
 }
 
 async function runOfflineScreenshot(
@@ -130,19 +172,7 @@ export async function runScreenshotCommand(
     options.showCursor,
   );
   const home = options.context.home;
-  let sessionDirectory: string;
-
-  try {
-    sessionDirectory = sessionDir(home, options.sessionId);
-  } catch (error) {
-    throw makeCliError(ERROR_CODES.INVALID_SESSION_ID, {
-      message: `Session ID "${options.sessionId}" is invalid.`,
-      details: {
-        sessionId: options.sessionId,
-      },
-      cause: error,
-    });
-  }
+  const sessionDirectory = checkedSessionDir(home, options.sessionId);
 
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
@@ -156,6 +186,18 @@ export async function runScreenshotCommand(
       },
     });
   }
+
+  const output =
+    options.out === undefined
+      ? undefined
+      : {
+          out: options.out,
+          path: await resolveScreenshotOutputPath(
+            options.sessionId,
+            options.out,
+            dirname(sessionDirectory),
+          ),
+        };
 
   let result: ScreenshotResult;
 
@@ -199,6 +241,18 @@ export async function runScreenshotCommand(
       profile,
       showCursor,
     );
+  }
+
+  if (output !== undefined) {
+    try {
+      await copyFileReplacing(result.artifactPath, output.path);
+    } catch (error) {
+      const removed = await sessionNotFoundIfRemoved(sessionDirectory, error);
+      throw removed === error
+        ? outputPathError(options.sessionId, output.out, error)
+        : removed;
+    }
+    result = { ...result, artifactPath: output.path };
   }
 
   emitSuccess({

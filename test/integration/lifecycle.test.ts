@@ -1411,6 +1411,262 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     },
   );
 
+  it.runIf(process.platform === 'linux')(
+    'keeps a session running whose host renamed itself, and destroy --force ends it',
+    async () => {
+      const env = {
+        AGENT_TTY_HOME: testHome,
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --title=renamed-host`,
+      };
+      const created = runCli(
+        ['create', '--json', '--', '/bin/sh', '-c', 'exec cat'],
+        env,
+      );
+      expect(created.status).toBe(0);
+      const { sessionId } = (
+        JSON.parse(created.stdout) as SuccessEnvelope<{ sessionId: string }>
+      ).result;
+      const { hostPid } = SessionRecordSchema.parse(
+        JSON.parse(
+          await readFile(manifestPath(sessionDir(testHome, sessionId)), 'utf8'),
+        ),
+      );
+      expect(
+        await readFile(`/proc/${String(hostPid)}/cmdline`, 'utf8'),
+      ).toMatch(/^renamed-host/);
+
+      const list = runCli(['list', '--json'], { AGENT_TTY_HOME: testHome });
+      expect(JSON.parse(list.stdout)).toMatchObject({
+        ok: true,
+        result: { sessions: [{ sessionId, status: 'running' }] },
+      });
+
+      const destroy = runCli(['destroy', sessionId, '--force', '--json'], {
+        AGENT_TTY_HOME: testHome,
+      });
+      expect(JSON.parse(destroy.stdout)).toMatchObject({
+        ok: true,
+        result: { sessionId, destroyed: true },
+      });
+      expect(isProcessAlive(hostPid)).toBe(false);
+    },
+  );
+
+  it('a destroy --force that lands during a reconcile write stays destroyed', async () => {
+    const sessionId = createSession(testHome, ['/bin/sh', '-c', 'exec cat']);
+    const hostPid = inspectSession(testHome, sessionId).hostPid as number;
+    process.kill(hostPid, 'SIGKILL');
+    const deadline = Date.now() + 10_000;
+    while (isProcessAlive(hostPid)) {
+      expect(Date.now()).toBeLessThan(deadline);
+      await sleep(50);
+    }
+
+    const holdLog = join(testHome, 'hold.log');
+    const lister = spawn(
+      process.execPath,
+      ['--import', 'tsx', './src/cli/main.ts', 'list', '--json'],
+      {
+        stdio: 'ignore',
+        env: {
+          ...process.env,
+          AGENT_TTY_HOME: testHome,
+          REPLAY_LOG: holdLog,
+          REPLAY_HOLD: 'list:rename:/session.json:1:4000',
+          NODE_OPTIONS: [
+            process.env.NODE_OPTIONS ?? '',
+            `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+          ].join(' '),
+        },
+      },
+    );
+    const listerExit = once(lister, 'exit');
+    const holdDeadline = Date.now() + 10_000;
+    while (
+      !(await readFile(holdLog, 'utf8').then(
+        (log) => log.includes('hold rename'),
+        () => false,
+      ))
+    ) {
+      expect(Date.now()).toBeLessThan(holdDeadline);
+      await sleep(50);
+    }
+
+    const result = runCli(['destroy', sessionId, '--force', '--json'], {
+      AGENT_TTY_HOME: testHome,
+    });
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      ok: true,
+      result: { sessionId, destroyed: true },
+    });
+    await listerExit;
+
+    const manifest = SessionRecordSchema.parse(
+      JSON.parse(
+        await readFile(manifestPath(sessionDir(testHome, sessionId)), 'utf8'),
+      ),
+    );
+    expect(manifest.status).toBe('destroyed');
+  });
+
+  // The held start-up write keeps the host from listening past create's
+  // readiness loop, as a host that starts slowly on a loaded machine does.
+  // Without a session token, program.json names no group that a CLI can
+  // prove, so only the host can stop the program.
+  describe.each([
+    ['with a session token', []],
+    [
+      'without a session token',
+      [
+        `--import=${pathToFileURL(resolve('test/fixtures/denied-autogroup.ts')).href}`,
+      ],
+    ],
+  ])('a create that gives up %s', (_name, preloads) => {
+    let pgid = 0;
+
+    afterEach(() => {
+      if (pgid > 1) {
+        killGroupIfAlive(pgid);
+      }
+      pgid = 0;
+    });
+
+    it('lets its host stop the program and record destroyed', async () => {
+      const holdLog = join(testHome, 'hold.log');
+      const creator = spawn(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          './src/cli/main.ts',
+          'create',
+          '--json',
+          '--',
+          '/bin/sh',
+          '-c',
+          'trap "" HUP; sleep 300 & wait',
+        ],
+        {
+          stdio: ['ignore', 'pipe', 'ignore'],
+          env: {
+            ...process.env,
+            AGENT_TTY_HOME: testHome,
+            REPLAY_LOG: holdLog,
+            REPLAY_HOLD: '_host:rename:/session.json:1:10000',
+            NODE_OPTIONS: [
+              process.env.NODE_OPTIONS ?? '',
+              `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+              ...preloads,
+            ].join(' '),
+          },
+        },
+      );
+      let stdout = '';
+      creator.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString('utf8');
+      });
+      const creatorExit = once(creator, 'exit');
+      const deadline = Date.now() + 15_000;
+      while (
+        !(await readFile(holdLog, 'utf8').then(
+          (log) => log.includes('hold rename'),
+          () => false,
+        ))
+      ) {
+        expect(Date.now()).toBeLessThan(deadline);
+        await sleep(50);
+      }
+      const [sessionId] = await readdir(join(testHome, 'sessions'));
+      const directory = sessionDir(testHome, sessionId as string);
+      const manifest = SessionRecordSchema.parse(
+        JSON.parse(await readFile(manifestPath(directory), 'utf8')),
+      );
+      expect(manifest.childPid).toBeNull();
+      const hostPid = manifest.hostPid as number;
+      pgid = (
+        JSON.parse(await readFile(programRecordPath(directory), 'utf8')) as {
+          pid: number;
+        }
+      ).pid;
+      expect(isGroupAlive(pgid)).toBe(true);
+
+      const [code] = (await creatorExit) as [number | null];
+
+      expect(code).toBe(6);
+      expect(JSON.parse(stdout)).toMatchObject({
+        ok: false,
+        error: { code: 'HOST_UNREACHABLE' },
+      });
+      // The host hangs the program up, then kills its group after the
+      // shutdown grace, and exits once its held write has landed.
+      const stopDeadline = Date.now() + 20_000;
+      while (isGroupAlive(pgid) || isProcessAlive(hostPid)) {
+        expect(Date.now()).toBeLessThan(stopDeadline);
+        await sleep(100);
+      }
+      expect(inspectSession(testHome, sessionId as string).status).toBe(
+        'destroyed',
+      );
+    }, 60_000);
+  });
+
+  // A SIGTERM that the default action would turn into a host death between
+  // the spawn and program.json leaves a program that no file names.
+  describe('a host that gets SIGTERM right after it spawns the program', () => {
+    let pgid = 0;
+
+    afterEach(() => {
+      if (pgid > 1) {
+        killGroupIfAlive(pgid);
+      }
+      pgid = 0;
+    });
+
+    it('stops the program and records destroyed', async () => {
+      const pidFile = join(testHome, 'program.pid');
+      const creator = spawn(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          './src/cli/main.ts',
+          'create',
+          '--json',
+          '--',
+          '/bin/sh',
+          '-c',
+          'trap "" HUP; sleep 300 & wait',
+        ],
+        {
+          stdio: 'ignore',
+          env: {
+            ...process.env,
+            AGENT_TTY_HOME: testHome,
+            SIGTERM_AFTER_SPAWN_PID_FILE: pidFile,
+            NODE_OPTIONS: [
+              process.env.NODE_OPTIONS ?? '',
+              `--import=${pathToFileURL(resolve('test/fixtures/sigterm-after-spawn.ts')).href}`,
+            ].join(' '),
+          },
+        },
+      );
+      const [code] = (await once(creator, 'exit')) as [number | null];
+      expect(code).toBe(6);
+      pgid = Number(await readFile(pidFile, 'utf8'));
+      expect(pgid).toBeGreaterThan(1);
+
+      const stopDeadline = Date.now() + 15_000;
+      while (isGroupAlive(pgid)) {
+        expect(Date.now()).toBeLessThan(stopDeadline);
+        await sleep(100);
+      }
+      const [sessionId] = await readdir(join(testHome, 'sessions'));
+      expect(inspectSession(testHome, sessionId as string).status).toBe(
+        'destroyed',
+      );
+    }, 60_000);
+  });
+
   describe('destroy run by the program itself', () => {
     let pgid = 0;
 
@@ -1537,6 +1793,120 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
         });
         expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
         expect(await groupEnds(pgid)).toBe(true);
+      },
+    );
+
+    // Without the variable, only the session id, or off Linux the
+    // controlling terminal, shows that the job runs inside the program.
+    it.runIf(process.platform !== 'win32').each([
+      ['destroy', ''],
+      ['destroy --force', '--force'],
+    ])(
+      '%s typed into an interactive shell that unset the session variable prints its result',
+      async (_name, flag) => {
+        const out = join(testHome, 'inner-destroy.json');
+        const sessionId = createSession(
+          testHome,
+          ['/bin/bash', '--norc', '--noprofile', '-i'],
+          { env: { HISTFILE: '/dev/null' } },
+        );
+        pgid = inspectSession(testHome, sessionId).childPid as number;
+        const command = `unset AGENT_TTY_SESSION_ID; ${cli.map((part) => `'${part}'`).join(' ')} destroy ${sessionId} ${flag} --json > '${out}'`;
+        for (const args of [
+          ['type', sessionId, command],
+          ['send-keys', sessionId, 'Enter'],
+        ]) {
+          expect(
+            runCli([...args, '--json'], { AGENT_TTY_HOME: testHome }).status,
+          ).toBe(0);
+        }
+
+        expect(await readEnvelopeOnceWritten(out)).toMatchObject({
+          ok: true,
+          result: { sessionId, destroyed: true },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await groupEnds(pgid)).toBe(true);
+      },
+    );
+
+    // Without /proc/self/stat the CLI cannot read its session id, so it runs
+    // again in a new session, and that copy skips the check.
+    it.runIf(process.platform === 'linux')(
+      'destroy typed into an interactive shell that cannot read its session id prints its result',
+      async () => {
+        const out = join(testHome, 'inner-destroy.json');
+        const sessionId = createSession(
+          testHome,
+          ['/bin/bash', '--norc', '--noprofile', '-i'],
+          { env: { HISTFILE: '/dev/null' } },
+        );
+        pgid = inspectSession(testHome, sessionId).childPid as number;
+        const preload = pathToFileURL(
+          resolve('test/fixtures/unreadable-self-stat.ts'),
+        ).href;
+        const command = `unset AGENT_TTY_SESSION_ID; NODE_OPTIONS='--import=${preload}' ${cli.map((part) => `'${part}'`).join(' ')} destroy ${sessionId} --json > '${out}'`;
+        for (const args of [
+          ['type', sessionId, command],
+          ['send-keys', sessionId, 'Enter'],
+        ]) {
+          expect(
+            runCli([...args, '--json'], { AGENT_TTY_HOME: testHome }).status,
+          ).toBe(0);
+        }
+
+        expect(await readEnvelopeOnceWritten(out)).toMatchObject({
+          ok: true,
+          result: { sessionId, destroyed: true },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await groupEnds(pgid)).toBe(true);
+      },
+    );
+
+    // A CLI in a PID namespace whose session leader runs outside it reads
+    // session id 0 and runs again in a new session. When the host runs in
+    // another namespace, the manifest's hostPid can name an unrelated process
+    // in the CLI's one, and the copy's forced destroy must not kill it.
+    it.runIf(process.platform === 'linux')(
+      'destroy --force that reads session id 0 kills no unrelated process that hostPid names',
+      async () => {
+        const sessionId = createSession(testHome, [
+          '/bin/sh',
+          '-c',
+          'trap "" HUP; exec sleep 300',
+        ]);
+        const session = inspectSession(testHome, sessionId);
+        pgid = session.childPid as number;
+        const unrelated = spawn('sleep', ['300'], { stdio: 'ignore' });
+        try {
+          expect(unrelated.pid).toBeTypeOf('number');
+          const directory = sessionDir(testHome, sessionId);
+          await writeManifest(manifestPath(directory), {
+            ...SessionRecordSchema.parse(
+              JSON.parse(await readFile(manifestPath(directory), 'utf8')),
+            ),
+            hostPid: unrelated.pid as number,
+          });
+          const preload = pathToFileURL(
+            resolve('test/fixtures/zero-session-id.ts'),
+          ).href;
+
+          runCli(['destroy', sessionId, '--force', '--json'], {
+            AGENT_TTY_HOME: testHome,
+            NODE_OPTIONS: `--import=${preload}`,
+          });
+
+          expect(await groupEnds(pgid)).toBe(true);
+          await sleep(200);
+          expect(unrelated.signalCode).toBeNull();
+          expect(unrelated.exitCode).toBeNull();
+        } finally {
+          unrelated.kill('SIGKILL');
+          if (session.hostPid !== null && isProcessAlive(session.hostPid)) {
+            process.kill(session.hostPid, 'SIGKILL');
+          }
+        }
       },
     );
   });

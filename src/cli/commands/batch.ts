@@ -9,7 +9,7 @@ import type { BatchResult, BatchStepRecord } from '../../batch/result.js';
 
 import { resolveCommandTarget } from '../commandTarget.js';
 import { exitCodeForError } from '../exitCodes.js';
-import { emitSuccess, emitSuccessSync } from '../output.js';
+import { emitFailure, emitSuccess, emitSuccessSync } from '../output.js';
 import { executeBatch } from '../../batch/executor.js';
 import { parseBatchPlan } from '../../batch/plan.js';
 import { buildPartialBatchResult } from '../../batch/result.js';
@@ -320,18 +320,29 @@ export async function runBatchCommand(options: CommandOptions): Promise<void> {
       }),
   );
 
-  // Set process.exitCode then always emitSuccess (doctor pattern), so a failed
-  // Batch still emits the full per-step envelope instead of a bare error.
+  const failed = options.keepGoing ? undefined : firstFailedStep(result);
+  const failedError = failed?.status === 'failed' ? failed.error : undefined;
   if (result.failedIndices.length > 0) {
-    if (options.keepGoing) {
-      process.exitCode = KEEP_GOING_FAILURE_EXIT_CODE;
-    } else {
-      const failed = firstFailedStep(result);
-      process.exitCode =
-        failed?.status === 'failed' && failed.error !== undefined
-          ? exitCodeForError(failed.error.code)
-          : KEEP_GOING_FAILURE_EXIT_CODE;
-    }
+    process.exitCode =
+      failedError === undefined
+        ? KEEP_GOING_FAILURE_EXIT_CODE
+        : exitCodeForError(failedError.code);
+  }
+
+  if (options.json && failed !== undefined && failedError !== undefined) {
+    emitFailure({
+      command: 'batch',
+      json: true,
+      error: {
+        ...failedError,
+        // Earlier steps already applied their input, so rerunning the Batch is
+        // never a safe retry, whatever the failed step's code.
+        retryable: false,
+        details: { sessionId: options.sessionId, stepIndex: failed.index },
+      },
+      result,
+    });
+    return;
   }
 
   emitSuccess({

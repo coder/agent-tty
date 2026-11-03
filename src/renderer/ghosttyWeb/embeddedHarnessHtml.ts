@@ -545,6 +545,31 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
         return cells;
       }
 
+      // One grapheme string per viewport cell, '' where getChars() is empty
+      // (blanks and wide-glyph spacers), the same rule as decodeSnapshotCell.
+      function getCellGraphemes() {
+        const terminal = getReadyTerminal();
+        terminal.scrollToBottom();
+        const { cols, rows, activeBuffer, viewportY } =
+          getNormalizedViewportState(terminal);
+        const wasmTerm = terminal.wasmTerm;
+        invariant(wasmTerm, 'terminal WASM instance is unavailable');
+        const nullCell = activeBuffer.getNullCell();
+        const grid = [];
+        for (let row = 0; row < rows; row += 1) {
+          const line = activeBuffer.getLine(viewportY + row);
+          const graphemes = [];
+          for (let col = 0; col < cols; col += 1) {
+            const cell = line?.getCell(col) ?? nullCell;
+            graphemes.push(
+              cell.getChars() === '' ? '' : wasmTerm.getGraphemeString(row, col),
+            );
+          }
+          grid.push(graphemes);
+        }
+        return grid;
+      }
+
       function getSnapshotPayload(options) {
         invariant(
           options === undefined ||
@@ -628,6 +653,9 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
         },
         getSnapshot(options) {
           return getSnapshotPayload(options);
+        },
+        getCellGraphemes() {
+          return getCellGraphemes();
         },
         getVisibleText() {
           return decodeVisibleLines(getReadyTerminal())

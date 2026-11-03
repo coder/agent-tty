@@ -128,7 +128,7 @@ function reconcileFacts() {
   );
   const aliveRead = indexOfStatement(
     body,
-    /^const hostAlive = isProcessAlive\(manifest\.hostPid\);$/,
+    /^const hostAlive = isHostAlive\(\s*await readSessionHost\(sessionDirectory, manifest\),?\s*\);$/,
   );
   const alive = guardIndex(
     body,
@@ -245,7 +245,61 @@ function createFacts() {
   return {
     CreateRecordsHostPid:
       launch >= 0 && launch < write && pidInManifest && onlyThroughCallback,
+    CreateStopsOnGiveUp: stopsOnGiveUp(create.body),
   };
+}
+
+// In runCreateCommand's readiness loop, the catch of an unreachable host
+// ends with host.stop() right after its last retry and before it rethrows
+// the error. Only a win32 create skips the stop while the manifest names
+// no program, so on Linux and macOS, which the model covers, it always stops. launchHost's stop sends SIGTERM through the ChildProcess
+// handle, and runHost registers its SIGTERM handler before it spawns the
+// program and skips the spawn when a SIGTERM came first.
+function stopsOnGiveUp(body) {
+  let stops = false;
+  walk(body, (node) => {
+    if (!ts.isCatchClause(node)) {
+      return;
+    }
+    const last = node.block.statements.at(-1);
+    if (last === undefined || normalize(last.getText()) !== 'throw error;') {
+      return;
+    }
+    walk(node.block, (inner) => {
+      if (!ts.isIfStatement(inner) || !ts.isBlock(inner.thenStatement)) {
+        return;
+      }
+      const st = inner.thenStatement.statements.map((s) =>
+        normalize(s.getText()),
+      );
+      const retry = st.findIndex((s) =>
+        s.startsWith('if (attempt + 1 < READINESS_MAX_ATTEMPTS) {'),
+      );
+      stops ||=
+        retry >= 0 &&
+        retry === st.length - 3 &&
+        st[retry + 1].startsWith('invariant(host !== undefined,') &&
+        st[retry + 2] ===
+          "if (process.platform !== 'win32' || manifest?.childPid != null) { host.stop(); }";
+    });
+  });
+  const launch = normalize(
+    requireDeclaration('src/host/lifecycle.ts', 'launchHost').getText(),
+  );
+  const run = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
+  const handler = indexOfStatement(run, /^process\.on\('SIGTERM'/);
+  const skip = indexOfStatement(
+    run,
+    /^if \(sigterm\.received\) \{\s*await eventLog\.close\(\);\s*return;\s*\}$/,
+  );
+  const spawn = indexOfStatement(run, /= createPty\(/);
+  return (
+    stops &&
+    /stop: \(\) => \{ child\.kill\('SIGTERM'\); \}/.test(launch) &&
+    handler >= 0 &&
+    handler < skip &&
+    skip === spawn - 1
+  );
 }
 
 // runHost waits for create's manifest, and every host write of session.json
@@ -319,6 +373,106 @@ function shutdownChecksCommandable(runHostBody) {
   return inShutdown && request >= 0 && request < write;
 }
 
+// destroy --force kills the host only when hostMatches proves it: on Linux
+// judgeHost reads the recorded boot id and start time again, elsewhere ps
+// shows `_host <session id>`. Liveness reads dead only on judgeHost's proof,
+// and runHost records the host right after it read its manifest.
+function hostProofFacts() {
+  const lifecycle = 'src/host/lifecycle.ts';
+  const kill = requireDeclaration(lifecycle, 'killHostBestEffort').body;
+  const killsOnMatch =
+    kill.statements.length === 1 &&
+    ts.isIfStatement(kill.statements[0]) &&
+    normalize(kill.statements[0].expression.getText()) ===
+      'host !== null && hostMatches(host)' &&
+    normalize(kill.statements[0].thenStatement.getText()) ===
+      '{ killProcessBestEffort(host.pid); }';
+  const matches = normalize(
+    requireDeclaration(lifecycle, 'hostMatches').body.getText(),
+  );
+  const matchesOnProof = matches.includes(
+    "process.platform === 'linux' ? judgeHost(host.pid, host.record) === 'alive' : psShowsSessionHost(host)",
+  );
+  const alive = normalize(
+    requireDeclaration(lifecycle, 'isHostAlive').body.getText(),
+  );
+  const aliveUntilProof = alive.includes(
+    "host !== null && judgeHost(host.pid, host.record) !== 'dead'",
+  );
+  const judge = normalize(
+    requireDeclaration('src/host/hostRecord.ts', 'judgeHost').body.getText(),
+  );
+  const judgesIdentity = judge.includes(
+    'record.bootId === bootId && record.startTicks === stat.startTicks',
+  );
+  const body = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
+  const check = indexOfStatement(
+    body,
+    /^invariant\(\s*manifest\.hostPid === process\.pid/,
+  );
+  const records =
+    check >= 0 &&
+    normalize(body.statements[check + 1]?.getText() ?? '') ===
+      'const hostRecord = captureHost(process.pid);' &&
+    normalize(body.statements[check + 2]?.getText() ?? '') ===
+      'if (hostRecord !== null) { writeHostRecord(sessDir, hostRecord); }';
+  return {
+    ProvesHostPid:
+      killsOnMatch &&
+      matchesOnProof &&
+      aliveUntilProof &&
+      judgesIdentity &&
+      records,
+  };
+}
+
+function repairFacts() {
+  const lifecycle = 'src/host/lifecycle.ts';
+  let marks = false;
+  walk(requireDeclaration(lifecycle, 'recordDestroyed').body, (node) => {
+    if (!ts.isIfStatement(node) || !ts.isBlock(node.thenStatement)) {
+      return;
+    }
+    const st = node.thenStatement.statements.map((s) => normalize(s.getText()));
+    marks ||=
+      st.length === 2 &&
+      st[0].startsWith(
+        'await writeDestroyMarker( destroyMarkerPath(dirname(manifestFile)),',
+      ) &&
+      st[1].startsWith('await writeManifest(manifestFile, {') &&
+      st[1].includes("status: 'destroyed'");
+  });
+  let repairs = false;
+  walk(requireDeclaration(lifecycle, 'reconcileSession').body, (node) => {
+    if (!ts.isTryStatement(node)) {
+      return;
+    }
+    const [write, check] = node.tryBlock.statements;
+    repairs ||=
+      write !== undefined &&
+      normalize(write.getText()) ===
+        'await writeManifest(manifestFile, reconciledManifest);' &&
+      check !== undefined &&
+      ts.isIfStatement(check) &&
+      normalize(check.expression.getText()) ===
+        "reconciledStatus !== 'destroyed' && existsSync(destroyMarkerPath(sessionDirectory))" &&
+      /^\{ await writeManifest\(manifestFile, \{[^]*status: 'destroyed'[^]*\}\); \}$/.test(
+        normalize(check.thenStatement.getText()),
+      );
+  });
+  const marker = requireDeclaration(
+    'src/storage/manifests.ts',
+    'writeDestroyMarker',
+  ).getText();
+  return {
+    ReconcileRepairsDestroyed:
+      marks &&
+      repairs &&
+      marker.includes("await replaceFileAtomic(path, '')") &&
+      !marker.includes('mkdir'),
+  };
+}
+
 function destroyFacts() {
   const destroy = requireDeclaration('src/host/lifecycle.ts', 'destroySession');
   const returns = [];
@@ -380,7 +534,7 @@ function destroyFacts() {
     const block = force.thenStatement;
     const first = indexOfStatement(
       block,
-      /^await stopSessionProcesses\(\s*sessionId,\s*manifest\.hostPid,\s*await readProgramGroup\(/,
+      /^await stopSessionProcesses\(\s*sessionId,\s*await readSessionHost\(sessionDirectory, manifest\),\s*await readProgramGroup\(/,
     );
     const reread = indexOfStatement(
       block,
@@ -392,7 +546,7 @@ function destroyFacts() {
     );
     const second = indexOfStatement(
       block,
-      /^await stopSessionProcesses\(\s*sessionId,\s*current\.hostPid,\s*group,/,
+      /^await stopSessionProcesses\(\s*sessionId,\s*await readSessionHost\(sessionDirectory, current\),\s*group,/,
     );
     const records = indexOfStatement(
       block,
@@ -412,7 +566,7 @@ function destroyFacts() {
   ).body;
   const stopWaits =
     indexOfStatement(stop, /^stopProgramGroup\(group\);$/) >= 0 &&
-    indexOfStatement(stop, /^killProcessBestEffort\(hostPid\);$/) >= 0 &&
+    indexOfStatement(stop, /^killHostBestEffort\(host\);$/) >= 0 &&
     indexOfStatement(stop, /^const stopped = await waitForProcessesToExit\(/) >=
       0 &&
     guardIndex(stop, '!stopped', ts.SyntaxKind.ThrowStatement) >= 0;
@@ -421,7 +575,7 @@ function destroyFacts() {
     'waitForProcessesToExit',
   );
   const waitsForProcessesOnly =
-    calls(wait.body, 'isProcessAlive').length === 1 &&
+    calls(wait.body, 'isHostAlive').length === 1 &&
     calls(wait.body, 'isProgramGroupAlive').length === 1 &&
     calls(wait.body, 'stat').length === 0 &&
     calls(wait.body, 'pathExists').length === 0;
@@ -449,7 +603,8 @@ function destroyFacts() {
 
 // The statements of destroySession's local stopLeftoversThenRecordDestroyed:
 // with DestroyStopsLeftovers it stops the group that program.json proves,
-// waits for it, and only then records destroyed.
+// waits for it, and only then records destroyed. readProvenProgramGroup
+// returns the record whenever it has a token.
 function stopLeftoversThenRecordDestroyed(destroy) {
   let found = [];
   walk(destroy.body, (node) => {
@@ -474,8 +629,20 @@ function stopLeftoversThenRecordDestroyed(destroy) {
     stops:
       found.length === 2 &&
       found[0] ===
-        'await stopSessionProcesses( sessionId, null, await readProvenProgramGroup(sessionDirectory), sessionDirectory, signal, );',
+        'await stopSessionProcesses( sessionId, null, await readProvenProgramGroup(sessionDirectory), sessionDirectory, signal, );' &&
+      bodyIs(
+        'readProvenProgramGroup',
+        "const record = await readProgramRecord(sessionDirectory); return typeof record === 'object' && hasToken(record) ? record : null;",
+      ) &&
+      bodyIs('hasToken', 'return record.bootId !== null;'),
   };
+}
+
+function bodyIs(name, text) {
+  const body = requireDeclaration('src/host/programGroup.ts', name).body;
+  return (
+    normalize(body.statements.map((st) => st.getText()).join(' ')) === text
+  );
 }
 
 function manifestWriteFacts() {
@@ -794,6 +961,47 @@ function ownershipFacts() {
   };
 }
 
+// captureToken reads the program's autogroup between two reads of its stat,
+// and keeps it only when the second read shows the program as the leader of
+// its own session, with the same start time and the host as its parent, and
+// the autogroup differs from the host's own. isProgramGroupAlive reads a
+// group alive only while the check owns it, cannot run, or finds no live
+// member while the probe reads the group alive, so a group whose members
+// carry another autogroup reads gone.
+function tokenFacts() {
+  const module = 'src/host/programGroup.ts';
+  const capture = requireDeclaration(module, 'captureToken').body;
+  const loop = capture.statements.find(ts.isWhileStatement);
+  const st =
+    loop !== undefined && ts.isBlock(loop.statement)
+      ? loop.statement.statements.map((s) => normalize(s.getText()))
+      : [];
+  const capturesOwnSession =
+    capture.statements.some(
+      (s) =>
+        normalize(s.getText()) ===
+        "const ownAutogroup = readAutogroup('self');",
+    ) &&
+    st[0] === 'const before = readShownProcStat(pid);' &&
+    st[1] === 'const autogroup = readAutogroup(pid);' &&
+    st[2] === 'const after = readShownProcStat(pid);' &&
+    st[3] ===
+      'if ( before === null || after === null || before.startTicks !== after.startTicks || after.ppid !== process.pid ) { return null; }' &&
+    st[4] ===
+      'if (after.sid === pid && autogroup !== ownAutogroup) { return autogroup === null ? null : { bootId, autogroup }; }';
+  const alive = requireDeclaration(module, 'isProgramGroupAlive').body
+    .statements;
+  const readsUnprovenGone =
+    normalize(alive.at(-2)?.getText() ?? '') ===
+      'const { verdict } = judgeLiveGroup(group);' &&
+    normalize(alive.at(-1)?.getText() ?? '') ===
+      "return ( verdict === 'owned' || verdict === 'unknown' || (verdict === 'gone' && isProcessGroupAlive(group.pid)) );";
+  return {
+    TokenNamesProgram: capturesOwnSession,
+    ReusedIdReadsGone: readsUnprovenGone,
+  };
+}
+
 // A group that only a childPid names, without a record with a token, gets
 // the kill and reads alive only while the session folder exists, checked in
 // the same synchronous block as the kill or the probe.
@@ -818,9 +1026,12 @@ function fallbackFacts() {
 // runDestroyCommand runs the same command detached, in a new session, before
 // it destroys anything when cliRunsInsideProgramSession matches. On Linux
 // that check compares the program's pid with the CLI's session id, the
-// fourth field after the command name in /proc/self/stat. Before it reads
+// fourth field after the command name in /proc/self/stat, and a CLI that
+// cannot read that id, or reads 0, counts as inside. Before it reads
 // the manifest, the check matches AGENT_TTY_SESSION_ID, and the copy does
-// not get that variable, so it does not start a copy of its own.
+// not get that variable. Off Linux the check compares the process group and
+// the controlling terminal. The copy gets DESTROY_RERUN_ENV_KEY and skips the
+// check, so it never starts a copy of its own.
 function rerunFacts() {
   const destroyFile = 'src/cli/commands/destroy.ts';
   const run = requireDeclaration(destroyFile, 'runDestroyCommand').body;
@@ -828,7 +1039,7 @@ function rerunFacts() {
     (st) =>
       ts.isIfStatement(st) &&
       normalize(st.expression.getText()) ===
-        'await cliRunsInsideProgramSession(options.sessionId)' &&
+        "process.env[DESTROY_RERUN_ENV_KEY] !== '1' && (await cliRunsInsideProgramSession(options.sessionId))" &&
       /^\{\s*process\.exitCode = await rerunInNewSession\(\);\s*return;\s*\}$/.test(
         st.thenStatement.getText(),
       ),
@@ -840,25 +1051,39 @@ function rerunFacts() {
   );
   const detached =
     spawns.length === 1 && /\bdetached: true\b/.test(spawns[0].getText());
+  const copyEnv =
+    spawns.length === 1
+      ? (/\benv: \{ \.\.\.process\.env, ([^}]*?),? \}/
+          .exec(normalize(spawns[0].getText()))?.[1]
+          .split(', ') ?? [])
+      : [];
+  const copySkipsCheck = copyEnv.includes("[DESTROY_RERUN_ENV_KEY]: '1'");
   const lifecycle = 'src/host/lifecycle.ts';
-  const compares = requireDeclaration(
+  const insideBody = requireDeclaration(
     lifecycle,
     'cliRunsInsideProgramSession',
-  ).body.statements.some((st) => {
-    if (!ts.isReturnStatement(st) || st.expression === undefined) {
-      return false;
-    }
-    let expression = st.expression;
-    while (ts.isParenthesizedExpression(expression)) {
-      expression = expression.expression;
-    }
-    return (
-      normalize(expression.getText()) ===
-      "manifest.childPid === (process.platform === 'linux' ? ownLinuxSessionId() : ownProcessGroupId())"
-    );
-  });
+  ).body;
+  const insideStatements = insideBody.statements.map((st) =>
+    normalize(st.getText()),
+  );
+  const linux = insideBody.statements.find(
+    (st) =>
+      ts.isIfStatement(st) &&
+      normalize(st.expression.getText()) === "process.platform === 'linux'",
+  );
+  const linuxStatements =
+    linux !== undefined && ts.isBlock(linux.thenStatement)
+      ? linux.thenStatement.statements.map((st) => normalize(st.getText()))
+      : [];
+  const compares =
+    linuxStatements.length === 2 &&
+    linuxStatements[0] === 'const sid = ownLinuxSessionId();' &&
+    linuxStatements[1] ===
+      'return sid === null || manifest.childPid === sid;' &&
+    insideStatements.at(-1) ===
+      'return ( manifest.childPid === ownProcessGroupId() || sharesControllingTerminal(manifest.childPid) );';
   const readsSessionId =
-    /const \{ sid \} = parseProcStat\(readFileSync\('\/proc\/self\/stat', 'utf8'\)\)/.test(
+    /stat = readFileSync\('\/proc\/self\/stat', 'utf8'\);[^]*const \{ sid \} = parseProcStat\(stat\)/.test(
       normalize(requireDeclaration(lifecycle, 'ownLinuxSessionId').getText()),
     ) &&
     /const fields = text\.slice\(close \+ 2\)\.split\(' '\);[^]*sid: Number\(fields\[3\]\)/.test(
@@ -879,14 +1104,15 @@ function rerunFacts() {
     inside,
     /= await readManifestIfExists\(/,
   );
-  const copyDropsId =
-    spawns.length === 1 &&
-    normalize(spawns[0].getText()).includes(
-      'env: { ...process.env, AGENT_TTY_SESSION_ID: undefined }',
-    );
+  const copyDropsId = copyEnv.includes('AGENT_TTY_SESSION_ID: undefined');
   return {
     ReRunsInNewSession:
-      check >= 0 && destroy > check && detached && compares && readsSessionId,
+      check >= 0 &&
+      destroy > check &&
+      detached &&
+      copySkipsCheck &&
+      compares &&
+      readsSessionId,
     InsideCheckReadsEnv:
       readsEnv >= 0 && readsEnv < readsManifest && copyDropsId,
   };
@@ -971,8 +1197,20 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'launchHost'],
   ['src/host/lifecycle.ts', 'isProcessAlive'],
   ['src/host/lifecycle.ts', 'killProcessBestEffort'],
+  ['src/host/lifecycle.ts', 'readSessionHost'],
+  ['src/host/lifecycle.ts', 'psShowsSessionHost'],
+  ['src/host/lifecycle.ts', 'isHostAlive'],
+  ['src/host/lifecycle.ts', 'hostMatches'],
+  ['src/host/lifecycle.ts', 'killHostBestEffort'],
+  ['src/host/hostRecord.ts', 'captureHost'],
+  ['src/host/hostRecord.ts', 'writeHostRecord'],
+  ['src/host/hostRecord.ts', 'readHostRecord'],
+  ['src/host/hostRecord.ts', 'pidExists'],
+  ['src/host/hostRecord.ts', 'judgeHost'],
   ['src/host/lifecycle.ts', 'ownLinuxSessionId'],
   ['src/host/lifecycle.ts', 'ownProcessGroupId'],
+  ['src/host/lifecycle.ts', 'controllingTerminal'],
+  ['src/host/lifecycle.ts', 'sharesControllingTerminal'],
   ['src/host/lifecycle.ts', 'cliRunsInsideProgramSession'],
   ['src/host/lifecycle.ts', 'readSessionManifestOrThrow'],
   ['src/host/lifecycle.ts', 'waitForTerminalManifest'],
@@ -1002,9 +1240,11 @@ const COVERED = [
   ['src/host/programGroup.ts', 'readProgramGroup'],
   ['src/host/programGroup.ts', 'judgeProgramGroup'],
   ['src/host/programGroup.ts', 'readGroupMembers'],
+  ['src/host/programGroup.ts', 'judgeLiveGroup'],
   ['src/host/programGroup.ts', 'processGroupTarget'],
   ['src/host/programGroup.ts', 'procHidesOtherUsers'],
   ['src/host/programGroup.ts', 'groupHasLiveProcess'],
+  ['src/host/programGroup.ts', 'scanGroup'],
   ['src/host/programGroup.ts', 'isProcessGroupAlive'],
   ['src/host/programGroup.ts', 'killProcessGroupBestEffort'],
   ['src/host/programGroup.ts', 'isProgramGroupAlive'],
@@ -1022,6 +1262,7 @@ const COVERED = [
   ['src/storage/manifests.ts', 'replaceFileAtomicSync'],
   ['src/storage/manifests.ts', 'writeValidatedJsonFileSync'],
   ['src/storage/manifests.ts', 'writeManifest'],
+  ['src/storage/manifests.ts', 'writeDestroyMarker'],
   ['src/protocol/sessionStatusPolicy.ts', 'SESSION_STATUS_POLICIES'],
 ];
 
@@ -1040,6 +1281,10 @@ const RUN_HOST_PARTS = [
   /^const handlePtyExit = /,
   /^pty\.onExit\(/,
   /^process\.on\('SIGTERM'/,
+  /^let onSigterm = /,
+  /^if \(sigterm\.received\) \{/,
+  /^invariant\(!sigterm\.received/,
+  /^onSigterm = startShutdown;/,
 ];
 
 function runHostFingerprints() {
@@ -1240,6 +1485,8 @@ const constants = {
   ...createFacts(),
   ...hostFacts(),
   ...destroyFacts(),
+  ...hostProofFacts(),
+  ...repairFacts(),
   ...manifestWriteFacts(),
   ...programGroupFacts(),
   ...deniedProbeFacts(),
@@ -1247,6 +1494,7 @@ const constants = {
   ...programRecordFacts(),
   ...ownershipFacts(),
   ...fallbackFacts(),
+  ...tokenFacts(),
   ...rerunFacts(),
   ...policyFacts(),
 };

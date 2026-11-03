@@ -11,6 +11,7 @@ import {
 import { programRecordPath } from '../storage/sessionPaths.js';
 import { invariant } from '../util/assert.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
+import { sharesHostPidNamespace } from './hostRecord.js';
 
 const ProgramPidSchema = z.number().int().gt(1);
 // On Linux, setsid() gives the new session a new autogroup, whose id comes
@@ -133,7 +134,7 @@ function readLiveThreadState(pid: number): string | null {
 
 // A process whose main thread called pthread_exit shows Z while another of
 // its threads runs, so it takes the state of that thread.
-function readProcStat(pid: number): ProcStat | null {
+export function readProcStat(pid: number): ProcStat | null {
   const text = readProcFileIfExists(`/proc/${String(pid)}/stat`);
   if (text === null) {
     return null;
@@ -173,7 +174,7 @@ function readAutogroup(pid: number | 'self'): number | null {
 }
 
 // A hardened /proc can refuse the boot id and still show the autogroups.
-function readBootId(): string | null {
+export function readBootId(): string | null {
   try {
     const bootId = readProcFileIfExists(
       '/proc/sys/kernel/random/boot_id',
@@ -296,7 +297,11 @@ export async function readProgramGroup(
   if (typeof record === 'object' && hasToken(record)) {
     return record;
   }
-  if (record === 'invalid' || childPid === null) {
+  if (
+    record === 'invalid' ||
+    childPid === null ||
+    !(await sharesHostPidNamespace(sessionDirectory))
+  ) {
     return null;
   }
   return { childPid, sessionDirectory };
@@ -366,7 +371,17 @@ function readGroupMembers(pgid: number): ProcessRow[] {
 }
 
 function judgeLiveGroup(record: ProvenRecord): GroupJudgement {
-  return judgeProgramGroup(record, readBootId(), readGroupMembers(record.pid));
+  const bootId = readBootId();
+  const judgement = judgeProgramGroup(
+    record,
+    bootId,
+    readGroupMembers(record.pid),
+  );
+  // A member can fork and end after the scan listed /proc, so a group that
+  // reads gone is scanned once more.
+  return judgement.verdict === 'gone'
+    ? judgeProgramGroup(record, bootId, readGroupMembers(record.pid))
+    : judgement;
 }
 
 // node-pty starts the program as a session leader, so the program's pid is
@@ -418,6 +433,21 @@ function groupHasLiveProcess(pgid: number): boolean | null {
     return true;
   }
 
+  // A process of the group can fork and end after the scan listed /proc,
+  // so a scan that finds no live process runs once more, and the group
+  // shows only zombies when both scans show only zombies.
+  const first = scanGroup(pgid);
+  if (first === true) {
+    return true;
+  }
+  const second = scanGroup(pgid);
+  if (second === true) {
+    return true;
+  }
+  return first === false && second === false ? false : null;
+}
+
+function scanGroup(pgid: number): boolean | null {
   let seen = false;
   for (const entry of readdirSync('/proc')) {
     if (!/^\d+$/.test(entry)) {

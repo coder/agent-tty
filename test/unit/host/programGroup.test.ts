@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readlinkSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,6 +14,7 @@ import {
   judgeProgramGroup,
   parseAutogroup,
   parseProcStat,
+  readProgramGroup,
   stopProgramGroup,
   writeProgramRecord,
   type ProcessRow,
@@ -23,6 +24,7 @@ import {
   programRecordPath,
   sessionDir,
 } from '../../../src/storage/sessionPaths.js';
+import { writeHostRecord } from '../../../src/host/hostRecord.js';
 import { capturesToken } from '../../helpers.js';
 
 import type * as Fs from 'node:fs';
@@ -33,6 +35,8 @@ const procHooks = vi.hoisted(() => ({
   // /proc/<pid>/task/<tid>/stat by "<pid>/<tid>" for the threads beside the
   // leader, whose task stat is its /proc/<pid>/stat.
   threads: new Map<string, string | Error>(),
+  // Pids whose /proc/<pid>/task listing fails with this error.
+  taskErrors: new Map<string, Error>(),
   mountinfo: undefined as string | undefined,
 }));
 
@@ -55,6 +59,10 @@ vi.mock('node:fs', async () => {
     }
     if (!procHooks.stat.has(pid)) {
       throw errno('ENOENT');
+    }
+    const taskError = procHooks.taskErrors.get(pid);
+    if (taskError !== undefined) {
+      throw taskError;
     }
     return [
       pid,
@@ -100,6 +108,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   procHooks.stat = undefined;
   procHooks.threads.clear();
+  procHooks.taskErrors.clear();
   procHooks.mountinfo = undefined;
   autogroupFile.read = null;
   Object.defineProperty(process, 'platform', { value: platform });
@@ -207,6 +216,24 @@ describe('captureProgram', () => {
       expect(captureProgram(process.ppid)).toEqual({
         version: 1,
         pid: process.ppid,
+        bootId: null,
+        autogroup: null,
+      });
+    },
+  );
+
+  it.runIf(capturesToken)(
+    "records no token while the child shows the host's autogroup",
+    () => {
+      const child = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' });
+      children.push(child);
+      const pid = child.pid as number;
+      const hostAutogroup = readFileSync('/proc/self/autogroup', 'utf8');
+      replaceAutogroupOf(pid, () => hostAutogroup);
+
+      expect(captureProgram(pid)).toEqual({
+        version: 1,
+        pid,
         bootId: null,
         autogroup: null,
       });
@@ -328,6 +355,61 @@ describe('writeProgramRecord', () => {
         writeProgramRecord(directory, invalid as unknown as ProgramRecord),
       ),
     ).toMatchObject({ code: 'MANIFEST_VALIDATION_ERROR' });
+  });
+});
+
+// Only Linux has /proc/self/ns/pid and host records.
+describe.runIf(platform === 'linux')('readProgramGroup without a token', () => {
+  let home = '';
+  let directory = '';
+
+  beforeEach(async () => {
+    home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-program-')));
+    directory = sessionDir(home, 'session-01');
+    await mkdir(directory, { recursive: true });
+    writeProgramRecord(directory, {
+      version: 1,
+      pid: 4242,
+      bootId: null,
+      autogroup: null,
+    });
+  });
+
+  afterEach(async () => {
+    await rm(home, { recursive: true, force: true });
+  });
+
+  function recordHostIn(pidNamespace: string): void {
+    writeHostRecord(directory, {
+      version: 1,
+      pid: 4141,
+      bootId: 'ce4b84e5-e77e-4d68-bc28-cd04a84f6cd7',
+      startTicks: '100',
+      pidNamespace,
+    });
+  }
+
+  it('falls back to the childPid without a host record', async () => {
+    expect(await readProgramGroup(directory, 4242)).toEqual({
+      childPid: 4242,
+      sessionDirectory: directory,
+    });
+  });
+
+  it("falls back to the childPid in the host's pid namespace", async () => {
+    recordHostIn(readlinkSync('/proc/self/ns/pid'));
+
+    expect(await readProgramGroup(directory, 4242)).toEqual({
+      childPid: 4242,
+      sessionDirectory: directory,
+    });
+  });
+
+  // There the childPid names another process group, if any.
+  it("names no group in a pid namespace other than the host's", async () => {
+    recordHostIn('pid:[1]');
+
+    expect(await readProgramGroup(directory, 4242)).toBeNull();
   });
 });
 
@@ -476,6 +558,36 @@ function procShowsSecondThread(thread: string): void {
   );
 }
 
+// The first process of the group forks a live process of the group and then
+// ends, after the scan listed /proc and before it reads that process.
+function forksDuringScan(end: 'Z' | 'ENOENT'): void {
+  const read = autogroupFile.read;
+  let forked = false;
+  autogroupFile.read = (file) => {
+    if (!forked && file === '/proc/100/stat') {
+      forked = true;
+      procHooks.stat?.set(
+        '100',
+        end === 'Z'
+          ? `100 (a) Z 1 ${String(CHILD_PID)} ${String(CHILD_PID)} ${STAT_TAIL}`
+          : errno('ENOENT'),
+      );
+      procHooks.stat?.set(
+        '200',
+        `200 (a) S 100 ${String(CHILD_PID)} ${String(CHILD_PID)} ${STAT_TAIL}`,
+      );
+    }
+    return read?.(file) ?? null;
+  };
+}
+
+const FORK_CASES = [
+  ['ok', 'Z'],
+  ['ok', 'ENOENT'],
+  ['EPERM', 'Z'],
+  ['EPERM', 'ENOENT'],
+] as const;
+
 describe('a program group without a token', () => {
   const group: ProgramRecord = {
     version: 1,
@@ -483,6 +595,45 @@ describe('a program group without a token', () => {
     bootId: null,
     autogroup: null,
   };
+
+  it.each(FORK_CASES)(
+    'on linux, when the probe ends %s and a process forks during the scan and then ends %s, is alive',
+    (outcome, end) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procShowsGroup('S');
+      forksDuringScan(end);
+      probeEnds(outcome);
+
+      expect(isProgramGroupAlive(group)).toBe(true);
+    },
+  );
+
+  // The child that the first fork left forks and ends as a zombie while the
+  // second scan runs, so that scan shows only a zombie of the group.
+  it('on linux, when the probe ends EPERM and a process forks during each scan, is alive', () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    procShowsGroup('S');
+    forksDuringScan('ENOENT');
+    const firstFork = autogroupFile.read;
+    let forked = false;
+    autogroupFile.read = (file) => {
+      if (!forked && procHooks.stat?.has('200') && file === '/proc/200/stat') {
+        forked = true;
+        procHooks.stat.set(
+          '200',
+          `200 (a) Z 100 ${String(CHILD_PID)} ${String(CHILD_PID)} ${STAT_TAIL}`,
+        );
+        procHooks.stat.set(
+          '300',
+          `300 (a) S 200 ${String(CHILD_PID)} ${String(CHILD_PID)} ${STAT_TAIL}`,
+        );
+      }
+      return firstFork?.(file) ?? null;
+    };
+    probeEnds('EPERM');
+
+    expect(isProgramGroupAlive(group)).toBe(true);
+  });
 
   it.each([
     ['ok', ['Z', 'X'], false],
@@ -519,6 +670,18 @@ describe('a program group without a token', () => {
       probeEnds(outcome);
 
       expect(isProgramGroupAlive(group)).toBe(alive);
+    },
+  );
+
+  it.each(['EACCES', 'EPERM'])(
+    'on linux, counts a zombie leader alive while /proc refuses the list of its threads with %s',
+    (code) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      procShowsGroup('Z');
+      procHooks.taskErrors.set('100', errno(code));
+      probeEnds('ok');
+
+      expect(isProgramGroupAlive(group)).toBe(true);
     },
   );
 
@@ -670,6 +833,30 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     },
   );
 
+  it.each(FORK_CASES)(
+    'is alive when the probe ends %s and a member forks during the scan and then ends %s',
+    (outcome, end) => {
+      procShowsTokenGroup('S');
+      forksDuringScan(end);
+      probeEnds(outcome);
+
+      expect(isProgramGroupAlive(group)).toBe(true);
+    },
+  );
+
+  it.each(['Z', 'ENOENT'] as const)(
+    'gets the kill when a member forks during the scan and then ends %s',
+    (end) => {
+      procShowsTokenGroup('S');
+      forksDuringScan(end);
+      const kill = probeEnds('ok');
+
+      stopProgramGroup(group);
+
+      expect(kill).toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+    },
+  );
+
   it.each(['EPERM', 'EACCES'])(
     'is alive with only a zombie in view while another process refuses its read with %s',
     (readError) => {
@@ -779,6 +966,19 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     stopProgramGroup(group);
     expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
   });
+
+  it.each(['EACCES', 'EPERM'])(
+    'is alive and gets no kill while /proc refuses the list of the threads of a zombie leader with %s',
+    (code) => {
+      procShowsTokenGroup('Z');
+      procHooks.taskErrors.set('100', errno(code));
+      const kill = probeEnds('ok');
+
+      expect(isProgramGroupAlive(group)).toBe(true);
+      stopProgramGroup(group);
+      expect(kill).not.toHaveBeenCalledWith(-CHILD_PID, 'SIGKILL');
+    },
+  );
 
   it('is alive with no member in view when /proc hides other users and the probe ends EPERM', () => {
     procShowsTokenGroup();

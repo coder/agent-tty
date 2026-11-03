@@ -14,6 +14,7 @@ import {
   cleanupHome,
   createSession,
   destroySession,
+  parseWaitTimeoutEnvelope,
   readEvents,
   runCli,
   sleep,
@@ -336,12 +337,9 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     );
 
     expect(cursorLineResult.exitCode).toBe(11);
-    const envelope = JSON.parse(
-      cursorLineResult.stdout,
-    ) as SuccessEnvelope<WaitForRenderResult>;
-    expect(envelope.ok).toBe(true);
-    expect(envelope.result.matched).toBe(false);
-    expect(envelope.result.timedOut).toBe(true);
+    const timedOut = parseWaitTimeoutEnvelope(cursorLineResult.stdout);
+    expect(timedOut.matched).toBe(false);
+    expect(timedOut.timedOut).toBe(true);
   });
 
   it('matches text on the cursor row with CLI --scope cursor-line', async () => {
@@ -461,7 +459,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     expect(envelope.result.cursorCol).toBe(snapshot.cursorCol);
   });
 
-  it('exits 11 with a success envelope when CLI --text times out', () => {
+  it('exits 11 with a WAIT_TIMEOUT error envelope that keeps the result when CLI --text times out', () => {
     const result = runCli(
       [
         'wait',
@@ -478,16 +476,27 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
     expect(result.exitCode).toBe(11);
     expect(result.stderr).toBe('');
-    const envelope = JSON.parse(
-      result.stdout,
-    ) as SuccessEnvelope<WaitForRenderResult>;
-    expect(envelope.ok).toBe(true);
-    expect(envelope.result.matched).toBe(false);
-    expect(envelope.result.timedOut).toBe(true);
-    expect(envelope.result.capturedAtSeq).toBeGreaterThanOrEqual(0);
+    const timedOut = parseWaitTimeoutEnvelope(result.stdout);
+    expect(timedOut.matched).toBe(false);
+    expect(timedOut.timedOut).toBe(true);
+    expect(timedOut.capturedAtSeq).toBeGreaterThanOrEqual(0);
+    const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+    expect(envelope.error.details).toEqual({ sessionId, timeoutMs: 1000 });
   });
 
-  it('exits 11 with a success envelope when legacy CLI --idle-ms times out', () => {
+  it('prints the WAIT_TIMEOUT error to stderr when CLI --text times out without --json', () => {
+    const result = runCli(
+      ['wait', sessionId, '--text', 'MISSING_TEXT', '--timeout', '1000'],
+      { AGENT_TTY_HOME: testHome },
+      10_000,
+    );
+
+    expect(result.exitCode).toBe(11);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toMatch(/^WAIT_TIMEOUT: /u);
+  });
+
+  it('exits 11 with a WAIT_TIMEOUT error envelope when legacy CLI --idle-ms times out', () => {
     const result = runCli(
       ['wait', sessionId, '--idle-ms', '10000', '--timeout', '1000', '--json'],
       { AGENT_TTY_HOME: testHome },
@@ -496,12 +505,12 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
     expect(result.exitCode).toBe(11);
     expect(result.stderr).toBe('');
-    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<WaitResult>;
-    expect(envelope.ok).toBe(true);
-    expect(envelope.result.timedOut).toBe(true);
+    expect(parseWaitTimeoutEnvelope(result.stdout)).toEqual({
+      timedOut: true,
+    });
   });
 
-  it('exits 11 with a success envelope when legacy CLI --exit times out', () => {
+  it('exits 11 with a WAIT_TIMEOUT error envelope when legacy CLI --exit times out', () => {
     const result = runCli(
       ['wait', sessionId, '--exit', '--timeout', '1000', '--json'],
       { AGENT_TTY_HOME: testHome },
@@ -510,9 +519,9 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
     expect(result.exitCode).toBe(11);
     expect(result.stderr).toBe('');
-    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<WaitResult>;
-    expect(envelope.ok).toBe(true);
-    expect(envelope.result.timedOut).toBe(true);
+    expect(parseWaitTimeoutEnvelope(result.stdout)).toEqual({
+      timedOut: true,
+    });
   });
 
   it('rejects non-integer CLI --cursor-row values', () => {

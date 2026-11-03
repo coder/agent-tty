@@ -35,7 +35,7 @@ agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format webm --json
 agent-tty --home "$AGENT_HOME" destroy "$SESSION_ID" --json
 ```
 
-`wait` gives up after 30 s by default and exits `11` (`WAIT_TIMEOUT`). Pass `--timeout <ms>` for a slower program, or `--timeout 0` to wait without a limit.
+`wait` gives up after 30 s by default and exits `11` (`WAIT_TIMEOUT`). Pass `--timeout <ms>` for a slower program, or `--timeout 0` to wait without a limit. A `batch` `wait` step without `"timeout"` uses the same 30 s default.
 
 ## Essential Commands
 
@@ -60,6 +60,7 @@ agent-tty --home <path> wait <session-id> --regex 'READY>$' --scope cursor-line 
 agent-tty --home <path> wait <session-id> --screen-stable-ms 1000 --json
 agent-tty --home <path> snapshot <session-id> --format text --json
 agent-tty --home <path> screenshot <session-id> --json
+agent-tty --home <path> screenshot <session-id> --out ./proof.png --json
 agent-tty --home <path> record export <session-id> --format webm --json
 ```
 
@@ -112,6 +113,8 @@ agent-tty --home "$AGENT_HOME" screenshot "$SESSION_ID" --json
 agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format asciicast --json
 agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format webm --json
 ```
+
+To keep proof after the Home is removed, pass `--out <path>` to `screenshot` or `record export`. The file goes to that path and `.result.artifactPath` returns it. The parent folder must already exist, and the path must be outside the Home's `sessions/` folder.
 
 ## Anti-Patterns
 

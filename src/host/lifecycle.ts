@@ -1,13 +1,14 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { chmod, mkdir, readdir, stat, unlink } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { chmod, mkdir, readdir, rmdir, stat, unlink } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { ulid } from 'ulid';
 
 import { CliError } from '../cli/errors.js';
+import { DESTROY_RERUN_ENV_KEY } from '../config/defaults.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import {
   isActiveSessionStatus,
@@ -19,9 +20,11 @@ import { ensureHome, resolveHome } from '../storage/home.js';
 import {
   readManifest,
   readManifestIfExists,
+  writeDestroyMarker,
   writeManifest,
 } from '../storage/manifests.js';
 import {
+  destroyMarkerPath,
   manifestPath,
   sessionDir,
   socketPath,
@@ -37,6 +40,7 @@ import {
   stopProgramGroup,
   type ProgramGroup,
 } from './programGroup.js';
+import { judgeHost, readHostRecord, type HostRecord } from './hostRecord.js';
 import { sendRpc } from './rpcClient.js';
 
 const DESTROY_POLL_INTERVAL_MS = 100;
@@ -208,10 +212,81 @@ function killProcessBestEffort(pid: number | null): void {
   }
 }
 
-function ownLinuxSessionId(): number {
-  const { sid } = parseProcStat(readFileSync('/proc/self/stat', 'utf8'));
-  invariant(sid > 0, 'own session id must be a positive integer');
-  return sid;
+const HOST_SUBCOMMAND = '_host';
+
+interface SessionHost {
+  readonly pid: number;
+  readonly sessionId: string;
+  readonly record: HostRecord | null;
+}
+
+async function readSessionHost(
+  sessionDirectory: string,
+  manifest: SessionRecord,
+): Promise<SessionHost | null> {
+  return manifest.hostPid === null
+    ? null
+    : {
+        pid: manifest.hostPid,
+        sessionId: manifest.sessionId,
+        record: await readHostRecord(sessionDirectory),
+      };
+}
+
+function psShowsSessionHost(host: SessionHost): boolean {
+  if (process.platform === 'win32') {
+    return false;
+  }
+  let args: string[];
+  try {
+    args = execFileSync(
+      '/bin/ps',
+      ['-ww', '-o', 'command=', '-p', String(host.pid)],
+      { encoding: 'utf8' },
+    )
+      .trim()
+      .split(/\s+/);
+  } catch {
+    return false;
+  }
+  return args.some(
+    (arg, index) =>
+      arg === HOST_SUBCOMMAND && args[index + 1] === host.sessionId,
+  );
+}
+
+function isHostAlive(host: SessionHost | null): boolean {
+  return host !== null && judgeHost(host.pid, host.record) !== 'dead';
+}
+
+function hostMatches(host: SessionHost): boolean {
+  return process.platform === 'linux'
+    ? judgeHost(host.pid, host.record) === 'alive'
+    : psShowsSessionHost(host);
+}
+
+function killHostBestEffort(host: SessionHost | null): void {
+  // Node has no pidfd API, so the kill races a pid that the host gives up
+  // after hostMatches read it.
+  if (host !== null && hostMatches(host)) {
+    killProcessBestEffort(host.pid);
+  }
+}
+
+// A chroot or a container without a mounted /proc has no /proc/self/stat.
+// In a PID namespace whose session leader runs outside it (`unshare -p -f`,
+// bwrap without --new-session), the kernel shows session id 0. Either way
+// the id is unknown, and the CLI then counts as inside the session.
+function ownLinuxSessionId(): number | null {
+  let stat: string;
+  try {
+    stat = readFileSync('/proc/self/stat', 'utf8');
+  } catch {
+    return null;
+  }
+  const { sid } = parseProcStat(stat);
+  invariant(sid >= 0, 'own session id must not be negative');
+  return sid === 0 ? null : sid;
 }
 
 // macOS and the BSDs ship ps at /bin/ps, so a restricted PATH cannot hide
@@ -237,14 +312,39 @@ function ownProcessGroupId(): number | null {
   return pgid;
 }
 
+function controllingTerminal(pid: number): string | null {
+  let output: string;
+  try {
+    output = execFileSync('/bin/ps', ['-o', 'tty=', '-p', String(pid)], {
+      encoding: 'utf8',
+    });
+  } catch {
+    return null;
+  }
+  const tty = output.trim();
+  // A terminal name such as ttys001 or pts/3 starts with a letter and ends
+  // with a digit. For a process without a terminal ps prints ?? (macOS,
+  // OpenBSD), ? (procps, NetBSD) or - (FreeBSD), and any other value that
+  // names no terminal reads as none too, so two of them never match.
+  return /^[a-z][\w/]*\d$/i.test(tty) ? tty : null;
+}
+
+// A terminal is the controlling terminal of at most one session and of
+// every process in it. The program leads its session with the PTY as that
+// terminal, so a process with the program's terminal runs in its session.
+function sharesControllingTerminal(pid: number): boolean {
+  const own = controllingTerminal(process.pid);
+  return own !== null && own === controllingTerminal(pid);
+}
+
 // The program and the processes it starts inherit AGENT_TTY_SESSION_ID at
 // spawn, before any manifest names the program's pid. `create --env` can
 // override that variable, so the ids are compared too. The program leads its
 // own session, so a process inside that session has the program's pid as its
 // session id. Linux compares that id, which also covers a job that the
 // program's shell put in a group of its own. POSIX ps has no session id
-// field, so other systems compare the process group and miss such a job
-// whose environment lost the variable. Windows has no sessions or groups.
+// field, so other systems compare the process group and the controlling
+// terminal. Windows has no sessions or groups.
 export async function cliRunsInsideProgramSession(
   sessionId: string,
 ): Promise<boolean> {
@@ -262,9 +362,15 @@ export async function cliRunsInsideProgramSession(
     return false;
   }
 
+  if (process.platform === 'linux') {
+    // A CLI that cannot read its session id runs again in a new session,
+    // where the copy skips this check: a needless copy costs one re-run.
+    const sid = ownLinuxSessionId();
+    return sid === null || manifest.childPid === sid;
+  }
   return (
-    manifest.childPid ===
-    (process.platform === 'linux' ? ownLinuxSessionId() : ownProcessGroupId())
+    manifest.childPid === ownProcessGroupId() ||
+    sharesControllingTerminal(manifest.childPid)
   );
 }
 
@@ -277,6 +383,75 @@ async function unlinkIfPresent(path: string): Promise<void> {
     }
 
     throw error;
+  }
+}
+
+export async function removeSocketDirectoryIfEmpty(
+  socketFile: string,
+): Promise<void> {
+  try {
+    await rmdir(dirname(socketFile));
+  } catch (error) {
+    if (
+      hasErrorCode(error, 'ENOENT') ||
+      hasErrorCode(error, 'ENOTEMPTY') ||
+      hasErrorCode(error, 'EEXIST')
+    ) {
+      return;
+    }
+
+    throw error;
+  }
+}
+
+// For a process whose work is already done: an unusual rmdir error, such as
+// EBUSY or EPERM, is logged and must not fail it.
+export async function removeSocketDirectoryBestEffort(
+  socketFile: string,
+): Promise<void> {
+  try {
+    await removeSocketDirectoryIfEmpty(socketFile);
+  } catch (error) {
+    console.debug('could not remove the socket directory:', error);
+  }
+}
+
+const SOCKET_LISTEN_ATTEMPTS = 5;
+
+// libuv reports a bind in a missing directory as EACCES.
+function isVanishedSocketDirectory(
+  error: unknown,
+  socketDirectory: string,
+): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const { code, path, syscall } = error as NodeJS.ErrnoException;
+  return (
+    (syscall === 'listen' && (code === 'EACCES' || code === 'ENOENT')) ||
+    (syscall === 'chmod' && code === 'ENOENT' && path === socketDirectory)
+  );
+}
+
+export async function listenInSocketDirectory(
+  socketFile: string,
+  listen: () => Promise<void>,
+): Promise<void> {
+  const socketDirectory = dirname(socketFile);
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await mkdir(socketDirectory, { recursive: true });
+      await chmod(socketDirectory, 0o700);
+      await listen();
+      return;
+    } catch (error) {
+      if (
+        attempt === SOCKET_LISTEN_ATTEMPTS ||
+        !isVanishedSocketDirectory(error, socketDirectory)
+      ) {
+        throw error;
+      }
+    }
   }
 }
 
@@ -351,7 +526,7 @@ async function waitForTerminalManifest(
 }
 
 export async function waitForProcessesToExit(
-  hostPid: number | null,
+  host: SessionHost | null,
   group: ProgramGroup | null,
   maxAttempts: number = DESTROY_MAX_ATTEMPTS,
   intervalMs: number = DESTROY_POLL_INTERVAL_MS,
@@ -371,7 +546,7 @@ export async function waitForProcessesToExit(
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     throwIfAborted(signal);
-    if (!isProcessAlive(hostPid) && !isProgramGroupAlive(group)) {
+    if (!isHostAlive(host) && !isProgramGroupAlive(group)) {
       return true;
     }
 
@@ -508,7 +683,16 @@ export async function allocateSession(
   return { sessionId, sessionDirectory };
 }
 
-export function launchHost(config: LaunchHostConfig): number {
+export interface LaunchedHost {
+  readonly pid: number;
+  // Sends the host SIGTERM, which makes it stop its program and end the
+  // session. It sends nothing once the host has exited, so a reused pid
+  // never gets the signal. On Windows, SIGTERM ends the host at once, without
+  // its shutdown.
+  stop(): void;
+}
+
+export function launchHost(config: LaunchHostConfig): LaunchedHost {
   assertNonEmptyString(config.sessionId, 'sessionId');
   assertNonEmptyString(config.home, 'home');
   assertStringRecord(config.env, 'env');
@@ -526,7 +710,7 @@ export function launchHost(config: LaunchHostConfig): number {
     [
       ...process.execArgv,
       entrypoint,
-      '_host',
+      HOST_SUBCOMMAND,
       config.sessionId,
       // The host waits for the first manifest while this process lives.
       String(process.pid),
@@ -537,6 +721,7 @@ export function launchHost(config: LaunchHostConfig): number {
       env: {
         ...process.env,
         ...config.env,
+        [DESTROY_RERUN_ENV_KEY]: undefined,
         AGENT_TTY_HOME: config.home,
         TERM: config.term,
       },
@@ -549,7 +734,12 @@ export function launchHost(config: LaunchHostConfig): number {
     'Detached host process must expose a positive PID',
   );
 
-  return child.pid;
+  return {
+    pid: child.pid,
+    stop: () => {
+      child.kill('SIGTERM');
+    },
+  };
 }
 
 async function recordDestroyed(
@@ -560,10 +750,15 @@ async function recordDestroyed(
 ): Promise<void> {
   invariant(
     isTerminalSessionStatus(manifest.status) ||
-      (!isProcessAlive(manifest.hostPid) && !isProgramGroupAlive(group)),
+      (!isHostAlive(await readSessionHost(dirname(manifestFile), manifest)) &&
+        !isProgramGroupAlive(group)),
     'recordDestroyed needs a terminal manifest or dead session processes',
   );
   if (!isDestroyedSessionStatus(manifest.status)) {
+    await writeDestroyMarker(
+      destroyMarkerPath(dirname(manifestFile)),
+      manifest.sessionId,
+    );
     await writeManifest(manifestFile, {
       ...manifest,
       status: 'destroyed',
@@ -571,20 +766,21 @@ async function recordDestroyed(
     });
   }
   await unlinkIfPresent(socketFile);
+  await removeSocketDirectoryIfEmpty(socketFile);
 }
 
 async function stopSessionProcesses(
   sessionId: string,
-  hostPid: number | null,
+  host: SessionHost | null,
   group: ProgramGroup | null,
   sessionDirectory: string,
   signal: AbortSignal | undefined,
 ): Promise<void> {
   stopProgramGroup(group);
-  killProcessBestEffort(hostPid);
+  killHostBestEffort(host);
 
   const stopped = await waitForProcessesToExit(
-    hostPid,
+    host,
     group,
     DESTROY_MAX_ATTEMPTS,
     DESTROY_POLL_INTERVAL_MS,
@@ -641,7 +837,7 @@ export async function destroySession(
   if (force === true) {
     await stopSessionProcesses(
       sessionId,
-      manifest.hostPid,
+      await readSessionHost(sessionDirectory, manifest),
       await readProgramGroup(sessionDirectory, manifest.childPid),
       sessionDirectory,
       signal,
@@ -652,7 +848,7 @@ export async function destroySession(
     const group = await readProgramGroup(sessionDirectory, current.childPid);
     await stopSessionProcesses(
       sessionId,
-      current.hostPid,
+      await readSessionHost(sessionDirectory, current),
       group,
       sessionDirectory,
       signal,
@@ -790,7 +986,9 @@ export async function reconcileSession(
     return;
   }
 
-  const hostAlive = isProcessAlive(manifest.hostPid);
+  const hostAlive = isHostAlive(
+    await readSessionHost(sessionDirectory, manifest),
+  );
   if (manifest.hostPid !== null && hostAlive) {
     return;
   }
@@ -853,6 +1051,18 @@ export async function reconcileSession(
 
   try {
     await writeManifest(manifestFile, reconciledManifest);
+    if (
+      reconciledStatus !== 'destroyed' &&
+      existsSync(destroyMarkerPath(sessionDirectory))
+    ) {
+      await writeManifest(manifestFile, {
+        ...latest,
+        status: 'destroyed',
+        updatedAt: new Date().toISOString(),
+        hostPid: null,
+        childPid: null,
+      });
+    }
   } catch (error) {
     if (
       error instanceof CliError &&
@@ -862,5 +1072,7 @@ export async function reconcileSession(
     }
     throw error;
   }
-  await unlinkIfPresent(socketPath(sessionDirectory));
+  const socketFile = socketPath(sessionDirectory);
+  await unlinkIfPresent(socketFile);
+  await removeSocketDirectoryIfEmpty(socketFile);
 }

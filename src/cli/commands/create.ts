@@ -9,7 +9,7 @@ import { DEFAULT_IDLE_TIMEOUT_MS } from '../../config/defaults.js';
 import {
   allocateSession,
   launchHost,
-  reconcileSession,
+  type LaunchedHost,
 } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
@@ -136,6 +136,7 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
   }
 
   let sessionId: string | undefined;
+  let host: LaunchedHost | undefined;
 
   try {
     const allocatedSession = await allocateSession(
@@ -153,12 +154,13 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
       },
       (id) => {
         sessionId = id;
-        return launchHost({
+        host = launchHost({
           sessionId: id,
           home: options.context.home,
           env: environment,
           term: options.term,
         });
+        return host.pid;
       },
     );
     sessionId = allocatedSession.sessionId;
@@ -198,7 +200,6 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
   });
   const sessionDirectory = sessionDir(home, sessionId);
   const socketFile = socketPath(sessionDirectory);
-  let lastError: CliError | null = null;
 
   for (let attempt = 0; attempt < READINESS_MAX_ATTEMPTS; attempt += 1) {
     try {
@@ -230,26 +231,23 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
           return;
         }
 
-        lastError = error;
         if (attempt + 1 < READINESS_MAX_ATTEMPTS) {
           await delay(READINESS_POLL_INTERVAL_MS);
           continue;
+        }
+
+        // A host that answers too late would serve a session whose create
+        // failed. The host knows its program's pid also without a session
+        // token, so it stops the program and ends the session itself. On
+        // Windows the SIGTERM ends the host at once, and only a program that
+        // the manifest names can be stopped by a later reconcile.
+        invariant(host !== undefined, 'a session that create polls has a host');
+        if (process.platform !== 'win32' || manifest?.childPid != null) {
+          host.stop();
         }
       }
 
       throw error;
     }
   }
-
-  await reconcileSession(sessionDirectory).catch(() => undefined);
-
-  throw makeCliError(ERROR_CODES.HOST_TIMEOUT, {
-    message: `Timed out waiting for session "${sessionId}" to become ready.`,
-    details: {
-      sessionId,
-      sessionDirectory,
-      causeCode: lastError?.code,
-    },
-    cause: lastError,
-  });
 }
