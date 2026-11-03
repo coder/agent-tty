@@ -211,8 +211,17 @@ export async function runInspectCommand(
   // A reconcile records destroyed for an ended session that a destroy marked
   // but did not finish (see reconcileSession).
   if (isMarkedDestroyed(sessionDirectory, session)) {
-    await reconcileSession(sessionDirectory);
-    session = await readManifest(manifestFile);
+    const read = session;
+    try {
+      await reconcileSession(sessionDirectory);
+      session = await readManifest(manifestFile);
+    } catch {
+      // A marked session that ended shows as it reads when its repair fails,
+      // as in list. The repair write can have landed before a later step
+      // threw.
+      session =
+        (await readManifestIfExists(manifestFile).catch(() => read)) ?? read;
+    }
   }
 
   const isLiveHostEligible = isLiveHostEligibleSessionStatus(session.status);
