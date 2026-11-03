@@ -147,6 +147,111 @@ describe('TerminalQueryResponder', () => {
     );
   });
 
+  describe('XTGETTCAP and DECRQSS', () => {
+    const ESC = '\x1b';
+    const ST = `${ESC}\\`;
+    const upperHex = (text: string): string =>
+      Buffer.from(text, 'ascii').toString('hex').toUpperCase();
+    const SETRGBF_VALUE = upperHex('\\E[38;2;%p1%d;%p2%d;%p3%dm');
+    const SETRGBB_VALUE = upperHex('\\E[48;2;%p1%d;%p2%d;%p3%dm');
+    const TC = '5463';
+    const RGB = '524742';
+    const SETRGBF = '73657472676266';
+    const SETRGBB = '73657472676262';
+    const xtgettcap = (list: string): string => `${ESC}P+q${list}${ST}`;
+    const DECRQSS_DECLINE = `${ESC}P0$r${ST}`;
+
+    it('answers a Tc query with a valueless positive reply', () => {
+      expect(makeResponder().consume(xtgettcap(TC))).toBe(
+        `${ESC}P1+r${TC}${ST}`,
+      );
+    });
+
+    it("answers Neovim's four-name query with four replies in request order", () => {
+      expect(
+        makeResponder().consume(
+          xtgettcap([TC, RGB, SETRGBF, SETRGBB].join(';')),
+        ),
+      ).toBe(
+        [
+          `${ESC}P1+r${TC}${ST}`,
+          `${ESC}P1+r${RGB}${ST}`,
+          `${ESC}P1+r${SETRGBF}=${SETRGBF_VALUE}${ST}`,
+          `${ESC}P1+r${SETRGBB}=${SETRGBB_VALUE}${ST}`,
+        ].join(''),
+      );
+    });
+
+    it('hex-encodes the terminfo source form of setrgbf', () => {
+      expect(SETRGBF_VALUE).toBe(
+        '5C455B33383B323B25703125643B25703225643B25703325646D',
+      );
+    });
+
+    it('stays silent for an unknown capability name', () => {
+      expect(makeResponder().consume(xtgettcap('436F'))).toBe('');
+    });
+
+    it('answers only the known names of a mixed query', () => {
+      expect(
+        makeResponder().consume(xtgettcap([TC, '436F', RGB].join(';'))),
+      ).toBe(`${ESC}P1+r${TC}${ST}${ESC}P1+r${RGB}${ST}`);
+    });
+
+    it('stays silent for odd-length and non-hex tokens', () => {
+      expect(makeResponder().consume(xtgettcap('546'))).toBe('');
+      expect(makeResponder().consume(xtgettcap('ZZ'))).toBe('');
+      expect(makeResponder().consume(xtgettcap(`;${TC.slice(0, 3)};`))).toBe(
+        '',
+      );
+    });
+
+    it('declines a DECRQSS SGR query', () => {
+      expect(makeResponder().consume(`${ESC}P$qm${ST}`)).toBe(DECRQSS_DECLINE);
+    });
+
+    it("declines Neovim's combined SGR set plus DECRQSS write exactly once", () => {
+      expect(
+        makeResponder().consume(`${ESC}[0m${ESC}[48;2;1;2;3m${ESC}P$qm${ST}`),
+      ).toBe(DECRQSS_DECLINE);
+    });
+
+    it('answers a DCS terminated by the 8-bit C1 ST, replying with the 7-bit ST', () => {
+      expect(makeResponder().consume(`${ESC}P+q${TC}\x9c`)).toBe(
+        `${ESC}P1+r${TC}${ST}`,
+      );
+    });
+
+    it('answers a DCS split across chunks on its final byte', () => {
+      const responder = makeResponder();
+      expect(responder.consume(`${ESC}P+q54`)).toBe('');
+      expect(responder.consume('63')).toBe('');
+      expect(responder.consume(ESC)).toBe('');
+      expect(responder.consume('\\')).toBe(`${ESC}P1+r${TC}${ST}`);
+    });
+
+    it('stays silent for another DECRQSS request', () => {
+      expect(makeResponder().consume(`${ESC}P$qr${ST}`)).toBe('');
+    });
+
+    it('stays silent for an overlong DCS and still answers the next query', () => {
+      const responder = makeResponder();
+      expect(responder.consume(`${ESC}P+q${TC}${'x'.repeat(400)}${ST}`)).toBe(
+        '',
+      );
+      expect(responder.consume(xtgettcap(TC))).toBe(`${ESC}P1+r${TC}${ST}`);
+    });
+
+    it('aborts a DCS on an ESC that is not ST and answers the next query', () => {
+      const responder = makeResponder();
+      expect(responder.consume(`${ESC}P+q${TC}${ESC}${xtgettcap(RGB)}`)).toBe(
+        `${ESC}P1+r${RGB}${ST}`,
+      );
+      expect(responder.consume(`${ESC}P+q${TC}${ESC}Zhello`)).toBe('');
+      expect(responder.consume(xtgettcap(TC))).toBe(`${ESC}P1+r${TC}${ST}`);
+    });
+  });
+
   it('rejects a malformed background color at construction', () => {
     expect(
       () =>
