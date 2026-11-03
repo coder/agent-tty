@@ -1153,7 +1153,7 @@ const goldenResultContracts: readonly GoldenResultContractCase[] = [
       artifactPath: '/tmp/test.webm',
       bytes: 2048,
       sha256: 'def456',
-      capturedAtSeq: -1,
+      capturedAtSeq: -2,
       metadata: {},
     },
     extraFieldResult: {

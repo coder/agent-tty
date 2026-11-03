@@ -86,8 +86,8 @@ describe('artifact paths', () => {
     expect(() => screenshotFilename(-2, 'reference-dark')).toThrow(
       /seq must be an integer of at least -1/u,
     );
-    expect(() => recordingFilename(-1, 'asciicast')).toThrow(
-      /seq must be a non-negative integer/u,
+    expect(() => recordingFilename(-2, 'asciicast')).toThrow(
+      /seq must be an integer of at least -1/u,
     );
     expect(() => screenshotFilename(0, '')).toThrow(
       /profileName must be a non-empty string/u,

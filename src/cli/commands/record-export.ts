@@ -155,7 +155,7 @@ async function computeFileHash(filePath: string): Promise<string> {
 }
 
 function resolveCapturedAtSeq(events: ReadonlyArray<{ seq: number }>): number {
-  return events.at(-1)?.seq ?? 0;
+  return events.at(-1)?.seq ?? -1;
 }
 
 function buildResultLines(result: RecordExportResult): string[] {
@@ -275,7 +275,6 @@ export async function runRecordExportCommand(
         options.context.profileDefault,
       );
 
-      invariant(events.length > 0, 'webm export requires at least one event');
       invariant(
         artifactOutputPath.endsWith('.webm'),
         'webm export output path must end with .webm',

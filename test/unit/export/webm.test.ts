@@ -425,16 +425,38 @@ describe('generateWebmExport', () => {
     expect(result.timingMode).toBe('recorded');
   });
 
-  it('rejects empty events', async () => {
-    await expect(
-      generateWebmExport({
+  it('exports an empty event log as a blank video at seq -1', async () => {
+    const emptyInput = {
+      sessionId: 'session-01',
+      initialCols: 80,
+      initialRows: 24,
+      events: [],
+      targetSeq: -1,
+    };
+    mocks.buildReplayInput.mockReturnValue(emptyInput);
+    const mockBackend = createMockBackend();
+
+    const result = await generateWebmExport(
+      {
         sessionId: 'session-01',
         sessionDir: '/tmp/agent-tty/sessions/session-01',
         manifest: createManifest(),
         events: [],
-        outputPath: '/tmp/exports/recording-1-webm.webm',
-      }),
-    ).rejects.toThrow('events must not be empty');
+        outputPath: '/tmp/exports/recording--1-webm.webm',
+      },
+      { backendFactory: () => mockBackend.backend },
+    );
+
+    expect(mockBackend.replayWithTiming).toHaveBeenCalledWith(
+      emptyInput,
+      expect.anything(),
+    );
+    expect(result).toMatchObject({
+      capturedAtSeq: -1,
+      durationMs: 0,
+      outputEventCount: 0,
+      resizeEventCount: 0,
+    });
   });
 
   it('rejects non-absolute output paths', async () => {

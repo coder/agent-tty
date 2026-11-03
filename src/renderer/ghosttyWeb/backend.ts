@@ -523,9 +523,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       input.initialRows,
       'replay input initialRows must be a positive integer',
     );
-    assertNonNegativeInteger(
-      input.targetSeq,
-      'replay input targetSeq must be a non-negative integer',
+    invariant(
+      Number.isInteger(input.targetSeq) && input.targetSeq >= -1,
+      'replay input targetSeq must be an integer of at least -1',
     );
     invariant(
       input.targetSeq >= this.lastAppliedSeq,

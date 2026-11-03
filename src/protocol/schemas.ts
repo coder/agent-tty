@@ -572,7 +572,7 @@ const RecordExportResultFields = {
   artifactPath: NonEmptyStringSchema,
   bytes: PositiveIntSchema,
   sha256: NonEmptyStringSchema,
-  capturedAtSeq: NonNegativeIntSchema,
+  capturedAtSeq: ReplaySeqSchema,
   durationMs: NonNegativeIntSchema.optional(),
   metadata: z.record(z.string(), z.unknown()),
 };

@@ -138,7 +138,6 @@ export async function generateWebmExport(
   invariant(isAbsolute(options.sessionDir), 'sessionDir must be absolute');
   invariant(options.outputPath.length > 0, 'outputPath is required');
   invariant(isAbsolute(options.outputPath), 'outputPath must be absolute');
-  invariant(options.events.length > 0, 'events must not be empty');
 
   const replayInput = buildReplayInput(
     options.sessionId,
@@ -217,17 +216,14 @@ export async function generateWebmExport(
     );
     const firstEvent = exportedEvents[0];
     const lastEvent = exportedEvents.at(-1);
-    invariant(firstEvent !== undefined, 'expected at least one exported event');
-    invariant(lastEvent !== undefined, 'expected at least one exported event');
-
-    const firstTimestamp = parseTimestamp(
-      firstEvent.ts,
-      'first exported event timestamp',
-    );
-    const lastTimestamp = parseTimestamp(
-      lastEvent.ts,
-      'last exported event timestamp',
-    );
+    const firstTimestamp =
+      firstEvent === undefined
+        ? 0
+        : parseTimestamp(firstEvent.ts, 'first exported event timestamp');
+    const lastTimestamp =
+      lastEvent === undefined
+        ? 0
+        : parseTimestamp(lastEvent.ts, 'last exported event timestamp');
     invariant(
       lastTimestamp >= firstTimestamp,
       'last exported event timestamp must not precede the first exported event timestamp',
