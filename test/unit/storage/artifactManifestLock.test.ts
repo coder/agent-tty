@@ -27,6 +27,7 @@ const fsHooks = vi.hoisted(() => ({
   beforeLink: undefined as ((to: string) => Promise<void>) | undefined,
   beforeRm: undefined as ((path: string) => Promise<void>) | undefined,
   beforeWriteFile: undefined as ((path: string) => Promise<void>) | undefined,
+  beforeUtimes: undefined as ((path: string) => Promise<void>) | undefined,
 }));
 
 vi.mock('node:fs/promises', async () => {
@@ -50,6 +51,10 @@ vi.mock('node:fs/promises', async () => {
         typeof args[0] === 'string' ? args[0] : '',
       );
       return actual.writeFile(...args);
+    },
+    utimes: async (...args: Parameters<typeof actual.utimes>) => {
+      await fsHooks.beforeUtimes?.(String(args[0]));
+      return actual.utimes(...args);
     },
   };
 });
@@ -119,6 +124,7 @@ describe('artifact manifest lock', () => {
     fsHooks.beforeLink = undefined;
     fsHooks.beforeRm = undefined;
     fsHooks.beforeWriteFile = undefined;
+    fsHooks.beforeUtimes = undefined;
     vi.useRealTimers();
     await rm(home, { recursive: true, force: true });
   });
@@ -224,7 +230,7 @@ describe('artifact manifest lock', () => {
     },
   );
 
-  it('removes old lock temp and break files when it takes the lock', async () => {
+  it('removes lock temp and break files whose owner is gone once it had to wait for the lock', async () => {
     const artifacts = join(sessionDirectory, 'artifacts');
     const twoMinutesAgo = new Date(Date.now() - 120_000);
     for (const name of [
@@ -234,11 +240,80 @@ describe('artifact manifest lock', () => {
       await writeFile(join(artifacts, name), 'left over');
       await utimes(join(artifacts, name), twoMinutesAgo, twoMinutesAgo);
     }
+    await writeFile(
+      join(artifacts, 'manifest.json.lock.tmp-dead'),
+      await deadOwnerRecord(),
+    );
     await writeFile(join(artifacts, 'manifest.json.lock.tmp-new'), 'in use');
+    await writeFile(lockPath, await deadOwnerRecord());
+    freezeLockClock();
 
     await withArtifactManifestLock(sessionDirectory, () => Promise.resolve());
 
     expect(await readdir(artifacts)).toEqual(['manifest.json.lock.tmp-new']);
+  });
+
+  it('does not read the artifacts folder for leftovers when it finds the lock free', async () => {
+    const artifacts = join(sessionDirectory, 'artifacts');
+    const twoMinutesAgo = new Date(Date.now() - 120_000);
+    await writeFile(join(artifacts, 'manifest.json.lock.tmp-old'), 'left over');
+    await utimes(
+      join(artifacts, 'manifest.json.lock.tmp-old'),
+      twoMinutesAgo,
+      twoMinutesAgo,
+    );
+
+    await withArtifactManifestLock(sessionDirectory, () => Promise.resolve());
+
+    expect(await readdir(artifacts)).toEqual(['manifest.json.lock.tmp-old']);
+  });
+
+  it('removes the break file of a breaker that died and breaks the lock at once', async () => {
+    await writeFile(lockPath, await deadOwnerRecord());
+    await writeFile(`${lockPath}.break`, await deadOwnerRecord());
+    freezeLockClock();
+
+    await expect(
+      withArtifactManifestLock(
+        sessionDirectory,
+        () => Promise.resolve('ran'),
+        FAST,
+      ),
+    ).resolves.toBe('ran');
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
+  });
+
+  it('writes its temp file again when another writer removed it during the wait', async () => {
+    await writeFile(lockPath, ownerRecord(process.pid, true));
+    freezeLockClock();
+    let refreshes = 0;
+    // On the second attempt, a writer that took the lock while this one was
+    // stopped has removed this one's temp file and let go of the lock.
+    fsHooks.beforeUtimes = async (path) => {
+      if (!path.startsWith(`${lockPath}.tmp-`)) {
+        return;
+      }
+      refreshes += 1;
+      if (refreshes === 2) {
+        await rm(path);
+        await rm(lockPath);
+      }
+    };
+
+    await expect(
+      withArtifactManifestLock(
+        sessionDirectory,
+        async () => {
+          const owner = JSON.parse(await readFile(lockPath, 'utf8')) as {
+            pid: number;
+          };
+          return owner.pid;
+        },
+        FAST,
+      ),
+    ).resolves.toBe(process.pid);
+    expect(refreshes).toBe(2);
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
   });
 
   it('breaks a lock whose owner is gone', async () => {
