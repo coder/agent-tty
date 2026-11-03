@@ -1,4 +1,4 @@
-import { dirname } from 'node:path';
+import { basename, dirname } from 'node:path';
 
 import type { ScreenshotResult } from '../../protocol/messages.js';
 
@@ -15,6 +15,7 @@ import {
   captureScreenshotResult,
   parseScreenshotResult,
 } from '../../screenshot/capture.js';
+import { removeArtifactEntry } from '../../storage/artifactManifest.js';
 import { sessionNotFoundIfRemoved } from '../../storage/artifactPaths.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
@@ -240,6 +241,15 @@ export async function runScreenshotCommand(
       await copyFileReplacing(result.artifactPath, output.target);
     } catch (error) {
       const removed = await sessionNotFoundIfRemoved(sessionDirectory, error);
+      // The copy runs after the capture, for example into an --out folder
+      // that was replaced. A failed command leaves no capture behind.
+      if (removed === error && result.sha256 !== undefined) {
+        await removeArtifactEntry({
+          sessionDir: sessionDirectory,
+          filename: basename(result.artifactPath),
+          sha256: result.sha256,
+        }).catch(() => undefined);
+      }
       throw removed !== error || error instanceof CliError
         ? removed
         : outputPathError(options.sessionId, output.out, error);

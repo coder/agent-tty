@@ -465,6 +465,11 @@ export interface AppendArtifactWithRollbackOptions {
   sessionDir: string;
   entry: ArtifactEntry;
   rollbackArtifactPath?: string;
+  /**
+   * The append drops the entries whose `metadata.outputPath` equals the
+   * entry's: the entry's file replaced theirs.
+   */
+  replacesSameOutputPath?: boolean;
 }
 
 // Removes a rolled-back artifact unless the manifest already lists a file of
@@ -490,6 +495,7 @@ async function appendArtifact(
     rollbackArtifactPath: string | undefined;
   }>,
   rollbackIfNoLock?: string,
+  replacedOutputPath?: string,
 ): Promise<ArtifactEntry> {
   const resolvedSessionDir = resolve(sessionDir);
   const expectedSessionId = sessionIdFromSessionDir(resolvedSessionDir);
@@ -501,9 +507,15 @@ async function appendArtifact(
       try {
         const validatedEntry = validateArtifactEntry(entry, expectedSessionId);
         const manifest = await readArtifactManifest(resolvedSessionDir);
+        const kept =
+          replacedOutputPath === undefined
+            ? manifest.artifacts
+            : manifest.artifacts.filter(
+                (listed) => listed.metadata.outputPath !== replacedOutputPath,
+              );
         await writeArtifactManifest(resolvedSessionDir, {
           ...manifest,
-          artifacts: [...manifest.artifacts, validatedEntry],
+          artifacts: [...kept, validatedEntry],
         });
         return validatedEntry;
       } catch (error) {
@@ -547,6 +559,16 @@ export async function appendArtifactWithRollback(
     );
   }
 
+  let replacedOutputPath: string | undefined;
+  if (options.replacesSameOutputPath === true) {
+    const outputPath = options.entry.metadata.outputPath;
+    invariant(
+      typeof outputPath === 'string' && isAbsolute(outputPath),
+      'an entry that replaces its output path must name an absolute metadata.outputPath',
+    );
+    replacedOutputPath = outputPath;
+  }
+
   await appendArtifact(
     options.sessionDir,
     () =>
@@ -555,6 +577,46 @@ export async function appendArtifactWithRollback(
         rollbackArtifactPath: options.rollbackArtifactPath,
       }),
     options.rollbackArtifactPath,
+    replacedOutputPath,
+  );
+}
+
+export interface RemoveArtifactEntryOptions {
+  sessionDir: string;
+  filename: string;
+  sha256: string;
+}
+
+/**
+ * Undoes a capture: removes the last manifest entry with `filename` and
+ * `sha256`, then the file when no other entry lists it. It runs in the same
+ * per-session queue and lock as the appends.
+ */
+export async function removeArtifactEntry(
+  options: RemoveArtifactEntryOptions,
+): Promise<void> {
+  const resolvedSessionDir = resolve(options.sessionDir);
+  const path = artifactPath(resolvedSessionDir, options.filename);
+  await appendSerializer.run(resolvedSessionDir, () =>
+    withArtifactManifestLock(resolvedSessionDir, async () => {
+      const manifest = await readArtifactManifest(resolvedSessionDir);
+      const index = manifest.artifacts.findLastIndex(
+        (entry) =>
+          entry.filename === options.filename &&
+          entry.sha256 === options.sha256,
+      );
+      if (index === -1) {
+        return;
+      }
+      const artifacts = manifest.artifacts.toSpliced(index, 1);
+      await writeArtifactManifest(resolvedSessionDir, {
+        ...manifest,
+        artifacts,
+      });
+      if (!artifacts.some((entry) => entry.filename === options.filename)) {
+        await rm(path, { force: true });
+      }
+    }),
   );
 }
 

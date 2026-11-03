@@ -390,6 +390,8 @@ export async function runRecordExportCommand(
     await appendArtifactWithRollback({
       sessionDir: sessionDirectory,
       entry: artifactEntry,
+      // A second export to the same path replaced the file of the first.
+      replacesSameOutputPath: true,
       ...(options.out === undefined
         ? { rollbackArtifactPath: artifactOutputPath }
         : {}),
