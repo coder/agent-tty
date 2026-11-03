@@ -6,7 +6,11 @@ import type { MouseInput } from '../protocol/messages.js';
 import { assertValidKeyName } from '../pty/keyEncoder.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { MouseInputSchema } from '../protocol/messages.js';
-import { DEFAULT_WAIT_TIMEOUT_MS } from '../renderWait/limits.js';
+import {
+  DEFAULT_WAIT_TIMEOUT_MS,
+  RENDER_WAIT_POLL_INTERVAL_MS,
+  screenStableWindowFits,
+} from '../renderWait/limits.js';
 import { prepareRenderWaitCondition } from '../renderWait/matcher.js';
 import { invariant, unreachable } from '../util/assert.js';
 
@@ -215,17 +219,6 @@ function parseWaitStep(
     cursorCol: wait.cursorCol,
   });
 
-  if (
-    wait.timeout === undefined &&
-    wait.screenStableMs !== undefined &&
-    wait.screenStableMs >= DEFAULT_WAIT_TIMEOUT_MS
-  ) {
-    invalidInput(
-      `Batch step ${String(index)} wait screenStableMs ${String(wait.screenStableMs)} cannot finish within the default timeout of ${String(DEFAULT_WAIT_TIMEOUT_MS)} ms. Set a larger "timeout", or "timeout": 0 to wait without a limit.`,
-      index,
-    );
-  }
-
   // Absent -> finite default; explicit 0 -> infinite.
   const timeoutMs =
     wait.timeout === undefined
@@ -233,6 +226,22 @@ function parseWaitStep(
       : wait.timeout === 0
         ? undefined
         : wait.timeout;
+
+  if (
+    wait.screenStableMs !== undefined &&
+    timeoutMs !== undefined &&
+    !screenStableWindowFits(wait.screenStableMs, timeoutMs)
+  ) {
+    const limit =
+      wait.timeout === undefined
+        ? `the default timeout of ${String(timeoutMs)} ms`
+        : `its timeout of ${String(timeoutMs)} ms`;
+    invalidInput(
+      `Batch step ${String(index)} wait screenStableMs ${String(wait.screenStableMs)} cannot finish within ${limit}. It needs one render poll (${String(RENDER_WAIT_POLL_INTERVAL_MS)} ms) more than its length. Set a larger "timeout", or "timeout": 0 to wait without a limit.`,
+      index,
+    );
+  }
+
   return { kind: 'wait', condition, timeoutMs };
 }
 

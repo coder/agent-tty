@@ -19,7 +19,11 @@ import {
   matchRenderWaitSnapshot,
   prepareRenderWaitCondition,
 } from '../../renderWait/matcher.js';
-import { DEFAULT_WAIT_TIMEOUT_MS } from '../../renderWait/limits.js';
+import {
+  DEFAULT_WAIT_TIMEOUT_MS,
+  RENDER_WAIT_POLL_INTERVAL_MS,
+  screenStableWindowFits,
+} from '../../renderWait/limits.js';
 import { computeScreenHash } from '../../renderer/canonicalScreen.js';
 import { isTerminalSessionStatus } from '../../protocol/sessionStatusPolicy.js';
 import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
@@ -54,21 +58,38 @@ function isNonNegativeInteger(value: number | undefined): value is number {
   return value !== undefined && Number.isInteger(value) && value >= 0;
 }
 
-function assertFitsDefaultTimeout(
+function assertWindowFitsTimeout(
   flag: '--idle-ms' | '--screen-stable-ms',
   windowMs: number | undefined,
   timeout: number | undefined,
 ): void {
-  if (
-    timeout === undefined &&
-    windowMs !== undefined &&
-    windowMs >= DEFAULT_WAIT_TIMEOUT_MS
-  ) {
-    throw makeCliError(ERROR_CODES.INVALID_DURATION, {
-      message: `${flag} ${String(windowMs)} cannot finish within the default --timeout of ${String(DEFAULT_WAIT_TIMEOUT_MS)} ms. Pass a larger --timeout, or --timeout 0 to wait without a limit.`,
-      details: { flag, windowMs, defaultTimeoutMs: DEFAULT_WAIT_TIMEOUT_MS },
-    });
+  if (windowMs === undefined || timeout === 0) {
+    return;
   }
+
+  const timeoutMs = timeout ?? DEFAULT_WAIT_TIMEOUT_MS;
+  const screenStable = flag === '--screen-stable-ms';
+  const fits = screenStable
+    ? screenStableWindowFits(windowMs, timeoutMs)
+    : windowMs < timeoutMs;
+  if (fits) {
+    return;
+  }
+
+  const limit =
+    timeout === undefined
+      ? `the default --timeout of ${String(timeoutMs)} ms`
+      : `--timeout ${String(timeoutMs)}`;
+  const pollNote = screenStable
+    ? ` It needs one render poll (${String(RENDER_WAIT_POLL_INTERVAL_MS)} ms) more than its length.`
+    : '';
+  throw makeCliError(ERROR_CODES.INVALID_DURATION, {
+    message: `${flag} ${String(windowMs)} cannot finish within ${limit}.${pollNote} Pass a larger --timeout, or --timeout 0 to wait without a limit.`,
+    details:
+      timeout === undefined
+        ? { flag, windowMs, defaultTimeoutMs: timeoutMs }
+        : { flag, windowMs, timeoutMs },
+  });
 }
 
 function isRenderWaitMode(options: CommandOptions): boolean {
@@ -277,7 +298,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       });
     }
 
-    assertFitsDefaultTimeout(
+    assertWindowFitsTimeout(
       '--screen-stable-ms',
       options.screenStableMs,
       options.timeout,
@@ -377,7 +398,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     });
   }
 
-  assertFitsDefaultTimeout('--idle-ms', options.idleMs, options.timeout);
+  assertWindowFitsTimeout('--idle-ms', options.idleMs, options.timeout);
 
   const manifestStatus = manifest.status;
 
