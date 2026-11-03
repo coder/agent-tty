@@ -11,8 +11,9 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { ReplayTimingOptions } from '../../../src/renderer/backend.js';
 import type { ReplayInput } from '../../../src/renderer/types.js';
 import { BUNDLED_FONT_ASSETS } from '../../../src/renderer/bundledFont.js';
 import { hashProfile, resolveProfile } from '../../../src/renderer/profiles.js';
@@ -826,5 +827,150 @@ describe('GhosttyWebBackend unit guards', () => {
       'ghostty-web renderer cleanup failure: browser',
       browserError,
     );
+  });
+});
+
+describe('GhosttyWebBackend replayWithTiming output pacing', () => {
+  const FIRST_EVENT_AT_MS = 16;
+  const RECORDED: ReplayTimingOptions = {
+    mode: 'recorded',
+    finalFrameHoldMs: 1_000,
+  };
+  const MAX_SPEED: ReplayTimingOptions = {
+    mode: 'max-speed',
+    minFrameHoldMs: 16,
+    finalFrameHoldMs: 500,
+  };
+  const BASE_TIMESTAMP_MS = Date.parse('2026-03-19T12:00:00.000Z');
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function outputEvent(
+    seq: number,
+    offsetMs: number,
+  ): ReplayInput['events'][number] {
+    return {
+      seq,
+      ts: new Date(BASE_TIMESTAMP_MS + offsetMs).toISOString(),
+      type: 'output',
+      payload: { data: `out${String(seq)}` },
+    };
+  }
+
+  function exitEvent(
+    seq: number,
+    offsetMs: number,
+  ): ReplayInput['events'][number] {
+    return {
+      seq,
+      ts: new Date(BASE_TIMESTAMP_MS + offsetMs).toISOString(),
+      type: 'exit',
+      payload: { exitCode: 0, exitSignal: null },
+    };
+  }
+
+  async function replayAndRecordFlushes(
+    events: ReplayInput['events'],
+    timing: ReplayTimingOptions,
+  ): Promise<{ atMs: number; chunks: string[] }[]> {
+    vi.useFakeTimers();
+    const backend = createBackend();
+    const flushes: { atMs: number; chunks: string[] }[] = [];
+    let replayStartedAtMs = 0;
+
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: { isClosed: () => false },
+      resizeBridge: () => {
+        replayStartedAtMs = Date.now();
+        return Promise.resolve();
+      },
+      flushOutputBatch: (_page: object, dataChunks: string[]) => {
+        flushes.push({ atMs: Date.now(), chunks: [...dataChunks] });
+        return Promise.resolve();
+      },
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 80,
+            rows: 24,
+            visibleLines: [],
+          }),
+        ),
+    });
+
+    const lastEvent = events.at(-1);
+    expect(lastEvent).toBeDefined();
+    const replay = backend.replayWithTiming(
+      {
+        sessionId: 'renderer-unit-session',
+        initialCols: 80,
+        initialRows: 24,
+        targetSeq: lastEvent?.seq ?? -1,
+        events,
+      },
+      timing,
+    );
+    await vi.runAllTimersAsync();
+    await replay;
+
+    return flushes.map((flush) => ({
+      atMs: flush.atMs - replayStartedAtMs,
+      chunks: flush.chunks,
+    }));
+  }
+
+  it('shows each output at its recorded time when the outputs are far apart', async () => {
+    const flushes = await replayAndRecordFlushes(
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 200),
+        outputEvent(2, 400),
+        exitEvent(3, 600),
+      ],
+      RECORDED,
+    );
+
+    expect(flushes).toEqual([
+      { atMs: FIRST_EVENT_AT_MS, chunks: ['out0'] },
+      { atMs: FIRST_EVENT_AT_MS + 200, chunks: ['out1'] },
+      { atMs: FIRST_EVENT_AT_MS + 400, chunks: ['out2'] },
+    ]);
+  });
+
+  it('keeps outputs that arrive within one frame hold in a single flush', async () => {
+    const flushes = await replayAndRecordFlushes(
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 5),
+        outputEvent(2, 10),
+        exitEvent(3, 500),
+      ],
+      RECORDED,
+    );
+
+    expect(flushes).toEqual([
+      { atMs: FIRST_EVENT_AT_MS + 10, chunks: ['out0', 'out1', 'out2'] },
+    ]);
+  });
+
+  it('shows max-speed progress frame by frame, not as one jump', async () => {
+    const flushes = await replayAndRecordFlushes(
+      [outputEvent(0, 0), outputEvent(1, 200), outputEvent(2, 400)],
+      MAX_SPEED,
+    );
+
+    expect(flushes.map((flush) => flush.chunks)).toEqual([
+      ['out0'],
+      ['out1'],
+      ['out2'],
+    ]);
+    expect(flushes.map((flush) => flush.atMs)).toEqual([
+      FIRST_EVENT_AT_MS,
+      FIRST_EVENT_AT_MS + 16,
+      FIRST_EVENT_AT_MS + 32,
+    ]);
   });
 });
