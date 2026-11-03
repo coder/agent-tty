@@ -875,6 +875,32 @@ describe('a hostPid that may no longer name the host', () => {
     },
   );
 
+  // Without /proc a host.json makes even a dead host read unknown, but no
+  // process with its pid proves that no host can end the session.
+  it.runIf(platform === 'linux')(
+    'on linux destroy --force without /proc names no plain destroy once no process has the host pid',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      await seedHost(host);
+      process.kill(host, 'SIGKILL');
+      await vi.waitFor(() => {
+        expect(isRunning(host)).toBe(false);
+      });
+      fsHooks.noProc = true;
+      fsHooks.links = new Map([['/proc/self/ns/pid', errno('ENOENT')]]);
+
+      const error: unknown = await destroySession('session-01', true).catch(
+        (thrown: unknown) => thrown,
+      );
+
+      expect(error).toMatchObject({ code: 'HOST_TIMEOUT' });
+      expect((error as Error).message).toContain(
+        'Run destroy where /proc is mounted.',
+      );
+      expect((error as Error).message).not.toContain('plain destroy');
+    },
+  );
+
   it.runIf(platform === 'linux').each([
     ['an unrelated live process', 'live' as const],
     ['no process', 'free' as const],
