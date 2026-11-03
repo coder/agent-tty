@@ -26,7 +26,7 @@ const NO_HARD_LINK_ERROR_CODES = ['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS'];
 const MAX_VANISHED_FILE_RETRIES = 3;
 
 /** Returns false when `path` already exists. */
-async function createWithoutReplacing(
+export async function createWithoutReplacing(
   temporaryPath: string,
   path: string,
 ): Promise<boolean> {
@@ -55,7 +55,7 @@ async function createWithoutReplacing(
 // check the parent folders, and a hard link still counts as a regular file.
 // O_NONBLOCK keeps a FIFO at the name from blocking the open until a writer
 // appears. It has no effect on reads from a regular file.
-async function readRegularFile(path: string): Promise<Buffer> {
+export async function readRegularFile(path: string): Promise<Buffer> {
   const handle = await open(
     path,
     constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,

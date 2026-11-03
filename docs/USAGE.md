@@ -145,7 +145,7 @@ Useful flags:
 - `--after-seq <n>`: only match renderer snapshots produced after this Event Log sequence — thread an input command's returned `seq` here so the wait cannot match pre-input screen state. `-1` is the sequence before the first event, which a `snapshot` of a session that has printed nothing reports.
 - `--idle-ms <ms>`: wait for output idleness.
 - `--exit`: wait for the process to exit.
-- `--timeout <ms>`: maximum wait time in milliseconds. The default is `30000` (30 s). `0` waits without a limit. An `--idle-ms` or `--screen-stable-ms` of `30000` or more cannot finish within the default, so `wait` rejects it with `INVALID_DURATION` unless you pass `--timeout`.
+- `--timeout <ms>`: maximum wait time in milliseconds. The default is `30000` (30 s). `0` waits without a limit. A window that cannot finish within the timeout is rejected with `INVALID_DURATION`: an `--idle-ms` must be shorter than the timeout, and a `--screen-stable-ms` must be more than one render poll (200 ms) shorter, with a timeout of more than two polls (400 ms), because the stable clock starts at the first snapshot and a later snapshot must confirm it. With the default timeout, `--screen-stable-ms` can be at most `29799`. `--timeout 0` skips the check.
 
 On timeout, a standalone `wait` exits `11` and prints an error envelope: `ok: false`, `error.code: "WAIT_TIMEOUT"`, and the wait result under `result` (`timedOut: true`, and `matched: false` for render waits). Without `--json`, it prints `WAIT_TIMEOUT: <message>` to stderr. Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast.
 
@@ -206,7 +206,7 @@ Steps are a JSON array; each step is exactly one verb. The shape mirrors the res
 - `sendKeys`: a non-empty array of key names — individual named keys or single characters (e.g. `["Enter"]`, `["Ctrl+C"]`, `["Escape", "Enter"]`). Multi-character literal text such as `:wq` is not a key name; send it with a `type` step.
 - `mouse`: the same `action`, `button`, `row`, `col`, and optional `modifiers`, `cellWidth`, and `cellHeight` fields as the `mouse` command. It uses the batch command's renderer.
 - `run`: a command string, with optional `noWait` (fire-and-forget) and `timeout` (ms). A `run` step is a waited run by default.
-- `wait`: the same conditions as the `wait` command — `text`, `regex`, `scope`, `screenStableMs`, `cursorRow`, `cursorCol`, and `timeout` (ms). An omitted `timeout` is `30000`, the same default as the `wait` command, and `0` waits without a limit. Without `timeout`, a `screenStableMs` of `30000` or more is rejected with `INVALID_INPUT`.
+- `wait`: the same conditions as the `wait` command — `text`, `regex`, `scope`, `screenStableMs`, `cursorRow`, `cursorCol`, and `timeout` (ms). An omitted `timeout` is `30000`, the same default as the `wait` command, and `0` waits without a limit. A `screenStableMs` that is not more than one render poll (200 ms) shorter than the step's timeout, or a timeout of two polls (400 ms) or less, is rejected with `INVALID_INPUT` and `details.stepIndex`.
 
 Input source and flags:
 
@@ -259,6 +259,8 @@ Semantic `snapshot`, screen-hash, and render-backed `wait` paths prefer `libghos
 
 On a session that has printed nothing yet, `snapshot` returns an empty screen of the session's size and `screenshot` returns a blank image. `record export` gives a header-only asciicast or a blank WebM of the session's size, with `durationMs: 0`. All of them report `capturedAtSeq: -1`, and the default files are named `screenshot--1-<profile>.png` and `recording--1-<format>.<ext>`.
 
+The screenshot hides the cursor unless you pass `--show-cursor`. `--hide-cursor` is the default, and the result reports `cursorVisible` for the choice.
+
 ```bash
 agent-tty screenshot <session-id> --profile reference-dark --json
 agent-tty screenshot <session-id> --show-cursor --json
@@ -267,11 +269,11 @@ agent-tty record export <session-id> --format asciicast --out ./session.cast --j
 agent-tty record export <session-id> --format webm --timing accelerated --out ./session.webm --json
 ```
 
-`--out <path>` on `screenshot` and `record export` writes the file to that path, so it outlives the Home. A relative path resolves against the working directory, and a file already at the path is replaced. The parent folder must exist: a missing or unwritable parent, or a path inside the Home's `sessions/` folder, fails with `EXPORT_ERROR` (exit 7). `screenshot --out` still records the capture in the session's artifact manifest and returns the `--out` path as `artifactPath`.
+`--out <path>` on `screenshot` and `record export` writes the file to that path, so it outlives the Home. A relative path resolves against the working directory, and a file already at the path is replaced. The parent folder must exist: a missing parent, a parent you cannot write to or search, or a path inside the Home's `sessions/` folder, fails with `EXPORT_ERROR` (exit 7) before the capture. agent-tty checks the parent folder again just before it moves the file into place. If the folder was replaced or removed, the command fails with `EXPORT_ERROR` (exit 7) and does not write the file. This holds even when the new folder is a fine place for the file: a script that runs `rm -rf out && mkdir out` while an export of `out/proof.png` runs gets exit 7. A replacement after that check and before the move is not caught. `screenshot --out` still records the capture in the session's artifact manifest and returns the `--out` path as `artifactPath`.
 
 The screenshot result lists `missingGlyphs`: each code point that the PNG draws as an empty `.notdef` box, with the zero-based `row` and `col` of each cell. A box appears when no font has the glyph, and also when Chromium draws a whole cluster (a letter plus a mark) with the first bundled font because no font has every part of it. The bundled fonts are a Latin JetBrains Mono subset and Symbols Nerd Font Mono. The check is best effort: an empty array means it found no box (see Known limits below), and a result without `missingGlyphs` means the check did not run or failed. The list holds at most 4096 cells, and one screenshot checks at most 4096 distinct glyphs within a 1-second time budget. When a limit or the budget stops the check early, the result also has `"missingGlyphsTruncated": true`, and the list can miss boxes. Glyphs that a host font draws are not listed, so the same session can list different code points on hosts with different fonts. The text snapshot still has the right characters.
 
-Known limits: a letter that the font builds from a smaller precomposed letter plus a mark it lacks, such as Vietnamese `ế` (drawn as `ê` without the acute), is listed although the PNG shows a letter, not a box. A glyph under the block cursor is listed although the cursor hides it, and so is a glyph in a concealed (SGR 8) cell. The check uses the regular font style, so a bold or italic cell whose host font face differs in coverage can be judged wrong, and a grapheme that Chromium splits over several fonts is judged per code point, which can miss a box. A cluster whose parts the bundled fonts cover only between them, such as a Nerd Font glyph with a mark that only JetBrains Mono has, is not checked, so a box in it is not listed.
+Known limits: a letter that the font builds from a smaller precomposed letter plus a mark it lacks, such as Vietnamese `ế` (drawn as `ê` without the acute), is listed although the PNG shows a letter, not a box. With `--show-cursor`, a glyph under the block cursor is listed although the cursor hides it, and so is a glyph in a concealed (SGR 8) cell. The check uses the regular font style, so a bold or italic cell whose host font face differs in coverage can be judged wrong, and a grapheme that Chromium splits over several fonts is judged per code point, which can miss a box. A cluster whose parts the bundled fonts cover only between them, such as a Nerd Font glyph with a mark that only JetBrains Mono has, is not checked, so a box in it is not listed.
 
 ```bash
 agent-tty screenshot <session-id> --json | jq -c '.result.missingGlyphs'
@@ -307,6 +309,7 @@ On Linux it also ends those processes when the program has already exited or the
 `list`, `inspect`, `destroy` and `gc` reconcile a session whose host died: they kill the program's group and record the session as `failed` (or `exited` or `destroyed`).
 A `destroy` that runs inside the session, such as one typed into the session's shell, runs again outside the session and prints its result once the session has ended.
 The session's terminal is closed by then, so redirect stdout to keep the result, for example `agent-tty destroy "$AGENT_TTY_SESSION_ID" --json > destroy.json`.
+Ctrl-C or SIGTERM to that `destroy` reaches the copy outside the session too, and the `destroy` then exits as the copy did, 130 or 143. A destroy request that already reached the host still ends the session.
 When `destroy` records `destroyed` itself, as with `--force`, for a session whose host died or for a session that has already ended, it first writes an empty internal file, `destroyed`, in the session folder. When the host records `destroyed`, as after a plain `destroy` of a live session, nobody writes that file.
 A reconcile that writes over the record at the same moment finds the file right after its own write and records `destroyed` again.
 A `list`, `inspect` or `gc` that reads the session between those two writes sees `failed`. If the reconciling process is killed between them, the session stays `failed`.
@@ -324,6 +327,7 @@ Before each kill, agent-tty checks that a live process in the group has that aut
 If no process passes the check, agent-tty kills nothing, for example when an unrelated program now uses the group id.
 If `/proc` refuses to show the boot id, or shows no autogroup id for a live process whose group and session id are the program's pid (it refuses the read, or the file is empty or malformed), agent-tty cannot run the check.
 It then kills nothing and counts the group as running.
+When the CLI cannot list `/proc` at all, as in a chroot or a container without it, it sees no process of the group. The group then counts as running while `kill(-pgid, 0)` finds a process, and nothing proves a kill. A plain `destroy` still ends the session through its host, and `destroy --force` of such a session fails with `HOST_TIMEOUT`. End it with a plain `destroy`, or run `destroy --force` from a process that can read `/proc`. A session whose program exited has no host. When it has an autogroup record, its `destroy` fails with `HOST_TIMEOUT` while a process of the program's group runs. Run that `destroy` from a process that can read `/proc`.
 If the proven group, or a group that agent-tty cannot check, does not end within the destroy wait (about 5 s), `destroy` fails with `HOST_TIMEOUT` and does not record the session as `destroyed`.
 
 `destroy --force` and reconcile also check the host's pid from `session.json` before they trust it.
@@ -413,6 +417,9 @@ Every command exits with a stable code, so scripts can branch without parsing ou
 | `10`      | Replay failed.                                                                                                              |
 | `11`      | A standalone `wait` timed out, or a `wait` step inside a fail-fast `batch` timed out (`WAIT_TIMEOUT`; see [`wait`](#wait)). |
 | `12`      | A requested runtime capability is unavailable (`CAPABILITY_UNAVAILABLE`).                                                   |
+| `130`     | Interrupted by SIGINT: a `batch` that flushed its partial result, or a `destroy` whose copy in a new session SIGINT ended.  |
+| `143`     | Ended by SIGTERM: a `batch` that flushed its partial result, or a `destroy` whose copy in a new session SIGTERM ended.      |
+| `128+n`   | Ended by signal `n`: a `destroy` whose copy in a new session that signal ended, such as `129` (SIGHUP) or `137` (SIGKILL).  |
 
 A fail-fast `batch` exits with the failed step's code (for example `11` for a wait timeout); `--keep-going` exits `1` if any step failed.
 

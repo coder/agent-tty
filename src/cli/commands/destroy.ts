@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { constants as osConstants } from 'node:os';
 import process from 'node:process';
 
 import type { DestroyResult } from '../../protocol/messages.js';
@@ -23,7 +24,12 @@ interface CommandOptions {
 // before it prints, so a copy in a new session does the destroy instead.
 // The copy runs outside the session, so it does not get the session's id.
 // DESTROY_RERUN_ENV_KEY tells the copy to skip the check, so whatever ps
-// shows, a copy never starts another copy.
+// shows, a copy never starts another copy. In its new session the copy gets
+// no Ctrl-C from the terminal, so this CLI forwards SIGINT and SIGTERM, and
+// it exits as the copy did. The session's end hangs this CLI up with SIGHUP,
+// which it does not forward.
+const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
+
 async function rerunInNewSession(): Promise<number> {
   const child = spawn(
     process.execPath,
@@ -38,12 +44,27 @@ async function rerunInNewSession(): Promise<number> {
       stdio: 'inherit',
     },
   );
-  return new Promise((resolve, reject) => {
-    child.once('error', reject);
-    child.once('exit', (code) => {
-      resolve(code ?? 1);
-    });
+  const forwards = FORWARDED_SIGNALS.map((signal) => {
+    const forward = (): void => {
+      child.kill(signal);
+    };
+    process.on(signal, forward);
+    return { signal, forward };
   });
+  try {
+    return await new Promise((resolve, reject) => {
+      child.once('error', reject);
+      child.once('exit', (code, signal) => {
+        // A copy that a signal ended exits the conventional 128 + its number.
+        const signo = signal === null ? undefined : osConstants.signals[signal];
+        resolve(code ?? (signo === undefined ? 1 : 128 + signo));
+      });
+    });
+  } finally {
+    for (const { signal, forward } of forwards) {
+      process.off(signal, forward);
+    }
+  }
 }
 
 export async function runDestroyCommand(
