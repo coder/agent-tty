@@ -546,6 +546,8 @@ describe('GhosttyWebBackend unit guards', () => {
     );
   });
 
+  // The only unit test that boots a real Chromium. On CI runners the cold
+  // boot took up to 3.2 s and once passed the default 5 s timeout.
   it('serves all bundled font assets over the backend HTTP server', async () => {
     const backend = createBackend();
 
@@ -576,7 +578,7 @@ describe('GhosttyWebBackend unit guards', () => {
     } finally {
       await backend.dispose();
     }
-  });
+  }, 30_000);
 
   it('times out screenshot paint waits after 5 seconds', async () => {
     vi.useFakeTimers();
