@@ -271,6 +271,31 @@ export async function writeDestroyMarker(
   }
 }
 
+export async function writeCreateFailedMarker(
+  path: string,
+  sessionId: string,
+): Promise<void> {
+  assertAbsoluteStoragePath(path, 'create-failed marker path');
+
+  try {
+    await replaceFileAtomic(path, '');
+  } catch (error) {
+    if (isEnoentError(error)) {
+      throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
+        message: `Session "${sessionId}" was not found: its folder ${dirname(path)} no longer exists.`,
+        details: { sessionId, markerPath: path },
+        cause: error,
+      });
+    }
+
+    throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+      message: `Failed to write the create-failed marker at ${path}.`,
+      details: { path },
+      cause: error,
+    });
+  }
+}
+
 export async function writeManifest(
   path: string,
   record: SessionRecord,

@@ -7,7 +7,8 @@ import process from 'node:process';
 
 if (process.argv.includes('create') && !process.argv.includes('_host')) {
   Object.defineProperty(process, 'platform', { value: 'win32' });
-  const kill = ChildProcess.prototype.kill;
+  const kill = Object.getOwnPropertyDescriptor(ChildProcess.prototype, 'kill')
+    ?.value as (this: ChildProcess, signal: NodeJS.Signals) => boolean;
   ChildProcess.prototype.kill = function killAtOnce(this: ChildProcess) {
     return kill.call(this, 'SIGKILL');
   };
