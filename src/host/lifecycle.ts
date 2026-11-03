@@ -787,10 +787,16 @@ async function stopSessionProcesses(
     pollOptions(signal),
   );
   if (!stopped) {
-    // Without /proc nothing proves the program's group or the host.
+    // Without /proc nothing proves the program's group or the host. An empty
+    // /proc mount point has no /proc/self. Only a host can end the session
+    // for a plain destroy.
     const hint =
-      process.platform === 'linux' && !existsSync('/proc')
-        ? " This process cannot read /proc, so it cannot prove which processes are the session's. End the session with a plain destroy, or run destroy --force where /proc is mounted."
+      process.platform === 'linux' && !existsSync('/proc/self')
+        ? ` This process cannot read /proc, so it cannot prove which processes are the session's. ${
+            host === null
+              ? 'Run destroy where /proc is mounted.'
+              : 'End the session with a plain destroy, or run destroy --force where /proc is mounted.'
+          }`
         : '';
     throw makeCliError(ERROR_CODES.HOST_TIMEOUT, {
       message: `Timed out forcing session "${sessionId}" to exit.${hint}`,
