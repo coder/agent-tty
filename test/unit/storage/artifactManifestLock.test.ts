@@ -286,6 +286,54 @@ describe('artifact manifest lock', () => {
     });
   });
 
+  it('keeps a rollback file that the manifest already lists when it cannot take the lock', async () => {
+    const artifact = join(sessionDirectory, 'artifacts', 'recording-1.cast');
+    await writeFile(artifact, 'cast');
+    const entry = () =>
+      createArtifactEntry({
+        kind: 'recording',
+        filename: 'recording-1.cast',
+        sessionId: 'session-01',
+        capturedAtSeq: 1,
+        metadata: {},
+      });
+    await appendArtifactWithRollback({
+      sessionDir: sessionDirectory,
+      entry: entry(),
+      rollbackArtifactPath: artifact,
+    });
+    fsHooks.beforeWriteFile = (path) =>
+      path.includes('manifest.json.lock.tmp-')
+        ? Promise.reject(Object.assign(new Error('io'), { code: 'EIO' }))
+        : Promise.resolve();
+
+    await expect(
+      appendArtifactWithRollback({
+        sessionDir: sessionDirectory,
+        entry: entry(),
+        rollbackArtifactPath: artifact,
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.STORAGE_WRITE_ERROR });
+    expect(await readFile(artifact, 'utf8')).toBe('cast');
+  });
+
+  it('judges a FIFO at the lock path as an unknown owner instead of blocking on it', async () => {
+    expect(spawnSync('mkfifo', [lockPath]).status).toBe(0);
+    const update = vi.fn(() => Promise.resolve('ran'));
+
+    await expect(
+      withArtifactManifestLock(sessionDirectory, update, FAST),
+    ).rejects.toMatchObject({ code: ERROR_CODES.STORAGE_WRITE_ERROR });
+    expect(update).not.toHaveBeenCalled();
+
+    const twoMinutesAgo = new Date(Date.now() - 120_000);
+    await utimes(lockPath, twoMinutesAgo, twoMinutesAgo);
+    await expect(
+      withArtifactManifestLock(sessionDirectory, update, FAST),
+    ).resolves.toBe('ran');
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
+  });
+
   it('removes the rollback file and reports STORAGE_WRITE_ERROR when it cannot take the lock', async () => {
     const artifact = join(sessionDirectory, 'artifacts', 'recording-1.cast');
     await writeFile(artifact, 'cast');

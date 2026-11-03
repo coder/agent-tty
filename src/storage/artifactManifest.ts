@@ -1,12 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import {
-  lstat,
-  readFile,
-  rename,
-  rm,
-  utimes,
-  writeFile,
-} from 'node:fs/promises';
+import { lstat, rename, rm, utimes, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
 import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -26,6 +19,7 @@ import { readValidatedJsonFile, writeValidatedJsonFile } from './manifests.js';
 import {
   createWithoutReplacing,
   publishArtifactFile,
+  readRegularFile,
 } from './artifactFiles.js';
 import {
   artifactPath,
@@ -226,7 +220,23 @@ export async function writeArtifactManifest(
 
 type ManifestLockOwner = z.infer<typeof ManifestLockOwnerSchema>;
 
-function parseLockOwner(contents: string): ManifestLockOwner | null {
+// A missing lock throws ENOENT. A lock that is not a regular file (a FIFO,
+// a symlink) reads as null, so the caller judges it as an unknown owner.
+async function readLockFile(path: string): Promise<string | null> {
+  try {
+    return (await readRegularFile(path)).toString('utf8');
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      throw error;
+    }
+    return null;
+  }
+}
+
+function parseLockOwner(contents: string | null): ManifestLockOwner | null {
+  if (contents === null) {
+    return null;
+  }
   try {
     const parsed = ManifestLockOwnerSchema.safeParse(JSON.parse(contents));
     return parsed.success ? parsed.data : null;
@@ -239,10 +249,10 @@ async function breakStaleManifestLock(
   lockPath: string,
   timing: ManifestLockTiming,
 ): Promise<'retry' | 'held'> {
-  let observed: string;
+  let observed: string | null;
   let modifiedAtMs: number;
   try {
-    observed = await readFile(lockPath, 'utf8');
+    observed = await readLockFile(lockPath);
     modifiedAtMs = (await lstat(lockPath)).mtimeMs;
   } catch (error) {
     if (hasErrorCode(error, 'ENOENT')) {
@@ -273,7 +283,7 @@ async function breakStaleManifestLock(
     throw error;
   }
   try {
-    const moved = await readFile(movedPath, 'utf8');
+    const moved = await readLockFile(movedPath);
     if (moved === unreleasedLocks.get(lockPath)) {
       unreleasedLocks.delete(lockPath);
     }
@@ -304,7 +314,7 @@ async function acquireManifestLock(
       }
       const outcome = await breakStaleManifestLock(lockPath, timing);
       if (Date.now() >= deadline) {
-        const holder = await readFile(lockPath, 'utf8').catch(() => '');
+        const holder = await readLockFile(lockPath).catch(() => null);
         throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
           message: `Timed out after ${String(timing.waitMs)} ms waiting for the artifact manifest lock at ${lockPath}.`,
           retryable: true,
@@ -336,7 +346,7 @@ async function releaseManifestLock(
         }
         throw error;
       }
-      if ((await readFile(movedPath, 'utf8')) !== contents) {
+      if ((await readLockFile(movedPath)) !== contents) {
         await createWithoutReplacing(movedPath, lockPath);
       }
       await rm(movedPath, { force: true });
@@ -402,6 +412,22 @@ export interface AppendArtifactWithRollbackOptions {
   rollbackArtifactPath?: string;
 }
 
+// Removes a rolled-back artifact unless the manifest already lists a file of
+// that name, which a repeated default export at the same seq reuses.
+async function removeUnlistedArtifact(
+  sessionDir: string,
+  path: string,
+): Promise<void> {
+  const listed = await readArtifactManifest(sessionDir).then(
+    (manifest) =>
+      manifest.artifacts.some((entry) => entry.filename === basename(path)),
+    () => false,
+  );
+  if (!listed) {
+    await rm(path, { force: true }).catch(() => undefined);
+  }
+}
+
 async function appendArtifact(
   sessionDir: string,
   prepare: () => Promise<{
@@ -427,9 +453,9 @@ async function appendArtifact(
         return validatedEntry;
       } catch (error) {
         if (rollbackArtifactPath !== undefined) {
-          // Best-effort: swallow rm errors so the original manifest failure propagates.
-          await rm(rollbackArtifactPath, { force: true }).catch(
-            () => undefined,
+          await removeUnlistedArtifact(
+            resolvedSessionDir,
+            rollbackArtifactPath,
           );
         }
         throw error;
@@ -440,7 +466,7 @@ async function appendArtifact(
       return await update();
     } catch (error) {
       if (!locked && rollbackIfNoLock !== undefined) {
-        await rm(rollbackIfNoLock, { force: true }).catch(() => undefined);
+        await removeUnlistedArtifact(resolvedSessionDir, rollbackIfNoLock);
       }
       throw error;
     }
