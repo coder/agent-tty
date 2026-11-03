@@ -317,16 +317,31 @@ describe('artifact manifest lock', () => {
 
   it('dates the lock from when it was taken, not from when the wait began', async () => {
     await writeFile(lockPath, ownerRecord(process.pid, true));
+    freezeLockClock();
     const waitStartedAt = Date.now();
-    const pending = withArtifactManifestLock(
-      sessionDirectory,
-      async () => (await stat(lockPath)).mtimeMs,
-      { waitMs: 5_000, unknownOwnerStaleMs: 60_000 },
-    );
-    await sleep(1_200);
-    await rm(lockPath);
+    let attempts = 0;
+    // The first attempt finds the lock held, and the clock moves on. The
+    // owner lets go just before the second attempt links.
+    fsHooks.beforeLink = async (to) => {
+      if (to !== lockPath) {
+        return;
+      }
+      attempts += 1;
+      if (attempts === 1) {
+        vi.setSystemTime(waitStartedAt + 1_200);
+      } else if (attempts === 2) {
+        await rm(lockPath);
+      }
+    };
 
-    expect(await pending).toBeGreaterThanOrEqual(waitStartedAt + 1_000);
+    await expect(
+      withArtifactManifestLock(
+        sessionDirectory,
+        async () => (await stat(lockPath)).mtimeMs,
+        { waitMs: 5_000, unknownOwnerStaleMs: 60_000 },
+      ),
+    ).resolves.toBeGreaterThanOrEqual(waitStartedAt + 1_000);
+    expect(attempts).toBe(2);
   });
 
   it('breaks its own lock on the next update when the release failed', async () => {
