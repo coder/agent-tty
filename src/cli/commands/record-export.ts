@@ -206,6 +206,20 @@ export async function runRecordExportCommand(
   try {
     const eventsFile = eventLogPath(sessionDirectory);
     const events = await readEventLogRecords(eventsFile);
+
+    if (format === 'webm' && events.length === 0) {
+      throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+        message:
+          'WebM export requires at least one event; use asciicast for an empty event log.',
+        retryable: false,
+        details: {
+          sessionId: options.sessionId,
+          format,
+          reason: 'empty_event_log',
+        },
+      });
+    }
+
     const defaultCapturedAtSeq = resolveCapturedAtSeq(events);
     const { path: artifactOutputPath, explicitOutput } =
       await resolveOutputPath(

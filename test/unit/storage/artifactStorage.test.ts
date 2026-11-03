@@ -116,6 +116,12 @@ describe('artifact paths', () => {
     expect(recordingFilename(7, 'webm')).toBe('recording-7-webm.webm');
   });
 
+  it('generates recording filenames for captures before the first event', () => {
+    expect(recordingFilename(-1, 'asciicast')).toBe(
+      'recording--1-asciicast.cast',
+    );
+  });
+
   it('asserts on unsupported recording formats', () => {
     expect(() => recordingFilename(7, 'trace')).toThrow(
       /unsupported recording format: trace/u,

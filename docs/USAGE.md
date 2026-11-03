@@ -263,6 +263,8 @@ On a session that has printed nothing yet, `snapshot` returns an empty screen of
 
 The screenshot hides the cursor unless you pass `--show-cursor`. `--hide-cursor` is the default, and the result reports `cursorVisible` for the choice.
 
+An asciicast export of an empty event log contains only its header, reports `capturedAtSeq: -1`, and uses a filename such as `recording--1-asciicast.cast`. WebM export requires at least one event; on an empty event log, `record export --format webm` exits with a non-retryable `INVALID_INPUT` error explaining that no events are available and recommending asciicast.
+
 ```bash
 agent-tty screenshot <session-id> --profile reference-dark --json
 agent-tty screenshot <session-id> --show-cursor --json

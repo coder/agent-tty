@@ -1,15 +1,30 @@
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, readFile, realpath } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { writeManifest } from '../../src/storage/manifests.js';
+import {
+  eventLogPath,
+  manifestPath,
+  sessionDir,
+} from '../../src/storage/sessionPaths.js';
 import {
   cleanupHome,
   createSession,
+  createTestSessionRecord,
   destroySession,
+  readEvents,
   runCli,
   type SuccessEnvelope,
   type WaitResult,
@@ -80,6 +95,24 @@ function parseAsciicast(contents: string): unknown[] {
     .trim()
     .split('\n')
     .map((line) => JSON.parse(line) as unknown);
+}
+
+async function createEmptySession(testHome: string): Promise<string> {
+  const sessionId = 'session-empty';
+  const sessionDirectory = sessionDir(testHome, sessionId);
+  await mkdir(sessionDirectory, { recursive: true });
+  await writeManifest(
+    manifestPath(sessionDirectory),
+    createTestSessionRecord({
+      sessionId,
+      status: 'exited',
+      hostPid: null,
+      childPid: null,
+      exitCode: 0,
+    }),
+  );
+  await writeFile(eventLogPath(sessionDirectory), '', 'utf8');
+  return sessionId;
 }
 
 describe('record export integration', { timeout: 120_000 }, () => {
@@ -248,6 +281,58 @@ describe('record export integration', { timeout: 120_000 }, () => {
       }),
     );
     expect(contents).toContain('done');
+  });
+
+  it('exports an empty asciicast with the pre-event sequence', async () => {
+    const sessionId = await createEmptySession(testHome);
+    expect(await readEvents(testHome, sessionId)).toEqual([]);
+
+    const exportResult = runCli(
+      ['record', 'export', sessionId, '--format', 'asciicast', '--json'],
+      { AGENT_TTY_HOME: testHome },
+      15_000,
+    );
+    expect(exportResult.status).toBe(0);
+    expect(exportResult.stderr).toBe('');
+
+    const envelope = JSON.parse(
+      exportResult.stdout,
+    ) as SuccessEnvelope<RecordExportResult>;
+    expect(envelope.result.capturedAtSeq).toBe(-1);
+    expect(envelope.result.artifactPath).toContain(
+      'recording--1-asciicast.cast',
+    );
+    expect(
+      parseAsciicast(await readFile(envelope.result.artifactPath, 'utf8')),
+    ).toHaveLength(1);
+
+    const artifactManifest = await readJsonFile<{
+      artifacts: Array<{ capturedAtSeq: number }>;
+    }>(join(testHome, 'sessions', sessionId, 'artifacts', 'manifest.json'));
+    expect(artifactManifest.artifacts.at(-1)?.capturedAtSeq).toBe(-1);
+  });
+
+  it('rejects WebM export on an empty event log with a non-retryable input error', async () => {
+    const sessionId = await createEmptySession(testHome);
+    expect(await readEvents(testHome, sessionId)).toEqual([]);
+
+    const exportResult = runCli(
+      ['record', 'export', sessionId, '--format', 'webm', '--json'],
+      { AGENT_TTY_HOME: testHome },
+      15_000,
+    );
+    expect(exportResult.status).not.toBe(0);
+    expect(exportResult.stderr).toBe('');
+
+    const envelope = JSON.parse(exportResult.stdout) as ErrorEnvelope;
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe('record export');
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.retryable).toBe(false);
+    expect(envelope.error.message).toContain('empty event log');
+    expect(envelope.error.details).toEqual(
+      expect.objectContaining({ reason: 'empty_event_log' }),
+    );
   });
 
   it('exports webm video for running sessions', async () => {

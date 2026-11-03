@@ -8,7 +8,7 @@ This directory converts a session's event log into recording exports. `generateA
 
 - `AsciicastHeader`: `version: 2`, `width`, `height`, `timestamp`, `title`, optional `sessionId` and `toolVersion`, and `env.TERM` [asciicast.ts:AsciicastHeader].
 - `AsciicastExport`: `contents`, `header`, `capturedAtSeq`, `durationMs`, `outputEventCount`, `resizeEventCount` and `markerCount` [asciicast.ts:AsciicastExport].
-- `generateAsciicast(sessionId, manifest, events, toolVersion?)` returns an `AsciicastExport`. It runs synchronously [asciicast.ts:generateAsciicast].
+- `generateAsciicast(sessionId, manifest, events, toolVersion?)` returns an `AsciicastExport`. It runs synchronously and reports `capturedAtSeq: -1` when the event log is empty [asciicast.ts:generateAsciicast].
 - `WebmExportOptions`: `sessionId`, `sessionDir`, `manifest`, `events`, `outputPath`, and optional `targetSeq`, `profileName`, `timingMode` and `rendererName` [webm.ts:WebmExportOptions].
 - `WebmExportDeps`: optional `backendFactory` and `replayTimeoutMs`, for tests and callers that supply their own backend [webm.ts:WebmExportDeps].
 - `WebmExportResult`: `capturedAtSeq`, `durationMs`, `outputEventCount`, `resizeEventCount`, `cols`, `rows`, `profileName`, `timingMode` and `rendererBackend`, plus the optional `missingGlyphs` and `missingGlyphsTruncated` of `RecordedGlyphFields` [webm.ts:WebmExportResult].
@@ -20,6 +20,7 @@ This directory converts a session's event log into recording exports. `generateA
 - Event timestamps must parse to finite numbers [asciicast.ts:parseTimestamp]. They must not decrease from one event to the next [asciicast.ts:generateAsciicast].
 - Event mapping: `output` becomes `o`, `resize` becomes `r` with `COLSxROWS`, and `marker` becomes `m`. Input, run, signal and exit events are skipped. An unknown type reaches `unreachable()` [asciicast.ts:generateAsciicast].
 - `generateWebmExport` asserts a non-empty `sessionId`, absolute `sessionDir` and `outputPath`, and positive initial dimensions. An empty event list gives a blank video with `capturedAtSeq` -1 and `durationMs` 0 [webm.ts:generateWebmExport].
+- The CLI rejects WebM export for an empty event log with a non-retryable `INVALID_INPUT` error that directs callers to asciicast [record-export.ts:runRecordExportCommand].
 - `generateAsciicast` reports `capturedAtSeq` -1 for an empty event list [asciicast.ts:generateAsciicast].
 - Defaults: timing mode `recorded` and profile `reference-dark` [webm.ts:generateWebmExport].
 - A requested `libghostty-vt` renderer is replaced with `ghostty-web`. A code comment says `libghostty-vt` is semantic-only [webm.ts:generateWebmExport].
