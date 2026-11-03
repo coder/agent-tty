@@ -43,7 +43,7 @@ import {
 } from './programGroup.js';
 import { judgeHost, readHostRecord, type HostRecord } from './hostRecord.js';
 import { sendRpc } from './rpcClient.js';
-import { ensureSocketRoot, isOwnSocket } from './socketRoot.js';
+import { ensureSocketRoot, isOwnLegacySocket } from './socketRoot.js';
 
 const DESTROY_POLL_INTERVAL_MS = 100;
 const DESTROY_MAX_ATTEMPTS = 50;
@@ -422,7 +422,7 @@ export async function removeSocketDirectoryBestEffort(
 // older version listens at. Remove this after one minor release.
 async function removeLegacySocketBestEffort(socketFile: string): Promise<void> {
   const oldSocketFile = legacySocketPath(socketFile);
-  if (oldSocketFile === null || !(await isOwnSocket(oldSocketFile))) {
+  if (oldSocketFile === null || !(await isOwnLegacySocket(oldSocketFile))) {
     return;
   }
   try {

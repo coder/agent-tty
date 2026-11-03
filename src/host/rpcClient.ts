@@ -22,7 +22,7 @@ import {
 import { legacySocketPath } from '../storage/sessionPaths.js';
 import { invariant } from '../util/assert.js';
 import { ResourceScope } from '../util/resourceScope.js';
-import { isOwnSocket } from './socketRoot.js';
+import { isOwnLegacySocket, socketRootExists } from './socketRoot.js';
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_RPC_BUFFER_BYTES = 1_048_576;
@@ -114,17 +114,27 @@ export async function sendRpc(
   timeoutMs?: number,
   signal?: AbortSignal,
 ): Promise<unknown> {
+  throwIfAborted(signal);
+  // A host that an older version started listens at the old path. Remove
+  // this fallback after one minor release.
+  const oldSocketPath = legacySocketPath(socketPath);
+  if (oldSocketPath === null) {
+    return await sendRpcAt(socketPath, method, params, timeoutMs, signal);
+  }
   try {
+    if (!(await socketRootExists())) {
+      throw toTransportCliError(
+        Object.assign(new Error(`connect ENOENT ${socketPath}`), {
+          code: 'ENOENT',
+        }),
+        socketPath,
+        method,
+        timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      );
+    }
     return await sendRpcAt(socketPath, method, params, timeoutMs, signal);
   } catch (error) {
-    // A host that an older version started listens at the old path. Remove
-    // this fallback after one minor release.
-    const oldSocketPath = legacySocketPath(socketPath);
-    if (
-      oldSocketPath === null ||
-      !isMissingSocket(error) ||
-      !(await isOwnSocket(oldSocketPath))
-    ) {
+    if (!isMissingSocket(error) || !(await isOwnLegacySocket(oldSocketPath))) {
       throw error;
     }
     return await sendRpcAt(oldSocketPath, method, params, timeoutMs, signal);
