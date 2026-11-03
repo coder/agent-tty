@@ -1360,8 +1360,10 @@ describe.skipIf(process.platform === 'win32')(
           childPid: null,
         }),
       );
+      // Off Linux there is no host.json, and a host whose pid exists reads
+      // as running.
       const own = captureHost(process.pid);
-      expect(own).not.toBeNull();
+      expect(own !== null).toBe(process.platform === 'linux');
       if (own !== null) {
         writeHostRecord(directory, own);
       }
