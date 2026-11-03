@@ -2,7 +2,7 @@
   "fingerprints": {
     "src/cli/commands/create.ts#runCreateCommand": "5135dd8d24063c90",
     "src/cli/commands/destroy.ts#runDestroyCommand": "ecaa8b1d572da7c6",
-    "src/cli/commands/destroy.ts#rerunInNewSession": "14ace5f1e7d356b5",
+    "src/cli/commands/destroy.ts#rerunInNewSession": "cf32d7d082758522",
     "src/cli/commands/gc.ts#gcSessions": "667e4ebc3ca3029c",
     "src/host/lifecycle.ts#allocateSession": "8f7eee41b3c56db9",
     "src/host/lifecycle.ts#launchHost": "597a5a6b9eb58cc8",
@@ -70,7 +70,7 @@
     "src/host/rpcServer.ts#RpcServer.listen": "aa62e1cd89eceaa4",
     "src/host/rpcServer.ts#RpcServer.close": "2d8092cceb4b8e13",
     "src/storage/manifests.ts#readValidatedJsonFile": "6287eb627b09bf80",
-    "src/storage/manifests.ts#replaceFileAtomic": "20532509b3dcaade",
+    "src/storage/manifests.ts#replaceFileAtomic": "46e02780a28076c4",
     "src/storage/manifests.ts#replaceFileAtomicSync": "38bea7cd8e67828f",
     "src/storage/manifests.ts#writeValidatedJsonFileSync": "4a5d1cc5f63ae8ce",
     "src/storage/manifests.ts#writeManifest": "1bcc99f09acfc577",
