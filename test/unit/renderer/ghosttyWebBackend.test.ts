@@ -11,8 +11,9 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { ReplayTimingOptions } from '../../../src/renderer/backend.js';
 import type { ReplayInput } from '../../../src/renderer/types.js';
 import { BUNDLED_FONT_ASSETS } from '../../../src/renderer/bundledFont.js';
 import { hashProfile, resolveProfile } from '../../../src/renderer/profiles.js';
@@ -826,5 +827,234 @@ describe('GhosttyWebBackend unit guards', () => {
       'ghostty-web renderer cleanup failure: browser',
       browserError,
     );
+  });
+});
+
+describe('GhosttyWebBackend replayWithTiming output pacing', () => {
+  const FIRST_EVENT_AT_MS = 16;
+  const RECORDED: ReplayTimingOptions = {
+    mode: 'recorded',
+    finalFrameHoldMs: 1_000,
+  };
+  const MAX_SPEED: ReplayTimingOptions = {
+    mode: 'max-speed',
+    minFrameHoldMs: 16,
+    finalFrameHoldMs: 500,
+  };
+  const BASE_TIMESTAMP_MS = Date.parse('2026-03-19T12:00:00.000Z');
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function outputEvent(
+    seq: number,
+    offsetMs: number,
+  ): ReplayInput['events'][number] {
+    return {
+      seq,
+      ts: new Date(BASE_TIMESTAMP_MS + offsetMs).toISOString(),
+      type: 'output',
+      payload: { data: `out${String(seq)}` },
+    };
+  }
+
+  function exitEvent(
+    seq: number,
+    offsetMs: number,
+  ): ReplayInput['events'][number] {
+    return {
+      seq,
+      ts: new Date(BASE_TIMESTAMP_MS + offsetMs).toISOString(),
+      type: 'exit',
+      payload: { exitCode: 0, exitSignal: null },
+    };
+  }
+
+  async function replayAndRecordFlushes(
+    events: ReplayInput['events'],
+    timing: ReplayTimingOptions,
+    flushCostMs = 0,
+    onFlush: () => void = () => {},
+  ): Promise<{ atMs: number; chunks: string[] }[]> {
+    vi.useFakeTimers();
+    const backend = createBackend();
+    const flushes: { atMs: number; chunks: string[] }[] = [];
+    let replayStartedAtMs = 0;
+
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: { isClosed: () => false },
+      resizeBridge: () => {
+        replayStartedAtMs = performance.now();
+        return Promise.resolve();
+      },
+      flushOutputBatch: (_page: object, dataChunks: string[]) => {
+        flushes.push({ atMs: performance.now(), chunks: [...dataChunks] });
+        onFlush();
+        return new Promise<void>((resolve) => {
+          setTimeout(resolve, flushCostMs);
+        });
+      },
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 80,
+            rows: 24,
+            visibleLines: [],
+          }),
+        ),
+    });
+
+    const replay = backend.replayWithTiming(
+      {
+        sessionId: 'renderer-unit-session',
+        initialCols: 80,
+        initialRows: 24,
+        targetSeq: Math.max(...events.map((event) => event.seq)),
+        events,
+      },
+      timing,
+    );
+    await vi.runAllTimersAsync();
+    await replay;
+
+    return flushes.map((flush) => ({
+      atMs: flush.atMs - replayStartedAtMs,
+      chunks: flush.chunks,
+    }));
+  }
+
+  it('shows each output at its recorded time when the outputs are far apart', async () => {
+    const flushes = await replayAndRecordFlushes(
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 200),
+        outputEvent(2, 400),
+        exitEvent(3, 600),
+      ],
+      RECORDED,
+    );
+
+    expect(flushes).toEqual([
+      { atMs: FIRST_EVENT_AT_MS, chunks: ['out0'] },
+      { atMs: FIRST_EVENT_AT_MS + 200, chunks: ['out1'] },
+      { atMs: FIRST_EVENT_AT_MS + 400, chunks: ['out2'] },
+    ]);
+  });
+
+  it('keeps outputs that arrive within one frame hold in a single flush', async () => {
+    const flushes = await replayAndRecordFlushes(
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 5),
+        outputEvent(2, 10),
+        exitEvent(3, 500),
+      ],
+      RECORDED,
+    );
+
+    expect(flushes).toEqual([
+      { atMs: FIRST_EVENT_AT_MS + 10, chunks: ['out0', 'out1', 'out2'] },
+    ]);
+  });
+
+  it('keeps the recorded pace when each flush costs more than a frame hold', async () => {
+    const events = Array.from({ length: 101 }, (_, index) =>
+      outputEvent(index, index * 10),
+    );
+    events.push(exitEvent(101, 1_000));
+    const flushes = await replayAndRecordFlushes(events, RECORDED, 30);
+
+    expect(flushes.length).toBeGreaterThanOrEqual(10);
+    expect(flushes.at(-1)?.atMs).toBeLessThanOrEqual(FIRST_EVENT_AT_MS + 1_060);
+    expect(flushes.flatMap((flush) => flush.chunks)).toEqual(
+      events.slice(0, 101).map((event) => `out${String(event.seq)}`),
+    );
+  });
+
+  it('keeps the pace when the wall clock jumps during the replay', async () => {
+    const flushes = await replayAndRecordFlushes(
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 200),
+        outputEvent(2, 400),
+        exitEvent(3, 600),
+      ],
+      RECORDED,
+      0,
+      () => {
+        vi.setSystemTime(Date.now() + 60_000);
+      },
+    );
+
+    expect(flushes.map((flush) => flush.atMs)).toEqual([
+      FIRST_EVENT_AT_MS,
+      FIRST_EVENT_AT_MS + 200,
+      FIRST_EVENT_AT_MS + 400,
+    ]);
+  });
+
+  it('paces accelerated output on the capped schedule with its own frame hold', async () => {
+    const accelerated: ReplayTimingOptions = {
+      mode: 'accelerated',
+      maxGapMs: 400,
+      minFrameHoldMs: 100,
+      finalFrameHoldMs: 1_000,
+    };
+    const flushes = await replayAndRecordFlushes(
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 150),
+        outputEvent(2, 300),
+        outputEvent(3, 340),
+        outputEvent(4, 2_300),
+        exitEvent(5, 2_500),
+      ],
+      accelerated,
+    );
+
+    expect(flushes).toEqual([
+      { atMs: 100, chunks: ['out0'] },
+      { atMs: 250, chunks: ['out1'] },
+      { atMs: 440, chunks: ['out2', 'out3'] },
+      { atMs: 840, chunks: ['out4'] },
+    ]);
+  });
+
+  it('keeps max-speed outputs in one flush so frame holds cannot outlast the export timeout', async () => {
+    const flushes = await replayAndRecordFlushes(
+      [outputEvent(0, 0), outputEvent(1, 200), outputEvent(2, 400)],
+      MAX_SPEED,
+    );
+
+    expect(flushes).toEqual([
+      { atMs: FIRST_EVENT_AT_MS, chunks: ['out0', 'out1', 'out2'] },
+    ]);
+  });
+
+  it('refreshes continuous output at least once per frame hold', async () => {
+    const events = Array.from({ length: 21 }, (_, index) =>
+      outputEvent(index, index * 10),
+    );
+    events.push(exitEvent(21, 300));
+    const flushes = await replayAndRecordFlushes(events, RECORDED);
+
+    expect(flushes.length).toBeGreaterThanOrEqual(8);
+    expect(flushes[0]?.atMs).toBeLessThanOrEqual(FIRST_EVENT_AT_MS + 20);
+    expect(flushes.flatMap((flush) => flush.chunks)).toEqual(
+      events.slice(0, 21).map((event) => `out${String(event.seq)}`),
+    );
+  });
+
+  it('keeps the recorded pace when continuous output fills every frame hold', async () => {
+    const events = Array.from({ length: 101 }, (_, index) =>
+      outputEvent(index, index * 10),
+    );
+    events.push(exitEvent(101, 1_000));
+    const flushes = await replayAndRecordFlushes(events, RECORDED);
+
+    expect(flushes.length).toBeGreaterThanOrEqual(30);
+    expect(flushes.at(-1)?.atMs).toBeLessThanOrEqual(FIRST_EVENT_AT_MS + 1_020);
   });
 });

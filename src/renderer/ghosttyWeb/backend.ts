@@ -659,6 +659,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     let resizeEventCount = 0;
     let highestProcessedSeq = this.lastAppliedSeq;
     let pendingOutputChunks: string[] = [];
+    let pendingSinceTimestampMs: number | null = null;
+    let scheduleStartedAtMs = 0;
+    let scheduledElapsedMs = 0;
 
     const flushOutputBatch = async (): Promise<void> => {
       if (pendingOutputChunks.length === 0) {
@@ -667,6 +670,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
 
       await this.flushOutputBatch(page, pendingOutputChunks);
       pendingOutputChunks = [];
+      pendingSinceTimestampMs = null;
       await waitForDelay(resolvedMinFrameHoldMs);
     };
 
@@ -691,19 +695,46 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       }
 
       const eventTimestampMs = parseEventTimestampMs(event.ts, event.seq);
-      if (previousProcessedEventTimestampMs !== null) {
+      if (previousProcessedEventTimestampMs === null) {
+        scheduleStartedAtMs = performance.now();
+      } else {
         const interEventDelayMs =
           eventTimestampMs - previousProcessedEventTimestampMs;
         invariant(
           interEventDelayMs >= 0,
           'replay event timestamps must be ordered non-decreasingly',
         );
-        await waitForDelay(computeInterEventDelay(interEventDelayMs));
+        scheduledElapsedMs += computeInterEventDelay(interEventDelayMs);
+        // Output shows once its batch is a frame hold old, unless the replay
+        // runs behind the schedule: then batches grow until it catches up, so
+        // slow flushes lower the frame rate instead of stretching the video.
+        // Max-speed keeps one batch per run of output events, so its frame
+        // holds cannot outlast the export timeout.
+        if (
+          timing.mode !== 'max-speed' &&
+          pendingSinceTimestampMs !== null &&
+          eventTimestampMs - pendingSinceTimestampMs >=
+            resolvedMinFrameHoldMs &&
+          performance.now() - scheduleStartedAtMs <= scheduledElapsedMs
+        ) {
+          await flushOutputBatch();
+        }
+        // Waiting for the event's place on the schedule lets frame holds and
+        // bridge calls use up time that the recording spent idle.
+        await waitForDelay(
+          Math.max(
+            0,
+            Math.round(
+              scheduledElapsedMs - (performance.now() - scheduleStartedAtMs),
+            ),
+          ),
+        );
       }
       previousProcessedEventTimestampMs = eventTimestampMs;
 
       switch (event.type) {
         case 'output': {
+          pendingSinceTimestampMs ??= eventTimestampMs;
           pendingOutputChunks.push(event.payload.data);
           outputEventCount += 1;
           break;
