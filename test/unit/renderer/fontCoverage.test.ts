@@ -67,6 +67,34 @@ describe('readFontFile', () => {
     );
   });
 
+  it('reads the bundled Noto symbol subsets, which hold no emoji-presentation code point', () => {
+    const files = ['noto-sans-symbols-2-regular', 'noto-sans-math-regular'].map(
+      (assetKey) => {
+        const asset = BUNDLED_FONT_ASSETS.find(
+          (candidate) => candidate.assetKey === assetKey,
+        );
+        if (asset === undefined) {
+          throw new Error(`${assetKey} must be bundled`);
+        }
+        return readFontFile(asset.buffer);
+      },
+    );
+    const [symbols2, math] = files;
+
+    expect(files.map((file) => file.postScriptName)).toEqual([
+      'NotoSansSymbols2-Regular',
+      'NotoSansMath-Regular',
+    ]);
+    expect(symbols2?.coverage.has(0x1fb00)).toBe(true);
+    expect(math?.coverage.has(0x29c9)).toBe(true);
+    for (const file of files) {
+      const emoji = [...file.coverage].filter((codePoint) =>
+        /^\p{Emoji_Presentation}$/u.test(String.fromCodePoint(codePoint)),
+      );
+      expect(emoji, file.postScriptName).toEqual([]);
+    }
+  });
+
   it('gives every bundled font its own PostScript name, the name CDP reports', () => {
     const names = BUNDLED_FONT_ASSETS.map(
       (asset) => readFontFile(asset.buffer).postScriptName,
@@ -83,7 +111,12 @@ describe('profileFaces', () => {
     );
 
   it('lists the bundled families of the reference profile in stack order', () => {
-    expect(names(PROFILE)).toEqual([['JetBrainsMono-Regular'], ['SymbolsNFM']]);
+    expect(names(PROFILE)).toEqual([
+      ['JetBrainsMono-Regular'],
+      ['SymbolsNFM'],
+      ['NotoSansSymbols2-Regular'],
+      ['NotoSansMath-Regular'],
+    ]);
   });
 
   it('returns null when the font stack does not start with a bundled font', () => {

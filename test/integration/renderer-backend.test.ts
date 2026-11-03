@@ -643,6 +643,12 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     ]);
   });
 
+  it('draws math and legacy-computing symbols with the bundled Noto fonts', async () => {
+    expect(await listedGlyphs(PROFILE, 'x \u29c9 \u{1fb00} \u0378 y')).toEqual([
+      'U+0378',
+    ]);
+  });
+
   it('reports the font of every probe text, right after the probe spans appear', async () => {
     await backend.boot();
     await backend.replayTo(

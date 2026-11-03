@@ -15,7 +15,14 @@ import {
 import { resolveProfile } from '../../../src/renderer/profiles.js';
 import type { RenderProfileConfig } from '../../../src/renderer/types.js';
 
-const PROFILE = resolveProfile('reference-dark');
+const REFERENCE = resolveProfile('reference-dark');
+// Most cases need glyphs that no bundled font has, such as U+29C9, which the
+// reference stack draws with Noto Sans Math. This stack leaves the Noto fonts
+// out, so those glyphs stay boxes.
+const PROFILE = {
+  ...REFERENCE,
+  fontFamily: '"JetBrains Mono", "Symbols Nerd Font Mono", monospace',
+};
 
 const JETBRAINS: UsedFont = {
   familyName: 'JetBrains Mono',
@@ -166,6 +173,16 @@ describe('GlyphCheck', () => {
         [['\ue0b0', '\u0378']],
         { '\ue0b0': [SYMBOLS], '\u0378': [JETBRAINS] },
         profile,
+      ),
+    ).toEqual(['U+0378']);
+  });
+
+  it('lets the reference stack draw math and legacy-computing symbols with the Noto fonts', async () => {
+    expect(
+      await listed(
+        [['\u29c9', '\u{1fb00}', '\u0378']],
+        { '\u0378': [JETBRAINS] },
+        REFERENCE,
       ),
     ).toEqual(['U+0378']);
   });

@@ -4,10 +4,9 @@ import type { ZodError } from 'zod';
 
 import { invariant } from '../util/assert.js';
 import {
+  BUNDLED_FONT_ASSETS,
   BUNDLED_FONT_ASSET_IDENTITY,
   BUNDLED_FONT_FAMILY,
-  BUNDLED_PRIMARY_FONT_ASSET,
-  BUNDLED_SYMBOLS_FONT_ASSET,
   BUNDLED_SYMBOLS_FONT_FAMILY,
   getBundledFontAssetByIdentity,
 } from './bundledFont.js';
@@ -22,7 +21,9 @@ export const BUILTIN_PROFILE_NAMES = Object.freeze([
   'reference-light',
 ] as const);
 
-export const REFERENCE_PROFILE_FONT_STACK = `"${BUNDLED_FONT_FAMILY}", "${BUNDLED_SYMBOLS_FONT_FAMILY}", monospace`;
+// The Noto symbol fonts come after `monospace`, so the host monospace font
+// still draws every glyph it has.
+export const REFERENCE_PROFILE_FONT_STACK = `"${BUNDLED_FONT_FAMILY}", "${BUNDLED_SYMBOLS_FONT_FAMILY}", monospace, "Noto Sans Symbols 2", "Noto Sans Math"`;
 
 type BuiltinProfileName = (typeof BUILTIN_PROFILE_NAMES)[number];
 
@@ -42,22 +43,17 @@ function createBundledFontDescriptor(
   });
 }
 
-const BUILTIN_PROFILE_FONT_ASSETS = Object.freeze([
-  createBundledFontDescriptor(
-    BUNDLED_PRIMARY_FONT_ASSET.family,
-    BUNDLED_PRIMARY_FONT_ASSET.assetIdentity,
-    BUNDLED_PRIMARY_FONT_ASSET.route,
-    BUNDLED_PRIMARY_FONT_ASSET.weight,
-    BUNDLED_PRIMARY_FONT_ASSET.style,
+const BUILTIN_PROFILE_FONT_ASSETS = Object.freeze(
+  BUNDLED_FONT_ASSETS.map((asset) =>
+    createBundledFontDescriptor(
+      asset.family,
+      asset.assetIdentity,
+      asset.route,
+      asset.weight,
+      asset.style,
+    ),
   ),
-  createBundledFontDescriptor(
-    BUNDLED_SYMBOLS_FONT_ASSET.family,
-    BUNDLED_SYMBOLS_FONT_ASSET.assetIdentity,
-    BUNDLED_SYMBOLS_FONT_ASSET.route,
-    BUNDLED_SYMBOLS_FONT_ASSET.weight,
-    BUNDLED_SYMBOLS_FONT_ASSET.style,
-  ),
-] as const satisfies readonly RenderProfileBundledFont[]);
+);
 
 const BUILTIN_PROFILES: Record<BuiltinProfileName, RenderProfileConfig> = {
   'reference-dark': {
