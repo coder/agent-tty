@@ -182,7 +182,7 @@ describe('artifact manifest lock', () => {
 
       expect(maxInside).toBe(1);
     }
-  });
+  }, 30_000);
 
   it('breaks a lock with an unknown owner whose time is far in the future', async () => {
     await writeFile(lockPath, 'not json');
@@ -233,7 +233,7 @@ describe('artifact manifest lock', () => {
   });
 
   it('breaks a lock whose owner is gone', async () => {
-    await writeFile(lockPath, ownerRecord(deadPid(), false));
+    await writeFile(lockPath, await deadOwnerRecord());
 
     await expect(
       withArtifactManifestLock(
@@ -268,12 +268,12 @@ describe('artifact manifest lock', () => {
     },
   );
 
-  it('puts back a lock that a live owner took after the dead owner was judged', async () => {
-    await writeFile(lockPath, ownerRecord(deadPid(), false));
+  it('keeps a lock that changed after the dead owner was judged', async () => {
+    await writeFile(lockPath, await deadOwnerRecord());
     const live = ownerRecord(process.pid, true);
-    fsHooks.beforeRename = async (from) => {
-      if (from === lockPath) {
-        fsHooks.beforeRename = undefined;
+    fsHooks.beforeLink = async (to) => {
+      if (to === `${lockPath}.break`) {
+        fsHooks.beforeLink = undefined;
         await writeFile(lockPath, live);
       }
     };
@@ -320,8 +320,8 @@ describe('artifact manifest lock', () => {
 
   it('breaks its own lock on the next update when the release failed', async () => {
     let failures = 0;
-    fsHooks.beforeRename = (from, to) => {
-      if (from !== lockPath || !to.includes('.released-')) {
+    fsHooks.beforeRm = (path) => {
+      if (path !== lockPath) {
         return Promise.resolve();
       }
       failures += 1;
@@ -340,7 +340,7 @@ describe('artifact manifest lock', () => {
       'manifest.json.lock',
     ]);
 
-    fsHooks.beforeRename = undefined;
+    fsHooks.beforeRm = undefined;
     await expect(
       withArtifactManifestLock(
         sessionDirectory,

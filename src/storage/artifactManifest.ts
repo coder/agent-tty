@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { lstat, rename, rm, utimes, writeFile } from 'node:fs/promises';
-import { basename, isAbsolute, resolve } from 'node:path';
+import { lstat, readdir, rm, utimes, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -245,55 +245,116 @@ function parseLockOwner(contents: string | null): ManifestLockOwner | null {
   }
 }
 
-async function breakStaleManifestLock(
-  lockPath: string,
-  timing: ManifestLockTiming,
-): Promise<'retry' | 'held'> {
-  let observed: string | null;
-  let modifiedAtMs: number;
+interface LockFileState {
+  contents: string | null;
+  modifiedAtMs: number;
+}
+
+async function readLockFileState(path: string): Promise<LockFileState | null> {
   try {
-    observed = await readLockFile(lockPath);
-    modifiedAtMs = (await lstat(lockPath)).mtimeMs;
+    const contents = await readLockFile(path);
+    return { contents, modifiedAtMs: (await lstat(path)).mtimeMs };
   } catch (error) {
     if (hasErrorCode(error, 'ENOENT')) {
-      return 'retry';
+      return null;
     }
     throw error;
   }
+}
 
-  const owner = parseLockOwner(observed);
+// A clock step can put a modification time in the future, so the age counts
+// in both directions.
+function isOlderThan(state: LockFileState, limitMs: number): boolean {
+  return Math.abs(Date.now() - state.modifiedAtMs) > limitMs;
+}
+
+function isStaleLock(
+  lockPath: string,
+  state: LockFileState,
+  timing: ManifestLockTiming,
+): boolean {
+  if (unreleasedLocks.get(lockPath) === state.contents) {
+    return true;
+  }
+  const owner = parseLockOwner(state.contents);
+  // Without a process record the pid may belong to another pid namespace.
   const verdict =
-    owner === null ? 'unknown' : judgeHost(owner.pid, owner.process);
-  const stale =
-    unreleasedLocks.get(lockPath) === observed ||
-    (verdict === 'unknown'
-      ? Date.now() - modifiedAtMs > timing.unknownOwnerStaleMs
-      : verdict === 'dead');
-  if (!stale) {
+    owner === null || (owner.process === null && process.platform === 'linux')
+      ? 'unknown'
+      : judgeHost(owner.pid, owner.process);
+  return verdict === 'unknown'
+    ? isOlderThan(state, timing.unknownOwnerStaleMs)
+    : verdict === 'dead';
+}
+
+async function removeIfUnchanged(
+  path: string,
+  contents: string | null,
+): Promise<void> {
+  const current = await readLockFileState(path);
+  if (current !== null && current.contents === contents) {
+    await rm(path, { force: true });
+  }
+}
+
+/**
+ * Breakers take `<lock>.break` first, so only one of them can remove the
+ * stale lock, and only while it still holds the bytes that were judged.
+ */
+async function breakStaleManifestLock(
+  lockPath: string,
+  temporaryPath: string,
+  contents: string,
+  timing: ManifestLockTiming,
+): Promise<'retry' | 'held'> {
+  const judged = await readLockFileState(lockPath);
+  if (judged === null) {
+    return 'retry';
+  }
+  if (!isStaleLock(lockPath, judged, timing)) {
     return 'held';
   }
 
-  const movedPath = `${lockPath}.broken-${randomUUID()}`;
-  try {
-    await rename(lockPath, movedPath);
-  } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) {
-      return 'retry';
+  const breakPath = `${lockPath}.break`;
+  if (!(await createWithoutReplacing(temporaryPath, breakPath))) {
+    const breaker = await readLockFileState(breakPath);
+    if (breaker !== null && isOlderThan(breaker, timing.unknownOwnerStaleMs)) {
+      await removeIfUnchanged(breakPath, breaker.contents);
     }
-    throw error;
+    return 'held';
   }
   try {
-    const moved = await readLockFile(movedPath);
-    if (moved === unreleasedLocks.get(lockPath)) {
+    await removeIfUnchanged(lockPath, judged.contents);
+    if (unreleasedLocks.get(lockPath) === judged.contents) {
       unreleasedLocks.delete(lockPath);
     }
-    if (moved !== observed) {
-      await createWithoutReplacing(movedPath, lockPath);
-    }
   } finally {
-    await rm(movedPath, { force: true });
+    await removeIfUnchanged(breakPath, contents);
   }
   return 'retry';
+}
+
+async function removeOldLockFiles(
+  lockPath: string,
+  temporaryPath: string,
+  timing: ManifestLockTiming,
+): Promise<void> {
+  const directory = dirname(lockPath);
+  const lockName = basename(lockPath);
+  const names = await readdir(directory).catch((): string[] => []);
+  for (const name of names) {
+    const path = join(directory, name);
+    if (
+      path === temporaryPath ||
+      (name !== `${lockName}.break` && !name.startsWith(`${lockName}.tmp-`))
+    ) {
+      continue;
+    }
+    const state = await readLockFileState(path).catch(() => null);
+    if (state !== null && isOlderThan(state, timing.unknownOwnerStaleMs)) {
+      await removeIfUnchanged(path, state.contents).catch(() => undefined);
+    }
+  }
 }
 
 async function acquireManifestLock(
@@ -310,9 +371,15 @@ async function acquireManifestLock(
       const now = new Date();
       await utimes(temporaryPath, now, now);
       if (await createWithoutReplacing(temporaryPath, lockPath)) {
+        await removeOldLockFiles(lockPath, temporaryPath, timing);
         return;
       }
-      const outcome = await breakStaleManifestLock(lockPath, timing);
+      const outcome = await breakStaleManifestLock(
+        lockPath,
+        temporaryPath,
+        contents,
+        timing,
+      );
       if (Date.now() >= deadline) {
         const holder = await readLockFile(lockPath).catch(() => null);
         throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
@@ -336,20 +403,8 @@ async function releaseManifestLock(
   contents: string,
 ): Promise<void> {
   for (let attempt = 1; ; attempt += 1) {
-    const movedPath = `${lockPath}.released-${randomUUID()}`;
     try {
-      try {
-        await rename(lockPath, movedPath);
-      } catch (error) {
-        if (hasErrorCode(error, 'ENOENT')) {
-          return;
-        }
-        throw error;
-      }
-      if ((await readLockFile(movedPath)) !== contents) {
-        await createWithoutReplacing(movedPath, lockPath);
-      }
-      await rm(movedPath, { force: true });
+      await removeIfUnchanged(lockPath, contents);
       return;
     } catch {
       if (attempt >= MAX_LOCK_RELEASE_ATTEMPTS) {
