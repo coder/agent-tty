@@ -333,11 +333,12 @@ function controllingTerminal(pid: number): string | null {
     return null;
   }
   const tty = output.trim();
-  // A terminal name such as ttys001 or pts/3 starts with a letter and ends
-  // with a digit. For a process without a terminal ps prints ?? (macOS,
-  // OpenBSD), ? (procps, NetBSD) or - (FreeBSD), and any other value that
-  // names no terminal reads as none too, so two of them never match.
-  return /^[a-z][\w/]*\d$/i.test(tty) ? tty : null;
+  // For a process without a terminal ps prints ?? (macOS, OpenBSD), ?
+  // (procps, NetBSD) or - (FreeBSD), so two of them never match. The console
+  // is the terminal of many unrelated processes. Any other name, such as
+  // ttys001, pts/3 or the BSD pty ttypa, is a terminal. A wrong match costs
+  // one re-run, since the copy skips this check.
+  return ['', '-', '?', '??', 'console'].includes(tty) ? null : tty;
 }
 
 // A terminal is the controlling terminal of at most one session and of
@@ -657,6 +658,11 @@ export async function allocateSession(
     assertNonEmptyString(commandPart, 'command segment');
   }
 
+  // The program never gets the destroy re-run marker, see resolvePtyEnv.
+  const env = Object.fromEntries(
+    Object.entries(config.env).filter(([key]) => key !== DESTROY_RERUN_ENV_KEY),
+  );
+
   const sessionDirectory = sessionDir(home, sessionId);
   await mkdir(sessionDirectory, { recursive: true });
   // Owner-only: this directory holds the event log and all artifacts, so 0o700
@@ -686,7 +692,7 @@ export async function allocateSession(
       ? { idleTimeoutMs: config.idleTimeoutMs }
       : {}),
     ...(config.name !== undefined ? { name: config.name } : {}),
-    ...(Object.keys(config.env).length > 0 ? { env: { ...config.env } } : {}),
+    ...(Object.keys(env).length > 0 ? { env } : {}),
     shell: resolvedShellPath,
     term: config.term,
   });
@@ -957,7 +963,11 @@ export async function listSessions(
       return [];
     }
 
-    throw error;
+    throw makeCliError(ERROR_CODES.STORAGE_READ_ERROR, {
+      message: `Failed to read sessions directory at ${sessionsRoot}.`,
+      details: { sessionsRoot },
+      cause: error,
+    });
   }
 
   const summaries: SessionSummary[] = [];

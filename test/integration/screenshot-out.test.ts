@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import {
   chmod,
   mkdir,
@@ -9,7 +10,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -124,21 +125,28 @@ describe('screenshot --out', { timeout: 120_000 }, () => {
     expect(sha256(await readFile(out))).toBe(result.sha256);
   });
 
-  it('fails with EXPORT_ERROR before capturing when the --out parent folder is missing', async () => {
-    const out = join(outDir, 'missing', 'proof.png');
+  it('creates missing parent folders of --out', async () => {
+    const out = join(outDir, 'missing', 'nested', 'proof.png');
+
+    const result = expectSuccess(screenshot(['--out', out]));
+
+    expect(result.artifactPath).toBe(out);
+    expect(sha256(await readFile(out))).toBe(result.sha256);
+  });
+
+  it('creates no folder inside session storage', () => {
+    const out = join(
+      sessionDir(testHome, sessionId),
+      'artifacts',
+      'new',
+      'proof.png',
+    );
 
     const run = screenshot(['--out', out]);
 
     expect(run.status).toBe(7);
-    expect(run.envelope.ok).toBe(false);
-    expect((run.envelope as ErrorEnvelope).error).toMatchObject({
-      code: 'EXPORT_ERROR',
-      details: { sessionId, out },
-    });
-    const manifest = await readArtifactManifest(
-      sessionDir(testHome, sessionId),
-    );
-    expect(manifest.artifacts).toEqual([]);
+    expect((run.envelope as ErrorEnvelope).error.code).toBe('EXPORT_ERROR');
+    expect(existsSync(dirname(out))).toBe(false);
   });
 
   it.skipIf(process.getuid?.() === 0)(
@@ -180,6 +188,27 @@ describe('screenshot --out', { timeout: 120_000 }, () => {
       sessionDir(testHome, sessionId),
     );
     expect(manifest.artifacts).toHaveLength(1);
+  });
+
+  it('fails with STORAGE_WRITE_ERROR when the artifacts path is a file, live and offline', async () => {
+    const artifactsPath = join(sessionDir(testHome, sessionId), 'artifacts');
+    await rm(artifactsPath, { recursive: true, force: true });
+    await writeFile(artifactsPath, '');
+    const expectedError = {
+      code: 'STORAGE_WRITE_ERROR',
+      message: `Artifacts path ${artifactsPath} is not a folder.`,
+    };
+
+    const live = screenshot([]);
+    expect(live.status).toBe(8);
+    expect((live.envelope as ErrorEnvelope).error).toMatchObject(expectedError);
+
+    destroySession(testHome, sessionId);
+    const offline = screenshot([]);
+    expect(offline.status).toBe(8);
+    expect((offline.envelope as ErrorEnvelope).error).toMatchObject(
+      expectedError,
+    );
   });
 
   it('writes --out for a destroyed session through offline replay', async () => {

@@ -122,7 +122,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid UnsharedGroupReadsUnknown"
+GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid FreezesUnseenGroup UnsharedGroupReadsUnknown"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -145,6 +145,8 @@ WITNESSES="WitnessGcRemovesSession WitnessCreateGivesUp WitnessSessionServes Wit
 # TOKEN: whether the host's capture finds the program's session token.
 RUNS=""
 TOKEN=TRUE
+# UNSEEN: whether no scan of /proc shows a live process of the program.
+UNSEEN=FALSE
 # OTHER: whether destroy, list and gc run in another pid space than the host.
 OTHER=FALSE
 write_run() {
@@ -166,6 +168,7 @@ write_run() {
       echo "  $guard = $value"
     done
     echo "  Token = $TOKEN"
+    echo "  Unseen = $UNSEEN"
     echo "  OtherPidSpace = $OTHER"
     echo "  MaxListReconciles = 2"
     echo "SPECIFICATION Spec"
@@ -210,6 +213,14 @@ write_run mutant-GcFinalCheck pass NoLiveSessionDeleted "GcFinalCheck=FALSE" "re
 write_run mutant-GcBothChecks violated NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE GcFinalCheck=FALSE" "with neither gc check, gc removes live sessions" NoLiveSessionDeleted
 write_run mutant-ShutdownChecksCommandable pass TerminalIsFinal "ShutdownChecksCommandable=FALSE" "redundant: the writer writes nothing after a terminal record"
 write_run mutant-ShutdownBothChecks violated TerminalIsFinal "ShutdownChecksCommandable=FALSE HostStopsAfterTerminalWrite=FALSE" "with neither, shutdown writes destroying over an exit record" TerminalIsFinal
+
+# A fork chain: each process of the program forks its successor and ends
+# between scans, so the kill through the token sees no member until the
+# group is frozen.
+UNSEEN=TRUE
+write_run current-unseen pass "$RULES" "" "the code with a program that no scan shows: every rule holds"
+write_run mutant-FreezesUnseenGroup-unseen violated DestroyedProgramStopped "FreezesUnseenGroup=FALSE" "without the freeze, the kill finds no member in view, and destroy records destroyed while a fork chain runs" DestroyedProgramStopped
+UNSEEN=FALSE
 
 # destroy, list and gc run without /proc, or in another pid namespace or on
 # another machine than the host, so they cannot see the program's group.

@@ -529,6 +529,24 @@ function killProcessGroupBestEffort(pgid: number): void {
   }
 }
 
+// Whether the signal reached a process of the group. ESRCH: none is left.
+// EPERM: only processes of another user are.
+function signalProcessGroup(
+  pgid: number,
+  signal: 'SIGSTOP' | 'SIGCONT',
+): boolean {
+  try {
+    process.kill(processGroupTarget(pgid), signal);
+    return true;
+  } catch (error) {
+    if (hasErrorCode(error, 'ESRCH') || hasErrorCode(error, 'EPERM')) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
 export function isProgramGroupAlive(group: ProgramGroup | null): boolean {
   if (group === null) {
     return false;
@@ -575,21 +593,41 @@ export function stopProgramGroup(group: ProgramGroup | null): void {
     return;
   }
 
-  for (let attempt = 0; attempt < STOP_ATTEMPTS; attempt += 1) {
-    const judgement = judgeLiveGroup(group);
-    if (judgement.verdict !== 'owned') {
-      return;
+  // A member that forks its successor and ends between scans is never in
+  // view. SIGSTOP freezes the group, also a child that a member forks while
+  // the kernel delivers it, and a stopped member stays in view, so a frozen
+  // group that reads gone is judged again. A frozen group that gets no kill
+  // gets SIGCONT, also when a scan throws.
+  let frozen = false;
+  let killed = false;
+  try {
+    for (let attempt = 0; attempt < STOP_ATTEMPTS; attempt += 1) {
+      const judgement = judgeLiveGroup(group);
+      if (judgement.verdict === 'gone') {
+        frozen ||= signalProcessGroup(group.pid, 'SIGSTOP');
+        if (frozen) {
+          continue;
+        }
+      }
+      if (judgement.verdict !== 'owned') {
+        return;
+      }
+      // No pidfd exists for a process group, so the kill races a reused
+      // group id. Reading the witness again shrinks that race to the time
+      // between this read and the kill.
+      const witness = readProcessRow(judgement.witness);
+      if (
+        witness !== null &&
+        judgeProgramGroup(group, group.bootId, [witness]).verdict === 'owned'
+      ) {
+        killProcessGroupBestEffort(group.pid);
+        killed = true;
+        return;
+      }
     }
-    // No pidfd exists for a process group, so the kill races a reused group
-    // id. Reading the witness again shrinks that race to the time between
-    // this read and the kill.
-    const witness = readProcessRow(judgement.witness);
-    if (
-      witness !== null &&
-      judgeProgramGroup(group, group.bootId, [witness]).verdict === 'owned'
-    ) {
-      killProcessGroupBestEffort(group.pid);
-      return;
+  } finally {
+    if (frozen && !killed) {
+      signalProcessGroup(group.pid, 'SIGCONT');
     }
   }
 }

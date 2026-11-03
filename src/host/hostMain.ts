@@ -1221,9 +1221,10 @@ export async function runHost(
     // DECRQSS) in this chunk. This runs after queuing ingestion so the
     // canonical output path is never gated on the reply. The reply is written
     // to the child as input and is not appended to the event log, so it is
-    // absent from snapshots/recordings;
-    // programs that emit these queries put the terminal in raw mode, so the
-    // reply is consumed rather than echoed back into the output stream.
+    // absent from snapshots/recordings. A program that reads the reply turns
+    // off canonical mode and echo first. A query printed from an interactive
+    // shell (`printf '\e]11;?\a'`) gets its reply as typed input at the next
+    // prompt, because readline holds the same mode while it waits.
     const queryReply = terminalQueryResponder.consume(data);
     if (queryReply.length > 0) {
       pty.write(queryReply);

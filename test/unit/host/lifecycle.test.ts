@@ -332,6 +332,19 @@ describe('allocateSession', () => {
     expect(launch).not.toHaveBeenCalled();
   });
 
+  // The program never gets the destroy re-run marker, so the manifest that
+  // inspect shows does not name it either.
+  it.each([
+    [{ FOO: 'bar', AGENT_TTY_DESTROY_RERUN: '1' }, { FOO: 'bar' }],
+    [{ AGENT_TTY_DESTROY_RERUN: '1' }, undefined],
+  ])('records the env %o as %o', async (env, recorded) => {
+    const result = await allocateSession(makeConfig({ env }), () => 4242);
+
+    expect(
+      (await readManifest(manifestPath(result.sessionDirectory))).env,
+    ).toEqual(recorded);
+  });
+
   it('does not launch a host when the shell does not exist', async () => {
     const launch = vi.fn(() => 4242);
 
@@ -1322,7 +1335,10 @@ describe('cliRunsInsideProgramSession', () => {
   it.each([
     ['ttys003', 'ttys003', true],
     ['pts/3', 'pts/3', true],
+    ['ttypa', 'ttypa', true],
+    ['ttyPz', 'ttyPz', true],
     ['ttys003', 'ttys004', false],
+    ['ttypa', 'ttypb', false],
     ['??', '??', false],
     ['?', '?', false],
     ['-', '-', false],

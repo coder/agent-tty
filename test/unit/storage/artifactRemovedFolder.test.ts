@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const fsHooks = vi.hoisted(() => ({
   afterReadFile: undefined as ((path: string) => Promise<void>) | undefined,
   afterMkdir: undefined as ((path: string) => Promise<void>) | undefined,
+  beforeStat: undefined as ((path: string) => Promise<void>) | undefined,
 }));
 
 vi.mock('node:fs/promises', async () => {
@@ -30,7 +31,15 @@ vi.mock('node:fs/promises', async () => {
     }
     return created;
   };
-  return { ...actual, readFile, mkdir };
+  const stat = async (
+    ...args: Parameters<typeof actual.stat>
+  ): ReturnType<typeof actual.stat> => {
+    if (typeof args[0] === 'string') {
+      await fsHooks.beforeStat?.(args[0]);
+    }
+    return await actual.stat(...args);
+  };
+  return { ...actual, readFile, mkdir, stat };
 });
 
 import type * as FsPromises from 'node:fs/promises';
@@ -63,11 +72,12 @@ beforeEach(async () => {
 afterEach(async () => {
   fsHooks.afterReadFile = undefined;
   fsHooks.afterMkdir = undefined;
+  fsHooks.beforeStat = undefined;
   await rm(join(sessionDirectory, '..'), { recursive: true, force: true });
 });
 
 function gcRemovesSessionAfter(
-  hook: 'afterReadFile' | 'afterMkdir',
+  hook: 'afterReadFile' | 'afterMkdir' | 'beforeStat',
   path: string,
 ): void {
   let fired = false;
@@ -89,6 +99,17 @@ describe('artifact writes after gc removed the session folder', () => {
     });
 
     expect(existsSync(sessionDirectory)).toBe(false);
+  });
+
+  it('ensureArtifactsDir reports SESSION_NOT_FOUND when the folder goes before it checks an existing artifacts path', async () => {
+    const artifactsPath = join(sessionDirectory, 'artifacts');
+    await mkdir(artifactsPath);
+    gcRemovesSessionAfter('beforeStat', artifactsPath);
+
+    await expect(ensureArtifactsDir(sessionDirectory)).rejects.toMatchObject({
+      code: 'SESSION_NOT_FOUND',
+      details: { sessionId: 'session-01' },
+    });
   });
 
   it('an artifact manifest append reports SESSION_NOT_FOUND and creates nothing', async () => {

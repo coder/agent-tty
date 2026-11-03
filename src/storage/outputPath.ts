@@ -4,6 +4,7 @@ import {
   access,
   copyFile,
   lstat,
+  mkdir,
   realpath,
   rename,
   rm,
@@ -12,6 +13,7 @@ import {
   basename,
   dirname,
   isAbsolute,
+  join,
   relative,
   resolve,
   sep,
@@ -21,6 +23,7 @@ import process from 'node:process';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
+import { canonicalHomePath } from './home.js';
 
 function isInside(root: string, path: string): boolean {
   const relativePath = relative(root, path);
@@ -30,6 +33,54 @@ function isInside(root: string, path: string): boolean {
       !relativePath.startsWith(`..${sep}`) &&
       !isAbsolute(relativePath))
   );
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function createMissingFolders(
+  directory: string,
+  refuseRealPath: (realPath: string) => void,
+): Promise<void> {
+  const missing: string[] = [];
+  let existing = directory;
+  while (!(await pathExists(existing))) {
+    const parent = dirname(existing);
+    invariant(parent !== existing, 'the filesystem root must exist');
+    missing.unshift(basename(existing));
+    existing = parent;
+  }
+  if (missing.length === 0) {
+    return;
+  }
+
+  let current = await realpath(existing);
+  refuseRealPath(join(current, ...missing));
+  for (const name of missing) {
+    current = join(current, name);
+    try {
+      await mkdir(current);
+    } catch (error) {
+      if (!hasErrorCode(error, 'EEXIST')) {
+        throw error;
+      }
+    }
+    if ((await realpath(current)) !== current) {
+      throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
+        message: `Output folder ${current} resolved to another place while it was being created.`,
+        details: { outputPath: current },
+      });
+    }
+  }
 }
 
 export interface ExplicitOutputPath {
@@ -48,6 +99,17 @@ export async function resolveExplicitOutputPath(
   const resolvedOutputPath = isAbsolute(outputPath)
     ? resolve(outputPath)
     : resolve(process.cwd(), outputPath);
+  const realSessionsRoot = canonicalHomePath(sessionsRoot);
+  const refuseInsideSessions = (realPath: string): void => {
+    if (isInside(realSessionsRoot, realPath)) {
+      throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
+        message: `Output path ${realPath} is inside agent-tty session storage (${realSessionsRoot}). Choose a path outside it.`,
+        details: { out: outputPath, outputPath: realPath },
+      });
+    }
+  };
+
+  await createMissingFolders(dirname(resolvedOutputPath), refuseInsideSessions);
   const realParentDirectory = await realpath(dirname(resolvedOutputPath));
   const parentStats = await lstat(realParentDirectory, { bigint: true });
 
@@ -67,20 +129,7 @@ export async function resolveExplicitOutputPath(
     'output path must remain within the resolved parent directory',
   );
 
-  const realSessionsRoot = await realpath(sessionsRoot).catch(
-    (error: unknown) => {
-      if (hasErrorCode(error, 'ENOENT')) {
-        return null;
-      }
-      throw error;
-    },
-  );
-  if (realSessionsRoot !== null && isInside(realSessionsRoot, realOutputPath)) {
-    throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
-      message: `Output path ${realOutputPath} is inside agent-tty session storage (${realSessionsRoot}). Choose a path outside it.`,
-      details: { out: outputPath, outputPath: realOutputPath },
-    });
-  }
+  refuseInsideSessions(realOutputPath);
   return {
     path: realOutputPath,
     parentDev: parentStats.dev,

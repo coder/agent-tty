@@ -149,6 +149,20 @@ export async function ensureArtifactsDir(sessionDir: string): Promise<string> {
     if (!hasErrorCode(error, 'EEXIST')) {
       throw error;
     }
+
+    const stats = await stat(directory).catch(async (statError: unknown) => {
+      const removed = await sessionNotFoundIfRemoved(sessionDir, statError);
+      if (removed !== statError) {
+        throw removed;
+      }
+      return undefined;
+    });
+    if (stats?.isDirectory() !== true) {
+      throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+        message: `Artifacts path ${directory} is not a folder.`,
+        details: { path: directory },
+      });
+    }
   }
 
   return directory;
