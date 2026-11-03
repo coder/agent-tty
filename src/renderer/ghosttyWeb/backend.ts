@@ -696,7 +696,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
 
       const eventTimestampMs = parseEventTimestampMs(event.ts, event.seq);
       if (previousProcessedEventTimestampMs === null) {
-        scheduleStartedAtMs = Date.now();
+        scheduleStartedAtMs = performance.now();
       } else {
         const interEventDelayMs =
           eventTimestampMs - previousProcessedEventTimestampMs;
@@ -715,7 +715,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           pendingSinceTimestampMs !== null &&
           eventTimestampMs - pendingSinceTimestampMs >=
             resolvedMinFrameHoldMs &&
-          Date.now() - scheduleStartedAtMs <= scheduledElapsedMs
+          performance.now() - scheduleStartedAtMs <= scheduledElapsedMs
         ) {
           await flushOutputBatch();
         }
@@ -724,7 +724,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         await waitForDelay(
           Math.max(
             0,
-            Math.round(scheduledElapsedMs - (Date.now() - scheduleStartedAtMs)),
+            Math.round(
+              scheduledElapsedMs - (performance.now() - scheduleStartedAtMs),
+            ),
           ),
         );
       }
