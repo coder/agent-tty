@@ -383,12 +383,10 @@ describe('screenshot command', () => {
     );
   });
 
-  it('says when the missing glyph list is truncated', async () => {
-    const result = createScreenshotResult({
-      missingGlyphs: [{ codePoint: 'U+0378', cells: [{ row: 1, col: 6 }] }],
-      missingGlyphsTruncated: true,
-    });
-    mocks.sendRpc.mockResolvedValue(result);
+  async function glyphLines(
+    fields: Pick<ScreenshotResult, 'missingGlyphs' | 'missingGlyphsTruncated'>,
+  ): Promise<string[]> {
+    mocks.sendRpc.mockResolvedValue(createScreenshotResult(fields));
 
     await runScreenshotCommand({
       context: TEST_CONTEXT,
@@ -396,13 +394,32 @@ describe('screenshot command', () => {
       sessionId: 'session-01',
     });
 
-    expect(mocks.emitSuccess).toHaveBeenCalledWith(
-      expect.objectContaining({
-        lines: expect.arrayContaining([
-          'Missing glyphs (drawn as boxes): U+0378, and more',
-        ]) as unknown,
+    const [output] = mocks.emitSuccess.mock.calls.at(-1) as [
+      { lines: string[] },
+    ];
+    return output.lines.filter((line) => /glyph/iu.test(line));
+  }
+
+  it('says on its own line when the glyph check stopped early', async () => {
+    expect(
+      await glyphLines({
+        missingGlyphs: [{ codePoint: 'U+0378', cells: [{ row: 1, col: 6 }] }],
+        missingGlyphsTruncated: true,
       }),
-    );
+    ).toEqual([
+      'Missing glyphs (drawn as boxes): U+0378',
+      'Glyph check incomplete',
+    ]);
+  });
+
+  it('claims no box when an incomplete glyph check found none', async () => {
+    expect(
+      await glyphLines({ missingGlyphs: [], missingGlyphsTruncated: true }),
+    ).toEqual(['Glyph check incomplete']);
+  });
+
+  it('prints no glyph line when the check found no box', async () => {
+    expect(await glyphLines({ missingGlyphs: [] })).toEqual([]);
   });
 
   it('threads showCursor to running-session screenshot RPC requests', async () => {
