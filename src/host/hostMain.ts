@@ -6,6 +6,7 @@ import {
   matchRenderWaitSnapshot,
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
+import { RENDER_WAIT_POLL_INTERVAL_MS } from '../renderWait/limits.js';
 import { EventLog } from './eventLog.js';
 import { captureHost, writeHostRecord } from './hostRecord.js';
 import {
@@ -1068,7 +1069,6 @@ export async function runHost(
 
       const rendererName = resolveHostRendererName(requestedRendererName);
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
-      const pollIntervalMs = 200;
       const waitScope = new ResourceScope();
       let lastVisibleText: string | undefined;
       let lastTextChangeAt = Date.now();
@@ -1161,7 +1161,7 @@ export async function runHost(
               pollInFlight = false;
             }
           })();
-        }, pollIntervalMs);
+        }, RENDER_WAIT_POLL_INTERVAL_MS);
 
         waitScope.add('waitForRender poll interval', () => {
           clearInterval(checkInterval);
