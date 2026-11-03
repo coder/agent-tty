@@ -99,12 +99,13 @@ function inTimeNamespace(timeNamespace: string | null | undefined): boolean {
   }
 }
 
-// null when no file names the machine, as in many container images.
+// null when no file names the machine, as in many container images. On
+// first boot, systemd writes `uninitialized` to /etc/machine-id.
 function readMachineId(): string | null {
   for (const path of ['/etc/machine-id', '/var/lib/dbus/machine-id']) {
     try {
       const machineId = readFileSync(path, 'utf8').trim();
-      if (machineId.length > 0) {
+      if (/^[0-9a-f]{32}$/.test(machineId)) {
         return machineId;
       }
     } catch {
