@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
+import { constants, type BigIntStats } from 'node:fs';
 import {
   access,
   copyFile,
@@ -92,8 +92,18 @@ export async function assertOutputParentUnchanged(
   output: ExplicitOutputPath,
 ): Promise<void> {
   const parentDirectory = dirname(output.path);
-  const realParentDirectory = await realpath(parentDirectory);
-  const parentStats = await lstat(parentDirectory, { bigint: true });
+  let realParentDirectory: string;
+  let parentStats: BigIntStats;
+  try {
+    realParentDirectory = await realpath(parentDirectory);
+    parentStats = await lstat(parentDirectory, { bigint: true });
+  } catch (error) {
+    throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
+      message: `Output folder ${parentDirectory} could not be checked again before the write. Nothing was written to ${output.path}.`,
+      details: { outputPath: output.path },
+      cause: error,
+    });
+  }
   if (
     realParentDirectory !== parentDirectory ||
     parentStats.dev !== output.parentDev ||
