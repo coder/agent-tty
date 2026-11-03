@@ -1148,7 +1148,11 @@ export async function runHost(
 
               consecutiveFailures += 1;
               if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
-                reject(pollError);
+                reject(
+                  pollError instanceof Error
+                    ? pollError
+                    : new Error(String(pollError)),
+                );
                 return;
               }
               // Transient — retry on next poll.
