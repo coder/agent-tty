@@ -4,7 +4,10 @@ import { resolve } from 'node:path';
 import type { CommandContext } from '../context.js';
 
 import { emitSuccess } from '../output.js';
-import { reconcileSession } from '../../host/lifecycle.js';
+import {
+  reconcileSession,
+  removeDeadHostSocket,
+} from '../../host/lifecycle.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import {
   isCollectableSessionStatus,
@@ -89,6 +92,10 @@ export interface GcDependencies {
   ) => Promise<void>;
   readManifestIfExists: (path: string) => Promise<SessionRecord | null>;
   reconcileSession: (sessionDirectory: string) => Promise<void>;
+  removeDeadHostSocket: (
+    sessionDirectory: string,
+    manifest: SessionRecord,
+  ) => Promise<void>;
   now: () => Date;
 }
 
@@ -98,6 +105,7 @@ const defaultDependencies: GcDependencies = {
   rm,
   readManifestIfExists,
   reconcileSession,
+  removeDeadHostSocket,
   now: () => new Date(),
 };
 
@@ -440,6 +448,11 @@ export async function gcSessions(
         continue;
       }
 
+      // Before the rm, which deletes the host.json that the host check reads.
+      await dependencies.removeDeadHostSocket(
+        sessionDirectory,
+        finalManifest ?? manifestAfter,
+      );
       try {
         // A reconcile or destroy write can land during the rm and make its
         // last rmdir fail with ENOTEMPTY. A retry deletes that late file.

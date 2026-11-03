@@ -8,6 +8,7 @@ import { emitSuccess } from '../output.js';
 import { DEFAULT_IDLE_TIMEOUT_MS } from '../../config/defaults.js';
 import {
   allocateSession,
+  ensureSocketRoot,
   launchHost,
   type LaunchedHost,
 } from '../../host/lifecycle.js';
@@ -134,6 +135,10 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
       details: { idleTimeoutMs },
     });
   }
+
+  // The host's stdio goes nowhere, so a socket root that its listen would
+  // refuse is reported here.
+  await ensureSocketRoot();
 
   let sessionId: string | undefined;
   let host: LaunchedHost | undefined;

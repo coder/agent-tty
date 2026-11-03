@@ -1,6 +1,14 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { chmod, mkdir, readdir, rmdir, stat, unlink } from 'node:fs/promises';
+import {
+  chmod,
+  lstat,
+  mkdir,
+  readdir,
+  rmdir,
+  stat,
+  unlink,
+} from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -25,9 +33,11 @@ import {
 } from '../storage/manifests.js';
 import {
   destroyMarkerPath,
+  legacySocketPath,
   manifestPath,
   sessionDir,
   socketPath,
+  socketRootDirectory,
 } from '../storage/sessionPaths.js';
 import { makeAbortError, throwIfAborted } from '../util/abort.js';
 import { invariant } from '../util/assert.js';
@@ -41,7 +51,7 @@ import {
   type ProgramGroup,
 } from './programGroup.js';
 import { judgeHost, readHostRecord, type HostRecord } from './hostRecord.js';
-import { sendRpc } from './rpcClient.js';
+import { isOwnSocket, sendRpc } from './rpcClient.js';
 
 const DESTROY_POLL_INTERVAL_MS = 100;
 const DESTROY_MAX_ATTEMPTS = 50;
@@ -416,6 +426,79 @@ export async function removeSocketDirectoryBestEffort(
   }
 }
 
+// Removes the socket at the old path of the same session, which a host of an
+// older version listens at. Remove this after one minor release.
+async function removeLegacySocketBestEffort(socketFile: string): Promise<void> {
+  const oldSocketFile = legacySocketPath(socketFile);
+  if (oldSocketFile === null || !(await isOwnSocket(oldSocketFile))) {
+    return;
+  }
+  try {
+    await unlinkIfPresent(oldSocketFile);
+    await removeSocketDirectoryIfEmpty(oldSocketFile);
+  } catch (error) {
+    console.debug('could not remove the old socket:', error);
+  }
+}
+
+// The host unlinks its socket when it closes. A host that died after its
+// terminal write left it, and reconcileSession skips a terminal manifest.
+// Remove it only when the host is proven gone: hostPid is null, or
+// judgeHost reads the host dead.
+export async function removeDeadHostSocket(
+  sessionDirectory: string,
+  manifest: SessionRecord,
+): Promise<void> {
+  const socketFile = socketPath(sessionDirectory);
+  try {
+    if (isHostAlive(await readSessionHost(sessionDirectory, manifest))) {
+      return;
+    }
+    await unlinkIfPresent(socketFile);
+    await removeSocketDirectoryIfEmpty(socketFile);
+  } catch (error) {
+    console.debug('could not remove the socket of a dead host:', error);
+  }
+  await removeLegacySocketBestEffort(socketFile);
+}
+
+// Other users can create entries in /tmp, so the root must be a directory,
+// not a symlink, of this uid, with no group or other bits. Another user can
+// still create the root first and so block this uid.
+export async function ensureSocketRoot(
+  root: string = socketRootDirectory(),
+): Promise<void> {
+  const uid = process.getuid?.();
+  if (uid === undefined) {
+    return;
+  }
+  try {
+    await mkdir(root, { mode: 0o700 });
+  } catch (error) {
+    if (!hasErrorCode(error, 'EEXIST')) {
+      throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+        message: `Failed to create the socket root ${root}.`,
+        details: { path: root },
+        cause: error,
+      });
+    }
+  }
+  const stats = await lstat(root);
+  if (stats.isDirectory() && stats.uid === uid && (stats.mode & 0o077) === 0) {
+    return;
+  }
+  const kind = stats.isSymbolicLink()
+    ? 'a symlink'
+    : stats.isDirectory()
+      ? 'a directory'
+      : 'a file';
+  const mode = (stats.mode & 0o777).toString(8);
+  throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+    message: `The socket root ${root} is ${kind} of uid ${String(stats.uid)} with mode ${mode}. It must be a directory of uid ${String(uid)} with mode 700: remove it or fix it.`,
+    details: { path: root, ownerUid: stats.uid, mode },
+  });
+}
+
 const SOCKET_LISTEN_ATTEMPTS = 5;
 
 // libuv reports a bind in a missing directory as EACCES.
@@ -438,6 +521,7 @@ export async function listenInSocketDirectory(
   listen: () => Promise<void>,
 ): Promise<void> {
   const socketDirectory = dirname(socketFile);
+  await ensureSocketRoot();
   for (let attempt = 1; ; attempt += 1) {
     try {
       await mkdir(socketDirectory, { recursive: true });
@@ -767,6 +851,7 @@ async function recordDestroyed(
   }
   await unlinkIfPresent(socketFile);
   await removeSocketDirectoryIfEmpty(socketFile);
+  await removeLegacySocketBestEffort(socketFile);
 }
 
 async function stopSessionProcesses(
@@ -810,6 +895,7 @@ export async function destroySession(
   const manifest = await readSessionManifestOrThrow(sessionId, manifestFile);
 
   if (isDestroyedSessionStatus(manifest.status)) {
+    await removeDeadHostSocket(sessionDirectory, manifest);
     throw makeCliError(ERROR_CODES.SESSION_ALREADY_DESTROYED, {
       message: `Session "${sessionId}" is already destroyed.`,
       details: { sessionId },

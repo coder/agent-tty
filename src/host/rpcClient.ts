@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { lstat } from 'node:fs/promises';
 import net from 'node:net';
+import { dirname } from 'node:path';
+import process from 'node:process';
 
 import { CliError } from '../cli/errors.js';
 import {
@@ -19,6 +22,7 @@ import {
   makeAbortError,
   throwIfAborted,
 } from '../util/abort.js';
+import { legacySocketPath } from '../storage/sessionPaths.js';
 import { invariant } from '../util/assert.js';
 import { ResourceScope } from '../util/resourceScope.js';
 
@@ -97,7 +101,63 @@ function toResponseCliError(code: string, message: string): CliError {
   return new CliError(code, message);
 }
 
+// A socket that lstat shows as ours, in a folder that no other user can
+// write, so that nobody can swap it before the connect.
+export async function isOwnSocket(socketFile: string): Promise<boolean> {
+  const uid = process.getuid?.();
+  if (uid === undefined) {
+    return false;
+  }
+  try {
+    const [directory, socket] = await Promise.all([
+      lstat(dirname(socketFile)),
+      lstat(socketFile),
+    ]);
+    return (
+      directory.isDirectory() &&
+      directory.uid === uid &&
+      (directory.mode & 0o022) === 0 &&
+      socket.isSocket() &&
+      socket.uid === uid
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isMissingSocket(error: unknown): boolean {
+  return (
+    error instanceof CliError &&
+    error.code === ERROR_CODES.HOST_UNREACHABLE &&
+    error.details.errno === 'ENOENT'
+  );
+}
+
 export async function sendRpc(
+  socketPath: string,
+  method: string,
+  params?: Record<string, unknown>,
+  timeoutMs?: number,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  try {
+    return await sendRpcAt(socketPath, method, params, timeoutMs, signal);
+  } catch (error) {
+    // A host that an older version started listens at the old path. Remove
+    // this fallback after one minor release.
+    const oldSocketPath = legacySocketPath(socketPath);
+    if (
+      oldSocketPath === null ||
+      !isMissingSocket(error) ||
+      !(await isOwnSocket(oldSocketPath))
+    ) {
+      throw error;
+    }
+    return await sendRpcAt(oldSocketPath, method, params, timeoutMs, signal);
+  }
+}
+
+async function sendRpcAt(
   socketPath: string,
   method: string,
   params?: Record<string, unknown>,

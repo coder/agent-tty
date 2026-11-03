@@ -68,7 +68,7 @@ describe.skipIf(process.platform === 'win32')('ensureSocketRoot', () => {
 
     await expect(ensureSocketRoot(root)).rejects.toMatchObject({
       code: 'STORAGE_WRITE_ERROR',
-      message: expect.stringContaining(root),
+      message: expect.stringContaining(root) as string,
       details: { path: root, ownerUid: process.getuid?.() },
     });
   });
@@ -80,7 +80,7 @@ describe.skipIf(process.platform === 'win32')('ensureSocketRoot', () => {
 
     await expect(ensureSocketRoot(root)).rejects.toMatchObject({
       code: 'STORAGE_WRITE_ERROR',
-      message: expect.stringContaining(`uid ${String(uid)}`),
+      message: expect.stringContaining(`uid ${String(uid)}`) as string,
       details: { path: root, ownerUid: uid },
     });
   });
