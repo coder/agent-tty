@@ -387,6 +387,6 @@ Stop and report back (do not improvise) if:
   need their own hardening.
 - Deferred out of this plan (and why): hardening the `/tmp/agent-tty/` socket-root
   parent (plan 001 already deferred it; per-Home socket dirs are `0o700`, which is
-  sufficient), and any retroactive chmod of event logs in Homes created before
+  sufficient; it landed later in #252 as `/tmp/agent-tty-<uid>/`), and any retroactive chmod of event logs in Homes created before
   this change ships (those keep their old mode until rewritten — acceptable; new
   sessions are protected).
