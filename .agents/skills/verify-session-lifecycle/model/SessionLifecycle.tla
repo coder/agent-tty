@@ -149,6 +149,8 @@ VARIABLES
     dmark,       \* the destroy marker file exists in the session directory
     rec,         \* program.json names the program with its token
     startFailed, \* ghost: the host died because its files were missing
+    readRepaired, \* ghost: a reconcile's first read wrote destroyed next to
+                 \*   the destroy marker
     sock,        \* the RPC socket file exists (it is outside the directory)
     cpc,         \* create: "alloc", "write", "launch", "done", "failed"
                  \*   (it gave up on its host)
@@ -211,7 +213,7 @@ VARIABLES
 
 diskVars == <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal, wasExited,
               wasNamed, dmark>>
-ghostVars == <<startFailed>>
+ghostVars == <<startFailed, readRepaired>>
 hostVars == <<hostAlive, hpc, hex, rsz, prog, foreign, left>>
 groupVars == <<rec, reused, hitUnrelated, diedUnrecorded, passedReused,
                hrec, hreused, hitUnrelatedHost>>
@@ -226,7 +228,7 @@ Init ==
     /\ mcode = FALSE /\ mchild = FALSE
     /\ wasTerminal = FALSE /\ wasExited = FALSE /\ wasNamed = FALSE
     /\ dmark = FALSE
-    /\ rec = FALSE /\ startFailed = FALSE
+    /\ rec = FALSE /\ startFailed = FALSE /\ readRepaired = FALSE
     /\ sock = FALSE
     /\ cpc = "alloc"
     /\ hostAlive = FALSE /\ hpc = "none" /\ hex = "none" /\ rsz = "none"
@@ -351,6 +353,7 @@ GroupSeen(kind) ==
 \* The host fails to start because its files are missing or were rewritten.
 HostFailsToStart ==
     /\ startFailed' = TRUE
+    /\ readRepaired' = readRepaired
     /\ hostAlive' = FALSE
     /\ hpc' = "dead"
     /\ hex' = IF hex = "none" THEN "none" ELSE "gone"
@@ -783,16 +786,17 @@ ReconcileReads(p) ==
           /\ mst # "destroyed"
           THEN /\ Write("destroyed", FALSE, "none", mcode, FALSE)
                /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
+               /\ readRepaired' = TRUE
                /\ UNCHANGED rd
        ELSE IF mst = "none" \/ (ReconcileSkipsTerminal /\ mst \in Terminal)
           THEN /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
-               /\ UNCHANGED <<rd, diskVars>>
+               /\ UNCHANGED <<rd, diskVars, readRepaired>>
           ELSE /\ pc' = [pc EXCEPT ![p] = "r_check"]
                /\ rd' = [rd EXCEPT ![p] = [st |-> mst, pid |-> mpid,
                                            code |-> mcode, child |-> mchild,
                                            grp |-> "none"]]
-               /\ UNCHANGED diskVars
-    /\ UNCHANGED <<ghostVars, sock, cpc, hostVars, shutVars, gres, lruns,
+               /\ UNCHANGED <<diskVars, readRepaired>>
+    /\ UNCHANGED <<startFailed, sock, cpc, hostVars, shutVars, gres, lruns,
                    destroyVars, groupVars>>
 
 \* After its group kill, reconcileSession waits for the group, or, without
@@ -1275,7 +1279,7 @@ Spec == Init /\ [][Next]_vars
 TypeOK ==
     /\ dmark => dir
     /\ {dir, mpid, mchild, wasTerminal, wasExited, wasNamed, dmark, startFailed,
-        sock,
+        readRepaired, sock,
         hostAlive, prog, foreign, sig, dforce, dinside, dsaw, dkill, rec, left,
         reused, hitUnrelated, diedUnrecorded, passedReused, hrec, hreused,
         hitUnrelatedHost}
@@ -1406,10 +1410,7 @@ NoUnrelatedHostKilled == ~hitUnrelatedHost
 WitnessGcRemovesSession == gres # "removed"
 WitnessReconcileRepairs ==
     ~(dmark /\ mst = "failed" /\ \E p \in Readers : pc[p] = "r_repair")
-\* A reader's first read already wrote destroyed over the failed that the
-\* other reader wrote and has yet to repair.
-WitnessMarkedRepaired ==
-    ~(dmark /\ mst = "destroyed" /\ \E p \in Readers : pc[p] = "r_repair")
+WitnessMarkedRepaired == ~readRepaired
 WitnessCreateGivesUp ==
     ~(cpc = "failed" /\ sig /\ mst = "destroyed" /\ ~hostAlive)
 WitnessSessionServes == ~(hpc = "serving" /\ sock /\ mst = "running" /\ mpid)
