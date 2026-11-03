@@ -160,7 +160,11 @@ import {
   writeProgramRecord,
   type ProgramRecord,
 } from '../../../src/host/programGroup.js';
-import { captureHost, writeHostRecord } from '../../../src/host/hostRecord.js';
+import {
+  captureHost,
+  writeHostRecord,
+  type HostRecord,
+} from '../../../src/host/hostRecord.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
 import { manifestPath, sessionDir } from '../../../src/storage/sessionPaths.js';
@@ -917,6 +921,24 @@ describe('a hostPid that may no longer name the host', () => {
       });
       expect(kill).not.toHaveBeenCalledWith(host, 'SIGKILL');
       expect(isRunning(host)).toBe(true);
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux a CLI in another time namespace still records failed for a host that stays a zombie',
+    async () => {
+      const zombie = await startZombie();
+      const directory = await seedHost(zombie, 'none');
+      const own = captureHost(process.pid);
+      expect(own).not.toBeNull();
+      writeHostRecord(directory, { ...(own as HostRecord), pid: zombie });
+      fsHooks.links = new Map([['/proc/self/ns/time', 'time:[1]']]);
+
+      await reconcileSession(directory);
+
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'failed',
+      });
     },
   );
 
