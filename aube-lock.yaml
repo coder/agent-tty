@@ -21,7 +21,7 @@ time:
   '@alcalzone/ansi-tokenize@0.3.0': 2026-02-20T13:12:49.245Z
   '@babel/code-frame@7.29.7': 2026-05-25T11:15:38.208Z
   '@babel/helper-validator-identifier@7.29.7': 2026-05-25T11:15:31.539Z
-  '@coder/libghostty-vt-node@0.1.0-beta.5': 2026-11-01T22:00:53.181Z
+  '@coder/libghostty-vt-node@0.1.0-beta.7': 2026-11-03T14:55:40.835Z
   '@conventional-commits/parser@0.4.1': 2021-01-07T02:41:52.208Z
   '@esbuild/darwin-arm64@0.28.1': 2026-06-11T22:44:42.682Z
   '@esbuild/darwin-x64@0.28.1': 2026-06-11T22:44:48.973Z
@@ -397,8 +397,8 @@ importers:
         version: 4.1.11(@types/node@25.5.0)(vite@8.1.6(@types/node@25.5.0)(esbuild@0.28.1)(tsx@4.21.0)(yaml@2.8.4))
     optionalDependencies:
       '@coder/libghostty-vt-node':
-        specifier: 0.1.0-beta.5
-        version: 0.1.0-beta.5
+        specifier: 0.1.0-beta.7
+        version: 0.1.0-beta.7
 
 packages:
 
@@ -414,8 +414,8 @@ packages:
     resolution: {integrity: sha512-qehxGkRj55h/ff8EMaJ+cYhyaKlHIxqYDn682wQD7RNp9UujOQsHog2uS0r2vzr4pW+sXf90NeeayjcNaX3fFg==}
     engines: {node: '>=6.9.0'}
 
-  '@coder/libghostty-vt-node@0.1.0-beta.5':
-    resolution: {integrity: sha512-tgbkhc5kAo1JzO82ezgj6DR3dKdafSJJIOo7wmV8LS3HRQeHv03WZ65YxTj7bs58qX3ypl/AjdDSE9pb/g0LVg==}
+  '@coder/libghostty-vt-node@0.1.0-beta.7':
+    resolution: {integrity: sha512-qdFQhM97WDBQURCi3Pb48xWY/K0YDWqnf2p3H6pLokMAg6vTFeaZCzsh2YuqPCwD7JMG9JRfLL3obpRK9h22Kg==}
     engines: {node: '>=20.19'}
 
   '@conventional-commits/parser@0.4.1':
@@ -1918,7 +1918,7 @@ snapshots:
 
   '@babel/helper-validator-identifier@7.29.7': {}
 
-  '@coder/libghostty-vt-node@0.1.0-beta.5':
+  '@coder/libghostty-vt-node@0.1.0-beta.7':
     dependencies:
       node-addon-api: 8.7.0
       node-gyp-build: 4.8.4

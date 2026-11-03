@@ -25,6 +25,7 @@ import {
 } from '../storage/manifests.js';
 import {
   destroyMarkerPath,
+  legacySocketPath,
   manifestPath,
   sessionDir,
   socketPath,
@@ -42,6 +43,7 @@ import {
 } from './programGroup.js';
 import { judgeHost, readHostRecord, type HostRecord } from './hostRecord.js';
 import { sendRpc } from './rpcClient.js';
+import { ensureSocketRoot, isOwnLegacySocket } from './socketRoot.js';
 
 const DESTROY_POLL_INTERVAL_MS = 100;
 const DESTROY_MAX_ATTEMPTS = 50;
@@ -428,6 +430,42 @@ export async function removeSocketDirectoryBestEffort(
   }
 }
 
+// Removes the socket at the old path of the same session, which a host of an
+// older version listens at. Remove this after one minor release.
+async function removeLegacySocketBestEffort(socketFile: string): Promise<void> {
+  const oldSocketFile = legacySocketPath(socketFile);
+  if (oldSocketFile === null || !(await isOwnLegacySocket(oldSocketFile))) {
+    return;
+  }
+  try {
+    await unlinkIfPresent(oldSocketFile);
+    await removeSocketDirectoryIfEmpty(oldSocketFile);
+  } catch (error) {
+    console.debug('could not remove the old socket:', error);
+  }
+}
+
+// The host unlinks its socket when it closes. A host that died after its
+// terminal write left it, and reconcileSession skips a terminal manifest.
+// Remove it only when the host is proven gone: hostPid is null, or
+// judgeHost reads the host dead.
+export async function removeDeadHostSocket(
+  sessionDirectory: string,
+  manifest: SessionRecord,
+): Promise<void> {
+  const socketFile = socketPath(sessionDirectory);
+  try {
+    if (isHostAlive(await readSessionHost(sessionDirectory, manifest))) {
+      return;
+    }
+    await unlinkIfPresent(socketFile);
+    await removeSocketDirectoryIfEmpty(socketFile);
+  } catch (error) {
+    console.debug('could not remove the socket of a dead host:', error);
+  }
+  await removeLegacySocketBestEffort(socketFile);
+}
+
 const SOCKET_LISTEN_ATTEMPTS = 5;
 
 // libuv reports a bind in a missing directory as EACCES.
@@ -450,6 +488,7 @@ export async function listenInSocketDirectory(
   listen: () => Promise<void>,
 ): Promise<void> {
   const socketDirectory = dirname(socketFile);
+  await ensureSocketRoot();
   for (let attempt = 1; ; attempt += 1) {
     try {
       await mkdir(socketDirectory, { recursive: true });
@@ -784,6 +823,7 @@ async function recordDestroyed(
   }
   await unlinkIfPresent(socketFile);
   await removeSocketDirectoryIfEmpty(socketFile);
+  await removeLegacySocketBestEffort(socketFile);
 }
 
 async function stopSessionProcesses(
@@ -841,6 +881,7 @@ export async function destroySession(
   const manifest = await readSessionManifestOrThrow(sessionId, manifestFile);
 
   if (isDestroyedSessionStatus(manifest.status)) {
+    await removeDeadHostSocket(sessionDirectory, manifest);
     throw makeCliError(ERROR_CODES.SESSION_ALREADY_DESTROYED, {
       message: `Session "${sessionId}" is already destroyed.`,
       details: { sessionId },

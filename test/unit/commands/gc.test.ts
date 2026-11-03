@@ -78,6 +78,7 @@ function createMockDependencies(
 ): {
   dependencies: GcDependencies;
   removedPaths: string[];
+  socketCleanups: string[];
   bytesBySession: Map<string, number>;
 } {
   const sessionsRoot = `${home}/sessions`;
@@ -86,6 +87,7 @@ function createMockDependencies(
   const manifestReadSequences = new Map<string, Array<SessionRecord | null>>();
   const reconcileStore = new Map<string, SessionRecord | null | undefined>();
   const removedPaths: string[] = [];
+  const socketCleanups: string[] = [];
   const bytesBySession = new Map<string, number>();
   const sessionIds = Object.keys(sessions);
 
@@ -196,11 +198,16 @@ function createMockDependencies(
       }
       return Promise.resolve();
     },
+    removeDeadHostSocket: (sessionDirectory: string, manifest) => {
+      socketCleanups.push(`${sessionDirectory} ${manifest.status}`);
+      return Promise.resolve();
+    },
   };
 
   return {
     dependencies,
     removedPaths,
+    socketCleanups,
     bytesBySession,
   };
 }
@@ -268,6 +275,48 @@ describe('gc command helpers', () => {
       totalBytesFreed: bytesBySession.get('exited-01'),
     });
     expect(removedPaths).toEqual([`${home}/sessions/exited-01`]);
+  });
+
+  it('removes the socket of a dead host before it removes the folder, and only for a removed session', async () => {
+    const home = '/tmp/agent-tty';
+    const { dependencies, removedPaths, socketCleanups } =
+      createMockDependencies(home, {
+        'exited-01': {
+          manifest: createSessionRecord({
+            sessionId: 'exited-01',
+            status: 'exited',
+            createdAt: '2026-03-20T08:00:00.000Z',
+          }),
+        },
+        'running-01': {
+          manifest: createSessionRecord({
+            sessionId: 'running-01',
+            status: 'running',
+            createdAt: '2026-03-20T09:00:00.000Z',
+          }),
+        },
+      });
+    const rmDirectory = dependencies.rm;
+    dependencies.rm = async (path, options) => {
+      expect(socketCleanups).toEqual([`${path} exited`]);
+      await rmDirectory(path, options);
+    };
+
+    await gcSessions(
+      home,
+      { dryRun: false, staleOnly: false, olderThanMs: null },
+      dependencies,
+    );
+    expect(removedPaths).toEqual([`${home}/sessions/exited-01`]);
+    expect(socketCleanups).toEqual([`${home}/sessions/exited-01 exited`]);
+
+    socketCleanups.length = 0;
+    await gcSessions(
+      home,
+      { dryRun: true, staleOnly: false, olderThanMs: null },
+      dependencies,
+    );
+    expect(socketCleanups).toEqual([]);
   });
 
   it('skips deleting a session that restarts after the exited check', async () => {
