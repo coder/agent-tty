@@ -165,6 +165,84 @@ describe('GhosttyWebBackend unit guards', () => {
     expect(graphemes).toHaveBeenCalledTimes(1);
   });
 
+  it('runs the recorded glyph check inside the final frame hold', async () => {
+    vi.useFakeTimers();
+    const backend = createBackend();
+    const graphemes = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({ missingGlyphs: [{ codePoint: 'U+0378' }] });
+          }, 300);
+        }),
+    );
+    const page = {
+      isClosed: () => false,
+      evaluate: vi.fn(() =>
+        Promise.resolve({ seen: ['\u0378'], complete: true }),
+      ),
+    };
+    Object.assign(backend as object, {
+      glyphCheckMemo: { graphemes },
+      isBooted: true,
+      page,
+      resizeBridge: () => Promise.resolve(),
+      flushOutputBatch: () => Promise.resolve(),
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 80,
+            rows: 24,
+            cursorRow: 0,
+            cursorCol: 0,
+          }),
+        ),
+    });
+
+    try {
+      let settledAt: number | undefined;
+      const replay = backend
+        .replayWithTiming(
+          {
+            sessionId: 'renderer-unit-session',
+            initialCols: 80,
+            initialRows: 24,
+            targetSeq: 0,
+            events: [
+              {
+                seq: 0,
+                ts: '2026-03-19T12:00:00.000Z',
+                type: 'output',
+                payload: { data: '\u0378' },
+              },
+            ],
+          },
+          { mode: 'recorded', finalFrameHoldMs: 1_000 },
+        )
+        .then(() => {
+          settledAt = Date.now();
+        });
+      const startedAt = Date.now();
+      await vi.advanceTimersByTimeAsync(2_000);
+      await replay;
+
+      expect(graphemes).toHaveBeenCalledTimes(1);
+      expect(graphemes).toHaveBeenCalledWith(
+        page,
+        new Set(['\u0378']),
+        true,
+        1_000,
+      );
+      expect((settledAt ?? Infinity) - startedAt).toBeLessThanOrEqual(1_100);
+      await expect(backend.recordedMissingGlyphs()).resolves.toEqual({
+        missingGlyphs: [{ codePoint: 'U+0378' }],
+      });
+      expect(graphemes).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('flushes and skips run_complete events during replay', async () => {
     const backend = createBackend();
     const flushedChunks: string[][] = [];
