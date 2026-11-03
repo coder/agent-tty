@@ -28,8 +28,11 @@ vi.mock('../../../src/cli/output.js', () => ({
 
 vi.mock('../../../src/host/lifecycle.js', () => ({
   allocateSession: mocks.allocateSession,
-  ensureSocketRoot: mocks.ensureSocketRoot,
   launchHost: mocks.launchHost,
+}));
+
+vi.mock('../../../src/host/socketRoot.js', () => ({
+  ensureSocketRoot: mocks.ensureSocketRoot,
 }));
 
 // The readiness loop waits 100 ms between its 50 attempts.

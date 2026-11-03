@@ -1,8 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { lstat } from 'node:fs/promises';
 import net from 'node:net';
-import { dirname } from 'node:path';
-import process from 'node:process';
 
 import { CliError } from '../cli/errors.js';
 import {
@@ -25,6 +22,7 @@ import {
 import { legacySocketPath } from '../storage/sessionPaths.js';
 import { invariant } from '../util/assert.js';
 import { ResourceScope } from '../util/resourceScope.js';
+import { isOwnSocket } from './socketRoot.js';
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_RPC_BUFFER_BYTES = 1_048_576;
@@ -99,30 +97,6 @@ function toResponseCliError(code: string, message: string): CliError {
   }
 
   return new CliError(code, message);
-}
-
-// A socket that lstat shows as ours, in a folder that no other user can
-// write, so that nobody can swap it before the connect.
-export async function isOwnSocket(socketFile: string): Promise<boolean> {
-  const uid = process.getuid?.();
-  if (uid === undefined) {
-    return false;
-  }
-  try {
-    const [directory, socket] = await Promise.all([
-      lstat(dirname(socketFile)),
-      lstat(socketFile),
-    ]);
-    return (
-      directory.isDirectory() &&
-      directory.uid === uid &&
-      (directory.mode & 0o022) === 0 &&
-      socket.isSocket() &&
-      socket.uid === uid
-    );
-  } catch {
-    return false;
-  }
 }
 
 function isMissingSocket(error: unknown): boolean {

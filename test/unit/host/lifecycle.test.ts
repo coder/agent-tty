@@ -156,7 +156,6 @@ import {
   allocateSession,
   destroySession,
   cliRunsInsideProgramSession,
-  ensureSocketRoot,
   reconcileSession,
   removeSocketDirectoryBestEffort,
   removeSocketDirectoryIfEmpty,
@@ -172,6 +171,7 @@ import {
   writeHostRecord,
   type HostRecord,
 } from '../../../src/host/hostRecord.js';
+import { ensureSocketRoot } from '../../../src/host/socketRoot.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
 import {

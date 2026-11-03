@@ -8,11 +8,11 @@ import { emitSuccess } from '../output.js';
 import { DEFAULT_IDLE_TIMEOUT_MS } from '../../config/defaults.js';
 import {
   allocateSession,
-  ensureSocketRoot,
   launchHost,
   type LaunchedHost,
 } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
+import { ensureSocketRoot } from '../../host/socketRoot.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import type { SessionRecord } from '../../protocol/schemas.js';
 import { upsertHome } from '../../storage/homeRegistry.js';

@@ -14,7 +14,7 @@ import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ensureSocketRoot } from '../../../src/host/lifecycle.js';
+import { ensureSocketRoot } from '../../../src/host/socketRoot.js';
 
 let parent = '';
 let root = '';

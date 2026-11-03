@@ -1,14 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import {
-  chmod,
-  lstat,
-  mkdir,
-  readdir,
-  rmdir,
-  stat,
-  unlink,
-} from 'node:fs/promises';
+import { chmod, mkdir, readdir, rmdir, stat, unlink } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -37,7 +29,6 @@ import {
   manifestPath,
   sessionDir,
   socketPath,
-  socketRootDirectory,
 } from '../storage/sessionPaths.js';
 import { makeAbortError, throwIfAborted } from '../util/abort.js';
 import { invariant } from '../util/assert.js';
@@ -51,7 +42,8 @@ import {
   type ProgramGroup,
 } from './programGroup.js';
 import { judgeHost, readHostRecord, type HostRecord } from './hostRecord.js';
-import { isOwnSocket, sendRpc } from './rpcClient.js';
+import { sendRpc } from './rpcClient.js';
+import { ensureSocketRoot, isOwnSocket } from './socketRoot.js';
 
 const DESTROY_POLL_INTERVAL_MS = 100;
 const DESTROY_MAX_ATTEMPTS = 50;
@@ -460,45 +452,6 @@ export async function removeDeadHostSocket(
     console.debug('could not remove the socket of a dead host:', error);
   }
   await removeLegacySocketBestEffort(socketFile);
-}
-
-// Other users can create entries in /tmp, so the root must be a directory,
-// not a symlink, of this uid, with no group or other bits. Another user can
-// still create the root first and so block this uid.
-export async function ensureSocketRoot(
-  root: string = socketRootDirectory(),
-): Promise<void> {
-  const uid = process.getuid?.();
-  if (uid === undefined) {
-    return;
-  }
-  try {
-    await mkdir(root);
-    // umask applies to a mkdir mode, not to chmod.
-    await chmod(root, 0o700);
-  } catch (error) {
-    if (!hasErrorCode(error, 'EEXIST')) {
-      throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
-        message: `Failed to create the socket root ${root}.`,
-        details: { path: root },
-        cause: error,
-      });
-    }
-  }
-  const stats = await lstat(root);
-  if (stats.isDirectory() && stats.uid === uid && (stats.mode & 0o077) === 0) {
-    return;
-  }
-  const kind = stats.isSymbolicLink()
-    ? 'a symlink'
-    : stats.isDirectory()
-      ? 'a directory'
-      : 'a file';
-  const mode = (stats.mode & 0o777).toString(8);
-  throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
-    message: `The socket root ${root} is ${kind} of uid ${String(stats.uid)} with mode ${mode}. It must be a directory of uid ${String(uid)} with mode 700: remove it or fix it.`,
-    details: { path: root, ownerUid: stats.uid, mode },
-  });
 }
 
 const SOCKET_LISTEN_ATTEMPTS = 5;
