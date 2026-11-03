@@ -687,6 +687,11 @@ describe('destroySession', () => {
 
           await expect(destroySession('session-01')).rejects.toMatchObject({
             code: 'HOST_TIMEOUT',
+            message: expect.stringContaining(
+              gap === 'namespace'
+                ? "Run destroy from the host's pid namespace on the host's machine."
+                : 'Run destroy where /proc is mounted.',
+            ) as string,
           });
           expect(kill.mock.calls.filter(([pid]) => pid === -group)).toEqual([]);
           expect(await readManifest(manifestPath(directory))).toEqual(exited);
