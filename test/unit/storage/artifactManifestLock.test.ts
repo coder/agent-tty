@@ -1,4 +1,5 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
 import {
   mkdir,
   mkdtemp,
@@ -72,6 +73,22 @@ function ownerRecord(pid: number, withProcess: boolean): string {
   });
 }
 
+async function deadOwnerRecord(): Promise<string> {
+  const child = spawn('sleep', ['30'], { stdio: 'ignore' });
+  await once(child, 'spawn');
+  const pid = child.pid;
+  expect(pid).toBeGreaterThan(0);
+  const record = captureHost(Number(pid));
+  child.kill('SIGKILL');
+  await once(child, 'exit');
+  return JSON.stringify({
+    version: 1,
+    token: `dead-${String(pid)}`,
+    pid,
+    process: record,
+  });
+}
+
 function deadPid(): number {
   const child = spawnSync('/bin/sh', ['-c', 'exit 0']);
   expect(child.pid).toBeGreaterThan(0);
@@ -140,6 +157,79 @@ describe('artifact manifest lock', () => {
     });
     expect(update).not.toHaveBeenCalled();
     expect(await readFile(lockPath, 'utf8')).toBe(contents);
+  });
+
+  it("lets one writer at a time in when many find a dead owner's lock", async () => {
+    for (let round = 0; round < 10; round += 1) {
+      await writeFile(lockPath, await deadOwnerRecord());
+      let inside = 0;
+      let maxInside = 0;
+      const update = async (): Promise<void> => {
+        inside += 1;
+        maxInside = Math.max(maxInside, inside);
+        await sleep(20);
+        inside -= 1;
+      };
+
+      await Promise.all(
+        Array.from({ length: 10 }, () =>
+          withArtifactManifestLock(sessionDirectory, update, {
+            waitMs: 5_000,
+            unknownOwnerStaleMs: 60_000,
+          }),
+        ),
+      );
+
+      expect(maxInside).toBe(1);
+    }
+  });
+
+  it('breaks a lock with an unknown owner whose time is far in the future', async () => {
+    await writeFile(lockPath, 'not json');
+    const inTwoMinutes = new Date(Date.now() + 120_000);
+    await utimes(lockPath, inTwoMinutes, inTwoMinutes);
+
+    await expect(
+      withArtifactManifestLock(
+        sessionDirectory,
+        () => Promise.resolve('ran'),
+        FAST,
+      ),
+    ).resolves.toBe('ran');
+  });
+
+  it.runIf(process.platform === 'linux')(
+    'never judges an owner without a process record as dead',
+    async () => {
+      const contents = ownerRecord(deadPid(), false);
+      await writeFile(lockPath, contents);
+
+      await expect(
+        withArtifactManifestLock(
+          sessionDirectory,
+          () => Promise.resolve(),
+          FAST,
+        ),
+      ).rejects.toMatchObject({ code: ERROR_CODES.STORAGE_WRITE_ERROR });
+      expect(await readFile(lockPath, 'utf8')).toBe(contents);
+    },
+  );
+
+  it('removes old lock temp and break files when it takes the lock', async () => {
+    const artifacts = join(sessionDirectory, 'artifacts');
+    const twoMinutesAgo = new Date(Date.now() - 120_000);
+    for (const name of [
+      'manifest.json.lock.tmp-old',
+      'manifest.json.lock.break',
+    ]) {
+      await writeFile(join(artifacts, name), 'left over');
+      await utimes(join(artifacts, name), twoMinutesAgo, twoMinutesAgo);
+    }
+    await writeFile(join(artifacts, 'manifest.json.lock.tmp-new'), 'in use');
+
+    await withArtifactManifestLock(sessionDirectory, () => Promise.resolve());
+
+    expect(await readdir(artifacts)).toEqual(['manifest.json.lock.tmp-new']);
   });
 
   it('breaks a lock whose owner is gone', async () => {
