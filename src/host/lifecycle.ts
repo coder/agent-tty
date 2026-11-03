@@ -955,12 +955,12 @@ export async function listSessions(
         await reconcileSession(sessionDirectory);
         manifest = await readManifestIfExists(manifestFile);
       } catch {
-        // A marked session that ended lists as it reads when its repair
-        // write fails.
         if (isActiveSessionStatus(read.status)) {
           continue;
         }
-        manifest = read;
+        // A marked session that ended lists as it reads when its repair
+        // fails. The repair write can have landed before a later step threw.
+        manifest = await readManifestIfExists(manifestFile).catch(() => read);
       }
 
       if (manifest === null) {
