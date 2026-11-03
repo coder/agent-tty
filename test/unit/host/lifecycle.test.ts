@@ -913,6 +913,31 @@ describe('a hostPid that may no longer name the host', () => {
   );
 
   it.skipIf(platform === 'win32')(
+    'on darwin reconcile records failed when no process has the pid that a linux host record names',
+    async () => {
+      const ended = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' });
+      await once(ended, 'exit');
+      const pid = ended.pid as number;
+      expect(isRunning(pid)).toBe(false);
+      const directory = await seedHost(pid, 'none');
+      writeHostRecord(directory, {
+        version: 1,
+        pid,
+        bootId: 'linux-boot',
+        startTicks: '1',
+        pidNamespace: 'pid:[1]',
+      });
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+      await reconcileSession(directory);
+
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'failed',
+      });
+    },
+  );
+
+  it.skipIf(platform === 'win32')(
     'on win32 destroy --force never kills the host',
     async () => {
       const host = startProcess('_host', 'session-01', '1');
