@@ -259,45 +259,40 @@ function createFacts() {
   };
 }
 
-// In runCreateCommand's readiness loop, the catch of an unreachable host
-// ends with host.stop() right after its last retry and before it rethrows
-// the error. Only a win32 create skips the stop while the manifest names
-// no program, so on Linux and macOS, which the model covers, it always stops. launchHost's stop sends SIGTERM through the ChildProcess
-// handle, and runHost registers its SIGTERM handler before it spawns the
-// program and skips the spawn when a SIGTERM came first.
+// In runCreateCommand, the readiness wait is the only statement of a try
+// whose catch calls host.stop() and then rethrows, so every error of the
+// readiness wait stops the host. Only a win32 create skips the stop while the
+// manifest names no program, so on Linux and macOS, which the model covers,
+// it always stops. launchHost's stop sends SIGTERM through the ChildProcess
+// handle, and runHost registers its SIGTERM handler before it waits for the
+// manifest, notes a SIGTERM until the spawn, and skips the spawn when a
+// SIGTERM came first.
 function stopsOnGiveUp(body) {
-  let stops = false;
-  walk(body, (node) => {
-    if (!ts.isCatchClause(node)) {
-      return;
+  const stops = body.statements.some((s) => {
+    if (!ts.isTryStatement(s) || s.catchClause === undefined) {
+      return false;
     }
-    const last = node.block.statements.at(-1);
-    if (last === undefined || normalize(last.getText()) !== 'throw error;') {
-      return;
-    }
-    walk(node.block, (inner) => {
-      if (!ts.isIfStatement(inner) || !ts.isBlock(inner.thenStatement)) {
-        return;
-      }
-      const st = inner.thenStatement.statements.map((s) =>
-        normalize(s.getText()),
-      );
-      const retry = st.findIndex((s) =>
-        s.startsWith('if (attempt + 1 < READINESS_MAX_ATTEMPTS) {'),
-      );
-      stops ||=
-        retry >= 0 &&
-        retry === st.length - 3 &&
-        st[retry + 1].startsWith('invariant(host !== undefined,') &&
-        st[retry + 2] ===
-          "if (process.platform !== 'win32' || manifest?.childPid != null) { host.stop(); }";
-    });
+    const tried = s.tryBlock.statements.map((t) => normalize(t.getText()));
+    const st = s.catchClause.block.statements.map((t) =>
+      normalize(t.getText()),
+    );
+    return (
+      tried.length === 1 &&
+      tried[0] ===
+        'result = await waitForReadyHost(socketFile, sessionDirectory, sessionId);' &&
+      st.length === 4 &&
+      st[0].startsWith('invariant(host !== undefined,') &&
+      st[2] ===
+        "if (process.platform !== 'win32' || manifest?.childPid != null) { host.stop(); }" &&
+      st[3] === 'throw withSessionId(error, sessionId);'
+    );
   });
   const launch = normalize(
     requireDeclaration('src/host/lifecycle.ts', 'launchHost').getText(),
   );
   const run = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
   const handler = indexOfStatement(run, /^process\.on\('SIGTERM'/);
+  const wait = indexOfStatement(run, /= await waitForManifestFromCreate\(/);
   const skip = indexOfStatement(
     run,
     /^if \(sigterm\.received\) \{\s*await eventLog\.close\(\);\s*return;\s*\}$/,
@@ -307,7 +302,8 @@ function stopsOnGiveUp(body) {
     stops &&
     /stop: \(\) => \{ child\.kill\('SIGTERM'\); \}/.test(launch) &&
     handler >= 0 &&
-    handler < skip &&
+    handler < wait &&
+    wait < skip &&
     skip === spawn - 1
   );
 }
@@ -1325,6 +1321,7 @@ function policyFacts() {
 
 const COVERED = [
   ['src/cli/commands/create.ts', 'runCreateCommand'],
+  ['src/cli/commands/create.ts', 'waitForReadyHost'],
   ['src/cli/commands/destroy.ts', 'runDestroyCommand'],
   ['src/cli/commands/destroy.ts', 'rerunInNewSession'],
   ['src/cli/commands/gc.ts', 'gcSessions'],

@@ -118,9 +118,11 @@ vi.mock('node:fs', async () => {
     }
     return stat;
   }) as typeof actual.readFileSync;
+  // A faked /proc names this process at /proc/self, also on macOS.
   const readlinkSync = ((path: string, ...rest: unknown[]) =>
-    procHooks.self !== undefined && path === '/proc/self'
-      ? procHooks.self
+    path === '/proc/self' &&
+    (procHooks.self !== undefined || procHooks.stat !== undefined)
+      ? (procHooks.self ?? String(process.pid))
       : (actual.readlinkSync as (...args: unknown[]) => unknown)(
           path,
           ...rest,
