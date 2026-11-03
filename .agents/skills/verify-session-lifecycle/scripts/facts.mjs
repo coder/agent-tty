@@ -464,12 +464,31 @@ function repairFacts() {
     'src/storage/manifests.ts',
     'writeDestroyMarker',
   ).getText();
+  const reconcile = requireDeclaration(lifecycle, 'reconcileSession').body;
+  const marked = indexOfStatement(
+    reconcile,
+    /^if \(\s*manifest !== null &&\s*isTerminalSessionStatus\(manifest\.status\) &&\s*!isDestroyedSessionStatus\(manifest\.status\) &&\s*existsSync\(destroyMarkerPath\(sessionDirectory\)\)\s*\) \{\s*await writeMarkedDestroyed\(manifestFile, manifest\);\s*return;\s*\}$/,
+  );
+  const terminal = guardIndex(
+    reconcile,
+    'manifest === null || isTerminalSessionStatus(manifest.status)',
+    ts.SyntaxKind.ReturnStatement,
+  );
+  const rewrite = normalize(
+    requireDeclaration(lifecycle, 'writeMarkedDestroyed').body.getText(),
+  );
   return {
     ReconcileRepairsDestroyed:
       marks &&
       repairs &&
       marker.includes("await replaceFileAtomic(path, '')") &&
       !marker.includes('mkdir'),
+    ReconcileRepairsMarked:
+      marked >= 0 &&
+      marked < terminal &&
+      rewrite.includes(
+        "await writeManifest(manifestFile, { ...rest, status: 'destroyed',",
+      ),
   };
 }
 
@@ -1218,6 +1237,7 @@ const COVERED = [
   ['src/host/lifecycle.ts', 'stopSessionProcesses'],
   ['src/host/lifecycle.ts', 'recordDestroyed'],
   ['src/host/lifecycle.ts', 'destroySession'],
+  ['src/host/lifecycle.ts', 'writeMarkedDestroyed'],
   ['src/host/lifecycle.ts', 'reconcileSession'],
   ['src/host/hostMain.ts', 'waitForManifestFromCreate'],
   ['src/host/hostMain.ts', 'isSessionCommandable'],

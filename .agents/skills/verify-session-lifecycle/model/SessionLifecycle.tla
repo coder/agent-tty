@@ -90,6 +90,9 @@ CONSTANTS
                             \*   destroy marker before destroyed, and a
                             \*   reconcile that finds it after its own write
                             \*   writes destroyed again
+    ReconcileRepairsMarked, \* lifecycle.ts: a reconcile that reads a
+                            \*   terminal manifest other than destroyed next
+                            \*   to the destroy marker writes destroyed
     CreateStopsOnGiveUp,    \* create.ts: a create that gives up on its
                             \*   host sends it SIGTERM, so the host stops
                             \*   its program and ends the session
@@ -121,7 +124,8 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  InsideCheckReadsEnv, RecordsProgramSync,
                  ProvesGroupOwnership, DestroyStopsLeftovers,
                  FallbackNeedsFolder, CreateStopsOnGiveUp,
-                 ReconcileRepairsDestroyed, TokenNamesProgram,
+                 ReconcileRepairsDestroyed, ReconcileRepairsMarked,
+                 TokenNamesProgram,
                  ReusedIdReadsGone, ProvesHostPid} : b \in BOOLEAN
 
 Readers == {"gc", "list"}   \* the two processes that run reconcileSession
@@ -768,18 +772,28 @@ AfterReconcile(p) == IF p = "gc" THEN "readafter" ELSE "idle"
 \* isProcessAlive(manifest.hostPid). A null hostPid reads as a dead host.
 SkipsHost(read) == ReconcileSkipsLiveHost /\ read.pid /\ hostAlive
 
-\* readManifestIfExists; return when it is null or terminal.
+\* readManifestIfExists. With ReconcileRepairsMarked, a terminal manifest
+\* other than destroyed next to the destroy marker gets destroyed from this
+\* copy (writeMarkedDestroyed), with hostPid and childPid null and the exit
+\* code kept, and reconcile returns. Otherwise it returns when the manifest
+\* is null or terminal.
 ReconcileReads(p) ==
     /\ pc[p] = "r_read"
-    /\ IF mst = "none" \/ (ReconcileSkipsTerminal /\ mst \in Terminal)
-          THEN /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
+    /\ IF ReconcileRepairsMarked /\ dmark /\ mst \in Terminal
+          /\ mst # "destroyed"
+          THEN /\ Write("destroyed", FALSE, "none", mcode, FALSE)
+               /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
                /\ UNCHANGED rd
+       ELSE IF mst = "none" \/ (ReconcileSkipsTerminal /\ mst \in Terminal)
+          THEN /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
+               /\ UNCHANGED <<rd, diskVars>>
           ELSE /\ pc' = [pc EXCEPT ![p] = "r_check"]
                /\ rd' = [rd EXCEPT ![p] = [st |-> mst, pid |-> mpid,
                                            code |-> mcode, child |-> mchild,
                                            grp |-> "none"]]
-    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, gres,
-                   lruns, destroyVars, groupVars>>
+               /\ UNCHANGED diskVars
+    /\ UNCHANGED <<ghostVars, sock, cpc, hostVars, shutVars, gres, lruns,
+                   destroyVars, groupVars>>
 
 \* After its group kill, reconcileSession waits for the group, or, without
 \* ReconcileWaitsForGroup, writes at once.
@@ -1392,6 +1406,10 @@ NoUnrelatedHostKilled == ~hitUnrelatedHost
 WitnessGcRemovesSession == gres # "removed"
 WitnessReconcileRepairs ==
     ~(dmark /\ mst = "failed" /\ \E p \in Readers : pc[p] = "r_repair")
+\* A reader's first read already wrote destroyed over the failed that the
+\* other reader wrote and has yet to repair.
+WitnessMarkedRepaired ==
+    ~(dmark /\ mst = "destroyed" /\ \E p \in Readers : pc[p] = "r_repair")
 WitnessCreateGivesUp ==
     ~(cpc = "failed" /\ sig /\ mst = "destroyed" /\ ~hostAlive)
 WitnessSessionServes == ~(hpc = "serving" /\ sock /\ mst = "running" /\ mpid)
