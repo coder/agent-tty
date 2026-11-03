@@ -48,7 +48,7 @@
     "src/host/programGroup.ts#writeProgramRecord": "1845322710155185",
     "src/host/programGroup.ts#readProgramRecord": "b02c48c2bff248a7",
     "src/host/programGroup.ts#readProvenProgramGroup": "4331f000970ee6cb",
-    "src/host/programGroup.ts#readProgramGroup": "a6c6b5b93a0eb491",
+    "src/host/programGroup.ts#readProgramGroup": "404d251988e08416",
     "src/host/programGroup.ts#judgeProgramGroup": "b8b3053a25f95bbf",
     "src/host/programGroup.ts#readGroupMembers": "e799d475e046c19c",
     "src/host/programGroup.ts#judgeLiveGroup": "29c9c4bfd01c4338",
