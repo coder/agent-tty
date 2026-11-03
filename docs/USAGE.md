@@ -323,7 +323,8 @@ A reconcile that writes over the record at the same moment finds the file right 
 A `list`, `inspect` or `gc` that reads the session between those two writes sees `failed`. If the reconciling process is killed between them, the session stays `failed`.
 If `destroy` fails after it wrote the file, for example because its manifest write fails, the file stays. For a session that had not ended yet, the next reconcile then records it as `destroyed`. A reconcile skips a session that has already ended, so for such a session run `destroy` again.
 When `create` cannot reach its new host within about 6 s, it fails with `HOST_UNREACHABLE` or `HOST_TIMEOUT` and tells the host to stop.
-`create` also tells the host to stop when it fails for another reason after it started the host, for example when it cannot read the new session's manifest. Each such error names the session in `details.sessionId`.
+`create` also tells the host to stop when it fails for another reason after it wrote the session's first manifest, for example when it cannot read that manifest again. Each such error names the session in `details.sessionId`.
+When that first manifest write fails, `create` removes the session folder. The host waits for the manifest only while `create` runs, so it then exits without starting the program.
 On Linux and macOS it sends the host SIGTERM, and the host stops the program the way `destroy` does and records the session as `destroyed` once the program's group has ended, also while its start-up is still slow.
 `create` exits before the host has ended the session, so a caller that checks at once can still read `running` or `destroying`.
 The host records `destroyed` right after the program exits on the SIGHUP, or about 2 s later, after the shutdown grace, when the program ignores SIGHUP. A host whose start-up write is still slow records it only after that write.

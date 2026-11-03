@@ -152,8 +152,8 @@ async function waitForReadyHost(
   }
 }
 
-// Every error after the launch names the session, so a caller can inspect or
-// destroy what the failed create left.
+// Every error of the readiness wait names the session, so a caller can inspect
+// or destroy what the failed create left.
 function withSessionId(error: unknown, sessionId: string): CliError {
   if (error instanceof CliError) {
     return new CliError(error.code, error.message, {
