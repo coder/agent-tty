@@ -96,6 +96,11 @@ CONSTANTS
     CreateStopsOnGiveUp,    \* create.ts: a create that gives up on its
                             \*   host sends it SIGTERM, so the host stops
                             \*   its program and ends the session
+    HostChecksCreateFailed, \* create.ts, hostMain.ts: a create that gives
+                            \*   up writes the create-failed marker before
+                            \*   it reads the manifest, and the host checks
+                            \*   for it before the spawn and right after its
+                            \*   start-up write, and then ends the session
     TokenNamesProgram,      \* programGroup.ts: captureToken records an
                             \*   autogroup only once the program leads its
                             \*   own session in an autogroup other than the
@@ -124,12 +129,16 @@ CONSTANTS
                             \*   processes (no /proc, an empty /proc,
                             \*   another pid namespace or another machine),
                             \*   and host.json names the host's pid space
+    Win32,                  \* the environment: Windows, where SIGTERM ends
+                            \*   the host at once, so create sends it only
+                            \*   when the manifest names the program
     MaxListReconciles       \* how many times the "list" process reconciles
 
 ASSUME MaxListReconciles \in 1..3
 ASSUME Token \in BOOLEAN
 ASSUME Unseen \in BOOLEAN
 ASSUME OtherPidSpace \in BOOLEAN
+ASSUME Win32 \in BOOLEAN
 ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  ReconcileSkipsLiveHost, CreateRecordsHostPid,
                  HostWaitsForManifest, ReconcileRereads,
@@ -142,6 +151,7 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  InsideCheckReadsEnv, RecordsProgramSync,
                  ProvesGroupOwnership, DestroyStopsLeftovers,
                  FallbackNeedsFolder, CreateStopsOnGiveUp,
+                 HostChecksCreateFailed,
                  ReconcileRepairsDestroyed, ReconcileRepairsMarked,
                  TokenNamesProgram,
                  ReusedIdReadsGone, ProvesHostPid,
@@ -166,17 +176,21 @@ VARIABLES
     wasExited,   \* ghost: the manifest has shown "exited"
     wasNamed,    \* ghost: a manifest has recorded the program's pid
     dmark,       \* the destroy marker file exists in the session directory
+    cmark,       \* the create-failed marker file exists in it
     rec,         \* program.json names the program with its token
     startFailed, \* ghost: the host died because its files were missing
     readRepaired, \* ghost: a reconcile wrote destroyed from its first read
                  \*   next to the destroy marker
     sock,        \* the RPC socket file exists (it is outside the directory)
-    cpc,         \* create: "alloc", "write", "launch", "done", "failed"
-                 \*   (it gave up on its host)
+    cpc,         \* create: "alloc", "write", "launch", "done", "giveup"
+                 \*   (Windows: the marker is written, the manifest read
+                 \*   is next), "failed" (it gave up on its host)
     hostAlive,   \* the detached host process is alive
     hpc,         \* host start-up path: "none", "boot", "open", "record"
                  \*   (the program runs, program.json is not written yet),
-                 \*   "pidwrite", "sockdir", "serving", "idle", "dead"
+                 \*   "pidwrite", "markcheck" (the start-up write landed,
+                 \*   the marker check is next), "sockdir", "serving",
+                 \*   "idle", "dead"
     hex,         \* host exit path: "none", "wait" (the program runs),
                  \*   "groupwait" (the program ended during a destroy, and
                  \*   the host waits for its group), "exitwrite" (its exit
@@ -231,7 +245,7 @@ VARIABLES
     dkill        \* ghost: destroy --force killed a live host
 
 diskVars == <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal, wasExited,
-              wasNamed, dmark>>
+              wasNamed, dmark, cmark>>
 ghostVars == <<startFailed, readRepaired>>
 hostVars == <<hostAlive, hpc, hex, rsz, prog, foreign, left>>
 groupVars == <<rec, reused, hitUnrelated, diedUnrecorded, passedReused,
@@ -246,7 +260,7 @@ Init ==
     /\ dir = FALSE /\ mst = "none" /\ mpid = FALSE /\ morigin = "none"
     /\ mcode = FALSE /\ mchild = FALSE
     /\ wasTerminal = FALSE /\ wasExited = FALSE /\ wasNamed = FALSE
-    /\ dmark = FALSE
+    /\ dmark = FALSE /\ cmark = FALSE
     /\ rec = FALSE /\ startFailed = FALSE /\ readRepaired = FALSE
     /\ sock = FALSE
     /\ cpc = "alloc"
@@ -284,7 +298,7 @@ Write(s, pid, origin, code, child) ==
     /\ wasTerminal' = (wasTerminal \/ s \in Terminal)
     /\ wasExited' = (wasExited \/ s = "exited")
     /\ wasNamed' = (wasNamed \/ child)
-    /\ dmark' = dmark
+    /\ dmark' = dmark /\ cmark' = cmark
 
 \* SIGKILL of the program's group ends every process of our user in it.
 \* Without KillsProgramGroup the code kills only the program's pid, and a
@@ -426,8 +440,8 @@ CreateMakesDirectory ==
     /\ dir' = TRUE
     /\ cpc' = IF CreateRecordsHostPid THEN "launch" ELSE "write"
     /\ UNCHANGED <<mst, mpid, morigin, mcode, mchild, wasTerminal, wasExited,
-                   wasNamed, dmark, ghostVars, sock, hostVars, shutVars,
-                   readerVars, destroyVars, groupVars>>
+                   wasNamed, dmark, cmark, ghostVars, sock, hostVars,
+                   shutVars, readerVars, destroyVars, groupVars>>
 
 \* allocateSession: writeManifest with status "running". gc skips a directory
 \* without a manifest, so this write always finds its directory (TypeOK
@@ -450,17 +464,38 @@ CreateLaunchesHost ==
 
 \* runCreateCommand's readiness loop gives up after 50 inspect RPCs that
 \* fail, which the model lets happen at any step after the start-up, since
-\* it has no clock. With CreateStopsOnGiveUp, create then sends its host
-\* SIGTERM and reports the error. HostGetsSigterm takes that SIGTERM as the
-\* host's one SIGTERM, and HostCrashes covers one that ends a host before it
-\* spawns the program. create writes nothing itself: without a token only
-\* the host knows which group is the program's. Without the guard, create
-\* only reports the error.
+\* it has no clock. With HostChecksCreateFailed, create first writes the
+\* create-failed marker, an empty file written with no mkdir, so the write
+\* fails when gc removed the directory, and create goes on. Then it reads
+\* the manifest. With CreateStopsOnGiveUp, create sends its host SIGTERM
+\* and reports the error. HostGetsSigterm takes that SIGTERM as the host's
+\* one SIGTERM, and HostCrashes covers one that ends a host before it spawns
+\* the program. create writes nothing else: without a token only the host
+\* knows which group is the program's. Without the guard, create only
+\* reports the error. On Linux and macOS the manifest read changes nothing,
+\* so the model joins the marker write, the read and the SIGTERM.
 CreateGivesUp ==
     /\ cpc = "done"
+    /\ cmark' = (cmark \/ (HostChecksCreateFailed /\ dir))
+    /\ cpc' = IF Win32 THEN "giveup" ELSE "failed"
+    /\ UNCHANGED <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal,
+                   wasExited, wasNamed, dmark, ghostVars, sock, hostVars,
+                   shutVars, readerVars, destroyVars, groupVars>>
+
+\* On Windows the SIGTERM ends the host at once, without its handlers, so
+\* create sends it only when the manifest that it reads after the marker
+\* write names the program. The next reconcile then records failed and ends
+\* the program.
+CreateStopsHostOnWindows ==
+    /\ cpc = "giveup"
     /\ cpc' = "failed"
-    /\ UNCHANGED <<diskVars, ghostVars, sock, hostVars, shutVars, readerVars,
-                   destroyVars, groupVars>>
+    /\ IF CreateStopsOnGiveUp /\ mchild /\ hostAlive
+          THEN /\ HostDies
+               /\ UNCHANGED <<prog, foreign, left, rec, reused, hitUnrelated,
+                              hrec, hreused, hitUnrelatedHost, passedReused>>
+          ELSE UNCHANGED <<hostVars, groupVars>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, shutVars, readerVars,
+                   destroyVars>>
 
 \* -------------------------------------------------------------------------
 \* The host's serial manifest writer (createSerialManifestWriter). Each write
@@ -550,12 +585,14 @@ HostReadsManifest ==
 \* handler of the host runs inside this block.
 HostOpensLogAndSpawns ==
     /\ hostAlive /\ hpc = "open"
-    /\ IF dir
-          THEN /\ hpc' = IF RecordsProgramSync THEN "record" ELSE "pidwrite"
-               /\ hex' = "wait" /\ prog' = TRUE
-               /\ UNCHANGED <<hostAlive, rsz, ghostVars, diedUnrecorded,
-                              passedReused>>
-          ELSE HostFailsToStart /\ UNCHANGED prog
+    /\ IF ~dir
+          THEN HostFailsToStart /\ UNCHANGED prog
+       ELSE IF HostChecksCreateFailed /\ cmark
+          THEN HostDies /\ UNCHANGED <<prog, ghostVars, passedReused>>
+       ELSE /\ hpc' = IF RecordsProgramSync THEN "record" ELSE "pidwrite"
+            /\ hex' = "wait" /\ prog' = TRUE
+            /\ UNCHANGED <<hostAlive, rsz, ghostVars, diedUnrecorded,
+                           passedReused>>
     /\ UNCHANGED <<diskVars, sock, cpc, foreign, left, rec, reused,
                    hitUnrelated, hrec, hreused, hitUnrelatedHost, shutVars,
                    readerVars, destroyVars, passedReused>>
@@ -582,13 +619,24 @@ HostRecordsProgram ==
 HostWritesPids ==
     /\ hostAlive /\ hpc = "pidwrite"
     /\ HostWrite("running", FALSE)
-    /\ hpc' = "sockdir"
+    /\ hpc' = IF HostChecksCreateFailed THEN "markcheck" ELSE "sockdir"
     /\ dsnap' = NextTurn(ExitWriteAheadOfDestroying)
     /\ rec' = (rec \/ (Token /\ ~RecordsProgramSync /\ dir))
     /\ UNCHANGED <<ghostVars, sock, cpc, hostAlive, hex, rsz, prog, foreign,
                    left, reused, hitUnrelated, diedUnrecorded, hrec, hreused,
                    hitUnrelatedHost, hst, hsd, sig, readerVars, destroyVars,
                    passedReused>>
+
+\* Right after the start-up write lands, the host checks for the
+\* create-failed marker and shuts down when it finds it, as for a SIGTERM.
+HostChecksMarker ==
+    /\ hostAlive /\ hpc = "markcheck"
+    /\ IF cmark
+          THEN /\ hpc' = "idle" /\ StartShutdown(WriteQueued)
+          ELSE /\ hpc' = "sockdir" /\ UNCHANGED <<hst, hsd, dsnap>>
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hex, rsz, prog,
+                   foreign, left, hwt, sig, readerVars, destroyVars,
+                   groupVars>>
 
 \* `if (!isSessionCommandable(state))` initiateShutdown, else mkdir and
 \* chmod of the socket directory and rpcServer.listen(), which the host
@@ -631,7 +679,9 @@ HostResizeWriteLands ==
 \* calls startShutdown, and it runs only after the synchronous start-up
 \* block.
 HostGetsSigterm ==
-    /\ hostAlive /\ ~sig /\ hpc \in {"pidwrite", "sockdir", "serving", "idle"}
+    /\ ~Win32
+    /\ hostAlive /\ ~sig
+    /\ hpc \in {"pidwrite", "markcheck", "sockdir", "serving", "idle"}
     /\ sig' = TRUE
     /\ StartShutdown(WriteQueued)
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, hwt, readerVars,
@@ -1029,7 +1079,7 @@ GcRemoves ==
     /\ pc["gc"] \in {"rm", "rmsock"}
     /\ sock' = (sock /\ pc["gc"] = "rm")
     /\ dir' = FALSE /\ mst' = "none" /\ mpid' = FALSE /\ morigin' = "none"
-    /\ mcode' = FALSE /\ mchild' = FALSE /\ dmark' = FALSE
+    /\ mcode' = FALSE /\ mchild' = FALSE /\ dmark' = FALSE /\ cmark' = FALSE
     /\ rec' = FALSE /\ hrec' = FALSE
     /\ pc' = [pc EXCEPT !["gc"] = "done"]
     /\ gres' = "removed"
@@ -1166,7 +1216,7 @@ DestroyMarksFolder ==
           THEN /\ dmark' = TRUE /\ dpc' = "twrite" /\ UNCHANGED <<drd, dres>>
           ELSE /\ DestroyEnds("error") /\ UNCHANGED dmark
     /\ UNCHANGED <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal,
-                   wasExited, wasNamed, ghostVars, sock, cpc, hostVars,
+                   wasExited, wasNamed, cmark, ghostVars, sock, cpc, hostVars,
                    shutVars, readerVars, dforce, dinside, dsaw, dkill,
                    groupVars>>
 
@@ -1314,9 +1364,9 @@ AllFinished ==
 
 Next ==
     \/ CreateMakesDirectory \/ CreateWritesManifest \/ CreateLaunchesHost
-    \/ CreateGivesUp
+    \/ CreateGivesUp \/ CreateStopsHostOnWindows
     \/ HostReadsManifest \/ HostOpensLogAndSpawns \/ HostRecordsProgram
-    \/ HostWritesPids
+    \/ HostWritesPids \/ HostChecksMarker
     \/ HostListens \/ HostStartsResize \/ HostResizeWriteLands
     \/ HostGetsSigterm \/ HostWritesDestroying \/ HostClosesSocket
     \/ HostKillsProgram \/ ProgramExits \/ HostPollsGroup \/ HostWritesExit
@@ -1347,7 +1397,9 @@ Spec == Init /\ [][Next]_vars
 
 TypeOK ==
     /\ dmark => dir
-    /\ {dir, mpid, mchild, wasTerminal, wasExited, wasNamed, dmark, startFailed,
+    /\ cmark => dir
+    /\ {dir, mpid, mchild, wasTerminal, wasExited, wasNamed, dmark, cmark,
+        startFailed,
         readRepaired, sock,
         hostAlive, prog, foreign, sig, dforce, dinside, dsaw, dkill, rec, left,
         reused, hitUnrelated, diedUnrecorded, passedReused, hrec, hreused,
@@ -1362,7 +1414,7 @@ TypeOK ==
     /\ hsd \in {"none", "write", "wait", "closed"}
     /\ dsnap \in {"none", "destroying", "destroyed"}
     /\ (mst # "none") => dir
-    /\ (dir /\ mst = "none") => cpc \notin {"done", "failed"}
+    /\ (dir /\ mst = "none") => cpc \notin {"done", "giveup", "failed"}
     /\ (cpc = "write") => dir
     /\ gres \in {"pending", "skipped", "removed"}
     /\ lruns \in 0..MaxListReconciles
@@ -1457,10 +1509,13 @@ DestroyedSessionStopped ==
     (mst = "destroyed" /\ ~diedUnrecorded) => ~(GroupAlive \/ left)
 
 \* R17: once create gave up, its host keeps the session "running" only
-\* while create's SIGTERM is still on its way to it.
+\* while create's SIGTERM is still on its way to it, or while the host has
+\* yet to check for the create-failed marker.
 FailedCreateStopped ==
     (cpc = "failed" /\ hostAlive /\ hst = "running") =>
-        (CreateStopsOnGiveUp /\ ~sig)
+        \/ CreateStopsOnGiveUp /\ ~Win32 /\ ~sig
+        \/ HostChecksCreateFailed /\ cmark
+           /\ hpc \in {"boot", "open", "record", "pidwrite", "markcheck"}
 
 \* R18: once destroy reported success, the manifest says destroyed while the
 \* directory exists, except while a reconcile that wrote over it has yet to

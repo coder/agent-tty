@@ -122,7 +122,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid FreezesUnseenGroup UnsharedGroupReadsUnknown"
+GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp HostChecksCreateFailed TokenNamesProgram ReusedIdReadsGone ProvesHostPid FreezesUnseenGroup UnsharedGroupReadsUnknown"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -149,6 +149,8 @@ TOKEN=TRUE
 UNSEEN=FALSE
 # OTHER: whether destroy, list and gc run in another pid space than the host.
 OTHER=FALSE
+# WIN32: whether SIGTERM ends the host at once, as on Windows.
+WIN32=FALSE
 write_run() {
   local name=$1 expect=$2 invariants=$3 overrides=$4 note=$5 must=${6:-}
   local dir="$OUT/$name" fact guard value
@@ -170,6 +172,7 @@ write_run() {
     echo "  Token = $TOKEN"
     echo "  Unseen = $UNSEEN"
     echo "  OtherPidSpace = $OTHER"
+    echo "  Win32 = $WIN32"
     echo "  MaxListReconciles = 2"
     echo "SPECIFICATION Spec"
     echo "CHECK_DEADLOCK TRUE"
@@ -204,6 +207,7 @@ write_run mutant-DestroyStopsLeftovers violated DestroyedSessionStopped "Destroy
 write_run mutant-FallbackNeedsFolder violated NoUnrelatedGroupKilled "FallbackNeedsFolder=FALSE" "without the folder check, a childPid that gc's removal left stale gets the kill" NoUnrelatedGroupKilled
 write_run mutant-ReconcileRepairsDestroyed violated DestroyedStaysDestroyed "ReconcileRepairsDestroyed=FALSE" "without the marker, a reconcile writes failed over the destroyed that destroy reported" DestroyedStaysDestroyed
 write_run mutant-CreateStopsOnGiveUp violated FailedCreateStopped "CreateStopsOnGiveUp=FALSE" "without the SIGTERM, a create that gave up leaves its host serving the session" FailedCreateStopped
+write_run mutant-HostChecksCreateFailed pass FailedCreateStopped "HostChecksCreateFailed=FALSE" "redundant off Windows: the SIGTERM stops the host"
 write_run mutant-TokenNamesProgram violated DestroyedSessionStopped "TokenNamesProgram=FALSE" "with the host's autogroup as the token, no member carries it, and destroy records destroyed while the program's group runs" DestroyedSessionStopped
 write_run mutant-ReusedIdReadsGone pass WitnessWaitPassesReusedId "ReusedIdReadsGone=FALSE" "with a group that took the id read alive, no wait of destroy passes while that group runs"
 write_run mutant-ProvesHostPid violated NoUnrelatedHostKilled "ProvesHostPid=FALSE" "without the start-up record, destroy --force kills a process that took the host's pid" NoUnrelatedHostKilled
@@ -242,6 +246,13 @@ write_run mutant-ProbeCountsDeniedGroup-no-token violated DestroyedProgramStoppe
 write_run mutant-KillsProgramGroup-no-token violated DestroyedProgramStopped "KillsProgramGroup=FALSE" "without a token, with pid kills and pid waits only, a process of the program outlives destroy" DestroyedProgramStopped
 write_run mutant-HostWaitsForGroup-no-token violated DestroyedProgramStopped "HostWaitsForGroup=FALSE" "without a token, the host records destroyed while a process of another user runs" DestroyedProgramStopped
 write_run mutant-ReconcileWaitsForGroup-no-token violated LiveGroupStaysNamed "ReconcileWaitsForGroup=FALSE" "without a token, reconcile drops childPid while the group runs" LiveGroupStaysNamed
+
+# Windows: no token, and a SIGTERM ends the host at once, so create sends it
+# only when the manifest names the program.
+WIN32=TRUE
+write_run current-win32 pass "$NO_TOKEN_RULES" "" "the code on Windows: R1 to R14 and R17 to R19 hold"
+write_run mutant-HostChecksCreateFailed-win32 violated FailedCreateStopped "HostChecksCreateFailed=FALSE" "without the marker, a host that the manifest does not name yet keeps serving after create gave up" FailedCreateStopped
+WIN32=FALSE
 
 run_tlc() {
   local dir rc=0
