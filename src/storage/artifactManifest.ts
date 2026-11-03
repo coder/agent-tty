@@ -318,13 +318,46 @@ async function removeIfUnchanged(
   }
 }
 
+// Returns true when another breaker that is not stale announced itself.
+// It removes the announcements of stale breakers on the way. Each has a
+// name that no other writer uses, so removing it by path cannot remove a
+// live breaker's announcement.
+async function otherBreakerAnnounced(
+  lockPath: string,
+  announcementPath: string,
+  timing: ManifestLockTiming,
+): Promise<boolean> {
+  const directory = dirname(lockPath);
+  const prefix = `${basename(lockPath)}.breaker-`;
+  for (const name of await readdir(directory)) {
+    const path = join(directory, name);
+    if (!name.startsWith(prefix) || path === announcementPath) {
+      continue;
+    }
+    const state = await readLockFileState(path);
+    if (state === null) {
+      continue;
+    }
+    if (!isStaleBreakFile(state, timing)) {
+      return true;
+    }
+    await removeIfUnchanged(path, state.contents);
+  }
+  return false;
+}
+
 /**
- * Breakers take `<lock>.break` first, so only one of them can remove the
- * stale lock, and only while it still holds the bytes that were judged.
+ * A breaker first announces itself with `<lock>.breaker-<id>` and acts only
+ * when no other live breaker announced, so breakers act one at a time: of
+ * two that announce, the one that scans later sees the other. The acting
+ * breaker takes `<lock>.break` the same exclusive way, which also keeps out
+ * older agent-tty versions, and removes the stale lock only while it still
+ * holds the bytes that were judged.
  */
 async function breakStaleManifestLock(
   lockPath: string,
   temporaryPath: string,
+  announcementPath: string,
   contents: string,
   timing: ManifestLockTiming,
 ): Promise<'retry' | 'held'> {
@@ -336,23 +369,33 @@ async function breakStaleManifestLock(
     return 'held';
   }
 
-  const breakPath = `${lockPath}.break`;
-  if (!(await createWithoutReplacing(temporaryPath, breakPath))) {
-    const breaker = await readLockFileState(breakPath);
-    if (breaker !== null && isStaleBreakFile(breaker, timing)) {
-      await removeIfUnchanged(breakPath, breaker.contents);
-    }
-    return 'held';
-  }
+  // The name is this writer's own, so it can already exist only from this
+  // writer's earlier attempt.
+  await createWithoutReplacing(temporaryPath, announcementPath);
   try {
-    await removeIfUnchanged(lockPath, judged.contents);
-    if (unreleasedLocks.get(lockPath) === judged.contents) {
-      unreleasedLocks.delete(lockPath);
+    if (await otherBreakerAnnounced(lockPath, announcementPath, timing)) {
+      return 'held';
     }
+    const breakPath = `${lockPath}.break`;
+    if (!(await createWithoutReplacing(temporaryPath, breakPath))) {
+      const breaker = await readLockFileState(breakPath);
+      if (breaker !== null && isStaleBreakFile(breaker, timing)) {
+        await removeIfUnchanged(breakPath, breaker.contents);
+      }
+      return 'held';
+    }
+    try {
+      await removeIfUnchanged(lockPath, judged.contents);
+      if (unreleasedLocks.get(lockPath) === judged.contents) {
+        unreleasedLocks.delete(lockPath);
+      }
+    } finally {
+      await removeIfUnchanged(breakPath, contents);
+    }
+    return 'retry';
   } finally {
-    await removeIfUnchanged(breakPath, contents);
+    await rm(announcementPath, { force: true });
   }
-  return 'retry';
 }
 
 async function removeOldLockFiles(
@@ -365,9 +408,11 @@ async function removeOldLockFiles(
   const names = await readdir(directory).catch((): string[] => []);
   for (const name of names) {
     const path = join(directory, name);
+    const breakFile =
+      name === `${lockName}.break` || name.startsWith(`${lockName}.breaker-`);
     if (
       path === temporaryPath ||
-      (name !== `${lockName}.break` && !name.startsWith(`${lockName}.tmp-`))
+      (!breakFile && !name.startsWith(`${lockName}.tmp-`))
     ) {
       continue;
     }
@@ -375,10 +420,9 @@ async function removeOldLockFiles(
     if (state === null) {
       continue;
     }
-    const stale =
-      name === `${lockName}.break`
-        ? isStaleBreakFile(state, timing)
-        : isOwnerGone(state, timing);
+    const stale = breakFile
+      ? isStaleBreakFile(state, timing)
+      : isOwnerGone(state, timing);
     if (stale) {
       await removeIfUnchanged(path, state.contents).catch(() => undefined);
     }
@@ -407,7 +451,9 @@ async function acquireManifestLock(
   contents: string,
   timing: ManifestLockTiming,
 ): Promise<void> {
-  const temporaryPath = `${lockPath}.tmp-${randomUUID()}`;
+  const id = randomUUID();
+  const temporaryPath = `${lockPath}.tmp-${id}`;
+  const announcementPath = `${lockPath}.breaker-${id}`;
   try {
     await writeFile(temporaryPath, contents, { flag: 'wx', mode: 0o600 });
     const deadline = Date.now() + timing.waitMs;
@@ -428,6 +474,7 @@ async function acquireManifestLock(
       const outcome = await breakStaleManifestLock(
         lockPath,
         temporaryPath,
+        announcementPath,
         contents,
         timing,
       );
@@ -440,7 +487,8 @@ async function acquireManifestLock(
         });
       }
       if (outcome === 'held') {
-        await sleep(pollMs);
+        // Jitter, so two breakers that saw each other do not meet again.
+        await sleep(pollMs * (0.5 + Math.random()));
         pollMs = Math.min(pollMs * 2, MAX_LOCK_POLL_MS);
       }
     }
