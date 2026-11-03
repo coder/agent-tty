@@ -445,6 +445,22 @@ describe('reconcileSession', () => {
     }
   });
 
+  it('leaves a running session with a live host as it is next to the destroy marker', async () => {
+    const running = makeRecord({ hostPid: process.pid, childPid: null });
+    const directory = await seedSession(running);
+    const own = captureHost(process.pid);
+    if (own !== null) {
+      writeHostRecord(directory, own);
+    }
+    writeFileSync(join(directory, 'destroyed'), '');
+
+    await reconcileSession(directory);
+    expect(await readManifest(manifestPath(directory))).toEqual(running);
+    expect(await listSessions(home, true)).toMatchObject([
+      { sessionId: 'session-01', status: 'running' },
+    ]);
+  });
+
   it('list shows destroyed when the socket cleanup fails after the repair write', async () => {
     const directory = await seedSession(
       makeRecord({

@@ -133,6 +133,20 @@ describe('scanHome (read-only Session counts)', () => {
     });
   });
 
+  it('counts an active Session that holds the destroy marker', async () => {
+    const dependencies: ScanHomeDependencies = {
+      readdir: () => Promise.resolve(['marked']),
+      readManifestIfExists: () =>
+        Promise.resolve(makeRecord({ sessionId: 'marked', status: 'running' })),
+      pathExists: () => true,
+    };
+
+    expect(await scanHome('/fake/home', dependencies)).toEqual({
+      activeSessions: 1,
+      totalSessions: 1,
+    });
+  });
+
   it('skips a Session whose manifest fails to read and counts the rest', async () => {
     // A single corrupt/unreadable manifest must not break discovery of the Home.
     const dependencies: ScanHomeDependencies = {
