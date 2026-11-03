@@ -435,6 +435,56 @@ describe('inspect command', () => {
     expect(emitted.result.session.status).toBe('destroyed');
   });
 
+  it('shows the record it read when the repair of a marked session fails', async () => {
+    const failedSession = createSessionRecord('failed');
+    mocks.readManifestIfExists
+      .mockResolvedValueOnce(failedSession)
+      .mockResolvedValueOnce(failedSession);
+    mocks.isMarkedDestroyed.mockReturnValueOnce(true);
+    mocks.reconcileSession.mockRejectedValueOnce(
+      makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+        message: 'disk full',
+      }),
+    );
+    mocks.countEventLogEntries.mockResolvedValueOnce(3);
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    const emitted = getLastEmitSuccessPayload() as {
+      result: { session: { status: string } };
+    };
+    expect(emitted.result.session.status).toBe('failed');
+  });
+
+  it('shows destroyed when the repair write of a marked session landed before a later step threw', async () => {
+    const failedSession = createSessionRecord('failed');
+    mocks.readManifestIfExists
+      .mockResolvedValueOnce(failedSession)
+      .mockResolvedValueOnce({ ...failedSession, status: 'destroyed' });
+    mocks.isMarkedDestroyed.mockReturnValueOnce(true);
+    mocks.reconcileSession.mockRejectedValueOnce(
+      Object.assign(new Error('EPERM: operation not permitted, unlink'), {
+        code: 'EPERM',
+      }),
+    );
+    mocks.countEventLogEntries.mockResolvedValueOnce(3);
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    const emitted = getLastEmitSuccessPayload() as {
+      result: { session: { status: string } };
+    };
+    expect(emitted.result.session.status).toBe('destroyed');
+  });
+
   it('reports offline replay renderer runtime for exited sessions', async () => {
     const exitedSession = createSessionRecord('exited');
     mocks.readManifestIfExists.mockResolvedValueOnce(exitedSession);
