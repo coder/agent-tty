@@ -907,8 +907,9 @@ function programRecordFacts() {
 // Every group kill goes through stopProgramGroup. It is synchronous, and
 // with a token it kills only right after it read a live member of the group
 // again and found the program's session id, autogroup and boot id on it.
-// No other code calls the raw group kill or builds a group target, and only
-// stopProgramGroup sends the SIGSTOP and SIGCONT of signalProcessGroup.
+// No other code calls the raw group kill or builds a group target, except
+// the two probes, which send signal 0, and only stopProgramGroup sends the
+// SIGSTOP and SIGCONT of signalProcessGroup.
 function ownershipFacts() {
   const module = 'src/host/programGroup.ts';
   const stop = requireDeclaration(module, 'stopProgramGroup');
@@ -959,13 +960,18 @@ function ownershipFacts() {
       }
       if (isCall(node, 'processGroupTarget')) {
         targets += 1;
+        const owner = ownerPath(node);
         stray ||=
           file !== module ||
           ![
             'isProcessGroupAlive',
+            'probeFindsGroup',
             'killProcessGroupBestEffort',
             'signalProcessGroup',
-          ].includes(ownerPath(node));
+          ].includes(owner) ||
+          (['isProcessGroupAlive', 'probeFindsGroup'].includes(owner) &&
+            normalize(node.parent.getText()) !==
+              'process.kill(processGroupTarget(pgid), 0)');
       }
     });
   }
@@ -979,7 +985,7 @@ function ownershipFacts() {
       checkedKill &&
       judgesToken &&
       rawKills > 0 &&
-      targets === 3 &&
+      targets === 4 &&
       signalParam === "signal: 'SIGSTOP' | 'SIGCONT'" &&
       !stray,
     FreezesUnseenGroup: freezeFacts(stop.body),
@@ -1274,14 +1280,27 @@ function gcFacts() {
         ts.isShorthandPropertyAssignment(p) &&
         p.name.text === 'provenProgramGroupRuns',
     );
+  const runs = requireDeclaration(
+    'src/host/programGroup.ts',
+    'provenProgramGroupRuns',
+  ).body.statements.map((s) => normalize(s.getText()));
   const judges =
+    runs[0] ===
+      'const group = await readProvenProgramGroup(sessionDirectory);' &&
+    runs[1] === 'if (isProgramGroupAlive(group)) { return true; }';
+  // Then a group that reads gone, whose id the probe finds while no scan
+  // shows a member, live or zombie, counts as running too.
+  const probes =
+    judges &&
+    runs[2] ===
+      "return ( group !== null && !('unshared' in group) && judgeLiveGroup(group).verdict === 'gone' && probeFindsGroup(group.pid) && groupHasLiveProcess(group.pid) === null );" &&
     normalize(
       requireDeclaration(
         'src/host/programGroup.ts',
-        'provenProgramGroupRuns',
+        'probeFindsGroup',
       ).body.getText(),
     ) ===
-    '{ return isProgramGroupAlive(await readProvenProgramGroup(sessionDirectory)); }';
+      "{ try { process.kill(processGroupTarget(pgid), 0); return true; } catch (error) { if (hasErrorCode(error, 'ESRCH')) { return false; } if (hasErrorCode(error, 'EPERM')) { return true; } throw error; } }";
   return {
     GcSkipsNonCollectable: reconcile >= 0 && collectable > reconcile,
     GcFinalCheck: finalCheck,
@@ -1291,6 +1310,7 @@ function gcFacts() {
       loop.statements.indexOf(removal) > groupSkip &&
       wired &&
       judges,
+    GcProbesUnseenGroup: probes,
   };
 }
 
@@ -1332,6 +1352,7 @@ const COVERED = [
   ['src/cli/commands/gc.ts', 'gcSessions'],
   ['src/cli/commands/gc.ts', 'defaultDependencies'],
   ['src/host/programGroup.ts', 'provenProgramGroupRuns'],
+  ['src/host/programGroup.ts', 'probeFindsGroup'],
   ['src/host/lifecycle.ts', 'allocateSession'],
   ['src/host/lifecycle.ts', 'launchHost'],
   ['src/host/lifecycle.ts', 'isProcessAlive'],

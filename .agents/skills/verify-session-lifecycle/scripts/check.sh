@@ -142,7 +142,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck GcKeepsLiveGroup ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid FreezesUnseenGroup UnsharedGroupReadsUnknown"
+GUARDS="GcSkipsNonCollectable GcFinalCheck GcKeepsLiveGroup GcProbesUnseenGroup ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid FreezesUnseenGroup UnsharedGroupReadsUnknown"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -242,6 +242,7 @@ write_run mutant-ShutdownBothChecks violated TerminalIsFinal "ShutdownChecksComm
 UNSEEN=TRUE
 write_run current-unseen pass "$RULES" "" "the code with a program that no scan shows: every rule holds"
 write_run mutant-FreezesUnseenGroup-unseen violated DestroyedProgramStopped "FreezesUnseenGroup=FALSE" "without the freeze, the kill finds no member in view, and destroy records destroyed while a fork chain runs" DestroyedProgramStopped
+write_run mutant-GcProbesUnseenGroup-unseen violated RemovedSessionStopped "GcProbesUnseenGroup=FALSE" "without the probe, gc removes program.json while a fork chain that the program left runs" RemovedSessionStopped
 UNSEEN=FALSE
 
 # destroy, list and gc run without /proc, or in another pid namespace or on

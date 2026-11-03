@@ -575,10 +575,38 @@ export function isProgramGroupAlive(group: ProgramGroup | null): boolean {
   );
 }
 
+// Whether gc must keep the session. gc sends no SIGSTOP, so a fork chain
+// that no scan shows reads gone: a group id that the probe finds while no
+// scan shows a member of the group, not even a zombie, also counts.
 export async function provenProgramGroupRuns(
   sessionDirectory: string,
 ): Promise<boolean> {
-  return isProgramGroupAlive(await readProvenProgramGroup(sessionDirectory));
+  const group = await readProvenProgramGroup(sessionDirectory);
+  if (isProgramGroupAlive(group)) {
+    return true;
+  }
+  return (
+    group !== null &&
+    !('unshared' in group) &&
+    judgeLiveGroup(group).verdict === 'gone' &&
+    probeFindsGroup(group.pid) &&
+    groupHasLiveProcess(group.pid) === null
+  );
+}
+
+function probeFindsGroup(pgid: number): boolean {
+  try {
+    process.kill(processGroupTarget(pgid), 0);
+    return true;
+  } catch (error) {
+    if (hasErrorCode(error, 'ESRCH')) {
+      return false;
+    }
+    if (hasErrorCode(error, 'EPERM')) {
+      return true;
+    }
+    throw error;
+  }
 }
 
 export function stopProgramGroup(group: ProgramGroup | null): void {

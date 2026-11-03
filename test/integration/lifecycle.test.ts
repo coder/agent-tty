@@ -1149,6 +1149,42 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       },
     );
 
+    // gc sends no SIGSTOP, so only the probe of the group id finds the chain.
+    it.runIf(capturesToken)(
+      'gc keeps an exited session while a fork chain that the program left runs',
+      async () => {
+        const beat = join(testHome, 'beat');
+        const sessionId = createSession(testHome, [
+          '/bin/sh',
+          '-c',
+          `trap "" HUP; python3 '${forkChain}' 60 0.002 '${beat}' & exit 0`,
+        ]);
+        pgid = inspectSession(testHome, sessionId).childPid as number;
+        const deadline = Date.now() + 10_000;
+        while (
+          !existsSync(beat) ||
+          inspectSession(testHome, sessionId).status !== 'exited'
+        ) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
+        expect(await chainRuns(beat)).toBe(true);
+
+        const kept = runCli(['gc', '--json'], { AGENT_TTY_HOME: testHome });
+        expect(JSON.parse(kept.stdout)).toMatchObject({
+          ok: true,
+          result: { removedSessionCount: 0 },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('exited');
+
+        const destroyed = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(JSON.parse(destroyed.stdout)).toMatchObject({ ok: true });
+        expect(await chainRuns(beat)).toBe(false);
+      },
+    );
+
     it('a reconcile after a host crash ends the program and its background process', async () => {
       const sessionId = await createProgram(
         'trap "" TERM HUP; sleep 300 & touch "$0"; wait',

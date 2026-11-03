@@ -22,6 +22,7 @@ import {
   judgeProgramGroup,
   parseAutogroup,
   parseProcStat,
+  provenProgramGroupRuns,
   readProgramGroup,
   readProvenProgramGroup,
   stopProgramGroup,
@@ -33,7 +34,11 @@ import {
   programRecordPath,
   sessionDir,
 } from '../../../src/storage/sessionPaths.js';
-import { captureHost, writeHostRecord } from '../../../src/host/hostRecord.js';
+import {
+  captureHost,
+  writeHostRecord,
+  type HostRecord,
+} from '../../../src/host/hostRecord.js';
 import { capturesToken } from '../../helpers.js';
 
 import type * as Fs from 'node:fs';
@@ -868,6 +873,60 @@ describe('a program group with a token, as a faked /proc shows it', () => {
           ? '/autogroup-7 nice 0\n'
           : null;
   }
+
+  // gc sends no SIGSTOP, so a fork chain that no scan shows reads gone.
+  describe('provenProgramGroupRuns', () => {
+    async function recordedSession(): Promise<string> {
+      const directory = await mkdtemp(join(tmpdir(), 'agent-tty-runs-'));
+      writeProgramRecord(directory, group);
+      writeHostRecord(directory, captureHost(process.pid) as HostRecord);
+      return directory;
+    }
+
+    it.each([
+      {
+        when: 'no scan shows a member and the probe finds the id',
+        states: [],
+        probe: 'ok',
+        runs: true,
+      },
+      {
+        when: 'only zombies are left',
+        states: ['Z'],
+        probe: 'ok',
+        runs: false,
+      },
+      {
+        when: 'the probe finds no process',
+        states: [],
+        probe: 'ESRCH',
+        runs: false,
+      },
+      {
+        when: 'a live member carries the token',
+        states: ['S'],
+        probe: 'ok',
+        runs: true,
+      },
+    ] as const)(
+      'when $when, reads the group running: $runs',
+      async ({ states, probe, runs }) => {
+        const directory = await recordedSession();
+        try {
+          procShowsTokenGroup(...states);
+          if (probe === 'ok') {
+            probeEnds('ok');
+          } else {
+            killFailsWith(probe);
+          }
+
+          expect(await provenProgramGroupRuns(directory)).toBe(runs);
+        } finally {
+          await rm(directory, { recursive: true, force: true });
+        }
+      },
+    );
+  });
 
   it.each(['EPERM', 'EACCES'])(
     'is alive and gets the kill when a live member carries the token and another process refuses its read with %s',

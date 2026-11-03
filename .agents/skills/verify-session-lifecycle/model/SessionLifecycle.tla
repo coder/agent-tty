@@ -47,6 +47,9 @@ CONSTANTS
     GcKeepsLiveGroup,       \* gc.ts: skip a session that is not destroyed
                             \*   while program.json proves that its group
                             \*   runs
+    GcProbesUnseenGroup,    \* programGroup.ts: provenProgramGroupRuns also
+                            \*   counts a group id that the probe finds
+                            \*   while no scan shows a member
     ReconcileSkipsTerminal, \* lifecycle.ts: return when the manifest is terminal
     ReconcileSkipsLiveHost, \* lifecycle.ts: return when hostPid is set and alive
     CreateRecordsHostPid,   \* lifecycle.ts: launch the host, then write the
@@ -131,6 +134,7 @@ ASSUME Token \in BOOLEAN
 ASSUME Unseen \in BOOLEAN
 ASSUME OtherPidSpace \in BOOLEAN
 ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, GcKeepsLiveGroup,
+                 GcProbesUnseenGroup,
                  ReconcileSkipsTerminal,
                  ReconcileSkipsLiveHost, CreateRecordsHostPid,
                  HostWaitsForManifest, ReconcileRereads,
@@ -980,14 +984,21 @@ GcReadsReconciled ==
                    lruns, destroyVars, groupVars>>
 
 \* provenProgramGroupRuns reads program.json and judges the group, as the
-\* waits of destroy do. With GcKeepsLiveGroup gc skips a session that is not
-\* destroyed while that group reads alive ("the session's program group
-\* still runs"). The code tests the status of manifestAfter, which cannot
-\* turn from destroyed back, so this current status skips no more often.
+\* waits of destroy do. gc sends no SIGSTOP, so with Unseen no scan shows
+\* the program's processes, and with GcProbesUnseenGroup the probe
+\* kill(-pgid, 0) then finds them. An unrelated group that took the id is
+\* in view and reads unproven. With GcKeepsLiveGroup gc skips a session that
+\* is not destroyed while that group reads alive ("the session's program
+\* group still runs"). The code tests the status of manifestAfter, which
+\* cannot turn from destroyed back, so this current status skips no more
+\* often.
+GcSeesGroup ==
+    \/ CliGroupSeen("proven")
+    \/ GcProbesUnseenGroup /\ Unseen /\ (prog \/ left)
+
 GcChecksGroup ==
     /\ pc["gc"] = "group"
-    /\ IF GcKeepsLiveGroup /\ mst # "destroyed" /\ rec
-          /\ CliGroupSeen("proven")
+    /\ IF GcKeepsLiveGroup /\ mst # "destroyed" /\ rec /\ GcSeesGroup
           THEN GcSkips
           ELSE GcGoesTo("final")
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, rd,
@@ -1461,10 +1472,9 @@ NoUnrelatedHostKilled == ~hitUnrelatedHost
 \* R20: gc removes the folder, and with it program.json, only once no
 \* process of the program's group runs, also none that the program left
 \* when it exited on its own. It does not count a program that no
-\* program.json named (see R16), nor a group that no scan shows (Unseen):
-\* gc sends no SIGSTOP.
+\* program.json named (see R16).
 RemovedSessionStopped ==
-    (gres = "removed" /\ ~diedUnrecorded /\ ~Unseen) => ~(GroupAlive \/ left)
+    (gres = "removed" /\ ~diedUnrecorded) => ~(GroupAlive \/ left)
 
 \* Witnesses. check.sh expects TLC to report each one VIOLATED, which shows
 \* that the model reaches the state: the rules above are not true only
