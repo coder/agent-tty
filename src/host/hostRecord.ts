@@ -16,7 +16,7 @@ import { readBootId, readProcStat } from './programGroup.js';
 // start time on the same boot. The pid means that process only in the
 // host's pid namespace on the host's machine, and /proc shows that start
 // time with the boottime offset of the reader's time namespace.
-const HostRecordSchema = z
+export const HostRecordSchema = z
   .object({
     version: z.literal(1),
     pid: z.number().int().positive(),
