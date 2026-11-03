@@ -875,6 +875,7 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     events: ReplayInput['events'],
     timing: ReplayTimingOptions,
     flushCostMs = 0,
+    onFlush: () => void = () => {},
   ): Promise<{ atMs: number; chunks: string[] }[]> {
     vi.useFakeTimers();
     const backend = createBackend();
@@ -885,11 +886,12 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
       isBooted: true,
       page: { isClosed: () => false },
       resizeBridge: () => {
-        replayStartedAtMs = Date.now();
+        replayStartedAtMs = performance.now();
         return Promise.resolve();
       },
       flushOutputBatch: (_page: object, dataChunks: string[]) => {
-        flushes.push({ atMs: Date.now(), chunks: [...dataChunks] });
+        flushes.push({ atMs: performance.now(), chunks: [...dataChunks] });
+        onFlush();
         return new Promise<void>((resolve) => {
           setTimeout(resolve, flushCostMs);
         });
@@ -969,6 +971,28 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     expect(flushes.flatMap((flush) => flush.chunks)).toEqual(
       events.slice(0, 101).map((event) => `out${String(event.seq)}`),
     );
+  });
+
+  it('keeps the pace when the wall clock jumps during the replay', async () => {
+    const flushes = await replayAndRecordFlushes(
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 200),
+        outputEvent(2, 400),
+        exitEvent(3, 600),
+      ],
+      RECORDED,
+      0,
+      () => {
+        vi.setSystemTime(Date.now() + 60_000);
+      },
+    );
+
+    expect(flushes.map((flush) => flush.atMs)).toEqual([
+      FIRST_EVENT_AT_MS,
+      FIRST_EVENT_AT_MS + 200,
+      FIRST_EVENT_AT_MS + 400,
+    ]);
   });
 
   it('keeps max-speed outputs in one flush so frame holds cannot outlast the export timeout', async () => {
