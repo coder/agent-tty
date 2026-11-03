@@ -2,6 +2,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import {
   closeSync,
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -82,6 +83,11 @@ function runCleanup(
     options.stderrPath === undefined
       ? undefined
       : openSync(options.stderrPath, 'w');
+  // A second name outside home/ keeps the stderr text after home/ is removed.
+  const stderrCopy = join(run.root, 'cleanup.stderr');
+  if (options.stderrPath !== undefined) {
+    linkSync(options.stderrPath, stderrCopy);
+  }
   try {
     const result = spawnSync(file, args, {
       cwd,
@@ -91,7 +97,10 @@ function runCleanup(
     });
     return {
       status: result.status,
-      stderr: stderrFd === undefined ? result.stderr : '',
+      stderr:
+        stderrFd === undefined
+          ? result.stderr
+          : readFileSync(stderrCopy, 'utf8'),
     };
   } finally {
     if (stderrFd !== undefined) {
@@ -256,7 +265,7 @@ describe.skipIf(process.platform !== 'linux')(
           stderrPath: join(run.home, 'cleanup.log'),
         });
 
-        expect(result.status).toBe(0);
+        expect(result.status, result.stderr).toBe(0);
         expect(existsSync(run.home)).toBe(false);
       });
 
