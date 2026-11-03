@@ -778,14 +778,14 @@ SkipsHost(read) == ReconcileSkipsLiveHost /\ read.pid /\ hostAlive
 \* readManifestIfExists. With ReconcileRepairsMarked, a terminal manifest
 \* other than destroyed next to the destroy marker gets destroyed from this
 \* copy (writeMarkedDestroyed), with hostPid and childPid null and the exit
-\* code kept, and reconcile returns. Otherwise it returns when the manifest
-\* is null or terminal.
+\* code kept, and reconcile unlinks the socket and returns. Otherwise it
+\* returns when the manifest is null or terminal.
 ReconcileReads(p) ==
     /\ pc[p] = "r_read"
     /\ IF ReconcileRepairsMarked /\ dmark /\ mst \in Terminal
           /\ mst # "destroyed"
           THEN /\ Write("destroyed", FALSE, "none", mcode, FALSE)
-               /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
+               /\ pc' = [pc EXCEPT ![p] = "r_unlink"]
                /\ readRepaired' = TRUE
                /\ UNCHANGED rd
        ELSE IF mst = "none" \/ (ReconcileSkipsTerminal /\ mst \in Terminal)
