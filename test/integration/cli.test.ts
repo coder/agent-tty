@@ -800,6 +800,19 @@ describe('CLI integration', () => {
     expect(envelope.error.code).toBe('SESSION_NOT_FOUND');
   });
 
+  it('prints the INVALID_INPUT envelope for a usage error after --json follows -- as an option value', () => {
+    const result = runCli(
+      ['wait', 'missing', '--text', '--', '--json', '--bogus'],
+      testEnv(),
+    );
+    expect(result.status, result.stderr).toBe(2);
+
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.command).toBe('agent-tty');
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.message).toBe("unknown option '--bogus'");
+  });
+
   it('prints a human error when --json is the value of an option', () => {
     const result = runCli(['wait', 'missing', '--text', '--json'], testEnv());
     expect(result.status).toBe(3);
