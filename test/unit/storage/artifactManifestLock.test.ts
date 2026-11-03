@@ -25,6 +25,7 @@ const fsHooks = vi.hoisted(() => ({
     | undefined,
   beforeLink: undefined as ((to: string) => Promise<void>) | undefined,
   beforeRm: undefined as ((path: string) => Promise<void>) | undefined,
+  beforeWriteFile: undefined as ((path: string) => Promise<void>) | undefined,
 }));
 
 vi.mock('node:fs/promises', async () => {
@@ -43,12 +44,22 @@ vi.mock('node:fs/promises', async () => {
       await fsHooks.beforeRm?.(String(args[0]));
       return actual.rm(...args);
     },
+    writeFile: async (...args: Parameters<typeof actual.writeFile>) => {
+      await fsHooks.beforeWriteFile?.(
+        typeof args[0] === 'string' ? args[0] : '',
+      );
+      return actual.writeFile(...args);
+    },
   };
 });
 
 import { captureHost } from '../../../src/host/hostRecord.js';
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
-import { withArtifactManifestLock } from '../../../src/storage/artifactManifest.js';
+import {
+  appendArtifactWithRollback,
+  createArtifactEntry,
+  withArtifactManifestLock,
+} from '../../../src/storage/artifactManifest.js';
 
 const FAST = { waitMs: 100, unknownOwnerStaleMs: 60_000 };
 
@@ -83,6 +94,7 @@ describe('artifact manifest lock', () => {
     fsHooks.beforeRename = undefined;
     fsHooks.beforeLink = undefined;
     fsHooks.beforeRm = undefined;
+    fsHooks.beforeWriteFile = undefined;
     await rm(home, { recursive: true, force: true });
   });
 
@@ -218,8 +230,8 @@ describe('artifact manifest lock', () => {
 
   it('breaks its own lock on the next update when the release failed', async () => {
     let failures = 0;
-    fsHooks.beforeRm = (path) => {
-      if (path !== lockPath) {
+    fsHooks.beforeRename = (from, to) => {
+      if (from !== lockPath || !to.includes('.released-')) {
         return Promise.resolve();
       }
       failures += 1;
@@ -238,7 +250,7 @@ describe('artifact manifest lock', () => {
       'manifest.json.lock',
     ]);
 
-    fsHooks.beforeRm = undefined;
+    fsHooks.beforeRename = undefined;
     await expect(
       withArtifactManifestLock(
         sessionDirectory,
@@ -257,6 +269,45 @@ describe('artifact manifest lock', () => {
     });
 
     expect(await readFile(lockPath, 'utf8')).toBe(other);
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([
+      'manifest.json.lock',
+    ]);
+  });
+
+  it('times out on schedule when the lock keeps changing hands', async () => {
+    fsHooks.beforeLink = () =>
+      Promise.reject(Object.assign(new Error('taken'), { code: 'EEXIST' }));
+
+    await expect(
+      withArtifactManifestLock(sessionDirectory, () => Promise.resolve(), FAST),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.STORAGE_WRITE_ERROR,
+      retryable: true,
+    });
+  });
+
+  it('removes the rollback file and reports STORAGE_WRITE_ERROR when it cannot take the lock', async () => {
+    const artifact = join(sessionDirectory, 'artifacts', 'recording-1.cast');
+    await writeFile(artifact, 'cast');
+    fsHooks.beforeWriteFile = (path) =>
+      path.includes('manifest.json.lock.tmp-')
+        ? Promise.reject(Object.assign(new Error('io'), { code: 'EIO' }))
+        : Promise.resolve();
+
+    await expect(
+      appendArtifactWithRollback({
+        sessionDir: sessionDirectory,
+        entry: createArtifactEntry({
+          kind: 'recording',
+          filename: 'recording-1.cast',
+          sessionId: 'session-01',
+          capturedAtSeq: 1,
+          metadata: {},
+        }),
+        rollbackArtifactPath: artifact,
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.STORAGE_WRITE_ERROR });
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
   });
 
   it('reports SESSION_NOT_FOUND when the session folder is gone', async () => {

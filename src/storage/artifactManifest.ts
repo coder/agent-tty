@@ -19,6 +19,7 @@ import {
   HostRecordSchema,
   judgeHost,
 } from '../host/hostRecord.js';
+import { CliError } from '../cli/errors.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { ReplaySeqSchema } from '../protocol/schemas.js';
 import { readValidatedJsonFile, writeValidatedJsonFile } from './manifests.js';
@@ -301,9 +302,7 @@ async function acquireManifestLock(
       if (await createWithoutReplacing(temporaryPath, lockPath)) {
         return;
       }
-      if ((await breakStaleManifestLock(lockPath, timing)) === 'retry') {
-        continue;
-      }
+      const outcome = await breakStaleManifestLock(lockPath, timing);
       if (Date.now() >= deadline) {
         const holder = await readFile(lockPath, 'utf8').catch(() => '');
         throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
@@ -312,8 +311,10 @@ async function acquireManifestLock(
           details: { lockPath, holderPid: parseLockOwner(holder)?.pid ?? null },
         });
       }
-      await sleep(pollMs);
-      pollMs = Math.min(pollMs * 2, MAX_LOCK_POLL_MS);
+      if (outcome === 'held') {
+        await sleep(pollMs);
+        pollMs = Math.min(pollMs * 2, MAX_LOCK_POLL_MS);
+      }
     }
   } finally {
     await rm(temporaryPath, { force: true }).catch(() => undefined);
@@ -325,18 +326,20 @@ async function releaseManifestLock(
   contents: string,
 ): Promise<void> {
   for (let attempt = 1; ; attempt += 1) {
+    const movedPath = `${lockPath}.released-${randomUUID()}`;
     try {
-      const current = await readFile(lockPath, 'utf8').catch(
-        (error: unknown) => {
-          if (hasErrorCode(error, 'ENOENT')) {
-            return null;
-          }
-          throw error;
-        },
-      );
-      if (current === contents) {
-        await rm(lockPath, { force: true });
+      try {
+        await rename(lockPath, movedPath);
+      } catch (error) {
+        if (hasErrorCode(error, 'ENOENT')) {
+          return;
+        }
+        throw error;
       }
+      if ((await readFile(movedPath, 'utf8')) !== contents) {
+        await createWithoutReplacing(movedPath, lockPath);
+      }
+      await rm(movedPath, { force: true });
       return;
     } catch {
       if (attempt >= MAX_LOCK_RELEASE_ATTEMPTS) {
@@ -363,7 +366,6 @@ export async function withArtifactManifestLock<T>(
     timing.unknownOwnerStaleMs >= 0,
     'lock unknownOwnerStaleMs must not be negative',
   );
-  await ensureArtifactsDir(sessionDir);
   const lockPath = artifactPath(sessionDir, ARTIFACT_MANIFEST_LOCK_FILENAME);
   const contents = JSON.stringify(
     ManifestLockOwnerSchema.parse({
@@ -375,9 +377,17 @@ export async function withArtifactManifestLock<T>(
   );
 
   try {
+    await ensureArtifactsDir(sessionDir);
     await acquireManifestLock(lockPath, contents, timing);
   } catch (error) {
-    throw await sessionNotFoundIfRemoved(sessionDir, error);
+    const removed = await sessionNotFoundIfRemoved(sessionDir, error);
+    throw removed instanceof CliError
+      ? removed
+      : makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+          message: `Failed to take the artifact manifest lock at ${lockPath}.`,
+          details: { lockPath },
+          cause: error,
+        });
   }
   try {
     return await update();
@@ -398,11 +408,14 @@ async function appendArtifact(
     entry: ArtifactEntry;
     rollbackArtifactPath: string | undefined;
   }>,
+  rollbackIfNoLock?: string,
 ): Promise<ArtifactEntry> {
   const resolvedSessionDir = resolve(sessionDir);
   const expectedSessionId = sessionIdFromSessionDir(resolvedSessionDir);
-  return await appendSerializer.run(resolvedSessionDir, () =>
+  let locked = false;
+  const update = (): Promise<ArtifactEntry> =>
     withArtifactManifestLock(resolvedSessionDir, async () => {
+      locked = true;
       const { entry, rollbackArtifactPath } = await prepare();
       try {
         const validatedEntry = validateArtifactEntry(entry, expectedSessionId);
@@ -421,8 +434,17 @@ async function appendArtifact(
         }
         throw error;
       }
-    }),
-  );
+    });
+  return await appendSerializer.run(resolvedSessionDir, async () => {
+    try {
+      return await update();
+    } catch (error) {
+      if (!locked && rollbackIfNoLock !== undefined) {
+        await rm(rollbackIfNoLock, { force: true }).catch(() => undefined);
+      }
+      throw error;
+    }
+  });
 }
 
 /**
@@ -444,11 +466,14 @@ export async function appendArtifactWithRollback(
     );
   }
 
-  await appendArtifact(options.sessionDir, () =>
-    Promise.resolve({
-      entry: options.entry,
-      rollbackArtifactPath: options.rollbackArtifactPath,
-    }),
+  await appendArtifact(
+    options.sessionDir,
+    () =>
+      Promise.resolve({
+        entry: options.entry,
+        rollbackArtifactPath: options.rollbackArtifactPath,
+      }),
+    options.rollbackArtifactPath,
   );
 }
 
