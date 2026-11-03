@@ -104,24 +104,17 @@ function readMachineId(): string | null {
       if (machineId.length > 0) {
         return machineId;
       }
-    } catch (error) {
-      if (!hasErrorCode(error, 'ENOENT')) {
-        throw error;
-      }
+    } catch {
+      continue;
     }
   }
   return null;
 }
 
 function inHostPidSpace(record: HostRecord): boolean {
-  try {
-    return (
-      inPidNamespace(record.pidNamespace) &&
-      readMachineId() === record.machineId
-    );
-  } catch {
-    return false;
-  }
+  return (
+    inPidNamespace(record.pidNamespace) && readMachineId() === record.machineId
+  );
 }
 
 export function writeHostRecord(
