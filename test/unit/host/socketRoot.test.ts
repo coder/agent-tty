@@ -137,6 +137,18 @@ describe.skipIf(process.platform === 'win32')('ensureSocketRoot', () => {
     expect(await socketRootExists(root)).toBe(true);
   });
 
+  it('gives the owner bits back to a private root that it reads as there', async () => {
+    await mkdir(root, { mode: 0o700 });
+    await chmod(root, 0);
+
+    try {
+      expect(await socketRootExists(root)).toBe(true);
+      expect((await lstat(root)).mode & 0o777).toBe(0o700);
+    } finally {
+      await chmod(root, 0o700);
+    }
+  });
+
   it('refuses an existing root that is not private', async () => {
     await mkdir(root);
     await chmod(root, 0o755);

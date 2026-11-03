@@ -227,6 +227,7 @@ describe.skipIf(process.platform === 'win32')(
         await sleep(50);
       }
       expect(readFileSync(exitFile, 'utf8')).toBe('0\n');
+      expect(existsSync(`${exitFile}.ebusy`)).toBe(true);
     });
 
     it('a host whose program exits removes it', async () => {

@@ -223,6 +223,24 @@ describe.skipIf(process.platform === 'win32')(
       expect(connect).not.toHaveBeenCalled();
     });
 
+    it('goes to the old path without a connect to the new one when another user owns the new root', async () => {
+      lstatHooks.entries.set(socketRootDirectory(), {
+        kind: 'directory',
+        uid: uid + 1,
+        mode: 0o700,
+      });
+      oldPathShows({ uid, mode: 0o700 }, { kind: 'socket', uid });
+      const connect = vi.spyOn(net, 'connect');
+
+      await expect(
+        sendRpc(socketFile, 'inspect', {}, 1_000),
+      ).rejects.toMatchObject({
+        code: 'HOST_UNREACHABLE',
+        details: { socketPath: oldSocketFile },
+      });
+      expect(connect.mock.calls).toEqual([[{ path: oldSocketFile }]]);
+    });
+
     it('goes to the old path without a connect to the new one when the new root is missing', async () => {
       lstatHooks.missing.add(socketRootDirectory());
       oldPathShows({ uid, mode: 0o700 }, { kind: 'socket', uid });
