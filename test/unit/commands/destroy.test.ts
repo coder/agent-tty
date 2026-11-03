@@ -100,4 +100,29 @@ describe('destroy command', () => {
       expect(mocks.destroySession).not.toHaveBeenCalled();
     },
   );
+  // The end of the program's session hangs up the CLI that waits inside it,
+  // and the copy must outlive that to report the destroy.
+  it('does not forward SIGHUP to the copy', async () => {
+    mocks.cliRunsInsideProgramSession.mockResolvedValue(true);
+    const child = Object.assign(new EventEmitter(), {
+      kill: vi.fn(() => true),
+    });
+    mocks.spawn.mockReturnValue(child);
+    const listeners = process.listenerCount('SIGHUP');
+
+    const destroy = runDestroyCommand(OPTIONS);
+    await vi.waitFor(() => {
+      expect(mocks.spawn).toHaveBeenCalledOnce();
+    });
+
+    expect(process.listenerCount('SIGHUP')).toBe(listeners);
+    process.listeners('SIGHUP').forEach((listener) => {
+      listener('SIGHUP');
+    });
+    expect(child.kill).not.toHaveBeenCalled();
+
+    child.emit('exit', 0, null);
+    await destroy;
+    expect(process.exitCode).toBe(0);
+  });
 });

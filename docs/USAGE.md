@@ -407,6 +407,8 @@ Every command exits with a stable code, so scripts can branch without parsing ou
 | `10`      | Replay failed.                                                                                                              |
 | `11`      | A standalone `wait` timed out, or a `wait` step inside a fail-fast `batch` timed out (`WAIT_TIMEOUT`; see [`wait`](#wait)). |
 | `12`      | A requested runtime capability is unavailable (`CAPABILITY_UNAVAILABLE`).                                                   |
+| `130`     | Interrupted by SIGINT: a `batch` that flushed its partial result, or a `destroy` whose copy in a new session SIGINT ended.  |
+| `143`     | Ended by SIGTERM: a `batch` that flushed its partial result, or a `destroy` whose copy in a new session SIGTERM ended.      |
 
 A fail-fast `batch` exits with the failed step's code (for example `11` for a wait timeout); `--keep-going` exits `1` if any step failed.
 
