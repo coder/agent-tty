@@ -112,10 +112,7 @@ export interface VideoCapableRendererBackend extends RendererBackend {
   /** Finalize and save the video recording to the given path. */
   finalizeVideo(outputPath: string): Promise<void>;
 
-  /**
-   * The glyphs that a bundled font drew as boxes in any frame of the replay.
-   * Never rejects: `{}` means the check did not run.
-   */
+  /** Resolves to `{}` instead of rejecting when the glyph check fails. */
   recordedMissingGlyphs(): Promise<RecordedGlyphFields>;
 }
 

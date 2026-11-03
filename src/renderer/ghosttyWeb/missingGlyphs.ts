@@ -127,12 +127,11 @@ export function probeText(grapheme: string, codePoint: number): string {
   return COMBINING_MARK.test(char) && base !== char ? base + char : char;
 }
 
-// Each candidate maps to the code points that no bundled face has.
 function glyphProbeTexts(
-  candidates: ReadonlyMap<string, readonly number[]>,
+  unbundledCodePointsByGrapheme: ReadonlyMap<string, readonly number[]>,
 ): string[] {
   const texts = new Set<string>();
-  for (const [grapheme, codePoints] of candidates) {
+  for (const [grapheme, codePoints] of unbundledCodePointsByGrapheme) {
     texts.add(grapheme);
     for (const codePoint of codePoints) {
       const text = probeText(grapheme, codePoint);
@@ -175,7 +174,7 @@ function faceOf(font: UsedFont, faces: StackFaces): BundledFace {
 // all of it, or else the first font of the stack, which then draws `.notdef`
 // boxes. So the code points of a cluster that one bundled face drew are boxes
 // when that face lacks them. A cluster split over several fonts is judged per
-// code point, over the code points that no bundled face has.
+// code point.
 function boxedCodePoints(
   grapheme: string,
   unbundledCodePoints: readonly number[],
@@ -226,11 +225,6 @@ function boxedCodePoints(
   return boxed;
 }
 
-/**
- * Finds the glyphs that the bundled fonts of a profile draw as `.notdef`
- * boxes. It keeps the fonts that Chromium reported per probe text, so a text
- * is probed once per backend.
- */
 export class GlyphCheck {
   private readonly faces: StackFaces;
   private readonly cssFont: string;
@@ -241,7 +235,6 @@ export class GlyphCheck {
     this.cssFont = cssFont;
   }
 
-  /** Null when the profile's font stack does not start with a bundled font. */
   public static forProfile(profile: RenderProfileConfig): GlyphCheck | null {
     const faces = profileFaces(profile);
     return faces === null
@@ -252,12 +245,14 @@ export class GlyphCheck {
         );
   }
 
-  /** The boxed code points of one screen, each with its cells. */
   public async screen(
     page: Page,
     grid: readonly (readonly string[])[],
   ): Promise<ScreenGlyphFields> {
-    const { boxed, complete } = await this.judge(page, new Set(grid.flat()));
+    const { boxedByGrapheme: boxed, allJudged } = await this.judge(
+      page,
+      new Set(grid.flat()),
+    );
     const cellsByGrapheme = new Map<string, GlyphCell[]>();
     grid.forEach((graphemes, row) => {
       graphemes.forEach((grapheme, col) => {
@@ -275,7 +270,7 @@ export class GlyphCheck {
 
     const cellsByCodePoint = new Map<number, GlyphCell[]>();
     let listedCells = 0;
-    let truncated = !complete;
+    let truncated = !allJudged;
     for (const [grapheme, cells] of cellsByGrapheme) {
       for (const codePoint of boxed.get(grapheme) ?? []) {
         const listed = cells.slice(0, MAX_MISSING_GLYPH_CELLS - listedCells);
@@ -307,37 +302,40 @@ export class GlyphCheck {
     };
   }
 
-  /** The code points boxed in any of the graphemes, without cells. */
   public async graphemes(
     page: Page,
     graphemes: ReadonlySet<string>,
     complete: boolean,
   ): Promise<RecordedGlyphFields> {
     const judged = await this.judge(page, graphemes);
-    const codePoints = new Set([...judged.boxed.values()].flat());
+    const codePoints = new Set([...judged.boxedByGrapheme.values()].flat());
     return {
       missingGlyphs: [...codePoints]
         .sort((left, right) => left - right)
         .map((codePoint) => ({ codePoint: formatCodePoint(codePoint) })),
-      ...((!complete || !judged.complete) && { missingGlyphsTruncated: true }),
+      ...((!complete || !judged.allJudged) && { missingGlyphsTruncated: true }),
     };
   }
 
-  // Maps each grapheme with a box to its boxed code points. `complete` is
-  // false when a probe limit or the time budget left a grapheme unjudged.
   private async judge(
     page: Page,
     graphemes: Iterable<string>,
-  ): Promise<{ boxed: Map<string, number[]>; complete: boolean }> {
+  ): Promise<{
+    boxedByGrapheme: Map<string, number[]>;
+    allJudged: boolean;
+  }> {
     const bundled = someFaceHas(this.faces);
-    const candidates = new Map<string, number[]>();
+    const unbundledCodePointsByGrapheme = new Map<string, number[]>();
     for (const grapheme of graphemes) {
       if (grapheme !== '' && !drawsWhole(grapheme, this.faces)) {
-        candidates.set(grapheme, uncoveredCodePoints(grapheme, bundled));
+        unbundledCodePointsByGrapheme.set(
+          grapheme,
+          uncoveredCodePoints(grapheme, bundled),
+        );
       }
     }
 
-    const texts = glyphProbeTexts(candidates);
+    const texts = glyphProbeTexts(unbundledCodePointsByGrapheme);
     if (this.fontsByText.size + texts.length > MAX_CACHED_GLYPH_PROBES) {
       this.fontsByText.clear();
     }
@@ -351,9 +349,12 @@ export class GlyphCheck {
       }
     }
 
-    const boxed = new Map<string, number[]>();
-    let complete = true;
-    for (const [grapheme, unbundledCodePoints] of candidates) {
+    const boxedByGrapheme = new Map<string, number[]>();
+    let allJudged = true;
+    for (const [
+      grapheme,
+      unbundledCodePoints,
+    ] of unbundledCodePointsByGrapheme) {
       const codePoints = boxedCodePoints(
         grapheme,
         unbundledCodePoints,
@@ -361,12 +362,12 @@ export class GlyphCheck {
         this.faces,
       );
       if (codePoints === undefined) {
-        complete = false;
+        allJudged = false;
       } else if (codePoints.length > 0) {
-        boxed.set(grapheme, codePoints);
+        boxedByGrapheme.set(grapheme, codePoints);
       }
     }
-    return { boxed, complete };
+    return { boxedByGrapheme, allJudged };
   }
 }
 

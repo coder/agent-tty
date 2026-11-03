@@ -21,8 +21,6 @@ export const BUILTIN_PROFILE_NAMES = Object.freeze([
   'reference-light',
 ] as const);
 
-// The Noto symbol fonts come after `monospace`, so the host monospace font
-// still draws every glyph it has.
 export const REFERENCE_PROFILE_FONT_STACK = `"${BUNDLED_FONT_FAMILY}", "${BUNDLED_SYMBOLS_FONT_FAMILY}", monospace, "Noto Sans Symbols 2", "Noto Sans Math"`;
 
 type BuiltinProfileName = (typeof BUILTIN_PROFILE_NAMES)[number];

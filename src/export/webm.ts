@@ -209,7 +209,6 @@ export async function generateWebmExport(
       timingOptions,
       replayTimeoutMs,
     );
-    // finalizeVideo() closes the page that the glyph check probes.
     const missingGlyphs = await backend.recordedMissingGlyphs();
     await backend.finalizeVideo(options.outputPath);
 

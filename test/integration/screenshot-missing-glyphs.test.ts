@@ -5,6 +5,7 @@ import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { MAX_GLYPH_PROBES } from '../../src/renderer/ghosttyWeb/missingGlyphs.js';
 import {
   cleanupHome,
   createSession,
@@ -13,8 +14,7 @@ import {
 } from '../helpers.js';
 
 const CLI_TIMEOUT_MS = 60_000;
-// More distinct glyphs than one screenshot probes (MAX_GLYPH_PROBES).
-const GLYPH_COUNT = 4600;
+const GLYPH_COUNT = MAX_GLYPH_PROBES + 500;
 
 describe('screenshot missing-glyph output', { timeout: 120_000 }, () => {
   let testHome = '';

@@ -12,12 +12,11 @@ const WOFF2_HEADER_SIZE = 48;
 const WOFF2_CUSTOM_TAG_INDEX = 63;
 const WOFF2_GLYF_TAG_INDEX = 10;
 const WOFF2_LOCA_TAG_INDEX = 11;
-// Indexes into the WOFF2 known-tag table.
-const WOFF2_TAG_INDEXES = { cmap: 0, name: 5 } as const;
+const WOFF2_KNOWN_TAG_INDEXES = { cmap: 0, name: 5 } as const;
 const SFNT_VERSIONS = new Set([0x00010000, 0x4f54544f, 0x74727565]);
 const POSTSCRIPT_NAME_ID = 6;
 
-type TableTag = keyof typeof WOFF2_TAG_INDEXES;
+type TableTag = keyof typeof WOFF2_KNOWN_TAG_INDEXES;
 type ReadTable = (tag: TableTag) => Buffer;
 
 function readUIntBase128(bytes: Buffer, cursor: { offset: number }): number {
@@ -86,7 +85,7 @@ function woff2Tables(bytes: Buffer): ReadTable {
     'WOFF2 decompressed stream length must match its table directory',
   );
   return (tag) => {
-    const table = tables.get(WOFF2_TAG_INDEXES[tag]);
+    const table = tables.get(WOFF2_KNOWN_TAG_INDEXES[tag]);
     invariant(table !== undefined, `WOFF2 font has no ${tag} table`);
     invariant(!table.transformed, `WOFF2 ${tag} table must not be transformed`);
     return stream.subarray(table.offset, table.offset + table.length);
@@ -189,7 +188,6 @@ function readCoverage(cmap: Buffer): ReadonlySet<number> {
   return codePoints;
 }
 
-// Name ID 6 from the Windows Unicode record, else the Macintosh Roman one.
 function readPostScriptName(name: Buffer): string {
   const count = name.readUInt16BE(2);
   const storageOffset = name.readUInt16BE(4);
@@ -201,15 +199,17 @@ function readPostScriptName(name: Buffer): string {
     }
     const platformId = name.readUInt16BE(record);
     const encodingId = name.readUInt16BE(record + 2);
+    const isWindowsUnicode = platformId === 3 && encodingId === 1;
+    const isMacintoshRoman = platformId === 1 && encodingId === 0;
     const length = name.readUInt16BE(record + 8);
     const start = storageOffset + name.readUInt16BE(record + 10);
     invariant(start + length <= name.length, 'font name string is truncated');
     const text = name.subarray(start, start + length);
-    if (platformId === 3 && encodingId === 1) {
+    if (isWindowsUnicode) {
       invariant(length % 2 === 0, 'a UTF-16 font name has an even length');
       return Buffer.from(text).swap16().toString('utf16le');
     }
-    if (platformId === 1 && encodingId === 0) {
+    if (isMacintoshRoman) {
       macintoshName ??= text.toString('latin1');
     }
   }

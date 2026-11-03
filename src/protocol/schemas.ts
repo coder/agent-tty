@@ -467,7 +467,6 @@ export const MissingGlyphSchema = z
   .strict();
 export type MissingGlyph = z.infer<typeof MissingGlyphSchema>;
 
-// A video has many frames, so a record export entry names no cells.
 export const RecordedMissingGlyphSchema = MissingGlyphSchema.pick({
   codePoint: true,
 }).strict();

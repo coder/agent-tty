@@ -947,8 +947,6 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     return check.screen(page, grid);
   }
 
-  // Records in the page every grapheme of the viewport after a replay paints
-  // it, for recordedMissingGlyphs(). A failure only turns the check off.
   private async notePaintedGraphemes(page: Page): Promise<void> {
     if (this.paintedNoteFailed) {
       return;

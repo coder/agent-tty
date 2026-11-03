@@ -3,7 +3,6 @@ interface GlyphCheckFields {
   missingGlyphsTruncated?: true | undefined;
 }
 
-/** Human output lines for the best-effort missing-glyph check of an artifact. */
 export function missingGlyphLines(result: GlyphCheckFields): string[] {
   const lines: string[] = [];
   const codePoints = (result.missingGlyphs ?? []).map(

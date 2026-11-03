@@ -16,10 +16,7 @@ import { resolveProfile } from '../../../src/renderer/profiles.js';
 import type { RenderProfileConfig } from '../../../src/renderer/types.js';
 
 const REFERENCE = resolveProfile('reference-dark');
-// Most cases need glyphs that no bundled font has, such as U+29C9, which the
-// reference stack draws with Noto Sans Math. This stack leaves the Noto fonts
-// out, so those glyphs stay boxes.
-const PROFILE = {
+const PROFILE_WITHOUT_NOTO = {
   ...REFERENCE,
   fontFamily: '"JetBrains Mono", "Symbols Nerd Font Mono", monospace',
 };
@@ -54,13 +51,11 @@ function bundledFace(
   };
 }
 
-// A page whose CDP reports, for each probe span, the fonts listed for its
-// text, or `fallback` for a text the table does not list.
 function fakePage(
-  fonts: Record<string, readonly UsedFont[]>,
-  fallback?: readonly UsedFont[],
+  fontsByText: Record<string, readonly UsedFont[]>,
+  fallbackFonts?: readonly UsedFont[],
 ): { page: Page; probed: string[] } {
-  const fontsByText = new Map(Object.entries(fonts));
+  const table = new Map(Object.entries(fontsByText));
   const probed: string[] = [];
   let spans: string[] = [];
   const send = vi.fn((method: string, params?: { nodeId?: number }) => {
@@ -72,7 +67,7 @@ function fakePage(
     }
     if (method === 'CSS.getPlatformFontsForNode') {
       const text = spans[(params?.nodeId ?? 0) - 2] ?? '';
-      const used = fontsByText.get(text) ?? fallback;
+      const used = table.get(text) ?? fallbackFonts;
       if (used === undefined) {
         return Promise.reject(new Error(`no fake fonts for ${text}`));
       }
@@ -98,7 +93,9 @@ function fakePage(
   return { page, probed };
 }
 
-function check(profile: RenderProfileConfig = PROFILE): GlyphCheck {
+function check(
+  profile: RenderProfileConfig = PROFILE_WITHOUT_NOTO,
+): GlyphCheck {
   const glyphCheck = GlyphCheck.forProfile(profile);
   if (glyphCheck === null) {
     throw new Error('the profile must start with a bundled font');
@@ -109,7 +106,7 @@ function check(profile: RenderProfileConfig = PROFILE): GlyphCheck {
 async function listed(
   grid: string[][],
   fonts: Record<string, readonly UsedFont[]>,
-  profile: RenderProfileConfig = PROFILE,
+  profile: RenderProfileConfig = PROFILE_WITHOUT_NOTO,
 ): Promise<string[]> {
   const { page } = fakePage(fonts);
   const { missingGlyphs } = await check(profile).screen(page, grid);
@@ -120,7 +117,7 @@ describe('GlyphCheck', () => {
   it('checks a probe against the face that drew it, not every face of its family', async () => {
     const { page } = fakePage({ '\ue0b0': [JETBRAINS] });
     const profile = {
-      ...PROFILE,
+      ...PROFILE_WITHOUT_NOTO,
       fontFamily: '"Term", monospace',
       fontAssets: [
         bundledFace(BUNDLED_PRIMARY_FONT_ASSET, 'Term', '400'),
@@ -136,7 +133,7 @@ describe('GlyphCheck', () => {
   it('finds the drawing face by its PostScript name when the profile aliases its family', async () => {
     const { page } = fakePage({ '\u0378': [JETBRAINS] });
     const profile = {
-      ...PROFILE,
+      ...PROFILE_WITHOUT_NOTO,
       fontFamily: '"Term Mono", monospace',
       fontAssets: [bundledFace(BUNDLED_PRIMARY_FONT_ASSET, 'Term Mono')],
     };
@@ -164,7 +161,7 @@ describe('GlyphCheck', () => {
 
   it('counts a bundled font that the stack names after the generic family', async () => {
     const profile = {
-      ...PROFILE,
+      ...PROFILE_WITHOUT_NOTO,
       fontFamily: '"JetBrains Mono", monospace, "Symbols Nerd Font Mono"',
     };
 
@@ -196,7 +193,7 @@ describe('GlyphCheck', () => {
 
   it('matches family names without regard to case, as CSS does', async () => {
     const profile = {
-      ...PROFILE,
+      ...PROFILE_WITHOUT_NOTO,
       fontFamily: '"jetbrains mono", "SYMBOLS NERD FONT MONO", monospace',
     };
 
