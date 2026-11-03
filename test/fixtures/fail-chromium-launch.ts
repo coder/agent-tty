@@ -2,7 +2,6 @@ import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import process from 'node:process';
 
-// AGENT_TTY_TEST_CHROMIUM_FAILURES=<n> fails only the first n launches.
 if (process.argv.includes('_host')) {
   const limit = process.env.AGENT_TTY_TEST_CHROMIUM_FAILURES;
   let failuresLeft = limit === undefined ? Infinity : Number(limit);

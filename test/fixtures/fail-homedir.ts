@@ -1,15 +1,19 @@
 import type * as Os from 'node:os';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 
-// Node and tsx also call os.homedir() at startup, so only the Home lookup in
-// src/storage/home.ts fails. The interval keeps the event loop alive.
 const os = createRequire(import.meta.url)('node:os') as typeof Os;
 const homedir = os.homedir;
+
+function calledFromResolveHome(): boolean {
+  return new Error().stack?.includes('/src/storage/home.ts') === true;
+}
+
 os.homedir = () => {
-  if (new Error().stack?.includes('/src/storage/home.ts') === true) {
+  if (calledFromResolveHome()) {
     throw new Error('fixture: homedir failed');
   }
   return homedir();
 };
 syncBuiltinESMExports();
-setInterval(() => undefined, 60_000);
+
+export const openHandle = setInterval(() => undefined, 60_000);
