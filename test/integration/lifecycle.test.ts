@@ -1751,7 +1751,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       expect(code).toBe(6);
       expect(JSON.parse(stdout)).toMatchObject({
         ok: false,
-        error: { code: 'HOST_UNREACHABLE' },
+        error: { code: 'HOST_UNREACHABLE', details: { sessionId } },
       });
       // The host hangs the program up, then kills its group after the
       // shutdown grace, and exits once its held write has landed.
