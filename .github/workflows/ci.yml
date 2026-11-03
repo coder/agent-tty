@@ -155,6 +155,67 @@ jobs:
         env:
           AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
 
+  # Destroy and reconcile under the /proc isolation that containers and
+  # hardened hosts use: a /proc that hides the processes of other users
+  # (hidepid=2) and a private PID namespace. other-user-group.test.ts adds a
+  # live process of the nobody user to the program's group. The tests drop
+  # from root to the runner user, because root sees through hidepid and can
+  # signal the nobody user's process.
+  proc-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AGENT_TTY_REQUIRE_SETPRIV: '1'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          install_args: --locked
+
+      - name: Install CI dependencies
+        run: mise run bootstrap-ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Make the other-user helper
+        run: |
+          install -m 0700 "$(command -v setpriv)" "$RUNNER_TEMP/setpriv-as"
+          sudo setcap cap_setuid,cap_setgid+ep "$RUNNER_TEMP/setpriv-as"
+          echo "AGENT_TTY_TEST_SETPRIV=$RUNNER_TEMP/setpriv-as" >> "$GITHUB_ENV"
+
+      - name: Test with another user's process
+        run: npx vitest run --maxWorkers=1 --retry=2 test/integration/other-user-group.test.ts
+
+      # The runner's sudo refuses -E, so env hands the runner's environment
+      # on to the namespace. A new proc instance, not a remount: a remount of
+      # /proc changes the superblock that the runner's own /proc shares.
+      - name: Test under a /proc mounted with hidepid=2
+        run: |
+          mapfile -d '' -t vars < <(env -0)
+          sudo env "${vars[@]}" unshare --mount --propagation private -- sh -euc '
+            mount -t proc -o hidepid=2 proc /proc
+            grep " /proc " /proc/self/mountinfo | tail -n 1 | grep -Eq "hidepid=(2|invisible)"
+            exec setpriv --reuid="$1" --regid="$2" --init-groups -- \
+              npx vitest run --maxWorkers=1 --retry=2 test/integration/lifecycle.test.ts test/integration/gc.test.ts test/integration/other-user-group.test.ts
+          ' sh "$(id -un)" "$(id -gn)"
+
+      # Node does not reap orphans, so a shell runs as PID 1 and its wait
+      # reaps the hosts reparented to it. non-reaping-init.test.ts covers an
+      # init that never reaps.
+      - name: Test in a private PID namespace
+        run: |
+          mapfile -d '' -t vars < <(env -0)
+          sudo env "${vars[@]}" unshare --pid --fork --mount-proc -- \
+            setpriv --reuid="$(id -un)" --regid="$(id -gn)" --init-groups -- \
+            sh -c '"$@" & wait $!' sh \
+            npx vitest run --maxWorkers=1 --retry=2 test/integration/lifecycle.test.ts test/integration/gc.test.ts test/integration/other-user-group.test.ts
+
   quality-gates:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -163,6 +224,7 @@ jobs:
       - test-unit
       - test-integration
       - test-e2e
+      - proc-isolation
     if: ${{ always() }}
     steps:
       - name: Report Linux quality gate results
@@ -171,6 +233,7 @@ jobs:
           echo "test-unit: ${{ needs.test-unit.result }}"
           echo "test-integration: ${{ needs.test-integration.result }}"
           echo "test-e2e: ${{ needs.test-e2e.result }}"
+          echo "proc-isolation: ${{ needs.proc-isolation.result }}"
 
       - name: Fail if any Linux quality gate failed
         if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}

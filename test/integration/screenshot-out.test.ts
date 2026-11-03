@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import process from 'node:process';
@@ -132,6 +140,32 @@ describe('screenshot --out', { timeout: 120_000 }, () => {
     );
     expect(manifest.artifacts).toEqual([]);
   });
+
+  it.skipIf(process.getuid?.() === 0)(
+    'fails with EXPORT_ERROR before capturing when the --out parent folder cannot be searched',
+    async () => {
+      const writeOnly = join(outDir, 'write-only');
+      await mkdir(writeOnly, { mode: 0o200 });
+      await chmod(writeOnly, 0o200);
+      const out = join(writeOnly, 'proof.png');
+
+      try {
+        const run = screenshot(['--out', out]);
+
+        expect(run.status).toBe(7);
+        expect((run.envelope as ErrorEnvelope).error).toMatchObject({
+          code: 'EXPORT_ERROR',
+          details: { sessionId, out },
+        });
+        const manifest = await readArtifactManifest(
+          sessionDir(testHome, sessionId),
+        );
+        expect(manifest.artifacts).toEqual([]);
+      } finally {
+        await chmod(writeOnly, 0o700);
+      }
+    },
+  );
 
   it('refuses an --out inside session storage and leaves the managed files as they were', async () => {
     const first = expectSuccess(screenshot([]));

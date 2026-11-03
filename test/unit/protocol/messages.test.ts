@@ -1101,6 +1101,18 @@ describe('RPC message schemas', () => {
         metadata: {},
       }).success,
     ).toBe(true);
+    expect(
+      RecordExportResultSchema.safeParse({
+        sessionId: 'session-01',
+        format: 'asciicast',
+        artifactPath: '/tmp/session-01/artifacts/recording--1-asciicast.cast',
+        bytes: 128,
+        sha256: 'abc123',
+        capturedAtSeq: -1,
+        durationMs: 0,
+        metadata: {},
+      }).success,
+    ).toBe(true);
   });
 
   it('rejects invalid record export results', () => {
@@ -1136,6 +1148,17 @@ describe('RPC message schemas', () => {
         capturedAtSeq: 7,
         metadata: {},
         extra: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordExportResultSchema.safeParse({
+        sessionId: 'session-01',
+        format: 'asciicast',
+        artifactPath: '/tmp/session-01/artifacts/recording--2-asciicast.cast',
+        bytes: 128,
+        sha256: 'abc123',
+        capturedAtSeq: -2,
+        metadata: {},
       }).success,
     ).toBe(false);
   });

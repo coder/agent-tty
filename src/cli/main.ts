@@ -1014,6 +1014,10 @@ async function main(): Promise<void> {
       'Only match renderer snapshots produced after this Event Log sequence',
       parseIntegerOption,
     )
+    .addHelpText(
+      'after',
+      '\nThe --idle-ms or --screen-stable-ms window must fit inside the timeout. A window that cannot fit fails at once with INVALID_DURATION (exit 2).',
+    )
     .action(
       wrapAction(
         'wait',
