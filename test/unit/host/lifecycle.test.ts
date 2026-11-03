@@ -24,9 +24,7 @@ const fsHooks = vi.hoisted(() => ({
   // The text that a read of /proc/self/stat returns.
   ownStat: undefined as string | undefined,
   rmdirError: undefined as Error | undefined,
-  // Other contents for a path that readFileSync reads.
   files: undefined as Map<string, string> | undefined,
-  // Other targets for a link that readlinkSync reads.
   links: undefined as Map<string, string> | undefined,
 }));
 

@@ -157,10 +157,6 @@ export async function readHostRecord(
   }
 }
 
-// A pid that the host recorded names another process, if any, in a pid
-// namespace other than the host's or on another machine. Without a host
-// record, from a session that predates it, the CLI cannot tell and trusts
-// the pid as before.
 export async function sharesHostPidNamespace(
   sessionDirectory: string,
 ): Promise<boolean> {
