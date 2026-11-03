@@ -932,25 +932,31 @@ GcReadsReconciled ==
                    lruns, destroyVars, groupVars>>
 
 \* finalManifest = readManifestIfExists; skip when it is there and not
-\* collectable ("session restarted between check and delete").
+\* collectable ("session restarted between check and delete"). Then
+\* removeDeadHostSocket judges the host of that copy: a null hostPid or a
+\* dead host sends gc to "rmsock". hostAlive stands in for judgeHost, which
+\* reads a dead host alive only when its pid now names another process, and
+\* no rule depends on the socket of a dead host.
 GcFinalRead ==
     /\ pc["gc"] = "final"
     /\ IF GcFinalCheck /\ mst # "none" /\ mst \notin Collectable
           THEN GcSkips
-          ELSE GcGoesTo("rm")
+          ELSE GcGoesTo(IF mpid /\ hostAlive THEN "rm" ELSE "rmsock")
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, rd,
                    lruns, destroyVars, groupVars>>
 
+\* At "rmsock", removeDeadHostSocket unlinks the socket first. Then
 \* rm(sessionDirectory, { recursive: true, force: true, maxRetries: 3,
 \*    retryDelay: 10 })
 GcRemoves ==
-    /\ pc["gc"] = "rm"
+    /\ pc["gc"] \in {"rm", "rmsock"}
+    /\ sock' = (sock /\ pc["gc"] = "rm")
     /\ dir' = FALSE /\ mst' = "none" /\ mpid' = FALSE /\ morigin' = "none"
     /\ mcode' = FALSE /\ mchild' = FALSE /\ dmark' = FALSE
     /\ rec' = FALSE /\ hrec' = FALSE
     /\ pc' = [pc EXCEPT !["gc"] = "done"]
     /\ gres' = "removed"
-    /\ UNCHANGED <<wasTerminal, wasExited, wasNamed, ghostVars, sock, cpc,
+    /\ UNCHANGED <<wasTerminal, wasExited, wasNamed, ghostVars, cpc,
                    hostVars, shutVars, rd, lruns, destroyVars, reused,
                    hitUnrelated, diedUnrecorded, hreused, hitUnrelatedHost,
                    passedReused>>
@@ -1038,9 +1044,10 @@ DestroyFinishes ==
          /\ UNCHANGED <<dres, dsaw>>
 
 \* readSessionManifestOrThrow throws SESSION_NOT_FOUND on a missing manifest,
-\* then destroySession throws SESSION_ALREADY_DESTROYED on a destroyed one. A
-\* terminal copy goes to recordDestroyed, an active one to --force or to the
-\* destroy RPC.
+\* then destroySession throws SESSION_ALREADY_DESTROYED on a destroyed one,
+\* after removeDeadHostSocket unlinked the socket of a host that the copy
+\* proves gone (see GcFinalRead). A terminal copy goes to recordDestroyed, an
+\* active one to --force or to the destroy RPC.
 DestroyReads ==
     /\ DestroyAt({"read"})
     /\ IF mst \in {"none", "destroyed"}
@@ -1052,7 +1059,8 @@ DestroyReads ==
           THEN /\ dpc' = "kill" /\ drd' = ReadCopy
                /\ UNCHANGED <<dres, dsaw>>
           ELSE /\ dpc' = "rpc" /\ UNCHANGED <<drd, dres, dsaw>>
-    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
+    /\ sock' = (sock /\ (mst # "destroyed" \/ (mpid /\ hostAlive)))
+    /\ UNCHANGED <<diskVars, ghostVars, cpc, hostVars, shutVars,
                    readerVars, dforce, dinside, dkill, groupVars>>
 
 \* stopLeftoversThenRecordDestroyed: stopSessionProcesses(sessionId, null,
