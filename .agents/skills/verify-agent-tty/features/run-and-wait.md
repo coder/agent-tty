@@ -1,6 +1,6 @@
 # Input and waits
 
-A user sends input to a running program and waits until the screen shows the result: a waited `run` of a shell command, typed text, pasted text, key chords, and markers in the timeline. The text, regex, cursor and stable-screen conditions of `wait` are checked against the rendered screen, not the raw output. `--idle-ms` measures the time since the program last wrote output, and `--exit` waits for the process to exit.
+A user sends input to a running program and waits until the screen shows the result: a waited `run` of a shell command, typed text, pasted text, key chords, and markers in the timeline. The text, regex, cursor and stable-screen conditions of `wait` are checked against the rendered screen, not the raw output. `--idle-ms` waits until the program has written no output for that long, counted from its last output or from the `wait` call, whichever is later. `--exit` waits for the process to exit.
 
 ## Sub-features
 
@@ -57,5 +57,5 @@ Preconditions:
 - Without `NODE_OPTIONS=--disable-warning=DEP0205` (set by `env.sh`), Node 26 prints a tsx deprecation warning after the fixture's prompt, and a cursor-line wait for `READY>$` never matches.
 - `hello-prompt` exits on Ctrl+C. Input after that fails with `SESSION_NOT_RUNNING` (exit 4).
 - `type` and `send-keys` return once the input is written, not when the program has reacted. Always follow them with a `wait`.
-- A waited `run` that times out exits 0, with `ok: true`, `timedOut: true` and `completed: false`. `wait`, and a `batch` whose `wait` or `run` step times out, exit 11. Check `.result.timedOut` after each `run`.
+- A waited `run` that times out exits 0, with `ok: true`, `timedOut: true` and `completed: false`. `wait`, and a fail-fast `batch` whose `wait` or `run` step times out, exit 11. A `--keep-going` batch with a failed step exits 1. Check `.result.timedOut` after each `run`.
 - `wait --idle-ms` or `--screen-stable-ms` of 30000 ms or more without `--timeout` exits 2 with `INVALID_DURATION`, because the window does not fit in the 30 s default. Pass a larger `--timeout`.
