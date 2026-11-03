@@ -363,7 +363,7 @@ function readGroupMembers(pgid: number): ProcessRow[] {
   } catch (error) {
     // A chroot or a container without a mounted /proc shows no member, so
     // the probe answers alone and nothing proves a kill.
-    if (hasErrorCode(error, 'ENOENT') || isRefusedRead(error)) {
+    if (hasErrorCode(error, 'ENOENT')) {
       return [];
     }
     throw error;
