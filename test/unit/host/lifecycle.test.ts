@@ -179,6 +179,7 @@ import {
   removeSocketDirectoryBestEffort,
   removeSocketDirectoryIfEmpty,
   type AllocateConfig,
+  type LaunchedHost,
 } from '../../../src/host/lifecycle.js';
 import {
   captureProgram,
@@ -374,13 +375,13 @@ describe('allocateSession', () => {
 
 describe('launchHost', () => {
   function launchFixture(source: string): {
-    stop: () => void;
+    host: LaunchedHost;
     child: ChildProcess.ChildProcess;
   } {
     const entrypoint = join(home, 'host.mjs');
     writeFileSync(entrypoint, source);
-    const cliEntrypoint = process.argv[1];
-    process.argv[1] = entrypoint;
+    const cliArgv = process.argv;
+    process.argv = [...cliArgv.slice(0, 1), entrypoint, ...cliArgv.slice(2)];
     try {
       const host = launchHost({
         sessionId: 'session-01',
@@ -390,29 +391,31 @@ describe('launchHost', () => {
       });
       const child = spawnHooks.last as ChildProcess.ChildProcess;
       expect(child.pid).toBe(host.pid);
-      return { stop: host.stop, child };
+      return { host, child };
     } finally {
-      process.argv[1] = cliEntrypoint;
+      process.argv = cliArgv;
     }
   }
 
   it('stop sends a running host SIGTERM', async () => {
-    const { stop, child } = launchFixture('setInterval(() => {}, 1000);\n');
+    const { host, child } = launchFixture('setInterval(() => {}, 1000);\n');
     const exit = once(child, 'exit');
 
-    stop();
+    host.stop();
 
     expect(child.killed).toBe(true);
     expect(await exit).toEqual([null, 'SIGTERM']);
   });
 
   it('stop sends nothing once the host has exited', async () => {
-    const { stop, child } = launchFixture('process.exit(0);\n');
+    const { host, child } = launchFixture('process.exit(0);\n');
     const errors: unknown[] = [];
     child.on('error', (error) => errors.push(error));
     expect(await once(child, 'exit')).toEqual([0, null]);
 
-    expect(stop).not.toThrow();
+    expect(() => {
+      host.stop();
+    }).not.toThrow();
 
     expect(child.killed).toBe(false);
     expect(errors).toEqual([]);
