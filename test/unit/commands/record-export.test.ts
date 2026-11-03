@@ -14,6 +14,8 @@ import process from 'node:process';
 
 import type * as FsPromises from 'node:fs/promises';
 
+import type * as HomeModule from '../../../src/storage/home.js';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
@@ -54,7 +56,8 @@ vi.mock('../../../src/storage/manifests.js', () => ({
   writeTextFileAtomic: mocks.writeTextFileAtomic,
 }));
 
-vi.mock('../../../src/storage/home.js', () => ({
+vi.mock('../../../src/storage/home.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof HomeModule>()),
   resolveHome: mocks.resolveHome,
 }));
 
@@ -1176,22 +1179,26 @@ describe('record export command', () => {
     expect(mocks.writeTextFileAtomic).not.toHaveBeenCalled();
   });
 
-  it('rejects output paths whose parent directory does not exist', async () => {
+  it('creates missing parent folders of --out', async () => {
     const workspaceDirectory = await createTemporaryDirectory(
       'agent-tty-record-export-missing-parent-',
     );
+    const out = join(workspaceDirectory, 'missing', 'custom.cast');
 
-    await expect(
-      runRecordExportCommand({
-        context: TEST_CONTEXT,
-        json: false,
-        sessionId: 'session-01',
-        format: 'asciicast',
-        out: join(workspaceDirectory, 'missing', 'custom.cast'),
-      }),
-    ).rejects.toMatchObject({
-      code: ERROR_CODES.EXPORT_ERROR,
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+      format: 'asciicast',
+      out,
     });
+
+    expect(mocks.writeTextFileAtomic).toHaveBeenCalledWith(
+      expect.objectContaining({ path: out }),
+    );
+    await expect(access(join(workspaceDirectory, 'missing'))).resolves.toBe(
+      undefined,
+    );
   });
 
   it('rejects invalid formats', async () => {

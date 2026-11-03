@@ -445,6 +445,38 @@ describe('record export integration', { timeout: 120_000 }, () => {
     },
   );
 
+  it('creates missing parent folders of --out', async () => {
+    const sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      "printf 'done\\n'; exit 0",
+    ]);
+    waitForExit(testHome, sessionId);
+    const out = join(testHome, 'exports', 'nested', 'session.cast');
+
+    const result = runCli(
+      [
+        'record',
+        'export',
+        sessionId,
+        '--format',
+        'asciicast',
+        '--out',
+        out,
+        '--json',
+      ],
+      { AGENT_TTY_HOME: testHome },
+      15_000,
+    );
+
+    expect(result.status).toBe(0);
+    const envelope = JSON.parse(
+      result.stdout,
+    ) as SuccessEnvelope<RecordExportResult>;
+    expect(envelope.result.artifactPath).toBe(out);
+    expect(await readFile(out, 'utf8')).toContain('done');
+  });
+
   it('rejects invalid export formats', () => {
     const result = runCli(
       ['record', 'export', 'session-01', '--format', 'bogus', '--json'],

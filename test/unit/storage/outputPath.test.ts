@@ -14,7 +14,25 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 
+import type * as FsPromises from 'node:fs/promises';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const fsHooks = vi.hoisted(() => ({
+  afterMkdir: undefined as ((path: string) => Promise<void>) | undefined,
+}));
+
+vi.mock('node:fs/promises', async () => {
+  const actual = await vi.importActual<typeof FsPromises>('node:fs/promises');
+  return {
+    ...actual,
+    mkdir: async (...args: Parameters<typeof actual.mkdir>) => {
+      const created = await actual.mkdir(...args);
+      await fsHooks.afterMkdir?.(String(args[0]));
+      return created;
+    },
+  };
+});
 
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
 import { writeTextFileAtomic } from '../../../src/storage/manifests.js';
@@ -38,6 +56,7 @@ describe('explicit output paths', () => {
   });
 
   afterEach(async () => {
+    fsHooks.afterMkdir = undefined;
     vi.restoreAllMocks();
     await rm(workspace, { recursive: true, force: true });
   });
@@ -60,14 +79,58 @@ describe('explicit output paths', () => {
     ).resolves.toMatchObject({ path: join(workspace, 'real', 'shot.png') });
   });
 
-  it('rejects a missing parent folder without creating it', async () => {
+  it('creates missing parent folders', async () => {
     await expect(
-      resolveExplicitOutputPath(
-        join(workspace, 'missing', 'shot.png'),
-        sessionsRoot(),
-      ),
-    ).rejects.toMatchObject({ code: 'ENOENT' });
-    expect(await readdir(workspace)).toEqual([]);
+      resolveOut(join(workspace, 'missing', 'nested', 'shot.png')),
+    ).resolves.toMatchObject({
+      path: join(workspace, 'missing', 'nested', 'shot.png'),
+    });
+    expect(await readdir(join(workspace, 'missing'))).toEqual(['nested']);
+  });
+
+  it('creates no folder inside session storage, also through a symlinked parent', async () => {
+    const artifacts = join(sessionsRoot(), 'session-01', 'artifacts');
+    await mkdir(artifacts, { recursive: true });
+    await symlink(artifacts, join(workspace, 'into-session'));
+
+    for (const out of [
+      join(artifacts, 'new', 'shot.png'),
+      join(sessionsRoot(), 'new', 'shot.png'),
+      join(workspace, 'into-session', 'new', 'shot.png'),
+    ]) {
+      await expect(resolveOut(out)).rejects.toMatchObject({
+        code: ERROR_CODES.EXPORT_ERROR,
+      });
+    }
+    expect(await readdir(artifacts)).toEqual([]);
+    expect(await readdir(sessionsRoot())).toEqual(['session-01']);
+  });
+
+  it('creates no folder under a sessions root that does not exist yet', async () => {
+    await mkdir(join(workspace, 'home'));
+
+    await expect(
+      resolveOut(join(sessionsRoot(), 'new', 'shot.png')),
+    ).rejects.toMatchObject({ code: ERROR_CODES.EXPORT_ERROR });
+    expect(await readdir(join(workspace, 'home'))).toEqual([]);
+  });
+
+  it('stops when a folder it created is replaced by a link', async () => {
+    const artifacts = join(sessionsRoot(), 'session-01', 'artifacts');
+    await mkdir(artifacts, { recursive: true });
+    const created = join(workspace, 'exports');
+    fsHooks.afterMkdir = async (path) => {
+      if (path === created) {
+        fsHooks.afterMkdir = undefined;
+        await rm(created, { recursive: true });
+        await symlink(artifacts, created);
+      }
+    };
+
+    await expect(
+      resolveOut(join(created, 'nested', 'shot.png')),
+    ).rejects.toMatchObject({ code: ERROR_CODES.EXPORT_ERROR });
+    expect(await readdir(artifacts)).toEqual([]);
   });
 
   it.skipIf(process.getuid?.() === 0)(
