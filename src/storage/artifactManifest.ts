@@ -268,14 +268,13 @@ function isOlderThan(state: LockFileState, limitMs: number): boolean {
   return Math.abs(Date.now() - state.modifiedAtMs) > limitMs;
 }
 
-function isStaleLock(
-  lockPath: string,
+// The lock, break and temp files hold their writer's record. Their owner is
+// gone when judgeHost says it is dead, or when it reads unknown and the file
+// is older than unknownOwnerStaleMs.
+function isOwnerGone(
   state: LockFileState,
   timing: ManifestLockTiming,
 ): boolean {
-  if (unreleasedLocks.get(lockPath) === state.contents) {
-    return true;
-  }
   const owner = parseLockOwner(state.contents);
   // Without a process record the pid may belong to another pid namespace.
   const verdict =
@@ -285,6 +284,17 @@ function isStaleLock(
   return verdict === 'unknown'
     ? isOlderThan(state, timing.unknownOwnerStaleMs)
     : verdict === 'dead';
+}
+
+function isStaleLock(
+  lockPath: string,
+  state: LockFileState,
+  timing: ManifestLockTiming,
+): boolean {
+  return (
+    unreleasedLocks.get(lockPath) === state.contents ||
+    isOwnerGone(state, timing)
+  );
 }
 
 async function removeIfUnchanged(
@@ -318,7 +328,7 @@ async function breakStaleManifestLock(
   const breakPath = `${lockPath}.break`;
   if (!(await createWithoutReplacing(temporaryPath, breakPath))) {
     const breaker = await readLockFileState(breakPath);
-    if (breaker !== null && isOlderThan(breaker, timing.unknownOwnerStaleMs)) {
+    if (breaker !== null && isOwnerGone(breaker, timing)) {
       await removeIfUnchanged(breakPath, breaker.contents);
     }
     return 'held';
@@ -351,9 +361,26 @@ async function removeOldLockFiles(
       continue;
     }
     const state = await readLockFileState(path).catch(() => null);
-    if (state !== null && isOlderThan(state, timing.unknownOwnerStaleMs)) {
+    if (state !== null && isOwnerGone(state, timing)) {
       await removeIfUnchanged(path, state.contents).catch(() => undefined);
     }
+  }
+}
+
+// A writer stopped for over unknownOwnerStaleMs while it waits can find that
+// another writer removed its temp file, so it writes the file again.
+async function refreshTemporaryFile(
+  path: string,
+  contents: string,
+): Promise<void> {
+  const now = new Date();
+  try {
+    await utimes(path, now, now);
+  } catch (error) {
+    if (!hasErrorCode(error, 'ENOENT')) {
+      throw error;
+    }
+    await writeFile(path, contents, { flag: 'wx', mode: 0o600 });
   }
 }
 
@@ -367,13 +394,19 @@ async function acquireManifestLock(
     await writeFile(temporaryPath, contents, { flag: 'wx', mode: 0o600 });
     const deadline = Date.now() + timing.waitMs;
     let pollMs = 2;
+    let foundTaken = false;
     for (;;) {
-      const now = new Date();
-      await utimes(temporaryPath, now, now);
+      await refreshTemporaryFile(temporaryPath, contents);
       if (await createWithoutReplacing(temporaryPath, lockPath)) {
-        await removeOldLockFiles(lockPath, temporaryPath, timing);
+        // Writers that die while they wait for or hold the lock leave lock
+        // files behind. Only a writer that found the lock taken scans the
+        // artifacts folder for them, so a free lock costs no scan.
+        if (foundTaken) {
+          await removeOldLockFiles(lockPath, temporaryPath, timing);
+        }
         return;
       }
+      foundTaken = true;
       const outcome = await breakStaleManifestLock(
         lockPath,
         temporaryPath,
