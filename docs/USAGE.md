@@ -257,7 +257,7 @@ The Wait Baseline fixes stale-match only. It does **not** fix echo-match: a whol
 Screenshots and WebM export use the `ghostty-web` reference visual renderer through Playwright/Chromium.
 Semantic `snapshot`, screen-hash, and render-backed `wait` paths prefer `libghostty-vt` when the optional native package is available and fall back to `ghostty-web` otherwise. Run `doctor --json` first in new environments.
 
-On a session that has printed nothing yet, `snapshot` returns an empty screen of the session's size and `screenshot` returns a blank image. Both report `capturedAtSeq: -1`, and the screenshot file is named `screenshot--1-<profile>.png`.
+On a session that has printed nothing yet, `snapshot` returns an empty screen of the session's size and `screenshot` returns a blank image. `record export` gives a header-only asciicast or a blank WebM of the session's size, with `durationMs: 0`. All of them report `capturedAtSeq: -1`, and the default files are named `screenshot--1-<profile>.png` and `recording--1-<format>.<ext>`.
 
 ```bash
 agent-tty screenshot <session-id> --profile reference-dark --json
@@ -327,11 +327,15 @@ It then kills nothing and counts the group as running.
 If the proven group, or a group that agent-tty cannot check, does not end within the destroy wait (about 5 s), `destroy` fails with `HOST_TIMEOUT` and does not record the session as `destroyed`.
 
 `destroy --force` and reconcile also check the host's pid from `session.json` before they trust it.
-On Linux the host records its pid, the boot id, its start time from `/proc/self/stat` and its pid namespace in an internal file, `host.json`, when it starts.
+On Linux the host records its pid, the boot id, its start time from `/proc/self/stat`, its pid and time namespaces and the machine id (`/etc/machine-id`) in an internal file, `host.json`, when it starts.
 Reconcile counts the host as ended only when no process has its pid, when that process is a zombie, or when `host.json` names another boot or another start time than that process has. That covers a crashed host that stays a zombie under a container init that never reaps, and a later process that got the same pid.
 Reconcile then records the session as `failed`. `destroy --force` sends the host SIGKILL only when the boot id and the start time of the process match `host.json`, so it does not signal a process that got the pid before that check.
 The check and the kill are two system calls. A process that gets the pid between them still gets the signal, which needs the host to end, be reaped and its pid to go to a new process in that gap.
-When agent-tty cannot read `/proc` or `host.json`, it counts a host whose pid exists as running and does not kill it. When it runs in another pid namespace than the host, where the recorded pid can name an unrelated process, it counts the host as running and kills nothing, whatever that pid shows. Without a session token, it also kills no process group through the program's recorded pid there.
+When agent-tty cannot read `/proc` or `host.json`, it counts a host whose pid exists as running and does not kill it. With `host.json` but an unreadable `/proc/self/ns/pid`, it counts the host as running even when no process has its pid.
+When it runs in another pid namespace than the one that `host.json` names, or on another machine (another machine id), where the recorded pid can name an unrelated process, it counts the host as running and kills nothing, whatever that pid shows. Without a session token, it also kills no process group through the program's recorded pid there.
+In another time namespace than the host's, `/proc` shows start times with another boottime offset. There agent-tty counts the host as ended only when no process has its pid or that process is a zombie, and it does not kill the host.
+Without `host.json`, as for a session that an agent-tty version without it started, agent-tty cannot tell that it runs in another pid namespace. There a pid that no process has, or a zombie, reads as an ended host, and a kill without a session token goes to the group that the program's recorded pid names there.
+A `hostPid` in `session.json` that differs from the pid in `host.json` never matches, so the session stays `running` and `destroy --force` kills nothing until `session.json` names the host again. That does not happen in normal use, because the host checks that `session.json` names its own pid.
 On macOS and the BSDs, `destroy --force` kills the host only when `/bin/ps` shows the pid running `_host <session id>`, the arguments that agent-tty starts the host with.
 
 Limits:
@@ -344,7 +348,9 @@ Limits:
 6. Two cases where agent-tty cannot run the check end differently from a session that stays running:
    - At the idle time-out, a host that cannot run the check kills nothing, but it still records the session as `exited` once the program has exited, while a process that the program left can still run. A later `destroy` then fails with `HOST_TIMEOUT`, and `gc` can remove the session folder.
    - When `/proc` hides the processes of other users (mounted with `hidepid=2`, `hidepid=4`, `hidepid=invisible` or `hidepid=ptraceable`), a group whose processes agent-tty cannot see counts as running. A `destroy` that cannot prove such a group gone fails with `HOST_TIMEOUT` and does not record the session as `destroyed`.
-7. Off Linux, reconcile counts the host as alive while any process has its pid. A crashed host that stays a zombie, or a process that got its pid, keeps the session `running`, and `destroy --force` kills nothing and fails with `HOST_TIMEOUT`. On Linux, the same happens when `/proc` is not mounted or refuses to show the host, and for a session that an agent-tty version without `host.json` started. On Windows, `destroy --force` never kills the host: it kills the program, and a host that hangs makes it fail with `HOST_TIMEOUT`. End such a host yourself with the Host PID that `inspect` shows (`taskkill /pid <pid> /f`), then run `destroy --force` again.
+7. Off Linux, reconcile counts the host as alive while any process has its pid. A crashed host that stays a zombie, or a process that got its pid, keeps the session `running`, and `destroy --force` kills nothing and fails with `HOST_TIMEOUT`. On Linux, the same happens when `/proc` is not mounted or refuses to show the host, and for a session that an agent-tty version without `host.json` started. On Windows, `destroy --force` never kills the host: it kills the program, and a host that hangs makes it fail with `HOST_TIMEOUT`. End such a host yourself with the Host PID that `inspect` shows (`taskkill /pid <pid> /f`), then run `destroy --force` again. When agent-tty cannot judge the host (another pid namespace or machine, or a refused read of `/proc/self/ns/pid`), `destroy --force` cannot see the host end either. It can fail with `HOST_TIMEOUT` although the host has recorded the session as `exited`, and a second `destroy --force` then records it as `destroyed`. When `/proc` is mounted but refuses to show the host and the program's processes (a security module that hides processes of the same user), `destroy --force` kills nothing and fails with `HOST_TIMEOUT` also for a healthy host.
+8. A Home that several machines share, for example over NFS, works only from the machine that started each session. From another machine, agent-tty counts the host as running and kills nothing, because the machine id differs. Machines without a machine id (an empty, missing or `uninitialized` `/etc/machine-id`, as in many container images), or with the same one (a cloned image), cannot tell each other apart. There the boot id differs, so the other machine counts a live host as ended, records the session as `failed`, and `gc` can then remove its folder. Remote sessions are out of scope (see `RELEASE.md`).
+9. A host that has ended reads as running forever when the machine id in its `host.json` differs from this machine's, for example after `/etc/machine-id` changed or in a cloned image that got a new one. `list` keeps the session `running`, `destroy --force` fails with `HOST_TIMEOUT`, and `gc` keeps the folder. First check that the host is gone: `ps -p <pid>` with the Host PID that `inspect` shows prints no `_host` process for that session. Then delete `host.json` from the session folder (`<home>/sessions/<session id>/host.json`). The next `list` records the session as `failed`, and `gc` can remove it. If another process now has that pid, the session stays `running`, and you can remove the session folder yourself.
 
 ## Isolation
 
@@ -364,7 +370,7 @@ Avoid writing automated sessions into the default `~/.agent-tty` unless you inte
 
 `create` spawns the shell with your inherited environment plus `TERM` (from `--term`), a default `PROMPT_EOL_MARK=` (empty) and a default `COLORTERM=truecolor`. The empty `PROMPT_EOL_MARK` suppresses the inverse-video `%` that `zsh` prints at the end of any output without a trailing newline; without it, agent-tty's hidden per-`run` completion marker leaves a stray `%` in snapshots, screenshots, and recordings. The variable is zsh-only and inert in other shells.
 
-The `COLORTERM=truecolor` default says that the renderer draws 24-bit color. Neovim turns on 24-bit color when it sees that value. When `COLORTERM` is unset, Neovim asks the terminal instead, and agent-tty does not answer that query, so a screenshot loses the colors that the 256-color palette cannot show. An inherited `COLORTERM` describes the terminal that launched agent-tty, not the session's renderer, so the default replaces it.
+The `COLORTERM=truecolor` default says that the renderer draws 24-bit color. Neovim turns on 24-bit color when it sees that value. When `COLORTERM` is unset or empty, Neovim asks the terminal instead. agent-tty answers that XTGETTCAP query (`Tc`, `RGB`), so Neovim still detects 24-bit color. An inherited `COLORTERM` describes the terminal that launched agent-tty, not the session's renderer, so the default replaces it.
 
 The shell also receives two session variables, so scripts inside a session can detect agent-tty and find their own session:
 
@@ -381,8 +387,9 @@ Any `--env` value always wins, so you can opt back into the shell's native behav
 # Restore zsh's styled default marker:
 agent-tty create --env PROMPT_EOL_MARK='%B%S%#%s%b' -- /bin/zsh
 
-# Hide 24-bit color support from the program:
-agent-tty create --env COLORTERM= -- nvim
+# Hide 24-bit color support from Neovim (an empty COLORTERM would not,
+# because Neovim then asks the terminal, and agent-tty answers yes):
+agent-tty create --env COLORTERM=256color -- nvim
 ```
 
 A lone `'%'` does **not** restore the marker (zsh treats it as a prompt escape that expands to nothing); use `'%B%S%#%s%b'` for the styled default or `'%%'` for a plain percent. The default is applied at spawn time and is not stored in the manifest, so it does not appear in `inspect`, `list`, or `create --json` output. If your `~/.zshrc` assigns `PROMPT_EOL_MARK` it runs after the environment is imported and wins, so the marker can reappear — remove that line or set the value you want via `--env`.
