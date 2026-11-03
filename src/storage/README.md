@@ -42,7 +42,7 @@
 - `computeArtifactHealth` maps only `MANIFEST_VALIDATION_ERROR` to health `manifest-invalid` and rethrows other errors. It validates its result with `ArtifactHealthSummarySchema`. [artifactHealth.ts:computeArtifactHealth]
 - The registry read returns `[]` on a read error, invalid JSON or a schema failure. The read checks each `homes` entry on its own and drops an invalid entry, so the valid entries survive. `resolveHomeRegistryPath` ignores an empty or relative `XDG_STATE_HOME`. [homeRegistry.ts:createHomeRegistry] [homeRegistry.ts:resolveHomeRegistryPath]
 - `upsert` reads and then writes the registry with no lock. A code comment states that concurrent creates can race and drop an entry, which registers again on the next create. [homeRegistry.ts:createHomeRegistry]
-- The `scanHome` doc comment states that it does not reconcile sessions, does not write manifests and does not throw. It skips destroyed sessions, sessions whose folder holds the destroy marker, and unreadable manifests. [homeScope.ts:scanHome]
+- The `scanHome` doc comment states that it does not reconcile sessions, does not write manifests and does not throw. It skips destroyed sessions, ended sessions whose folder holds the destroy marker, and unreadable manifests. [homeScope.ts:scanHome]
 - `listRegisteredHomes` leaves out Homes with no visible sessions, and the `active` scope also leaves out Homes with no active session. Its doc comment states that it does not rewrite the registry file. [homeScope.ts:listRegisteredHomes]
 
 ## Side Effects
