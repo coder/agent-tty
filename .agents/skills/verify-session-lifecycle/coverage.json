@@ -17,7 +17,7 @@
     "src/host/hostRecord.ts#writeHostRecord": "be58a9c34e8fad35",
     "src/host/hostRecord.ts#readHostRecord": "6e0fc70b53f945bc",
     "src/host/hostRecord.ts#pidExists": "d539275a0f6041ea",
-    "src/host/hostRecord.ts#judgeHost": "175a3e9e75c16396",
+    "src/host/hostRecord.ts#judgeHost": "ddb50e85fdaddab8",
     "src/host/lifecycle.ts#ownLinuxSessionId": "2f51d6f7c3c89991",
     "src/host/lifecycle.ts#ownProcessGroupId": "b480c93782250b9a",
     "src/host/lifecycle.ts#controllingTerminal": "612ec5fdff4785ef",
