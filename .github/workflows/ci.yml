@@ -157,12 +157,10 @@ jobs:
 
   # Destroy and reconcile under the /proc isolation that containers and
   # hardened hosts use: a /proc that hides the processes of other users
-  # (hidepid=2) and a private PID namespace. Each namespace step starts as
-  # root, sets up the namespace, and drops back to the runner user with
-  # setpriv before the tests start. other-user-group.test.ts starts a process
-  # of the nobody user in the program's group with a setpriv copy that has the
-  # cap_setuid and cap_setgid file capabilities. Without
-  # AGENT_TTY_TEST_SETPRIV it skips, as in the jobs above.
+  # (hidepid=2) and a private PID namespace. other-user-group.test.ts adds a
+  # live process of the nobody user to the program's group. The tests drop
+  # from root to the runner user, because root sees through hidepid and can
+  # signal the nobody user's process.
   proc-isolation:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -192,9 +190,8 @@ jobs:
       - name: Test with another user's process
         run: npx vitest run --maxWorkers=1 --retry=2 test/integration/other-user-group.test.ts
 
-      # This mounts a new proc instance in a private mount namespace. A
-      # remount of /proc would change the runner's own /proc, which shares the
-      # same superblock.
+      # A new proc instance, not a remount: a remount of /proc changes the
+      # superblock that the runner's own /proc shares.
       - name: Test under a /proc mounted with hidepid=2
         run: |
           sudo -E unshare --mount --propagation private -- sh -euc '
@@ -204,9 +201,9 @@ jobs:
               npx vitest run --maxWorkers=1 --retry=2 test/integration/lifecycle.test.ts test/integration/gc.test.ts test/integration/other-user-group.test.ts
           ' sh "$(id -un)" "$(id -gn)" "$PATH" "$HOME"
 
-      # PID 1 of the namespace is a shell that waits for the tests. Its wait
-      # also reaps the hosts that outlive their CLI, as an init does.
-      # non-reaping-init.test.ts covers an init that never reaps.
+      # Node does not reap orphans, so a shell runs as PID 1 and its wait
+      # reaps the hosts reparented to it. non-reaping-init.test.ts covers an
+      # init that never reaps.
       - name: Test in a private PID namespace
         run: |
           sudo -E unshare --pid --fork --mount-proc -- \

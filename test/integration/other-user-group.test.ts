@@ -17,9 +17,8 @@ import {
   sleep,
 } from '../helpers.js';
 
-// A setpriv binary with the cap_setuid and cap_setgid file capabilities, so
-// the test can start and end a process of the nobody user. The proc-isolation
-// CI job makes one. Without it the tests skip.
+// Path to a setpriv copy with the cap_setuid and cap_setgid file
+// capabilities. A plain setpriv cannot change the user.
 const setpriv = process.env.AGENT_TTY_TEST_SETPRIV;
 const nobody = '65534';
 
@@ -34,13 +33,16 @@ function asNobody(args: string[]): { status: number | null; stdout: string } {
   );
 }
 
-// Run as nobody, pgrep sees the process also when /proc hides other users.
+// pgrep runs as nobody, because hidepid=2 hides the processes of nobody from
+// the test's user.
 function nobodySleepIn(group: number): boolean {
   return (
     asNobody(['pgrep', '-U', nobody, '-g', String(group), '-x', 'sleep'])
       .status === 0
   );
 }
+
+const shellWaitingOnHangupProofNobodySleep = `"$0" --reuid=${nobody} --regid=${nobody} --clear-groups /bin/sh -c 'trap "" HUP; exec sleep 300' & wait`;
 
 describe.runIf(process.platform === 'linux' && setpriv !== undefined)(
   "a program group that holds another user's process",
@@ -63,13 +65,11 @@ describe.runIf(process.platform === 'linux' && setpriv !== undefined)(
       await cleanupHome(testHome);
     });
 
-    // The program's shell stays in its group and waits. The nobody process
-    // ignores SIGHUP, so it outlives the shell when the session ends.
-    async function createProgram(): Promise<string> {
+    async function createGroupWithNobodyProcess(): Promise<string> {
       const sessionId = createSession(testHome, [
         '/bin/sh',
         '-c',
-        `"$0" --reuid=${nobody} --regid=${nobody} --clear-groups /bin/sh -c 'trap "" HUP; exec sleep 300' & wait`,
+        shellWaitingOnHangupProofNobodySleep,
         setpriv as string,
       ]);
       const childPid = inspectSession(testHome, sessionId).childPid;
@@ -125,7 +125,7 @@ describe.runIf(process.platform === 'linux' && setpriv !== undefined)(
     }
 
     it('destroy times out until the process ends, then the session is destroyed', async () => {
-      const sessionId = await createProgram();
+      const sessionId = await createGroupWithNobodyProcess();
 
       const result = destroy(sessionId);
       expect(result.envelope).toMatchObject({
@@ -141,7 +141,7 @@ describe.runIf(process.platform === 'linux' && setpriv !== undefined)(
     });
 
     it('destroy --force times out without recording destroyed', async () => {
-      const sessionId = await createProgram();
+      const sessionId = await createGroupWithNobodyProcess();
 
       const result = destroy(sessionId, '--force');
       expect(result.envelope).toMatchObject({
@@ -158,7 +158,7 @@ describe.runIf(process.platform === 'linux' && setpriv !== undefined)(
     });
 
     it('a reconcile after a host crash keeps the session until the process ends', async () => {
-      const sessionId = await createProgram();
+      const sessionId = await createGroupWithNobodyProcess();
       crashSession(testHome, sessionId);
       await sleep(500);
 
