@@ -333,7 +333,7 @@ describe('wait command', () => {
     ],
     [
       { screenStableMs: 29_800 },
-      '--screen-stable-ms 29800 cannot finish within the default --timeout of 30000 ms. It needs one render poll (200 ms) more than its length. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      '--screen-stable-ms 29800 cannot finish within the default --timeout of 30000 ms. It needs more than 30000 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
       {
         flag: '--screen-stable-ms',
         windowMs: 29_800,
@@ -347,13 +347,18 @@ describe('wait command', () => {
     ],
     [
       { screenStableMs: 5000, timeout: 2000 },
-      '--screen-stable-ms 5000 cannot finish within --timeout 2000. It needs one render poll (200 ms) more than its length. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      '--screen-stable-ms 5000 cannot finish within --timeout 2000. It needs more than 5200 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
       { flag: '--screen-stable-ms', windowMs: 5000, timeoutMs: 2000 },
     ],
     [
       { screenStableMs: 1800, timeout: 2000 },
-      '--screen-stable-ms 1800 cannot finish within --timeout 2000. It needs one render poll (200 ms) more than its length. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      '--screen-stable-ms 1800 cannot finish within --timeout 2000. It needs more than 2000 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
       { flag: '--screen-stable-ms', windowMs: 1800, timeoutMs: 2000 },
+    ],
+    [
+      { screenStableMs: 1, timeout: 202 },
+      '--screen-stable-ms 1 cannot finish within --timeout 202. It needs more than 400 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      { flag: '--screen-stable-ms', windowMs: 1, timeoutMs: 202 },
     ],
   ])(
     'rejects a window that cannot finish within the timeout: %o',
@@ -374,6 +379,7 @@ describe('wait command', () => {
     { screenStableMs: 29_799 },
     { idleMs: 1999, timeout: 2000 },
     { screenStableMs: 1799, timeout: 2000 },
+    { screenStableMs: 1, timeout: 401 },
     { screenStableMs: 60_000, timeout: 0 },
   ])(
     'accepts a window that can finish within the timeout: %o',
