@@ -21,6 +21,8 @@ const CLEANUP = resolve('.agents/skills/verify-agent-tty/scripts/cleanup.sh');
 const CLI = resolve('src/cli/main.ts');
 const TSX_LOADER = import.meta.resolve('tsx');
 const CLEANUP_TIMEOUT_MS = 60_000;
+const ADOPTED_HOLDER_IN_HOME =
+  '[ "$$" != 1 ] || (cd "$AGENT_TTY_HOME" && exec sleep 60 &)';
 
 interface Run {
   root: string;
@@ -221,11 +223,7 @@ describe.skipIf(process.platform !== 'linux')(
     it.skipIf(!canRunAsPidOne())(
       'keeps home/ when a process that pid 1 adopted holds a path in it',
       () => {
-        // env.sh runs in cleanup.sh (pid 1). The subshell exits, so pid 1
-        // adopts the sleep, as it adopts an outside process that daemonizes.
-        run = makeRun([
-          '[ "$$" != 1 ] || (cd "$AGENT_TTY_HOME" && exec sleep 60 &)',
-        ]);
+        run = makeRun([ADOPTED_HOLDER_IN_HOME]);
 
         const result = runCleanup(run, run.root, pidOnePrefix());
 

@@ -108,10 +108,9 @@ is_own_ancestor() {
   case "$own_ancestors" in *" $1 "*) return 0 ;; esac
   return 1
 }
-# As pid 1, cleanup.sh counts no process as its own child: pid 1 also adopts
-# orphans, so a parent walk cannot tell its children from an adopted process.
 is_own_descendant() {
   local walk=$1 hops=0
+  [ "$$" -ne 1 ] || return 1
   while [ -n "$walk" ] && [ "$walk" -gt 1 ] && [ "$hops" -lt "$max_hops" ]; do
     [ "$walk" = "$$" ] && return 0
     walk=$(parent_of "$walk")
@@ -151,6 +150,7 @@ for dir in "$run_real/home" "$run_real/state" "$run_real/removing"; do
   path_tests+=(-o -lname "$pattern" -o -lname "$pattern/*" -o -lname "$pattern (deleted)")
 done
 find_holders() {
+  cd / || exit 1
   holders=""
   holder_pids=" "
   for file in $(grep -lzxF "AGENT_TTY_HOME=$AGENT_TTY_HOME" /proc/[0-9]*/environ 2>/dev/null); do
@@ -176,9 +176,6 @@ keep_home() {
   echo "cleanup.sh: kept $kept. Then run cleanup.sh again." >&2
   exit 1
 }
-# The scans below run as children of cleanup.sh. Leave the run's folders, so
-# they do not hold a path in it through the working directory they inherit.
-cd / || exit 1
 find_holders
 [ -z "$pids_failed$holders" ] || keep_home
 
