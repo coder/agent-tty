@@ -190,6 +190,27 @@ describe('screenshot --out', { timeout: 120_000 }, () => {
     expect(manifest.artifacts).toHaveLength(1);
   });
 
+  it('fails with STORAGE_WRITE_ERROR when the artifacts path is a file, live and offline', async () => {
+    const artifactsPath = join(sessionDir(testHome, sessionId), 'artifacts');
+    await rm(artifactsPath, { recursive: true, force: true });
+    await writeFile(artifactsPath, '');
+    const expectedError = {
+      code: 'STORAGE_WRITE_ERROR',
+      message: `Artifacts path ${artifactsPath} is not a folder.`,
+    };
+
+    const live = screenshot([]);
+    expect(live.status).toBe(8);
+    expect((live.envelope as ErrorEnvelope).error).toMatchObject(expectedError);
+
+    destroySession(testHome, sessionId);
+    const offline = screenshot([]);
+    expect(offline.status).toBe(8);
+    expect((offline.envelope as ErrorEnvelope).error).toMatchObject(
+      expectedError,
+    );
+  });
+
   it('writes --out for a destroyed session through offline replay', async () => {
     destroySession(testHome, sessionId);
     const out = join(outDir, 'offline.png');

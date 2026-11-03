@@ -21,7 +21,7 @@
 
 - `ConfigFileSchema` is `.strict()`, so unknown keys fail validation. `logLevel` must be `'debug'`, `'info'`, `'warn'` or `'error'`. `defaultCols` and `defaultRows` must be positive integers. `idleTimeoutMs` must be a non-negative integer. [resolveConfig.ts:ConfigFileSchema]
 - `loadConfigFile` asserts that `home` is non-empty and absolute. [resolveConfig.ts:loadConfigFile]
-- `loadConfigFile` returns `null` on `ENOENT`. It throws on any other read error, on invalid JSON and on a schema failure. The schema error lists each issue path. [resolveConfig.ts:loadConfigFile]
+- `loadConfigFile` returns `null` on `ENOENT`. Any other read error throws `STORAGE_READ_ERROR`. Invalid JSON and a schema failure throw `INVALID_INPUT`, and the schema error lists each issue path. Each error has `details.configPath`. [resolveConfig.ts:loadConfigFile]
 - `resolveConfig` does not read `config.json`. Its `cols`, `rows` and `shell` come from `DEFAULT_COLS`, `DEFAULT_ROWS` and `DEFAULT_SHELL`, and it freezes the result with `Object.freeze`. [resolveConfig.ts:resolveConfig]
 
 ## Side Effects

@@ -43,8 +43,9 @@ import {
 import { CliError } from './errors.js';
 import { warnIfUnsupportedNode } from './nodeRuntime.js';
 import {
+  argvHasFlag,
   emitCliError,
-  jsonOutputRequested,
+  exitAfterOutputFlush,
   setColorEnabled,
 } from './output.js';
 import {
@@ -96,6 +97,19 @@ function toCliError(error: unknown, logger?: Logger): CliError {
   });
 }
 
+function exitOnInternalError(error: CliError): void {
+  if (error.code === ERROR_CODES.INTERNAL_ERROR) {
+    exitAfterOutputFlush();
+  }
+}
+
+function parsedJsonOption(command: Command): boolean {
+  return (
+    command.opts<{ json?: boolean }>().json === true ||
+    command.commands.some(parsedJsonOption)
+  );
+}
+
 function getActionCommand(rawArgs: readonly unknown[]): Command {
   const maybeCommand = rawArgs.at(-1);
   invariant(
@@ -126,10 +140,18 @@ function wrapAction<Args extends unknown[]>(
       await fn(...([...args, context] as [...Args, CommandContext]));
       context.logger.debug(`completed ${commandName} command`);
     } catch (error: unknown) {
-      emitCliError(commandName, toCliError(error, logger));
+      const cliError = toCliError(error, logger);
+      emitCliError(
+        commandName,
+        cliError,
+        command.opts<{ json?: boolean }>().json === true,
+      );
+      exitOnInternalError(cliError);
     }
   };
 }
+
+let parsedOutputOptions: { json: boolean; color: boolean } | undefined;
 
 const HELP_OUTPUT_CODES: ReadonlySet<string> = new Set([
   'commander.help',
@@ -166,6 +188,10 @@ async function main(): Promise<void> {
 
   program.hook('preAction', async (_thisCommand, actionCommand) => {
     const globalOptions = actionCommand.optsWithGlobals<GlobalCliOptions>();
+    parsedOutputOptions = {
+      json: actionCommand.opts<{ json?: boolean }>().json === true,
+      color: globalOptions.color ?? true,
+    };
     const rendererConfiguredByEnv =
       process.env.AGENT_TTY_RENDERER !== undefined;
     const context = await resolveCommandContext(globalOptions).catch(
@@ -1065,25 +1091,37 @@ async function main(): Promise<void> {
       await runHost(sessionId, Number(creatorPid));
     });
 
-  await program.parseAsync();
-}
-
-try {
-  await main();
-} catch (error: unknown) {
-  if (error instanceof CommanderError) {
-    process.exitCode = error.code === 'commander.helpDisplayed' ? 0 : 2;
-    if (!HELP_OUTPUT_CODES.has(error.code) && jsonOutputRequested()) {
+  try {
+    await program.parseAsync();
+  } catch (error: unknown) {
+    if (!(error instanceof CommanderError)) {
+      throw error;
+    }
+    process.exitCode = error.exitCode === 0 ? 0 : 2;
+    const json = argvHasFlag('--json') || parsedJsonOption(program);
+    if (!HELP_OUTPUT_CODES.has(error.code) && json) {
       emitCliError(
         'agent-tty',
         makeCliError(ERROR_CODES.INVALID_INPUT, {
           message: error.message.replace(/^error: /u, ''),
         }),
+        true,
       );
     }
-  } else if (error instanceof CliError) {
-    setColorEnabled(!process.argv.includes('--no-color'));
-    emitCliError('agent-tty', error);
+  }
+}
+
+try {
+  await main();
+} catch (error: unknown) {
+  if (error instanceof CliError) {
+    const output = parsedOutputOptions ?? {
+      json: argvHasFlag('--json'),
+      color: !argvHasFlag('--no-color'),
+    };
+    setColorEnabled(output.color);
+    emitCliError('agent-tty', error, output.json);
+    exitOnInternalError(error);
   } else {
     throw error;
   }
