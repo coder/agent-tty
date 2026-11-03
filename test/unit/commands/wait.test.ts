@@ -546,7 +546,7 @@ describe('wait command', () => {
 
   describe('human-mode WAIT_TIMEOUT message', () => {
     beforeEach(() => {
-      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.useFakeTimers({ toFake: ['Date', 'performance'] });
     });
 
     afterEach(() => {
@@ -555,7 +555,7 @@ describe('wait command', () => {
 
     function resolveTimedOutAfter(elapsedMs: number, result: object): void {
       mocks.sendRpc.mockImplementation(() => {
-        vi.setSystemTime(Date.now() + elapsedMs);
+        vi.advanceTimersByTime(elapsedMs);
         return Promise.resolve(result);
       });
     }
@@ -607,6 +607,20 @@ describe('wait command', () => {
 
       await expect(
         runWaitCommand(createOptions(overrides)),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.WAIT_TIMEOUT,
+        message: 'Wait timed out before its condition was met.',
+      });
+    });
+
+    it('keeps the generic text when the system clock jumps forward during the wait', async () => {
+      mocks.sendRpc.mockImplementation(() => {
+        vi.setSystemTime(Date.now() + 30_000);
+        return Promise.resolve(renderTimeout);
+      });
+
+      await expect(
+        runWaitCommand(createOptions({ text: 'missing', timeout: 1000 })),
       ).rejects.toMatchObject({
         code: ERROR_CODES.WAIT_TIMEOUT,
         message: 'Wait timed out before its condition was met.',
