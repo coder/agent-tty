@@ -5,6 +5,7 @@ import { basename, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type {
+  RecordDiffResult,
   RecordExportResult,
   ScreenshotResult,
   SnapshotResult,
@@ -217,6 +218,26 @@ describe(
           capturedAtSeq: -1,
         },
       ]);
+    });
+
+    it('diffs the empty screen at --at-seq -1, the seq it reports', () => {
+      const { status, envelope } = runJson<RecordDiffResult>(testHome, [
+        'record',
+        'diff',
+        sessionId,
+        sessionId,
+        '--at-seq-a',
+        '-1',
+        '--at-seq-b',
+        '-1',
+      ]);
+      expect(status).toBe(0);
+      expect(envelope.result).toMatchObject({
+        identical: true,
+        a: { capturedAtSeq: -1, cols: COLS, rows: ROWS },
+        b: { capturedAtSeq: -1, cols: COLS, rows: ROWS },
+        diff: [],
+      });
     });
 
     it('matches a screen-stable render wait on the empty screen', () => {

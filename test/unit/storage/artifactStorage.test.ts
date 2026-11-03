@@ -14,6 +14,7 @@ import {
   appendArtifactWithRollback,
   ArtifactEntrySchema,
   readArtifactManifest,
+  removeArtifactEntry,
   writeArtifactManifest,
 } from '../../../src/storage/artifactManifest.js';
 import {
@@ -216,6 +217,75 @@ describe('artifact manifest storage', () => {
         }),
       ],
     });
+  });
+
+  it('replaces the entries of an earlier export to the same output path', async () => {
+    const sessionDir = await createSessionDir();
+    const exportEntry = (id: string, outputPath: string): ArtifactEntry =>
+      createArtifactEntry({
+        id,
+        kind: 'recording',
+        filename: 'recording-4-asciicast.cast',
+        metadata: { format: 'asciicast', outputPath },
+      });
+    const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
+    const outPath = '/tmp/exports/recording-4-asciicast.cast';
+    for (const entry of [
+      exportEntry('01JQ0000000000000000000001', castPath),
+      exportEntry('01JQ0000000000000000000002', outPath),
+      createArtifactEntry({ id: '01JQ0000000000000000000003' }),
+    ]) {
+      await appendArtifactWithRollback({ sessionDir, entry });
+    }
+
+    await appendArtifactWithRollback({
+      sessionDir,
+      entry: exportEntry('01JQ0000000000000000000004', castPath),
+      replacesSameOutputPath: true,
+    });
+
+    const manifest = await readArtifactManifest(sessionDir);
+    expect(manifest.artifacts.map((entry) => entry.id)).toEqual([
+      '01JQ0000000000000000000002',
+      '01JQ0000000000000000000003',
+      '01JQ0000000000000000000004',
+    ]);
+  });
+
+  it('removes the last entry of a capture and its file once no entry lists the file', async () => {
+    const sessionDir = await createSessionDir();
+    await ensureArtifactsDir(sessionDir);
+    const filename = 'screenshot-4-reference-dark.png';
+    await writeFile(artifactPath(sessionDir, filename), 'png');
+    const shot = (id: string, sha256: string): ArtifactEntry =>
+      createArtifactEntry({ id, kind: 'screenshot', filename, sha256 });
+    for (const entry of [
+      shot('01JQ0000000000000000000001', 'a'.repeat(64)),
+      shot('01JQ0000000000000000000002', 'a'.repeat(64)),
+      createArtifactEntry({ id: '01JQ0000000000000000000003' }),
+    ]) {
+      await appendArtifactWithRollback({ sessionDir, entry });
+    }
+    const ids = async (): Promise<string[]> =>
+      (await readArtifactManifest(sessionDir)).artifacts.map(
+        (entry) => entry.id,
+      );
+
+    await removeArtifactEntry({ sessionDir, filename, sha256: 'b'.repeat(64) });
+    expect(await ids()).toHaveLength(3);
+
+    await removeArtifactEntry({ sessionDir, filename, sha256: 'a'.repeat(64) });
+    expect(await ids()).toEqual([
+      '01JQ0000000000000000000001',
+      '01JQ0000000000000000000003',
+    ]);
+    await expect(
+      access(artifactPath(sessionDir, filename)),
+    ).resolves.toBeUndefined();
+
+    await removeArtifactEntry({ sessionDir, filename, sha256: 'a'.repeat(64) });
+    expect(await ids()).toEqual(['01JQ0000000000000000000003']);
+    await expect(access(artifactPath(sessionDir, filename))).rejects.toThrow();
   });
 
   it('writes and reads artifact manifests with validation', async () => {
