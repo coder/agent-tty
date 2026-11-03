@@ -69,7 +69,7 @@
     "src/host/rpcServer.ts#RpcServer.listen": "aa62e1cd89eceaa4",
     "src/host/rpcServer.ts#RpcServer.close": "2d8092cceb4b8e13",
     "src/storage/manifests.ts#readValidatedJsonFile": "6287eb627b09bf80",
-    "src/storage/manifests.ts#replaceFileAtomic": "20532509b3dcaade",
+    "src/storage/manifests.ts#replaceFileAtomic": "46e02780a28076c4",
     "src/storage/manifests.ts#replaceFileAtomicSync": "38bea7cd8e67828f",
     "src/storage/manifests.ts#writeValidatedJsonFileSync": "4a5d1cc5f63ae8ce",
     "src/storage/manifests.ts#writeManifest": "1bcc99f09acfc577",
