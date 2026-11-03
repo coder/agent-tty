@@ -88,6 +88,222 @@ describe('GhosttyWebBackend unit guards', () => {
     expect(recordedChunks).toEqual(chunks);
   });
 
+  it('notes painted graphemes after each bridge batch of a split flush', async () => {
+    const backend = createBackend();
+    const calls: string[] = [];
+    (
+      backend as unknown as {
+        writeBatchBridge: (page: object, dataChunks: string[]) => Promise<void>;
+      }
+    ).writeBatchBridge = vi.fn((_page: object, dataChunks: string[]) => {
+      calls.push(`write ${String(dataChunks.length)}`);
+      return Promise.resolve();
+    });
+
+    const chunks = Array.from(
+      { length: 2_501 },
+      (_, index) => `chunk-${String(index)}`,
+    );
+    await (
+      backend as unknown as {
+        flushOutputBatch: (
+          page: object,
+          dataChunks: string[],
+          afterEachBatch?: () => Promise<void>,
+        ) => Promise<void>;
+      }
+    ).flushOutputBatch({}, chunks, () => {
+      calls.push('note');
+      return Promise.resolve();
+    });
+
+    expect(calls).toEqual([
+      'write 1000',
+      'note',
+      'write 1000',
+      'note',
+      'write 501',
+      'note',
+    ]);
+  });
+
+  it('notes painted graphemes after each output flush of a timed replay', async () => {
+    const backend = createBackend();
+    const calls: string[] = [];
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: { isClosed: () => false },
+      resizeBridge: () => Promise.resolve(),
+      writeBatchBridge: (_page: object, dataChunks: string[]) => {
+        calls.push(`write ${dataChunks.join(',')}`);
+        return Promise.resolve();
+      },
+      notePaintedGraphemes: () => {
+        calls.push('note');
+        return Promise.resolve();
+      },
+      checkPaintedGlyphs: () => Promise.resolve({}),
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 80,
+            rows: 24,
+            cursorRow: 0,
+            cursorCol: 0,
+          }),
+        ),
+    });
+
+    await backend.replayWithTiming(
+      {
+        sessionId: 'renderer-unit-session',
+        initialCols: 80,
+        initialRows: 24,
+        targetSeq: 2,
+        events: [
+          {
+            seq: 0,
+            ts: '2026-03-19T12:00:00.000Z',
+            type: 'output',
+            payload: { data: 'first' },
+          },
+          {
+            seq: 1,
+            ts: '2026-03-19T12:00:00.010Z',
+            type: 'input_text',
+            payload: { data: 'x' },
+          },
+          {
+            seq: 2,
+            ts: '2026-03-19T12:00:00.020Z',
+            type: 'output',
+            payload: { data: 'second' },
+          },
+        ],
+      },
+      { mode: 'max-speed', minFrameHoldMs: 0, finalFrameHoldMs: 0 },
+    );
+
+    expect(calls).toEqual(['write first', 'note', 'write second', 'note']);
+  });
+
+  it('retries the painted-grapheme note after the backend reboots', async () => {
+    const backend = createBackend();
+    const graphemes = vi.fn(() => Promise.resolve({ missingGlyphs: [] }));
+    const failingPage = {
+      isClosed: () => false,
+      evaluate: vi.fn(() => Promise.reject(new Error('page crashed'))),
+    };
+    Object.assign(backend as object, {
+      glyphCheckMemo: { graphemes },
+      isBooted: true,
+      page: failingPage,
+    });
+    const notePaintedGraphemes = (
+      backend as unknown as {
+        notePaintedGraphemes: (page: object) => Promise<void>;
+      }
+    ).notePaintedGraphemes.bind(backend);
+
+    await notePaintedGraphemes(failingPage);
+    await expect(backend.recordedMissingGlyphs()).resolves.toEqual({});
+
+    await backend.dispose();
+    const healthyPage = {
+      isClosed: () => false,
+      evaluate: vi.fn(() => Promise.resolve({ seen: [], complete: true })),
+    };
+    Object.assign(backend as object, {
+      glyphCheckMemo: { graphemes },
+      isBooted: true,
+      page: healthyPage,
+    });
+
+    await notePaintedGraphemes(healthyPage);
+    await expect(backend.recordedMissingGlyphs()).resolves.toEqual({
+      missingGlyphs: [],
+    });
+    expect(graphemes).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs the recorded glyph check inside the final frame hold', async () => {
+    vi.useFakeTimers();
+    const backend = createBackend();
+    const graphemes = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({ missingGlyphs: [{ codePoint: 'U+0378' }] });
+          }, 300);
+        }),
+    );
+    const page = {
+      isClosed: () => false,
+      evaluate: vi.fn(() =>
+        Promise.resolve({ seen: ['\u0378'], complete: true }),
+      ),
+    };
+    Object.assign(backend as object, {
+      glyphCheckMemo: { graphemes },
+      isBooted: true,
+      page,
+      resizeBridge: () => Promise.resolve(),
+      flushOutputBatch: () => Promise.resolve(),
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 80,
+            rows: 24,
+            cursorRow: 0,
+            cursorCol: 0,
+          }),
+        ),
+    });
+
+    try {
+      let settledAt: number | undefined;
+      const replay = backend
+        .replayWithTiming(
+          {
+            sessionId: 'renderer-unit-session',
+            initialCols: 80,
+            initialRows: 24,
+            targetSeq: 0,
+            events: [
+              {
+                seq: 0,
+                ts: '2026-03-19T12:00:00.000Z',
+                type: 'output',
+                payload: { data: '\u0378' },
+              },
+            ],
+          },
+          { mode: 'recorded', finalFrameHoldMs: 1_000 },
+        )
+        .then(() => {
+          settledAt = Date.now();
+        });
+      const startedAt = Date.now();
+      await vi.advanceTimersByTimeAsync(2_000);
+      await replay;
+
+      expect(graphemes).toHaveBeenCalledTimes(1);
+      expect(graphemes).toHaveBeenCalledWith(
+        page,
+        new Set(['\u0378']),
+        true,
+        1_000,
+      );
+      expect((settledAt ?? Infinity) - startedAt).toBeLessThanOrEqual(1_100);
+      await expect(backend.recordedMissingGlyphs()).resolves.toEqual({
+        missingGlyphs: [{ codePoint: 'U+0378' }],
+      });
+      expect(graphemes).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('flushes and skips run_complete events during replay', async () => {
     const backend = createBackend();
     const flushedChunks: string[][] = [];
@@ -534,6 +750,30 @@ describe('GhosttyWebBackend unit guards', () => {
     } finally {
       await rm(temporaryDirectory, { force: true, recursive: true });
     }
+  });
+
+  it('omits the record export glyph fields, and does not fail, when reading the painted glyphs fails', async () => {
+    const logger = new Logger('debug');
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const backend = new GhosttyWebBackend(
+      'renderer-unit-session',
+      PROFILE,
+      undefined,
+      logger,
+    );
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: {
+        evaluate: vi.fn().mockRejectedValue(new Error('painted read failed')),
+        isClosed: () => false,
+      },
+    });
+
+    await expect(backend.recordedMissingGlyphs()).resolves.toEqual({});
+    expect(debugSpy).toHaveBeenCalledWith(
+      'Missing-glyph check failed; the record export result omits missingGlyphs',
+      'painted read failed',
+    );
   });
 
   it('uses initial caret capture when showCursor is enabled', async () => {

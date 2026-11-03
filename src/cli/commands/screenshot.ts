@@ -4,6 +4,7 @@ import type { ScreenshotResult } from '../../protocol/messages.js';
 
 import type { CommandContext } from '../context.js';
 
+import { missingGlyphLines } from '../missingGlyphLines.js';
 import { emitSuccess } from '../output.js';
 import { CliError } from '../../cli/errors.js';
 import { sendRpc } from '../../host/rpcClient.js';
@@ -104,17 +105,7 @@ function formatScreenshotLines(result: ScreenshotResult): string[] {
   if (result.renderProfileHash !== undefined) {
     lines.push(`Render profile hash: ${result.renderProfileHash}`);
   }
-  const missingCodePoints = (result.missingGlyphs ?? []).map(
-    (glyph) => glyph.codePoint,
-  );
-  if (result.missingGlyphsTruncated === true) {
-    missingCodePoints.push('and more');
-  }
-  if (missingCodePoints.length > 0) {
-    lines.push(
-      `Missing glyphs (drawn as boxes): ${missingCodePoints.join(', ')}`,
-    );
-  }
+  lines.push(...missingGlyphLines(result));
 
   return lines;
 }

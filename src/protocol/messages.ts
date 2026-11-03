@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import type {
   MissingGlyph as MissingGlyphType,
+  RecordedMissingGlyph as RecordedMissingGlyphType,
   RecordDiffLine as RecordDiffLineType,
   RecordDiffResult as RecordDiffResultType,
   RecordDiffSide as RecordDiffSideType,
@@ -28,6 +29,7 @@ import { RendererNameSchema } from '../renderer/names.js';
 
 export {
   MissingGlyphSchema,
+  RecordedMissingGlyphSchema,
   RecordDiffLineSchema,
   RecordDiffResultSchema,
   RecordDiffSideSchema,
@@ -223,6 +225,8 @@ export type ScreenshotParams = z.infer<typeof ScreenshotParamsSchema>;
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;
 
 export type MissingGlyph = MissingGlyphType;
+
+export type RecordedMissingGlyph = RecordedMissingGlyphType;
 
 export type RecordExportResult = RecordExportResultType;
 

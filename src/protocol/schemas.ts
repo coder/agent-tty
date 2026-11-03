@@ -467,6 +467,11 @@ export const MissingGlyphSchema = z
   .strict();
 export type MissingGlyph = z.infer<typeof MissingGlyphSchema>;
 
+export const RecordedMissingGlyphSchema = MissingGlyphSchema.pick({
+  codePoint: true,
+}).strict();
+export type RecordedMissingGlyph = z.infer<typeof RecordedMissingGlyphSchema>;
+
 export const ScreenshotResultSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
@@ -562,18 +567,28 @@ export const WaitForRenderResultSchema = z
     screenHash: Sha256HexSchema.optional(),
   })
   .strict();
-export const RecordExportResultSchema = z
-  .object({
-    sessionId: NonEmptyStringSchema,
-    format: z.enum(['asciicast', 'webm']),
-    artifactPath: NonEmptyStringSchema,
-    bytes: PositiveIntSchema,
-    sha256: NonEmptyStringSchema,
-    capturedAtSeq: ReplaySeqSchema,
-    durationMs: NonNegativeIntSchema.optional(),
-    metadata: z.record(z.string(), z.unknown()),
-  })
-  .strict();
+const RecordExportResultFields = {
+  sessionId: NonEmptyStringSchema,
+  artifactPath: NonEmptyStringSchema,
+  bytes: PositiveIntSchema,
+  sha256: NonEmptyStringSchema,
+  capturedAtSeq: ReplaySeqSchema,
+  durationMs: NonNegativeIntSchema.optional(),
+  metadata: z.record(z.string(), z.unknown()),
+};
+export const RecordExportResultSchema = z.discriminatedUnion('format', [
+  z
+    .object({ ...RecordExportResultFields, format: z.literal('asciicast') })
+    .strict(),
+  z
+    .object({
+      ...RecordExportResultFields,
+      format: z.literal('webm'),
+      missingGlyphs: z.array(RecordedMissingGlyphSchema).optional(),
+      missingGlyphsTruncated: z.literal(true).optional(),
+    })
+    .strict(),
+]);
 export type RecordExportResult = z.infer<typeof RecordExportResultSchema>;
 
 export const RecordDiffLineSchema = z.discriminatedUnion('op', [
