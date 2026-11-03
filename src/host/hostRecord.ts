@@ -1,4 +1,4 @@
-import { readlinkSync } from 'node:fs';
+import { readFileSync, readlinkSync } from 'node:fs';
 import process from 'node:process';
 
 import { z } from 'zod';
@@ -14,7 +14,8 @@ import { readBootId, readProcStat } from './programGroup.js';
 
 // A pid can name a new process after the host ends, but not with the host's
 // start time on the same boot. The pid means that process only in the
-// host's pid namespace.
+// host's pid namespace on the host's machine, and /proc shows that start
+// time with the boottime offset of the reader's time namespace.
 const HostRecordSchema = z
   .object({
     version: z.literal(1),
@@ -22,6 +23,8 @@ const HostRecordSchema = z
     bootId: z.string().min(1),
     startTicks: z.string().regex(/^\d+$/),
     pidNamespace: z.string().min(1),
+    timeNamespace: z.string().min(1).nullable().optional(),
+    machineId: z.string().min(1).nullable().optional(),
   })
   .strict();
 
@@ -57,6 +60,8 @@ export function captureHost(pid: number): HostRecord | null {
           bootId,
           startTicks: stat.startTicks,
           pidNamespace,
+          timeNamespace: readTimeNamespace(pid),
+          machineId: readMachineId(),
         };
   } catch {
     return null;
@@ -69,6 +74,49 @@ function inPidNamespace(pidNamespace: string): boolean {
   } catch {
     return false;
   }
+}
+
+// null on a kernel without time namespaces, and when /proc refuses the link.
+function readTimeNamespace(pid: number): string | null {
+  try {
+    return readlinkSync(`/proc/${String(pid)}/ns/time`);
+  } catch {
+    return null;
+  }
+}
+
+function inTimeNamespace(timeNamespace: string | null | undefined): boolean {
+  if (timeNamespace === undefined) {
+    return true;
+  }
+  try {
+    return readlinkSync('/proc/self/ns/time') === timeNamespace;
+  } catch (error) {
+    return hasErrorCode(error, 'ENOENT') && timeNamespace === null;
+  }
+}
+
+// null when no file names the machine, as in many container images. On
+// first boot, systemd writes `uninitialized` to /etc/machine-id.
+function readMachineId(): string | null {
+  for (const path of ['/etc/machine-id', '/var/lib/dbus/machine-id']) {
+    try {
+      const machineId = readFileSync(path, 'utf8').trim();
+      if (/^[0-9a-f]{32}$/.test(machineId)) {
+        return machineId;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function inHostPidSpace(record: HostRecord): boolean {
+  return (
+    inPidNamespace(record.pidNamespace) &&
+    (record.machineId === undefined || readMachineId() === record.machineId)
+  );
 }
 
 export function writeHostRecord(
@@ -104,17 +152,14 @@ export async function readHostRecord(
   }
 }
 
-// A pid that the host recorded names another process, if any, in a pid
-// namespace other than the host's. Without a host record, from a session
-// that predates it, the CLI cannot tell and trusts the pid as before.
-export async function sharesHostPidNamespace(
+export async function sharesHostPids(
   sessionDirectory: string,
 ): Promise<boolean> {
   if (process.platform !== 'linux') {
     return true;
   }
   const record = await readHostRecord(sessionDirectory);
-  return record === null || inPidNamespace(record.pidNamespace);
+  return record === null || inHostPidSpace(record);
 }
 
 function pidExists(pid: number): boolean {
@@ -136,7 +181,7 @@ export function judgeHost(pid: number, record: HostRecord | null): HostVerdict {
   if (
     process.platform === 'linux' &&
     record !== null &&
-    !inPidNamespace(record.pidNamespace)
+    !inHostPidSpace(record)
   ) {
     return 'unknown';
   }
@@ -160,7 +205,12 @@ export function judgeHost(pid: number, record: HostRecord | null): HostVerdict {
   if (stat.state === 'Z' || stat.state === 'X') {
     return 'dead';
   }
-  if (record === null || record.pid !== pid || bootId === null) {
+  if (
+    record === null ||
+    record.pid !== pid ||
+    bootId === null ||
+    !inTimeNamespace(record.timeNamespace)
+  ) {
     return 'unknown';
   }
   return record.bootId === bootId && record.startTicks === stat.startTicks
