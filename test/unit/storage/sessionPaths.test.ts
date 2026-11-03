@@ -9,6 +9,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import process from 'node:process';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -16,9 +17,11 @@ import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import {
   manifestPath,
   eventLogPath,
+  legacySocketPath,
   programRecordPath,
   sessionDir,
   socketPath,
+  socketRootDirectory,
 } from '../../../src/storage/sessionPaths.js';
 import {
   readManifest,
@@ -59,7 +62,7 @@ describe('session paths', () => {
     const home = '/tmp/agent-tty-home';
     const sessionId = 'session-01';
     const directory = sessionDir(home, 'session-01');
-    const expectedSocketPath = `/tmp/agent-tty/${crypto.createHash('sha256').update(home).digest('hex').slice(0, 8)}/${crypto.createHash('sha256').update(sessionId).digest('hex').slice(0, 12)}`;
+    const expectedSocketPath = `${socketRootDirectory()}/${crypto.createHash('sha256').update(home).digest('hex').slice(0, 8)}/${crypto.createHash('sha256').update(sessionId).digest('hex').slice(0, 12)}`;
 
     expect(directory).toBe('/tmp/agent-tty-home/sessions/session-01');
     expect(manifestPath(directory)).toBe(
@@ -73,6 +76,29 @@ describe('session paths', () => {
     );
     expect(socketPath(directory)).toBe(expectedSocketPath);
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'puts sockets under a root named for the uid',
+    () => {
+      expect(socketRootDirectory()).toBe(
+        `/tmp/agent-tty-${String(process.getuid?.())}`,
+      );
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'maps a socket path to the path that an older host listens at',
+    () => {
+      const socketFile = socketPath(
+        sessionDir('/tmp/agent-tty-home', 'session-01'),
+      );
+
+      expect(legacySocketPath(socketFile)).toBe(
+        `/tmp/agent-tty/${socketFile.slice(socketRootDirectory().length + 1)}`,
+      );
+      expect(legacySocketPath('/tmp/elsewhere/rpc.sock')).toBeNull();
+    },
+  );
 
   it('asserts on invalid path helper inputs', () => {
     expect(() => sessionDir('', 'session-01')).toThrow(

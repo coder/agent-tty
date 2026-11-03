@@ -1,4 +1,14 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+} from 'node:fs';
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -7,7 +17,13 @@ import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { sessionDir, socketPath } from '../../src/storage/sessionPaths.js';
+import { readManifest, writeManifest } from '../../src/storage/manifests.js';
+import {
+  legacySocketPath,
+  manifestPath,
+  sessionDir,
+  socketPath,
+} from '../../src/storage/sessionPaths.js';
 import {
   cleanupHome,
   crashSession,
@@ -22,6 +38,34 @@ let testHome = '';
 
 function socketDirectoryOf(sessionId: string): string {
   return dirname(socketPath(sessionDir(testHome, sessionId)));
+}
+
+async function waitForExit(pid: number): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  for (;;) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
+    expect(Date.now()).toBeLessThan(deadline);
+    await sleep(50);
+  }
+}
+
+// A host of an older version listens at the old path. A rename of the
+// socket file keeps the host listening on it.
+function moveSocketToOldPath(sessionId: string): string {
+  const socketFile = socketPath(sessionDir(testHome, sessionId));
+  const oldSocketFile = legacySocketPath(socketFile);
+  expect(oldSocketFile).not.toBeNull();
+  if (oldSocketFile === null) {
+    throw new Error('the platform has no old socket path');
+  }
+  mkdirSync(dirname(oldSocketFile), { recursive: true, mode: 0o700 });
+  chmodSync(dirname(oldSocketFile), 0o700);
+  renameSync(socketFile, oldSocketFile);
+  return oldSocketFile;
 }
 
 async function waitForRemoval(path: string): Promise<void> {
@@ -64,6 +108,90 @@ describe.skipIf(process.platform === 'win32')(
       expect(runCli(['destroy', second, '--json'], env).status).toBe(0);
       expect(existsSync(directory)).toBe(false);
     });
+
+    it('lies in a root of the uid that only the owner can use', () => {
+      const sessionId = createSession(testHome);
+      const root = dirname(socketDirectoryOf(sessionId));
+
+      expect(root).toBe(`/tmp/agent-tty-${String(process.getuid?.())}`);
+      const stats = lstatSync(root);
+      expect(stats.isDirectory()).toBe(true);
+      expect(stats.uid).toBe(process.getuid?.());
+      expect(stats.mode & 0o077).toBe(0);
+    });
+
+    it('a CLI reaches a host that listens at the old path, and destroy removes that path', () => {
+      const sessionId = createSession(testHome);
+      const oldSocketFile = moveSocketToOldPath(sessionId);
+      const env = { AGENT_TTY_HOME: testHome };
+
+      expect(
+        runCli(['type', sessionId, 'old-path', '--json'], env).status,
+      ).toBe(0);
+      expect(runCli(['destroy', sessionId, '--json'], env).status).toBe(0);
+      expect(existsSync(oldSocketFile)).toBe(false);
+      expect(existsSync(dirname(oldSocketFile))).toBe(false);
+    });
+
+    it('a CLI does not follow a symlink at the old path', () => {
+      const sessionId = createSession(testHome);
+      const oldSocketFile = moveSocketToOldPath(sessionId);
+      const moved = join(testHome, 'moved.sock');
+      renameSync(oldSocketFile, moved);
+      symlinkSync(moved, oldSocketFile);
+      const env = { AGENT_TTY_HOME: testHome };
+
+      try {
+        const result = runCli(['type', sessionId, 'old-path', '--json'], env);
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          ok: false,
+          error: { code: 'HOST_UNREACHABLE' },
+        });
+      } finally {
+        rmSync(oldSocketFile, { force: true });
+        rmSync(dirname(oldSocketFile), { recursive: true, force: true });
+        renameSync(moved, socketPath(sessionDir(testHome, sessionId)));
+      }
+    });
+
+    it.each([
+      ['gc', 'exited'],
+      ['destroy', 'destroyed'],
+    ] as const)(
+      '%s removes it when the host died after it wrote %s',
+      async (command, status) => {
+        const sessionId = createSession(testHome);
+        const { hostPid } = inspectSession(testHome, sessionId);
+        expect(hostPid).toBeTypeOf('number');
+        crashSession(testHome, sessionId);
+        await waitForExit(hostPid ?? 0);
+        const manifestFile = manifestPath(sessionDir(testHome, sessionId));
+        await writeManifest(manifestFile, {
+          ...(await readManifest(manifestFile)),
+          status,
+          childPid: null,
+          exitCode: 0,
+        });
+        const directory = socketDirectoryOf(sessionId);
+        expect(existsSync(directory)).toBe(true);
+
+        const result = runCli(
+          command === 'gc'
+            ? ['gc', '--json']
+            : ['destroy', sessionId, '--json'],
+          { AGENT_TTY_HOME: testHome },
+        );
+        expect(JSON.parse(result.stdout)).toMatchObject(
+          command === 'gc'
+            ? {
+                ok: true,
+                result: { homes: [{ removedSessions: [sessionId] }] },
+              }
+            : { ok: false, error: { code: 'SESSION_ALREADY_DESTROYED' } },
+        );
+        expect(existsSync(directory)).toBe(false);
+      },
+    );
 
     it('destroy --force removes it after it kills the host', () => {
       const sessionId = createSession(testHome);

@@ -10,7 +10,7 @@ import {
 } from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -156,6 +156,7 @@ import {
   allocateSession,
   destroySession,
   cliRunsInsideProgramSession,
+  ensureSocketRoot,
   reconcileSession,
   removeSocketDirectoryBestEffort,
   removeSocketDirectoryIfEmpty,
@@ -173,7 +174,11 @@ import {
 } from '../../../src/host/hostRecord.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
-import { manifestPath, sessionDir } from '../../../src/storage/sessionPaths.js';
+import {
+  manifestPath,
+  sessionDir,
+  socketPath,
+} from '../../../src/storage/sessionPaths.js';
 import { capturesToken, killGroupIfAlive } from '../../helpers.js';
 
 const HOST_PID = 2_147_483_646;
@@ -1277,3 +1282,53 @@ describe('removeSocketDirectoryBestEffort', () => {
     );
   });
 });
+
+describe.skipIf(process.platform === 'win32')(
+  'destroy of a destroyed session',
+  () => {
+    let socketFile = '';
+
+    beforeEach(async () => {
+      vi.stubEnv('AGENT_TTY_HOME', home);
+      socketFile = socketPath(sessionDir(home, 'session-01'));
+      await ensureSocketRoot();
+      await mkdir(dirname(socketFile), { recursive: true, mode: 0o700 });
+      writeFileSync(socketFile, '');
+    });
+
+    afterEach(async () => {
+      await rm(dirname(socketFile), { recursive: true, force: true });
+    });
+
+    it('removes the socket that a dead host left, then reports SESSION_ALREADY_DESTROYED', async () => {
+      await seedSession(makeRecord({ status: 'destroyed', childPid: null }));
+      killProbeReportsDead();
+
+      await expect(destroySession('session-01')).rejects.toMatchObject({
+        code: 'SESSION_ALREADY_DESTROYED',
+      });
+      expect(existsSync(socketFile)).toBe(false);
+      expect(existsSync(dirname(socketFile))).toBe(false);
+    });
+
+    it('keeps the socket of a host that still runs', async () => {
+      const directory = await seedSession(
+        makeRecord({
+          status: 'destroyed',
+          hostPid: process.pid,
+          childPid: null,
+        }),
+      );
+      const own = captureHost(process.pid);
+      expect(own).not.toBeNull();
+      if (own !== null) {
+        writeHostRecord(directory, own);
+      }
+
+      await expect(destroySession('session-01')).rejects.toMatchObject({
+        code: 'SESSION_ALREADY_DESTROYED',
+      });
+      expect(existsSync(socketFile)).toBe(true);
+    });
+  },
+);

@@ -11,6 +11,7 @@ import type { SessionRecord } from '../../../src/protocol/schemas.js';
 const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
   allocateSession: vi.fn(),
+  ensureSocketRoot: vi.fn(),
   launchHost: vi.fn(),
   stopHost: vi.fn(),
   sendRpc: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock('../../../src/cli/output.js', () => ({
 
 vi.mock('../../../src/host/lifecycle.js', () => ({
   allocateSession: mocks.allocateSession,
+  ensureSocketRoot: mocks.ensureSocketRoot,
   launchHost: mocks.launchHost,
 }));
 
@@ -380,6 +382,19 @@ describe('create command', () => {
     expect(mocks.allocateSession.mock.calls[0]?.[0]).not.toHaveProperty(
       'idleTimeoutMs',
     );
+  });
+
+  it('refuses an unsafe socket root before it allocates a session', async () => {
+    const unsafe = makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+      message: 'unsafe socket root',
+    });
+    mocks.ensureSocketRoot.mockRejectedValueOnce(unsafe);
+
+    await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
+      unsafe,
+    );
+    expect(mocks.allocateSession).not.toHaveBeenCalled();
+    expect(mocks.launchHost).not.toHaveBeenCalled();
   });
 
   it('rejects negative idle timeout values before allocating a session', async () => {
