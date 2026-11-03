@@ -8,6 +8,7 @@ import type {
   MouseAction,
   MouseButton,
   MouseModifiers,
+  RecordExportResult,
 } from '../protocol/schemas.js';
 
 export interface SnapshotOptions {
@@ -110,4 +111,15 @@ export interface VideoCapableRendererBackend extends RendererBackend {
 
   /** Finalize and save the video recording to the given path. */
   finalizeVideo(outputPath: string): Promise<void>;
+
+  /**
+   * The glyphs that a bundled font drew as boxes in any frame of the replay.
+   * Never rejects: `{}` means the check did not run.
+   */
+  recordedMissingGlyphs(): Promise<RecordedGlyphFields>;
 }
+
+export type RecordedGlyphFields = Pick<
+  RecordExportResult,
+  'missingGlyphs' | 'missingGlyphsTruncated'
+>;

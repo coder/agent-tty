@@ -386,6 +386,50 @@ describe('GlyphCheck', () => {
   });
 });
 
+describe('GlyphCheck.graphemes', () => {
+  it('lists each boxed code point once, in code point order and without cells', async () => {
+    const { page } = fakePage({
+      '\u29c9': [JETBRAINS],
+      '\u0378': [JETBRAINS],
+      '\u2502': [HOST],
+    });
+
+    await expect(
+      check().graphemes(
+        page,
+        new Set(['\u29c9', 'a', '\u2502', '\u0378']),
+        true,
+      ),
+    ).resolves.toEqual({
+      missingGlyphs: [{ codePoint: 'U+0378' }, { codePoint: 'U+29C9' }],
+    });
+  });
+
+  it('marks the result truncated when the painted graphemes were cut short', async () => {
+    const { page } = fakePage({ '\u0378': [JETBRAINS] });
+
+    await expect(
+      check().graphemes(page, new Set(['\u0378']), false),
+    ).resolves.toEqual({
+      missingGlyphs: [{ codePoint: 'U+0378' }],
+      missingGlyphsTruncated: true,
+    });
+  });
+
+  it('marks the result truncated when the probe limit leaves a glyph unchecked', async () => {
+    const { page } = fakePage({}, [JETBRAINS]);
+    const graphemes = new Set(
+      Array.from({ length: MAX_GLYPH_PROBES + 1 }, (_, index) =>
+        String.fromCodePoint(0x4e00 + index),
+      ),
+    );
+    const result = await check().graphemes(page, graphemes, true);
+
+    expect(result.missingGlyphsTruncated).toBe(true);
+    expect(result.missingGlyphs).toHaveLength(MAX_GLYPH_PROBES);
+  });
+});
+
 describe('probeUsedFonts', () => {
   function fakePage(count: number, delayMs: number): Page {
     const send = vi.fn(async (method: string) => {

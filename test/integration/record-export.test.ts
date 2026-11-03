@@ -34,6 +34,8 @@ interface RecordExportResult {
   capturedAtSeq: number;
   durationMs?: number;
   metadata: Record<string, unknown>;
+  missingGlyphs?: { codePoint: string }[];
+  missingGlyphsTruncated?: true;
 }
 
 async function readJsonFile<T>(path: string): Promise<T> {
@@ -274,6 +276,7 @@ describe('record export integration', { timeout: 120_000 }, () => {
     expect(envelope.result.artifactPath.endsWith('.webm')).toBe(true);
     expect(envelope.result.bytes).toBeGreaterThan(0);
     expect(envelope.result.capturedAtSeq).toBeGreaterThanOrEqual(0);
+    expect(envelope.result.missingGlyphs).toEqual([]);
 
     const contents = await readFile(envelope.result.artifactPath);
     expect(contents.byteLength).toBe(envelope.result.bytes);
@@ -359,6 +362,43 @@ describe('record export integration', { timeout: 120_000 }, () => {
         bytes: envelope.result.bytes,
       }),
     );
+  });
+
+  it('lists a glyph that a webm frame drew as a box although the last frame is clean, and asciicast lists none', () => {
+    const sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      "printf 'box \\315\\270\\n'; read line; printf '\\033[2J\\033[Hclean\\n'; exec cat",
+    ]);
+
+    waitForIdle(testHome, sessionId);
+    const enterResult = runCli(['send-keys', sessionId, 'Enter', '--json'], {
+      AGENT_TTY_HOME: testHome,
+    });
+    expect(enterResult.status).toBe(0);
+    const waitResult = runCli(
+      ['wait', sessionId, '--text', 'clean', '--timeout', '10000', '--json'],
+      { AGENT_TTY_HOME: testHome },
+      15_000,
+    );
+    expect(waitResult.status).toBe(0);
+    waitForIdle(testHome, sessionId);
+
+    const exportAs = (format: 'asciicast' | 'webm') => {
+      const result = runCli(
+        ['record', 'export', sessionId, '--format', format, '--json'],
+        { AGENT_TTY_HOME: testHome },
+        120_000,
+      );
+      expect(result.status).toBe(0);
+      return (JSON.parse(result.stdout) as SuccessEnvelope<RecordExportResult>)
+        .result;
+    };
+
+    expect(exportAs('webm').missingGlyphs).toEqual([{ codePoint: 'U+0378' }]);
+    expect(exportAs('asciicast')).not.toHaveProperty('missingGlyphs');
+
+    destroySession(testHome, sessionId);
   });
 
   it('rejects invalid export formats', () => {

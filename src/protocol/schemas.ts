@@ -467,6 +467,12 @@ export const MissingGlyphSchema = z
   .strict();
 export type MissingGlyph = z.infer<typeof MissingGlyphSchema>;
 
+// A video has many frames, so a record export entry names no cells.
+export const RecordedMissingGlyphSchema = MissingGlyphSchema.pick({
+  codePoint: true,
+}).strict();
+export type RecordedMissingGlyph = z.infer<typeof RecordedMissingGlyphSchema>;
+
 export const ScreenshotResultSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
@@ -572,6 +578,8 @@ export const RecordExportResultSchema = z
     capturedAtSeq: NonNegativeIntSchema,
     durationMs: NonNegativeIntSchema.optional(),
     metadata: z.record(z.string(), z.unknown()),
+    missingGlyphs: z.array(RecordedMissingGlyphSchema).optional(),
+    missingGlyphsTruncated: z.literal(true).optional(),
   })
   .strict();
 export type RecordExportResult = z.infer<typeof RecordExportResultSchema>;

@@ -10,6 +10,7 @@ import {
   type SessionRecord,
 } from '../protocol/schemas.js';
 import type {
+  RecordedGlyphFields,
   ReplayTimingOptions,
   VideoCapableRendererBackend,
   VideoRecordingOptions,
@@ -71,7 +72,7 @@ export interface WebmExportDeps {
   replayTimeoutMs?: number;
 }
 
-export interface WebmExportResult {
+export interface WebmExportResult extends RecordedGlyphFields {
   capturedAtSeq: number;
   durationMs: number;
   outputEventCount: number;
@@ -208,6 +209,8 @@ export async function generateWebmExport(
       timingOptions,
       replayTimeoutMs,
     );
+    // finalizeVideo() closes the page that the glyph check probes.
+    const missingGlyphs = await backend.recordedMissingGlyphs();
     await backend.finalizeVideo(options.outputPath);
 
     const exportedEvents = replayInput.events.filter(
@@ -253,6 +256,7 @@ export async function generateWebmExport(
       profileName,
       timingMode: resolvedTimingMode,
       rendererBackend: videoRendererName,
+      ...missingGlyphs,
     };
   } finally {
     if (backend !== null) {

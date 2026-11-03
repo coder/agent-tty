@@ -535,6 +535,30 @@ describe('GhosttyWebBackend unit guards', () => {
     }
   });
 
+  it('omits the record export glyph fields, and does not fail, when reading the painted glyphs fails', async () => {
+    const logger = new Logger('debug');
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const backend = new GhosttyWebBackend(
+      'renderer-unit-session',
+      PROFILE,
+      undefined,
+      logger,
+    );
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: {
+        evaluate: vi.fn().mockRejectedValue(new Error('painted read failed')),
+        isClosed: () => false,
+      },
+    });
+
+    await expect(backend.recordedMissingGlyphs()).resolves.toEqual({});
+    expect(debugSpy).toHaveBeenCalledWith(
+      'Missing-glyph check failed; the record export result omits missingGlyphs',
+      'painted read failed',
+    );
+  });
+
   it('uses initial caret capture when showCursor is enabled', async () => {
     const backend = createBackend();
     // oxfmt-ignore

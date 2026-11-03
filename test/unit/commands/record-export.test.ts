@@ -489,6 +489,45 @@ describe('record export command', () => {
     expect(emitSuccessArgs.result.durationMs).toBe(1_500);
   });
 
+  it('reports the glyphs that the video drew as boxes, in the result and the human output', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+    const webmContent = Buffer.alloc(64, 0x42);
+    mocks.generateWebmExport.mockResolvedValue({
+      capturedAtSeq: 1,
+      durationMs: 1_500,
+      outputEventCount: 1,
+      resizeEventCount: 1,
+      cols: 80,
+      rows: 24,
+      profileName: 'reference-dark',
+      timingMode: 'recorded',
+      rendererBackend: 'ghostty-web',
+      missingGlyphs: [{ codePoint: 'U+0378' }],
+      missingGlyphsTruncated: true,
+    });
+    mocks.stat.mockResolvedValue({ size: webmContent.byteLength });
+    mocks.readFile.mockResolvedValue(webmContent);
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+      format: 'webm',
+    });
+
+    const [output] = mocks.emitSuccess.mock.calls[0] as [
+      { result: Record<string, unknown>; lines: string[] },
+    ];
+    expect(output.result).toMatchObject({
+      missingGlyphs: [{ codePoint: 'U+0378' }],
+      missingGlyphsTruncated: true,
+    });
+    expect(output.lines.slice(-2)).toEqual([
+      'Missing glyphs (drawn as boxes): U+0378',
+      'Glyph check incomplete',
+    ]);
+  });
+
   it('requests rollback for default asciicast artifacts when manifest append fails', async () => {
     const sessionDirectory = await createTemporaryDirectory(
       'agent-tty-record-export-append-asciicast-',

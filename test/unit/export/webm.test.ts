@@ -107,6 +107,8 @@ function createMockBackend(
     overrides.getVisibleText ?? vi.fn().mockResolvedValue('');
   const finalizeVideo =
     overrides.finalizeVideo ?? vi.fn().mockResolvedValue(undefined);
+  const recordedMissingGlyphs =
+    overrides.recordedMissingGlyphs ?? vi.fn().mockResolvedValue({});
   const dispose = overrides.dispose ?? vi.fn().mockResolvedValue(undefined);
   const backend: VideoCapableRendererBackend = {
     rendererBackend: overrides.rendererBackend ?? 'mock-video-backend',
@@ -118,6 +120,7 @@ function createMockBackend(
     screenshot,
     getVisibleText,
     finalizeVideo,
+    recordedMissingGlyphs,
     dispose,
   };
 
@@ -269,6 +272,44 @@ describe('generateWebmExport', () => {
       profileName: 'reference-dark',
       timingMode: 'recorded',
       rendererBackend: 'ghostty-web',
+    });
+  });
+
+  it('reports the glyphs that the replay drew as boxes, checked before the video closes', async () => {
+    const callOrder: string[] = [];
+    const mockBackend = createMockBackend({
+      replayWithTiming: vi.fn().mockImplementation(() => {
+        callOrder.push('replay');
+        return Promise.resolve(createReplayState());
+      }),
+      recordedMissingGlyphs: vi.fn().mockImplementation(() => {
+        callOrder.push('glyphs');
+        return Promise.resolve({
+          missingGlyphs: [{ codePoint: 'U+0378' }],
+          missingGlyphsTruncated: true,
+        });
+      }),
+      finalizeVideo: vi.fn().mockImplementation(() => {
+        callOrder.push('finalize');
+        return Promise.resolve();
+      }),
+    });
+
+    const result = await generateWebmExport(
+      {
+        sessionId: 'session-01',
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
+        manifest: createManifest(),
+        events: createEvents(),
+        outputPath: '/tmp/exports/recording-1-webm.webm',
+      },
+      { backendFactory: () => mockBackend.backend },
+    );
+
+    expect(callOrder).toEqual(['replay', 'glyphs', 'finalize']);
+    expect(result).toMatchObject({
+      missingGlyphs: [{ codePoint: 'U+0378' }],
+      missingGlyphsTruncated: true,
     });
   });
 

@@ -29,6 +29,7 @@ import {
   ResourceScopeCloseError,
 } from '../../util/resourceScope.js';
 import type {
+  RecordedGlyphFields,
   ReplayTimingOptions,
   ScreenshotOptions,
   SnapshotOptions,
@@ -55,7 +56,11 @@ import {
   validateHarnessSnapshot,
 } from './harnessDecoding.js';
 import type { GhosttyHarnessSnapshot } from './harnessDecoding.js';
-import { GlyphCheck, type ScreenGlyphFields } from './missingGlyphs.js';
+import {
+  GlyphCheck,
+  MAX_CACHED_GLYPH_PROBES,
+  type ScreenGlyphFields,
+} from './missingGlyphs.js';
 
 export {
   assembleCanonicalLine,
@@ -84,6 +89,7 @@ interface GhosttyBrowserBridge {
 
 interface GhosttyBrowserGlobal {
   __agentTty?: GhosttyBrowserBridge;
+  __agentTtyPainted?: { seen: Set<string>; complete: boolean };
   __agentTtyLog?: (
     level: LogLevel,
     message: string,
@@ -274,6 +280,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   // dispose() race on the same scope.
   private readonly loggedScopes = new WeakSet<ResourceScope>();
   private glyphCheckMemo: GlyphCheck | null | undefined;
+  private paintedNoteFailed = false;
   private initialReplayCols: number | null = null;
   private initialReplayRows: number | null = null;
   private lastAppliedSeq = -1;
@@ -654,6 +661,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
 
       await this.flushOutputBatch(page, pendingOutputChunks);
       pendingOutputChunks = [];
+      await this.notePaintedGraphemes(page);
       await waitForDelay(resolvedMinFrameHoldMs);
     };
 
@@ -709,6 +717,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           this.currentCols = event.payload.cols;
           this.currentRows = event.payload.rows;
           resizeEventCount += 1;
+          await this.notePaintedGraphemes(page);
           await waitForDelay(resolvedMinFrameHoldMs);
           break;
         }
@@ -936,6 +945,85 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       'cell graphemes must be one string per viewport cell',
     );
     return check.screen(page, grid);
+  }
+
+  // Records in the page every grapheme of the viewport after a replay paints
+  // it, for recordedMissingGlyphs(). A failure only turns the check off.
+  private async notePaintedGraphemes(page: Page): Promise<void> {
+    if (this.paintedNoteFailed) {
+      return;
+    }
+    try {
+      if (this.glyphCheck() === null) {
+        return;
+      }
+      await page.evaluate((cap) => {
+        const scope = globalThis as GhosttyBrowserGlobal;
+        const bridge = scope.__agentTty;
+        if (
+          bridge === undefined ||
+          typeof bridge.getCellGraphemes !== 'function'
+        ) {
+          throw new Error(
+            'ghostty-web bridge getCellGraphemes() is unavailable',
+          );
+        }
+        scope.__agentTtyPainted ??= { seen: new Set(), complete: true };
+        const painted = scope.__agentTtyPainted;
+        for (const row of bridge.getCellGraphemes()) {
+          for (const grapheme of row) {
+            if (grapheme === '' || painted.seen.has(grapheme)) {
+              continue;
+            }
+            if (painted.seen.size < cap) {
+              painted.seen.add(grapheme);
+            } else {
+              painted.complete = false;
+            }
+          }
+        }
+      }, MAX_CACHED_GLYPH_PROBES);
+    } catch (error) {
+      this.paintedNoteFailed = true;
+      this.logger.debug(
+        'Missing-glyph note failed; the record export result omits missingGlyphs',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  public async recordedMissingGlyphs(): Promise<RecordedGlyphFields> {
+    try {
+      const check = this.glyphCheck();
+      if (check === null || this.paintedNoteFailed) {
+        return {};
+      }
+      const page = this.requireOperationalPage('recordedMissingGlyphs()');
+      const painted = await page.evaluate(() => {
+        const state = (globalThis as GhosttyBrowserGlobal).__agentTtyPainted;
+        return {
+          seen: [...(state?.seen ?? [])],
+          complete: state?.complete ?? true,
+        };
+      });
+      invariant(
+        Array.isArray(painted.seen) &&
+          painted.seen.every((grapheme) => typeof grapheme === 'string') &&
+          typeof painted.complete === 'boolean',
+        'painted graphemes must be strings with a completeness flag',
+      );
+      return await check.graphemes(
+        page,
+        new Set(painted.seen),
+        painted.complete,
+      );
+    } catch (error) {
+      this.logger.debug(
+        'Missing-glyph check failed; the record export result omits missingGlyphs',
+        error instanceof Error ? error.message : String(error),
+      );
+      return {};
+    }
   }
 
   public async finalizeVideo(outputPath: string): Promise<void> {

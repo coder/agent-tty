@@ -6,6 +6,7 @@ import {
   type FamilyFaces,
   type StackFaces,
 } from '../fontCoverage.js';
+import type { RecordedGlyphFields } from '../backend.js';
 import type { RenderProfileConfig, ScreenshotResult } from '../types.js';
 
 import { invariant } from '../../util/assert.js';
@@ -303,6 +304,22 @@ export class GlyphCheck {
     return {
       missingGlyphs,
       ...(truncated && { missingGlyphsTruncated: true }),
+    };
+  }
+
+  /** The code points boxed in any of the graphemes, without cells. */
+  public async graphemes(
+    page: Page,
+    graphemes: ReadonlySet<string>,
+    complete: boolean,
+  ): Promise<RecordedGlyphFields> {
+    const judged = await this.judge(page, graphemes);
+    const codePoints = new Set([...judged.boxed.values()].flat());
+    return {
+      missingGlyphs: [...codePoints]
+        .sort((left, right) => left - right)
+        .map((codePoint) => ({ codePoint: formatCodePoint(codePoint) })),
+      ...((!complete || !judged.complete) && { missingGlyphsTruncated: true }),
     };
   }
 
