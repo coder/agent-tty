@@ -170,7 +170,7 @@ describe('GhosttyWebBackend unit guards', () => {
             seq: 1,
             ts: '2026-03-19T12:00:00.010Z',
             type: 'input_text',
-            payload: { text: 'x' },
+            payload: { data: 'x' },
           },
           {
             seq: 2,
