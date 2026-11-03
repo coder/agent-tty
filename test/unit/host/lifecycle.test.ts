@@ -4,6 +4,7 @@ import {
   existsSync,
   lstatSync,
   readFileSync,
+  readlinkSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -24,6 +25,8 @@ const fsHooks = vi.hoisted(() => ({
   // The text that a read of /proc/self/stat returns.
   ownStat: undefined as string | undefined,
   rmdirError: undefined as Error | undefined,
+  files: undefined as Map<string, string | Error> | undefined,
+  links: undefined as Map<string, string | Error> | undefined,
 }));
 
 vi.mock('node:fs', async () => {
@@ -36,6 +39,13 @@ vi.mock('node:fs', async () => {
           ...rest,
         )) as typeof actual.readdirSync;
   const readFileSync = ((path: string, ...rest: unknown[]) => {
+    const file = fsHooks.files?.get(path);
+    if (file instanceof Error) {
+      throw file;
+    }
+    if (file !== undefined) {
+      return file;
+    }
     if (fsHooks.ownStatError !== undefined && path === '/proc/self/stat') {
       throw fsHooks.ownStatError;
     }
@@ -64,7 +74,17 @@ vi.mock('node:fs', async () => {
     }
     return stat;
   }) as typeof actual.readFileSync;
-  return { ...actual, readdirSync, readFileSync };
+  const readlinkSync = ((path: string, ...rest: unknown[]) => {
+    const link = fsHooks.links?.get(path);
+    if (link instanceof Error) {
+      throw link;
+    }
+    return (
+      link ??
+      (actual.readlinkSync as (...args: unknown[]) => unknown)(path, ...rest)
+    );
+  }) as typeof actual.readlinkSync;
+  return { ...actual, readdirSync, readFileSync, readlinkSync };
 });
 
 // The controlling terminal that /bin/ps prints for a pid, or null when ps
@@ -146,7 +166,11 @@ import {
   writeProgramRecord,
   type ProgramRecord,
 } from '../../../src/host/programGroup.js';
-import { captureHost, writeHostRecord } from '../../../src/host/hostRecord.js';
+import {
+  captureHost,
+  writeHostRecord,
+  type HostRecord,
+} from '../../../src/host/hostRecord.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
 import { manifestPath, sessionDir } from '../../../src/storage/sessionPaths.js';
@@ -171,6 +195,8 @@ afterEach(async () => {
   fsHooks.ownStatError = undefined;
   fsHooks.noProc = false;
   fsHooks.ownStat = undefined;
+  fsHooks.files = undefined;
+  fsHooks.links = undefined;
   await rm(home, { recursive: true, force: true });
 });
 
@@ -869,6 +895,156 @@ describe('a hostPid that may no longer name the host', () => {
     },
   );
 
+  function shiftStartTicks(stat: string, ticks: bigint): string {
+    const close = stat.lastIndexOf(')');
+    const fields = stat.slice(close + 2).split(' ');
+    fields[19] = String(BigInt(fields[19] ?? '') + ticks);
+    return `${stat.slice(0, close + 2)}${fields.join(' ')}`;
+  }
+
+  // /proc/<pid>/stat shows the start time with the reader's boottime offset.
+  it.runIf(platform === 'linux')(
+    'on linux a CLI in another time namespace leaves a live host running and kills nothing',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host);
+      const record = await readManifest(manifestPath(directory));
+      const statPath = `/proc/${String(host)}/stat`;
+      fsHooks.files = new Map([
+        [
+          statPath,
+          shiftStartTicks(readFileSync(statPath, 'utf8'), 10_000_000n),
+        ],
+      ]);
+      fsHooks.links = new Map([['/proc/self/ns/time', 'time:[1]']]);
+      const kill = vi.spyOn(process, 'kill');
+
+      await reconcileSession(directory);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+
+      await expect(destroySession('session-01', true)).rejects.toMatchObject({
+        code: 'HOST_TIMEOUT',
+      });
+      expect(kill).not.toHaveBeenCalledWith(host, 'SIGKILL');
+      expect(isRunning(host)).toBe(true);
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux destroy --force kills a host whose record predates the identity fields',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host, 'none');
+      const own = captureHost(host);
+      expect(own).not.toBeNull();
+      const {
+        timeNamespace: _time,
+        machineId: _machine,
+        ...legacy
+      } = own as HostRecord;
+      writeFileSync(join(directory, 'host.json'), JSON.stringify(legacy));
+      const kill = reapAsInitAfterKill(host);
+
+      await destroySession('session-01', true);
+
+      expect(kill).toHaveBeenCalledWith(host, 'SIGKILL');
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'destroyed',
+      });
+    },
+  );
+
+  it.runIf(platform === 'linux').each([
+    [
+      'uninitialized\n',
+      'fedcba9876543210fedcba9876543210\n',
+      'fedcba9876543210fedcba9876543210',
+    ],
+    ['uninitialized\n', 'not-a-machine-id\n', null],
+  ])(
+    'on linux the host record reads /etc/machine-id %j and the dbus id %j as machine id %j',
+    (etc, dbus, expected) => {
+      fsHooks.files = new Map<string, string | Error>([
+        ['/etc/machine-id', etc],
+        ['/var/lib/dbus/machine-id', dbus],
+      ]);
+
+      expect(captureHost(process.pid)).toMatchObject({ machineId: expected });
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux the host record keeps the pid namespace when /proc refuses its time namespace',
+    () => {
+      fsHooks.links = new Map<string, string | Error>([
+        [`/proc/${String(process.pid)}/ns/time`, errno('EACCES')],
+      ]);
+
+      expect(captureHost(process.pid)).toMatchObject({
+        pidNamespace: readlinkSync('/proc/self/ns/pid'),
+        timeNamespace: null,
+      });
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux the host record takes the dbus machine id when /etc/machine-id cannot be read',
+    () => {
+      fsHooks.files = new Map<string, string | Error>([
+        ['/etc/machine-id', errno('EACCES')],
+        ['/var/lib/dbus/machine-id', 'fedcba9876543210fedcba9876543210\n'],
+      ]);
+
+      expect(captureHost(process.pid)).toMatchObject({
+        machineId: 'fedcba9876543210fedcba9876543210',
+      });
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux a CLI in another time namespace still records failed for a host that stays a zombie',
+    async () => {
+      const zombie = await startZombie();
+      const directory = await seedHost(zombie, 'none');
+      const own = captureHost(process.pid);
+      expect(own).not.toBeNull();
+      writeHostRecord(directory, { ...(own as HostRecord), pid: zombie });
+      fsHooks.links = new Map([['/proc/self/ns/time', 'time:[1]']]);
+
+      await reconcileSession(directory);
+
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'failed',
+      });
+    },
+  );
+
+  it.runIf(platform === 'linux')(
+    'on linux a CLI on another machine that shares the Home leaves the host running and kills nothing',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host);
+      const record = await readManifest(manifestPath(directory));
+      fsHooks.files = new Map([
+        [
+          '/proc/sys/kernel/random/boot_id',
+          '4f2f7a8e-0c5e-4d34-9b6a-1c1d2e3f4a5b\n',
+        ],
+        ['/etc/machine-id', '0123456789abcdef0123456789abcdef\n'],
+      ]);
+      const kill = vi.spyOn(process, 'kill');
+
+      await reconcileSession(directory);
+      expect(await readManifest(manifestPath(directory))).toEqual(record);
+
+      await expect(destroySession('session-01', true)).rejects.toMatchObject({
+        code: 'HOST_TIMEOUT',
+      });
+      expect(kill).not.toHaveBeenCalledWith(host, 'SIGKILL');
+      expect(isRunning(host)).toBe(true);
+    },
+  );
+
   it.skipIf(platform === 'win32').each([
     ['runs the host of that session', ['_host', 'session-01', '1']],
     ['has an earlier _host argument', ['_host', 'x', '_host', 'session-01']],
@@ -932,6 +1108,8 @@ describe('a hostPid that may no longer name the host', () => {
         bootId: 'linux-boot',
         startTicks: '1',
         pidNamespace: 'pid:[1]',
+        timeNamespace: null,
+        machineId: null,
       });
       Object.defineProperty(process, 'platform', { value: 'darwin' });
 

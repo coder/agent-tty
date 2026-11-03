@@ -326,18 +326,73 @@ describe('wait command', () => {
   });
 
   it.each([
-    ['--idle-ms', { idleMs: 30_000 }],
-    ['--screen-stable-ms', { screenStableMs: 30_000 }],
-  ] as const)(
-    'rejects %s that cannot finish within the default timeout',
-    async (flag, overrides) => {
+    [
+      { idleMs: 30_000 },
+      '--idle-ms 30000 cannot finish within the default --timeout of 30000 ms. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      { flag: '--idle-ms', windowMs: 30_000, defaultTimeoutMs: 30_000 },
+    ],
+    [
+      { screenStableMs: 29_800 },
+      '--screen-stable-ms 29800 cannot finish within the default --timeout of 30000 ms. It needs more than 30000 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      {
+        flag: '--screen-stable-ms',
+        windowMs: 29_800,
+        defaultTimeoutMs: 30_000,
+      },
+    ],
+    [
+      { idleMs: 2000, timeout: 2000 },
+      '--idle-ms 2000 cannot finish within --timeout 2000. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      { flag: '--idle-ms', windowMs: 2000, timeoutMs: 2000 },
+    ],
+    [
+      { screenStableMs: 5000, timeout: 2000 },
+      '--screen-stable-ms 5000 cannot finish within --timeout 2000. It needs more than 5200 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      { flag: '--screen-stable-ms', windowMs: 5000, timeoutMs: 2000 },
+    ],
+    [
+      { screenStableMs: 1800, timeout: 2000 },
+      '--screen-stable-ms 1800 cannot finish within --timeout 2000. It needs more than 2000 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      { flag: '--screen-stable-ms', windowMs: 1800, timeoutMs: 2000 },
+    ],
+    [
+      { screenStableMs: 1, timeout: 202 },
+      '--screen-stable-ms 1 cannot finish within --timeout 202. It needs more than 400 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      { flag: '--screen-stable-ms', windowMs: 1, timeoutMs: 202 },
+    ],
+  ])(
+    'rejects a window that cannot finish within the timeout: %o',
+    async (overrides, message, details) => {
       await expect(
         runWaitCommand(createOptions(overrides)),
       ).rejects.toMatchObject({
         code: ERROR_CODES.INVALID_DURATION,
-        message: `${flag} 30000 cannot finish within the default --timeout of 30000 ms. Pass a larger --timeout, or --timeout 0 to wait without a limit.`,
+        message,
+        details,
       });
       expect(mocks.sendRpc).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { idleMs: 29_999 },
+    { screenStableMs: 29_799 },
+    { idleMs: 1999, timeout: 2000 },
+    { screenStableMs: 1799, timeout: 2000 },
+    { screenStableMs: 1, timeout: 401 },
+    { screenStableMs: 60_000, timeout: 0 },
+  ])(
+    'accepts a window that can finish within the timeout: %o',
+    async (overrides) => {
+      mocks.sendRpc.mockResolvedValue(
+        'idleMs' in overrides
+          ? { timedOut: false }
+          : { matched: true, timedOut: false, capturedAtSeq: 1 },
+      );
+
+      await runWaitCommand(createOptions(overrides));
+
+      expect(mocks.sendRpc).toHaveBeenCalledTimes(1);
     },
   );
 

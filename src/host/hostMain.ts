@@ -6,6 +6,7 @@ import {
   matchRenderWaitSnapshot,
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
+import { RENDER_WAIT_POLL_INTERVAL_MS } from '../renderWait/limits.js';
 import { EventLog } from './eventLog.js';
 import { captureHost, writeHostRecord } from './hostRecord.js';
 import {
@@ -348,12 +349,13 @@ export async function runHost(
   const program = captureProgram(pty.pid);
 
   // Answer the terminal-capability queries programs emit at startup (OSC 10/11
-  // color probes, the `ESC [ 5 n` DSR sentinel). The colors mirror the default
-  // render profile so a program's light/dark choice matches a default-profile
-  // capture; the probe is answered once here, before any capture profile is
-  // known, so a capture later requested with a different `--profile` can still
-  // diverge. Without this, programs like Neovim time out waiting for a reply and
-  // print a warning (E1568) into the very output agent-tty captures.
+  // color probes, the `ESC [ 5 n` DSR sentinel, XTGETTCAP/DECRQSS 24-bit color
+  // probes). The colors mirror the default render profile so a program's
+  // light/dark choice matches a default-profile capture; the probe is answered
+  // once here, before any capture profile is known, so a capture later
+  // requested with a different `--profile` can still diverge. Without this,
+  // programs like Neovim time out waiting for a reply and print a warning
+  // (E1568) into the very output agent-tty captures.
   const defaultProfile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
   const terminalQueryResponder = new TerminalQueryResponder({
     backgroundColor: defaultProfile.backgroundColor,
@@ -1067,7 +1069,6 @@ export async function runHost(
 
       const rendererName = resolveHostRendererName(requestedRendererName);
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
-      const pollIntervalMs = 200;
       const waitScope = new ResourceScope();
       let lastVisibleText: string | undefined;
       let lastTextChangeAt = Date.now();
@@ -1160,7 +1161,7 @@ export async function runHost(
               pollInFlight = false;
             }
           })();
-        }, pollIntervalMs);
+        }, RENDER_WAIT_POLL_INTERVAL_MS);
 
         waitScope.add('waitForRender poll interval', () => {
           clearInterval(checkInterval);
@@ -1216,10 +1217,11 @@ export async function runHost(
       // the log can no longer be trusted to drive waits or replay artifacts.
       rethrowAsync(error);
     });
-    // Reply to terminal-capability queries (OSC 10/11, DSR) in this chunk. This
-    // runs after queuing ingestion so the canonical output path is never gated
-    // on the reply. The reply is written to the child as input and is not
-    // appended to the event log, so it is absent from snapshots/recordings;
+    // Reply to terminal-capability queries (OSC 10/11, DSR, XTGETTCAP,
+    // DECRQSS) in this chunk. This runs after queuing ingestion so the
+    // canonical output path is never gated on the reply. The reply is written
+    // to the child as input and is not appended to the event log, so it is
+    // absent from snapshots/recordings;
     // programs that emit these queries put the terminal in raw mode, so the
     // reply is consumed rather than echoed back into the output stream.
     const queryReply = terminalQueryResponder.consume(data);
