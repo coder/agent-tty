@@ -114,6 +114,25 @@ describe('scanHome (read-only Session counts)', () => {
     expect(after.status).toBe('running');
   });
 
+  it('asks its dependencies whether a Session folder holds the destroy marker', async () => {
+    const dependencies: ScanHomeDependencies = {
+      readdir: () => Promise.resolve(['marked', 'plain']),
+      readManifestIfExists: (path) =>
+        Promise.resolve(
+          makeRecord({
+            sessionId: path.includes('marked') ? 'marked' : 'plain',
+            status: 'failed',
+          }),
+        ),
+      pathExists: (path) => path === '/fake/home/sessions/marked/destroyed',
+    };
+
+    expect(await scanHome('/fake/home', dependencies)).toEqual({
+      activeSessions: 0,
+      totalSessions: 1,
+    });
+  });
+
   it('skips a Session whose manifest fails to read and counts the rest', async () => {
     // A single corrupt/unreadable manifest must not break discovery of the Home.
     const dependencies: ScanHomeDependencies = {
@@ -124,6 +143,7 @@ describe('scanHome (read-only Session counts)', () => {
           : Promise.resolve(
               makeRecord({ sessionId: 'good', status: 'running' }),
             ),
+      pathExists: () => false,
     };
 
     expect(await scanHome('/fake/home', dependencies)).toEqual({
