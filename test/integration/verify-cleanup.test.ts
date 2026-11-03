@@ -14,7 +14,7 @@ import process from 'node:process';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createSession } from '../helpers.js';
+import { cleanupHome, createSession } from '../helpers.js';
 import { invariant } from '../../src/util/assert.js';
 
 const CLEANUP = resolve('.agents/skills/verify-agent-tty/scripts/cleanup.sh');
@@ -34,7 +34,7 @@ function quote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-function makeRun(): Run {
+function makeRun(envExtra: string[] = []): Run {
   // oxfmt-ignore
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tty-verify-cleanup-')));
   const run = {
@@ -56,6 +56,7 @@ function makeRun(): Run {
       `export EVIDENCE=${quote(run.evidence)}`,
       'export NODE_OPTIONS="--disable-warning=DEP0205"',
       `att() { node --import ${quote(TSX_LOADER)} ${quote(CLI)} "$@"; }`,
+      ...envExtra,
       '',
     ].join('\n'),
   );
@@ -109,6 +110,24 @@ function canRunAsPidOne(): boolean {
   return probe.status === 0 && probe.stdout.trim() === '1';
 }
 
+function pidOnePrefix(): string[] {
+  return [
+    'sudo',
+    '-n',
+    'env',
+    `PATH=${process.env.PATH ?? ''}`,
+    `HOME=${process.env.HOME ?? ''}`,
+    'unshare',
+    '--pid',
+    '--fork',
+    '--mount-proc',
+    'setpriv',
+    `--reuid=${String(process.getuid?.())}`,
+    `--regid=${String(process.getgid?.())}`,
+    '--init-groups',
+  ];
+}
+
 describe.skipIf(process.platform !== 'linux')(
   'verify-agent-tty cleanup.sh',
   { timeout: 120_000 },
@@ -116,10 +135,11 @@ describe.skipIf(process.platform !== 'linux')(
     let run: Run | undefined;
     let holder: ChildProcess | undefined;
 
-    afterEach(() => {
+    afterEach(async () => {
       holder?.kill('SIGKILL');
       holder = undefined;
       if (run !== undefined) {
+        await cleanupHome(run.home);
         rmSync(run.root, { recursive: true, force: true });
         run = undefined;
       }
@@ -191,24 +211,29 @@ describe.skipIf(process.platform !== 'linux')(
       () => {
         run = makeRun();
 
-        const result = runCleanup(run, run.home, [
-          'sudo',
-          '-n',
-          'env',
-          `PATH=${process.env.PATH ?? ''}`,
-          `HOME=${process.env.HOME ?? ''}`,
-          'unshare',
-          '--pid',
-          '--fork',
-          '--mount-proc',
-          'setpriv',
-          `--reuid=${String(process.getuid?.())}`,
-          `--regid=${String(process.getgid?.())}`,
-          '--init-groups',
-        ]);
+        const result = runCleanup(run, run.home, pidOnePrefix());
 
         expect(result.status, result.stderr).toBe(0);
         expect(existsSync(run.home)).toBe(false);
+      },
+    );
+
+    it.skipIf(!canRunAsPidOne())(
+      'keeps home/ when a process that pid 1 adopted holds a path in it',
+      () => {
+        // env.sh runs in cleanup.sh (pid 1). The subshell exits, so pid 1
+        // adopts the sleep, as it adopts an outside process that daemonizes.
+        run = makeRun([
+          '[ "$$" != 1 ] || (cd "$AGENT_TTY_HOME" && exec sleep 60 &)',
+        ]);
+
+        const result = runCleanup(run, run.root, pidOnePrefix());
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toMatch(
+          / sleep 60 {2}\(uses a path in the run\)/u,
+        );
+        expect(existsSync(run.home)).toBe(true);
       },
     );
   },
