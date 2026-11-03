@@ -926,6 +926,30 @@ describe('a hostPid that may no longer name the host', () => {
   );
 
   it.runIf(platform === 'linux')(
+    'on linux destroy --force kills a host whose record predates the identity fields',
+    async () => {
+      const host = startProcess('_host', 'session-01', '1');
+      const directory = await seedHost(host, 'none');
+      const own = captureHost(host);
+      expect(own).not.toBeNull();
+      const {
+        timeNamespace: _time,
+        machineId: _machine,
+        ...legacy
+      } = own as HostRecord;
+      writeFileSync(join(directory, 'host.json'), JSON.stringify(legacy));
+      const kill = reapAsInitAfterKill(host);
+
+      await destroySession('session-01', true);
+
+      expect(kill).toHaveBeenCalledWith(host, 'SIGKILL');
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'destroyed',
+      });
+    },
+  );
+
+  it.runIf(platform === 'linux')(
     'on linux the host record takes the dbus machine id when /etc/machine-id cannot be read',
     () => {
       fsHooks.files = new Map<string, string | Error>([
