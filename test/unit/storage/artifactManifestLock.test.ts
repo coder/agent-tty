@@ -64,6 +64,13 @@ import {
 
 const FAST = { waitMs: 100, unknownOwnerStaleMs: 60_000 };
 
+// The lock reads time only through Date. A frozen Date keeps the wait
+// deadline from passing, so a call that must take the lock cannot lose a race
+// with a slow runner, and only the lock's age or owner can let it in.
+function freezeLockClock(): void {
+  vi.useFakeTimers({ toFake: ['Date'] });
+}
+
 function ownerRecord(pid: number, withProcess: boolean): string {
   return JSON.stringify({
     version: 1,
@@ -112,6 +119,7 @@ describe('artifact manifest lock', () => {
     fsHooks.beforeLink = undefined;
     fsHooks.beforeRm = undefined;
     fsHooks.beforeWriteFile = undefined;
+    vi.useRealTimers();
     await rm(home, { recursive: true, force: true });
   });
 
@@ -188,6 +196,7 @@ describe('artifact manifest lock', () => {
     await writeFile(lockPath, 'not json');
     const inTwoMinutes = new Date(Date.now() + 120_000);
     await utimes(lockPath, inTwoMinutes, inTwoMinutes);
+    freezeLockClock();
 
     await expect(
       withArtifactManifestLock(
@@ -234,6 +243,7 @@ describe('artifact manifest lock', () => {
 
   it('breaks a lock whose owner is gone', async () => {
     await writeFile(lockPath, await deadOwnerRecord());
+    freezeLockClock();
 
     await expect(
       withArtifactManifestLock(
@@ -261,6 +271,7 @@ describe('artifact manifest lock', () => {
 
       const twoMinutesAgo = new Date(Date.now() - 120_000);
       await utimes(lockPath, twoMinutesAgo, twoMinutesAgo);
+      freezeLockClock();
       await expect(
         withArtifactManifestLock(sessionDirectory, update, FAST),
       ).resolves.toBe('ran');
@@ -341,6 +352,7 @@ describe('artifact manifest lock', () => {
     ]);
 
     fsHooks.beforeRm = undefined;
+    freezeLockClock();
     await expect(
       withArtifactManifestLock(
         sessionDirectory,
@@ -418,6 +430,7 @@ describe('artifact manifest lock', () => {
 
     const twoMinutesAgo = new Date(Date.now() - 120_000);
     await utimes(lockPath, twoMinutesAgo, twoMinutesAgo);
+    freezeLockClock();
     await expect(
       withArtifactManifestLock(sessionDirectory, update, FAST),
     ).resolves.toBe('ran');
