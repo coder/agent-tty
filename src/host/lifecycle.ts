@@ -473,7 +473,9 @@ export async function ensureSocketRoot(
     return;
   }
   try {
-    await mkdir(root, { mode: 0o700 });
+    await mkdir(root);
+    // umask applies to a mkdir mode, not to chmod.
+    await chmod(root, 0o700);
   } catch (error) {
     if (!hasErrorCode(error, 'EEXIST')) {
       throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
