@@ -233,7 +233,7 @@ describe('generateAsciicast', () => {
     expect(result.outputEventCount).toBe(0);
     expect(result.resizeEventCount).toBe(0);
     expect(result.markerCount).toBe(0);
-    expect(result.capturedAtSeq).toBe(0);
+    expect(result.capturedAtSeq).toBe(-1);
     expect(result.durationMs).toBe(0);
   });
 });

@@ -19,7 +19,8 @@ This directory converts a session's event log into recording exports. `generateA
 - `generateAsciicast` asserts a non-empty `sessionId` equal to `manifest.sessionId`, positive `manifest.cols` and `manifest.rows`, and a non-empty `toolVersion` when given [asciicast.ts:generateAsciicast]. `manifest.createdAt` must parse as a valid timestamp even when there are events. The header uses it when `events` is empty [asciicast.ts:parseTimestamp].
 - Event timestamps must parse to finite numbers [asciicast.ts:parseTimestamp]. They must not decrease from one event to the next [asciicast.ts:generateAsciicast].
 - Event mapping: `output` becomes `o`, `resize` becomes `r` with `COLSxROWS`, and `marker` becomes `m`. Input, run, signal and exit events are skipped. An unknown type reaches `unreachable()` [asciicast.ts:generateAsciicast].
-- `generateWebmExport` asserts a non-empty `sessionId`, absolute `sessionDir` and `outputPath`, a non-empty event list, and positive initial dimensions [webm.ts:generateWebmExport].
+- `generateWebmExport` asserts a non-empty `sessionId`, absolute `sessionDir` and `outputPath`, and positive initial dimensions. An empty event list gives a short blank video with `capturedAtSeq` -1 and `durationMs` 0 [webm.ts:generateWebmExport].
+- `generateAsciicast` reports `capturedAtSeq` -1 for an empty event list [asciicast.ts:generateAsciicast].
 - Defaults: timing mode `recorded` and profile `reference-dark` [webm.ts:generateWebmExport].
 - A requested `libghostty-vt` renderer is replaced with `ghostty-web`. A code comment says `libghostty-vt` is semantic-only [webm.ts:generateWebmExport].
 - The default backend factory accepts only `ghostty-web` [webm.ts:createDefaultBackend].
