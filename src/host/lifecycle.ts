@@ -437,7 +437,8 @@ export async function removeSocketDirectoryBestEffort(
 }
 
 // Removes the socket at the old path of the same session, which a host of an
-// older version listens at. Remove this after one minor release.
+// older version listens at. Hosts of 0.5.0 and earlier listen there, and
+// 0.6.0 is the first release with the per-uid root, so remove this in 0.7.0.
 async function removeLegacySocketBestEffort(socketFile: string): Promise<void> {
   const oldSocketFile = legacySocketPath(socketFile);
   if (oldSocketFile === null || !(await isOwnLegacySocket(oldSocketFile))) {
@@ -1131,6 +1132,9 @@ export async function reconcileSession(
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
 
+  // Only a destroy writes the marker, after it stopped the host, so no host
+  // listens on either socket, and the repair removes both without a liveness
+  // check.
   if (manifest !== null && isMarkedDestroyed(sessionDirectory, manifest)) {
     if (await writeMarkedDestroyed(manifestFile, manifest)) {
       const socketFile = socketPath(sessionDirectory);

@@ -97,7 +97,8 @@ export async function socketRootExists(
 // listens. No other user may be able to rename or replace a folder on its
 // path before the connect: the Home's folder is this uid's and not writable
 // by others, and the root is this uid's or root's, either not writable by
-// others or sticky. Remove this after one minor release.
+// others or sticky. Hosts of 0.5.0 and earlier listen there, and 0.6.0 is
+// the first release with the per-uid root, so remove this in 0.7.0.
 export async function isOwnLegacySocket(socketFile: string): Promise<boolean> {
   const uid = process.getuid?.();
   if (uid === undefined) {
