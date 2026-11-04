@@ -469,8 +469,8 @@ export interface AppendArtifactWithRollbackOptions {
    * `fileIdentity` of the file that the entry describes, taken when it was
    * written. The append then drops the entries whose `metadata.outputPath`
    * names that file, which replaced theirs. When `metadata.outputPath` no
-   * longer names that file, a later write replaced it, and the append adds
-   * nothing.
+   * longer names that file, the append drops nothing and still adds the
+   * entry, so an export never loses its entry.
    */
   outputFileIdentity?: string;
 }
@@ -498,16 +498,18 @@ function pathSpelling(path: string): string {
 
 /**
  * Returns the entries to keep beside an entry for the file `identity` at
- * `outputPath`, or null when `outputPath` no longer names that file: a later
- * write replaced it, and the later entry describes the file.
+ * `outputPath`. When `outputPath` no longer names that file, it keeps them
+ * all: a later export can have replaced the file, or a file server or a tool
+ * can have changed its modification time, and an entry too many is better
+ * than a lost one.
  */
 async function entriesKeptBeside(
   artifacts: readonly ArtifactEntry[],
   outputPath: string,
   identity: string,
-): Promise<ArtifactEntry[] | null> {
+): Promise<readonly ArtifactEntry[]> {
   if ((await fileIdentity(outputPath)) !== identity) {
-    return null;
+    return artifacts;
   }
   // Only a path that differs at most in case can name the same file, so the
   // append reads no other entry's path, which can be on a slow mount.
@@ -569,9 +571,6 @@ async function appendArtifact(
                 replacedOutput.path,
                 replacedOutput.identity,
               );
-        if (kept === null) {
-          return validatedEntry;
-        }
         await writeArtifactManifest(resolvedSessionDir, {
           ...manifest,
           artifacts: [...kept, validatedEntry],
