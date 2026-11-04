@@ -139,12 +139,12 @@
     "src/storage/manifests.ts#writeCreateFailedMarker": "587c8047e563db4e",
     "src/storage/manifests.ts#writeEmptyMarker": "143325689100f36c",
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
-    "src/host/hostMain.ts#runHost(parts)": "e3879ee94370dcfd",
+    "src/host/hostMain.ts#runHost(parts)": "7bd4c6553a831b9d",
     "src/host/hostMain.ts#runHost(final try)": "e0615a9709fefb67",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "7f1c6dd7943968c3",
-    "skill:scripts/facts.mjs": "07dba02a98497dcb",
+    "skill:scripts/facts.mjs": "6ee4da3ef9b6bac3",
     "skill:scripts/check.sh": "b48bc5fd343aefb5"
   },
   "callSites": {
