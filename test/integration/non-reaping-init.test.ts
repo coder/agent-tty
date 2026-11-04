@@ -165,6 +165,53 @@ describe.runIf(process.platform === 'linux')(
       expect(destroy.status).toBe(0);
     });
 
+    // Each process of the fork chain forks its successor and ends, and the
+    // subreaper never reaps it, so the chain leaves zombies in view while its
+    // live process escapes the scans. gc freezes such a group before it reads
+    // it ended.
+    it('gc keeps an exited session while a fork chain runs behind its zombies', async ({
+      skip,
+    }) => {
+      const beat = join(testHome, 'beat');
+      const recorded = join(testHome, 'sessions', '$AGENT_TTY_SESSION_ID');
+      const sessionId = await createUnderSubreaper(
+        `trap "" HUP; python3 '${resolve('test/fixtures/fork-chain.py')}' 20 0.002 '${beat}' & ` +
+          `until [ -f "${recorded}/program.json" ]; do sleep 0.01; done; touch "$0"; exit 0`,
+      );
+      const record = JSON.parse(
+        await readFile(
+          join(testHome, 'sessions', sessionId, 'program.json'),
+          'utf8',
+        ),
+      ) as { bootId: unknown };
+      if (record.bootId === null) {
+        skip('the host captured no session token');
+      }
+      const deadline = Date.now() + 10_000;
+      while (
+        inspectSession(testHome, sessionId).status !== 'exited' ||
+        groupStates(pgid).filter((state) => state === 'Z').length < 200
+      ) {
+        expect(Date.now()).toBeLessThan(deadline);
+        await sleep(100);
+      }
+
+      const kept = runCli(['gc', '--json'], { AGENT_TTY_HOME: testHome });
+      expect(kept.status).toBe(0);
+      expect(JSON.parse(kept.stdout)).toMatchObject({
+        ok: true,
+        result: { removedSessionCount: 0 },
+      });
+
+      const destroy = runCli(['destroy', sessionId, '--json'], {
+        AGENT_TTY_HOME: testHome,
+      });
+      expect(
+        (JSON.parse(destroy.stdout) as { error?: unknown }).error,
+      ).toBeUndefined();
+      expect(groupStates(pgid).every((state) => state === 'Z')).toBe(true);
+    });
+
     it('destroy ends a program whose killed background process stays a zombie', async () => {
       const sessionId = await createUnderSubreaper(
         'trap "" HUP; sleep 300 & touch "$0"; wait',

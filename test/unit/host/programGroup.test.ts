@@ -983,6 +983,55 @@ describe('a program group with a token, as a faked /proc shows it', () => {
       }
     });
 
+    // Under a PID 1 that never reaps, the zombies of a fork chain stay in
+    // view while its live member escapes both scans. A stopped member stays
+    // in view, so gc freezes the group and judges it again.
+    it.each([
+      { frozen: ['Z', 'T'], runs: true },
+      { frozen: ['Z'], runs: false },
+    ])(
+      'freezes a group whose scans show only zombies, and reads it running: $runs when the frozen group shows $frozen',
+      async ({ frozen, runs }) => {
+        const directory = await recordedSession();
+        try {
+          procShowsTokenGroup('Z');
+          const signals: unknown[] = [];
+          vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+            signals.push(signal);
+            if (signal === 'SIGSTOP') {
+              procShowsTokenGroup(...frozen);
+            }
+            return true;
+          });
+
+          expect(await provenProgramGroupRuns(directory)).toBe(runs);
+          expect(signals).toEqual([0, 'SIGSTOP', 'SIGCONT']);
+        } finally {
+          await rm(directory, { recursive: true, force: true });
+        }
+      },
+    );
+
+    it('gives a frozen group SIGCONT when its judgement throws', async () => {
+      const directory = await recordedSession();
+      try {
+        procShowsTokenGroup('Z');
+        const signals: unknown[] = [];
+        vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+          signals.push(signal);
+          if (signal === 'SIGSTOP') {
+            procHooks.listError = errno('EIO');
+          }
+          return true;
+        });
+
+        await expect(provenProgramGroupRuns(directory)).rejects.toThrow('EIO');
+        expect(signals).toEqual([0, 'SIGSTOP', 'SIGCONT']);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
     // A member of a fork chain can end between its stat and its autogroup
     // read, so gc judges again.
     it('judges again after a member that ended before its autogroup read', async () => {

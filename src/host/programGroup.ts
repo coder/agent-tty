@@ -639,7 +639,24 @@ function judgeGroupForGc(group: ProvenRecord): boolean | null {
     return false;
   }
   const live = groupHasLiveProcess(group.pid);
-  return live === null ? true : live ? null : false;
+  return live === null ? true : live ? null : judgeFrozenGroup(group);
+}
+
+// The scans show only zombies of the group while the probe finds its id.
+// Under a PID 1 that never reaps, the zombies of a fork chain stay, and its
+// live member can escape both scans. SIGSTOP freezes the group, as in
+// stopProgramGroup, and a stopped member stays in view, so a judgement of
+// the frozen group decides. The group gets SIGCONT, also when a scan throws.
+function judgeFrozenGroup(group: ProvenRecord): boolean | null {
+  if (!procShowsOwnPidSpace() || !signalProcessGroup(group.pid, 'SIGSTOP')) {
+    return false;
+  }
+  try {
+    const { verdict } = judgeLiveGroup(group);
+    return verdict === 'owned' ? true : verdict === 'unknown' ? null : false;
+  } finally {
+    signalProcessGroup(group.pid, 'SIGCONT');
+  }
 }
 
 function probeFindsGroup(pgid: number): boolean {
