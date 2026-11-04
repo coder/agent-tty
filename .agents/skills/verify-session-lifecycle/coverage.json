@@ -1,7 +1,8 @@
 {
   "fingerprints": {
-    "src/cli/commands/create.ts#runCreateCommand": "131d2707818ea283",
+    "src/cli/commands/create.ts#runCreateCommand": "79bf6194263f5c99",
     "src/cli/commands/create.ts#waitForReadyHost": "a7fd2ba345b6bfd6",
+    "src/cli/commands/create.ts#writeMarkerOrLog": "abf293bd80df1c3d",
     "src/cli/commands/destroy.ts#runDestroyCommand": "ecaa8b1d572da7c6",
     "src/cli/commands/destroy.ts#rerunInNewSession": "cf32d7d082758522",
     "src/cli/commands/gc.ts#gcSessions": "667e4ebc3ca3029c",
@@ -89,13 +90,13 @@
     "src/storage/manifests.ts#writeCreateFailedMarker": "587c8047e563db4e",
     "src/storage/manifests.ts#writeEmptyMarker": "143325689100f36c",
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
-    "src/host/hostMain.ts#runHost(parts)": "1d75544221b3c6c1",
-    "src/host/hostMain.ts#runHost(final try)": "251f1e68a4ec17cc",
+    "src/host/hostMain.ts#runHost(parts)": "64190e53e002f80e",
+    "src/host/hostMain.ts#runHost(final try)": "e0615a9709fefb67",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "320f9c8a26340aeb",
-    "skill:scripts/facts.mjs": "0f4e240431fb0fcd",
-    "skill:scripts/check.sh": "606573a67217656e"
+    "skill:model/SessionLifecycle.tla": "92c2c7c68311a1cc",
+    "skill:scripts/facts.mjs": "fdea99c0724ce6a8",
+    "skill:scripts/check.sh": "169876a806f5e9cc"
   },
   "callSites": {
     "writeManifest": [

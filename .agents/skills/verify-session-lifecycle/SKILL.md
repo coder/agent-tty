@@ -62,7 +62,7 @@ From the repo root:
 .agents/skills/verify-session-lifecycle/scripts/check.sh
 ```
 
-It needs `node`, Java 11 or newer (`java -version`), and the network once: the first run downloads `tla2tools.jar` 1.7.4 into this skill's `.cache/` folder (git ignores it) and checks its sha256. On this repo it takes about eleven minutes with the default `CHECK_JOBS` of 4. Ten runs explore more than 20 million distinct states each, so `CHECK_JOBS=81` starts every run at once and takes about as long as the longest run. `JAVA=/path/to/java` picks another Java. `TLA2TOOLS_JAR=/path/to/tla2tools.jar` uses a jar you already have, which must be the same 1.7.4 build. `CHECK_OUT=<folder>` keeps the results in that folder (default: a new temp folder, printed at the end).
+It needs `node`, Java 11 or newer (`java -version`), and the network once: the first run downloads `tla2tools.jar` 1.7.4 into this skill's `.cache/` folder (git ignores it) and checks its sha256. On this repo it takes about eleven minutes with the default `CHECK_JOBS` of 4. Eleven runs explore more than 20 million distinct states each, so `CHECK_JOBS=81` starts every run at once and takes about as long as the longest run. `JAVA=/path/to/java` picks another Java. `TLA2TOOLS_JAR=/path/to/tla2tools.jar` uses a jar you already have, which must be the same 1.7.4 build. `CHECK_OUT=<folder>` keeps the results in that folder (default: a new temp folder, printed at the end).
 
 What it does:
 
@@ -537,7 +537,7 @@ To bring the check back in line after changes that skipped it, use `/maintain-fo
 
 ## Scope
 
-The model checks every order of these steps for one session: one `create` that can give up on its host, its host, one `gc` pass over that session (not `--dry-run`), one other command that reconciles twice, one resize, one `destroy` (with or without `--force`, from outside or from inside the program's session), one SIGTERM to the host, a program exit at any time, a process of another user in the program's group that starts and ends at any time, a process that the program leaves when it exits on its own, the host's `host.json` and `program.json` writes, an unrelated group that takes the program's group id once the whole group has ended, an unrelated process that takes the host's pid once the host has ended, the kill timer of the host's shutdown, and a host crash at any time. With a token the model has 27,013,946 distinct states, and without one 26,822,518. The check prints both counts.
+The model checks every order of these steps for one session: one `create` that can give up on its host, its host, one `gc` pass over that session (not `--dry-run`), one other command that reconciles twice, one resize, one `destroy` (with or without `--force`, from outside or from inside the program's session), one SIGTERM to the host, a program exit at any time, a process of another user in the program's group that starts and ends at any time, a process that the program leaves when it exits on its own, the host's `host.json` and `program.json` writes, an unrelated group that takes the program's group id once the whole group has ended, an unrelated process that takes the host's pid once the host has ended, the kill timer of the host's shutdown, and a host crash at any time. With a token the model has 58,644,364 distinct states, and without one 57,769,962. The check prints both counts.
 
 It assumes:
 
