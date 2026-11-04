@@ -62,6 +62,51 @@ describe('RpcServer request abort handling', () => {
   });
 });
 
+describe('RpcServer request ids', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'agent-tty-rpc-server-'));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = '';
+  });
+
+  it('rejects a request id over 128 characters without echoing it', async () => {
+    const socketFile = join(tempDir, 'rpc.sock');
+    const inspect = vi.fn(() => Promise.resolve({}));
+    const server = new RpcServer(socketFile, { inspect });
+    await server.listen();
+    const client = net.connect({ path: socketFile });
+    client.setEncoding('utf8');
+    let received = '';
+    client.on('data', (chunk: string) => {
+      received += chunk;
+    });
+    const ended = new Promise<void>((resolve, reject) => {
+      client.once('end', resolve);
+      client.once('error', reject);
+    });
+
+    try {
+      client.write(
+        `${JSON.stringify({ id: 'x'.repeat(129), method: 'inspect', params: {} })}\n`,
+      );
+      await ended;
+
+      expect(JSON.parse(received)).toMatchObject({
+        id: 'unknown',
+        ok: false,
+        error: { code: 'RPC_ERROR' },
+      });
+      expect(inspect).not.toHaveBeenCalled();
+    } finally {
+      client.destroy();
+      await server.close();
+    }
+  });
+});
+
 describe('RpcServer CliError responses', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'agent-tty-rpc-server-'));
@@ -191,6 +236,14 @@ describe('RpcServer CliError responses', () => {
     expect(message.length).toBeLessThan(70_000);
     expect(message.startsWith('\u0001'.repeat(60_000))).toBe(true);
     expect(message.endsWith('[message truncated]')).toBe(true);
+  });
+
+  it('does not cut a surrogate pair in half when it shortens a message', async () => {
+    const error = await rejectionFrom(new Error(`a${'😀'.repeat(40_000)}`));
+
+    expect((error as CliError).message).toBe(
+      `a${'😀'.repeat(32_757)} [message truncated]`,
+    );
   });
 
   it('answers RPC_ERROR when building the error response throws', async () => {
