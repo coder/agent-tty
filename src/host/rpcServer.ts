@@ -4,6 +4,7 @@ import net from 'node:net';
 import { CliError } from '../cli/errors.js';
 import { ERROR_CODES } from '../protocol/errors.js';
 import {
+  MAX_RPC_REQUEST_ID_CHARS,
   RpcMethodSchemas,
   RpcRequestSchema,
   RpcResponseSchema,
@@ -23,9 +24,12 @@ const MAX_RPC_ERROR_DETAILS_CHARS = 65_536;
 const MAX_RPC_ERROR_MESSAGE_CHARS = 65_536;
 const TRUNCATED_MESSAGE_SUFFIX = ' [message truncated]';
 // JSON writes a control character as 6 characters (\u0001), so an error
-// response with a message and details at their caps still fits in one buffer.
+// response with an id, a message and details at their caps still fits in one
+// buffer.
 invariant(
-  6 * MAX_RPC_ERROR_MESSAGE_CHARS + MAX_RPC_ERROR_DETAILS_CHARS + 1_024 <
+  6 * (MAX_RPC_REQUEST_ID_CHARS + MAX_RPC_ERROR_MESSAGE_CHARS) +
+    MAX_RPC_ERROR_DETAILS_CHARS +
+    1_024 <
     MAX_RPC_BUFFER_BYTES,
   'RPC error message and details caps must fit in one RPC response.',
 );
@@ -122,7 +126,11 @@ function extractRequestId(value: unknown): string {
   if (value !== null && typeof value === 'object' && 'id' in value) {
     const id = value.id;
 
-    if (typeof id === 'string' && id.length > 0) {
+    if (
+      typeof id === 'string' &&
+      id.length > 0 &&
+      id.length <= MAX_RPC_REQUEST_ID_CHARS
+    ) {
       return id;
     }
   }
@@ -139,9 +147,16 @@ function requestIdFromLine(line: string): string {
 }
 
 function sendableMessage(message: string): string {
-  return message.length <= MAX_RPC_ERROR_MESSAGE_CHARS
-    ? message
-    : `${message.slice(0, MAX_RPC_ERROR_MESSAGE_CHARS - TRUNCATED_MESSAGE_SUFFIX.length)}${TRUNCATED_MESSAGE_SUFFIX}`;
+  if (message.length <= MAX_RPC_ERROR_MESSAGE_CHARS) {
+    return message;
+  }
+  let end = MAX_RPC_ERROR_MESSAGE_CHARS - TRUNCATED_MESSAGE_SUFFIX.length;
+  const lastKept = message.charCodeAt(end - 1);
+  // Do not keep the first half of a surrogate pair without its second half.
+  if (lastKept >= 0xd800 && lastKept <= 0xdbff) {
+    end -= 1;
+  }
+  return `${message.slice(0, end)}${TRUNCATED_MESSAGE_SUFFIX}`;
 }
 
 function buildErrorResponse(id: string, message: string): RpcResponse {
