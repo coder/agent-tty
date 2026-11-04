@@ -1132,9 +1132,10 @@ export async function reconcileSession(
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
 
-  // Only a destroy writes the marker, after it stopped the host, so no host
-  // listens on either socket, and the repair removes both without a liveness
-  // check.
+  // Only recordDestroyed writes the marker, and only for a terminal manifest
+  // or once the host and the program's group are dead. So the host has
+  // ended or is ending, and the repair removes both sockets without a
+  // liveness check.
   if (manifest !== null && isMarkedDestroyed(sessionDirectory, manifest)) {
     if (await writeMarkedDestroyed(manifestFile, manifest)) {
       const socketFile = socketPath(sessionDirectory);
