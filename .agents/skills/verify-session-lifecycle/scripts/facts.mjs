@@ -1406,7 +1406,8 @@ function rerunFacts() {
 
 // judgeFrozenGroup freezes and judges at most FROZEN_JUDGEMENTS times: SIGSTOP
 // where /proc shows this process's pid space, a judgement, and SIGCONT in a
-// finally. A frozen judgement other than gone decides; gone freezes again.
+// finally. A frozen judgement other than gone decides; gone freezes again,
+// and gone after the last freeze is inconclusive, so gc judges again.
 function frozenJudgesTwice() {
   const module = 'src/host/programGroup.ts';
   const limit = requireDeclaration(module, 'FROZEN_JUDGEMENTS').initializer;
@@ -1422,7 +1423,7 @@ function frozenJudgesTwice() {
     loop === undefined ||
     !ts.isForStatement(loop) ||
     !ts.isBlock(loop.statement) ||
-    normalize(statements[1].getText()) !== 'return false;'
+    normalize(statements[1].getText()) !== 'return null;'
   ) {
     return false;
   }

@@ -1040,8 +1040,9 @@ describe('a program group with a token, as a faked /proc shows it', () => {
       }
     });
 
-    // Nothing live was in view to freeze, so one pass reads the group ended.
-    it('reads a group that shows only zombies, also frozen twice, ended in one pass', async () => {
+    // Two frozen judgements that read gone stay inconclusive, so gc judges
+    // the group again, and reads it ended only after the last judgement.
+    it('reads a group that shows only zombies, frozen twice in each of ten judgements, ended', async () => {
       const directory = await recordedSession();
       try {
         procShowsTokenGroup('Z');
@@ -1052,10 +1053,47 @@ describe('a program group with a token, as a faked /proc shows it', () => {
         });
 
         expect(await provenProgramGroupRuns(directory)).toBe(false);
+        expect(signals).toEqual(
+          Array.from({ length: 10 }, () => [
+            0,
+            'SIGSTOP',
+            'SIGCONT',
+            'SIGSTOP',
+            'SIGCONT',
+          ]).flat(),
+        );
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    // A SIGCONT from another gc or a destroy before both frozen judgements
+    // lets the live member escape them. The next judgement still finds it.
+    it('keeps the session when a live member escapes both frozen judgements of one pass', async () => {
+      const directory = await recordedSession();
+      try {
+        procShowsTokenGroup('Z');
+        const signals: unknown[] = [];
+        let stops = 0;
+        vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+          signals.push(signal);
+          if (signal === 'SIGSTOP') {
+            stops += 1;
+            if (stops === 3) {
+              procShowsTokenGroup('Z', 'T');
+            }
+          }
+          return true;
+        });
+
+        expect(await provenProgramGroupRuns(directory)).toBe(true);
         expect(signals).toEqual([
           0,
           'SIGSTOP',
           'SIGCONT',
+          'SIGSTOP',
+          'SIGCONT',
+          0,
           'SIGSTOP',
           'SIGCONT',
         ]);

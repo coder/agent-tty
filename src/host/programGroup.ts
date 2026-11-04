@@ -690,7 +690,8 @@ function judgeGroupForGc(group: ProvenRecord): boolean | null {
   return live === null ? true : live ? null : judgeFrozenGroup(group);
 }
 
-// A frozen judgement that reads gone is judged frozen once more.
+// A frozen judgement that reads gone is judged frozen once more, so a gc
+// sends at most GC_JUDGEMENTS * FROZEN_JUDGEMENTS SIGSTOP and SIGCONT pairs.
 const FROZEN_JUDGEMENTS = 2;
 
 // The scans show only zombies of the group while the probe finds its id.
@@ -699,11 +700,11 @@ const FROZEN_JUDGEMENTS = 2;
 // stopProgramGroup, and a stopped member stays in view. Another gc or a
 // destroy can send SIGCONT before the judgement, so a frozen group that
 // still reads gone gets another SIGSTOP and judgement. When that one reads
-// gone too, the group reads ended, so an ended group costs one pass of
-// provenProgramGroupRuns, not GC_JUDGEMENTS. That reads a live fork chain
-// ended only when a SIGCONT from elsewhere came before both judgements and
-// the chain's live member escaped both scans. The group gets SIGCONT, also
-// when a scan throws.
+// gone too, the judgement stays inconclusive, and provenProgramGroupRuns
+// judges the group again. So gc reads a live fork chain ended only when a
+// SIGCONT from elsewhere came before each of its frozen judgements and the
+// chain's live member escaped every scan. The group gets SIGCONT, also when
+// a scan throws.
 function judgeFrozenGroup(group: ProvenRecord): boolean | null {
   for (let frozen = 0; frozen < FROZEN_JUDGEMENTS; frozen += 1) {
     if (!procShowsOwnPidSpace() || !signalProcessGroup(group.pid, 'SIGSTOP')) {
@@ -719,7 +720,7 @@ function judgeFrozenGroup(group: ProvenRecord): boolean | null {
       return verdict === 'owned' ? true : verdict === 'unproven' ? false : null;
     }
   }
-  return false;
+  return null;
 }
 
 function probeFindsGroup(pgid: number): boolean {
