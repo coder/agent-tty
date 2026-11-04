@@ -280,6 +280,7 @@ UNSEEN=FALSE
 OTHER=TRUE
 write_run current-otherspace pass "$RULES" "" "the code with destroy, list and gc in another pid space: every rule holds"
 write_run witness-WitnessUnsharedDestroyCompletes-otherspace violated WitnessUnsharedDestroyCompletes "" "a plain destroy from another pid space still succeeds"
+write_run witness-WitnessUnsharedGcRemovesLeftover-otherspace violated WitnessUnsharedGcRemovesLeftover "" "gc in another pid space cannot check the group, so it removes an exited session while a process that the program left runs"
 write_run mutant-UnsharedGroupReadsUnknown-otherspace violated DestroyedSessionStopped "UnsharedGroupReadsUnknown=FALSE" "with the group read gone where no scan or probe shows it, destroy of an exited session records destroyed while a process it left runs" DestroyedSessionStopped
 write_run mutant-CreateRecordsHost-otherspace violated HostDeathOnlyWhenDead "CreateRecordsHost=FALSE" "without the record from create, a reconcile in another pid space reads the starting host dead and records it failed" HostDeathOnlyWhenDead
 OTHER=FALSE

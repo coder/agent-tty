@@ -1363,7 +1363,9 @@ function gcFacts() {
   // program.json proves a live group for a session that is not destroyed,
   // and skips the session when it does or when the read throws. The
   // default dependency is provenProgramGroupRuns, which judges the group
-  // that readProvenProgramGroup gives as isProgramGroupAlive does.
+  // that readProvenProgramGroup gives and counts it only when a live member
+  // carries the token. A group in another pid space reads unshared there,
+  // and gc does not count it.
   const groupRead = loop.statements.findIndex(
     (s) =>
       ts.isTryStatement(s) &&
@@ -1393,16 +1395,21 @@ function gcFacts() {
     'src/host/programGroup.ts',
     'provenProgramGroupRuns',
   ).body.statements.map((s) => normalize(s.getText()));
+  const owned = "verdict === 'owned'";
+  // Or a group that reads gone, whose id the probe finds while no scan
+  // shows a member, live or zombie.
+  const withProbe = `return ( ${owned} || (verdict === 'gone' && probeFindsGroup(group.pid) && groupHasLiveProcess(group.pid) === null) );`;
   const judges =
+    runs.length === 4 &&
     runs[0] ===
       'const group = await readProvenProgramGroup(sessionDirectory);' &&
-    runs[1] === 'if (isProgramGroupAlive(group)) { return true; }';
-  // Then a group that reads gone, whose id the probe finds while no scan
-  // shows a member, live or zombie, counts as running too.
+    runs[1] ===
+      "if (group === null || 'unshared' in group) { return false; }" &&
+    runs[2] === 'const { verdict } = judgeLiveGroup(group);' &&
+    (runs[3] === `return ${owned};` || runs[3] === withProbe);
   const probes =
     judges &&
-    runs[2] ===
-      "return ( group !== null && !('unshared' in group) && judgeLiveGroup(group).verdict === 'gone' && probeFindsGroup(group.pid) && groupHasLiveProcess(group.pid) === null );" &&
+    runs[3] === withProbe &&
     normalize(
       requireDeclaration(
         'src/host/programGroup.ts',

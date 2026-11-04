@@ -939,6 +939,49 @@ describe('a program group with a token, as a faked /proc shows it', () => {
         }
       },
     );
+
+    // gc keeps only a group that it proves, so that destroy can end it. A
+    // group that it cannot check would keep the session forever, as after a
+    // container restart that keeps the home: host.json then names a pid
+    // namespace that no longer exists.
+    it.each([
+      {
+        when: 'host.json names another pid namespace',
+        setUp: (directory: string) => {
+          const host = captureHost(process.pid) as HostRecord;
+          writeHostRecord(directory, { ...host, pidNamespace: 'pid:[1]' });
+          procShowsTokenGroup('S');
+          probeEnds('ok');
+        },
+      },
+      {
+        when: 'a live member of the session shows no autogroup',
+        setUp: () => {
+          procShowsTokenGroup('S');
+          const read = autogroupFile.read;
+          autogroupFile.read = (file) =>
+            /^\/proc\/\d+\/autogroup$/.test(file) ? '' : (read?.(file) ?? null);
+          probeEnds('ok');
+        },
+      },
+      {
+        when: '/proc hides the processes of other users and the probe finds the id',
+        setUp: () => {
+          procHooks.mountinfo = procMount('rw,hidepid=2');
+          procShowsTokenGroup();
+          probeEnds('EPERM');
+        },
+      },
+    ])('when $when, reads the group not proven', async ({ setUp }) => {
+      const directory = await recordedSession();
+      try {
+        setUp(directory);
+
+        expect(await provenProgramGroupRuns(directory)).toBe(false);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
   });
 
   it.each(['EPERM', 'EACCES'])(

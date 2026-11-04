@@ -1087,17 +1087,21 @@ GcReadsReconciled ==
                    lruns, destroyVars, groupVars>>
 
 \* provenProgramGroupRuns reads program.json and judges the group, as the
-\* waits of destroy do. gc sends no SIGSTOP, so with Unseen no scan shows
-\* the program's processes, and with GcProbesUnseenGroup the probe
+\* waits of destroy do, but it counts only a group that it proves: a live
+\* member carries the token. gc sends no SIGSTOP, so with Unseen no scan
+\* shows the program's processes, and with GcProbesUnseenGroup the probe
 \* kill(-pgid, 0) then finds them. An unrelated group that took the id is
-\* in view and reads unproven. With GcKeepsLiveGroup gc skips a session that
-\* is not destroyed while that group reads alive ("the session's program
-\* group still runs"). The code tests the status of manifestAfter, which
-\* cannot turn from destroyed back, so this current status skips no more
-\* often.
+\* in view and reads unproven. With OtherPidSpace gc cannot check the group
+\* and reads it not proven, so that a session whose pid space is gone, as
+\* after a container restart, does not stay forever. With GcKeepsLiveGroup
+\* gc skips a session that is not destroyed while it proves the group
+\* ("the session's program group still runs"). The code tests the status
+\* of manifestAfter, which cannot turn from destroyed back, so this current
+\* status skips no more often.
 GcSeesGroup ==
-    \/ CliGroupSeen("proven")
-    \/ GcProbesUnseenGroup /\ Unseen /\ (prog \/ left)
+    /\ ~OtherPidSpace
+    /\ \/ GroupSeen("proven")
+       \/ GcProbesUnseenGroup /\ Unseen /\ (prog \/ left)
 
 GcChecksGroup ==
     /\ pc["gc"] = "group"
@@ -1578,12 +1582,15 @@ DestroyedStaysDestroyed ==
 \* pid after the host ended.
 NoUnrelatedHostKilled == ~hitUnrelatedHost
 
-\* R20: gc removes the folder, and with it program.json, only once no
-\* process of the program's group runs, also none that the program left
-\* when it exited on its own. It does not count a program that no
-\* program.json named (see R16).
+\* R20: gc in the host's pid space removes the folder, and with it
+\* program.json, only once no process of the program's group runs, also
+\* none that the program left when it exited on its own. It does not count
+\* a program that no program.json named (see R16). A gc in another pid
+\* space cannot check the group, and it removes the folder as it does
+\* without a token (WitnessUnsharedGcRemovesLeftover).
 RemovedSessionStopped ==
-    (gres = "removed" /\ ~diedUnrecorded) => ~(GroupAlive \/ left)
+    (gres = "removed" /\ ~diedUnrecorded /\ ~OtherPidSpace)
+        => ~(GroupAlive \/ left)
 
 \* Witnesses. check.sh expects TLC to report each one VIOLATED, which shows
 \* that the model reaches the state: the rules above are not true only
@@ -1630,4 +1637,8 @@ WitnessWaitPassesReusedId == ~passedReused
 \* destroyed record.
 WitnessUnsharedDestroyCompletes ==
     ~(OtherPidSpace /\ ~dforce /\ wasNamed /\ dres = "ok")
+\* With OtherPidSpace gc removes an exited session while a process that
+\* the program left runs, because it cannot check the group there.
+WitnessUnsharedGcRemovesLeftover ==
+    ~(OtherPidSpace /\ rec /\ left /\ gres = "removed")
 =============================================================================

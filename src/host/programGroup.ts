@@ -595,22 +595,29 @@ export function isProgramGroupAlive(group: ProgramGroup | null): boolean {
   );
 }
 
-// Whether gc must keep the session. gc sends no SIGSTOP, so a fork chain
-// that no scan shows reads gone: a group id that the probe finds while no
-// scan shows a member of the group, not even a zombie, also counts.
+// Whether gc must keep the session. gc keeps it only while it proves that
+// the group runs, so that destroy can end it: a live member carries the
+// token. gc sends no SIGSTOP, so a fork chain that no scan shows reads gone:
+// a group id that the probe finds while no scan shows a member of the
+// group, not even a zombie, also counts. A group that gc cannot check, in
+// another pid space or behind a refused read of /proc, proves nothing, and
+// gc removes the session as it does one without a token. Else such a
+// session would stay forever, for example after a container restart that
+// keeps the home, when host.json names a pid namespace that no longer
+// exists.
 export async function provenProgramGroupRuns(
   sessionDirectory: string,
 ): Promise<boolean> {
   const group = await readProvenProgramGroup(sessionDirectory);
-  if (isProgramGroupAlive(group)) {
-    return true;
+  if (group === null || 'unshared' in group) {
+    return false;
   }
+  const { verdict } = judgeLiveGroup(group);
   return (
-    group !== null &&
-    !('unshared' in group) &&
-    judgeLiveGroup(group).verdict === 'gone' &&
-    probeFindsGroup(group.pid) &&
-    groupHasLiveProcess(group.pid) === null
+    verdict === 'owned' ||
+    (verdict === 'gone' &&
+      probeFindsGroup(group.pid) &&
+      groupHasLiveProcess(group.pid) === null)
   );
 }
 

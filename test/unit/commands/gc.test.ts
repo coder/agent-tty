@@ -408,6 +408,49 @@ describe('gc command helpers', () => {
     expect(socketCleanups).toEqual([`${home}/sessions/destroyed-01 destroyed`]);
   });
 
+  it('keeps a session whose program group check throws, and reports why', async () => {
+    const home = '/tmp/agent-tty';
+    const exitedManifest = createSessionRecord({
+      sessionId: 'unchecked-01',
+      status: 'exited',
+      createdAt: '2026-03-20T08:00:00.000Z',
+    });
+    const { dependencies, removedPaths, socketCleanups } =
+      createMockDependencies(home, {
+        'unchecked-01': { manifest: exitedManifest },
+        'exited-01': {
+          manifest: { ...exitedManifest, sessionId: 'exited-01' },
+        },
+      });
+    const checked: string[] = [];
+    dependencies.provenProgramGroupRuns = (sessionDirectory: string) => {
+      checked.push(sessionDirectory);
+      return sessionDirectory.endsWith('/unchecked-01')
+        ? Promise.reject(new Error('EIO: i/o error, scandir /proc'))
+        : Promise.resolve(false);
+    };
+
+    for (const dryRun of [true, false]) {
+      const result = await gcSessions(
+        home,
+        { dryRun, staleOnly: false, olderThanMs: null },
+        dependencies,
+      );
+
+      expect(result.skippedSessions).toEqual([
+        {
+          sessionId: 'unchecked-01',
+          reason:
+            "failed to check the session's program group: EIO: i/o error, scandir /proc",
+        },
+      ]);
+      expect(result.removedSessions).toEqual(['exited-01']);
+    }
+    expect(checked).toContain(`${home}/sessions/unchecked-01`);
+    expect(removedPaths).toEqual([`${home}/sessions/exited-01`]);
+    expect(socketCleanups).toEqual([`${home}/sessions/exited-01 exited`]);
+  });
+
   it('reports removals in dry-run mode without deleting anything', async () => {
     const home = '/tmp/agent-tty';
     const { dependencies, removedPaths, bytesBySession } =
