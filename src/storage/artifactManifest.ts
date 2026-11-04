@@ -622,8 +622,8 @@ export interface AppendArtifactWithRollbackOptions {
    * `fileIdentity` of the file that the entry describes, taken when it was
    * written. The append then drops the entries whose `metadata.outputPath`
    * names that file, which replaced theirs. When `metadata.outputPath` no
-   * longer names that file, a later write replaced it, and the append adds
-   * nothing.
+   * longer names that file, the append drops nothing and still adds the
+   * entry, unless the path now holds a file of another size.
    */
   outputFileIdentity?: string;
 }
@@ -649,18 +649,32 @@ function pathSpelling(path: string): string {
   return path.normalize('NFC').toLowerCase();
 }
 
+// The size field of a fileIdentity string.
+function identitySize(identity: string): string {
+  const fields = identity.split(':');
+  invariant(fields.length === 4, 'a file identity has four fields');
+  return fields[2] ?? '';
+}
+
 /**
  * Returns the entries to keep beside an entry for the file `identity` at
- * `outputPath`, or null when `outputPath` no longer names that file: a later
- * write replaced it, and the later entry describes the file.
+ * `outputPath`, or null when the entry must not be added. When `outputPath`
+ * no longer names that file but holds a file of the same size, or no file,
+ * it keeps them all: a file server or a tool can have changed the time, and
+ * an entry too many is better than a lost one. A file of another size holds
+ * other bytes, which a later export wrote, so the entry would describe bytes
+ * that are gone: it returns null.
  */
 async function entriesKeptBeside(
   artifacts: readonly ArtifactEntry[],
   outputPath: string,
   identity: string,
-): Promise<ArtifactEntry[] | null> {
-  if ((await fileIdentity(outputPath)) !== identity) {
-    return null;
+): Promise<readonly ArtifactEntry[] | null> {
+  const current = await fileIdentity(outputPath);
+  if (current !== identity) {
+    return current !== null && identitySize(current) !== identitySize(identity)
+      ? null
+      : artifacts;
   }
   // Only a path that differs at most in case can name the same file, so the
   // append reads no other entry's path, which can be on a slow mount.
