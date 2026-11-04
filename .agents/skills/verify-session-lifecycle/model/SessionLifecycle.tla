@@ -506,13 +506,12 @@ CreateLaunchesHost ==
 \* the program. create writes nothing else: without a token only the host
 \* knows which group is the program's. Without the guard, create only
 \* reports the error. On Linux and macOS the manifest read changes nothing,
-\* so the model joins the marker write, the read and the SIGTERM. On
-\* Windows the marker write can also fail for a reason of its own, such as
-\* an antivirus lock on its temp file. Off Windows such a failure changes
-\* nothing, because the SIGTERM stops the host.
+\* so the model joins the marker write, the read and the SIGTERM. The
+\* marker write can also fail for a reason of its own, such as an antivirus
+\* lock on its temp file. Off Windows the SIGTERM then still stops the host.
 CreateGivesUp ==
     /\ cpc = "done"
-    /\ \E written \in IF Win32 THEN BOOLEAN ELSE {TRUE} :
+    /\ \E written \in BOOLEAN :
           cmark' = (cmark \/ (HostChecksCreateFailed /\ dir /\ written))
     /\ cpc' = IF Win32 THEN "giveup" ELSE "failed"
     /\ UNCHANGED <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal,
