@@ -982,6 +982,32 @@ describe('a program group with a token, as a faked /proc shows it', () => {
         await rm(directory, { recursive: true, force: true });
       }
     });
+
+    // A member of a fork chain can end between its stat and its autogroup
+    // read, so gc judges again.
+    it('judges again after a member that ended before its autogroup read', async () => {
+      const directory = await recordedSession();
+      try {
+        procShowsTokenGroup('S');
+        const read = autogroupFile.read;
+        let autogroupReads = 0;
+        autogroupFile.read = (file) => {
+          if (/^\/proc\/\d+\/autogroup$/.test(file)) {
+            autogroupReads += 1;
+            if (autogroupReads === 1) {
+              return '';
+            }
+          }
+          return read?.(file) ?? null;
+        };
+        probeEnds('ok');
+
+        expect(await provenProgramGroupRuns(directory)).toBe(true);
+        expect(autogroupReads).toBe(2);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
   });
 
   it.each(['EPERM', 'EACCES'])(

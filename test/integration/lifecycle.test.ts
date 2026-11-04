@@ -1277,7 +1277,10 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
         const destroyed = runCli(['destroy', sessionId, '--json'], {
           AGENT_TTY_HOME: testHome,
         });
-        expect(JSON.parse(destroyed.stdout)).toMatchObject({ ok: true });
+        // The error, when there is one, names why the chain outlived destroy.
+        expect(
+          (JSON.parse(destroyed.stdout) as { error?: unknown }).error,
+        ).toBeUndefined();
         expect(await chainRuns(beat)).toBe(false);
       },
     );

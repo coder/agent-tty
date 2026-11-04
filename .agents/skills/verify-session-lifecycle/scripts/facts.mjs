@@ -1391,25 +1391,40 @@ function gcFacts() {
         ts.isShorthandPropertyAssignment(p) &&
         p.name.text === 'provenProgramGroupRuns',
     );
-  const runs = requireDeclaration(
-    'src/host/programGroup.ts',
-    'provenProgramGroupRuns',
-  ).body.statements.map((s) => normalize(s.getText()));
-  const owned = "verdict === 'owned'";
-  // Or a group that reads gone, whose id the probe finds while no scan
-  // shows a member, live or zombie.
-  const withProbe = `return ( ${owned} || (verdict === 'gone' && probeFindsGroup(group.pid) && groupHasLiveProcess(group.pid) === null) );`;
+  const body = (name) =>
+    requireDeclaration('src/host/programGroup.ts', name).body.statements.map(
+      (s) => normalize(s.getText()),
+    );
+  const runs = body('provenProgramGroupRuns');
+  const judge = body('judgeGroupForGc');
+  // provenProgramGroupRuns gives false for a group that gc cannot check in
+  // another pid space, and judges the group again while judgeGroupForGc
+  // reads it inconclusive. That counts only a live member that carries the
+  // token, and treats unknown as inconclusive.
   const judges =
     runs.length === 4 &&
     runs[0] ===
       'const group = await readProvenProgramGroup(sessionDirectory);' &&
     runs[1] ===
       "if (group === null || 'unshared' in group) { return false; }" &&
-    runs[2] === 'const { verdict } = judgeLiveGroup(group);' &&
-    (runs[3] === `return ${owned};` || runs[3] === withProbe);
+    runs[2] ===
+      'for (let judged = 0; judged < GC_JUDGEMENTS; judged += 1) { const runs = judgeGroupForGc(group); if (runs !== null) { return runs; } }' &&
+    runs[3] === 'return false;' &&
+    judge[0] === 'const { verdict } = judgeLiveGroup(group);' &&
+    judge[1] ===
+      "if (verdict !== 'gone') { return verdict === 'owned' ? true : verdict === 'unproven' ? false : null; }";
+  // Then a group that reads gone, whose id the probe finds while no scan
+  // shows a member, live or zombie, counts as running too. Without the
+  // probe, gone reads false.
+  const probeTail = [
+    'if (!probeFindsGroup(group.pid)) { return false; }',
+    'const live = groupHasLiveProcess(group.pid);',
+    'return live === null ? true : live ? null : false;',
+  ];
+  const tail = judge.slice(2);
   const probes =
     judges &&
-    runs[3] === withProbe &&
+    tail.join('\n') === probeTail.join('\n') &&
     normalize(
       requireDeclaration(
         'src/host/programGroup.ts',
@@ -1417,6 +1432,8 @@ function gcFacts() {
       ).body.getText(),
     ) ===
       "{ try { process.kill(processGroupTarget(pgid), 0); return true; } catch (error) { if (hasErrorCode(error, 'ESRCH')) { return false; } if (hasErrorCode(error, 'EPERM')) { return true; } throw error; } }";
+  const judgesGone =
+    probes || (tail.length === 1 && tail[0] === 'return false;');
   return {
     GcSkipsNonCollectable: reconcile >= 0 && collectable > reconcile,
     GcFinalCheck: finalCheck,
@@ -1425,7 +1442,8 @@ function gcFacts() {
       groupSkip === groupRead + 1 &&
       loop.statements.indexOf(removal) > groupSkip &&
       wired &&
-      judges,
+      judges &&
+      judgesGone,
     GcProbesUnseenGroup: probes,
   };
 }
@@ -1469,6 +1487,7 @@ const COVERED = [
   ['src/cli/commands/gc.ts', 'gcSessions'],
   ['src/cli/commands/gc.ts', 'defaultDependencies'],
   ['src/host/programGroup.ts', 'provenProgramGroupRuns'],
+  ['src/host/programGroup.ts', 'judgeGroupForGc'],
   ['src/host/programGroup.ts', 'probeFindsGroup'],
   ['src/host/lifecycle.ts', 'allocateSession'],
   ['src/host/lifecycle.ts', 'launchHost'],
