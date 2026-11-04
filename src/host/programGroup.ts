@@ -435,6 +435,14 @@ function readProcessRow(pid: number): ProcessRow | null {
   return stat === null ? null : toProcessRow(stat);
 }
 
+// Whether a scan shows a member of the group that job control or a tracer
+// stopped.
+function showsStoppedMember(pgid: number): boolean {
+  return readGroupMembers(pgid).some(
+    (row) => row.state === 'T' || row.state === 't',
+  );
+}
+
 function readGroupMembers(pgid: number): ProcessRow[] {
   let entries: string[];
   try {
@@ -579,8 +587,11 @@ function isProcessGroupAlive(pgid: number): boolean {
     throw error;
   }
 
-  // None in view: the kill found processes that were reaped before the scan.
-  return groupHasLiveProcess(pgid) ?? false;
+  // None in view: the kill found processes that were reaped before the scan,
+  // or members of a fork chain that end before a scan reads them. A second
+  // probe tells them apart: reaped processes are gone, a fork chain still
+  // holds the id. Scans that show only zombies read the group ended.
+  return groupHasLiveProcess(pgid) ?? probeFindsGroup(pgid);
 }
 
 function killProcessGroupBestEffort(pgid: number): void {
@@ -767,15 +778,17 @@ export function stopProgramGroup(group: ProgramGroup | null): void {
   }
 
   // A member that forks its successor and ends between scans is never in
-  // view. One that a scan shows can also end before its autogroup read
-  // (unknown, running) or before the witness is read again. SIGSTOP freezes
-  // the group, also a child that a member forks while the kernel delivers
-  // it, and a stopped member stays in view and cannot end, so a judgement
-  // that gets no kill and is neither unproven nor an unknown without a
-  // running member sends SIGSTOP and judges the frozen group again. A group
-  // that job control stopped, whose autogroup /proc refuses, gets no signal. Each such judgement sends SIGSTOP again, for a member that a
+  // view. One that a scan shows can also end between two reads: before its
+  // autogroup read (unknown, running) or before the witness is read again.
+  // SIGSTOP freezes the group, also a child that a member forks while the
+  // kernel delivers it, and a stopped member stays in view and cannot end,
+  // so a judgement that gets no kill and is neither unproven nor an unknown
+  // without a running member sends SIGSTOP and judges the frozen group
+  // again. Each such judgement sends SIGSTOP again, for a member that a
   // SIGCONT from elsewhere resumed. A frozen group that gets no kill gets
-  // SIGCONT, also when a scan throws.
+  // SIGCONT, also when a scan throws. So a group that shows a member that
+  // job control stopped before the first freeze gets no SIGSTOP: the
+  // SIGCONT would resume that member.
   let frozen = false;
   let killed = false;
   try {
@@ -802,6 +815,9 @@ export function stopProgramGroup(group: ProgramGroup | null): void {
         }
       }
       if (!procShowsOwnPidSpace()) {
+        return;
+      }
+      if (!frozen && showsStoppedMember(group.pid)) {
         return;
       }
       frozen = signalProcessGroup(group.pid, 'SIGSTOP') || frozen;

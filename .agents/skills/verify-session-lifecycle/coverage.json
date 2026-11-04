@@ -33,6 +33,7 @@
     "RecordsProgramSync": true,
     "ProvesGroupOwnership": true,
     "FreezesUnseenGroup": true,
+    "WaitProbesUnseenGroup": true,
     "FallbackNeedsFolder": true,
     "UnsharedGroupReadsUnknown": true,
     "TokenNamesProgram": true,
@@ -120,11 +121,11 @@
     "src/host/programGroup.ts#procHidesOtherUsers": "214f60a56d6573fa",
     "src/host/programGroup.ts#groupHasLiveProcess": "1d8026f335463a72",
     "src/host/programGroup.ts#scanGroup": "babc9d5767424243",
-    "src/host/programGroup.ts#isProcessGroupAlive": "ce1b8fca10085d51",
+    "src/host/programGroup.ts#isProcessGroupAlive": "cb20b5d3ec5d2979",
     "src/host/programGroup.ts#killProcessGroupBestEffort": "6d5d47cb5697681b",
     "src/host/programGroup.ts#signalProcessGroup": "c5a3a84361b67aa1",
     "src/host/programGroup.ts#isProgramGroupAlive": "f6fe01a280824f82",
-    "src/host/programGroup.ts#stopProgramGroup": "45733f4c2786197c",
+    "src/host/programGroup.ts#stopProgramGroup": "bbdb4374697df170",
     "src/host/programGroup.ts#procShowsOwnPidSpace": "ac852506311bb328",
     "src/host/rpcClient.ts#toTransportCliError": "dd6531349c62bcbd",
     "src/host/sessionState.ts#SessionState.setDimensions": "08c4f06122d157e9",
@@ -147,9 +148,9 @@
     "src/host/hostMain.ts#runHost(final try)": "e0615a9709fefb67",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "cd8639012467f13e",
-    "skill:scripts/facts.mjs": "e4e67f62f1c1853b",
-    "skill:scripts/check.sh": "17f2ce5bd1b1b090"
+    "skill:model/SessionLifecycle.tla": "9d2f5e19d5de78d2",
+    "skill:scripts/facts.mjs": "85928ae0e99639e2",
+    "skill:scripts/check.sh": "81d1f6f959f1dfca"
   },
   "callSites": {
     "writeManifest": [
