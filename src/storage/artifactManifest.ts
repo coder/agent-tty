@@ -476,15 +476,17 @@ export interface AppendArtifactWithRollbackOptions {
 }
 
 /**
- * Device and inode of the file at `path`, so two spellings of one path (a
- * case-insensitive file system, a symlink) match. null when the path does
+ * Device, inode, size and modification time of the file at `path`, so two
+ * spellings of one path (a case-insensitive file system, a symlink) match.
+ * A rename keeps all four. Size and time keep a later file that reuses a
+ * removed file's inode number from matching it. null when the path does
  * not resolve.
  */
 export async function fileIdentity(path: string): Promise<string | null> {
   try {
-    // bigint keeps device and inode numbers above 2^53 exact.
+    // bigint keeps the numbers above 2^53 exact and the time in nanoseconds.
     const stats = await stat(path, { bigint: true });
-    return `${String(stats.dev)}:${String(stats.ino)}`;
+    return [stats.dev, stats.ino, stats.size, stats.mtimeNs].join(':');
   } catch {
     return null;
   }
