@@ -55,7 +55,7 @@ Yes, when the diff changes any of these:
 
 You do not have to judge this by hand. The check prints `STALE` when any of these changed since the sync commit.
 
-CI runs the check in the `lifecycle-model` job. Every run of it calls `scripts/check.sh --drift-only`, which compares the covered code with `coverage.json` and needs no Java, and fails on `STALE`. The whole check runs only when `coverage.json` differs from the base of the pull request or merge group, in four jobs with `CHECK_SHARD=<i>/4`. Each job runs every fourth run that expects pass and every fourth of the rest, because the runs that expect pass explore the whole model and take most of the time.
+CI runs the check in the `lifecycle-model` job. Every run of it calls `scripts/check.sh --drift-only`, which compares the guard values and the covered code with `coverage.json` and needs no Java, and fails on `STALE`. The whole check runs only when `coverage.json` differs from the base of the pull request or merge group, in four jobs with `CHECK_SHARD=<i>/4`. Each job runs every fourth run that expects pass and every fourth of the rest, because the runs that expect pass explore the whole model and take most of the time.
 
 ## Run it
 
@@ -72,7 +72,7 @@ What it does:
 1. `scripts/facts.mjs` reads the code with the TypeScript compiler. It finds the thirty-three guards that the rules depend on and the status sets of the policy table, and it hashes each covered function with comments and layout removed.
 2. It writes one TLC config per run, with those facts as constants. A guard that is not in the code, in the expected place and order, reads FALSE, and the model then runs without it.
 3. It runs TLC 73 times and prints one line per run.
-4. It compares the hashes and call sites with `coverage.json`.
+4. It compares the guard values, the status sets, the hashes and the call sites with `coverage.json`.
 
 Exit codes: 0 means every run gave the expected result and the covered code matches the sync record. 1 means at least one run gave an unexpected result; the line says `UNEXPECTED`. 3 means every result was as expected, but covered code changed since the sync commit; that is not a pass, so follow "When you change covered code on purpose". 2 means a tool could not run. When both 1 and 3 apply, the exit code is 1.
 
@@ -556,7 +556,7 @@ The artifact commands never create the session folder (coder/agent-tty#198). `en
 
 ## Coverage record
 
-The sync commit is the last commit that changed `coverage.json`. `check.sh` prints it, and `git log -1 --format=%h -- .agents/skills/verify-session-lifecycle/coverage.json` shows it too. In that commit, someone read the covered code above and confirmed that the model describes it. `coverage.json` holds the hash of each covered function, of the model and of the two check scripts, and the list of call sites at that commit. The check compares them with the code on every run.
+The sync commit is the last commit that changed `coverage.json`. `check.sh` prints it, and `git log -1 --format=%h -- .agents/skills/verify-session-lifecycle/coverage.json` shows it too. In that commit, someone read the covered code above and confirmed that the model describes it. `coverage.json` holds the value of each guard and status set that `scripts/facts.mjs` read, the hash of each covered function, of the model and of the two check scripts, and the list of call sites at that commit. The check compares them with the code on every run. The guards come from the source text with its comments, and the hashes leave comments out. So a new comment inside a guarded block can turn a guard FALSE while every hash stays the same, and the check then prints `fact <guard> changed: was true, now false`.
 
 Change `coverage.json` (with `check.sh --update-coverage`) only in the same commit as a confirmed model, or after you have confirmed that the model still describes the changed code. Because the sync commit comes from git, a squash merge keeps it correct.
 

@@ -5,8 +5,8 @@
 #
 #   .agents/skills/verify-session-lifecycle/scripts/check.sh [--update-coverage | --drift-only]
 #
-# --drift-only compares the covered code with coverage.json and runs no TLC,
-# so it needs no Java: exit 0 or 3 as below.
+# --drift-only compares the facts and the covered code with coverage.json
+# and runs no TLC, so it needs no Java: exit 0 or 3 as below.
 #
 # Exit 0: every TLC run gave the expected result and the covered code is
 #         unchanged since the last sync.
@@ -104,18 +104,35 @@ if [ "$UPDATE_COVERAGE" -eq 1 ]; then
   node -e '
     const fs = require("node:fs");
     const facts = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-    const record = { fingerprints: facts.fingerprints, callSites: facts.callSites };
+    const record = {
+      constants: facts.constants,
+      fingerprints: facts.fingerprints,
+      callSites: facts.callSites,
+    };
     fs.writeFileSync(process.argv[2], JSON.stringify(record, null, 2) + "\n");
   ' "$OUT/facts.json" "$COVERAGE"
   echo "Rewrote $COVERAGE. Commit it only after you have confirmed that the model"
   echo "describes the code: that commit becomes the sync commit."
 fi
 
-# Prints one line per covered function or call site that changed.
+# Prints one line per fact, covered function or call site that changed. The
+# facts come from the source text with its comments, and the hashes leave
+# comments out, so a new comment in a guarded block can turn a guard FALSE
+# while every hash stays the same.
 node -e '
   const fs = require("node:fs");
   const facts = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
   const record = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+  const recorded = record.constants ?? {};
+  for (const [key, value] of Object.entries(facts.constants)) {
+    const before = key in recorded ? JSON.stringify(recorded[key]) : "not recorded";
+    if (before !== JSON.stringify(value)) {
+      console.log(`fact ${key} changed: was ${before}, now ${JSON.stringify(value)}`);
+    }
+  }
+  for (const key of Object.keys(recorded)) {
+    if (!(key in facts.constants)) console.log(`fact ${key} is no longer read`);
+  }
   for (const [key, value] of Object.entries(facts.fingerprints)) {
     if (record.fingerprints[key] !== value) console.log(`changed: ${key}`);
   }
