@@ -1725,6 +1725,15 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
         `--import=${pathToFileURL(resolve('test/fixtures/fake-win32-create.ts')).href}`,
       ],
     ],
+    // create retries the marker write while the manifest names no program.
+    [
+      'on Windows, when its first marker write fails',
+      [
+        `--import=${pathToFileURL(resolve('test/fixtures/denied-autogroup.ts')).href}`,
+        `--import=${pathToFileURL(resolve('test/fixtures/fake-win32-create.ts')).href}`,
+        `--import=${pathToFileURL(resolve('test/fixtures/fail-first-marker-write.ts')).href}`,
+      ],
+    ],
   ])('a create that gives up %s', (_name, preloads) => {
     let pgid = 0;
 
