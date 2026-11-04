@@ -277,8 +277,9 @@ VARIABLES
                  \*   "killed" (it died before it reported)
     dsaw,        \* ghost: destroy wrote "destroyed" or read it last
     dkill,       \* ghost: destroy --force killed a live host
-    dblind       \* ghost: destroy --force recorded destroyed without a read
-                 \*   of the program's group (CheckFails)
+    dblind       \* ghost: destroy --force wrote the destroy marker or
+                 \*   destroyed without a read of the program's group
+                 \*   (CheckFails); a reconcile then repairs to destroyed
 
 diskVars == <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal, wasExited,
               wasNamed, dmark, cmark>>
@@ -1325,10 +1326,11 @@ DestroyMarksFolder ==
     /\ DestroyAt({"tmark"})
     /\ IF dir
           THEN /\ dmark' = TRUE /\ dpc' = "twrite" /\ UNCHANGED <<drd, dres>>
-          ELSE /\ DestroyEnds("error") /\ UNCHANGED dmark
+               /\ dblind' = (dblind \/ drd.grp = "blind")
+          ELSE /\ DestroyEnds("error") /\ UNCHANGED <<dmark, dblind>>
     /\ UNCHANGED <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal,
                    wasExited, wasNamed, cmark, ghostVars, sock, cpc, hostVars,
-                   shutVars, readerVars, dforce, dinside, dsaw, dkill, dblind,
+                   shutVars, readerVars, dforce, dinside, dsaw, dkill,
                    groupVars>>
 
 \* recordDestroyed: writeManifest({ ...manifest, status: 'destroyed' }) from
