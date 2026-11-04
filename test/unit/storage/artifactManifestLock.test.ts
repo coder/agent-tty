@@ -492,6 +492,34 @@ describe('artifact manifest lock', () => {
     expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
   });
 
+  // APFS answers EINVAL, not ENOENT, to a link into a folder that another
+  // process removes during the call (macOS CI run 41762561666).
+  it('announces itself again when the link into a folder another breaker removes fails with EINVAL', async () => {
+    const folder = `${lockPath}.breakers`;
+    await writeFile(lockPath, await deadOwnerRecord());
+    freezeLockClock();
+    let removed = false;
+    fsHooks.beforeLink = async (to) => {
+      if (to.startsWith(`${folder}/`) && !removed) {
+        removed = true;
+        await rmdir(folder);
+        throw Object.assign(new Error(`EINVAL: invalid argument, link`), {
+          code: 'EINVAL',
+        });
+      }
+    };
+
+    await expect(
+      withArtifactManifestLock(
+        sessionDirectory,
+        () => Promise.resolve('ran'),
+        FAST,
+      ),
+    ).resolves.toBe('ran');
+    expect(removed).toBe(true);
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
+  });
+
   it('waits longer each time it meets another breaker', async () => {
     // A live breaker's announcement that stays: every attempt meets it.
     const folder = `${lockPath}.breakers`;
