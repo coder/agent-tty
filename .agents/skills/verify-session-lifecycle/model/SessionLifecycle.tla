@@ -50,6 +50,9 @@ CONSTANTS
     GcProbesUnseenGroup,    \* programGroup.ts: provenProgramGroupRuns also
                             \*   counts a group id that the probe finds
                             \*   while no scan shows a member
+    GcFreezesUnseenGroup,   \* programGroup.ts: gc sends SIGSTOP to a group
+                            \*   whose scans show only zombies while the
+                            \*   probe finds its id, and judges it again
     ReconcileSkipsTerminal, \* lifecycle.ts: return when the manifest is terminal
     ReconcileSkipsLiveHost, \* lifecycle.ts: return when hostPid is set and alive
     CreateRecordsHostPid,   \* lifecycle.ts: launch the host, then write the
@@ -143,6 +146,9 @@ CONSTANTS
     Unseen,                 \* the environment: no scan of /proc shows a
                             \*   live process of the program, as for a fork
                             \*   chain whose processes each live about 2 ms
+    ZombiesInView,          \* the environment: with Unseen, the scans show
+                            \*   zombies of the program's group, as under a
+                            \*   PID 1 that never reaps
     OtherPidSpace,          \* the environment: destroy, list and gc run
                             \*   where no scan and no probe shows the host's
                             \*   processes (no /proc, an empty /proc,
@@ -156,10 +162,11 @@ CONSTANTS
 ASSUME MaxListReconciles \in 1..3
 ASSUME Token \in BOOLEAN
 ASSUME Unseen \in BOOLEAN
+ASSUME ZombiesInView \in BOOLEAN
 ASSUME OtherPidSpace \in BOOLEAN
 ASSUME Win32 \in BOOLEAN
 ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, GcKeepsLiveGroup,
-                 GcProbesUnseenGroup,
+                 GcProbesUnseenGroup, GcFreezesUnseenGroup,
                  ReconcileSkipsTerminal,
                  ReconcileSkipsLiveHost, CreateRecordsHostPid,
                  HostWaitsForManifest, ReconcileRereads,
@@ -1179,20 +1186,25 @@ GcReadsReconciled ==
 
 \* provenProgramGroupRuns reads program.json and judges the group, as the
 \* waits of destroy do, but it counts only a group that it proves: a live
-\* member carries the token. gc sends no SIGSTOP, so with Unseen no scan
-\* shows the program's processes, and with GcProbesUnseenGroup the probe
-\* kill(-pgid, 0) then finds them. An unrelated group that took the id is
-\* in view and reads unproven. With OtherPidSpace gc cannot check the group
-\* and reads it not proven, so that a session whose pid space is gone, as
-\* after a container restart, does not stay forever. With GcKeepsLiveGroup
-\* gc skips a session that is not destroyed while it proves the group
-\* ("the session's program group still runs"). The code tests the status
-\* of manifestAfter, which cannot turn from destroyed back, so this current
-\* status skips no more often.
+\* member carries the token. With Unseen no scan shows the program's
+\* processes, and with GcProbesUnseenGroup the probe kill(-pgid, 0) then
+\* finds them while no scan shows a member, not even a zombie. With
+\* ZombiesInView the scans show zombies of the group, which the probe also
+\* finds, so gc needs GcFreezesUnseenGroup: it sends SIGSTOP, a stopped
+\* member stays in view, and the judgement after it finds the program's
+\* processes. An unrelated group that took the id is in view and reads
+\* unproven. With OtherPidSpace gc cannot check the group and reads it not
+\* proven, so that a session whose pid space is gone, as after a container
+\* restart, does not stay forever. With GcKeepsLiveGroup gc skips a session
+\* that is not destroyed while it proves the group ("the session's program
+\* group still runs"). The code tests the status of manifestAfter, which
+\* cannot turn from destroyed back, so this current status skips no more
+\* often.
 GcSeesGroup ==
     /\ ~OtherPidSpace
     /\ \/ GroupSeen("proven")
-       \/ GcProbesUnseenGroup /\ Unseen /\ (prog \/ left)
+       \/ /\ GcProbesUnseenGroup /\ Unseen /\ (prog \/ left)
+          /\ (~ZombiesInView \/ GcFreezesUnseenGroup)
 
 GcChecksGroup ==
     /\ pc["gc"] = "group"

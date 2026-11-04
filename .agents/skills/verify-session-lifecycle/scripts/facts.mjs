@@ -1083,8 +1083,9 @@ function programRecordFacts() {
 // with a token it kills only right after it read a live member of the group
 // again and found the program's session id, autogroup and boot id on it.
 // No other code calls the raw group kill or builds a group target, except
-// the two probes, which send signal 0, and only stopProgramGroup sends the
-// SIGSTOP and SIGCONT of signalProcessGroup.
+// the two probes, which send signal 0. Only stopProgramGroup and gc's
+// judgeFrozenGroup send the SIGSTOP and SIGCONT of signalProcessGroup, which
+// kill nothing.
 function ownershipFacts() {
   const module = 'src/host/programGroup.ts';
   const stop = requireDeclaration(module, 'stopProgramGroup');
@@ -1126,12 +1127,15 @@ function ownershipFacts() {
   let stray = false;
   for (const file of listSources('src')) {
     walk(source(file), (node) => {
-      if (
-        isCall(node, 'killProcessGroupBestEffort') ||
-        isCall(node, 'signalProcessGroup')
-      ) {
+      if (isCall(node, 'killProcessGroupBestEffort')) {
         rawKills += 1;
         stray ||= file !== module || ownerPath(node) !== 'stopProgramGroup';
+      }
+      if (isCall(node, 'signalProcessGroup')) {
+        rawKills += 1;
+        stray ||=
+          file !== module ||
+          !['stopProgramGroup', 'judgeFrozenGroup'].includes(ownerPath(node));
       }
       if (isCall(node, 'processGroupTarget')) {
         targets += 1;
@@ -1500,16 +1504,21 @@ function gcFacts() {
       "if (verdict !== 'gone') { return verdict === 'owned' ? true : verdict === 'unproven' ? false : null; }";
   // Then a group that reads gone, whose id the probe finds while no scan
   // shows a member, live or zombie, counts as running too. Without the
-  // probe, gone reads false.
-  const probeTail = [
+  // probe, gone reads false. When the scans show only zombies, the group is
+  // judged again frozen, or, without the freeze, reads ended.
+  const probeHead = [
     'if (!probeFindsGroup(group.pid)) { return false; }',
     'const live = groupHasLiveProcess(group.pid);',
-    'return live === null ? true : live ? null : false;',
   ];
   const tail = judge.slice(2);
+  const last = tail.at(-1);
   const probes =
     judges &&
-    tail.join('\n') === probeTail.join('\n') &&
+    tail.length === 3 &&
+    tail.slice(0, 2).join('\n') === probeHead.join('\n') &&
+    (last === 'return live === null ? true : live ? null : false;' ||
+      last ===
+        'return live === null ? true : live ? null : judgeFrozenGroup(group);') &&
     normalize(
       requireDeclaration(
         'src/host/programGroup.ts',
@@ -1519,6 +1528,19 @@ function gcFacts() {
       "{ try { process.kill(processGroupTarget(pgid), 0); return true; } catch (error) { if (hasErrorCode(error, 'ESRCH')) { return false; } if (hasErrorCode(error, 'EPERM')) { return true; } throw error; } }";
   const judgesGone =
     probes || (tail.length === 1 && tail[0] === 'return false;');
+  // judgeFrozenGroup sends SIGSTOP only where /proc shows this process's pid
+  // space, judges the stopped group, and sends SIGCONT in a finally. A
+  // frozen group that still reads gone is inconclusive, so gc freezes it
+  // again: another gc or a destroy can have resumed it.
+  const freezes =
+    probes &&
+    last ===
+      'return live === null ? true : live ? null : judgeFrozenGroup(group);' &&
+    body('judgeFrozenGroup').join('\n') ===
+      [
+        "if (!procShowsOwnPidSpace() || !signalProcessGroup(group.pid, 'SIGSTOP')) { return false; }",
+        "try { const { verdict } = judgeLiveGroup(group); return verdict === 'owned' ? true : verdict === 'unproven' ? false : null; } finally { signalProcessGroup(group.pid, 'SIGCONT'); }",
+      ].join('\n');
   return {
     GcSkipsNonCollectable: reconcile >= 0 && collectable > reconcile,
     GcFinalCheck: finalCheck,
@@ -1530,6 +1552,7 @@ function gcFacts() {
       judges &&
       judgesGone,
     GcProbesUnseenGroup: probes,
+    GcFreezesUnseenGroup: freezes,
   };
 }
 
@@ -1575,6 +1598,7 @@ const COVERED = [
   ['src/cli/commands/gc.ts', 'defaultDependencies'],
   ['src/host/programGroup.ts', 'provenProgramGroupRuns'],
   ['src/host/programGroup.ts', 'judgeGroupForGc'],
+  ['src/host/programGroup.ts', 'judgeFrozenGroup'],
   ['src/host/programGroup.ts', 'GC_JUDGEMENTS'],
   ['src/host/programGroup.ts', 'probeFindsGroup'],
   ['src/host/lifecycle.ts', 'allocateSession'],
