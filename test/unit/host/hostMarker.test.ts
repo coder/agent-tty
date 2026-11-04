@@ -18,6 +18,7 @@ import {
 } from 'vitest';
 
 import { runHost } from '../../../src/host/hostMain.js';
+import { readProcStat } from '../../../src/host/programGroup.js';
 import type * as ProgramGroupModule from '../../../src/host/programGroup.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import {
@@ -250,4 +251,66 @@ describe('runHost and the create-failed marker', () => {
     sendSigterm();
     await expectHostStopped(readProgramGroup());
   }, 15_000);
+
+  it('stops when the creator writes the marker and exits between its probe and its check', async () => {
+    const creator = spawn('sleep', ['30'], { stdio: 'ignore' });
+    onTestFinished(() => {
+      creator.kill('SIGKILL');
+    });
+    const creatorPid = creator.pid as number;
+    expect(creatorPid).toBeGreaterThan(0);
+    await runHost(SESSION_ID, creatorPid);
+    expect(existsSync(socketPath(directory))).toBe(true);
+    // The next probe finds the creator gone, and it wrote the marker first.
+    const kill = process.kill.bind(process);
+    vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (pid === creatorPid && signal === 0) {
+        writeFileSync(createFailedMarkerPath(directory), '');
+        throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
+      }
+      return kill(pid, signal);
+    });
+
+    await expectHostStopped(readProgramGroup());
+  }, 15_000);
+
+  // kill(pid, 0) succeeds for a zombie, so only /proc shows that the creator
+  // has exited while its parent has yet to reap it.
+  it.runIf(process.platform === 'linux')(
+    'stops the watch when its creator is a zombie',
+    async () => {
+      const parent = spawn(
+        '/bin/sh',
+        ['-c', 'sleep 0 & echo $!; exec sleep 30'],
+        { stdio: ['ignore', 'pipe', 'ignore'] },
+      );
+      onTestFinished(() => {
+        parent.kill('SIGKILL');
+      });
+      const [line] = (await once(parent.stdout, 'data')) as [Buffer];
+      const zombie = Number(line.toString('utf8').trim());
+      expect(zombie).toBeGreaterThan(1);
+      const deadline = Date.now() + 10_000;
+      while (readProcStat(zombie)?.state !== 'Z') {
+        expect(Date.now()).toBeLessThan(deadline);
+        await delay(20);
+      }
+      const watchStopped = trackMarkerWatch();
+      await runHost(SESSION_ID, zombie);
+      expect(existsSync(socketPath(directory))).toBe(true);
+      await watchStopped();
+
+      await writeCreateFailedMarker(
+        createFailedMarkerPath(directory),
+        SESSION_ID,
+      );
+
+      expect((await readManifest(manifestPath(directory))).status).toBe(
+        'running',
+      );
+      sendSigterm();
+      await expectHostStopped(readProgramGroup());
+    },
+    20_000,
+  );
 });
