@@ -911,32 +911,41 @@ export async function destroySession(
   }
 
   // destroy --force of a session whose host is gone also ends a session
-  // whose program group it cannot read: a read of program.json or /proc
-  // that fails with a system error. It then stops what it can without the
-  // group and records destroyed, so a process that the program left can
-  // outlive it. A group that reads alive, or a host that does not end
-  // (HOST_TIMEOUT), still fails the destroy.
+  // whose program group it cannot read: the read of program.json, or the
+  // first judgement of the group, fails with an errno that every later read
+  // repeats. It then stops what it can without the group and records
+  // destroyed, so a process that the program left can outlive it. A failed
+  // read after that first judgement, a group that reads alive, and a host
+  // that does not end (HOST_TIMEOUT) still fail the destroy.
   const stopUnlessUnreadable = async (
     host: SessionHost | null,
     readGroup: () => Promise<ProgramGroup | null>,
   ): Promise<ProgramGroup | null> => {
+    let group: ProgramGroup | null;
     try {
-      const group = await readGroup();
-      await stopSessionProcesses(
-        sessionId,
-        host,
-        group,
-        sessionDirectory,
-        signal,
-      );
-      return group;
+      group = await readGroup();
+      isProgramGroupAlive(group);
     } catch (error) {
       if (force !== true || !isUnreadableGroupError(error)) {
         throw error;
       }
+      await stopSessionProcesses(
+        sessionId,
+        host,
+        null,
+        sessionDirectory,
+        signal,
+      );
+      return null;
     }
-    await stopSessionProcesses(sessionId, host, null, sessionDirectory, signal);
-    return null;
+    await stopSessionProcesses(
+      sessionId,
+      host,
+      group,
+      sessionDirectory,
+      signal,
+    );
+    return group;
   };
 
   const stopLeftoversThenRecordDestroyed = async (

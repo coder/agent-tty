@@ -1112,7 +1112,7 @@ describe('a program group with a token, as a faked /proc shows it', () => {
 
     // A /proc that names another pid than this process's belongs to another
     // pid namespace, so the group reads unshared and gc sends no signal.
-    it('sends no SIGSTOP when /proc/self names another pid', async () => {
+    it('sends no signal when /proc/self names another pid', async () => {
       const directory = await recordedSession();
       try {
         procShowsTokenGroup('Z');
@@ -1121,6 +1121,29 @@ describe('a program group with a token, as a faked /proc shows it', () => {
 
         expect(await provenProgramGroupRuns(directory)).toBe(false);
         expect(kill).not.toHaveBeenCalled();
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    // sharesHostPids read /proc/self as this process's pid a moment before,
+    // so only a /proc that changed since, such as one mounted over it,
+    // reaches the guard of the freeze. The probe changes it here.
+    it('sends no SIGSTOP when /proc/self names another pid at the freeze', async () => {
+      const directory = await recordedSession();
+      try {
+        procShowsTokenGroup('Z');
+        const signals: unknown[] = [];
+        vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+          signals.push(signal);
+          if (signal === 0) {
+            procHooks.self = '1';
+          }
+          return true;
+        });
+
+        expect(await provenProgramGroupRuns(directory)).toBe(false);
+        expect(signals).toEqual([0]);
       } finally {
         await rm(directory, { recursive: true, force: true });
       }
@@ -1758,14 +1781,36 @@ describe.runIf(platform === 'linux')('a program record with a token', () => {
 
 // destroy --force ends a session without its group only after such a read.
 describe('isUnreadableGroupError', () => {
+  const refused = (code: string) =>
+    makeCliError(ERROR_CODES.STORAGE_READ_ERROR, { cause: errno(code) });
   it.each([
+    ['a program.json that the read refuses', refused('EACCES'), true],
     [
-      'a program.json that the read refuses',
-      makeCliError(ERROR_CODES.STORAGE_READ_ERROR),
+      'a program.json behind a file where a folder was',
+      refused('ENOTDIR'),
       true,
     ],
     ['a /proc scan that fails with EIO', errno('EIO'), true],
     ['a /proc read that fails with EACCES', errno('EACCES'), true],
+    ['a read that EPERM refuses', errno('EPERM'), true],
+    ['a path that loops', errno('ELOOP'), true],
+    ['a program.json that is a folder', refused('EISDIR'), true],
+    ['a name too long', errno('ENAMETOOLONG'), true],
+    [
+      'a program.json read that ran out of file descriptors',
+      refused('EMFILE'),
+      false,
+    ],
+    ['EMFILE', errno('EMFILE'), false],
+    ['ENFILE', errno('ENFILE'), false],
+    ['ENOMEM', errno('ENOMEM'), false],
+    ['EAGAIN', errno('EAGAIN'), false],
+    ['EINTR', errno('EINTR'), false],
+    [
+      'a STORAGE_READ_ERROR without a cause',
+      makeCliError(ERROR_CODES.STORAGE_READ_ERROR),
+      false,
+    ],
     ['HOST_TIMEOUT', makeCliError(ERROR_CODES.HOST_TIMEOUT), false],
     [
       'an assertion',

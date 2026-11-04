@@ -971,6 +971,47 @@ describe('destroySession', () => {
         });
       });
 
+      // Only a read that fails before the first verdict on the group lets
+      // destroy --force record destroyed without it. After a verdict that
+      // the group runs, a failed read leaves the group running.
+      it('destroy --force fails, and records nothing, when a read fails after the group read owned', async () => {
+        const directory = await seedLeftover();
+        const stat = `/proc/${String(group)}/stat`;
+        let reads = 0;
+        fsHooks.files = new (class extends Map<string, string | Error> {
+          override get(path: string): string | Error | undefined {
+            if (path !== stat) {
+              return undefined;
+            }
+            reads += 1;
+            return reads > 1 ? errno('EIO') : undefined;
+          }
+        })();
+        const kill = vi.spyOn(process, 'kill');
+
+        await expect(destroySession('session-01', true)).rejects.toMatchObject({
+          code: 'EIO',
+        });
+        expect(kill).not.toHaveBeenCalledWith(-group, 'SIGKILL');
+        expect(await readManifest(manifestPath(directory))).toEqual(exited);
+        expect(reads).toBeGreaterThan(1);
+      });
+
+      it('destroy --force records destroyed, and kills nothing, when the first read of the group fails', async () => {
+        const directory = await seedLeftover();
+        fsHooks.files = new Map([
+          [`/proc/${String(group)}/stat`, errno('EIO')],
+        ]);
+        const kill = vi.spyOn(process, 'kill');
+
+        await destroySession('session-01', true);
+
+        expect(kill).not.toHaveBeenCalledWith(-group, 'SIGKILL');
+        expect(await readManifest(manifestPath(directory))).toMatchObject({
+          status: 'destroyed',
+        });
+      });
+
       it('times out without recording destroyed while the group survives its kill', async () => {
         const directory = await seedLeftover();
         const send = process.kill.bind(process);

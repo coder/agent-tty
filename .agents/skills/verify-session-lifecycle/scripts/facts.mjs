@@ -729,8 +729,10 @@ function statementsOf(block) {
 
 function stopUnlessUnreadableFacts(arrows) {
   const st = arrows.get('stopUnlessUnreadable') ?? [];
-  const attempt = st[0];
+  const [declared, attempt, ...after] = st;
   if (
+    declared === undefined ||
+    normalize(declared.getText()) !== 'let group: ProgramGroup | null;' ||
     attempt === undefined ||
     !ts.isTryStatement(attempt) ||
     attempt.catchClause === undefined ||
@@ -738,30 +740,34 @@ function stopUnlessUnreadableFacts(arrows) {
   ) {
     return { stops: false, skipsUnreadable: false };
   }
+  // The try reads the group and judges it once, with no kill. Only a read
+  // or a judgement that fails there can skip the group: the stop comes
+  // after the try, so a read that fails after a verdict fails the destroy.
   const tried = statementsOf(attempt.tryBlock).join('\n');
-  const caught = statementsOf(attempt.catchClause.block).join('\n');
-  const after = st.slice(1).map((s) => normalize(s.getText()));
+  const caught = statementsOf(attempt.catchClause.block);
   const stops =
     tried ===
-    [
-      'const group = await readGroup();',
-      'await stopSessionProcesses( sessionId, host, group, sessionDirectory, signal, );',
-      'return group;',
-    ].join('\n');
-  const skipsUnreadable =
-    caught ===
-      'if (force !== true || !isUnreadableGroupError(error)) { throw error; }' &&
-    after.join('\n') ===
+      ['group = await readGroup();', 'isProgramGroupAlive(group);'].join(
+        '\n',
+      ) &&
+    after.map((s) => normalize(s.getText())).join('\n') ===
       [
-        'await stopSessionProcesses(sessionId, host, null, sessionDirectory, signal);',
+        'await stopSessionProcesses( sessionId, host, group, sessionDirectory, signal, );',
+        'return group;',
+      ].join('\n');
+  const skipsUnreadable =
+    caught.join('\n') ===
+      [
+        'if (force !== true || !isUnreadableGroupError(error)) { throw error; }',
+        'await stopSessionProcesses( sessionId, host, null, sessionDirectory, signal, );',
         'return null;',
       ].join('\n') &&
     bodyIs(
       'isUnreadableGroupError',
-      "if (hasErrorCode(error, ERROR_CODES.STORAGE_READ_ERROR)) { return true; } const code: unknown = error instanceof Error ? (error as { code?: unknown }).code : undefined; return ( !(error instanceof CliError) && typeof code === 'string' && /^E[A-Z0-9]+$/.test(code) );",
+      "const cause = hasErrorCode(error, ERROR_CODES.STORAGE_READ_ERROR) ? (error as Error).cause : error; const code: unknown = cause instanceof Error ? (cause as { code?: unknown }).code : undefined; return ( !(cause instanceof CliError) && typeof code === 'string' && UNREADABLE_ERRNOS.has(code) );",
     );
   return {
-    stops: stops && (caught === 'throw error;' || skipsUnreadable),
+    stops: stops && (caught.join('\n') === 'throw error;' || skipsUnreadable),
     skipsUnreadable: stops && skipsUnreadable,
   };
 }
@@ -1635,6 +1641,7 @@ const COVERED = [
   ['src/host/programGroup.ts', 'judgeFrozenGroup'],
   ['src/host/programGroup.ts', 'FROZEN_JUDGEMENTS'],
   ['src/host/programGroup.ts', 'isUnreadableGroupError'],
+  ['src/host/programGroup.ts', 'UNREADABLE_ERRNOS'],
   ['src/host/programGroup.ts', 'GC_JUDGEMENTS'],
   ['src/host/programGroup.ts', 'probeFindsGroup'],
   ['src/host/lifecycle.ts', 'allocateSession'],

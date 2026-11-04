@@ -297,20 +297,34 @@ async function readProgramRecord(
   }
 }
 
-// Whether a read of the program's group failed with a system error: a read
-// of program.json or host.json (STORAGE_READ_ERROR), or a read of /proc
-// (an errno code such as EIO or EACCES). A verdict, HOST_TIMEOUT, an abort
-// or a bug is none of these.
+// The errnos of a read that a retry does not change: the permissions or the
+// file system refuse it (EACCES, EPERM, EIO), or a path names no readable
+// file (EISDIR, ENOTDIR, ELOOP, ENAMETOOLONG). EMFILE, ENFILE, ENOMEM,
+// EAGAIN and EINTR pass, so a later read can succeed.
+const UNREADABLE_ERRNOS = new Set([
+  'EACCES',
+  'EPERM',
+  'EIO',
+  'EISDIR',
+  'ENOTDIR',
+  'ELOOP',
+  'ENAMETOOLONG',
+]);
+
+// Whether a read of the program's group failed in a way that every later
+// read repeats: a read of program.json or host.json (STORAGE_READ_ERROR) or
+// of /proc, with one of UNREADABLE_ERRNOS. A verdict, HOST_TIMEOUT, an
+// abort or a bug is none of these.
 export function isUnreadableGroupError(error: unknown): boolean {
-  if (hasErrorCode(error, ERROR_CODES.STORAGE_READ_ERROR)) {
-    return true;
-  }
+  const cause = hasErrorCode(error, ERROR_CODES.STORAGE_READ_ERROR)
+    ? (error as Error).cause
+    : error;
   const code: unknown =
-    error instanceof Error ? (error as { code?: unknown }).code : undefined;
+    cause instanceof Error ? (cause as { code?: unknown }).code : undefined;
   return (
-    !(error instanceof CliError) &&
+    !(cause instanceof CliError) &&
     typeof code === 'string' &&
-    /^E[A-Z0-9]+$/.test(code)
+    UNREADABLE_ERRNOS.has(code)
   );
 }
 
@@ -669,9 +683,11 @@ const FROZEN_JUDGEMENTS = 2;
 // stopProgramGroup, and a stopped member stays in view. Another gc or a
 // destroy can send SIGCONT before the judgement, so a frozen group that
 // still reads gone gets another SIGSTOP and judgement. When that one reads
-// gone too, nothing live was in view to freeze, and the group reads ended,
-// so an ended group costs one pass of provenProgramGroupRuns, not
-// GC_JUDGEMENTS. The group gets SIGCONT, also when a scan throws.
+// gone too, the group reads ended, so an ended group costs one pass of
+// provenProgramGroupRuns, not GC_JUDGEMENTS. That reads a live fork chain
+// ended only when a SIGCONT from elsewhere came before both judgements and
+// the chain's live member escaped both scans. The group gets SIGCONT, also
+// when a scan throws.
 function judgeFrozenGroup(group: ProvenRecord): boolean | null {
   for (let frozen = 0; frozen < FROZEN_JUDGEMENTS; frozen += 1) {
     if (!procShowsOwnPidSpace() || !signalProcessGroup(group.pid, 'SIGSTOP')) {
