@@ -983,6 +983,101 @@ describe('a program group with a token, as a faked /proc shows it', () => {
       }
     });
 
+    // Under a PID 1 that never reaps, the zombies of a fork chain stay in
+    // view while its live member escapes both scans. A stopped member stays
+    // in view, so gc freezes the group and judges it again.
+    it('freezes a group whose scans show only zombies, and keeps it when the frozen group shows a live member', async () => {
+      const directory = await recordedSession();
+      try {
+        procShowsTokenGroup('Z');
+        const signals: unknown[] = [];
+        vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+          signals.push(signal);
+          if (signal === 'SIGSTOP') {
+            procShowsTokenGroup('Z', 'T');
+          }
+          return true;
+        });
+
+        expect(await provenProgramGroupRuns(directory)).toBe(true);
+        expect(signals).toEqual([0, 'SIGSTOP', 'SIGCONT']);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    // Another gc or a destroy can resume the group before the judgement.
+    it('freezes the group again when the frozen group still shows only zombies', async () => {
+      const directory = await recordedSession();
+      try {
+        procShowsTokenGroup('Z');
+        const signals: unknown[] = [];
+        let stops = 0;
+        vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+          signals.push(signal);
+          if (signal === 'SIGSTOP') {
+            stops += 1;
+            if (stops === 2) {
+              procShowsTokenGroup('Z', 'T');
+            }
+          }
+          return true;
+        });
+
+        expect(await provenProgramGroupRuns(directory)).toBe(true);
+        expect(signals).toEqual([
+          0,
+          'SIGSTOP',
+          'SIGCONT',
+          0,
+          'SIGSTOP',
+          'SIGCONT',
+        ]);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    // GC_JUDGEMENTS bounds the judgements of a group that ended.
+    it('reads a group that shows only zombies, also frozen, ended after ten judgements', async () => {
+      const directory = await recordedSession();
+      try {
+        procShowsTokenGroup('Z');
+        const signals: unknown[] = [];
+        vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+          signals.push(signal);
+          return true;
+        });
+
+        expect(await provenProgramGroupRuns(directory)).toBe(false);
+        expect(signals).toEqual(
+          Array.from({ length: 10 }, () => [0, 'SIGSTOP', 'SIGCONT']).flat(),
+        );
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    it('gives a frozen group SIGCONT when its judgement throws', async () => {
+      const directory = await recordedSession();
+      try {
+        procShowsTokenGroup('Z');
+        const signals: unknown[] = [];
+        vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+          signals.push(signal);
+          if (signal === 'SIGSTOP') {
+            procHooks.listError = errno('EIO');
+          }
+          return true;
+        });
+
+        await expect(provenProgramGroupRuns(directory)).rejects.toThrow('EIO');
+        expect(signals).toEqual([0, 'SIGSTOP', 'SIGCONT']);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
     // A member of a fork chain can end between its stat and its autogroup
     // read, so gc judges again.
     it('judges again after a member that ended before its autogroup read', async () => {

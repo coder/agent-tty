@@ -7,6 +7,7 @@
     "GcFinalCheck": true,
     "GcKeepsLiveGroup": true,
     "GcProbesUnseenGroup": true,
+    "GcFreezesUnseenGroup": true,
     "CreateRecordsHostPid": true,
     "CreateRecordsHost": true,
     "CreateStopsOnGiveUp": true,
@@ -46,7 +47,8 @@
     "src/cli/commands/gc.ts#gcSessions": "a2ac8bd10f100332",
     "src/cli/commands/gc.ts#defaultDependencies": "81a9894438cb5be7",
     "src/host/programGroup.ts#provenProgramGroupRuns": "7b50817618b4b769",
-    "src/host/programGroup.ts#judgeGroupForGc": "e0cd1b46a60eb1fe",
+    "src/host/programGroup.ts#judgeGroupForGc": "fb133ba2739116d1",
+    "src/host/programGroup.ts#judgeFrozenGroup": "d18458e7d70a5664",
     "src/host/programGroup.ts#GC_JUDGEMENTS": "180a0af01a4b81c7",
     "src/host/programGroup.ts#probeFindsGroup": "31ea7b5e835c0509",
     "src/host/lifecycle.ts#allocateSession": "43819af8c6c271ec",
@@ -137,9 +139,9 @@
     "src/host/hostMain.ts#runHost(final try)": "251f1e68a4ec17cc",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "19775a9a74c5ca9a",
-    "skill:scripts/facts.mjs": "4aff1bce5c8ba086",
-    "skill:scripts/check.sh": "0e69ddb1068b5df4"
+    "skill:model/SessionLifecycle.tla": "77ec28d60359f635",
+    "skill:scripts/facts.mjs": "eded6c52629e3523",
+    "skill:scripts/check.sh": "e33db0960de216fe"
   },
   "callSites": {
     "writeManifest": [

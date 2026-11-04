@@ -166,7 +166,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck GcKeepsLiveGroup GcProbesUnseenGroup ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid CreateRecordsHost FreezesUnseenGroup UnsharedGroupReadsUnknown HostChecksCreateFailed"
+GUARDS="GcSkipsNonCollectable GcFinalCheck GcKeepsLiveGroup GcProbesUnseenGroup GcFreezesUnseenGroup ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid CreateRecordsHost FreezesUnseenGroup UnsharedGroupReadsUnknown HostChecksCreateFailed"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -192,6 +192,9 @@ RUNS=""
 TOKEN=TRUE
 # UNSEEN: whether no scan of /proc shows a live process of the program.
 UNSEEN=FALSE
+# ZOMBIES: whether, with UNSEEN, the scans show zombies of the program's
+# group, as under a PID 1 that never reaps.
+ZOMBIES=FALSE
 # OTHER: whether destroy, list and gc run in another pid space than the host.
 OTHER=FALSE
 # WIN32: whether SIGTERM ends the host at once, as on Windows.
@@ -216,6 +219,7 @@ write_run() {
     done
     echo "  Token = $TOKEN"
     echo "  Unseen = $UNSEEN"
+    echo "  ZombiesInView = $ZOMBIES"
     echo "  OtherPidSpace = $OTHER"
     echo "  Win32 = $WIN32"
     echo "  MaxListReconciles = 2"
@@ -273,6 +277,11 @@ UNSEEN=TRUE
 write_run current-unseen pass "$RULES" "" "the code with a program that no scan shows: every rule holds"
 write_run mutant-FreezesUnseenGroup-unseen violated DestroyedProgramStopped "FreezesUnseenGroup=FALSE" "without the freeze, the kill finds no member in view, and destroy records destroyed while a fork chain runs" DestroyedProgramStopped
 write_run mutant-GcProbesUnseenGroup-unseen violated RemovedSessionStopped "GcProbesUnseenGroup=FALSE" "without the probe, gc removes program.json while a fork chain that the program left runs" RemovedSessionStopped
+# Under a PID 1 that never reaps, the chain also leaves zombies in view.
+# With every guard, that changes nothing, so current-unseen covers it.
+ZOMBIES=TRUE
+write_run mutant-GcFreezesUnseenGroup-unseen-zombies violated RemovedSessionStopped "GcFreezesUnseenGroup=FALSE" "without the freeze, gc reads a fork chain behind its zombies ended and removes program.json while it runs" RemovedSessionStopped
+ZOMBIES=FALSE
 UNSEEN=FALSE
 
 # destroy, list and gc run without /proc, or in another pid namespace or on
