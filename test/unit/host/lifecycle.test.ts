@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fsHooks = vi.hoisted(() => ({
   afterReadFile: undefined as ((path: string) => Promise<void>) | undefined,
+  beforeRename: undefined as ((target: string) => void) | undefined,
   // /proc/<pid>/stat by pid, or the error that its read throws.
   proc: undefined as Map<string, string | Error> | undefined,
   mountinfo: undefined as string | undefined,
@@ -143,6 +144,14 @@ vi.mock('node:fs/promises', async () => {
     }
     return contents;
   };
+  const rename = async (
+    ...args: Parameters<typeof actual.rename>
+  ): Promise<void> => {
+    if (typeof args[1] === 'string') {
+      fsHooks.beforeRename?.(args[1]);
+    }
+    await actual.rename(...args);
+  };
   const rmdir = async (
     ...args: Parameters<typeof actual.rmdir>
   ): Promise<void> => {
@@ -151,7 +160,7 @@ vi.mock('node:fs/promises', async () => {
     }
     await actual.rmdir(...args);
   };
-  return { ...actual, readFile, rmdir };
+  return { ...actual, readFile, rename, rmdir };
 });
 
 // destroy and reconcile poll for about 5 s. These tests skip the waits.
@@ -197,6 +206,7 @@ import { ensureSocketRoot } from '../../../src/host/socketRoot.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
 import {
+  hostRecordPath,
   legacySocketPath,
   manifestPath,
   sessionDir,
@@ -225,6 +235,7 @@ afterEach(async () => {
   fsHooks.ownStat = undefined;
   fsHooks.files = undefined;
   fsHooks.links = undefined;
+  fsHooks.beforeRename = undefined;
   await rm(home, { recursive: true, force: true });
 });
 
@@ -363,7 +374,16 @@ describe('allocateSession', () => {
       try {
         await once(host, 'spawn');
         const hostPid = host.pid as number;
+        const hostRecordAtFirstManifest: boolean[] = [];
+        fsHooks.beforeRename = (target) => {
+          if (target.endsWith('/session.json')) {
+            hostRecordAtFirstManifest.push(
+              existsSync(hostRecordPath(dirname(target))),
+            );
+          }
+        };
         const result = await allocateSession(makeConfig(), () => hostPid);
+        expect(hostRecordAtFirstManifest).toEqual([true]);
         fsHooks.links = new Map([['/proc/self/ns/pid', 'pid:[1]']]);
         const kill = process.kill.bind(process);
         vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {

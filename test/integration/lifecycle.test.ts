@@ -1012,6 +1012,43 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
       },
     );
 
+    // A token proves the group only beside host.json, which names its pid
+    // space, so a host that cannot record itself records no token.
+    it.runIf(capturesToken)(
+      'destroy of an exited session whose host could not read its pid namespace ends ok',
+      async () => {
+        const result = runCli(
+          ['create', '--json', '--', '/bin/sh', '-c', 'exit 0'],
+          {
+            AGENT_TTY_HOME: testHome,
+            NODE_OPTIONS: [
+              process.env.NODE_OPTIONS ?? '',
+              `--import=${pathToFileURL(resolve('test/fixtures/denied-pid-namespace.ts')).href}`,
+            ].join(' '),
+          },
+        );
+        const { sessionId } = (
+          JSON.parse(result.stdout) as SuccessEnvelope<{ sessionId: string }>
+        ).result;
+        const directory = sessionDir(testHome, sessionId);
+        const deadline = Date.now() + 10_000;
+        while (inspectSession(testHome, sessionId).status !== 'exited') {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
+        expect(existsSync(join(directory, 'host.json'))).toBe(false);
+        expect(
+          JSON.parse(await readFile(programRecordPath(directory), 'utf8')),
+        ).toMatchObject({ bootId: null, autogroup: null });
+
+        const destroyed = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(JSON.parse(destroyed.stdout)).toMatchObject({ ok: true });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+      },
+    );
+
     // Only a session with a token checks the autogroup.
     it.runIf(capturesToken)(
       'destroy times out while it cannot read the autogroup of a process that the program left',
