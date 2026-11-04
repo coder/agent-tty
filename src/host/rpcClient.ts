@@ -8,6 +8,7 @@ import {
   type ProtocolErrorCode,
 } from '../protocol/errors.js';
 import {
+  MAX_RPC_RESPONSE_CHARS,
   RpcMethodSchemas,
   RpcRequestSchema,
   RpcResponseSchema,
@@ -25,7 +26,6 @@ import { ResourceScope } from '../util/resourceScope.js';
 import { isOwnLegacySocket, socketRootExists } from './socketRoot.js';
 
 const DEFAULT_TIMEOUT_MS = 5_000;
-const MAX_RPC_BUFFER_BYTES = 1_048_576;
 const HOST_UNREACHABLE_SOCKET_CODES = new Set([
   'ECONNREFUSED',
   'ENOENT',
@@ -233,7 +233,7 @@ async function sendRpcAt(
         return;
       }
 
-      if (buffer.length + chunk.length > MAX_RPC_BUFFER_BYTES) {
+      if (buffer.length + chunk.length > MAX_RPC_RESPONSE_CHARS) {
         settlers.reject(
           makeCliError(ERROR_CODES.RPC_ERROR, {
             message: 'RPC response exceeds maximum buffer size.',
