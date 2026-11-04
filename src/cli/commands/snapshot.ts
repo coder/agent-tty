@@ -20,6 +20,12 @@ import { manifestPath, socketPath } from '../../storage/sessionPaths.js';
 import { checkedSessionDir } from '../sessionGuards.js';
 
 const DEFAULT_SNAPSHOT_FORMAT = 'structured';
+// The host sends no bytes until it has built every cell. A fully styled
+// 500x200 snapshot took 1.5 to 1.8 s to its first byte at load average 100
+// (about 17 microseconds per cell), so a grid near MAX_RPC_RESPONSE_CHARS
+// (about 1.2 million styled cells) takes about 20 s. The 5,000 ms default
+// would end it with HOST_TIMEOUT.
+const SNAPSHOT_WITH_CELLS_RPC_TIMEOUT_MS = 60_000;
 
 interface CommandOptions {
   context: CommandContext;
@@ -85,16 +91,15 @@ async function runRpcSnapshot(
   includeScrollback: boolean,
   includeCells: boolean,
 ): Promise<SnapshotResult> {
-  const rawResult: unknown = await sendRpc(
-    socketPath(sessionDirectory),
-    'snapshot',
-    {
-      format,
-      includeScrollback,
-      includeCells,
-      rendererName,
-    },
-  );
+  const params = { format, includeScrollback, includeCells, rendererName };
+  const rawResult: unknown = includeCells
+    ? await sendRpc(
+        socketPath(sessionDirectory),
+        'snapshot',
+        params,
+        SNAPSHOT_WITH_CELLS_RPC_TIMEOUT_MS,
+      )
+    : await sendRpc(socketPath(sessionDirectory), 'snapshot', params);
 
   return parseSnapshotResult(rawResult);
 }

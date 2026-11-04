@@ -243,15 +243,17 @@ async function sendRpcAt(
         return;
       }
 
-      buffer += chunk;
-      const newlineIndex = buffer.indexOf('\n');
+      // Scan only the new chunk: the buffer before it has no newline, and a
+      // rescan of the whole buffer after every chunk is quadratic.
+      const newlineIndex = chunk.indexOf('\n');
 
       if (newlineIndex < 0) {
+        buffer += chunk;
         return;
       }
 
       responseHandled = true;
-      const line = buffer.slice(0, newlineIndex);
+      const line = buffer + chunk.slice(0, newlineIndex);
 
       try {
         const rawResponse = JSON.parse(line) as unknown;
