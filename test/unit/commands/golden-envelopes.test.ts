@@ -1460,6 +1460,44 @@ describe('JSON envelope contracts', () => {
     });
   });
 
+  it('locks the create error envelope shape after the session was allocated', () => {
+    const error = makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+      message:
+        'Failed to reach RPC host at /tmp/agent-tty-1000/0123456789abcdef/rpc.sock.',
+      details: {
+        method: 'inspect',
+        socketPath: '/tmp/agent-tty-1000/0123456789abcdef/rpc.sock',
+        errno: 'ECONNREFUSED',
+        sessionId: 'session-01',
+      },
+    });
+
+    expect(
+      createErrorEnvelope('create', {
+        code: error.code,
+        message: error.message,
+        retryable: error.retryable,
+        details: error.details,
+      }),
+    ).toEqual({
+      ok: false,
+      command: 'create',
+      timestamp: LOCKED_TIMESTAMP,
+      error: {
+        code: 'HOST_UNREACHABLE',
+        message:
+          'Failed to reach RPC host at /tmp/agent-tty-1000/0123456789abcdef/rpc.sock.',
+        retryable: true,
+        details: {
+          method: 'inspect',
+          socketPath: '/tmp/agent-tty-1000/0123456789abcdef/rpc.sock',
+          errno: 'ECONNREFUSED',
+          sessionId: 'session-01',
+        },
+      },
+    });
+  });
+
   it('locks the WAIT_TIMEOUT error envelope shape with the wait result', () => {
     const error = makeCliError(ERROR_CODES.WAIT_TIMEOUT, {
       message: 'Wait timed out before its condition was met.',

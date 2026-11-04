@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   eventLogPath: vi.fn(),
   writeTextFileAtomic: vi.fn(),
   appendArtifactWithRollback: vi.fn(),
+  fileIdentity: vi.fn(),
   // Test-internal delegate used by the appendArtifactWithRollback mock.
   appendArtifact: vi.fn(),
   createArtifactEntry: vi.fn(),
@@ -70,6 +71,7 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
   appendArtifactWithRollback: mocks.appendArtifactWithRollback,
   createArtifactEntry: mocks.createArtifactEntry,
+  fileIdentity: mocks.fileIdentity,
 }));
 
 vi.mock('../../../src/storage/artifactPaths.js', () => ({
@@ -189,7 +191,16 @@ describe('record export command', () => {
       (sessionDirectory: string, filename: string) =>
         `${sessionDirectory}/artifacts/${filename}`,
     );
-    mocks.writeTextFileAtomic.mockResolvedValue(undefined);
+    // Runs the hook with a temp path, as the real write does before its
+    // rename.
+    mocks.writeTextFileAtomic.mockImplementation(
+      async (options: {
+        path: string;
+        beforeRename?: (temporaryPath: string) => Promise<void>;
+      }) => {
+        await options.beforeRename?.(`${options.path}.tmp-test`);
+      },
+    );
     mocks.appendArtifactWithRollback.mockImplementation(
       async (options: {
         sessionDir: string;
@@ -209,6 +220,9 @@ describe('record export command', () => {
       },
     );
     mocks.appendArtifact.mockResolvedValue(undefined);
+    mocks.fileIdentity.mockImplementation((path: string) =>
+      Promise.resolve(`identity of ${path}`),
+    );
     mocks.createArtifactEntry.mockImplementation((entry: unknown) => ({
       id: 'artifact-01',
       createdAt: '2026-03-19T12:00:04.000Z',
@@ -280,6 +294,7 @@ describe('record export command', () => {
       writeErrorMessage:
         'Failed to write record export artifact at /tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast.',
       createParentFolders: false,
+      beforeRename: expect.any(Function) as unknown,
     });
     expect(mocks.createArtifactEntry).toHaveBeenCalledWith({
       kind: 'recording',
@@ -312,6 +327,9 @@ describe('record export command', () => {
       sessionDir: '/tmp/agent-tty/sessions/session-01',
       rollbackArtifactPath:
         '/tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast',
+      // The temp file's identity, which the rename keeps.
+      outputFileIdentity:
+        'identity of /tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast.tmp-test',
     });
     expect(appendCall[0].entry).toMatchObject({
       kind: 'recording',
@@ -426,6 +444,12 @@ describe('record export command', () => {
     expect(mocks.rename).toHaveBeenCalledWith(
       generateWebmExportArgs.outputPath,
       '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm',
+    );
+    // The temp file's identity, which the rename keeps.
+    expect(mocks.appendArtifactWithRollback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outputFileIdentity: `identity of ${generateWebmExportArgs.outputPath}`,
+      }),
     );
     expect(generateWebmExportArgs.rendererName).toBe('ghostty-web');
     expect(mocks.writeTextFileAtomic).not.toHaveBeenCalled();
@@ -552,8 +576,13 @@ describe('record export command', () => {
     );
     mocks.recordingFilename.mockReturnValue('recording-2-asciicast.cast');
     mocks.writeTextFileAtomic.mockImplementation(
-      async (options: { path: string; contents: string }) => {
+      async (options: {
+        path: string;
+        contents: string;
+        beforeRename?: (temporaryPath: string) => Promise<void>;
+      }) => {
         await mkdir(dirname(options.path), { recursive: true });
+        await options.beforeRename?.(`${options.path}.tmp-test`);
         await writeFile(options.path, options.contents, 'utf8');
       },
     );
@@ -796,11 +825,14 @@ describe('record export command', () => {
     const exportsDirectory = join(workspaceDirectory, 'exports');
     await mkdir(exportsDirectory);
     mocks.writeTextFileAtomic.mockImplementation(
-      async (options: { beforeRename?: () => Promise<void> }) => {
+      async (options: {
+        path: string;
+        beforeRename?: (temporaryPath: string) => Promise<void>;
+      }) => {
         const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
         await fs.rename(exportsDirectory, join(workspaceDirectory, 'moved'));
         await mkdir(exportsDirectory);
-        await options.beforeRename?.();
+        await options.beforeRename?.(`${options.path}.tmp-test`);
       },
     );
 
@@ -831,8 +863,13 @@ describe('record export command', () => {
     });
 
     mocks.writeTextFileAtomic.mockImplementation(
-      async (options: { path: string; contents: string }) => {
+      async (options: {
+        path: string;
+        contents: string;
+        beforeRename?: (temporaryPath: string) => Promise<void>;
+      }) => {
         await mkdir(dirname(options.path), { recursive: true });
+        await options.beforeRename?.(`${options.path}.tmp-test`);
         await writeFile(options.path, options.contents, 'utf8');
       },
     );

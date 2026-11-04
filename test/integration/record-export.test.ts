@@ -6,6 +6,8 @@ import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { readArtifactManifest } from '../../src/storage/artifactManifest.js';
+import { sessionDir } from '../../src/storage/sessionPaths.js';
 import {
   cleanupHome,
   createSession,
@@ -444,6 +446,47 @@ describe('record export integration', { timeout: 120_000 }, () => {
       }
     },
   );
+
+  it('keeps one manifest entry per file when it exports the same seq again', async () => {
+    const sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      "printf 'done\\n'; exit 0",
+    ]);
+    waitForExit(testHome, sessionId);
+    const out = join(testHome, 'exports', 'session.cast');
+    const exportCast = (extra: string[]): RecordExportResult => {
+      const result = runCli(
+        [
+          'record',
+          'export',
+          sessionId,
+          '--format',
+          'asciicast',
+          ...extra,
+          '--json',
+        ],
+        { AGENT_TTY_HOME: testHome },
+        15_000,
+      );
+      expect(result.status).toBe(0);
+      return (JSON.parse(result.stdout) as SuccessEnvelope<RecordExportResult>)
+        .result;
+    };
+
+    const first = exportCast([]);
+    const second = exportCast([]);
+    exportCast(['--out', out]);
+    exportCast(['--out', out]);
+
+    expect(second.artifactPath).toBe(first.artifactPath);
+    const manifest = await readArtifactManifest(
+      sessionDir(testHome, sessionId),
+    );
+    expect(
+      manifest.artifacts.map((entry) => entry.metadata.outputPath),
+    ).toEqual([first.artifactPath, out]);
+  });
 
   it('creates missing parent folders of --out', async () => {
     const sessionId = createSession(testHome, [

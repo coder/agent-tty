@@ -461,37 +461,49 @@ describe('run command integration', { timeout: 45_000 }, () => {
     expectCompletionArtifactsClean(outputText, marker);
   });
 
-  it('detects session exit during wait before timing out', async () => {
-    sessionId = createSession(testHome, [
-      '/bin/sh',
-      '-c',
-      'stty -echo; exec sleep 2',
-    ]);
-    await sleep(500);
+  it.each([
+    ['right after the run types its input', 'exit 0', 0],
+    ['later in the wait', 'sleep 1; exit 0', 900],
+  ])(
+    'detects session exit during wait before timing out (%s)',
+    (_case, afterRead, minDurationMs) => {
+      sessionId = createSession(testHome, [
+        '/bin/sh',
+        '-c',
+        `stty -echo; echo ready; read -r line; ${afterRead}`,
+      ]);
+      const ready = runCli(
+        ['wait', sessionId, '--text', 'ready', '--timeout', '20000', '--json'],
+        testEnv(),
+        30_000,
+      );
+      expect(ready.status, ready.stderr).toBe(0);
 
-    const result = runCli(
-      ['run', sessionId, 'echo never-runs', '--timeout', '10000', '--json'],
-      testEnv(),
-      30_000,
-    );
+      const result = runCli(
+        ['run', sessionId, 'echo never-runs', '--timeout', '10000', '--json'],
+        testEnv(),
+        30_000,
+      );
 
-    expect(result.status).toBe(0);
-    expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
 
-    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
-      accepted: true;
-      completed: boolean;
-      timedOut: boolean;
-      seq: number;
-      durationMs: number;
-      marker: string;
-    }>;
-    expect(envelope.ok).toBe(true);
-    expect(envelope.result.accepted).toBe(true);
-    expect(envelope.result.completed).toBe(false);
-    expect(envelope.result.timedOut).toBe(false);
-    expect(envelope.result.durationMs).toBeLessThan(10_000);
-  });
+      const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+        accepted: true;
+        completed: boolean;
+        timedOut: boolean;
+        seq: number;
+        durationMs: number;
+        marker: string;
+      }>;
+      expect(envelope.ok).toBe(true);
+      expect(envelope.result.accepted).toBe(true);
+      expect(envelope.result.completed).toBe(false);
+      expect(envelope.result.timedOut).toBe(false);
+      expect(envelope.result.durationMs).toBeGreaterThanOrEqual(minDurationMs);
+      expect(envelope.result.durationMs).toBeLessThan(10_000);
+    },
+  );
 
   it('does not log postamble cursor controls when shell echo is disabled', async () => {
     sessionId = createSession(

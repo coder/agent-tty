@@ -23,6 +23,7 @@ import { parseProcStat } from '../../src/host/programGroup.js';
 import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
 import { SessionRecordSchema } from '../../src/protocol/schemas.js';
 import { writeManifest } from '../../src/storage/manifests.js';
+import { hasErrorCode } from '../../src/util/hasErrorCode.js';
 import {
   manifestPath,
   programRecordPath,
@@ -39,6 +40,7 @@ import {
   inspectSession,
   isGroupAlive,
   killGroupIfAlive,
+  processEnds,
   readEvents,
   runCli,
   sleep,
@@ -101,7 +103,9 @@ interface GcResult {
 
 let testHome = '';
 
-describe('lifecycle integration', { timeout: 30000 }, () => {
+// Many tests spend 5 to 15 s in real waits and CLI starts, and a loaded
+// runner takes up to three times as long.
+describe('lifecycle integration', { timeout: 60_000 }, () => {
   beforeEach(async () => {
     // oxfmt-ignore
     testHome = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
@@ -656,8 +660,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     const beforeCrash = inspectSession(testHome, sessionId);
     expect(beforeCrash.status).toBe('running');
 
-    crashSession(testHome, sessionId);
-    await sleep(500);
+    expect(await processEnds(crashSession(testHome, sessionId))).toBe(true);
 
     const afterCrash = inspectSession(testHome, sessionId);
     expect(afterCrash.status).toBe('failed');
@@ -698,8 +701,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       'session directory should exist on disk before stale-host reconciliation',
     ).resolves.toBeDefined();
 
-    crashSession(testHome, sessionId);
-    await sleep(1000);
+    expect(await processEnds(crashSession(testHome, sessionId))).toBe(true);
 
     const listResult = runCli(['list', '--json'], {
       AGENT_TTY_HOME: testHome,
@@ -1058,6 +1060,43 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       },
     );
 
+    // A token proves the group only beside host.json, which names its pid
+    // space, so a host that cannot record itself records no token.
+    it.runIf(capturesToken)(
+      'destroy of an exited session whose host could not read its pid namespace ends ok',
+      async () => {
+        const result = runCli(
+          ['create', '--json', '--', '/bin/sh', '-c', 'exit 0'],
+          {
+            AGENT_TTY_HOME: testHome,
+            NODE_OPTIONS: [
+              process.env.NODE_OPTIONS ?? '',
+              `--import=${pathToFileURL(resolve('test/fixtures/denied-pid-namespace.ts')).href}`,
+            ].join(' '),
+          },
+        );
+        const { sessionId } = (
+          JSON.parse(result.stdout) as SuccessEnvelope<{ sessionId: string }>
+        ).result;
+        const directory = sessionDir(testHome, sessionId);
+        const deadline = Date.now() + 10_000;
+        while (inspectSession(testHome, sessionId).status !== 'exited') {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
+        expect(existsSync(join(directory, 'host.json'))).toBe(false);
+        expect(
+          JSON.parse(await readFile(programRecordPath(directory), 'utf8')),
+        ).toMatchObject({ bootId: null, autogroup: null });
+
+        const destroyed = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(JSON.parse(destroyed.stdout)).toMatchObject({ ok: true });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+      },
+    );
+
     // Only a session with a token checks the autogroup.
     it.runIf(capturesToken)(
       'destroy times out while it cannot read the autogroup of a process that the program left',
@@ -1189,8 +1228,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       const sessionId = await createProgram(
         'trap "" TERM HUP; sleep 300 & touch "$0"; wait',
       );
-      crashSession(testHome, sessionId);
-      await sleep(500);
+      expect(await processEnds(crashSession(testHome, sessionId))).toBe(true);
       expect(isGroupAlive(pgid)).toBe(true);
 
       expect(inspectSession(testHome, sessionId).status).toBe('failed');
@@ -1750,6 +1788,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
   // The held start-up write keeps the host from listening past create's
   // readiness loop, as a host that starts slowly on a loaded machine does.
+  // The hold ends once create has given up.
   // Without a session token, program.json names no group that a CLI can
   // prove, so only the host can stop the program.
   describe.each([
@@ -1772,6 +1811,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
 
     it('lets its host stop the program and record destroyed', async () => {
       const holdLog = join(testHome, 'hold.log');
+      const release = join(testHome, 'release');
       const creator = spawn(
         process.execPath,
         [
@@ -1791,7 +1831,8 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
             ...process.env,
             AGENT_TTY_HOME: testHome,
             REPLAY_LOG: holdLog,
-            REPLAY_HOLD: '_host:rename:/session.json:1:10000',
+            REPLAY_RELEASE: release,
+            REPLAY_HOLD: '_host:rename:/session.json:1:60000',
             NODE_OPTIONS: [
               process.env.NODE_OPTIONS ?? '',
               `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
@@ -1830,14 +1871,15 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       expect(isGroupAlive(pgid)).toBe(true);
 
       const [code] = (await creatorExit) as [number | null];
+      await writeFile(release, '');
 
       expect(code).toBe(6);
       expect(JSON.parse(stdout)).toMatchObject({
         ok: false,
-        error: { code: 'HOST_UNREACHABLE' },
+        error: { code: 'HOST_UNREACHABLE', details: { sessionId } },
       });
       // The host hangs the program up, then kills its group after the
-      // shutdown grace, and exits once its held write has landed.
+      // shutdown grace, and exits once its released write has landed.
       const stopDeadline = Date.now() + 20_000;
       while (isGroupAlive(pgid) || isProcessAlive(hostPid)) {
         expect(Date.now()).toBeLessThan(stopDeadline);
@@ -1928,7 +1970,7 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     ];
 
     async function readEnvelopeOnceWritten(path: string): Promise<unknown> {
-      const deadline = Date.now() + 15_000;
+      const deadline = Date.now() + 30_000;
       while (Date.now() < deadline) {
         await sleep(100);
         try {
@@ -1966,11 +2008,20 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
     // The program can run destroy before the host's start-up write names its
     // pid. Holding that write keeps create's manifest, with no childPid, for
     // the whole destroy. The hold matches the host's argv only, so the inner
-    // CLI, which inherits it, runs at full speed.
+    // CLI, which inherits it, runs at full speed. A held host never answers
+    // create, which gives up after about 5 s and sends it SIGTERM. On a slow
+    // runner that came before the inner destroy, so create is killed once it
+    // has written the manifest, which the host still reads after its creator
+    // died, and the destroy kills the held host.
     it('destroy --force before the host names the program prints its result', async () => {
       const out = join(testHome, 'early-destroy.json');
-      runCli(
+      const sessions = join(testHome, 'sessions');
+      const create = spawn(
+        process.execPath,
         [
+          '--import',
+          'tsx',
+          './src/cli/main.ts',
           'create',
           '--json',
           '--',
@@ -1981,23 +2032,48 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
           ...cli,
         ],
         {
-          AGENT_TTY_HOME: testHome,
-          NODE_OPTIONS: [
-            process.env.NODE_OPTIONS ?? '',
-            `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
-          ].join(' '),
-          REPLAY_HOLD: '_host:rename:/session.json:1:4000',
+          cwd: process.cwd(),
+          env: {
+            ...process.env,
+            AGENT_TTY_HOME: testHome,
+            NODE_OPTIONS: [
+              process.env.NODE_OPTIONS ?? '',
+              `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+            ].join(' '),
+            REPLAY_HOLD: '_host:rename:/session.json:1:120000',
+          },
+          stdio: 'ignore',
         },
       );
-      const [sessionId] = await readdir(join(testHome, 'sessions'));
+      let sessionId: string | undefined;
+      try {
+        const deadline = Date.now() + 20_000;
+        while (
+          sessionId === undefined ||
+          !existsSync(manifestPath(sessionDir(testHome, sessionId)))
+        ) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(20);
+          // create makes the sessions folder only after it starts.
+          [sessionId] = await readdir(sessions).catch((error: unknown) => {
+            if (hasErrorCode(error, 'ENOENT')) {
+              return [];
+            }
+            throw error;
+          });
+        }
+      } finally {
+        create.kill('SIGKILL');
+      }
 
       expect(await readEnvelopeOnceWritten(out)).toMatchObject({
         ok: true,
         result: { sessionId, destroyed: true },
       });
-      expect(inspectSession(testHome, sessionId as string).status).toBe(
-        'destroyed',
-      );
+      expect(inspectSession(testHome, sessionId)).toMatchObject({
+        status: 'destroyed',
+        childPid: null,
+      });
     }, 60_000);
 
     // Bash runs a typed command as a job in its own process group, so only
@@ -2175,10 +2251,14 @@ describe('lifecycle integration', { timeout: 30000 }, () => {
       'echo offline-test-data; exec cat',
     ]);
 
-    await sleep(1000);
+    const events = join(testHome, 'sessions', sessionId, 'events.jsonl');
+    const deadline = Date.now() + 10_000;
+    while (!(await readFile(events, 'utf8')).includes('offline-test-data')) {
+      expect(Date.now()).toBeLessThan(deadline);
+      await sleep(50);
+    }
 
-    crashSession(testHome, sessionId);
-    await sleep(500);
+    expect(await processEnds(crashSession(testHome, sessionId))).toBe(true);
 
     const session = inspectSession(testHome, sessionId);
     expect(session.status).toBe('failed');

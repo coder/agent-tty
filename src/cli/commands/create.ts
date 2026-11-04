@@ -122,6 +122,57 @@ async function readCreateResult(
   return toCreateResult(manifest);
 }
 
+async function waitForReadyHost(
+  socketFile: string,
+  sessionDirectory: string,
+  sessionId: string,
+): Promise<CreateResult> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await sendRpc(socketFile, 'inspect', undefined, READINESS_RPC_TIMEOUT_MS);
+      return await readCreateResult(sessionDirectory, sessionId);
+    } catch (error) {
+      if (
+        !(error instanceof CliError) ||
+        (error.code !== ERROR_CODES.HOST_UNREACHABLE &&
+          error.code !== ERROR_CODES.HOST_TIMEOUT)
+      ) {
+        throw error;
+      }
+      const manifest = await readManifestIfExists(
+        manifestPath(sessionDirectory),
+      );
+      if (manifest?.status === 'exited') {
+        return toCreateResult(manifest);
+      }
+      if (attempt + 1 >= READINESS_MAX_ATTEMPTS) {
+        throw error;
+      }
+      await delay(READINESS_POLL_INTERVAL_MS);
+    }
+  }
+}
+
+// Every error of the readiness wait names the session, so a caller can inspect
+// or destroy what the failed create left.
+function withSessionId(error: unknown, sessionId: string): CliError {
+  if (error instanceof CliError) {
+    return new CliError(error.code, error.message, {
+      retryable: error.retryable,
+      details: { ...error.details, sessionId },
+      result: error.result,
+      cause: error,
+    });
+  }
+
+  return makeCliError(ERROR_CODES.INTERNAL_ERROR, {
+    message:
+      error instanceof Error ? error.message : 'Failed to create session.',
+    details: { sessionId },
+    cause: error,
+  });
+}
+
 export async function runCreateCommand(options: CommandOptions): Promise<void> {
   const environment = normalizeCreateEnvironment(options.envEntries);
   const idleTimeoutMs =
@@ -206,53 +257,29 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
   const sessionDirectory = sessionDir(home, sessionId);
   const socketFile = socketPath(sessionDirectory);
 
-  for (let attempt = 0; attempt < READINESS_MAX_ATTEMPTS; attempt += 1) {
-    try {
-      await sendRpc(socketFile, 'inspect', undefined, READINESS_RPC_TIMEOUT_MS);
-      const result = await readCreateResult(sessionDirectory, sessionId);
-      emitSuccess({
-        command: 'create',
-        json: options.json,
-        result,
-        lines: [`Session created: ${sessionId}`],
-      });
-      return;
-    } catch (error) {
-      if (
-        error instanceof CliError &&
-        (error.code === ERROR_CODES.HOST_UNREACHABLE ||
-          error.code === ERROR_CODES.HOST_TIMEOUT)
-      ) {
-        const manifest = await readManifestIfExists(
-          manifestPath(sessionDirectory),
-        );
-        if (manifest?.status === 'exited') {
-          emitSuccess({
-            command: 'create',
-            json: options.json,
-            result: toCreateResult(manifest),
-            lines: [`Session created: ${sessionId}`],
-          });
-          return;
-        }
-
-        if (attempt + 1 < READINESS_MAX_ATTEMPTS) {
-          await delay(READINESS_POLL_INTERVAL_MS);
-          continue;
-        }
-
-        // A host that answers too late would serve a session whose create
-        // failed. The host knows its program's pid also without a session
-        // token, so it stops the program and ends the session itself. On
-        // Windows the SIGTERM ends the host at once, and only a program that
-        // the manifest names can be stopped by a later reconcile.
-        invariant(host !== undefined, 'a session that create polls has a host');
-        if (process.platform !== 'win32' || manifest?.childPid != null) {
-          host.stop();
-        }
-      }
-
-      throw error;
+  let result: CreateResult;
+  try {
+    result = await waitForReadyHost(socketFile, sessionDirectory, sessionId);
+  } catch (error) {
+    // Every error here fails the create, and a host that answers later would
+    // serve that failed session. The host knows its program's pid also
+    // without a session token, so it stops the program and ends the session
+    // itself. On Windows the SIGTERM ends the host at once, and only a
+    // program that the manifest names can be stopped by a later reconcile.
+    invariant(host !== undefined, 'a session that create polls has a host');
+    const manifest = await readManifestIfExists(
+      manifestPath(sessionDirectory),
+    ).catch(() => null);
+    if (process.platform !== 'win32' || manifest?.childPid != null) {
+      host.stop();
     }
+    throw withSessionId(error, sessionId);
   }
+
+  emitSuccess({
+    command: 'create',
+    json: options.json,
+    result,
+    lines: [`Session created: ${sessionId}`],
+  });
 }

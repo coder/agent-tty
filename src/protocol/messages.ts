@@ -82,6 +82,7 @@ export const RpcErrorSchema = z
   .object({
     code: NonEmptyStringSchema,
     message: NonEmptyStringSchema,
+    details: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 export type RpcError = z.infer<typeof RpcErrorSchema>;

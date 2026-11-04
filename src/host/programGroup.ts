@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, readlinkSync } from 'node:fs';
 import process from 'node:process';
 
 import { z } from 'zod';
@@ -47,7 +47,7 @@ interface ChildPidGroup {
 
 // A group with a token in a pid space that this process cannot prove it
 // shares with the host: without /proc, with an empty /proc, in another pid
-// namespace or on another machine. No scan or probe here shows the
+// namespace or on another machine, or without host.json. No scan or probe here shows the
 // program's processes, so the group reads alive and gets no kill.
 interface UnsharedGroup {
   readonly unshared: true;
@@ -232,10 +232,14 @@ function captureToken(
   return null;
 }
 
+export function programWithoutToken(pid: number): ProgramRecord {
+  return { version: 1, pid, bootId: null, autogroup: null };
+}
+
 export function captureProgram(pid: number): ProgramRecord {
   const token = captureToken(pid);
   return token === null
-    ? { version: 1, pid, bootId: null, autogroup: null }
+    ? programWithoutToken(pid)
     : { version: 1, pid, ...token };
 }
 
@@ -299,7 +303,9 @@ export async function readProvenProgramGroup(
   if (typeof record !== 'object' || !hasToken(record)) {
     return null;
   }
-  return (await sharesHostPids(sessionDirectory)) ? record : UNSHARED_GROUP;
+  return (await sharesHostPids(sessionDirectory, false))
+    ? record
+    : UNSHARED_GROUP;
 }
 
 export async function readProgramGroup(
@@ -308,12 +314,14 @@ export async function readProgramGroup(
 ): Promise<ProgramGroup | null> {
   const record = await readProgramRecord(sessionDirectory);
   if (typeof record === 'object' && hasToken(record)) {
-    return (await sharesHostPids(sessionDirectory)) ? record : UNSHARED_GROUP;
+    return (await sharesHostPids(sessionDirectory, false))
+      ? record
+      : UNSHARED_GROUP;
   }
   if (
     record === 'invalid' ||
     childPid === null ||
-    !(await sharesHostPids(sessionDirectory))
+    !(await sharesHostPids(sessionDirectory, true))
   ) {
     return null;
   }
@@ -547,6 +555,18 @@ function signalProcessGroup(
   }
 }
 
+// /proc names this process by its own pid only when /proc belongs to this
+// process's pid namespace. A /proc of another namespace, as after
+// `unshare --pid --fork` without --mount-proc, shows none of this
+// namespace's processes, and the group id can name this process's own group.
+function procShowsOwnPidSpace(): boolean {
+  try {
+    return readlinkSync('/proc/self') === String(process.pid);
+  } catch {
+    return false;
+  }
+}
+
 export function isProgramGroupAlive(group: ProgramGroup | null): boolean {
   if (group === null) {
     return false;
@@ -630,15 +650,16 @@ export function stopProgramGroup(group: ProgramGroup | null): void {
   // A member that forks its successor and ends between scans is never in
   // view. SIGSTOP freezes the group, also a child that a member forks while
   // the kernel delivers it, and a stopped member stays in view, so a frozen
-  // group that reads gone is judged again. A frozen group that gets no kill
-  // gets SIGCONT, also when a scan throws.
+  // group that reads gone is judged again. Each such judgement sends SIGSTOP
+  // again, for a member that a SIGCONT from elsewhere resumed. A frozen group
+  // that gets no kill gets SIGCONT, also when a scan throws.
   let frozen = false;
   let killed = false;
   try {
     for (let attempt = 0; attempt < STOP_ATTEMPTS; attempt += 1) {
       const judgement = judgeLiveGroup(group);
-      if (judgement.verdict === 'gone') {
-        frozen ||= signalProcessGroup(group.pid, 'SIGSTOP');
+      if (judgement.verdict === 'gone' && procShowsOwnPidSpace()) {
+        frozen = signalProcessGroup(group.pid, 'SIGSTOP') || frozen;
         if (frozen) {
           continue;
         }

@@ -32,7 +32,7 @@ This directory parses and runs a Batch: an ordered JSON list of `type`, `paste`,
 - A non-wait step that produced a seq, failed or not, becomes the `afterSeq` baseline for the next wait [executor.ts:executeBatch].
 - A thrown error that is not a `CliError` becomes an `INTERNAL_ERROR` failed record [executor.ts:reframeAsInternalError].
 - A waited `run` that does not complete fails with `WAIT_TIMEOUT` or `SESSION_NOT_RUNNING` [executor.ts:runRunStep].
-- A `wait` that times out or does not match fails with `WAIT_TIMEOUT` [executor.ts:runWaitStep].
+- A `wait` that times out or does not match fails with `WAIT_TIMEOUT` [executor.ts:runWaitStep]. When it timed out, the message names the step's timeout in ms. A `wait` whose RPC rejects (for example after repeated renderer failures) fails with that error's code [executor.ts:executeBatch].
 - All record schemas are `.strict()` [result.ts:BatchResultSchema].
 - `buildPartialBatchResult` marks the first unrecorded step `interrupted` and the rest `not-run` [result.ts:buildPartialBatchResult].
 - `createRpcStepDriver` asserts a non-empty `socketPath` and validates every RPC response with its result schema [stepDriver.ts:createRpcStepDriver].

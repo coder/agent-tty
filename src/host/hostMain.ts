@@ -18,6 +18,7 @@ import {
 import { createSerialManifestWriter } from './manifestWriter.js';
 import {
   captureProgram,
+  programWithoutToken,
   stopProgramGroup,
   writeProgramRecord,
 } from './programGroup.js';
@@ -346,7 +347,12 @@ export async function runHost(
     'PTY child PID must be a positive integer',
   );
   state.setChildPid(pty.pid);
-  const program = captureProgram(pty.pid);
+  // A token proves the group only beside host.json, which names the pid
+  // space of its pid, so a host that could not record itself records none.
+  const program =
+    hostRecord === null
+      ? programWithoutToken(pty.pid)
+      : captureProgram(pty.pid);
 
   // Answer the terminal-capability queries programs emit at startup (OSC 10/11
   // color probes, the `ESC [ 5 n` DSR sentinel, XTGETTCAP/DECRQSS 24-bit color
@@ -1075,7 +1081,7 @@ export async function runHost(
       let latestCapturedAtSeq = -1;
       let seenPostBaseline = false;
 
-      const pollCondition = new Promise<WaitForRenderResult>((resolve) => {
+      const polled = new Promise<WaitForRenderResult>((resolve, reject) => {
         let pollInFlight = false;
         let consecutiveFailures = 0;
 
@@ -1146,14 +1152,13 @@ export async function runHost(
                 return;
               }
 
-              void pollError;
               consecutiveFailures += 1;
               if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
-                resolve({
-                  matched: false,
-                  timedOut: true,
-                  capturedAtSeq: latestCapturedAtSeq,
-                });
+                reject(
+                  pollError instanceof Error
+                    ? pollError
+                    : new Error(String(pollError)),
+                );
                 return;
               }
               // Transient — retry on next poll.
@@ -1170,7 +1175,7 @@ export async function runHost(
 
       return await waitForScopedOperation({
         operationName: 'waitForRender',
-        operation: pollCondition,
+        operation: polled,
         scope: waitScope,
         signal,
         ...(timeoutMs === undefined

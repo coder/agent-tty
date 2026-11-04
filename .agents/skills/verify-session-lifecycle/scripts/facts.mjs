@@ -242,52 +242,57 @@ function createFacts() {
       }
       return false;
     });
+  // Right after the launch, captureHost reads the new host and
+  // writeHostRecord writes host.json, before the first manifest names it.
+  const recordsHost =
+    launch >= 0 &&
+    write > launch + 2 &&
+    normalize(body.statements[launch + 1].getText()) ===
+      'const hostRecord = captureHost(hostPid);' &&
+    normalize(body.statements[launch + 2].getText()) ===
+      'if (hostRecord !== null) { writeHostRecord(sessionDirectory, hostRecord); }';
   return {
     CreateRecordsHostPid:
       launch >= 0 && launch < write && pidInManifest && onlyThroughCallback,
+    CreateRecordsHost: recordsHost,
     CreateStopsOnGiveUp: stopsOnGiveUp(create.body),
   };
 }
 
-// In runCreateCommand's readiness loop, the catch of an unreachable host
-// ends with host.stop() right after its last retry and before it rethrows
-// the error. Only a win32 create skips the stop while the manifest names
-// no program, so on Linux and macOS, which the model covers, it always stops. launchHost's stop sends SIGTERM through the ChildProcess
-// handle, and runHost registers its SIGTERM handler before it spawns the
-// program and skips the spawn when a SIGTERM came first.
+// In runCreateCommand, the readiness wait is the only statement of a try
+// whose catch calls host.stop() and then rethrows, so every error of the
+// readiness wait stops the host. Only a win32 create skips the stop while the
+// manifest names no program, so on Linux and macOS, which the model covers,
+// it always stops. launchHost's stop sends SIGTERM through the ChildProcess
+// handle, and runHost registers its SIGTERM handler before it waits for the
+// manifest, notes a SIGTERM until the spawn, and skips the spawn when a
+// SIGTERM came first.
 function stopsOnGiveUp(body) {
-  let stops = false;
-  walk(body, (node) => {
-    if (!ts.isCatchClause(node)) {
-      return;
+  const stops = body.statements.some((s) => {
+    if (!ts.isTryStatement(s) || s.catchClause === undefined) {
+      return false;
     }
-    const last = node.block.statements.at(-1);
-    if (last === undefined || normalize(last.getText()) !== 'throw error;') {
-      return;
-    }
-    walk(node.block, (inner) => {
-      if (!ts.isIfStatement(inner) || !ts.isBlock(inner.thenStatement)) {
-        return;
-      }
-      const st = inner.thenStatement.statements.map((s) =>
-        normalize(s.getText()),
-      );
-      const retry = st.findIndex((s) =>
-        s.startsWith('if (attempt + 1 < READINESS_MAX_ATTEMPTS) {'),
-      );
-      stops ||=
-        retry >= 0 &&
-        retry === st.length - 3 &&
-        st[retry + 1].startsWith('invariant(host !== undefined,') &&
-        st[retry + 2] ===
-          "if (process.platform !== 'win32' || manifest?.childPid != null) { host.stop(); }";
-    });
+    const tried = s.tryBlock.statements.map((t) => normalize(t.getText()));
+    const st = s.catchClause.block.statements.map((t) =>
+      normalize(t.getText()),
+    );
+    return (
+      tried.length === 1 &&
+      tried[0] ===
+        'result = await waitForReadyHost(socketFile, sessionDirectory, sessionId);' &&
+      st.length === 4 &&
+      st[0].startsWith('invariant(host !== undefined,') &&
+      st[2] ===
+        "if (process.platform !== 'win32' || manifest?.childPid != null) { host.stop(); }" &&
+      st[3] === 'throw withSessionId(error, sessionId);'
+    );
   });
   const launch = normalize(
     requireDeclaration('src/host/lifecycle.ts', 'launchHost').getText(),
   );
   const run = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
   const handler = indexOfStatement(run, /^process\.on\('SIGTERM'/);
+  const wait = indexOfStatement(run, /= await waitForManifestFromCreate\(/);
   const skip = indexOfStatement(
     run,
     /^if \(sigterm\.received\) \{\s*await eventLog\.close\(\);\s*return;\s*\}$/,
@@ -297,7 +302,8 @@ function stopsOnGiveUp(body) {
     stops &&
     /stop: \(\) => \{ child\.kill\('SIGTERM'\); \}/.test(launch) &&
     handler >= 0 &&
-    handler < skip &&
+    handler < wait &&
+    wait < skip &&
     skip === spawn - 1
   );
 }
@@ -467,7 +473,7 @@ function repairFacts() {
   const reconcile = requireDeclaration(lifecycle, 'reconcileSession').body;
   const marked = indexOfStatement(
     reconcile,
-    /^if \(manifest !== null && isMarkedDestroyed\(sessionDirectory, manifest\)\) \{\s*if \(await writeMarkedDestroyed\(manifestFile, manifest\)\) \{\s*const socketFile = socketPath\(sessionDirectory\);\s*await unlinkIfPresent\(socketFile\);\s*await removeSocketDirectoryIfEmpty\(socketFile\);\s*\}\s*return;\s*\}$/,
+    /^if \(manifest !== null && isMarkedDestroyed\(sessionDirectory, manifest\)\) \{\s*if \(await writeMarkedDestroyed\(manifestFile, manifest\)\) \{\s*const socketFile = socketPath\(sessionDirectory\);\s*await unlinkIfPresent\(socketFile\);\s*await removeSocketDirectoryIfEmpty\(socketFile\);\s*await removeLegacySocketBestEffort\(socketFile\);\s*\}\s*return;\s*\}$/,
   );
   const markedCheck = normalize(
     requireDeclaration(lifecycle, 'isMarkedDestroyed').body.getText(),
@@ -633,7 +639,7 @@ function destroyFacts() {
 // that a process which saw the group recorded destroyed gets no wait for an
 // unshared group (trustsDestroyed).
 const UNSHARED_RETURN =
-  'return (await sharesHostPids(sessionDirectory)) ? record : UNSHARED_GROUP;';
+  'return (await sharesHostPids(sessionDirectory, false)) ? record : UNSHARED_GROUP;';
 const STOP_UNLESS_TRUSTED =
   "await stopSessionProcesses( sessionId, null, terminal.status === 'destroyed' && group !== null && 'unshared' in group ? null : group, sessionDirectory, signal, );";
 const STOP_ALWAYS =
@@ -899,18 +905,23 @@ function noAwaitIn(statements) {
   return !found;
 }
 
-// runHost captures the program's token right after setChildPid and writes
-// program.json as the first statement of its last try, before
-// `await persistManifest()`, and no statement between createPty and that try
-// awaits. So the record is written in the synchronous block that spawns the
-// program.
+// runHost captures the program's token right after setChildPid, only when it
+// wrote host.json, and writes program.json as the first statement of its last
+// try, before `await persistManifest()`, and no statement between createPty
+// and that try awaits. So the record is written in the synchronous block that
+// spawns the program. The fact also guards that a token lies only beside
+// host.json: a CLI counts the group of a token without host.json as running,
+// so a destroy of such a session after its program exited fails with
+// HOST_TIMEOUT. The model leaves out a host that cannot write host.json, so no
+// run checks that part.
 function programRecordFacts() {
   const body = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
   const spawn = indexOfStatement(body, /= createPty\(/);
   const named = indexOfStatement(body, /^state\.setChildPid\(pty\.pid\);$/);
-  const captured = indexOfStatement(
-    body,
-    /^const program = captureProgram\(pty\.pid\);$/,
+  const captured = body.statements.findIndex(
+    (s) =>
+      normalize(s.getText()) ===
+      'const program = hostRecord === null ? programWithoutToken(pty.pid) : captureProgram(pty.pid);',
   );
   const last = body.statements.at(-1);
   const tried =
@@ -1016,10 +1027,11 @@ function ownershipFacts() {
   };
 }
 
-// In stopProgramGroup's loop, a judgement of gone sends SIGSTOP to the
-// group once and judges again, so a member that a scan never shows stops and
-// comes into view. The finally block sends a frozen group that got no kill
-// SIGCONT, also when a scan throws.
+// In stopProgramGroup's loop, each judgement of gone sends SIGSTOP to the
+// group and judges again, so a member that a scan never shows stops and
+// comes into view, while /proc names this process by its pid. The finally
+// block sends a frozen group that got no kill SIGCONT, also when a scan
+// throws.
 function freezeFacts(body) {
   const guarded = body.statements.find(ts.isTryStatement);
   const loop = guarded?.tryBlock.statements.find(ts.isForStatement);
@@ -1039,7 +1051,14 @@ function freezeFacts(body) {
     before.at(-1) === 'let killed = false;' &&
     guarded.tryBlock.statements.length === 1 &&
     st[1] ===
-      "if (judgement.verdict === 'gone') { frozen ||= signalProcessGroup(group.pid, 'SIGSTOP'); if (frozen) { continue; } }" &&
+      "if (judgement.verdict === 'gone' && procShowsOwnPidSpace()) { frozen = signalProcessGroup(group.pid, 'SIGSTOP') || frozen; if (frozen) { continue; } }" &&
+    normalize(
+      requireDeclaration(
+        'src/host/programGroup.ts',
+        'procShowsOwnPidSpace',
+      ).body.getText(),
+    ) ===
+      "{ try { return readlinkSync('/proc/self') === String(process.pid); } catch { return false; } }" &&
     normalize(guarded.finallyBlock.getText()) ===
       "{ if (frozen && !killed) { signalProcessGroup(group.pid, 'SIGCONT'); } }"
   );
@@ -1134,7 +1153,7 @@ function unsharedFacts() {
       statement('stopProgramGroup', 2) ===
         "if ('unshared' in group) { return; }" &&
       shares ===
-        "{ if (process.platform !== 'linux') { return true; } const record = await readHostRecord(sessionDirectory); return record === null || inHostPidSpace(record); }" &&
+        "{ if (process.platform !== 'linux') { return true; } const record = await readHostRecord(sessionDirectory); return record === null ? sharedWithoutRecord : inHostPidSpace(record); }" &&
       stopLeftoversThenRecordDestroyed(
         requireDeclaration('src/host/lifecycle.ts', 'destroySession'),
       ).trustsDestroyed,
@@ -1371,6 +1390,7 @@ function policyFacts() {
 
 const COVERED = [
   ['src/cli/commands/create.ts', 'runCreateCommand'],
+  ['src/cli/commands/create.ts', 'waitForReadyHost'],
   ['src/cli/commands/destroy.ts', 'runDestroyCommand'],
   ['src/cli/commands/destroy.ts', 'rerunInNewSession'],
   ['src/cli/commands/gc.ts', 'gcSessions'],
@@ -1443,6 +1463,7 @@ const COVERED = [
   ['src/host/programGroup.ts', 'signalProcessGroup'],
   ['src/host/programGroup.ts', 'isProgramGroupAlive'],
   ['src/host/programGroup.ts', 'stopProgramGroup'],
+  ['src/host/programGroup.ts', 'procShowsOwnPidSpace'],
   ['src/host/rpcClient.ts', 'toTransportCliError'],
   ['src/host/sessionState.ts', 'SessionState.setDimensions'],
   ['src/host/sessionState.ts', 'SessionState.requestDestroy'],
@@ -1467,7 +1488,7 @@ const RUN_HOST_PARTS = [
   /= await EventLog\.open\(/,
   /= createPty\(/,
   /state\.setChildPid\(/,
-  /^const program = captureProgram\(/,
+  /^const program =/,
   /^const hangUpProgram = /,
   /^const startIdlePolling = /,
   /^const initiateShutdown = /,
