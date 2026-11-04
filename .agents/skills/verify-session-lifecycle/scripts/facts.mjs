@@ -281,7 +281,13 @@ function giveUpCatch(body) {
       tried[0] ===
         'result = await waitForReadyHost(socketFile, sessionDirectory, sessionId);'
     ) {
-      return s.catchClause.block.statements.map((t) => normalize(t.getText()));
+      // The text-mode line that names the session changes no process or
+      // file, so the facts skip it.
+      return s.catchClause.block.statements
+        .map((t) => normalize(t.getText()))
+        .filter(
+          (t) => !t.startsWith('if (!options.json) { writeHumanErrorLines('),
+        );
     }
   }
   return null;

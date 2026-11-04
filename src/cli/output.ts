@@ -43,6 +43,10 @@ export function writeHumanLines(lines: readonly string[]): void {
   process.stdout.write(`${formatHumanText(lines.join('\n'))}\n`);
 }
 
+export function writeHumanErrorLines(lines: readonly string[]): void {
+  process.stderr.write(`${formatHumanText(lines.join('\n'))}\n`);
+}
+
 interface SuccessOutputOptions {
   command: string;
   json: boolean;

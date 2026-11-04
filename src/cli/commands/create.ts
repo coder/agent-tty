@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
 
-import { emitSuccess } from '../output.js';
+import { emitSuccess, writeHumanErrorLines } from '../output.js';
 import { DEFAULT_IDLE_TIMEOUT_MS } from '../../config/defaults.js';
 import {
   allocateSession,
@@ -291,6 +291,11 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
     ).catch(() => null);
     if (process.platform !== 'win32' || manifest?.childPid != null) {
       host.stop();
+    }
+    // JSON names the session in details.sessionId. Text mode prints only the
+    // error line, so name the session before it.
+    if (!options.json) {
+      writeHumanErrorLines([`Session ${sessionId} failed to start.`]);
     }
     throw withSessionId(error, sessionId);
   }
