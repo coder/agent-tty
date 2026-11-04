@@ -320,8 +320,13 @@ export async function runRecordExportCommand(
         if (explicitOutput !== undefined) {
           await assertOutputParentUnchanged(explicitOutput);
         }
-        // The rename keeps the temp file's inode.
+        // The rename keeps the temp file's inode. The bytes and the hash come
+        // from the temp file too, so another write that replaces the file
+        // after the rename cannot lend this entry its bytes.
         outputFileIdentity = await fileIdentity(temporaryOutputPath);
+        bytes = (await stat(temporaryOutputPath)).size;
+        invariant(bytes > 0, 'webm export artifact must not be empty');
+        sha256 = await computeFileHash(temporaryOutputPath);
         await rename(temporaryOutputPath, artifactOutputPath);
       } catch (error) {
         await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
@@ -375,11 +380,6 @@ export async function runRecordExportCommand(
           'default webm artifact path seq must match exported seq',
         );
       }
-
-      const stats = await stat(artifactOutputPath);
-      bytes = stats.size;
-      invariant(bytes > 0, 'webm export artifact must not be empty');
-      sha256 = await computeFileHash(artifactOutputPath);
     }
 
     const artifactEntry = createArtifactEntry({

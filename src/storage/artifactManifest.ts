@@ -662,8 +662,8 @@ function identitySize(identity: string): string {
  * no longer names that file but holds a file of the same size, or no file,
  * it keeps them all: a file server or a tool can have changed the time, and
  * an entry too many is better than a lost one. A file of another size holds
- * other bytes, which a later export wrote, so the entry would describe bytes
- * that are gone: it returns null.
+ * other bytes, which a later export or a tool that rewrote the file left, so
+ * the entry would describe bytes that are gone: it returns null.
  */
 async function entriesKeptBeside(
   artifacts: readonly ArtifactEntry[],
