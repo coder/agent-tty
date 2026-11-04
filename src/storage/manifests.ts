@@ -246,11 +246,14 @@ export async function readManifestIfExists(
   return readManifestInternal(path, true);
 }
 
-export async function writeDestroyMarker(
+// An empty marker file, written with no mkdir: when the session folder is
+// gone, the write fails with SESSION_NOT_FOUND instead of creating it again.
+async function writeEmptyMarker(
   path: string,
   sessionId: string,
+  label: string,
 ): Promise<void> {
-  assertAbsoluteStoragePath(path, 'destroy marker path');
+  assertAbsoluteStoragePath(path, `${label} path`);
 
   try {
     await replaceFileAtomic(path, '');
@@ -264,36 +267,25 @@ export async function writeDestroyMarker(
     }
 
     throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
-      message: `Failed to write the destroy marker at ${path}.`,
+      message: `Failed to write the ${label} at ${path}.`,
       details: { path },
       cause: error,
     });
   }
 }
 
+export async function writeDestroyMarker(
+  path: string,
+  sessionId: string,
+): Promise<void> {
+  await writeEmptyMarker(path, sessionId, 'destroy marker');
+}
+
 export async function writeCreateFailedMarker(
   path: string,
   sessionId: string,
 ): Promise<void> {
-  assertAbsoluteStoragePath(path, 'create-failed marker path');
-
-  try {
-    await replaceFileAtomic(path, '');
-  } catch (error) {
-    if (isEnoentError(error)) {
-      throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
-        message: `Session "${sessionId}" was not found: its folder ${dirname(path)} no longer exists.`,
-        details: { sessionId, markerPath: path },
-        cause: error,
-      });
-    }
-
-    throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
-      message: `Failed to write the create-failed marker at ${path}.`,
-      details: { path },
-      cause: error,
-    });
-  }
+  await writeEmptyMarker(path, sessionId, 'create-failed marker');
 }
 
 export async function writeManifest(
