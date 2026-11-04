@@ -857,4 +857,29 @@ describe('artifact manifest lock', () => {
       withArtifactManifestLock(sessionDirectory, () => Promise.resolve()),
     ).rejects.toMatchObject({ code: ERROR_CODES.SESSION_NOT_FOUND });
   });
+
+  // APFS answers EINVAL, not ENOENT, to a link into a folder that another
+  // process removes during the call.
+  it.each([
+    { folder: 'gone', code: ERROR_CODES.SESSION_NOT_FOUND },
+    { folder: 'still there', code: ERROR_CODES.STORAGE_WRITE_ERROR },
+  ])(
+    'reports $code for an EINVAL from the lock link when the session folder is $folder',
+    async ({ folder, code }) => {
+      fsHooks.beforeLink = async (to) => {
+        if (to === lockPath) {
+          if (folder === 'gone') {
+            await rm(sessionDirectory, { recursive: true });
+          }
+          throw Object.assign(new Error('EINVAL: invalid argument, link'), {
+            code: 'EINVAL',
+          });
+        }
+      };
+
+      await expect(
+        withArtifactManifestLock(sessionDirectory, () => Promise.resolve()),
+      ).rejects.toMatchObject({ code });
+    },
+  );
 });

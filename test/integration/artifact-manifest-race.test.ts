@@ -146,6 +146,11 @@ describe(
       const manifest = await readArtifactManifest(directory);
       expect(manifest.artifacts.length).toBeGreaterThanOrEqual(1);
       expect(manifest.artifacts.length).toBeLessThanOrEqual(6);
+      // Each export adds at most one entry of its own. The unit tests under
+      // "an export that replaces its output path" in
+      // test/unit/storage/artifactStorage.test.ts cover which entries go.
+      const ids = manifest.artifacts.map((entry) => entry.id);
+      expect(new Set(ids).size).toBe(ids.length);
       for (const entry of manifest.artifacts) {
         const bytes = await readFile(
           join(directory, 'artifacts', entry.filename),
