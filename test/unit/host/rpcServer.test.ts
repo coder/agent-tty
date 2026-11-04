@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import net from 'node:net';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CliError } from '../../../src/cli/errors.js';
 import { sendRpc } from '../../../src/host/rpcClient.js';
@@ -121,6 +121,19 @@ describe('RpcServer CliError responses', () => {
         return details;
       },
     ],
+    [
+      'behind a throwing getter',
+      () =>
+        Object.defineProperty({}, 'size', {
+          enumerable: true,
+          get: () => {
+            throw new Error('size is not readable');
+          },
+        }),
+    ],
+    ['a toJSON that returns undefined', () => ({ toJSON: () => undefined })],
+    ['a toJSON that returns a string', () => ({ toJSON: () => 'size: 1' })],
+    ['a toJSON that returns an array', () => ({ toJSON: () => ['size', 1] })],
   ])(
     'keeps the code and message but drops details that are %s',
     async (_case, makeDetails) => {
@@ -147,5 +160,64 @@ describe('RpcServer CliError responses', () => {
       message: 'renderer failed',
       details: {},
     });
+  });
+
+  // A control character takes 6 characters in JSON (\u0001), the largest
+  // escape, so this message is the worst case for the response size.
+  const hugeMessage = '\u0001'.repeat(1_100_000);
+
+  it('shortens a huge CliError message and keeps its code and details', async () => {
+    const details = { blob: 'x'.repeat(65_000) };
+    const error = await rejectionFrom(
+      makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+        message: hugeMessage,
+        details,
+      }),
+    );
+
+    expect(error).toMatchObject({ code: 'STORAGE_WRITE_ERROR', details });
+    const { message } = error as CliError;
+    expect(message.length).toBeLessThan(70_000);
+    expect(message.startsWith('\u0001'.repeat(60_000))).toBe(true);
+    expect(message.endsWith('[message truncated]')).toBe(true);
+  });
+
+  it('shortens a huge message of an error that is not a CliError', async () => {
+    const error = await rejectionFrom(new Error(hugeMessage));
+
+    expect(error).toMatchObject({ code: 'RPC_ERROR' });
+    const { details, message } = error as CliError;
+    expect(details).toEqual({});
+    expect(message.length).toBeLessThan(70_000);
+    expect(message.startsWith('\u0001'.repeat(60_000))).toBe(true);
+    expect(message.endsWith('[message truncated]')).toBe(true);
+  });
+
+  it('answers RPC_ERROR when building the error response throws', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const handlerError = new Error('placeholder');
+    Object.defineProperty(handlerError, 'message', {
+      get: () => {
+        throw new Error('message is not readable');
+      },
+    });
+
+    try {
+      const error = await rejectionFrom(handlerError);
+
+      expect(error).toMatchObject({
+        code: 'RPC_ERROR',
+        message: 'RPC request handling failed unexpectedly.',
+        details: {},
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        'RPC request handling failed unexpectedly:',
+        expect.objectContaining({ message: 'message is not readable' }),
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

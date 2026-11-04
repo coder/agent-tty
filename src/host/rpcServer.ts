@@ -20,6 +20,15 @@ import { ResourceScope } from '../util/resourceScope.js';
 const MAX_UNIX_SOCKET_PATH = 104;
 const MAX_RPC_BUFFER_BYTES = 1_048_576;
 const MAX_RPC_ERROR_DETAILS_CHARS = 65_536;
+const MAX_RPC_ERROR_MESSAGE_CHARS = 65_536;
+const TRUNCATED_MESSAGE_SUFFIX = ' [message truncated]';
+// JSON writes a control character as 6 characters (\u0001), so an error
+// response with a message and details at their caps still fits in one buffer.
+invariant(
+  6 * MAX_RPC_ERROR_MESSAGE_CHARS + MAX_RPC_ERROR_DETAILS_CHARS + 1_024 <
+    MAX_RPC_BUFFER_BYTES,
+  'RPC error message and details caps must fit in one RPC response.',
+);
 
 const SOCKET_LIVENESS_PROBE_TIMEOUT_MS = 1_000;
 const UNKNOWN_REQUEST_ID = 'unknown';
@@ -121,13 +130,27 @@ function extractRequestId(value: unknown): string {
   return UNKNOWN_REQUEST_ID;
 }
 
+function requestIdFromLine(line: string): string {
+  try {
+    return extractRequestId(JSON.parse(line) as unknown);
+  } catch {
+    return UNKNOWN_REQUEST_ID;
+  }
+}
+
+function sendableMessage(message: string): string {
+  return message.length <= MAX_RPC_ERROR_MESSAGE_CHARS
+    ? message
+    : `${message.slice(0, MAX_RPC_ERROR_MESSAGE_CHARS - TRUNCATED_MESSAGE_SUFFIX.length)}${TRUNCATED_MESSAGE_SUFFIX}`;
+}
+
 function buildErrorResponse(id: string, message: string): RpcResponse {
   const response = {
     id,
     ok: false,
     error: {
       code: ERROR_CODES.RPC_ERROR,
-      message,
+      message: sendableMessage(message),
     },
   } as const;
   const responseResult = RpcResponseSchema.safeParse(response);
@@ -145,14 +168,22 @@ function sendableDetails(
   if (Object.keys(details).length === 0) {
     return undefined;
   }
-  let serialized: string;
+  let serialized: unknown;
   try {
     serialized = JSON.stringify(details);
   } catch {
     return undefined;
   }
-  return serialized.length <= MAX_RPC_ERROR_DETAILS_CHARS
-    ? (JSON.parse(serialized) as Record<string, unknown>)
+  // A toJSON can turn the details into undefined, a string or an array.
+  if (
+    typeof serialized !== 'string' ||
+    serialized.length > MAX_RPC_ERROR_DETAILS_CHARS
+  ) {
+    return undefined;
+  }
+  const parsed = JSON.parse(serialized) as unknown;
+  return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>)
     : undefined;
 }
 
@@ -163,7 +194,7 @@ function buildCliErrorResponse(id: string, error: CliError): RpcResponse {
     ok: false,
     error: {
       code: error.code,
-      message: error.message,
+      message: sendableMessage(error.message),
       ...(details === undefined ? {} : { details }),
     },
   } as const;
@@ -336,7 +367,18 @@ export class RpcServer {
 
       handled = true;
       const line = buffer.slice(0, newlineIndex);
-      void this.processRequestLine(socket, line);
+      void this.processRequestLine(socket, line).catch((error: unknown) => {
+        // An unhandled rejection would end the host and its session, so a
+        // failure to build or send the response gets a plain RPC_ERROR.
+        console.error('RPC request handling failed unexpectedly:', error);
+        this.sendResponse(
+          socket,
+          buildErrorResponse(
+            requestIdFromLine(line),
+            'RPC request handling failed unexpectedly.',
+          ),
+        );
+      });
     });
 
     socket.on('end', () => {
