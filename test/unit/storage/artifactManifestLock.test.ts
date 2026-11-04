@@ -9,6 +9,7 @@ import {
   readFile,
   realpath,
   rm,
+  rmdir,
   stat,
   utimes,
   writeFile,
@@ -466,6 +467,91 @@ describe('artifact manifest lock', () => {
         FAST,
       ),
     ).resolves.toBe('ran');
+  });
+
+  it('announces itself again when another breaker removed the empty folder before its link', async () => {
+    const folder = `${lockPath}.breakers`;
+    await writeFile(lockPath, await deadOwnerRecord());
+    freezeLockClock();
+    let removed = false;
+    fsHooks.beforeLink = async (to) => {
+      if (to.startsWith(`${folder}/`) && !removed) {
+        removed = true;
+        await rmdir(folder);
+      }
+    };
+
+    await expect(
+      withArtifactManifestLock(
+        sessionDirectory,
+        () => Promise.resolve('ran'),
+        FAST,
+      ),
+    ).resolves.toBe('ran');
+    expect(removed).toBe(true);
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
+  });
+
+  it('waits longer each time it meets another breaker', async () => {
+    // A live breaker's announcement that stays: every attempt meets it.
+    const folder = `${lockPath}.breakers`;
+    await writeFile(lockPath, await deadOwnerRecord());
+    await mkdir(folder);
+    await writeFile(join(folder, 'live'), ownerRecord(process.pid, true));
+    let listings = 0;
+    fsHooks.beforeReaddir = (path) => {
+      if (path === folder) {
+        listings += 1;
+      }
+      return Promise.resolve();
+    };
+
+    await expect(
+      withArtifactManifestLock(sessionDirectory, () => Promise.resolve(), {
+        waitMs: 1_500,
+        unknownOwnerStaleMs: 60_000,
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.STORAGE_WRITE_ERROR });
+    // A backoff from 5 ms that doubles up to 200 ms allows about 12
+    // attempts in 1.5 s. A backoff that stays at 5 ms allows over 100.
+    expect(listings).toBeGreaterThan(3);
+    expect(listings).toBeLessThan(40);
+  });
+
+  it("removes a dead breaker's announcement and breaks the lock at once", async () => {
+    const folder = `${lockPath}.breakers`;
+    await writeFile(lockPath, await deadOwnerRecord());
+    await mkdir(folder);
+    await writeFile(join(folder, 'dead'), await deadOwnerRecord());
+
+    await expect(
+      withArtifactManifestLock(sessionDirectory, () => Promise.resolve('ran'), {
+        waitMs: 2_000,
+        unknownOwnerStaleMs: 60_000,
+      }),
+    ).resolves.toBe('ran');
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
+  });
+
+  it("sweeps a dead breaker's announcement once it had to wait for a live lock", async () => {
+    // The lock is live, so this writer never breaks and never lists the
+    // announcements. Only the sweep can remove the dead one.
+    const folder = `${lockPath}.breakers`;
+    await writeFile(lockPath, ownerRecord(process.pid, true));
+    await mkdir(folder);
+    await writeFile(join(folder, 'dead'), await deadOwnerRecord());
+    freezeLockClock();
+    let refreshes = 0;
+    fsHooks.beforeUtimes = async (path) => {
+      if (path.startsWith(`${lockPath}.tmp-`) && (refreshes += 1) === 2) {
+        await rm(lockPath);
+      }
+    };
+
+    await withArtifactManifestLock(sessionDirectory, () => Promise.resolve());
+
+    expect(refreshes).toBe(2);
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
   });
 
   it('writes its temp file again when another writer removed it during the wait', async () => {
