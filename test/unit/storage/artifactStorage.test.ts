@@ -379,7 +379,7 @@ describe('artifact manifest storage', () => {
       ]);
     });
 
-    it('adds its entry and drops none when a later export already replaced its file', async () => {
+    it('adds nothing when a later export replaced its file with bytes of another size', async () => {
       const sessionDir = await createSessionDir();
       await ensureArtifactsDir(sessionDir);
       const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
@@ -397,11 +397,33 @@ describe('artifact manifest storage', () => {
         rollbackArtifactPath: castPath,
       });
 
+      expect(await ids(sessionDir)).toEqual(['01JQ0000000000000000000002']);
+      await expect(readFile(castPath, 'utf8')).resolves.toBe('later');
+    });
+
+    it('adds its entry and drops none when a later export replaced its file with bytes of the same size', async () => {
+      // The append cannot tell these bytes from its own without reading
+      // the file under the lock, so it keeps both entries.
+      const sessionDir = await createSessionDir();
+      await ensureArtifactsDir(sessionDir);
+      const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
+      const earlier = await exportTo(castPath, 'early');
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000002', castPath),
+        outputFileIdentity: await exportTo(castPath, 'later'),
+      });
+
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000001', castPath),
+        outputFileIdentity: earlier,
+      });
+
       expect(await ids(sessionDir)).toEqual([
         '01JQ0000000000000000000002',
         '01JQ0000000000000000000001',
       ]);
-      await expect(readFile(castPath, 'utf8')).resolves.toBe('later');
     });
 
     it('adds its entry when its file is gone and keeps the entries of other missing files', async () => {
