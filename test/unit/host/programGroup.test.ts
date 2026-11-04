@@ -1430,6 +1430,20 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     ]);
   });
 
+  // A stopped member cannot end, so /proc refused its autogroup. A SIGCONT
+  // would resume a group that job control stopped.
+  it('sends no signal to a stopped group whose member shows no autogroup', () => {
+    procShowsTokenGroup('T');
+    const tokenRead = autogroupFile.read;
+    autogroupFile.read = (file) =>
+      file === '/proc/100/autogroup' ? '' : (tokenRead?.(file) ?? null);
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+    stopProgramGroup(group);
+
+    expect(kill).not.toHaveBeenCalled();
+  });
+
   // The witness of a judgement can end before it is read again.
   it('freezes a group whose witness ends before it is read again, and kills it once a stopped member carries the token', () => {
     procShowsTokenGroup('S');
@@ -1756,10 +1770,12 @@ describe.runIf(capturesToken)('a program group with a token', () => {
 
       stopProgramGroup(record);
 
-      // Each judgement of unknown freezes the group, and the group gets
-      // SIGCONT at the end.
+      // A running member without an autogroup can be a member of a fork
+      // chain that ended between two reads, so the group gets SIGSTOP. Its
+      // stopped member still shows no autogroup, so /proc refuses it, and
+      // the group gets SIGCONT.
       expect(kill.mock.calls).toEqual([
-        ...Array.from({ length: 5 }, () => [-pid, 'SIGSTOP']),
+        [-pid, 'SIGSTOP'],
         [-pid, 'SIGCONT'],
       ]);
       expect(isProgramGroupAlive(record)).toBe(true);

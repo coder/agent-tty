@@ -377,10 +377,14 @@ export async function readProgramGroup(
 }
 
 // unknown: /proc refuses the boot id, or shows a member of the program's
-// session without an autogroup, so the group can still be ours.
+// session without an autogroup, so the group can still be ours. running:
+// such a member is not stopped, so it can have ended between its stat and
+// its autogroup read, as a member of a fork chain does. A stopped one cannot
+// end, so /proc refused its autogroup.
 type GroupJudgement =
   | { readonly verdict: 'owned'; readonly witness: number }
-  | { readonly verdict: 'gone' | 'unproven' | 'unknown' };
+  | { readonly verdict: 'unknown'; readonly running: boolean }
+  | { readonly verdict: 'gone' | 'unproven' };
 
 export function judgeProgramGroup(
   record: ProvenRecord,
@@ -394,7 +398,7 @@ export function judgeProgramGroup(
     return { verdict: 'gone' };
   }
   if (bootId === null) {
-    return { verdict: 'unknown' };
+    return { verdict: 'unknown', running: false };
   }
   if (bootId !== record.bootId) {
     return { verdict: 'unproven' };
@@ -405,8 +409,14 @@ export function judgeProgramGroup(
   if (witness !== undefined) {
     return { verdict: 'owned', witness: witness.pid };
   }
-  return members.some((row) => row.sid === record.pid && row.autogroup === null)
-    ? { verdict: 'unknown' }
+  const unread = members.filter(
+    (row) => row.sid === record.pid && row.autogroup === null,
+  );
+  return unread.length > 0
+    ? {
+        verdict: 'unknown',
+        running: unread.some((row) => row.state !== 'T' && row.state !== 't'),
+      }
     : { verdict: 'unproven' };
 }
 
@@ -758,11 +768,12 @@ export function stopProgramGroup(group: ProgramGroup | null): void {
 
   // A member that forks its successor and ends between scans is never in
   // view. One that a scan shows can also end before its autogroup read
-  // (unknown) or before the witness is read again. SIGSTOP freezes the group,
-  // also a child that a member forks while the kernel delivers it, and a
-  // stopped member stays in view and cannot end, so a judgement that gets
-  // no kill and is not unproven sends SIGSTOP and judges the frozen group
-  // again. Each such judgement sends SIGSTOP again, for a member that a
+  // (unknown, running) or before the witness is read again. SIGSTOP freezes
+  // the group, also a child that a member forks while the kernel delivers
+  // it, and a stopped member stays in view and cannot end, so a judgement
+  // that gets no kill and is neither unproven nor an unknown without a
+  // running member sends SIGSTOP and judges the frozen group again. A group
+  // that job control stopped, whose autogroup /proc refuses, gets no signal. Each such judgement sends SIGSTOP again, for a member that a
   // SIGCONT from elsewhere resumed. A frozen group that gets no kill gets
   // SIGCONT, also when a scan throws.
   let frozen = false;
@@ -770,7 +781,10 @@ export function stopProgramGroup(group: ProgramGroup | null): void {
   try {
     for (let attempt = 0; attempt < STOP_ATTEMPTS; attempt += 1) {
       const judgement = judgeLiveGroup(group);
-      if (judgement.verdict === 'unproven') {
+      if (
+        judgement.verdict === 'unproven' ||
+        (judgement.verdict === 'unknown' && !judgement.running)
+      ) {
         return;
       }
       // No pidfd exists for a process group, so the kill races a reused

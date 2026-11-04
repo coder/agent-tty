@@ -1209,7 +1209,8 @@ function ownershipFacts() {
     // that owns the group too.
     checkedKill =
       st[0] === 'const judgement = judgeLiveGroup(group);' &&
-      st[1] === "if (judgement.verdict === 'unproven') { return; }" &&
+      st[1] ===
+        "if ( judgement.verdict === 'unproven' || (judgement.verdict === 'unknown' && !judgement.running) ) { return; }" &&
       st[2] ===
         "if (judgement.verdict === 'owned') { const witness = readProcessRow(judgement.witness); if ( witness !== null && judgeProgramGroup(group, group.bootId, [witness]).verdict === 'owned' ) { killProcessGroupBestEffort(group.pid); killed = true; return; } }";
   });
@@ -1300,7 +1301,8 @@ function freezeFacts(body) {
     before.at(-1) === 'let killed = false;' &&
     guarded.tryBlock.statements.length === 1 &&
     st.length === 6 &&
-    st[1] === "if (judgement.verdict === 'unproven') { return; }" &&
+    st[1] ===
+      "if ( judgement.verdict === 'unproven' || (judgement.verdict === 'unknown' && !judgement.running) ) { return; }" &&
     st[2].startsWith("if (judgement.verdict === 'owned') {") &&
     st.slice(3).join('\n') ===
       [
