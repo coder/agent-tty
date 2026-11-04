@@ -512,9 +512,17 @@ function repairFacts() {
         normalize(check.thenStatement.getText()),
       );
   });
-  const marker = requireDeclaration(
+  // writeDestroyMarker writes through the helper that it shares with
+  // writeCreateFailedMarker.
+  const marker = normalize(
+    requireDeclaration(
+      'src/storage/manifests.ts',
+      'writeDestroyMarker',
+    ).body.getText(),
+  );
+  const emptyMarker = requireDeclaration(
     'src/storage/manifests.ts',
-    'writeDestroyMarker',
+    'writeEmptyMarker',
   ).getText();
   const reconcile = requireDeclaration(lifecycle, 'reconcileSession').body;
   const marked = indexOfStatement(
@@ -536,8 +544,10 @@ function repairFacts() {
     ReconcileRepairsDestroyed:
       marks &&
       repairs &&
-      marker.includes("await replaceFileAtomic(path, '')") &&
-      !marker.includes('mkdir'),
+      marker ===
+        "{ await writeEmptyMarker(path, sessionId, 'destroy marker'); }" &&
+      emptyMarker.includes("await replaceFileAtomic(path, '')") &&
+      !emptyMarker.includes('mkdir'),
     ReconcileRepairsMarked:
       marked >= 0 &&
       marked < terminal &&
