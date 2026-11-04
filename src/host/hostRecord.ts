@@ -68,9 +68,14 @@ export function captureHost(pid: number): HostRecord | null {
   }
 }
 
+// A /proc of another pid namespace names this process by another pid, and
+// its listing shows none of this namespace's processes.
 function inPidNamespace(pidNamespace: string): boolean {
   try {
-    return readlinkSync('/proc/self/ns/pid') === pidNamespace;
+    return (
+      readlinkSync('/proc/self/ns/pid') === pidNamespace &&
+      readlinkSync('/proc/self') === String(process.pid)
+    );
   } catch {
     return false;
   }

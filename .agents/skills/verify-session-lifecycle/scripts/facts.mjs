@@ -905,7 +905,8 @@ function noAwaitIn(statements) {
   return !found;
 }
 
-// runHost captures the program's token right after setChildPid and writes
+// runHost captures the program's token right after setChildPid, only when it
+// wrote host.json, and writes
 // program.json as the first statement of its last try, before
 // `await persistManifest()`, and no statement between createPty and that try
 // awaits. So the record is written in the synchronous block that spawns the
@@ -914,9 +915,10 @@ function programRecordFacts() {
   const body = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
   const spawn = indexOfStatement(body, /= createPty\(/);
   const named = indexOfStatement(body, /^state\.setChildPid\(pty\.pid\);$/);
-  const captured = indexOfStatement(
-    body,
-    /^const program = captureProgram\(pty\.pid\);$/,
+  const captured = body.statements.findIndex(
+    (s) =>
+      normalize(s.getText()) ===
+      'const program = hostRecord === null ? programWithoutToken(pty.pid) : captureProgram(pty.pid);',
   );
   const last = body.statements.at(-1);
   const tried =
@@ -1416,7 +1418,7 @@ const RUN_HOST_PARTS = [
   /= await EventLog\.open\(/,
   /= createPty\(/,
   /state\.setChildPid\(/,
-  /^const program = captureProgram\(/,
+  /^const program =/,
   /^const hangUpProgram = /,
   /^const startIdlePolling = /,
   /^const initiateShutdown = /,

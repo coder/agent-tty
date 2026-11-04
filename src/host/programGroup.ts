@@ -232,10 +232,14 @@ function captureToken(
   return null;
 }
 
+export function programWithoutToken(pid: number): ProgramRecord {
+  return { version: 1, pid, bootId: null, autogroup: null };
+}
+
 export function captureProgram(pid: number): ProgramRecord {
   const token = captureToken(pid);
   return token === null
-    ? { version: 1, pid, bootId: null, autogroup: null }
+    ? programWithoutToken(pid)
     : { version: 1, pid, ...token };
 }
 
