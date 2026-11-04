@@ -69,9 +69,13 @@ const EmptyObjectSchema = z.object({}).strict();
 const NonEmptyStringSchema = z.string().min(1);
 const DurationSchema = z.number().int().positive();
 
+// The client sends a UUID (36 characters). The cap bounds the id that the
+// server echoes in every response.
+export const MAX_RPC_REQUEST_ID_CHARS = 128;
+
 export const RpcRequestSchema = z
   .object({
-    id: NonEmptyStringSchema,
+    id: z.string().min(1).max(MAX_RPC_REQUEST_ID_CHARS),
     method: NonEmptyStringSchema,
     params: z.record(z.string(), z.unknown()).optional(),
   })
