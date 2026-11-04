@@ -1759,6 +1759,7 @@ const COVERED = [
   ['src/host/hostRecord.ts', 'captureHost'],
   ['src/host/hostRecord.ts', 'writeHostRecord'],
   ['src/host/hostRecord.ts', 'readHostRecord'],
+  ['src/host/hostRecord.ts', 'readHostRecordOrThrow'],
   ['src/host/hostRecord.ts', 'pidExists'],
   ['src/host/hostRecord.ts', 'judgeHost'],
   ['src/host/hostRecord.ts', 'inPidNamespace'],

@@ -139,21 +139,40 @@ export function writeHostRecord(
   });
 }
 
-export async function readHostRecord(
+async function readHostRecordOrThrow(
   sessionDirectory: string,
 ): Promise<HostRecord | null> {
   const path = hostRecordPath(sessionDirectory);
+  return await readValidatedJsonFile({
+    path,
+    pathLabel: 'host record path',
+    allowMissing: true,
+    readErrorMessage: `Failed to read the host record at ${path}.`,
+    invalidJsonMessage: `The host record contains invalid JSON at ${path}.`,
+    validate: validateHostRecord,
+  });
+}
+
+export async function readHostRecord(
+  sessionDirectory: string,
+): Promise<HostRecord | null> {
   try {
-    return await readValidatedJsonFile({
-      path,
-      pathLabel: 'host record path',
-      allowMissing: true,
-      readErrorMessage: `Failed to read the host record at ${path}.`,
-      invalidJsonMessage: `The host record contains invalid JSON at ${path}.`,
-      validate: validateHostRecord,
-    });
+    return await readHostRecordOrThrow(sessionDirectory);
   } catch {
     return null;
+  }
+}
+
+// Whether host.json exists but its read or its check fails, so that
+// readHostRecord reads it as missing.
+export async function hostRecordUnreadable(
+  sessionDirectory: string,
+): Promise<boolean> {
+  try {
+    await readHostRecordOrThrow(sessionDirectory);
+    return false;
+  } catch {
+    return true;
   }
 }
 
