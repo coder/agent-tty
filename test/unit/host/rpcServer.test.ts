@@ -5,6 +5,7 @@ import net from 'node:net';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type { CliError } from '../../../src/cli/errors.js';
 import { sendRpc } from '../../../src/host/rpcClient.js';
 import { RpcServer } from '../../../src/host/rpcServer.js';
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
@@ -100,6 +101,43 @@ describe('RpcServer CliError responses', () => {
       details: { path: '/run/artifacts', errno: 'ELOOP' },
     });
   });
+
+  it.each<[string, () => Record<string, unknown>]>([
+    [
+      'too large for one response',
+      () => ({
+        issues: Array.from({ length: 50_000 }, (_, index) => ({
+          path: ['artifacts', index],
+          message: 'Required',
+        })),
+      }),
+    ],
+    ['a BigInt', () => ({ size: 1n })],
+    [
+      'a circular object',
+      () => {
+        const details: Record<string, unknown> = {};
+        details.self = details;
+        return details;
+      },
+    ],
+  ])(
+    'keeps the code and message but drops details that are %s',
+    async (_case, makeDetails) => {
+      const error = await rejectionFrom(
+        makeCliError(ERROR_CODES.MANIFEST_VALIDATION_ERROR, {
+          message: 'Artifact manifest is invalid.',
+          details: makeDetails(),
+        }),
+      );
+
+      expect(error).toMatchObject({
+        code: 'MANIFEST_VALIDATION_ERROR',
+        message: 'Artifact manifest is invalid.',
+      });
+      expect((error as CliError).details).toEqual({});
+    },
+  );
 
   it('gives an error that is not a CliError as RPC_ERROR without details', async () => {
     const error = await rejectionFrom(new Error('renderer failed'));
