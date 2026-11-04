@@ -416,17 +416,24 @@ function retriesMarker(body) {
 
 // runHost's watchCreateFailed checks, every CREATE_FAILED_POLL_INTERVAL_MS,
 // whether the creator still runs and then whether the create-failed marker
-// exists. A probe that throws, and a zombie creator, count as an exited
-// creator, so no error leaves the timer. On the marker it calls startShutdown, and it stops once a check
+// exists. On Linux and macOS a new parent of the host means that the
+// creator exited. A probe that throws counts as an exited creator, so no
+// error leaves the timer, and the watch stops after
+// CREATE_FAILED_WATCH_MAX_MS. On the marker it calls startShutdown, and it stops once a check
 // after the creator's exit found none. The start-up try calls it right after
 // the check that follows the start-up write.
 function pollsCreateFailed() {
   const run = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
+  const strip = (node) => normalize(node.getText().replace(/\/\/[^\n]*/g, ''));
+  const probe = indexOfStatement(run, /^const creatorRuns = /);
   const watch = indexOfStatement(run, /^const watchCreateFailed = /);
   const watches =
-    watch >= 0 &&
-    normalize(run.statements[watch].getText().replace(/\/\/[^\n]*/g, '')) ===
-      "const watchCreateFailed = (): void => { const timer = setInterval(() => { let creatorGone = true; try { creatorGone = !isProcessAlive(creatorPid) || readProcStat(creatorPid)?.state === 'Z'; } catch { } if (existsSync(createFailedMarkerPath(sessDir))) { clearInterval(timer); startShutdown(); } else if (creatorGone) { clearInterval(timer); } }, CREATE_FAILED_POLL_INTERVAL_MS); timer.unref(); };";
+    probe >= 0 &&
+    probe < watch &&
+    strip(run.statements[probe]) ===
+      "const creatorRuns = (): boolean => { if (process.platform !== 'win32' && process.ppid !== creatorPid) { return false; } try { return isProcessAlive(creatorPid); } catch { return false; } };" &&
+    strip(run.statements[watch]) ===
+      'const watchCreateFailed = (): void => { const deadline = Date.now() + CREATE_FAILED_WATCH_MAX_MS; const timer = setInterval(() => { const creatorGone = !creatorRuns() || Date.now() >= deadline; if (existsSync(createFailedMarkerPath(sessDir))) { clearInterval(timer); startShutdown(); } else if (creatorGone) { clearInterval(timer); } }, CREATE_FAILED_POLL_INTERVAL_MS); timer.unref(); };';
   const last = run.statements.at(-1);
   const tried =
     last !== undefined && ts.isTryStatement(last)
