@@ -1523,7 +1523,9 @@ function gcFacts() {
   const judgesGone =
     probes || (tail.length === 1 && tail[0] === 'return false;');
   // judgeFrozenGroup sends SIGSTOP only where /proc shows this process's pid
-  // space, judges the stopped group, and sends SIGCONT in a finally.
+  // space, judges the stopped group, and sends SIGCONT in a finally. A
+  // frozen group that still reads gone is inconclusive, so gc freezes it
+  // again: another gc or a destroy can have resumed it.
   const freezes =
     probes &&
     last ===
@@ -1531,7 +1533,7 @@ function gcFacts() {
     body('judgeFrozenGroup').join('\n') ===
       [
         "if (!procShowsOwnPidSpace() || !signalProcessGroup(group.pid, 'SIGSTOP')) { return false; }",
-        "try { const { verdict } = judgeLiveGroup(group); return verdict === 'owned' ? true : verdict === 'unknown' ? null : false; } finally { signalProcessGroup(group.pid, 'SIGCONT'); }",
+        "try { const { verdict } = judgeLiveGroup(group); return verdict === 'owned' ? true : verdict === 'unproven' ? false : null; } finally { signalProcessGroup(group.pid, 'SIGCONT'); }",
       ].join('\n');
   return {
     GcSkipsNonCollectable: reconcile >= 0 && collectable > reconcile,
