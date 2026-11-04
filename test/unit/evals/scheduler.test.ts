@@ -255,17 +255,27 @@ describe('runScheduled', () => {
 
   it('preserves input-order settlement and hook coverage with concurrency greater than one', async () => {
     const items: TestItem[] = [
-      { key: 'item-0', delayMs: 30 },
+      { key: 'item-0' },
       { key: 'item-1', delayMs: 0 },
       { key: 'item-2', delayMs: 5 },
     ];
     const startKeys: string[] = [];
     const finishKeys: string[] = [];
+    // item-0 stays in its executor until item-2 has finished, so item-1 and
+    // item-2 run on the second worker. A gate sets the finish order, not a
+    // longer timer: on a busy runner, late timers fire together and a 30 ms
+    // item-0 timer could finish before item-2. With one worker this deadlocks
+    // and the test times out.
+    const item2Finished = Promise.withResolvers<undefined>();
 
     const results = await runScheduled(
       items,
       async (item) => {
-        await delay(item.delayMs ?? 0);
+        if (item.key === 'item-0') {
+          await item2Finished.promise;
+        } else {
+          await delay(item.delayMs ?? 0);
+        }
         return item.key;
       },
       {
@@ -276,6 +286,9 @@ describe('runScheduled', () => {
         },
         onItemFinish: async (item, settled) => {
           finishKeys.push(`${item.key}:${settled.status}`);
+          if (item.key === 'item-2') {
+            item2Finished.resolve(undefined);
+          }
           await delay(1);
         },
       },
