@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   captureProgram,
+  forceSkipsGroup,
   isProgramGroupAlive,
   isUnreadableGroupError,
   judgeProgramGroup,
@@ -1744,6 +1745,23 @@ describe.runIf(platform === 'linux')('a program record with a token', () => {
     expect(await readProvenProgramGroup(directory)).toEqual({
       unshared: true,
     });
+  });
+
+  // gc names destroy --force for a failed reconcile only after this check.
+  it('skips the group for destroy --force only when its first read fails for good', async () => {
+    recordHostIn(readlinkSync('/proc/self/ns/pid'));
+    expect(await forceSkipsGroup(directory, 4242)).toBe(false);
+
+    procHooks.listError = errno('EMFILE');
+    expect(await forceSkipsGroup(directory, 4242)).toBe(false);
+
+    procHooks.listError = errno('EIO');
+    expect(await forceSkipsGroup(directory, 4242)).toBe(true);
+
+    procHooks.listError = undefined;
+    await rm(programRecordPath(directory));
+    await mkdir(programRecordPath(directory));
+    expect(await forceSkipsGroup(directory, 4242)).toBe(true);
   });
 
   // Only an agent-tty version between program.json and host.json wrote a

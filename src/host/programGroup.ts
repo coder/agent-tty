@@ -312,9 +312,10 @@ const UNREADABLE_ERRNOS = new Set([
 ]);
 
 // Whether a read of the program's group failed in a way that every later
-// read repeats: a read of program.json or host.json (STORAGE_READ_ERROR) or
-// of /proc, with one of UNREADABLE_ERRNOS. A verdict, HOST_TIMEOUT, an
-// abort or a bug is none of these.
+// read repeats: a read of program.json (STORAGE_READ_ERROR) or of /proc,
+// with one of UNREADABLE_ERRNOS. A verdict, HOST_TIMEOUT, an abort or a bug
+// is none of these. A host.json that cannot be read counts as missing, so
+// its group reads unshared and throws nothing here.
 export function isUnreadableGroupError(error: unknown): boolean {
   const cause = hasErrorCode(error, ERROR_CODES.STORAGE_READ_ERROR)
     ? (error as Error).cause
@@ -326,6 +327,21 @@ export function isUnreadableGroupError(error: unknown): boolean {
     typeof code === 'string' &&
     UNREADABLE_ERRNOS.has(code)
   );
+}
+
+// Whether destroy --force skips the program's group: the read of the group,
+// or its first judgement, fails with an error that isUnreadableGroupError
+// accepts.
+export async function forceSkipsGroup(
+  sessionDirectory: string,
+  childPid: number | null,
+): Promise<boolean> {
+  try {
+    isProgramGroupAlive(await readProgramGroup(sessionDirectory, childPid));
+    return false;
+  } catch (error) {
+    return isUnreadableGroupError(error);
+  }
 }
 
 export async function readProvenProgramGroup(
