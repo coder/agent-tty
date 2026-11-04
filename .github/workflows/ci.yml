@@ -125,6 +125,9 @@ jobs:
         run: npm run test:integration -- --shard=${{ matrix.shard }}
         env:
           AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
+          # verify-cleanup.test.ts runs cleanup.sh as pid 1 through
+          # passwordless sudo, unshare and setpriv, which these runners have.
+          AGENT_TTY_REQUIRE_PID1_UNSHARE: '1'
 
   test-e2e:
     runs-on: ubuntu-latest
@@ -239,10 +242,12 @@ jobs:
         if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
         run: exit 1
 
-  # macOS counterpart to the Ubuntu quality gates above. It runs the static
-  # checks and the full test suite serially in one job, so PTY spawning,
-  # process groups and Unix domain sockets are tested on macOS too.
-  quality-gates-macos:
+  # macOS counterpart to the Ubuntu quality gates above, so PTY spawning,
+  # process groups and Unix domain sockets are tested on macOS too. As one
+  # serial job it took 18 to 30 minutes, 75 to 80 percent of it in the
+  # integration tests, so the integration tests run in three shards next to
+  # one job for the static checks, the unit tests and the e2e tests.
+  checks-macos:
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
@@ -254,8 +259,8 @@ jobs:
       - name: Set up mise
         uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
         with:
-          # The macOS job does not run workflow linting or Communique, so avoid
-          # installing release-only tools. It still needs aube for bootstrap-ci.
+          # The macOS jobs do not run workflow linting or Communique, so avoid
+          # installing release-only tools. They still need aube for bootstrap-ci.
           install_args: --locked node python aube
 
       - name: Install CI dependencies
@@ -281,12 +286,55 @@ jobs:
         env:
           AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
 
-      - name: Test integration
-        run: mise run test-integration
-        env:
-          AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
-
       - name: Test e2e
         run: mise run test-e2e
         env:
           AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
+
+  test-integration-macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/3, 2/3, 3/3]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          install_args: --locked node python aube
+
+      - name: Install CI dependencies
+        run: mise run bootstrap-ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Test integration shard
+        run: npm run test:integration -- --shard=${{ matrix.shard }}
+        env:
+          AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
+
+  # The ruleset for main requires this check, so it gates the macOS jobs
+  # above the way quality-gates gates the Linux ones.
+  quality-gates-macos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - checks-macos
+      - test-integration-macos
+    if: ${{ always() }}
+    steps:
+      - name: Report macOS quality gate results
+        run: |
+          echo "checks-macos: ${{ needs.checks-macos.result }}"
+          echo "test-integration-macos: ${{ needs.test-integration-macos.result }}"
+
+      - name: Fail if any macOS quality gate failed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: exit 1

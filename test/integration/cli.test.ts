@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -717,6 +718,33 @@ describe('CLI integration', () => {
       const envelope = parseErrorEnvelope(result.stdout);
       expect(envelope.command).toBe('version');
       expect(envelope.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  it('prints one INTERNAL_ERROR envelope for an unexpected error before the command runs and exits although a handle stays open', () => {
+    const preload = pathToFileURL(resolve('test/fixtures/fail-homedir.ts'));
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      NODE_OPTIONS: [
+        process.env.NODE_OPTIONS ?? '',
+        `--import=${preload.href}`,
+      ].join(' '),
+    };
+    delete env.AGENT_TTY_HOME;
+
+    const result = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', './src/cli/main.ts', 'version', '--json'],
+      { encoding: 'utf8', env, timeout: 30_000 },
+    );
+
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).not.toMatch(/^\s+at /mu);
+    const envelope = parseErrorEnvelope(result.stdout);
+    expect(envelope.command).toBe('agent-tty');
+    expect(envelope.error).toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'fixture: homedir failed',
     });
   });
 

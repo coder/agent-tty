@@ -247,7 +247,8 @@ export function destroySession(testHome: string, sessionId: string): void {
   });
 }
 
-export function crashSession(testHome: string, sessionId: string): void {
+// Returns the pid of the host that it killed.
+export function crashSession(testHome: string, sessionId: string): number {
   const session = inspectSession(testHome, sessionId);
   const hostPid = session.hostPid;
   expect(hostPid).toBeTypeOf('number');
@@ -261,6 +262,26 @@ export function crashSession(testHome: string, sessionId: string): void {
     process.kill(hostPid, 'SIGKILL');
   } catch {
     // Process may already be dead
+  }
+  return hostPid;
+}
+
+// A killed process stays a zombie until its parent, init here, reaps it.
+export async function processEnds(pid: number): Promise<boolean> {
+  const deadline = Date.now() + 10_000;
+  for (;;) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if (hasErrorCode(error, 'ESRCH')) {
+        return true;
+      }
+      throw error;
+    }
+    if (Date.now() > deadline) {
+      return false;
+    }
+    await sleep(50);
   }
 }
 

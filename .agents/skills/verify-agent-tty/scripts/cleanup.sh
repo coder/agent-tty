@@ -6,7 +6,8 @@
 # fails, while a process outside the caller's terminal session still carries
 # this run's AGENT_TTY_HOME or is yours, hides its environment and started
 # after the run, or while any process but cleanup.sh, the processes that
-# started it and its own children has its working directory or an open file in
+# started it and its own children (none when it runs as pid 1, which also
+# adopts orphans) has its working directory or an open file in
 # home/, state/ or removing/. It also exits 1 when the removal fails, or when a process
 # that started during the removal still holds the run's folders.
 #
@@ -96,8 +97,8 @@ caller_session=$(session_of $$)
 # A pid reused during a walk can make the parents loop, so a walk stops after
 # max_hops parents, and the parents it did not reach count as not ours.
 max_hops=1024
-own_ancestors=" "
-pid=$$
+own_ancestors=" $$ "
+pid=$(parent_of $$)
 hops=0
 while [ -n "$pid" ] && [ "$pid" -gt 1 ] && [ "$hops" -lt "$max_hops" ]; do
   own_ancestors="$own_ancestors$pid "

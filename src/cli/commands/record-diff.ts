@@ -35,10 +35,11 @@ interface ReplayedScreen {
   readonly visibleLines: readonly string[];
 }
 
+// -1 is the seq of an empty event log, as record export reports it.
 function assertValidAtSeq(value: number | undefined, flag: string): void {
-  if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
+  if (value !== undefined && (!Number.isInteger(value) || value < -1)) {
     throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-      message: `${flag} must be a non-negative integer.`,
+      message: `${flag} must be an integer of at least -1.`,
       details: { [flag]: value },
     });
   }

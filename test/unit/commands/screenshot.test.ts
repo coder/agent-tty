@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   resolveExplicitOutputPath: vi.fn(),
   copyFileReplacing: vi.fn(),
   sessionNotFoundIfRemoved: vi.fn(),
+  removeArtifactEntry: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', () => ({
@@ -57,6 +58,7 @@ vi.mock('../../../src/replay/offlineReplay.js', () => ({
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
   publishArtifactWithRollback: mocks.publishArtifactWithRollback,
   createArtifactEntry: mocks.createArtifactEntry,
+  removeArtifactEntry: mocks.removeArtifactEntry,
 }));
 
 vi.mock('../../../src/storage/artifactPaths.js', () => ({
@@ -223,6 +225,7 @@ describe('screenshot command', () => {
     mocks.sessionNotFoundIfRemoved.mockImplementation(
       (_dir: string, error: unknown) => Promise.resolve(error),
     );
+    mocks.removeArtifactEntry.mockResolvedValue(undefined);
   });
 
   describe('--out', () => {
@@ -302,6 +305,29 @@ describe('screenshot command', () => {
         details: { sessionId: 'session-01', out: '/real/out/proof.png' },
       });
       expect(mocks.emitSuccess).not.toHaveBeenCalled();
+      expect(mocks.removeArtifactEntry).toHaveBeenCalledWith({
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
+        filename: 'snapshot.png',
+        sha256: TEST_SCREENSHOT_SHA256,
+      });
+    });
+
+    it('passes on the copy error when it cannot remove the capture', async () => {
+      mocks.sendRpc.mockResolvedValue(createScreenshotResult());
+      mocks.resolveExplicitOutputPath.mockResolvedValue(outTarget);
+      mocks.copyFileReplacing.mockRejectedValue(
+        Object.assign(new Error('disk full'), { code: 'ENOSPC' }),
+      );
+      mocks.removeArtifactEntry.mockRejectedValue(new Error('lock timeout'));
+
+      await expect(
+        runScreenshotCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          out: '/real/out/proof.png',
+        }),
+      ).rejects.toMatchObject({ code: ERROR_CODES.EXPORT_ERROR });
     });
 
     it('passes on the EXPORT_ERROR when the --out folder was replaced before the rename', async () => {
@@ -322,6 +348,7 @@ describe('screenshot command', () => {
         }),
       ).rejects.toBe(replaced);
       expect(mocks.emitSuccess).not.toHaveBeenCalled();
+      expect(mocks.removeArtifactEntry).toHaveBeenCalledTimes(1);
     });
 
     it('reports SESSION_NOT_FOUND when the session folder is gone before the copy', async () => {
@@ -344,6 +371,7 @@ describe('screenshot command', () => {
           out: '/real/out/proof.png',
         }),
       ).rejects.toBe(removed);
+      expect(mocks.removeArtifactEntry).not.toHaveBeenCalled();
     });
   });
 
