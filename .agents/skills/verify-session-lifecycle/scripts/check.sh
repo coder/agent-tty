@@ -122,7 +122,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp HostChecksCreateFailed HostPollsCreateFailed TokenNamesProgram ReusedIdReadsGone ProvesHostPid CreateRecordsHost FreezesUnseenGroup UnsharedGroupReadsUnknown"
+GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp HostChecksCreateFailed HostPollsCreateFailed CreateRetriesMarker TokenNamesProgram ReusedIdReadsGone ProvesHostPid CreateRecordsHost FreezesUnseenGroup UnsharedGroupReadsUnknown"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -256,6 +256,8 @@ WIN32=TRUE
 write_run current-win32 pass "$NO_TOKEN_RULES" "" "the code on Windows: R1 to R14 and R17 to R19 hold"
 write_run mutant-HostChecksCreateFailed-win32 violated FailedCreateStopped "HostChecksCreateFailed=FALSE" "without the marker, a host that the manifest does not name yet keeps serving after create gave up" FailedCreateStopped
 write_run mutant-HostPollsCreateFailed-win32 violated FailedCreateStopped "HostPollsCreateFailed=FALSE" "without the watch, a host that checked for the marker before create wrote it keeps serving when create cannot read the manifest" FailedCreateStopped
+write_run mutant-CreateRetriesMarker-win32 violated FailedCreateStopped "CreateRetriesMarker=FALSE" "without the retries, a marker write that fails once leaves a host that the manifest does not name yet serving after create gave up" FailedCreateStopped
+write_run witness-WitnessMarkerRetried-win32 violated WitnessMarkerRetried "" "the model reaches this state on Windows"
 WIN32=FALSE
 
 run_tlc() {

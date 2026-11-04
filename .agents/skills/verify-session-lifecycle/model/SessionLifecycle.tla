@@ -105,6 +105,11 @@ CONSTANTS
                             \*   host checks for the create-failed marker
                             \*   while its creator runs and once after, and
                             \*   then ends the session
+    CreateRetriesMarker,    \* create.ts: on Windows, while the marker write
+                            \*   fails and the manifest names no program,
+                            \*   create writes the marker again and reads
+                            \*   the manifest after each write, up to 50
+                            \*   times, while the host runs
     TokenNamesProgram,      \* programGroup.ts: captureToken records an
                             \*   autogroup only once the program leads its
                             \*   own session in an autogroup other than the
@@ -159,6 +164,7 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  ProvesGroupOwnership, DestroyStopsLeftovers,
                  FallbackNeedsFolder, CreateStopsOnGiveUp,
                  HostChecksCreateFailed, HostPollsCreateFailed,
+                 CreateRetriesMarker,
                  ReconcileRepairsDestroyed, ReconcileRepairsMarked,
                  TokenNamesProgram,
                  ReusedIdReadsGone, ProvesHostPid, CreateRecordsHost,
@@ -196,7 +202,11 @@ VARIABLES
     sock,        \* the RPC socket file exists (it is outside the directory)
     cpc,         \* create: "alloc", "write", "launch", "done", "giveup"
                  \*   (Windows: the marker is written, the manifest read
-                 \*   is next), "failed" (it gave up on its host)
+                 \*   is next), "retry" (Windows: the marker write failed
+                 \*   and the manifest named no program, so the next
+                 \*   write is due), "failed" (it gave up on its host),
+                 \*   "exhausted" (Windows: it gave up after its last
+                 \*   marker write failed too, see R17)
     hostAlive,   \* the detached host process is alive
     hpc,         \* host start-up path: "none", "boot", "open", "record"
                  \*   (the program runs, program.json is not written yet),
@@ -496,31 +506,64 @@ CreateLaunchesHost ==
 \* the program. create writes nothing else: without a token only the host
 \* knows which group is the program's. Without the guard, create only
 \* reports the error. On Linux and macOS the manifest read changes nothing,
-\* so the model joins the marker write, the read and the SIGTERM.
+\* so the model joins the marker write, the read and the SIGTERM. On
+\* Windows the marker write can also fail for a reason of its own, such as
+\* an antivirus lock on its temp file. Off Windows such a failure changes
+\* nothing, because the SIGTERM stops the host.
 CreateGivesUp ==
     /\ cpc = "done"
-    /\ cmark' = (cmark \/ (HostChecksCreateFailed /\ dir))
+    /\ \E written \in IF Win32 THEN BOOLEAN ELSE {TRUE} :
+          cmark' = (cmark \/ (HostChecksCreateFailed /\ dir /\ written))
     /\ cpc' = IF Win32 THEN "giveup" ELSE "failed"
     /\ UNCHANGED <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal,
                    wasExited, wasNamed, dmark, ghostVars, sock, hostVars,
                    shutVars, readerVars, destroyVars, groupVars>>
 
+\* On Windows, create's SIGTERM to a host that the manifest names.
+CreateStopsNamedHost(readOk) ==
+    IF CreateStopsOnGiveUp /\ readOk /\ mchild /\ hostAlive
+       THEN /\ HostDies
+            /\ UNCHANGED <<prog, foreign, left, rec, reused, hitUnrelated,
+                           hrec, hreused, hitUnrelatedHost, passedReused>>
+       ELSE UNCHANGED <<hostVars, groupVars>>
+
 \* On Windows the SIGTERM ends the host at once, without its handlers, so
 \* create sends it only when the manifest that it reads after the marker
 \* write names the program. The next reconcile then records failed and ends
 \* the program. That read can fail, for example when the file is not
-\* readable, and then create sends nothing.
+\* readable, and then create sends nothing. With CreateRetriesMarker, a
+\* create whose marker write failed and whose read named no program writes
+\* the marker again while the host runs.
 CreateStopsHostOnWindows ==
     /\ cpc = "giveup"
-    /\ cpc' = "failed"
     /\ \E readOk \in BOOLEAN :
-       IF CreateStopsOnGiveUp /\ readOk /\ mchild /\ hostAlive
-          THEN /\ HostDies
-               /\ UNCHANGED <<prog, foreign, left, rec, reused, hitUnrelated,
-                              hrec, hreused, hitUnrelatedHost, passedReused>>
-          ELSE UNCHANGED <<hostVars, groupVars>>
+       IF CreateRetriesMarker /\ HostChecksCreateFailed /\ ~cmark
+          /\ ~(readOk /\ mchild) /\ hostAlive
+          THEN /\ cpc' = "retry"
+               /\ UNCHANGED <<hostVars, groupVars>>
+          ELSE /\ cpc' = "failed"
+               /\ CreateStopsNamedHost(readOk)
     /\ UNCHANGED <<diskVars, ghostVars, sock, shutVars, readerVars,
                    destroyVars>>
+
+\* One more marker write, 100 ms after the last one, then a manifest read.
+\* create goes on while the write fails, the read names no program and the
+\* host runs. The model has no clock, so after any write that failed it can
+\* also stop as if its 50th write had failed ("exhausted"). Then the host
+\* that the manifest does not name yet sees no marker and serves the
+\* session. The SKILL.md Scope section states this residual.
+CreateRewritesMarker ==
+    /\ cpc = "retry"
+    /\ \E written \in BOOLEAN, readOk \in BOOLEAN, more \in BOOLEAN :
+       /\ cmark' = (cmark \/ (dir /\ written))
+       /\ IF ~(dir /\ written) /\ ~(readOk /\ mchild) /\ hostAlive
+             THEN /\ cpc' = IF more THEN "retry" ELSE "exhausted"
+                  /\ UNCHANGED <<hostVars, groupVars>>
+             ELSE /\ cpc' = "failed"
+                  /\ CreateStopsNamedHost(readOk)
+    /\ UNCHANGED <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal,
+                   wasExited, wasNamed, dmark, ghostVars, sock, shutVars,
+                   readerVars, destroyVars>>
 
 \* -------------------------------------------------------------------------
 \* The host's serial manifest writer (createSerialManifestWriter). Each write
@@ -1423,14 +1466,15 @@ DestroyFinalRead ==
 \* Every process is finished. This step keeps TLC from reporting the end
 \* states as deadlocks. Any other state without a step is a model error.
 AllFinished ==
-    /\ cpc \in {"done", "failed"} /\ ~hostAlive /\ pc["gc"] = "done"
+    /\ cpc \in {"done", "failed", "exhausted"} /\ ~hostAlive
+    /\ pc["gc"] = "done"
     /\ pc["list"] = "idle" /\ lruns = MaxListReconciles
     /\ dpc = "done"
     /\ UNCHANGED vars
 
 Next ==
     \/ CreateMakesDirectory \/ CreateWritesManifest \/ CreateLaunchesHost
-    \/ CreateGivesUp \/ CreateStopsHostOnWindows
+    \/ CreateGivesUp \/ CreateStopsHostOnWindows \/ CreateRewritesMarker
     \/ HostReadsManifest \/ HostOpensLogAndSpawns \/ HostRecordsProgram
     \/ HostWritesPids \/ HostChecksMarker \/ HostPollsMarker
     \/ HostListens \/ HostStartsResize \/ HostResizeWriteLands
@@ -1481,7 +1525,8 @@ TypeOK ==
     /\ hsd \in {"none", "write", "wait", "closed"}
     /\ dsnap \in {"none", "destroying", "destroyed"}
     /\ (mst # "none") => dir
-    /\ (dir /\ mst = "none") => cpc \notin {"done", "giveup", "failed"}
+    /\ (dir /\ mst = "none") =>
+          cpc \notin {"done", "giveup", "retry", "failed", "exhausted"}
     /\ (cpc = "write") => dir
     /\ gres \in {"pending", "skipped", "removed"}
     /\ lruns \in 0..MaxListReconciles
@@ -1577,7 +1622,9 @@ DestroyedSessionStopped ==
 
 \* R17: once create gave up, its host keeps the session "running" only
 \* while create's SIGTERM is still on its way to it, or while the host has
-\* yet to check for the create-failed marker.
+\* yet to check for the create-failed marker. A create that gave up after
+\* all its marker writes failed ends as "exhausted", which R17 does not
+\* cover (see the Scope section of SKILL.md).
 FailedCreateStopped ==
     (cpc = "failed" /\ hostAlive /\ hst = "running") =>
         \/ CreateStopsOnGiveUp /\ ~Win32 /\ ~sig
@@ -1607,6 +1654,7 @@ WitnessReconcileRepairs ==
     ~(dmark /\ mst = "failed" /\ \E p \in Readers : pc[p] = "r_repair")
 WitnessMarkedRepaired == ~readRepaired
 WitnessMarkerPolled == ~polled
+WitnessMarkerRetried == cpc # "retry"
 WitnessDeadRepairRepaired ==
     ~(diedBeforeRepair /\ ~lostRepair /\ mst = "destroyed" /\ dir)
 WitnessCreateGivesUp ==

@@ -258,6 +258,7 @@ function createFacts() {
     CreateStopsOnGiveUp: stopsOnGiveUp(create.body),
     HostChecksCreateFailed: checksCreateFailed(create.body),
     HostPollsCreateFailed: pollsCreateFailed(),
+    CreateRetriesMarker: retriesMarker(create.body),
   };
 }
 
@@ -296,14 +297,11 @@ function giveUpCatch(body) {
 
 function stopsOnGiveUp(body) {
   const st = giveUpCatch(body) ?? [];
+  // No statement before the stop leaves the catch.
   const stops =
     st.length >= 4 &&
     st[0].startsWith('invariant(host !== undefined,') &&
-    st
-      .at(-3)
-      .startsWith(
-        'const manifest = await readManifestIfExists( manifestPath(sessionDirectory), )',
-      ) &&
+    st.slice(1, -2).every((t) => !/\b(return|throw|break)\b/.test(t)) &&
     st.at(-2) ===
       "if (process.platform !== 'win32' || manifest?.childPid != null) { host.stop(); }" &&
     st.at(-1) === 'throw withSessionId(error, sessionId);';
@@ -337,11 +335,14 @@ function stopsOnGiveUp(body) {
 function checksCreateFailed(body) {
   const st = giveUpCatch(body) ?? [];
   const marks =
-    st.length === 5 &&
-    st[1].startsWith(
-      'await writeCreateFailedMarker( createFailedMarkerPath(sessionDirectory), sessionId, ).catch(',
-    ) &&
-    st[2].startsWith('const manifest = await readManifestIfExists(');
+    st.length >= 8 &&
+    st[1] === 'const markerFile = createFailedMarkerPath(sessionDirectory);' &&
+    st[2] === 'const manifestFile = manifestPath(sessionDirectory);' &&
+    st[4] ===
+      'let marked = await writeMarkerOrLog(markerFile, sessionId, logger);' &&
+    st[5] ===
+      'let manifest = await readManifestIfExists(manifestFile).catch(() => null);' &&
+    writesMarker();
   const run = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
   const check = indexOfStatement(
     run,
@@ -369,6 +370,38 @@ function checksCreateFailed(body) {
       'if (existsSync(createFailedMarkerPath(sessDir))) { await initiateShutdown(); return; }' &&
     write + 1 < listen
   );
+}
+
+// writeMarkerOrLog writes the create-failed marker and reports whether the
+// write landed.
+function writesMarker() {
+  const helper = normalize(
+    requireDeclaration(
+      'src/cli/commands/create.ts',
+      'writeMarkerOrLog',
+    ).body.getText(),
+  );
+  return helper.startsWith(
+    '{ return writeCreateFailedMarker(path, sessionId).then( () => true, (error: unknown) => {',
+  );
+}
+
+// On Windows, while the marker write fails and the manifest names no
+// program, the give-up catch writes the marker again and reads the manifest
+// after each write, a bounded number of times while the host runs, before
+// its stop. So a host that the manifest does not name yet gets the marker,
+// or the last read names its program and create stops it.
+function retriesMarker(body) {
+  const st = giveUpCatch(body) ?? [];
+  const loop =
+    'for ( let attempt = 1; ' +
+    "process.platform === 'win32' && !marked && manifest?.childPid == null && " +
+    'attempt <= MARKER_RETRY_MAX_ATTEMPTS && isProcessAlive(host.pid); ' +
+    'attempt += 1 ) { ' +
+    'await delay(MARKER_RETRY_INTERVAL_MS); ' +
+    'marked = await writeMarkerOrLog(markerFile, sessionId, logger); ' +
+    'manifest = await readManifestIfExists(manifestFile).catch(() => null); }';
+  return st.length === 9 && st[6] === loop && checksCreateFailed(body);
 }
 
 // runHost's watchCreateFailed checks, every CREATE_FAILED_POLL_INTERVAL_MS,
@@ -1420,6 +1453,7 @@ function policyFacts() {
 const COVERED = [
   ['src/cli/commands/create.ts', 'runCreateCommand'],
   ['src/cli/commands/create.ts', 'waitForReadyHost'],
+  ['src/cli/commands/create.ts', 'writeMarkerOrLog'],
   ['src/cli/commands/destroy.ts', 'runDestroyCommand'],
   ['src/cli/commands/destroy.ts', 'rerunInNewSession'],
   ['src/cli/commands/gc.ts', 'gcSessions'],
