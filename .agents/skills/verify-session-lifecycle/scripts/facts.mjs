@@ -396,12 +396,22 @@ function retriesMarker(body) {
   const loop =
     'for ( let attempt = 1; ' +
     "process.platform === 'win32' && !marked && manifest?.childPid == null && " +
-    'attempt <= MARKER_RETRY_MAX_ATTEMPTS && isProcessAlive(host.pid); ' +
+    'attempt <= MARKER_RETRY_MAX_ATTEMPTS && hostRuns(host.pid); ' +
     'attempt += 1 ) { ' +
     'await delay(MARKER_RETRY_INTERVAL_MS); ' +
     'marked = await writeMarkerOrLog(markerFile, sessionId, logger); ' +
     'manifest = await readManifestIfExists(manifestFile).catch(() => null); }';
-  return st.length === 9 && st[6] === loop && checksCreateFailed(body);
+  // A probe that throws counts as an exited host.
+  const probe = normalize(
+    requireDeclaration('src/cli/commands/create.ts', 'hostRuns').body.getText(),
+  );
+  return (
+    st.length === 9 &&
+    st[6] === loop &&
+    probe ===
+      '{ try { return isProcessAlive(pid); } catch { return false; } }' &&
+    checksCreateFailed(body)
+  );
 }
 
 // runHost's watchCreateFailed checks, every CREATE_FAILED_POLL_INTERVAL_MS,
@@ -1455,6 +1465,7 @@ const COVERED = [
   ['src/cli/commands/create.ts', 'runCreateCommand'],
   ['src/cli/commands/create.ts', 'waitForReadyHost'],
   ['src/cli/commands/create.ts', 'writeMarkerOrLog'],
+  ['src/cli/commands/create.ts', 'hostRuns'],
   ['src/cli/commands/destroy.ts', 'runDestroyCommand'],
   ['src/cli/commands/destroy.ts', 'rerunInNewSession'],
   ['src/cli/commands/gc.ts', 'gcSessions'],

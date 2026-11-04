@@ -180,6 +180,17 @@ function withSessionId(error: unknown, sessionId: string): CliError {
   });
 }
 
+// A probe that throws, such as EPERM from a process of another user that
+// took the host's pid, counts as an exited host, so the create still reports
+// its own error.
+function hostRuns(pid: number): boolean {
+  try {
+    return isProcessAlive(pid);
+  } catch {
+    return false;
+  }
+}
+
 // A failed write is logged, so the create still reports its own error.
 function writeMarkerOrLog(
   path: string,
@@ -310,7 +321,7 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
       !marked &&
       manifest?.childPid == null &&
       attempt <= MARKER_RETRY_MAX_ATTEMPTS &&
-      isProcessAlive(host.pid);
+      hostRuns(host.pid);
       attempt += 1
     ) {
       await delay(MARKER_RETRY_INTERVAL_MS);
