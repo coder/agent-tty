@@ -55,7 +55,7 @@ Yes, when the diff changes any of these:
 
 You do not have to judge this by hand. The check prints `STALE` when any of these changed since the sync commit.
 
-CI runs the check in the `lifecycle-model` job. Its first share calls `scripts/check.sh --drift-only`, which compares the guard values and the covered code with `coverage.json` and needs no Java, and fails on `STALE`. The whole check runs only when `coverage.json` differs from the base of the pull request or merge group, in four jobs with `CHECK_SHARD=<i>/4`. Each job runs every fourth run that expects pass and every fourth of the rest, because the runs that expect pass explore the whole model and take most of the time.
+CI runs the check in the `lifecycle-model` job. Its first share calls `scripts/check.sh --drift-only`, which compares the guard values and the covered code with `coverage.json` and needs no Java, and fails on `STALE`. The whole check runs only when `coverage.json` differs from the base of the pull request or merge group, in eight jobs with `CHECK_SHARD=<i>/8` and `CHECK_JOBS=12`. Each job runs every eighth run that expects pass and every eighth of the rest, because the runs that expect pass explore the whole model and take most of the time, and it starts all its runs at once.
 
 ## Run it
 
@@ -65,7 +65,7 @@ From the repo root:
 .agents/skills/verify-session-lifecycle/scripts/check.sh
 ```
 
-It needs `node`, Java 11 or newer (`java -version`), and the network once: the first run downloads `tla2tools.jar` 1.7.4 into this skill's `.cache/` folder (git ignores it) and checks its sha256. On a CI runner with 4 vCPUs and the default `CHECK_JOBS` of 4 it takes about an hour, so CI runs it in four shares. Eleven runs explore more than 20 million distinct states each, so `CHECK_JOBS=85` starts every run at once and takes about as long as the longest run. `JAVA=/path/to/java` picks another Java. `TLA2TOOLS_JAR=/path/to/tla2tools.jar` uses a jar you already have, which must be the same 1.7.4 build. `CHECK_OUT=<folder>` keeps the results in that folder (default: a new temp folder, printed at the end).
+It needs `node`, Java 11 or newer (`java -version`), and the network once: the first run downloads `tla2tools.jar` 1.7.4 into this skill's `.cache/` folder (git ignores it) and checks its sha256. `CHECK_JOBS` runs run at a time (a new one starts as soon as one ends; the bash 3.2 of macOS waits for each batch). The runs that expect pass share the CPUs as TLC workers, at least 1 each, and the others keep 1 worker, so their traces stay the shortest. Eleven runs explore more than 20 million distinct states each, so `CHECK_JOBS=85` starts every run at once and takes about as long as the longest run. `JAVA=/path/to/java` picks another Java. `TLA2TOOLS_JAR=/path/to/tla2tools.jar` uses a jar you already have, which must be the same 1.7.4 build. `CHECK_OUT=<folder>` keeps the results in that folder (default: a new temp folder, printed at the end).
 
 What it does:
 
