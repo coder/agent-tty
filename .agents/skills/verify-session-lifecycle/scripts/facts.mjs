@@ -1401,7 +1401,18 @@ function gcFacts() {
   // another pid space, and judges the group again while judgeGroupForGc
   // reads it inconclusive. That counts only a live member that carries the
   // token, and treats unknown as inconclusive.
+  // The loop runs at least once only with a positive GC_JUDGEMENTS.
+  const limit = requireDeclaration(
+    'src/host/programGroup.ts',
+    'GC_JUDGEMENTS',
+  ).initializer;
+  const judgesAtAll =
+    limit !== undefined &&
+    ts.isNumericLiteral(limit) &&
+    Number.isInteger(Number(limit.text)) &&
+    Number(limit.text) >= 1;
   const judges =
+    judgesAtAll &&
     runs.length === 4 &&
     runs[0] ===
       'const group = await readProvenProgramGroup(sessionDirectory);' &&
@@ -1488,6 +1499,7 @@ const COVERED = [
   ['src/cli/commands/gc.ts', 'defaultDependencies'],
   ['src/host/programGroup.ts', 'provenProgramGroupRuns'],
   ['src/host/programGroup.ts', 'judgeGroupForGc'],
+  ['src/host/programGroup.ts', 'GC_JUDGEMENTS'],
   ['src/host/programGroup.ts', 'probeFindsGroup'],
   ['src/host/lifecycle.ts', 'allocateSession'],
   ['src/host/lifecycle.ts', 'launchHost'],
