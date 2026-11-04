@@ -1638,7 +1638,8 @@ WitnessWaitPassesReusedId == ~passedReused
 WitnessUnsharedDestroyCompletes ==
     ~(OtherPidSpace /\ ~dforce /\ wasNamed /\ dres = "ok")
 \* With OtherPidSpace gc removes an exited session while a process that
-\* the program left runs, because it cannot check the group there.
+\* the program left runs, because it cannot check the group there: the
+\* state that R20 leaves out.
 WitnessUnsharedGcRemovesLeftover ==
-    ~(OtherPidSpace /\ rec /\ left /\ gres = "removed")
+    ~(OtherPidSpace /\ gres = "removed" /\ ~diedUnrecorded /\ left)
 =============================================================================
