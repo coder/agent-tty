@@ -19,6 +19,7 @@ import { ResourceScope } from '../util/resourceScope.js';
 
 const MAX_UNIX_SOCKET_PATH = 104;
 const MAX_RPC_BUFFER_BYTES = 1_048_576;
+const MAX_RPC_ERROR_DETAILS_CHARS = 65_536;
 
 const SOCKET_LIVENESS_PROBE_TIMEOUT_MS = 1_000;
 const UNKNOWN_REQUEST_ID = 'unknown';
@@ -138,16 +139,32 @@ function buildErrorResponse(id: string, message: string): RpcResponse {
   return responseResult.data;
 }
 
+function sendableDetails(
+  details: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (Object.keys(details).length === 0) {
+    return undefined;
+  }
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(details);
+  } catch {
+    return undefined;
+  }
+  return serialized.length <= MAX_RPC_ERROR_DETAILS_CHARS
+    ? (JSON.parse(serialized) as Record<string, unknown>)
+    : undefined;
+}
+
 function buildCliErrorResponse(id: string, error: CliError): RpcResponse {
+  const details = sendableDetails(error.details);
   const response = {
     id,
     ok: false,
     error: {
       code: error.code,
       message: error.message,
-      ...(Object.keys(error.details).length === 0
-        ? {}
-        : { details: error.details }),
+      ...(details === undefined ? {} : { details }),
     },
   } as const;
   const responseResult = RpcResponseSchema.safeParse(response);
