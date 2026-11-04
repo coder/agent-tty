@@ -7,7 +7,15 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from 'vitest';
 
 import { runHost } from '../../../src/host/hostMain.js';
 import type * as ProgramGroupModule from '../../../src/host/programGroup.js';
@@ -175,6 +183,44 @@ describe('runHost and the create-failed marker', () => {
     );
     expect(existsSync(socketPath(directory))).toBe(true);
     // Stop the host as a SIGTERM would.
+    for (const listener of process.rawListeners('SIGTERM')) {
+      if (!sigtermListeners.has(listener)) {
+        (listener as () => void)();
+      }
+    }
+    await expectHostStopped(readProgramGroup());
+  }, 15_000);
+
+  it('keeps serving when a process of another user takes the pid of its creator', async () => {
+    const creator = spawn('sleep', ['30'], { stdio: 'ignore' });
+    onTestFinished(() => {
+      creator.kill('SIGKILL');
+    });
+    const creatorPid = creator.pid as number;
+    expect(creatorPid).toBeGreaterThan(0);
+    await runHost(SESSION_ID, creatorPid);
+    expect(existsSync(socketPath(directory))).toBe(true);
+    // From here on, the probe of the creator's pid answers EPERM.
+    const kill = process.kill.bind(process);
+    vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (pid === creatorPid && signal === 0) {
+        throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' });
+      }
+      return kill(pid, signal);
+    });
+    await delay(300);
+
+    await writeCreateFailedMarker(
+      createFailedMarkerPath(directory),
+      SESSION_ID,
+    );
+    await delay(500);
+
+    expect((await readManifest(manifestPath(directory))).status).toBe(
+      'running',
+    );
+    expect(existsSync(socketPath(directory))).toBe(true);
+    vi.restoreAllMocks();
     for (const listener of process.rawListeners('SIGTERM')) {
       if (!sigtermListeners.has(listener)) {
         (listener as () => void)();
