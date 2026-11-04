@@ -81,6 +81,37 @@ async function expectHostStopped(group: number): Promise<void> {
   }
 }
 
+// Spies on the timers before runHost starts. The returned function waits
+// until the host's marker watch, its only 100 ms interval, has stopped. A
+// stopped watch never checks for the marker again.
+function trackMarkerWatch(): () => Promise<void> {
+  const setSpy = vi.spyOn(globalThis, 'setInterval');
+  const clearSpy = vi.spyOn(globalThis, 'clearInterval');
+  return async () => {
+    const deadline = Date.now() + 10_000;
+    for (;;) {
+      const watches = setSpy.mock.calls.flatMap((call, index) =>
+        call[1] === 100 ? [setSpy.mock.results[index]?.value as unknown] : [],
+      );
+      expect(watches).toHaveLength(1);
+      if (clearSpy.mock.calls.some(([timer]) => timer === watches[0])) {
+        return;
+      }
+      expect(Date.now()).toBeLessThan(deadline);
+      await delay(20);
+    }
+  };
+}
+
+// Stops the host as a SIGTERM would.
+function sendSigterm(): void {
+  for (const listener of process.rawListeners('SIGTERM')) {
+    if (!sigtermListeners.has(listener)) {
+      (listener as () => void)();
+    }
+  }
+}
+
 beforeEach(async () => {
   // The host resolves its Home to the real path, and the socket path is
   // derived from that path, as on macOS, where tmpdir() is a symlink.
@@ -110,6 +141,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   hooks.afterProgramRecord = () => {};
   // runHost adds a SIGTERM listener that would outlive the test.
   for (const listener of process.rawListeners('SIGTERM')) {
@@ -165,29 +197,23 @@ describe('runHost and the create-failed marker', () => {
   it('keeps serving when the marker appears after its creator has exited', async () => {
     const creator = spawn('sleep', ['30'], { stdio: 'ignore' });
     expect(creator.pid).toBeGreaterThan(0);
+    const watchStopped = trackMarkerWatch();
     await runHost(SESSION_ID, creator.pid as number);
     expect(existsSync(socketPath(directory))).toBe(true);
     creator.kill('SIGKILL');
     await once(creator, 'exit');
-    // Two polls see the creator gone and stop the watch.
-    await delay(300);
+    await watchStopped();
 
     await writeCreateFailedMarker(
       createFailedMarkerPath(directory),
       SESSION_ID,
     );
-    await delay(500);
 
     expect((await readManifest(manifestPath(directory))).status).toBe(
       'running',
     );
     expect(existsSync(socketPath(directory))).toBe(true);
-    // Stop the host as a SIGTERM would.
-    for (const listener of process.rawListeners('SIGTERM')) {
-      if (!sigtermListeners.has(listener)) {
-        (listener as () => void)();
-      }
-    }
+    sendSigterm();
     await expectHostStopped(readProgramGroup());
   }, 15_000);
 
@@ -198,6 +224,7 @@ describe('runHost and the create-failed marker', () => {
     });
     const creatorPid = creator.pid as number;
     expect(creatorPid).toBeGreaterThan(0);
+    const watchStopped = trackMarkerWatch();
     await runHost(SESSION_ID, creatorPid);
     expect(existsSync(socketPath(directory))).toBe(true);
     // From here on, the probe of the creator's pid answers EPERM.
@@ -208,24 +235,19 @@ describe('runHost and the create-failed marker', () => {
       }
       return kill(pid, signal);
     });
-    await delay(300);
+    await watchStopped();
 
     await writeCreateFailedMarker(
       createFailedMarkerPath(directory),
       SESSION_ID,
     );
-    await delay(500);
 
     expect((await readManifest(manifestPath(directory))).status).toBe(
       'running',
     );
     expect(existsSync(socketPath(directory))).toBe(true);
     vi.restoreAllMocks();
-    for (const listener of process.rawListeners('SIGTERM')) {
-      if (!sigtermListeners.has(listener)) {
-        (listener as () => void)();
-      }
-    }
+    sendSigterm();
     await expectHostStopped(readProgramGroup());
   }, 15_000);
 });
