@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import {
   mkdir,
   mkdtemp,
@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 
 import type { SessionRecord as ProtocolSessionRecord } from '../src/protocol/schemas.js';
+import { parseProcStat } from '../src/host/programGroup.js';
 import type { SemanticSnapshot } from '../src/renderer/types.js';
 import { hasErrorCode } from '../src/util/hasErrorCode.js';
 
@@ -359,10 +360,108 @@ export function killGroupIfAlive(group: number): void {
   }
 }
 
-// init reaps the killed processes a moment after they die.
+const GONE_CODES = ['ENOENT', 'ESRCH'];
+
+function isGone(error: unknown): boolean {
+  return GONE_CODES.some((code) => hasErrorCode(error, code));
+}
+
+// Whether /proc shows the processes of every user. hidepid leaves other
+// users out, and an unreadable mountinfo counts as hiding them.
+function procShowsEveryUser(): boolean {
+  let mountinfo: string;
+  try {
+    mountinfo = readFileSync('/proc/self/mountinfo', 'utf8');
+  } catch {
+    return false;
+  }
+  let shows = false;
+  for (const line of mountinfo.split('\n')) {
+    const fields = line.split(' ');
+    const separator = fields.indexOf('-');
+    if (fields[4] === '/proc' && fields[separator + 1] === 'proc') {
+      shows = !/(^|,)hidepid=(2|4|invisible|ptraceable)(,|$)/.test(
+        fields[separator + 3] ?? '',
+      );
+    }
+  }
+  return shows;
+}
+
+// Whether a scan of /proc shows a thread of the group that is not a zombie,
+// or null when a read is refused or the scan shows no member at all, as a
+// /proc of another pid namespace does, so the scan proves nothing.
+function scanFindsLiveThread(group: number): boolean | null {
+  let seen = false;
+  try {
+    for (const entry of readdirSync('/proc')) {
+      if (!/^\d+$/.test(entry)) {
+        continue;
+      }
+      let tasks: string[];
+      try {
+        if (
+          parseProcStat(readFileSync(`/proc/${entry}/stat`, 'utf8')).pgid !==
+          group
+        ) {
+          continue;
+        }
+        seen = true;
+        tasks = readdirSync(`/proc/${entry}/task`);
+      } catch (error) {
+        if (isGone(error)) {
+          continue;
+        }
+        throw error;
+      }
+      for (const task of tasks) {
+        let state: string;
+        try {
+          state = parseProcStat(
+            readFileSync(`/proc/${entry}/task/${task}/stat`, 'utf8'),
+          ).state;
+        } catch (error) {
+          if (isGone(error)) {
+            continue;
+          }
+          throw error;
+        }
+        if (state !== 'Z' && state !== 'X') {
+          return true;
+        }
+      }
+    }
+  } catch (error) {
+    if (
+      ['EACCES', 'EPERM', 'ENOENT'].some((code) => hasErrorCode(error, code))
+    ) {
+      return null;
+    }
+    throw error;
+  }
+  return seen ? false : null;
+}
+
+// A killed process stays a zombie until its parent reaps it. An orphan's
+// parent is init, which can take seconds to reap on a loaded machine, so on
+// Linux a group whose threads are all zombies counts as ended. A process can
+// fork and end between the /proc listing and its own read, so two scans must
+// agree. Where /proc cannot show the whole group, the probe decides alone.
+function groupHasLiveThread(group: number): boolean {
+  if (!isGroupAlive(group)) {
+    return false;
+  }
+  if (process.platform !== 'linux' || !procShowsEveryUser()) {
+    return true;
+  }
+  return (
+    scanFindsLiveThread(group) !== false || scanFindsLiveThread(group) !== false
+  );
+}
+
 export async function groupEnds(group: number): Promise<boolean> {
-  const deadline = Date.now() + 2_000;
-  while (isGroupAlive(group)) {
+  const deadline = Date.now() + 5_000;
+  while (groupHasLiveThread(group)) {
     if (Date.now() > deadline) {
       return false;
     }
