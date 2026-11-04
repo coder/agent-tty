@@ -3,7 +3,10 @@
 # reconcileSession, gc, and destroy, all acting on one session at the same
 # time.
 #
-#   .agents/skills/verify-session-lifecycle/scripts/check.sh [--update-coverage]
+#   .agents/skills/verify-session-lifecycle/scripts/check.sh [--update-coverage | --drift-only]
+#
+# --drift-only compares the facts and the covered code with coverage.json
+# and runs no TLC, so it needs no Java: exit 0 or 3 as below.
 #
 # Exit 0: every TLC run gave the expected result and the covered code is
 #         unchanged since the last sync.
@@ -16,19 +19,25 @@
 #
 # Needs: node (the repo's), Java 11 or newer, and the network once, to fetch
 # the pinned TLC jar. Env: JAVA (default java), TLA2TOOLS_JAR (use this jar),
-# CHECK_OUT (keep the results in this folder), CHECK_JOBS (default 4).
+# CHECK_OUT (keep the results in this folder), CHECK_JOBS (default 4),
+# CHECK_SHARD=<i>/<n> (run only the i-th of n shares of the runs; CI runs
+# the shares in parallel jobs).
 set -euo pipefail
 
 UPDATE_COVERAGE=0
+DRIFT_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --update-coverage) UPDATE_COVERAGE=1 ;;
+    --drift-only) DRIFT_ONLY=1 ;;
     *)
-      echo "usage: $0 [--update-coverage]" >&2
+      echo "usage: $0 [--update-coverage | --drift-only]" >&2
       exit 2
       ;;
   esac
 done
+[ $((UPDATE_COVERAGE + DRIFT_ONLY)) -le 1 ] ||
+  { echo "usage: $0 [--update-coverage | --drift-only]" >&2; exit 2; }
 
 SKILL_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 REPO=$(git -C "$SKILL_DIR" rev-parse --show-toplevel)
@@ -36,6 +45,7 @@ SPEC="$SKILL_DIR/model/SessionLifecycle.tla"
 COVERAGE="$SKILL_DIR/coverage.json"
 JAVA=${JAVA:-java}
 JOBS=${CHECK_JOBS:-4}
+SHARD=${CHECK_SHARD:-1/1}
 TLC_VERSION=1.7.4
 TLC_SHA256=936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
 TLC_URL="https://github.com/tlaplus/tlaplus/releases/download/v$TLC_VERSION/tla2tools.jar"
@@ -59,22 +69,28 @@ sha256() {
 case "$JOBS" in
   *[!0-9]* | 0*) die "CHECK_JOBS must be a positive integer, not '$JOBS'" ;;
 esac
+SHARD_INDEX=${SHARD%%/*}
+SHARD_COUNT=${SHARD#*/}
+[[ $SHARD =~ ^[1-9][0-9]*/[1-9][0-9]*$ ]] && [ "$SHARD_INDEX" -le "$SHARD_COUNT" ] ||
+  die "CHECK_SHARD must be <i>/<n> with 1 <= i <= n, not '$SHARD'"
 command -v node >/dev/null 2>&1 || die "node is not on PATH"
-# `java -version` prints `version "11.0.2"`, or `version "1.8.0_292"` for Java 8.
-java_out=$("$JAVA" -version 2>&1) || die "Java 11+ is needed (set JAVA=/path/to/java)"
-java_version=$(sed -n 's/.* version "\([^"]*\)".*/\1/p' <<<"$java_out" | head -1)
-[ -n "$java_version" ] || die "Java 11+ is needed (set JAVA=/path/to/java)"
-java_major=${java_version#1.}
-java_major=${java_major%%[!0-9]*}
-[ -n "$java_major" ] && [ "$java_major" -ge 11 ] ||
-  die "Java 11+ is needed, $JAVA is version $java_version (set JAVA=/path/to/java)"
-if [ ! -f "$JAR" ]; then
-  mkdir -p "$(dirname "$JAR")"
-  echo "Fetching TLC $TLC_VERSION into $JAR"
-  curl -fsSL -o "$JAR.part" "$TLC_URL" || die "could not download $TLC_URL"
-  mv "$JAR.part" "$JAR"
+if [ "$DRIFT_ONLY" -eq 0 ]; then
+  # `java -version` prints `version "11.0.2"`, or `version "1.8.0_292"` for Java 8.
+  java_out=$("$JAVA" -version 2>&1) || die "Java 11+ is needed (set JAVA=/path/to/java)"
+  java_version=$(sed -n 's/.* version "\([^"]*\)".*/\1/p' <<<"$java_out" | head -1)
+  [ -n "$java_version" ] || die "Java 11+ is needed (set JAVA=/path/to/java)"
+  java_major=${java_version#1.}
+  java_major=${java_major%%[!0-9]*}
+  [ -n "$java_major" ] && [ "$java_major" -ge 11 ] ||
+    die "Java 11+ is needed, $JAVA is version $java_version (set JAVA=/path/to/java)"
+  if [ ! -f "$JAR" ]; then
+    mkdir -p "$(dirname "$JAR")"
+    echo "Fetching TLC $TLC_VERSION into $JAR"
+    curl -fsSL -o "$JAR.part" "$TLC_URL" || die "could not download $TLC_URL"
+    mv "$JAR.part" "$JAR"
 fi
 [ "$(sha256 "$JAR")" = "$TLC_SHA256" ] || die "$JAR does not match the pinned sha256 of TLC $TLC_VERSION"
+fi
 
 OUT=${CHECK_OUT:-$(mktemp -d "${TMPDIR:-/tmp}/session-lifecycle-check.XXXXXX")}
 mkdir -p "$OUT"
@@ -88,18 +104,35 @@ if [ "$UPDATE_COVERAGE" -eq 1 ]; then
   node -e '
     const fs = require("node:fs");
     const facts = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-    const record = { fingerprints: facts.fingerprints, callSites: facts.callSites };
+    const record = {
+      constants: facts.constants,
+      fingerprints: facts.fingerprints,
+      callSites: facts.callSites,
+    };
     fs.writeFileSync(process.argv[2], JSON.stringify(record, null, 2) + "\n");
   ' "$OUT/facts.json" "$COVERAGE"
   echo "Rewrote $COVERAGE. Commit it only after you have confirmed that the model"
   echo "describes the code: that commit becomes the sync commit."
 fi
 
-# Prints one line per covered function or call site that changed.
+# Prints one line per fact, covered function or call site that changed. The
+# facts come from the source text with its comments, and the hashes leave
+# comments out, so a new comment in a guarded block can turn a guard FALSE
+# while every hash stays the same.
 node -e '
   const fs = require("node:fs");
   const facts = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
   const record = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+  const recorded = record.constants ?? {};
+  for (const [key, value] of Object.entries(facts.constants)) {
+    const before = key in recorded ? JSON.stringify(recorded[key]) : "not recorded";
+    if (before !== JSON.stringify(value)) {
+      console.log(`fact ${key} changed: was ${before}, now ${JSON.stringify(value)}`);
+    }
+  }
+  for (const key of Object.keys(recorded)) {
+    if (!(key in facts.constants)) console.log(`fact ${key} is no longer read`);
+  }
   for (const [key, value] of Object.entries(facts.fingerprints)) {
     if (record.fingerprints[key] !== value) console.log(`changed: ${key}`);
   }
@@ -114,6 +147,17 @@ node -e '
   }
 ' "$OUT/facts.json" "$COVERAGE" >"$OUT/drift.txt"
 
+if [ "$DRIFT_ONLY" -eq 1 ]; then
+  if [ -s "$OUT/drift.txt" ]; then
+    echo "STALE: covered code changed since the last sync. Re-read each item,"
+    echo "update the model if it no longer describes the code, then run with --update-coverage:"
+    sed 's/^/  /' "$OUT/drift.txt"
+    exit 3
+  fi
+  echo "Covered code matches the sync record."
+  exit 0
+fi
+
 COLLECTABLE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Collectable.map((s) => JSON.stringify(s)).join(", ") + "}");
@@ -122,7 +166,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp HostChecksCreateFailed HostPollsCreateFailed CreateRetriesMarker TokenNamesProgram ReusedIdReadsGone ProvesHostPid CreateRecordsHost FreezesUnseenGroup UnsharedGroupReadsUnknown"
+GUARDS="GcSkipsNonCollectable GcFinalCheck GcKeepsLiveGroup GcProbesUnseenGroup ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid CreateRecordsHost FreezesUnseenGroup UnsharedGroupReadsUnknown HostChecksCreateFailed HostPollsCreateFailed CreateRetriesMarker"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -133,8 +177,9 @@ FACTS_LINE=$(node -e '
 ' "$OUT/facts.json" $GUARDS) || die "facts.json lacks a guard fact"
 
 NO_TOKEN_RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal RecordedExitKept RunningSessionReachable HostStartsWhenCreated TerminalIsLastWrite DestroyedOnlyWhenEnded DestroyEndsDestroyed RemovedFolderStaysRemoved DestroyedProgramStopped LiveGroupStaysNamed DestroyOutlivesProgram FailedCreateStopped DestroyedStaysDestroyed NoUnrelatedHostKilled"
-# R15 and R16 are what the token adds, so only the runs with Token check them.
-RULES="$NO_TOKEN_RULES NoUnrelatedGroupKilled DestroyedSessionStopped"
+# R15, R16 and R20 are what the token adds, so only the runs with Token
+# check them.
+RULES="$NO_TOKEN_RULES NoUnrelatedGroupKilled DestroyedSessionStopped RemovedSessionStopped"
 NO_TOKEN_WITNESSES="WitnessCreateGivesUp WitnessCrashReconciled WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessReconcileRepairs"
 WITNESSES="WitnessGcRemovesSession WitnessCreateGivesUp WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled WitnessDestroyCompletes WitnessSigtermRecorded WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessLeftoverMeetsDestroy WitnessReusedIdMeetsKill WitnessRecordNamesProgram WitnessUnrecordedProgramOutlives WitnessReconcileRepairs WitnessMarkedRepaired WitnessDeadRepairRepaired WitnessWaitPassesReusedId WitnessReusedHostMeetsKill WitnessMarkerPolled"
 
@@ -218,6 +263,7 @@ write_run mutant-ReconcileSkipsTerminal pass RecordedExitKept "ReconcileSkipsTer
 write_run mutant-GcSkipsNonCollectable pass NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE" "redundant: the final check still skips"
 write_run mutant-GcFinalCheck pass NoLiveSessionDeleted "GcFinalCheck=FALSE" "redundant: the first check still skips"
 write_run mutant-GcBothChecks violated NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE GcFinalCheck=FALSE" "with neither gc check, gc removes live sessions" NoLiveSessionDeleted
+write_run mutant-GcKeepsLiveGroup violated RemovedSessionStopped "GcKeepsLiveGroup=FALSE" "without the group check, gc removes program.json while a process that the program left runs" RemovedSessionStopped
 write_run mutant-ShutdownChecksCommandable pass TerminalIsFinal "ShutdownChecksCommandable=FALSE" "redundant: the writer writes nothing after a terminal record"
 write_run mutant-ShutdownBothChecks violated TerminalIsFinal "ShutdownChecksCommandable=FALSE HostStopsAfterTerminalWrite=FALSE" "with neither, shutdown writes destroying over an exit record" TerminalIsFinal
 
@@ -227,6 +273,7 @@ write_run mutant-ShutdownBothChecks violated TerminalIsFinal "ShutdownChecksComm
 UNSEEN=TRUE
 write_run current-unseen pass "$RULES" "" "the code with a program that no scan shows: every rule holds"
 write_run mutant-FreezesUnseenGroup-unseen violated DestroyedProgramStopped "FreezesUnseenGroup=FALSE" "without the freeze, the kill finds no member in view, and destroy records destroyed while a fork chain runs" DestroyedProgramStopped
+write_run mutant-GcProbesUnseenGroup-unseen violated RemovedSessionStopped "GcProbesUnseenGroup=FALSE" "without the probe, gc removes program.json while a fork chain that the program left runs" RemovedSessionStopped
 UNSEEN=FALSE
 
 # destroy, list and gc run without /proc, or in another pid namespace or on
@@ -234,6 +281,7 @@ UNSEEN=FALSE
 OTHER=TRUE
 write_run current-otherspace pass "$RULES" "" "the code with destroy, list and gc in another pid space: every rule holds"
 write_run witness-WitnessUnsharedDestroyCompletes-otherspace violated WitnessUnsharedDestroyCompletes "" "a plain destroy from another pid space still succeeds"
+write_run witness-WitnessUnsharedGcRemovesLeftover-otherspace violated WitnessUnsharedGcRemovesLeftover "" "gc in another pid space cannot check the group, so it removes an exited session while a process that the program left runs"
 write_run mutant-UnsharedGroupReadsUnknown-otherspace violated DestroyedSessionStopped "UnsharedGroupReadsUnknown=FALSE" "with the group read gone where no scan or probe shows it, destroy of an exited session records destroyed while a process it left runs" DestroyedSessionStopped
 write_run mutant-CreateRecordsHost-otherspace violated HostDeathOnlyWhenDead "CreateRecordsHost=FALSE" "without the record from create, a reconcile in another pid space reads the starting host dead and records it failed" HostDeathOnlyWhenDead
 OTHER=FALSE
@@ -260,6 +308,26 @@ write_run mutant-CreateRetriesMarker-win32 violated FailedCreateStopped "CreateR
 write_run witness-WitnessMarkerRetried-win32 violated WitnessMarkerRetried "" "the model reaches this state on Windows"
 WIN32=FALSE
 
+# A run that expects pass explores the whole model and takes minutes, and a
+# run that expects a violation stops at the first one, mostly in seconds. So
+# a share takes every n-th run of each kind, which spreads the long runs.
+if [ "$SHARD_COUNT" -gt 1 ]; then
+  passes=0
+  others=0
+  share=""
+  for name in $RUNS; do
+    if [ "$(cut -f1 "$OUT/$name/expect.txt")" = pass ]; then
+      [ $((passes % SHARD_COUNT + 1)) -eq "$SHARD_INDEX" ] && share="$share $name"
+      passes=$((passes + 1))
+    else
+      [ $((others % SHARD_COUNT + 1)) -eq "$SHARD_INDEX" ] && share="$share $name"
+      others=$((others + 1))
+    fi
+  done
+  RUNS=$share
+  echo "Share $SHARD of the runs:$RUNS"
+fi
+
 run_tlc() {
   local dir rc=0
   dir=$(cd "$OUT/$1" && pwd)
@@ -270,11 +338,20 @@ run_tlc() {
   echo "$rc" >"$dir/rc"
 }
 
-count=0
+# A pool: a new run starts as soon as one ends. The bash 3.2 of macOS has
+# no `wait -n`, so there each batch of $JOBS runs waits for its slowest.
+running=0
 for name in $RUNS; do
   run_tlc "$name" &
-  count=$((count + 1))
-  if [ $((count % JOBS)) -eq 0 ]; then wait; fi
+  running=$((running + 1))
+  if [ "$running" -ge "$JOBS" ]; then
+    if wait -n 2>/dev/null; then
+      running=$((running - 1))
+    else
+      wait
+      running=0
+    fi
+  fi
 done
 wait
 
@@ -324,6 +401,7 @@ echo
 echo "Facts: $FACTS_LINE"
 echo "       Collectable=$COLLECTABLE Terminal=$TERMINAL"
 for name in current current-no-token; do
+  case " $RUNS " in *" $name "*) ;; *) continue ;; esac
   echo "Distinct states of $name: $(sed -n 's/.* \([0-9]*\) distinct states found.*/\1/p' "$OUT/$name/tlc.out" | tail -1)."
 done
 echo "A violated run stops at its first violation."

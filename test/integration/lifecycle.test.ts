@@ -949,6 +949,24 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
       return sessionId;
     }
 
+    // The host captures the session token only while the program runs, so a
+    // program that would exit at once first waits until program.json is in
+    // place. A capture that still found no token leaves gc nothing to prove,
+    // so a test of gc's group check skips then.
+    function untilRecorded(): string {
+      return `until [ -f "${testHome}/sessions/$AGENT_TTY_SESSION_ID/program.json" ]; do sleep 0.01; done`;
+    }
+
+    async function recordsToken(sessionId: string): Promise<boolean> {
+      const record = JSON.parse(
+        await readFile(
+          join(testHome, 'sessions', sessionId, 'program.json'),
+          'utf8',
+        ),
+      ) as { bootId: unknown };
+      return record.bootId !== null;
+    }
+
     it('destroy ends it within the destroy wait', async () => {
       const sessionId = await createProgram(
         'trap "" TERM HUP; touch "$0"; exec sleep 300',
@@ -1010,6 +1028,90 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
         expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
         expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
         expect(await groupEnds(pgid)).toBe(true);
+      },
+    );
+
+    // gc would delete program.json, the only record that proves the group.
+    it.runIf(capturesToken)(
+      'gc keeps an exited session while a process that the program left runs',
+      async ({ skip }) => {
+        const sessionId = await createProgram(
+          `trap "" HUP; sleep 300 & ${untilRecorded()}; touch "$0"; exit 0`,
+        );
+        const deadline = Date.now() + 10_000;
+        while (inspectSession(testHome, sessionId).status !== 'exited') {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
+        if (!(await recordsToken(sessionId))) {
+          skip('the host captured no session token');
+        }
+
+        const kept = runCli(['gc', '--json'], { AGENT_TTY_HOME: testHome });
+        expect(kept.status).toBe(0);
+        expect(JSON.parse(kept.stdout)).toMatchObject({
+          ok: true,
+          result: {
+            removedSessionCount: 0,
+            homes: [
+              {
+                skippedSessions: [
+                  {
+                    sessionId,
+                    reason: expect.stringContaining('destroy') as string,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('exited');
+        expect(isGroupAlive(pgid)).toBe(true);
+
+        const destroyed = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(JSON.parse(destroyed.stdout)).toMatchObject({ ok: true });
+        expect(await groupEnds(pgid)).toBe(true);
+        const removed = runCli(['gc', '--json'], { AGENT_TTY_HOME: testHome });
+        expect(JSON.parse(removed.stdout)).toMatchObject({
+          ok: true,
+          result: { removedSessionCount: 1 },
+        });
+      },
+    );
+
+    // After a container restart that keeps the home, host.json names a pid
+    // namespace that no longer exists. gc cannot check the group there, and
+    // no destroy can prove it gone, so gc removes the session.
+    it.runIf(capturesToken)(
+      'gc removes an exited session whose host.json names another pid namespace',
+      async ({ skip }) => {
+        const sessionId = await createProgram(
+          `trap "" HUP; sleep 300 & ${untilRecorded()}; touch "$0"; exit 0`,
+        );
+        const deadline = Date.now() + 10_000;
+        while (inspectSession(testHome, sessionId).status !== 'exited') {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
+        if (!(await recordsToken(sessionId))) {
+          skip('the host captured no session token');
+        }
+        const hostFile = join(testHome, 'sessions', sessionId, 'host.json');
+        const host = JSON.parse(await readFile(hostFile, 'utf8')) as object;
+        await writeFile(
+          hostFile,
+          JSON.stringify({ ...host, pidNamespace: 'pid:[1]' }),
+        );
+
+        const removed = runCli(['gc', '--json'], { AGENT_TTY_HOME: testHome });
+        expect(removed.status).toBe(0);
+        expect(JSON.parse(removed.stdout)).toMatchObject({
+          ok: true,
+          result: { removedSessionCount: 1 },
+        });
+        expect(isGroupAlive(pgid)).toBe(true);
       },
     );
 
@@ -1137,6 +1239,48 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
 
         expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
         expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+        expect(await chainRuns(beat)).toBe(false);
+      },
+    );
+
+    // gc sends no SIGSTOP, so only the probe of the group id finds the chain.
+    it.runIf(capturesToken)(
+      'gc keeps an exited session while a fork chain that the program left runs',
+      async ({ skip }) => {
+        const beat = join(testHome, 'beat');
+        const sessionId = createSession(testHome, [
+          '/bin/sh',
+          '-c',
+          `trap "" HUP; python3 '${forkChain}' 60 0.002 '${beat}' & ${untilRecorded()}; exit 0`,
+        ]);
+        pgid = inspectSession(testHome, sessionId).childPid as number;
+        const deadline = Date.now() + 10_000;
+        while (
+          !existsSync(beat) ||
+          inspectSession(testHome, sessionId).status !== 'exited'
+        ) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
+        if (!(await recordsToken(sessionId))) {
+          skip('the host captured no session token');
+        }
+        expect(await chainRuns(beat)).toBe(true);
+
+        const kept = runCli(['gc', '--json'], { AGENT_TTY_HOME: testHome });
+        expect(JSON.parse(kept.stdout)).toMatchObject({
+          ok: true,
+          result: { removedSessionCount: 0 },
+        });
+        expect(inspectSession(testHome, sessionId).status).toBe('exited');
+
+        const destroyed = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        // The error, when there is one, names why the chain outlived destroy.
+        expect(
+          (JSON.parse(destroyed.stdout) as { error?: unknown }).error,
+        ).toBeUndefined();
         expect(await chainRuns(beat)).toBe(false);
       },
     );
