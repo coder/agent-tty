@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
+import { readdirSync } from 'node:fs';
 import {
   mkdir,
   mkdtemp,
@@ -29,6 +30,7 @@ const fsHooks = vi.hoisted(() => ({
   beforeRm: undefined as ((path: string) => Promise<void>) | undefined,
   beforeWriteFile: undefined as ((path: string) => Promise<void>) | undefined,
   beforeUtimes: undefined as ((path: string) => Promise<void>) | undefined,
+  beforeReaddir: undefined as ((path: string) => Promise<void>) | undefined,
 }));
 
 vi.mock('node:fs/promises', async () => {
@@ -52,6 +54,10 @@ vi.mock('node:fs/promises', async () => {
         typeof args[0] === 'string' ? args[0] : '',
       );
       return actual.writeFile(...args);
+    },
+    readdir: async (...args: Parameters<typeof actual.readdir>) => {
+      await fsHooks.beforeReaddir?.(String(args[0]));
+      return actual.readdir(...args);
     },
     utimes: async (...args: Parameters<typeof actual.utimes>) => {
       await fsHooks.beforeUtimes?.(String(args[0]));
@@ -126,6 +132,7 @@ describe('artifact manifest lock', () => {
     fsHooks.beforeRm = undefined;
     fsHooks.beforeWriteFile = undefined;
     fsHooks.beforeUtimes = undefined;
+    fsHooks.beforeReaddir = undefined;
     vi.useRealTimers();
     await rm(home, { recursive: true, force: true });
   });
@@ -380,39 +387,41 @@ describe('artifact manifest lock', () => {
     expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
   });
 
-  it("lets 30 writers through a dead owner's lock when the artifacts folder holds 20000 files", async () => {
+  it('lists only the announcements while it announces itself, not the artifacts folder', async () => {
+    // A listing of a large artifacts folder while the announcement exists
+    // made breakers that started together keep seeing each other.
     const artifacts = join(sessionDirectory, 'artifacts');
-    for (let start = 0; start < 20_000; start += 200) {
-      await Promise.all(
-        Array.from({ length: 200 }, (_, index) =>
-          writeFile(join(artifacts, `f${String(start + index)}.png`), ''),
-        ),
-      );
-    }
     await writeFile(lockPath, await deadOwnerRecord());
-    let inside = 0;
-    let maxInside = 0;
-    const update = async (): Promise<void> => {
-      inside += 1;
-      maxInside = Math.max(maxInside, inside);
-      await sleep(1);
-      inside -= 1;
+    const announced = (): boolean => {
+      const inFolder = (path: string): string[] => {
+        try {
+          return readdirSync(path);
+        } catch {
+          return [];
+        }
+      };
+      return (
+        inFolder(`${lockPath}.breakers`).length > 0 ||
+        inFolder(artifacts).some((name) =>
+          name.startsWith('manifest.json.lock.breaker'),
+        )
+      );
+    };
+    const listedWhileAnnounced: string[] = [];
+    fsHooks.beforeReaddir = (path) => {
+      if (announced()) {
+        listedWhileAnnounced.push(path);
+      }
+      return Promise.resolve();
     };
 
-    const results = await Promise.allSettled(
-      Array.from({ length: 30 }, () =>
-        withArtifactManifestLock(sessionDirectory, update, {
-          waitMs: 10_000,
-          unknownOwnerStaleMs: 60_000,
-        }),
-      ),
-    );
+    await withArtifactManifestLock(sessionDirectory, () => Promise.resolve());
+    fsHooks.beforeReaddir = undefined;
 
-    expect(results.filter((result) => result.status === 'rejected')).toEqual(
-      [],
-    );
-    expect(maxInside).toBe(1);
-  }, 60_000);
+    expect(listedWhileAnnounced).not.toHaveLength(0);
+    expect(listedWhileAnnounced).not.toContain(artifacts);
+    expect(await readdir(artifacts)).toEqual([]);
+  });
 
   it("removes a dead breaker's fresh break file once it had to wait for a live lock", async () => {
     await writeFile(lockPath, ownerRecord(process.pid, true));
