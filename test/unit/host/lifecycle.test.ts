@@ -1086,7 +1086,8 @@ describe('destroySession', () => {
       it.each([
         ['host.json names another pid namespace', 'namespace' as const],
         ['the CLI cannot read /proc', 'noProc' as const],
-        ['the CLI cannot read host.json', 'unreadable' as const],
+        ['host.json is a folder', 'folder' as const],
+        ['the read of host.json is refused', 'refused' as const],
       ])(
         'times out without a signal to the group when %s and no probe finds it',
         async (_, gap) => {
@@ -1097,9 +1098,15 @@ describe('destroySession', () => {
             ...(own as HostRecord),
             ...(gap === 'namespace' && { pidNamespace: 'pid:[1]' }),
           });
-          if (gap === 'unreadable') {
+          if (gap === 'folder') {
             await rm(hostRecordPath(directory));
             await mkdir(hostRecordPath(directory));
+          }
+          if (gap === 'refused') {
+            fsHooks.afterReadFile = (path) =>
+              path === hostRecordPath(directory)
+                ? Promise.reject(errno('EACCES'))
+                : Promise.resolve();
           }
           fsHooks.proc = new Map();
           if (gap === 'noProc') {
@@ -1123,7 +1130,8 @@ describe('destroySession', () => {
                 namespace:
                   "Run destroy from the host's pid namespace on the host's machine.",
                 noProc: 'Run destroy where /proc is mounted.',
-                unreadable: `This process cannot read the host record at ${hostRecordPath(directory)}`,
+                folder: `Failed to read the host record at ${hostRecordPath(directory)} (EISDIR), so this process cannot prove which processes are the session's.`,
+                refused: `Failed to read the host record at ${hostRecordPath(directory)} (EACCES), so this process cannot prove which processes are the session's. Make that file readable and run destroy again.`,
               }[gap],
             ) as string,
           });

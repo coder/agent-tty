@@ -163,16 +163,16 @@ export async function readHostRecord(
   }
 }
 
-// Whether host.json exists but its read or its check fails, so that
-// readHostRecord reads it as missing.
-export async function hostRecordUnreadable(
+// The error of a host.json that exists but whose read or check fails, so
+// that readHostRecord reads it as missing. null when it reads.
+export async function hostRecordError(
   sessionDirectory: string,
-): Promise<boolean> {
+): Promise<Error | null> {
   try {
     await readHostRecordOrThrow(sessionDirectory);
-    return false;
-  } catch {
-    return true;
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error : new Error(String(error));
   }
 }
 

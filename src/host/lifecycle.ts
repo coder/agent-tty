@@ -25,7 +25,6 @@ import {
 } from '../storage/manifests.js';
 import {
   destroyMarkerPath,
-  hostRecordPath,
   legacySocketPath,
   manifestPath,
   sessionDir,
@@ -45,7 +44,7 @@ import {
 } from './programGroup.js';
 import {
   captureHost,
-  hostRecordUnreadable,
+  hostRecordError,
   judgeHost,
   readHostRecord,
   writeHostRecord,
@@ -894,9 +893,22 @@ async function stopSessionProcesses(
 // and when this process cannot read host.json, which readHostRecord reads as
 // missing.
 async function unsharedGroupHint(sessionDirectory: string): Promise<string> {
-  return (await hostRecordUnreadable(sessionDirectory))
-    ? ` This process cannot read the host record at ${hostRecordPath(sessionDirectory)}, so it cannot prove which processes are the session's. Make that file readable and run destroy again.`
-    : " This process runs in another pid namespace or on another machine than the session's host, so it cannot prove which processes are the session's. Run destroy from the host's pid namespace on the host's machine.";
+  const error = await hostRecordError(sessionDirectory);
+  if (error === null) {
+    return " This process runs in another pid namespace or on another machine than the session's host, so it cannot prove which processes are the session's. Run destroy from the host's pid namespace on the host's machine.";
+  }
+  const code: unknown =
+    error.cause instanceof Error
+      ? (error.cause as { code?: unknown }).code
+      : undefined;
+  // Only a read that the permissions refuse passes once the file is
+  // readable. A folder, invalid JSON or an invalid record does not.
+  const refused = code === 'EACCES' || code === 'EPERM';
+  return ` ${error.message.replace(/\.$/, '')}${
+    typeof code === 'string' ? ` (${code})` : ''
+  }, so this process cannot prove which processes are the session's.${
+    refused ? ' Make that file readable and run destroy again.' : ''
+  }`;
 }
 
 export interface DestroySessionOptions {
