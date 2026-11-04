@@ -49,7 +49,8 @@
     "src/cli/commands/gc.ts#defaultDependencies": "81a9894438cb5be7",
     "src/host/programGroup.ts#provenProgramGroupRuns": "7b50817618b4b769",
     "src/host/programGroup.ts#judgeGroupForGc": "fb133ba2739116d1",
-    "src/host/programGroup.ts#judgeFrozenGroup": "d18458e7d70a5664",
+    "src/host/programGroup.ts#judgeFrozenGroup": "ca600530eddb26b2",
+    "src/host/programGroup.ts#FROZEN_JUDGEMENTS": "d4eb06aa7addbaa9",
     "src/host/programGroup.ts#isUnreadableGroupError": "561c6a1108e60d06",
     "src/host/programGroup.ts#GC_JUDGEMENTS": "180a0af01a4b81c7",
     "src/host/programGroup.ts#probeFindsGroup": "31ea7b5e835c0509",
@@ -142,7 +143,7 @@
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "f1bb5d457a8f2ba0",
-    "skill:scripts/facts.mjs": "81c2bebbe52aeff4",
+    "skill:scripts/facts.mjs": "222f471610f4a026",
     "skill:scripts/check.sh": "0e998387e38d04c8"
   },
   "callSites": {

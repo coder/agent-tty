@@ -1398,6 +1398,52 @@ function rerunFacts() {
   };
 }
 
+// judgeFrozenGroup freezes and judges at most FROZEN_JUDGEMENTS times: SIGSTOP
+// where /proc shows this process's pid space, a judgement, and SIGCONT in a
+// finally. A frozen judgement other than gone decides; gone freezes again.
+function frozenJudgesTwice() {
+  const module = 'src/host/programGroup.ts';
+  const limit = requireDeclaration(module, 'FROZEN_JUDGEMENTS').initializer;
+  const statements = requireDeclaration(module, 'judgeFrozenGroup').body
+    .statements;
+  const loop = statements[0];
+  if (
+    limit === undefined ||
+    !ts.isNumericLiteral(limit) ||
+    !Number.isInteger(Number(limit.text)) ||
+    Number(limit.text) < 1 ||
+    statements.length !== 2 ||
+    loop === undefined ||
+    !ts.isForStatement(loop) ||
+    !ts.isBlock(loop.statement) ||
+    normalize(statements[1].getText()) !== 'return false;'
+  ) {
+    return false;
+  }
+  const head = normalize(
+    `${loop.initializer?.getText()}; ${loop.condition?.getText()}; ${loop.incrementor?.getText()}`,
+  );
+  const [stop, declared, judged, decides, ...rest] = loop.statement.statements;
+  return (
+    head === 'let frozen = 0; frozen < FROZEN_JUDGEMENTS; frozen += 1' &&
+    rest.length === 0 &&
+    normalize(stop?.getText() ?? '') ===
+      "if (!procShowsOwnPidSpace() || !signalProcessGroup(group.pid, 'SIGSTOP')) { return false; }" &&
+    normalize(declared?.getText() ?? '') ===
+      "let verdict: GroupJudgement['verdict'];" &&
+    judged !== undefined &&
+    ts.isTryStatement(judged) &&
+    judged.catchClause === undefined &&
+    judged.finallyBlock !== undefined &&
+    statementsOf(judged.tryBlock).join('\n') ===
+      'verdict = judgeLiveGroup(group).verdict;' &&
+    statementsOf(judged.finallyBlock).join('\n') ===
+      "signalProcessGroup(group.pid, 'SIGCONT');" &&
+    normalize(decides?.getText() ?? '') ===
+      "if (verdict !== 'gone') { return verdict === 'owned' ? true : verdict === 'unproven' ? false : null; }"
+  );
+}
+
 function gcFacts() {
   const fn = requireDeclaration('src/cli/commands/gc.ts', 'gcSessions');
   let loop;
@@ -1530,11 +1576,7 @@ function gcFacts() {
     probes &&
     last ===
       'return live === null ? true : live ? null : judgeFrozenGroup(group);' &&
-    body('judgeFrozenGroup').join('\n') ===
-      [
-        "if (!procShowsOwnPidSpace() || !signalProcessGroup(group.pid, 'SIGSTOP')) { return false; }",
-        "try { const { verdict } = judgeLiveGroup(group); return verdict === 'owned' ? true : verdict === 'unproven' ? false : null; } finally { signalProcessGroup(group.pid, 'SIGCONT'); }",
-      ].join('\n');
+    frozenJudgesTwice();
   return {
     GcSkipsNonCollectable: reconcile >= 0 && collectable > reconcile,
     GcFinalCheck: finalCheck,
@@ -1591,6 +1633,7 @@ const COVERED = [
   ['src/host/programGroup.ts', 'provenProgramGroupRuns'],
   ['src/host/programGroup.ts', 'judgeGroupForGc'],
   ['src/host/programGroup.ts', 'judgeFrozenGroup'],
+  ['src/host/programGroup.ts', 'FROZEN_JUDGEMENTS'],
   ['src/host/programGroup.ts', 'isUnreadableGroupError'],
   ['src/host/programGroup.ts', 'GC_JUDGEMENTS'],
   ['src/host/programGroup.ts', 'probeFindsGroup'],

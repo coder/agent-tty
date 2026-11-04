@@ -1031,7 +1031,6 @@ describe('a program group with a token, as a faked /proc shows it', () => {
           0,
           'SIGSTOP',
           'SIGCONT',
-          0,
           'SIGSTOP',
           'SIGCONT',
         ]);
@@ -1040,8 +1039,8 @@ describe('a program group with a token, as a faked /proc shows it', () => {
       }
     });
 
-    // GC_JUDGEMENTS bounds the judgements of a group that ended.
-    it('reads a group that shows only zombies, also frozen, ended after ten judgements', async () => {
+    // Nothing live was in view to freeze, so one pass reads the group ended.
+    it('reads a group that shows only zombies, also frozen twice, ended in one pass', async () => {
       const directory = await recordedSession();
       try {
         procShowsTokenGroup('Z');
@@ -1052,9 +1051,76 @@ describe('a program group with a token, as a faked /proc shows it', () => {
         });
 
         expect(await provenProgramGroupRuns(directory)).toBe(false);
-        expect(signals).toEqual(
-          Array.from({ length: 10 }, () => [0, 'SIGSTOP', 'SIGCONT']).flat(),
-        );
+        expect(signals).toEqual([
+          0,
+          'SIGSTOP',
+          'SIGCONT',
+          'SIGSTOP',
+          'SIGCONT',
+        ]);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    // A member of another session or autogroup that took the id is not the
+    // program's, and it gets its SIGCONT.
+    it.each([
+      {
+        member: 'another autogroup',
+        frozen: () => {
+          procShowsTokenGroup('Z', 'T');
+          const read = autogroupFile.read;
+          autogroupFile.read = (file) =>
+            file === '/proc/101/autogroup'
+              ? '/autogroup-9 nice 0\n'
+              : (read?.(file) ?? null);
+        },
+      },
+      {
+        member: 'another session',
+        frozen: () => {
+          procShowsTokenGroup('Z');
+          procHooks.stat?.set(
+            '101',
+            `101 (a) T 1 ${String(CHILD_PID)} 4242 ${STAT_TAIL}`,
+          );
+        },
+      },
+    ])(
+      'reads a frozen group whose live member is in $member ended, and resumes it',
+      async ({ frozen }) => {
+        const directory = await recordedSession();
+        try {
+          procShowsTokenGroup('Z');
+          const signals: unknown[] = [];
+          vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+            signals.push(signal);
+            if (signal === 'SIGSTOP') {
+              frozen();
+            }
+            return true;
+          });
+
+          expect(await provenProgramGroupRuns(directory)).toBe(false);
+          expect(signals).toEqual([0, 'SIGSTOP', 'SIGCONT']);
+        } finally {
+          await rm(directory, { recursive: true, force: true });
+        }
+      },
+    );
+
+    // A /proc that names another pid than this process's belongs to another
+    // pid namespace, so the group reads unshared and gc sends no signal.
+    it('sends no SIGSTOP when /proc/self names another pid', async () => {
+      const directory = await recordedSession();
+      try {
+        procShowsTokenGroup('Z');
+        procHooks.self = '1';
+        const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+        expect(await provenProgramGroupRuns(directory)).toBe(false);
+        expect(kill).not.toHaveBeenCalled();
       } finally {
         await rm(directory, { recursive: true, force: true });
       }
