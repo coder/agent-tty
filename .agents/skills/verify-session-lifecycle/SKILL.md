@@ -47,7 +47,7 @@ Yes, when the diff changes any of these:
 - `src/cli/commands/gc.ts` `gcSessions`, `src/cli/commands/create.ts` `runCreateCommand` with `waitForReadyHost`, and `src/cli/commands/destroy.ts` `runDestroyCommand` with `rerunInNewSession`.
 - `src/host/sessionState.ts` `setDimensions`, `requestDestroy`, `recordDestroyed` and `recordExit`, `src/host/eventLog.ts` `EventLog.open`, `src/host/rpcServer.ts` `listen` and `close`, `src/host/rpcClient.ts` `toTransportCliError` (which socket errors read as `HOST_UNREACHABLE`).
 - `src/host/hostRecord.ts`: `captureHost`, `writeHostRecord`, `readHostRecord`, `pidExists`, `judgeHost`, `inPidNamespace`, `readTimeNamespace`, `inTimeNamespace`, `readMachineId`, `inHostPidSpace` and `sharesHostPids`.
-- `src/storage/manifests.ts` `readValidatedJsonFile`, `replaceFileAtomic`, `replaceFileAtomicSync`, `writeValidatedJsonFileSync`, `writeManifest`, `writeDestroyMarker`, `writeCreateFailedMarker`.
+- `src/storage/manifests.ts` `readValidatedJsonFile`, `replaceFileAtomic`, `replaceFileAtomicSync`, `writeValidatedJsonFileSync`, `writeManifest`, `writeDestroyMarker` and `writeCreateFailedMarker` with `writeEmptyMarker`.
 - The `SESSION_STATUS_POLICIES` table in `src/protocol/sessionStatusPolicy.ts`.
 - Any new or removed call to `writeManifest`, `persistManifest`, `replaceFileAtomic`, `writeValidatedJsonFile`, `writeTextFileAtomic`, `manifestPath`, `reconcileSession`, `writeProgramRecord` or `stopProgramGroup` (also through an import alias), or a recursive `rm` (one with `recursive: true`, whatever its argument is named), anywhere in `src/`.
 - This skill's `model/SessionLifecycle.tla`, `scripts/facts.mjs` and `scripts/check.sh`: an edit to them also needs a new confirmed `coverage.json`.
@@ -62,7 +62,7 @@ From the repo root:
 .agents/skills/verify-session-lifecycle/scripts/check.sh
 ```
 
-It needs `node`, Java 11 or newer (`java -version`), and the network once: the first run downloads `tla2tools.jar` 1.7.4 into this skill's `.cache/` folder (git ignores it) and checks its sha256. On this repo it takes about eleven minutes with the default `CHECK_JOBS` of 4. Nine runs explore the whole model, so `CHECK_JOBS=74` starts every run at once and takes about as long as the longest run. `JAVA=/path/to/java` picks another Java. `TLA2TOOLS_JAR=/path/to/tla2tools.jar` uses a jar you already have, which must be the same 1.7.4 build. `CHECK_OUT=<folder>` keeps the results in that folder (default: a new temp folder, printed at the end).
+It needs `node`, Java 11 or newer (`java -version`), and the network once: the first run downloads `tla2tools.jar` 1.7.4 into this skill's `.cache/` folder (git ignores it) and checks its sha256. On this repo it takes about eleven minutes with the default `CHECK_JOBS` of 4. Ten runs explore more than 20 million distinct states each, so `CHECK_JOBS=74` starts every run at once and takes about as long as the longest run. `JAVA=/path/to/java` picks another Java. `TLA2TOOLS_JAR=/path/to/tla2tools.jar` uses a jar you already have, which must be the same 1.7.4 build. `CHECK_OUT=<folder>` keeps the results in that folder (default: a new temp folder, printed at the end).
 
 What it does:
 

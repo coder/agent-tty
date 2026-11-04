@@ -1444,6 +1444,7 @@ const COVERED = [
   ['src/storage/manifests.ts', 'writeManifest'],
   ['src/storage/manifests.ts', 'writeDestroyMarker'],
   ['src/storage/manifests.ts', 'writeCreateFailedMarker'],
+  ['src/storage/manifests.ts', 'writeEmptyMarker'],
   ['src/protocol/sessionStatusPolicy.ts', 'SESSION_STATUS_POLICIES'],
 ];
 
