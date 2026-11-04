@@ -119,8 +119,8 @@ export async function sendRpc(
   signal?: AbortSignal,
 ): Promise<unknown> {
   throwIfAborted(signal);
-  // A host that an older version started listens at the old path. Remove
-  // this fallback after one minor release.
+  // A host that an older version started listens at the old path. Hosts of
+  // 0.5.0 and earlier listen there, so remove this fallback in 0.7.0.
   const oldSocketPath = legacySocketPath(socketPath);
   if (oldSocketPath === null) {
     return await sendRpcAt(socketPath, method, params, timeoutMs, signal);

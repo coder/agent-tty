@@ -4,10 +4,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
 
-import { emitSuccess } from '../output.js';
+import { emitSuccess, writeHumanErrorLines } from '../output.js';
 import { DEFAULT_IDLE_TIMEOUT_MS } from '../../config/defaults.js';
 import {
   allocateSession,
+  isProcessAlive,
   launchHost,
   type LaunchedHost,
 } from '../../host/lifecycle.js';
@@ -31,6 +32,8 @@ import { invariant } from '../../util/assert.js';
 const READINESS_POLL_INTERVAL_MS = 100;
 const READINESS_MAX_ATTEMPTS = 50;
 const READINESS_RPC_TIMEOUT_MS = 100;
+const MARKER_RETRY_INTERVAL_MS = 100;
+const MARKER_RETRY_MAX_ATTEMPTS = 50;
 
 type SessionEnvironment = Record<string, string>;
 
@@ -177,6 +180,35 @@ function withSessionId(error: unknown, sessionId: string): CliError {
   });
 }
 
+// A probe that throws, such as EPERM from a process of another user that
+// took the host's pid, counts as an exited host, so the create still reports
+// its own error.
+function hostRuns(pid: number): boolean {
+  try {
+    return isProcessAlive(pid);
+  } catch {
+    return false;
+  }
+}
+
+// A failed write is logged, so the create still reports its own error.
+function writeMarkerOrLog(
+  path: string,
+  sessionId: string,
+  logger: CommandContext['logger'],
+): Promise<boolean> {
+  return writeCreateFailedMarker(path, sessionId).then(
+    () => true,
+    (error: unknown) => {
+      logger.debug('failed to write the create-failed marker', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    },
+  );
+}
+
 export async function runCreateCommand(options: CommandOptions): Promise<void> {
   const environment = normalizeCreateEnvironment(options.envEntries);
   const idleTimeoutMs =
@@ -274,23 +306,35 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
     // for it after its start-up write names the program: either the host
     // finds the marker, or the manifest read below finds the program.
     invariant(host !== undefined, 'a session that create polls has a host');
-    await writeCreateFailedMarker(
-      createFailedMarkerPath(sessionDirectory),
-      sessionId,
-    ).catch((markerError: unknown) => {
-      options.context.logger.debug('failed to write the create-failed marker', {
-        sessionId,
-        error:
-          markerError instanceof Error
-            ? markerError.message
-            : String(markerError),
-      });
-    });
-    const manifest = await readManifestIfExists(
-      manifestPath(sessionDirectory),
-    ).catch(() => null);
+    const markerFile = createFailedMarkerPath(sessionDirectory);
+    const manifestFile = manifestPath(sessionDirectory);
+    const logger = options.context.logger;
+    let marked = await writeMarkerOrLog(markerFile, sessionId, logger);
+    let manifest = await readManifestIfExists(manifestFile).catch(() => null);
+    // On Windows a host that the manifest does not name yet sees only the
+    // marker. So while the marker write fails, create writes it again and
+    // reads the manifest after each write, until the marker lands, the
+    // manifest names the program, or the host has exited.
+    for (
+      let attempt = 1;
+      process.platform === 'win32' &&
+      !marked &&
+      manifest?.childPid == null &&
+      attempt <= MARKER_RETRY_MAX_ATTEMPTS &&
+      hostRuns(host.pid);
+      attempt += 1
+    ) {
+      await delay(MARKER_RETRY_INTERVAL_MS);
+      marked = await writeMarkerOrLog(markerFile, sessionId, logger);
+      manifest = await readManifestIfExists(manifestFile).catch(() => null);
+    }
     if (process.platform !== 'win32' || manifest?.childPid != null) {
       host.stop();
+    }
+    // JSON names the session in details.sessionId. Text mode prints only the
+    // error line, so name the session before it.
+    if (!options.json) {
+      writeHumanErrorLines([`Session ${sessionId} failed to start.`]);
     }
     throw withSessionId(error, sessionId);
   }

@@ -166,7 +166,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck GcKeepsLiveGroup GcProbesUnseenGroup GcFreezesUnseenGroup ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid CreateRecordsHost FreezesUnseenGroup UnsharedGroupReadsUnknown HostChecksCreateFailed ForceSkipsUnreadableGroup"
+GUARDS="GcSkipsNonCollectable GcFinalCheck GcKeepsLiveGroup GcProbesUnseenGroup GcFreezesUnseenGroup ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid CreateRecordsHost FreezesUnseenGroup UnsharedGroupReadsUnknown HostChecksCreateFailed HostPollsCreateFailed CreateRetriesMarker ForceSkipsUnreadableGroup"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -181,7 +181,7 @@ NO_TOKEN_RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal Recor
 # check them.
 RULES="$NO_TOKEN_RULES NoUnrelatedGroupKilled DestroyedSessionStopped RemovedSessionStopped"
 NO_TOKEN_WITNESSES="WitnessCreateGivesUp WitnessCrashReconciled WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessReconcileRepairs"
-WITNESSES="WitnessGcRemovesSession WitnessCreateGivesUp WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled WitnessDestroyCompletes WitnessSigtermRecorded WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessLeftoverMeetsDestroy WitnessReusedIdMeetsKill WitnessRecordNamesProgram WitnessUnrecordedProgramOutlives WitnessReconcileRepairs WitnessMarkedRepaired WitnessWaitPassesReusedId WitnessReusedHostMeetsKill"
+WITNESSES="WitnessGcRemovesSession WitnessCreateGivesUp WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled WitnessDestroyCompletes WitnessSigtermRecorded WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessLeftoverMeetsDestroy WitnessReusedIdMeetsKill WitnessRecordNamesProgram WitnessUnrecordedProgramOutlives WitnessReconcileRepairs WitnessMarkedRepaired WitnessDeadRepairRepaired WitnessWaitPassesReusedId WitnessReusedHostMeetsKill WitnessMarkerPolled"
 
 # --- runs ----------------------------------------------------------------
 
@@ -264,11 +264,12 @@ write_run mutant-FallbackNeedsFolder violated NoUnrelatedGroupKilled "FallbackNe
 write_run mutant-ReconcileRepairsDestroyed violated DestroyedStaysDestroyed "ReconcileRepairsDestroyed=FALSE" "without the marker, a reconcile writes failed over the destroyed that destroy reported" DestroyedStaysDestroyed
 write_run mutant-CreateStopsOnGiveUp violated FailedCreateStopped "CreateStopsOnGiveUp=FALSE" "without the SIGTERM, a create that gave up leaves its host serving the session" FailedCreateStopped
 write_run mutant-HostChecksCreateFailed pass FailedCreateStopped "HostChecksCreateFailed=FALSE" "redundant off Windows: the SIGTERM stops the host"
+write_run mutant-HostPollsCreateFailed pass FailedCreateStopped "HostPollsCreateFailed=FALSE" "redundant off Windows: the SIGTERM stops the host"
 write_run mutant-TokenNamesProgram violated DestroyedSessionStopped "TokenNamesProgram=FALSE" "with the host's autogroup as the token, no member carries it, and destroy records destroyed while the program's group runs" DestroyedSessionStopped
 write_run mutant-ReusedIdReadsGone pass WitnessWaitPassesReusedId "ReusedIdReadsGone=FALSE" "with a group that took the id read alive, no wait of destroy passes while that group runs"
 write_run mutant-ProvesHostPid violated NoUnrelatedHostKilled "ProvesHostPid=FALSE" "without the start-up record, destroy --force kills a process that took the host's pid" NoUnrelatedHostKilled
 write_run witness-WitnessUnrecordedHostMeetsKill violated WitnessUnrecordedHostMeetsKill "CreateRecordsHost=FALSE" "without a record from create, as when its capture fails, a kill meets a host that host.json does not name yet"
-write_run mutant-ReconcileRepairsMarked pass DestroyedStaysDestroyed "ReconcileRepairsMarked=FALSE" "redundant in the model: it has no crash of a reconciling process, so the repair after the reconcile's own write always runs"
+write_run mutant-ReconcileRepairsMarked violated DestroyedStaysDestroyed "ReconcileRepairsMarked=FALSE" "without the repair at the first read, a list that died between its write and its repair leaves failed, and the next reconcile skips it" DestroyedStaysDestroyed
 write_run mutant-ReconcileSkipsTerminal pass RecordedExitKept "ReconcileSkipsTerminal=FALSE" "redundant: the re-read returns on a terminal manifest"
 write_run mutant-GcSkipsNonCollectable pass NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE" "redundant: the final check still skips"
 write_run mutant-GcFinalCheck pass NoLiveSessionDeleted "GcFinalCheck=FALSE" "redundant: the first check still skips"
@@ -334,6 +335,9 @@ write_run mutant-ReconcileWaitsForGroup-no-token violated LiveGroupStaysNamed "R
 WIN32=TRUE
 write_run current-win32 pass "$NO_TOKEN_RULES" "" "the code on Windows: R1 to R14 and R17 to R19 hold"
 write_run mutant-HostChecksCreateFailed-win32 violated FailedCreateStopped "HostChecksCreateFailed=FALSE" "without the marker, a host that the manifest does not name yet keeps serving after create gave up" FailedCreateStopped
+write_run mutant-HostPollsCreateFailed-win32 violated FailedCreateStopped "HostPollsCreateFailed=FALSE" "without the watch, a host that checked for the marker before create wrote it keeps serving when create cannot read the manifest" FailedCreateStopped
+write_run mutant-CreateRetriesMarker-win32 violated FailedCreateStopped "CreateRetriesMarker=FALSE" "without the retries, a marker write that fails once leaves a host that the manifest does not name yet serving after create gave up" FailedCreateStopped
+write_run witness-WitnessMarkerRetried-win32 violated WitnessMarkerRetried "" "the model reaches this state on Windows"
 WIN32=FALSE
 
 # A run that expects pass explores the whole model and takes minutes, and a
