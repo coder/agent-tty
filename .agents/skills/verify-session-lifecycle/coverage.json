@@ -12,6 +12,8 @@
     "CreateRecordsHost": true,
     "CreateStopsOnGiveUp": true,
     "HostChecksCreateFailed": true,
+    "HostPollsCreateFailed": true,
+    "CreateRetriesMarker": true,
     "HostWaitsForManifest": true,
     "HostSerializesWrites": true,
     "HostStopsAfterTerminalWrite": true,
@@ -40,8 +42,10 @@
     "Terminal": ["destroyed", "exited", "failed"]
   },
   "fingerprints": {
-    "src/cli/commands/create.ts#runCreateCommand": "131d2707818ea283",
+    "src/cli/commands/create.ts#runCreateCommand": "bb4fa596cc1e4af7",
     "src/cli/commands/create.ts#waitForReadyHost": "a7fd2ba345b6bfd6",
+    "src/cli/commands/create.ts#writeMarkerOrLog": "abf293bd80df1c3d",
+    "src/cli/commands/create.ts#hostRuns": "b80eac3bb9523aaf",
     "src/cli/commands/destroy.ts#runDestroyCommand": "ecaa8b1d572da7c6",
     "src/cli/commands/destroy.ts#rerunInNewSession": "cf32d7d082758522",
     "src/cli/commands/gc.ts#gcSessions": "a2ac8bd10f100332",
@@ -135,13 +139,13 @@
     "src/storage/manifests.ts#writeCreateFailedMarker": "587c8047e563db4e",
     "src/storage/manifests.ts#writeEmptyMarker": "143325689100f36c",
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
-    "src/host/hostMain.ts#runHost(parts)": "1d75544221b3c6c1",
-    "src/host/hostMain.ts#runHost(final try)": "251f1e68a4ec17cc",
+    "src/host/hostMain.ts#runHost(parts)": "e3879ee94370dcfd",
+    "src/host/hostMain.ts#runHost(final try)": "e0615a9709fefb67",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "77ec28d60359f635",
-    "skill:scripts/facts.mjs": "eded6c52629e3523",
-    "skill:scripts/check.sh": "e33db0960de216fe"
+    "skill:model/SessionLifecycle.tla": "7f1c6dd7943968c3",
+    "skill:scripts/facts.mjs": "07dba02a98497dcb",
+    "skill:scripts/check.sh": "b48bc5fd343aefb5"
   },
   "callSites": {
     "writeManifest": [
