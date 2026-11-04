@@ -1413,6 +1413,50 @@ describe('a program group with a token, as a faked /proc shows it', () => {
       });
   }
 
+  // A member that a scan shows can end before its autogroup read, so the
+  // judgement reads unknown. A stopped member cannot end.
+  it('freezes a group whose member ends before its autogroup read, and kills it once a stopped member carries the token', () => {
+    procShowsTokenGroup('S');
+    const tokenRead = autogroupFile.read;
+    autogroupFile.read = (file) =>
+      file === '/proc/100/autogroup' ? '' : (tokenRead?.(file) ?? null);
+    const kill = stopShowsMember();
+
+    stopProgramGroup(group);
+
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGKILL'],
+    ]);
+  });
+
+  // The witness of a judgement can end before it is read again.
+  it('freezes a group whose witness ends before it is read again, and kills it once a stopped member carries the token', () => {
+    procShowsTokenGroup('S');
+    const live = procHooks.stat as Map<string, string | Error>;
+    let reads = 0;
+    procHooks.stat = new (class extends Map<string, string | Error> {
+      override get(pid: string): string | Error | undefined {
+        if (pid !== '100') {
+          return live.get(pid);
+        }
+        // Each judgement reads the member once, and the read of the witness
+        // after it finds the member ended.
+        reads += 1;
+        return reads % 2 === 0 ? errno('ENOENT') : live.get(pid);
+      }
+    })(live);
+    const kill = stopShowsMember();
+
+    stopProgramGroup(group);
+
+    expect(reads).toBe(2);
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGKILL'],
+    ]);
+  });
+
   it('freezes a group that no scan shows and kills it once a stopped member carries the token', () => {
     procShowsTokenGroup();
     const kill = stopShowsMember();
@@ -1712,7 +1756,12 @@ describe.runIf(capturesToken)('a program group with a token', () => {
 
       stopProgramGroup(record);
 
-      expect(kill).not.toHaveBeenCalled();
+      // Each judgement of unknown freezes the group, and the group gets
+      // SIGCONT at the end.
+      expect(kill.mock.calls).toEqual([
+        ...Array.from({ length: 5 }, () => [-pid, 'SIGSTOP']),
+        [-pid, 'SIGCONT'],
+      ]);
       expect(isProgramGroupAlive(record)).toBe(true);
       expect(() => process.kill(-pid, 0)).not.toThrow();
     },

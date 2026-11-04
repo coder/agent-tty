@@ -1205,16 +1205,13 @@ function ownershipFacts() {
       return;
     }
     const st = node.statement.statements.map((s) => normalize(s.getText()));
-    const owned = st.findIndex((s) =>
-      /^if \(judgement\.verdict !== 'owned'\) \{ (return|break); \}$/.test(s),
-    );
+    // The only kill follows a judgement of owned and a read of its witness
+    // that owns the group too.
     checkedKill =
       st[0] === 'const judgement = judgeLiveGroup(group);' &&
-      owned > 0 &&
-      st[owned + 1] === 'const witness = readProcessRow(judgement.witness);' &&
-      /^if \( witness !== null && judgeProgramGroup\(group, group\.bootId, \[witness\]\)\.verdict === 'owned' \) \{ killProcessGroupBestEffort\(group\.pid\); killed = true; return; \}$/.test(
-        st[owned + 2] ?? '',
-      );
+      st[1] === "if (judgement.verdict === 'unproven') { return; }" &&
+      st[2] ===
+        "if (judgement.verdict === 'owned') { const witness = readProcessRow(judgement.witness); if ( witness !== null && judgeProgramGroup(group, group.bootId, [witness]).verdict === 'owned' ) { killProcessGroupBestEffort(group.pid); killed = true; return; } }";
   });
   const judge = normalize(
     requireDeclaration(module, 'judgeProgramGroup').getText(),
@@ -1278,11 +1275,12 @@ function ownershipFacts() {
   };
 }
 
-// In stopProgramGroup's loop, each judgement of gone sends SIGSTOP to the
-// group and judges again, so a member that a scan never shows stops and
-// comes into view, while /proc names this process by its pid. The finally
-// block sends a frozen group that got no kill SIGCONT, also when a scan
-// throws.
+// In stopProgramGroup's loop, each judgement that gets no kill and is not
+// unproven sends SIGSTOP to the group and judges again: gone, unknown, and
+// owned with a witness that ended before its read. So a member that a scan
+// never shows, or that ends between two reads, stops and stays in view,
+// while /proc names this process by its pid. The finally block sends a
+// frozen group that got no kill SIGCONT, also when a scan throws.
 function freezeFacts(body) {
   const guarded = body.statements.find(ts.isTryStatement);
   const loop = guarded?.tryBlock.statements.find(ts.isForStatement);
@@ -1301,8 +1299,15 @@ function freezeFacts(body) {
     before.at(-2) === 'let frozen = false;' &&
     before.at(-1) === 'let killed = false;' &&
     guarded.tryBlock.statements.length === 1 &&
-    st[1] ===
-      "if (judgement.verdict === 'gone' && procShowsOwnPidSpace()) { frozen = signalProcessGroup(group.pid, 'SIGSTOP') || frozen; if (frozen) { continue; } }" &&
+    st.length === 6 &&
+    st[1] === "if (judgement.verdict === 'unproven') { return; }" &&
+    st[2].startsWith("if (judgement.verdict === 'owned') {") &&
+    st.slice(3).join('\n') ===
+      [
+        'if (!procShowsOwnPidSpace()) { return; }',
+        "frozen = signalProcessGroup(group.pid, 'SIGSTOP') || frozen;",
+        'if (!frozen) { return; }',
+      ].join('\n') &&
     normalize(
       requireDeclaration(
         'src/host/programGroup.ts',
