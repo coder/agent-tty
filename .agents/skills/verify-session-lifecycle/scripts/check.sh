@@ -136,7 +136,7 @@ NO_TOKEN_RULES="NoLiveSessionDeleted HostDeathOnlyWhenDead TerminalIsFinal Recor
 # R15 and R16 are what the token adds, so only the runs with Token check them.
 RULES="$NO_TOKEN_RULES NoUnrelatedGroupKilled DestroyedSessionStopped"
 NO_TOKEN_WITNESSES="WitnessCreateGivesUp WitnessCrashReconciled WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessReconcileRepairs"
-WITNESSES="WitnessGcRemovesSession WitnessCreateGivesUp WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled WitnessDestroyCompletes WitnessSigtermRecorded WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessLeftoverMeetsDestroy WitnessReusedIdMeetsKill WitnessRecordNamesProgram WitnessUnrecordedProgramOutlives WitnessReconcileRepairs WitnessMarkedRepaired WitnessWaitPassesReusedId WitnessReusedHostMeetsKill"
+WITNESSES="WitnessGcRemovesSession WitnessCreateGivesUp WitnessSessionServes WitnessResizeLands WitnessCleanExitRecorded WitnessCrashReconciled WitnessDestroyCompletes WitnessSigtermRecorded WitnessDestroyExitedSession WitnessForceDestroyRecorded WitnessProgramOutlivesHost WitnessForeignOutlivesDestroy WitnessForeignOutlivesForce WitnessLeftoverMeetsDestroy WitnessReusedIdMeetsKill WitnessRecordNamesProgram WitnessUnrecordedProgramOutlives WitnessReconcileRepairs WitnessMarkedRepaired WitnessDeadRepairRepaired WitnessWaitPassesReusedId WitnessReusedHostMeetsKill"
 
 # --- runs ----------------------------------------------------------------
 
@@ -212,7 +212,7 @@ write_run mutant-TokenNamesProgram violated DestroyedSessionStopped "TokenNamesP
 write_run mutant-ReusedIdReadsGone pass WitnessWaitPassesReusedId "ReusedIdReadsGone=FALSE" "with a group that took the id read alive, no wait of destroy passes while that group runs"
 write_run mutant-ProvesHostPid violated NoUnrelatedHostKilled "ProvesHostPid=FALSE" "without the start-up record, destroy --force kills a process that took the host's pid" NoUnrelatedHostKilled
 write_run witness-WitnessUnrecordedHostMeetsKill violated WitnessUnrecordedHostMeetsKill "CreateRecordsHost=FALSE" "without a record from create, as when its capture fails, a kill meets a host that host.json does not name yet"
-write_run mutant-ReconcileRepairsMarked pass DestroyedStaysDestroyed "ReconcileRepairsMarked=FALSE" "redundant in the model: it has no crash of a reconciling process, so the repair after the reconcile's own write always runs"
+write_run mutant-ReconcileRepairsMarked violated DestroyedStaysDestroyed "ReconcileRepairsMarked=FALSE" "without the repair at the first read, a list that died between its write and its repair leaves failed, and the next reconcile skips it" DestroyedStaysDestroyed
 write_run mutant-ReconcileSkipsTerminal pass RecordedExitKept "ReconcileSkipsTerminal=FALSE" "redundant: the re-read returns on a terminal manifest"
 write_run mutant-GcSkipsNonCollectable pass NoLiveSessionDeleted "GcSkipsNonCollectable=FALSE" "redundant: the final check still skips"
 write_run mutant-GcFinalCheck pass NoLiveSessionDeleted "GcFinalCheck=FALSE" "redundant: the first check still skips"

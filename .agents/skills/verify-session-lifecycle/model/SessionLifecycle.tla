@@ -183,6 +183,10 @@ VARIABLES
     rec,         \* program.json names the program with its token
     startFailed, \* ghost: the host died because its files were missing
     readRepaired, \* ghost: a reconcile wrote destroyed from its first read
+    lostRepair,  \* ghost: a reconcile died between its write and its
+                 \*   repair while the marker existed, and no reconcile has
+                 \*   read the manifest since
+    diedBeforeRepair, \* ghost: such a death happened
                  \*   next to the destroy marker
     sock,        \* the RPC socket file exists (it is outside the directory)
     cpc,         \* create: "alloc", "write", "launch", "done", "giveup"
@@ -249,7 +253,7 @@ VARIABLES
 
 diskVars == <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal, wasExited,
               wasNamed, dmark, cmark>>
-ghostVars == <<startFailed, readRepaired>>
+ghostVars == <<startFailed, readRepaired, lostRepair, diedBeforeRepair>>
 hostVars == <<hostAlive, hpc, hex, rsz, prog, foreign, left>>
 groupVars == <<rec, reused, hitUnrelated, diedUnrecorded, passedReused,
                hrec, hreused, hitUnrelatedHost>>
@@ -265,6 +269,7 @@ Init ==
     /\ wasTerminal = FALSE /\ wasExited = FALSE /\ wasNamed = FALSE
     /\ dmark = FALSE /\ cmark = FALSE
     /\ rec = FALSE /\ startFailed = FALSE /\ readRepaired = FALSE
+    /\ lostRepair = FALSE /\ diedBeforeRepair = FALSE
     /\ sock = FALSE
     /\ cpc = "alloc"
     /\ hostAlive = FALSE /\ hpc = "none" /\ hex = "none" /\ rsz = "none"
@@ -415,6 +420,7 @@ CliKillThrough(named) == IF OtherPidSpace THEN NoKill ELSE KillThrough(named)
 HostFailsToStart ==
     /\ startFailed' = TRUE
     /\ readRepaired' = readRepaired
+    /\ lostRepair' = lostRepair /\ diedBeforeRepair' = diedBeforeRepair
     /\ hostAlive' = FALSE
     /\ hpc' = "dead"
     /\ hex' = IF hex = "none" THEN "none" ELSE "gone"
@@ -888,9 +894,12 @@ SkipsHost(read) == ReconcileSkipsLiveHost /\ read.pid /\ CliHostAlive
 \* readManifestIfExists. With ReconcileRepairsMarked, a terminal manifest
 \* other than destroyed next to the destroy marker (isMarkedDestroyed) goes
 \* to the repair write from this copy ("r_marked"). Otherwise it returns when
-\* the manifest is null or terminal.
+\* the manifest is null or terminal. A reconcile that died before its
+\* repair left its failed record, and this read is the next chance to
+\* repair it.
 ReconcileReads(p) ==
     /\ pc[p] = "r_read"
+    /\ lostRepair' = FALSE /\ diedBeforeRepair' = diedBeforeRepair
     /\ IF ReconcileRepairsMarked /\ dmark /\ mst \in Terminal
           /\ mst # "destroyed"
           THEN /\ pc' = [pc EXCEPT ![p] = "r_marked"]
@@ -1027,8 +1036,9 @@ ReconcileWritesMarked(p) ==
                /\ readRepaired' = TRUE
           ELSE /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
                /\ UNCHANGED <<diskVars, readRepaired>>
-    /\ UNCHANGED <<startFailed, sock, cpc, hostVars, shutVars, rd, gres, lruns,
-                   destroyVars, groupVars>>
+    /\ UNCHANGED <<startFailed, lostRepair, diedBeforeRepair, sock, cpc,
+                   hostVars, shutVars, rd, gres, lruns, destroyVars,
+                   groupVars>>
 
 \* unlinkIfPresent(socketPath(sessionDirectory))
 ReconcileUnlinksSocket(p) ==
@@ -1037,6 +1047,19 @@ ReconcileUnlinksSocket(p) ==
     /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
     /\ UNCHANGED <<diskVars, ghostVars, cpc, hostVars, shutVars, rd, gres,
                    lruns, destroyVars, groupVars>>
+
+\* The list process is killed between its write and its repair, for
+\* example by a Ctrl-C. Its write may have replaced the destroyed record
+\* of a destroy that already reported success. gc's death in the same
+\* place leaves the same record, so only list dies in the model. A later
+\* list starts a new reconcile.
+ListDiesBeforeRepair ==
+    /\ pc["list"] = "r_repair"
+    /\ pc' = [pc EXCEPT !["list"] = "idle"]
+    /\ lostRepair' = (lostRepair \/ (dmark /\ mst # "destroyed"))
+    /\ diedBeforeRepair' = (diedBeforeRepair \/ (dmark /\ mst # "destroyed"))
+    /\ UNCHANGED <<diskVars, startFailed, readRepaired, sock, cpc, hostVars,
+                   shutVars, rd, gres, lruns, destroyVars, groupVars>>
 
 \* -------------------------------------------------------------------------
 \* gc
@@ -1396,6 +1419,7 @@ Next ==
           \/ ReconcilePollsGroup(p)
           \/ ReconcileWrites(p) \/ ReconcileRepairs(p)
           \/ ReconcileWritesMarked(p) \/ ReconcileUnlinksSocket(p)
+    \/ ListDiesBeforeRepair
     \/ GcFindsDirectory \/ GcReadsManifest \/ GcReadsReconciled
     \/ GcFinalRead \/ GcRemoves
     \/ ListStartsReconcile
@@ -1417,7 +1441,7 @@ TypeOK ==
     /\ cmark => dir
     /\ {dir, mpid, mchild, wasTerminal, wasExited, wasNamed, dmark, cmark,
         startFailed,
-        readRepaired, sock,
+        readRepaired, lostRepair, diedBeforeRepair, sock,
         hostAlive, prog, foreign, sig, dforce, dinside, dsaw, dkill, rec, left,
         reused, hitUnrelated, diedUnrecorded, passedReused, hrec, hreused,
         hitUnrelatedHost}
@@ -1536,10 +1560,13 @@ FailedCreateStopped ==
 
 \* R18: once destroy reported success, the manifest says destroyed while the
 \* directory exists, except while a reconcile that wrote over it has yet to
-\* write destroyed again.
+\* write destroyed again, or, after that reconcile died, until the next
+\* reconcile reads the manifest and writes destroyed.
 DestroyedStaysDestroyed ==
     (dres = "ok" /\ dir) =>
-        (mst = "destroyed" \/ \E p \in Readers : pc[p] = "r_repair")
+        \/ mst = "destroyed"
+        \/ \E p \in Readers : pc[p] \in {"r_repair", "r_marked"}
+        \/ lostRepair
 
 \* R19: no kill of destroy --force reaches a process that took the host's
 \* pid after the host ended.
@@ -1552,6 +1579,8 @@ WitnessGcRemovesSession == gres # "removed"
 WitnessReconcileRepairs ==
     ~(dmark /\ mst = "failed" /\ \E p \in Readers : pc[p] = "r_repair")
 WitnessMarkedRepaired == ~readRepaired
+WitnessDeadRepairRepaired ==
+    ~(diedBeforeRepair /\ ~lostRepair /\ mst = "destroyed" /\ dir)
 WitnessCreateGivesUp ==
     ~(cpc = "failed" /\ sig /\ mst = "destroyed" /\ ~hostAlive)
 WitnessSessionServes == ~(hpc = "serving" /\ sock /\ mst = "running" /\ mpid)
