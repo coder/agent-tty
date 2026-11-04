@@ -1048,10 +1048,16 @@ describe('a hostPid that may no longer name the host', () => {
     return child.pid as number;
   }
 
+  // The parent never waits, so its child stays a zombie. A shell does not
+  // do: dash reaps a background child that ends before the shell reaches
+  // its next command, and then no zombie appears.
   async function startZombie(): Promise<number> {
     const parent = spawn(
-      '/bin/sh',
-      ['-c', 'sleep 0 & echo $!; exec sleep 30'],
+      'python3',
+      [
+        '-c',
+        'import os, time\npid = os.fork()\nif pid == 0:\n    os._exit(0)\nprint(pid, flush=True)\ntime.sleep(30)',
+      ],
       {
         stdio: ['ignore', 'pipe', 'ignore'],
       },
@@ -1067,7 +1073,7 @@ describe('a hostPid that may no longer name the host', () => {
           }).trim(),
         ).toBe('Z');
       },
-      { timeout: 5000 },
+      { timeout: 3000 },
     );
     return pid;
   }
