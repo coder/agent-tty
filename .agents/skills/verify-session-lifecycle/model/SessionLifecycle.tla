@@ -120,6 +120,10 @@ CONSTANTS
                             \*   create writes the marker again and reads
                             \*   the manifest after each write, up to 50
                             \*   times, while the host runs
+    ForceSkipsUnreadableGroup, \* lifecycle.ts: destroy --force of a session
+                            \*   whose host is gone records destroyed also
+                            \*   when the read of the group fails with a
+                            \*   system error, after it stops the host alone
     TokenNamesProgram,      \* programGroup.ts: captureToken records an
                             \*   autogroup only once the program leads its
                             \*   own session in an autogroup other than the
@@ -157,6 +161,13 @@ CONSTANTS
     Win32,                  \* the environment: Windows, where SIGTERM ends
                             \*   the host at once, so create sends it only
                             \*   when the manifest names the program
+    CheckFails,             \* the environment: while program.json names
+                            \*   the program, every read of it by destroy,
+                            \*   list and gc fails with a system error (EACCES,
+                            \*   or EIO on /proc), as does every judgement
+    Refused,                \* the environment: /proc of destroy, list and gc
+                            \*   refuses the autogroup of the program's
+                            \*   processes, so no judgement proves the group
     MaxListReconciles       \* how many times the "list" process reconciles
 
 ASSUME MaxListReconciles \in 1..3
@@ -165,6 +176,8 @@ ASSUME Unseen \in BOOLEAN
 ASSUME ZombiesInView \in BOOLEAN
 ASSUME OtherPidSpace \in BOOLEAN
 ASSUME Win32 \in BOOLEAN
+ASSUME CheckFails \in BOOLEAN
+ASSUME Refused \in BOOLEAN
 ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, GcKeepsLiveGroup,
                  GcProbesUnseenGroup, GcFreezesUnseenGroup,
                  ReconcileSkipsTerminal,
@@ -180,7 +193,7 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, GcKeepsLiveGroup,
                  ProvesGroupOwnership, DestroyStopsLeftovers,
                  FallbackNeedsFolder, CreateStopsOnGiveUp,
                  HostChecksCreateFailed, HostPollsCreateFailed,
-                 CreateRetriesMarker,
+                 CreateRetriesMarker, ForceSkipsUnreadableGroup,
                  ReconcileRepairsDestroyed, ReconcileRepairsMarked,
                  TokenNamesProgram,
                  ReusedIdReadsGone, ProvesHostPid, CreateRecordsHost,
@@ -189,8 +202,10 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, GcKeepsLiveGroup,
 Readers == {"gc", "list"}   \* the two processes that run reconcileSession
 \* The group that a kill went through, and that the wait after it probes:
 \* "proven" (program.json with a token), "numeric" (a childPid without a
-\* token), "bare" (the host's own record without a token) or "none".
-GroupKinds == {"none", "proven", "numeric", "bare"}
+\* token), "bare" (the host's own record without a token), "blind" (destroy
+\* --force could not read the group, see ForceSkipsUnreadableGroup) or
+\* "none".
+GroupKinds == {"none", "proven", "numeric", "bare", "blind"}
 NoRead == [pid |-> FALSE, origin |-> "none", code |-> FALSE, child |-> FALSE,
            grp |-> "none"]
 
@@ -280,7 +295,10 @@ VARIABLES
     dres,        \* what destroy reported: "pending", "ok", "error", or
                  \*   "killed" (it died before it reported)
     dsaw,        \* ghost: destroy wrote "destroyed" or read it last
-    dkill        \* ghost: destroy --force killed a live host
+    dkill,       \* ghost: destroy --force killed a live host
+    dblind       \* ghost: destroy --force wrote the destroy marker or
+                 \*   destroyed without a read of the program's group
+                 \*   (CheckFails); a reconcile then repairs to destroyed
 
 diskVars == <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal, wasExited,
               wasNamed, dmark, cmark>>
@@ -291,7 +309,7 @@ groupVars == <<rec, reused, hitUnrelated, diedUnrecorded, passedReused,
                hrec, hreused, hitUnrelatedHost>>
 shutVars == <<hst, hsd, dsnap, hwt, sig>>
 readerVars == <<pc, rd, gres, lruns>>
-destroyVars == <<dpc, dforce, dinside, drd, dres, dsaw, dkill>>
+destroyVars == <<dpc, dforce, dinside, drd, dres, dsaw, dkill, dblind>>
 vars == <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, readerVars,
           destroyVars, groupVars>>
 
@@ -319,7 +337,7 @@ Init ==
     /\ lruns = 0
     /\ dpc = "check" /\ dforce \in BOOLEAN /\ dinside = FALSE
     /\ drd = NoRead /\ dres = "pending"
-    /\ dsaw = FALSE /\ dkill = FALSE
+    /\ dsaw = FALSE /\ dkill = FALSE /\ dblind = FALSE
 
 \* writeManifest in src/storage/manifests.ts: write a temp file in the session
 \* directory and rename it over session.json. The rename is the visible step.
@@ -441,12 +459,23 @@ GroupSeen(kind) ==
 \* readProgramGroup and readProvenProgramGroup give a group with a token
 \* that reads alive instead, so their waits time out. The host always runs
 \* in its own pid space, so it keeps GroupSeen and HostKill. CliHostAlive
-\* gives the CLI's view of the host.
+\* gives the CLI's view of the host. With Refused a live member of the
+\* program's session shows no autogroup, so a group with a token reads
+\* unknown, which reads alive, while a process of it runs, and it gets no
+\* kill, because nothing proves it.
 CliGroupSeen(kind) ==
     IF OtherPidSpace
     THEN kind = "proven" /\ UnsharedGroupReadsUnknown
+    ELSE IF Refused /\ kind = "proven"
+    THEN KillsProgramGroup /\ (prog \/ left \/ foreign)
     ELSE GroupSeen(kind)
-CliKillThrough(named) == IF OtherPidSpace THEN NoKill ELSE KillThrough(named)
+CliKillThrough(named) ==
+    IF OtherPidSpace \/ (Refused /\ rec) THEN NoKill ELSE KillThrough(named)
+
+\* With CheckFails every read of program.json by destroy, list and gc fails
+\* while the record exists, and so does every judgement of the group that
+\* it names.
+Unreadable == CheckFails /\ rec
 
 \* The host fails to start because its files are missing or were rewritten.
 HostFailsToStart ==
@@ -1044,13 +1073,22 @@ ReconcileRereadsManifest(p) ==
 
 \* `const group = await readProgramGroup(sessionDirectory,
 \* current.childPid)` reads program.json, then stopProgramGroup(group).
+\* With Unreadable the read throws, and so does reconcileSession: gc skips
+\* the session ("failed to reconcile session (destroy --force removes it)"),
+\* and list goes on.
 ReconcileReadsRecord(p) ==
     /\ pc[p] = "r_record"
-    /\ CliKillThrough(rd[p].child)
-    /\ rd' = [rd EXCEPT ![p].grp = KindThrough(rd[p].child)]
-    /\ pc' = [pc EXCEPT ![p] = AfterGroupKill]
+    /\ IF Unreadable
+          THEN /\ NoKill /\ UNCHANGED rd
+               /\ pc' = [pc EXCEPT ![p] = IF p = "gc" THEN "done"
+                                          ELSE AfterReconcile(p)]
+               /\ gres' = IF p = "gc" THEN "skipped" ELSE gres
+          ELSE /\ CliKillThrough(rd[p].child)
+               /\ rd' = [rd EXCEPT ![p].grp = KindThrough(rd[p].child)]
+               /\ pc' = [pc EXCEPT ![p] = AfterGroupKill]
+               /\ UNCHANGED gres
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, hex, rsz,
-                   foreign, shutVars, gres, lruns, destroyVars, rec, reused,
+                   foreign, shutVars, lruns, destroyVars, rec, reused,
                    diedUnrecorded, hrec, hreused, hitUnrelatedHost,
                    passedReused>>
 
@@ -1201,14 +1239,15 @@ GcReadsReconciled ==
 \* cannot turn from destroyed back, so this current status skips no more
 \* often.
 GcSeesGroup ==
-    /\ ~OtherPidSpace
+    /\ ~OtherPidSpace /\ ~Refused
     /\ \/ GroupSeen("proven")
        \/ /\ GcProbesUnseenGroup /\ Unseen /\ (prog \/ left)
           /\ (~ZombiesInView \/ GcFreezesUnseenGroup)
 
 GcChecksGroup ==
     /\ pc["gc"] = "group"
-    /\ IF GcKeepsLiveGroup /\ mst # "destroyed" /\ rec /\ GcSeesGroup
+    /\ IF GcKeepsLiveGroup /\ mst # "destroyed"
+          /\ (Unreadable \/ (rec /\ GcSeesGroup))
           THEN GcSkips
           ELSE GcGoesTo("final")
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, rd,
@@ -1273,7 +1312,8 @@ DestroyDies ==
     /\ DestroyDoomed
     /\ dpc' = "done" /\ dres' = "killed" /\ drd' = NoRead
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
-                   readerVars, dforce, dinside, dsaw, dkill, groupVars>>
+                   readerVars, dforce, dinside, dsaw, dkill, dblind,
+                   groupVars>>
 
 \* runDestroyCommand: cliRunsInsideProgramSession first compares
 \* AGENT_TTY_SESSION_ID, which the program and its processes inherit at
@@ -1295,7 +1335,8 @@ DestroyChecksSession ==
                                   /\ (InsideCheckReadsEnv \/ mchild)))
     /\ dpc' = "read"
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
-                   readerVars, dforce, drd, dres, dsaw, dkill, groupVars>>
+                   readerVars, dforce, drd, dres, dsaw, dkill, dblind,
+                   groupVars>>
 
 ReadCopy == [pid |-> mpid, origin |-> morigin, code |-> mcode, child |-> mchild,
              grp |-> "none"]
@@ -1346,7 +1387,7 @@ DestroyReads ==
           ELSE /\ dpc' = "rpc" /\ UNCHANGED <<drd, dres, dsaw>>
     /\ sock' = (sock /\ (mst # "destroyed" \/ (mpid /\ CliHostAlive)))
     /\ UNCHANGED <<diskVars, ghostVars, cpc, hostVars, shutVars,
-                   readerVars, dforce, dinside, dkill, groupVars>>
+                   readerVars, dforce, dinside, dkill, dblind, groupVars>>
 
 \* stopLeftoversThenRecordDestroyed: stopSessionProcesses(sessionId, null,
 \* await readProvenProgramGroup(sessionDirectory), ...). The program.json
@@ -1355,12 +1396,18 @@ DestroyReads ==
 \* Then waitForProcessesToExit (DestroyPollsGroup, at "twait").
 DestroyKillsLeftovers ==
     /\ DestroyAt({"tkill"})
-    /\ IF rec /\ ~OtherPidSpace THEN ProvenKill ELSE NoKill
-    /\ drd' = [drd EXCEPT !.grp = IF rec THEN "proven" ELSE "none"]
-    /\ dpc' = "twait"
+    /\ IF Unreadable /\ ~(dforce /\ ForceSkipsUnreadableGroup)
+          THEN /\ NoKill /\ DestroyEnds("error")
+          ELSE /\ IF rec /\ ~OtherPidSpace /\ ~Refused /\ ~Unreadable
+                     THEN ProvenKill ELSE NoKill
+               /\ drd' = [drd EXCEPT !.grp = IF Unreadable THEN "blind"
+                                             ELSE IF rec THEN "proven"
+                                             ELSE "none"]
+               /\ dpc' = "twait"
+               /\ UNCHANGED dres
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostAlive, hpc, hex, rsz,
-                   foreign, shutVars, readerVars, dforce, dinside, dres, dsaw,
-                   dkill, rec, reused, diedUnrecorded, hrec, hreused,
+                   foreign, shutVars, readerVars, dforce, dinside, dsaw,
+                   dkill, dblind, rec, reused, diedUnrecorded, hrec, hreused,
                    hitUnrelatedHost, passedReused>>
 
 \* recordDestroyed: writeDestroyMarker, an empty file written with no mkdir.
@@ -1370,7 +1417,8 @@ DestroyMarksFolder ==
     /\ DestroyAt({"tmark"})
     /\ IF dir
           THEN /\ dmark' = TRUE /\ dpc' = "twrite" /\ UNCHANGED <<drd, dres>>
-          ELSE /\ DestroyEnds("error") /\ UNCHANGED dmark
+               /\ dblind' = (dblind \/ drd.grp = "blind")
+          ELSE /\ DestroyEnds("error") /\ UNCHANGED <<dmark, dblind>>
     /\ UNCHANGED <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal,
                    wasExited, wasNamed, cmark, ghostVars, sock, cpc, hostVars,
                    shutVars, readerVars, dforce, dinside, dsaw, dkill,
@@ -1385,9 +1433,10 @@ DestroyWritesDestroyed ==
           THEN /\ Write("destroyed", drd.pid, drd.origin,
                         DestroyKeepsExitCode /\ drd.code, drd.child)
                /\ dpc' = "tunlink" /\ drd' = NoRead /\ dsaw' = TRUE
+               /\ dblind' = (dblind \/ drd.grp = "blind")
                /\ UNCHANGED dres
           ELSE /\ DestroyEnds("error")
-               /\ UNCHANGED diskVars
+               /\ UNCHANGED <<diskVars, dblind>>
     /\ UNCHANGED <<ghostVars, sock, cpc, hostVars, shutVars, readerVars,
                    dforce, dinside, dkill, groupVars>>
 
@@ -1397,7 +1446,7 @@ DestroyUnlinksSocket ==
     /\ sock' = FALSE
     /\ dpc' = "done" /\ dres' = "ok"
     /\ UNCHANGED <<diskVars, ghostVars, cpc, hostVars, shutVars, readerVars,
-                   dforce, dinside, drd, dsaw, dkill, groupVars>>
+                   dforce, dinside, drd, dsaw, dkill, dblind, groupVars>>
 
 \* killHostBestEffort(host) of the copy that destroy read. With
 \* ProvesHostPid it kills only a host that hostMatches proves: the live host
@@ -1423,13 +1472,19 @@ KillsHost ==
 \* wait ("rkill").
 DestroyKills ==
     /\ DestroyAt({"kill", "rkill"})
-    /\ CliKillThrough(drd.child)
-    /\ KillsHost
-    /\ drd' = [drd EXCEPT !.grp = KindThrough(drd.child)]
-    /\ dpc' = IF dpc = "kill" THEN "kwait" ELSE "rwait"
+    /\ IF Unreadable /\ ~ForceSkipsUnreadableGroup
+          THEN /\ NoKill /\ DestroyEnds("error")
+               /\ UNCHANGED <<hostAlive, hpc, hex, rsz, dkill, diedUnrecorded,
+                              hitUnrelatedHost>>
+          ELSE /\ IF Unreadable THEN NoKill ELSE CliKillThrough(drd.child)
+               /\ KillsHost
+               /\ drd' = [drd EXCEPT !.grp = IF Unreadable THEN "blind"
+                                             ELSE KindThrough(drd.child)]
+               /\ dpc' = IF dpc = "kill" THEN "kwait" ELSE "rwait"
+               /\ UNCHANGED dres
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, foreign, shutVars,
-                   readerVars, dforce, dinside, dres, dsaw, rec, reused, hrec,
-                   hreused, passedReused>>
+                   readerVars, dforce, dinside, dsaw, dblind, rec, reused,
+                   hrec, hreused, passedReused>>
 
 \* waitForProcessesToExit in stopSessionProcesses polls until the host is
 \* dead and isProgramGroupAlive(group) reads false. A host that the kill
@@ -1453,7 +1508,7 @@ DestroyPollsGroup ==
           THEN /\ dpc' = "tunlink" /\ drd' = NoRead /\ UNCHANGED <<dres, dsaw>>
           ELSE /\ dpc' = Records /\ UNCHANGED <<drd, dres, dsaw>>
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
-                   readerVars, dforce, dinside, dkill, rec, reused,
+                   readerVars, dforce, dinside, dkill, dblind, rec, reused,
                    hitUnrelated, diedUnrecorded, hrec, hreused,
                    hitUnrelatedHost>>
 
@@ -1468,7 +1523,7 @@ DestroyRereads ==
                /\ dsaw' = (mst = "destroyed")
                /\ UNCHANGED dres
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
-                   readerVars, dforce, dinside, dkill, groupVars>>
+                   readerVars, dforce, dinside, dkill, dblind, groupVars>>
 
 \* sendRpc(socketFile, 'destroy') reaches the host, whose destroy handler
 \* calls startShutdown and answers. The host does the work, so this is one
@@ -1478,7 +1533,7 @@ DestroySendsRpc ==
     /\ StartShutdown(WriteQueued)
     /\ dpc' = "poll"
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, hwt, sig,
-                   readerVars, dforce, dinside, drd, dres, dsaw, dkill,
+                   readerVars, dforce, dinside, drd, dres, dsaw, dkill, dblind,
                    groupVars>>
 
 \* No socket file, or nobody listens on it: HOST_UNREACHABLE. destroy then
@@ -1487,7 +1542,7 @@ DestroyRpcFails ==
     /\ DestroyAt({"rpc"}) /\ ~(sock /\ hostAlive)
     /\ dpc' = "final"
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
-                   readerVars, dforce, dinside, drd, dres, dsaw, dkill,
+                   readerVars, dforce, dinside, drd, dres, dsaw, dkill, dblind,
                    groupVars>>
 
 \* waitForTerminalManifest: readManifest until it is terminal. A missing
@@ -1501,7 +1556,7 @@ DestroyPolls ==
           THEN DestroyFinishes
           ELSE /\ dpc' = "final" /\ UNCHANGED <<drd, dres, dsaw>>
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
-                   readerVars, dforce, dinside, dkill, groupVars>>
+                   readerVars, dforce, dinside, dkill, dblind, groupVars>>
 
 \* readSessionManifestOrThrow after destroy's own reconcile: terminal means
 \* success, anything else throws.
@@ -1509,7 +1564,7 @@ DestroyFinalRead ==
     /\ DestroyAt({"final"})
     /\ IF mst \in Terminal THEN DestroyFinishes ELSE DestroyEnds("error")
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars,
-                   readerVars, dforce, dinside, dkill, groupVars>>
+                   readerVars, dforce, dinside, dkill, dblind, groupVars>>
 
 \* Every process is finished. This step keeps TLC from reporting the end
 \* states as deadlocks. Any other state without a step is a model error.
@@ -1560,7 +1615,8 @@ TypeOK ==
     /\ {dir, mpid, mchild, wasTerminal, wasExited, wasNamed, dmark, cmark,
         startFailed,
         readRepaired, lostRepair, diedBeforeRepair, polled, sock,
-        hostAlive, prog, foreign, sig, dforce, dinside, dsaw, dkill, rec, left,
+        hostAlive, prog, foreign, sig, dforce, dinside, dsaw, dkill, dblind,
+        rec, left,
         reused, hitUnrelated, diedUnrecorded, passedReused, hrec, hreused,
         hitUnrelatedHost}
        \subseteq BOOLEAN
@@ -1646,7 +1702,8 @@ RemovedFolderStaysRemoved == gres = "removed" => ~dir
 \* process that a program left when it exited on its own (`left`, which R16
 \* covers), nor a program that no manifest named: its host died before the
 \* start-up write (see the Scope section of SKILL.md).
-DestroyedProgramStopped == (mst = "destroyed" /\ wasNamed) => ~GroupAlive
+DestroyedProgramStopped ==
+    (mst = "destroyed" /\ wasNamed /\ ~dblind) => ~GroupAlive
 
 \* R13: while a process of the program's group runs, a manifest that named
 \* the program still names it, so a later destroy or reconcile can still
@@ -1666,7 +1723,7 @@ NoUnrelatedGroupKilled == ~hitUnrelated
 \* the host died after it started the program and before program.json named
 \* it (see the Scope section of SKILL.md).
 DestroyedSessionStopped ==
-    (mst = "destroyed" /\ ~diedUnrecorded) => ~(GroupAlive \/ left)
+    (mst = "destroyed" /\ ~diedUnrecorded /\ ~dblind) => ~(GroupAlive \/ left)
 
 \* R17: once create gave up, its host keeps the session "running" only
 \* while create's SIGTERM is still on its way to it, or while the host has
@@ -1701,7 +1758,8 @@ NoUnrelatedHostKilled == ~hitUnrelatedHost
 \* space cannot check the group, and it removes the folder as it does
 \* without a token (WitnessUnsharedGcRemovesLeftover).
 RemovedSessionStopped ==
-    (gres = "removed" /\ ~diedUnrecorded /\ ~OtherPidSpace)
+    (gres = "removed" /\ ~diedUnrecorded /\ ~OtherPidSpace /\ ~Refused
+     /\ ~dblind)
         => ~(GroupAlive \/ left)
 
 \* Witnesses. check.sh expects TLC to report each one VIOLATED, which shows
@@ -1756,6 +1814,9 @@ WitnessUnsharedDestroyCompletes ==
 \* With OtherPidSpace gc removes an exited session while a process that
 \* the program left runs, because it cannot check the group there: the
 \* state that R20 leaves out.
+WitnessUncheckedForceDestroys == ~(dblind /\ dres = "ok" /\ left)
+WitnessRefusedGcRemovesLeftover ==
+    ~(Refused /\ gres = "removed" /\ ~diedUnrecorded /\ left)
 WitnessUnsharedGcRemovesLeftover ==
     ~(OtherPidSpace /\ gres = "removed" /\ ~diedUnrecorded /\ left)
 =============================================================================

@@ -704,7 +704,7 @@ function destroyFacts() {
     const block = force.thenStatement;
     const first = indexOfStatement(
       block,
-      /^await stopSessionProcesses\(\s*sessionId,\s*await readSessionHost\(sessionDirectory, manifest\),\s*await readProgramGroup\(/,
+      /^await stopUnlessUnreadable\(\s*await readSessionHost\(sessionDirectory, manifest\),\s*\(\) => readProgramGroup\(sessionDirectory, manifest\.childPid\),?\s*\);$/,
     );
     const reread = indexOfStatement(
       block,
@@ -712,11 +712,7 @@ function destroyFacts() {
     );
     const group = indexOfStatement(
       block,
-      /^const group = await readProgramGroup\(/,
-    );
-    const second = indexOfStatement(
-      block,
-      /^await stopSessionProcesses\(\s*sessionId,\s*await readSessionHost\(sessionDirectory, current\),\s*group,/,
+      /^const group = await stopUnlessUnreadable\(\s*await readSessionHost\(sessionDirectory, current\),\s*\(\) => readProgramGroup\(sessionDirectory, current\.childPid\),?\s*\);$/,
     );
     const records = indexOfStatement(
       block,
@@ -726,8 +722,8 @@ function destroyFacts() {
       first >= 0 &&
       reread > first &&
       group > reread &&
-      second > group &&
-      records > second &&
+      records > group &&
+      stopsThenRecords.stops &&
       calls(block, 'reconcileSession').length === 0;
   }
   const stop = requireDeclaration(
@@ -757,6 +753,7 @@ function destroyFacts() {
       stopWaits &&
       waitsForProcessesOnly,
     DestroyKeepsExitCode: keepsExitCode,
+    ForceSkipsUnreadableGroup: forceRecords && stopsThenRecords.skipsUnreadable,
     DestroyStopsLeftovers:
       stopsThenRecords.records &&
       stopsThenRecords.stops &&
@@ -771,52 +768,155 @@ function destroyFacts() {
   };
 }
 
-// The statements of destroySession's local stopLeftoversThenRecordDestroyed:
-// with DestroyStopsLeftovers it stops the group that program.json proves,
-// waits for it, and only then records destroyed. readProvenProgramGroup
-// returns the record whenever it has a token, or the unshared group when
-// this process cannot prove that it shares the host's pid space. A session
-// that a process which saw the group recorded destroyed gets no wait for an
-// unshared group (trustsDestroyed).
+// destroySession's local stopLeftoversThenRecordDestroyed hands
+// stopUnlessUnreadable the read of program.json, and only then records
+// destroyed. readProvenProgramGroup returns the record whenever it has a
+// token, or the unshared group when this process cannot prove that it
+// shares the host's pid space. A session that a process which saw the
+// group recorded destroyed gets no wait for an unshared group
+// (trustsDestroyed). stopUnlessUnreadable reads the group, stops it and
+// waits. With skipsUnreadable, destroy --force that cannot read the group
+// (a system error) stops the host alone instead.
 const UNSHARED_RETURN =
   'return (await sharesHostPids(sessionDirectory, false)) ? record : UNSHARED_GROUP;';
-const STOP_UNLESS_TRUSTED =
-  "await stopSessionProcesses( sessionId, null, terminal.status === 'destroyed' && group !== null && 'unshared' in group ? null : group, sessionDirectory, signal, );";
-const STOP_ALWAYS =
-  'await stopSessionProcesses( sessionId, null, group, sessionDirectory, signal, );';
+const RETURN_UNLESS_TRUSTED =
+  "return terminal.status === 'destroyed' && group !== null && 'unshared' in group ? null : group;";
 
-function stopLeftoversThenRecordDestroyed(destroy) {
-  let found = [];
+function localArrows(destroy) {
+  const out = new Map();
   walk(destroy.body, (node) => {
     if (
       ts.isVariableDeclaration(node) &&
-      node.name.getText() === 'stopLeftoversThenRecordDestroyed' &&
       node.initializer !== undefined &&
       ts.isArrowFunction(node.initializer) &&
       ts.isBlock(node.initializer.body)
     ) {
-      found = node.initializer.body.statements.map((st) =>
-        normalize(st.getText()),
-      );
+      out.set(node.name.getText(), node.initializer.body.statements);
     }
   });
+  return out;
+}
+
+function statementsOf(block) {
+  return block.statements.map((st) => normalize(st.getText()));
+}
+
+function stopUnlessUnreadableFacts(arrows) {
+  const st = arrows.get('stopUnlessUnreadable') ?? [];
+  const [judge, declared, attempt, ...after] = st;
+  // readAndJudge reads the group and judges it once, with no kill.
+  const judges =
+    judge !== undefined &&
+    ts.isVariableStatement(judge) &&
+    judge.declarationList.declarations[0]?.name.getText() === 'readAndJudge' &&
+    (arrows.get('readAndJudge') ?? [])
+      .map((s) => normalize(s.getText()))
+      .join('\n') ===
+      [
+        'const group = await readGroup();',
+        'isProgramGroupAlive(group);',
+        'return group;',
+      ].join('\n');
+  if (
+    !judges ||
+    declared === undefined ||
+    normalize(declared.getText()) !== 'let group: ProgramGroup | null;' ||
+    attempt === undefined ||
+    !ts.isTryStatement(attempt) ||
+    attempt.catchClause === undefined ||
+    attempt.finallyBlock !== undefined
+  ) {
+    return { stops: false, skipsUnreadable: false };
+  }
+  // Only a read or a judgement that fails in the try can skip the group: the
+  // stop comes after the try, so a read that fails after a verdict fails the
+  // destroy. With --force, an unreadable read is read again after a poll
+  // interval, and only a second unreadable read skips the group.
+  const tried = statementsOf(attempt.tryBlock).join('\n');
+  const caught = attempt.catchClause.block.statements;
+  const stops =
+    tried === 'group = await readAndJudge();' &&
+    after.map((s) => normalize(s.getText())).join('\n') ===
+      [
+        'await stopSessionProcesses( sessionId, host, group, sessionDirectory, signal, );',
+        'return group;',
+      ].join('\n');
+  const [rethrows, waits, again, ...more] = caught;
+  const skipsUnreadable =
+    more.length === 0 &&
+    normalize(rethrows?.getText() ?? '') ===
+      'if (force !== true || !isUnreadableGroupError(error)) { throw error; }' &&
+    normalize(waits?.getText() ?? '') ===
+      'await pollDelay(DESTROY_POLL_INTERVAL_MS, signal);' &&
+    again !== undefined &&
+    ts.isTryStatement(again) &&
+    again.catchClause !== undefined &&
+    again.finallyBlock === undefined &&
+    statementsOf(again.tryBlock).join('\n') ===
+      'group = await readAndJudge();' &&
+    statementsOf(again.catchClause.block).join('\n') ===
+      [
+        'if (!isUnreadableGroupError(secondError)) { throw secondError; }',
+        'await stopSessionProcesses( sessionId, host, null, sessionDirectory, signal, );',
+        'return null;',
+      ].join('\n') &&
+    bodyIs(
+      'isUnreadableGroupError',
+      "const cause = hasErrorCode(error, ERROR_CODES.STORAGE_READ_ERROR) ? (error as Error).cause : error; const code: unknown = cause instanceof Error ? (cause as { code?: unknown }).code : undefined; return ( !(cause instanceof CliError) && typeof code === 'string' && UNREADABLE_ERRNOS.has(code) );",
+    );
+  const rethrowsAll =
+    caught.map((s) => normalize(s.getText())).join('\n') === 'throw error;';
+  return {
+    stops: stops && (rethrowsAll || skipsUnreadable),
+    skipsUnreadable: stops && skipsUnreadable,
+  };
+}
+
+function stopLeftoversThenRecordDestroyed(destroy) {
+  const arrows = localArrows(destroy);
+  const found = arrows.get('stopLeftoversThenRecordDestroyed') ?? [];
+  const first = found[0];
+  let read = [];
+  if (
+    first !== undefined &&
+    ts.isExpressionStatement(first) &&
+    ts.isAwaitExpression(first.expression) &&
+    ts.isCallExpression(first.expression.expression)
+  ) {
+    const call = first.expression.expression;
+    const reader = call.arguments[1];
+    if (
+      call.expression.getText() === 'stopUnlessUnreadable' &&
+      call.arguments.length === 2 &&
+      call.arguments[0].getText() === 'null' &&
+      reader !== undefined &&
+      ts.isArrowFunction(reader) &&
+      ts.isBlock(reader.body)
+    ) {
+      read = statementsOf(reader.body);
+    }
+  }
+  const unless = stopUnlessUnreadableFacts(arrows);
   return {
     records:
       found.length > 0 &&
       /^await recordDestroyed\(manifestFile, socketFile, terminal, null\);$/.test(
-        found.at(-1),
+        normalize(found.at(-1).getText()),
       ),
     stops:
-      found.length === 3 &&
-      found[0] ===
+      found.length === 2 &&
+      read.length === 2 &&
+      read[0] ===
         'const group = await readProvenProgramGroup(sessionDirectory);' &&
-      [STOP_UNLESS_TRUSTED, STOP_ALWAYS].includes(found[1]) &&
+      [RETURN_UNLESS_TRUSTED, 'return group;'].includes(read[1]) &&
+      unless.stops &&
       bodyIs(
         'readProvenProgramGroup',
         `const record = await readProgramRecord(sessionDirectory); if (typeof record !== 'object' || !hasToken(record)) { return null; } ${UNSHARED_RETURN}`,
       ) &&
       bodyIs('hasToken', 'return record.bootId !== null;'),
-    trustsDestroyed: found[1] === STOP_UNLESS_TRUSTED,
+    trustsDestroyed: read[1] === RETURN_UNLESS_TRUSTED,
+    skipsUnreadable: unless.skipsUnreadable,
   };
 }
 
@@ -1404,6 +1504,53 @@ function rerunFacts() {
   };
 }
 
+// judgeFrozenGroup freezes and judges at most FROZEN_JUDGEMENTS times: SIGSTOP
+// where /proc shows this process's pid space, a judgement, and SIGCONT in a
+// finally. A frozen judgement other than gone decides; gone freezes again,
+// and gone after the last freeze is inconclusive, so gc judges again.
+function frozenJudgesTwice() {
+  const module = 'src/host/programGroup.ts';
+  const limit = requireDeclaration(module, 'FROZEN_JUDGEMENTS').initializer;
+  const statements = requireDeclaration(module, 'judgeFrozenGroup').body
+    .statements;
+  const loop = statements[0];
+  if (
+    limit === undefined ||
+    !ts.isNumericLiteral(limit) ||
+    !Number.isInteger(Number(limit.text)) ||
+    Number(limit.text) < 1 ||
+    statements.length !== 2 ||
+    loop === undefined ||
+    !ts.isForStatement(loop) ||
+    !ts.isBlock(loop.statement) ||
+    normalize(statements[1].getText()) !== 'return null;'
+  ) {
+    return false;
+  }
+  const head = normalize(
+    `${loop.initializer?.getText()}; ${loop.condition?.getText()}; ${loop.incrementor?.getText()}`,
+  );
+  const [stop, declared, judged, decides, ...rest] = loop.statement.statements;
+  return (
+    head === 'let frozen = 0; frozen < FROZEN_JUDGEMENTS; frozen += 1' &&
+    rest.length === 0 &&
+    normalize(stop?.getText() ?? '') ===
+      "if (!procShowsOwnPidSpace() || !signalProcessGroup(group.pid, 'SIGSTOP')) { return false; }" &&
+    normalize(declared?.getText() ?? '') ===
+      "let verdict: GroupJudgement['verdict'];" &&
+    judged !== undefined &&
+    ts.isTryStatement(judged) &&
+    judged.catchClause === undefined &&
+    judged.finallyBlock !== undefined &&
+    statementsOf(judged.tryBlock).join('\n') ===
+      'verdict = judgeLiveGroup(group).verdict;' &&
+    statementsOf(judged.finallyBlock).join('\n') ===
+      "signalProcessGroup(group.pid, 'SIGCONT');" &&
+    normalize(decides?.getText() ?? '') ===
+      "if (verdict !== 'gone') { return verdict === 'owned' ? true : verdict === 'unproven' ? false : null; }"
+  );
+}
+
 function gcFacts() {
   const fn = requireDeclaration('src/cli/commands/gc.ts', 'gcSessions');
   let loop;
@@ -1536,11 +1683,7 @@ function gcFacts() {
     probes &&
     last ===
       'return live === null ? true : live ? null : judgeFrozenGroup(group);' &&
-    body('judgeFrozenGroup').join('\n') ===
-      [
-        "if (!procShowsOwnPidSpace() || !signalProcessGroup(group.pid, 'SIGSTOP')) { return false; }",
-        "try { const { verdict } = judgeLiveGroup(group); return verdict === 'owned' ? true : verdict === 'unproven' ? false : null; } finally { signalProcessGroup(group.pid, 'SIGCONT'); }",
-      ].join('\n');
+    frozenJudgesTwice();
   return {
     GcSkipsNonCollectable: reconcile >= 0 && collectable > reconcile,
     GcFinalCheck: finalCheck,
@@ -1599,6 +1742,9 @@ const COVERED = [
   ['src/host/programGroup.ts', 'provenProgramGroupRuns'],
   ['src/host/programGroup.ts', 'judgeGroupForGc'],
   ['src/host/programGroup.ts', 'judgeFrozenGroup'],
+  ['src/host/programGroup.ts', 'FROZEN_JUDGEMENTS'],
+  ['src/host/programGroup.ts', 'isUnreadableGroupError'],
+  ['src/host/programGroup.ts', 'UNREADABLE_ERRNOS'],
   ['src/host/programGroup.ts', 'GC_JUDGEMENTS'],
   ['src/host/programGroup.ts', 'probeFindsGroup'],
   ['src/host/lifecycle.ts', 'allocateSession'],

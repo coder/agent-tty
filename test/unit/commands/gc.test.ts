@@ -209,6 +209,7 @@ function createMockDependencies(
     },
     provenProgramGroupRuns: (sessionDirectory: string) =>
       Promise.resolve(runningGroups.has(sessionDirectory)),
+    forceSkipsGroup: () => Promise.resolve(false),
   };
 
   return {
@@ -449,6 +450,100 @@ describe('gc command helpers', () => {
     expect(checked).toContain(`${home}/sessions/unchecked-01`);
     expect(removedPaths).toEqual([`${home}/sessions/exited-01`]);
     expect(socketCleanups).toEqual([`${home}/sessions/exited-01 exited`]);
+  });
+
+  it('names destroy --force when a read of the group fails with a system error', async () => {
+    const home = '/tmp/agent-tty';
+    const { dependencies, removedPaths } = createMockDependencies(home, {
+      'unreadable-01': {
+        manifest: createSessionRecord({
+          sessionId: 'unreadable-01',
+          status: 'exited',
+          createdAt: '2026-03-20T08:00:00.000Z',
+        }),
+      },
+    });
+    dependencies.provenProgramGroupRuns = () =>
+      Promise.reject(
+        Object.assign(new Error('EIO: i/o error, scandir /proc'), {
+          code: 'EIO',
+        }),
+      );
+
+    const result = await gcSessions(
+      home,
+      { dryRun: false, staleOnly: false, olderThanMs: null },
+      dependencies,
+    );
+
+    expect(result.skippedSessions).toEqual([
+      {
+        sessionId: 'unreadable-01',
+        reason:
+          "failed to check the session's program group (destroy --force removes it): EIO: i/o error, scandir /proc",
+      },
+    ]);
+    expect(removedPaths).toEqual([]);
+  });
+
+  it('names destroy --force for a failed reconcile only when the read of the group fails too', async () => {
+    const home = '/tmp/agent-tty';
+    const running = (sessionId: string) => ({
+      manifest: createSessionRecord({
+        sessionId,
+        status: 'running',
+        createdAt: '2026-03-20T08:00:00.000Z',
+      }),
+    });
+    const { dependencies, removedPaths } = createMockDependencies(home, {
+      'socket-01': running('socket-01'),
+      'unreadable-01': running('unreadable-01'),
+      'transient-01': running('transient-01'),
+    });
+    const failure = (code: string) =>
+      Object.assign(new Error(`${code}: unlink of the socket failed`), {
+        code,
+      });
+    dependencies.reconcileSession = (sessionDirectory: string) =>
+      Promise.reject(
+        failure(
+          sessionDirectory.endsWith('transient-01') ? 'EMFILE' : 'EACCES',
+        ),
+      );
+    const asked: string[] = [];
+    dependencies.forceSkipsGroup = (sessionDirectory, childPid) => {
+      asked.push(`${sessionDirectory} ${String(childPid)}`);
+      return Promise.resolve(sessionDirectory.endsWith('unreadable-01'));
+    };
+
+    const result = await gcSessions(
+      home,
+      { dryRun: false, staleOnly: false, olderThanMs: null },
+      dependencies,
+    );
+
+    expect(result.skippedSessions).toEqual([
+      {
+        sessionId: 'socket-01',
+        reason:
+          'failed to reconcile session: EACCES: unlink of the socket failed',
+      },
+      {
+        sessionId: 'unreadable-01',
+        reason:
+          'failed to reconcile session (destroy --force removes it): EACCES: unlink of the socket failed',
+      },
+      {
+        sessionId: 'transient-01',
+        reason:
+          'failed to reconcile session: EMFILE: unlink of the socket failed',
+      },
+    ]);
+    expect(asked).toEqual([
+      `${home}/sessions/socket-01 456`,
+      `${home}/sessions/unreadable-01 456`,
+    ]);
+    expect(removedPaths).toEqual([]);
   });
 
   it('reports removals in dry-run mode without deleting anything', async () => {

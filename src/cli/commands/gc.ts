@@ -8,7 +8,11 @@ import {
   reconcileSession,
   removeDeadHostSocket,
 } from '../../host/lifecycle.js';
-import { provenProgramGroupRuns } from '../../host/programGroup.js';
+import {
+  forceSkipsGroup,
+  isUnreadableGroupError,
+  provenProgramGroupRuns,
+} from '../../host/programGroup.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import {
   isCollectableSessionStatus,
@@ -98,6 +102,10 @@ export interface GcDependencies {
     manifest: SessionRecord,
   ) => Promise<void>;
   provenProgramGroupRuns: (sessionDirectory: string) => Promise<boolean>;
+  forceSkipsGroup: (
+    sessionDirectory: string,
+    childPid: number | null,
+  ) => Promise<boolean>;
   now: () => Date;
 }
 
@@ -109,6 +117,7 @@ const defaultDependencies: GcDependencies = {
   reconcileSession,
   removeDeadHostSocket,
   provenProgramGroupRuns,
+  forceSkipsGroup,
   now: () => new Date(),
 };
 
@@ -289,6 +298,15 @@ export function parseDurationToMs(value: string): number {
   return durationMs;
 }
 
+// A read of the program's group that fails with one of UNREADABLE_ERRNOS
+// fails every later check too. destroy --force ends such a session without
+// the read.
+const FORCE_HINT = ' (destroy --force removes it)';
+
+function forceRemovesIt(error: unknown): string {
+  return isUnreadableGroupError(error) ? FORCE_HINT : '';
+}
+
 export async function gcSessions(
   home: string,
   options: GcExecutionOptions,
@@ -368,9 +386,17 @@ export async function gcSessions(
     try {
       await dependencies.reconcileSession(sessionDirectory);
     } catch (error) {
+      // A reconcile also writes the manifest and removes the socket, so gc
+      // names destroy --force only when the read of the group fails too.
+      const skips =
+        isUnreadableGroupError(error) &&
+        (await dependencies.forceSkipsGroup(
+          sessionDirectory,
+          manifestBefore.childPid,
+        ));
       result.skippedSessions.push({
         sessionId: manifestBefore.sessionId,
-        reason: `failed to reconcile session: ${getErrorMessage(error)}`,
+        reason: `failed to reconcile session${skips ? FORCE_HINT : ''}: ${getErrorMessage(error)}`,
       });
       continue;
     }
@@ -434,7 +460,7 @@ export async function gcSessions(
     } catch (error) {
       result.skippedSessions.push({
         sessionId,
-        reason: `failed to check the session's program group: ${getErrorMessage(error)}`,
+        reason: `failed to check the session's program group${forceRemovesIt(error)}: ${getErrorMessage(error)}`,
       });
       continue;
     }
