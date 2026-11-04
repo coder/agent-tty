@@ -10,6 +10,7 @@ import type { SessionRecord } from '../../../src/protocol/schemas.js';
 
 const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
+  writeHumanErrorLines: vi.fn(),
   allocateSession: vi.fn(),
   ensureSocketRoot: vi.fn(),
   launchHost: vi.fn(),
@@ -26,6 +27,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../src/cli/output.js', () => ({
   emitSuccess: mocks.emitSuccess,
+  writeHumanErrorLines: mocks.writeHumanErrorLines,
 }));
 
 vi.mock('../../../src/host/lifecycle.js', () => ({
@@ -364,6 +366,34 @@ describe('create command', () => {
     await runCreateCommand({ ...baseOptions, context });
 
     expect(mocks.writeCreateFailedMarker).not.toHaveBeenCalled();
+  });
+
+  it('names the session in text mode when the host never answers', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'host unreachable',
+      }),
+    );
+
+    await expect(
+      runCreateCommand({ ...baseOptions, json: false, context }),
+    ).rejects.toMatchObject({ code: 'HOST_UNREACHABLE' });
+    expect(mocks.writeHumanErrorLines).toHaveBeenCalledWith([
+      'Session session-01 failed to start.',
+    ]);
+  });
+
+  it('leaves the session line out of JSON mode, where details.sessionId names it', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'host unreachable',
+      }),
+    );
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({ details: { sessionId: 'session-01' } });
+    expect(mocks.writeHumanErrorLines).not.toHaveBeenCalled();
   });
 
   it('keeps the details of the last error and adds the session id', async () => {
