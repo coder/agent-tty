@@ -400,8 +400,10 @@ async function breakStaleManifestLock(
     await createWithoutReplacing(temporaryPath, announcementPath);
   } catch (error) {
     // Another breaker removed the empty folder after the mkdir. The next
-    // attempt makes it again.
-    if (hasErrorCode(error, 'ENOENT')) {
+    // attempt makes it again. APFS answers EINVAL instead of ENOENT when the
+    // folder is removed during the link. An EINVAL with another cause
+    // repeats, and the wait then ends at its deadline.
+    if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'EINVAL')) {
       return 'held';
     }
     throw error;
