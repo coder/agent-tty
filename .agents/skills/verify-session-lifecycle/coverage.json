@@ -18,6 +18,7 @@
     "ShutdownChecksCommandable": true,
     "DestroyRecordsDestroyed": true,
     "DestroyKeepsExitCode": true,
+    "ForceSkipsUnreadableGroup": true,
     "DestroyStopsLeftovers": true,
     "ProvesHostPid": true,
     "ReconcileRepairsDestroyed": true,
@@ -44,11 +45,12 @@
     "src/cli/commands/create.ts#waitForReadyHost": "a7fd2ba345b6bfd6",
     "src/cli/commands/destroy.ts#runDestroyCommand": "ecaa8b1d572da7c6",
     "src/cli/commands/destroy.ts#rerunInNewSession": "cf32d7d082758522",
-    "src/cli/commands/gc.ts#gcSessions": "a2ac8bd10f100332",
+    "src/cli/commands/gc.ts#gcSessions": "18a7249df9349120",
     "src/cli/commands/gc.ts#defaultDependencies": "81a9894438cb5be7",
     "src/host/programGroup.ts#provenProgramGroupRuns": "7b50817618b4b769",
     "src/host/programGroup.ts#judgeGroupForGc": "fb133ba2739116d1",
     "src/host/programGroup.ts#judgeFrozenGroup": "d18458e7d70a5664",
+    "src/host/programGroup.ts#isUnreadableGroupError": "561c6a1108e60d06",
     "src/host/programGroup.ts#GC_JUDGEMENTS": "180a0af01a4b81c7",
     "src/host/programGroup.ts#probeFindsGroup": "31ea7b5e835c0509",
     "src/host/lifecycle.ts#allocateSession": "43819af8c6c271ec",
@@ -82,7 +84,7 @@
     "src/host/lifecycle.ts#stopSessionProcesses": "d1abb608b1d2160a",
     "src/host/lifecycle.ts#recordDestroyed": "d3a74237a9c8459c",
     "src/host/lifecycle.ts#removeDeadHostSocket": "34ce07ab7b7e8d7b",
-    "src/host/lifecycle.ts#destroySession": "d840dd07a0e481f5",
+    "src/host/lifecycle.ts#destroySession": "eb4a0bae82dc09a5",
     "src/host/lifecycle.ts#isMarkedDestroyed": "d178f4a63473915c",
     "src/host/lifecycle.ts#writeMarkedDestroyed": "4863c35f70699757",
     "src/host/lifecycle.ts#reconcileSession": "739c83bf945000c6",
@@ -139,9 +141,9 @@
     "src/host/hostMain.ts#runHost(final try)": "251f1e68a4ec17cc",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "77ec28d60359f635",
-    "skill:scripts/facts.mjs": "eded6c52629e3523",
-    "skill:scripts/check.sh": "e33db0960de216fe"
+    "skill:model/SessionLifecycle.tla": "f1bb5d457a8f2ba0",
+    "skill:scripts/facts.mjs": "81c2bebbe52aeff4",
+    "skill:scripts/check.sh": "0e998387e38d04c8"
   },
   "callSites": {
     "writeManifest": [
