@@ -274,3 +274,68 @@ describe('RpcServer CliError responses', () => {
     }
   });
 });
+
+describe('RpcServer large success responses', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'agent-tty-rpc-server-'));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = '';
+  });
+
+  async function textSnapshotFrom(text: string): Promise<unknown> {
+    const socketFile = join(tempDir, 'rpc.sock');
+    const server = new RpcServer(socketFile, {
+      snapshot: () =>
+        Promise.resolve({
+          format: 'text',
+          sessionId: 'session-1',
+          capturedAtSeq: 1,
+          cols: 80,
+          rows: 24,
+          cursorRow: 0,
+          cursorCol: 0,
+          text,
+        }),
+    });
+    await server.listen();
+    try {
+      return await sendRpc(
+        socketFile,
+        'snapshot',
+        { format: 'text' },
+        20_000,
+      ).catch((error: unknown) => error);
+    } finally {
+      await server.close();
+    }
+  }
+
+  it('returns a success response larger than 1 MiB', async () => {
+    const result = await textSnapshotFrom('x'.repeat(2_000_000));
+
+    expect(result).toMatchObject({ format: 'text' });
+    expect((result as { text: string }).text).toHaveLength(2_000_000);
+  });
+
+  it(
+    'refuses a success response over 64 MiB with PROTOCOL_ERROR',
+    { timeout: 30_000 },
+    async () => {
+      const error = await textSnapshotFrom('x'.repeat(67_108_864));
+
+      expect(error).toMatchObject({
+        code: 'PROTOCOL_ERROR',
+        details: { maxResponseChars: 67_108_864 },
+      });
+      const { details, message } = error as CliError;
+      const responseChars = details.responseChars as number;
+      expect(responseChars).toBeGreaterThan(67_108_864);
+      expect(message).toBe(
+        `RPC response takes ${String(responseChars)} characters, over the 67108864-character limit.`,
+      );
+    },
+  );
+});
