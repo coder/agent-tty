@@ -18,7 +18,6 @@ import {
 } from 'vitest';
 
 import { runHost } from '../../../src/host/hostMain.js';
-import { readProcStat } from '../../../src/host/programGroup.js';
 import type * as ProgramGroupModule from '../../../src/host/programGroup.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import {
@@ -57,6 +56,10 @@ const SESSION_ID = 'session-01';
 let home = '';
 let directory = '';
 let sigtermListeners: ReadonlySet<unknown> = new Set();
+// runHost runs in this process, so a test sets the host's parent pid: Linux
+// and macOS give a process a new parent when its parent exits.
+const ppidDescriptor = Object.getOwnPropertyDescriptor(process, 'ppid');
+let hostParent = 0;
 
 function readProgramGroup(): number {
   const { pid } = JSON.parse(
@@ -139,6 +142,12 @@ beforeEach(async () => {
   };
   await writeManifest(manifestPath(directory), record);
   sigtermListeners = new Set(process.rawListeners('SIGTERM'));
+  hostParent = process.pid;
+  Object.defineProperty(process, 'ppid', {
+    configurable: true,
+    enumerable: true,
+    get: () => hostParent,
+  });
 });
 
 afterEach(async () => {
@@ -154,6 +163,9 @@ afterEach(async () => {
     killGroupIfAlive(readProgramGroup());
   }
   vi.unstubAllEnvs();
+  if (ppidDescriptor !== undefined) {
+    Object.defineProperty(process, 'ppid', ppidDescriptor);
+  }
   await rm(home, { recursive: true, force: true });
 });
 
@@ -198,11 +210,13 @@ describe('runHost and the create-failed marker', () => {
   it('keeps serving when the marker appears after its creator has exited', async () => {
     const creator = spawn('sleep', ['30'], { stdio: 'ignore' });
     expect(creator.pid).toBeGreaterThan(0);
+    hostParent = creator.pid as number;
     const watchStopped = trackMarkerWatch();
     await runHost(SESSION_ID, creator.pid as number);
     expect(existsSync(socketPath(directory))).toBe(true);
     creator.kill('SIGKILL');
     await once(creator, 'exit');
+    hostParent = 1;
     await watchStopped();
 
     await writeCreateFailedMarker(
@@ -225,6 +239,8 @@ describe('runHost and the create-failed marker', () => {
     });
     const creatorPid = creator.pid as number;
     expect(creatorPid).toBeGreaterThan(0);
+    // The host keeps its parent pid, as on Windows, so only the probe tells.
+    hostParent = creatorPid;
     const watchStopped = trackMarkerWatch();
     await runHost(SESSION_ID, creatorPid);
     expect(existsSync(socketPath(directory))).toBe(true);
@@ -259,6 +275,7 @@ describe('runHost and the create-failed marker', () => {
     });
     const creatorPid = creator.pid as number;
     expect(creatorPid).toBeGreaterThan(0);
+    hostParent = creatorPid;
     await runHost(SESSION_ID, creatorPid);
     expect(existsSync(socketPath(directory))).toBe(true);
     // The next probe finds the creator gone, and it wrote the marker first.
@@ -274,43 +291,52 @@ describe('runHost and the create-failed marker', () => {
     await expectHostStopped(readProgramGroup());
   }, 15_000);
 
-  // kill(pid, 0) succeeds for a zombie, so only /proc shows that the creator
-  // has exited while its parent has yet to reap it.
-  it.runIf(process.platform === 'linux')(
-    'stops the watch when its creator is a zombie',
-    async () => {
-      const parent = spawn(
-        '/bin/sh',
-        ['-c', 'sleep 0 & echo $!; exec sleep 30'],
-        { stdio: ['ignore', 'pipe', 'ignore'] },
-      );
-      onTestFinished(() => {
-        parent.kill('SIGKILL');
-      });
-      const [line] = (await once(parent.stdout, 'data')) as [Buffer];
-      const zombie = Number(line.toString('utf8').trim());
-      expect(zombie).toBeGreaterThan(1);
-      const deadline = Date.now() + 10_000;
-      while (readProcStat(zombie)?.state !== 'Z') {
-        expect(Date.now()).toBeLessThan(deadline);
-        await delay(20);
-      }
-      const watchStopped = trackMarkerWatch();
-      await runHost(SESSION_ID, zombie);
-      expect(existsSync(socketPath(directory))).toBe(true);
-      await watchStopped();
+  // The creator exited, and a process of the same user, or a zombie that its
+  // parent has yet to reap, holds its pid, so the probe still finds it.
+  it('stops the watch once the host has a new parent, whatever holds the creator pid', async () => {
+    const holder = spawn('sleep', ['30'], { stdio: 'ignore' });
+    onTestFinished(() => {
+      holder.kill('SIGKILL');
+    });
+    const creatorPid = holder.pid as number;
+    expect(creatorPid).toBeGreaterThan(0);
+    hostParent = creatorPid;
+    const watchStopped = trackMarkerWatch();
+    await runHost(SESSION_ID, creatorPid);
+    expect(existsSync(socketPath(directory))).toBe(true);
+    hostParent = 1;
+    await watchStopped();
 
-      await writeCreateFailedMarker(
-        createFailedMarkerPath(directory),
-        SESSION_ID,
-      );
+    await writeCreateFailedMarker(
+      createFailedMarkerPath(directory),
+      SESSION_ID,
+    );
 
-      expect((await readManifest(manifestPath(directory))).status).toBe(
-        'running',
-      );
-      sendSigterm();
-      await expectHostStopped(readProgramGroup());
-    },
-    20_000,
-  );
+    expect((await readManifest(manifestPath(directory))).status).toBe(
+      'running',
+    );
+    sendSigterm();
+    await expectHostStopped(readProgramGroup());
+  }, 15_000);
+
+  it('stops the watch 60 s after it started, also while its creator runs', async () => {
+    const watchStopped = trackMarkerWatch();
+    await runHost(SESSION_ID, process.pid);
+    expect(existsSync(socketPath(directory))).toBe(true);
+    const now = Date.now.bind(Date);
+    vi.spyOn(Date, 'now').mockImplementation(() => now() + 60_000);
+    await watchStopped();
+
+    await writeCreateFailedMarker(
+      createFailedMarkerPath(directory),
+      SESSION_ID,
+    );
+
+    expect((await readManifest(manifestPath(directory))).status).toBe(
+      'running',
+    );
+    vi.restoreAllMocks();
+    sendSigterm();
+    await expectHostStopped(readProgramGroup());
+  }, 15_000);
 });
