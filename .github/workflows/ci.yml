@@ -221,13 +221,15 @@ jobs:
 
   # Model-checks the session lifecycle with the verify-session-lifecycle
   # skill. Share 1 checks that coverage.json matches the facts and the
-  # covered code. The TLC runs took 63 min in one job of 4 vCPUs and take 13
-  # to 17 min in each of 4 shares. They run only when coverage.json differs
-  # from the base, which every change to the model, its scripts, the covered
-  # code or a fact needs.
+  # covered code. The TLC runs took 63 min in one job of 4 vCPUs and took 13
+  # to 17 min in each of 4 shares. The model of #324 has about twice the
+  # states: its shares took 38 to 48 min, and a share cannot be shorter than
+  # its longest run, so the job has 90 min. They run only when coverage.json
+  # differs from the base, which every change to the model, its scripts, the
+  # covered code or a fact needs.
   lifecycle-model:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
