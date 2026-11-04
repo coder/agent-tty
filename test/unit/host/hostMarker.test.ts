@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -74,7 +74,11 @@ async function expectHostStopped(group: number): Promise<void> {
 }
 
 beforeEach(async () => {
-  home = await mkdtemp(join(tmpdir(), 'agent-tty-host-marker-'));
+  // The host resolves its Home to the real path, and the socket path is
+  // derived from that path, as on macOS, where tmpdir() is a symlink.
+  home = await realpath(
+    await mkdtemp(join(tmpdir(), 'agent-tty-host-marker-')),
+  );
   vi.stubEnv('AGENT_TTY_HOME', home);
   directory = sessionDir(home, SESSION_ID);
   await mkdir(directory, { recursive: true, mode: 0o700 });
