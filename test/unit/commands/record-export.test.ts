@@ -453,11 +453,10 @@ describe('record export command', () => {
     );
     expect(generateWebmExportArgs.rendererName).toBe('ghostty-web');
     expect(mocks.writeTextFileAtomic).not.toHaveBeenCalled();
-    expect(mocks.stat).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm',
-    );
+    // The bytes and the hash come from the temp file, before the rename.
+    expect(mocks.stat).toHaveBeenCalledWith(generateWebmExportArgs.outputPath);
     expect(mocks.readFile).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm',
+      generateWebmExportArgs.outputPath,
     );
 
     expect(mocks.createArtifactEntry).toHaveBeenCalledTimes(1);
@@ -601,6 +600,50 @@ describe('record export command', () => {
       expect.objectContaining({ rollbackArtifactPath: artifactFile }),
     );
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('describes the WebM it wrote even when another write replaces the file after the rename', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+    const finalPath =
+      '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm';
+    const written = Buffer.alloc(100, 0x41);
+    const replaced = Buffer.alloc(200, 0x42);
+    mocks.generateWebmExport.mockResolvedValue({
+      capturedAtSeq: 1,
+      durationMs: 1_500,
+      outputEventCount: 1,
+      resizeEventCount: 1,
+      cols: 80,
+      rows: 24,
+      profileName: 'reference-dark',
+      timingMode: 'recorded',
+      rendererBackend: 'ghostty-web',
+    });
+    // After the rename, the path holds another export's bytes.
+    mocks.stat.mockImplementation((path: string) =>
+      Promise.resolve({
+        size: path === finalPath ? replaced.length : written.length,
+      }),
+    );
+    mocks.readFile.mockImplementation((path: string) =>
+      Promise.resolve(path === finalPath ? replaced : written),
+    );
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+    });
+
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: expect.objectContaining({
+          bytes: written.length,
+          sha256: createHash('sha256').update(written).digest('hex'),
+        }) as unknown,
+      }),
+    );
   });
 
   it('requests rollback for default webm artifacts when manifest append fails', async () => {
