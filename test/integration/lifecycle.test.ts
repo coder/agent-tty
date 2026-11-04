@@ -13,7 +13,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -1869,6 +1869,15 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
         `--import=${pathToFileURL(resolve('test/fixtures/fake-win32-create.ts')).href}`,
       ],
     ],
+    // create retries the marker write while the manifest names no program.
+    [
+      'on Windows, when its first marker write fails',
+      [
+        `--import=${pathToFileURL(resolve('test/fixtures/denied-autogroup.ts')).href}`,
+        `--import=${pathToFileURL(resolve('test/fixtures/fake-win32-create.ts')).href}`,
+        `--import=${pathToFileURL(resolve('test/fixtures/fail-first-marker-write.ts')).href}`,
+      ],
+    ],
   ])('a create that gives up %s', (_name, preloads) => {
     let pgid = 0;
 
@@ -2033,6 +2042,103 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
     expect(existsSync(programRecordPath(directory))).toBe(false);
     expect(inspectSession(testHome, sessionId as string).status).toBe('failed');
   }, 60_000);
+
+  // On Windows, create stops a host only when its manifest read names the
+  // program. Here the host's start-up write and its marker check come before
+  // create gives up, its listen is held past create's exit, and create's
+  // manifest read after the marker write fails. Only the host can see the
+  // marker then.
+  describe('a create on Windows whose manifest read fails after it gave up', () => {
+    let pgid = 0;
+
+    afterEach(() => {
+      if (pgid > 1) {
+        killGroupIfAlive(pgid);
+      }
+      pgid = 0;
+    });
+
+    it('lets its host find the marker, stop the program and record destroyed', async () => {
+      const holdLog = join(testHome, 'hold.log');
+      const release = join(testHome, 'release');
+      const socketDirectory = basename(
+        dirname(socketPath(sessionDir(testHome, 'probe'))),
+      );
+      const creator = spawn(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          './src/cli/main.ts',
+          'create',
+          '--json',
+          '--',
+          '/bin/sh',
+          '-c',
+          'trap "" HUP; sleep 300 & wait',
+        ],
+        {
+          stdio: ['ignore', 'pipe', 'ignore'],
+          env: {
+            ...process.env,
+            AGENT_TTY_HOME: testHome,
+            REPLAY_LOG: holdLog,
+            REPLAY_RELEASE: release,
+            REPLAY_HOLD: `_host:mkdir:/${socketDirectory}:1:60000`,
+            NODE_OPTIONS: [
+              process.env.NODE_OPTIONS ?? '',
+              `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+              `--import=${pathToFileURL(resolve('test/fixtures/denied-autogroup.ts')).href}`,
+              `--import=${pathToFileURL(resolve('test/fixtures/fake-win32-create.ts')).href}`,
+              `--import=${pathToFileURL(resolve('test/fixtures/fail-manifest-read-after-marker.ts')).href}`,
+            ].join(' '),
+          },
+        },
+      );
+      let stdout = '';
+      creator.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString('utf8');
+      });
+      const creatorExit = once(creator, 'exit');
+      const deadline = Date.now() + 15_000;
+      while (
+        !(await readFile(holdLog, 'utf8').then(
+          (log) => log.includes('hold mkdir'),
+          () => false,
+        ))
+      ) {
+        expect(Date.now()).toBeLessThan(deadline);
+        await sleep(50);
+      }
+      const [sessionId] = await readdir(join(testHome, 'sessions'));
+      const directory = sessionDir(testHome, sessionId as string);
+      const manifest = SessionRecordSchema.parse(
+        JSON.parse(await readFile(manifestPath(directory), 'utf8')),
+      );
+      expect(manifest.childPid).not.toBeNull();
+      const hostPid = manifest.hostPid as number;
+      pgid = manifest.childPid as number;
+      expect(isGroupAlive(pgid)).toBe(true);
+
+      const [code] = (await creatorExit) as [number | null];
+      expect(code).toBe(6);
+      expect(JSON.parse(stdout)).toMatchObject({
+        ok: false,
+        error: { code: 'HOST_UNREACHABLE', details: { sessionId } },
+      });
+      expect(existsSync(join(directory, 'create-failed'))).toBe(true);
+      await writeFile(release, '');
+
+      const stopDeadline = Date.now() + 20_000;
+      while (isGroupAlive(pgid) || isProcessAlive(hostPid)) {
+        expect(Date.now()).toBeLessThan(stopDeadline);
+        await sleep(100);
+      }
+      expect(inspectSession(testHome, sessionId as string).status).toBe(
+        'destroyed',
+      );
+    }, 60_000);
+  });
 
   // A SIGTERM that the default action would turn into a host death between
   // the spawn and program.json leaves a program that no file names.

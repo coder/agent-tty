@@ -20,6 +20,7 @@ import { createSerialManifestWriter } from './manifestWriter.js';
 import {
   captureProgram,
   programWithoutToken,
+  readProcStat,
   stopProgramGroup,
   writeProgramRecord,
 } from './programGroup.js';
@@ -106,6 +107,7 @@ export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
 // may exceed idleTimeoutMs by up to checkIntervalMs (bounded by this cap).
 const IDLE_CHECK_CAP_MS = 5_000;
 const MANIFEST_WAIT_INTERVAL_MS = 20;
+const CREATE_FAILED_POLL_INTERVAL_MS = 100;
 // How long the host waits after SIGHUP before it kills the program's process
 // group. nvim takes about 1 s to exit on SIGHUP, and `destroy` waits about 5 s.
 const SHUTDOWN_KILL_GRACE_MS = 2_000;
@@ -1272,6 +1274,33 @@ export async function runHost(
   invariant(!sigterm.received, 'SIGTERM is handled only after the spawn block');
   onSigterm = startShutdown;
 
+  // A create that gives up after the check below may not stop the host: on
+  // Windows it sends nothing when its manifest read fails. It writes the
+  // create-failed marker before it exits, so the host watches for the marker
+  // while its creator runs, and once more after the creator has exited.
+  const watchCreateFailed = (): void => {
+    const timer = setInterval(() => {
+      // An error of the probe, such as EPERM from a process of another user
+      // that took the pid, means that the creator has exited. So does a
+      // zombie, which kill(pid, 0) still finds until its parent reaps it.
+      let creatorGone = true;
+      try {
+        creatorGone =
+          !isProcessAlive(creatorPid) ||
+          readProcStat(creatorPid)?.state === 'Z';
+      } catch {
+        // creatorGone stays true.
+      }
+      if (existsSync(createFailedMarkerPath(sessDir))) {
+        clearInterval(timer);
+        startShutdown();
+      } else if (creatorGone) {
+        clearInterval(timer);
+      }
+    }, CREATE_FAILED_POLL_INTERVAL_MS);
+    timer.unref();
+  };
+
   try {
     writeProgramRecord(sessDir, program);
     await persistManifest();
@@ -1283,6 +1312,7 @@ export async function runHost(
       await initiateShutdown();
       return;
     }
+    watchCreateFailed();
 
     if (!isSessionCommandable(state)) {
       await initiateShutdown();

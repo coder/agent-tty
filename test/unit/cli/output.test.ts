@@ -94,6 +94,25 @@ describe('emitCliError', () => {
   });
 });
 
+describe('writeHumanErrorLines', () => {
+  it('writes the lines to stderr, without color when color is off', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    output.setColorEnabled(false);
+    output.writeHumanErrorLines([
+      '\u001b[31mSession s-1\u001b[0m failed.',
+      'next',
+    ]);
+    const stderrCalls = stderr.mock.calls.map(([chunk]) => String(chunk));
+    const stdoutCalls = stdout.mock.calls.length;
+    stderr.mockRestore();
+    stdout.mockRestore();
+
+    expect(stderrCalls).toEqual(['Session s-1 failed.\nnext\n']);
+    expect(stdoutCalls).toBe(0);
+  });
+});
+
 describe('argvHasFlag', () => {
   afterEach(() => {
     process.argv = originalArgv;

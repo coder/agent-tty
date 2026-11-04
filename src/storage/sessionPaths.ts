@@ -179,8 +179,8 @@ export function socketPath(sessionDirectory: string): string {
   return socketFile;
 }
 
-// A host that an older version started listens under the shared root. Remove
-// this after one minor release.
+// A host that an older version started listens under the shared root. Hosts
+// of 0.5.0 and earlier listen there, so remove this in 0.7.0.
 export function legacySocketPath(socketFile: string): string | null {
   const root = socketRootDirectory();
   const socketDirectory = dirname(socketFile);
