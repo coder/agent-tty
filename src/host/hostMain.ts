@@ -18,6 +18,7 @@ import {
 import { createSerialManifestWriter } from './manifestWriter.js';
 import {
   captureProgram,
+  programWithoutToken,
   stopProgramGroup,
   writeProgramRecord,
 } from './programGroup.js';
@@ -346,7 +347,12 @@ export async function runHost(
     'PTY child PID must be a positive integer',
   );
   state.setChildPid(pty.pid);
-  const program = captureProgram(pty.pid);
+  // A token proves the group only beside host.json, which names the pid
+  // space of its pid, so a host that could not record itself records none.
+  const program =
+    hostRecord === null
+      ? programWithoutToken(pty.pid)
+      : captureProgram(pty.pid);
 
   // Answer the terminal-capability queries programs emit at startup (OSC 10/11
   // color probes, the `ESC [ 5 n` DSR sentinel, XTGETTCAP/DECRQSS 24-bit color

@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fsHooks = vi.hoisted(() => ({
   afterReadFile: undefined as ((path: string) => Promise<void>) | undefined,
+  beforeRename: undefined as ((target: string) => void) | undefined,
   // /proc/<pid>/stat by pid, or the error that its read throws.
   proc: undefined as Map<string, string | Error> | undefined,
   mountinfo: undefined as string | undefined,
@@ -143,6 +144,14 @@ vi.mock('node:fs/promises', async () => {
     }
     return contents;
   };
+  const rename = async (
+    ...args: Parameters<typeof actual.rename>
+  ): Promise<void> => {
+    if (typeof args[1] === 'string') {
+      fsHooks.beforeRename?.(args[1]);
+    }
+    await actual.rename(...args);
+  };
   const rmdir = async (
     ...args: Parameters<typeof actual.rmdir>
   ): Promise<void> => {
@@ -151,7 +160,7 @@ vi.mock('node:fs/promises', async () => {
     }
     await actual.rmdir(...args);
   };
-  return { ...actual, readFile, rmdir };
+  return { ...actual, readFile, rename, rmdir };
 });
 
 // destroy and reconcile poll for about 5 s. These tests skip the waits.
@@ -197,6 +206,7 @@ import { ensureSocketRoot } from '../../../src/host/socketRoot.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import { readManifest, writeManifest } from '../../../src/storage/manifests.js';
 import {
+  hostRecordPath,
   legacySocketPath,
   manifestPath,
   sessionDir,
@@ -225,8 +235,17 @@ afterEach(async () => {
   fsHooks.ownStat = undefined;
   fsHooks.files = undefined;
   fsHooks.links = undefined;
+  fsHooks.beforeRename = undefined;
   await rm(home, { recursive: true, force: true });
 });
+
+// A token proves the group only with a host.json that names this pid space.
+function recordOwnPidSpace(directory: string): void {
+  writeHostRecord(directory, {
+    ...(captureHost(process.pid) as HostRecord),
+    pid: HOST_PID,
+  });
+}
 
 function errno(code: string): Error {
   return Object.assign(new Error(code), { code });
@@ -345,6 +364,45 @@ describe('allocateSession', () => {
       childPid: null,
     });
   });
+
+  // A CLI in another pid namespace finds no process with the host's pid. A
+  // host.json from the start on keeps it from reading the host dead.
+  it.runIf(process.platform === 'linux')(
+    'records the host before the first manifest names it',
+    async () => {
+      const host = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' });
+      try {
+        await once(host, 'spawn');
+        const hostPid = host.pid as number;
+        const hostRecordAtFirstManifest: boolean[] = [];
+        fsHooks.beforeRename = (target) => {
+          if (target.endsWith('/session.json')) {
+            hostRecordAtFirstManifest.push(
+              existsSync(hostRecordPath(dirname(target))),
+            );
+          }
+        };
+        const result = await allocateSession(makeConfig(), () => hostPid);
+        expect(hostRecordAtFirstManifest).toEqual([true]);
+        fsHooks.links = new Map([['/proc/self/ns/pid', 'pid:[1]']]);
+        const kill = process.kill.bind(process);
+        vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+          if (pid === hostPid && signal === 0) {
+            throw errno('ESRCH');
+          }
+          return kill(pid, signal);
+        });
+
+        await reconcileSession(result.sessionDirectory);
+
+        expect(
+          await readManifest(manifestPath(result.sessionDirectory)),
+        ).toMatchObject({ status: 'running', hostPid });
+      } finally {
+        host.kill('SIGKILL');
+      }
+    },
+  );
 
   it('does not launch a host when the working directory does not exist', async () => {
     const launch = vi.fn(() => 4242);
@@ -731,6 +789,7 @@ describe('reconcileSession', () => {
       expect(record.autogroup).not.toBeNull();
       const directory = await seedSession(makeRecord({ childPid: group }));
       writeProgramRecord(directory, change(record));
+      recordOwnPidSpace(directory);
       const send = process.kill.bind(process);
       const kill = vi
         .spyOn(process, 'kill')
@@ -895,6 +954,7 @@ describe('destroySession', () => {
         expect(record.autogroup).not.toBeNull();
         const directory = await seedSession(exited);
         writeProgramRecord(directory, record);
+        recordOwnPidSpace(directory);
         return directory;
       }
 
