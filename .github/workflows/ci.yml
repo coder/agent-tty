@@ -220,10 +220,11 @@ jobs:
             npx vitest run --maxWorkers=1 --retry=2 test/integration/lifecycle.test.ts test/integration/gc.test.ts test/integration/other-user-group.test.ts
 
   # Model-checks the session lifecycle with the verify-session-lifecycle
-  # skill. Every run checks that coverage.json matches the covered code. The
-  # TLC runs took 63 min in one job of 4 vCPUs and take 10 to 17 min in each
-  # of 4 shares. They run only when coverage.json differs from the base,
-  # which every change to the model, its scripts or the covered code needs.
+  # skill. Share 1 checks that coverage.json matches the facts and the
+  # covered code. The TLC runs took 63 min in one job of 4 vCPUs and take 13
+  # to 17 min in each of 4 shares. They run only when coverage.json differs
+  # from the base, which every change to the model, its scripts, the covered
+  # code or a fact needs.
   lifecycle-model:
     runs-on: ubuntu-latest
     timeout-minutes: 50
@@ -248,6 +249,7 @@ jobs:
         run: mise run bootstrap-ci
 
       - name: Check that coverage.json matches the covered code
+        if: matrix.shard == 1
         run: .agents/skills/verify-session-lifecycle/scripts/check.sh --drift-only
 
       - name: Decide whether the model checker must run
