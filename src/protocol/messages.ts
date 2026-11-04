@@ -75,8 +75,10 @@ export const MAX_RPC_REQUEST_ID_CHARS = 128;
 
 // A fully styled cell takes about 56 characters in a structured snapshot with
 // cells, so a 500x200 snapshot takes about 5.6 million. This cap fits about
-// 1.2 million styled cells (a 1,000x1,000 screen) and still bounds the memory
-// that one response can take.
+// 1.2 million styled cells and still bounds the memory that one response can
+// take. A 1,000x1,000 styled snapshot (56,051,020 characters) raised the CLI's
+// peak RSS from 232 MB (an 80x24 snapshot) to 0.84 to 0.99 GB: about 14 bytes
+// per response character. So a response at the cap takes about 1.2 GB.
 export const MAX_RPC_RESPONSE_CHARS = 67_108_864;
 
 export const RpcRequestSchema = z
