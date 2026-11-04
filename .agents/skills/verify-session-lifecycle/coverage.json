@@ -84,15 +84,16 @@
     "src/storage/manifests.ts#replaceFileAtomicSync": "38bea7cd8e67828f",
     "src/storage/manifests.ts#writeValidatedJsonFileSync": "4a5d1cc5f63ae8ce",
     "src/storage/manifests.ts#writeManifest": "1bcc99f09acfc577",
-    "src/storage/manifests.ts#writeDestroyMarker": "7387a50b983a97c6",
-    "src/storage/manifests.ts#writeCreateFailedMarker": "83f49746ad93e019",
+    "src/storage/manifests.ts#writeDestroyMarker": "5474dd44808899ec",
+    "src/storage/manifests.ts#writeCreateFailedMarker": "587c8047e563db4e",
+    "src/storage/manifests.ts#writeEmptyMarker": "143325689100f36c",
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
     "src/host/hostMain.ts#runHost(parts)": "d1c6e592e0bc812f",
     "src/host/hostMain.ts#runHost(final try)": "251f1e68a4ec17cc",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "dc4a86d43c05521b",
-    "skill:scripts/facts.mjs": "7bed941909749f9e",
+    "skill:scripts/facts.mjs": "75817045fb2e80dc",
     "skill:scripts/check.sh": "437700097f1af52d"
   },
   "callSites": {
@@ -110,8 +111,7 @@
       "src/host/hostMain.ts#runHost>resize"
     ],
     "replaceFileAtomic": [
-      "src/storage/manifests.ts#writeCreateFailedMarker",
-      "src/storage/manifests.ts#writeDestroyMarker",
+      "src/storage/manifests.ts#writeEmptyMarker",
       "src/storage/manifests.ts#writeManifest",
       "src/storage/manifests.ts#writeTextFileAtomic"
     ],
