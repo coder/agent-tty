@@ -1849,7 +1849,7 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
     ];
 
     async function readEnvelopeOnceWritten(path: string): Promise<unknown> {
-      const deadline = Date.now() + 15_000;
+      const deadline = Date.now() + 30_000;
       while (Date.now() < deadline) {
         await sleep(100);
         try {
@@ -1889,11 +1889,12 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
     // the whole destroy. The hold matches the host's argv only, so the inner
     // CLI, which inherits it, runs at full speed. A held host never answers
     // create, which gives up after about 5 s and sends it SIGTERM. On a slow
-    // runner that came before the inner destroy, so create is killed once the
-    // program runs, and the destroy kills the held host.
+    // runner that came before the inner destroy, so create is killed once it
+    // has written the manifest, which the host still reads after its creator
+    // died, and the destroy kills the held host.
     it('destroy --force before the host names the program prints its result', async () => {
       const out = join(testHome, 'early-destroy.json');
-      const started = `${out}.started`;
+      const sessions = join(testHome, 'sessions');
       const create = spawn(
         process.execPath,
         [
@@ -1905,7 +1906,7 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
           '--',
           '/bin/sh',
           '-c',
-          ': > "$0.started"; "$@" destroy "$AGENT_TTY_SESSION_ID" --force --json > "$0"',
+          '"$@" destroy "$AGENT_TTY_SESSION_ID" --force --json > "$0"',
           out,
           ...cli,
         ],
@@ -1923,22 +1924,26 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
           stdio: 'ignore',
         },
       );
+      let sessionId: string | undefined;
       try {
         const deadline = Date.now() + 20_000;
-        while (!existsSync(started)) {
+        while (
+          sessionId === undefined ||
+          !existsSync(manifestPath(sessionDir(testHome, sessionId)))
+        ) {
           expect(Date.now()).toBeLessThan(deadline);
-          await sleep(50);
+          await sleep(20);
+          [sessionId] = await readdir(sessions).catch((): string[] => []);
         }
       } finally {
         create.kill('SIGKILL');
       }
-      const [sessionId] = await readdir(join(testHome, 'sessions'));
 
       expect(await readEnvelopeOnceWritten(out)).toMatchObject({
         ok: true,
         result: { sessionId, destroyed: true },
       });
-      expect(inspectSession(testHome, sessionId as string)).toMatchObject({
+      expect(inspectSession(testHome, sessionId)).toMatchObject({
         status: 'destroyed',
         childPid: null,
       });

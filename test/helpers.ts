@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import {
   mkdir,
   mkdtemp,
@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 
 import type { SessionRecord as ProtocolSessionRecord } from '../src/protocol/schemas.js';
+import { parseProcStat } from '../src/host/programGroup.js';
 import type { SemanticSnapshot } from '../src/renderer/types.js';
 import { hasErrorCode } from '../src/util/hasErrorCode.js';
 
@@ -359,10 +360,61 @@ export function killGroupIfAlive(group: number): void {
   }
 }
 
-// init reaps the killed processes a moment after they die.
+function readStateIfExists(path: string): string | null {
+  try {
+    return parseProcStat(readFileSync(path, 'utf8')).state;
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ESRCH')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+// A killed process stays a zombie until its parent reaps it. An orphan's
+// parent is init, which can take seconds to reap on a loaded machine, so on
+// Linux a group whose threads are all zombies counts as ended.
+function groupHasLiveThread(group: number): boolean {
+  if (!isGroupAlive(group)) {
+    return false;
+  }
+  if (process.platform !== 'linux') {
+    return true;
+  }
+  for (const entry of readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry)) {
+      continue;
+    }
+    let tasks: string[];
+    try {
+      if (
+        parseProcStat(readFileSync(`/proc/${entry}/stat`, 'utf8')).pgid !==
+        group
+      ) {
+        continue;
+      }
+      tasks = readdirSync(`/proc/${entry}/task`);
+    } catch (error) {
+      if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ESRCH')) {
+        continue;
+      }
+      throw error;
+    }
+    if (
+      tasks.some((task) => {
+        const state = readStateIfExists(`/proc/${entry}/task/${task}/stat`);
+        return state !== null && state !== 'Z' && state !== 'X';
+      })
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export async function groupEnds(group: number): Promise<boolean> {
-  const deadline = Date.now() + 2_000;
-  while (isGroupAlive(group)) {
+  const deadline = Date.now() + 5_000;
+  while (groupHasLiveThread(group)) {
     if (Date.now() > deadline) {
       return false;
     }
