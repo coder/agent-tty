@@ -1,3 +1,5 @@
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -53,6 +55,22 @@ function readProgramGroup(): number {
   ) as { pid: number };
   expect(pid).toBeGreaterThan(1);
   return pid;
+}
+
+// The host records destroyed, its program's group is gone and its socket is
+// removed.
+async function expectHostStopped(group: number): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  let manifest = await readManifest(manifestPath(directory));
+  while (
+    manifest.status !== 'destroyed' ||
+    isGroupAlive(group) ||
+    existsSync(socketPath(directory))
+  ) {
+    expect(Date.now()).toBeLessThan(deadline);
+    await delay(50);
+    manifest = await readManifest(manifestPath(directory));
+  }
 }
 
 beforeEach(async () => {
@@ -117,13 +135,47 @@ describe('runHost and the create-failed marker', () => {
     await runHost(SESSION_ID, process.pid);
 
     expect(existsSync(socketPath(directory))).toBe(false);
-    const group = readProgramGroup();
-    const deadline = Date.now() + 10_000;
-    let manifest = await readManifest(manifestPath(directory));
-    while (manifest.status !== 'destroyed' || isGroupAlive(group)) {
-      expect(Date.now()).toBeLessThan(deadline);
-      await delay(50);
-      manifest = await readManifest(manifestPath(directory));
-    }
+    await expectHostStopped(readProgramGroup());
   });
+
+  it('stops a serving host when the marker appears while its creator runs', async () => {
+    await runHost(SESSION_ID, process.pid);
+    expect(existsSync(socketPath(directory))).toBe(true);
+
+    await writeCreateFailedMarker(
+      createFailedMarkerPath(directory),
+      SESSION_ID,
+    );
+
+    await expectHostStopped(readProgramGroup());
+  });
+
+  it('keeps serving when the marker appears after its creator has exited', async () => {
+    const creator = spawn('sleep', ['30'], { stdio: 'ignore' });
+    expect(creator.pid).toBeGreaterThan(0);
+    await runHost(SESSION_ID, creator.pid as number);
+    expect(existsSync(socketPath(directory))).toBe(true);
+    creator.kill('SIGKILL');
+    await once(creator, 'exit');
+    // Two polls see the creator gone and stop the watch.
+    await delay(300);
+
+    await writeCreateFailedMarker(
+      createFailedMarkerPath(directory),
+      SESSION_ID,
+    );
+    await delay(500);
+
+    expect((await readManifest(manifestPath(directory))).status).toBe(
+      'running',
+    );
+    expect(existsSync(socketPath(directory))).toBe(true);
+    // Stop the host as a SIGTERM would.
+    for (const listener of process.rawListeners('SIGTERM')) {
+      if (!sigtermListeners.has(listener)) {
+        (listener as () => void)();
+      }
+    }
+    await expectHostStopped(readProgramGroup());
+  }, 15_000);
 });
