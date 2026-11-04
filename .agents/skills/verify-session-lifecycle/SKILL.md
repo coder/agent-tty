@@ -55,7 +55,7 @@ Yes, when the diff changes any of these:
 
 You do not have to judge this by hand. The check prints `STALE` when any of these changed since the sync commit.
 
-CI runs the check in the `lifecycle-model` job. Its first share calls `scripts/check.sh --drift-only`, which compares the guard values and the covered code with `coverage.json` and needs no Java, and fails on `STALE`. The whole check runs only when `coverage.json` differs from the base of the pull request or merge group, in eight jobs with `CHECK_SHARD=<i>/8` and `CHECK_JOBS=12`. Each job runs every eighth run that expects pass and every eighth of the rest, because the runs that expect pass explore the whole model and take most of the time, and it starts all its runs at once. On #330 a share took 11 to 33 min.
+CI runs the check in the `lifecycle-model` job. Its first share calls `scripts/check.sh --drift-only`, which compares the guard values and the covered code with `coverage.json` and needs no Java, and fails on `STALE`. The whole check runs only when `coverage.json` differs from the base of the pull request or merge group, in eight jobs with `CHECK_SHARD=<i>/8` and `CHECK_JOBS=12`. Each job runs every eighth run that expects pass and every eighth of the rest, because the runs that expect pass explore the whole model and take most of the time, and it starts all its runs at once. With the model of #324, a share took 11 to 33 min.
 
 ## Run it
 
