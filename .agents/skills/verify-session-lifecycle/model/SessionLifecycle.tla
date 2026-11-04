@@ -1328,7 +1328,7 @@ DestroyMarksFolder ==
           ELSE /\ DestroyEnds("error") /\ UNCHANGED dmark
     /\ UNCHANGED <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal,
                    wasExited, wasNamed, cmark, ghostVars, sock, cpc, hostVars,
-                   shutVars, readerVars, dforce, dinside, dsaw, dkill,
+                   shutVars, readerVars, dforce, dinside, dsaw, dkill, dblind,
                    groupVars>>
 
 \* recordDestroyed: writeManifest({ ...manifest, status: 'destroyed' }) from
