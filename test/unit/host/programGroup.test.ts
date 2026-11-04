@@ -18,7 +18,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   captureProgram,
+  forceSkipsGroup,
   isProgramGroupAlive,
+  isUnreadableGroupError,
   judgeProgramGroup,
   parseAutogroup,
   parseProcStat,
@@ -30,6 +32,7 @@ import {
   type ProcessRow,
   type ProgramRecord,
 } from '../../../src/host/programGroup.js';
+import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 import {
   programRecordPath,
   sessionDir,
@@ -1029,7 +1032,6 @@ describe('a program group with a token, as a faked /proc shows it', () => {
           0,
           'SIGSTOP',
           'SIGCONT',
-          0,
           'SIGSTOP',
           'SIGCONT',
         ]);
@@ -1038,8 +1040,9 @@ describe('a program group with a token, as a faked /proc shows it', () => {
       }
     });
 
-    // GC_JUDGEMENTS bounds the judgements of a group that ended.
-    it('reads a group that shows only zombies, also frozen, ended after ten judgements', async () => {
+    // Two frozen judgements that read gone stay inconclusive, so gc judges
+    // the group again, and reads it ended only after the last judgement.
+    it('reads a group that shows only zombies, frozen twice in each of ten judgements, ended', async () => {
       const directory = await recordedSession();
       try {
         procShowsTokenGroup('Z');
@@ -1051,8 +1054,135 @@ describe('a program group with a token, as a faked /proc shows it', () => {
 
         expect(await provenProgramGroupRuns(directory)).toBe(false);
         expect(signals).toEqual(
-          Array.from({ length: 10 }, () => [0, 'SIGSTOP', 'SIGCONT']).flat(),
+          Array.from({ length: 10 }, () => [
+            0,
+            'SIGSTOP',
+            'SIGCONT',
+            'SIGSTOP',
+            'SIGCONT',
+          ]).flat(),
         );
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    // A SIGCONT from another gc or a destroy before both frozen judgements
+    // lets the live member escape them. The next judgement still finds it.
+    it('keeps the session when a live member escapes both frozen judgements of one pass', async () => {
+      const directory = await recordedSession();
+      try {
+        procShowsTokenGroup('Z');
+        const signals: unknown[] = [];
+        let stops = 0;
+        vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+          signals.push(signal);
+          if (signal === 'SIGSTOP') {
+            stops += 1;
+            if (stops === 3) {
+              procShowsTokenGroup('Z', 'T');
+            }
+          }
+          return true;
+        });
+
+        expect(await provenProgramGroupRuns(directory)).toBe(true);
+        expect(signals).toEqual([
+          0,
+          'SIGSTOP',
+          'SIGCONT',
+          'SIGSTOP',
+          'SIGCONT',
+          0,
+          'SIGSTOP',
+          'SIGCONT',
+        ]);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    // A member of another session or autogroup that took the id is not the
+    // program's, and it gets its SIGCONT.
+    it.each([
+      {
+        member: 'another autogroup',
+        frozen: () => {
+          procShowsTokenGroup('Z', 'T');
+          const read = autogroupFile.read;
+          autogroupFile.read = (file) =>
+            file === '/proc/101/autogroup'
+              ? '/autogroup-9 nice 0\n'
+              : (read?.(file) ?? null);
+        },
+      },
+      {
+        member: 'another session',
+        frozen: () => {
+          procShowsTokenGroup('Z');
+          procHooks.stat?.set(
+            '101',
+            `101 (a) T 1 ${String(CHILD_PID)} 4242 ${STAT_TAIL}`,
+          );
+        },
+      },
+    ])(
+      'reads a frozen group whose live member is in $member ended, and resumes it',
+      async ({ frozen }) => {
+        const directory = await recordedSession();
+        try {
+          procShowsTokenGroup('Z');
+          const signals: unknown[] = [];
+          vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+            signals.push(signal);
+            if (signal === 'SIGSTOP') {
+              frozen();
+            }
+            return true;
+          });
+
+          expect(await provenProgramGroupRuns(directory)).toBe(false);
+          expect(signals).toEqual([0, 'SIGSTOP', 'SIGCONT']);
+        } finally {
+          await rm(directory, { recursive: true, force: true });
+        }
+      },
+    );
+
+    // A /proc that names another pid than this process's belongs to another
+    // pid namespace, so the group reads unshared and gc sends no signal.
+    it('sends no signal when /proc/self names another pid', async () => {
+      const directory = await recordedSession();
+      try {
+        procShowsTokenGroup('Z');
+        procHooks.self = '1';
+        const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+        expect(await provenProgramGroupRuns(directory)).toBe(false);
+        expect(kill).not.toHaveBeenCalled();
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    // sharesHostPids read /proc/self as this process's pid a moment before,
+    // so only a /proc that changed since, such as one mounted over it,
+    // reaches the guard of the freeze. The probe changes it here.
+    it('sends no SIGSTOP when /proc/self names another pid at the freeze', async () => {
+      const directory = await recordedSession();
+      try {
+        procShowsTokenGroup('Z');
+        const signals: unknown[] = [];
+        vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+          signals.push(signal);
+          if (signal === 0) {
+            procHooks.self = '1';
+          }
+          return true;
+        });
+
+        expect(await provenProgramGroupRuns(directory)).toBe(false);
+        expect(signals).toEqual([0]);
       } finally {
         await rm(directory, { recursive: true, force: true });
       }
@@ -1655,6 +1785,23 @@ describe.runIf(platform === 'linux')('a program record with a token', () => {
     });
   });
 
+  // gc names destroy --force for a failed reconcile only after this check.
+  it('skips the group for destroy --force only when its first read fails for good', async () => {
+    recordHostIn(readlinkSync('/proc/self/ns/pid'));
+    expect(await forceSkipsGroup(directory, 4242)).toBe(false);
+
+    procHooks.listError = errno('EMFILE');
+    expect(await forceSkipsGroup(directory, 4242)).toBe(false);
+
+    procHooks.listError = errno('EIO');
+    expect(await forceSkipsGroup(directory, 4242)).toBe(true);
+
+    procHooks.listError = undefined;
+    await rm(programRecordPath(directory));
+    await mkdir(programRecordPath(directory));
+    expect(await forceSkipsGroup(directory, 4242)).toBe(true);
+  });
+
   // Only an agent-tty version between program.json and host.json wrote a
   // token without host.json, and nothing names its pid space.
   it('reads alive and gets no kill without a host record', async () => {
@@ -1685,5 +1832,50 @@ describe.runIf(platform === 'linux')('a program record with a token', () => {
       stopProgramGroup(group);
     }
     expect(kill).not.toHaveBeenCalled();
+  });
+});
+
+// destroy --force ends a session without its group only after such a read.
+describe('isUnreadableGroupError', () => {
+  const refused = (code: string) =>
+    makeCliError(ERROR_CODES.STORAGE_READ_ERROR, { cause: errno(code) });
+  it.each([
+    ['a program.json that the read refuses', refused('EACCES'), true],
+    [
+      'a program.json behind a file where a folder was',
+      refused('ENOTDIR'),
+      true,
+    ],
+    ['a /proc scan that fails with EIO', errno('EIO'), true],
+    ['a /proc read that fails with EACCES', errno('EACCES'), true],
+    ['a read that EPERM refuses', errno('EPERM'), true],
+    ['a path that loops', errno('ELOOP'), true],
+    ['a program.json that is a folder', refused('EISDIR'), true],
+    ['a name too long', errno('ENAMETOOLONG'), true],
+    [
+      'a program.json read that ran out of file descriptors',
+      refused('EMFILE'),
+      false,
+    ],
+    ['EMFILE', errno('EMFILE'), false],
+    ['ENFILE', errno('ENFILE'), false],
+    ['ENOMEM', errno('ENOMEM'), false],
+    ['EAGAIN', errno('EAGAIN'), false],
+    ['EINTR', errno('EINTR'), false],
+    [
+      'a STORAGE_READ_ERROR without a cause',
+      makeCliError(ERROR_CODES.STORAGE_READ_ERROR),
+      false,
+    ],
+    ['HOST_TIMEOUT', makeCliError(ERROR_CODES.HOST_TIMEOUT), false],
+    [
+      'an assertion',
+      Object.assign(new Error('x'), { code: 'ERR_ASSERTION' }),
+      false,
+    ],
+    ['an error without a code', new Error('EIO'), false],
+    ['a value that is no error', { code: 'EIO' }, false],
+  ])('reads %s as unreadable: %s', (_name, error, unreadable) => {
+    expect(isUnreadableGroupError(error)).toBe(unreadable);
   });
 });

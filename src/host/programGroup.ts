@@ -3,6 +3,7 @@ import process from 'node:process';
 
 import { z } from 'zod';
 
+import { CliError } from '../cli/errors.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import {
   readValidatedJsonFile,
@@ -293,6 +294,53 @@ async function readProgramRecord(
       return 'invalid';
     }
     throw error;
+  }
+}
+
+// The errnos of a read that a retry does not change: the permissions or the
+// file system refuse it (EACCES, EPERM, EIO), or a path names no readable
+// file (EISDIR, ENOTDIR, ELOOP, ENAMETOOLONG). EMFILE, ENFILE, ENOMEM,
+// EAGAIN and EINTR pass, so a later read can succeed.
+const UNREADABLE_ERRNOS = new Set([
+  'EACCES',
+  'EPERM',
+  'EIO',
+  'EISDIR',
+  'ENOTDIR',
+  'ELOOP',
+  'ENAMETOOLONG',
+]);
+
+// Whether a read of the program's group failed in a way that every later
+// read repeats: a read of program.json (STORAGE_READ_ERROR) or of /proc,
+// with one of UNREADABLE_ERRNOS. A verdict, HOST_TIMEOUT, an abort or a bug
+// is none of these. A host.json that cannot be read counts as missing, so
+// its group reads unshared and throws nothing here.
+export function isUnreadableGroupError(error: unknown): boolean {
+  const cause = hasErrorCode(error, ERROR_CODES.STORAGE_READ_ERROR)
+    ? (error as Error).cause
+    : error;
+  const code: unknown =
+    cause instanceof Error ? (cause as { code?: unknown }).code : undefined;
+  return (
+    !(cause instanceof CliError) &&
+    typeof code === 'string' &&
+    UNREADABLE_ERRNOS.has(code)
+  );
+}
+
+// Whether destroy --force skips the program's group: the read of the group,
+// or its first judgement, fails with an error that isUnreadableGroupError
+// accepts.
+export async function forceSkipsGroup(
+  sessionDirectory: string,
+  childPid: number | null,
+): Promise<boolean> {
+  try {
+    isProgramGroupAlive(await readProgramGroup(sessionDirectory, childPid));
+    return false;
+  } catch (error) {
+    return isUnreadableGroupError(error);
   }
 }
 
@@ -642,24 +690,37 @@ function judgeGroupForGc(group: ProvenRecord): boolean | null {
   return live === null ? true : live ? null : judgeFrozenGroup(group);
 }
 
+// A frozen judgement that reads gone is judged frozen once more, so a gc
+// sends at most GC_JUDGEMENTS * FROZEN_JUDGEMENTS SIGSTOP and SIGCONT pairs.
+const FROZEN_JUDGEMENTS = 2;
+
 // The scans show only zombies of the group while the probe finds its id.
 // Under a PID 1 that never reaps, the zombies of a fork chain stay, and its
 // live member can escape both scans. SIGSTOP freezes the group, as in
 // stopProgramGroup, and a stopped member stays in view. Another gc or a
 // destroy can send SIGCONT before the judgement, so a frozen group that
-// still reads gone is judged again, with another SIGSTOP. A group that
-// ended reads gone each time, so the bounded loop of provenProgramGroupRuns
-// then reads it ended. The group gets SIGCONT, also when a scan throws.
+// still reads gone gets another SIGSTOP and judgement. When that one reads
+// gone too, the judgement stays inconclusive, and provenProgramGroupRuns
+// judges the group again. So gc reads a live fork chain ended only when a
+// SIGCONT from elsewhere came before each of its frozen judgements and the
+// chain's live member escaped every scan. The group gets SIGCONT, also when
+// a scan throws.
 function judgeFrozenGroup(group: ProvenRecord): boolean | null {
-  if (!procShowsOwnPidSpace() || !signalProcessGroup(group.pid, 'SIGSTOP')) {
-    return false;
+  for (let frozen = 0; frozen < FROZEN_JUDGEMENTS; frozen += 1) {
+    if (!procShowsOwnPidSpace() || !signalProcessGroup(group.pid, 'SIGSTOP')) {
+      return false;
+    }
+    let verdict: GroupJudgement['verdict'];
+    try {
+      verdict = judgeLiveGroup(group).verdict;
+    } finally {
+      signalProcessGroup(group.pid, 'SIGCONT');
+    }
+    if (verdict !== 'gone') {
+      return verdict === 'owned' ? true : verdict === 'unproven' ? false : null;
+    }
   }
-  try {
-    const { verdict } = judgeLiveGroup(group);
-    return verdict === 'owned' ? true : verdict === 'unproven' ? false : null;
-  } finally {
-    signalProcessGroup(group.pid, 'SIGCONT');
-  }
+  return null;
 }
 
 function probeFindsGroup(pgid: number): boolean {
