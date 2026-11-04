@@ -1279,7 +1279,14 @@ export async function runHost(
   // while its creator runs, and once more after the creator has exited.
   const watchCreateFailed = (): void => {
     const timer = setInterval(() => {
-      const creatorGone = !isProcessAlive(creatorPid);
+      // An error of the probe, such as EPERM from a process of another user
+      // that took the pid, means that the creator has exited.
+      let creatorGone = true;
+      try {
+        creatorGone = !isProcessAlive(creatorPid);
+      } catch {
+        // creatorGone stays true.
+      }
       if (existsSync(createFailedMarkerPath(sessDir))) {
         clearInterval(timer);
         startShutdown();

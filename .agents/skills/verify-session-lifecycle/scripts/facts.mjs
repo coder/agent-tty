@@ -406,7 +406,8 @@ function retriesMarker(body) {
 
 // runHost's watchCreateFailed checks, every CREATE_FAILED_POLL_INTERVAL_MS,
 // whether the creator still runs and then whether the create-failed marker
-// exists. On the marker it calls startShutdown, and it stops once a check
+// exists. A probe that throws counts as an exited creator, so no error leaves
+// the timer. On the marker it calls startShutdown, and it stops once a check
 // after the creator's exit found none. The start-up try calls it right after
 // the check that follows the start-up write.
 function pollsCreateFailed() {
@@ -414,8 +415,8 @@ function pollsCreateFailed() {
   const watch = indexOfStatement(run, /^const watchCreateFailed = /);
   const watches =
     watch >= 0 &&
-    normalize(run.statements[watch].getText()) ===
-      'const watchCreateFailed = (): void => { const timer = setInterval(() => { const creatorGone = !isProcessAlive(creatorPid); if (existsSync(createFailedMarkerPath(sessDir))) { clearInterval(timer); startShutdown(); } else if (creatorGone) { clearInterval(timer); } }, CREATE_FAILED_POLL_INTERVAL_MS); timer.unref(); };';
+    normalize(run.statements[watch].getText().replace(/\/\/[^\n]*/g, '')) ===
+      'const watchCreateFailed = (): void => { const timer = setInterval(() => { let creatorGone = true; try { creatorGone = !isProcessAlive(creatorPid); } catch { } if (existsSync(createFailedMarkerPath(sessDir))) { clearInterval(timer); startShutdown(); } else if (creatorGone) { clearInterval(timer); } }, CREATE_FAILED_POLL_INTERVAL_MS); timer.unref(); };';
   const last = run.statements.at(-1);
   const tried =
     last !== undefined && ts.isTryStatement(last)
