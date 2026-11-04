@@ -1419,6 +1419,18 @@ describe.runIf(platform === 'linux')('a program record with a token', () => {
     expect(await readProvenProgramGroup(directory)).toEqual(record);
   });
 
+  // A /proc of another pid namespace names this process by another pid, and
+  // its scan shows none of the program's processes.
+  it("reads alive in the host's pid namespace when /proc belongs to another one", async () => {
+    recordHostIn(readlinkSync('/proc/self/ns/pid'));
+    procHooks.self = String(process.pid + 1);
+
+    expect(await readProgramGroup(directory, 4242)).toEqual({ unshared: true });
+    expect(await readProvenProgramGroup(directory)).toEqual({
+      unshared: true,
+    });
+  });
+
   // Only an agent-tty version between program.json and host.json wrote a
   // token without host.json, and nothing names its pid space.
   it('reads alive and gets no kill without a host record', async () => {
