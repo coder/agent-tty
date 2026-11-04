@@ -337,12 +337,32 @@ if [ "$SHARD_COUNT" -gt 1 ]; then
   echo "Share $SHARD of the runs:$RUNS"
 fi
 
+# A run that expects pass explores the whole model and takes the longest, so
+# the runs that expect pass and run at the same time share the CPUs, each
+# with at least 1 TLC worker. A run that expects a violation keeps 1 worker,
+# which finds the shortest trace.
+CPUS=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+passes=0
+for name in $RUNS; do
+  if [ "$(cut -f1 "$OUT/$name/expect.txt")" = pass ]; then
+    passes=$((passes + 1))
+  fi
+done
+concurrent=$((passes < JOBS ? passes : JOBS))
+PASS_WORKERS=1
+if [ "$concurrent" -gt 0 ] && [ "$CPUS" -gt "$concurrent" ]; then
+  PASS_WORKERS=$((CPUS / concurrent))
+fi
+
 run_tlc() {
-  local dir rc=0
+  local dir rc=0 workers=1
   dir=$(cd "$OUT/$1" && pwd)
   mkdir -p "$dir/tmp"
+  if [ "$(cut -f1 "$dir/expect.txt")" = pass ]; then
+    workers=$PASS_WORKERS
+  fi
   (cd "$dir" && "$JAVA" -XX:+UseParallelGC -Xmx2g -Djava.io.tmpdir="$dir/tmp" \
-    -cp "$JAR" tlc2.TLC -workers 1 -config SessionLifecycle.cfg \
+    -cp "$JAR" tlc2.TLC -workers "$workers" -config SessionLifecycle.cfg \
     -metadir "$dir/states" SessionLifecycle.tla >tlc.out 2>&1) || rc=$?
   echo "$rc" >"$dir/rc"
 }
