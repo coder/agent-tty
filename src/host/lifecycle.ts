@@ -1136,6 +1136,7 @@ export async function reconcileSession(
       const socketFile = socketPath(sessionDirectory);
       await unlinkIfPresent(socketFile);
       await removeSocketDirectoryIfEmpty(socketFile);
+      await removeLegacySocketBestEffort(socketFile);
     }
     return;
   }

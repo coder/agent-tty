@@ -1737,6 +1737,20 @@ describe.skipIf(process.platform === 'win32')(
       await rm(dirname(oldSocketFile), { recursive: true, force: true });
     });
 
+    it('a reconcile that repairs a marked session removes it', async () => {
+      const directory = await seedSession(
+        makeRecord({ status: 'failed', hostPid: null, childPid: null }),
+      );
+      writeFileSync(join(directory, 'destroyed'), '');
+
+      await reconcileSession(directory);
+
+      expect(await readManifest(manifestPath(directory))).toMatchObject({
+        status: 'destroyed',
+      });
+      expect(existsSync(oldSocketFile)).toBe(false);
+    });
+
     it('destroy removes it when the host is dead', async () => {
       await seedSession(makeRecord({ status: 'destroyed', childPid: null }));
       killProbeReportsDead();

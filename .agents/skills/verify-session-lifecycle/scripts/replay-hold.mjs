@@ -13,8 +13,9 @@
 // <nth>        hold the nth matching call (1 = the first) in that process
 //
 // The detached host inherits NODE_OPTIONS and REPLAY_HOLD from `create`.
-// Set REPLAY_LOG=<file> to log each hold.
-import { appendFileSync } from 'node:fs';
+// Set REPLAY_LOG=<file> to log each hold. Set REPLAY_RELEASE=<file> to end
+// every hold as soon as that file exists, so <ms> is only a cap.
+import { appendFileSync, existsSync } from 'node:fs';
 import fsp from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import process from 'node:process';
@@ -42,6 +43,17 @@ const holds = (process.env.REPLAY_HOLD ?? '')
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function holdFor(ms) {
+  const release = process.env.REPLAY_RELEASE;
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (release !== undefined && existsSync(release)) {
+      return;
+    }
+    await sleep(Math.min(release === undefined ? ms : 50, end - Date.now()));
+  }
+}
+
 for (const call of new Set(holds.map((hold) => hold.call))) {
   const original = fsp[call];
   const mine = holds.filter((hold) => hold.call === call);
@@ -61,12 +73,12 @@ for (const call of new Set(holds.map((hold) => hold.call))) {
     }
     log(`hold ${call} ${path} for ${String(hold.ms)} ms`);
     if (HOLD_BEFORE.has(call)) {
-      await sleep(hold.ms);
+      await holdFor(hold.ms);
       log(`release ${call} ${path}`);
       return original(...args);
     }
     const result = await original(...args);
-    await sleep(hold.ms);
+    await holdFor(hold.ms);
     log(`release ${call} ${path}`);
     return result;
   };

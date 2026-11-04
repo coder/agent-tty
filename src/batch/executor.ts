@@ -285,7 +285,10 @@ async function runWaitStep(
       ...observations,
       error: toBatchStepError(
         makeCliError(ERROR_CODES.WAIT_TIMEOUT, {
-          message: `Render wait at step ${String(index)} timed out before its condition was met.`,
+          message:
+            result.timedOut && step.timeoutMs !== undefined
+              ? `Render wait at step ${String(index)} timed out after ${String(step.timeoutMs)} ms.`
+              : `Render wait at step ${String(index)} timed out before its condition was met.`,
         }),
       ),
     };
