@@ -596,6 +596,24 @@ describe('create command', () => {
       expect(mocks.stopHost).not.toHaveBeenCalled();
     });
 
+    it('counts a host probe that throws as an exited host and keeps the error', async () => {
+      mocks.writeCreateFailedMarker.mockRejectedValue(diskError);
+      // A process of another user that took the host's pid answers EPERM.
+      mocks.isProcessAlive.mockImplementation(() => {
+        throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' });
+      });
+
+      await expect(
+        runCreateCommand({ ...baseOptions, context }),
+      ).rejects.toMatchObject({
+        code: 'HOST_UNREACHABLE',
+        details: { sessionId: 'session-01' },
+      });
+
+      expect(mocks.writeCreateFailedMarker).toHaveBeenCalledOnce();
+      expect(mocks.stopHost).not.toHaveBeenCalled();
+    });
+
     it('stops retrying once the host has exited', async () => {
       mocks.writeCreateFailedMarker.mockRejectedValue(diskError);
       mocks.isProcessAlive.mockReturnValueOnce(true).mockReturnValue(false);
