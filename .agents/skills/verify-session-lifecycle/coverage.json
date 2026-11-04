@@ -70,7 +70,8 @@
     "src/host/lifecycle.ts#killHostBestEffort": "25fcfd52894e189c",
     "src/host/hostRecord.ts#captureHost": "2cf2057461621536",
     "src/host/hostRecord.ts#writeHostRecord": "be58a9c34e8fad35",
-    "src/host/hostRecord.ts#readHostRecord": "6e0fc70b53f945bc",
+    "src/host/hostRecord.ts#readHostRecord": "ae72a381b617a36e",
+    "src/host/hostRecord.ts#readHostRecordOrThrow": "cff845ca6764b043",
     "src/host/hostRecord.ts#pidExists": "d539275a0f6041ea",
     "src/host/hostRecord.ts#judgeHost": "85b37d524df156a4",
     "src/host/hostRecord.ts#inPidNamespace": "aaa5cdfdfbb99f33",
@@ -87,7 +88,7 @@
     "src/host/lifecycle.ts#readSessionManifestOrThrow": "9709f28e5e9cca4b",
     "src/host/lifecycle.ts#waitForTerminalManifest": "3f14811e8d2f5f7f",
     "src/host/lifecycle.ts#waitForProcessesToExit": "bdab1d674a6856b8",
-    "src/host/lifecycle.ts#stopSessionProcesses": "d1abb608b1d2160a",
+    "src/host/lifecycle.ts#stopSessionProcesses": "5359cc5db2eefe4e",
     "src/host/lifecycle.ts#recordDestroyed": "d3a74237a9c8459c",
     "src/host/lifecycle.ts#removeDeadHostSocket": "34ce07ab7b7e8d7b",
     "src/host/lifecycle.ts#destroySession": "05edb5d2825ed857",
@@ -148,7 +149,7 @@
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "cd8639012467f13e",
-    "skill:scripts/facts.mjs": "e4e67f62f1c1853b",
+    "skill:scripts/facts.mjs": "f007734bffb0f4a1",
     "skill:scripts/check.sh": "17f2ce5bd1b1b090"
   },
   "callSites": {
