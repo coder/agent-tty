@@ -20,6 +20,7 @@ import { createSerialManifestWriter } from './manifestWriter.js';
 import {
   captureProgram,
   programWithoutToken,
+  readProcStat,
   stopProgramGroup,
   writeProgramRecord,
 } from './programGroup.js';
@@ -1280,10 +1281,13 @@ export async function runHost(
   const watchCreateFailed = (): void => {
     const timer = setInterval(() => {
       // An error of the probe, such as EPERM from a process of another user
-      // that took the pid, means that the creator has exited.
+      // that took the pid, means that the creator has exited. So does a
+      // zombie, which kill(pid, 0) still finds until its parent reaps it.
       let creatorGone = true;
       try {
-        creatorGone = !isProcessAlive(creatorPid);
+        creatorGone =
+          !isProcessAlive(creatorPid) ||
+          readProcStat(creatorPid)?.state === 'Z';
       } catch {
         // creatorGone stays true.
       }
