@@ -1589,6 +1589,7 @@ const COVERED = [
   ['src/host/programGroup.ts', 'provenProgramGroupRuns'],
   ['src/host/programGroup.ts', 'judgeGroupForGc'],
   ['src/host/programGroup.ts', 'judgeFrozenGroup'],
+  ['src/host/programGroup.ts', 'isUnreadableGroupError'],
   ['src/host/programGroup.ts', 'GC_JUDGEMENTS'],
   ['src/host/programGroup.ts', 'probeFindsGroup'],
   ['src/host/lifecycle.ts', 'allocateSession'],
