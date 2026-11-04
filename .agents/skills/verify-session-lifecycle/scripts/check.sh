@@ -365,6 +365,16 @@ fi
 # with at least 1 TLC worker. A run that expects a violation keeps 1 worker,
 # which finds the shortest trace.
 CPUS=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+# getconf counts every online CPU, also in a container whose cgroup v2 quota
+# allows fewer. cpu.max reads "max <period>" without a quota, else
+# "<quota> <period>" in microseconds.
+if read -r quota period 2>/dev/null </sys/fs/cgroup/cpu.max &&
+  [[ $quota =~ ^[1-9][0-9]*$ && $period =~ ^[1-9][0-9]*$ ]]; then
+  quota_cpus=$(((quota + period - 1) / period))
+  if [ "$quota_cpus" -lt "$CPUS" ]; then
+    CPUS=$quota_cpus
+  fi
+fi
 passes=0
 for name in $RUNS; do
   if [ "$(cut -f1 "$OUT/$name/expect.txt")" = pass ]; then
@@ -376,6 +386,7 @@ PASS_WORKERS=1
 if [ "$concurrent" -gt 0 ] && [ "$CPUS" -gt "$concurrent" ]; then
   PASS_WORKERS=$((CPUS / concurrent))
 fi
+echo "CPUs: $CPUS. TLC workers of a run that expects pass: $PASS_WORKERS."
 
 run_tlc() {
   local dir rc=0 workers=1
