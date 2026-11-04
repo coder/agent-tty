@@ -292,6 +292,48 @@ describe('artifact manifest storage', () => {
       ]);
     });
 
+    it('keeps the entry of a path that differs only in case but names another file', async ({
+      skip,
+    }) => {
+      const sessionDir = await createSessionDir();
+      await ensureArtifactsDir(sessionDir);
+      const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
+      const variantPath = artifactPath(
+        sessionDir,
+        'Recording-4-Asciicast.cast',
+      );
+      const otherPath = join(sessionDir, 'other.cast');
+      await writeFile(otherPath, 'other');
+      await exportTo(castPath, 'first');
+      try {
+        await symlink(otherPath, variantPath);
+      } catch (error) {
+        // A case-insensitive file system has one name for both spellings,
+        // so they cannot name two files there.
+        if ((error as { code?: unknown }).code === 'EEXIST') {
+          skip();
+        }
+        throw error;
+      }
+      for (const entry of [
+        exportEntry('01JQ0000000000000000000001', castPath),
+        exportEntry('01JQ0000000000000000000002', variantPath),
+      ]) {
+        await appendArtifactWithRollback({ sessionDir, entry });
+      }
+
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000003', castPath),
+        outputFileIdentity: await exportTo(castPath, 'second'),
+      });
+
+      expect(await ids(sessionDir)).toEqual([
+        '01JQ0000000000000000000002',
+        '01JQ0000000000000000000003',
+      ]);
+    });
+
     it('adds nothing when a later export already replaced its file', async () => {
       const sessionDir = await createSessionDir();
       await ensureArtifactsDir(sessionDir);
