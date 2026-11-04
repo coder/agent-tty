@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { lstat, readdir, rm, utimes, writeFile } from 'node:fs/promises';
+import { lstat, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -465,6 +465,65 @@ export interface AppendArtifactWithRollbackOptions {
   sessionDir: string;
   entry: ArtifactEntry;
   rollbackArtifactPath?: string;
+  /**
+   * `fileIdentity` of the file that the entry describes, taken when it was
+   * written. The append then drops the entries whose `metadata.outputPath`
+   * names that file, which replaced theirs. When `metadata.outputPath` no
+   * longer names that file, a later write replaced it, and the append adds
+   * nothing.
+   */
+  outputFileIdentity?: string;
+}
+
+/**
+ * Device, inode, size and modification time of the file at `path`, so two
+ * spellings of one path (a case-insensitive file system, a symlink) match.
+ * A rename keeps all four. Size and time keep a later file that reuses a
+ * removed file's inode number from matching it. null when the path does
+ * not resolve.
+ */
+export async function fileIdentity(path: string): Promise<string | null> {
+  try {
+    // bigint keeps the numbers above 2^53 exact and the time in nanoseconds.
+    const stats = await stat(path, { bigint: true });
+    return [stats.dev, stats.ino, stats.size, stats.mtimeNs].join(':');
+  } catch {
+    return null;
+  }
+}
+
+function pathSpelling(path: string): string {
+  return path.normalize('NFC').toLowerCase();
+}
+
+/**
+ * Returns the entries to keep beside an entry for the file `identity` at
+ * `outputPath`, or null when `outputPath` no longer names that file: a later
+ * write replaced it, and the later entry describes the file.
+ */
+async function entriesKeptBeside(
+  artifacts: readonly ArtifactEntry[],
+  outputPath: string,
+  identity: string,
+): Promise<ArtifactEntry[] | null> {
+  if ((await fileIdentity(outputPath)) !== identity) {
+    return null;
+  }
+  // Only a path that differs at most in case can name the same file, so the
+  // append reads no other entry's path, which can be on a slow mount.
+  const spelling = pathSpelling(outputPath);
+  const kept: ArtifactEntry[] = [];
+  for (const listed of artifacts) {
+    const listedPath = listed.metadata.outputPath;
+    const sameFile =
+      typeof listedPath === 'string' &&
+      pathSpelling(listedPath) === spelling &&
+      (await fileIdentity(listedPath)) === identity;
+    if (!sameFile) {
+      kept.push(listed);
+    }
+  }
+  return kept;
 }
 
 // Removes a rolled-back artifact unless the manifest already lists a file of
@@ -490,6 +549,7 @@ async function appendArtifact(
     rollbackArtifactPath: string | undefined;
   }>,
   rollbackIfNoLock?: string,
+  replacedOutput?: { path: string; identity: string },
 ): Promise<ArtifactEntry> {
   const resolvedSessionDir = resolve(sessionDir);
   const expectedSessionId = sessionIdFromSessionDir(resolvedSessionDir);
@@ -501,9 +561,20 @@ async function appendArtifact(
       try {
         const validatedEntry = validateArtifactEntry(entry, expectedSessionId);
         const manifest = await readArtifactManifest(resolvedSessionDir);
+        const kept =
+          replacedOutput === undefined
+            ? manifest.artifacts
+            : await entriesKeptBeside(
+                manifest.artifacts,
+                replacedOutput.path,
+                replacedOutput.identity,
+              );
+        if (kept === null) {
+          return validatedEntry;
+        }
         await writeArtifactManifest(resolvedSessionDir, {
           ...manifest,
-          artifacts: [...manifest.artifacts, validatedEntry],
+          artifacts: [...kept, validatedEntry],
         });
         return validatedEntry;
       } catch (error) {
@@ -547,6 +618,16 @@ export async function appendArtifactWithRollback(
     );
   }
 
+  let replacedOutput: { path: string; identity: string } | undefined;
+  if (options.outputFileIdentity !== undefined) {
+    const outputPath = options.entry.metadata.outputPath;
+    invariant(
+      typeof outputPath === 'string' && isAbsolute(outputPath),
+      'an entry with an outputFileIdentity must name an absolute metadata.outputPath',
+    );
+    replacedOutput = { path: outputPath, identity: options.outputFileIdentity };
+  }
+
   await appendArtifact(
     options.sessionDir,
     () =>
@@ -555,6 +636,46 @@ export async function appendArtifactWithRollback(
         rollbackArtifactPath: options.rollbackArtifactPath,
       }),
     options.rollbackArtifactPath,
+    replacedOutput,
+  );
+}
+
+export interface RemoveArtifactEntryOptions {
+  sessionDir: string;
+  filename: string;
+  sha256: string;
+}
+
+/**
+ * Undoes a capture: removes the last manifest entry with `filename` and
+ * `sha256`, then the file when no other entry lists it. It runs in the same
+ * per-session queue and lock as the appends.
+ */
+export async function removeArtifactEntry(
+  options: RemoveArtifactEntryOptions,
+): Promise<void> {
+  const resolvedSessionDir = resolve(options.sessionDir);
+  const path = artifactPath(resolvedSessionDir, options.filename);
+  await appendSerializer.run(resolvedSessionDir, () =>
+    withArtifactManifestLock(resolvedSessionDir, async () => {
+      const manifest = await readArtifactManifest(resolvedSessionDir);
+      const index = manifest.artifacts.findLastIndex(
+        (entry) =>
+          entry.filename === options.filename &&
+          entry.sha256 === options.sha256,
+      );
+      if (index === -1) {
+        return;
+      }
+      const artifacts = manifest.artifacts.toSpliced(index, 1);
+      await writeArtifactManifest(resolvedSessionDir, {
+        ...manifest,
+        artifacts,
+      });
+      if (!artifacts.some((entry) => entry.filename === options.filename)) {
+        await rm(path, { force: true });
+      }
+    }),
   );
 }
 
