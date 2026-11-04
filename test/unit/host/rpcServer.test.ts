@@ -320,6 +320,37 @@ describe('RpcServer large success responses', () => {
     expect((result as { text: string }).text).toHaveLength(2_000_000);
   });
 
+  it('scans each chunk of a large response for the newline only once', async () => {
+    // A socket read gives at most 64 KiB, so this response comes in 60 or more
+    // chunks. Scanning the whole buffer after each chunk would read the
+    // response about 30 times; scanning each new chunk reads it once.
+    // oxlint-disable-next-line typescript/unbound-method -- the spy below calls it with nativeIndexOf.call(this, ...).
+    const nativeIndexOf = String.prototype.indexOf;
+    let newlineScanChars = 0;
+    const indexOf = vi
+      .spyOn(String.prototype, 'indexOf')
+      .mockImplementation(function (
+        this: string,
+        searchString: string,
+        position?: number,
+      ): number {
+        if (searchString === '\n') {
+          newlineScanChars += this.length;
+        }
+        return nativeIndexOf.call(this, searchString, position);
+      });
+
+    let result: unknown;
+    try {
+      result = await textSnapshotFrom('x'.repeat(4_000_000));
+    } finally {
+      indexOf.mockRestore();
+    }
+
+    expect((result as { text: string }).text).toHaveLength(4_000_000);
+    expect(newlineScanChars).toBeLessThan(2 * 4_000_000);
+  });
+
   it(
     'refuses a success response over 64 MiB with PROTOCOL_ERROR',
     { timeout: 30_000 },

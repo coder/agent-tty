@@ -358,6 +358,9 @@ describe('snapshot command', () => {
         includeCells: true,
         rendererName: 'ghostty-web',
       },
+      // The host sends nothing until it has built every cell, so a large
+      // grid needs more than the 5,000 ms default.
+      60_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
       command: 'snapshot',
