@@ -166,7 +166,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck GcKeepsLiveGroup GcProbesUnseenGroup GcFreezesUnseenGroup ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid CreateRecordsHost FreezesUnseenGroup UnsharedGroupReadsUnknown HostChecksCreateFailed"
+GUARDS="GcSkipsNonCollectable GcFinalCheck GcKeepsLiveGroup GcProbesUnseenGroup GcFreezesUnseenGroup ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid CreateRecordsHost FreezesUnseenGroup UnsharedGroupReadsUnknown HostChecksCreateFailed ForceSkipsUnreadableGroup"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -199,6 +199,11 @@ ZOMBIES=FALSE
 OTHER=FALSE
 # WIN32: whether SIGTERM ends the host at once, as on Windows.
 WIN32=FALSE
+# CHECKFAILS: whether destroy, list and gc fail every read of program.json.
+CHECKFAILS=FALSE
+# REFUSED: whether /proc of destroy, list and gc refuses the program's
+# autogroup.
+REFUSED=FALSE
 write_run() {
   local name=$1 expect=$2 invariants=$3 overrides=$4 note=$5 must=${6:-}
   local dir="$OUT/$name" fact guard value
@@ -222,6 +227,8 @@ write_run() {
     echo "  ZombiesInView = $ZOMBIES"
     echo "  OtherPidSpace = $OTHER"
     echo "  Win32 = $WIN32"
+    echo "  CheckFails = $CHECKFAILS"
+    echo "  Refused = $REFUSED"
     echo "  MaxListReconciles = 2"
     echo "SPECIFICATION Spec"
     echo "CHECK_DEADLOCK TRUE"
@@ -293,6 +300,22 @@ write_run witness-WitnessUnsharedGcRemovesLeftover-otherspace violated WitnessUn
 write_run mutant-UnsharedGroupReadsUnknown-otherspace violated DestroyedSessionStopped "UnsharedGroupReadsUnknown=FALSE" "with the group read gone where no scan or probe shows it, destroy of an exited session records destroyed while a process it left runs" DestroyedSessionStopped
 write_run mutant-CreateRecordsHost-otherspace violated HostDeathOnlyWhenDead "CreateRecordsHost=FALSE" "without the record from create, a reconcile in another pid space reads the starting host dead and records it failed" HostDeathOnlyWhenDead
 OTHER=FALSE
+
+# destroy, list and gc cannot read program.json (EACCES), or /proc fails with
+# a system error. gc keeps the session, and destroy --force ends it without
+# the read.
+CHECKFAILS=TRUE
+write_run current-checkfails pass "$RULES" "" "the code with program.json unreadable for destroy, list and gc: every rule holds"
+write_run witness-WitnessUncheckedForceDestroys-checkfails violated WitnessUncheckedForceDestroys "" "destroy --force ends a session whose group it cannot read while a process that the program left runs"
+write_run mutant-ForceSkipsUnreadableGroup-checkfails pass WitnessUncheckedForceDestroys "ForceSkipsUnreadableGroup=FALSE" "without the fallback, destroy --force fails on the read, so no command removes the session"
+CHECKFAILS=FALSE
+
+# /proc of destroy, list and gc refuses the autogroup of the program's
+# processes. gc cannot check the group, and destroy cannot prove it.
+REFUSED=TRUE
+write_run current-refused pass "$RULES" "" "the code with a /proc that refuses the program's autogroup: every rule holds"
+write_run witness-WitnessRefusedGcRemovesLeftover-refused violated WitnessRefusedGcRemovesLeftover "" "gc cannot check the group, so it removes an exited session while a process that the program left runs"
+REFUSED=FALSE
 
 # Without a token every kill falls back to the id that a manifest or the
 # host's own record names, as before program.json existed.

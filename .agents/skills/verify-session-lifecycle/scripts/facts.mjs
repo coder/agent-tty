@@ -630,7 +630,7 @@ function destroyFacts() {
     const block = force.thenStatement;
     const first = indexOfStatement(
       block,
-      /^await stopSessionProcesses\(\s*sessionId,\s*await readSessionHost\(sessionDirectory, manifest\),\s*await readProgramGroup\(/,
+      /^await stopUnlessUnreadable\(\s*await readSessionHost\(sessionDirectory, manifest\),\s*\(\) => readProgramGroup\(sessionDirectory, manifest\.childPid\),?\s*\);$/,
     );
     const reread = indexOfStatement(
       block,
@@ -638,11 +638,7 @@ function destroyFacts() {
     );
     const group = indexOfStatement(
       block,
-      /^const group = await readProgramGroup\(/,
-    );
-    const second = indexOfStatement(
-      block,
-      /^await stopSessionProcesses\(\s*sessionId,\s*await readSessionHost\(sessionDirectory, current\),\s*group,/,
+      /^const group = await stopUnlessUnreadable\(\s*await readSessionHost\(sessionDirectory, current\),\s*\(\) => readProgramGroup\(sessionDirectory, current\.childPid\),?\s*\);$/,
     );
     const records = indexOfStatement(
       block,
@@ -652,8 +648,8 @@ function destroyFacts() {
       first >= 0 &&
       reread > first &&
       group > reread &&
-      second > group &&
-      records > second &&
+      records > group &&
+      stopsThenRecords.stops &&
       calls(block, 'reconcileSession').length === 0;
   }
   const stop = requireDeclaration(
@@ -683,6 +679,7 @@ function destroyFacts() {
       stopWaits &&
       waitsForProcessesOnly,
     DestroyKeepsExitCode: keepsExitCode,
+    ForceSkipsUnreadableGroup: forceRecords && stopsThenRecords.skipsUnreadable,
     DestroyStopsLeftovers:
       stopsThenRecords.records &&
       stopsThenRecords.stops &&
@@ -697,52 +694,123 @@ function destroyFacts() {
   };
 }
 
-// The statements of destroySession's local stopLeftoversThenRecordDestroyed:
-// with DestroyStopsLeftovers it stops the group that program.json proves,
-// waits for it, and only then records destroyed. readProvenProgramGroup
-// returns the record whenever it has a token, or the unshared group when
-// this process cannot prove that it shares the host's pid space. A session
-// that a process which saw the group recorded destroyed gets no wait for an
-// unshared group (trustsDestroyed).
+// destroySession's local stopLeftoversThenRecordDestroyed hands
+// stopUnlessUnreadable the read of program.json, and only then records
+// destroyed. readProvenProgramGroup returns the record whenever it has a
+// token, or the unshared group when this process cannot prove that it
+// shares the host's pid space. A session that a process which saw the
+// group recorded destroyed gets no wait for an unshared group
+// (trustsDestroyed). stopUnlessUnreadable reads the group, stops it and
+// waits. With skipsUnreadable, destroy --force that cannot read the group
+// (a system error) stops the host alone instead.
 const UNSHARED_RETURN =
   'return (await sharesHostPids(sessionDirectory, false)) ? record : UNSHARED_GROUP;';
-const STOP_UNLESS_TRUSTED =
-  "await stopSessionProcesses( sessionId, null, terminal.status === 'destroyed' && group !== null && 'unshared' in group ? null : group, sessionDirectory, signal, );";
-const STOP_ALWAYS =
-  'await stopSessionProcesses( sessionId, null, group, sessionDirectory, signal, );';
+const RETURN_UNLESS_TRUSTED =
+  "return terminal.status === 'destroyed' && group !== null && 'unshared' in group ? null : group;";
 
-function stopLeftoversThenRecordDestroyed(destroy) {
-  let found = [];
+function localArrows(destroy) {
+  const out = new Map();
   walk(destroy.body, (node) => {
     if (
       ts.isVariableDeclaration(node) &&
-      node.name.getText() === 'stopLeftoversThenRecordDestroyed' &&
       node.initializer !== undefined &&
       ts.isArrowFunction(node.initializer) &&
       ts.isBlock(node.initializer.body)
     ) {
-      found = node.initializer.body.statements.map((st) =>
-        normalize(st.getText()),
-      );
+      out.set(node.name.getText(), node.initializer.body.statements);
     }
   });
+  return out;
+}
+
+function statementsOf(block) {
+  return block.statements.map((st) => normalize(st.getText()));
+}
+
+function stopUnlessUnreadableFacts(arrows) {
+  const st = arrows.get('stopUnlessUnreadable') ?? [];
+  const attempt = st[0];
+  if (
+    attempt === undefined ||
+    !ts.isTryStatement(attempt) ||
+    attempt.catchClause === undefined ||
+    attempt.finallyBlock !== undefined
+  ) {
+    return { stops: false, skipsUnreadable: false };
+  }
+  const tried = statementsOf(attempt.tryBlock).join('\n');
+  const caught = statementsOf(attempt.catchClause.block).join('\n');
+  const after = st.slice(1).map((s) => normalize(s.getText()));
+  const stops =
+    tried ===
+    [
+      'const group = await readGroup();',
+      'await stopSessionProcesses( sessionId, host, group, sessionDirectory, signal, );',
+      'return group;',
+    ].join('\n');
+  const skipsUnreadable =
+    caught ===
+      'if (force !== true || !isUnreadableGroupError(error)) { throw error; }' &&
+    after.join('\n') ===
+      [
+        'await stopSessionProcesses(sessionId, host, null, sessionDirectory, signal);',
+        'return null;',
+      ].join('\n') &&
+    bodyIs(
+      'isUnreadableGroupError',
+      "if (hasErrorCode(error, ERROR_CODES.STORAGE_READ_ERROR)) { return true; } const code: unknown = error instanceof Error ? (error as { code?: unknown }).code : undefined; return ( !(error instanceof CliError) && typeof code === 'string' && /^E[A-Z0-9]+$/.test(code) );",
+    );
+  return {
+    stops: stops && (caught === 'throw error;' || skipsUnreadable),
+    skipsUnreadable: stops && skipsUnreadable,
+  };
+}
+
+function stopLeftoversThenRecordDestroyed(destroy) {
+  const arrows = localArrows(destroy);
+  const found = arrows.get('stopLeftoversThenRecordDestroyed') ?? [];
+  const first = found[0];
+  let read = [];
+  if (
+    first !== undefined &&
+    ts.isExpressionStatement(first) &&
+    ts.isAwaitExpression(first.expression) &&
+    ts.isCallExpression(first.expression.expression)
+  ) {
+    const call = first.expression.expression;
+    const reader = call.arguments[1];
+    if (
+      call.expression.getText() === 'stopUnlessUnreadable' &&
+      call.arguments.length === 2 &&
+      call.arguments[0].getText() === 'null' &&
+      reader !== undefined &&
+      ts.isArrowFunction(reader) &&
+      ts.isBlock(reader.body)
+    ) {
+      read = statementsOf(reader.body);
+    }
+  }
+  const unless = stopUnlessUnreadableFacts(arrows);
   return {
     records:
       found.length > 0 &&
       /^await recordDestroyed\(manifestFile, socketFile, terminal, null\);$/.test(
-        found.at(-1),
+        normalize(found.at(-1).getText()),
       ),
     stops:
-      found.length === 3 &&
-      found[0] ===
+      found.length === 2 &&
+      read.length === 2 &&
+      read[0] ===
         'const group = await readProvenProgramGroup(sessionDirectory);' &&
-      [STOP_UNLESS_TRUSTED, STOP_ALWAYS].includes(found[1]) &&
+      [RETURN_UNLESS_TRUSTED, 'return group;'].includes(read[1]) &&
+      unless.stops &&
       bodyIs(
         'readProvenProgramGroup',
         `const record = await readProgramRecord(sessionDirectory); if (typeof record !== 'object' || !hasToken(record)) { return null; } ${UNSHARED_RETURN}`,
       ) &&
       bodyIs('hasToken', 'return record.bootId !== null;'),
-    trustsDestroyed: found[1] === STOP_UNLESS_TRUSTED,
+    trustsDestroyed: read[1] === RETURN_UNLESS_TRUSTED,
+    skipsUnreadable: unless.skipsUnreadable,
   };
 }
 
