@@ -568,10 +568,14 @@ describe('create command', () => {
 
     it('stops the host once the manifest names the program', async () => {
       mocks.writeCreateFailedMarker.mockRejectedValue(diskError);
-      mocks.readManifestIfExists
-        .mockResolvedValueOnce(makeManifest())
-        .mockResolvedValueOnce(null)
-        .mockResolvedValue(makeManifest({ childPid: 4321 }));
+      // The read after the third write finds the program.
+      mocks.readManifestIfExists.mockImplementation(() =>
+        Promise.resolve(
+          mocks.writeCreateFailedMarker.mock.calls.length >= 3
+            ? makeManifest({ childPid: 4321 })
+            : makeManifest(),
+        ),
+      );
 
       await expect(
         runCreateCommand({ ...baseOptions, context }),
