@@ -317,16 +317,18 @@ export async function runRecordExportCommand(
           ...(timingMode !== undefined ? { timingMode } : {}),
           rendererName: options.context.rendererVisualDefault,
         });
-        if (explicitOutput !== undefined) {
-          await assertOutputParentUnchanged(explicitOutput);
-        }
-        // The rename keeps the temp file's inode. The bytes and the hash come
-        // from the temp file too, so another write that replaces the file
-        // after the rename cannot lend this entry its bytes.
-        outputFileIdentity = await fileIdentity(temporaryOutputPath);
+        // The bytes and the hash come from the temp file, so another write
+        // that replaces the file after the rename cannot lend this entry its
+        // bytes. They come before the folder check, which keeps the time
+        // from that check to the rename short.
         bytes = (await stat(temporaryOutputPath)).size;
         invariant(bytes > 0, 'webm export artifact must not be empty');
         sha256 = await computeFileHash(temporaryOutputPath);
+        if (explicitOutput !== undefined) {
+          await assertOutputParentUnchanged(explicitOutput);
+        }
+        // The rename keeps the temp file's inode.
+        outputFileIdentity = await fileIdentity(temporaryOutputPath);
         await rename(temporaryOutputPath, artifactOutputPath);
       } catch (error) {
         await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
