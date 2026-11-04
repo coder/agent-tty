@@ -82,7 +82,8 @@ export function fixtureCommand(
     | 'alt-screen-demo'
     | 'crash-demo'
     | 'unicode-grid'
-    | 'scrollback-demo',
+    | 'scrollback-demo'
+    | 'styled-fill',
 ): string[] {
   return ['node', '--import', 'tsx', `test/fixtures/apps/${appName}/main.ts`];
 }

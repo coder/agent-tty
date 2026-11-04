@@ -274,3 +274,99 @@ describe('RpcServer CliError responses', () => {
     }
   });
 });
+
+describe('RpcServer large success responses', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'agent-tty-rpc-server-'));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = '';
+  });
+
+  async function textSnapshotFrom(text: string): Promise<unknown> {
+    const socketFile = join(tempDir, 'rpc.sock');
+    const server = new RpcServer(socketFile, {
+      snapshot: () =>
+        Promise.resolve({
+          format: 'text',
+          sessionId: 'session-1',
+          capturedAtSeq: 1,
+          cols: 80,
+          rows: 24,
+          cursorRow: 0,
+          cursorCol: 0,
+          text,
+        }),
+    });
+    await server.listen();
+    try {
+      return await sendRpc(
+        socketFile,
+        'snapshot',
+        { format: 'text' },
+        20_000,
+      ).catch((error: unknown) => error);
+    } finally {
+      await server.close();
+    }
+  }
+
+  it('returns a success response larger than 1 MiB', async () => {
+    const result = await textSnapshotFrom('x'.repeat(2_000_000));
+
+    expect(result).toMatchObject({ format: 'text' });
+    expect((result as { text: string }).text).toHaveLength(2_000_000);
+  });
+
+  it('scans each chunk of a large response for the newline only once', async () => {
+    // A socket read gives at most 64 KiB, so this response comes in 60 or more
+    // chunks. Scanning the whole buffer after each chunk would read the
+    // response about 30 times; scanning each new chunk reads it once.
+    // oxlint-disable-next-line typescript/unbound-method -- the spy below calls it with nativeIndexOf.call(this, ...).
+    const nativeIndexOf = String.prototype.indexOf;
+    let newlineScanChars = 0;
+    const indexOf = vi
+      .spyOn(String.prototype, 'indexOf')
+      .mockImplementation(function (
+        this: string,
+        searchString: string,
+        position?: number,
+      ): number {
+        if (searchString === '\n') {
+          newlineScanChars += this.length;
+        }
+        return nativeIndexOf.call(this, searchString, position);
+      });
+
+    let result: unknown;
+    try {
+      result = await textSnapshotFrom('x'.repeat(4_000_000));
+    } finally {
+      indexOf.mockRestore();
+    }
+
+    expect((result as { text: string }).text).toHaveLength(4_000_000);
+    expect(newlineScanChars).toBeLessThan(2 * 4_000_000);
+  });
+
+  it(
+    'refuses a success response over 64 MiB with PROTOCOL_ERROR',
+    { timeout: 30_000 },
+    async () => {
+      const error = await textSnapshotFrom('x'.repeat(67_108_864));
+
+      expect(error).toMatchObject({
+        code: 'PROTOCOL_ERROR',
+        details: { maxResponseChars: 67_108_864 },
+      });
+      const { details, message } = error as CliError;
+      const responseChars = details.responseChars as number;
+      expect(responseChars).toBeGreaterThan(67_108_864);
+      expect(message).toBe(
+        `RPC response takes ${String(responseChars)} characters, over the 67108864-character limit.`,
+      );
+    },
+  );
+});

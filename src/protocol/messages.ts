@@ -73,6 +73,12 @@ const DurationSchema = z.number().int().positive();
 // server echoes in every response.
 export const MAX_RPC_REQUEST_ID_CHARS = 128;
 
+// A fully styled cell takes about 56 characters in a structured snapshot with
+// cells, so a 500x200 snapshot takes about 5.6 million. This cap fits about
+// 1.2 million styled cells (a 1,000x1,000 screen) and still bounds the memory
+// that one response can take.
+export const MAX_RPC_RESPONSE_CHARS = 67_108_864;
+
 export const RpcRequestSchema = z
   .object({
     id: z.string().min(1).max(MAX_RPC_REQUEST_ID_CHARS),
