@@ -20,7 +20,6 @@ import { createSerialManifestWriter } from './manifestWriter.js';
 import {
   captureProgram,
   programWithoutToken,
-  readProcStat,
   stopProgramGroup,
   writeProgramRecord,
 } from './programGroup.js';
@@ -108,6 +107,9 @@ export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
 const IDLE_CHECK_CAP_MS = 5_000;
 const MANIFEST_WAIT_INTERVAL_MS = 20;
 const CREATE_FAILED_POLL_INTERVAL_MS = 100;
+// A create ends well within this time after its host's start-up check: its
+// readiness wait and its marker retries take about 20 s at most.
+const CREATE_FAILED_WATCH_MAX_MS = 60_000;
 // How long the host waits after SIGHUP before it kills the program's process
 // group. nvim takes about 1 s to exit on SIGHUP, and `destroy` waits about 5 s.
 const SHUTDOWN_KILL_GRACE_MS = 2_000;
@@ -1278,19 +1280,26 @@ export async function runHost(
   // Windows it sends nothing when its manifest read fails. It writes the
   // create-failed marker before it exits, so the host watches for the marker
   // while its creator runs, and once more after the creator has exited.
+  // The host is the creator's child. Linux and macOS give it a new parent
+  // when the creator exits, also while the creator is a zombie and before
+  // another process can take its pid. Windows keeps the parent pid, so there
+  // only the probe tells, and an error of the probe, such as EPERM from a
+  // process of another user that took the pid, means that the creator has
+  // exited. The watch stops after CREATE_FAILED_WATCH_MAX_MS in any case.
+  const creatorRuns = (): boolean => {
+    if (process.platform !== 'win32' && process.ppid !== creatorPid) {
+      return false;
+    }
+    try {
+      return isProcessAlive(creatorPid);
+    } catch {
+      return false;
+    }
+  };
   const watchCreateFailed = (): void => {
+    const deadline = Date.now() + CREATE_FAILED_WATCH_MAX_MS;
     const timer = setInterval(() => {
-      // An error of the probe, such as EPERM from a process of another user
-      // that took the pid, means that the creator has exited. So does a
-      // zombie, which kill(pid, 0) still finds until its parent reaps it.
-      let creatorGone = true;
-      try {
-        creatorGone =
-          !isProcessAlive(creatorPid) ||
-          readProcStat(creatorPid)?.state === 'Z';
-      } catch {
-        // creatorGone stays true.
-      }
+      const creatorGone = !creatorRuns() || Date.now() >= deadline;
       if (existsSync(createFailedMarkerPath(sessDir))) {
         clearInterval(timer);
         startShutdown();
