@@ -400,8 +400,10 @@ async function breakStaleManifestLock(
     await createWithoutReplacing(temporaryPath, announcementPath);
   } catch (error) {
     // Another breaker removed the empty folder after the mkdir. The next
-    // attempt makes it again.
-    if (hasErrorCode(error, 'ENOENT')) {
+    // attempt makes it again. APFS answers EINVAL instead of ENOENT when the
+    // folder is removed during the link. An EINVAL with another cause
+    // repeats, and the wait then ends at its deadline.
+    if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'EINVAL')) {
       return 'held';
     }
     throw error;
@@ -662,8 +664,8 @@ function identitySize(identity: string): string {
  * no longer names that file but holds a file of the same size, or no file,
  * it keeps them all: a file server or a tool can have changed the time, and
  * an entry too many is better than a lost one. A file of another size holds
- * other bytes, which a later export wrote, so the entry would describe bytes
- * that are gone: it returns null.
+ * other bytes, which a later export or a tool that rewrote the file left, so
+ * the entry would describe bytes that are gone: it returns null.
  */
 async function entriesKeptBeside(
   artifacts: readonly ArtifactEntry[],

@@ -16,7 +16,9 @@ const mocks = vi.hoisted(() => ({
   stopHost: vi.fn(),
   sendRpc: vi.fn(),
   readManifestIfExists: vi.fn(),
+  writeCreateFailedMarker: vi.fn(),
   sessionDir: vi.fn(),
+  createFailedMarkerPath: vi.fn(),
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
   upsertHome: vi.fn(),
@@ -46,9 +48,11 @@ vi.mock('../../../src/host/rpcClient.js', () => ({
 
 vi.mock('../../../src/storage/manifests.js', () => ({
   readManifestIfExists: mocks.readManifestIfExists,
+  writeCreateFailedMarker: mocks.writeCreateFailedMarker,
 }));
 
 vi.mock('../../../src/storage/sessionPaths.js', () => ({
+  createFailedMarkerPath: mocks.createFailedMarkerPath,
   sessionDir: mocks.sessionDir,
   manifestPath: mocks.manifestPath,
   socketPath: mocks.socketPath,
@@ -132,6 +136,10 @@ describe('create command', () => {
     mocks.socketPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
     );
+    mocks.createFailedMarkerPath.mockImplementation(
+      (sessionDirectory: string) => `${sessionDirectory}/create-failed`,
+    );
+    mocks.writeCreateFailedMarker.mockResolvedValue(undefined);
     mocks.upsertHome.mockResolvedValue(undefined);
   });
 
@@ -305,6 +313,57 @@ describe('create command', () => {
     expect(mocks.sendRpc).toHaveBeenCalledTimes(50);
     expect(mocks.stopHost).toHaveBeenCalledOnce();
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('writes the create-failed marker before it reads the manifest for the stop', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'host unreachable',
+      }),
+    );
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({ code: 'HOST_UNREACHABLE' });
+
+    expect(mocks.writeCreateFailedMarker).toHaveBeenCalledOnce();
+    expect(mocks.writeCreateFailedMarker).toHaveBeenCalledWith(
+      '/tmp/agent-tty-home/sessions/session-01/create-failed',
+      'session-01',
+    );
+    const markerOrder =
+      mocks.writeCreateFailedMarker.mock.invocationCallOrder[0] ?? 0;
+    const lastRead = Math.max(
+      ...mocks.readManifestIfExists.mock.invocationCallOrder,
+    );
+    expect(markerOrder).toBeGreaterThan(0);
+    expect(markerOrder).toBeLessThan(lastRead);
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the error and still stops the host when the marker write fails', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'host unreachable',
+      }),
+    );
+    mocks.writeCreateFailedMarker.mockRejectedValue(
+      makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, { message: 'disk full' }),
+    );
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'HOST_UNREACHABLE',
+      details: { sessionId: 'session-01' },
+    });
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
+  it('leaves no create-failed marker for a create that succeeds', async () => {
+    await runCreateCommand({ ...baseOptions, context });
+
+    expect(mocks.writeCreateFailedMarker).not.toHaveBeenCalled();
   });
 
   it('keeps the details of the last error and adds the session id', async () => {

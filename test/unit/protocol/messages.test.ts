@@ -292,6 +292,14 @@ describe('RPC message schemas', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts a request id of up to 128 characters', () => {
+    const request = (id: string) =>
+      RpcRequestSchema.safeParse({ id, method: 'inspect' }).success;
+
+    expect(request('x'.repeat(128))).toBe(true);
+    expect(request('x'.repeat(129))).toBe(false);
+  });
+
   it('rejects a request with a non-object params payload', () => {
     const result = RpcRequestSchema.safeParse({
       id: 'request-1',

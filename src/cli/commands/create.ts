@@ -16,8 +16,12 @@ import { ensureSocketRoot } from '../../host/socketRoot.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import type { SessionRecord } from '../../protocol/schemas.js';
 import { upsertHome } from '../../storage/homeRegistry.js';
-import { readManifestIfExists } from '../../storage/manifests.js';
 import {
+  readManifestIfExists,
+  writeCreateFailedMarker,
+} from '../../storage/manifests.js';
+import {
+  createFailedMarkerPath,
   manifestPath,
   sessionDir,
   socketPath,
@@ -266,7 +270,22 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
     // without a session token, so it stops the program and ends the session
     // itself. On Windows the SIGTERM ends the host at once, and only a
     // program that the manifest names can be stopped by a later reconcile.
+    // So create first writes the create-failed marker, and the host checks
+    // for it after its start-up write names the program: either the host
+    // finds the marker, or the manifest read below finds the program.
     invariant(host !== undefined, 'a session that create polls has a host');
+    await writeCreateFailedMarker(
+      createFailedMarkerPath(sessionDirectory),
+      sessionId,
+    ).catch((markerError: unknown) => {
+      options.context.logger.debug('failed to write the create-failed marker', {
+        sessionId,
+        error:
+          markerError instanceof Error
+            ? markerError.message
+            : String(markerError),
+      });
+    });
     const manifest = await readManifestIfExists(
       manifestPath(sessionDirectory),
     ).catch(() => null);

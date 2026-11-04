@@ -317,6 +317,13 @@ export async function runRecordExportCommand(
           ...(timingMode !== undefined ? { timingMode } : {}),
           rendererName: options.context.rendererVisualDefault,
         });
+        // The bytes and the hash come from the temp file, so another write
+        // that replaces the file after the rename cannot lend this entry its
+        // bytes. They come before the folder check, which keeps the time
+        // from that check to the rename short.
+        bytes = (await stat(temporaryOutputPath)).size;
+        invariant(bytes > 0, 'webm export artifact must not be empty');
+        sha256 = await computeFileHash(temporaryOutputPath);
         if (explicitOutput !== undefined) {
           await assertOutputParentUnchanged(explicitOutput);
         }
@@ -375,11 +382,6 @@ export async function runRecordExportCommand(
           'default webm artifact path seq must match exported seq',
         );
       }
-
-      const stats = await stat(artifactOutputPath);
-      bytes = stats.size;
-      invariant(bytes > 0, 'webm export artifact must not be empty');
-      sha256 = await computeFileHash(artifactOutputPath);
     }
 
     const artifactEntry = createArtifactEntry({

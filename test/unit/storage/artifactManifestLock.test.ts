@@ -492,6 +492,34 @@ describe('artifact manifest lock', () => {
     expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
   });
 
+  // APFS answers EINVAL, not ENOENT, to a link into a folder that another
+  // process removes during the call (macOS CI run 41762561666).
+  it('announces itself again when the link into a folder another breaker removes fails with EINVAL', async () => {
+    const folder = `${lockPath}.breakers`;
+    await writeFile(lockPath, await deadOwnerRecord());
+    freezeLockClock();
+    let removed = false;
+    fsHooks.beforeLink = async (to) => {
+      if (to.startsWith(`${folder}/`) && !removed) {
+        removed = true;
+        await rmdir(folder);
+        throw Object.assign(new Error(`EINVAL: invalid argument, link`), {
+          code: 'EINVAL',
+        });
+      }
+    };
+
+    await expect(
+      withArtifactManifestLock(
+        sessionDirectory,
+        () => Promise.resolve('ran'),
+        FAST,
+      ),
+    ).resolves.toBe('ran');
+    expect(removed).toBe(true);
+    expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
+  });
+
   it('waits longer each time it meets another breaker', async () => {
     // A live breaker's announcement that stays: every attempt meets it.
     const folder = `${lockPath}.breakers`;
@@ -829,4 +857,29 @@ describe('artifact manifest lock', () => {
       withArtifactManifestLock(sessionDirectory, () => Promise.resolve()),
     ).rejects.toMatchObject({ code: ERROR_CODES.SESSION_NOT_FOUND });
   });
+
+  // APFS answers EINVAL, not ENOENT, to a link into a folder that another
+  // process removes during the call.
+  it.each([
+    { folder: 'gone', code: ERROR_CODES.SESSION_NOT_FOUND },
+    { folder: 'still there', code: ERROR_CODES.STORAGE_WRITE_ERROR },
+  ])(
+    'reports $code for an EINVAL from the lock link when the session folder is $folder',
+    async ({ folder, code }) => {
+      fsHooks.beforeLink = async (to) => {
+        if (to === lockPath) {
+          if (folder === 'gone') {
+            await rm(sessionDirectory, { recursive: true });
+          }
+          throw Object.assign(new Error('EINVAL: invalid argument, link'), {
+            code: 'EINVAL',
+          });
+        }
+      };
+
+      await expect(
+        withArtifactManifestLock(sessionDirectory, () => Promise.resolve()),
+      ).rejects.toMatchObject({ code });
+    },
+  );
 });

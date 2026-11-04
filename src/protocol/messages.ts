@@ -69,9 +69,19 @@ const EmptyObjectSchema = z.object({}).strict();
 const NonEmptyStringSchema = z.string().min(1);
 const DurationSchema = z.number().int().positive();
 
+// The client sends a UUID (36 characters). The cap bounds the id that the
+// server echoes in every response.
+export const MAX_RPC_REQUEST_ID_CHARS = 128;
+
+// A fully styled cell takes about 56 characters in a structured snapshot with
+// cells, so a 500x200 snapshot takes about 5.6 million. This cap fits about
+// 1.2 million styled cells (a 1,000x1,000 screen) and still bounds the memory
+// that one response can take.
+export const MAX_RPC_RESPONSE_CHARS = 67_108_864;
+
 export const RpcRequestSchema = z
   .object({
-    id: NonEmptyStringSchema,
+    id: z.string().min(1).max(MAX_RPC_REQUEST_ID_CHARS),
     method: NonEmptyStringSchema,
     params: z.record(z.string(), z.unknown()).optional(),
   })

@@ -2,8 +2,10 @@ import { chmod, stat, unlink } from 'node:fs/promises';
 import net from 'node:net';
 
 import { CliError } from '../cli/errors.js';
-import { ERROR_CODES } from '../protocol/errors.js';
+import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import {
+  MAX_RPC_REQUEST_ID_CHARS,
+  MAX_RPC_RESPONSE_CHARS,
   RpcMethodSchemas,
   RpcRequestSchema,
   RpcResponseSchema,
@@ -18,15 +20,19 @@ import { invariant } from '../util/assert.js';
 import { ResourceScope } from '../util/resourceScope.js';
 
 const MAX_UNIX_SOCKET_PATH = 104;
-const MAX_RPC_BUFFER_BYTES = 1_048_576;
+const MAX_RPC_REQUEST_CHARS = 1_048_576;
 const MAX_RPC_ERROR_DETAILS_CHARS = 65_536;
 const MAX_RPC_ERROR_MESSAGE_CHARS = 65_536;
 const TRUNCATED_MESSAGE_SUFFIX = ' [message truncated]';
 // JSON writes a control character as 6 characters (\u0001), so an error
-// response with a message and details at their caps still fits in one buffer.
+// response with an id, a message and details at their caps still fits in
+// 1,048,576 characters, the response cap of a CLI from before
+// MAX_RPC_RESPONSE_CHARS.
 invariant(
-  6 * MAX_RPC_ERROR_MESSAGE_CHARS + MAX_RPC_ERROR_DETAILS_CHARS + 1_024 <
-    MAX_RPC_BUFFER_BYTES,
+  6 * (MAX_RPC_REQUEST_ID_CHARS + MAX_RPC_ERROR_MESSAGE_CHARS) +
+    MAX_RPC_ERROR_DETAILS_CHARS +
+    1_024 <
+    1_048_576,
   'RPC error message and details caps must fit in one RPC response.',
 );
 
@@ -122,7 +128,11 @@ function extractRequestId(value: unknown): string {
   if (value !== null && typeof value === 'object' && 'id' in value) {
     const id = value.id;
 
-    if (typeof id === 'string' && id.length > 0) {
+    if (
+      typeof id === 'string' &&
+      id.length > 0 &&
+      id.length <= MAX_RPC_REQUEST_ID_CHARS
+    ) {
       return id;
     }
   }
@@ -139,9 +149,16 @@ function requestIdFromLine(line: string): string {
 }
 
 function sendableMessage(message: string): string {
-  return message.length <= MAX_RPC_ERROR_MESSAGE_CHARS
-    ? message
-    : `${message.slice(0, MAX_RPC_ERROR_MESSAGE_CHARS - TRUNCATED_MESSAGE_SUFFIX.length)}${TRUNCATED_MESSAGE_SUFFIX}`;
+  if (message.length <= MAX_RPC_ERROR_MESSAGE_CHARS) {
+    return message;
+  }
+  let end = MAX_RPC_ERROR_MESSAGE_CHARS - TRUNCATED_MESSAGE_SUFFIX.length;
+  const lastKept = message.charCodeAt(end - 1);
+  // Do not keep the first half of a surrogate pair without its second half.
+  if (lastKept >= 0xd800 && lastKept <= 0xdbff) {
+    end -= 1;
+  }
+  return `${message.slice(0, end)}${TRUNCATED_MESSAGE_SUFFIX}`;
 }
 
 function buildErrorResponse(id: string, message: string): RpcResponse {
@@ -346,7 +363,7 @@ export class RpcServer {
         return;
       }
 
-      if (buffer.length + chunk.length > MAX_RPC_BUFFER_BYTES) {
+      if (buffer.length + chunk.length > MAX_RPC_REQUEST_CHARS) {
         handled = true;
         this.sendResponse(
           socket,
@@ -524,6 +541,28 @@ export class RpcServer {
   }
 
   private sendResponse(socket: net.Socket, response: RpcResponse): void {
-    socket.end(`${JSON.stringify(response)}\n`);
+    const message = `${JSON.stringify(response)}\n`;
+    if (message.length <= MAX_RPC_RESPONSE_CHARS) {
+      socket.end(message);
+      return;
+    }
+
+    // An error response stays under 1,048,576 characters (see the invariant
+    // at the top of this file), so only a success response gets here.
+    invariant(
+      response.ok,
+      'Only an RPC success response can exceed the response cap.',
+    );
+    const refusal = buildCliErrorResponse(
+      response.id,
+      makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
+        message: `RPC response takes ${String(message.length)} characters, over the ${String(MAX_RPC_RESPONSE_CHARS)}-character limit.`,
+        details: {
+          responseChars: message.length,
+          maxResponseChars: MAX_RPC_RESPONSE_CHARS,
+        },
+      }),
+    );
+    socket.end(`${JSON.stringify(refusal)}\n`);
   }
 }
