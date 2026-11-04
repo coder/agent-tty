@@ -224,11 +224,10 @@ jobs:
   # covered code. Each of the 8 shares starts all its runs at once
   # (CHECK_JOBS 12: with the model of #324, 10 to 12 runs, of which at most
   # 2 explore the whole model), and check.sh gives those runs the 4 vCPUs as
-  # TLC workers. So a share takes about as long as its longest run. With 1
-  # TLC worker per run, the shares took 16 to 43 min, and the 43 min share
-  # held only the longest run. They run only when
-  # coverage.json differs from the base, which every change to the model,
-  # its scripts, the covered code or a fact needs.
+  # TLC workers. So a share takes about as long as its longest run: 11 to
+  # 33 min on #330. With 1 TLC worker per run, the shares took 15 to 43 min.
+  # TLC runs only when coverage.json differs from the base, which every
+  # change to the model, its scripts, the covered code or a fact needs.
   lifecycle-model:
     runs-on: ubuntu-latest
     timeout-minutes: 55
