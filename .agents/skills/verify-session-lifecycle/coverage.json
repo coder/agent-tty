@@ -144,13 +144,13 @@
     "src/storage/manifests.ts#writeCreateFailedMarker": "587c8047e563db4e",
     "src/storage/manifests.ts#writeEmptyMarker": "143325689100f36c",
     "src/protocol/sessionStatusPolicy.ts#SESSION_STATUS_POLICIES": "83827f9f7f6b8e1d",
-    "src/host/hostMain.ts#runHost(parts)": "7bd4c6553a831b9d",
+    "src/host/hostMain.ts#runHost(parts)": "2a0651c9dd9ea23f",
     "src/host/hostMain.ts#runHost(final try)": "e0615a9709fefb67",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "cd8639012467f13e",
-    "skill:scripts/facts.mjs": "09b61dd8c67af872",
-    "skill:scripts/check.sh": "fe2da7911682462a"
+    "skill:scripts/facts.mjs": "69cbe689f7e9713d",
+    "skill:scripts/check.sh": "cad764a01b6eee50"
   },
   "callSites": {
     "writeManifest": [
