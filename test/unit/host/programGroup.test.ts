@@ -49,6 +49,8 @@ const procHooks = vi.hoisted(() => ({
   mountinfo: undefined as string | undefined,
   // The error that the /proc listing throws.
   listError: undefined as Error | undefined,
+  // What /proc/self names, when not this process's pid.
+  self: undefined as string | undefined,
 }));
 
 const autogroupFile = vi.hoisted(() => ({
@@ -116,7 +118,16 @@ vi.mock('node:fs', async () => {
     }
     return stat;
   }) as typeof actual.readFileSync;
-  return { ...actual, readdirSync, readFileSync };
+  // A faked /proc names this process at /proc/self, also on macOS.
+  const readlinkSync = ((path: string, ...rest: unknown[]) =>
+    path === '/proc/self' &&
+    (procHooks.self !== undefined || procHooks.stat !== undefined)
+      ? (procHooks.self ?? String(process.pid))
+      : (actual.readlinkSync as (...args: unknown[]) => unknown)(
+          path,
+          ...rest,
+        )) as typeof actual.readlinkSync;
+  return { ...actual, readdirSync, readFileSync, readlinkSync };
 });
 
 const platform = process.platform;
@@ -128,6 +139,7 @@ afterEach(() => {
   procHooks.taskErrors.clear();
   procHooks.mountinfo = undefined;
   procHooks.listError = undefined;
+  procHooks.self = undefined;
   autogroupFile.read = null;
   Object.defineProperty(process, 'platform', { value: platform });
 });
@@ -1100,11 +1112,13 @@ describe('a program group with a token, as a faked /proc shows it', () => {
 
     expect(kill.mock.calls).toEqual([
       [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGSTOP'],
       [-CHILD_PID, 'SIGKILL'],
     ]);
   });
 
-  it('continues a frozen group that reads gone at each of its 5 judgements', () => {
+  // A SIGCONT from elsewhere can resume a member between two judgements.
+  it('stops a group that reads gone again at each of its 5 judgements, then continues it', () => {
     procShowsTokenGroup();
     let judged = 0;
     autogroupFile.read = (file) => {
@@ -1123,9 +1137,21 @@ describe('a program group with a token, as a faked /proc shows it', () => {
 
     expect(judged).toBe(5);
     expect(kill.mock.calls).toEqual([
-      [-CHILD_PID, 'SIGSTOP'],
+      ...Array.from({ length: 5 }, () => [-CHILD_PID, 'SIGSTOP']),
       [-CHILD_PID, 'SIGCONT'],
     ]);
+  });
+
+  // There the scan shows none of this namespace's processes, and the group
+  // id can name the CLI's own group.
+  it('sends no SIGSTOP when /proc belongs to another pid namespace', () => {
+    procShowsTokenGroup();
+    procHooks.self = String(process.pid + 1);
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+    stopProgramGroup(group);
+
+    expect(kill).not.toHaveBeenCalled();
   });
 
   it('continues a frozen group when a scan after the SIGSTOP throws', () => {
@@ -1391,6 +1417,34 @@ describe.runIf(platform === 'linux')('a program record with a token', () => {
 
     expect(await readProgramGroup(directory, 4242)).toEqual(record);
     expect(await readProvenProgramGroup(directory)).toEqual(record);
+  });
+
+  // A /proc of another pid namespace names this process by another pid, and
+  // its scan shows none of the program's processes.
+  it("reads alive in the host's pid namespace when /proc belongs to another one", async () => {
+    recordHostIn(readlinkSync('/proc/self/ns/pid'));
+    procHooks.self = String(process.pid + 1);
+
+    expect(await readProgramGroup(directory, 4242)).toEqual({ unshared: true });
+    expect(await readProvenProgramGroup(directory)).toEqual({
+      unshared: true,
+    });
+  });
+
+  // Only an agent-tty version between program.json and host.json wrote a
+  // token without host.json, and nothing names its pid space.
+  it('reads alive and gets no kill without a host record', async () => {
+    const kill = vi.spyOn(process, 'kill');
+
+    for (const group of [
+      await readProgramGroup(directory, 4242),
+      await readProvenProgramGroup(directory),
+    ]) {
+      expect(group).toEqual({ unshared: true });
+      expect(isProgramGroupAlive(group)).toBe(true);
+      stopProgramGroup(group);
+    }
+    expect(kill).not.toHaveBeenCalled();
   });
 
   // No scan or probe here shows the program's processes.

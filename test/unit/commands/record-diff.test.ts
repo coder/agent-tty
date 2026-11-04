@@ -342,13 +342,36 @@ describe('runRecordDiffCommand', () => {
     );
   });
 
-  it('rejects negative --at-seq values', async () => {
+  it('rejects --at-seq values below -1', async () => {
     await expect(
-      runRecordDiffCommand(createOptions({ atSeqA: -1 })),
+      runRecordDiffCommand(createOptions({ atSeqA: -2 })),
     ).rejects.toMatchObject({
       code: ERROR_CODES.INVALID_INPUT,
     });
     expect(mocks.withOfflineReplayRenderer).not.toHaveBeenCalled();
+  });
+
+  it('passes --at-seq -1, the seq of an empty event log, through to offline replay', async () => {
+    mockEmptyLogReplay(24, 80);
+
+    await runRecordDiffCommand(createOptions({ atSeqA: -1, atSeqB: -1 }));
+
+    for (const call of [1, 2]) {
+      expect(mocks.withOfflineReplayRenderer).toHaveBeenNthCalledWith(
+        call,
+        expect.objectContaining({ targetSeq: -1 }),
+        expect.any(Function),
+      );
+    }
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: expect.objectContaining({
+          identical: true,
+          a: expect.objectContaining({ capturedAtSeq: -1 }) as unknown,
+          b: expect.objectContaining({ capturedAtSeq: -1 }) as unknown,
+        }) as Record<string, unknown>,
+      }),
+    );
   });
 
   it('fails with SESSION_NOT_FOUND when a session manifest is missing', async () => {

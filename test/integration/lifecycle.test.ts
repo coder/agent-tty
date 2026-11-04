@@ -23,6 +23,7 @@ import { parseProcStat } from '../../src/host/programGroup.js';
 import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
 import { SessionRecordSchema } from '../../src/protocol/schemas.js';
 import { writeManifest } from '../../src/storage/manifests.js';
+import { hasErrorCode } from '../../src/util/hasErrorCode.js';
 import {
   manifestPath,
   programRecordPath,
@@ -1012,6 +1013,43 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
       },
     );
 
+    // A token proves the group only beside host.json, which names its pid
+    // space, so a host that cannot record itself records no token.
+    it.runIf(capturesToken)(
+      'destroy of an exited session whose host could not read its pid namespace ends ok',
+      async () => {
+        const result = runCli(
+          ['create', '--json', '--', '/bin/sh', '-c', 'exit 0'],
+          {
+            AGENT_TTY_HOME: testHome,
+            NODE_OPTIONS: [
+              process.env.NODE_OPTIONS ?? '',
+              `--import=${pathToFileURL(resolve('test/fixtures/denied-pid-namespace.ts')).href}`,
+            ].join(' '),
+          },
+        );
+        const { sessionId } = (
+          JSON.parse(result.stdout) as SuccessEnvelope<{ sessionId: string }>
+        ).result;
+        const directory = sessionDir(testHome, sessionId);
+        const deadline = Date.now() + 10_000;
+        while (inspectSession(testHome, sessionId).status !== 'exited') {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
+        expect(existsSync(join(directory, 'host.json'))).toBe(false);
+        expect(
+          JSON.parse(await readFile(programRecordPath(directory), 'utf8')),
+        ).toMatchObject({ bootId: null, autogroup: null });
+
+        const destroyed = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(JSON.parse(destroyed.stdout)).toMatchObject({ ok: true });
+        expect(inspectSession(testHome, sessionId).status).toBe('destroyed');
+      },
+    );
+
     // Only a session with a token checks the autogroup.
     it.runIf(capturesToken)(
       'destroy times out while it cannot read the autogroup of a process that the program left',
@@ -1931,7 +1969,7 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
     ];
 
     async function readEnvelopeOnceWritten(path: string): Promise<unknown> {
-      const deadline = Date.now() + 15_000;
+      const deadline = Date.now() + 30_000;
       while (Date.now() < deadline) {
         await sleep(100);
         try {
@@ -1971,11 +2009,12 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
     // the whole destroy. The hold matches the host's argv only, so the inner
     // CLI, which inherits it, runs at full speed. A held host never answers
     // create, which gives up after about 5 s and sends it SIGTERM. On a slow
-    // runner that came before the inner destroy, so create is killed once the
-    // program runs, and the destroy kills the held host.
+    // runner that came before the inner destroy, so create is killed once it
+    // has written the manifest, which the host still reads after its creator
+    // died, and the destroy kills the held host.
     it('destroy --force before the host names the program prints its result', async () => {
       const out = join(testHome, 'early-destroy.json');
-      const started = `${out}.started`;
+      const sessions = join(testHome, 'sessions');
       const create = spawn(
         process.execPath,
         [
@@ -1987,7 +2026,7 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
           '--',
           '/bin/sh',
           '-c',
-          ': > "$0.started"; "$@" destroy "$AGENT_TTY_SESSION_ID" --force --json > "$0"',
+          '"$@" destroy "$AGENT_TTY_SESSION_ID" --force --json > "$0"',
           out,
           ...cli,
         ],
@@ -2005,22 +2044,32 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
           stdio: 'ignore',
         },
       );
+      let sessionId: string | undefined;
       try {
         const deadline = Date.now() + 20_000;
-        while (!existsSync(started)) {
+        while (
+          sessionId === undefined ||
+          !existsSync(manifestPath(sessionDir(testHome, sessionId)))
+        ) {
           expect(Date.now()).toBeLessThan(deadline);
-          await sleep(50);
+          await sleep(20);
+          // create makes the sessions folder only after it starts.
+          [sessionId] = await readdir(sessions).catch((error: unknown) => {
+            if (hasErrorCode(error, 'ENOENT')) {
+              return [];
+            }
+            throw error;
+          });
         }
       } finally {
         create.kill('SIGKILL');
       }
-      const [sessionId] = await readdir(join(testHome, 'sessions'));
 
       expect(await readEnvelopeOnceWritten(out)).toMatchObject({
         ok: true,
         result: { sessionId, destroyed: true },
       });
-      expect(inspectSession(testHome, sessionId as string)).toMatchObject({
+      expect(inspectSession(testHome, sessionId)).toMatchObject({
         status: 'destroyed',
         childPid: null,
       });

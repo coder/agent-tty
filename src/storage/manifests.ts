@@ -43,10 +43,10 @@ export interface WriteTextFileAtomicOptions {
    */
   createParentFolders?: boolean;
   /**
-   * Runs after the temp file is written and before the rename. A `CliError`
-   * it throws is passed on as is.
+   * Runs after the temp file is written and before the rename, with the
+   * temp file's path. A `CliError` it throws is passed on as is.
    */
-  beforeRename?: () => Promise<void>;
+  beforeRename?: (temporaryPath: string) => Promise<void>;
 }
 
 function assertAbsoluteStoragePath(path: string, label: string): void {
@@ -114,13 +114,13 @@ export async function readValidatedJsonFile<T>(
 async function replaceFileAtomic(
   path: string,
   contents: string,
-  beforeRename?: () => Promise<void>,
+  beforeRename?: (temporaryPath: string) => Promise<void>,
 ): Promise<void> {
   const temporaryPath = `${path}.tmp-${randomUUID()}`;
 
   try {
     await writeFile(temporaryPath, contents, { encoding: 'utf8', mode: 0o600 });
-    await beforeRename?.();
+    await beforeRename?.(temporaryPath);
     await rename(temporaryPath, path);
   } catch (error) {
     await rm(temporaryPath, { force: true }).catch(() => undefined);

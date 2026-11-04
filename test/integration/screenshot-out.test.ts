@@ -4,13 +4,14 @@ import {
   chmod,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   realpath,
   rm,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -134,6 +135,35 @@ describe('screenshot --out', { timeout: 120_000 }, () => {
     expect(sha256(await readFile(out))).toBe(result.sha256);
   });
 
+  it('removes the capture and its manifest entry when the copy to --out fails', async () => {
+    // A folder at the --out path passes the checks before the capture, so
+    // the copy fails after it.
+    const out = join(outDir, 'taken');
+    await mkdir(out);
+    const artifacts = join(sessionDir(testHome, sessionId), 'artifacts');
+    const pngs = async (): Promise<string[]> =>
+      (await readdir(artifacts)).filter((name) => name.endsWith('.png'));
+
+    const failed = screenshot(['--out', out]);
+    expect(failed.status).toBe(7);
+    expect((failed.envelope as ErrorEnvelope).error.code).toBe('EXPORT_ERROR');
+    expect(
+      (await readArtifactManifest(sessionDir(testHome, sessionId))).artifacts,
+    ).toEqual([]);
+    expect(await pngs()).toEqual([]);
+
+    // A capture with the same screen can share the file of an earlier one.
+    const kept = expectSuccess(screenshot([]));
+    expect(screenshot(['--out', out]).status).toBe(7);
+    const manifest = await readArtifactManifest(
+      sessionDir(testHome, sessionId),
+    );
+    expect(manifest.artifacts.map((entry) => entry.sha256)).toEqual([
+      kept.sha256,
+    ]);
+    expect(await pngs()).toEqual([basename(kept.artifactPath)]);
+  });
+
   it('creates no folder inside session storage', () => {
     const out = join(
       sessionDir(testHome, sessionId),
@@ -197,6 +227,7 @@ describe('screenshot --out', { timeout: 120_000 }, () => {
     const expectedError = {
       code: 'STORAGE_WRITE_ERROR',
       message: `Artifacts path ${artifactsPath} is not a folder.`,
+      details: { path: artifactsPath },
     };
 
     const live = screenshot([]);

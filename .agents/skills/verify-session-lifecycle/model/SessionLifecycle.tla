@@ -108,6 +108,9 @@ CONSTANTS
     ReusedIdReadsGone,      \* programGroup.ts: isProgramGroupAlive reads a
                             \*   group gone when its live members carry
                             \*   another autogroup (unproven)
+    CreateRecordsHost,      \* lifecycle.ts: allocateSession writes host.json
+                            \*   for the launched host before the first
+                            \*   manifest
     ProvesHostPid,          \* lifecycle.ts, hostRecord.ts: destroy --force
                             \*   kills the host only while its pid shows the
                             \*   boot id and start time that host.json holds
@@ -154,7 +157,7 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  HostChecksCreateFailed,
                  ReconcileRepairsDestroyed, ReconcileRepairsMarked,
                  TokenNamesProgram,
-                 ReusedIdReadsGone, ProvesHostPid,
+                 ReusedIdReadsGone, ProvesHostPid, CreateRecordsHost,
                  FreezesUnseenGroup, UnsharedGroupReadsUnknown} : b \in BOOLEAN
 
 Readers == {"gc", "list"}   \* the two processes that run reconcileSession
@@ -400,8 +403,8 @@ GroupSeen(kind) ==
 \* sharesHostPids reads host.json. With UnsharedGroupReadsUnknown,
 \* readProgramGroup and readProvenProgramGroup give a group with a token
 \* that reads alive instead, so their waits time out. The host always runs
-\* in its own pid space, so it keeps GroupSeen and HostKill. OtherPidSpace
-\* leaves the CLI's view of the host as it is (see Scope).
+\* in its own pid space, so it keeps GroupSeen and HostKill. CliHostAlive
+\* gives the CLI's view of the host.
 CliGroupSeen(kind) ==
     IF OtherPidSpace
     THEN kind = "proven" /\ UnsharedGroupReadsUnknown
@@ -453,14 +456,21 @@ CreateWritesManifest ==
     /\ UNCHANGED <<ghostVars, sock, hostVars, shutVars, readerVars,
                    destroyVars, groupVars>>
 
-\* launchHost spawns the detached `_host` process.
+\* launchHost spawns the detached `_host` process. With CreateRecordsHost,
+\* captureHost reads the new host in the same synchronous block, and
+\* writeHostRecord writes host.json, which fails once gc removed the folder.
+\* The model leaves out a capture that fails (no /proc, or off Linux), after
+\* which only the host writes the record.
 CreateLaunchesHost ==
     /\ cpc = "launch"
     /\ hostAlive' = TRUE
     /\ hpc' = "boot"
     /\ cpc' = IF CreateRecordsHostPid THEN "write" ELSE "done"
+    /\ hrec' = (CreateRecordsHost /\ dir)
     /\ UNCHANGED <<diskVars, ghostVars, sock, hex, rsz, prog, foreign, left,
-                   shutVars, readerVars, destroyVars, groupVars>>
+                   shutVars, readerVars, destroyVars, rec, reused,
+                   hitUnrelated, diedUnrecorded, passedReused, hreused,
+                   hitUnrelatedHost>>
 
 \* runCreateCommand's readiness loop gives up after 50 inspect RPCs that
 \* fail, which the model lets happen at any step after the start-up, since
@@ -865,9 +875,15 @@ HostPidReused ==
 
 AfterReconcile(p) == IF p = "gc" THEN "readafter" ELSE "idle"
 
+\* isHostAlive as destroy, list and gc see it. In another pid space,
+\* judgeHost reads a host that host.json names as unknown, which reads alive
+\* also after the host ended. Before host.json exists it probes the pid in
+\* its own pid space, where no process has it, and reads the host dead.
+CliHostAlive == IF OtherPidSpace THEN hrec ELSE hostAlive
+
 \* `if (manifest.hostPid !== null && hostAlive) return`, where hostAlive is
-\* isProcessAlive(manifest.hostPid). A null hostPid reads as a dead host.
-SkipsHost(read) == ReconcileSkipsLiveHost /\ read.pid /\ hostAlive
+\* isHostAlive(manifest.hostPid). A null hostPid reads as a dead host.
+SkipsHost(read) == ReconcileSkipsLiveHost /\ read.pid /\ CliHostAlive
 
 \* readManifestIfExists. With ReconcileRepairsMarked, a terminal manifest
 \* other than destroyed next to the destroy marker (isMarkedDestroyed) goes
@@ -1068,7 +1084,7 @@ GcFinalRead ==
     /\ pc["gc"] = "final"
     /\ IF GcFinalCheck /\ mst # "none" /\ mst \notin Collectable
           THEN GcSkips
-          ELSE GcGoesTo(IF mpid /\ hostAlive THEN "rm" ELSE "rmsock")
+          ELSE GcGoesTo(IF mpid /\ CliHostAlive THEN "rm" ELSE "rmsock")
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, rd,
                    lruns, destroyVars, groupVars>>
 
@@ -1188,7 +1204,7 @@ DestroyReads ==
           THEN /\ dpc' = "kill" /\ drd' = ReadCopy
                /\ UNCHANGED <<dres, dsaw>>
           ELSE /\ dpc' = "rpc" /\ UNCHANGED <<drd, dres, dsaw>>
-    /\ sock' = (sock /\ (mst # "destroyed" \/ (mpid /\ hostAlive)))
+    /\ sock' = (sock /\ (mst # "destroyed" \/ (mpid /\ CliHostAlive)))
     /\ UNCHANGED <<diskVars, ghostVars, cpc, hostVars, shutVars,
                    readerVars, dforce, dinside, dkill, groupVars>>
 
@@ -1247,9 +1263,10 @@ DestroyUnlinksSocket ==
 \* ProvesHostPid it kills only a host that hostMatches proves: the live host
 \* once host.json names it, never a process that took its pid. Without it,
 \* the kill reaches whatever has the pid. The copy that destroy read after
-\* the first kill names the same host.
+\* the first kill names the same host. In another pid space, hostMatches
+\* never proves the host, so nothing gets the kill.
 KillsHost ==
-    IF dpc \in {"kill", "rkill"} /\ drd.pid /\ hostAlive
+    IF dpc \in {"kill", "rkill"} /\ drd.pid /\ hostAlive /\ ~OtherPidSpace
           /\ (hrec \/ ~ProvesHostPid)
     THEN /\ HostDies /\ dkill' = TRUE /\ UNCHANGED hitUnrelatedHost
     ELSE IF dpc \in {"kill", "rkill"} /\ drd.pid /\ hreused /\ ~ProvesHostPid
@@ -1287,7 +1304,7 @@ DestroyPollsGroup ==
     /\ DestroyAt({"kwait", "rwait", "twait"})
     /\ passedReused' = (passedReused \/
                          (reused /\ drd.grp = "proven" /\ ~CliGroupSeen(drd.grp)))
-    /\ IF CliGroupSeen(drd.grp) \/ (dpc # "twait" /\ drd.pid /\ hostAlive)
+    /\ IF CliGroupSeen(drd.grp) \/ (dpc # "twait" /\ drd.pid /\ CliHostAlive)
           THEN DestroyEnds("error")
           ELSE IF dpc = "kwait"
           THEN /\ dpc' = IF DestroyRecordsDestroyed THEN "reread" ELSE "final"

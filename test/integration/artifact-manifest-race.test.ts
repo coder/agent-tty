@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, realpath } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdtemp, readFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -45,7 +46,10 @@ describe(
     let testHome = '';
     let sessionId = '';
 
+    // Each export writes its own --out file: exports to one path keep only
+    // the entry of the file that is there.
     async function captureAtOnce(
+      round: number,
       screenshots: number,
       exports: number,
     ): Promise<number[]> {
@@ -53,13 +57,15 @@ describe(
         ...Array.from({ length: screenshots }, () =>
           runCliAsync(testHome, ['screenshot', sessionId]),
         ),
-        ...Array.from({ length: exports }, () =>
+        ...Array.from({ length: exports }, (_, index) =>
           runCliAsync(testHome, [
             'record',
             'export',
             sessionId,
             '--format',
             'asciicast',
+            '--out',
+            join(testHome, 'exports', `${String(round)}-${String(index)}.cast`),
           ]),
         ),
       ]);
@@ -109,7 +115,7 @@ describe(
 
     it('keeps every entry of live screenshots and record exports', async () => {
       for (let round = 1; round <= ROUNDS; round += 1) {
-        const codes = await captureAtOnce(4, 8);
+        const codes = await captureAtOnce(round, 4, 8);
         expect(codes).toEqual(Array.from({ length: 12 }, () => 0));
         expect(await countEntries()).toEqual({
           screenshot: 4 * round,
@@ -118,10 +124,42 @@ describe(
       }
     });
 
+    // An append whose file another export replaced in the meantime still
+    // adds its entry, so racing exports can leave more than one entry. They
+    // export the same log, so every entry describes the file.
+    it('lists the file with entries that describe it when exports write one path at once', async () => {
+      destroySession(testHome, sessionId);
+      const codes = await Promise.all(
+        Array.from({ length: 6 }, () =>
+          runCliAsync(testHome, [
+            'record',
+            'export',
+            sessionId,
+            '--format',
+            'asciicast',
+          ]),
+        ),
+      );
+      expect(codes).toEqual(Array.from({ length: 6 }, () => 0));
+
+      const directory = sessionDir(testHome, sessionId);
+      const manifest = await readArtifactManifest(directory);
+      expect(manifest.artifacts.length).toBeGreaterThanOrEqual(1);
+      expect(manifest.artifacts.length).toBeLessThanOrEqual(6);
+      for (const entry of manifest.artifacts) {
+        const bytes = await readFile(
+          join(directory, 'artifacts', entry.filename),
+        );
+        expect(createHash('sha256').update(bytes).digest('hex')).toBe(
+          entry.sha256,
+        );
+      }
+    });
+
     it('keeps every entry of offline screenshots and record exports', async () => {
       destroySession(testHome, sessionId);
       for (let round = 1; round <= ROUNDS; round += 1) {
-        const codes = await captureAtOnce(4, 4);
+        const codes = await captureAtOnce(round, 4, 4);
         expect(codes).toEqual(Array.from({ length: 8 }, () => 0));
         expect(await countEntries()).toEqual({
           screenshot: 4 * round,

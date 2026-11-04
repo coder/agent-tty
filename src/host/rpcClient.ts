@@ -91,12 +91,16 @@ function toTransportCliError(
   });
 }
 
-function toResponseCliError(code: string, message: string): CliError {
+function toResponseCliError(
+  code: string,
+  message: string,
+  details: Record<string, unknown> | undefined,
+): CliError {
   if (isProtocolErrorCode(code)) {
-    return makeCliError(code, { message });
+    return makeCliError(code, { message, ...(details && { details }) });
   }
 
-  return new CliError(code, message);
+  return new CliError(code, message, { ...(details && { details }) });
 }
 
 function isMissingSocket(error: unknown): boolean {
@@ -313,7 +317,11 @@ async function sendRpcAt(
         }
 
         settlers.reject(
-          toResponseCliError(response.error.code, response.error.message),
+          toResponseCliError(
+            response.error.code,
+            response.error.message,
+            response.error.details,
+          ),
         );
       } catch (error) {
         settlers.reject(
