@@ -221,18 +221,25 @@ jobs:
 
   # Model-checks the session lifecycle with the verify-session-lifecycle
   # skill. Share 1 checks that coverage.json matches the facts and the
-  # covered code. The TLC runs took 63 min in one job of 4 vCPUs and take 13
-  # to 17 min in each of 4 shares. They run only when coverage.json differs
-  # from the base, which every change to the model, its scripts, the covered
-  # code or a fact needs.
+  # covered code. The TLC runs took 63 min in one job of 4 vCPUs and took 13
+  # to 17 min in each of 4 shares. The model of #324 has about twice the
+  # states, and its 4 shares took 38 to 48 min. check.sh starts CHECK_JOBS
+  # runs at a time and waits for all of them before the next ones, so a share
+  # took as long as the sum of its longest runs. Now each of 8 shares starts
+  # all its runs at once (with the model of #324, 10 to 12 runs, of which at
+  # most 2 are long, on 4 vCPUs) and takes about as long as its longest run:
+  # 15 to 43 min, where the 43 min share holds only the longest run, which
+  # TLC checks with 1 worker. They run only when coverage.json differs from
+  # the base, which every change to the model, its scripts, the covered code
+  # or a fact needs.
   lifecycle-model:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
-    name: lifecycle-model (${{ matrix.shard }}/4)
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    name: lifecycle-model (${{ matrix.shard }}/8)
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -267,8 +274,8 @@ jobs:
       - name: Model-check the session lifecycle
         if: steps.inputs.outputs.tlc == 'true'
         env:
-          CHECK_JOBS: '4'
-          CHECK_SHARD: ${{ matrix.shard }}/4
+          CHECK_JOBS: '12'
+          CHECK_SHARD: ${{ matrix.shard }}/8
         run: .agents/skills/verify-session-lifecycle/scripts/check.sh
 
   quality-gates:
