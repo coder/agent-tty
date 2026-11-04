@@ -227,12 +227,14 @@ jobs:
   # runs at a time and waits for all of them before the next ones, so a share
   # took as long as the sum of its longest runs. Now each of 8 shares starts
   # all its runs at once (with the model of #324, 10 to 12 runs, of which at
-  # most 2 are long, on 4 vCPUs) and takes about as long as its longest run.
-  # They run only when coverage.json differs from the base, which every
-  # change to the model, its scripts, the covered code or a fact needs.
+  # most 2 are long, on 4 vCPUs) and takes about as long as its longest run:
+  # 15 to 43 min, where the 43 min share holds only the longest run, which
+  # TLC checks with 1 worker. They run only when coverage.json differs from
+  # the base, which every change to the model, its scripts, the covered code
+  # or a fact needs.
   lifecycle-model:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
