@@ -454,6 +454,8 @@ Every command exits with a stable code, so scripts can branch without parsing ou
 
 A fail-fast `batch` exits with the failed step's code (for example `11` for a wait timeout); `--keep-going` exits `1` if any step failed.
 
+A live session host answers at most 67,108,864 characters per command, counted as JavaScript string length (UTF-16 code units, not bytes: non-ASCII text takes more bytes on the wire). A larger response, such as `snapshot --include-cells` of a screen with more than about 1.2 million fully styled cells, fails with `PROTOCOL_ERROR` (exit `9`, `retryable: false`) and `details.maxResponseChars`.
+
 `agent-tty help` and `agent-tty help <command>` exit `0`. Without a command, the CLI prints the help on stderr and exits `2`.
 
 An unreadable Home `config.json` gives `STORAGE_READ_ERROR` (exit `8`). Invalid JSON or an invalid field in it gives `INVALID_INPUT` (exit `2`). Both errors carry `details.configPath`.

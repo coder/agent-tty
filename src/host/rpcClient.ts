@@ -234,10 +234,16 @@ async function sendRpcAt(
       }
 
       if (buffer.length + chunk.length > MAX_RPC_RESPONSE_CHARS) {
+        // Only an older host, without the server's response cap, gets here.
+        // A retry gets the same size, so this is not RPC_ERROR (retryable).
         settlers.reject(
-          makeCliError(ERROR_CODES.RPC_ERROR, {
-            message: 'RPC response exceeds maximum buffer size.',
-            details: { method, socketPath },
+          makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
+            message: `RPC response is over the ${String(MAX_RPC_RESPONSE_CHARS)}-character limit.`,
+            details: {
+              method,
+              socketPath,
+              maxResponseChars: MAX_RPC_RESPONSE_CHARS,
+            },
           }),
         );
         return;
