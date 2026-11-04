@@ -86,7 +86,7 @@
     "src/host/lifecycle.ts#stopSessionProcesses": "d1abb608b1d2160a",
     "src/host/lifecycle.ts#recordDestroyed": "d3a74237a9c8459c",
     "src/host/lifecycle.ts#removeDeadHostSocket": "34ce07ab7b7e8d7b",
-    "src/host/lifecycle.ts#destroySession": "ee53946fe51e4df1",
+    "src/host/lifecycle.ts#destroySession": "05edb5d2825ed857",
     "src/host/lifecycle.ts#isMarkedDestroyed": "d178f4a63473915c",
     "src/host/lifecycle.ts#writeMarkedDestroyed": "4863c35f70699757",
     "src/host/lifecycle.ts#reconcileSession": "739c83bf945000c6",
@@ -144,7 +144,7 @@
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "f1bb5d457a8f2ba0",
-    "skill:scripts/facts.mjs": "e4dac7e26cc13dd4",
+    "skill:scripts/facts.mjs": "c38cd6f59d124d76",
     "skill:scripts/check.sh": "0e998387e38d04c8"
   },
   "callSites": {

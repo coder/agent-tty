@@ -729,8 +729,22 @@ function statementsOf(block) {
 
 function stopUnlessUnreadableFacts(arrows) {
   const st = arrows.get('stopUnlessUnreadable') ?? [];
-  const [declared, attempt, ...after] = st;
+  const [judge, declared, attempt, ...after] = st;
+  // readAndJudge reads the group and judges it once, with no kill.
+  const judges =
+    judge !== undefined &&
+    ts.isVariableStatement(judge) &&
+    judge.declarationList.declarations[0]?.name.getText() === 'readAndJudge' &&
+    (arrows.get('readAndJudge') ?? [])
+      .map((s) => normalize(s.getText()))
+      .join('\n') ===
+      [
+        'const group = await readGroup();',
+        'isProgramGroupAlive(group);',
+        'return group;',
+      ].join('\n');
   if (
+    !judges ||
     declared === undefined ||
     normalize(declared.getText()) !== 'let group: ProgramGroup | null;' ||
     attempt === undefined ||
@@ -740,25 +754,35 @@ function stopUnlessUnreadableFacts(arrows) {
   ) {
     return { stops: false, skipsUnreadable: false };
   }
-  // The try reads the group and judges it once, with no kill. Only a read
-  // or a judgement that fails there can skip the group: the stop comes
-  // after the try, so a read that fails after a verdict fails the destroy.
+  // Only a read or a judgement that fails in the try can skip the group: the
+  // stop comes after the try, so a read that fails after a verdict fails the
+  // destroy. With --force, an unreadable read is read again after a poll
+  // interval, and only a second unreadable read skips the group.
   const tried = statementsOf(attempt.tryBlock).join('\n');
-  const caught = statementsOf(attempt.catchClause.block);
+  const caught = attempt.catchClause.block.statements;
   const stops =
-    tried ===
-      ['group = await readGroup();', 'isProgramGroupAlive(group);'].join(
-        '\n',
-      ) &&
+    tried === 'group = await readAndJudge();' &&
     after.map((s) => normalize(s.getText())).join('\n') ===
       [
         'await stopSessionProcesses( sessionId, host, group, sessionDirectory, signal, );',
         'return group;',
       ].join('\n');
+  const [rethrows, waits, again, ...more] = caught;
   const skipsUnreadable =
-    caught.join('\n') ===
+    more.length === 0 &&
+    normalize(rethrows?.getText() ?? '') ===
+      'if (force !== true || !isUnreadableGroupError(error)) { throw error; }' &&
+    normalize(waits?.getText() ?? '') ===
+      'await pollDelay(DESTROY_POLL_INTERVAL_MS, signal);' &&
+    again !== undefined &&
+    ts.isTryStatement(again) &&
+    again.catchClause !== undefined &&
+    again.finallyBlock === undefined &&
+    statementsOf(again.tryBlock).join('\n') ===
+      'group = await readAndJudge();' &&
+    statementsOf(again.catchClause.block).join('\n') ===
       [
-        'if (force !== true || !isUnreadableGroupError(error)) { throw error; }',
+        'if (!isUnreadableGroupError(secondError)) { throw secondError; }',
         'await stopSessionProcesses( sessionId, host, null, sessionDirectory, signal, );',
         'return null;',
       ].join('\n') &&
@@ -766,8 +790,10 @@ function stopUnlessUnreadableFacts(arrows) {
       'isUnreadableGroupError',
       "const cause = hasErrorCode(error, ERROR_CODES.STORAGE_READ_ERROR) ? (error as Error).cause : error; const code: unknown = cause instanceof Error ? (cause as { code?: unknown }).code : undefined; return ( !(cause instanceof CliError) && typeof code === 'string' && UNREADABLE_ERRNOS.has(code) );",
     );
+  const rethrowsAll =
+    caught.map((s) => normalize(s.getText())).join('\n') === 'throw error;';
   return {
-    stops: stops && (caught.join('\n') === 'throw error;' || skipsUnreadable),
+    stops: stops && (rethrowsAll || skipsUnreadable),
     skipsUnreadable: stops && skipsUnreadable,
   };
 }

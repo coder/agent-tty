@@ -913,30 +913,45 @@ export async function destroySession(
   // destroy --force of a session whose host is gone also ends a session
   // whose program group it cannot read: the read of program.json, or the
   // first judgement of the group, fails with an errno that every later read
-  // repeats. It then stops what it can without the group and records
-  // destroyed, so a process that the program left can outlive it. A failed
-  // read after that first judgement, a group that reads alive, and a host
-  // that does not end (HOST_TIMEOUT) still fail the destroy.
+  // repeats, twice, 100 ms apart. It then stops what it can without the
+  // group and records destroyed, so a process that the program left can
+  // outlive it. A failed read after that first judgement, a group that reads
+  // alive, and a host that does not end (HOST_TIMEOUT) still fail the
+  // destroy.
   const stopUnlessUnreadable = async (
     host: SessionHost | null,
     readGroup: () => Promise<ProgramGroup | null>,
   ): Promise<ProgramGroup | null> => {
+    const readAndJudge = async (): Promise<ProgramGroup | null> => {
+      const group = await readGroup();
+      isProgramGroupAlive(group);
+      return group;
+    };
     let group: ProgramGroup | null;
     try {
-      group = await readGroup();
-      isProgramGroupAlive(group);
+      group = await readAndJudge();
     } catch (error) {
       if (force !== true || !isUnreadableGroupError(error)) {
         throw error;
       }
-      await stopSessionProcesses(
-        sessionId,
-        host,
-        null,
-        sessionDirectory,
-        signal,
-      );
-      return null;
+      // A read that fails once, as on a network file system, can pass the
+      // next time.
+      await pollDelay(DESTROY_POLL_INTERVAL_MS, signal);
+      try {
+        group = await readAndJudge();
+      } catch (secondError) {
+        if (!isUnreadableGroupError(secondError)) {
+          throw secondError;
+        }
+        await stopSessionProcesses(
+          sessionId,
+          host,
+          null,
+          sessionDirectory,
+          signal,
+        );
+        return null;
+      }
     }
     await stopSessionProcesses(
       sessionId,
