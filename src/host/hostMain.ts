@@ -1082,7 +1082,7 @@ export async function runHost(
       let latestCapturedAtSeq = -1;
       let seenPostBaseline = false;
 
-      const pollCondition = new Promise<WaitForRenderResult>((resolve) => {
+      const polled = new Promise<WaitForRenderResult>((resolve, reject) => {
         let pollInFlight = false;
         let consecutiveFailures = 0;
 
@@ -1153,14 +1153,13 @@ export async function runHost(
                 return;
               }
 
-              void pollError;
               consecutiveFailures += 1;
               if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
-                resolve({
-                  matched: false,
-                  timedOut: true,
-                  capturedAtSeq: latestCapturedAtSeq,
-                });
+                reject(
+                  pollError instanceof Error
+                    ? pollError
+                    : new Error(String(pollError)),
+                );
                 return;
               }
               // Transient — retry on next poll.
@@ -1177,7 +1176,7 @@ export async function runHost(
 
       return await waitForScopedOperation({
         operationName: 'waitForRender',
-        operation: pollCondition,
+        operation: polled,
         scope: waitScope,
         signal,
         ...(timeoutMs === undefined
