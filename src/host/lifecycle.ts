@@ -44,6 +44,7 @@ import {
 } from './programGroup.js';
 import {
   captureHost,
+  hostRecordError,
   judgeHost,
   readHostRecord,
   writeHostRecord,
@@ -879,13 +880,35 @@ async function stopSessionProcesses(
               : 'End the session with a plain destroy, or run destroy --force where /proc is mounted.'
           }`
         : group !== null && 'unshared' in group
-          ? " This process runs in another pid namespace or on another machine than the session's host, so it cannot prove which processes are the session's. Run destroy from the host's pid namespace on the host's machine."
+          ? await unsharedGroupHint(sessionDirectory)
           : '';
     throw makeCliError(ERROR_CODES.HOST_TIMEOUT, {
       message: `Timed out forcing session "${sessionId}" to exit.${hint}`,
       details: { sessionId, sessionDirectory },
     });
   }
+}
+
+// A group reads unshared when host.json names another pid space or machine,
+// and when this process cannot read host.json, which readHostRecord reads as
+// missing.
+async function unsharedGroupHint(sessionDirectory: string): Promise<string> {
+  const error = await hostRecordError(sessionDirectory);
+  if (error === null) {
+    return " This process runs in another pid namespace or on another machine than the session's host, so it cannot prove which processes are the session's. Run destroy from the host's pid namespace on the host's machine.";
+  }
+  const code: unknown =
+    error.cause instanceof Error
+      ? (error.cause as { code?: unknown }).code
+      : undefined;
+  // Only a read that the permissions refuse passes once the file is
+  // readable. A folder, invalid JSON or an invalid record does not.
+  const refused = code === 'EACCES' || code === 'EPERM';
+  return ` ${error.message.replace(/\.$/, '')}${
+    typeof code === 'string' ? ` (${code})` : ''
+  }, so this process cannot prove which processes are the session's.${
+    refused ? ' Make that file readable and run destroy again.' : ''
+  }`;
 }
 
 export interface DestroySessionOptions {
@@ -1178,8 +1201,9 @@ export async function reconcileSession(
   const manifest = await readManifestIfExists(manifestFile);
 
   // Only recordDestroyed writes the marker, and only for a terminal manifest
-  // or once the host and the program's group are dead. So the host has
-  // ended or is ending, and the repair removes both sockets without a
+  // or once the host is dead. The program's group reads dead then too,
+  // except after a destroy --force that cannot read the group. So the host
+  // has ended or is ending, and the repair removes both sockets without a
   // liveness check.
   if (manifest !== null && isMarkedDestroyed(sessionDirectory, manifest)) {
     if (await writeMarkedDestroyed(manifestFile, manifest)) {
