@@ -514,13 +514,8 @@ async function acquireManifestLock(
         return;
       }
       foundTaken = true;
-      const outcome = await breakStaleManifestLock(
-        lockPath,
-        temporaryPath,
-        announcementPath,
-        contents,
-        timing,
-      );
+      // The check comes right after a failed link: a writer stopped past
+      // its deadline inside the break attempt still tries the link once.
       if (Date.now() >= deadline) {
         const holder = await readLockFile(lockPath).catch(() => null);
         throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
@@ -529,6 +524,13 @@ async function acquireManifestLock(
           details: { lockPath, holderPid: parseLockOwner(holder)?.pid ?? null },
         });
       }
+      const outcome = await breakStaleManifestLock(
+        lockPath,
+        temporaryPath,
+        announcementPath,
+        contents,
+        timing,
+      );
       if (outcome === 'met') {
         // Breakers that saw each other all wait. Each meeting doubles the
         // wait, and the jitter spreads their next attempts apart.
