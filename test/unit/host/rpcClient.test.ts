@@ -127,6 +127,65 @@ describe('sendRpc abort handling', () => {
   });
 });
 
+describe('sendRpc response cap', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'agent-tty-rpc-client-'));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = '';
+  });
+
+  it(
+    'refuses a response over 64 MiB from an older host with PROTOCOL_ERROR',
+    { timeout: 30_000 },
+    async () => {
+      const socketFile = join(tempDir, 'rpc.sock');
+      // An older host sends a success response of any size.
+      const server = net.createServer((socket) => {
+        socket.on('error', () => undefined);
+        socket.once('data', () => {
+          const piece = 'x'.repeat(1_048_576);
+          for (let index = 0; index <= 64; index += 1) {
+            socket.write(piece);
+          }
+        });
+      });
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(socketFile, () => {
+          server.off('error', reject);
+          resolve();
+        });
+      });
+
+      try {
+        const error = await sendRpc(socketFile, 'inspect', {}, 20_000).catch(
+          (rejection: unknown) => rejection,
+        );
+
+        expect(error).toMatchObject({
+          code: 'PROTOCOL_ERROR',
+          retryable: false,
+          message: 'RPC response is over the 67108864-character limit.',
+          details: { method: 'inspect', maxResponseChars: 67_108_864 },
+        });
+      } finally {
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => {
+            if (error !== undefined) {
+              reject(error);
+              return;
+            }
+            resolve();
+          });
+        });
+      }
+    },
+  );
+});
+
 describe.skipIf(process.platform === 'win32')(
   'sendRpc to a host that an older version started',
   () => {
