@@ -101,6 +101,10 @@ CONSTANTS
                             \*   it reads the manifest, and the host checks
                             \*   for it before the spawn and right after its
                             \*   start-up write, and then ends the session
+    HostPollsCreateFailed,  \* hostMain.ts: from its start-up check on, the
+                            \*   host checks for the create-failed marker
+                            \*   while its creator runs and once after, and
+                            \*   then ends the session
     TokenNamesProgram,      \* programGroup.ts: captureToken records an
                             \*   autogroup only once the program leads its
                             \*   own session in an autogroup other than the
@@ -154,7 +158,7 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
                  InsideCheckReadsEnv, RecordsProgramSync,
                  ProvesGroupOwnership, DestroyStopsLeftovers,
                  FallbackNeedsFolder, CreateStopsOnGiveUp,
-                 HostChecksCreateFailed,
+                 HostChecksCreateFailed, HostPollsCreateFailed,
                  ReconcileRepairsDestroyed, ReconcileRepairsMarked,
                  TokenNamesProgram,
                  ReusedIdReadsGone, ProvesHostPid, CreateRecordsHost,
@@ -187,6 +191,7 @@ VARIABLES
                  \*   repair while the marker existed, and no reconcile has
                  \*   read the manifest since
     diedBeforeRepair, \* ghost: such a death happened
+    polled,      \* ghost: the host's watch found the create-failed marker
                  \*   next to the destroy marker
     sock,        \* the RPC socket file exists (it is outside the directory)
     cpc,         \* create: "alloc", "write", "launch", "done", "giveup"
@@ -253,7 +258,8 @@ VARIABLES
 
 diskVars == <<dir, mst, mpid, morigin, mcode, mchild, wasTerminal, wasExited,
               wasNamed, dmark, cmark>>
-ghostVars == <<startFailed, readRepaired, lostRepair, diedBeforeRepair>>
+ghostVars == <<startFailed, readRepaired, lostRepair, diedBeforeRepair,
+               polled>>
 hostVars == <<hostAlive, hpc, hex, rsz, prog, foreign, left>>
 groupVars == <<rec, reused, hitUnrelated, diedUnrecorded, passedReused,
                hrec, hreused, hitUnrelatedHost>>
@@ -269,7 +275,7 @@ Init ==
     /\ wasTerminal = FALSE /\ wasExited = FALSE /\ wasNamed = FALSE
     /\ dmark = FALSE /\ cmark = FALSE
     /\ rec = FALSE /\ startFailed = FALSE /\ readRepaired = FALSE
-    /\ lostRepair = FALSE /\ diedBeforeRepair = FALSE
+    /\ lostRepair = FALSE /\ diedBeforeRepair = FALSE /\ polled = FALSE
     /\ sock = FALSE
     /\ cpc = "alloc"
     /\ hostAlive = FALSE /\ hpc = "none" /\ hex = "none" /\ rsz = "none"
@@ -421,6 +427,7 @@ HostFailsToStart ==
     /\ startFailed' = TRUE
     /\ readRepaired' = readRepaired
     /\ lostRepair' = lostRepair /\ diedBeforeRepair' = diedBeforeRepair
+    /\ polled' = polled
     /\ hostAlive' = FALSE
     /\ hpc' = "dead"
     /\ hex' = IF hex = "none" THEN "none" ELSE "gone"
@@ -501,11 +508,13 @@ CreateGivesUp ==
 \* On Windows the SIGTERM ends the host at once, without its handlers, so
 \* create sends it only when the manifest that it reads after the marker
 \* write names the program. The next reconcile then records failed and ends
-\* the program.
+\* the program. That read can fail, for example when the file is not
+\* readable, and then create sends nothing.
 CreateStopsHostOnWindows ==
     /\ cpc = "giveup"
     /\ cpc' = "failed"
-    /\ IF CreateStopsOnGiveUp /\ mchild /\ hostAlive
+    /\ \E readOk \in BOOLEAN :
+       IF CreateStopsOnGiveUp /\ readOk /\ mchild /\ hostAlive
           THEN /\ HostDies
                /\ UNCHANGED <<prog, foreign, left, rec, reused, hitUnrelated,
                               hrec, hreused, hitUnrelatedHost, passedReused>>
@@ -702,6 +711,21 @@ HostGetsSigterm ==
     /\ StartShutdown(WriteQueued)
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, hwt, readerVars,
                    destroyVars, groupVars>>
+
+\* watchCreateFailed: from right after the start-up check on, the host
+\* checks for the create-failed marker every 100 ms while its creator runs,
+\* and once after the creator exited. create writes the marker before it
+\* exits, so the watch finds every marker. On the marker it calls
+\* startShutdown, as for a SIGTERM.
+HostPollsMarker ==
+    /\ HostPollsCreateFailed
+    /\ hostAlive /\ cmark /\ hsd = "none"
+    /\ hpc \in {"sockdir", "serving"}
+    /\ polled' = TRUE
+    /\ StartShutdown(WriteQueued)
+    /\ UNCHANGED <<diskVars, startFailed, readRepaired, lostRepair,
+                   diedBeforeRepair, sock, cpc, hostVars, hwt, sig,
+                   readerVars, destroyVars, groupVars>>
 
 \* initiateShutdown's `await persistManifest()` lands, then its finally block
 \* starts.
@@ -900,6 +924,7 @@ SkipsHost(read) == ReconcileSkipsLiveHost /\ read.pid /\ CliHostAlive
 ReconcileReads(p) ==
     /\ pc[p] = "r_read"
     /\ lostRepair' = FALSE /\ diedBeforeRepair' = diedBeforeRepair
+    /\ polled' = polled
     /\ IF ReconcileRepairsMarked /\ dmark /\ mst \in Terminal
           /\ mst # "destroyed"
           THEN /\ pc' = [pc EXCEPT ![p] = "r_marked"]
@@ -1036,8 +1061,8 @@ ReconcileWritesMarked(p) ==
                /\ readRepaired' = TRUE
           ELSE /\ pc' = [pc EXCEPT ![p] = AfterReconcile(p)]
                /\ UNCHANGED <<diskVars, readRepaired>>
-    /\ UNCHANGED <<startFailed, lostRepair, diedBeforeRepair, sock, cpc,
-                   hostVars, shutVars, rd, gres, lruns, destroyVars,
+    /\ UNCHANGED <<startFailed, lostRepair, diedBeforeRepair, polled, sock,
+                   cpc, hostVars, shutVars, rd, gres, lruns, destroyVars,
                    groupVars>>
 
 \* unlinkIfPresent(socketPath(sessionDirectory))
@@ -1058,8 +1083,9 @@ ListDiesBeforeRepair ==
     /\ pc' = [pc EXCEPT !["list"] = "idle"]
     /\ lostRepair' = (lostRepair \/ (dmark /\ mst # "destroyed"))
     /\ diedBeforeRepair' = (diedBeforeRepair \/ (dmark /\ mst # "destroyed"))
-    /\ UNCHANGED <<diskVars, startFailed, readRepaired, sock, cpc, hostVars,
-                   shutVars, rd, gres, lruns, destroyVars, groupVars>>
+    /\ UNCHANGED <<diskVars, startFailed, readRepaired, polled, sock, cpc,
+                   hostVars, shutVars, rd, gres, lruns, destroyVars,
+                   groupVars>>
 
 \* -------------------------------------------------------------------------
 \* gc
@@ -1406,7 +1432,7 @@ Next ==
     \/ CreateMakesDirectory \/ CreateWritesManifest \/ CreateLaunchesHost
     \/ CreateGivesUp \/ CreateStopsHostOnWindows
     \/ HostReadsManifest \/ HostOpensLogAndSpawns \/ HostRecordsProgram
-    \/ HostWritesPids \/ HostChecksMarker
+    \/ HostWritesPids \/ HostChecksMarker \/ HostPollsMarker
     \/ HostListens \/ HostStartsResize \/ HostResizeWriteLands
     \/ HostGetsSigterm \/ HostWritesDestroying \/ HostClosesSocket
     \/ HostKillsProgram \/ ProgramExits \/ HostPollsGroup \/ HostWritesExit
@@ -1441,7 +1467,7 @@ TypeOK ==
     /\ cmark => dir
     /\ {dir, mpid, mchild, wasTerminal, wasExited, wasNamed, dmark, cmark,
         startFailed,
-        readRepaired, lostRepair, diedBeforeRepair, sock,
+        readRepaired, lostRepair, diedBeforeRepair, polled, sock,
         hostAlive, prog, foreign, sig, dforce, dinside, dsaw, dkill, rec, left,
         reused, hitUnrelated, diedUnrecorded, passedReused, hrec, hreused,
         hitUnrelatedHost}
@@ -1557,6 +1583,7 @@ FailedCreateStopped ==
         \/ CreateStopsOnGiveUp /\ ~Win32 /\ ~sig
         \/ HostChecksCreateFailed /\ cmark
            /\ hpc \in {"boot", "open", "record", "pidwrite", "markcheck"}
+        \/ HostPollsCreateFailed /\ cmark /\ hpc \in {"sockdir", "serving"}
 
 \* R18: once destroy reported success, the manifest says destroyed while the
 \* directory exists, except while a reconcile that wrote over it has yet to
@@ -1579,6 +1606,7 @@ WitnessGcRemovesSession == gres # "removed"
 WitnessReconcileRepairs ==
     ~(dmark /\ mst = "failed" /\ \E p \in Readers : pc[p] = "r_repair")
 WitnessMarkedRepaired == ~readRepaired
+WitnessMarkerPolled == ~polled
 WitnessDeadRepairRepaired ==
     ~(diedBeforeRepair /\ ~lostRepair /\ mst = "destroyed" /\ dir)
 WitnessCreateGivesUp ==

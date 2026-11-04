@@ -257,6 +257,7 @@ function createFacts() {
     CreateRecordsHost: recordsHost,
     CreateStopsOnGiveUp: stopsOnGiveUp(create.body),
     HostChecksCreateFailed: checksCreateFailed(create.body),
+    HostPollsCreateFailed: pollsCreateFailed(),
   };
 }
 
@@ -368,6 +369,29 @@ function checksCreateFailed(body) {
       'if (existsSync(createFailedMarkerPath(sessDir))) { await initiateShutdown(); return; }' &&
     write + 1 < listen
   );
+}
+
+// runHost's watchCreateFailed checks, every CREATE_FAILED_POLL_INTERVAL_MS,
+// whether the creator still runs and then whether the create-failed marker
+// exists. On the marker it calls startShutdown, and it stops once a check
+// after the creator's exit found none. The start-up try calls it right after
+// the check that follows the start-up write.
+function pollsCreateFailed() {
+  const run = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
+  const watch = indexOfStatement(run, /^const watchCreateFailed = /);
+  const watches =
+    watch >= 0 &&
+    normalize(run.statements[watch].getText()) ===
+      'const watchCreateFailed = (): void => { const timer = setInterval(() => { const creatorGone = !isProcessAlive(creatorPid); if (existsSync(createFailedMarkerPath(sessDir))) { clearInterval(timer); startShutdown(); } else if (creatorGone) { clearInterval(timer); } }, CREATE_FAILED_POLL_INTERVAL_MS); timer.unref(); };';
+  const last = run.statements.at(-1);
+  const tried =
+    last !== undefined && ts.isTryStatement(last)
+      ? last.tryBlock.statements.map((t) => normalize(t.getText()))
+      : [];
+  const check = tried.indexOf(
+    'if (existsSync(createFailedMarkerPath(sessDir))) { await initiateShutdown(); return; }',
+  );
+  return watches && check >= 0 && tried[check + 1] === 'watchCreateFailed();';
 }
 
 // runHost waits for create's manifest, and every host write of session.json
@@ -1502,6 +1526,7 @@ const RUN_HOST_PARTS = [
   /^process\.on\('SIGTERM'/,
   /^let onSigterm = /,
   /^if \(existsSync\(createFailedMarkerPath\(sessDir\)\)\) \{/,
+  /^const watchCreateFailed = /,
   /^if \(sigterm\.received\) \{/,
   /^invariant\(!sigterm\.received/,
   /^onSigterm = startShutdown;/,
