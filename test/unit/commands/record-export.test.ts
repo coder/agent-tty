@@ -861,6 +861,60 @@ describe('record export command', () => {
     expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
   });
 
+  // Hashing a large WebM takes time. The folder check runs after it, so a
+  // swap during the hash cannot slip in before the rename.
+  it('refuses the WebM when the --out folder is swapped for a link while it hashes the file', async () => {
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-webm-hash-swap-',
+    );
+    const exportsDirectory = join(workspaceDirectory, 'exports');
+    const elsewhereDirectory = join(workspaceDirectory, 'elsewhere');
+    await mkdir(exportsDirectory);
+    await mkdir(elsewhereDirectory);
+    const written = Buffer.from('webm bytes');
+    mocks.generateWebmExport.mockImplementation(
+      async (options: { outputPath: string }) => {
+        await writeFile(options.outputPath, written);
+        return {
+          capturedAtSeq: 1,
+          durationMs: 1_500,
+          outputEventCount: 1,
+          resizeEventCount: 1,
+          cols: 80,
+          rows: 24,
+          profileName: 'reference-dark',
+          timingMode: 'recorded',
+          rendererBackend: 'ghostty-web',
+        };
+      },
+    );
+    mocks.stat.mockResolvedValue({ size: written.length });
+    mocks.readFile.mockImplementation(async () => {
+      const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
+      await fs.rename(exportsDirectory, join(workspaceDirectory, 'moved'));
+      await symlink(elsewhereDirectory, exportsDirectory);
+      return written;
+    });
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'webm',
+        out: join(exportsDirectory, 'proof.webm'),
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
+      message: expect.stringContaining(
+        'was replaced while the command ran',
+      ) as unknown,
+    });
+    expect(mocks.readFile).toHaveBeenCalledTimes(1);
+    expect(mocks.rename).not.toHaveBeenCalled();
+    expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
+  });
+
   it('refuses the asciicast when the --out folder is replaced before the rename', async () => {
     const workspaceDirectory = await createTemporaryDirectory(
       'agent-tty-record-export-cast-swap-',
