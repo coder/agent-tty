@@ -1115,6 +1115,129 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
       },
     );
 
+    // A read of program.json that fails with EACCES fails every later
+    // check too. destroy --force ends such a session without the read, so
+    // gc does not keep it forever. Root reads any file, so these tests skip
+    // under root.
+    async function statusOf(sessionId: string): Promise<string> {
+      const manifest = JSON.parse(
+        await readFile(
+          join(testHome, 'sessions', sessionId, 'session.json'),
+          'utf8',
+        ),
+      ) as { status: string };
+      return manifest.status;
+    }
+
+    it.runIf(process.getuid?.() !== 0)(
+      'destroy --force ends an exited session whose program.json it cannot read',
+      async () => {
+        const sessionId = await createProgram(
+          `trap "" HUP; sleep 300 & ${untilRecorded()}; touch "$0"; exit 0`,
+        );
+        const deadline = Date.now() + 10_000;
+        while ((await statusOf(sessionId)) !== 'exited') {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(100);
+        }
+        await chmod(join(testHome, 'sessions', sessionId, 'program.json'), 0);
+
+        const kept = runCli(['gc', '--json'], { AGENT_TTY_HOME: testHome });
+        expect(JSON.parse(kept.stdout)).toMatchObject({
+          ok: true,
+          result: {
+            removedSessionCount: 0,
+            homes: [
+              {
+                skippedSessions: [
+                  {
+                    sessionId,
+                    reason: expect.stringContaining(
+                      'destroy --force removes it',
+                    ) as string,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+        const plain = runCli(['destroy', sessionId, '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(JSON.parse(plain.stdout)).toMatchObject({ ok: false });
+        expect(await statusOf(sessionId)).toBe('exited');
+
+        const forced = runCli(['destroy', sessionId, '--force', '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(
+          (JSON.parse(forced.stdout) as { error?: unknown }).error,
+        ).toBeUndefined();
+        expect(await statusOf(sessionId)).toBe('destroyed');
+        // The documented trade-off: the process that the program left runs on.
+        expect(isGroupAlive(pgid)).toBe(true);
+        const removed = runCli(['gc', '--json'], { AGENT_TTY_HOME: testHome });
+        expect(JSON.parse(removed.stdout)).toMatchObject({
+          ok: true,
+          result: { removedSessionCount: 1 },
+        });
+      },
+    );
+
+    it.runIf(process.getuid?.() !== 0)(
+      'destroy --force ends a session whose host died and whose program.json it cannot read',
+      async () => {
+        const sessionId = await createProgram(
+          `trap "" HUP; ${untilRecorded()}; touch "$0"; exec sleep 300`,
+        );
+        const sessionFile = join(
+          testHome,
+          'sessions',
+          sessionId,
+          'session.json',
+        );
+        const { hostPid } = JSON.parse(await readFile(sessionFile, 'utf8')) as {
+          hostPid: number;
+        };
+        process.kill(hostPid, 'SIGKILL');
+        const deadline = Date.now() + 10_000;
+        while (isProcessAlive(hostPid)) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await sleep(50);
+        }
+        await chmod(join(testHome, 'sessions', sessionId, 'program.json'), 0);
+
+        const kept = runCli(['gc', '--json'], { AGENT_TTY_HOME: testHome });
+        expect(JSON.parse(kept.stdout)).toMatchObject({
+          ok: true,
+          result: {
+            removedSessionCount: 0,
+            homes: [
+              {
+                skippedSessions: [
+                  {
+                    sessionId,
+                    reason: expect.stringContaining(
+                      'destroy --force removes it',
+                    ) as string,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+        expect(await statusOf(sessionId)).toBe('running');
+
+        const forced = runCli(['destroy', sessionId, '--force', '--json'], {
+          AGENT_TTY_HOME: testHome,
+        });
+        expect(
+          (JSON.parse(forced.stdout) as { error?: unknown }).error,
+        ).toBeUndefined();
+        expect(await statusOf(sessionId)).toBe('destroyed');
+      },
+    );
+
     // A token proves the group only beside host.json, which names its pid
     // space, so a host that cannot record itself records no token.
     it.runIf(capturesToken)(

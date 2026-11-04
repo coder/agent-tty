@@ -451,6 +451,40 @@ describe('gc command helpers', () => {
     expect(socketCleanups).toEqual([`${home}/sessions/exited-01 exited`]);
   });
 
+  it('names destroy --force when a read of the group fails with a system error', async () => {
+    const home = '/tmp/agent-tty';
+    const { dependencies, removedPaths } = createMockDependencies(home, {
+      'unreadable-01': {
+        manifest: createSessionRecord({
+          sessionId: 'unreadable-01',
+          status: 'exited',
+          createdAt: '2026-03-20T08:00:00.000Z',
+        }),
+      },
+    });
+    dependencies.provenProgramGroupRuns = () =>
+      Promise.reject(
+        Object.assign(new Error('EIO: i/o error, scandir /proc'), {
+          code: 'EIO',
+        }),
+      );
+
+    const result = await gcSessions(
+      home,
+      { dryRun: false, staleOnly: false, olderThanMs: null },
+      dependencies,
+    );
+
+    expect(result.skippedSessions).toEqual([
+      {
+        sessionId: 'unreadable-01',
+        reason:
+          "failed to check the session's program group (destroy --force removes it): EIO: i/o error, scandir /proc",
+      },
+    ]);
+    expect(removedPaths).toEqual([]);
+  });
+
   it('reports removals in dry-run mode without deleting anything', async () => {
     const home = '/tmp/agent-tty';
     const { dependencies, removedPaths, bytesBySession } =

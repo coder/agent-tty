@@ -8,7 +8,10 @@ import {
   reconcileSession,
   removeDeadHostSocket,
 } from '../../host/lifecycle.js';
-import { provenProgramGroupRuns } from '../../host/programGroup.js';
+import {
+  isUnreadableGroupError,
+  provenProgramGroupRuns,
+} from '../../host/programGroup.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import {
   isCollectableSessionStatus,
@@ -289,6 +292,12 @@ export function parseDurationToMs(value: string): number {
   return durationMs;
 }
 
+// A read of the program's group that fails with a system error fails every
+// later check too. destroy --force ends such a session without the read.
+function forceRemovesIt(error: unknown): string {
+  return isUnreadableGroupError(error) ? ' (destroy --force removes it)' : '';
+}
+
 export async function gcSessions(
   home: string,
   options: GcExecutionOptions,
@@ -370,7 +379,7 @@ export async function gcSessions(
     } catch (error) {
       result.skippedSessions.push({
         sessionId: manifestBefore.sessionId,
-        reason: `failed to reconcile session: ${getErrorMessage(error)}`,
+        reason: `failed to reconcile session${forceRemovesIt(error)}: ${getErrorMessage(error)}`,
       });
       continue;
     }
@@ -434,7 +443,7 @@ export async function gcSessions(
     } catch (error) {
       result.skippedSessions.push({
         sessionId,
-        reason: `failed to check the session's program group: ${getErrorMessage(error)}`,
+        reason: `failed to check the session's program group${forceRemovesIt(error)}: ${getErrorMessage(error)}`,
       });
       continue;
     }

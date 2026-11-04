@@ -35,6 +35,7 @@ import { invariant } from '../util/assert.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
 import {
   isProgramGroupAlive,
+  isUnreadableGroupError,
   parseProcStat,
   readProgramGroup,
   readProvenProgramGroup,
@@ -909,22 +910,49 @@ export async function destroySession(
     });
   }
 
+  // destroy --force of a session whose host is gone also ends a session
+  // whose program group it cannot read: a read of program.json or /proc
+  // that fails with a system error. It then stops what it can without the
+  // group and records destroyed, so a process that the program left can
+  // outlive it. A group that reads alive, or a host that does not end
+  // (HOST_TIMEOUT), still fails the destroy.
+  const stopUnlessUnreadable = async (
+    host: SessionHost | null,
+    readGroup: () => Promise<ProgramGroup | null>,
+  ): Promise<ProgramGroup | null> => {
+    try {
+      const group = await readGroup();
+      await stopSessionProcesses(
+        sessionId,
+        host,
+        group,
+        sessionDirectory,
+        signal,
+      );
+      return group;
+    } catch (error) {
+      if (force !== true || !isUnreadableGroupError(error)) {
+        throw error;
+      }
+    }
+    await stopSessionProcesses(sessionId, host, null, sessionDirectory, signal);
+    return null;
+  };
+
   const stopLeftoversThenRecordDestroyed = async (
     terminal: SessionRecord,
   ): Promise<void> => {
-    const group = await readProvenProgramGroup(sessionDirectory);
-    // Only a process that sees the program's group records destroyed, after
-    // a wait that read the group gone. So a destroyed record needs no wait
-    // for a group out of view.
-    await stopSessionProcesses(
-      sessionId,
-      null,
-      terminal.status === 'destroyed' && group !== null && 'unshared' in group
+    await stopUnlessUnreadable(null, async () => {
+      const group = await readProvenProgramGroup(sessionDirectory);
+      // Only a process that sees the program's group records destroyed,
+      // after a wait that read the group gone. So a destroyed record needs no
+      // wait for a group out of view.
+      return terminal.status === 'destroyed' &&
+        group !== null &&
+        'unshared' in group
         ? null
-        : group,
-      sessionDirectory,
-      signal,
-    );
+        : group;
+    });
     await recordDestroyed(manifestFile, socketFile, terminal, null);
   };
 
@@ -934,23 +962,16 @@ export async function destroySession(
   }
 
   if (force === true) {
-    await stopSessionProcesses(
-      sessionId,
+    await stopUnlessUnreadable(
       await readSessionHost(sessionDirectory, manifest),
-      await readProgramGroup(sessionDirectory, manifest.childPid),
-      sessionDirectory,
-      signal,
+      () => readProgramGroup(sessionDirectory, manifest.childPid),
     );
     // The host is dead now, so this read is final. It can name a child that
     // the first read did not.
     const current = await readSessionManifestOrThrow(sessionId, manifestFile);
-    const group = await readProgramGroup(sessionDirectory, current.childPid);
-    await stopSessionProcesses(
-      sessionId,
+    const group = await stopUnlessUnreadable(
       await readSessionHost(sessionDirectory, current),
-      group,
-      sessionDirectory,
-      signal,
+      () => readProgramGroup(sessionDirectory, current.childPid),
     );
     await recordDestroyed(manifestFile, socketFile, current, group);
     return;

@@ -3,6 +3,7 @@ import process from 'node:process';
 
 import { z } from 'zod';
 
+import { CliError } from '../cli/errors.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import {
   readValidatedJsonFile,
@@ -294,6 +295,23 @@ async function readProgramRecord(
     }
     throw error;
   }
+}
+
+// Whether a read of the program's group failed with a system error: a read
+// of program.json or host.json (STORAGE_READ_ERROR), or a read of /proc
+// (an errno code such as EIO or EACCES). A verdict, HOST_TIMEOUT, an abort
+// or a bug is none of these.
+export function isUnreadableGroupError(error: unknown): boolean {
+  if (hasErrorCode(error, ERROR_CODES.STORAGE_READ_ERROR)) {
+    return true;
+  }
+  const code: unknown =
+    error instanceof Error ? (error as { code?: unknown }).code : undefined;
+  return (
+    !(error instanceof CliError) &&
+    typeof code === 'string' &&
+    /^E[A-Z0-9]+$/.test(code)
+  );
 }
 
 export async function readProvenProgramGroup(

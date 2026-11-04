@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   captureProgram,
   isProgramGroupAlive,
+  isUnreadableGroupError,
   judgeProgramGroup,
   parseAutogroup,
   parseProcStat,
@@ -30,6 +31,7 @@ import {
   type ProcessRow,
   type ProgramRecord,
 } from '../../../src/host/programGroup.js';
+import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 import {
   programRecordPath,
   sessionDir,
@@ -1639,5 +1641,28 @@ describe.runIf(platform === 'linux')('a program record with a token', () => {
       stopProgramGroup(group);
     }
     expect(kill).not.toHaveBeenCalled();
+  });
+});
+
+// destroy --force ends a session without its group only after such a read.
+describe('isUnreadableGroupError', () => {
+  it.each([
+    [
+      'a program.json that the read refuses',
+      makeCliError(ERROR_CODES.STORAGE_READ_ERROR),
+      true,
+    ],
+    ['a /proc scan that fails with EIO', errno('EIO'), true],
+    ['a /proc read that fails with EACCES', errno('EACCES'), true],
+    ['HOST_TIMEOUT', makeCliError(ERROR_CODES.HOST_TIMEOUT), false],
+    [
+      'an assertion',
+      Object.assign(new Error('x'), { code: 'ERR_ASSERTION' }),
+      false,
+    ],
+    ['an error without a code', new Error('EIO'), false],
+    ['a value that is no error', { code: 'EIO' }, false],
+  ])('reads %s as unreadable: %s', (_name, error, unreadable) => {
+    expect(isUnreadableGroupError(error)).toBe(unreadable);
   });
 });
