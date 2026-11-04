@@ -31,6 +31,7 @@ const fsHooks = vi.hoisted(() => ({
   beforeWriteFile: undefined as ((path: string) => Promise<void>) | undefined,
   beforeUtimes: undefined as ((path: string) => Promise<void>) | undefined,
   beforeReaddir: undefined as ((path: string) => Promise<void>) | undefined,
+  beforeLstat: undefined as ((path: string) => Promise<void>) | undefined,
 }));
 
 vi.mock('node:fs/promises', async () => {
@@ -54,6 +55,10 @@ vi.mock('node:fs/promises', async () => {
         typeof args[0] === 'string' ? args[0] : '',
       );
       return actual.writeFile(...args);
+    },
+    lstat: async (...args: Parameters<typeof actual.lstat>) => {
+      await fsHooks.beforeLstat?.(String(args[0]));
+      return actual.lstat(...args);
     },
     readdir: async (...args: Parameters<typeof actual.readdir>) => {
       await fsHooks.beforeReaddir?.(String(args[0]));
@@ -133,6 +138,7 @@ describe('artifact manifest lock', () => {
     fsHooks.beforeWriteFile = undefined;
     fsHooks.beforeUtimes = undefined;
     fsHooks.beforeReaddir = undefined;
+    fsHooks.beforeLstat = undefined;
     vi.useRealTimers();
     await rm(home, { recursive: true, force: true });
   });
@@ -438,6 +444,28 @@ describe('artifact manifest lock', () => {
 
     expect(refreshes).toBe(2);
     expect(await readdir(join(sessionDirectory, 'artifacts'))).toEqual([]);
+  });
+
+  it('takes a lock that was let go while it was stopped past its deadline', async () => {
+    // A writer stopped (SIGSTOP) while it judges the lock resumes after its
+    // deadline. The owner let go in the meantime, so the lock is free.
+    await writeFile(lockPath, ownerRecord(process.pid, true));
+    freezeLockClock();
+    fsHooks.beforeLstat = async (path) => {
+      if (path === lockPath) {
+        fsHooks.beforeLstat = undefined;
+        vi.setSystemTime(Date.now() + 60_000);
+        await rm(lockPath);
+      }
+    };
+
+    await expect(
+      withArtifactManifestLock(
+        sessionDirectory,
+        () => Promise.resolve('ran'),
+        FAST,
+      ),
+    ).resolves.toBe('ran');
   });
 
   it('writes its temp file again when another writer removed it during the wait', async () => {
