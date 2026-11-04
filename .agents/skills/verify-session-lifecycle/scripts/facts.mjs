@@ -972,11 +972,14 @@ function noAwaitIn(statements) {
 }
 
 // runHost captures the program's token right after setChildPid, only when it
-// wrote host.json, and writes
-// program.json as the first statement of its last try, before
-// `await persistManifest()`, and no statement between createPty and that try
-// awaits. So the record is written in the synchronous block that spawns the
-// program.
+// wrote host.json, and writes program.json as the first statement of its last
+// try, before `await persistManifest()`, and no statement between createPty
+// and that try awaits. So the record is written in the synchronous block that
+// spawns the program. The fact also guards that a token lies only beside
+// host.json: a CLI counts the group of a token without host.json as running,
+// so a destroy of such a session after its program exited fails with
+// HOST_TIMEOUT. The model leaves out a host that cannot write host.json, so no
+// run checks that part.
 function programRecordFacts() {
   const body = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
   const spawn = indexOfStatement(body, /= createPty\(/);
@@ -1005,8 +1008,9 @@ function programRecordFacts() {
 // Every group kill goes through stopProgramGroup. It is synchronous, and
 // with a token it kills only right after it read a live member of the group
 // again and found the program's session id, autogroup and boot id on it.
-// No other code calls the raw group kill or builds a group target, and only
-// stopProgramGroup sends the SIGSTOP and SIGCONT of signalProcessGroup.
+// No other code calls the raw group kill or builds a group target, except
+// the two probes, which send signal 0, and only stopProgramGroup sends the
+// SIGSTOP and SIGCONT of signalProcessGroup.
 function ownershipFacts() {
   const module = 'src/host/programGroup.ts';
   const stop = requireDeclaration(module, 'stopProgramGroup');
@@ -1057,13 +1061,18 @@ function ownershipFacts() {
       }
       if (isCall(node, 'processGroupTarget')) {
         targets += 1;
+        const owner = ownerPath(node);
         stray ||=
           file !== module ||
           ![
             'isProcessGroupAlive',
+            'probeFindsGroup',
             'killProcessGroupBestEffort',
             'signalProcessGroup',
-          ].includes(ownerPath(node));
+          ].includes(owner) ||
+          (['isProcessGroupAlive', 'probeFindsGroup'].includes(owner) &&
+            normalize(node.parent.getText()) !==
+              'process.kill(processGroupTarget(pgid), 0)');
       }
     });
   }
@@ -1077,7 +1086,7 @@ function ownershipFacts() {
       checkedKill &&
       judgesToken &&
       rawKills > 0 &&
-      targets === 3 &&
+      targets === 4 &&
       signalParam === "signal: 'SIGSTOP' | 'SIGCONT'" &&
       !stray,
     FreezesUnseenGroup: freezeFacts(stop.body),
@@ -1350,9 +1359,103 @@ function gcFacts() {
     const rm = indexOfStatement(inner, /dependencies\.rm\(sessionDirectory/);
     finalCheck = check >= 0 && rm > check;
   }
+  // After the collectable guard and before the removal, gc reads whether
+  // program.json proves a live group for a session that is not destroyed,
+  // and skips the session when it does or when the read throws. The
+  // default dependency is provenProgramGroupRuns, which judges the group
+  // that readProvenProgramGroup gives and counts it only when a live member
+  // carries the token. A group in another pid space reads unshared there,
+  // and gc does not count it.
+  const groupRead = loop.statements.findIndex(
+    (s) =>
+      ts.isTryStatement(s) &&
+      normalize(s.tryBlock.getText()) ===
+        "{ groupRuns = manifestAfter.status !== 'destroyed' && (await dependencies.provenProgramGroupRuns(sessionDirectory)); }" &&
+      s.catchClause !== undefined &&
+      returnsOrContinues(s.catchClause.block, ts.SyntaxKind.ContinueStatement),
+  );
+  const groupSkip = guardIndex(
+    loop,
+    'groupRuns',
+    ts.SyntaxKind.ContinueStatement,
+  );
+  const defaults = requireDeclaration(
+    'src/cli/commands/gc.ts',
+    'defaultDependencies',
+  ).initializer;
+  const wired =
+    defaults !== undefined &&
+    ts.isObjectLiteralExpression(defaults) &&
+    defaults.properties.some(
+      (p) =>
+        ts.isShorthandPropertyAssignment(p) &&
+        p.name.text === 'provenProgramGroupRuns',
+    );
+  const body = (name) =>
+    requireDeclaration('src/host/programGroup.ts', name).body.statements.map(
+      (s) => normalize(s.getText()),
+    );
+  const runs = body('provenProgramGroupRuns');
+  const judge = body('judgeGroupForGc');
+  // provenProgramGroupRuns gives false for a group that gc cannot check in
+  // another pid space, and judges the group again while judgeGroupForGc
+  // reads it inconclusive. That counts only a live member that carries the
+  // token, and treats unknown as inconclusive.
+  // The loop runs at least once only with a positive GC_JUDGEMENTS.
+  const limit = requireDeclaration(
+    'src/host/programGroup.ts',
+    'GC_JUDGEMENTS',
+  ).initializer;
+  const judgesAtAll =
+    limit !== undefined &&
+    ts.isNumericLiteral(limit) &&
+    Number.isInteger(Number(limit.text)) &&
+    Number(limit.text) >= 1;
+  const judges =
+    judgesAtAll &&
+    runs.length === 4 &&
+    runs[0] ===
+      'const group = await readProvenProgramGroup(sessionDirectory);' &&
+    runs[1] ===
+      "if (group === null || 'unshared' in group) { return false; }" &&
+    runs[2] ===
+      'for (let judged = 0; judged < GC_JUDGEMENTS; judged += 1) { const runs = judgeGroupForGc(group); if (runs !== null) { return runs; } }' &&
+    runs[3] === 'return false;' &&
+    judge[0] === 'const { verdict } = judgeLiveGroup(group);' &&
+    judge[1] ===
+      "if (verdict !== 'gone') { return verdict === 'owned' ? true : verdict === 'unproven' ? false : null; }";
+  // Then a group that reads gone, whose id the probe finds while no scan
+  // shows a member, live or zombie, counts as running too. Without the
+  // probe, gone reads false.
+  const probeTail = [
+    'if (!probeFindsGroup(group.pid)) { return false; }',
+    'const live = groupHasLiveProcess(group.pid);',
+    'return live === null ? true : live ? null : false;',
+  ];
+  const tail = judge.slice(2);
+  const probes =
+    judges &&
+    tail.join('\n') === probeTail.join('\n') &&
+    normalize(
+      requireDeclaration(
+        'src/host/programGroup.ts',
+        'probeFindsGroup',
+      ).body.getText(),
+    ) ===
+      "{ try { process.kill(processGroupTarget(pgid), 0); return true; } catch (error) { if (hasErrorCode(error, 'ESRCH')) { return false; } if (hasErrorCode(error, 'EPERM')) { return true; } throw error; } }";
+  const judgesGone =
+    probes || (tail.length === 1 && tail[0] === 'return false;');
   return {
     GcSkipsNonCollectable: reconcile >= 0 && collectable > reconcile,
     GcFinalCheck: finalCheck,
+    GcKeepsLiveGroup:
+      groupRead > collectable &&
+      groupSkip === groupRead + 1 &&
+      loop.statements.indexOf(removal) > groupSkip &&
+      wired &&
+      judges &&
+      judgesGone,
+    GcProbesUnseenGroup: probes,
   };
 }
 
@@ -1393,6 +1496,11 @@ const COVERED = [
   ['src/cli/commands/destroy.ts', 'runDestroyCommand'],
   ['src/cli/commands/destroy.ts', 'rerunInNewSession'],
   ['src/cli/commands/gc.ts', 'gcSessions'],
+  ['src/cli/commands/gc.ts', 'defaultDependencies'],
+  ['src/host/programGroup.ts', 'provenProgramGroupRuns'],
+  ['src/host/programGroup.ts', 'judgeGroupForGc'],
+  ['src/host/programGroup.ts', 'GC_JUDGEMENTS'],
+  ['src/host/programGroup.ts', 'probeFindsGroup'],
   ['src/host/lifecycle.ts', 'allocateSession'],
   ['src/host/lifecycle.ts', 'launchHost'],
   ['src/host/lifecycle.ts', 'isProcessAlive'],

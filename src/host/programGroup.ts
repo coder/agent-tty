@@ -595,6 +595,68 @@ export function isProgramGroupAlive(group: ProgramGroup | null): boolean {
   );
 }
 
+// gc judges the group again at most this many times while a judgement
+// stays inconclusive.
+const GC_JUDGEMENTS = 10;
+
+// Whether gc must keep the session. gc keeps it only while it proves that
+// the group runs, so that destroy can end it. A group that gc cannot check,
+// in another pid space or behind a refused read of /proc, proves nothing,
+// and gc removes the session as it does one without a token. Else such a
+// session would stay forever, for example after a container restart that
+// keeps the home, when host.json names a pid namespace that no longer
+// exists.
+export async function provenProgramGroupRuns(
+  sessionDirectory: string,
+): Promise<boolean> {
+  const group = await readProvenProgramGroup(sessionDirectory);
+  if (group === null || 'unshared' in group) {
+    return false;
+  }
+  for (let judged = 0; judged < GC_JUDGEMENTS; judged += 1) {
+    const runs = judgeGroupForGc(group);
+    if (runs !== null) {
+      return runs;
+    }
+  }
+  return false;
+}
+
+// true: a live member carries the token. false: the group ended, or the
+// live members are not the program's. null: inconclusive. A member of a fork
+// chain can end between its stat and its autogroup read (unknown), or show
+// up only after the judge's scans. A refused read of /proc stays
+// inconclusive.
+function judgeGroupForGc(group: ProvenRecord): boolean | null {
+  const { verdict } = judgeLiveGroup(group);
+  if (verdict !== 'gone') {
+    return verdict === 'owned' ? true : verdict === 'unproven' ? false : null;
+  }
+  // gc sends no SIGSTOP, so a fork chain that no scan shows reads gone: a
+  // group id that the probe finds while no scan shows a member of the
+  // group, not even a zombie, counts.
+  if (!probeFindsGroup(group.pid)) {
+    return false;
+  }
+  const live = groupHasLiveProcess(group.pid);
+  return live === null ? true : live ? null : false;
+}
+
+function probeFindsGroup(pgid: number): boolean {
+  try {
+    process.kill(processGroupTarget(pgid), 0);
+    return true;
+  } catch (error) {
+    if (hasErrorCode(error, 'ESRCH')) {
+      return false;
+    }
+    if (hasErrorCode(error, 'EPERM')) {
+      return true;
+    }
+    throw error;
+  }
+}
+
 export function stopProgramGroup(group: ProgramGroup | null): void {
   if (group === null) {
     return;

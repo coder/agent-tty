@@ -44,6 +44,12 @@ CONSTANTS
     Terminal,               \* statuses whose policy says terminal
     GcSkipsNonCollectable,  \* gc.ts: skip when manifestAfter is not collectable
     GcFinalCheck,           \* gc.ts: re-read before rm, skip if not collectable
+    GcKeepsLiveGroup,       \* gc.ts: skip a session that is not destroyed
+                            \*   while program.json proves that its group
+                            \*   runs
+    GcProbesUnseenGroup,    \* programGroup.ts: provenProgramGroupRuns also
+                            \*   counts a group id that the probe finds
+                            \*   while no scan shows a member
     ReconcileSkipsTerminal, \* lifecycle.ts: return when the manifest is terminal
     ReconcileSkipsLiveHost, \* lifecycle.ts: return when hostPid is set and alive
     CreateRecordsHostPid,   \* lifecycle.ts: launch the host, then write the
@@ -77,7 +83,8 @@ CONSTANTS
                             \*   AGENT_TTY_SESSION_ID before it reads the
                             \*   manifest
     RecordsProgramSync,     \* hostMain.ts: program.json is written in the
-                            \*   synchronous block that spawns the program
+                            \*   synchronous block that spawns the program,
+                            \*   with a token only beside host.json
     ProvesGroupOwnership,   \* programGroup.ts: every group kill goes
                             \*   through stopProgramGroup, which kills only
                             \*   while a live member carries the token
@@ -142,7 +149,9 @@ ASSUME Token \in BOOLEAN
 ASSUME Unseen \in BOOLEAN
 ASSUME OtherPidSpace \in BOOLEAN
 ASSUME Win32 \in BOOLEAN
-ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, ReconcileSkipsTerminal,
+ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, GcKeepsLiveGroup,
+                 GcProbesUnseenGroup,
+                 ReconcileSkipsTerminal,
                  ReconcileSkipsLiveHost, CreateRecordsHostPid,
                  HostWaitsForManifest, ReconcileRereads,
                  HostSerializesWrites, HostStopsAfterTerminalWrite,
@@ -571,7 +580,10 @@ StartShutdown(ahead) ==
 \* missing manifest without the wait, or a status other than "running",
 \* throws, and the host exits. Right after the read, with no await between,
 \* the host writes host.json with writeHostRecord: its pid, the boot id and
-\* its start time from /proc/self/stat.
+\* its start time from /proc/self/stat. The model leaves out a capture that
+\* fails (a refused read of the stat, the boot id or the pid namespace),
+\* after which the host writes no host.json and records no token
+\* (RecordsProgramSync).
 HostReadsManifest ==
     /\ hostAlive /\ hpc = "boot"
     /\ ~(HostWaitsForManifest /\ mst = "none")
@@ -1070,6 +1082,31 @@ GcReadsReconciled ==
     /\ pc["gc"] = "readafter"
     /\ IF mst = "none" \/ (GcSkipsNonCollectable /\ mst \notin Collectable)
           THEN GcSkips
+          ELSE GcGoesTo("group")
+    /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, rd,
+                   lruns, destroyVars, groupVars>>
+
+\* provenProgramGroupRuns reads program.json and judges the group, as the
+\* waits of destroy do, but it counts only a group that it proves: a live
+\* member carries the token. gc sends no SIGSTOP, so with Unseen no scan
+\* shows the program's processes, and with GcProbesUnseenGroup the probe
+\* kill(-pgid, 0) then finds them. An unrelated group that took the id is
+\* in view and reads unproven. With OtherPidSpace gc cannot check the group
+\* and reads it not proven, so that a session whose pid space is gone, as
+\* after a container restart, does not stay forever. With GcKeepsLiveGroup
+\* gc skips a session that is not destroyed while it proves the group
+\* ("the session's program group still runs"). The code tests the status
+\* of manifestAfter, which cannot turn from destroyed back, so this current
+\* status skips no more often.
+GcSeesGroup ==
+    /\ ~OtherPidSpace
+    /\ \/ GroupSeen("proven")
+       \/ GcProbesUnseenGroup /\ Unseen /\ (prog \/ left)
+
+GcChecksGroup ==
+    /\ pc["gc"] = "group"
+    /\ IF GcKeepsLiveGroup /\ mst # "destroyed" /\ rec /\ GcSeesGroup
+          THEN GcSkips
           ELSE GcGoesTo("final")
     /\ UNCHANGED <<diskVars, ghostVars, sock, cpc, hostVars, shutVars, rd,
                    lruns, destroyVars, groupVars>>
@@ -1397,7 +1434,7 @@ Next ==
           \/ ReconcileWrites(p) \/ ReconcileRepairs(p)
           \/ ReconcileWritesMarked(p) \/ ReconcileUnlinksSocket(p)
     \/ GcFindsDirectory \/ GcReadsManifest \/ GcReadsReconciled
-    \/ GcFinalRead \/ GcRemoves
+    \/ GcChecksGroup \/ GcFinalRead \/ GcRemoves
     \/ ListStartsReconcile
     \/ DestroyChecksSession \/ DestroyReads \/ DestroyMarksFolder
     \/ DestroyWritesDestroyed
@@ -1545,6 +1582,16 @@ DestroyedStaysDestroyed ==
 \* pid after the host ended.
 NoUnrelatedHostKilled == ~hitUnrelatedHost
 
+\* R20: gc in the host's pid space removes the folder, and with it
+\* program.json, only once no process of the program's group runs, also
+\* none that the program left when it exited on its own. It does not count
+\* a program that no program.json named (see R16). A gc in another pid
+\* space cannot check the group, and it removes the folder as it does
+\* without a token (WitnessUnsharedGcRemovesLeftover).
+RemovedSessionStopped ==
+    (gres = "removed" /\ ~diedUnrecorded /\ ~OtherPidSpace)
+        => ~(GroupAlive \/ left)
+
 \* Witnesses. check.sh expects TLC to report each one VIOLATED, which shows
 \* that the model reaches the state: the rules above are not true only
 \* because the model can never get there.
@@ -1590,4 +1637,9 @@ WitnessWaitPassesReusedId == ~passedReused
 \* destroyed record.
 WitnessUnsharedDestroyCompletes ==
     ~(OtherPidSpace /\ ~dforce /\ wasNamed /\ dres = "ok")
+\* With OtherPidSpace gc removes an exited session while a process that
+\* the program left runs, because it cannot check the group there: the
+\* state that R20 leaves out.
+WitnessUnsharedGcRemovesLeftover ==
+    ~(OtherPidSpace /\ gres = "removed" /\ ~diedUnrecorded /\ left)
 =============================================================================

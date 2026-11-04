@@ -8,6 +8,7 @@ import {
   reconcileSession,
   removeDeadHostSocket,
 } from '../../host/lifecycle.js';
+import { provenProgramGroupRuns } from '../../host/programGroup.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import {
   isCollectableSessionStatus,
@@ -96,6 +97,7 @@ export interface GcDependencies {
     sessionDirectory: string,
     manifest: SessionRecord,
   ) => Promise<void>;
+  provenProgramGroupRuns: (sessionDirectory: string) => Promise<boolean>;
   now: () => Date;
 }
 
@@ -106,6 +108,7 @@ const defaultDependencies: GcDependencies = {
   readManifestIfExists,
   reconcileSession,
   removeDeadHostSocket,
+  provenProgramGroupRuns,
   now: () => new Date(),
 };
 
@@ -416,6 +419,29 @@ export async function gcSessions(
       result.skippedSessions.push({
         sessionId,
         reason: 'session is newer than the requested age threshold',
+      });
+      continue;
+    }
+
+    // The rm deletes program.json, the only proof of the program's group, so
+    // a process that the program left would run on out of destroy's reach.
+    // A destroyed session's group read gone before destroy recorded it.
+    let groupRuns: boolean;
+    try {
+      groupRuns =
+        manifestAfter.status !== 'destroyed' &&
+        (await dependencies.provenProgramGroupRuns(sessionDirectory));
+    } catch (error) {
+      result.skippedSessions.push({
+        sessionId,
+        reason: `failed to check the session's program group: ${getErrorMessage(error)}`,
+      });
+      continue;
+    }
+    if (groupRuns) {
+      result.skippedSessions.push({
+        sessionId,
+        reason: "the session's program group still runs (destroy ends it)",
       });
       continue;
     }

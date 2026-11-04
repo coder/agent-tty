@@ -22,6 +22,7 @@ import {
   judgeProgramGroup,
   parseAutogroup,
   parseProcStat,
+  provenProgramGroupRuns,
   readProgramGroup,
   readProvenProgramGroup,
   stopProgramGroup,
@@ -33,7 +34,11 @@ import {
   programRecordPath,
   sessionDir,
 } from '../../../src/storage/sessionPaths.js';
-import { captureHost, writeHostRecord } from '../../../src/host/hostRecord.js';
+import {
+  captureHost,
+  writeHostRecord,
+  type HostRecord,
+} from '../../../src/host/hostRecord.js';
 import { capturesToken } from '../../helpers.js';
 
 import type * as Fs from 'node:fs';
@@ -880,6 +885,130 @@ describe('a program group with a token, as a faked /proc shows it', () => {
           ? '/autogroup-7 nice 0\n'
           : null;
   }
+
+  // gc sends no SIGSTOP, so a fork chain that no scan shows reads gone. The
+  // records name this process's pid space, which only Linux records.
+  describe.runIf(platform === 'linux')('provenProgramGroupRuns', () => {
+    async function recordedSession(): Promise<string> {
+      const directory = await mkdtemp(join(tmpdir(), 'agent-tty-runs-'));
+      writeProgramRecord(directory, group);
+      writeHostRecord(directory, captureHost(process.pid) as HostRecord);
+      return directory;
+    }
+
+    it.each([
+      {
+        when: 'no scan shows a member and the probe finds the id',
+        states: [],
+        probe: 'ok',
+        runs: true,
+      },
+      {
+        when: 'only zombies are left',
+        states: ['Z'],
+        probe: 'ok',
+        runs: false,
+      },
+      {
+        when: 'the probe finds no process',
+        states: [],
+        probe: 'ESRCH',
+        runs: false,
+      },
+      {
+        when: 'a live member carries the token',
+        states: ['S'],
+        probe: 'ok',
+        runs: true,
+      },
+    ] as const)(
+      'when $when, reads the group running: $runs',
+      async ({ states, probe, runs }) => {
+        const directory = await recordedSession();
+        try {
+          procShowsTokenGroup(...states);
+          if (probe === 'ok') {
+            probeEnds('ok');
+          } else {
+            killFailsWith(probe);
+          }
+
+          expect(await provenProgramGroupRuns(directory)).toBe(runs);
+        } finally {
+          await rm(directory, { recursive: true, force: true });
+        }
+      },
+    );
+
+    // gc keeps only a group that it proves, so that destroy can end it. A
+    // group that it cannot check would keep the session forever, as after a
+    // container restart that keeps the home: host.json then names a pid
+    // namespace that no longer exists.
+    it.each([
+      {
+        when: 'host.json names another pid namespace',
+        setUp: (directory: string) => {
+          const host = captureHost(process.pid) as HostRecord;
+          writeHostRecord(directory, { ...host, pidNamespace: 'pid:[1]' });
+          procShowsTokenGroup('S');
+          probeEnds('ok');
+        },
+      },
+      {
+        when: 'a live member of the session shows no autogroup',
+        setUp: () => {
+          procShowsTokenGroup('S');
+          const read = autogroupFile.read;
+          autogroupFile.read = (file) =>
+            /^\/proc\/\d+\/autogroup$/.test(file) ? '' : (read?.(file) ?? null);
+          probeEnds('ok');
+        },
+      },
+      {
+        when: '/proc hides the processes of other users and the probe finds the id',
+        setUp: () => {
+          procHooks.mountinfo = procMount('rw,hidepid=2');
+          procShowsTokenGroup();
+          probeEnds('EPERM');
+        },
+      },
+    ])('when $when, reads the group not proven', async ({ setUp }) => {
+      const directory = await recordedSession();
+      try {
+        setUp(directory);
+
+        expect(await provenProgramGroupRuns(directory)).toBe(false);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    // A member of a fork chain can end between its stat and its autogroup
+    // read, so gc judges again.
+    it('judges again after a member that ended before its autogroup read', async () => {
+      const directory = await recordedSession();
+      try {
+        procShowsTokenGroup('S');
+        const read = autogroupFile.read;
+        let autogroupReads = 0;
+        autogroupFile.read = (file) => {
+          if (/^\/proc\/\d+\/autogroup$/.test(file)) {
+            autogroupReads += 1;
+            if (autogroupReads === 1) {
+              return '';
+            }
+          }
+          return read?.(file) ?? null;
+        };
+        probeEnds('ok');
+
+        expect(await provenProgramGroupRuns(directory)).toBe(true);
+        expect(autogroupReads).toBe(2);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+  });
 
   it.each(['EPERM', 'EACCES'])(
     'is alive and gets the kill when a live member carries the token and another process refuses its read with %s',
