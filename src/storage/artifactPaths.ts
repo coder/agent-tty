@@ -178,7 +178,9 @@ export async function ensureArtifactsDir(sessionDir: string): Promise<string> {
 
 /**
  * Returns SESSION_NOT_FOUND for an ENOENT from a write under the session
- * folder when gc removed that folder, and any other error unchanged.
+ * folder when gc removed that folder, and any other error unchanged. APFS
+ * answers EINVAL instead of ENOENT to a link or rename into a folder that
+ * another process removes during the call, so EINVAL counts too.
  */
 export async function sessionNotFoundIfRemoved(
   sessionDir: string,
@@ -186,7 +188,7 @@ export async function sessionNotFoundIfRemoved(
 ): Promise<unknown> {
   assertAbsolutePath(sessionDir, 'sessionDir');
 
-  if (!hasErrorCode(error, 'ENOENT')) {
+  if (!hasErrorCode(error, 'ENOENT') && !hasErrorCode(error, 'EINVAL')) {
     return error;
   }
 
