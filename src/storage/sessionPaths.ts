@@ -3,6 +3,7 @@ import { basename, dirname, isAbsolute, resolve } from 'node:path';
 import process from 'node:process';
 
 import {
+  CREATE_FAILED_MARKER_FILENAME,
   DESTROY_MARKER_FILENAME,
   EVENT_LOG_FILENAME,
   HOST_RECORD_FILENAME,
@@ -84,6 +85,12 @@ export function hostRecordPath(sessionDirectory: string): string {
 
 export function destroyMarkerPath(sessionDirectory: string): string {
   return childPath(sessionDirectory, DESTROY_MARKER_FILENAME);
+}
+
+// A create that gave up writes this empty file, so a host that the manifest
+// does not name yet stops its session itself.
+export function createFailedMarkerPath(sessionDirectory: string): string {
+  return childPath(sessionDirectory, CREATE_FAILED_MARKER_FILENAME);
 }
 
 // One root per uid, so that no other user can create a Home's folder in it.

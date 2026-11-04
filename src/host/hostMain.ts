@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -75,6 +76,7 @@ import { captureSnapshotResult } from '../snapshot/capture.js';
 import { resolveHome } from '../storage/home.js';
 import { readManifestIfExists } from '../storage/manifests.js';
 import {
+  createFailedMarkerPath,
   eventLogPath,
   manifestPath,
   sessionDir,
@@ -328,6 +330,11 @@ export async function runHost(
     };
   });
 
+  // A create that gave up before the spawn wrote the create-failed marker.
+  if (existsSync(createFailedMarkerPath(sessDir))) {
+    await eventLog.close();
+    return;
+  }
   if (sigterm.received) {
     await eventLog.close();
     return;
@@ -1268,6 +1275,14 @@ export async function runHost(
   try {
     writeProgramRecord(sessDir, program);
     await persistManifest();
+
+    // That write names the program before this check, and a create that
+    // gives up writes the marker before it reads the manifest. So the host
+    // finds the marker, or create finds the program and stops the host.
+    if (existsSync(createFailedMarkerPath(sessDir))) {
+      await initiateShutdown();
+      return;
+    }
 
     if (!isSessionCommandable(state)) {
       await initiateShutdown();

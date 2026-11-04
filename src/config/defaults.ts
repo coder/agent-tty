@@ -18,3 +18,4 @@ export const EVENT_LOG_FILENAME = 'events.jsonl';
 export const PROGRAM_RECORD_FILENAME = 'program.json';
 export const HOST_RECORD_FILENAME = 'host.json';
 export const DESTROY_MARKER_FILENAME = 'destroyed';
+export const CREATE_FAILED_MARKER_FILENAME = 'create-failed';

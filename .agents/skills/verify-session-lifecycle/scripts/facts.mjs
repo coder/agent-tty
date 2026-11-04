@@ -256,6 +256,7 @@ function createFacts() {
       launch >= 0 && launch < write && pidInManifest && onlyThroughCallback,
     CreateRecordsHost: recordsHost,
     CreateStopsOnGiveUp: stopsOnGiveUp(create.body),
+    HostChecksCreateFailed: checksCreateFailed(create.body),
   };
 }
 
@@ -267,26 +268,38 @@ function createFacts() {
 // handle, and runHost registers its SIGTERM handler before it waits for the
 // manifest, notes a SIGTERM until the spawn, and skips the spawn when a
 // SIGTERM came first.
-function stopsOnGiveUp(body) {
-  const stops = body.statements.some((s) => {
+// The catch of the try whose only statement is the readiness wait, as
+// normalized statements, or null when runCreateCommand has no such try.
+function giveUpCatch(body) {
+  for (const s of body.statements) {
     if (!ts.isTryStatement(s) || s.catchClause === undefined) {
-      return false;
+      continue;
     }
     const tried = s.tryBlock.statements.map((t) => normalize(t.getText()));
-    const st = s.catchClause.block.statements.map((t) =>
-      normalize(t.getText()),
-    );
-    return (
+    if (
       tried.length === 1 &&
       tried[0] ===
-        'result = await waitForReadyHost(socketFile, sessionDirectory, sessionId);' &&
-      st.length === 4 &&
-      st[0].startsWith('invariant(host !== undefined,') &&
-      st[2] ===
-        "if (process.platform !== 'win32' || manifest?.childPid != null) { host.stop(); }" &&
-      st[3] === 'throw withSessionId(error, sessionId);'
-    );
-  });
+        'result = await waitForReadyHost(socketFile, sessionDirectory, sessionId);'
+    ) {
+      return s.catchClause.block.statements.map((t) => normalize(t.getText()));
+    }
+  }
+  return null;
+}
+
+function stopsOnGiveUp(body) {
+  const st = giveUpCatch(body) ?? [];
+  const stops =
+    st.length >= 4 &&
+    st[0].startsWith('invariant(host !== undefined,') &&
+    st
+      .at(-3)
+      .startsWith(
+        'const manifest = await readManifestIfExists( manifestPath(sessionDirectory), )',
+      ) &&
+    st.at(-2) ===
+      "if (process.platform !== 'win32' || manifest?.childPid != null) { host.stop(); }" &&
+    st.at(-1) === 'throw withSessionId(error, sessionId);';
   const launch = normalize(
     requireDeclaration('src/host/lifecycle.ts', 'launchHost').getText(),
   );
@@ -305,6 +318,49 @@ function stopsOnGiveUp(body) {
     handler < wait &&
     wait < skip &&
     skip === spawn - 1
+  );
+}
+
+// The give-up catch writes the create-failed marker right before its manifest
+// read, so the read comes after the marker. runHost checks for the marker right
+// before its SIGTERM skip, before the spawn, and right after its start-up
+// manifest write lands, before the listen, and then shuts down. So a host
+// whose start-up write landed before create's read is named by that read,
+// and a host whose write landed after it finds the marker.
+function checksCreateFailed(body) {
+  const st = giveUpCatch(body) ?? [];
+  const marks =
+    st.length === 5 &&
+    st[1].startsWith(
+      'await writeCreateFailedMarker( createFailedMarkerPath(sessionDirectory), sessionId, ).catch(',
+    ) &&
+    st[2].startsWith('const manifest = await readManifestIfExists(');
+  const run = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
+  const check = indexOfStatement(
+    run,
+    /^if \(existsSync\(createFailedMarkerPath\(sessDir\)\)\) \{\s*await eventLog\.close\(\);\s*return;\s*\}$/,
+  );
+  const skip = indexOfStatement(
+    run,
+    /^if \(sigterm\.received\) \{\s*await eventLog\.close\(\);\s*return;\s*\}$/,
+  );
+  const last = run.statements.at(-1);
+  const tried =
+    last !== undefined && ts.isTryStatement(last)
+      ? last.tryBlock.statements.map((t) => normalize(t.getText()))
+      : [];
+  const write = tried.indexOf('await persistManifest();');
+  const listen = tried.findIndex((t) =>
+    t.startsWith('rpcListenPromise = listenInSocketDirectory('),
+  );
+  return (
+    marks &&
+    check >= 0 &&
+    check === skip - 1 &&
+    write >= 0 &&
+    tried[write + 1] ===
+      'if (existsSync(createFailedMarkerPath(sessDir))) { await initiateShutdown(); return; }' &&
+    write + 1 < listen
   );
 }
 
@@ -466,9 +522,17 @@ function repairFacts() {
         normalize(check.thenStatement.getText()),
       );
   });
-  const marker = requireDeclaration(
+  // writeDestroyMarker writes through the helper that it shares with
+  // writeCreateFailedMarker.
+  const marker = normalize(
+    requireDeclaration(
+      'src/storage/manifests.ts',
+      'writeDestroyMarker',
+    ).body.getText(),
+  );
+  const emptyMarker = requireDeclaration(
     'src/storage/manifests.ts',
-    'writeDestroyMarker',
+    'writeEmptyMarker',
   ).getText();
   const reconcile = requireDeclaration(lifecycle, 'reconcileSession').body;
   const marked = indexOfStatement(
@@ -490,8 +554,10 @@ function repairFacts() {
     ReconcileRepairsDestroyed:
       marks &&
       repairs &&
-      marker.includes("await replaceFileAtomic(path, '')") &&
-      !marker.includes('mkdir'),
+      marker ===
+        "{ await writeEmptyMarker(path, sessionId, 'destroy marker'); }" &&
+      emptyMarker.includes("await replaceFileAtomic(path, '')") &&
+      !emptyMarker.includes('mkdir'),
     ReconcileRepairsMarked:
       marked >= 0 &&
       marked < terminal &&
@@ -1408,6 +1474,8 @@ const COVERED = [
   ['src/storage/manifests.ts', 'writeValidatedJsonFileSync'],
   ['src/storage/manifests.ts', 'writeManifest'],
   ['src/storage/manifests.ts', 'writeDestroyMarker'],
+  ['src/storage/manifests.ts', 'writeCreateFailedMarker'],
+  ['src/storage/manifests.ts', 'writeEmptyMarker'],
   ['src/protocol/sessionStatusPolicy.ts', 'SESSION_STATUS_POLICIES'],
 ];
 
@@ -1427,6 +1495,7 @@ const RUN_HOST_PARTS = [
   /^pty\.onExit\(/,
   /^process\.on\('SIGTERM'/,
   /^let onSigterm = /,
+  /^if \(existsSync\(createFailedMarkerPath\(sessDir\)\)\) \{/,
   /^if \(sigterm\.received\) \{/,
   /^invariant\(!sigterm\.received/,
   /^onSigterm = startShutdown;/,

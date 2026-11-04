@@ -1716,6 +1716,15 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
         `--import=${pathToFileURL(resolve('test/fixtures/denied-autogroup.ts')).href}`,
       ],
     ],
+    // create skips the SIGTERM while the manifest names no program, and the
+    // host finds the create-failed marker after its start-up write.
+    [
+      'on Windows, where SIGTERM ends the host at once',
+      [
+        `--import=${pathToFileURL(resolve('test/fixtures/denied-autogroup.ts')).href}`,
+        `--import=${pathToFileURL(resolve('test/fixtures/fake-win32-create.ts')).href}`,
+      ],
+    ],
   ])('a create that gives up %s', (_name, preloads) => {
     let pgid = 0;
 
@@ -1807,6 +1816,79 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
       );
     }, 60_000);
   });
+
+  // The held event-log open keeps the host between its manifest read and its
+  // spawn until create has given up. On Windows create sends no SIGTERM while
+  // the manifest names no program, so only the marker stops the spawn.
+  it('a create that gives up on Windows before its host spawns leaves no program', async () => {
+    const holdLog = join(testHome, 'hold.log');
+    const release = join(testHome, 'release');
+    const creator = spawn(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        './src/cli/main.ts',
+        'create',
+        '--json',
+        '--',
+        '/bin/sh',
+        '-c',
+        'trap "" HUP; sleep 300 & wait',
+      ],
+      {
+        stdio: ['ignore', 'pipe', 'ignore'],
+        env: {
+          ...process.env,
+          AGENT_TTY_HOME: testHome,
+          REPLAY_LOG: holdLog,
+          REPLAY_RELEASE: release,
+          REPLAY_HOLD: '_host:open:/events.jsonl:1:60000',
+          NODE_OPTIONS: [
+            process.env.NODE_OPTIONS ?? '',
+            `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+            `--import=${pathToFileURL(resolve('test/fixtures/fake-win32-create.ts')).href}`,
+          ].join(' '),
+        },
+      },
+    );
+    let stdout = '';
+    creator.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString('utf8');
+    });
+    const creatorExit = once(creator, 'exit');
+    const deadline = Date.now() + 15_000;
+    while (
+      !(await readFile(holdLog, 'utf8').then(
+        (log) => log.includes('hold open'),
+        () => false,
+      ))
+    ) {
+      expect(Date.now()).toBeLessThan(deadline);
+      await sleep(50);
+    }
+    const [sessionId] = await readdir(join(testHome, 'sessions'));
+    const directory = sessionDir(testHome, sessionId as string);
+    const hostPid = SessionRecordSchema.parse(
+      JSON.parse(await readFile(manifestPath(directory), 'utf8')),
+    ).hostPid as number;
+
+    const [code] = (await creatorExit) as [number | null];
+    await writeFile(release, '');
+
+    expect(code).toBe(6);
+    expect(JSON.parse(stdout)).toMatchObject({
+      ok: false,
+      error: { code: 'HOST_UNREACHABLE', details: { sessionId } },
+    });
+    const stopDeadline = Date.now() + 20_000;
+    while (isProcessAlive(hostPid)) {
+      expect(Date.now()).toBeLessThan(stopDeadline);
+      await sleep(100);
+    }
+    expect(existsSync(programRecordPath(directory))).toBe(false);
+    expect(inspectSession(testHome, sessionId as string).status).toBe('failed');
+  }, 60_000);
 
   // A SIGTERM that the default action would turn into a host death between
   // the spawn and program.json leaves a program that no file names.
