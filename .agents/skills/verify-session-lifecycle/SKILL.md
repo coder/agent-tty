@@ -65,7 +65,7 @@ From the repo root:
 .agents/skills/verify-session-lifecycle/scripts/check.sh
 ```
 
-It needs `node`, Java 11 or newer (`java -version`), and the network once: the first run downloads `tla2tools.jar` 1.7.4 into this skill's `.cache/` folder (git ignores it) and checks its sha256. On a CI runner with 4 vCPUs and the default `CHECK_JOBS` of 4 it takes about an hour, so CI runs it in four shares. Ten runs explore more than 20 million distinct states each, so `CHECK_JOBS=84` starts every run at once and takes about as long as the longest run. `JAVA=/path/to/java` picks another Java. `TLA2TOOLS_JAR=/path/to/tla2tools.jar` uses a jar you already have, which must be the same 1.7.4 build. `CHECK_OUT=<folder>` keeps the results in that folder (default: a new temp folder, printed at the end).
+It needs `node`, Java 11 or newer (`java -version`), and the network once: the first run downloads `tla2tools.jar` 1.7.4 into this skill's `.cache/` folder (git ignores it) and checks its sha256. On a CI runner with 4 vCPUs and the default `CHECK_JOBS` of 4 it takes about an hour, so CI runs it in four shares. Eleven runs explore more than 20 million distinct states each, so `CHECK_JOBS=84` starts every run at once and takes about as long as the longest run. `JAVA=/path/to/java` picks another Java. `TLA2TOOLS_JAR=/path/to/tla2tools.jar` uses a jar you already have, which must be the same 1.7.4 build. `CHECK_OUT=<folder>` keeps the results in that folder (default: a new temp folder, printed at the end).
 
 What it does:
 
