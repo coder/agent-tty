@@ -389,8 +389,10 @@ function procShowsEveryUser(): boolean {
 }
 
 // Whether a scan of /proc shows a thread of the group that is not a zombie,
-// or null when a read is refused, so the scan proves nothing.
+// or null when a read is refused or the scan shows no member at all, as a
+// /proc of another pid namespace does, so the scan proves nothing.
 function scanFindsLiveThread(group: number): boolean | null {
+  let seen = false;
   try {
     for (const entry of readdirSync('/proc')) {
       if (!/^\d+$/.test(entry)) {
@@ -404,6 +406,7 @@ function scanFindsLiveThread(group: number): boolean | null {
         ) {
           continue;
         }
+        seen = true;
         tasks = readdirSync(`/proc/${entry}/task`);
       } catch (error) {
         if (isGone(error)) {
@@ -436,7 +439,7 @@ function scanFindsLiveThread(group: number): boolean | null {
     }
     throw error;
   }
-  return false;
+  return seen ? false : null;
 }
 
 // A killed process stays a zombie until its parent reaps it. An orphan's

@@ -23,6 +23,7 @@ import { parseProcStat } from '../../src/host/programGroup.js';
 import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
 import { SessionRecordSchema } from '../../src/protocol/schemas.js';
 import { writeManifest } from '../../src/storage/manifests.js';
+import { hasErrorCode } from '../../src/util/hasErrorCode.js';
 import {
   manifestPath,
   programRecordPath,
@@ -1933,7 +1934,13 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
         ) {
           expect(Date.now()).toBeLessThan(deadline);
           await sleep(20);
-          [sessionId] = await readdir(sessions).catch((): string[] => []);
+          // create makes the sessions folder only after it starts.
+          [sessionId] = await readdir(sessions).catch((error: unknown) => {
+            if (hasErrorCode(error, 'ENOENT')) {
+              return [];
+            }
+            throw error;
+          });
         }
       } finally {
         create.kill('SIGKILL');
