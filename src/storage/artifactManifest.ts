@@ -1,5 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { lstat, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  readdir,
+  rm,
+  rmdir,
+  stat,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -33,6 +42,10 @@ import { KeyedSerializer } from '../util/keyedSerializer.js';
 const ARTIFACT_MANIFEST_FILENAME = 'manifest.json';
 const ARTIFACT_MANIFEST_LOCK_FILENAME = 'manifest.json.lock';
 const MAX_LOCK_POLL_MS = 50;
+// A breaker that met another waits this long times 2^(meetings - 1), up
+// to MAX_MEETING_BACKOFF_MS, with jitter.
+const MEETING_BACKOFF_MS = 5;
+const MAX_MEETING_BACKOFF_MS = 200;
 const MAX_LOCK_RELEASE_ATTEMPTS = 3;
 const NonEmptyStringSchema = z.string().min(1);
 const IsoDatetimeSchema = z.iso.datetime();
@@ -268,14 +281,13 @@ function isOlderThan(state: LockFileState, limitMs: number): boolean {
   return Math.abs(Date.now() - state.modifiedAtMs) > limitMs;
 }
 
-function isStaleLock(
-  lockPath: string,
+// The lock, break and temp files hold their writer's record. Their owner is
+// gone when judgeHost says it is dead, or when it reads unknown and the file
+// is older than unknownOwnerStaleMs.
+function isOwnerGone(
   state: LockFileState,
   timing: ManifestLockTiming,
 ): boolean {
-  if (unreleasedLocks.get(lockPath) === state.contents) {
-    return true;
-  }
   const owner = parseLockOwner(state.contents);
   // Without a process record the pid may belong to another pid namespace.
   const verdict =
@@ -285,6 +297,28 @@ function isStaleLock(
   return verdict === 'unknown'
     ? isOlderThan(state, timing.unknownOwnerStaleMs)
     : verdict === 'dead';
+}
+
+// A break file is a lease: it also expires after unknownOwnerStaleMs while
+// its breaker lives, so a stopped breaker cannot block every writer.
+function isStaleBreakFile(
+  state: LockFileState,
+  timing: ManifestLockTiming,
+): boolean {
+  return (
+    isOwnerGone(state, timing) || isOlderThan(state, timing.unknownOwnerStaleMs)
+  );
+}
+
+function isStaleLock(
+  lockPath: string,
+  state: LockFileState,
+  timing: ManifestLockTiming,
+): boolean {
+  return (
+    unreleasedLocks.get(lockPath) === state.contents ||
+    isOwnerGone(state, timing)
+  );
 }
 
 async function removeIfUnchanged(
@@ -297,16 +331,54 @@ async function removeIfUnchanged(
   }
 }
 
+// Breakers announce themselves in their own folder, so listing them costs
+// nothing however many artifacts the session holds.
+function announcementFolder(lockPath: string): string {
+  return `${lockPath}.breakers`;
+}
+
+// Returns true when another breaker that is not stale announced itself.
+// It removes the announcements of stale breakers on the way. Each has a
+// name that no other writer uses, so removing it by path cannot remove a
+// live breaker's announcement.
+async function otherBreakerAnnounced(
+  lockPath: string,
+  announcementPath: string,
+  timing: ManifestLockTiming,
+): Promise<boolean> {
+  const folder = announcementFolder(lockPath);
+  for (const name of await readdir(folder)) {
+    const path = join(folder, name);
+    if (path === announcementPath) {
+      continue;
+    }
+    const state = await readLockFileState(path);
+    if (state === null) {
+      continue;
+    }
+    if (!isStaleBreakFile(state, timing)) {
+      return true;
+    }
+    await removeIfUnchanged(path, state.contents);
+  }
+  return false;
+}
+
 /**
- * Breakers take `<lock>.break` first, so only one of them can remove the
- * stale lock, and only while it still holds the bytes that were judged.
+ * A breaker first announces itself with `<lock>.breakers/<id>` and acts only
+ * when no other live breaker announced, so breakers act one at a time: of
+ * two that announce, the one that scans later sees the other. The acting
+ * breaker takes `<lock>.break` the same exclusive way, which also keeps out
+ * older agent-tty versions, and removes the stale lock only while it still
+ * holds the bytes that were judged.
  */
 async function breakStaleManifestLock(
   lockPath: string,
   temporaryPath: string,
+  announcementPath: string,
   contents: string,
   timing: ManifestLockTiming,
-): Promise<'retry' | 'held'> {
+): Promise<'retry' | 'held' | 'met'> {
   const judged = await readLockFileState(lockPath);
   if (judged === null) {
     return 'retry';
@@ -315,23 +387,51 @@ async function breakStaleManifestLock(
     return 'held';
   }
 
-  const breakPath = `${lockPath}.break`;
-  if (!(await createWithoutReplacing(temporaryPath, breakPath))) {
-    const breaker = await readLockFileState(breakPath);
-    if (breaker !== null && isOlderThan(breaker, timing.unknownOwnerStaleMs)) {
-      await removeIfUnchanged(breakPath, breaker.contents);
+  // mkdir without recursive, so a removed session folder stays removed.
+  const folder = announcementFolder(lockPath);
+  await mkdir(folder).catch((error: unknown) => {
+    if (!hasErrorCode(error, 'EEXIST')) {
+      throw error;
     }
-    return 'held';
+  });
+  try {
+    // The name is this writer's own, so it can already exist only from this
+    // writer's earlier attempt.
+    await createWithoutReplacing(temporaryPath, announcementPath);
+  } catch (error) {
+    // Another breaker removed the empty folder after the mkdir. The next
+    // attempt makes it again.
+    if (hasErrorCode(error, 'ENOENT')) {
+      return 'held';
+    }
+    throw error;
   }
   try {
-    await removeIfUnchanged(lockPath, judged.contents);
-    if (unreleasedLocks.get(lockPath) === judged.contents) {
-      unreleasedLocks.delete(lockPath);
+    if (await otherBreakerAnnounced(lockPath, announcementPath, timing)) {
+      return 'met';
     }
+    const breakPath = `${lockPath}.break`;
+    if (!(await createWithoutReplacing(temporaryPath, breakPath))) {
+      const breaker = await readLockFileState(breakPath);
+      if (breaker !== null && isStaleBreakFile(breaker, timing)) {
+        await removeIfUnchanged(breakPath, breaker.contents);
+      }
+      return 'held';
+    }
+    try {
+      await removeIfUnchanged(lockPath, judged.contents);
+      if (unreleasedLocks.get(lockPath) === judged.contents) {
+        unreleasedLocks.delete(lockPath);
+      }
+    } finally {
+      await removeIfUnchanged(breakPath, contents);
+    }
+    return 'retry';
   } finally {
-    await removeIfUnchanged(breakPath, contents);
+    await rm(announcementPath, { force: true });
+    // rmdir removes only an empty folder, so no announcement goes with it.
+    await rmdir(folder).catch(() => undefined);
   }
-  return 'retry';
 }
 
 async function removeOldLockFiles(
@@ -341,19 +441,51 @@ async function removeOldLockFiles(
 ): Promise<void> {
   const directory = dirname(lockPath);
   const lockName = basename(lockPath);
-  const names = await readdir(directory).catch((): string[] => []);
-  for (const name of names) {
-    const path = join(directory, name);
-    if (
-      path === temporaryPath ||
-      (name !== `${lockName}.break` && !name.startsWith(`${lockName}.tmp-`))
-    ) {
+  const folder = announcementFolder(lockPath);
+  const paths = [
+    ...(await readdir(directory).catch((): string[] => []))
+      .filter(
+        (name) =>
+          name === `${lockName}.break` || name.startsWith(`${lockName}.tmp-`),
+      )
+      .map((name) => join(directory, name)),
+    ...(await readdir(folder).catch((): string[] => [])).map((name) =>
+      join(folder, name),
+    ),
+  ];
+  for (const path of paths) {
+    if (path === temporaryPath) {
       continue;
     }
+    const breakFile = !basename(path).startsWith(`${lockName}.tmp-`);
     const state = await readLockFileState(path).catch(() => null);
-    if (state !== null && isOlderThan(state, timing.unknownOwnerStaleMs)) {
+    if (state === null) {
+      continue;
+    }
+    const stale = breakFile
+      ? isStaleBreakFile(state, timing)
+      : isOwnerGone(state, timing);
+    if (stale) {
       await removeIfUnchanged(path, state.contents).catch(() => undefined);
     }
+  }
+  await rmdir(folder).catch(() => undefined);
+}
+
+// A writer stopped for over unknownOwnerStaleMs while it waits can find that
+// another writer removed its temp file, so it writes the file again.
+async function refreshTemporaryFile(
+  path: string,
+  contents: string,
+): Promise<void> {
+  const now = new Date();
+  try {
+    await utimes(path, now, now);
+  } catch (error) {
+    if (!hasErrorCode(error, 'ENOENT')) {
+      throw error;
+    }
+    await writeFile(path, contents, { flag: 'wx', mode: 0o600 });
   }
 }
 
@@ -362,24 +494,29 @@ async function acquireManifestLock(
   contents: string,
   timing: ManifestLockTiming,
 ): Promise<void> {
-  const temporaryPath = `${lockPath}.tmp-${randomUUID()}`;
+  const id = randomUUID();
+  const temporaryPath = `${lockPath}.tmp-${id}`;
+  const announcementPath = join(announcementFolder(lockPath), id);
   try {
     await writeFile(temporaryPath, contents, { flag: 'wx', mode: 0o600 });
     const deadline = Date.now() + timing.waitMs;
     let pollMs = 2;
+    let meetings = 0;
+    let foundTaken = false;
     for (;;) {
-      const now = new Date();
-      await utimes(temporaryPath, now, now);
+      await refreshTemporaryFile(temporaryPath, contents);
       if (await createWithoutReplacing(temporaryPath, lockPath)) {
-        await removeOldLockFiles(lockPath, temporaryPath, timing);
+        // Writers that die while they wait for or hold the lock leave lock
+        // files behind. Only a writer that found the lock taken scans the
+        // artifacts folder for them, so a free lock costs no scan.
+        if (foundTaken) {
+          await removeOldLockFiles(lockPath, temporaryPath, timing);
+        }
         return;
       }
-      const outcome = await breakStaleManifestLock(
-        lockPath,
-        temporaryPath,
-        contents,
-        timing,
-      );
+      foundTaken = true;
+      // The check comes right after a failed link: a writer stopped past
+      // its deadline inside the break attempt still tries the link once.
       if (Date.now() >= deadline) {
         const holder = await readLockFile(lockPath).catch(() => null);
         throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
@@ -388,8 +525,24 @@ async function acquireManifestLock(
           details: { lockPath, holderPid: parseLockOwner(holder)?.pid ?? null },
         });
       }
-      if (outcome === 'held') {
-        await sleep(pollMs);
+      const outcome = await breakStaleManifestLock(
+        lockPath,
+        temporaryPath,
+        announcementPath,
+        contents,
+        timing,
+      );
+      if (outcome === 'met') {
+        // Breakers that saw each other all wait. Each meeting doubles the
+        // wait, and the jitter spreads their next attempts apart.
+        meetings += 1;
+        const backoffMs = Math.min(
+          MEETING_BACKOFF_MS * 2 ** (meetings - 1),
+          MAX_MEETING_BACKOFF_MS,
+        );
+        await sleep(backoffMs * (0.5 + Math.random()));
+      } else if (outcome === 'held') {
+        await sleep(pollMs * (0.5 + Math.random()));
         pollMs = Math.min(pollMs * 2, MAX_LOCK_POLL_MS);
       }
     }
