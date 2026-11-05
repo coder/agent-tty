@@ -1773,9 +1773,16 @@ describe.runIf(capturesToken)('a program group with a token', () => {
       // A running member without an autogroup can be a member of a fork
       // chain that ended between two reads, so the group gets SIGSTOP. Its
       // stopped member still shows no autogroup, so /proc refuses it, and
-      // the group gets SIGCONT.
+      // the group gets SIGCONT. A SIGSTOP takes effect only when the kernel
+      // runs the member, so under load a judgement can still read it
+      // running, and it gets another SIGSTOP.
+      const stops = kill.mock.calls.filter(
+        ([, signal]) => signal === 'SIGSTOP',
+      ).length;
+      expect(stops).toBeGreaterThanOrEqual(1);
+      expect(stops).toBeLessThanOrEqual(5);
       expect(kill.mock.calls).toEqual([
-        [-pid, 'SIGSTOP'],
+        ...Array.from({ length: stops }, () => [-pid, 'SIGSTOP']),
         [-pid, 'SIGCONT'],
       ]);
       expect(isProgramGroupAlive(record)).toBe(true);

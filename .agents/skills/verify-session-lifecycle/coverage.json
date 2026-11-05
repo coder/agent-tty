@@ -125,7 +125,7 @@
     "src/host/programGroup.ts#killProcessGroupBestEffort": "6d5d47cb5697681b",
     "src/host/programGroup.ts#signalProcessGroup": "c5a3a84361b67aa1",
     "src/host/programGroup.ts#isProgramGroupAlive": "f6fe01a280824f82",
-    "src/host/programGroup.ts#stopProgramGroup": "45733f4c2786197c",
+    "src/host/programGroup.ts#stopProgramGroup": "215a685d9337aeb3",
     "src/host/programGroup.ts#procShowsOwnPidSpace": "ac852506311bb328",
     "src/host/rpcClient.ts#toTransportCliError": "dd6531349c62bcbd",
     "src/host/sessionState.ts#SessionState.setDimensions": "08c4f06122d157e9",
@@ -149,7 +149,7 @@
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "cd8639012467f13e",
-    "skill:scripts/facts.mjs": "f007734bffb0f4a1",
+    "skill:scripts/facts.mjs": "ff97d3d2dfab5811",
     "skill:scripts/check.sh": "17f2ce5bd1b1b090"
   },
   "callSites": {

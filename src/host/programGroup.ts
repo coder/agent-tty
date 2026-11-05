@@ -61,6 +61,13 @@ export type ProgramGroup = ProgramRecord | ChildPidGroup | UnsharedGroup;
 const CAPTURE_BUDGET_MS = 250;
 const STOP_ATTEMPTS = 5;
 
+// A SIGSTOP takes effect only when the kernel next runs the member: about
+// 30 us on an idle machine, longer under load. stopProgramGroup waits this
+// long after each SIGSTOP, so the next judgement mostly reads the frozen
+// members stopped. A member that still runs then gets another SIGSTOP.
+const STOP_SETTLE_MS = 1;
+const settleCell = new Int32Array(new SharedArrayBuffer(4));
+
 interface ProcStat {
   readonly pid: number;
   readonly state: string;
@@ -808,6 +815,7 @@ export function stopProgramGroup(group: ProgramGroup | null): void {
       if (!frozen) {
         return;
       }
+      Atomics.wait(settleCell, 0, 0, STOP_SETTLE_MS);
     }
   } finally {
     if (frozen && !killed) {

@@ -1300,7 +1300,7 @@ function freezeFacts(body) {
     before.at(-2) === 'let frozen = false;' &&
     before.at(-1) === 'let killed = false;' &&
     guarded.tryBlock.statements.length === 1 &&
-    st.length === 6 &&
+    st.length === 7 &&
     st[1] ===
       "if ( judgement.verdict === 'unproven' || (judgement.verdict === 'unknown' && !judgement.running) ) { return; }" &&
     st[2].startsWith("if (judgement.verdict === 'owned') {") &&
@@ -1309,6 +1309,7 @@ function freezeFacts(body) {
         'if (!procShowsOwnPidSpace()) { return; }',
         "frozen = signalProcessGroup(group.pid, 'SIGSTOP') || frozen;",
         'if (!frozen) { return; }',
+        'Atomics.wait(settleCell, 0, 0, STOP_SETTLE_MS);',
       ].join('\n') &&
     normalize(
       requireDeclaration(
