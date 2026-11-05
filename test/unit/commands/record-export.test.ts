@@ -1631,7 +1631,7 @@ describe('record export command', () => {
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
-  it.each(['asciicast', 'webm'] as const)(
+  it.each(['asciicast', 'webm', 'svg'] as const)(
     'names the size limit when the event log is too large to export as %s',
     async (format) => {
       mocks.readEventLogRecords.mockRejectedValue(
