@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prepares one verification run of the agent-tty CLI from this checkout:
-# brings deps up to date with aube-lock.yaml, builds dist/, and makes an
+# brings deps up to date with pnpm-lock.yaml, builds dist/, and makes an
 # isolated run folder. Prints the path of the run's env.sh; source it in
 # every shell.
 #
@@ -37,27 +37,19 @@ mkdir "$RUN/home" "$RUN/state" "$RUN/evidence"
 RUN=$(cd "$RUN" && pwd -P)
 cd "$REPO"
 
-command -v aube >/dev/null 2>&1 || {
-  echo "start-run.sh: aube is not on PATH; run 'mise install' first" >&2
+command -v pnpm >/dev/null 2>&1 || {
+  echo "start-run.sh: pnpm is not on PATH; run 'mise install' first" >&2
   exit 2
 }
-# A partial install leaves node_modules without .bin, and then `npm run build`
-# fails with "tsc: not found": only a clean install repairs that. Otherwise
-# bring node_modules up to date with aube-lock.yaml, so a run after a
-# dependency change does not build and run the old packages. aube returns
-# quickly when nothing changed.
-if [ ! -x node_modules/.bin/tsc ]; then
-  echo "Installing dependencies (aube ci)" >&2
-  aube ci >"$RUN/install.log" 2>&1 || {
-    echo "start-run.sh: aube ci failed, see $RUN/install.log" >&2
-    exit 2
-  }
-else
-  aube install --frozen-lockfile >"$RUN/install.log" 2>&1 || {
-    echo "start-run.sh: aube install --frozen-lockfile failed, see $RUN/install.log" >&2
-    exit 2
-  }
-fi
+# Bring node_modules up to date with pnpm-lock.yaml, so a run after a
+# dependency change does not build and run the old packages. This also
+# repairs a partial install that lacks node_modules/.bin, where
+# `npm run build` fails with "tsc: not found". pnpm returns quickly when
+# nothing changed.
+pnpm install --frozen-lockfile >"$RUN/install.log" 2>&1 || {
+  echo "start-run.sh: pnpm install --frozen-lockfile failed, see $RUN/install.log" >&2
+  exit 2
+}
 
 build() {
   npm run build >"$RUN/build.log" 2>&1 || {

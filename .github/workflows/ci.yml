@@ -248,7 +248,7 @@ jobs:
       - name: Set up mise
         uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
         with:
-          install_args: --locked node python aube
+          install_args: --locked node python npm:pnpm
 
       - name: Install CI dependencies
         run: mise run bootstrap-ci
@@ -319,8 +319,8 @@ jobs:
         uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
         with:
           # The macOS jobs do not run workflow linting or Communique, so avoid
-          # installing release-only tools. They still need aube for bootstrap-ci.
-          install_args: --locked node python aube
+          # installing release-only tools. They still need pnpm for bootstrap-ci.
+          install_args: --locked node python npm:pnpm
 
       - name: Install CI dependencies
         run: mise run bootstrap-ci
@@ -366,7 +366,7 @@ jobs:
       - name: Set up mise
         uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
         with:
-          install_args: --locked node python aube
+          install_args: --locked node python npm:pnpm
 
       - name: Install CI dependencies
         run: mise run bootstrap-ci

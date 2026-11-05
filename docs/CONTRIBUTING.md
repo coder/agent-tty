@@ -9,10 +9,11 @@ mise install
 mise run bootstrap
 ```
 
-Fallback setup after installing `aube` directly:
+Fallback setup without mise: install pnpm 10 from npm (`npm install -g pnpm@10`). It switches to the version that the `packageManager` field of `package.json` pins, and its npm build bundles the `node-gyp` that `node-pty` needs on Linux. Newer pnpm majors can refuse that pin, so do not use them here. Then run:
 
 ```bash
-aube exec playwright install chromium
+pnpm install
+pnpm exec playwright install chromium
 ```
 
 ## Day-to-day workflow
