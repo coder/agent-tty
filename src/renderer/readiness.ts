@@ -17,6 +17,7 @@ export const DASHBOARD_RENDERER_UNAVAILABLE_MESSAGE =
 
 export interface LibghosttyVtProbe {
   available: boolean;
+  mouseInputAvailable?: boolean;
   reason?: string;
   detail?: string;
 }
@@ -35,7 +36,10 @@ export async function probeLibghosttyVt(
   loader: LibghosttyVtLoader = defaultLoader,
 ): Promise<LibghosttyVtProbe> {
   try {
-    const module = (await loader()) as { createTerminal?: unknown };
+    const module = (await loader()) as {
+      createTerminal?: unknown;
+      supportsMouseInput?: unknown;
+    };
     if (typeof module.createTerminal !== 'function') {
       return {
         available: false,
@@ -43,8 +47,10 @@ export async function probeLibghosttyVt(
         detail: `${LIBGHOSTTY_VT_PACKAGE} loaded but did not expose createTerminal()`,
       };
     }
+    const mouseInputAvailable = module.supportsMouseInput === true;
     return {
       available: true,
+      mouseInputAvailable,
       reason: 'libghostty-vt native module available',
       detail: `${LIBGHOSTTY_VT_PACKAGE} exposes createTerminal()`,
     };

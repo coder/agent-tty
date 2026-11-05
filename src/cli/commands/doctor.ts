@@ -19,7 +19,7 @@ import {
   type Socket,
 } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join, normalize } from 'node:path';
+import { join, normalize } from 'node:path';
 import process from 'node:process';
 
 import type { CommandContext } from '../context.js';
@@ -27,6 +27,10 @@ import type { CommandContext } from '../context.js';
 import { emitSuccess } from '../output.js';
 import type { CapabilityEntry } from '../../renderer/capabilities.js';
 
+import {
+  listenInSocketDirectory,
+  removeSocketDirectoryBestEffort,
+} from '../../host/lifecycle.js';
 import { createPty } from '../../pty/createPty.js';
 import { resolveDefaultPlaywrightBrowsersPath } from '../../renderer/browserPath.js';
 import { discoverCapabilities } from '../../renderer/capabilities.js';
@@ -41,6 +45,8 @@ import {
   sessionDir,
   socketPath,
 } from '../../storage/sessionPaths.js';
+import { satisfiesNodeRange } from '../../util/nodeRange.js';
+import { loadSupportedNodeRange } from '../../util/packageMetadata.js';
 
 const COMMAND_NAME = 'doctor';
 const CHECK_TIMEOUT_MS = 10_000;
@@ -359,16 +365,12 @@ async function runCheckGroup(
   return results;
 }
 
-function runNodeRuntimeCheck(): string {
-  const majorVersion = Number.parseInt(
-    process.versions.node.split('.')[0] ?? '',
-    10,
-  );
+async function runNodeRuntimeCheck(): Promise<string> {
+  const range = await loadSupportedNodeRange();
   assert(
-    Number.isInteger(majorVersion),
-    'unable to parse Node runtime version',
+    satisfiesNodeRange(process.versions.node, range),
+    `Node ${process.versions.node} requires ${range}`,
   );
-  assert(majorVersion >= 24, `Node ${process.versions.node} requires 24+`);
   return `Node ${process.versions.node} ok`;
 }
 
@@ -545,7 +547,6 @@ export async function runSocketViabilityCheck(
     overrides,
     async (sessionDirectory, deps) => {
       const socketFile = socketPath(sessionDirectory);
-      await deps.mkdir(dirname(socketFile), { recursive: true });
 
       let server: Server | null = null;
       let client: Socket | null = null;
@@ -560,10 +561,14 @@ export async function runSocketViabilityCheck(
           socket.end();
         });
 
-        await new Promise<void>((resolve, reject) => {
-          serverInstance.once('error', reject);
-          serverInstance.listen(socketFile, () => resolve());
-        });
+        await listenInSocketDirectory(
+          socketFile,
+          () =>
+            new Promise<void>((resolve, reject) => {
+              serverInstance.once('error', reject);
+              serverInstance.listen(socketFile, () => resolve());
+            }),
+        );
 
         client = deps.createSocketConnection(socketFile);
         await waitForSocketConnect(client);
@@ -584,6 +589,7 @@ export async function runSocketViabilityCheck(
           await closeServer(server).catch(() => undefined);
         }
         await deps.rm(socketFile, { force: true }).catch(() => undefined);
+        await removeSocketDirectoryBestEffort(socketFile);
       }
     },
   );

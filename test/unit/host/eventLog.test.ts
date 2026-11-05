@@ -169,6 +169,83 @@ describe('EventLog', () => {
     }
   });
 
+  it('startAppend reserves the seq before its write settles', async () => {
+    const eventLog = await EventLog.open(eventLogPath);
+
+    try {
+      const started = eventLog.startAppend('input_run', {
+        command: 'echo hi',
+        noWait: false,
+        marker: `__AT_MARKER_${'a'.repeat(32)}__`,
+      });
+      expect(started.seq).toBe(0);
+      expect(eventLog.getEvents().map((event) => event.type)).toEqual([
+        'input_run',
+      ]);
+
+      const nextSeq = eventLog.append('input_text', { data: 'x' });
+      await expect(started.written).resolves.toBe(0);
+      await expect(nextSeq).resolves.toBe(1);
+      const lines = (await readFile(eventLogPath, 'utf8')).trim().split('\n');
+      expect(lines.map((line) => JSON.parse(line) as { type: string })).toEqual(
+        [
+          expect.objectContaining({ seq: 0, type: 'input_run' }),
+          expect.objectContaining({ seq: 1, type: 'input_text' }),
+        ],
+      );
+    } finally {
+      await eventLog.close();
+    }
+  });
+
+  it('rolls back a startAppend whose write fails and keeps the file a valid prefix', async () => {
+    const eventLog = await EventLog.open(eventLogPath);
+    const eventLogInternals = eventLog as unknown as {
+      fileHandle: {
+        appendFile: (data: string, encoding: BufferEncoding) => Promise<void>;
+      };
+      nextSeq: number;
+      writeQueue: Promise<void>;
+    };
+
+    try {
+      await eventLog.append('output', { data: 'prompt$ ' });
+      const appendFileSpy = vi
+        .spyOn(eventLogInternals.fileHandle, 'appendFile')
+        .mockRejectedValueOnce(new Error('EIO'));
+      const started = eventLog.startAppend('input_run', {
+        command: 'echo hi',
+        noWait: false,
+        marker: `__AT_MARKER_${'b'.repeat(32)}__`,
+      });
+      expect(started.seq).toBe(1);
+      const queuedOutput = eventLog.append('output', { data: 'hi\r\n' });
+
+      await expect(started.written).rejects.toThrow('EIO');
+      await expect(queuedOutput).rejects.toThrow('EIO');
+      expect(eventLog.getEvents().map((event) => event.seq)).toEqual([0]);
+      expect(eventLogInternals.nextSeq).toBe(1);
+      appendFileSpy.mockRestore();
+      await expect(
+        eventLog.append('output', { data: 'later' }),
+      ).rejects.toThrow('EIO');
+
+      const lines = (await readFile(eventLogPath, 'utf8')).trim().split('\n');
+      expect(
+        lines.map((line) => (JSON.parse(line) as { seq: number }).seq),
+      ).toEqual([0]);
+      const reopened = await EventLog.open(eventLogPath);
+      try {
+        await expect(reopened.append('output', { data: 'x' })).resolves.toBe(1);
+      } finally {
+        await reopened.close();
+      }
+      eventLogInternals.writeQueue = Promise.resolve();
+    } finally {
+      await eventLog.close();
+    }
+  });
+
   it('appends run_complete events and round-trips them from JSONL', async () => {
     const eventLog = await EventLog.open(eventLogPath);
 
@@ -219,6 +296,54 @@ describe('EventLog', () => {
         .split('\n')
         .map((line) => JSON.parse(line) as unknown);
       expect(logLines).toEqual(reopenedEventLog.getEvents());
+    } finally {
+      await reopenedEventLog.close();
+    }
+  });
+
+  it('appends input_mouse events and round-trips their semantic and wire data', async () => {
+    const eventLog = await EventLog.open(eventLogPath);
+
+    try {
+      const seq = await eventLog.append('input_mouse', {
+        action: 'move',
+        row: 3,
+        col: 8,
+        modifiers: { shift: false, alt: false, ctrl: true },
+        rendererBackend: 'libghostty-vt',
+        dataBase64: Buffer.from('\u001b[<48;9;4M').toString('base64'),
+      });
+
+      expect(seq).toBe(0);
+      expect(await eventLog.readAll()).toEqual([
+        expect.objectContaining({
+          seq: 0,
+          type: 'input_mouse',
+          payload: {
+            action: 'move',
+            row: 3,
+            col: 8,
+            modifiers: { shift: false, alt: false, ctrl: true },
+            rendererBackend: 'libghostty-vt',
+            dataBase64: Buffer.from('\u001b[<48;9;4M').toString('base64'),
+          },
+        }),
+      ]);
+    } finally {
+      await eventLog.close();
+    }
+
+    const reopenedEventLog = await EventLog.open(eventLogPath);
+    try {
+      expect(reopenedEventLog.getEvents()).toMatchObject([
+        {
+          seq: 0,
+          type: 'input_mouse',
+          payload: {
+            dataBase64: Buffer.from('\u001b[<48;9;4M').toString('base64'),
+          },
+        },
+      ]);
     } finally {
       await reopenedEventLog.close();
     }

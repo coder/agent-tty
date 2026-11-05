@@ -84,8 +84,12 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
+      # The pinned optional @coder/libghostty-vt-node ships prebuilds for the
+      # CI runners, so native mouse tests must run here rather than skip.
       - name: Test unit
         run: mise run test-unit
+        env:
+          AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
 
   # Integration and e2e tests drive real PTY hosts and headless-browser
   # renderers, which can transiently fail under machine load (e.g. a screenshot
@@ -119,6 +123,11 @@ jobs:
 
       - name: Test integration shard
         run: npm run test:integration -- --shard=${{ matrix.shard }}
+        env:
+          AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
+          # verify-cleanup.test.ts runs cleanup.sh as pid 1 through
+          # passwordless sudo, unshare and setpriv, which these runners have.
+          AGENT_TTY_REQUIRE_PID1_UNSHARE: '1'
 
   test-e2e:
     runs-on: ubuntu-latest
@@ -146,36 +155,20 @@ jobs:
 
       - name: Test e2e shard
         run: npm run test:e2e -- --shard=${{ matrix.shard }}
+        env:
+          AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
 
-  quality-gates:
+  # Destroy and reconcile under the /proc isolation that containers and
+  # hardened hosts use: a /proc that hides the processes of other users
+  # (hidepid=2) and a private PID namespace. other-user-group.test.ts adds a
+  # live process of the nobody user to the program's group. The tests drop
+  # from root to the runner user, because root sees through hidepid and can
+  # signal the nobody user's process.
+  proc-isolation:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    needs:
-      - linux-static
-      - test-unit
-      - test-integration
-      - test-e2e
-    if: ${{ always() }}
-    steps:
-      - name: Report Linux quality gate results
-        run: |
-          echo "linux-static: ${{ needs.linux-static.result }}"
-          echo "test-unit: ${{ needs.test-unit.result }}"
-          echo "test-integration: ${{ needs.test-integration.result }}"
-          echo "test-e2e: ${{ needs.test-e2e.result }}"
-
-      - name: Fail if any Linux quality gate failed
-        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
-        run: exit 1
-
-  # macOS compilation and static-analysis counterpart to the Ubuntu quality
-  # gates above.  Tests are excluded because the macOS GitHub Actions runner
-  # has pre-existing issues with PTY spawning and Unix domain sockets that
-  # cause integration/e2e test failures.  The full test suite runs on Linux;
-  # macOS validates that the code compiles and passes static checks.
-  quality-gates-macos:
-    runs-on: macos-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    env:
+      AGENT_TTY_REQUIRE_SETPRIV: '1'
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -185,8 +178,148 @@ jobs:
       - name: Set up mise
         uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
         with:
-          # The macOS job does not run workflow linting or Communique, so avoid
-          # installing release-only tools. It still needs aube for bootstrap-ci.
+          install_args: --locked
+
+      - name: Install CI dependencies
+        run: mise run bootstrap-ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Make the other-user helper
+        run: |
+          install -m 0700 "$(command -v setpriv)" "$RUNNER_TEMP/setpriv-as"
+          sudo setcap cap_setuid,cap_setgid+ep "$RUNNER_TEMP/setpriv-as"
+          echo "AGENT_TTY_TEST_SETPRIV=$RUNNER_TEMP/setpriv-as" >> "$GITHUB_ENV"
+
+      - name: Test with another user's process
+        run: npx vitest run --maxWorkers=1 --retry=2 test/integration/other-user-group.test.ts
+
+      # The runner's sudo refuses -E, so env hands the runner's environment
+      # on to the namespace. A new proc instance, not a remount: a remount of
+      # /proc changes the superblock that the runner's own /proc shares.
+      - name: Test under a /proc mounted with hidepid=2
+        run: |
+          mapfile -d '' -t vars < <(env -0)
+          sudo env "${vars[@]}" unshare --mount --propagation private -- sh -euc '
+            mount -t proc -o hidepid=2 proc /proc
+            grep " /proc " /proc/self/mountinfo | tail -n 1 | grep -Eq "hidepid=(2|invisible)"
+            exec setpriv --reuid="$1" --regid="$2" --init-groups -- \
+              npx vitest run --maxWorkers=1 --retry=2 test/integration/lifecycle.test.ts test/integration/gc.test.ts test/integration/other-user-group.test.ts
+          ' sh "$(id -un)" "$(id -gn)"
+
+      # Node does not reap orphans, so a shell runs as PID 1 and its wait
+      # reaps the hosts reparented to it. non-reaping-init.test.ts covers an
+      # init that never reaps.
+      - name: Test in a private PID namespace
+        run: |
+          mapfile -d '' -t vars < <(env -0)
+          sudo env "${vars[@]}" unshare --pid --fork --mount-proc -- \
+            setpriv --reuid="$(id -un)" --regid="$(id -gn)" --init-groups -- \
+            sh -c '"$@" & wait $!' sh \
+            npx vitest run --maxWorkers=1 --retry=2 test/integration/lifecycle.test.ts test/integration/gc.test.ts test/integration/other-user-group.test.ts
+
+  # Model-checks the session lifecycle with the verify-session-lifecycle
+  # skill. Share 1 checks that coverage.json matches the facts and the
+  # covered code. Each share starts all its runs at once, so CHECK_JOBS
+  # must be at least the run count that check.sh prints on the share's
+  # "Runs:" line. check.sh lists the share's runs on its "Share <i>/<n> of
+  # the runs:" line. The runs that expect pass explore the whole model, and
+  # check.sh gives them the runner's CPUs as TLC workers ("CPUs:" line). So
+  # a share takes about as long as its longest run, and the job log shows
+  # how long. TLC runs only when coverage.json differs from the base, which
+  # every change to the model, its scripts, the covered code or a fact
+  # needs.
+  lifecycle-model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    name: lifecycle-model (${{ matrix.shard }}/9)
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          install_args: --locked node python aube
+
+      - name: Install CI dependencies
+        run: mise run bootstrap-ci
+
+      - name: Check that coverage.json matches the covered code
+        if: matrix.shard == 1
+        run: .agents/skills/verify-session-lifecycle/scripts/check.sh --drift-only
+
+      - name: Decide whether the model checker must run
+        id: inputs
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          if [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null &&
+            git diff --quiet "$BASE" HEAD -- .agents/skills/verify-session-lifecycle/coverage.json; then
+            echo "tlc=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "tlc=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Model-check the session lifecycle
+        if: steps.inputs.outputs.tlc == 'true'
+        env:
+          CHECK_JOBS: '12'
+          CHECK_SHARD: ${{ matrix.shard }}/9
+        run: .agents/skills/verify-session-lifecycle/scripts/check.sh
+
+  quality-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - linux-static
+      - test-unit
+      - test-integration
+      - test-e2e
+      - proc-isolation
+      - lifecycle-model
+    if: ${{ always() }}
+    steps:
+      - name: Report Linux quality gate results
+        run: |
+          echo "linux-static: ${{ needs.linux-static.result }}"
+          echo "test-unit: ${{ needs.test-unit.result }}"
+          echo "test-integration: ${{ needs.test-integration.result }}"
+          echo "test-e2e: ${{ needs.test-e2e.result }}"
+          echo "proc-isolation: ${{ needs.proc-isolation.result }}"
+          echo "lifecycle-model: ${{ needs.lifecycle-model.result }}"
+
+      - name: Fail if any Linux quality gate failed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: exit 1
+
+  # macOS counterpart to the Ubuntu quality gates above, so PTY spawning,
+  # process groups and Unix domain sockets are tested on macOS too. As one
+  # serial job it took 18 to 30 minutes, 75 to 80 percent of it in the
+  # integration tests, so the integration tests run in three shards next to
+  # one job for the static checks, the unit tests and the e2e tests.
+  checks-macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          # The macOS jobs do not run workflow linting or Communique, so avoid
+          # installing release-only tools. They still need aube for bootstrap-ci.
           install_args: --locked node python aube
 
       - name: Install CI dependencies
@@ -203,3 +336,64 @@ jobs:
 
       - name: Build
         run: mise run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Test unit
+        run: mise run test-unit
+        env:
+          AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
+
+      - name: Test e2e
+        run: mise run test-e2e
+        env:
+          AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
+
+  test-integration-macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/3, 2/3, 3/3]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          install_args: --locked node python aube
+
+      - name: Install CI dependencies
+        run: mise run bootstrap-ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Test integration shard
+        run: npm run test:integration -- --shard=${{ matrix.shard }}
+        env:
+          AGENT_TTY_REQUIRE_MOUSE_NATIVE: '1'
+
+  # The ruleset for main requires this check, so it gates the macOS jobs
+  # above the way quality-gates gates the Linux ones.
+  quality-gates-macos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - checks-macos
+      - test-integration-macos
+    if: ${{ always() }}
+    steps:
+      - name: Report macOS quality gate results
+        run: |
+          echo "checks-macos: ${{ needs.checks-macos.result }}"
+          echo "test-integration-macos: ${{ needs.test-integration-macos.result }}"
+
+      - name: Fail if any macOS quality gate failed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: exit 1

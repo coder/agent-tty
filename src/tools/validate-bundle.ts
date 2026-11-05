@@ -241,6 +241,10 @@ async function runCanonicalChecks(
       }
       continue;
     }
+    if (!isWithinRoot(bundleRoot, await realpath(artifactPath))) {
+      escapedArtifacts.push(artifact.path);
+      continue;
+    }
     if (!stats.isFile()) {
       missingArtifacts.push(artifact.path);
       continue;

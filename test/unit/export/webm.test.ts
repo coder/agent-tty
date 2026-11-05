@@ -107,6 +107,8 @@ function createMockBackend(
     overrides.getVisibleText ?? vi.fn().mockResolvedValue('');
   const finalizeVideo =
     overrides.finalizeVideo ?? vi.fn().mockResolvedValue(undefined);
+  const recordedMissingGlyphs =
+    overrides.recordedMissingGlyphs ?? vi.fn().mockResolvedValue({});
   const dispose = overrides.dispose ?? vi.fn().mockResolvedValue(undefined);
   const backend: VideoCapableRendererBackend = {
     rendererBackend: overrides.rendererBackend ?? 'mock-video-backend',
@@ -118,6 +120,7 @@ function createMockBackend(
     screenshot,
     getVisibleText,
     finalizeVideo,
+    recordedMissingGlyphs,
     dispose,
   };
 
@@ -272,6 +275,44 @@ describe('generateWebmExport', () => {
     });
   });
 
+  it('reports the glyphs that the replay drew as boxes, checked before the video closes', async () => {
+    const callOrder: string[] = [];
+    const mockBackend = createMockBackend({
+      replayWithTiming: vi.fn().mockImplementation(() => {
+        callOrder.push('replay');
+        return Promise.resolve(createReplayState());
+      }),
+      recordedMissingGlyphs: vi.fn().mockImplementation(() => {
+        callOrder.push('glyphs');
+        return Promise.resolve({
+          missingGlyphs: [{ codePoint: 'U+0378' }],
+          missingGlyphsTruncated: true,
+        });
+      }),
+      finalizeVideo: vi.fn().mockImplementation(() => {
+        callOrder.push('finalize');
+        return Promise.resolve();
+      }),
+    });
+
+    const result = await generateWebmExport(
+      {
+        sessionId: 'session-01',
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
+        manifest: createManifest(),
+        events: createEvents(),
+        outputPath: '/tmp/exports/recording-1-webm.webm',
+      },
+      { backendFactory: () => mockBackend.backend },
+    );
+
+    expect(callOrder).toEqual(['replay', 'glyphs', 'finalize']);
+    expect(result).toMatchObject({
+      missingGlyphs: [{ codePoint: 'U+0378' }],
+      missingGlyphsTruncated: true,
+    });
+  });
+
   it('falls back to ghostty-web when libghostty-vt is requested', async () => {
     const mockBackend = createMockBackend();
     const backendFactory = vi.fn(
@@ -384,16 +425,38 @@ describe('generateWebmExport', () => {
     expect(result.timingMode).toBe('recorded');
   });
 
-  it('rejects empty events', async () => {
-    await expect(
-      generateWebmExport({
+  it('exports an empty event log as a blank video at seq -1', async () => {
+    const emptyInput = {
+      sessionId: 'session-01',
+      initialCols: 80,
+      initialRows: 24,
+      events: [],
+      targetSeq: -1,
+    };
+    mocks.buildReplayInput.mockReturnValue(emptyInput);
+    const mockBackend = createMockBackend();
+
+    const result = await generateWebmExport(
+      {
         sessionId: 'session-01',
         sessionDir: '/tmp/agent-tty/sessions/session-01',
         manifest: createManifest(),
         events: [],
-        outputPath: '/tmp/exports/recording-1-webm.webm',
-      }),
-    ).rejects.toThrow('events must not be empty');
+        outputPath: '/tmp/exports/recording--1-webm.webm',
+      },
+      { backendFactory: () => mockBackend.backend },
+    );
+
+    expect(mockBackend.replayWithTiming).toHaveBeenCalledWith(
+      emptyInput,
+      expect.anything(),
+    );
+    expect(result).toMatchObject({
+      capturedAtSeq: -1,
+      durationMs: 0,
+      outputEventCount: 0,
+      resizeEventCount: 0,
+    });
   });
 
   it('rejects non-absolute output paths', async () => {

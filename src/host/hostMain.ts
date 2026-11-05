@@ -1,17 +1,35 @@
-import { chmod, mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { existsSync } from 'node:fs';
 import process from 'node:process';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { loadPackageMetadata } from '../util/packageMetadata.js';
 import {
   matchRenderWaitSnapshot,
   prepareRenderWaitCondition,
 } from '../renderWait/matcher.js';
+import { RENDER_WAIT_POLL_INTERVAL_MS } from '../renderWait/limits.js';
 import { EventLog } from './eventLog.js';
+import { captureHost, writeHostRecord } from './hostRecord.js';
+import {
+  isProcessAlive,
+  listenInSocketDirectory,
+  removeSocketDirectoryBestEffort,
+  waitForProcessesToExit,
+} from './lifecycle.js';
+import { createSerialManifestWriter } from './manifestWriter.js';
+import {
+  captureProgram,
+  programWithoutToken,
+  stopProgramGroup,
+  writeProgramRecord,
+} from './programGroup.js';
 import { buildReplayInput } from './replay.js';
 import { HostRendererManager } from './renderer.js';
 import { RpcServer, type MethodHandler } from './rpcServer.js';
-import { RunCompletionCoordinator } from './runCompletionCoordinator.js';
+import {
+  RunCompletionCoordinator,
+  type RegisteredWaitedRunCompletion,
+} from './runCompletionCoordinator.js';
 import { SessionState } from './sessionState.js';
 import { createPty } from '../pty/createPty.js';
 import { TerminalQueryResponder } from '../pty/terminalQueryResponder.js';
@@ -19,8 +37,10 @@ import { encodeKey } from '../pty/keyEncoder.js';
 import { encodePaste } from '../pty/pasteEncoder.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { isCommandableSessionStatus } from '../protocol/sessionStatusPolicy.js';
+import type { SessionRecord } from '../protocol/schemas.js';
 import type {
   MarkParams,
+  MouseParams,
   PasteParams,
   ResizeParams,
   RunParams,
@@ -45,12 +65,18 @@ import {
   type RendererName,
 } from '../renderer/names.js';
 import { resolveProfile } from '../renderer/profiles.js';
+import {
+  probeLibghosttyVt,
+  type LibghosttyVtProbe,
+} from '../renderer/readiness.js';
 import { createRendererBackend } from '../renderer/registry.js';
+import { createMouseRpcHandler } from './mouseRpc.js';
 import { captureScreenshotResult } from '../screenshot/capture.js';
 import { captureSnapshotResult } from '../snapshot/capture.js';
 import { resolveHome } from '../storage/home.js';
-import { readManifest, writeManifest } from '../storage/manifests.js';
+import { readManifestIfExists } from '../storage/manifests.js';
 import {
+  createFailedMarkerPath,
   eventLogPath,
   manifestPath,
   sessionDir,
@@ -79,6 +105,14 @@ export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
 // Idle-timeout enforcement is polling-based: actual idle duration before kill
 // may exceed idleTimeoutMs by up to checkIntervalMs (bounded by this cap).
 const IDLE_CHECK_CAP_MS = 5_000;
+const MANIFEST_WAIT_INTERVAL_MS = 20;
+const CREATE_FAILED_POLL_INTERVAL_MS = 100;
+// A create ends well within this time after its host's start-up check: its
+// readiness wait and its marker retries take about 20 s at most.
+const CREATE_FAILED_WATCH_MAX_MS = 60_000;
+// How long the host waits after SIGHUP before it kills the program's process
+// group. nvim takes about 1 s to exit on SIGHUP, and `destroy` waits about 5 s.
+const SHUTDOWN_KILL_GRACE_MS = 2_000;
 
 type WaitOutcome = {
   exitCode?: number;
@@ -133,7 +167,41 @@ export function resolveHostRendererName(
   }
 }
 
-export async function runHost(sessionId: string): Promise<void> {
+// `create` launches the host before it writes the first manifest, so the host
+// waits for that write for as long as the creating process lives. A creator
+// that has exited finished all its writes first, so the read after its
+// liveness check sees any manifest it wrote.
+export async function waitForManifestFromCreate(
+  path: string,
+  creatorPid: number,
+): Promise<SessionRecord> {
+  invariant(
+    Number.isInteger(creatorPid) && creatorPid > 0,
+    'creatorPid must be a positive integer',
+  );
+
+  let creatorAlive = isProcessAlive(creatorPid);
+  let manifest = await readManifestIfExists(path);
+  while (manifest === null && creatorAlive) {
+    await delay(MANIFEST_WAIT_INTERVAL_MS);
+    creatorAlive = isProcessAlive(creatorPid);
+    manifest = await readManifestIfExists(path);
+  }
+
+  if (manifest === null) {
+    throw makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
+      message: 'Session manifest did not appear before its creator exited.',
+      details: { manifestPath: path, creatorPid },
+    });
+  }
+
+  return manifest;
+}
+
+export async function runHost(
+  sessionId: string,
+  creatorPid: number,
+): Promise<void> {
   invariant(
     typeof sessionId === 'string' && sessionId.length > 0,
     'sessionId must be a non-empty string',
@@ -145,11 +213,31 @@ export async function runHost(sessionId: string): Promise<void> {
   const ePath = eventLogPath(sessDir);
   const sPath = socketPath(sessDir);
 
-  const manifest = await readManifest(mPath);
+  // A create that gives up sends SIGTERM at any point of the start-up. With
+  // the default action, one that came between the spawn and program.json
+  // would end the host and leave a program that no file names. Before the
+  // spawn the host only notes it, and from then on it shuts down.
+  const sigterm = { received: false };
+  let onSigterm = (): void => {
+    sigterm.received = true;
+  };
+  process.on('SIGTERM', () => {
+    onSigterm();
+  });
+
+  const manifest = await waitForManifestFromCreate(mPath, creatorPid);
   invariant(
     manifest.sessionId === sessionId,
     'session manifest sessionId must match the requested session',
   );
+  invariant(
+    manifest.hostPid === process.pid,
+    'session manifest hostPid must be this host process',
+  );
+  const hostRecord = captureHost(process.pid);
+  if (hostRecord !== null) {
+    writeHostRecord(sessDir, hostRecord);
+  }
   const idleTimeoutMs = manifest.idleTimeoutMs ?? 0;
   invariant(
     Number.isInteger(idleTimeoutMs) && idleTimeoutMs >= 0,
@@ -158,11 +246,9 @@ export async function runHost(sessionId: string): Promise<void> {
 
   const hostDefaultRendererName = resolveHostRendererName(undefined);
   const state = new SessionState(manifest);
-  invariant(
-    Number.isInteger(process.pid) && process.pid > 0,
-    'process.pid must be a positive integer',
+  const persistManifest = createSerialManifestWriter(mPath, () =>
+    state.snapshot(),
   );
-  state.setHostPid(process.pid);
 
   const eventLog = await EventLog.open(ePath);
 
@@ -179,27 +265,37 @@ export async function runHost(sessionId: string): Promise<void> {
     return packageMetadataPromise;
   };
 
-  const rendererManager = new HostRendererManager({
+  const rendererManagerOptions: ConstructorParameters<
+    typeof HostRendererManager
+  >[0] = {
     sessionId,
     sessionDir: sessDir,
+    // Boot at the creation size that replay starts from, so mouse geometry
+    // is right before the child has printed anything.
     backendFactory: (rendererName, sid, profile) =>
-      createRendererBackend(rendererName, sid, profile),
-  });
+      createRendererBackend(rendererName, sid, profile, {
+        libghosttyVt: {
+          initialCols: manifest.creationCols ?? manifest.cols,
+          initialRows: manifest.creationRows ?? manifest.rows,
+        },
+      }),
+  };
+  const rendererManager = new HostRendererManager(rendererManagerOptions);
+  const mouseRendererManager = new HostRendererManager(rendererManagerOptions);
 
-  const loadReplayInput = (targetSeq?: number) => {
-    const replayInput = buildReplayInput(
+  const loadReplayInput = (targetSeq?: number) =>
+    buildReplayInput(
       sessionId,
       state.snapshot(),
       eventLog.getEvents(),
       targetSeq,
       { trustValidated: true },
     );
-    return replayInput.targetSeq === -1 ? null : replayInput;
-  };
 
   let eventLogClosed = false;
   let ptyExitHandled = false;
   let ptyHasExited = false;
+  let ptyExitCode: number | null = null;
   let lastOutputAt = Date.now();
   let lastActivityAt = lastOutputAt;
   const hostAbortController = new AbortController();
@@ -238,6 +334,15 @@ export async function runHost(sessionId: string): Promise<void> {
     };
   });
 
+  // A create that gave up before the spawn wrote the create-failed marker.
+  if (existsSync(createFailedMarkerPath(sessDir))) {
+    await eventLog.close();
+    return;
+  }
+  if (sigterm.received) {
+    await eventLog.close();
+    return;
+  }
   const pty = createPty({
     command: manifest.command,
     cwd: manifest.cwd,
@@ -245,6 +350,7 @@ export async function runHost(sessionId: string): Promise<void> {
     rows: manifest.rows,
     env: manifest.env ?? {},
     term: manifest.term ?? 'xterm-256color',
+    sessionId,
   });
 
   invariant(
@@ -252,18 +358,39 @@ export async function runHost(sessionId: string): Promise<void> {
     'PTY child PID must be a positive integer',
   );
   state.setChildPid(pty.pid);
+  // A token proves the group only beside host.json, which names the pid
+  // space of its pid, so a host that could not record itself records none.
+  const program =
+    hostRecord === null
+      ? programWithoutToken(pty.pid)
+      : captureProgram(pty.pid);
 
   // Answer the terminal-capability queries programs emit at startup (OSC 10/11
-  // color probes, the `ESC [ 5 n` DSR sentinel). The colors mirror the default
-  // render profile so a program's light/dark choice matches a default-profile
-  // capture; the probe is answered once here, before any capture profile is
-  // known, so a capture later requested with a different `--profile` can still
-  // diverge. Without this, programs like Neovim time out waiting for a reply and
-  // print a warning (E1568) into the very output agent-tty captures.
+  // color probes, the `ESC [ 5 n` DSR sentinel, XTGETTCAP/DECRQSS 24-bit color
+  // probes). The colors mirror the default render profile so a program's
+  // light/dark choice matches a default-profile capture; the probe is answered
+  // once here, before any capture profile is known, so a capture later
+  // requested with a different `--profile` can still diverge. Without this,
+  // programs like Neovim time out waiting for a reply and print a warning
+  // (E1568) into the very output agent-tty captures.
   const defaultProfile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
   const terminalQueryResponder = new TerminalQueryResponder({
     backgroundColor: defaultProfile.backgroundColor,
     foregroundColor: defaultProfile.foregroundColor,
+  });
+  let libghosttyVtProbe: Promise<LibghosttyVtProbe> | undefined;
+  const sendMouse = createMouseRpcHandler({
+    rendererManager: mouseRendererManager,
+    profile: defaultProfile,
+    probeLibghosttyVt: () => (libghosttyVtProbe ??= probeLibghosttyVt()),
+    loadReplayInput: () => loadReplayInput(),
+    assertCommandable: () => {
+      assertSessionCommandable(state);
+    },
+    writePty: (data) => {
+      pty.write(data);
+    },
+    appendMouseEvent: (payload) => eventLog.append('input_mouse', payload),
   });
 
   const replayRendererThroughSeq = async (targetSeq: number): Promise<void> => {
@@ -272,15 +399,21 @@ export async function runHost(sessionId: string): Promise<void> {
       'targetSeq must be a non-negative integer',
     );
 
-    const replayInput = loadReplayInput(targetSeq);
-    invariant(replayInput !== null, 'run-complete replay input must exist');
-
     const rendererName = resolveHostRendererName(undefined);
     const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
     await rendererManager.withBackend(
       rendererName,
       profile,
-      replayInput,
+      () => {
+        // The latest log, not targetSeq: earlier queued work can already have
+        // replayed past targetSeq.
+        const replayInput = loadReplayInput();
+        invariant(
+          replayInput.targetSeq >= targetSeq,
+          'run-complete replay input must reach the run-complete event',
+        );
+        return replayInput;
+      },
       async (backend) => {
         const snapshot = await backend.snapshot();
         invariant(
@@ -317,6 +450,14 @@ export async function runHost(sessionId: string): Promise<void> {
     void scope.close().catch(rethrowAsync);
   };
 
+  let groupKillTimer: ReturnType<typeof setTimeout> | undefined;
+  const hangUpProgram = (): void => {
+    pty.kill();
+    groupKillTimer ??= setTimeout(() => {
+      stopProgramGroup(program);
+    }, SHUTDOWN_KILL_GRACE_MS);
+  };
+
   const startIdlePolling = (): void => {
     if (
       idleTimeoutMs <= 0 ||
@@ -346,7 +487,7 @@ export async function runHost(sessionId: string): Promise<void> {
       const elapsedIdleMs = Date.now() - lastActivityAt;
       if (elapsedIdleMs >= idleTimeoutMs) {
         clearIdleTimeout();
-        pty.kill();
+        hangUpProgram();
       }
     }, checkIntervalMs);
     scope.add('idle timeout interval', () => {
@@ -375,9 +516,9 @@ export async function runHost(sessionId: string): Promise<void> {
         hostAbortController.abort(makeAbortReason('Host is shutting down.'));
         clearIdleTimeout();
         if (isSessionCommandable(state)) {
-          pty.kill();
+          hangUpProgram();
           state.requestDestroy();
-          await writeManifest(mPath, state.snapshot());
+          await persistManifest();
         }
       } finally {
         try {
@@ -392,13 +533,13 @@ export async function runHost(sessionId: string): Promise<void> {
             eventLogClosed = true;
           }
 
-          try {
-            await rendererManager.dispose();
-          } catch {
-            // best-effort cleanup
-          }
+          await Promise.allSettled([
+            rendererManager.dispose(),
+            mouseRendererManager.dispose(),
+          ]);
 
           await rpcServer.close();
+          await removeSocketDirectoryBestEffort(sPath);
         }
       }
     })();
@@ -416,15 +557,24 @@ export async function runHost(sessionId: string): Promise<void> {
 
     ptyExitHandled = true;
     clearIdleTimeout();
+    const hungUp = groupKillTimer !== undefined;
+    clearTimeout(groupKillTimer);
 
     const exitSignal = normalizeExitSignal(signal);
     const currentStatus = state.snapshot().status;
 
     if (currentStatus === 'destroying') {
-      state.recordDestroyed({ exitCode, exitSignal });
+      // A process that the program started can outlive it.
+      stopProgramGroup(program);
     } else {
+      if (hungUp) {
+        // The program can exit on the idle hang-up while a process it
+        // started ignores SIGHUP.
+        stopProgramGroup(program);
+      }
       state.recordExit(exitCode, exitSignal);
     }
+    ptyExitCode = exitCode;
     markPtyExited();
 
     void (async () => {
@@ -433,7 +583,15 @@ export async function runHost(sessionId: string): Promise<void> {
       } finally {
         runCompletion.resetForExit();
         try {
-          await writeManifest(mPath, state.snapshot());
+          // Until the group is gone the session stays destroying, so a later
+          // reconcile retries the kill.
+          if (
+            currentStatus === 'destroying' &&
+            (await waitForProcessesToExit(null, program))
+          ) {
+            state.recordDestroyed({ exitCode, exitSignal });
+          }
+          await persistManifest();
         } finally {
           await initiateShutdown();
         }
@@ -442,10 +600,9 @@ export async function runHost(sessionId: string): Promise<void> {
   };
 
   const makeWaitExitOutcome = (): WaitOutcome => {
-    const snapshot = state.snapshot();
     const result: WaitOutcome = { timedOut: false };
-    if (snapshot.exitCode !== null) {
-      result.exitCode = snapshot.exitCode;
+    if (ptyExitCode !== null) {
+      result.exitCode = ptyExitCode;
     }
     return result;
   };
@@ -458,11 +615,15 @@ export async function runHost(sessionId: string): Promise<void> {
       // reads, producing a result that does not correspond to any real
       // point in time.
       const sessionSnapshot = state.snapshot();
+      const reportedManager =
+        rendererManager.getCurrentRendererName() === null
+          ? mouseRendererManager
+          : rendererManager;
       const rendererBackend =
-        rendererManager.getCurrentRendererName() ?? hostDefaultRendererName;
-      const rendererProfile = rendererManager.getCurrentProfileName();
-      const rendererBooted = rendererManager.isBooted();
-      const rendererBootInFlight = rendererManager.isBootInFlight();
+        reportedManager.getCurrentRendererName() ?? hostDefaultRendererName;
+      const rendererProfile = reportedManager.getCurrentProfileName();
+      const rendererBooted = reportedManager.isBooted();
+      const rendererBootInFlight = reportedManager.isBootInFlight();
 
       const packageMetadata = await getPackageMetadata();
       return {
@@ -500,11 +661,10 @@ export async function runHost(sessionId: string): Promise<void> {
 
       const rendererName = resolveHostRendererName(requestedRendererName);
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
-      const replayInput = loadReplayInput();
       const { snapshot, rendererBackend } = await rendererManager.withBackend(
         rendererName,
         profile,
-        replayInput,
+        () => loadReplayInput(),
         async (backend) => ({
           snapshot: await backend.snapshot({
             includeScrollback,
@@ -548,12 +708,11 @@ export async function runHost(sessionId: string): Promise<void> {
       })();
 
       const rendererName = resolveHostRendererName(requestedRendererName);
-      const replayInput = loadReplayInput();
 
       return await rendererManager.withBackend(
         rendererName,
         profile,
-        replayInput,
+        () => loadReplayInput(),
         async (backend) =>
           await captureScreenshotResult({
             backend,
@@ -636,20 +795,27 @@ export async function runHost(sessionId: string): Promise<void> {
       }
 
       const preparedRun = runCompletion.prepareWaitedRun();
-      const seq = await eventLog.append('input_run', {
+      const inputRun = eventLog.startAppend('input_run', {
         command,
         marker: preparedRun.marker,
         noWait,
       });
-      const completion = runCompletion.registerWaitedRun({
-        marker: preparedRun.marker,
-        inputRunSeq: seq,
-      });
-      const injectedText = `${command}\n${completion.postamble}`;
+      const { seq } = inputRun;
       const effectiveTimeoutMs = timeoutMs ?? 30_000;
       const startTime = Date.now();
-      pty.write(injectedText);
+      let completion: RegisteredWaitedRunCompletion;
+      try {
+        completion = runCompletion.registerWaitedRun({
+          marker: preparedRun.marker,
+          inputRunSeq: seq,
+        });
+        pty.write(`${command}\n${completion.postamble}`);
+      } catch (error) {
+        await Promise.allSettled([inputRun.written]);
+        throw error;
+      }
       lastActivityAt = Date.now();
+      await inputRun.written;
 
       const waitResult = await completion.wait(effectiveTimeoutMs, { signal });
       const durationMs = Date.now() - startTime;
@@ -720,6 +886,20 @@ export async function runHost(sessionId: string): Promise<void> {
         seq,
       };
     },
+    mouse: async (params: unknown, context) => {
+      const { rendererName, ...request } = params as MouseParams;
+
+      assertSessionCommandable(state);
+      await ptyIngestionQueue;
+
+      const result = await sendMouse(
+        request,
+        resolveHostRendererName(rendererName),
+        context.signal,
+      );
+      lastActivityAt = Date.now();
+      return result;
+    },
     resize: async (params: unknown) => {
       const { cols, rows } = params as ResizeParams;
 
@@ -737,8 +917,11 @@ export async function runHost(sessionId: string): Promise<void> {
       pty.resize(cols, rows);
       lastActivityAt = Date.now();
       state.setDimensions(cols, rows);
-      await writeManifest(mPath, state.snapshot());
-      await eventLog.append('resize', { cols, rows });
+      // Reserve the seq with the PTY resize, like the input handlers, so a
+      // mouse request never replays the old grid after the PTY changed.
+      const resizeLogged = eventLog.append('resize', { cols, rows });
+      await persistManifest();
+      await resizeLogged;
       return { cols, rows };
     },
     signal: async (params: unknown) => {
@@ -846,12 +1029,7 @@ export async function runHost(sessionId: string): Promise<void> {
                 return;
               }
 
-              const snapshot = state.snapshot();
-              const result: WaitOutcome = { timedOut: false };
-              if (snapshot.exitCode !== null) {
-                result.exitCode = snapshot.exitCode;
-              }
-              resolve(result);
+              resolve(makeWaitExitOutcome());
             },
             Math.min(idleDuration / 2, 100),
           );
@@ -908,14 +1086,13 @@ export async function runHost(sessionId: string): Promise<void> {
 
       const rendererName = resolveHostRendererName(requestedRendererName);
       const profile = resolveProfile(DEFAULT_RENDER_PROFILE_NAME);
-      const pollIntervalMs = 200;
       const waitScope = new ResourceScope();
       let lastVisibleText: string | undefined;
       let lastTextChangeAt = Date.now();
-      let latestCapturedAtSeq = 0;
+      let latestCapturedAtSeq = -1;
       let seenPostBaseline = false;
 
-      const pollCondition = new Promise<WaitForRenderResult>((resolve) => {
+      const polled = new Promise<WaitForRenderResult>((resolve, reject) => {
         let pollInFlight = false;
         let consecutiveFailures = 0;
 
@@ -928,11 +1105,10 @@ export async function runHost(sessionId: string): Promise<void> {
           void (async () => {
             try {
               throwIfAborted(signal);
-              const replayInput = loadReplayInput();
               const snapshot = await rendererManager.withBackend(
                 rendererName,
                 profile,
-                replayInput,
+                () => loadReplayInput(),
                 async (backend) => {
                   throwIfAborted(signal);
                   return await backend.snapshot();
@@ -987,14 +1163,13 @@ export async function runHost(sessionId: string): Promise<void> {
                 return;
               }
 
-              void pollError;
               consecutiveFailures += 1;
               if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
-                resolve({
-                  matched: false,
-                  timedOut: true,
-                  capturedAtSeq: latestCapturedAtSeq,
-                });
+                reject(
+                  pollError instanceof Error
+                    ? pollError
+                    : new Error(String(pollError)),
+                );
                 return;
               }
               // Transient — retry on next poll.
@@ -1002,7 +1177,7 @@ export async function runHost(sessionId: string): Promise<void> {
               pollInFlight = false;
             }
           })();
-        }, pollIntervalMs);
+        }, RENDER_WAIT_POLL_INTERVAL_MS);
 
         waitScope.add('waitForRender poll interval', () => {
           clearInterval(checkInterval);
@@ -1011,7 +1186,7 @@ export async function runHost(sessionId: string): Promise<void> {
 
       return await waitForScopedOperation({
         operationName: 'waitForRender',
-        operation: pollCondition,
+        operation: polled,
         scope: waitScope,
         signal,
         ...(timeoutMs === undefined
@@ -1020,8 +1195,7 @@ export async function runHost(sessionId: string): Promise<void> {
               timeoutMs,
               timeoutResult: () => {
                 try {
-                  const replayInput = loadReplayInput();
-                  latestCapturedAtSeq = replayInput?.targetSeq ?? 0;
+                  latestCapturedAtSeq = loadReplayInput().targetSeq;
                 } catch {
                   // Best-effort snapshot for timeout reporting.
                 }
@@ -1059,12 +1233,14 @@ export async function runHost(sessionId: string): Promise<void> {
       // the log can no longer be trusted to drive waits or replay artifacts.
       rethrowAsync(error);
     });
-    // Reply to terminal-capability queries (OSC 10/11, DSR) in this chunk. This
-    // runs after queuing ingestion so the canonical output path is never gated
-    // on the reply. The reply is written to the child as input and is not
-    // appended to the event log, so it is absent from snapshots/recordings;
-    // programs that emit these queries put the terminal in raw mode, so the
-    // reply is consumed rather than echoed back into the output stream.
+    // Reply to terminal-capability queries (OSC 10/11, DSR, XTGETTCAP,
+    // DECRQSS) in this chunk. This runs after queuing ingestion so the
+    // canonical output path is never gated on the reply. The reply is written
+    // to the child as input and is not appended to the event log, so it is
+    // absent from snapshots/recordings. A program that reads the reply turns
+    // off canonical mode and echo first. A query printed from an interactive
+    // shell (`printf '\e]11;?\a'`) gets its reply as typed input at the next
+    // prompt, because readline holds the same mode while it waits.
     const queryReply = terminalQueryResponder.consume(data);
     if (queryReply.length > 0) {
       pty.write(queryReply);
@@ -1096,22 +1272,63 @@ export async function runHost(sessionId: string): Promise<void> {
 
   startIdlePolling();
 
-  process.on('SIGTERM', () => {
-    startShutdown();
-  });
+  // No handler runs between the check before createPty and here.
+  invariant(!sigterm.received, 'SIGTERM is handled only after the spawn block');
+  onSigterm = startShutdown;
+
+  // A create that gives up after the check below may not stop the host: on
+  // Windows it sends nothing when its manifest read fails. It writes the
+  // create-failed marker before it exits, so the host watches for the marker
+  // while its creator runs, and once more after the creator has exited.
+  // The host is the creator's child. Linux and macOS give it a new parent
+  // when the creator exits, also while the creator is a zombie and before
+  // another process can take its pid. Windows keeps the parent pid, so there
+  // only the probe tells, and an error of the probe, such as EPERM from a
+  // process of another user that took the pid, means that the creator has
+  // exited. The watch stops after CREATE_FAILED_WATCH_MAX_MS in any case.
+  const creatorRuns = (): boolean => {
+    if (process.platform !== 'win32' && process.ppid !== creatorPid) {
+      return false;
+    }
+    try {
+      return isProcessAlive(creatorPid);
+    } catch {
+      return false;
+    }
+  };
+  const watchCreateFailed = (): void => {
+    const deadline = Date.now() + CREATE_FAILED_WATCH_MAX_MS;
+    const timer = setInterval(() => {
+      const creatorGone = !creatorRuns() || Date.now() >= deadline;
+      if (existsSync(createFailedMarkerPath(sessDir))) {
+        clearInterval(timer);
+        startShutdown();
+      } else if (creatorGone) {
+        clearInterval(timer);
+      }
+    }, CREATE_FAILED_POLL_INTERVAL_MS);
+    timer.unref();
+  };
 
   try {
-    await writeManifest(mPath, state.snapshot());
-    const socketDirectory = dirname(sPath);
-    await mkdir(socketDirectory, { recursive: true });
-    await chmod(socketDirectory, 0o700);
+    writeProgramRecord(sessDir, program);
+    await persistManifest();
+
+    // That write names the program before this check, and a create that
+    // gives up writes the marker before it reads the manifest. So the host
+    // finds the marker, or create finds the program and stops the host.
+    if (existsSync(createFailedMarkerPath(sessDir))) {
+      await initiateShutdown();
+      return;
+    }
+    watchCreateFailed();
 
     if (!isSessionCommandable(state)) {
       await initiateShutdown();
       return;
     }
 
-    rpcListenPromise = rpcServer.listen();
+    rpcListenPromise = listenInSocketDirectory(sPath, () => rpcServer.listen());
     await rpcListenPromise;
 
     if (!isSessionCommandable(state)) {

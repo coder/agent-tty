@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 import type {
+  MissingGlyph as MissingGlyphType,
+  RecordedMissingGlyph as RecordedMissingGlyphType,
   RecordDiffLine as RecordDiffLineType,
   RecordDiffResult as RecordDiffResultType,
   RecordDiffSide as RecordDiffSideType,
@@ -20,9 +22,14 @@ import {
   WaitForRenderParamsSchema,
   WaitForRenderResultSchema,
   WaitResultSchema,
+  MouseActionSchema,
+  MouseButtonSchema,
 } from './schemas.js';
+import { RendererNameSchema } from '../renderer/names.js';
 
 export {
+  MissingGlyphSchema,
+  RecordedMissingGlyphSchema,
   RecordDiffLineSchema,
   RecordDiffResultSchema,
   RecordDiffSideSchema,
@@ -62,9 +69,21 @@ const EmptyObjectSchema = z.object({}).strict();
 const NonEmptyStringSchema = z.string().min(1);
 const DurationSchema = z.number().int().positive();
 
+// The client sends a UUID (36 characters). The cap bounds the id that the
+// server echoes in every response.
+export const MAX_RPC_REQUEST_ID_CHARS = 128;
+
+// A fully styled cell takes about 56 characters in a structured snapshot with
+// cells, so a 500x200 snapshot takes about 5.6 million. This cap fits about
+// 1.2 million styled cells and still bounds the memory that one response can
+// take. A 1,000x1,000 styled snapshot (56,051,020 characters) raised the CLI's
+// peak RSS from 227 MiB (an 80x24 snapshot) to 819 to 963 MiB: about 14 bytes
+// per response character. So a response at the cap takes about 1.1 GiB.
+export const MAX_RPC_RESPONSE_CHARS = 67_108_864;
+
 export const RpcRequestSchema = z
   .object({
-    id: NonEmptyStringSchema,
+    id: z.string().min(1).max(MAX_RPC_REQUEST_ID_CHARS),
     method: NonEmptyStringSchema,
     params: z.record(z.string(), z.unknown()).optional(),
   })
@@ -75,6 +94,7 @@ export const RpcErrorSchema = z
   .object({
     code: NonEmptyStringSchema,
     message: NonEmptyStringSchema,
+    details: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 export type RpcError = z.infer<typeof RpcErrorSchema>;
@@ -217,6 +237,10 @@ export type ScreenshotParams = z.infer<typeof ScreenshotParamsSchema>;
 
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;
 
+export type MissingGlyph = MissingGlyphType;
+
+export type RecordedMissingGlyph = RecordedMissingGlyphType;
+
 export type RecordExportResult = RecordExportResultType;
 
 export type RecordDiffLine = RecordDiffLineType;
@@ -300,6 +324,77 @@ export const SendKeysResultSchema = z
   .strict();
 export type SendKeysResult = z.infer<typeof SendKeysResultSchema>;
 
+const MouseInputModifiersSchema = z
+  .object({
+    shift: z.boolean().optional(),
+    alt: z.boolean().optional(),
+    ctrl: z.boolean().optional(),
+  })
+  .strict();
+
+const MouseInputShape = {
+  action: MouseActionSchema,
+  button: MouseButtonSchema.optional(),
+  row: z.number().int().nonnegative(),
+  col: z.number().int().nonnegative(),
+  cellWidth: z.number().int().positive().max(0xffffffff).optional(),
+  cellHeight: z.number().int().positive().max(0xffffffff).optional(),
+  modifiers: MouseInputModifiersSchema.optional().default({}),
+};
+
+function refineMouseInput(
+  event: { action: string; button?: string | undefined },
+  ctx: z.RefinementCtx,
+): void {
+  if (event.action === 'move' && event.button !== undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'button must not be set for move actions',
+      path: ['button'],
+    });
+  }
+  if (event.action !== 'move' && event.button === undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'button is required for press and release actions',
+      path: ['button'],
+    });
+  }
+  if (
+    event.action === 'release' &&
+    event.button !== undefined &&
+    event.button.startsWith('wheel-')
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'wheel buttons are instantaneous press actions',
+      path: ['button'],
+    });
+  }
+}
+
+/** One cell-addressed mouse action, as a batch `mouse` step accepts it. */
+export const MouseInputSchema = z
+  .object(MouseInputShape)
+  .strict()
+  .superRefine(refineMouseInput);
+export type MouseInput = z.infer<typeof MouseInputSchema>;
+
+export const MouseParamsSchema = z
+  .object({ ...MouseInputShape, rendererName: RendererNameSchema.optional() })
+  .strict()
+  .superRefine(refineMouseInput);
+export type MouseParams = z.infer<typeof MouseParamsSchema>;
+
+export const MouseResultSchema = z
+  .object({
+    reported: z.boolean(),
+    bytesWritten: z.number().int().nonnegative(),
+    seq: z.number().int().nonnegative(),
+  })
+  .strict();
+export type MouseResult = z.infer<typeof MouseResultSchema>;
+
 export const ResizeParamsSchema = z
   .object({
     cols: z.number().int().positive(),
@@ -365,6 +460,7 @@ const RPC_METHODS = [
   'run',
   'mark',
   'sendKeys',
+  'mouse',
   'resize',
   'signal',
   'wait',
@@ -407,6 +503,10 @@ export const RpcMethodSchemas = {
   sendKeys: {
     params: SendKeysParamsSchema,
     result: SendKeysResultSchema,
+  },
+  mouse: {
+    params: MouseParamsSchema,
+    result: MouseResultSchema,
   },
   resize: {
     params: ResizeParamsSchema,

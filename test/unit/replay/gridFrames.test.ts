@@ -473,7 +473,7 @@ describe('captureGridFrames', () => {
 
     expect(capture.frames).toHaveLength(1);
     expect(capture.frames[0]).toEqual({
-      capturedAtSeq: 0,
+      capturedAtSeq: -1,
       cols: 80,
       rows: 24,
       cursorRow: 0,
@@ -482,7 +482,7 @@ describe('captureGridFrames', () => {
       holdMs: 1_000,
     });
     expect(capture).toMatchObject({
-      capturedAtSeq: 0,
+      capturedAtSeq: -1,
       cols: 80,
       rows: 24,
       rendererBackend: 'none',

@@ -35,6 +35,8 @@ agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format webm --json
 agent-tty --home "$AGENT_HOME" destroy "$SESSION_ID" --json
 ```
 
+`wait` gives up after 30 s by default and exits `11` (`WAIT_TIMEOUT`). Pass `--timeout <ms>` for a slower program, or `--timeout 0` to wait without a limit. A `batch` `wait` step without `"timeout"` uses the same 30 s default.
+
 ## Essential Commands
 
 ```bash
@@ -49,6 +51,7 @@ agent-tty --home <path> run <session-id> 'command here' --json
 agent-tty --home <path> type <session-id> 'literal text' --json
 agent-tty --home <path> paste <session-id> 'multiline payload' --json
 agent-tty --home <path> send-keys <session-id> Enter Ctrl+C --json
+agent-tty --home <path> mouse <session-id> press --button left --row 8 --col 20 --json
 agent-tty --home <path> batch <session-id> '[{"run":"htop","noWait":true},{"wait":{"screenStableMs":1000}}]' --json
 
 # Observation and proof
@@ -57,6 +60,7 @@ agent-tty --home <path> wait <session-id> --regex 'READY>$' --scope cursor-line 
 agent-tty --home <path> wait <session-id> --screen-stable-ms 1000 --json
 agent-tty --home <path> snapshot <session-id> --format text --json
 agent-tty --home <path> screenshot <session-id> --json
+agent-tty --home <path> screenshot <session-id> --out ./proof.png --json
 agent-tty --home <path> record export <session-id> --format webm --json
 ```
 
@@ -76,6 +80,13 @@ agent-tty --home "$AGENT_HOME" snapshot "$SESSION_ID" --format text --json
 ### Drive an interactive CLI or TUI
 
 Use `batch` to run an ordered sequence of input-and-`wait` steps in one call instead of separate `run`/`wait`/`send-keys` invocations. Each `wait` step is anchored to a Wait Baseline — it only observes screen state produced _after_ the preceding input step, so the sequence cannot race ahead and match a stale screen. A batch stops at the first failed step by default (`--keep-going` attempts every step).
+
+Use `mouse` for TUI hit-testing, scrolling, and drag behavior. Coordinates are
+zero-based cells. A drag is three actions: `press --button left`, one or more
+button-free `move` actions, then `release --button left`. The child must enable
+mouse tracking; a suppressed event returns `reported: false`. Mouse input
+requires the `mouse-input` capability that `agent-tty doctor --json` reports,
+and must never be replaced with a hard-coded SGR sequence.
 
 ```bash
 AGENT_HOME="$(mktemp -d)"
@@ -102,6 +113,8 @@ agent-tty --home "$AGENT_HOME" screenshot "$SESSION_ID" --json
 agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format asciicast --json
 agent-tty --home "$AGENT_HOME" record export "$SESSION_ID" --format webm --json
 ```
+
+To keep proof after the Home is removed, pass `--out <path>` to `screenshot` or `record export`. The file goes to that path and `.result.artifactPath` returns it. The parent folder must already exist, and the path must be outside the Home's `sessions/` folder.
 
 ## Anti-Patterns
 

@@ -1,0 +1,52 @@
+# src/cli
+
+## Overview
+
+This directory is the agent-tty command-line front end. `main.ts` is the bin entrypoint and the public CLI contract: it builds the Commander program, registers every command, resolves a `CommandContext` before each action, and maps command failures to output envelopes and exit codes. The command handlers live in `./commands/`. The other files hold shared pieces: context resolution, output envelopes, session target lookup, session status guards, exit codes and the `CliError` class.
+
+## Interface
+
+- [`./commands/README.md`](./commands/README.md): one handler module per CLI command.
+- `main.ts` has no exports. It builds the program named `agent-tty` and runs `main()` at module top level. [main.ts:main]
+- Global options: `--home <path>`, `--timeout-ms <n>`, `--no-color`, `--log-level <level>`, `--profile <name>`, `--renderer <name>`. Each command except `dashboard` (alias `d`) and the hidden `_host` registers its own `--json` option. [main.ts:main]
+- Commands: `version`, `doctor`, `create [command...]`, `list`, `inspect`, `destroy`, `gc`, `type`, `paste`, `run`, `batch`, `mark`, `send-keys`, `mouse`, `resize`, `signal`, `snapshot`, `screenshot`, `dashboard`, `wait`. Groups: `skills list|get|path`, `home list|forget`, `record diff|export`. A hidden `_host <session-id> <creator-pid>` command imports `src/host/hostMain.ts` and runs `runHost(sessionId, Number(creatorPid))`. [main.ts:main]
+- `resolveCommandContext(options, env?, deps?)`, `getCommandContext`, `setCommandContext`, `parseTimeoutMsOption`, `resolveRendererDefault`, `resolveLogLevel`, `clearRendererDefaultProbeCacheForTests`, and the types `GlobalCliOptions` and `CommandContext`. [context.ts:resolveCommandContext] [context.ts:CommandContext]
+- `emitSuccess`, `emitSuccessSync`, `emitFailure`, `emitCliError`, `argvHasFlag`, `exitAfterOutputFlush`, `formatSuccessOutput`, `writeJsonEnvelope`, `writeHumanLines`, `writeHumanErrorLines`, `writeStdoutSync`, `setColorEnabled`. [output.ts:emitSuccess] [output.ts:emitFailure] [output.ts:writeStdoutSync] [output.ts:argvHasFlag] [output.ts:exitAfterOutputFlush]
+- `resolveCommandTarget(options)` returns a `CommandTarget` (`sessionId`, `sessionDirectory`, `manifestPath`, `socketPath`, `manifest`). Also exports `ResolveCommandTargetOptions` and `CommandTargetManifest`. [commandTarget.ts:resolveCommandTarget] [commandTarget.ts:CommandTarget]
+- `assertSessionCommandable(manifest, sessionId)` and `checkedSessionDir(home, sessionId)`. [sessionGuards.ts:assertSessionCommandable] [sessionGuards.ts:checkedSessionDir]
+- `exitCodeForError(code)`. [exitCodes.ts:exitCodeForError]
+- `warnIfUnsupportedNode(logger, version)`. [nodeRuntime.ts:warnIfUnsupportedNode]
+- `CliError` (`code`, `retryable`, `details`, `result`). `emitCliError` copies `result` into the error envelope when it is set. [errors.ts:CliError] [output.ts:emitCliError]
+
+## Invariants
+
+- `EXIT_CODE_BY_ERROR_CODE` maps error codes to exit codes: input errors 2, `SESSION_NOT_FOUND` 3, `SESSION_NOT_RUNNING` and `SESSION_ALREADY_DESTROYED` 4, `HOST_TIMEOUT` 5, `HOST_UNREACHABLE` 6, `EXPORT_ERROR` 7, storage and manifest errors 8, `PROTOCOL_ERROR` and `RPC_ERROR` 9, `REPLAY_ERROR` 10, `WAIT_TIMEOUT` 11, `CAPABILITY_UNAVAILABLE` 12, `INTERNAL_ERROR` 1. Unknown codes give 1. A code comment marks this as a public contract documented in `docs/USAGE.md`. [exitCodes.ts:exitCodeForError]
+- `wrapAction` turns every error into an error envelope and exit code. An error that is not a `CliError` becomes `INTERNAL_ERROR` with the error's message, and its stack goes to the debug log. It picks JSON or text output from the command's parsed `--json` option, not from argv. [main.ts:wrapAction] [main.ts:toCliError]
+- After an `INTERNAL_ERROR`, `exitOnInternalError` exits the process once stdout and stderr have flushed, so a socket, browser or timer that the failed code left open cannot keep the CLI running. Other error codes let the event loop drain. [main.ts:exitOnInternalError] [output.ts:exitAfterOutputFlush]
+- When parsing fails with a `CommanderError`, `main` sets exit code 0 when Commander's own exit code is 0 (`help`, `help <command>`, `--help`) and 2 otherwise (usage errors, and no command at all). A `CommanderError` that is not help or version output is also emitted as `INVALID_INPUT` under the command name `agent-tty`, with Commander's message minus its `error: ` prefix, when `--json` is in argv before the first `--` or Commander already parsed `--json` on a command. The second case covers a `--` that an option took as its value. [main.ts:main] [main.ts:parsedJsonOption]
+- The `preAction` hook turns a context resolution error that is not a `CliError` into `INTERNAL_ERROR`. Its stack is not logged, because the log level is not resolved yet. [main.ts:main] [main.ts:toCliError]
+- At top level, a `CliError` thrown outside `wrapAction` (for example from context resolution in the `preAction` hook) is emitted under the command name `agent-tty`. Its `--json` and `--no-color` come from the options Commander parsed, which the `preAction` hook records first. When parsing did not finish, they come from argv before the first `--`. [main.ts:main] [output.ts:argvHasFlag]
+- `emitCliError` writes the error to stderr as `code: message` when a JSON envelope is already on stdout, so stdout never holds two envelopes. [output.ts:emitCliError]
+- Other errors at top level, such as a failure of the hidden `_host` action, are rethrown. [main.ts:main]
+- The envelope shapes come from `src/protocol/envelope.ts` (`createSuccessEnvelope`, `createErrorEnvelope`). `output.ts` defines no schema. [output.ts:emitSuccess]
+- Home precedence is `--home`, then `AGENT_TTY_HOME`, then `resolveHome`. An explicit Home must be non-empty and absolute, else `INVALID_INPUT`. The returned context is frozen with `Object.freeze`. [context.ts:resolveCommandContext]
+- `--timeout-ms` must match `/^\d+$/`, else `INVALID_DURATION`. [context.ts:parseTimeoutMsOption]
+- `resolveCommandTarget` throws `INVALID_SESSION_ID` for an invalid ID and `SESSION_NOT_FOUND` for a missing manifest. It then requires a commandable status through `assertSessionCommandable` and asserts `status === 'running'`. [commandTarget.ts:resolveCommandTarget]
+- `assertSessionCommandable` throws `SESSION_ALREADY_DESTROYED` for destroyed sessions and `SESSION_NOT_RUNNING` for other non-commandable statuses. [sessionGuards.ts:assertSessionCommandable]
+- `checkedSessionDir` throws `INVALID_SESSION_ID` when `sessionDir` rejects the ID (empty, `.`, `..`, or a path separator). Every command that takes a session ID resolves it through this guard. [sessionGuards.ts:checkedSessionDir]
+- With color disabled, human output has ANSI escapes stripped. [output.ts:writeHumanLines]
+
+## Side Effects
+
+- `emitSuccess` writes to stdout. `emitFailure` writes the error envelope to stdout with `--json`, or `code: message` to stderr without it. [output.ts:emitSuccess] [output.ts:emitFailure]
+- `writeStdoutSync` writes to fd 1 with `fs.writeSync`. [output.ts:writeStdoutSync]
+- `emitCliError` sets `process.exitCode`. `exitAfterOutputFlush` calls `process.exit()` from the stderr write callback. `argvHasFlag` reads `process.argv`. [output.ts:emitCliError] [output.ts:exitAfterOutputFlush] [output.ts:argvHasFlag]
+- The `preAction` hook writes `AGENT_TTY_HOME`, `AGENT_TTY_LOG_LEVEL` and the host renderer key into `process.env`. It sets or deletes `AGENT_TTY_RENDERER`. It calls `warnIfUnsupportedNode`, which reads `package.json` and logs a warning when the Node version is outside its `engines.node` range. When `package.json` cannot be read or its range uses a comparator that `satisfiesNodeRange` does not support, it logs that at debug and skips the check. [main.ts:main]
+- `resolveCommandContext` reads `AGENT_TTY_HOME`, `AGENT_TTY_LOG_LEVEL`, `AGENT_TTY_PROFILE` and `AGENT_TTY_RENDERER`. It reads the config file through `loadConfigFile(home)` (`src/config/resolveConfig.ts`). When no renderer is configured, it dynamically imports libghostty-vt through `probeLibghosttyVt` and caches the result for the whole process. [context.ts:resolveCommandContext] [src/renderer/readiness.ts:probeLibghosttyVt]
+- `resolveCommandTarget` reads the session manifest through `readManifestIfExists`. [commandTarget.ts:resolveCommandTarget]
+
+## Verification
+
+- Run: `npx vitest run test/unit/cli test/unit/commands`
+- Integration (spawns `src/cli/main.ts` through `test/helpers.ts`): `npx vitest run --maxWorkers=1 test/integration/cli.test.ts`
+- Run: `npm run typecheck`

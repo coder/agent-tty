@@ -17,6 +17,7 @@ import { runHomeListCommand } from './commands/home/list.js';
 import { runInspectCommand } from './commands/inspect.js';
 import { runListCommand } from './commands/list.js';
 import { runMarkCommand } from './commands/mark.js';
+import { runMouseCommand } from './commands/mouse.js';
 import { runPasteCommand } from './commands/paste.js';
 import { runRunCommand } from './commands/run.js';
 import { runRecordDiffCommand } from './commands/record-diff.js';
@@ -40,8 +41,13 @@ import {
   type GlobalCliOptions,
 } from './context.js';
 import { CliError } from './errors.js';
-import { exitCodeForError } from './exitCodes.js';
-import { emitFailure, setColorEnabled } from './output.js';
+import { warnIfUnsupportedNode } from './nodeRuntime.js';
+import {
+  argvHasFlag,
+  emitCliError,
+  exitAfterOutputFlush,
+  setColorEnabled,
+} from './output.js';
 import {
   DEFAULT_COLS,
   DEFAULT_ROWS,
@@ -50,7 +56,9 @@ import {
   HOST_RENDERER_ENV_KEY,
 } from '../config/defaults.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
+import { DEFAULT_WAIT_TIMEOUT_MS } from '../renderWait/limits.js';
 import { invariant } from '../util/assert.js';
+import type { Logger } from '../util/logger.js';
 
 function parseIntegerOption(value: string): number {
   return Number.parseInt(value, 10);
@@ -76,19 +84,30 @@ function collectStringOption(value: string, previous: string[] = []): string[] {
   return [...previous, value];
 }
 
-function emitCliError(commandName: string, error: CliError): void {
-  const json = process.argv.includes('--json');
-  emitFailure({
-    command: commandName,
-    json,
-    error: {
-      code: error.code,
-      message: error.message,
-      retryable: error.retryable,
-      details: error.details,
-    },
+function toCliError(error: unknown, logger?: Logger): CliError {
+  if (error instanceof CliError) {
+    return error;
+  }
+
+  logger?.debug('unexpected error', error);
+  const message = error instanceof Error ? error.message : String(error);
+  return makeCliError(ERROR_CODES.INTERNAL_ERROR, {
+    ...(message.length > 0 && { message }),
+    cause: error,
   });
-  process.exitCode = exitCodeForError(error.code);
+}
+
+function exitOnInternalError(error: CliError): void {
+  if (error.code === ERROR_CODES.INTERNAL_ERROR) {
+    exitAfterOutputFlush();
+  }
+}
+
+function parsedJsonOption(command: Command): boolean {
+  return (
+    command.opts<{ json?: boolean }>().json === true ||
+    command.commands.some(parsedJsonOption)
+  );
 }
 
 function getActionCommand(rawArgs: readonly unknown[]): Command {
@@ -106,9 +125,11 @@ function wrapAction<Args extends unknown[]>(
 ): (...rawArgs: [...Args, Command]) => Promise<void> {
   return async (...rawArgs: [...Args, Command]) => {
     const command = getActionCommand(rawArgs);
+    let logger: Logger | undefined;
 
     try {
       const context = await getCommandContext(command);
+      logger = context.logger;
       setColorEnabled(context.colorEnabled);
       context.logger.debug(`starting ${commandName} command`, {
         logLevel: context.logLevel,
@@ -119,15 +140,24 @@ function wrapAction<Args extends unknown[]>(
       await fn(...([...args, context] as [...Args, CommandContext]));
       context.logger.debug(`completed ${commandName} command`);
     } catch (error: unknown) {
-      if (error instanceof CliError) {
-        emitCliError(commandName, error);
-        return;
-      }
-
-      throw error;
+      const cliError = toCliError(error, logger);
+      emitCliError(
+        commandName,
+        cliError,
+        command.opts<{ json?: boolean }>().json === true,
+      );
+      exitOnInternalError(cliError);
     }
   };
 }
+
+let parsedOutputOptions: { json: boolean; color: boolean } | undefined;
+
+const HELP_OUTPUT_CODES: ReadonlySet<string> = new Set([
+  'commander.help',
+  'commander.helpDisplayed',
+  'commander.version',
+]);
 
 const CODING_AGENT_HELP_INTRO =
   'MANDATORY FOR CODING AGENTS: read the `agent-tty` skill first. If your agent already loaded that skill, follow it; otherwise run `agent-tty skills get agent-tty` before any other agent-tty command.';
@@ -158,9 +188,17 @@ async function main(): Promise<void> {
 
   program.hook('preAction', async (_thisCommand, actionCommand) => {
     const globalOptions = actionCommand.optsWithGlobals<GlobalCliOptions>();
+    parsedOutputOptions = {
+      json: actionCommand.opts<{ json?: boolean }>().json === true,
+      color: globalOptions.color ?? true,
+    };
     const rendererConfiguredByEnv =
       process.env.AGENT_TTY_RENDERER !== undefined;
-    const context = await resolveCommandContext(globalOptions);
+    const context = await resolveCommandContext(globalOptions).catch(
+      (error: unknown) => {
+        throw toCliError(error);
+      },
+    );
     process.env.AGENT_TTY_HOME = context.home;
     // Propagate the resolved log level to the process environment so that
     // subsystems instantiated outside the CLI context (e.g., renderer backends,
@@ -181,6 +219,7 @@ async function main(): Promise<void> {
     }
     setColorEnabled(context.colorEnabled);
     setCommandContext(actionCommand, context);
+    await warnIfUnsupportedNode(context.logger, process.versions.node);
     context.logger.debug('resolved command context', {
       command: actionCommand.name(),
       home: context.home,
@@ -431,8 +470,8 @@ async function main(): Promise<void> {
           options: { force: boolean; json: boolean },
           context: CommandContext,
         ) => {
-          void context;
           await runDestroyCommand({
+            home: context.home,
             json: options.json,
             sessionId,
             force: options.force,
@@ -643,6 +682,75 @@ async function main(): Promise<void> {
     );
 
   program
+    .command('mouse <session-id> <action>')
+    .description('Send mode-aware mouse input to a terminal cell')
+    .requiredOption(
+      '--row <n>',
+      'Zero-based terminal row',
+      parseIntegerTokenOption,
+    )
+    .requiredOption(
+      '--col <n>',
+      'Zero-based terminal column',
+      parseIntegerTokenOption,
+    )
+    .option('--button <name>', 'left, middle, right, or a wheel direction')
+    .option(
+      '--cell-width <n>',
+      'Cell width in pixels (default: virtual unit cell)',
+      parseNumberOption,
+    )
+    .option(
+      '--cell-height <n>',
+      'Cell height in pixels (default: virtual unit cell)',
+      parseNumberOption,
+    )
+    .option('--shift', 'Hold Shift for this mouse action', false)
+    .option('--alt', 'Hold Alt for this mouse action', false)
+    .option('--ctrl', 'Hold Ctrl for this mouse action', false)
+    .option('--json', 'Emit a JSON command envelope', false)
+    .action(
+      wrapAction(
+        'mouse',
+        async (
+          sessionId: string,
+          action: string,
+          options: {
+            row: number;
+            col: number;
+            cellWidth?: number;
+            cellHeight?: number;
+            button?: string;
+            shift: boolean;
+            alt: boolean;
+            ctrl: boolean;
+            json: boolean;
+          },
+          context: CommandContext,
+        ) => {
+          await runMouseCommand({
+            context,
+            json: options.json,
+            sessionId,
+            action,
+            ...(options.button === undefined ? {} : { button: options.button }),
+            row: options.row,
+            col: options.col,
+            ...(options.cellWidth === undefined
+              ? {}
+              : { cellWidth: options.cellWidth }),
+            ...(options.cellHeight === undefined
+              ? {}
+              : { cellHeight: options.cellHeight }),
+            shift: options.shift,
+            alt: options.alt,
+            ctrl: options.ctrl,
+          });
+        },
+      ),
+    );
+
+  program
     .command('resize <session-id>')
     .description('Resize a session')
     .requiredOption('--cols <n>', 'Columns', parseIntegerOption)
@@ -737,6 +845,7 @@ async function main(): Promise<void> {
     .option('--profile <name>', 'Render profile name')
     .option('--show-cursor', 'Show the terminal cursor in the screenshot')
     .option('--hide-cursor', 'Hide the terminal cursor in the screenshot')
+    .option('--out <path>', 'Explicit output path')
     .option('--json', 'Emit a JSON command envelope', false)
     .action(
       wrapAction(
@@ -747,6 +856,7 @@ async function main(): Promise<void> {
             profile?: string;
             showCursor: boolean;
             hideCursor: boolean;
+            out?: string;
             json: boolean;
           },
           context: CommandContext,
@@ -774,6 +884,7 @@ async function main(): Promise<void> {
             ...(cursorVisible === undefined
               ? {}
               : { showCursor: cursorVisible }),
+            ...(options.out === undefined ? {} : { out: options.out }),
           });
         },
       ),
@@ -909,7 +1020,7 @@ async function main(): Promise<void> {
     .option('--idle-ms <ms>', 'Wait for output idle period', parseIntegerOption)
     .option(
       '--timeout <ms>',
-      'Maximum wait time in milliseconds (0 for infinite)',
+      `Maximum wait time in milliseconds (0 for infinite) (default: ${String(DEFAULT_WAIT_TIMEOUT_MS)})`,
       parseIntegerOption,
     )
     .option('--json', 'Emit a JSON command envelope', false)
@@ -938,6 +1049,10 @@ async function main(): Promise<void> {
       '--after-seq <n>',
       'Only match renderer snapshots produced after this Event Log sequence',
       parseIntegerOption,
+    )
+    .addHelpText(
+      'after',
+      '\nThe --idle-ms or --screen-stable-ms window must fit inside the timeout. A window that cannot fit fails at once with INVALID_DURATION (exit 2).',
     )
     .action(
       wrapAction(
@@ -979,24 +1094,44 @@ async function main(): Promise<void> {
     );
 
   program
-    .command('_host <session-id>', { hidden: true })
+    .command('_host <session-id> <creator-pid>', { hidden: true })
     .description('Internal: run the session host process')
-    .action(async (sessionId: string) => {
+    .action(async (sessionId: string, creatorPid: string) => {
       const { runHost } = await import('../host/hostMain.js');
-      await runHost(sessionId);
+      await runHost(sessionId, Number(creatorPid));
     });
 
-  await program.parseAsync();
+  try {
+    await program.parseAsync();
+  } catch (error: unknown) {
+    if (!(error instanceof CommanderError)) {
+      throw error;
+    }
+    process.exitCode = error.exitCode === 0 ? 0 : 2;
+    const json = argvHasFlag('--json') || parsedJsonOption(program);
+    if (!HELP_OUTPUT_CODES.has(error.code) && json) {
+      emitCliError(
+        'agent-tty',
+        makeCliError(ERROR_CODES.INVALID_INPUT, {
+          message: error.message.replace(/^error: /u, ''),
+        }),
+        true,
+      );
+    }
+  }
 }
 
 try {
   await main();
 } catch (error: unknown) {
-  if (error instanceof CommanderError) {
-    process.exitCode = error.code === 'commander.helpDisplayed' ? 0 : 2;
-  } else if (error instanceof CliError) {
-    setColorEnabled(!process.argv.includes('--no-color'));
-    emitCliError('agent-tty', error);
+  if (error instanceof CliError) {
+    const output = parsedOutputOptions ?? {
+      json: argvHasFlag('--json'),
+      color: !argvHasFlag('--no-color'),
+    };
+    setColorEnabled(output.color);
+    emitCliError('agent-tty', error, output.json);
+    exitOnInternalError(error);
   } else {
     throw error;
   }

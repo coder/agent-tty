@@ -252,10 +252,10 @@ export async function captureGridFrames(
   // initial dimensions define its reproducible blank grid, so synthesize a
   // single blank frame directly — renderer backends reject snapshot() before
   // the first replayed event, so no backend is booted. capturedAtSeq follows
-  // the record-export empty-log convention (0, same as asciicast).
+  // the record-export empty-log convention (-1, same as asciicast and WebM).
   if (replayInput.targetSeq < 0) {
     const blankFrame: GridFrame = {
-      capturedAtSeq: 0,
+      capturedAtSeq: -1,
       cols: replayInput.initialCols,
       rows: replayInput.initialRows,
       cursorRow: 0,
@@ -265,7 +265,7 @@ export async function captureGridFrames(
     };
     return {
       frames: [blankFrame],
-      capturedAtSeq: 0,
+      capturedAtSeq: -1,
       cols: blankFrame.cols,
       rows: blankFrame.rows,
       rendererBackend: 'none',

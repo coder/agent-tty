@@ -3,6 +3,7 @@ import { isAbsolute } from 'node:path';
 import type {
   CreateTerminalOptions,
   GhosttyVtTerminal,
+  MouseButton as NativeMouseButton,
   NativeInfo,
   SnapshotCell as NativeSnapshotCell,
   TerminalSnapshot,
@@ -11,6 +12,8 @@ import type {
 
 import type {
   RendererBackend,
+  MouseEncodingBackend,
+  MouseEncodingInput,
   ScreenshotOptions,
   SnapshotOptions,
 } from '../backend.js';
@@ -29,8 +32,12 @@ import { DEFAULT_COLS, DEFAULT_ROWS } from '../../config/defaults.js';
 import { invariant, assertString, unreachable } from '../../util/assert.js';
 import { Logger, createProcessLogger } from '../../util/logger.js';
 
+// Bindings that predate mouse encoding still render.
+type MouseAwareGhosttyVtTerminal = Omit<GhosttyVtTerminal, 'encodeMouse'> &
+  Partial<Pick<GhosttyVtTerminal, 'encodeMouse'>>;
+
 export interface LibghosttyVtNativeModule {
-  createTerminal(options: CreateTerminalOptions): GhosttyVtTerminal;
+  createTerminal(options: CreateTerminalOptions): MouseAwareGhosttyVtTerminal;
   getNativeInfo?: () => NativeInfo;
 }
 
@@ -139,6 +146,7 @@ function assertNativeSnapshot(snapshot: unknown): TerminalSnapshot {
     rows?: unknown;
     cursorRow?: unknown;
     cursorCol?: unknown;
+    cursorVisible?: unknown;
     isAltScreen?: unknown;
     visibleLines?: unknown;
     scrollbackLines?: unknown;
@@ -162,6 +170,10 @@ function assertNativeSnapshot(snapshot: unknown): TerminalSnapshot {
   invariant(
     candidate.cursorCol < candidate.cols,
     'snapshot cursorCol must be within cols',
+  );
+  invariant(
+    typeof candidate.cursorVisible === 'boolean',
+    'snapshot cursorVisible must be a boolean',
   );
   invariant(
     typeof candidate.isAltScreen === 'boolean',
@@ -197,6 +209,7 @@ function assertNativeSnapshot(snapshot: unknown): TerminalSnapshot {
     rows: candidate.rows,
     cursorRow: candidate.cursorRow,
     cursorCol: candidate.cursorCol,
+    cursorVisible: candidate.cursorVisible,
     isAltScreen: candidate.isAltScreen,
     visibleLines,
     ...(scrollbackLines === undefined ? {} : { scrollbackLines }),
@@ -350,7 +363,17 @@ function mapNativeCells(
     });
 }
 
-export class LibghosttyVtBackend implements RendererBackend {
+const NATIVE_MOUSE_BUTTONS: Readonly<Record<string, NativeMouseButton>> = {
+  left: 'left',
+  middle: 'middle',
+  right: 'right',
+  'wheel-up': 'four',
+  'wheel-down': 'five',
+  'wheel-left': 'six',
+  'wheel-right': 'seven',
+};
+
+export class LibghosttyVtBackend implements MouseEncodingBackend {
   public readonly rendererBackend = 'libghostty-vt';
   public isBooted = false;
 
@@ -375,7 +398,7 @@ export class LibghosttyVtBackend implements RendererBackend {
   private initialReplayRows: number | null = null;
   private lastAppliedSeq = -1;
   private latestReplayInput: ReplayInput | null = null;
-  private terminal: GhosttyVtTerminal | null = null;
+  private terminal: MouseAwareGhosttyVtTerminal | null = null;
 
   public constructor(
     sessionId: string,
@@ -448,9 +471,9 @@ export class LibghosttyVtBackend implements RendererBackend {
       input.initialRows,
       'replay input initialRows must be positive',
     );
-    assertNonNegativeInteger(
-      input.targetSeq,
-      'replay input targetSeq must be non-negative',
+    invariant(
+      Number.isInteger(input.targetSeq) && input.targetSeq >= -1,
+      'replay input targetSeq must be an integer of at least -1',
     );
     invariant(
       input.targetSeq >= this.lastAppliedSeq,
@@ -500,6 +523,7 @@ export class LibghosttyVtBackend implements RendererBackend {
         case 'input_text':
         case 'input_paste':
         case 'input_keys':
+        case 'input_mouse':
         case 'input_run':
         case 'run_complete':
         case 'signal':
@@ -536,8 +560,8 @@ export class LibghosttyVtBackend implements RendererBackend {
     await Promise.resolve();
     const terminal = this.requireTerminal('snapshot()');
     invariant(
-      this.lastAppliedSeq >= 0,
-      'snapshot() requires replayTo() to advance to a non-negative sequence first',
+      this.latestReplayInput !== null,
+      'snapshot() requires replayTo() first',
     );
     const nativeSnapshot = assertNativeSnapshot(terminal.snapshot(options));
     this.assertSnapshotDimensions(nativeSnapshot);
@@ -565,6 +589,67 @@ export class LibghosttyVtBackend implements RendererBackend {
     };
 
     return SemanticSnapshotSchema.parse(semanticSnapshot);
+  }
+
+  /**
+   * Encode cell-addressed mouse input using the child-selected Ghostty modes.
+   * Explicit cell metrics map those cells into the surface's pixel space.
+   */
+  public encodeMouse(input: MouseEncodingInput): Buffer {
+    const terminal = this.requireTerminal('encodeMouse()');
+    invariant(
+      typeof terminal.encodeMouse === 'function',
+      'terminal.encodeMouse is required; update @coder/libghostty-vt-node to a mouse-capable release',
+    );
+    assertNonNegativeInteger(input.row, 'mouse row must be non-negative');
+    assertNonNegativeInteger(input.col, 'mouse col must be non-negative');
+    if (input.row >= this.currentRows || input.col >= this.currentCols) {
+      throw new RangeError(
+        `Mouse cell row ${String(input.row)}, col ${String(input.col)} is outside the ${String(this.currentCols)}x${String(this.currentRows)} terminal grid. Use row 0-${String(this.currentRows - 1)} and col 0-${String(this.currentCols - 1)}.`,
+      );
+    }
+    const cellWidth = input.cellWidth ?? 1;
+    const cellHeight = input.cellHeight ?? 1;
+    assertPositiveInteger(cellWidth, 'mouse cellWidth must be positive');
+    assertPositiveInteger(cellHeight, 'mouse cellHeight must be positive');
+    invariant(
+      typeof input.anyButtonPressed === 'boolean',
+      'mouse anyButtonPressed must be a boolean',
+    );
+
+    const nativeButton =
+      input.button === undefined
+        ? undefined
+        : NATIVE_MOUSE_BUTTONS[input.button];
+    invariant(
+      input.button === undefined || nativeButton !== undefined,
+      `unsupported mouse button: ${String(input.button)}`,
+    );
+
+    const bytes = terminal.encodeMouse(
+      {
+        action: input.action === 'move' ? 'motion' : input.action,
+        ...(nativeButton === undefined ? {} : { button: nativeButton }),
+        x: input.col * cellWidth,
+        y: input.row * cellHeight,
+        modifiers: { ...input.modifiers },
+      },
+      {
+        geometry: {
+          screenWidth: this.currentCols * cellWidth,
+          screenHeight: this.currentRows * cellHeight,
+          cellWidth,
+          cellHeight,
+        },
+        anyButtonPressed: input.anyButtonPressed,
+        trackLastCell: true,
+      },
+    );
+    invariant(
+      Buffer.isBuffer(bytes),
+      'terminal.encodeMouse must return a Buffer',
+    );
+    return bytes;
   }
 
   public async screenshot(
@@ -679,7 +764,7 @@ export class LibghosttyVtBackend implements RendererBackend {
     );
   }
 
-  private requireTerminal(methodName: string): GhosttyVtTerminal {
+  private requireTerminal(methodName: string): MouseAwareGhosttyVtTerminal {
     this.assertNotDisposed(methodName);
     invariant(
       this.isBooted && this.terminal !== null,
@@ -690,12 +775,12 @@ export class LibghosttyVtBackend implements RendererBackend {
 
   private assertTerminalShape(
     terminal: unknown,
-  ): asserts terminal is GhosttyVtTerminal {
+  ): asserts terminal is MouseAwareGhosttyVtTerminal {
     invariant(
       terminal !== null && typeof terminal === 'object',
       'libghostty-vt terminal must be an object',
     );
-    const candidate = terminal as Partial<GhosttyVtTerminal>;
+    const candidate = terminal as Partial<MouseAwareGhosttyVtTerminal>;
     invariant(
       typeof candidate.feed === 'function',
       'terminal.feed is required',

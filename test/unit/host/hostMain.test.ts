@@ -1,3 +1,10 @@
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CliError } from '../../../src/cli/errors.js';
@@ -8,6 +15,7 @@ import {
   isSessionCommandable,
   normalizeExitSignal,
   resolveHostRendererName,
+  waitForManifestFromCreate,
 } from '../../../src/host/hostMain.js';
 import { SessionState } from '../../../src/host/sessionState.js';
 import { HOST_RENDERER_ENV_KEY } from '../../../src/config/defaults.js';
@@ -19,6 +27,8 @@ import type {
   SessionRecord,
   SessionStatus,
 } from '../../../src/protocol/schemas.js';
+import { writeManifest } from '../../../src/storage/manifests.js';
+import { manifestPath } from '../../../src/storage/sessionPaths.js';
 
 function makeSessionState(status: SessionStatus): SessionState {
   const terminal = status === 'exited' || status === 'failed';
@@ -137,5 +147,73 @@ describe('resolveHostRendererName', () => {
       expect(error).toBeInstanceOf(CliError);
       expect((error as CliError).code).toBe(ERROR_CODES.INVALID_INPUT);
     }
+  });
+});
+
+describe('waitForManifestFromCreate', () => {
+  const record: SessionRecord = {
+    version: 1,
+    sessionId: 'session-01',
+    createdAt: '2026-03-19T12:00:00.000Z',
+    updatedAt: '2026-03-19T12:00:00.000Z',
+    status: 'running',
+    command: ['/bin/sh'],
+    cwd: '/tmp/workspace',
+    cols: 80,
+    rows: 24,
+    hostPid: 123,
+    childPid: null,
+    exitCode: null,
+    exitSignal: null,
+  };
+  let sessionDirectory: string;
+
+  // The pid of a process that has exited and been reaped.
+  async function exitedPid(): Promise<number> {
+    const child = spawn(process.execPath, ['-e', '']);
+    await once(child, 'exit');
+    expect(child.pid).toBeGreaterThan(0);
+    return child.pid as number;
+  }
+
+  beforeEach(async () => {
+    sessionDirectory = await mkdtemp(join(tmpdir(), 'agent-tty-host-wait-'));
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(sessionDirectory, { recursive: true, force: true });
+  });
+
+  it('keeps waiting while the creator lives, however long its write takes', async () => {
+    const path = manifestPath(sessionDirectory);
+    // Each clock read jumps a minute, so a fixed time-out would pass at once.
+    const start = Date.now();
+    let reads = 0;
+    vi.spyOn(Date, 'now').mockImplementation(() => start + 60_000 * ++reads);
+
+    const waiting = waitForManifestFromCreate(path, process.pid);
+    await delay(100);
+    await writeManifest(path, record);
+
+    await expect(waiting).resolves.toEqual(record);
+  });
+
+  it('fails once the creator has exited without writing the manifest', async () => {
+    const creatorPid = await exitedPid();
+
+    await expect(
+      waitForManifestFromCreate(manifestPath(sessionDirectory), creatorPid),
+    ).rejects.toMatchObject({ code: ERROR_CODES.SESSION_NOT_FOUND });
+  });
+
+  it('returns the manifest that the creator wrote before it exited', async () => {
+    const path = manifestPath(sessionDirectory);
+    await writeManifest(path, record);
+    const creatorPid = await exitedPid();
+
+    await expect(waitForManifestFromCreate(path, creatorPid)).resolves.toEqual(
+      record,
+    );
   });
 });

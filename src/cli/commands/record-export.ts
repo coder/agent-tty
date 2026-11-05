@@ -1,14 +1,14 @@
-import { createHash } from 'node:crypto';
-import { constants as fsConstants } from 'node:fs';
-import { access, lstat, readFile, realpath, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, resolve } from 'node:path';
-import process from 'node:process';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFile, rename, rm, stat } from 'node:fs/promises';
+import { basename, dirname, isAbsolute } from 'node:path';
 
 import { z } from 'zod';
 
 import type { CommandContext } from '../context.js';
 
+import { missingGlyphLines } from '../missingGlyphLines.js';
 import { emitSuccess } from '../output.js';
+import type { RecordedGlyphFields } from '../../renderer/backend.js';
 import { generateAsciicast } from '../../export/asciicast.js';
 import { renderGridFramesToSvg } from '../../export/svg.js';
 import {
@@ -19,6 +19,7 @@ import { captureGridFrames } from '../../replay/gridFrames.js';
 import { readEventLogRecords } from '../../storage/eventLogCodec.js';
 import { hashProfile, resolveProfile } from '../../renderer/profiles.js';
 import { CliError } from '../errors.js';
+import { checkedSessionDir } from '../sessionGuards.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import {
   RecordExportResultSchema,
@@ -28,6 +29,7 @@ import {
 import {
   appendArtifactWithRollback,
   createArtifactEntry,
+  fileIdentity,
 } from '../../storage/artifactManifest.js';
 import {
   ReplayTimingModeSchema,
@@ -43,10 +45,11 @@ import {
   writeTextFileAtomic,
 } from '../../storage/manifests.js';
 import {
-  eventLogPath,
-  manifestPath,
-  sessionDir,
-} from '../../storage/sessionPaths.js';
+  assertOutputParentUnchanged,
+  resolveExplicitOutputPath,
+  type ExplicitOutputPath,
+} from '../../storage/outputPath.js';
+import { eventLogPath, manifestPath } from '../../storage/sessionPaths.js';
 import { invariant } from '../../util/assert.js';
 import { loadPackageMetadata } from '../../util/packageMetadata.js';
 
@@ -141,41 +144,23 @@ async function resolveOutputPath(
   format: RecordExportFormat,
   outputPath: string | undefined,
   filenameVariant?: string,
-): Promise<string> {
+): Promise<{ path: string; explicitOutput: ExplicitOutputPath | undefined }> {
   if (outputPath === undefined) {
     await ensureArtifactsDir(sessionDirectory);
-    return artifactPath(
-      sessionDirectory,
-      recordingFilename(capturedAtSeq, format, filenameVariant),
-    );
+    return {
+      path: artifactPath(
+        sessionDirectory,
+        recordingFilename(capturedAtSeq, format, filenameVariant),
+      ),
+      explicitOutput: undefined,
+    };
   }
 
-  invariant(outputPath.length > 0, 'output path must be a non-empty string');
-
-  const currentWorkingDirectory = process.cwd();
-  const resolvedOutputPath = isAbsolute(outputPath)
-    ? resolve(outputPath)
-    : resolve(currentWorkingDirectory, outputPath);
-  const parentDirectory = dirname(resolvedOutputPath);
-  const realParentDirectory = await realpath(parentDirectory);
-  const parentStats = await lstat(realParentDirectory);
-
-  invariant(
-    parentStats.isDirectory(),
-    `record export parent directory must be a directory: ${realParentDirectory}`,
+  const explicitOutput = await resolveExplicitOutputPath(
+    outputPath,
+    dirname(sessionDirectory),
   );
-
-  await access(realParentDirectory, fsConstants.W_OK);
-
-  const realOutputPath = resolve(
-    realParentDirectory,
-    basename(resolvedOutputPath),
-  );
-  invariant(
-    dirname(realOutputPath) === realParentDirectory,
-    'record export path must remain within the resolved parent directory',
-  );
-  return realOutputPath;
+  return { path: explicitOutput.path, explicitOutput };
 }
 
 async function computeFileHash(filePath: string): Promise<string> {
@@ -186,7 +171,7 @@ async function computeFileHash(filePath: string): Promise<string> {
 }
 
 function resolveCapturedAtSeq(events: ReadonlyArray<{ seq: number }>): number {
-  return events.at(-1)?.seq ?? 0;
+  return events.at(-1)?.seq ?? -1;
 }
 
 function buildResultLines(result: RecordExportResult): string[] {
@@ -198,6 +183,7 @@ function buildResultLines(result: RecordExportResult): string[] {
     `Bytes: ${String(result.bytes)}`,
     `SHA256: ${result.sha256}`,
     `Duration: ${String(result.durationMs ?? 0)} ms`,
+    ...(result.format === 'webm' ? missingGlyphLines(result) : []),
   ];
 }
 
@@ -230,19 +216,7 @@ export async function runRecordExportCommand(
 
   const timingMode = resolveReplayTimingMode(options.timing);
   const home = options.context.home;
-  let sessionDirectory: string;
-
-  try {
-    sessionDirectory = sessionDir(home, options.sessionId);
-  } catch (error) {
-    throw makeCliError(ERROR_CODES.INVALID_SESSION_ID, {
-      message: `Session ID "${options.sessionId}" is invalid.`,
-      details: {
-        sessionId: options.sessionId,
-      },
-      cause: error,
-    });
-  }
+  const sessionDirectory = checkedSessionDir(home, options.sessionId);
 
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
@@ -277,13 +251,14 @@ export async function runRecordExportCommand(
         : options.animate === true
           ? `${svgProfileName}-animated`
           : svgProfileName;
-    const artifactOutputPath = await resolveOutputPath(
-      sessionDirectory,
-      defaultCapturedAtSeq,
-      format,
-      options.out,
-      filenameVariant,
-    );
+    const { path: artifactOutputPath, explicitOutput } =
+      await resolveOutputPath(
+        sessionDirectory,
+        defaultCapturedAtSeq,
+        format,
+        options.out,
+        filenameVariant,
+      );
 
     invariant(
       isAbsolute(artifactOutputPath),
@@ -297,6 +272,10 @@ export async function runRecordExportCommand(
     let resultMetadata: Record<string, unknown>;
     let bytes: number;
     let sha256: string;
+    let glyphFields: RecordedGlyphFields = {};
+    // Names the exported file, so a second export to the same path can
+    // replace this export's manifest entry.
+    let outputFileIdentity: string | null = null;
 
     if (format === 'asciicast') {
       const packageMetadata = await loadPackageMetadata();
@@ -344,6 +323,14 @@ export async function runRecordExportCommand(
         pathLabel: 'record export path',
         contents: exportArtifact.contents,
         writeErrorMessage: `Failed to write record export artifact at ${artifactOutputPath}.`,
+        createParentFolders: false,
+        beforeRename: async (temporaryPath) => {
+          if (explicitOutput !== undefined) {
+            await assertOutputParentUnchanged(explicitOutput);
+          }
+          // The rename keeps the temp file's inode.
+          outputFileIdentity = await fileIdentity(temporaryPath);
+        },
       });
 
       bytes = contentsBuffer.byteLength;
@@ -414,6 +401,14 @@ export async function runRecordExportCommand(
         pathLabel: 'record export path',
         contents: svgContents,
         writeErrorMessage: `Failed to write record export artifact at ${artifactOutputPath}.`,
+        createParentFolders: false,
+        beforeRename: async (temporaryPath) => {
+          if (explicitOutput !== undefined) {
+            await assertOutputParentUnchanged(explicitOutput);
+          }
+          // The rename keeps the temp file's inode.
+          outputFileIdentity = await fileIdentity(temporaryPath);
+        },
       });
 
       bytes = contentsBuffer.byteLength;
@@ -425,19 +420,42 @@ export async function runRecordExportCommand(
         options.context.profileDefault,
       );
 
-      invariant(events.length > 0, 'webm export requires at least one event');
-      const webmResult: WebmExportResult = await generateWebmExport({
-        sessionId: options.sessionId,
-        sessionDir: sessionDirectory,
-        manifest,
-        events,
-        outputPath: artifactOutputPath,
-        ...(webmProfileName !== undefined
-          ? { profileName: webmProfileName }
-          : {}),
-        ...(timingMode !== undefined ? { timingMode } : {}),
-        rendererName: options.context.rendererVisualDefault,
-      });
+      invariant(
+        artifactOutputPath.endsWith('.webm'),
+        'webm export output path must end with .webm',
+      );
+      const temporaryOutputPath = `${artifactOutputPath}.tmp-${randomUUID()}.webm`;
+      let webmResult: WebmExportResult;
+      try {
+        webmResult = await generateWebmExport({
+          sessionId: options.sessionId,
+          sessionDir: sessionDirectory,
+          manifest,
+          events,
+          outputPath: temporaryOutputPath,
+          ...(webmProfileName !== undefined
+            ? { profileName: webmProfileName }
+            : {}),
+          ...(timingMode !== undefined ? { timingMode } : {}),
+          rendererName: options.context.rendererVisualDefault,
+        });
+        // The bytes and the hash come from the temp file, so another write
+        // that replaces the file after the rename cannot lend this entry its
+        // bytes. They come before the folder check, which keeps the time
+        // from that check to the rename short.
+        bytes = (await stat(temporaryOutputPath)).size;
+        invariant(bytes > 0, 'webm export artifact must not be empty');
+        sha256 = await computeFileHash(temporaryOutputPath);
+        if (explicitOutput !== undefined) {
+          await assertOutputParentUnchanged(explicitOutput);
+        }
+        // The rename keeps the temp file's inode.
+        outputFileIdentity = await fileIdentity(temporaryOutputPath);
+        await rename(temporaryOutputPath, artifactOutputPath);
+      } catch (error) {
+        await rm(temporaryOutputPath, { force: true }).catch(() => undefined);
+        throw error;
+      }
 
       const resolvedProfile = resolveProfile(webmResult.profileName);
       invariant(
@@ -448,6 +466,14 @@ export async function runRecordExportCommand(
 
       capturedAtSeq = webmResult.capturedAtSeq;
       durationMs = webmResult.durationMs;
+      glyphFields = {
+        ...(webmResult.missingGlyphs !== undefined && {
+          missingGlyphs: webmResult.missingGlyphs,
+        }),
+        ...(webmResult.missingGlyphsTruncated && {
+          missingGlyphsTruncated: true,
+        }),
+      };
       artifactKind = 'video';
       artifactMetadata = {
         format,
@@ -478,11 +504,6 @@ export async function runRecordExportCommand(
           'default webm artifact path seq must match exported seq',
         );
       }
-
-      const stats = await stat(artifactOutputPath);
-      bytes = stats.size;
-      invariant(bytes > 0, 'webm export artifact must not be empty');
-      sha256 = await computeFileHash(artifactOutputPath);
     }
 
     const artifactEntry = createArtifactEntry({
@@ -498,9 +519,14 @@ export async function runRecordExportCommand(
     // Explicit --out files belong to the user and are valid without a
     // manifest entry; only clean up default in-session artifacts that would
     // otherwise be orphaned.
+    invariant(
+      outputFileIdentity !== null,
+      'the exported file must exist after the write',
+    );
     await appendArtifactWithRollback({
       sessionDir: sessionDirectory,
       entry: artifactEntry,
+      outputFileIdentity,
       ...(options.out === undefined
         ? { rollbackArtifactPath: artifactOutputPath }
         : {}),
@@ -515,6 +541,7 @@ export async function runRecordExportCommand(
       capturedAtSeq,
       durationMs,
       metadata: resultMetadata,
+      ...glyphFields,
     };
     const parsedResult = RecordExportResultSchema.safeParse(rawResult);
 

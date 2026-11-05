@@ -15,7 +15,7 @@ import {
   countEventLogEntries,
   statEventLogBytes,
 } from '../../host/eventLog.js';
-import { reconcileSession } from '../../host/lifecycle.js';
+import { isMarkedDestroyed, reconcileSession } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import {
   isCommandableSessionStatus,
@@ -30,9 +30,9 @@ import { readManifest, readManifestIfExists } from '../../storage/manifests.js';
 import {
   eventLogPath,
   manifestPath,
-  sessionDir,
   socketPath,
 } from '../../storage/sessionPaths.js';
+import { checkedSessionDir } from '../sessionGuards.js';
 
 interface CommandOptions {
   context: CommandContext;
@@ -193,7 +193,7 @@ export async function runInspectCommand(
   options: CommandOptions,
 ): Promise<void> {
   const home = options.context.home;
-  const sessionDirectory = sessionDir(home, options.sessionId);
+  const sessionDirectory = checkedSessionDir(home, options.sessionId);
   const manifestFile = manifestPath(sessionDirectory);
   let session = await readManifestIfExists(manifestFile);
   let usedOfflineReplay = false;
@@ -206,6 +206,22 @@ export async function runInspectCommand(
         manifestPath: manifestFile,
       },
     });
+  }
+
+  // A reconcile records destroyed for an ended session that a destroy marked
+  // but did not finish (see reconcileSession).
+  if (isMarkedDestroyed(sessionDirectory, session)) {
+    const read = session;
+    try {
+      await reconcileSession(sessionDirectory);
+      session = await readManifest(manifestFile);
+    } catch {
+      // A marked session that ended shows as it reads when its repair fails,
+      // as in list. The repair write can have landed before a later step
+      // threw.
+      session =
+        (await readManifestIfExists(manifestFile).catch(() => read)) ?? read;
+    }
   }
 
   const isLiveHostEligible = isLiveHostEligibleSessionStatus(session.status);

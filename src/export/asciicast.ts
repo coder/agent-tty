@@ -154,6 +154,7 @@ export function generateAsciicast(
       case 'input_text':
       case 'input_paste':
       case 'input_keys':
+      case 'input_mouse':
       case 'input_run':
       case 'run_complete':
       case 'signal':
@@ -169,7 +170,7 @@ export function generateAsciicast(
   return {
     contents: `${lines.join('\n')}\n`,
     header,
-    capturedAtSeq: events.at(-1)?.seq ?? 0,
+    capturedAtSeq: events.at(-1)?.seq ?? -1,
     durationMs: Math.max(0, lastTimestampMs - firstTimestampMs),
     outputEventCount,
     resizeEventCount,

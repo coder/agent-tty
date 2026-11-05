@@ -6,7 +6,7 @@ import {
   type Server,
   type ServerResponse,
 } from 'node:http';
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { copyFile, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 import { ensurePlaywrightBrowsersPath } from '../browserPath.js';
@@ -29,6 +29,7 @@ import {
   ResourceScopeCloseError,
 } from '../../util/resourceScope.js';
 import type {
+  RecordedGlyphFields,
   ReplayTimingOptions,
   ScreenshotOptions,
   SnapshotOptions,
@@ -55,6 +56,12 @@ import {
   validateHarnessSnapshot,
 } from './harnessDecoding.js';
 import type { GhosttyHarnessSnapshot } from './harnessDecoding.js';
+import {
+  GLYPH_PROBE_BUDGET_MS,
+  GlyphCheck,
+  MAX_CACHED_GLYPH_PROBES,
+  type ScreenGlyphFields,
+} from './missingGlyphs.js';
 
 export {
   assembleCanonicalLine,
@@ -78,10 +85,12 @@ interface GhosttyBrowserBridge {
   setCursorVisible?: (visible: boolean) => Promise<void> | void;
   getSnapshot?: (options?: SnapshotOptions) => GhosttyHarnessSnapshot;
   getVisibleText?: () => string;
+  getCellGraphemes?: () => string[][];
 }
 
 interface GhosttyBrowserGlobal {
   __agentTty?: GhosttyBrowserBridge;
+  __agentTtyPainted?: { seen: Set<string>; complete: boolean };
   __agentTtyLog?: (
     level: LogLevel,
     message: string,
@@ -271,6 +280,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   // duplicate warnings if both bootInternal()'s catch and a concurrent
   // dispose() race on the same scope.
   private readonly loggedScopes = new WeakSet<ResourceScope>();
+  private glyphCheckMemo: GlyphCheck | null | undefined;
+  private paintedNoteFailed = false;
+  private recordedGlyphs: RecordedGlyphFields | undefined;
   private initialReplayCols: number | null = null;
   private initialReplayRows: number | null = null;
   private lastAppliedSeq = -1;
@@ -387,9 +399,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       input.initialRows,
       'replay input initialRows must be a positive integer',
     );
-    assertNonNegativeInteger(
-      input.targetSeq,
-      'replay input targetSeq must be a non-negative integer',
+    invariant(
+      Number.isInteger(input.targetSeq) && input.targetSeq >= -1,
+      'replay input targetSeq must be an integer of at least -1',
     );
     invariant(
       input.targetSeq >= this.lastAppliedSeq,
@@ -456,6 +468,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         case 'input_text':
         case 'input_paste':
         case 'input_keys':
+        case 'input_mouse':
         case 'input_run':
         case 'run_complete':
         case 'signal':
@@ -510,9 +523,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       input.initialRows,
       'replay input initialRows must be a positive integer',
     );
-    assertNonNegativeInteger(
-      input.targetSeq,
-      'replay input targetSeq must be a non-negative integer',
+    invariant(
+      Number.isInteger(input.targetSeq) && input.targetSeq >= -1,
+      'replay input targetSeq must be an integer of at least -1',
     );
     invariant(
       input.targetSeq >= this.lastAppliedSeq,
@@ -642,14 +655,20 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     let resizeEventCount = 0;
     let highestProcessedSeq = this.lastAppliedSeq;
     let pendingOutputChunks: string[] = [];
+    let pendingSinceTimestampMs: number | null = null;
+    let scheduleStartedAtMs = 0;
+    let scheduledElapsedMs = 0;
 
     const flushOutputBatch = async (): Promise<void> => {
       if (pendingOutputChunks.length === 0) {
         return;
       }
 
-      await this.flushOutputBatch(page, pendingOutputChunks);
+      await this.flushOutputBatch(page, pendingOutputChunks, () =>
+        this.notePaintedGraphemes(page),
+      );
       pendingOutputChunks = [];
+      pendingSinceTimestampMs = null;
       await waitForDelay(resolvedMinFrameHoldMs);
     };
 
@@ -674,19 +693,46 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       }
 
       const eventTimestampMs = parseEventTimestampMs(event.ts, event.seq);
-      if (previousProcessedEventTimestampMs !== null) {
+      if (previousProcessedEventTimestampMs === null) {
+        scheduleStartedAtMs = performance.now();
+      } else {
         const interEventDelayMs =
           eventTimestampMs - previousProcessedEventTimestampMs;
         invariant(
           interEventDelayMs >= 0,
           'replay event timestamps must be ordered non-decreasingly',
         );
-        await waitForDelay(computeInterEventDelay(interEventDelayMs));
+        scheduledElapsedMs += computeInterEventDelay(interEventDelayMs);
+        // Output shows once its batch is a frame hold old, unless the replay
+        // runs behind the schedule: then batches grow until it catches up, so
+        // slow flushes lower the frame rate instead of stretching the video.
+        // Max-speed keeps one batch per run of output events, so its frame
+        // holds cannot outlast the export timeout.
+        if (
+          timing.mode !== 'max-speed' &&
+          pendingSinceTimestampMs !== null &&
+          eventTimestampMs - pendingSinceTimestampMs >=
+            resolvedMinFrameHoldMs &&
+          performance.now() - scheduleStartedAtMs <= scheduledElapsedMs
+        ) {
+          await flushOutputBatch();
+        }
+        // Waiting for the event's place on the schedule lets frame holds and
+        // bridge calls use up time that the recording spent idle.
+        await waitForDelay(
+          Math.max(
+            0,
+            Math.round(
+              scheduledElapsedMs - (performance.now() - scheduleStartedAtMs),
+            ),
+          ),
+        );
       }
       previousProcessedEventTimestampMs = eventTimestampMs;
 
       switch (event.type) {
         case 'output': {
+          pendingSinceTimestampMs ??= eventTimestampMs;
           pendingOutputChunks.push(event.payload.data);
           outputEventCount += 1;
           break;
@@ -705,6 +751,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           this.currentCols = event.payload.cols;
           this.currentRows = event.payload.rows;
           resizeEventCount += 1;
+          await this.notePaintedGraphemes(page);
           await waitForDelay(resolvedMinFrameHoldMs);
           break;
         }
@@ -715,6 +762,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         case 'input_text':
         case 'input_paste':
         case 'input_keys':
+        case 'input_mouse':
         case 'input_run':
         case 'run_complete':
         case 'signal':
@@ -739,7 +787,16 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     );
 
     if (highestProcessedSeq !== this.lastAppliedSeq) {
-      await waitForDelay(finalFrameHoldMs);
+      // The probes draw off screen, so the check runs while the video holds
+      // the final frame instead of lengthening it.
+      await Promise.all([
+        waitForDelay(finalFrameHoldMs),
+        this.checkPaintedGlyphs(Math.max(1, finalFrameHoldMs)).then(
+          (fields) => {
+            this.recordedGlyphs = fields;
+          },
+        ),
+      ]);
     }
 
     if (highestProcessedSeq < 0) {
@@ -764,8 +821,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   public async snapshot(options?: SnapshotOptions): Promise<SemanticSnapshot> {
     const page = this.requireOperationalPage('snapshot()');
     invariant(
-      this.lastAppliedSeq >= 0,
-      'snapshot() requires replayTo() to advance to a non-negative sequence first',
+      this.initialReplayCols !== null,
+      'snapshot() requires replayTo() first',
     );
 
     const snapshot = await this.readHarnessSnapshot(page, options);
@@ -796,8 +853,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   ): Promise<ScreenshotResult> {
     const page = this.requireOperationalPage('screenshot()');
     invariant(
-      this.lastAppliedSeq >= 0,
-      'screenshot() requires replayTo() to advance to a non-negative sequence first',
+      this.initialReplayCols !== null,
+      'screenshot() requires replayTo() first',
     );
     invariant(
       outputPath.length > 0,
@@ -834,12 +891,12 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     await this.setScreenshotCursorVisibility(page, showCursor);
     await this.waitForScreenshotPaint(page);
 
-    await page.locator('#terminal').screenshot({
+    const renderedPng = await page.locator('#terminal').screenshot({
       animations: 'disabled',
       caret: showCursor ? 'initial' : 'hide',
-      path: outputPath,
       type: 'png',
     });
+    await writeFile(outputPath, renderedPng);
 
     const screenshotFile = await stat(outputPath);
     assertPositiveInteger(
@@ -869,6 +926,15 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     );
 
     const sha256 = createHash('sha256').update(pngBuffer).digest('hex');
+    const missingGlyphs = await this.findMissingGlyphs(page).catch(
+      (error: unknown) => {
+        this.logger.debug(
+          'Missing-glyph check failed; the screenshot result omits missingGlyphs',
+          error instanceof Error ? error.message : String(error),
+        );
+        return {};
+      },
+    );
 
     return {
       sessionId: this.sessionId,
@@ -884,7 +950,130 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       pixelHeight,
       sha256,
       renderProfileHash: hashProfile(this.profile),
+      ...missingGlyphs,
     };
+  }
+
+  private glyphCheck(): GlyphCheck | null {
+    if (this.glyphCheckMemo === undefined) {
+      this.glyphCheckMemo = GlyphCheck.forProfile(this.profile);
+    }
+    return this.glyphCheckMemo;
+  }
+
+  private async findMissingGlyphs(page: Page): Promise<ScreenGlyphFields> {
+    const check = this.glyphCheck();
+    if (check === null) {
+      return {};
+    }
+    const grid = await page.evaluate(() => {
+      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
+      if (
+        bridge === undefined ||
+        typeof bridge.getCellGraphemes !== 'function'
+      ) {
+        throw new Error('ghostty-web bridge getCellGraphemes() is unavailable');
+      }
+      return bridge.getCellGraphemes();
+    });
+    invariant(
+      Array.isArray(grid) &&
+        grid.length === this.currentRows &&
+        grid.every(
+          (row) =>
+            Array.isArray(row) &&
+            row.length === this.currentCols &&
+            row.every((grapheme) => typeof grapheme === 'string'),
+        ),
+      'cell graphemes must be one string per viewport cell',
+    );
+    return check.screen(page, grid);
+  }
+
+  private async notePaintedGraphemes(page: Page): Promise<void> {
+    if (this.paintedNoteFailed) {
+      return;
+    }
+    try {
+      if (this.glyphCheck() === null) {
+        return;
+      }
+      await page.evaluate((cap) => {
+        const scope = globalThis as GhosttyBrowserGlobal;
+        const bridge = scope.__agentTty;
+        if (
+          bridge === undefined ||
+          typeof bridge.getCellGraphemes !== 'function'
+        ) {
+          throw new Error(
+            'ghostty-web bridge getCellGraphemes() is unavailable',
+          );
+        }
+        scope.__agentTtyPainted ??= { seen: new Set(), complete: true };
+        const painted = scope.__agentTtyPainted;
+        for (const row of bridge.getCellGraphemes()) {
+          for (const grapheme of row) {
+            if (grapheme === '' || painted.seen.has(grapheme)) {
+              continue;
+            }
+            if (painted.seen.size < cap) {
+              painted.seen.add(grapheme);
+            } else {
+              painted.complete = false;
+            }
+          }
+        }
+      }, MAX_CACHED_GLYPH_PROBES);
+    } catch (error) {
+      this.paintedNoteFailed = true;
+      this.logger.debug(
+        'Missing-glyph note failed; the record export result omits missingGlyphs',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  public async recordedMissingGlyphs(): Promise<RecordedGlyphFields> {
+    return (
+      this.recordedGlyphs ?? this.checkPaintedGlyphs(GLYPH_PROBE_BUDGET_MS)
+    );
+  }
+
+  private async checkPaintedGlyphs(
+    budgetMs: number,
+  ): Promise<RecordedGlyphFields> {
+    try {
+      const check = this.glyphCheck();
+      if (check === null || this.paintedNoteFailed) {
+        return {};
+      }
+      const page = this.requireOperationalPage('checkPaintedGlyphs()');
+      const painted = await page.evaluate(() => {
+        const state = (globalThis as GhosttyBrowserGlobal).__agentTtyPainted;
+        return {
+          seen: [...(state?.seen ?? [])],
+          complete: state?.complete ?? true,
+        };
+      });
+      invariant(
+        Array.isArray(painted.seen) &&
+          painted.seen.every((grapheme) => typeof grapheme === 'string') &&
+          typeof painted.complete === 'boolean',
+        'painted graphemes must be strings with a completeness flag',
+      );
+      return await check.graphemes(
+        page,
+        new Set(painted.seen),
+        painted.complete,
+        budgetMs,
+      );
+    } catch (error) {
+      this.logger.debug(
+        'Missing-glyph check failed; the record export result omits missingGlyphs',
+        error instanceof Error ? error.message : String(error),
+      );
+      return {};
+    }
   }
 
   public async finalizeVideo(outputPath: string): Promise<void> {
@@ -937,7 +1126,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       this.expectedPageClosure = false;
     }
 
-    await video.saveAs(outputPath);
+    await copyFile(await video.path(), outputPath);
     this.page = null;
     this.browserContext = null;
 
@@ -1274,6 +1463,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       this.initialReplayCols = null;
       this.initialReplayRows = null;
       this.lastAppliedSeq = -1;
+      this.paintedNoteFailed = false;
+      this.recordedGlyphs = undefined;
       this.pageAndContextReleasedExternally = false;
     }
   }
@@ -1480,6 +1671,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   private async flushOutputBatch(
     page: Page,
     dataChunks: string[],
+    afterEachBatch?: () => Promise<void>,
   ): Promise<void> {
     invariant(
       dataChunks.length > 0,
@@ -1501,6 +1693,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         'flushOutputBatch batch size must respect MAX_REPLAY_BATCH_SIZE',
       );
       await this.writeBatchBridge(page, batch);
+      await afterEachBatch?.();
     }
   }
 

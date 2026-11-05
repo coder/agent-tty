@@ -1,11 +1,21 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, readdir, realpath, rm } from 'node:fs/promises';
+import { readdirSync, readFileSync } from 'node:fs';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 
 import type { SessionRecord as ProtocolSessionRecord } from '../src/protocol/schemas.js';
+import { parseProcStat } from '../src/host/programGroup.js';
 import type { SemanticSnapshot } from '../src/renderer/types.js';
+import { hasErrorCode } from '../src/util/hasErrorCode.js';
 
 import { afterEach, expect } from 'vitest';
 
@@ -33,6 +43,22 @@ export interface SuccessEnvelope<TResult> {
   command: string;
   timestamp: string;
   result: TResult;
+}
+
+export function parseWaitTimeoutEnvelope(
+  stdout: string,
+): Record<string, unknown> {
+  const envelope = JSON.parse(stdout) as {
+    ok: boolean;
+    command: string;
+    error?: { code: string; retryable: boolean };
+    result: Record<string, unknown>;
+  };
+  expect(envelope.ok).toBe(false);
+  expect(envelope.command).toBe('wait');
+  expect(envelope.error?.code).toBe('WAIT_TIMEOUT');
+  expect(envelope.error?.retryable).toBe(false);
+  return envelope.result;
 }
 
 export interface SessionRecord {
@@ -111,7 +137,9 @@ export async function createTemporarySessionDir(
 ): Promise<string> {
   const home = await realpath(await mkdtemp(join(tmpdir(), prefix)));
   temporaryDirectories.push(home);
-  return join(home, sessionId);
+  const sessionDirectory = join(home, sessionId);
+  await mkdir(sessionDirectory);
+  return sessionDirectory;
 }
 
 export function runCli(
@@ -179,6 +207,7 @@ export async function cleanupHome(home: string): Promise<void> {
 interface CreateSessionOptions {
   cols?: number;
   rows?: number;
+  env?: Record<string, string>;
 }
 
 export function createSession(
@@ -196,6 +225,7 @@ export function createSession(
   args.push('--', ...command);
 
   const result = runCli(args, {
+    ...options.env,
     AGENT_TTY_HOME: testHome,
   });
   expect(result.status).toBe(0);
@@ -218,7 +248,8 @@ export function destroySession(testHome: string, sessionId: string): void {
   });
 }
 
-export function crashSession(testHome: string, sessionId: string): void {
+// Returns the pid of the host that it killed.
+export function crashSession(testHome: string, sessionId: string): number {
   const session = inspectSession(testHome, sessionId);
   const hostPid = session.hostPid;
   expect(hostPid).toBeTypeOf('number');
@@ -232,6 +263,26 @@ export function crashSession(testHome: string, sessionId: string): void {
     process.kill(hostPid, 'SIGKILL');
   } catch {
     // Process may already be dead
+  }
+  return hostPid;
+}
+
+// A killed process stays a zombie until its parent, init here, reaps it.
+export async function processEnds(pid: number): Promise<boolean> {
+  const deadline = Date.now() + 10_000;
+  for (;;) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if (hasErrorCode(error, 'ESRCH')) {
+        return true;
+      }
+      throw error;
+    }
+    if (Date.now() > deadline) {
+      return false;
+    }
+    await sleep(50);
   }
 }
 
@@ -268,6 +319,155 @@ export async function readEvents(
     .split('\n')
     .filter((line) => line.length > 0)
     .map((line) => JSON.parse(line) as EventRecord);
+}
+
+// The host records the program's session token only where /proc shows an
+// autogroup and the boot id, which a Linux kernel without
+// CONFIG_SCHED_AUTOGROUP or a hardened /proc does not.
+export const capturesToken = ((): boolean => {
+  if (process.platform !== 'linux') {
+    return false;
+  }
+  try {
+    return (
+      /^\/autogroup-\d+ /.test(readFileSync('/proc/self/autogroup', 'utf8')) &&
+      readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim() !== ''
+    );
+  } catch {
+    return false;
+  }
+})();
+
+export function isGroupAlive(group: number): boolean {
+  try {
+    process.kill(-group, 0);
+    return true;
+  } catch (error) {
+    if (hasErrorCode(error, 'ESRCH')) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+export function killGroupIfAlive(group: number): void {
+  try {
+    process.kill(-group, 'SIGKILL');
+  } catch (error) {
+    if (!hasErrorCode(error, 'ESRCH')) {
+      throw error;
+    }
+  }
+}
+
+const GONE_CODES = ['ENOENT', 'ESRCH'];
+
+function isGone(error: unknown): boolean {
+  return GONE_CODES.some((code) => hasErrorCode(error, code));
+}
+
+// Whether /proc shows the processes of every user. hidepid leaves other
+// users out, and an unreadable mountinfo counts as hiding them.
+function procShowsEveryUser(): boolean {
+  let mountinfo: string;
+  try {
+    mountinfo = readFileSync('/proc/self/mountinfo', 'utf8');
+  } catch {
+    return false;
+  }
+  let shows = false;
+  for (const line of mountinfo.split('\n')) {
+    const fields = line.split(' ');
+    const separator = fields.indexOf('-');
+    if (fields[4] === '/proc' && fields[separator + 1] === 'proc') {
+      shows = !/(^|,)hidepid=(2|4|invisible|ptraceable)(,|$)/.test(
+        fields[separator + 3] ?? '',
+      );
+    }
+  }
+  return shows;
+}
+
+// Whether a scan of /proc shows a thread of the group that is not a zombie,
+// or null when a read is refused or the scan shows no member at all, as a
+// /proc of another pid namespace does, so the scan proves nothing.
+function scanFindsLiveThread(group: number): boolean | null {
+  let seen = false;
+  try {
+    for (const entry of readdirSync('/proc')) {
+      if (!/^\d+$/.test(entry)) {
+        continue;
+      }
+      let tasks: string[];
+      try {
+        if (
+          parseProcStat(readFileSync(`/proc/${entry}/stat`, 'utf8')).pgid !==
+          group
+        ) {
+          continue;
+        }
+        seen = true;
+        tasks = readdirSync(`/proc/${entry}/task`);
+      } catch (error) {
+        if (isGone(error)) {
+          continue;
+        }
+        throw error;
+      }
+      for (const task of tasks) {
+        let state: string;
+        try {
+          state = parseProcStat(
+            readFileSync(`/proc/${entry}/task/${task}/stat`, 'utf8'),
+          ).state;
+        } catch (error) {
+          if (isGone(error)) {
+            continue;
+          }
+          throw error;
+        }
+        if (state !== 'Z' && state !== 'X') {
+          return true;
+        }
+      }
+    }
+  } catch (error) {
+    if (
+      ['EACCES', 'EPERM', 'ENOENT'].some((code) => hasErrorCode(error, code))
+    ) {
+      return null;
+    }
+    throw error;
+  }
+  return seen ? false : null;
+}
+
+// A killed process stays a zombie until its parent reaps it. An orphan's
+// parent is init, which can take seconds to reap on a loaded machine, so on
+// Linux a group whose threads are all zombies counts as ended. A process can
+// fork and end between the /proc listing and its own read, so two scans must
+// agree. Where /proc cannot show the whole group, the probe decides alone.
+function groupHasLiveThread(group: number): boolean {
+  if (!isGroupAlive(group)) {
+    return false;
+  }
+  if (process.platform !== 'linux' || !procShowsEveryUser()) {
+    return true;
+  }
+  return (
+    scanFindsLiveThread(group) !== false || scanFindsLiveThread(group) !== false
+  );
+}
+
+export async function groupEnds(group: number): Promise<boolean> {
+  const deadline = Date.now() + 5_000;
+  while (groupHasLiveThread(group)) {
+    if (Date.now() > deadline) {
+      return false;
+    }
+    await sleep(50);
+  }
+  return true;
 }
 
 export async function sleep(ms: number): Promise<void> {

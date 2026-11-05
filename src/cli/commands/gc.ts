@@ -4,7 +4,15 @@ import { resolve } from 'node:path';
 import type { CommandContext } from '../context.js';
 
 import { emitSuccess } from '../output.js';
-import { reconcileSession } from '../../host/lifecycle.js';
+import {
+  reconcileSession,
+  removeDeadHostSocket,
+} from '../../host/lifecycle.js';
+import {
+  forceSkipsGroup,
+  isUnreadableGroupError,
+  provenProgramGroupRuns,
+} from '../../host/programGroup.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import {
   isCollectableSessionStatus,
@@ -80,10 +88,24 @@ export interface GcDependencies {
   }>;
   rm: (
     path: string,
-    options: { recursive: boolean; force: boolean },
+    options: {
+      recursive: boolean;
+      force: boolean;
+      maxRetries: number;
+      retryDelay: number;
+    },
   ) => Promise<void>;
   readManifestIfExists: (path: string) => Promise<SessionRecord | null>;
   reconcileSession: (sessionDirectory: string) => Promise<void>;
+  removeDeadHostSocket: (
+    sessionDirectory: string,
+    manifest: SessionRecord,
+  ) => Promise<void>;
+  provenProgramGroupRuns: (sessionDirectory: string) => Promise<boolean>;
+  forceSkipsGroup: (
+    sessionDirectory: string,
+    childPid: number | null,
+  ) => Promise<boolean>;
   now: () => Date;
 }
 
@@ -93,6 +115,9 @@ const defaultDependencies: GcDependencies = {
   rm,
   readManifestIfExists,
   reconcileSession,
+  removeDeadHostSocket,
+  provenProgramGroupRuns,
+  forceSkipsGroup,
   now: () => new Date(),
 };
 
@@ -273,6 +298,15 @@ export function parseDurationToMs(value: string): number {
   return durationMs;
 }
 
+// A read of the program's group that fails with one of UNREADABLE_ERRNOS
+// fails every later check too. destroy --force ends such a session without
+// the read.
+const FORCE_HINT = ' (destroy --force removes it)';
+
+function forceRemovesIt(error: unknown): string {
+  return isUnreadableGroupError(error) ? FORCE_HINT : '';
+}
+
 export async function gcSessions(
   home: string,
   options: GcExecutionOptions,
@@ -352,9 +386,17 @@ export async function gcSessions(
     try {
       await dependencies.reconcileSession(sessionDirectory);
     } catch (error) {
+      // A reconcile also writes the manifest and removes the socket, so gc
+      // names destroy --force only when the read of the group fails too.
+      const skips =
+        isUnreadableGroupError(error) &&
+        (await dependencies.forceSkipsGroup(
+          sessionDirectory,
+          manifestBefore.childPid,
+        ));
       result.skippedSessions.push({
         sessionId: manifestBefore.sessionId,
-        reason: `failed to reconcile session: ${getErrorMessage(error)}`,
+        reason: `failed to reconcile session${skips ? FORCE_HINT : ''}: ${getErrorMessage(error)}`,
       });
       continue;
     }
@@ -407,6 +449,29 @@ export async function gcSessions(
       continue;
     }
 
+    // The rm deletes program.json, the only proof of the program's group, so
+    // a process that the program left would run on out of destroy's reach.
+    // A destroyed session's group read gone before destroy recorded it.
+    let groupRuns: boolean;
+    try {
+      groupRuns =
+        manifestAfter.status !== 'destroyed' &&
+        (await dependencies.provenProgramGroupRuns(sessionDirectory));
+    } catch (error) {
+      result.skippedSessions.push({
+        sessionId,
+        reason: `failed to check the session's program group${forceRemovesIt(error)}: ${getErrorMessage(error)}`,
+      });
+      continue;
+    }
+    if (groupRuns) {
+      result.skippedSessions.push({
+        sessionId,
+        reason: "the session's program group still runs (destroy ends it)",
+      });
+      continue;
+    }
+
     const sessionBytes = await measurePathBytes(
       sessionDirectory,
       dependencies,
@@ -435,10 +500,19 @@ export async function gcSessions(
         continue;
       }
 
+      // Before the rm, which deletes the host.json that the host check reads.
+      await dependencies.removeDeadHostSocket(
+        sessionDirectory,
+        finalManifest ?? manifestAfter,
+      );
       try {
+        // A reconcile or destroy write can land during the rm and make its
+        // last rmdir fail with ENOTEMPTY. A retry deletes that late file.
         await dependencies.rm(sessionDirectory, {
           recursive: true,
           force: true,
+          maxRetries: 3,
+          retryDelay: 10,
         });
       } catch (error) {
         result.skippedSessions.push({

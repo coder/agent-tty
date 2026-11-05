@@ -1,6 +1,8 @@
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -14,6 +16,7 @@ import {
   cleanupHome,
   createSession,
   destroySession,
+  parseWaitTimeoutEnvelope,
   readEvents,
   runCli,
   sleep,
@@ -336,12 +339,9 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     );
 
     expect(cursorLineResult.exitCode).toBe(11);
-    const envelope = JSON.parse(
-      cursorLineResult.stdout,
-    ) as SuccessEnvelope<WaitForRenderResult>;
-    expect(envelope.ok).toBe(true);
-    expect(envelope.result.matched).toBe(false);
-    expect(envelope.result.timedOut).toBe(true);
+    const timedOut = parseWaitTimeoutEnvelope(cursorLineResult.stdout);
+    expect(timedOut.matched).toBe(false);
+    expect(timedOut.timedOut).toBe(true);
   });
 
   it('matches text on the cursor row with CLI --scope cursor-line', async () => {
@@ -461,7 +461,7 @@ describe('wait render integration', { timeout: 120_000 }, () => {
     expect(envelope.result.cursorCol).toBe(snapshot.cursorCol);
   });
 
-  it('exits 11 with a success envelope when CLI --text times out', () => {
+  it('exits 11 with a WAIT_TIMEOUT error envelope that keeps the result when CLI --text times out', () => {
     const result = runCli(
       [
         'wait',
@@ -478,30 +478,205 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
     expect(result.exitCode).toBe(11);
     expect(result.stderr).toBe('');
-    const envelope = JSON.parse(
-      result.stdout,
-    ) as SuccessEnvelope<WaitForRenderResult>;
-    expect(envelope.ok).toBe(true);
-    expect(envelope.result.matched).toBe(false);
-    expect(envelope.result.timedOut).toBe(true);
-    expect(envelope.result.capturedAtSeq).toBeGreaterThanOrEqual(0);
+    const timedOut = parseWaitTimeoutEnvelope(result.stdout);
+    expect(timedOut.matched).toBe(false);
+    expect(timedOut.timedOut).toBe(true);
+    expect(timedOut.capturedAtSeq).toBeGreaterThanOrEqual(0);
+    const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+    expect(envelope.error.details).toEqual({ sessionId, timeoutMs: 1000 });
   });
 
-  it('exits 11 with a success envelope when legacy CLI --idle-ms times out', () => {
+  it('prints the WAIT_TIMEOUT error to stderr when CLI --text times out without --json', () => {
     const result = runCli(
-      ['wait', sessionId, '--idle-ms', '10000', '--timeout', '1000', '--json'],
+      ['wait', sessionId, '--text', 'MISSING_TEXT', '--timeout', '1000'],
       { AGENT_TTY_HOME: testHome },
       10_000,
     );
 
     expect(result.exitCode).toBe(11);
-    expect(result.stderr).toBe('');
-    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<WaitResult>;
-    expect(envelope.ok).toBe(true);
-    expect(envelope.result.timedOut).toBe(true);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('WAIT_TIMEOUT: Wait timed out after 1000 ms.\n');
   });
 
-  it('exits 11 with a success envelope when legacy CLI --exit times out', () => {
+  function failingRendererEnv(failures?: number): Record<string, string> {
+    const preload = pathToFileURL(
+      resolve('test/fixtures/fail-chromium-launch.ts'),
+    );
+    return {
+      NODE_OPTIONS: [
+        process.env.NODE_OPTIONS ?? '',
+        `--import=${preload.href}`,
+      ].join(' '),
+      ...(failures === undefined
+        ? {}
+        : { AGENT_TTY_TEST_CHROMIUM_FAILURES: String(failures) }),
+    };
+  }
+
+  it.each(['0', '20000'])(
+    'returns the renderer error, not WAIT_TIMEOUT, when every render poll fails (--timeout %s)',
+    (timeout) => {
+      const failingSessionId = createSession(testHome, undefined, {
+        env: failingRendererEnv(),
+      });
+      try {
+        const human = runCli(
+          [
+            '--renderer',
+            'ghostty-web',
+            'wait',
+            failingSessionId,
+            '--text',
+            'NEVER',
+            '--timeout',
+            timeout,
+          ],
+          { AGENT_TTY_HOME: testHome },
+          30_000,
+        );
+
+        expect(human.exitCode, human.stderr).toBe(9);
+        expect(human.stdout).toBe('');
+        expect(human.stderr).toMatch(
+          /^RPC_ERROR: failed to boot GhosttyWebBackend: .*injected Chromium launch failure/u,
+        );
+
+        const json = runCli(
+          [
+            '--renderer',
+            'ghostty-web',
+            'wait',
+            failingSessionId,
+            '--text',
+            'NEVER',
+            '--timeout',
+            timeout,
+            '--json',
+          ],
+          { AGENT_TTY_HOME: testHome },
+          30_000,
+        );
+
+        expect(json.exitCode, json.stderr).toBe(9);
+        const envelope = JSON.parse(json.stdout) as ErrorEnvelope & {
+          result?: unknown;
+        };
+        expect(envelope.error).toMatchObject({
+          code: 'RPC_ERROR',
+          retryable: true,
+        });
+        expect(envelope).not.toHaveProperty('result');
+      } finally {
+        destroySession(testHome, failingSessionId);
+      }
+    },
+  );
+
+  it('keeps the code of a CliError that every render poll throws', () => {
+    const preload = pathToFileURL(resolve('test/fixtures/fail-render-poll.ts'));
+    const failingSessionId = createSession(testHome, undefined, {
+      env: {
+        NODE_OPTIONS: [
+          process.env.NODE_OPTIONS ?? '',
+          `--import=${preload.href}`,
+        ].join(' '),
+      },
+    });
+    try {
+      const result = runCli(
+        [
+          'wait',
+          failingSessionId,
+          '--text',
+          'NEVER',
+          '--timeout',
+          '20000',
+          '--json',
+        ],
+        { AGENT_TTY_HOME: testHome },
+        30_000,
+      );
+
+      expect(result.exitCode, result.stderr).toBe(10);
+      const envelope = JSON.parse(result.stdout) as ErrorEnvelope & {
+        result?: unknown;
+      };
+      expect(envelope.error).toMatchObject({
+        code: 'REPLAY_ERROR',
+        message: 'fixture: replay failed',
+      });
+      expect(envelope).not.toHaveProperty('result');
+    } finally {
+      destroySession(testHome, failingSessionId);
+    }
+  });
+
+  it('keeps polling through fewer failed render polls than the cap and matches', () => {
+    const marker = 'renderer-recovered';
+    const recoveringSessionId = createSession(
+      testHome,
+      ['/bin/sh', '-c', `echo ${marker}; exec cat`],
+      { env: failingRendererEnv(3) },
+    );
+    try {
+      const result = runCli(
+        [
+          '--renderer',
+          'ghostty-web',
+          'wait',
+          recoveringSessionId,
+          '--text',
+          marker,
+          '--timeout',
+          '20000',
+          '--json',
+        ],
+        { AGENT_TTY_HOME: testHome },
+        30_000,
+      );
+
+      expect(result.exitCode, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        ok: true,
+        result: { matched: true, timedOut: false },
+      });
+    } finally {
+      destroySession(testHome, recoveringSessionId);
+    }
+  });
+
+  it('exits 11 with a WAIT_TIMEOUT error envelope when legacy CLI --idle-ms times out', () => {
+    const tickingSessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      'while :; do echo tick; sleep 0.05; done',
+    ]);
+    try {
+      const result = runCli(
+        [
+          'wait',
+          tickingSessionId,
+          '--idle-ms',
+          '250',
+          '--timeout',
+          '1000',
+          '--json',
+        ],
+        { AGENT_TTY_HOME: testHome },
+        10_000,
+      );
+
+      expect(result.exitCode).toBe(11);
+      expect(result.stderr).toBe('');
+      expect(parseWaitTimeoutEnvelope(result.stdout)).toEqual({
+        timedOut: true,
+      });
+    } finally {
+      destroySession(testHome, tickingSessionId);
+    }
+  });
+
+  it('exits 11 with a WAIT_TIMEOUT error envelope when legacy CLI --exit times out', () => {
     const result = runCli(
       ['wait', sessionId, '--exit', '--timeout', '1000', '--json'],
       { AGENT_TTY_HOME: testHome },
@@ -510,10 +685,34 @@ describe('wait render integration', { timeout: 120_000 }, () => {
 
     expect(result.exitCode).toBe(11);
     expect(result.stderr).toBe('');
-    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<WaitResult>;
-    expect(envelope.ok).toBe(true);
-    expect(envelope.result.timedOut).toBe(true);
+    expect(parseWaitTimeoutEnvelope(result.stdout)).toEqual({
+      timedOut: true,
+    });
   });
+
+  it.each([
+    ['--screen-stable-ms', '5000'],
+    ['--idle-ms', '5000'],
+  ])(
+    'rejects CLI %s %s that cannot finish within --timeout 2000',
+    (flag, windowMs) => {
+      const result = runCli(
+        ['wait', sessionId, flag, windowMs, '--timeout', '2000', '--json'],
+        { AGENT_TTY_HOME: testHome },
+        10_000,
+      );
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toBe('');
+      const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+      expect(envelope.error.code).toBe('INVALID_DURATION');
+      expect(envelope.error.details).toEqual({
+        flag,
+        windowMs: Number(windowMs),
+        timeoutMs: 2000,
+      });
+    },
+  );
 
   it('rejects non-integer CLI --cursor-row values', () => {
     const result = runCli(

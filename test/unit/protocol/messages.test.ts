@@ -9,6 +9,8 @@ import {
   HostInspectResultSchema,
   InspectResultSchema,
   MarkParamsSchema,
+  MouseParamsSchema,
+  MouseResultSchema,
   RendererRuntimeSummarySchema,
   MarkResultSchema,
   PasteParamsSchema,
@@ -35,6 +37,7 @@ import {
 } from '../../../src/protocol/messages.js';
 import {
   EventRecordSchema,
+  InputMouseEventRecordSchema,
   MarkerEventRecordSchema,
   RunCompleteEventPayloadSchema,
   RunCompleteEventRecordSchema,
@@ -224,6 +227,7 @@ describe('CapabilityEntrySchema', () => {
       'record-export-asciicast',
       'record-export-webm',
       'dashboard',
+      'mouse-input',
     ] as const;
 
     for (const name of names) {
@@ -286,6 +290,14 @@ describe('RPC message schemas', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it('accepts a request id of up to 128 characters', () => {
+    const request = (id: string) =>
+      RpcRequestSchema.safeParse({ id, method: 'inspect' }).success;
+
+    expect(request('x'.repeat(128))).toBe(true);
+    expect(request('x'.repeat(129))).toBe(false);
   });
 
   it('rejects a request with a non-object params payload', () => {
@@ -606,6 +618,52 @@ describe('RPC message schemas', () => {
         renderProfileHash: 'b'.repeat(64),
       }).success,
     ).toBe(true);
+  });
+
+  it('accepts missingGlyphs and rejects malformed entries', () => {
+    const result = {
+      sessionId: 'session-01',
+      capturedAtSeq: 5,
+      profileName: 'reference-dark',
+      cols: 80,
+      rows: 24,
+      artifactPath: '/tmp/screenshot.png',
+      pngSizeBytes: 1024,
+    };
+    const parse = (missingGlyphs: unknown) =>
+      ScreenshotResultSchema.safeParse({ ...result, missingGlyphs }).success;
+
+    expect(parse([])).toBe(true);
+    expect(
+      parse([
+        { codePoint: 'U+0378', cells: [{ row: 1, col: 6 }] },
+        { codePoint: 'U+1F468', cells: [{ row: 0, col: 0 }] },
+      ]),
+    ).toBe(true);
+    expect(parse([{ codePoint: 'U+29c9', cells: [{ row: 0, col: 0 }] }])).toBe(
+      false,
+    );
+    expect(
+      parse([{ codePoint: 'U+110000', cells: [{ row: 0, col: 0 }] }]),
+    ).toBe(false);
+    expect(parse([{ codePoint: 'U+29C9', cells: [] }])).toBe(false);
+    expect(
+      parse([{ codePoint: 'U+29C9', cells: [{ row: 0, col: 0, width: 1 }] }]),
+    ).toBe(false);
+    expect(
+      ScreenshotResultSchema.safeParse({
+        ...result,
+        missingGlyphs: [],
+        missingGlyphsTruncated: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      ScreenshotResultSchema.safeParse({
+        ...result,
+        missingGlyphs: [],
+        missingGlyphsTruncated: false,
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects empty screenshot profile names', () => {
@@ -1078,6 +1136,73 @@ describe('RPC message schemas', () => {
         },
       }).success,
     ).toBe(true);
+    expect(
+      RecordExportResultSchema.safeParse({
+        sessionId: 'session-01',
+        format: 'asciicast',
+        artifactPath: '/tmp/session-01/artifacts/recording--1-asciicast.cast',
+        bytes: 128,
+        sha256: 'abc123',
+        capturedAtSeq: -1,
+        durationMs: 0,
+        metadata: {},
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts webm missingGlyphs without cells and rejects malformed entries', () => {
+    const result = {
+      sessionId: 'session-01',
+      format: 'webm',
+      artifactPath: '/tmp/session-01/artifacts/recording-7-webm.webm',
+      bytes: 4096,
+      sha256: 'abc123',
+      capturedAtSeq: 7,
+      metadata: {},
+    };
+    const parse = (fields: Record<string, unknown>) =>
+      RecordExportResultSchema.safeParse({ ...result, ...fields }).success;
+
+    expect(parse({ missingGlyphs: [] })).toBe(true);
+    expect(
+      parse({
+        missingGlyphs: [{ codePoint: 'U+0378' }, { codePoint: 'U+1F468' }],
+        missingGlyphsTruncated: true,
+      }),
+    ).toBe(true);
+    expect(
+      parse({
+        missingGlyphs: [{ codePoint: 'U+0378', cells: [{ row: 0, col: 0 }] }],
+      }),
+    ).toBe(false);
+    expect(parse({ missingGlyphs: [{ codePoint: 'U+29c9' }] })).toBe(false);
+    expect(parse({ missingGlyphs: [], missingGlyphsTruncated: false })).toBe(
+      false,
+    );
+  });
+
+  it('rejects glyph fields on an asciicast record export result', () => {
+    const result = {
+      sessionId: 'session-01',
+      format: 'asciicast',
+      artifactPath: '/tmp/session-01/artifacts/recording-7.cast',
+      bytes: 4096,
+      sha256: 'abc123',
+      capturedAtSeq: 7,
+      metadata: {},
+    };
+
+    expect(RecordExportResultSchema.safeParse(result).success).toBe(true);
+    expect(
+      RecordExportResultSchema.safeParse({ ...result, missingGlyphs: [] })
+        .success,
+    ).toBe(false);
+    expect(
+      RecordExportResultSchema.safeParse({
+        ...result,
+        missingGlyphsTruncated: true,
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects invalid record export results', () => {
@@ -1113,6 +1238,17 @@ describe('RPC message schemas', () => {
         capturedAtSeq: 7,
         metadata: {},
         extra: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordExportResultSchema.safeParse({
+        sessionId: 'session-01',
+        format: 'asciicast',
+        artifactPath: '/tmp/session-01/artifacts/recording--2-asciicast.cast',
+        bytes: 128,
+        sha256: 'abc123',
+        capturedAtSeq: -2,
+        metadata: {},
       }).success,
     ).toBe(false);
   });
@@ -1158,6 +1294,92 @@ describe('RPC message schemas', () => {
       bytesWritten: 1,
       seq: 42,
     });
+  });
+
+  it('classifies valid mouse parameter sets', () => {
+    const validParams = [
+      { action: 'press', button: 'left', row: 0, col: 0 },
+      { action: 'release', button: 'right', row: 23, col: 79 },
+      { action: 'move', row: 2, col: 3 },
+      {
+        action: 'move',
+        row: 4,
+        col: 5,
+        modifiers: { shift: true, alt: false, ctrl: true },
+        rendererName: 'libghostty-vt',
+      },
+      { action: 'press', button: 'wheel-up', row: 6, col: 7 },
+      { action: 'press', button: 'wheel-down', row: 6, col: 7 },
+      { action: 'press', button: 'wheel-left', row: 6, col: 7 },
+      { action: 'press', button: 'wheel-right', row: 6, col: 7 },
+    ];
+
+    expect(
+      validParams.map((params) => MouseParamsSchema.safeParse(params).success),
+    ).toEqual(validParams.map(() => true));
+  });
+
+  it('classifies invalid mouse parameter sets', () => {
+    const invalidParams = [
+      { action: 'press', row: 0, col: 0 },
+      { action: 'release', row: 0, col: 0 },
+      { action: 'move', button: 'left', row: 0, col: 0 },
+      { action: 'drag', button: 'left', row: 0, col: 0 },
+      { action: 'press', button: 'primary', row: 0, col: 0 },
+      { action: 'release', button: 'wheel-up', row: 0, col: 0 },
+      { action: 'press', button: 'left', row: -1, col: 0 },
+      { action: 'press', button: 'left', row: 0, col: -1 },
+      { action: 'press', button: 'left', row: 1.5, col: 0 },
+      {
+        action: 'press',
+        button: 'left',
+        row: 0,
+        col: 0,
+        modifiers: { meta: true },
+      },
+      { action: 'press', button: 'left', row: 0, col: 0, extra: true },
+    ];
+
+    expect(
+      invalidParams.map(
+        (params) => MouseParamsSchema.safeParse(params).success,
+      ),
+    ).toEqual(invalidParams.map(() => false));
+  });
+
+  it('accepts mouse results with reporting state, byte count, and seq', () => {
+    expect(
+      MouseResultSchema.parse({ reported: true, bytesWritten: 10, seq: 42 }),
+    ).toEqual({ reported: true, bytesWritten: 10, seq: 42 });
+    expect(
+      MouseResultSchema.parse({ reported: false, bytesWritten: 0, seq: 43 }),
+    ).toEqual({ reported: false, bytesWritten: 0, seq: 43 });
+  });
+
+  it('strictly validates input_mouse event records', () => {
+    const record = {
+      seq: 7,
+      ts: '2026-03-19T12:00:02.000Z',
+      type: 'input_mouse',
+      payload: {
+        action: 'press',
+        button: 'left',
+        row: 4,
+        col: 9,
+        modifiers: { shift: true, alt: false, ctrl: false },
+        rendererBackend: 'libghostty-vt',
+        dataBase64: Buffer.from('\u001b[<0;10;5M').toString('base64'),
+      },
+    } as const;
+
+    expect(InputMouseEventRecordSchema.parse(record)).toEqual(record);
+    expect(EventRecordSchema.parse(record)).toEqual(record);
+    expect(
+      InputMouseEventRecordSchema.safeParse({
+        ...record,
+        payload: { ...record.payload, reported: true },
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects empty type text', () => {
@@ -1237,6 +1459,7 @@ describe('RPC message schemas', () => {
       'run',
       'mark',
       'sendKeys',
+      'mouse',
       'resize',
       'signal',
       'wait',

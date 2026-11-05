@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import type { BatchPlan, BatchStep } from './plan.js';
 
-import { Sha256HexSchema } from '../protocol/schemas.js';
+import { ReplaySeqSchema, Sha256HexSchema } from '../protocol/schemas.js';
 import { unreachable } from '../util/assert.js';
 
 // `interrupted` is the in-flight step abandoned by a SIGINT/SIGTERM flush (its
@@ -38,6 +38,20 @@ export const InputStepRecordSchema = z
   .strict();
 export type InputStepRecord = z.infer<typeof InputStepRecordSchema>;
 
+export const MouseStepRecordSchema = z
+  .object({
+    index: NonNegativeIntSchema,
+    durationMs: NonNegativeIntSchema,
+    kind: z.literal('mouse'),
+    status: StepStatusSchema,
+    seq: NonNegativeIntSchema.optional(),
+    reported: z.boolean().optional(),
+    bytesWritten: NonNegativeIntSchema.optional(),
+    error: BatchStepErrorSchema.optional(),
+  })
+  .strict();
+export type MouseStepRecord = z.infer<typeof MouseStepRecordSchema>;
+
 export const RunStepRecordSchema = z
   .object({
     index: NonNegativeIntSchema,
@@ -66,7 +80,7 @@ export const WaitStepRecordSchema = z
     matched: z.boolean().optional(),
     timedOut: z.boolean().optional(),
     matchedText: z.string().optional(),
-    capturedAtSeq: NonNegativeIntSchema.optional(),
+    capturedAtSeq: ReplaySeqSchema.optional(),
     screenHash: Sha256HexSchema.optional(),
     error: BatchStepErrorSchema.optional(),
   })
@@ -75,6 +89,7 @@ export type WaitStepRecord = z.infer<typeof WaitStepRecordSchema>;
 
 export const BatchStepRecordSchema = z.discriminatedUnion('kind', [
   InputStepRecordSchema,
+  MouseStepRecordSchema,
   RunStepRecordSchema,
   WaitStepRecordSchema,
 ]);
@@ -105,6 +120,7 @@ export function unreachedStepRecord(
     case 'type':
     case 'paste':
     case 'sendKeys':
+    case 'mouse':
       return { ...base, kind: step.kind };
     default:
       return unreachable(step, `batch unreached-step kind at index ${index}`);

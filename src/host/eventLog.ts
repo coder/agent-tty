@@ -7,10 +7,12 @@ import { z } from 'zod';
 
 import {
   EventRecordSchema,
+  InputMouseEventPayloadSchema,
   InputRunEventPayloadSchema,
   MarkerEventPayloadSchema,
   RunCompleteEventPayloadSchema,
   type EventRecord,
+  type InputMouseEventPayload,
   type InputRunEventPayload,
   type MarkerEventPayload,
   type RunCompleteEventPayload,
@@ -85,6 +87,7 @@ type EventLogEventType =
   | 'input_text'
   | 'input_paste'
   | 'input_keys'
+  | 'input_mouse'
   | 'input_run'
   | 'run_complete'
   | 'resize'
@@ -96,12 +99,18 @@ type EventLogPayload =
   | InputTextEventPayload
   | InputPasteEventPayload
   | InputKeysEventPayload
+  | InputMouseEventPayload
   | InputRunEventPayload
   | RunCompleteEventPayload
   | ResizeEventPayload
   | SignalEventPayload
   | ExitEventPayload
   | MarkerEventPayload;
+
+export interface StartedAppend {
+  readonly seq: number;
+  readonly written: Promise<number>;
+}
 
 /**
  * Maximum number of events retained in the in-memory buffer.
@@ -136,6 +145,11 @@ function validatePayload(
     case 'input_keys': {
       const result = InputKeysEventPayloadSchema.safeParse(payload);
       invariant(result.success, 'input_keys payload must match schema');
+      return result.data;
+    }
+    case 'input_mouse': {
+      const result = InputMouseEventPayloadSchema.safeParse(payload);
+      invariant(result.success, 'input_mouse payload must match schema');
       return result.data;
     }
     case 'input_run': {
@@ -301,6 +315,10 @@ export class EventLog {
     payload: InputKeysEventPayload,
   ): Promise<number>;
   async append(
+    type: 'input_mouse',
+    payload: InputMouseEventPayload,
+  ): Promise<number>;
+  async append(
     type: 'input_run',
     payload: InputRunEventPayload,
   ): Promise<number>;
@@ -316,6 +334,17 @@ export class EventLog {
     type: EventLogEventType,
     payload: EventLogPayload,
   ): Promise<number> {
+    return await this.queueAppend(type, payload).written;
+  }
+
+  startAppend(type: 'input_run', payload: InputRunEventPayload): StartedAppend {
+    return this.queueAppend(type, payload);
+  }
+
+  private queueAppend(
+    type: EventLogEventType,
+    payload: EventLogPayload,
+  ): StartedAppend {
     invariant(!this.isClosed, 'cannot append to a closed event log');
 
     const validatedPayload = validatePayload(type, payload);
@@ -368,14 +397,14 @@ export class EventLog {
     });
     this.writeQueue = writePromise;
 
-    try {
-      await writePromise;
-    } catch (error) {
-      this.rollbackBufferedEventsFrom(seq);
-      throw error;
-    }
-
-    return seq;
+    const written = writePromise.then(
+      () => seq,
+      (error: unknown) => {
+        this.rollbackBufferedEventsFrom(seq);
+        throw error;
+      },
+    );
+    return { seq, written };
   }
 
   private rollbackBufferedEventsFrom(failedSeq: number): void {

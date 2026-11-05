@@ -1,21 +1,36 @@
 import crypto from 'node:crypto';
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import process from 'node:process';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 import {
   manifestPath,
   eventLogPath,
+  legacySocketPath,
+  programRecordPath,
   sessionDir,
   socketPath,
+  socketRootDirectory,
 } from '../../../src/storage/sessionPaths.js';
 import {
   readManifest,
   readManifestIfExists,
   writeManifest,
+  writeTextFileAtomic,
 } from '../../../src/storage/manifests.js';
 
 function createSessionRecord(): SessionRecord {
@@ -51,7 +66,7 @@ describe('session paths', () => {
     const home = '/tmp/agent-tty-home';
     const sessionId = 'session-01';
     const directory = sessionDir(home, 'session-01');
-    const expectedSocketPath = `/tmp/agent-tty/${crypto.createHash('sha256').update(home).digest('hex').slice(0, 8)}/${crypto.createHash('sha256').update(sessionId).digest('hex').slice(0, 12)}`;
+    const expectedSocketPath = `${socketRootDirectory()}/${crypto.createHash('sha256').update(home).digest('hex').slice(0, 8)}/${crypto.createHash('sha256').update(sessionId).digest('hex').slice(0, 12)}`;
 
     expect(directory).toBe('/tmp/agent-tty-home/sessions/session-01');
     expect(manifestPath(directory)).toBe(
@@ -60,8 +75,34 @@ describe('session paths', () => {
     expect(eventLogPath(directory)).toBe(
       '/tmp/agent-tty-home/sessions/session-01/events.jsonl',
     );
+    expect(programRecordPath(directory)).toBe(
+      '/tmp/agent-tty-home/sessions/session-01/program.json',
+    );
     expect(socketPath(directory)).toBe(expectedSocketPath);
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'puts sockets under a root named for the uid',
+    () => {
+      expect(socketRootDirectory()).toBe(
+        `/tmp/agent-tty-${String(process.getuid?.())}`,
+      );
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'maps a socket path to the path that an older host listens at',
+    () => {
+      const socketFile = socketPath(
+        sessionDir('/tmp/agent-tty-home', 'session-01'),
+      );
+
+      expect(legacySocketPath(socketFile)).toBe(
+        `/tmp/agent-tty/${socketFile.slice(socketRootDirectory().length + 1)}`,
+      );
+      expect(legacySocketPath('/tmp/elsewhere/rpc.sock')).toBeNull();
+    },
+  );
 
   it('asserts on invalid path helper inputs', () => {
     expect(() => sessionDir('', 'session-01')).toThrow(
@@ -87,14 +128,58 @@ describe('manifest storage', () => {
     // oxfmt-ignore
     const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
     temporaryDirectories.push(home);
-    const path = manifestPath(sessionDir(home, 'session-01'));
+    const directory = sessionDir(home, 'session-01');
+    const path = manifestPath(directory);
     const record = createSessionRecord();
 
+    await mkdir(directory, { recursive: true });
     await writeManifest(path, record);
 
     const roundTripped = await readManifest(path);
 
     expect(roundTripped).toEqual(record);
+  });
+
+  it('fails with SESSION_NOT_FOUND and creates nothing when the session folder is gone', async () => {
+    // oxfmt-ignore
+    const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
+    temporaryDirectories.push(home);
+    const directory = sessionDir(home, 'session-01');
+
+    await expect(
+      writeManifest(manifestPath(directory), createSessionRecord()),
+    ).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' });
+    await expect(stat(directory)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('runs beforeRename after the temp write and passes on its CliError', async () => {
+    // oxfmt-ignore
+    const directory = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-write-')));
+    temporaryDirectories.push(directory);
+    const path = join(directory, 'out.cast');
+    await writeFile(path, 'old');
+    const refused = makeCliError(ERROR_CODES.EXPORT_ERROR, {
+      message: 'refused',
+    });
+    let entriesSeenByHook: string[] = [];
+
+    await expect(
+      writeTextFileAtomic({
+        path,
+        pathLabel: 'test path',
+        contents: 'new',
+        writeErrorMessage: 'write failed',
+        createParentFolders: false,
+        beforeRename: async () => {
+          entriesSeenByHook = await readdir(directory);
+          throw refused;
+        },
+      }),
+    ).rejects.toBe(refused);
+
+    expect(entriesSeenByHook).toHaveLength(2);
+    expect(await readdir(directory)).toEqual(['out.cast']);
+    expect(await readFile(path, 'utf8')).toBe('old');
   });
 
   it('returns null when a manifest does not exist', async () => {
@@ -110,8 +195,10 @@ describe('manifest storage', () => {
     // oxfmt-ignore
     const home = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-home-')));
     temporaryDirectories.push(home);
-    const path = manifestPath(sessionDir(home, 'session-01'));
+    const directory = sessionDir(home, 'session-01');
+    const path = manifestPath(directory);
 
+    await mkdir(directory, { recursive: true });
     await writeManifest(path, createSessionRecord());
     await writeFile(
       path,
