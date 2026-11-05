@@ -7,6 +7,7 @@ import type { SnapshotCell } from '../../../src/protocol/schemas.js';
 
 import {
   MAX_SVG_OUTPUT_LENGTH,
+  defaultMaxSvgOutputLength,
   renderGridFramesToSvg,
 } from '../../../src/export/svg.js';
 import { resolveProfile } from '../../../src/renderer/profiles.js';
@@ -513,19 +514,27 @@ describe('renderGridFramesToSvg', () => {
     expect(svg).toContain('>b</text>');
   });
 
+  it('sizes the default output budget to the V8 heap limit', () => {
+    expect(defaultMaxSvgOutputLength(8 * 1024 ** 3)).toBe(
+      MAX_SVG_OUTPUT_LENGTH,
+    );
+    expect(defaultMaxSvgOutputLength(1024 ** 3)).toBe(134_217_728);
+    expect(defaultMaxSvgOutputLength(1)).toBe(1);
+  });
+
   it('stops with a clear export error when the output passes its length budget', () => {
-    const render = (maxOutputLength: number) =>
+    const render = (heapSizeLimit: number) =>
       renderGridFramesToSvg({
         profile: PROFILE,
         frames: [makeFrame({ lines: [[cell('x')]] })],
         animate: false,
-        maxOutputLength,
+        heapSizeLimit,
       });
 
     expect(MAX_SVG_OUTPUT_LENGTH).toBeLessThan(constants.MAX_STRING_LENGTH);
-    const svg = render(MAX_SVG_OUTPUT_LENGTH);
-    expect(render(svg.length)).toBe(svg);
-    expect(() => render(svg.length - 1)).toThrow(
+    const svg = render(8 * 1024 ** 3);
+    expect(render(svg.length * 8)).toBe(svg);
+    expect(() => render(svg.length * 8 - 1)).toThrow(
       expect.objectContaining({
         code: 'EXPORT_ERROR',
         message:

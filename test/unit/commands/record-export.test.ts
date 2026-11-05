@@ -836,9 +836,34 @@ describe('record export command', () => {
         code: ERROR_CODES.INVALID_INPUT,
         message: 'unknown render profile: bogus',
       });
+      expect(mocks.ensureArtifactsDir).not.toHaveBeenCalled();
       expect(mocks.captureGridFrames).not.toHaveBeenCalled();
       expect(mocks.generateWebmExport).not.toHaveBeenCalled();
       expect(mocks.emitSuccess).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['svg', 'webm'])(
+    'creates no --out folder for an unknown render profile for %s',
+    async (format) => {
+      const workspaceDirectory = await createTemporaryDirectory(
+        'agent-tty-record-export-bad-profile-',
+      );
+      const outFolder = join(workspaceDirectory, 'new');
+
+      await expect(
+        runRecordExportCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          format,
+          profile: 'bogus',
+          out: join(outFolder, 'sub', `x.${format}`),
+        }),
+      ).rejects.toMatchObject({ code: ERROR_CODES.INVALID_INPUT });
+      await expect(access(outFolder)).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
     },
   );
 

@@ -1,3 +1,5 @@
+import { getHeapStatistics } from 'node:v8';
+
 import type { SnapshotCell } from '../protocol/schemas.js';
 import type { RenderProfileConfig } from '../renderer/types.js';
 import {
@@ -51,8 +53,8 @@ export interface SvgRenderOptions {
   profile: RenderProfileConfig;
   frames: readonly SvgGridFrame[];
   animate: boolean;
-  /** Output length override in UTF-16 code units; defaults to MAX_SVG_OUTPUT_LENGTH. */
-  maxOutputLength?: number;
+  /** The V8 heap limit in bytes that sizes the output budget; defaults to getHeapStatistics(). */
+  heapSizeLimit?: number;
 }
 
 /**
@@ -61,6 +63,26 @@ export interface SvgRenderOptions {
  * This budget stops the render with a clear error well before that limit.
  */
 export const MAX_SVG_OUTPUT_LENGTH = 2 ** 28;
+
+/**
+ * The text lives on the heap twice during the final join, beside the frames.
+ * Eight heap bytes per character keeps a dense animation inside a small heap.
+ */
+const HEAP_BYTES_PER_OUTPUT_CHARACTER = 8;
+
+export function defaultMaxSvgOutputLength(heapSizeLimit: number): number {
+  invariant(
+    Number.isFinite(heapSizeLimit) && heapSizeLimit > 0,
+    'heap size limit must be positive',
+  );
+  return Math.max(
+    1,
+    Math.min(
+      MAX_SVG_OUTPUT_LENGTH,
+      Math.floor(heapSizeLimit / HEAP_BYTES_PER_OUTPUT_CHARACTER),
+    ),
+  );
+}
 
 type GlyphFace = 'latin' | 'symbols' | 'system';
 
@@ -602,12 +624,10 @@ function renderVisibilityAnimation(
  */
 export function renderGridFramesToSvg(options: SvgRenderOptions): string {
   const { profile, frames, animate } = options;
-  const maxOutputLength = options.maxOutputLength ?? MAX_SVG_OUTPUT_LENGTH;
-  invariant(frames.length > 0, 'svg rendering requires at least one frame');
-  invariant(
-    Number.isInteger(maxOutputLength) && maxOutputLength > 0,
-    'maxOutputLength must be a positive integer',
+  const maxOutputLength = defaultMaxSvgOutputLength(
+    options.heapSizeLimit ?? getHeapStatistics().heap_size_limit,
   );
+  invariant(frames.length > 0, 'svg rendering requires at least one frame');
   invariant(
     profile.fontSize === SVG_FONT_SIZE,
     'svg cell metrics are pinned to the reference profile font size',

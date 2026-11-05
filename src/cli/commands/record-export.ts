@@ -252,13 +252,17 @@ export async function runRecordExportCommand(
     // SVG exports at the same seq produce different content per render
     // profile and animation mode, so those must be part of the default
     // filename to keep exports from overwriting each other.
-    const svgProfileName =
-      format === 'svg'
-        ? (resolveRenderProfileName(
+    // Resolved before resolveOutputPath, which can create folders, so an
+    // unknown profile leaves nothing behind.
+    const renderProfileName =
+      format === 'asciicast'
+        ? undefined
+        : resolveRenderProfileName(
             options.profile,
             options.context.profileDefault,
-          ) ?? 'reference-dark')
-        : undefined;
+          );
+    const svgProfileName =
+      format === 'svg' ? (renderProfileName ?? 'reference-dark') : undefined;
     const filenameVariant =
       svgProfileName === undefined
         ? undefined
@@ -429,11 +433,6 @@ export async function runRecordExportCommand(
       invariant(bytes > 0, 'svg export artifact must not be empty');
       sha256 = createHash('sha256').update(contentsBuffer).digest('hex');
     } else {
-      const webmProfileName = resolveRenderProfileName(
-        options.profile,
-        options.context.profileDefault,
-      );
-
       invariant(
         artifactOutputPath.endsWith('.webm'),
         'webm export output path must end with .webm',
@@ -447,8 +446,8 @@ export async function runRecordExportCommand(
           manifest,
           events,
           outputPath: temporaryOutputPath,
-          ...(webmProfileName !== undefined
-            ? { profileName: webmProfileName }
+          ...(renderProfileName !== undefined
+            ? { profileName: renderProfileName }
             : {}),
           ...(timingMode !== undefined ? { timingMode } : {}),
           rendererName: options.context.rendererVisualDefault,
