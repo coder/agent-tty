@@ -740,6 +740,8 @@ function judgeFrozenGroup(group: ProvenRecord): boolean | null {
     }
     let verdict: GroupJudgement['verdict'];
     try {
+      // The SIGSTOP takes effect only when the kernel next runs a member.
+      Atomics.wait(settleCell, 0, 0, STOP_SETTLE_MS);
       verdict = judgeLiveGroup(group).verdict;
     } finally {
       signalProcessGroup(group.pid, 'SIGCONT');

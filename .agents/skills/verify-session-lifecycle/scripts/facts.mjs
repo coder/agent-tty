@@ -1578,7 +1578,10 @@ function frozenJudgesTwice() {
     judged.catchClause === undefined &&
     judged.finallyBlock !== undefined &&
     statementsOf(judged.tryBlock).join('\n') ===
-      'verdict = judgeLiveGroup(group).verdict;' &&
+      [
+        'Atomics.wait(settleCell, 0, 0, STOP_SETTLE_MS);',
+        'verdict = judgeLiveGroup(group).verdict;',
+      ].join('\n') &&
     statementsOf(judged.finallyBlock).join('\n') ===
       "signalProcessGroup(group.pid, 'SIGCONT');" &&
     normalize(decides?.getText() ?? '') ===
