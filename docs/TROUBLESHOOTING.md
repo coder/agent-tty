@@ -96,3 +96,9 @@ If it still appears:
 - The program running inside the session set the marker itself.
 
 To deliberately keep the marker, pass `--env PROMPT_EOL_MARK='%B%S%#%s%b'` (zsh's styled default) when creating the session.
+
+## A Recording Ends Early, or an Export Names the Event Log Limit
+
+Each session records its terminal output in `events.jsonl`, which holds at most 52,428,800 bytes (50 MB). A session that prints more stops recording at that size. The host writes one marker that begins `agent-tty: event log limit reached`, and after it records only the program's exit. The program keeps running. Its later output, input, resizes and signals are not recorded, so snapshots, screenshots and recordings show the session as it was at the marker, and a `wait` for text that appears later times out. An asciicast export ends with the marker. To keep a long session recordable, send its verbose output to a file instead of the terminal.
+
+A command that fails with a message such as `its event log is 81336613 bytes, over the 52428800-byte limit that commands can read` names a log that an older version of agent-tty wrote past the limit. No command can read that log. `inspect` and `destroy` still work on the session.

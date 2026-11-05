@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { EventRecord } from '../../../src/protocol/schemas.js';
 import {
   assertEventLogSize,
+  EventLogTooLargeError,
   MAX_EVENT_LOG_SIZE,
   parseEventLogContent,
   readEventLogRecords,
@@ -82,6 +83,21 @@ describe('event log codec', () => {
     await expect(readEventLogRecords(eventLogPath)).rejects.toThrow(
       `event log file exceeds size limit (${String(MAX_EVENT_LOG_SIZE + 1)} bytes, max ${String(MAX_EVENT_LOG_SIZE)})`,
     );
+  });
+
+  it('throws a typed error that carries the size and the limit', async () => {
+    expect(() => assertEventLogSize(MAX_EVENT_LOG_SIZE + 1)).toThrow(
+      EventLogTooLargeError,
+    );
+
+    await writeFile(eventLogPath, '', 'utf8');
+    await truncate(eventLogPath, MAX_EVENT_LOG_SIZE + 1);
+
+    await expect(readEventLogRecords(eventLogPath)).rejects.toMatchObject({
+      name: 'EventLogTooLargeError',
+      size: MAX_EVENT_LOG_SIZE + 1,
+      maxSize: MAX_EVENT_LOG_SIZE,
+    });
   });
 
   it('parses empty event log content as no records', () => {

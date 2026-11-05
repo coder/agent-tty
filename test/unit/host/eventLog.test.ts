@@ -3,6 +3,7 @@ import {
   readFile,
   realpath,
   rm,
+  stat,
   truncate,
   writeFile,
 } from 'node:fs/promises';
@@ -11,13 +12,20 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { generateAsciicast } from '../../../src/export/asciicast.js';
 import {
   countEventLogEntries,
+  EVENT_LOG_LIMIT_LABEL_PREFIX,
+  EVENT_LOG_TAIL_RESERVE_BYTES,
   EventLog,
   MAX_EVENT_BUFFER_ENTRIES,
   statEventLogBytes,
 } from '../../../src/host/eventLog.js';
-import { MAX_EVENT_LOG_SIZE } from '../../../src/storage/eventLogCodec.js';
+import type { SessionRecord } from '../../../src/protocol/schemas.js';
+import {
+  MAX_EVENT_LOG_SIZE,
+  readEventLogRecords,
+} from '../../../src/storage/eventLogCodec.js';
 
 let tempDir = '';
 let eventLogPath = '';
@@ -523,5 +531,272 @@ describe('EventLog', () => {
     await expect(EventLog.open(eventLogPath)).rejects.toThrow(
       'event log seq values must increase by 1 without gaps',
     );
+  });
+});
+
+describe('EventLog size limit', () => {
+  // Small enough to reach with a few dozen appends, large enough to leave
+  // room beyond the tail reserve.
+  const LIMIT = EVENT_LOG_TAIL_RESERVE_BYTES * 2;
+
+  beforeEach(async () => {
+    // oxfmt-ignore
+    tempDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-event-log-limit-')));
+    eventLogPath = join(tempDir, 'events.jsonl');
+    await writeFile(eventLogPath, '', 'utf8');
+  });
+
+  afterEach(async () => {
+    if (tempDir.length > 0) {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  async function fileBytes(): Promise<number> {
+    return (await stat(eventLogPath)).size;
+  }
+
+  async function fillUntilStopped(eventLog: EventLog): Promise<void> {
+    for (let index = 0; index < 1000; index += 1) {
+      await eventLog.append('output', { data: `line ${String(index)}\r\n` });
+      if (eventLog.getEvents().some((event) => event.type === 'marker')) {
+        return;
+      }
+    }
+    expect.unreachable('the log never stopped');
+  }
+
+  function stopRecords(eventLog: EventLog): readonly unknown[] {
+    return eventLog
+      .getEvents()
+      .filter(
+        (event) =>
+          event.type === 'marker' &&
+          event.payload.label.startsWith(EVENT_LOG_LIMIT_LABEL_PREFIX),
+      );
+  }
+
+  it('stops at the limit: one stop record, later events dropped, file within the limit', async () => {
+    const eventLog = await EventLog.open(eventLogPath, { maxBytes: LIMIT });
+
+    try {
+      await fillUntilStopped(eventLog);
+      const seqAtStop = eventLog.getEvents().at(-1)?.seq;
+      expect(seqAtStop).toBeGreaterThan(0);
+
+      // Every later append resolves, and none of them takes a seq.
+      await expect(
+        eventLog.append('output', { data: 'x'.repeat(100) }),
+      ).resolves.toBe(seqAtStop);
+      await expect(
+        eventLog.append('input_text', { data: 'typed' }),
+      ).resolves.toBe(seqAtStop);
+      await expect(
+        eventLog.append('resize', { cols: 100, rows: 30 }),
+      ).resolves.toBe(seqAtStop);
+      await expect(
+        eventLog.append('signal', { signal: 'SIGINT' }),
+      ).resolves.toBe(seqAtStop);
+      await expect(eventLog.append('marker', { label: 'late' })).resolves.toBe(
+        seqAtStop,
+      );
+      expect(
+        eventLog.startAppend('input_run', {
+          command: 'ls',
+          noWait: true,
+        }).seq,
+      ).toBe(seqAtStop);
+
+      // The exit record still fits in the reserve.
+      const exitSeq = await eventLog.append('exit', {
+        exitCode: 0,
+        exitSignal: null,
+      });
+      expect(exitSeq).toBe((seqAtStop ?? 0) + 1);
+      await expect(eventLog.append('output', { data: 'after' })).resolves.toBe(
+        exitSeq,
+      );
+      await eventLog.readAll();
+
+      const events = eventLog.getEvents();
+      expect(stopRecords(eventLog)).toHaveLength(1);
+      expect(events.map((event) => event.seq)).toEqual(
+        events.map((_, index) => index),
+      );
+      expect(events.at(-2)).toMatchObject({
+        type: 'marker',
+        payload: {
+          label: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (${String(LIMIT)} bytes); later events are not recorded`,
+        },
+      });
+      expect(events.at(-1)?.type).toBe('exit');
+      expect(events.map((event) => event.type)).not.toContain('input_text');
+      expect(await fileBytes()).toBeLessThanOrEqual(LIMIT);
+    } finally {
+      await eventLog.close();
+    }
+  });
+
+  it('keeps ordinary records out of the tail reserve', async () => {
+    const eventLog = await EventLog.open(eventLogPath, { maxBytes: LIMIT });
+
+    try {
+      await fillUntilStopped(eventLog);
+      await eventLog.readAll();
+
+      // Everything but the stop record fits below the reserve.
+      const stopSeq = eventLog.getEvents().at(-1)?.seq ?? 0;
+      const withoutStop = eventLog
+        .getEvents()
+        .slice(0, stopSeq)
+        .reduce(
+          (total, event) =>
+            total + Buffer.byteLength(`${JSON.stringify(event)}\n`),
+          0,
+        );
+      expect(withoutStop).toBeLessThanOrEqual(
+        LIMIT - EVENT_LOG_TAIL_RESERVE_BYTES,
+      );
+    } finally {
+      await eventLog.close();
+    }
+  });
+
+  it('stops on a single record that is larger than the room', async () => {
+    const eventLog = await EventLog.open(eventLogPath, { maxBytes: LIMIT });
+
+    try {
+      await eventLog.append('output', { data: 'prompt$ ' });
+      await expect(
+        eventLog.append('output', { data: 'x'.repeat(LIMIT) }),
+      ).resolves.toBe(1);
+      await eventLog.readAll();
+
+      expect(eventLog.getEvents().map((event) => event.type)).toEqual([
+        'output',
+        'marker',
+      ]);
+      expect(await fileBytes()).toBeLessThanOrEqual(LIMIT);
+    } finally {
+      await eventLog.close();
+    }
+  });
+
+  it('writes the exit record into the reserve when the log has not stopped', async () => {
+    const eventLog = await EventLog.open(eventLogPath, { maxBytes: LIMIT });
+    const lineBytes = (
+      seq: number,
+      type: 'output' | 'exit',
+      payload: object,
+    ): number =>
+      Buffer.byteLength(
+        `${JSON.stringify({ seq, ts: new Date().toISOString(), type, payload })}\n`,
+      );
+    const output = { data: 'y'.repeat(20) };
+    const exit = { exitCode: 0, exitSignal: null };
+
+    try {
+      // Fill the file up to the reserve line, without stopping the log.
+      let seq = 0;
+      while (
+        LIMIT - EVENT_LOG_TAIL_RESERVE_BYTES - (await fileBytes()) >=
+        lineBytes(seq, 'output', output)
+      ) {
+        await eventLog.append('output', output);
+        seq += 1;
+      }
+      expect(
+        LIMIT - EVENT_LOG_TAIL_RESERVE_BYTES - (await fileBytes()),
+      ).toBeLessThan(lineBytes(seq, 'exit', exit));
+      expect(stopRecords(eventLog)).toHaveLength(0);
+
+      await eventLog.append('exit', exit);
+      await eventLog.readAll();
+
+      expect(eventLog.getEvents().at(-1)?.type).toBe('exit');
+      expect(stopRecords(eventLog)).toHaveLength(0);
+      expect(await fileBytes()).toBeGreaterThan(
+        LIMIT - EVENT_LOG_TAIL_RESERVE_BYTES,
+      );
+      expect(await fileBytes()).toBeLessThanOrEqual(LIMIT);
+    } finally {
+      await eventLog.close();
+    }
+  });
+
+  it('leaves a log that readers accept and the asciicast export shows the stop', async () => {
+    const eventLog = await EventLog.open(eventLogPath, { maxBytes: LIMIT });
+
+    try {
+      await fillUntilStopped(eventLog);
+      await eventLog.append('exit', { exitCode: 0, exitSignal: null });
+    } finally {
+      await eventLog.close();
+    }
+
+    const events = await readEventLogRecords(eventLogPath);
+    expect(events.map((event) => event.seq)).toEqual(
+      events.map((_, index) => index),
+    );
+
+    const manifest: SessionRecord = {
+      version: 1,
+      sessionId: 'session-01',
+      createdAt: '2026-03-19T12:00:00.000Z',
+      updatedAt: '2026-03-19T12:00:00.000Z',
+      status: 'exited',
+      command: ['/bin/sh'],
+      cwd: '/tmp/workspace',
+      cols: 80,
+      rows: 24,
+      hostPid: null,
+      childPid: null,
+      exitCode: 0,
+      exitSignal: null,
+    };
+    const cast = generateAsciicast('session-01', manifest, events);
+    expect(cast.markerCount).toBe(1);
+    const markerLine = cast.contents
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as unknown[])
+      .find((line) => line[1] === 'm');
+    expect(markerLine?.[2]).toContain(EVENT_LOG_LIMIT_LABEL_PREFIX);
+  });
+
+  it('reports a failed write to the caller of a dropped append', async () => {
+    const eventLog = await EventLog.open(eventLogPath, { maxBytes: LIMIT });
+    const eventLogInternals = eventLog as unknown as {
+      fileHandle: {
+        appendFile: (data: string, encoding: BufferEncoding) => Promise<void>;
+      };
+      writeQueue: Promise<void>;
+    };
+
+    try {
+      await fillUntilStopped(eventLog);
+      vi.spyOn(eventLogInternals.fileHandle, 'appendFile').mockRejectedValue(
+        new Error('EIO'),
+      );
+      await expect(
+        eventLog.append('exit', { exitCode: 0, exitSignal: null }),
+      ).rejects.toThrow('EIO');
+      await expect(
+        eventLog.append('output', { data: 'dropped' }),
+      ).rejects.toThrow('EIO');
+      vi.restoreAllMocks();
+      eventLogInternals.writeQueue = Promise.resolve();
+    } finally {
+      await eventLog.close();
+    }
+  });
+
+  it('refuses a limit that readers would not accept or that has no room', async () => {
+    await expect(
+      EventLog.open(eventLogPath, { maxBytes: MAX_EVENT_LOG_SIZE + 1 }),
+    ).rejects.toThrow('maxBytes must leave room');
+    await expect(
+      EventLog.open(eventLogPath, { maxBytes: EVENT_LOG_TAIL_RESERVE_BYTES }),
+    ).rejects.toThrow('maxBytes must leave room');
   });
 });

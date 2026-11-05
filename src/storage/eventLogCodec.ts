@@ -5,13 +5,31 @@ import { invariant } from '../util/assert.js';
 
 export const MAX_EVENT_LOG_SIZE = 50 * 1024 * 1024;
 
+/**
+ * A log file larger than the limit. This is a state of the file, not a bug in
+ * the caller, so commands can catch it and name the cause. The host writer
+ * never produces such a file: it stops appending at the limit.
+ */
+export class EventLogTooLargeError extends Error {
+  public readonly size: number;
+  public readonly maxSize: number;
+
+  public constructor(size: number, maxSize: number) {
+    super(
+      `event log file exceeds size limit (${String(size)} bytes, max ${String(maxSize)})`,
+    );
+    this.name = 'EventLogTooLargeError';
+    this.size = size;
+    this.maxSize = maxSize;
+  }
+}
+
 export function assertEventLogSize(size: number): void {
   invariant(Number.isInteger(size), 'event log size must be an integer');
   invariant(size >= 0, 'event log size must be non-negative');
-  invariant(
-    size <= MAX_EVENT_LOG_SIZE,
-    `event log file exceeds size limit (${String(size)} bytes, max ${String(MAX_EVENT_LOG_SIZE)})`,
-  );
+  if (size > MAX_EVENT_LOG_SIZE) {
+    throw new EventLogTooLargeError(size, MAX_EVENT_LOG_SIZE);
+  }
 }
 
 function parseEventLogLine(line: string, lineNumber: number): EventRecord {

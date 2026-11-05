@@ -14,11 +14,13 @@ import process from 'node:process';
 
 import type * as FsPromises from 'node:fs/promises';
 
+import type * as EventLogCodecModule from '../../../src/storage/eventLogCodec.js';
 import type * as HomeModule from '../../../src/storage/home.js';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
+import { EventLogTooLargeError } from '../../../src/storage/eventLogCodec.js';
 
 const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
@@ -48,7 +50,8 @@ vi.mock('../../../src/cli/output.js', () => ({
   emitSuccess: mocks.emitSuccess,
 }));
 
-vi.mock('../../../src/storage/eventLogCodec.js', () => ({
+vi.mock('../../../src/storage/eventLogCodec.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof EventLogCodecModule>()),
   readEventLogRecords: mocks.readEventLogRecords,
 }));
 
@@ -1218,6 +1221,50 @@ describe('record export command', () => {
     });
     expect(mocks.readEventLogRecords).not.toHaveBeenCalled();
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it.each(['asciicast', 'webm'] as const)(
+    'names the size limit when the event log is too large to export as %s',
+    async (format) => {
+      mocks.readEventLogRecords.mockRejectedValue(
+        new EventLogTooLargeError(78_623_361, 52_428_800),
+      );
+
+      await expect(
+        runRecordExportCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          format,
+        }),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.EXPORT_ERROR,
+        message: `Failed to export session "session-01" as ${format}: its event log is 78623361 bytes, over the 52428800-byte limit that commands can read.`,
+        details: {
+          sessionId: 'session-01',
+          format,
+          eventLogBytes: 78_623_361,
+          maxEventLogBytes: 52_428_800,
+        },
+      });
+      expect(mocks.emitSuccess).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps the generic message for other event log read failures', async () => {
+    mocks.readEventLogRecords.mockRejectedValue(new Error('EIO'));
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'asciicast',
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
+      message: 'Failed to export session "session-01" as asciicast.',
+    });
   });
 
   it('writes explicit relative output paths within the current working directory', async () => {

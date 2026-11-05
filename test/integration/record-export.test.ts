@@ -1,5 +1,12 @@
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, readFile, realpath } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  truncate,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import process from 'node:process';
@@ -7,7 +14,8 @@ import process from 'node:process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { readArtifactManifest } from '../../src/storage/artifactManifest.js';
-import { sessionDir } from '../../src/storage/sessionPaths.js';
+import { MAX_EVENT_LOG_SIZE } from '../../src/storage/eventLogCodec.js';
+import { eventLogPath, sessionDir } from '../../src/storage/sessionPaths.js';
 import {
   cleanupHome,
   createSession,
@@ -518,6 +526,50 @@ describe('record export integration', { timeout: 120_000 }, () => {
     ) as SuccessEnvelope<RecordExportResult>;
     expect(envelope.result.artifactPath).toBe(out);
     expect(await readFile(out, 'utf8')).toContain('done');
+  });
+
+  it('names the size limit when the event log is too large to read', async () => {
+    const sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      "printf 'done\\n'; exit 0",
+    ]);
+    waitForExit(testHome, sessionId);
+    // A log that a host of an older version grew past the limit. A sparse
+    // file keeps the test fast: the size check runs before the read.
+    await truncate(
+      eventLogPath(sessionDir(testHome, sessionId)),
+      MAX_EVENT_LOG_SIZE + 1,
+    );
+
+    const exportResult = runCli(
+      ['record', 'export', sessionId, '--format', 'asciicast', '--json'],
+      { AGENT_TTY_HOME: testHome },
+      15_000,
+    );
+    expect(exportResult.status).toBe(7);
+    const exportEnvelope = JSON.parse(exportResult.stdout) as ErrorEnvelope;
+    expect(exportEnvelope.error.code).toBe('EXPORT_ERROR');
+    expect(exportEnvelope.error.message).toMatch(
+      new RegExp(
+        `^Failed to export session "${sessionId}" as asciicast: its event log is \\d+ bytes, over the ${String(MAX_EVENT_LOG_SIZE)}-byte limit that commands can read\\.$`,
+      ),
+    );
+    expect(exportEnvelope.error.details?.maxEventLogBytes).toBe(
+      MAX_EVENT_LOG_SIZE,
+    );
+
+    const snapshotResult = runCli(
+      ['snapshot', sessionId, '--json'],
+      { AGENT_TTY_HOME: testHome },
+      15_000,
+    );
+    expect(snapshotResult.status).toBe(10);
+    const snapshotEnvelope = JSON.parse(snapshotResult.stdout) as ErrorEnvelope;
+    expect(snapshotEnvelope.error.code).toBe('REPLAY_ERROR');
+    expect(snapshotEnvelope.error.message).toContain(
+      `-byte limit that commands can read.`,
+    );
   });
 
   it('rejects invalid export formats', () => {
