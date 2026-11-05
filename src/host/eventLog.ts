@@ -116,6 +116,7 @@ export interface StartedAppend {
 /**
  * Maximum number of events retained in the in-memory buffer.
  * At ~200 bytes per event object, 250k events ≈ 50MB — consistent with the file size limit.
+ * The log stops at this count the same way it stops at its byte limit.
  */
 export const MAX_EVENT_BUFFER_ENTRIES = 250_000;
 
@@ -126,7 +127,17 @@ export const MAX_EVENT_BUFFER_ENTRIES = 250_000;
  */
 export const EVENT_LOG_TAIL_RESERVE_BYTES = 4096;
 
-/** Start of the label of the marker that records why the log stopped. */
+/**
+ * Entries that ordinary records leave free in the buffer: one for the stop
+ * record and one for the `exit` record.
+ */
+export const EVENT_LOG_TAIL_RESERVE_ENTRIES = 2;
+
+/**
+ * Start of the label of the marker that records why the log stopped. The rest
+ * of the label names the limit that was reached: `(<n> bytes)` for the file
+ * size, `(<n> events)` for the entry count.
+ */
 export const EVENT_LOG_LIMIT_LABEL_PREFIX =
   'agent-tty: event log limit reached';
 
@@ -136,7 +147,15 @@ export interface EventLogOptions {
    * readers enforce, and cannot exceed it. Tests inject a small limit.
    */
   readonly maxBytes?: number;
+  /**
+   * Limit of the number of events. Defaults to `MAX_EVENT_BUFFER_ENTRIES` and
+   * cannot exceed it. Tests inject a small limit.
+   */
+  readonly maxEntries?: number;
 }
+
+/** The limit that stopped the log. */
+type StopReason = 'bytes' | 'entries';
 
 interface PreparedRecord {
   readonly record: EventRecord;
@@ -295,6 +314,7 @@ export class EventLog {
     private nextSeq: number,
     fileBytes: number,
     private readonly maxBytes: number,
+    private readonly maxEntries: number,
     eventBuffer: EventRecord[] = [],
     private isClosed = false,
   ) {
@@ -311,6 +331,12 @@ export class EventLog {
         maxBytes <= MAX_EVENT_LOG_SIZE,
       'maxBytes must leave room beyond the tail reserve and must not exceed MAX_EVENT_LOG_SIZE',
     );
+    invariant(
+      Number.isInteger(maxEntries) &&
+        maxEntries > EVENT_LOG_TAIL_RESERVE_ENTRIES &&
+        maxEntries <= MAX_EVENT_BUFFER_ENTRIES,
+      'maxEntries must leave room beyond the tail reserve and must not exceed MAX_EVENT_BUFFER_ENTRIES',
+    );
     this.fileBytes = fileBytes;
     invariant(
       nextSeq === eventBuffer.length,
@@ -325,6 +351,7 @@ export class EventLog {
   ): Promise<EventLog> {
     assertFilePath(filePath);
     const maxBytes = options.maxBytes ?? MAX_EVENT_LOG_SIZE;
+    const maxEntries = options.maxEntries ?? MAX_EVENT_BUFFER_ENTRIES;
 
     const fileHandle = await open(filePath, 'a');
     try {
@@ -351,6 +378,7 @@ export class EventLog {
         nextSeq,
         fileStats.size,
         maxBytes,
+        maxEntries,
         eventBuffer,
       );
     } catch (error) {
@@ -403,7 +431,8 @@ export class EventLog {
    * Appends a record while the log has room, and otherwise stops the log:
    *
    * - Ordinary records may fill the file up to `maxBytes` minus
-   *   `EVENT_LOG_TAIL_RESERVE_BYTES`.
+   *   `EVENT_LOG_TAIL_RESERVE_BYTES`, and the buffer up to `maxEntries` minus
+   *   `EVENT_LOG_TAIL_RESERVE_ENTRIES`.
    * - The first record that does not fit stops the log. The log appends one
    *   stop marker inside the reserve (see `recordStop`), and from then on it
    *   records nothing but the `exit` record, which also fits in the reserve.
@@ -430,12 +459,13 @@ export class EventLog {
     }
 
     const prepared = this.prepareRecord(type, validatedPayload);
-    if (this.hasRoomFor(type, prepared.bytes)) {
+    const stopReason = this.findStopReason(type, prepared.bytes);
+    if (stopReason === undefined) {
       return this.enqueue(prepared);
     }
 
     if (!this.stopped) {
-      this.recordStop();
+      this.recordStop(stopReason);
     }
     return this.acknowledgeUnstored();
   }
@@ -466,30 +496,48 @@ export class EventLog {
     };
   }
 
-  private hasRoomFor(type: EventLogEventType, bytes: number): boolean {
-    const room = this.maxBytes - this.fileBytes;
-    if (type === 'exit') {
-      // The last record of a session may use the reserve.
-      return bytes <= room;
-    }
+  /**
+   * Returns the limit that a record of `bytes` bytes would pass, or
+   * `undefined` when it fits. The last record of a session, `exit`, may use
+   * the reserves. When both limits are passed, the byte limit is the reason.
+   */
+  private findStopReason(
+    type: EventLogEventType,
+    bytes: number,
+  ): StopReason | undefined {
+    const reserveBytes = type === 'exit' ? 0 : EVENT_LOG_TAIL_RESERVE_BYTES;
+    const reserveEntries = type === 'exit' ? 0 : EVENT_LOG_TAIL_RESERVE_ENTRIES;
 
-    return bytes <= room - EVENT_LOG_TAIL_RESERVE_BYTES;
+    if (bytes > this.maxBytes - this.fileBytes - reserveBytes) {
+      return 'bytes';
+    }
+    if (this.eventBuffer.length + 1 > this.maxEntries - reserveEntries) {
+      return 'entries';
+    }
+    return undefined;
   }
 
   /**
    * Stops the log and records why, once. The marker is the only existing
    * event type that fits: it carries a label, replayers ignore it, and the
-   * asciicast export shows it as a marker. It goes into the reserve, so it
-   * fits unless a log that this host did not write already filled the
-   * reserve before it opened.
+   * asciicast export shows it as a marker. Its label names the limit that was
+   * reached: bytes or events. It goes into the reserves, so it fits unless a
+   * log that this host did not write already filled them before it opened.
    */
-  private recordStop(): void {
+  private recordStop(reason: StopReason): void {
     this.stopped = true;
 
+    const limit =
+      reason === 'bytes'
+        ? `${String(this.maxBytes)} bytes`
+        : `${String(this.maxEntries)} events`;
     const stop = this.prepareRecord('marker', {
-      label: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (${String(this.maxBytes)} bytes); later events are not recorded`,
+      label: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (${limit}); later events are not recorded`,
     });
-    if (stop.bytes > this.maxBytes - this.fileBytes) {
+    if (
+      stop.bytes > this.maxBytes - this.fileBytes ||
+      this.eventBuffer.length + 1 > this.maxEntries
+    ) {
       return;
     }
 
@@ -516,8 +564,8 @@ export class EventLog {
       'event seq must match the expected next seq',
     );
     invariant(
-      this.eventBuffer.length < MAX_EVENT_BUFFER_ENTRIES,
-      `event buffer exceeds ${String(MAX_EVENT_BUFFER_ENTRIES)} entries; session event log is too large`,
+      this.eventBuffer.length < this.maxEntries,
+      `event buffer exceeds ${String(this.maxEntries)} entries; session event log is too large`,
     );
     invariant(
       seq === this.eventBuffer.length,

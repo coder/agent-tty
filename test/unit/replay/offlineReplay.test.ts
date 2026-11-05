@@ -586,6 +586,27 @@ describe('withOfflineReplayRenderer', () => {
     expect(backend.disposed).toBe(true);
   });
 
+  it('keeps the generic message for other event log read failures', async () => {
+    const { sessionDir } = await createSessionFixture({
+      eventsContents: '{"seq":0',
+    });
+    const eventsFile = eventLogPath(sessionDir);
+    const backend = createMockBackend();
+
+    const replayPromise = withOfflineReplayRenderer(
+      { sessionDir },
+      () => Promise.resolve('unreachable'),
+      { backendFactory: () => backend },
+    );
+
+    await expect(replayPromise).rejects.toMatchObject({
+      name: 'CliError',
+      code: ERROR_CODES.REPLAY_ERROR,
+      message: `Failed to read event log: ${eventsFile}`,
+      details: {},
+    });
+  });
+
   it('wraps non-contiguous event log sequences as REPLAY_ERROR and still disposes the backend', async () => {
     const { sessionDir } = await createSessionFixture({
       events: [

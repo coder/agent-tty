@@ -99,6 +99,15 @@ To deliberately keep the marker, pass `--env PROMPT_EOL_MARK='%B%S%#%s%b'` (zsh'
 
 ## A Recording Ends Early, or an Export Names the Event Log Limit
 
-Each session records its terminal output in `events.jsonl`, which holds at most 52,428,800 bytes (50 MB). A session that prints more stops recording at that size. The host writes one marker that begins `agent-tty: event log limit reached`, and after it records only the program's exit. The program keeps running. Its later output, input, resizes and signals are not recorded, so snapshots, screenshots and recordings show the session as it was at the marker, and a `wait` for text that appears later times out. An asciicast export ends with the marker. To keep a long session recordable, send its verbose output to a file instead of the terminal.
+Each session records its terminal output in `events.jsonl`. The log stops at the first of two limits: 52,428,800 bytes (50 MB), or 250,000 events. A program that prints a lot reaches the byte limit. A program that prints in many tiny chunks reaches the event limit long before 50 MB. When the log stops, the host writes one marker and after it records only the program's exit. The marker begins `agent-tty: event log limit reached` and ends with the limit that stopped the log: `(52428800 bytes)` or `(250000 events)`. The program keeps running. Its later output, input, resizes and signals are not recorded, so snapshots, screenshots and recordings show the session as it was at the marker. An asciicast export ends with the marker.
+
+Commands on a live session read the stored log too, so after the marker they see the session as it was at the marker:
+
+- `wait --text` and `wait --regex` for text that appears later time out.
+- `wait --screen-stable-ms` can report a stable screen while the program keeps printing, because the stored screen no longer changes.
+- `mouse` encodes against the mouse modes in the stored log. A mode that the program turned on after the marker is not known, so the event succeeds with `reported: false` and writes nothing. A mode that the program turned off after the marker is still on in the stored log, so the program receives mouse bytes that it no longer expects.
+- `wait --idle-ms` and `wait --exit` watch the live program and are not affected.
+
+To keep a long session recordable, send its verbose output to a file instead of the terminal, or print in larger chunks.
 
 A command that fails with a message such as `its event log is 81336613 bytes, over the 52428800-byte limit that commands can read` names a log that an older version of agent-tty wrote past the limit. No command can read that log. `inspect` and `destroy` still work on the session.
