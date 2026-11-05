@@ -96,9 +96,9 @@ jobs:
         run: mise run bootstrap-ci
 
       # bootstrap-ci intentionally skips browser downloads so jobs that do not
-      # need Chromium can stay on deterministic `npm ci`. This release workflow
-      # runs the full Linux quality bar, so install Chromium explicitly just as
-      # `.github/workflows/ci.yml` does.
+      # need Chromium can stay on a deterministic frozen `pnpm install`. This
+      # release workflow runs the full Linux quality bar, so install Chromium
+      # explicitly just as `.github/workflows/ci.yml` does.
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 

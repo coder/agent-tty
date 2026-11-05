@@ -1,9 +1,12 @@
 [tools]
 actionlint = "1.7.12"
-aube = "1.10.4"
 communique = "1.1.3"
 jq = "1.8.1"
 node = "26"
+# The npm build of pnpm bundles node-gyp, which node-pty needs on Linux (it
+# ships no Linux prebuilds). The standalone binary (`pnpm = ...`) does not.
+# Stay on pnpm 10 until Dependabot's pnpm 11+ support settles.
+"npm:pnpm" = "10.34.5"
 python = "3"
 tmux = "3.6a"
 # VHS needs ttyd, but ttyd ships no macOS binary, so it's Linux/CI-only here.
@@ -14,11 +17,11 @@ zizmor = "1.25.2"
 
 [tasks.bootstrap]
 description = "Install deps and Chromium for local development"
-run = "aube exec playwright install chromium"
+run = "pnpm install && pnpm exec playwright install chromium"
 
 [tasks.bootstrap-ci]
 description = "Install deps for CI without browser downloads"
-run = "aube ci"
+run = "pnpm install --frozen-lockfile"
 
 [tasks.clean]
 description = "Clean artifacts"
@@ -129,7 +132,7 @@ sources = [
 
 [tasks.audit]
 description = "Fail on high-severity dependency advisories"
-run = "aube audit --audit-level high"
+run = "pnpm audit --audit-level high"
 
 [tasks.format]
 description = "Format"
@@ -201,3 +204,6 @@ run = "mise run format-check && mise run workflow-lint && mise run lint && mise 
 
 [settings]
 lockfile = true
+# Install npm-backend tools (pnpm) with npm itself, not whichever package
+# manager mise auto-detects on the host.
+npm.package_manager = "npm"

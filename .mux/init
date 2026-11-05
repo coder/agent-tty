@@ -31,7 +31,8 @@ if [ -f "$_mux_mise_config" ]; then
 fi
 
 "$_mux_mise_bin" install
-"$_mux_mise_bin" exec -- aube exec playwright install chromium
+"$_mux_mise_bin" exec -- pnpm install
+"$_mux_mise_bin" exec -- pnpm exec playwright install chromium
 
 unset _mux_mise_bin
 unset _mux_mise_config
