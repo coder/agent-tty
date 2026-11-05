@@ -9,7 +9,7 @@ mise install
 mise run bootstrap
 ```
 
-Fallback setup without mise: install pnpm 10 from npm (`npm install -g pnpm@10`). It switches to the version that the `packageManager` field of `package.json` pins, and its npm build bundles the `node-gyp` that `node-pty` needs on Linux. Newer pnpm majors can refuse that pin, so do not use them here:
+Fallback setup without mise: install pnpm 10 from npm (`npm install -g pnpm@10`). It switches to the version that the `packageManager` field of `package.json` pins, and its npm build bundles the `node-gyp` that `node-pty` needs on Linux. Newer pnpm majors can refuse that pin, so do not use them here. Then run:
 
 ```bash
 pnpm install
