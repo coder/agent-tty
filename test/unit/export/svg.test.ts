@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import type { SvgGridFrame } from '../../../src/export/svg.js';
 import type { SnapshotCell } from '../../../src/protocol/schemas.js';
 
-import { renderGridFramesToSvg } from '../../../src/export/svg.js';
+import {
+  MAX_SVG_OUTPUT_LENGTH,
+  renderGridFramesToSvg,
+} from '../../../src/export/svg.js';
 import { resolveProfile } from '../../../src/renderer/profiles.js';
 
 const PROFILE = resolveProfile('reference-dark');
@@ -379,6 +382,54 @@ describe('renderGridFramesToSvg', () => {
     const cjkSvg = render('漢');
     expect(cjkSvg).not.toContain(notoSymbols);
     expect(cjkSvg).not.toContain(notoMath);
+
+    // Noto Sans Math also covers 'a', but JetBrains Mono draws it first. The
+    // mark U+1AB0 is in no bundled face, so the cluster needs no Noto face.
+    const markSvg = render('a\u1ab0');
+    expect(markSvg).not.toContain(notoSymbols);
+    expect(markSvg).not.toContain(notoMath);
+  });
+
+  it('draws every printable ASCII glyph from the primary face in one run', () => {
+    const ascii = Array.from({ length: 0x7e - 0x21 + 1 }, (_, index) =>
+      String.fromCodePoint(0x21 + index),
+    );
+    const svg = stripFontAssets(
+      renderGridFramesToSvg({
+        profile: PROFILE,
+        frames: [
+          makeFrame({
+            cols: ascii.length,
+            lines: [ascii.map((char) => cell(char))],
+          }),
+        ],
+        animate: false,
+      }),
+    );
+
+    expect(countOccurrences(svg, '<text ')).toBe(1);
+  });
+
+  it('credits every font that it can embed in the license comment', () => {
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [makeFrame({ lines: [[cell('x')]] })],
+      animate: false,
+    });
+
+    for (const family of [
+      'JetBrains Mono',
+      'Symbols Nerd Font Mono',
+      'Noto Sans Symbols 2',
+      'Noto Sans Math',
+    ]) {
+      expect(svg).toMatch(
+        new RegExp(
+          `<!-- Embedded fonts \\(SIL Open Font License 1\\.1\\):[^>]*${family}`,
+          'u',
+        ),
+      );
+    }
   });
 
   it('preserves columns across zero-style gap padding cells', () => {
@@ -435,6 +486,43 @@ describe('renderGridFramesToSvg', () => {
 
     expect(svg).toContain('&lt;&amp;&quot;&apos;');
     expect(svg).not.toContain('\u0007');
+  });
+
+  it('strips the noncharacters U+FFFE and U+FFFF, which XML 1.0 forbids', () => {
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [
+        makeFrame({
+          lines: [[cell('a'), cell('\ufffe'), cell('\uffff'), cell('b')]],
+        }),
+      ],
+      animate: false,
+    });
+
+    expect(svg).not.toContain('\ufffe');
+    expect(svg).not.toContain('\uffff');
+    expect(svg).toContain('>a</text>');
+    expect(svg).toContain('>b</text>');
+  });
+
+  it('stops with a clear export error when the output passes its length budget', () => {
+    const render = (maxOutputLength: number) =>
+      renderGridFramesToSvg({
+        profile: PROFILE,
+        frames: [makeFrame({ lines: [[cell('x')]] })],
+        animate: false,
+        maxOutputLength,
+      });
+
+    const svg = render(MAX_SVG_OUTPUT_LENGTH);
+    expect(render(svg.length)).toBe(svg);
+    expect(() => render(svg.length - 1)).toThrow(
+      expect.objectContaining({
+        code: 'EXPORT_ERROR',
+        message:
+          'Recording is too large for SVG export. Use a still SVG export (drop --animate) or a WebM export instead.',
+      }),
+    );
   });
 
   it('draws the cursor as a translucent block at the cursor cell', () => {

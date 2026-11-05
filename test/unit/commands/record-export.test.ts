@@ -1256,6 +1256,62 @@ describe('record export command', () => {
     expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
   });
 
+  it('refuses the svg when the --out folder is replaced before the rename', async () => {
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-svg-swap-',
+    );
+    const exportsDirectory = join(workspaceDirectory, 'exports');
+    await mkdir(exportsDirectory);
+    mocks.captureGridFrames.mockResolvedValue({
+      frames: [
+        {
+          capturedAtSeq: 1,
+          cols: 80,
+          rows: 24,
+          cursorRow: 0,
+          cursorCol: 0,
+          lines: [],
+          holdMs: 1_000,
+        },
+      ],
+      capturedAtSeq: 1,
+      cols: 80,
+      rows: 24,
+      rendererBackend: 'libghostty-vt',
+      outputEventCount: 1,
+      resizeEventCount: 0,
+      timelineDurationMs: 1_000,
+    });
+    mocks.renderGridFramesToSvg.mockReturnValue('<svg>swap</svg>\n');
+    mocks.writeTextFileAtomic.mockImplementation(
+      async (options: {
+        path: string;
+        beforeRename?: (temporaryPath: string) => Promise<void>;
+      }) => {
+        const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
+        await fs.rename(exportsDirectory, join(workspaceDirectory, 'moved'));
+        await mkdir(exportsDirectory);
+        await options.beforeRename?.(`${options.path}.tmp-test`);
+      },
+    );
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'svg',
+        out: join(exportsDirectory, 'session.svg'),
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
+      message: expect.stringContaining(
+        'was replaced while the command ran',
+      ) as unknown,
+    });
+    expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
+  });
+
   it('preserves explicit output artifacts when manifest append fails', async () => {
     const workspaceDirectory = await createTemporaryDirectory(
       'agent-tty-record-export-explicit-out-',

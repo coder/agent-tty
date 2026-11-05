@@ -17,12 +17,12 @@
   - [`./storage/README.md`](./storage/README.md): on-disk layout: Home resolution, guarded session, socket and artifact paths, temp-file-plus-rename JSON writes, artifact manifests, the Home registry and the 50 MB event-log codec.
   - [`./pty/README.md`](./pty/README.md): spawns the PTY child through `node-pty`, builds its environment, encodes keys and bracketed paste, and answers DSR and OSC 10/11 terminal queries.
   - [`./config/README.md`](./config/README.md): default session constants and the Zod-validated loader for the optional `<home>/config.json`.
-  - [`./replay/README.md`](./replay/README.md): offline replay of a session's manifest and `events.jsonl` into a renderer backend up to a target `seq`.
+  - [`./replay/README.md`](./replay/README.md): offline replay of a session's manifest and `events.jsonl` into a renderer backend up to a target `seq`, and grid-frame capture for SVG export.
   - [`./renderer/README.md`](./renderer/README.md): `RendererBackend` contract, replay, snapshot and profile schemas, the backend registry, Screen Hash helpers and the `ghostty-web` and `libghostty-vt` backends.
   - [`./renderWait/README.md`](./renderWait/README.md): validates `waitForRender` conditions and matches them against semantic snapshots. Pure.
   - [`./snapshot/README.md`](./snapshot/README.md): builds structured and text snapshot results with a Screen Hash and saves them as JSON artifacts with a manifest entry.
   - [`./screenshot/README.md`](./screenshot/README.md): captures a renderer PNG to a temp path, validates it, moves it to the artifact name without replacing an existing file and appends a manifest entry.
-  - [`./export/README.md`](./export/README.md): asciicast v2 text from the event log, and WebM video by timed replay into a `ghostty-web` backend.
+  - [`./export/README.md`](./export/README.md): asciicast v2 text from the event log, WebM video by timed replay into a `ghostty-web` backend, and SVG from styled grid frames.
   - [`./batch/README.md`](./batch/README.md): parses and runs Batch plans of `type`, `paste`, `sendKeys`, `mouse`, `run` and `wait` steps over host RPC.
   - [`./dashboard/README.md`](./dashboard/README.md): Ink/React Session Dashboard behind `agent-tty dashboard`.
   - [`./skills/README.md`](./skills/README.md): finds, parses and serves the bundled skills from `<packageRoot>/skill-data/<name>/SKILL.md`.

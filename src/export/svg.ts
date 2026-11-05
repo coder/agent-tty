@@ -7,6 +7,7 @@ import {
   type BundledFontAsset,
 } from '../renderer/bundledFont.js';
 import { readFontFile } from '../renderer/fontCoverage.js';
+import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
 
 /**
@@ -50,7 +51,16 @@ export interface SvgRenderOptions {
   profile: RenderProfileConfig;
   frames: readonly SvgGridFrame[];
   animate: boolean;
+  /** Output length override in UTF-16 code units; defaults to MAX_SVG_OUTPUT_LENGTH. */
+  maxOutputLength?: number;
 }
+
+/**
+ * V8 cannot build a string longer than about 2^29 code units, so a dense
+ * animation that fits the grid-cell budget can still fail in the final join.
+ * This budget stops the render with a clear error well before that limit.
+ */
+export const MAX_SVG_OUTPUT_LENGTH = 2 ** 28;
 
 type GlyphFace = 'latin' | 'symbols' | 'system';
 
@@ -166,6 +176,12 @@ function embeddedFontAssets(
           for (const character of cell.char) {
             const codePoint = character.codePointAt(0);
             invariant(codePoint !== undefined, 'iterated character must exist');
+            if (
+              primary.coverage.has(codePoint) ||
+              symbols.coverage.has(codePoint)
+            ) {
+              continue;
+            }
             for (const fallback of fallbacks) {
               if (fallback.coverage.has(codePoint)) {
                 neededFallbacks.add(fallback);
@@ -222,13 +238,19 @@ const XML_ESCAPES: Record<string, string> = {
 };
 
 // XML 1.0 forbids raw C0 control characters (except tab/newline/CR, which
-// never appear inside a terminal grid cell) and DEL; strip them defensively.
+// never appear inside a terminal grid cell), U+FFFE and U+FFFF; strip them
+// and DEL defensively.
 function stripXmlDisallowed(value: string): string {
   let stripped = '';
   for (const character of value) {
     const codePoint = character.codePointAt(0);
     invariant(codePoint !== undefined, 'iterated character must exist');
-    if (codePoint < 0x20 || codePoint === 0x7f) {
+    if (
+      codePoint < 0x20 ||
+      codePoint === 0x7f ||
+      codePoint === 0xfffe ||
+      codePoint === 0xffff
+    ) {
       continue;
     }
     stripped += character;
@@ -580,7 +602,12 @@ function renderVisibilityAnimation(
  */
 export function renderGridFramesToSvg(options: SvgRenderOptions): string {
   const { profile, frames, animate } = options;
+  const maxOutputLength = options.maxOutputLength ?? MAX_SVG_OUTPUT_LENGTH;
   invariant(frames.length > 0, 'svg rendering requires at least one frame');
+  invariant(
+    Number.isInteger(maxOutputLength) && maxOutputLength > 0,
+    'maxOutputLength must be a positive integer',
+  );
   invariant(
     profile.fontSize === SVG_FONT_SIZE,
     'svg cell metrics are pinned to the reference profile font size',
@@ -607,20 +634,35 @@ export function renderGridFramesToSvg(options: SvgRenderOptions): string {
   const width = formatSvgNumber(canvasCols * SVG_CELL_WIDTH);
   const height = formatSvgNumber(canvasRows * SVG_CELL_HEIGHT);
 
-  const lines: string[] = [
+  const lines: string[] = [];
+  let outputLength = 0;
+  // Element lists are appended one-by-one rather than push(...spread): a
+  // dense frame can produce enough elements to exceed V8's argument limit.
+  const push = (line: string): void => {
+    outputLength += line.length + 1;
+    if (outputLength > maxOutputLength) {
+      throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
+        message:
+          'Recording is too large for SVG export. Use a still SVG export (drop --animate) or a WebM export instead.',
+        details: { maxOutputLength, frameCount: frames.length },
+      });
+    }
+    lines.push(line);
+  };
+  for (const line of [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="${escapeXml(profile.fontFamily)}" font-size="${formatSvgNumber(profile.fontSize)}" fill="${escapeXml(profile.foregroundColor)}">`,
     FONT_LICENSE_COMMENT,
     renderFontStyleElement(frames),
     `<rect width="100%" height="100%" fill="${escapeXml(profile.backgroundColor)}"/>`,
-  ];
+  ]) {
+    push(line);
+  }
 
-  // Element lists are appended one-by-one rather than push(...spread): a
-  // dense frame can produce enough elements to exceed V8's argument limit.
   if (!animate || frames.length === 1) {
     const finalFrame = frames.at(-1);
     invariant(finalFrame !== undefined, 'final frame must exist');
     for (const element of renderFrameElements(finalFrame, profile)) {
-      lines.push(element);
+      push(element);
     }
   } else {
     const totalMs = frames.reduce((sum, frame) => sum + frame.holdMs, 0);
@@ -638,8 +680,8 @@ export function renderGridFramesToSvg(options: SvgRenderOptions): string {
       // discrete values override the static attribute for the whole timeline.
       const staticVisibility =
         frameIndex === finalFrameIndex ? 'visible' : 'hidden';
-      lines.push(
-        `<g visibility="${staticVisibility}">`,
+      push(`<g visibility="${staticVisibility}">`);
+      push(
         renderVisibilityAnimation(
           frameIndex,
           frames.length,
@@ -649,13 +691,13 @@ export function renderGridFramesToSvg(options: SvgRenderOptions): string {
         ),
       );
       for (const element of renderFrameElements(frame, profile)) {
-        lines.push(element);
+        push(element);
       }
-      lines.push('</g>');
+      push('</g>');
       offsetMs = endMs;
     }
   }
 
-  lines.push('</svg>');
+  push('</svg>');
   return `${lines.join('\n')}\n`;
 }
