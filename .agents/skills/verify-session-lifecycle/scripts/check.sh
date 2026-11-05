@@ -401,6 +401,7 @@ PASS_WORKERS=1
 if [ "$concurrent" -gt 0 ] && [ "$CPUS" -gt "$concurrent" ]; then
   PASS_WORKERS=$((CPUS / concurrent))
 fi
+echo "Runs: $(($(wc -w <<<"$RUNS"))), $passes of them expect pass."
 echo "CPUs: $CPUS. TLC workers of a run that expects pass: $PASS_WORKERS."
 
 run_tlc() {
