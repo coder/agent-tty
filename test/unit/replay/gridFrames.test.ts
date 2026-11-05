@@ -501,6 +501,16 @@ describe('captureGridFrames', () => {
         { seq: 0, ts: isoAt(1_000), type: 'output', payload: { data: 'a' } },
         { seq: 1, ts: isoAt(0), type: 'output', payload: { data: 'b' } },
       ],
+      steppedBackAt: 1,
+    },
+    {
+      name: 'a visual event after a later non-visual event',
+      events: [
+        { seq: 0, ts: isoAt(0), type: 'output', payload: { data: 'a' } },
+        { seq: 1, ts: isoAt(1_000), type: 'marker', payload: { label: 'm' } },
+        { seq: 2, ts: isoAt(500), type: 'output', payload: { data: 'b' } },
+      ],
+      steppedBackAt: 2,
     },
     {
       name: 'the last event',
@@ -508,14 +518,17 @@ describe('captureGridFrames', () => {
         { seq: 0, ts: isoAt(1_000), type: 'output', payload: { data: 'a' } },
         { seq: 1, ts: isoAt(0), type: 'marker', payload: { label: 'm' } },
       ],
+      steppedBackAt: 1,
     },
-  ] satisfies Array<{ name: string; events: EventRecord[] }>)(
+  ] satisfies Array<{
+    name: string;
+    events: EventRecord[];
+    steppedBackAt: number;
+  }>)(
     'captures a still frame when the clock stepped back at $name, and refuses the timeline',
-    async ({ events }) => {
-      const grids = new Map([
-        [0, 'a'],
-        [1, 'ab'],
-      ]);
+    async ({ events, steppedBackAt }) => {
+      const lastSeq = events.length - 1;
+      const grids = new Map([[lastSeq, 'ab']]);
       const capture = await captureGridFrames(
         {
           sessionId: SESSION_ID,
@@ -527,10 +540,9 @@ describe('captureGridFrames', () => {
         { backendFactory: () => new FakeGridBackend(grids) },
       );
       expect(capture.frames).toHaveLength(1);
-      expect(capture.capturedAtSeq).toBe(1);
+      expect(capture.capturedAtSeq).toBe(lastSeq);
       expect(capture.frames[0]?.holdMs).toBe(1_000);
 
-      const backend = new FakeGridBackend(grids);
       await expect(
         captureGridFrames(
           {
@@ -540,12 +552,11 @@ describe('captureGridFrames', () => {
             profile: PROFILE,
             mode: 'timeline',
           },
-          { backendFactory: () => backend },
+          { backendFactory: () => new FakeGridBackend(grids) },
         ),
       ).rejects.toMatchObject({
         code: 'EXPORT_ERROR',
-        message:
-          'Animated SVG export needs event timestamps that do not go backward, but the clock stepped back at event 1. Use a still SVG export (drop --animate) instead.',
+        message: `Animated SVG export needs event timestamps that do not go backward, but the clock stepped back at event ${String(steppedBackAt)}. Use a still SVG export (drop --animate) instead.`,
       });
     },
   );

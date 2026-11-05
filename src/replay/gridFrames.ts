@@ -148,11 +148,27 @@ function collectFrameBoundaries(
   let firstVisualEventIndex: number | null = null;
   let outputEventCount = 0;
   let resizeEventCount = 0;
+  let previousTsMs: number | undefined;
 
   for (const [eventIndex, event] of input.events.entries()) {
     if (event.seq > input.targetSeq) {
       break;
     }
+    const tsMs = parseTimestamp(
+      event.ts,
+      `event ${String(event.seq)} timestamp`,
+    );
+    // The animated timeline spans every event, so each event of any type must
+    // not precede the one before it. A still capture ignores timing, so a
+    // clock that stepped backward while the session ran does not matter there.
+    if (
+      mode === 'timeline' &&
+      previousTsMs !== undefined &&
+      tsMs < previousTsMs
+    ) {
+      throw timestampsOutOfOrderError(event.seq);
+    }
+    previousTsMs = tsMs;
     if (event.type !== 'output' && event.type !== 'resize') {
       continue;
     }
@@ -163,17 +179,8 @@ function collectFrameBoundaries(
       resizeEventCount += 1;
     }
 
-    const tsMs = parseTimestamp(
-      event.ts,
-      `event ${String(event.seq)} timestamp`,
-    );
     const lastBoundary = boundaries.at(-1);
     if (lastBoundary !== undefined) {
-      // A still capture ignores timing, so a clock that stepped backward
-      // while the session ran only matters for the animated timeline.
-      if (mode === 'timeline' && tsMs < lastBoundary.tsMs) {
-        throw timestampsOutOfOrderError(event.seq);
-      }
       if (tsMs === lastBoundary.tsMs) {
         lastBoundary.seq = event.seq;
         continue;
@@ -338,9 +345,6 @@ export async function captureGridFrames(
   );
   const timelineStartMs = parseTimestamp(firstEvent.ts, 'events[0].ts');
   const timelineEndMs = parseTimestamp(lastEvent.ts, 'events[last].ts');
-  if (options.mode === 'timeline' && timelineEndMs < timelineStartMs) {
-    throw timestampsOutOfOrderError(lastEvent.seq);
-  }
 
   let captureBoundaries: FrameBoundary[];
   if (options.mode === 'timeline' && boundaries.length > 0) {
