@@ -121,13 +121,23 @@ function parseTimestamp(value: string, label: string): number {
   return timestamp;
 }
 
+function timestampsOutOfOrderError(seq: number) {
+  return makeCliError(ERROR_CODES.EXPORT_ERROR, {
+    message: `Animated SVG export needs event timestamps that do not go backward, but the clock stepped back at event ${String(seq)}. Use a still SVG export (drop --animate) instead.`,
+    details: { seq },
+  });
+}
+
 /**
  * Collect the seq boundaries where the visible grid may have changed: only
  * `output` and `resize` events mutate the screen, and events sharing one
  * timestamp are coalesced into the last seq of that instant so the frame count
  * stays bounded by the number of distinct recorded instants.
  */
-function collectFrameBoundaries(input: ReplayInput): {
+function collectFrameBoundaries(
+  input: ReplayInput,
+  mode: GridFrameMode,
+): {
   boundaries: FrameBoundary[];
   /** Index into `input.events` of the first visual event, or null if none. */
   firstVisualEventIndex: number | null;
@@ -159,10 +169,11 @@ function collectFrameBoundaries(input: ReplayInput): {
     );
     const lastBoundary = boundaries.at(-1);
     if (lastBoundary !== undefined) {
-      invariant(
-        tsMs >= lastBoundary.tsMs,
-        'event timestamps must be non-decreasing',
-      );
+      // A still capture ignores timing, so a clock that stepped backward
+      // while the session ran only matters for the animated timeline.
+      if (mode === 'timeline' && tsMs < lastBoundary.tsMs) {
+        throw timestampsOutOfOrderError(event.seq);
+      }
       if (tsMs === lastBoundary.tsMs) {
         lastBoundary.seq = event.seq;
         continue;
@@ -309,7 +320,7 @@ export async function captureGridFrames(
     firstVisualEventIndex,
     outputEventCount,
     resizeEventCount,
-  } = collectFrameBoundaries(replayInput);
+  } = collectFrameBoundaries(replayInput, options.mode);
 
   // Timing model: the animated timeline spans the FULL event log — from the
   // first event's timestamp to the last event's timestamp, whatever the event
@@ -327,10 +338,9 @@ export async function captureGridFrames(
   );
   const timelineStartMs = parseTimestamp(firstEvent.ts, 'events[0].ts');
   const timelineEndMs = parseTimestamp(lastEvent.ts, 'events[last].ts');
-  invariant(
-    timelineEndMs >= timelineStartMs,
-    'last event timestamp must not precede the first event timestamp',
-  );
+  if (options.mode === 'timeline' && timelineEndMs < timelineStartMs) {
+    throw timestampsOutOfOrderError(lastEvent.seq);
+  }
 
   let captureBoundaries: FrameBoundary[];
   if (options.mode === 'timeline' && boundaries.length > 0) {

@@ -18,7 +18,7 @@
 - A missing event log counts as zero events. Other event-log read errors, replay-input errors, profile errors and boot or replay errors become a `CliError` with code `REPLAY_ERROR` (from `src/protocol/errors.ts`). [offlineReplay.ts:readOfflineReplayInput] [offlineReplay.ts:withOfflineReplayRenderer]
 - `backend.replayTo` always runs, also for an empty Event Log (`targetSeq` -1). [offlineReplay.ts:withOfflineReplayRenderer]
 - After the backend is created, `backend.dispose()` runs in a `finally` block, on success and on failure. [offlineReplay.ts:withOfflineReplayRenderer]
-- `captureGridFrames` gives one blank frame with `capturedAtSeq` -1 for an empty event log and boots no backend. It fails with `EXPORT_ERROR` when the `libghostty-vt` backend cannot boot, or when the retained cells pass `defaultMaxGridCells` of the V8 heap limit (at most `MAX_ANIMATED_GRID_CELLS`). [gridFrames.ts:captureGridFrames]
+- `captureGridFrames` gives one blank frame with `capturedAtSeq` -1 for an empty event log and boots no backend. Mode `final` ignores event timing. Mode `timeline` fails with `EXPORT_ERROR` when a visual event or the last event has an earlier timestamp than the one before it. It also fails with `EXPORT_ERROR` when the `libghostty-vt` backend cannot boot, or when the retained cells pass `defaultMaxGridCells` of the V8 heap limit (at most `MAX_ANIMATED_GRID_CELLS`). [gridFrames.ts:captureGridFrames]
 
 ## Side Effects
 

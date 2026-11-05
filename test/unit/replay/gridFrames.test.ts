@@ -494,6 +494,62 @@ describe('captureGridFrames', () => {
     expect(backend.disposed).toBe(true);
   });
 
+  it.each([
+    {
+      name: 'a visual event',
+      events: [
+        { seq: 0, ts: isoAt(1_000), type: 'output', payload: { data: 'a' } },
+        { seq: 1, ts: isoAt(0), type: 'output', payload: { data: 'b' } },
+      ],
+    },
+    {
+      name: 'the last event',
+      events: [
+        { seq: 0, ts: isoAt(1_000), type: 'output', payload: { data: 'a' } },
+        { seq: 1, ts: isoAt(0), type: 'marker', payload: { label: 'm' } },
+      ],
+    },
+  ] satisfies Array<{ name: string; events: EventRecord[] }>)(
+    'captures a still frame when the clock stepped back at $name, and refuses the timeline',
+    async ({ events }) => {
+      const grids = new Map([
+        [0, 'a'],
+        [1, 'ab'],
+      ]);
+      const capture = await captureGridFrames(
+        {
+          sessionId: SESSION_ID,
+          manifest: createSessionRecord(),
+          events,
+          profile: PROFILE,
+          mode: 'final',
+        },
+        { backendFactory: () => new FakeGridBackend(grids) },
+      );
+      expect(capture.frames).toHaveLength(1);
+      expect(capture.capturedAtSeq).toBe(1);
+      expect(capture.frames[0]?.holdMs).toBe(1_000);
+
+      const backend = new FakeGridBackend(grids);
+      await expect(
+        captureGridFrames(
+          {
+            sessionId: SESSION_ID,
+            manifest: createSessionRecord(),
+            events,
+            profile: PROFILE,
+            mode: 'timeline',
+          },
+          { backendFactory: () => backend },
+        ),
+      ).rejects.toMatchObject({
+        code: 'EXPORT_ERROR',
+        message:
+          'Animated SVG export needs event timestamps that do not go backward, but the clock stepped back at event 1. Use a still SVG export (drop --animate) instead.',
+      });
+    },
+  );
+
   it('synthesizes a blank frame for an empty event log without a backend', async () => {
     const capture = await captureGridFrames(
       {
