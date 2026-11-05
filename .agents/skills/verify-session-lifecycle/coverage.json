@@ -151,7 +151,7 @@
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
     "skill:model/SessionLifecycle.tla": "9d2f5e19d5de78d2",
     "skill:scripts/facts.mjs": "36ed7de152b0c580",
-    "skill:scripts/check.sh": "eaa2d6a36689fc17"
+    "skill:scripts/check.sh": "5cf0c5286124ebeb"
   },
   "callSites": {
     "writeManifest": [

@@ -221,13 +221,14 @@ jobs:
 
   # Model-checks the session lifecycle with the verify-session-lifecycle
   # skill. Share 1 checks that coverage.json matches the facts and the
-  # covered code. Each of the 9 shares starts all its runs at once
-  # (CHECK_JOBS 12: of the 94 runs, a share gets 9 to 11, of which at most
-  # 2 explore the whole model), and check.sh gives those runs the 4 vCPUs as
-  # TLC workers. So a share takes about as long as its longest run. With the
-  # model of #324, the shares took 11 to 33 min, and 15 to 43 min with 1 TLC
-  # worker per run. TLC runs only when coverage.json differs from the base,
-  # which every change to the model, its scripts, the covered code or a fact
+  # covered code. Each share starts all its runs at once, so CHECK_JOBS
+  # must be at least the run count that check.sh prints on the share's
+  # "Runs:" line. check.sh lists the share's runs on its "Share <i>/<n> of
+  # the runs:" line. The runs that expect pass explore the whole model, and
+  # check.sh gives them the runner's CPUs as TLC workers ("CPUs:" line). So
+  # a share takes about as long as its longest run, and the job log shows
+  # how long. TLC runs only when coverage.json differs from the base, which
+  # every change to the model, its scripts, the covered code or a fact
   # needs.
   lifecycle-model:
     runs-on: ubuntu-latest
