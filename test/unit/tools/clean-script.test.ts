@@ -29,7 +29,7 @@ function buildInfoFiles(): string[] {
 describe('npm run clean', () => {
   // A build info file that survives `clean` makes the next `tsc -p` build
   // skip its output, so `clean` then `build` would leave dist/ empty.
-  it('removes dist, coverage and every build info file the tsconfigs name', async () => {
+  it('removes dist, coverage and every build info file the tsconfigs name, and nothing else', async () => {
     const pkg = JSON.parse(
       readFileSync(join(repoRoot, 'package.json'), 'utf8'),
     ) as { scripts: Record<string, string> };
@@ -42,10 +42,12 @@ describe('npm run clean', () => {
       await mkdtemp(join(tmpdir(), 'agent-tty-clean-')),
     );
     tempDirs.push(dir);
+    const kept = ['package.json', 'src/cli/main.ts', 'visible.tsbuildinfo'];
     const targets = [
       'dist/cli/main.js',
       'coverage/index.html',
       ...buildInfoFiles(),
+      ...kept,
     ];
     for (const target of targets) {
       await mkdir(join(dir, target, '..'), { recursive: true });
@@ -63,6 +65,9 @@ describe('npm run clean', () => {
 
     for (const target of ['dist', 'coverage', ...buildInfoFiles()]) {
       expect(existsSync(join(dir, target)), `${target} removed`).toBe(false);
+    }
+    for (const target of kept) {
+      expect(existsSync(join(dir, target)), `${target} kept`).toBe(true);
     }
   });
 });
