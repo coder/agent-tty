@@ -221,8 +221,8 @@ jobs:
 
   # Model-checks the session lifecycle with the verify-session-lifecycle
   # skill. Share 1 checks that coverage.json matches the facts and the
-  # covered code. Each of the 8 shares starts all its runs at once
-  # (CHECK_JOBS 12: with the model of #327, 10 to 12 runs, of which at most
+  # covered code. Each of the 9 shares starts all its runs at once
+  # (CHECK_JOBS 12: of the 94 runs, a share gets 9 to 11, of which at most
   # 2 explore the whole model), and check.sh gives those runs the 4 vCPUs as
   # TLC workers. So a share takes about as long as its longest run. With the
   # model of #324, the shares took 11 to 33 min, and 15 to 43 min with 1 TLC
@@ -235,8 +235,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
-    name: lifecycle-model (${{ matrix.shard }}/8)
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    name: lifecycle-model (${{ matrix.shard }}/9)
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -272,7 +272,7 @@ jobs:
         if: steps.inputs.outputs.tlc == 'true'
         env:
           CHECK_JOBS: '12'
-          CHECK_SHARD: ${{ matrix.shard }}/8
+          CHECK_SHARD: ${{ matrix.shard }}/9
         run: .agents/skills/verify-session-lifecycle/scripts/check.sh
 
   quality-gates:

@@ -293,8 +293,11 @@ write_run current-unseen pass "$RULES" "" "the code with a program that no scan 
 write_run mutant-UnseenBothGuards-unseen violated DestroyedProgramStopped "FreezesUnseenGroup=FALSE WaitProbesUnseenGroup=FALSE" "with neither the freeze nor the wait's probe, the kill finds no member in view, and destroy records destroyed while a fork chain runs" DestroyedProgramStopped
 write_run mutant-GcProbesUnseenGroup-unseen violated RemovedSessionStopped "GcProbesUnseenGroup=FALSE" "without the probe, gc removes program.json while a fork chain that the program left runs" RemovedSessionStopped
 # Under a PID 1 that never reaps, the chain also leaves zombies in view.
-# With every guard, that changes nothing, so current-unseen covers it.
+# Scans that show only zombies read the group ended whatever the wait's
+# probe finds, so only the freeze keeps destroy from recording destroyed.
 ZOMBIES=TRUE
+write_run current-unseen-zombies pass "$RULES" "" "the code with a fork chain behind zombies of the program's group: every rule holds"
+write_run mutant-FreezesUnseenGroup-unseen-zombies violated DestroyedProgramStopped "FreezesUnseenGroup=FALSE" "without the freeze, the kill finds no member in view, the wait reads the chain behind its zombies ended, and destroy records destroyed while it runs" DestroyedProgramStopped
 write_run mutant-GcFreezesUnseenGroup-unseen-zombies violated RemovedSessionStopped "GcFreezesUnseenGroup=FALSE" "without the freeze, gc reads a fork chain behind its zombies ended and removes program.json while it runs" RemovedSessionStopped
 ZOMBIES=FALSE
 # Every freeze misses the chain. The wait then times out.
