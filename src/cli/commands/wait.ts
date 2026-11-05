@@ -5,12 +5,9 @@ import type {
 import type { PreparedRenderWaitCondition } from '../../renderWait/matcher.js';
 import type { SemanticSnapshot } from '../../renderer/types.js';
 
-import process from 'node:process';
-
 import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
 
-import { exitCodeForError } from '../exitCodes.js';
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
@@ -22,16 +19,20 @@ import {
   matchRenderWaitSnapshot,
   prepareRenderWaitCondition,
 } from '../../renderWait/matcher.js';
+import {
+  DEFAULT_WAIT_TIMEOUT_MS,
+  RENDER_WAIT_POLL_INTERVAL_MS,
+  screenStableMinimumMs,
+} from '../../renderWait/limits.js';
 import { computeScreenHash } from '../../renderer/canonicalScreen.js';
 import { isTerminalSessionStatus } from '../../protocol/sessionStatusPolicy.js';
 import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
+import { manifestPath, socketPath } from '../../storage/sessionPaths.js';
 import {
-  manifestPath,
-  sessionDir,
-  socketPath,
-} from '../../storage/sessionPaths.js';
-import { assertSessionCommandable } from '../sessionGuards.js';
+  assertSessionCommandable,
+  checkedSessionDir,
+} from '../sessionGuards.js';
 
 interface CommandOptions {
   context: CommandContext;
@@ -49,14 +50,44 @@ interface CommandOptions {
   afterSeq: number | undefined;
 }
 
-const DEFAULT_WAIT_TIMEOUT_MS = 600_000;
-
 function isPositiveInteger(value: number | undefined): value is number {
   return value !== undefined && Number.isInteger(value) && value > 0;
 }
 
 function isNonNegativeInteger(value: number | undefined): value is number {
   return value !== undefined && Number.isInteger(value) && value >= 0;
+}
+
+function assertWindowFitsTimeout(
+  flag: '--idle-ms' | '--screen-stable-ms',
+  windowMs: number | undefined,
+  timeout: number | undefined,
+): void {
+  if (windowMs === undefined || timeout === 0) {
+    return;
+  }
+
+  const timeoutMs = timeout ?? DEFAULT_WAIT_TIMEOUT_MS;
+  const screenStable = flag === '--screen-stable-ms';
+  const minimumMs = screenStable ? screenStableMinimumMs(windowMs) : windowMs;
+  if (minimumMs < timeoutMs) {
+    return;
+  }
+
+  const limit =
+    timeout === undefined
+      ? `the default --timeout of ${String(timeoutMs)} ms`
+      : `--timeout ${String(timeoutMs)}`;
+  const pollNote = screenStable
+    ? ` It needs more than ${String(minimumMs)} ms, because the stable clock starts at the first render poll (every ${String(RENDER_WAIT_POLL_INTERVAL_MS)} ms) and a later poll must confirm it.`
+    : '';
+  throw makeCliError(ERROR_CODES.INVALID_DURATION, {
+    message: `${flag} ${String(windowMs)} cannot finish within ${limit}.${pollNote} Pass a larger --timeout, or --timeout 0 to wait without a limit.`,
+    details:
+      timeout === undefined
+        ? { flag, windowMs, defaultTimeoutMs: timeoutMs }
+        : { flag, windowMs, timeoutMs },
+  });
 }
 
 function isRenderWaitMode(options: CommandOptions): boolean {
@@ -85,10 +116,6 @@ function parseRenderWaitScope(
 }
 
 function waitLines(result: WaitResult): string[] {
-  if (result.timedOut) {
-    return ['Wait timed out.'];
-  }
-
   if (result.exitCode !== undefined) {
     return [`Process exited with code ${String(result.exitCode)}.`];
   }
@@ -97,10 +124,6 @@ function waitLines(result: WaitResult): string[] {
 }
 
 function renderWaitLines(result: WaitForRenderResult): string[] {
-  if (result.timedOut) {
-    return [`Wait timed out. (capturedAtSeq: ${String(result.capturedAtSeq)})`];
-  }
-
   const lines: string[] = [];
   if (!result.matched) {
     lines.push(
@@ -120,9 +143,34 @@ function renderWaitLines(result: WaitForRenderResult): string[] {
   return lines;
 }
 
-function setWaitTimeoutExitCode(result: { timedOut: boolean }): void {
+// A host timer can fire a millisecond before the CLI clock reaches the
+// timeout, so the message names the timeout only when the CLI measured it.
+function timeoutMessage(
+  options: CommandOptions,
+  timeoutMs: number,
+  elapsedMs: number,
+): string {
+  if (options.json || timeoutMs === 0 || elapsedMs < timeoutMs) {
+    return 'Wait timed out before its condition was met.';
+  }
+  if (options.timeout === undefined) {
+    return `Wait timed out after ${String(timeoutMs)} ms (the default; pass --timeout <ms>, or --timeout 0 to wait without a limit).`;
+  }
+  return `Wait timed out after ${String(timeoutMs)} ms.`;
+}
+
+function throwIfTimedOut(
+  result: WaitResult | WaitForRenderResult,
+  options: CommandOptions,
+  timeoutMs: number,
+  elapsedMs: number,
+): void {
   if (result.timedOut) {
-    process.exitCode = exitCodeForError(ERROR_CODES.WAIT_TIMEOUT);
+    throw makeCliError(ERROR_CODES.WAIT_TIMEOUT, {
+      message: timeoutMessage(options, timeoutMs, elapsedMs),
+      details: { sessionId: options.sessionId, timeoutMs },
+      result,
+    });
   }
 }
 
@@ -181,7 +229,7 @@ async function runOfflineRenderWait(
 
 export async function runWaitCommand(options: CommandOptions): Promise<void> {
   const home = options.context.home;
-  const sessionDirectory = sessionDir(home, options.sessionId);
+  const sessionDirectory = checkedSessionDir(home, options.sessionId);
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
 
@@ -244,10 +292,10 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
 
     if (
       options.afterSeq !== undefined &&
-      !isNonNegativeInteger(options.afterSeq)
+      !(Number.isInteger(options.afterSeq) && options.afterSeq >= -1)
     ) {
       throw makeCliError(ERROR_CODES.INVALID_INPUT, {
-        message: '--after-seq must be a non-negative integer.',
+        message: '--after-seq must be an integer of at least -1.',
         details: { afterSeq: options.afterSeq },
       });
     }
@@ -264,6 +312,12 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
         },
       });
     }
+
+    assertWindowFitsTimeout(
+      '--screen-stable-ms',
+      options.screenStableMs,
+      options.timeout,
+    );
 
     const scope = parseRenderWaitScope(options.scope);
     const preparedCondition = prepareRenderWaitCondition({
@@ -289,6 +343,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       rendererName: options.context.rendererDefault,
     };
     const clientTimeout = effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
+    const startedAt = performance.now();
     let rawResult: unknown;
     try {
       rawResult = await sendRpc(
@@ -319,6 +374,12 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       });
     }
     const result: WaitForRenderResult = parsedResult.data;
+    throwIfTimedOut(
+      result,
+      options,
+      effectiveTimeout,
+      performance.now() - startedAt,
+    );
 
     emitSuccess({
       command: 'wait',
@@ -326,7 +387,6 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       result,
       lines: renderWaitLines(result),
     });
-    setWaitTimeoutExitCode(result);
     return;
   }
 
@@ -359,6 +419,8 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     });
   }
 
+  assertWindowFitsTimeout('--idle-ms', options.idleMs, options.timeout);
+
   const manifestStatus = manifest.status;
 
   if (options.waitForExit && isTerminalSessionStatus(manifestStatus)) {
@@ -387,6 +449,7 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     timeoutMs: effectiveTimeout === 0 ? undefined : effectiveTimeout,
   };
   const clientTimeout = effectiveTimeout === 0 ? 0 : effectiveTimeout + 5_000;
+  const startedAt = performance.now();
   const rawResult: unknown = await sendRpc(
     socketPath(sessionDirectory),
     'wait',
@@ -401,6 +464,12 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     });
   }
   const result: WaitResult = parsedResult.data;
+  throwIfTimedOut(
+    result,
+    options,
+    effectiveTimeout,
+    performance.now() - startedAt,
+  );
 
   emitSuccess({
     command: 'wait',
@@ -408,5 +477,4 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
     result,
     lines: waitLines(result),
   });
-  setWaitTimeoutExitCode(result);
 }

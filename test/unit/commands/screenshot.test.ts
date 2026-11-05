@@ -13,17 +13,19 @@ const mocks = vi.hoisted(() => ({
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
   withOfflineReplayRenderer: vi.fn(),
-  appendArtifactWithRollback: vi.fn(),
-  // Test-internal delegate used by the appendArtifactWithRollback mock.
+  publishArtifactWithRollback: vi.fn(),
+  // Test-internal delegate used by the publishArtifactWithRollback mock.
   appendArtifact: vi.fn(),
   createArtifactEntry: vi.fn(),
   ensureArtifactsDir: vi.fn(),
-  rename: vi.fn(),
   rm: vi.fn(),
+  resolveExplicitOutputPath: vi.fn(),
+  copyFileReplacing: vi.fn(),
+  sessionNotFoundIfRemoved: vi.fn(),
+  removeArtifactEntry: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', () => ({
-  rename: mocks.rename,
   rm: mocks.rm,
 }));
 
@@ -54,8 +56,9 @@ vi.mock('../../../src/replay/offlineReplay.js', () => ({
 }));
 
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
-  appendArtifactWithRollback: mocks.appendArtifactWithRollback,
+  publishArtifactWithRollback: mocks.publishArtifactWithRollback,
   createArtifactEntry: mocks.createArtifactEntry,
+  removeArtifactEntry: mocks.removeArtifactEntry,
 }));
 
 vi.mock('../../../src/storage/artifactPaths.js', () => ({
@@ -67,6 +70,12 @@ vi.mock('../../../src/storage/artifactPaths.js', () => ({
     (seq: number, profileName: string) =>
       `screenshot-${String(seq)}-${profileName}.png`,
   ),
+  sessionNotFoundIfRemoved: mocks.sessionNotFoundIfRemoved,
+}));
+
+vi.mock('../../../src/storage/outputPath.js', () => ({
+  resolveExplicitOutputPath: mocks.resolveExplicitOutputPath,
+  copyFileReplacing: mocks.copyFileReplacing,
 }));
 
 import { runScreenshotCommand } from '../../../src/cli/commands/screenshot.js';
@@ -197,9 +206,10 @@ describe('screenshot command', () => {
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
     );
     mocks.readManifestIfExists.mockResolvedValue(createRunningSessionRecord());
-    mocks.appendArtifactWithRollback.mockImplementation(
+    mocks.publishArtifactWithRollback.mockImplementation(
       async (options: { sessionDir: string; entry: unknown }) => {
         await mocks.appendArtifact(options.sessionDir, options.entry);
+        return options.entry;
       },
     );
     mocks.appendArtifact.mockResolvedValue(undefined);
@@ -211,8 +221,158 @@ describe('screenshot command', () => {
     mocks.ensureArtifactsDir.mockResolvedValue(
       '/tmp/agent-tty/sessions/session-01/artifacts',
     );
-    mocks.rename.mockResolvedValue(undefined);
     mocks.rm.mockResolvedValue(undefined);
+    mocks.sessionNotFoundIfRemoved.mockImplementation(
+      (_dir: string, error: unknown) => Promise.resolve(error),
+    );
+    mocks.removeArtifactEntry.mockResolvedValue(undefined);
+  });
+
+  describe('--out', () => {
+    const outTarget = {
+      path: '/real/out/proof.png',
+      parentDev: 1n,
+      parentIno: 2n,
+    };
+
+    it('copies the captured PNG to the resolved --out path and returns that path', async () => {
+      mocks.sendRpc.mockResolvedValue(
+        createScreenshotResult({ artifactPath: '/artifacts/shot.png' }),
+      );
+      mocks.resolveExplicitOutputPath.mockResolvedValue(outTarget);
+      mocks.copyFileReplacing.mockResolvedValue(undefined);
+
+      await runScreenshotCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        out: 'out/proof.png',
+      });
+
+      expect(mocks.resolveExplicitOutputPath).toHaveBeenCalledWith(
+        'out/proof.png',
+        '/tmp/agent-tty/sessions',
+      );
+      expect(mocks.copyFileReplacing).toHaveBeenCalledWith(
+        '/artifacts/shot.png',
+        outTarget,
+      );
+      expect(mocks.emitSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          result: expect.objectContaining({
+            artifactPath: '/real/out/proof.png',
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('fails with EXPORT_ERROR before capturing when --out cannot be resolved', async () => {
+      mocks.resolveExplicitOutputPath.mockRejectedValue(
+        Object.assign(new Error('missing parent'), { code: 'ENOENT' }),
+      );
+
+      await expect(
+        runScreenshotCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          out: '/missing/proof.png',
+        }),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.EXPORT_ERROR,
+        details: { sessionId: 'session-01', out: '/missing/proof.png' },
+      });
+      expect(mocks.sendRpc).not.toHaveBeenCalled();
+      expect(mocks.emitSuccess).not.toHaveBeenCalled();
+    });
+
+    it('fails with EXPORT_ERROR when the copy to --out fails', async () => {
+      mocks.sendRpc.mockResolvedValue(createScreenshotResult());
+      mocks.resolveExplicitOutputPath.mockResolvedValue(outTarget);
+      mocks.copyFileReplacing.mockRejectedValue(
+        Object.assign(new Error('disk full'), { code: 'ENOSPC' }),
+      );
+
+      await expect(
+        runScreenshotCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          out: '/real/out/proof.png',
+        }),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.EXPORT_ERROR,
+        details: { sessionId: 'session-01', out: '/real/out/proof.png' },
+      });
+      expect(mocks.emitSuccess).not.toHaveBeenCalled();
+      expect(mocks.removeArtifactEntry).toHaveBeenCalledWith({
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
+        filename: 'snapshot.png',
+        sha256: TEST_SCREENSHOT_SHA256,
+      });
+    });
+
+    it('passes on the copy error when it cannot remove the capture', async () => {
+      mocks.sendRpc.mockResolvedValue(createScreenshotResult());
+      mocks.resolveExplicitOutputPath.mockResolvedValue(outTarget);
+      mocks.copyFileReplacing.mockRejectedValue(
+        Object.assign(new Error('disk full'), { code: 'ENOSPC' }),
+      );
+      mocks.removeArtifactEntry.mockRejectedValue(new Error('lock timeout'));
+
+      await expect(
+        runScreenshotCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          out: '/real/out/proof.png',
+        }),
+      ).rejects.toMatchObject({ code: ERROR_CODES.EXPORT_ERROR });
+    });
+
+    it('passes on the EXPORT_ERROR when the --out folder was replaced before the rename', async () => {
+      const replaced = new CliError(
+        ERROR_CODES.EXPORT_ERROR,
+        'Output folder /real/out was replaced while the command ran.',
+      );
+      mocks.sendRpc.mockResolvedValue(createScreenshotResult());
+      mocks.resolveExplicitOutputPath.mockResolvedValue(outTarget);
+      mocks.copyFileReplacing.mockRejectedValue(replaced);
+
+      await expect(
+        runScreenshotCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          out: '/real/out/proof.png',
+        }),
+      ).rejects.toBe(replaced);
+      expect(mocks.emitSuccess).not.toHaveBeenCalled();
+      expect(mocks.removeArtifactEntry).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports SESSION_NOT_FOUND when the session folder is gone before the copy', async () => {
+      const removed = new CliError(
+        ERROR_CODES.SESSION_NOT_FOUND,
+        'Session folder was removed.',
+      );
+      mocks.sendRpc.mockResolvedValue(createScreenshotResult());
+      mocks.resolveExplicitOutputPath.mockResolvedValue(outTarget);
+      mocks.copyFileReplacing.mockRejectedValue(
+        Object.assign(new Error('gone'), { code: 'ENOENT' }),
+      );
+      mocks.sessionNotFoundIfRemoved.mockResolvedValue(removed);
+
+      await expect(
+        runScreenshotCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          out: '/real/out/proof.png',
+        }),
+      ).rejects.toBe(removed);
+      expect(mocks.removeArtifactEntry).not.toHaveBeenCalled();
+    });
   });
 
   it('falls back to the default render profile when no profile is configured', async () => {
@@ -251,6 +411,69 @@ describe('screenshot command', () => {
         `Render profile hash: ${TEST_RENDER_PROFILE_HASH}`,
       ],
     });
+  });
+
+  it('names missing glyphs in the human output', async () => {
+    const result = createScreenshotResult({
+      missingGlyphs: [
+        { codePoint: 'U+0378', cells: [{ row: 1, col: 6 }] },
+        { codePoint: 'U+29C9', cells: [{ row: 0, col: 6 }] },
+      ],
+    });
+    mocks.sendRpc.mockResolvedValue(result);
+
+    await runScreenshotCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+    });
+
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lines: expect.arrayContaining([
+          'Missing glyphs (drawn as boxes): U+0378, U+29C9',
+        ]) as unknown,
+      }),
+    );
+  });
+
+  async function glyphLines(
+    fields: Pick<ScreenshotResult, 'missingGlyphs' | 'missingGlyphsTruncated'>,
+  ): Promise<string[]> {
+    mocks.sendRpc.mockResolvedValue(createScreenshotResult(fields));
+
+    await runScreenshotCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+    });
+
+    const [output] = mocks.emitSuccess.mock.calls.at(-1) as [
+      { lines: string[] },
+    ];
+    return output.lines.filter((line) => /glyph/iu.test(line));
+  }
+
+  it('says on its own line when the glyph check stopped early', async () => {
+    expect(
+      await glyphLines({
+        missingGlyphs: [{ codePoint: 'U+0378', cells: [{ row: 1, col: 6 }] }],
+        missingGlyphsTruncated: true,
+      }),
+    ).toEqual([
+      'Missing glyphs (drawn as boxes): U+0378',
+      'Glyph check incomplete',
+    ]);
+  });
+
+  it('claims no box when an incomplete glyph check found none', async () => {
+    expect(
+      await glyphLines({ missingGlyphs: [], missingGlyphsTruncated: true }),
+    ).toEqual(['Glyph check incomplete']);
+  });
+
+  it('prints no glyph line when the check found no box', async () => {
+    expect(await glyphLines({ missingGlyphs: [] })).toEqual([]);
   });
 
   it('threads showCursor to running-session screenshot RPC requests', async () => {
@@ -372,7 +595,7 @@ describe('screenshot command', () => {
       },
       expect.any(Function),
     );
-    // Rename, manifest-entry construction, and manifest append are exercised
+    // Publishing, manifest-entry construction, and manifest append are exercised
     // by `test/unit/screenshot/capture.test.ts`. Here we only check the
     // routing-level surface of the offline path.
     expect(mocks.emitSuccess).toHaveBeenCalledWith({
@@ -544,8 +767,7 @@ describe('screenshot command', () => {
       expect.stringMatching(/^\/artifacts\/\.tmp-screenshot-.*\.png$/),
       { force: true },
     );
-    expect(mocks.rename).not.toHaveBeenCalled();
-    expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
+    expect(mocks.publishArtifactWithRollback).not.toHaveBeenCalled();
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 

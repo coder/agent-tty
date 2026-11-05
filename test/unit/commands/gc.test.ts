@@ -1,3 +1,7 @@
+import { mkdir, mkdtemp, rm, stat, watch, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
@@ -11,6 +15,8 @@ import {
 } from '../../../src/cli/commands/gc.js';
 import type { CommandContext } from '../../../src/cli/context.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
+import { writeManifest } from '../../../src/storage/manifests.js';
+import { manifestPath, sessionDir } from '../../../src/storage/sessionPaths.js';
 import { createLogger } from '../../../src/util/logger.js';
 
 interface MockDirectoryNode {
@@ -31,6 +37,7 @@ interface MockSessionState {
   manifestReads?: Array<SessionRecord | null>;
   reconciledManifest?: SessionRecord | null;
   isDirectory?: boolean;
+  groupRuns?: boolean;
 }
 
 function createSessionRecord(options: {
@@ -72,6 +79,7 @@ function createMockDependencies(
 ): {
   dependencies: GcDependencies;
   removedPaths: string[];
+  socketCleanups: string[];
   bytesBySession: Map<string, number>;
 } {
   const sessionsRoot = `${home}/sessions`;
@@ -79,7 +87,9 @@ function createMockDependencies(
   const manifestStore = new Map<string, SessionRecord | null>();
   const manifestReadSequences = new Map<string, Array<SessionRecord | null>>();
   const reconcileStore = new Map<string, SessionRecord | null | undefined>();
+  const runningGroups = new Set<string>();
   const removedPaths: string[] = [];
+  const socketCleanups: string[] = [];
   const bytesBySession = new Map<string, number>();
   const sessionIds = Object.keys(sessions);
 
@@ -133,6 +143,9 @@ function createMockDependencies(
     manifestStore.set(manifestFile, sessionState.manifest);
     if ('reconciledManifest' in sessionState) {
       reconcileStore.set(sessionDirectory, sessionState.reconciledManifest);
+    }
+    if (sessionState.groupRuns === true) {
+      runningGroups.add(sessionDirectory);
     }
   }
 
@@ -190,11 +203,19 @@ function createMockDependencies(
       }
       return Promise.resolve();
     },
+    removeDeadHostSocket: (sessionDirectory: string, manifest) => {
+      socketCleanups.push(`${sessionDirectory} ${manifest.status}`);
+      return Promise.resolve();
+    },
+    provenProgramGroupRuns: (sessionDirectory: string) =>
+      Promise.resolve(runningGroups.has(sessionDirectory)),
+    forceSkipsGroup: () => Promise.resolve(false),
   };
 
   return {
     dependencies,
     removedPaths,
+    socketCleanups,
     bytesBySession,
   };
 }
@@ -264,6 +285,48 @@ describe('gc command helpers', () => {
     expect(removedPaths).toEqual([`${home}/sessions/exited-01`]);
   });
 
+  it('removes the socket of a dead host before it removes the folder, and only for a removed session', async () => {
+    const home = '/tmp/agent-tty';
+    const { dependencies, removedPaths, socketCleanups } =
+      createMockDependencies(home, {
+        'exited-01': {
+          manifest: createSessionRecord({
+            sessionId: 'exited-01',
+            status: 'exited',
+            createdAt: '2026-03-20T08:00:00.000Z',
+          }),
+        },
+        'running-01': {
+          manifest: createSessionRecord({
+            sessionId: 'running-01',
+            status: 'running',
+            createdAt: '2026-03-20T09:00:00.000Z',
+          }),
+        },
+      });
+    const rmDirectory = dependencies.rm;
+    dependencies.rm = async (path, options) => {
+      expect(socketCleanups).toEqual([`${path} exited`]);
+      await rmDirectory(path, options);
+    };
+
+    await gcSessions(
+      home,
+      { dryRun: false, staleOnly: false, olderThanMs: null },
+      dependencies,
+    );
+    expect(removedPaths).toEqual([`${home}/sessions/exited-01`]);
+    expect(socketCleanups).toEqual([`${home}/sessions/exited-01 exited`]);
+
+    socketCleanups.length = 0;
+    await gcSessions(
+      home,
+      { dryRun: true, staleOnly: false, olderThanMs: null },
+      dependencies,
+    );
+    expect(socketCleanups).toEqual([]);
+  });
+
   it('skips deleting a session that restarts after the exited check', async () => {
     const home = '/tmp/agent-tty';
     const exitedManifest = createSessionRecord({
@@ -304,6 +367,182 @@ describe('gc command helpers', () => {
       dryRun: false,
       totalBytesFreed: 0,
     });
+    expect(removedPaths).toEqual([]);
+  });
+
+  it('keeps a terminal session whose proven program group still runs', async () => {
+    const home = '/tmp/agent-tty';
+    const exitedManifest = createSessionRecord({
+      sessionId: 'leftover-01',
+      status: 'exited',
+      createdAt: '2026-03-20T08:00:00.000Z',
+    });
+    const { dependencies, removedPaths, socketCleanups } =
+      createMockDependencies(home, {
+        'leftover-01': { manifest: exitedManifest, groupRuns: true },
+        'destroyed-01': {
+          manifest: {
+            ...exitedManifest,
+            sessionId: 'destroyed-01',
+            status: 'destroyed',
+          },
+          groupRuns: true,
+        },
+      });
+
+    for (const dryRun of [true, false]) {
+      const result = await gcSessions(
+        home,
+        { dryRun, staleOnly: false, olderThanMs: null },
+        dependencies,
+      );
+
+      expect(result.skippedSessions).toEqual([
+        {
+          sessionId: 'leftover-01',
+          reason: "the session's program group still runs (destroy ends it)",
+        },
+      ]);
+      expect(result.removedSessions).toEqual(['destroyed-01']);
+    }
+    expect(removedPaths).toEqual([`${home}/sessions/destroyed-01`]);
+    expect(socketCleanups).toEqual([`${home}/sessions/destroyed-01 destroyed`]);
+  });
+
+  it('keeps a session whose program group check throws, and reports why', async () => {
+    const home = '/tmp/agent-tty';
+    const exitedManifest = createSessionRecord({
+      sessionId: 'unchecked-01',
+      status: 'exited',
+      createdAt: '2026-03-20T08:00:00.000Z',
+    });
+    const { dependencies, removedPaths, socketCleanups } =
+      createMockDependencies(home, {
+        'unchecked-01': { manifest: exitedManifest },
+        'exited-01': {
+          manifest: { ...exitedManifest, sessionId: 'exited-01' },
+        },
+      });
+    const checked: string[] = [];
+    dependencies.provenProgramGroupRuns = (sessionDirectory: string) => {
+      checked.push(sessionDirectory);
+      return sessionDirectory.endsWith('/unchecked-01')
+        ? Promise.reject(new Error('EIO: i/o error, scandir /proc'))
+        : Promise.resolve(false);
+    };
+
+    for (const dryRun of [true, false]) {
+      const result = await gcSessions(
+        home,
+        { dryRun, staleOnly: false, olderThanMs: null },
+        dependencies,
+      );
+
+      expect(result.skippedSessions).toEqual([
+        {
+          sessionId: 'unchecked-01',
+          reason:
+            "failed to check the session's program group: EIO: i/o error, scandir /proc",
+        },
+      ]);
+      expect(result.removedSessions).toEqual(['exited-01']);
+    }
+    expect(checked).toContain(`${home}/sessions/unchecked-01`);
+    expect(removedPaths).toEqual([`${home}/sessions/exited-01`]);
+    expect(socketCleanups).toEqual([`${home}/sessions/exited-01 exited`]);
+  });
+
+  it('names destroy --force when a read of the group fails with a system error', async () => {
+    const home = '/tmp/agent-tty';
+    const { dependencies, removedPaths } = createMockDependencies(home, {
+      'unreadable-01': {
+        manifest: createSessionRecord({
+          sessionId: 'unreadable-01',
+          status: 'exited',
+          createdAt: '2026-03-20T08:00:00.000Z',
+        }),
+      },
+    });
+    dependencies.provenProgramGroupRuns = () =>
+      Promise.reject(
+        Object.assign(new Error('EIO: i/o error, scandir /proc'), {
+          code: 'EIO',
+        }),
+      );
+
+    const result = await gcSessions(
+      home,
+      { dryRun: false, staleOnly: false, olderThanMs: null },
+      dependencies,
+    );
+
+    expect(result.skippedSessions).toEqual([
+      {
+        sessionId: 'unreadable-01',
+        reason:
+          "failed to check the session's program group (destroy --force removes it): EIO: i/o error, scandir /proc",
+      },
+    ]);
+    expect(removedPaths).toEqual([]);
+  });
+
+  it('names destroy --force for a failed reconcile only when the read of the group fails too', async () => {
+    const home = '/tmp/agent-tty';
+    const running = (sessionId: string) => ({
+      manifest: createSessionRecord({
+        sessionId,
+        status: 'running',
+        createdAt: '2026-03-20T08:00:00.000Z',
+      }),
+    });
+    const { dependencies, removedPaths } = createMockDependencies(home, {
+      'socket-01': running('socket-01'),
+      'unreadable-01': running('unreadable-01'),
+      'transient-01': running('transient-01'),
+    });
+    const failure = (code: string) =>
+      Object.assign(new Error(`${code}: unlink of the socket failed`), {
+        code,
+      });
+    dependencies.reconcileSession = (sessionDirectory: string) =>
+      Promise.reject(
+        failure(
+          sessionDirectory.endsWith('transient-01') ? 'EMFILE' : 'EACCES',
+        ),
+      );
+    const asked: string[] = [];
+    dependencies.forceSkipsGroup = (sessionDirectory, childPid) => {
+      asked.push(`${sessionDirectory} ${String(childPid)}`);
+      return Promise.resolve(sessionDirectory.endsWith('unreadable-01'));
+    };
+
+    const result = await gcSessions(
+      home,
+      { dryRun: false, staleOnly: false, olderThanMs: null },
+      dependencies,
+    );
+
+    expect(result.skippedSessions).toEqual([
+      {
+        sessionId: 'socket-01',
+        reason:
+          'failed to reconcile session: EACCES: unlink of the socket failed',
+      },
+      {
+        sessionId: 'unreadable-01',
+        reason:
+          'failed to reconcile session (destroy --force removes it): EACCES: unlink of the socket failed',
+      },
+      {
+        sessionId: 'transient-01',
+        reason:
+          'failed to reconcile session: EMFILE: unlink of the socket failed',
+      },
+    ]);
+    expect(asked).toEqual([
+      `${home}/sessions/socket-01 456`,
+      `${home}/sessions/unreadable-01 456`,
+    ]);
     expect(removedPaths).toEqual([]);
   });
 
@@ -642,5 +881,70 @@ describe('runGcCommand (cross-Home sweep)', () => {
     expect(forgetHome).not.toHaveBeenCalled();
     // Only the already-gone Home is reported as a would-deregister.
     expect(readResult().deregisteredHomes).toEqual(['/h/gone']);
+  });
+});
+
+describe('gcSessions on a real Home', () => {
+  const homes: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(
+      homes.splice(0).map((home) => rm(home, { recursive: true, force: true })),
+    );
+  });
+
+  it('removes the session folder when a manifest write lands during its rm', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'agent-tty-gc-rm-race-'));
+    homes.push(home);
+    const sessionId = 'exited-01';
+    const sessionDirectory = sessionDir(home, sessionId);
+    const manifestFile = manifestPath(sessionDirectory);
+    const record = createSessionRecord({
+      sessionId,
+      status: 'exited',
+      createdAt: '2026-03-21T10:00:00.000Z',
+    });
+    await mkdir(join(sessionDirectory, 'artifacts'), { recursive: true });
+    await writeManifest(manifestFile, record);
+    await Promise.all(
+      Array.from({ length: 2000 }, (_, index) =>
+        writeFile(
+          join(sessionDirectory, 'artifacts', `${String(index)}.txt`),
+          '',
+        ),
+      ),
+    );
+
+    const stopWatching = new AbortController();
+    const lateWrite = (async () => {
+      try {
+        for await (const event of watch(sessionDirectory, {
+          signal: stopWatching.signal,
+        })) {
+          if (event.filename === 'session.json') {
+            await writeManifest(manifestFile, record).catch(() => undefined);
+            return;
+          }
+        }
+      } catch (error) {
+        if (!(error instanceof Error && error.name === 'AbortError')) {
+          throw error;
+        }
+      }
+    })();
+
+    const sweep = await gcSessions(home, {
+      dryRun: false,
+      staleOnly: false,
+      olderThanMs: null,
+    });
+    stopWatching.abort();
+    await lateWrite;
+
+    expect(sweep.skippedSessions).toEqual([]);
+    expect(sweep.removedSessions).toEqual([sessionId]);
+    await expect(stat(sessionDirectory)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 });

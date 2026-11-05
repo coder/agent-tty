@@ -1,16 +1,26 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { existsSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 
 const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
+  writeHumanErrorLines: vi.fn(),
   allocateSession: vi.fn(),
+  ensureSocketRoot: vi.fn(),
   launchHost: vi.fn(),
-  reconcileSession: vi.fn(),
+  isProcessAlive: vi.fn(),
+  stopHost: vi.fn(),
   sendRpc: vi.fn(),
   readManifestIfExists: vi.fn(),
+  writeCreateFailedMarker: vi.fn(),
   sessionDir: vi.fn(),
+  createFailedMarkerPath: vi.fn(),
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
   upsertHome: vi.fn(),
@@ -18,12 +28,22 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../src/cli/output.js', () => ({
   emitSuccess: mocks.emitSuccess,
+  writeHumanErrorLines: mocks.writeHumanErrorLines,
 }));
 
 vi.mock('../../../src/host/lifecycle.js', () => ({
   allocateSession: mocks.allocateSession,
+  isProcessAlive: mocks.isProcessAlive,
   launchHost: mocks.launchHost,
-  reconcileSession: mocks.reconcileSession,
+}));
+
+vi.mock('../../../src/host/socketRoot.js', () => ({
+  ensureSocketRoot: mocks.ensureSocketRoot,
+}));
+
+// The readiness loop waits 100 ms between its 50 attempts.
+vi.mock('node:timers/promises', () => ({
+  setTimeout: () => Promise.resolve(),
 }));
 
 vi.mock('../../../src/host/rpcClient.js', () => ({
@@ -32,9 +52,11 @@ vi.mock('../../../src/host/rpcClient.js', () => ({
 
 vi.mock('../../../src/storage/manifests.js', () => ({
   readManifestIfExists: mocks.readManifestIfExists,
+  writeCreateFailedMarker: mocks.writeCreateFailedMarker,
 }));
 
 vi.mock('../../../src/storage/sessionPaths.js', () => ({
+  createFailedMarkerPath: mocks.createFailedMarkerPath,
   sessionDir: mocks.sessionDir,
   manifestPath: mocks.manifestPath,
   socketPath: mocks.socketPath,
@@ -96,11 +118,17 @@ describe('create command', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.allocateSession.mockResolvedValue({
-      sessionId: 'session-01',
-      sessionDirectory: '/tmp/agent-tty-home/sessions/session-01',
-    });
-    mocks.launchHost.mockReturnValue(12345);
+    mocks.allocateSession.mockImplementation(
+      (_config: unknown, launch: (sessionId: string) => number) => {
+        launch('session-01');
+        return Promise.resolve({
+          sessionId: 'session-01',
+          sessionDirectory: '/tmp/agent-tty-home/sessions/session-01',
+        });
+      },
+    );
+    mocks.launchHost.mockReturnValue({ pid: 12345, stop: mocks.stopHost });
+    mocks.isProcessAlive.mockReturnValue(true);
     mocks.sendRpc.mockResolvedValue({ session: { sessionId: 'session-01' } });
     mocks.readManifestIfExists.mockResolvedValue(makeManifest());
     mocks.sessionDir.mockImplementation(
@@ -113,6 +141,10 @@ describe('create command', () => {
     mocks.socketPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
     );
+    mocks.createFailedMarkerPath.mockImplementation(
+      (sessionDirectory: string) => `${sessionDirectory}/create-failed`,
+    );
+    mocks.writeCreateFailedMarker.mockResolvedValue(undefined);
     mocks.upsertHome.mockResolvedValue(undefined);
   });
 
@@ -151,18 +183,21 @@ describe('create command', () => {
       name: 'demo-session',
     });
 
-    expect(mocks.allocateSession).toHaveBeenCalledWith({
-      home: context.home,
-      command: ['/bin/sh', '-c', 'echo ready'],
-      shellPath: '/bin/bash',
-      cwd: '/tmp/workspace',
-      cols: 120,
-      rows: 40,
-      env: { FOO: 'bar', BAZ: 'qux' },
-      term: 'vt100',
-      idleTimeoutMs: 5000,
-      name: 'demo-session',
-    });
+    expect(mocks.allocateSession).toHaveBeenCalledWith(
+      {
+        home: context.home,
+        command: ['/bin/sh', '-c', 'echo ready'],
+        shellPath: '/bin/bash',
+        cwd: '/tmp/workspace',
+        cols: 120,
+        rows: 40,
+        env: { FOO: 'bar', BAZ: 'qux' },
+        term: 'vt100',
+        idleTimeoutMs: 5000,
+        name: 'demo-session',
+      },
+      expect.any(Function),
+    );
     expect(mocks.launchHost).toHaveBeenCalledWith({
       sessionId: 'session-01',
       home: context.home,
@@ -211,6 +246,25 @@ describe('create command', () => {
     );
   });
 
+  it('removes the session folder when the host fails to launch', async () => {
+    const sessionDirectory = await mkdtemp(join(tmpdir(), 'agent-tty-create-'));
+    onTestFinished(() =>
+      rm(sessionDirectory, { recursive: true, force: true }),
+    );
+    mocks.sessionDir.mockReturnValue(sessionDirectory);
+    mocks.launchHost.mockImplementation(() => {
+      throw new Error('spawn failed');
+    });
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'spawn failed',
+    });
+    expect(existsSync(sessionDirectory)).toBe(false);
+  });
+
   it('emits the enriched result when the session exits before inspect becomes ready', async () => {
     mocks.sendRpc.mockRejectedValue(
       makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
@@ -245,6 +299,342 @@ describe('create command', () => {
     );
   });
 
+  it('when the host never answers, tells the host to stop and reports the last error', async () => {
+    const unreachable = makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+      message: 'host unreachable',
+    });
+    mocks.sendRpc.mockRejectedValue(unreachable);
+    mocks.readManifestIfExists.mockResolvedValue(makeManifest());
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'HOST_UNREACHABLE',
+      message: 'host unreachable',
+      retryable: true,
+      details: { sessionId: 'session-01' },
+      cause: unreachable,
+    });
+    expect(mocks.sendRpc).toHaveBeenCalledTimes(50);
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('writes the create-failed marker before it reads the manifest for the stop', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'host unreachable',
+      }),
+    );
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({ code: 'HOST_UNREACHABLE' });
+
+    expect(mocks.writeCreateFailedMarker).toHaveBeenCalledOnce();
+    expect(mocks.writeCreateFailedMarker).toHaveBeenCalledWith(
+      '/tmp/agent-tty-home/sessions/session-01/create-failed',
+      'session-01',
+    );
+    const markerOrder =
+      mocks.writeCreateFailedMarker.mock.invocationCallOrder[0] ?? 0;
+    const lastRead = Math.max(
+      ...mocks.readManifestIfExists.mock.invocationCallOrder,
+    );
+    expect(markerOrder).toBeGreaterThan(0);
+    expect(markerOrder).toBeLessThan(lastRead);
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the error and still stops the host when the marker write fails', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'host unreachable',
+      }),
+    );
+    mocks.writeCreateFailedMarker.mockRejectedValue(
+      makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, { message: 'disk full' }),
+    );
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'HOST_UNREACHABLE',
+      details: { sessionId: 'session-01' },
+    });
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
+  it('leaves no create-failed marker for a create that succeeds', async () => {
+    await runCreateCommand({ ...baseOptions, context });
+
+    expect(mocks.writeCreateFailedMarker).not.toHaveBeenCalled();
+  });
+
+  it('names the session in text mode when the host never answers', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'host unreachable',
+      }),
+    );
+
+    await expect(
+      runCreateCommand({ ...baseOptions, json: false, context }),
+    ).rejects.toMatchObject({ code: 'HOST_UNREACHABLE' });
+    expect(mocks.writeHumanErrorLines).toHaveBeenCalledWith([
+      'Session session-01 failed to start.',
+    ]);
+  });
+
+  it('leaves the session line out of JSON mode, where details.sessionId names it', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'host unreachable',
+      }),
+    );
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({ details: { sessionId: 'session-01' } });
+    expect(mocks.writeHumanErrorLines).not.toHaveBeenCalled();
+  });
+
+  it('keeps the details of the last error and adds the session id', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_TIMEOUT, {
+        message: 'RPC request timed out after 1000ms.',
+        details: { method: 'inspect', timeoutMs: 1000 },
+      }),
+    );
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'HOST_TIMEOUT',
+      details: { method: 'inspect', timeoutMs: 1000, sessionId: 'session-01' },
+    });
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
+  it('stops the host when the manifest is gone after the host answered', async () => {
+    mocks.readManifestIfExists.mockResolvedValue(null);
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      details: { sessionId: 'session-01' },
+    });
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('stops the host when the manifest read fails while the host does not answer', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'host unreachable',
+      }),
+    );
+    mocks.readManifestIfExists.mockRejectedValue(
+      makeCliError(ERROR_CODES.STORAGE_READ_ERROR, {
+        message: 'manifest unreadable',
+      }),
+    );
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'STORAGE_READ_ERROR',
+      message: 'manifest unreadable',
+      details: { sessionId: 'session-01' },
+    });
+    expect(mocks.sendRpc).toHaveBeenCalledOnce();
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
+  it('stops the host on an error that is not a CliError and reports it as INTERNAL_ERROR', async () => {
+    const failure = new TypeError('socket path broke');
+    mocks.sendRpc.mockRejectedValue(failure);
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'socket path broke',
+      details: { sessionId: 'session-01' },
+      cause: failure,
+    });
+    expect(mocks.sendRpc).toHaveBeenCalledOnce();
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
+  it('on Windows, stops a host that never answers only once the manifest names its program', async () => {
+    const platform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    onTestFinished(() => {
+      Object.defineProperty(process, 'platform', { value: platform });
+    });
+    const unreachable = makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+      message: 'host unreachable',
+    });
+    const failure = { code: 'HOST_UNREACHABLE', cause: unreachable };
+    mocks.sendRpc.mockRejectedValue(unreachable);
+
+    mocks.readManifestIfExists.mockResolvedValue(makeManifest());
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject(failure);
+    expect(mocks.stopHost).not.toHaveBeenCalled();
+
+    mocks.readManifestIfExists.mockResolvedValue(null);
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject(failure);
+    expect(mocks.stopHost).not.toHaveBeenCalled();
+
+    mocks.readManifestIfExists.mockResolvedValue(
+      makeManifest({ childPid: 4321 }),
+    );
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject(failure);
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
+  it('on Windows, applies the same rule to an error that is not a readiness error', async () => {
+    const platform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    onTestFinished(() => {
+      Object.defineProperty(process, 'platform', { value: platform });
+    });
+    const failure = new TypeError('socket path broke');
+    mocks.sendRpc.mockRejectedValue(failure);
+
+    mocks.readManifestIfExists.mockResolvedValue(makeManifest());
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR', cause: failure });
+    expect(mocks.stopHost).not.toHaveBeenCalled();
+
+    mocks.readManifestIfExists.mockResolvedValue(
+      makeManifest({ childPid: 4321 }),
+    );
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR', cause: failure });
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
+  describe('on Windows, when the marker write fails while the manifest names no program', () => {
+    const diskError = makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+      message: 'i/o error',
+    });
+
+    beforeEach(() => {
+      const platform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+      onTestFinished(() => {
+        Object.defineProperty(process, 'platform', { value: platform });
+      });
+      mocks.sendRpc.mockRejectedValue(
+        makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+          message: 'host unreachable',
+        }),
+      );
+    });
+
+    it('retries the marker write, and reads the manifest after each write', async () => {
+      mocks.writeCreateFailedMarker
+        .mockRejectedValueOnce(diskError)
+        .mockResolvedValue(undefined);
+
+      await expect(
+        runCreateCommand({ ...baseOptions, context }),
+      ).rejects.toMatchObject({
+        code: 'HOST_UNREACHABLE',
+        details: { sessionId: 'session-01' },
+      });
+
+      expect(mocks.writeCreateFailedMarker).toHaveBeenCalledTimes(2);
+      const lastWrite = Math.max(
+        ...mocks.writeCreateFailedMarker.mock.invocationCallOrder,
+      );
+      const lastRead = Math.max(
+        ...mocks.readManifestIfExists.mock.invocationCallOrder,
+      );
+      expect(lastWrite).toBeLessThan(lastRead);
+      expect(mocks.stopHost).not.toHaveBeenCalled();
+    });
+
+    it('stops the host once the manifest names the program', async () => {
+      mocks.writeCreateFailedMarker.mockRejectedValue(diskError);
+      // The read after the third write finds the program.
+      mocks.readManifestIfExists.mockImplementation(() =>
+        Promise.resolve(
+          mocks.writeCreateFailedMarker.mock.calls.length >= 3
+            ? makeManifest({ childPid: 4321 })
+            : makeManifest(),
+        ),
+      );
+
+      await expect(
+        runCreateCommand({ ...baseOptions, context }),
+      ).rejects.toMatchObject({ code: 'HOST_UNREACHABLE' });
+
+      expect(mocks.writeCreateFailedMarker).toHaveBeenCalledTimes(3);
+      expect(mocks.stopHost).toHaveBeenCalledOnce();
+    });
+
+    it('gives up after 50 more writes', async () => {
+      mocks.writeCreateFailedMarker.mockRejectedValue(diskError);
+
+      await expect(
+        runCreateCommand({ ...baseOptions, context }),
+      ).rejects.toMatchObject({ code: 'HOST_UNREACHABLE' });
+
+      expect(mocks.writeCreateFailedMarker).toHaveBeenCalledTimes(51);
+      expect(mocks.stopHost).not.toHaveBeenCalled();
+    });
+
+    it('counts a host probe that throws as an exited host and keeps the error', async () => {
+      mocks.writeCreateFailedMarker.mockRejectedValue(diskError);
+      // A process of another user that took the host's pid answers EPERM.
+      mocks.isProcessAlive.mockImplementation(() => {
+        throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' });
+      });
+
+      await expect(
+        runCreateCommand({ ...baseOptions, context }),
+      ).rejects.toMatchObject({
+        code: 'HOST_UNREACHABLE',
+        details: { sessionId: 'session-01' },
+      });
+
+      expect(mocks.writeCreateFailedMarker).toHaveBeenCalledOnce();
+      expect(mocks.stopHost).not.toHaveBeenCalled();
+    });
+
+    it('stops retrying once the host has exited', async () => {
+      mocks.writeCreateFailedMarker.mockRejectedValue(diskError);
+      mocks.isProcessAlive.mockReturnValueOnce(true).mockReturnValue(false);
+
+      await expect(
+        runCreateCommand({ ...baseOptions, context }),
+      ).rejects.toMatchObject({ code: 'HOST_UNREACHABLE' });
+
+      expect(mocks.isProcessAlive).toHaveBeenCalledWith(12345);
+      expect(mocks.writeCreateFailedMarker).toHaveBeenCalledTimes(2);
+      expect(mocks.stopHost).not.toHaveBeenCalled();
+    });
+  });
+
+  it('leaves a host that answers alone', async () => {
+    await runCreateCommand({ ...baseOptions, context });
+
+    expect(mocks.emitSuccess).toHaveBeenCalledOnce();
+    expect(mocks.stopHost).not.toHaveBeenCalled();
+  });
+
   it('passes idle timeout through allocation when provided explicitly', async () => {
     await runCreateCommand({
       ...baseOptions,
@@ -256,6 +646,7 @@ describe('create command', () => {
       expect.objectContaining({
         idleTimeoutMs: 5000,
       }),
+      expect.any(Function),
     );
   });
 
@@ -274,6 +665,7 @@ describe('create command', () => {
       expect.objectContaining({
         idleTimeoutMs: 1234,
       }),
+      expect.any(Function),
     );
   });
 
@@ -288,6 +680,19 @@ describe('create command', () => {
     expect(mocks.allocateSession.mock.calls[0]?.[0]).not.toHaveProperty(
       'idleTimeoutMs',
     );
+  });
+
+  it('refuses an unsafe socket root before it allocates a session', async () => {
+    const unsafe = makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+      message: 'unsafe socket root',
+    });
+    mocks.ensureSocketRoot.mockRejectedValueOnce(unsafe);
+
+    await expect(runCreateCommand({ ...baseOptions, context })).rejects.toBe(
+      unsafe,
+    );
+    expect(mocks.allocateSession).not.toHaveBeenCalled();
+    expect(mocks.launchHost).not.toHaveBeenCalled();
   });
 
   it('rejects negative idle timeout values before allocating a session', async () => {

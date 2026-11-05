@@ -50,6 +50,7 @@ agent-tty --home <path> run <session-id> 'command here' --json
 agent-tty --home <path> type <session-id> 'literal text' --json
 agent-tty --home <path> paste <session-id> 'multiline payload' --json
 agent-tty --home <path> send-keys <session-id> Enter Ctrl+C --json
+agent-tty --home <path> mouse <session-id> press --button left --row 8 --col 20 --json
 agent-tty --home <path> resize <session-id> --cols 100 --rows 30 --json
 agent-tty --home <path> signal <session-id> SIGTERM --json
 
@@ -61,6 +62,8 @@ agent-tty --home <path> screenshot <session-id> --json
 agent-tty --home <path> record export <session-id> --format asciicast --json
 agent-tty --home <path> record export <session-id> --format webm --json
 ```
+
+Every command that runs checks the Node version against the `engines.node` range in `package.json`. Help output, usage errors and invalid global options skip the check. On a Node outside that range, a prerelease build included, the command still runs and writes a warning to stderr, so stdout keeps one JSON envelope. `--log-level error` hides the warning. `doctor` fails its `node-runtime` check against the same range.
 
 ## `run`
 
@@ -83,6 +86,43 @@ Important flags:
 Use `type` when the target application needs literal interactive typing, `paste` when the target should receive a literal pasted payload, and `send-keys` for discrete control keys such as `Enter`, `Escape`, or `Ctrl+C`.
 `run` is not structured output capture and does not report the child command's exit status.
 
+## `mouse`
+
+`mouse` sends a cell-addressed event through the terminal modes selected by
+the child. The `libghostty-vt` renderer is required because static escape
+sequences cannot account for tracking mode, wire format, pixel mode, viewport
+clamping, or motion deduplication.
+
+```bash
+agent-tty mouse <session-id> press --button left --row 8 --col 20 --json
+agent-tty mouse <session-id> move --row 9 --col 24 --json
+agent-tty mouse <session-id> release --button left --row 9 --col 24 --json
+agent-tty mouse <session-id> press --button wheel-down --row 9 --col 24 --json
+```
+
+Rows and columns are zero-based. `press` and `release` require `--button`;
+`move` uses the host's held-button state so press, move, and release form a real
+drag. Buttons are `left`, `middle`, `right`, `wheel-up`, `wheel-down`,
+`wheel-left`, and `wheel-right`. `--shift`, `--alt`, and `--ctrl` add modifiers.
+An event suppressed by the child's tracking mode succeeds with
+`reported: false` and `bytesWritten: 0`. A cell outside the session's current
+grid exits `2` with `INVALID_INPUT`. Missing renderer support exits `12`
+with `CAPABILITY_UNAVAILABLE`.
+
+The default surface uses virtual one-pixel cells. For SGR-pixels with a known
+surface, pass `--cell-width` and `--cell-height` in pixels; the requested cell
+maps to its top-left pixel. For example, row 2, column 3 with a 10x20 cell maps
+to pixel 30,40. Screen dimensions follow the session's current rows and columns.
+The same optional `cellWidth` and `cellHeight` fields are accepted in batch steps.
+
+The host writes the native buffer directly to the PTY, including non-UTF-8 X10
+bytes. Each `input_mouse` event stores those exact bytes as `dataBase64` alongside
+the action, cell position, modifiers, renderer, and any explicit cell metrics.
+Suppressed events still receive a sequence number and record an empty payload.
+The mouse encoder comes with the optional `@coder/libghostty-vt-node` package,
+and `doctor --json` reports it as the `mouse-input` capability. Without that
+package, the other commands still work and `mouse` exits `12`.
+
 ## `wait`
 
 Use `wait` to synchronize on terminal state:
@@ -102,12 +142,14 @@ Useful flags:
 - `--regex <pattern>`: wait for a regex match in rendered output.
 - `--scope <scope>`: where `--text`/`--regex` match — `screen` (default, whole visible screen) or `cursor-line` (only the row the cursor is on). See [Echo-Match](#echo-match).
 - `--screen-stable-ms <ms>`: wait for the rendered screen to be stable.
-- `--after-seq <n>`: only match renderer snapshots produced after this Event Log sequence — thread an input command's returned `seq` here so the wait cannot match pre-input screen state.
+- `--after-seq <n>`: only match renderer snapshots produced after this Event Log sequence — thread an input command's returned `seq` here so the wait cannot match pre-input screen state. `-1` is the sequence before the first event, which a `snapshot` of a session that has printed nothing reports.
 - `--idle-ms <ms>`: wait for output idleness.
 - `--exit`: wait for the process to exit.
-- `--timeout <ms>`: maximum wait time in milliseconds, with `0` meaning infinite.
+- `--timeout <ms>`: maximum wait time in milliseconds. The default is `30000` (30 s). `0` waits without a limit. A window that cannot finish within the timeout is rejected with `INVALID_DURATION`: an `--idle-ms` must be shorter than the timeout, and a `--screen-stable-ms` must be more than one render poll (200 ms) shorter, with a timeout of more than two polls (400 ms), because the stable clock starts at the first snapshot and a later snapshot must confirm it. With the default timeout, `--screen-stable-ms` can be at most `29799`. `--timeout 0` skips the check.
 
-On timeout, a standalone `wait` exits `11` (`WAIT_TIMEOUT`) while preserving a success JSON envelope with `timedOut: true` in the result (`matched: false` for render waits). Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast.
+On timeout, a standalone `wait` exits `11` and prints an error envelope: `ok: false`, `error.code: "WAIT_TIMEOUT"`, and the wait result under `result` (`timedOut: true`, and `matched: false` for render waits). Without `--json`, it prints `WAIT_TIMEOUT: <message>` to stderr. When the wait lasted its whole timeout, the message names it, for example `Wait timed out after 30000 ms (the default; pass --timeout <ms>, or --timeout 0 to wait without a limit).` Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast, and its message names the step's timeout, for example `Render wait at step 0 timed out after 1000 ms.`
+
+`WAIT_TIMEOUT` only means that the timeout ran out. When 10 render polls in a row fail (about 3 s, for example because the renderer cannot start), a render `wait` stops with the renderer's error instead, also with `--timeout 0`: the same `error.code` and exit code that `snapshot` gives for that failure, usually `RPC_ERROR` (exit `9`, `retryable: true`), and no `result`. A `batch` `wait` step fails with that code, and its step record has no `timedOut`. Fewer failed polls in a row are retried.
 
 ### Echo-Match
 
@@ -153,6 +195,7 @@ Steps are a JSON array; each step is exactly one verb. The shape mirrors the res
   { "run": "nvim --clean", "noWait": true },
   { "wait": { "screenStableMs": 1000 } },
   { "sendKeys": ["i"] },
+  { "mouse": { "action": "press", "button": "left", "row": 8, "col": 20 } },
   { "type": "hello" },
   { "sendKeys": ["Escape"] },
   { "type": ":wq" },
@@ -163,8 +206,9 @@ Steps are a JSON array; each step is exactly one verb. The shape mirrors the res
 
 - `type` / `paste`: a string of literal text.
 - `sendKeys`: a non-empty array of key names — individual named keys or single characters (e.g. `["Enter"]`, `["Ctrl+C"]`, `["Escape", "Enter"]`). Multi-character literal text such as `:wq` is not a key name; send it with a `type` step.
+- `mouse`: the same `action`, `button`, `row`, `col`, and optional `modifiers`, `cellWidth`, and `cellHeight` fields as the `mouse` command. It uses the batch command's renderer.
 - `run`: a command string, with optional `noWait` (fire-and-forget) and `timeout` (ms). A `run` step is a waited run by default.
-- `wait`: the same conditions as the `wait` command — `text`, `regex`, `scope`, `screenStableMs`, `cursorRow`, `cursorCol`, and `timeout` (ms).
+- `wait`: the same conditions as the `wait` command — `text`, `regex`, `scope`, `screenStableMs`, `cursorRow`, `cursorCol`, and `timeout` (ms). An omitted `timeout` is `30000`, the same default as the `wait` command, and `0` waits without a limit. A `screenStableMs` that is not more than one render poll (200 ms) shorter than the step's timeout, or a timeout of two polls (400 ms) or less, is rejected with `INVALID_INPUT` and `details.stepIndex`.
 
 Input source and flags:
 
@@ -206,7 +250,7 @@ The `--json` result is a per-step envelope:
 }
 ```
 
-Each step record carries its `index`, `kind`, `status` (`completed` | `failed` | `not-run` | `interrupted`), and `durationMs`. Input steps report the Event Log `seq` they produced; `wait` steps report the `waitBaseline` they were anchored to plus `matched` / `timedOut` / `matchedText` / `capturedAtSeq`, and a matched `wait` step also carries the `screenHash` of the screen it observed (see [Screen Hash](#screen-hash)). `completedCount` and `failedIndices` summarize the run. A fail-fast batch exits non-zero with the failed step's exit code (e.g. `11` for a `WAIT_TIMEOUT`); `--keep-going` exits `1` if any step failed. If the process is interrupted by SIGINT/SIGTERM, batch flushes the same envelope with the in-flight step marked `interrupted` and later steps `not-run`, then exits non-zero.
+Each step record carries its `index`, `kind`, `status` (`completed` | `failed` | `not-run` | `interrupted`), and `durationMs`. Input steps report the Event Log `seq` they produced, and `mouse` steps also report `reported` and `bytesWritten`; `wait` steps report the `waitBaseline` they were anchored to plus `matched` / `timedOut` / `matchedText` / `capturedAtSeq`, and a matched `wait` step also carries the `screenHash` of the screen it observed (see [Screen Hash](#screen-hash)). `completedCount` and `failedIndices` summarize the run. A fail-fast batch with a failed step exits with that step's exit code (e.g. `11` for a `WAIT_TIMEOUT`) and, with `--json`, prints an error envelope: `ok: false`, the step's `error.code` and `message`, `error.details.stepIndex`, and the same per-step `result`. Its `retryable` is always `false`, because a batch is not atomic and a rerun repeats the input of the steps that already ran. `--keep-going` exits `1` if any step failed and keeps `ok: true`. If the process is interrupted by SIGINT/SIGTERM, batch flushes a success envelope (`ok: true`) with the per-step results so far, the in-flight step marked `interrupted` and later steps `not-run`, then exits `130` (SIGINT) or `143` (SIGTERM).
 
 The Wait Baseline fixes stale-match only. It does **not** fix echo-match: a whole-screen `wait` can still match the terminal's echo of a just-typed command (the echo renders _after_ the baseline). Use `"scope": "cursor-line"` on the wait step to restrict matching to the cursor row (see [Echo-Match](#echo-match)), or wait for a distinctive output token. Interrupting a batch mid-`wait` leaves that wait's command still running on the session (the wait is abandoned, not cancelled), exactly like a caller timeout on `run`.
 
@@ -215,11 +259,34 @@ The Wait Baseline fixes stale-match only. It does **not** fix echo-match: a whol
 Screenshots and WebM export use the `ghostty-web` reference visual renderer through Playwright/Chromium.
 Semantic `snapshot`, screen-hash, and render-backed `wait` paths prefer `libghostty-vt` when the optional native package is available and fall back to `ghostty-web` otherwise. Run `doctor --json` first in new environments.
 
+On a session that has printed nothing yet, `snapshot` returns an empty screen of the session's size and `screenshot` returns a blank image. `record export` gives a header-only asciicast or a blank WebM of the session's size, with `durationMs: 0`. All of them report `capturedAtSeq: -1`, and the default files are named `screenshot--1-<profile>.png` and `recording--1-<format>.<ext>`.
+
+The screenshot hides the cursor unless you pass `--show-cursor`. `--hide-cursor` is the default, and the result reports `cursorVisible` for the choice.
+
 ```bash
 agent-tty screenshot <session-id> --profile reference-dark --json
 agent-tty screenshot <session-id> --show-cursor --json
+agent-tty screenshot <session-id> --out ./proof.png --json
 agent-tty record export <session-id> --format asciicast --out ./session.cast --json
 agent-tty record export <session-id> --format webm --timing accelerated --out ./session.webm --json
+```
+
+`--out <path>` on `screenshot` and `record export` writes the file to that path, so it outlives the Home. A relative path resolves against the working directory, and a file already at the path is replaced. Missing parent folders are created, like `mkdir -p`, and they stay when the capture fails afterwards. A parent you cannot write to or search, or a path inside the Home's `sessions/` folder, fails with `EXPORT_ERROR` (exit 7) before the capture. agent-tty checks the folders it would create against `sessions/` before it creates any. If a parent folder is swapped during that step, one empty folder can be left in the other place. agent-tty checks the parent folder again just before it moves the file into place. If the folder was replaced or removed, the command fails with `EXPORT_ERROR` (exit 7) and does not write the file. This holds even when the new folder is a fine place for the file: a script that runs `rm -rf out && mkdir out` while an export of `out/proof.png` runs gets exit 7. A replacement after that check and before the move is not caught. A replacement during the write, also one that is undone before the check, can leave a `<file>.tmp-<id>` temp file in the folder that was at that path during the write. `screenshot --out` still records the capture in the session's artifact manifest and returns the `--out` path as `artifactPath`. When the copy to `--out` fails, `screenshot` removes that capture and its manifest entry again. A second `record export` to the same path, the default path at the same sequence or the same `--out`, replaces the manifest entry of the first. When the file changed between the second export's write and its manifest update, for example when a file server set a new modification time, both entries stay. When another export or a tool left a file of another size at the path in that time, the export exits 0 and adds no manifest entry, because its bytes are gone.
+
+The screenshot result lists `missingGlyphs`: each code point that the PNG draws as an empty `.notdef` box, with the zero-based `row` and `col` of each cell. A box appears when no font has the glyph, and also when Chromium draws a whole cluster (a letter plus a mark) with the first bundled font because no font has every part of it. The bundled fonts are a Latin JetBrains Mono subset and Symbols Nerd Font Mono, and after the host `monospace` font Noto Sans Symbols 2 and Noto Sans Math, which draw math, arrows, braille, legacy computing and other symbols that the host fonts lack. The Noto files leave out every code point with the Unicode Emoji property, also those that default to text presentation such as U+1F321, so a host color emoji font still draws them. The check is best effort: an empty array means it found no box (see Known limits below), and a result without `missingGlyphs` means the check did not run or failed. The list holds at most 4096 cells, and one screenshot checks at most 4096 distinct glyphs within a 1-second time budget. When a limit or the budget stops the check early, the result also has `"missingGlyphsTruncated": true`, the list can miss boxes, and the human output prints `Glyph check incomplete`. Glyphs that a host font draws are not listed, so the same session can list different code points on hosts with different fonts. The text snapshot still has the right characters.
+
+Known limits: a letter that the font builds from a smaller precomposed letter plus a mark it lacks, such as Vietnamese `ế` (drawn as `ê` without the acute), is listed although the PNG shows a letter, not a box. With `--show-cursor`, a glyph under the block cursor is listed although the cursor hides it, and so is a glyph in a concealed (SGR 8) cell. The check uses the regular font style, so a bold or italic cell whose host font face differs in coverage can be judged wrong, and a grapheme that Chromium splits over several fonts is judged per code point, which can miss a box.
+
+```bash
+agent-tty screenshot <session-id> --json | jq -c '.result.missingGlyphs'
+# [{"codePoint":"U+0378","cells":[{"row":0,"col":6}]}]
+```
+
+`record export --format webm` lists `missingGlyphs` as well: each code point that a bundled font drew as a box in at least one frame of the video. The entries have no `cells`, because a cell names a place in one frame. The check reads the screen after each output batch and each resize of the replay, so a box that a later frame clears is still listed, even when it shows for less than one video frame. The check runs while the video holds its last frame and gets that hold as its time budget, so a normal recording is not longer. A screen with thousands of distinct glyphs that the bundled fonts lack can make the check run past the hold and add a fraction of a second. The limits, the caps and `missingGlyphsTruncated` work as for `screenshot`. An empty array means the check found no box, and a result without `missingGlyphs` means the check did not run or failed. Asciicast results never have the field.
+
+```bash
+agent-tty record export <session-id> --format webm --json | jq -c '.result.missingGlyphs'
+# [{"codePoint":"U+0378"}]
 ```
 
 WebM export replays with recorded wall-clock timing by default. Pass `--timing accelerated` (idle gaps clamped to 400ms) or `--timing max-speed` for a time-compressed video.
@@ -237,16 +304,92 @@ agent-tty record diff <session-id-a> <session-id-b> --json
 agent-tty record diff <session-id> <session-id> --at-seq-a 0 --json
 ```
 
-- `--at-seq-a <seq>` / `--at-seq-b <seq>`: replay each side up to an Event Log sequence (default: latest). Diffing a session against itself at an earlier sequence shows how its screen evolved.
+- `--at-seq-a <seq>` / `--at-seq-b <seq>`: replay each side up to an Event Log sequence (default: latest). Diffing a session against itself at an earlier sequence shows how its screen evolved. `-1` is the sequence of an empty event log, so it is valid only for a session that has no events yet.
 - The JSON result carries `identical`, per-side `sessionId`/`capturedAtSeq`/`cols`/`rows`/`screenHash`, and a `diff` array of `{ op: equal | delete | add, text, aRow?, bRow? }` entries over the visible screen lines (0-based rows, no trimming or normalization — the same canonical lines that `screenHash` hashes). A side with an empty event log reports the pre-event blank screen with `capturedAtSeq: -1` (no event was replayed).
 - Human output is a unified-style diff with `---`/`+++` headers naming each side's session, sequence, and hash prefix.
 - The line diff is LCS-minimal for any realistic screen. As a bounded-memory safeguard, when the differing region (after matching the common prefix and suffix) is so large that the product of its two side lengths exceeds a 4,000,000-cell budget (for example 1,000 × 4,001 lines), that region degrades to a plain delete-then-add block instead of a minimal diff — `identical`, both `screenHash` values, and full-screen reconstruction remain exact; only diff minimality is reduced.
 - The command works entirely offline from `events.jsonl`; sessions may be running or exited. The exit code is `0` whether or not the screens differ — automation should read `identical` from the JSON result.
 
+## `destroy`
+
+`destroy` ends the session's program and every process that the program left in its process group, then records the session as `destroyed`.
+On Linux it also ends those processes when the program has already exited or the session has failed.
+A group whose processes each fork their successor and end too fast for any scan of `/proc` to show or read one, a fork chain, gets SIGSTOP first. Its stopped processes stay in view, so `destroy` can prove the group and kill it. A frozen group that agent-tty cannot prove is the session's gets SIGCONT. When the freeze misses a fork chain, as when another process resumes it before each check, the wait still finds the group id, and `destroy` fails with `HOST_TIMEOUT` instead of recording the session as `destroyed`. Under a PID 1 that never reaps, a group whose scans show only zombies reads ended, so there such a missed chain can outlive a `destroy` that reports success.
+`destroy --force` kills the host and the program's group without asking the host first.
+When a read of the program's group fails with an error that every later read repeats, such as `program.json` that refuses the read (EACCES) or a `/proc` scan that fails (EIO), `gc` keeps the session and reports "failed to check the session's program group (destroy --force removes it)", or "failed to reconcile session (destroy --force removes it)" for a session whose host died. Those errors are EACCES, EPERM, EIO, EISDIR, ENOTDIR, ELOOP and ENAMETOOLONG. A plain `destroy` fails on the same read. When the read of `program.json` or the first check of the group fails that way twice, 100 ms apart, `destroy --force` stops the host alone, without the group, and records the session as `destroyed` once the host has ended, so the next `gc` removes it. A process that the program left can outlive such a `destroy --force`. When the second read passes, `destroy --force` stops the group as usual. A read that fails after that first check, a group that reads alive, or a host that does not end (`HOST_TIMEOUT`) still fails it. Other errors, such as EMFILE, ENOMEM or EAGAIN, can pass, so `gc` gives no such hint and `destroy --force` fails on them too. A `host.json` that cannot be read counts as missing, so the group reads as out of view, as in another pid namespace: `destroy --force` fails with `HOST_TIMEOUT`, and its message names `host.json` and the error. When the read was refused (EACCES or EPERM), make that file readable and run `destroy` again. Until then, `gc` removes such a session once it has ended, but a session whose host died while it ran stays `running`, because its group reads alive.
+`list`, `inspect`, `destroy` and `gc` reconcile a session whose host died: they kill the program's group and record the session as `failed` (or `exited` or `destroyed`).
+A `destroy` that runs inside the session, such as one typed into the session's shell, runs again outside the session and prints its result once the session has ended.
+The session's terminal is closed by then, so redirect stdout to keep the result, for example `agent-tty destroy "$AGENT_TTY_SESSION_ID" --json > destroy.json`.
+Ctrl-C or SIGTERM to that `destroy` reaches the copy outside the session too, and the `destroy` then exits as the copy did, 130 or 143. A destroy request that already reached the host still ends the session.
+When `destroy` records `destroyed` itself, as with `--force`, for a session whose host died or for a session that has already ended, it first writes an empty internal file, `destroyed`, in the session folder. When the host records `destroyed`, as after a plain `destroy` of a live session, nobody writes that file.
+A reconcile that writes over the record at the same moment finds the file right after its own write and records `destroyed` again.
+A `list`, `inspect` or `gc` that reads the session between those two writes sees `failed`, and `home list` and the dashboard count a session that has ended and has that file as destroyed. If the reconciling process is killed between them, the next reconcile finds the file and records the session as `destroyed`. When that repair fails, for example on a full disk, `list` and `inspect` show the session as it reads.
+If `destroy` fails after it wrote the file, for example because its manifest write fails, the file stays, and the next reconcile records the session as `destroyed`, also when the session had already ended. Nothing deletes the file before `gc` removes the session folder, because a reconcile that read before the destroy can still write after it.
+A host that died after it recorded the session as ended leaves its socket. `gc`, and a `destroy` of a `destroyed` session, remove that socket when the manifest names no host pid or the host check below reads the host as ended.
+When `create` cannot reach its new host, it fails and tells the host to stop. It fails with `HOST_UNREACHABLE` (exit 6) after about 6 s when nothing listens on the socket, and with `HOST_TIMEOUT` (exit 5) after about 10 s when the host accepts the connection but does not answer.
+`create` also tells the host to stop when it fails for another reason after it wrote the session's first manifest, for example when it cannot read that manifest again. Each such error names the session in `details.sessionId`, and in text mode `create` prints `Session <id> failed to start.` before the error line.
+When that first manifest write fails, `create` removes the session folder. The host waits for the manifest only while `create` runs, so it then exits without starting the program.
+On Linux and macOS it sends the host SIGTERM, and the host stops the program the way `destroy` does and records the session as `destroyed` once the program's group has ended, also while its start-up is still slow.
+`create` exits before the host has ended the session, so a caller that checks at once can still read `running` or `destroying`.
+The host records `destroyed` right after the program exits on the SIGHUP, or about 2 s later, after the shutdown grace, when the program ignores SIGHUP. A host whose start-up write is still slow records it only after that write.
+Once the session reads `destroyed`, a `destroy` of it exits 4 with `SESSION_ALREADY_DESTROYED`.
+A host that has already died, or that gets the SIGTERM before it spawns the program, leaves the session to the reconcile above: the session reads `running` until the next reconcile records it `failed`, and no program runs.
+When the host cannot end the program's group, for example a process of another user, the session stays `destroying` with the host alive. That host never listened, so a plain `destroy` then fails with `HOST_UNREACHABLE` (exit 6), and only `destroy --force` can end the session.
+A host stopped with SIGSTOP, or with a blocked event loop, handles the SIGTERM only when it runs again. Until then the program runs and the session reads `running`. A plain `destroy` fails because the host does not answer, and only `destroy --force` ends the session sooner.
+On Windows, SIGTERM ends the host at once, so the host cannot stop the program itself. There `create` sends it only once the manifest names the program: the session then reads `running` with a dead host until the next reconcile records it `failed` and ends the program. Before the host's start-up write, `create` sends nothing.
+For that case, on every platform, `create` first writes an empty internal file, `create-failed`, in the session folder, and then reads the manifest. The host checks for that file before it starts the program, and returns then, so no program runs and the next reconcile records the session `failed`. It checks again right after its start-up write, and then ends the session the way a SIGTERM does on Linux: it stops the program and records `destroyed`.
+On Windows, a host whose start-up write lands before `create` reads the manifest is named by that read and gets the SIGTERM, and a host whose write lands after it finds the file. After its start-up write, the host also checks for the file every 100 ms while `create` runs, and once after `create` exits, so it ends the session also when `create` cannot read the manifest. When the file write fails, `create` writes it again every 100 ms, up to 50 times, while the host runs and the manifest names no program. When every write fails, for example on a full disk, a Windows host that starts late can still serve the session. This path is not tested on a real Windows host.
+
+On Linux, `destroy` and reconcile never kill a process group that they cannot prove is the session's.
+When the host starts the program, it records the program's pid, the boot id and the program's autogroup id in an internal file, `program.json`.
+Linux gives each new session a new autogroup id, and child processes keep it.
+Before each kill, agent-tty checks that a live process in the group has that autogroup id and the program's pid as its session id.
+If no process passes the check, agent-tty kills nothing, for example when an unrelated program now uses the group id.
+If `/proc` refuses to show the boot id, or shows no autogroup id for a live process whose group and session id are the program's pid (it refuses the read, or the file is empty or malformed), agent-tty cannot run the check.
+It then kills nothing and counts the group as running.
+When the CLI cannot list `/proc` at all, as in a chroot or a container without it, it sees no process of the group, and nothing proves a kill. For a session without an autogroup record, the group then counts as running while `kill(-pgid, 0)` finds a process. A session with an autogroup record but without `host.json` counts as running whatever the probe finds. A plain `destroy` still ends a live session through its host, and `destroy --force` of a session with an autogroup record fails with `HOST_TIMEOUT`. End it with a plain `destroy`, or run `destroy --force` from a process that can read `/proc`.
+On Linux, a CLI that cannot prove that it shares the host's pid space cannot prove that the program's group ended either: it cannot read `/proc/self/ns/pid` (no `/proc`, or an empty one), its `/proc` belongs to another pid namespace (`/proc/self` names another pid than its own), or `host.json` names another pid namespace or another machine. For a session with an autogroup record and a `host.json`, such a CLI counts the group as running and sends it no signal. On the host's machine, a plain `destroy` of a live session still ends it through its host. From another machine the host's socket does not answer, so a plain `destroy` fails with `HOST_UNREACHABLE`: run it on the machine that started the session. A `destroy` of a session whose program exited fails with `HOST_TIMEOUT` and keeps the session `exited`, also when no process of the group is left. This trade-off keeps `destroy` from recording `destroyed` while a process that the program left runs where the CLI cannot see it. Run such a `destroy` from a process in the host's pid namespace that can read `/proc`. `gc` still removes the folder of an `exited` session, as it does on every system.
+If the proven group, or a group that agent-tty cannot check, does not end within the destroy wait (about 5 s), `destroy` fails with `HOST_TIMEOUT` and does not record the session as `destroyed`.
+
+`destroy --force` and reconcile also check the host's pid from `session.json` before they trust it.
+On Linux the host records its pid, the boot id, its start time from `/proc/self/stat`, its pid and time namespaces and the machine id (`/etc/machine-id`) in an internal file, `host.json`. `create` writes it for the new host before `session.json` names the host, and the host writes it again when it starts.
+Reconcile counts the host as ended only when no process has its pid, when that process is a zombie, or when `host.json` names another boot or another start time than that process has. That covers a crashed host that stays a zombie under a container init that never reaps, and a later process that got the same pid.
+Reconcile then records the session as `failed`. `destroy --force` sends the host SIGKILL only when the boot id and the start time of the process match `host.json`, so it does not signal a process that got the pid before that check.
+The check and the kill are two system calls. A process that gets the pid between them still gets the signal, which needs the host to end, be reaped and its pid to go to a new process in that gap.
+When agent-tty cannot read `/proc` or `host.json`, it counts a host whose pid exists as running and does not kill it. With `host.json` but an unreadable `/proc/self/ns/pid`, it counts the host as running even when no process has its pid.
+When it runs in another pid namespace than the one that `host.json` names, or on another machine (another machine id), where the recorded pid can name an unrelated process, it counts the host as running and kills nothing, whatever that pid shows. A CLI whose `/proc` belongs to another pid namespace (`/proc/self` names another pid than its own) counts the host as running in the same way, so its `destroy --force` can fail with `HOST_TIMEOUT` (item 7 under Limits). Without a session token, it also kills no process group through the program's recorded pid there.
+In another time namespace than the host's, `/proc` shows start times with another boottime offset. There agent-tty counts the host as ended only when no process has its pid or that process is a zombie, and it does not kill the host.
+Without `host.json`, as for a session that an agent-tty version without it started, agent-tty cannot tell that it runs in another pid namespace. There a pid that no process has, or a zombie, reads as an ended host, and a kill without a session token goes to the group that the program's recorded pid names there. A session with an autogroup record but no `host.json`, which only unreleased development builds wrote, counts as out of the CLI's pid space: its group counts as running and gets no signal.
+A `hostPid` in `session.json` that differs from the pid in `host.json` never matches, so the session stays `running` and `destroy --force` kills nothing until `session.json` names the host again. That does not happen in normal use, because the host checks that `session.json` names its own pid.
+On macOS and the BSDs, `destroy --force` kills the host only when `/bin/ps` shows the pid running `_host <session id>`, the arguments that agent-tty starts the host with.
+
+Limits:
+
+1. `destroy` does not kill a process that has left the program's process group. A process leaves the group when it calls `setsid` (for example `setsid cmd` or a daemon), or when an interactive shell with job control runs it as a job (for example `cmd &` typed into `bash -i`). Stop such a process yourself, or keep it in the program's group.
+2. Some sessions have no autogroup record: sessions on macOS and Windows, on Linux kernels without autogroups (`/proc/self/autogroup` is missing), on Linux when `/proc` refuses to show the autogroup, the boot id or the host's pid namespace at start-up, and sessions that an agent-tty version without `program.json` created. For these sessions, `destroy --force`, reconcile and the host's own kill at shutdown or at the idle time-out kill the process group (on Windows, the process) that `session.json` names, without the check, so such a kill can reach an unrelated process that took the group id after the program's group ended. `destroy` of a session whose program has already exited kills nothing. A `program.json` that agent-tty cannot read as a record, for example one that a newer version wrote, proves nothing: `destroy` and reconcile kill nothing for that session. Where `/proc` belongs to another pid namespace, as after `unshare --pid --fork` without `--mount-proc`, and the PID 1 of that namespace never reaps, a `destroy` of such a session fails with `HOST_TIMEOUT` after the program's group has ended: no scan of `/proc` shows the group's zombies, and `kill(-pgid, 0)` still finds them.
+3. The check and the kill are separate system calls, a few microseconds apart. If every process of the group exits and an unrelated process takes the group id in that time, the kill reaches the unrelated process. No system call kills a process group through a handle, so this window remains. A group that no scan shows, or whose process ends while agent-tty reads it, gets SIGSTOP before each check and SIGCONT when the checks fail. A group that shows a process that job control stopped (`kill -STOP`, or Ctrl-Z in a shell) gets no SIGSTOP, so that SIGCONT cannot resume the process. `gc` sends the same two signals to a group whose scans show only zombies while its id still names a process (see item 5). A CLI whose `/proc` belongs to another pid namespace sends no SIGSTOP. If the unrelated group is a job of an interactive shell, the shell reports the job as stopped, and after the SIGCONT the job runs in the background. If agent-tty itself dies between the two signals (SIGKILL, SIGINT, SIGTERM, SIGHUP, or the out-of-memory killer), an unrelated group that took the id stays stopped, and a later `destroy` does not resume it. Resume it with `kill -CONT -- -<pgid>`, where `<pgid>` is the Child PID that `inspect` shows.
+4. The host writes `program.json` a few milliseconds after it starts the program. We timed 150 `create` calls on Linux, from the return of node-pty's spawn to the renamed `program.json`, at 1-minute load averages of 38 to 83: the median was 2.8 ms, the 90th percentile 4.3 ms, and the longest 66 ms. If the host dies in that window and the program ignores the hang-up signal, no file names the program, and `destroy` cannot end it.
+5. `gc` kills nothing. It keeps the folder of a session that is not `destroyed` only while it proves that the program's group runs: the autogroup record in `program.json` proves that a live process of the group is the program's, or the group id still names a process that no scan of `/proc` shows, such as a fast fork chain. When the scans show only zombies of the group while its id still names a process, as for a fork chain under a PID 1 that never reaps, `gc` sends the group SIGSTOP, checks it again, and sends SIGCONT, up to twice in each of up to ten checks of the group, and it keeps the session only when such a check proves the group. A group that has ended gets all 20 frozen checks: with about 2,300 processes in `/proc`, they took about 3.5 s at a load of 90. Another `gc` or a `destroy` that runs at the same time can send SIGCONT before a frozen check. Only when that happens before all 20 of them can a live process of the chain escape every scan, and `gc` then removes the folder of a session whose group still runs. A kept session gets the reason "the session's program group still runs (destroy ends it)". When `gc` cannot check the group, it removes `program.json` with the folder, as it does without an autogroup record (see item 2). That happens in another pid namespace than the one that `host.json` names, for example after a container restart that keeps the agent-tty home, when `host.json` cannot be read, and when `/proc` refuses the boot id or the autogroup of a live process of the group, or hides the processes of other users. Otherwise such a session would stay forever, because no `destroy` can prove its group gone. A process that the program left can then no longer be stopped by agent-tty. Run `destroy` before `gc` when a program can leave processes behind.
+6. Two cases where agent-tty cannot run the check end differently from a session that stays running:
+   - At the idle time-out, a host that cannot run the check kills nothing, but it still records the session as `exited` once the program has exited, while a process that the program left can still run. A later `destroy` then fails with `HOST_TIMEOUT`, and `gc` can remove the session folder.
+   - When `/proc` hides the processes of other users (mounted with `hidepid=2`, `hidepid=4`, `hidepid=invisible` or `hidepid=ptraceable`), a group whose processes agent-tty cannot see counts as running. A `destroy` that cannot prove such a group gone fails with `HOST_TIMEOUT` and does not record the session as `destroyed`.
+7. Off Linux, reconcile counts the host as alive while any process has its pid. A crashed host that stays a zombie, or a process that got its pid, keeps the session `running`, and `destroy --force` kills nothing and fails with `HOST_TIMEOUT`. On Linux, the same happens when `/proc` is not mounted or refuses to show the host, and for a session that an agent-tty version without `host.json` started. On Windows, `destroy --force` never kills the host: it kills the program, and a host that hangs makes it fail with `HOST_TIMEOUT`. End such a host yourself with the Host PID that `inspect` shows (`taskkill /pid <pid> /f`), then run `destroy --force` again. When agent-tty cannot judge the host (another pid namespace or machine, a `/proc` of another pid namespace, or a refused read of `/proc/self/ns/pid`), `destroy --force` cannot see the host end either. It can fail with `HOST_TIMEOUT` although the host has recorded the session as `exited`, and a second `destroy --force` then records it as `destroyed`. When `/proc` is mounted but refuses to show the host and the program's processes (a security module that hides processes of the same user), `destroy --force` kills nothing and fails with `HOST_TIMEOUT` also for a healthy host.
+8. A Home that several machines share, for example over NFS, works only from the machine that started each session. From another machine, agent-tty counts the host as running and kills nothing, because the machine id differs. Machines without a machine id (an empty, missing or `uninitialized` `/etc/machine-id`, as in many container images), or with the same one (a cloned image), cannot tell each other apart. agent-tty takes a machine id only when it is 32 lowercase hex characters, so it also reads any other value, such as a UUID with dashes or uppercase hex, as no id. There the boot id differs, so the other machine counts a live host as ended, records the session as `failed`, and `gc` can then remove its folder. Remote sessions are out of scope (see `RELEASE.md`).
+9. A host that has ended reads as running forever when the machine id in its `host.json` differs from this machine's, for example after `/etc/machine-id` changed or in a cloned image that got a new one. `list` keeps the session `running`, `destroy --force` fails with `HOST_TIMEOUT`, and `gc` keeps the folder. First check, on the machine that started the session, that the host is gone: `ps -p <pid>` with the Host PID that `inspect` shows prints no `_host` process for that session. `ps` sees only the processes of its own machine, and when you delete `host.json` while the session still runs on another machine, `gc` can remove its folder. Then delete `host.json` from the session folder (`<home>/sessions/<session id>/host.json`). The next `list` records the session as `failed`, and `gc` can remove it. If another process now has that pid, the session stays `running`, and you can remove the session folder yourself.
+
 ## Isolation
 
-`--home <path>` stores manifests, sockets, event logs, and artifacts under an isolated agent-tty home.
+`--home <path>` stores manifests, event logs, and artifacts under an isolated agent-tty home.
 Pass the same `--home` value to every command in a workflow.
+
+Each session's RPC socket lies outside the Home, at `/tmp/agent-tty-<uid>/<8 hex>/<12 hex>` (on Windows under `/tmp/agent-tty/`). `inspect --json` shows it as `host.rpcSocketPath`.
+`create`, the host and `doctor` create `/tmp/agent-tty-<uid>` with mode `0700`. When that path is not a directory of your uid that no group or other user can use, for example a symlink or a folder of another user, `create` fails with `STORAGE_WRITE_ERROR` (exit 8) and names the path and its owner.
+
+Known limits:
+
+1. Any user can create `/tmp/agent-tty-<uid>` before you do, because `/tmp` is shared. `create`, and every command that talks to a host that this version started, then fails as above until that user or an admin removes it. agent-tty never connects to a socket in such a folder. A host that an older version started stays reachable at the old path (limit 2).
+2. A host that an older version started listens at `/tmp/agent-tty/<8 hex>/<12 hex>`. This version still reaches it there when that socket and its folder belong to your uid, no other user can write the folder, and `/tmp/agent-tty` belongs to you or to root and either no other user can write it or it has the sticky bit. An older version created `/tmp/agent-tty` with your umask, so under umask `002` that folder has mode `0775`. Your group can then write it, and this version does not reach an old host there until you run `chmod g-w /tmp/agent-tty`. `destroy` and `gc` remove that old socket. An older version cannot reach a host that this version started: destroy your sessions before you downgrade.
+3. The socket root belongs to the uid of the CLI. A CLI that runs as another uid, for example `sudo agent-tty ...` or `docker exec -u root`, looks under its own root and cannot reach a host that your uid started (`HOST_UNREACHABLE`). Run every command of a session as the uid that created it.
 
 For tests and automation, prefer an absolute temp directory:
 
@@ -259,20 +402,37 @@ Avoid writing automated sessions into the default `~/.agent-tty` unless you inte
 
 ## Shell Environment
 
-`create` spawns the shell with your inherited environment plus `TERM` (from `--term`) and a default `PROMPT_EOL_MARK=` (empty). The empty `PROMPT_EOL_MARK` suppresses the inverse-video `%` that `zsh` prints at the end of any output without a trailing newline; without it, agent-tty's hidden per-`run` completion marker leaves a stray `%` in snapshots, screenshots, and recordings. The variable is zsh-only and inert in other shells.
+`create` spawns the shell with your inherited environment plus `TERM` (from `--term`), a default `PROMPT_EOL_MARK=` (empty) and a default `COLORTERM=truecolor`. The empty `PROMPT_EOL_MARK` suppresses the inverse-video `%` that `zsh` prints at the end of any output without a trailing newline; without it, agent-tty's hidden per-`run` completion marker leaves a stray `%` in snapshots, screenshots, and recordings. The variable is zsh-only and inert in other shells.
 
-Any `--env` value always wins, so you can opt back into the shell's native behavior per session:
+The `COLORTERM=truecolor` default says that the renderer draws 24-bit color. Neovim turns on 24-bit color when it sees that value. When `COLORTERM` is unset or empty, Neovim asks the terminal instead. agent-tty answers that XTGETTCAP query (`Tc`, `RGB`), so Neovim still detects 24-bit color. An inherited `COLORTERM` describes the terminal that launched agent-tty, not the session's renderer, so the default replaces it.
+
+Like a terminal, agent-tty also answers DSR (`ESC [ 5 n`), the OSC 10 and OSC 11 color queries, and the DECRQSS SGR query. It writes each reply to the program as typed input. A program that asks, such as Neovim, reads the reply. A shell at its prompt reads the reply as typed text. So when a shell command prints a query, for example `printf '\e[5n'` or `cat` of a log that holds query bytes, the reply waits at the next prompt. The next `run` command then starts with the reply text and fails, for example with `necho: command not found` after a DSR reply. After an XTGETTCAP or DECRQSS reply, the next command does not run at all. In both cases `run` still reports `completed: true`. agent-tty cannot skip these replies: the shell at its prompt holds the terminal in the same mode as a program that waits for a reply. The terminal's ISIG flag and its foreground process group do not tell them apart either: in bash they are the same for a query that `printf` prints at the prompt and for `printf '\e[5n'; read -rs -d n r`, which waits for the reply. tmux leaks the DSR reply in the same way. To clear a reply, send `ctrl+c` before the next command. Do not use `ctrl+u`: after an XTGETTCAP or DECRQSS reply, bash waits in a history search, and `ctrl+u` clears only the search text. The next `run` then searches the history for its own command and can run an older command that contains it again. To print such a log, use `cat -v`, which shows the escape bytes as text.
+
+The shell also receives two session variables, so scripts inside a session can detect agent-tty and find their own session:
+
+| Variable               | Value                                                     |
+| ---------------------- | --------------------------------------------------------- |
+| `AGENT_TTY_ACTIVE`     | `true`.                                                   |
+| `AGENT_TTY_SESSION_ID` | The session's ID (a ULID, as printed by `create --json`). |
+
+Both replace inherited values, so a session created from inside another session reports its own ID, not the outer one. A PTY that agent-tty spawns without a session (the `doctor` spawn probe) gets neither variable: inherited values are removed, so it never reports an outer session's ID. Like the `PROMPT_EOL_MARK` and `COLORTERM` defaults, they are set at spawn time and are not stored in the session's recorded `env`.
+
+Any `--env` value always wins, so you can opt back into the shell's native behavior or override a session variable per session:
 
 ```bash
 # Restore zsh's styled default marker:
 agent-tty create --env PROMPT_EOL_MARK='%B%S%#%s%b' -- /bin/zsh
+
+# Hide 24-bit color support from Neovim (an empty COLORTERM would not,
+# because Neovim then asks the terminal, and agent-tty answers yes):
+agent-tty create --env COLORTERM=256color -- nvim
 ```
 
 A lone `'%'` does **not** restore the marker (zsh treats it as a prompt escape that expands to nothing); use `'%B%S%#%s%b'` for the styled default or `'%%'` for a plain percent. The default is applied at spawn time and is not stored in the manifest, so it does not appear in `inspect`, `list`, or `create --json` output. If your `~/.zshrc` assigns `PROMPT_EOL_MARK` it runs after the environment is imported and wins, so the marker can reappear — remove that line or set the value you want via `--env`.
 
 ## Exit Codes
 
-Every command exits with a stable code, so scripts can branch without parsing output. The `--json` error envelope carries the precise `error.code` when a command fails before producing a result. Commands that preserve an observable result for a failed predicate, such as timed-out `wait` and fail-fast `batch`, still emit a success envelope while exiting non-zero.
+Every command exits with a stable code, so scripts can branch without parsing output. The `--json` error envelope carries the precise `error.code` when a command fails before producing a result. A timed-out standalone `wait` emits an error envelope (`ok: false`, `error.code: "WAIT_TIMEOUT"`) that still carries the wait `result`. A fail-fast `batch` with a failed step does the same with the step's `error.code` and its per-step `result`. A `--keep-going` batch with failures keeps a success envelope and exits `1`.
 
 | Exit code | Meaning                                                                                                                     |
 | --------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -288,8 +448,20 @@ Every command exits with a stable code, so scripts can branch without parsing ou
 | `9`       | Protocol or RPC error.                                                                                                      |
 | `10`      | Replay failed.                                                                                                              |
 | `11`      | A standalone `wait` timed out, or a `wait` step inside a fail-fast `batch` timed out (`WAIT_TIMEOUT`; see [`wait`](#wait)). |
+| `12`      | A requested runtime capability is unavailable (`CAPABILITY_UNAVAILABLE`).                                                   |
+| `130`     | Interrupted by SIGINT: a `batch` that flushed its partial result, or a `destroy` whose copy in a new session SIGINT ended.  |
+| `143`     | Ended by SIGTERM: a `batch` that flushed its partial result, or a `destroy` whose copy in a new session SIGTERM ended.      |
+| `128+n`   | Ended by signal `n`: a `destroy` whose copy in a new session that signal ended, such as `129` (SIGHUP) or `137` (SIGKILL).  |
 
 A fail-fast `batch` exits with the failed step's code (for example `11` for a wait timeout); `--keep-going` exits `1` if any step failed.
+
+A live session host answers at most 67,108,864 characters per command, counted as JavaScript string length (UTF-16 code units, not bytes: non-ASCII text takes more bytes on the wire). A larger response, such as `snapshot --include-cells` of a screen with more than about 1.2 million fully styled cells, fails with `PROTOCOL_ERROR` (exit `9`, `retryable: false`) and `details.maxResponseChars`.
+
+`agent-tty help` and `agent-tty help <command>` exit `0`. Without a command, the CLI prints the help on stderr and exits `2`.
+
+An unreadable Home `config.json` gives `STORAGE_READ_ERROR` (exit `8`). Invalid JSON or an invalid field in it gives `INVALID_INPUT` (exit `2`). Both errors carry `details.configPath`.
+
+An unexpected failure prints an `INTERNAL_ERROR` envelope and exits `1` once the output is flushed, even when the failed code left a handle open. Add `--log-level debug` to also print its stack on stderr. A failure while the CLI reads the global options and the config file prints no stack, because the log level is not known yet. With `--json`, a usage error (unknown command or flag, missing argument or required option) prints an `INVALID_INPUT` envelope under the command name `agent-tty` and exits `2`. The usage text still goes to stderr.
 
 ## Anti-Patterns
 

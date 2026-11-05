@@ -177,6 +177,26 @@ export type CommuniqueRunner = (
   env: NodeJS.ProcessEnv,
 ) => Promise<void>;
 
+const MALFORMED_SUBMISSION_HINT =
+  'hint: communique::malformed_submission usually means the model answer was cut ' +
+  'off at the response token ceiling before it wrote every required field. ' +
+  'Raise `max_tokens` under [defaults] in communique.toml (Communique 1.1.3 ' +
+  'uses 4096 when it is unset).';
+
+/**
+ * Error text for a failed `communique` run: the command line and its stderr,
+ * plus a hint for the one failure whose message does not name its cause.
+ */
+export function describeCommuniqueFailure(
+  args: readonly string[],
+  stderr: string,
+): string {
+  const message = `communique ${args.join(' ')} failed${stderr === '' ? '' : `:\n${stderr}`}`;
+  return stderr.includes('communique::malformed_submission')
+    ? `${message}\n${MALFORMED_SUBMISSION_HINT}`
+    : message;
+}
+
 async function runCommuniqueBinary(
   args: string[],
   env: NodeJS.ProcessEnv,
@@ -194,10 +214,7 @@ async function runCommuniqueBinary(
       error instanceof Object && 'stderr' in error
         ? String((error as { stderr: unknown }).stderr)
         : '';
-    throw new Error(
-      `communique ${args.join(' ')} failed${stderr === '' ? '' : `:\n${stderr}`}`,
-      { cause: error },
-    );
+    throw new Error(describeCommuniqueFailure(args, stderr), { cause: error });
   }
 }
 

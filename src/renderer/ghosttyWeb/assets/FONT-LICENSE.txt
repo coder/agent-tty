@@ -7,3 +7,17 @@ Font: Symbols Nerd Font Mono by the Nerd Fonts contributors
 License: SIL Open Font License 1.1
 Source: https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/NerdFontsSymbolsOnly.zip
 Asset: SymbolsNerdFontMono-Regular.ttf
+
+Font: Noto Sans Symbols 2 by the Noto Project Authors
+License: SIL Open Font License 1.1 (OFL-NotoSansSymbols2.txt)
+Source: https://raw.githubusercontent.com/notofonts/notofonts.github.io/c16b117609abbe4e60b3f2bd4433bdb3d0accb2e/fonts/NotoSansSymbols2/unhinted/ttf/NotoSansSymbols2-Regular.ttf
+Version: 2.008
+Subset: no code points with the Unicode Emoji property, made by scripts/subset-symbol-fonts.sh
+Asset: NotoSansSymbols2-Regular.woff2
+
+Font: Noto Sans Math by the Noto Project Authors
+License: SIL Open Font License 1.1 (OFL-NotoSansMath.txt)
+Source: https://raw.githubusercontent.com/notofonts/notofonts.github.io/55773c3eb233b5a0eaa07de6226da189b136b4f0/fonts/NotoSansMath/unhinted/ttf/NotoSansMath-Regular.ttf
+Version: 3.000
+Subset: no code points with the Unicode Emoji property, made by scripts/subset-symbol-fonts.sh
+Asset: NotoSansMath-Regular.woff2

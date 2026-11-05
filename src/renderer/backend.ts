@@ -4,6 +4,12 @@ import type {
   ScreenshotResult,
   SemanticSnapshot,
 } from './types.js';
+import type {
+  MouseAction,
+  MouseButton,
+  MouseModifiers,
+  RecordExportResult,
+} from '../protocol/schemas.js';
 
 export interface SnapshotOptions {
   includeScrollback?: boolean;
@@ -43,6 +49,31 @@ export interface RendererBackend {
   readonly isBooted: boolean;
 }
 
+export interface MouseEncodingInput {
+  action: MouseAction;
+  button?: MouseButton;
+  row: number;
+  col: number;
+  cellWidth?: number;
+  cellHeight?: number;
+  modifiers: MouseModifiers;
+  anyButtonPressed: boolean;
+}
+
+export interface MouseEncodingBackend extends RendererBackend {
+  /** Encode one semantic mouse action using modes negotiated by the child. */
+  encodeMouse(input: MouseEncodingInput): Buffer;
+}
+
+export function supportsMouseEncoding(
+  backend: RendererBackend,
+): backend is MouseEncodingBackend {
+  return (
+    'encodeMouse' in backend &&
+    typeof (backend as Partial<MouseEncodingBackend>).encodeMouse === 'function'
+  );
+}
+
 export interface VideoRecordingOptions {
   outputDir: string;
   size: { width: number; height: number };
@@ -80,4 +111,12 @@ export interface VideoCapableRendererBackend extends RendererBackend {
 
   /** Finalize and save the video recording to the given path. */
   finalizeVideo(outputPath: string): Promise<void>;
+
+  /** Resolves to `{}` instead of rejecting when the glyph check fails. */
+  recordedMissingGlyphs(): Promise<RecordedGlyphFields>;
 }
+
+export type RecordedGlyphFields = Pick<
+  Extract<RecordExportResult, { format: 'webm' }>,
+  'missingGlyphs' | 'missingGlyphsTruncated'
+>;

@@ -1,10 +1,18 @@
 import crypto from 'node:crypto';
 import { basename, dirname, isAbsolute, resolve } from 'node:path';
+import process from 'node:process';
 
-import { EVENT_LOG_FILENAME, MANIFEST_FILENAME } from '../config/defaults.js';
+import {
+  CREATE_FAILED_MARKER_FILENAME,
+  DESTROY_MARKER_FILENAME,
+  EVENT_LOG_FILENAME,
+  HOST_RECORD_FILENAME,
+  MANIFEST_FILENAME,
+  PROGRAM_RECORD_FILENAME,
+} from '../config/defaults.js';
 import { invariant } from '../util/assert.js';
 
-const SOCKET_ROOT_DIRECTORY = '/tmp/agent-tty';
+const LEGACY_SOCKET_ROOT_DIRECTORY = '/tmp/agent-tty';
 const SOCKET_HOME_ID_LENGTH = 8;
 const SOCKET_ID_LENGTH = 12;
 
@@ -67,11 +75,39 @@ export function eventLogPath(sessionDirectory: string): string {
   return childPath(sessionDirectory, EVENT_LOG_FILENAME);
 }
 
+export function programRecordPath(sessionDirectory: string): string {
+  return childPath(sessionDirectory, PROGRAM_RECORD_FILENAME);
+}
+
+export function hostRecordPath(sessionDirectory: string): string {
+  return childPath(sessionDirectory, HOST_RECORD_FILENAME);
+}
+
+export function destroyMarkerPath(sessionDirectory: string): string {
+  return childPath(sessionDirectory, DESTROY_MARKER_FILENAME);
+}
+
+// A create that gave up writes this empty file, so a host that the manifest
+// does not name yet stops its session itself.
+export function createFailedMarkerPath(sessionDirectory: string): string {
+  return childPath(sessionDirectory, CREATE_FAILED_MARKER_FILENAME);
+}
+
+// One root per uid, so that no other user can create a Home's folder in it.
+// Windows has no uid and keeps the shared root.
+export function socketRootDirectory(): string {
+  const uid = process.getuid?.();
+  return uid === undefined
+    ? LEGACY_SOCKET_ROOT_DIRECTORY
+    : `${LEGACY_SOCKET_ROOT_DIRECTORY}-${String(uid)}`;
+}
+
 function resolveSocketDirectory(home: string): string {
   assertAbsolutePath(home, 'home');
 
+  const root = socketRootDirectory();
   const directory = resolve(
-    SOCKET_ROOT_DIRECTORY,
+    root,
     crypto
       .createHash('sha256')
       .update(resolve(home))
@@ -79,7 +115,7 @@ function resolveSocketDirectory(home: string): string {
       .slice(0, SOCKET_HOME_ID_LENGTH),
   );
   invariant(
-    dirname(directory) === resolve(SOCKET_ROOT_DIRECTORY),
+    dirname(directory) === root,
     'socket directory must stay within the socket root directory',
   );
   invariant(
@@ -141,4 +177,22 @@ export function socketPath(sessionDirectory: string): string {
   );
 
   return socketFile;
+}
+
+// A host that an older version started listens under the shared root. Hosts
+// of 0.5.0 and earlier listen there, so remove this in 0.7.0.
+export function legacySocketPath(socketFile: string): string | null {
+  const root = socketRootDirectory();
+  const socketDirectory = dirname(socketFile);
+  if (
+    root === LEGACY_SOCKET_ROOT_DIRECTORY ||
+    dirname(socketDirectory) !== root
+  ) {
+    return null;
+  }
+  return resolve(
+    LEGACY_SOCKET_ROOT_DIRECTORY,
+    basename(socketDirectory),
+    basename(socketFile),
+  );
 }

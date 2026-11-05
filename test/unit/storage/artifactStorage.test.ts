@@ -1,6 +1,15 @@
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  symlink,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -13,7 +22,9 @@ import type {
 import {
   appendArtifactWithRollback,
   ArtifactEntrySchema,
+  fileIdentity,
   readArtifactManifest,
+  removeArtifactEntry,
   writeArtifactManifest,
 } from '../../../src/storage/artifactManifest.js';
 import {
@@ -72,6 +83,46 @@ describe('artifact paths', () => {
     await expect(access(artifactsDir)).resolves.toBeUndefined();
   });
 
+  it('rejects an artifacts path that is a file with STORAGE_WRITE_ERROR', async () => {
+    const sessionDir = await createSessionDir();
+    const artifactsPath = join(sessionDir, 'artifacts');
+    await writeFile(artifactsPath, '');
+
+    await expect(ensureArtifactsDir(sessionDir)).rejects.toMatchObject({
+      code: 'STORAGE_WRITE_ERROR',
+      message: `Artifacts path ${artifactsPath} is not a folder.`,
+      details: { path: artifactsPath },
+    });
+  });
+
+  it('rejects a dangling artifacts symlink with STORAGE_WRITE_ERROR', async () => {
+    const sessionDir = await createSessionDir();
+    const artifactsPath = join(sessionDir, 'artifacts');
+    await symlink(join(sessionDir, 'missing-target'), artifactsPath);
+
+    await expect(ensureArtifactsDir(sessionDir)).rejects.toMatchObject({
+      code: 'STORAGE_WRITE_ERROR',
+      details: { path: artifactsPath },
+    });
+  });
+
+  it('names the stat error and keeps it as the cause when the artifacts path cannot be checked', async () => {
+    const sessionDir = await createSessionDir();
+    const artifactsPath = join(sessionDir, 'artifacts');
+    await symlink(artifactsPath, artifactsPath);
+
+    const error: unknown = await ensureArtifactsDir(sessionDir).catch(
+      (thrown: unknown) => thrown,
+    );
+
+    expect(error).toMatchObject({
+      code: 'STORAGE_WRITE_ERROR',
+      message: `Failed to check artifacts path ${artifactsPath} (ELOOP).`,
+      details: { path: artifactsPath, errno: 'ELOOP' },
+      cause: { code: 'ELOOP' },
+    });
+  });
+
   it('generates recording filenames for webm format', () => {
     expect(recordingFilename(7, 'webm')).toBe('recording-7-webm.webm');
   });
@@ -83,8 +134,11 @@ describe('artifact paths', () => {
   });
 
   it('asserts on invalid helper inputs', () => {
-    expect(() => screenshotFilename(-1, 'reference-dark')).toThrow(
-      /seq must be a non-negative integer/u,
+    expect(() => screenshotFilename(-2, 'reference-dark')).toThrow(
+      /seq must be an integer of at least -1/u,
+    );
+    expect(() => recordingFilename(-2, 'asciicast')).toThrow(
+      /seq must be an integer of at least -1/u,
     );
     expect(() => screenshotFilename(0, '')).toThrow(
       /profileName must be a non-empty string/u,
@@ -190,6 +244,249 @@ describe('artifact manifest storage', () => {
         }),
       ],
     });
+  });
+
+  describe('an export that replaces its output path', () => {
+    const exportEntry = (id: string, outputPath: string): ArtifactEntry =>
+      createArtifactEntry({
+        id,
+        kind: 'recording',
+        filename: basename(outputPath),
+        metadata: { format: 'asciicast', outputPath },
+      });
+    const ids = async (sessionDir: string): Promise<string[]> =>
+      (await readArtifactManifest(sessionDir)).artifacts.map(
+        (entry) => entry.id,
+      );
+    // Writes a new file at `path`, as an export does with a temp file and
+    // a rename, and returns its identity.
+    const exportTo = async (
+      path: string,
+      contents: string,
+    ): Promise<string> => {
+      const temporaryPath = `${path}.tmp`;
+      await writeFile(temporaryPath, contents);
+      await rename(temporaryPath, path);
+      const identity = await fileIdentity(path);
+      expect(identity).not.toBeNull();
+      return identity ?? '';
+    };
+
+    it('drops the entries of earlier exports to the same file', async () => {
+      const sessionDir = await createSessionDir();
+      await ensureArtifactsDir(sessionDir);
+      const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
+      // Another spelling of the same file, as on a case-insensitive file
+      // system. A symlink stands in for it on a case-sensitive one.
+      const aliasPath = artifactPath(sessionDir, 'RECORDING-4-ASCIICAST.cast');
+      await symlink(castPath, aliasPath);
+      // A symlink whose path differs in more than case is not read.
+      const otherAliasPath = join(sessionDir, 'other-alias.cast');
+      await symlink(castPath, otherAliasPath);
+      const otherPath = join(sessionDir, 'other.cast');
+      await writeFile(otherPath, 'other');
+      await exportTo(castPath, 'first');
+      for (const entry of [
+        exportEntry('01JQ0000000000000000000001', castPath),
+        exportEntry('01JQ0000000000000000000002', otherPath),
+        exportEntry('01JQ0000000000000000000003', aliasPath),
+        createArtifactEntry({ id: '01JQ0000000000000000000004' }),
+        exportEntry('01JQ0000000000000000000006', otherAliasPath),
+      ]) {
+        await appendArtifactWithRollback({ sessionDir, entry });
+      }
+
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000005', castPath),
+        outputFileIdentity: await exportTo(castPath, 'second'),
+      });
+
+      expect(await ids(sessionDir)).toEqual([
+        '01JQ0000000000000000000002',
+        '01JQ0000000000000000000004',
+        '01JQ0000000000000000000006',
+        '01JQ0000000000000000000005',
+      ]);
+    });
+
+    it('keeps the entry of a path that differs only in case but names another file', async ({
+      skip,
+    }) => {
+      const sessionDir = await createSessionDir();
+      await ensureArtifactsDir(sessionDir);
+      const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
+      const variantPath = artifactPath(
+        sessionDir,
+        'Recording-4-Asciicast.cast',
+      );
+      const otherPath = join(sessionDir, 'other.cast');
+      await writeFile(otherPath, 'other');
+      await exportTo(castPath, 'first');
+      try {
+        await symlink(otherPath, variantPath);
+      } catch (error) {
+        // A case-insensitive file system has one name for both spellings,
+        // so they cannot name two files there.
+        if ((error as { code?: unknown }).code === 'EEXIST') {
+          skip();
+        }
+        throw error;
+      }
+      for (const entry of [
+        exportEntry('01JQ0000000000000000000001', castPath),
+        exportEntry('01JQ0000000000000000000002', variantPath),
+      ]) {
+        await appendArtifactWithRollback({ sessionDir, entry });
+      }
+
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000003', castPath),
+        outputFileIdentity: await exportTo(castPath, 'second'),
+      });
+
+      expect(await ids(sessionDir)).toEqual([
+        '01JQ0000000000000000000002',
+        '01JQ0000000000000000000003',
+      ]);
+    });
+
+    it('adds its entry when the file got a new modification time after the write', async () => {
+      // A file server can set the time of last write after the close, or a
+      // tool can touch the file. The export must not lose its entry then.
+      const sessionDir = await createSessionDir();
+      await ensureArtifactsDir(sessionDir);
+      const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000001', castPath),
+        outputFileIdentity: await exportTo(castPath, 'first'),
+      });
+      const identity = await exportTo(castPath, 'second');
+      const later = new Date(Date.now() + 5_000);
+      await utimes(castPath, later, later);
+
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000002', castPath),
+        outputFileIdentity: identity,
+      });
+
+      expect(await ids(sessionDir)).toEqual([
+        '01JQ0000000000000000000001',
+        '01JQ0000000000000000000002',
+      ]);
+    });
+
+    it('adds nothing when a later export replaced its file with bytes of another size', async () => {
+      const sessionDir = await createSessionDir();
+      await ensureArtifactsDir(sessionDir);
+      const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
+      const earlier = await exportTo(castPath, 'earlier');
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000002', castPath),
+        outputFileIdentity: await exportTo(castPath, 'later'),
+      });
+
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000001', castPath),
+        outputFileIdentity: earlier,
+        rollbackArtifactPath: castPath,
+      });
+
+      expect(await ids(sessionDir)).toEqual(['01JQ0000000000000000000002']);
+      await expect(readFile(castPath, 'utf8')).resolves.toBe('later');
+    });
+
+    it('adds its entry and drops none when a later export replaced its file with bytes of the same size', async () => {
+      // The append cannot tell these bytes from its own without reading
+      // the file under the lock, so it keeps both entries.
+      const sessionDir = await createSessionDir();
+      await ensureArtifactsDir(sessionDir);
+      const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
+      const earlier = await exportTo(castPath, 'early');
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000002', castPath),
+        outputFileIdentity: await exportTo(castPath, 'later'),
+      });
+
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000001', castPath),
+        outputFileIdentity: earlier,
+      });
+
+      expect(await ids(sessionDir)).toEqual([
+        '01JQ0000000000000000000002',
+        '01JQ0000000000000000000001',
+      ]);
+    });
+
+    it('adds its entry when its file is gone and keeps the entries of other missing files', async () => {
+      const sessionDir = await createSessionDir();
+      await ensureArtifactsDir(sessionDir);
+      const castPath = artifactPath(sessionDir, 'recording-4-asciicast.cast');
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry(
+          '01JQ0000000000000000000001',
+          join(sessionDir, 'missing.cast'),
+        ),
+      });
+      const identity = await exportTo(castPath, 'gone');
+      await rm(castPath);
+
+      await appendArtifactWithRollback({
+        sessionDir,
+        entry: exportEntry('01JQ0000000000000000000002', castPath),
+        outputFileIdentity: identity,
+      });
+
+      expect(await ids(sessionDir)).toEqual([
+        '01JQ0000000000000000000001',
+        '01JQ0000000000000000000002',
+      ]);
+    });
+  });
+
+  it('removes the last entry of a capture and its file once no entry lists the file', async () => {
+    const sessionDir = await createSessionDir();
+    await ensureArtifactsDir(sessionDir);
+    const filename = 'screenshot-4-reference-dark.png';
+    await writeFile(artifactPath(sessionDir, filename), 'png');
+    const shot = (id: string, sha256: string): ArtifactEntry =>
+      createArtifactEntry({ id, kind: 'screenshot', filename, sha256 });
+    for (const entry of [
+      shot('01JQ0000000000000000000001', 'a'.repeat(64)),
+      shot('01JQ0000000000000000000002', 'a'.repeat(64)),
+      createArtifactEntry({ id: '01JQ0000000000000000000003' }),
+    ]) {
+      await appendArtifactWithRollback({ sessionDir, entry });
+    }
+    const ids = async (): Promise<string[]> =>
+      (await readArtifactManifest(sessionDir)).artifacts.map(
+        (entry) => entry.id,
+      );
+
+    await removeArtifactEntry({ sessionDir, filename, sha256: 'b'.repeat(64) });
+    expect(await ids()).toHaveLength(3);
+
+    await removeArtifactEntry({ sessionDir, filename, sha256: 'a'.repeat(64) });
+    expect(await ids()).toEqual([
+      '01JQ0000000000000000000001',
+      '01JQ0000000000000000000003',
+    ]);
+    await expect(
+      access(artifactPath(sessionDir, filename)),
+    ).resolves.toBeUndefined();
+
+    await removeArtifactEntry({ sessionDir, filename, sha256: 'a'.repeat(64) });
+    expect(await ids()).toEqual(['01JQ0000000000000000000003']);
+    await expect(access(artifactPath(sessionDir, filename))).rejects.toThrow();
   });
 
   it('writes and reads artifact manifests with validation', async () => {

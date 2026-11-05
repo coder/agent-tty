@@ -2,7 +2,6 @@ import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { exitCodeForError } from '../../../src/cli/exitCodes.js';
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 
 const mocks = vi.hoisted(() => ({
@@ -326,6 +325,88 @@ describe('wait command', () => {
     expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [
+      { idleMs: 30_000 },
+      '--idle-ms 30000 cannot finish within the default --timeout of 30000 ms. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      { flag: '--idle-ms', windowMs: 30_000, defaultTimeoutMs: 30_000 },
+    ],
+    [
+      { screenStableMs: 29_800 },
+      '--screen-stable-ms 29800 cannot finish within the default --timeout of 30000 ms. It needs more than 30000 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      {
+        flag: '--screen-stable-ms',
+        windowMs: 29_800,
+        defaultTimeoutMs: 30_000,
+      },
+    ],
+    [
+      { idleMs: 2000, timeout: 2000 },
+      '--idle-ms 2000 cannot finish within --timeout 2000. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      { flag: '--idle-ms', windowMs: 2000, timeoutMs: 2000 },
+    ],
+    [
+      { screenStableMs: 5000, timeout: 2000 },
+      '--screen-stable-ms 5000 cannot finish within --timeout 2000. It needs more than 5200 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      { flag: '--screen-stable-ms', windowMs: 5000, timeoutMs: 2000 },
+    ],
+    [
+      { screenStableMs: 1800, timeout: 2000 },
+      '--screen-stable-ms 1800 cannot finish within --timeout 2000. It needs more than 2000 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      { flag: '--screen-stable-ms', windowMs: 1800, timeoutMs: 2000 },
+    ],
+    [
+      { screenStableMs: 1, timeout: 202 },
+      '--screen-stable-ms 1 cannot finish within --timeout 202. It needs more than 400 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Pass a larger --timeout, or --timeout 0 to wait without a limit.',
+      { flag: '--screen-stable-ms', windowMs: 1, timeoutMs: 202 },
+    ],
+  ])(
+    'rejects a window that cannot finish within the timeout: %o',
+    async (overrides, message, details) => {
+      await expect(
+        runWaitCommand(createOptions(overrides)),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.INVALID_DURATION,
+        message,
+        details,
+      });
+      expect(mocks.sendRpc).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { idleMs: 29_999 },
+    { screenStableMs: 29_799 },
+    { idleMs: 1999, timeout: 2000 },
+    { screenStableMs: 1799, timeout: 2000 },
+    { screenStableMs: 1, timeout: 401 },
+    { screenStableMs: 60_000, timeout: 0 },
+  ])(
+    'accepts a window that can finish within the timeout: %o',
+    async (overrides) => {
+      mocks.sendRpc.mockResolvedValue(
+        'idleMs' in overrides
+          ? { timedOut: false }
+          : { matched: true, timedOut: false, capturedAtSeq: 1 },
+      );
+
+      await runWaitCommand(createOptions(overrides));
+
+      expect(mocks.sendRpc).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([0, 60_000])(
+    'accepts a long --idle-ms with an explicit --timeout %d',
+    async (timeout) => {
+      mocks.sendRpc.mockResolvedValue({ timedOut: false });
+
+      await runWaitCommand(createOptions({ idleMs: 30_000, timeout }));
+
+      expect(mocks.sendRpc).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('rejects negative --timeout values for render waits', async () => {
     await expect(
       runWaitCommand(createOptions({ text: 'hello', timeout: -1 })),
@@ -356,9 +437,9 @@ describe('wait command', () => {
       {
         exit: true,
         idleMs: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -417,9 +498,9 @@ describe('wait command', () => {
       {
         exit: undefined,
         idleMs: 500,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -429,22 +510,22 @@ describe('wait command', () => {
     );
   });
 
-  it('sets WAIT_TIMEOUT exit code for legacy wait timeouts while preserving success output', async () => {
+  it('throws WAIT_TIMEOUT carrying the result for legacy wait timeouts', async () => {
     const result = { timedOut: true };
     mocks.sendRpc.mockResolvedValue(result);
 
-    await runWaitCommand(createOptions({ waitForExit: true, timeout: 1000 }));
-
-    expect(process.exitCode).toBe(exitCodeForError(ERROR_CODES.WAIT_TIMEOUT));
-    expect(mocks.emitSuccess).toHaveBeenCalledWith({
-      command: 'wait',
-      json: false,
+    await expect(
+      runWaitCommand(createOptions({ waitForExit: true, timeout: 1000 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.WAIT_TIMEOUT,
+      retryable: false,
+      details: { sessionId: 'session-01', timeoutMs: 1000 },
       result,
-      lines: ['Wait timed out.'],
     });
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
-  it('sets WAIT_TIMEOUT exit code for render wait timeouts while preserving success output', async () => {
+  it('throws WAIT_TIMEOUT carrying the result for render wait timeouts', async () => {
     const result = {
       matched: false,
       timedOut: true,
@@ -452,14 +533,122 @@ describe('wait command', () => {
     };
     mocks.sendRpc.mockResolvedValue(result);
 
-    await runWaitCommand(createOptions({ text: 'missing', timeout: 1000 }));
-
-    expect(process.exitCode).toBe(exitCodeForError(ERROR_CODES.WAIT_TIMEOUT));
-    expect(mocks.emitSuccess).toHaveBeenCalledWith({
-      command: 'wait',
-      json: false,
+    await expect(
+      runWaitCommand(createOptions({ text: 'missing', timeout: 1000 })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.WAIT_TIMEOUT,
+      retryable: false,
+      details: { sessionId: 'session-01', timeoutMs: 1000 },
       result,
-      lines: ['Wait timed out. (capturedAtSeq: 7)'],
+    });
+    expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  describe('human-mode WAIT_TIMEOUT message', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date', 'performance'] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function resolveTimedOutAfter(elapsedMs: number, result: object): void {
+      mocks.sendRpc.mockImplementation(() => {
+        vi.advanceTimersByTime(elapsedMs);
+        return Promise.resolve(result);
+      });
+    }
+
+    const renderTimeout = { matched: false, timedOut: true, capturedAtSeq: 7 };
+
+    it.each([
+      [
+        'an explicit --timeout',
+        { text: 'missing', timeout: 1000 },
+        1000,
+        renderTimeout,
+        'Wait timed out after 1000 ms.',
+      ],
+      [
+        'the default timeout',
+        { text: 'missing' },
+        30_000,
+        renderTimeout,
+        'Wait timed out after 30000 ms (the default; pass --timeout <ms>, or --timeout 0 to wait without a limit).',
+      ],
+      [
+        'the --timeout of an --idle-ms wait',
+        { idleMs: 500, timeout: 1000 },
+        1000,
+        { timedOut: true },
+        'Wait timed out after 1000 ms.',
+      ],
+    ])(
+      'names %s that ran out',
+      async (_case, overrides, elapsedMs, result, message) => {
+        resolveTimedOutAfter(elapsedMs, result);
+
+        await expect(
+          runWaitCommand(createOptions(overrides)),
+        ).rejects.toMatchObject({ code: ERROR_CODES.WAIT_TIMEOUT, message });
+      },
+    );
+
+    it.each([
+      ['--timeout 0', { text: 'missing', timeout: 0 }],
+      [
+        'a --timeout that did not run out',
+        { text: 'missing', timeout: 20_000 },
+      ],
+      ['a default timeout that did not run out', { text: 'missing' }],
+    ])('keeps the generic text for %s', async (_case, overrides) => {
+      resolveTimedOutAfter(3000, renderTimeout);
+
+      await expect(
+        runWaitCommand(createOptions(overrides)),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.WAIT_TIMEOUT,
+        message: 'Wait timed out before its condition was met.',
+      });
+    });
+
+    it('keeps the generic text when the system clock jumps forward during the wait', async () => {
+      mocks.sendRpc.mockImplementation(() => {
+        vi.setSystemTime(Date.now() + 30_000);
+        return Promise.resolve(renderTimeout);
+      });
+
+      await expect(
+        runWaitCommand(createOptions({ text: 'missing', timeout: 1000 })),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.WAIT_TIMEOUT,
+        message: 'Wait timed out before its condition was met.',
+      });
+    });
+
+    it('keeps the generic text under --json when the timeout ran out', async () => {
+      resolveTimedOutAfter(30_000, { timedOut: true });
+
+      await expect(
+        runWaitCommand(createOptions({ json: true, waitForExit: true })),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.WAIT_TIMEOUT,
+        message: 'Wait timed out before its condition was met.',
+        details: { sessionId: 'session-01', timeoutMs: 30000 },
+      });
+    });
+  });
+
+  it('keeps the WAIT_TIMEOUT message of the JSON envelope', async () => {
+    mocks.sendRpc.mockResolvedValue({ timedOut: true });
+
+    await expect(
+      runWaitCommand(createOptions({ json: true, waitForExit: true })),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.WAIT_TIMEOUT,
+      message: 'Wait timed out before its condition was met.',
+      details: { sessionId: 'session-01', timeoutMs: 30000 },
     });
   });
 
@@ -484,10 +673,10 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         afterSeq: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -517,7 +706,7 @@ describe('wait command', () => {
       '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'waitForRender',
       expect.objectContaining({ rendererName: 'libghostty-vt' }),
-      605_000,
+      35_000,
     );
   });
 
@@ -542,10 +731,10 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         afterSeq: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -579,10 +768,10 @@ describe('wait command', () => {
         cursorRow: 3,
         cursorCol: 4,
         afterSeq: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -613,10 +802,10 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         afterSeq: 5,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.emitSuccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -637,12 +826,12 @@ describe('wait command', () => {
     expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
 
-  it('rejects negative --after-seq values', async () => {
+  it('rejects --after-seq values below -1', async () => {
     await expect(
-      runWaitCommand(createOptions({ text: 'hello', afterSeq: -1 })),
+      runWaitCommand(createOptions({ text: 'hello', afterSeq: -2 })),
     ).rejects.toMatchObject({
       code: ERROR_CODES.INVALID_INPUT,
-      details: { afterSeq: -1 },
+      details: { afterSeq: -2 },
     });
     expect(mocks.sendRpc).not.toHaveBeenCalled();
   });
@@ -695,10 +884,10 @@ describe('wait command', () => {
         cursorRow: undefined,
         cursorCol: undefined,
         afterSeq: undefined,
-        timeoutMs: 600_000,
+        timeoutMs: 30_000,
         rendererName: 'ghostty-web',
       },
-      605_000,
+      35_000,
     );
     expect(mocks.withOfflineReplayRenderer).toHaveBeenCalledWith(
       {

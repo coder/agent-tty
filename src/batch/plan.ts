@@ -1,9 +1,16 @@
 import { z } from 'zod';
 
 import type { PreparedRenderWaitCondition } from '../renderWait/matcher.js';
+import type { MouseInput } from '../protocol/messages.js';
 
 import { assertValidKeyName } from '../pty/keyEncoder.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
+import { MouseInputSchema } from '../protocol/messages.js';
+import {
+  DEFAULT_WAIT_TIMEOUT_MS,
+  RENDER_WAIT_POLL_INTERVAL_MS,
+  screenStableMinimumMs,
+} from '../renderWait/limits.js';
 import { prepareRenderWaitCondition } from '../renderWait/matcher.js';
 import { invariant, unreachable } from '../util/assert.js';
 
@@ -11,6 +18,7 @@ export type BatchStep =
   | { kind: 'type'; text: string }
   | { kind: 'paste'; text: string }
   | { kind: 'sendKeys'; keys: string[] }
+  | { kind: 'mouse'; input: MouseInput }
   | {
       kind: 'run';
       command: string;
@@ -27,20 +35,23 @@ export interface BatchPlan {
   steps: BatchStep[];
 }
 
-const VERB_KEYS = ['type', 'paste', 'sendKeys', 'run', 'wait'] as const;
+const VERB_KEYS = [
+  'type',
+  'paste',
+  'sendKeys',
+  'mouse',
+  'run',
+  'wait',
+] as const;
 
 type VerbKey = (typeof VERB_KEYS)[number];
-
-// Default for an omitted `wait` step timeout, matching the `wait` command; an
-// explicit `timeout: 0` still means infinite. Keeps an unattended Batch from
-// hanging forever on a wait whose condition never appears.
-const DEFAULT_WAIT_TIMEOUT_MS = 600_000;
 
 const TypeStepSchema = z.object({ type: z.string().min(1) }).strict();
 const PasteStepSchema = z.object({ paste: z.string().min(1) }).strict();
 const SendKeysStepSchema = z
   .object({ sendKeys: z.array(z.string().min(1)).min(1) })
   .strict();
+const MouseStepSchema = z.object({ mouse: z.unknown() }).strict();
 const RunStepSchema = z
   .object({
     run: z.string().min(1),
@@ -90,13 +101,13 @@ function parseStep(rawStep: unknown, index: number): BatchStep {
   const verbs = presentVerbKeys(rawStep);
   if (verbs.length === 0) {
     return invalidInput(
-      `Batch step ${String(index)} must have exactly one of type|paste|sendKeys|run|wait; found none`,
+      `Batch step ${String(index)} must have exactly one of type|paste|sendKeys|mouse|run|wait; found none`,
       index,
     );
   }
   if (verbs.length > 1) {
     return invalidInput(
-      `Batch step ${String(index)} must have exactly one of type|paste|sendKeys|run|wait; found ${verbs.join(', ')}`,
+      `Batch step ${String(index)} must have exactly one of type|paste|sendKeys|mouse|run|wait; found ${verbs.join(', ')}`,
       index,
     );
   }
@@ -111,6 +122,8 @@ function parseStep(rawStep: unknown, index: number): BatchStep {
       return parsePasteStep(rawStep, index);
     case 'sendKeys':
       return parseSendKeysStep(rawStep, index);
+    case 'mouse':
+      return parseMouseStep(rawStep, index);
     case 'run':
       return parseRunStep(rawStep, index);
     case 'wait':
@@ -164,6 +177,21 @@ function parseSendKeysStep(
   return { kind: 'sendKeys', keys };
 }
 
+function parseMouseStep(
+  rawStep: Record<string, unknown>,
+  index: number,
+): BatchStep {
+  const { mouse } = unwrapStep(MouseStepSchema, rawStep, index);
+  const result = MouseInputSchema.safeParse(mouse);
+  if (!result.success) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: `Batch step ${String(index)} is invalid`,
+      details: { stepIndex: index, issues: result.error.issues },
+    });
+  }
+  return { kind: 'mouse', input: result.data };
+}
+
 function parseRunStep(
   rawStep: Record<string, unknown>,
   index: number,
@@ -198,6 +226,22 @@ function parseWaitStep(
       : wait.timeout === 0
         ? undefined
         : wait.timeout;
+
+  if (
+    wait.screenStableMs !== undefined &&
+    timeoutMs !== undefined &&
+    screenStableMinimumMs(wait.screenStableMs) >= timeoutMs
+  ) {
+    const limit =
+      wait.timeout === undefined
+        ? `the default timeout of ${String(timeoutMs)} ms`
+        : `its timeout of ${String(timeoutMs)} ms`;
+    invalidInput(
+      `Batch step ${String(index)} wait screenStableMs ${String(wait.screenStableMs)} cannot finish within ${limit}. It needs more than ${String(screenStableMinimumMs(wait.screenStableMs))} ms, because the stable clock starts at the first render poll (every ${String(RENDER_WAIT_POLL_INTERVAL_MS)} ms) and a later poll must confirm it. Set a larger "timeout", or "timeout": 0 to wait without a limit.`,
+      index,
+    );
+  }
+
   return { kind: 'wait', condition, timeoutMs };
 }
 

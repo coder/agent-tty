@@ -2,9 +2,9 @@
 # "Unknown project config" warnings the way .npmrc keys do). Overrides and the
 # build-script allowlist live in package.json's "pnpm" field.
 
-# Supply-chain guards carried over from aube's defaults: skip versions
-# published less than a day ago (the resolver falls back to an older match),
-# and reject versions whose publish trust evidence weakens between releases.
+# Supply-chain guards: skip versions published less than a day ago (the
+# resolver falls back to an older match), and reject versions whose publish
+# trust evidence weakens between releases.
 minimumReleaseAge: 1440
 trustPolicy: no-downgrade
 

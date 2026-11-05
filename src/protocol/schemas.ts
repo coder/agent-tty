@@ -16,6 +16,7 @@ const RegexPatternSchema = z
 const ProfileNameSchema = z.string().min(1).max(100);
 const PositiveIntSchema = z.number().int().positive();
 const NonNegativeIntSchema = z.number().int().nonnegative();
+export const ReplaySeqSchema = z.number().int().gte(-1);
 const IsoDatetimeSchema = z.iso.datetime();
 const SnapshotFormatSchema = z.enum(['structured', 'text']);
 
@@ -110,6 +111,66 @@ export const InputKeysEventPayloadSchema = z
   .strict();
 export type InputKeysEventPayload = z.infer<typeof InputKeysEventPayloadSchema>;
 
+export const MouseActionSchema = z.enum(['press', 'release', 'move']);
+export type MouseAction = z.infer<typeof MouseActionSchema>;
+
+export const MouseButtonSchema = z.enum([
+  'left',
+  'middle',
+  'right',
+  'wheel-up',
+  'wheel-down',
+  'wheel-left',
+  'wheel-right',
+]);
+export type MouseButton = z.infer<typeof MouseButtonSchema>;
+
+export const MouseModifiersSchema = z
+  .object({
+    shift: z.boolean(),
+    alt: z.boolean(),
+    ctrl: z.boolean(),
+  })
+  .strict();
+export type MouseModifiers = z.infer<typeof MouseModifiersSchema>;
+
+export const InputMouseEventPayloadSchema = z
+  .object({
+    action: MouseActionSchema,
+    button: MouseButtonSchema.optional(),
+    row: NonNegativeIntSchema,
+    col: NonNegativeIntSchema,
+    cellWidth: PositiveIntSchema.optional(),
+    cellHeight: PositiveIntSchema.optional(),
+    modifiers: MouseModifiersSchema,
+    rendererBackend: NonEmptyStringSchema,
+    dataBase64: z
+      .string()
+      .regex(
+        /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u,
+      ),
+  })
+  .strict()
+  .superRefine((event, ctx) => {
+    if (event.action === 'move' && event.button !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'button must not be set for move events',
+        path: ['button'],
+      });
+    }
+    if (event.action !== 'move' && event.button === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'button is required for press and release events',
+        path: ['button'],
+      });
+    }
+  });
+export type InputMouseEventPayload = z.infer<
+  typeof InputMouseEventPayloadSchema
+>;
+
 export const InputRunEventPayloadSchema = z
   .object({
     command: z.string().min(1),
@@ -183,6 +244,7 @@ export const EventTypeSchema = z.enum([
   'input_text',
   'input_paste',
   'input_keys',
+  'input_mouse',
   'input_run',
   'run_complete',
   'resize',
@@ -226,6 +288,14 @@ export const InputKeysEventRecordSchema = z
     ...EventRecordBaseShape,
     type: z.literal('input_keys'),
     payload: InputKeysEventPayloadSchema,
+  })
+  .strict();
+
+export const InputMouseEventRecordSchema = z
+  .object({
+    ...EventRecordBaseShape,
+    type: z.literal('input_mouse'),
+    payload: InputMouseEventPayloadSchema,
   })
   .strict();
 
@@ -282,6 +352,7 @@ export const EventRecordSchema = z.discriminatedUnion('type', [
   InputTextEventRecordSchema,
   InputPasteEventRecordSchema,
   InputKeysEventRecordSchema,
+  InputMouseEventRecordSchema,
   InputRunEventRecordSchema,
   RunCompleteEventRecordSchema,
   ResizeEventRecordSchema,
@@ -334,7 +405,7 @@ export const StructuredSnapshotResultSchema = z
   .object({
     format: z.literal('structured'),
     sessionId: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntSchema,
+    capturedAtSeq: ReplaySeqSchema,
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
     cursorRow: NonNegativeIntSchema,
@@ -354,7 +425,7 @@ export const TextSnapshotResultSchema = z
   .object({
     format: z.literal('text'),
     sessionId: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntSchema,
+    capturedAtSeq: ReplaySeqSchema,
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
     cursorRow: NonNegativeIntSchema,
@@ -380,10 +451,31 @@ export const ScreenshotParamsSchema = z
   .strict();
 export type ScreenshotParams = z.infer<typeof ScreenshotParamsSchema>;
 
+export const MissingGlyphSchema = z
+  .object({
+    codePoint: z
+      .string()
+      .regex(/^U\+(?:[0-9A-F]{4}|[1-9A-F][0-9A-F]{4}|10[0-9A-F]{4})$/u),
+    cells: z
+      .array(
+        z
+          .object({ row: NonNegativeIntSchema, col: NonNegativeIntSchema })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
+export type MissingGlyph = z.infer<typeof MissingGlyphSchema>;
+
+export const RecordedMissingGlyphSchema = MissingGlyphSchema.pick({
+  codePoint: true,
+}).strict();
+export type RecordedMissingGlyph = z.infer<typeof RecordedMissingGlyphSchema>;
+
 export const ScreenshotResultSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntSchema,
+    capturedAtSeq: ReplaySeqSchema,
     profileName: NonEmptyStringSchema,
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
@@ -395,6 +487,8 @@ export const ScreenshotResultSchema = z
     pixelHeight: PositiveIntSchema.optional(),
     sha256: Sha256HexSchema.optional(),
     renderProfileHash: Sha256HexSchema.optional(),
+    missingGlyphs: z.array(MissingGlyphSchema).optional(),
+    missingGlyphsTruncated: z.literal(true).optional(),
   })
   .strict();
 export type ScreenshotResult = z.infer<typeof ScreenshotResultSchema>;
@@ -410,7 +504,7 @@ export const WaitForRenderParamsSchema = z
     screenStableMs: PositiveIntSchema.optional(),
     cursorRow: NonNegativeIntSchema.optional(),
     cursorCol: NonNegativeIntSchema.optional(),
-    afterSeq: NonNegativeIntSchema.optional(),
+    afterSeq: ReplaySeqSchema.optional(),
     timeoutMs: PositiveIntSchema.optional(),
     rendererName: RendererNameSchema.optional(),
   })
@@ -469,22 +563,32 @@ export const WaitForRenderResultSchema = z
     matchedText: z.string().optional(),
     cursorRow: NonNegativeIntSchema.optional(),
     cursorCol: NonNegativeIntSchema.optional(),
-    capturedAtSeq: NonNegativeIntSchema,
+    capturedAtSeq: ReplaySeqSchema,
     screenHash: Sha256HexSchema.optional(),
   })
   .strict();
-export const RecordExportResultSchema = z
-  .object({
-    sessionId: NonEmptyStringSchema,
-    format: z.enum(['asciicast', 'webm']),
-    artifactPath: NonEmptyStringSchema,
-    bytes: PositiveIntSchema,
-    sha256: NonEmptyStringSchema,
-    capturedAtSeq: NonNegativeIntSchema,
-    durationMs: NonNegativeIntSchema.optional(),
-    metadata: z.record(z.string(), z.unknown()),
-  })
-  .strict();
+const RecordExportResultFields = {
+  sessionId: NonEmptyStringSchema,
+  artifactPath: NonEmptyStringSchema,
+  bytes: PositiveIntSchema,
+  sha256: NonEmptyStringSchema,
+  capturedAtSeq: ReplaySeqSchema,
+  durationMs: NonNegativeIntSchema.optional(),
+  metadata: z.record(z.string(), z.unknown()),
+};
+export const RecordExportResultSchema = z.discriminatedUnion('format', [
+  z
+    .object({ ...RecordExportResultFields, format: z.literal('asciicast') })
+    .strict(),
+  z
+    .object({
+      ...RecordExportResultFields,
+      format: z.literal('webm'),
+      missingGlyphs: z.array(RecordedMissingGlyphSchema).optional(),
+      missingGlyphsTruncated: z.literal(true).optional(),
+    })
+    .strict(),
+]);
 export type RecordExportResult = z.infer<typeof RecordExportResultSchema>;
 
 export const RecordDiffLineSchema = z.discriminatedUnion('op', [
@@ -522,9 +626,7 @@ const MAX_BLANK_HASH_ROWS = 100_000;
 export const RecordDiffSideSchema = z
   .object({
     sessionId: NonEmptyStringSchema,
-    // -1 mirrors ReplayInput.targetSeq for an empty event log: the side is
-    // the pre-event blank screen and no event sequence was replayed.
-    capturedAtSeq: z.number().int().gte(-1),
+    capturedAtSeq: ReplaySeqSchema,
     cols: PositiveIntSchema,
     rows: PositiveIntSchema,
     screenHash: Sha256HexSchema,

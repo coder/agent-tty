@@ -1,5 +1,5 @@
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { access, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -345,6 +345,101 @@ describe('snapshot capture', () => {
         cursorCol: 0,
         scrollbackLineCount: 2,
       },
+    });
+  });
+
+  describe('repeat capture at the same seq and format', () => {
+    const plainSnapshot = createTestSemanticSnapshot();
+    const scrollbackSnapshot = createTestSemanticSnapshot({
+      scrollbackLines: [{ row: 0, text: 'scrolled away' }],
+    });
+
+    async function captureText(
+      sessionDirectory: string,
+      snapshot = plainSnapshot,
+    ) {
+      return await captureSnapshotResult({
+        sessionDir: sessionDirectory,
+        format: 'text',
+        snapshot,
+        rendererBackend: 'test-backend',
+      });
+    }
+
+    async function readRecordedSnapshots(
+      sessionDirectory: string,
+    ): Promise<Array<{ filename: string; contents: unknown }>> {
+      const manifest = await readArtifactManifest(sessionDirectory);
+      return await Promise.all(
+        manifest.artifacts.map(async (entry) => ({
+          filename: entry.filename,
+          contents: JSON.parse(
+            await readFile(
+              artifactPath(sessionDirectory, entry.filename),
+              'utf8',
+            ),
+          ) as unknown,
+        })),
+      );
+    }
+
+    async function listArtifactFiles(
+      sessionDirectory: string,
+    ): Promise<string[]> {
+      return (await readdir(join(sessionDirectory, 'artifacts'))).sort();
+    }
+
+    it('reuses the existing file when the result is identical', async () => {
+      const sessionDirectory = await createSessionDir();
+
+      const first = await captureText(sessionDirectory);
+      await captureText(sessionDirectory);
+
+      await expect(readRecordedSnapshots(sessionDirectory)).resolves.toEqual([
+        { filename: 'snapshot-5-text.json', contents: first },
+        { filename: 'snapshot-5-text.json', contents: first },
+      ]);
+      expect(await listArtifactFiles(sessionDirectory)).toEqual([
+        'manifest.json',
+        'snapshot-5-text.json',
+      ]);
+    });
+
+    it('stores a different result under a new name and keeps the earlier file', async () => {
+      const sessionDirectory = await createSessionDir();
+
+      const first = await captureText(sessionDirectory);
+      const second = await captureText(sessionDirectory, scrollbackSnapshot);
+
+      expect(second).not.toEqual(first);
+      await expect(readRecordedSnapshots(sessionDirectory)).resolves.toEqual([
+        { filename: 'snapshot-5-text.json', contents: first },
+        { filename: 'snapshot-5-text-2.json', contents: second },
+      ]);
+    });
+
+    it('keeps the earlier file when the repeat capture fails to append', async () => {
+      const sessionDirectory = await createSessionDir();
+      const first = await captureText(sessionDirectory);
+      const manifestFilePath = artifactPath(sessionDirectory, 'manifest.json');
+      const recordedManifest = await readFile(manifestFilePath, 'utf8');
+      await writeFile(manifestFilePath, '{');
+
+      await expect(captureText(sessionDirectory)).rejects.toMatchObject({
+        code: 'MANIFEST_VALIDATION_ERROR',
+      });
+      await expect(
+        captureText(sessionDirectory, scrollbackSnapshot),
+      ).rejects.toMatchObject({ code: 'MANIFEST_VALIDATION_ERROR' });
+
+      await writeFile(manifestFilePath, recordedManifest);
+      await expect(readRecordedSnapshots(sessionDirectory)).resolves.toEqual([
+        { filename: 'snapshot-5-text.json', contents: first },
+      ]);
+      expect(await listArtifactFiles(sessionDirectory)).toEqual([
+        'manifest.json',
+        'snapshot-5-text.json',
+      ]);
     });
   });
 });

@@ -1,7 +1,10 @@
+import { basename, dirname } from 'node:path';
+
 import type { ScreenshotResult } from '../../protocol/messages.js';
 
 import type { CommandContext } from '../context.js';
 
+import { missingGlyphLines } from '../missingGlyphLines.js';
 import { emitSuccess } from '../output.js';
 import { CliError } from '../../cli/errors.js';
 import { sendRpc } from '../../host/rpcClient.js';
@@ -12,12 +15,16 @@ import {
   captureScreenshotResult,
   parseScreenshotResult,
 } from '../../screenshot/capture.js';
+import { removeArtifactEntry } from '../../storage/artifactManifest.js';
+import { sessionNotFoundIfRemoved } from '../../storage/artifactPaths.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import {
-  manifestPath,
-  sessionDir,
-  socketPath,
-} from '../../storage/sessionPaths.js';
+  copyFileReplacing,
+  resolveExplicitOutputPath,
+  type ExplicitOutputPath,
+} from '../../storage/outputPath.js';
+import { manifestPath, socketPath } from '../../storage/sessionPaths.js';
+import { checkedSessionDir } from '../sessionGuards.js';
 
 const DEFAULT_SCREENSHOT_PROFILE = 'reference-dark';
 
@@ -27,6 +34,7 @@ interface CommandOptions {
   sessionId: string;
   profile?: string;
   showCursor?: boolean;
+  out?: string;
 }
 
 interface ResolvedScreenshotRequest {
@@ -98,8 +106,35 @@ function formatScreenshotLines(result: ScreenshotResult): string[] {
   if (result.renderProfileHash !== undefined) {
     lines.push(`Render profile hash: ${result.renderProfileHash}`);
   }
+  lines.push(...missingGlyphLines(result));
 
   return lines;
+}
+
+function outputPathError(
+  sessionId: string,
+  out: string,
+  error: unknown,
+): CliError {
+  return makeCliError(ERROR_CODES.EXPORT_ERROR, {
+    message: `Failed to write the screenshot of session "${sessionId}" to ${out}.`,
+    details: { sessionId, out },
+    cause: error,
+  });
+}
+
+async function resolveScreenshotOutputPath(
+  sessionId: string,
+  out: string,
+  sessionsRoot: string,
+): Promise<ExplicitOutputPath> {
+  try {
+    return await resolveExplicitOutputPath(out, sessionsRoot);
+  } catch (error) {
+    throw error instanceof CliError
+      ? error
+      : outputPathError(sessionId, out, error);
+  }
 }
 
 async function runOfflineScreenshot(
@@ -130,19 +165,7 @@ export async function runScreenshotCommand(
     options.showCursor,
   );
   const home = options.context.home;
-  let sessionDirectory: string;
-
-  try {
-    sessionDirectory = sessionDir(home, options.sessionId);
-  } catch (error) {
-    throw makeCliError(ERROR_CODES.INVALID_SESSION_ID, {
-      message: `Session ID "${options.sessionId}" is invalid.`,
-      details: {
-        sessionId: options.sessionId,
-      },
-      cause: error,
-    });
-  }
+  const sessionDirectory = checkedSessionDir(home, options.sessionId);
 
   const manifestFile = manifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(manifestFile);
@@ -156,6 +179,18 @@ export async function runScreenshotCommand(
       },
     });
   }
+
+  const output =
+    options.out === undefined
+      ? undefined
+      : {
+          out: options.out,
+          target: await resolveScreenshotOutputPath(
+            options.sessionId,
+            options.out,
+            dirname(sessionDirectory),
+          ),
+        };
 
   let result: ScreenshotResult;
 
@@ -199,6 +234,27 @@ export async function runScreenshotCommand(
       profile,
       showCursor,
     );
+  }
+
+  if (output !== undefined) {
+    try {
+      await copyFileReplacing(result.artifactPath, output.target);
+    } catch (error) {
+      const removed = await sessionNotFoundIfRemoved(sessionDirectory, error);
+      // The copy runs after the capture, for example into an --out folder
+      // that was replaced. A failed command leaves no capture behind.
+      if (removed === error && result.sha256 !== undefined) {
+        await removeArtifactEntry({
+          sessionDir: sessionDirectory,
+          filename: basename(result.artifactPath),
+          sha256: result.sha256,
+        }).catch(() => undefined);
+      }
+      throw removed !== error || error instanceof CliError
+        ? removed
+        : outputPathError(options.sessionId, output.out, error);
+    }
+    result = { ...result, artifactPath: output.target.path };
   }
 
   emitSuccess({

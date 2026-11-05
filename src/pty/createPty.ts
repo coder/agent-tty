@@ -6,7 +6,10 @@ import process from 'node:process';
 import type { IPty } from 'node-pty';
 import { spawn } from 'node-pty';
 
-import { HOST_RENDERER_ENV_KEY } from '../config/defaults.js';
+import {
+  DESTROY_RERUN_ENV_KEY,
+  HOST_RENDERER_ENV_KEY,
+} from '../config/defaults.js';
 import { invariant } from '../util/assert.js';
 
 export interface PtyOptions {
@@ -16,6 +19,7 @@ export interface PtyOptions {
   rows: number;
   env: Record<string, string>;
   term: string;
+  sessionId?: string;
 }
 
 const EXECUTABLE_PERMISSION_MASK = 0o111;
@@ -78,28 +82,42 @@ function ensureDarwinSpawnHelperExecutable(): void {
  * mark surfaces as a stray `%` in snapshots, screenshots, and recordings.
  * Defaulting the parameter to empty suppresses the glyph. It is inert in shells
  * that do not implement it (bash, etc.), so setting it unconditionally is safe.
+ *
+ * `COLORTERM=truecolor` tells programs that the renderer draws 24-bit color.
+ * Neovim reads it before it queries the terminal, and any other non-empty
+ * value, such as one inherited from the launching terminal, skips that query.
  */
-const PROMPT_EOL_MARK_ENV_KEY = 'PROMPT_EOL_MARK';
+const SPAWN_ENV_DEFAULTS: Readonly<Record<string, string>> = {
+  PROMPT_EOL_MARK: '',
+  COLORTERM: 'truecolor',
+};
 
 /**
  * Resolves the environment handed to the spawned PTY shell.
  *
  * Precedence, lowest to highest: the inherited process environment (minus
- * host-only internals), then the `PROMPT_EOL_MARK=''` default, then the caller-supplied `env` (so a `--env`
- * value always wins — even an explicit empty one), then `TERM`. The default sits
- * after the inherited environment so it also overrides any inherited
- * `PROMPT_EOL_MARK`, keeping captures deterministic regardless of the launching
- * shell. The presence check is against `env` (the user-explicit set) rather than
- * the merged result, so an inherited value never counts as opting out.
+ * host-only internals), then `SPAWN_ENV_DEFAULTS`, then the generated session
+ * metadata, then the caller-supplied `env` (so a `--env` value always wins —
+ * even an explicit empty one), then `TERM`. The session metadata is
+ * `AGENT_TTY_ACTIVE=true` plus `AGENT_TTY_SESSION_ID` when
+ * `sessionId` is given; without a `sessionId` both are removed instead, so a
+ * session-less PTY never claims an inherited outer session. The defaults sit
+ * after the inherited environment so they also override inherited values: a
+ * nested session reports its own id rather than the outer session's, and
+ * captures stay deterministic regardless of the launching shell. Only `env`
+ * (the user-explicit set) opts out of a default, so an inherited value never
+ * counts as opting out. The destroy re-run marker never reaches the program,
+ * not even through `env`.
  */
 export function resolvePtyEnv(
   env: Record<string, string>,
   term: string,
   baseEnv: Record<string, string | undefined> = process.env,
+  sessionId?: string,
 ): Record<string, string> {
   const resolved: Record<string, string> = {};
   for (const [key, value] of Object.entries(baseEnv)) {
-    if (key === HOST_RENDERER_ENV_KEY) {
+    if (key === HOST_RENDERER_ENV_KEY || key === DESTROY_RERUN_ENV_KEY) {
       continue;
     }
     if (value !== undefined) {
@@ -107,11 +125,27 @@ export function resolvePtyEnv(
     }
   }
 
-  if (!Object.prototype.hasOwnProperty.call(env, PROMPT_EOL_MARK_ENV_KEY)) {
-    resolved[PROMPT_EOL_MARK_ENV_KEY] = '';
+  Object.assign(resolved, SPAWN_ENV_DEFAULTS);
+
+  invariant(
+    sessionId === undefined || sessionId.length > 0,
+    'resolvePtyEnv: sessionId must be non-empty when provided',
+  );
+  if (sessionId === undefined) {
+    // A PTY without a session (the doctor spawn probe) must not claim one, so
+    // drop any session variables inherited from an outer session.
+    delete resolved.AGENT_TTY_ACTIVE;
+    delete resolved.AGENT_TTY_SESSION_ID;
+  } else {
+    resolved.AGENT_TTY_ACTIVE = 'true';
+    resolved.AGENT_TTY_SESSION_ID = sessionId;
   }
 
-  Object.assign(resolved, env);
+  for (const [key, value] of Object.entries(env)) {
+    if (key !== DESTROY_RERUN_ENV_KEY) {
+      resolved[key] = value;
+    }
+  }
   resolved.TERM = term;
   return resolved;
 }
@@ -144,6 +178,6 @@ export function createPty(options: PtyOptions): IPty {
     cwd,
     cols,
     rows,
-    env: resolvePtyEnv(env, term),
+    env: resolvePtyEnv(env, term, process.env, options.sessionId),
   });
 }

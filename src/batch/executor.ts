@@ -170,6 +170,18 @@ async function runStep(
         seq,
       };
     }
+    case 'mouse': {
+      const { seq, reported, bytesWritten } = await driver.mouse(step.input);
+      return {
+        index,
+        durationMs: Date.now() - startedAt,
+        kind: 'mouse',
+        status: 'completed',
+        seq,
+        reported,
+        bytesWritten,
+      };
+    }
     case 'run':
       return runRunStep(step, index, driver, startedAt);
     case 'wait':
@@ -273,7 +285,10 @@ async function runWaitStep(
       ...observations,
       error: toBatchStepError(
         makeCliError(ERROR_CODES.WAIT_TIMEOUT, {
-          message: `Render wait at step ${String(index)} timed out before its condition was met.`,
+          message:
+            result.timedOut && step.timeoutMs !== undefined
+              ? `Render wait at step ${String(index)} timed out after ${String(step.timeoutMs)} ms.`
+              : `Render wait at step ${String(index)} timed out before its condition was met.`,
         }),
       ),
     };
@@ -324,6 +339,7 @@ function failedRecord(
     case 'type':
     case 'paste':
     case 'sendKeys':
+    case 'mouse':
       return { ...base, kind: step.kind, error: stepError };
     default:
       return unreachable(step, `batch failed-step kind at index ${index}`);

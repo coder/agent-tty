@@ -3,6 +3,7 @@ import {
   mkdir,
   realpath,
   rm,
+  symlink,
   truncate,
   writeFile,
 } from 'node:fs/promises';
@@ -409,6 +410,45 @@ describe('validate-bundle canonical profile', () => {
     expect(findCheck(result, 'artifacts-present').message).toContain(
       'envelope.json',
     );
+  });
+
+  it('fails when a manifest artifact resolves outside the bundle through a symlink', async () => {
+    const outsideContent = 'outside the bundle\n';
+    const bundleRoot = await writeCanonicalBundle([
+      { path: 'notes.md', description: 'narrative', content: '# Notes\n' },
+      {
+        path: 'commands.sh',
+        description: 'reproduce',
+        content: '#!/bin/sh\n',
+      },
+      {
+        path: 'inside-link.md',
+        description: 'symlink to a bundle file',
+        content: '# Notes\n',
+      },
+      {
+        path: 'outside-link.txt',
+        description: 'symlink to a file outside the bundle',
+        content: outsideContent,
+      },
+    ]);
+    const outsideRoot = await createTempDir();
+    await writeFixtureFile(outsideRoot, 'secret.txt', outsideContent);
+    await rm(join(bundleRoot, 'inside-link.md'));
+    await symlink('notes.md', join(bundleRoot, 'inside-link.md'));
+    await rm(join(bundleRoot, 'outside-link.txt'));
+    await symlink(
+      join(outsideRoot, 'secret.txt'),
+      join(bundleRoot, 'outside-link.txt'),
+    );
+
+    const result = await validateBundle(bundleRoot, 'canonical');
+
+    expect(result.ok).toBe(false);
+    expect(findCheck(result, 'artifacts-present')).toMatchObject({
+      ok: false,
+      message: 'Paths escape bundle root: outside-link.txt',
+    });
   });
 
   it('fails when an artifact byte size disagrees with the manifest', async () => {

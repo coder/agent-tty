@@ -13,8 +13,12 @@ import { invariant } from '../util/assert.js';
  *   E1568: Terminal did not respond to DSR request for 'background' color.
  *
  * The warning text then lands in the very PNG/WebM captures agent-tty exists to
- * produce. This scanner answers the handful of startup queries that matter so
- * those programs proceed immediately, and reports the colors of agent-tty's
+ * produce. Programs started with a clean environment (`env -i nvim`, or
+ * `--env COLORTERM=`) also cannot read COLORTERM, so they ask the terminal about
+ * 24-bit color instead: an XTGETTCAP query for Tc/RGB/setrgbf/setrgbb, and a
+ * DECRQSS SGR query that agent-tty declines because it does not track SGR state.
+ * This scanner answers the handful of startup queries that matter so those
+ * programs proceed immediately, and reports the colors of agent-tty's
  * default render profile so a program's light/dark choice matches a
  * default-profile capture. The probe is answered once at session start, before
  * any capture profile is known, so a capture later requested with a different
@@ -33,7 +37,8 @@ const BELL = 0x07;
 const LEFT_SQUARE_BRACKET = 0x5b; // [ — introduces a CSI sequence after ESC.
 const RIGHT_SQUARE_BRACKET = 0x5d; // ] — introduces an OSC sequence after ESC.
 const REVERSE_SOLIDUS = 0x5c; // \ — the second byte of a 7-bit ST terminator (ESC \).
-const C1_STRING_TERMINATOR = 0x9c; // 8-bit C1 String Terminator (ST); also ends an OSC.
+const C1_STRING_TERMINATOR = 0x9c; // 8-bit C1 String Terminator (ST); also ends an OSC or DCS.
+const DCS_INTRODUCER = 0x50; // P — introduces a DCS string after ESC.
 
 const CSI_FINAL_BYTE_MIN = 0x40;
 const CSI_FINAL_BYTE_MAX = 0x7e;
@@ -49,8 +54,24 @@ const CSI_PARAM_BYTE_MAX = 0x3f;
  */
 const MAX_CSI_PARAM_LENGTH = 32;
 const MAX_OSC_PAYLOAD_LENGTH = 64;
+const MAX_DCS_PAYLOAD_LENGTH = 256;
 
-type ScannerState = 'ground' | 'esc' | 'csi' | 'osc' | 'oscEsc';
+type ScannerState =
+  | 'ground'
+  | 'esc'
+  | 'csi'
+  | 'osc'
+  | 'oscEsc'
+  | 'dcs'
+  | 'dcsEsc';
+
+// Values are terminfo source strings with a literal `\E`; null marks a boolean.
+const XTGETTCAP_CAPABILITIES: ReadonlyMap<string, string | null> = new Map([
+  ['Tc', null],
+  ['RGB', null],
+  ['setrgbf', '\\E[38;2;%p1%d;%p2%d;%p3%dm'],
+  ['setrgbb', '\\E[48;2;%p1%d;%p2%d;%p3%dm'],
+]);
 
 export interface TerminalQueryResponderOptions {
   /** Background color (`#rrggbb`) reported for OSC 11 queries. */
@@ -76,6 +97,28 @@ function toOscColorPayload(hexColor: string): string {
   const green = hexColor.slice(3, 5).toLowerCase();
   const blue = hexColor.slice(5, 7).toLowerCase();
   return `rgb:${red}${red}/${green}${green}/${blue}${blue}`;
+}
+
+/**
+ * Answers one hex-encoded XTGETTCAP name with `DCS 1 + r <name>[=<value>] ST`.
+ * Unknown or malformed names get no reply rather than a "not found" one, so
+ * agent-tty never contradicts a capability that TERM's terminfo entry has.
+ */
+function answerXtgettcapName(hexName: string): string {
+  if (!/^(?:[0-9a-fA-F]{2})+$/u.test(hexName)) {
+    return '';
+  }
+  const value = XTGETTCAP_CAPABILITIES.get(
+    Buffer.from(hexName, 'hex').toString('latin1'),
+  );
+  if (value === undefined) {
+    return '';
+  }
+  const encodedValue =
+    value === null
+      ? ''
+      : `=${Buffer.from(value, 'latin1').toString('hex').toUpperCase()}`;
+  return `\x1bP1+r${hexName}${encodedValue}\x1b\\`;
 }
 
 export class TerminalQueryResponder {
@@ -129,6 +172,10 @@ export class TerminalQueryResponder {
         return this.stepOsc(char, code);
       case 'oscEsc':
         return this.stepOscEsc(code);
+      case 'dcs':
+        return this.stepDcs(char, code);
+      case 'dcsEsc':
+        return this.stepDcsEsc(code);
     }
   }
 
@@ -139,6 +186,9 @@ export class TerminalQueryResponder {
     } else if (code === RIGHT_SQUARE_BRACKET) {
       this.state = 'osc';
       this.buffer = '';
+    } else if (code === DCS_INTRODUCER) {
+      this.state = 'dcs';
+      this.buffer = '';
     } else if (code !== ESC) {
       // Any other escape sequence is one we do not answer; ignore it. A repeated
       // ESC keeps us waiting for the introducer of a fresh sequence.
@@ -147,9 +197,9 @@ export class TerminalQueryResponder {
     return '';
   }
 
-  // A stray byte aborts the in-progress CSI/OSC sequence: the buffer is dropped,
-  // and a fresh ESC begins another sequence while anything else returns to
-  // ground. Centralized so both call sites stay in lockstep.
+  // A stray byte aborts the in-progress CSI/OSC/DCS sequence: the buffer is
+  // dropped, and a fresh ESC begins another sequence while anything else returns
+  // to ground. Centralized so every call site stays in lockstep.
   private abortSequence(code: number): string {
     this.buffer = '';
     this.state = code === ESC ? 'esc' : 'ground';
@@ -205,6 +255,43 @@ export class TerminalQueryResponder {
     }
     // The ESC did not form a 7-bit ST, so it aborts the OSC.
     return this.abortSequence(code);
+  }
+
+  private stepDcs(char: string, code: number): string {
+    if (code === C1_STRING_TERMINATOR) {
+      return this.dispatchDcs();
+    }
+    if (code === ESC) {
+      this.state = 'dcsEsc';
+      return '';
+    }
+    if (this.buffer.length <= MAX_DCS_PAYLOAD_LENGTH) {
+      this.buffer += char;
+    }
+    return '';
+  }
+
+  private stepDcsEsc(code: number): string {
+    if (code === REVERSE_SOLIDUS) {
+      return this.dispatchDcs();
+    }
+    return this.abortSequence(code);
+  }
+
+  private dispatchDcs(): string {
+    const payload = this.buffer;
+    this.state = 'ground';
+    this.buffer = '';
+    if (payload.length > MAX_DCS_PAYLOAD_LENGTH) {
+      return '';
+    }
+    if (payload.startsWith('+q')) {
+      return payload.slice(2).split(';').map(answerXtgettcapName).join('');
+    }
+    if (payload === '$qm') {
+      return '\x1bP0$r\x1b\\';
+    }
+    return '';
   }
 
   private dispatchOsc(terminator: string): string {

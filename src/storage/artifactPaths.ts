@@ -1,7 +1,9 @@
-import { mkdir } from 'node:fs/promises';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { mkdir, stat } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, resolve } from 'node:path';
 
+import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
+import { hasErrorCode } from '../util/hasErrorCode.js';
 
 const ARTIFACTS_DIRNAME = 'artifacts';
 const SAFE_FILENAME_COMPONENT_PATTERN = /[^a-zA-Z0-9._-]+/g;
@@ -21,6 +23,13 @@ function assertNonNegativeInteger(value: number, label: string): void {
   invariant(
     Number.isInteger(value) && value >= 0,
     `${label} must be a non-negative integer`,
+  );
+}
+
+function assertReplaySeq(seq: number): void {
+  invariant(
+    Number.isInteger(seq) && seq >= -1,
+    'seq must be an integer of at least -1',
   );
 }
 
@@ -60,7 +69,7 @@ function artifactsDir(sessionDir: string): string {
 }
 
 export function screenshotFilename(seq: number, profileName: string): string {
-  assertNonNegativeInteger(seq, 'seq');
+  assertReplaySeq(seq);
   const sanitizedProfileName = sanitizeFilenameComponent(
     profileName,
     'profileName',
@@ -72,7 +81,7 @@ export function snapshotFilename(
   seq: number,
   format: 'structured' | 'text',
 ): string {
-  assertNonNegativeInteger(seq, 'seq');
+  assertReplaySeq(seq);
   const sanitizedFormat = sanitizeFilenameComponent(format, 'format');
   return `snapshot-${String(seq)}-${sanitizedFormat}.json`;
 }
@@ -86,7 +95,7 @@ function recordingExtension(format: string): string {
 }
 
 export function recordingFilename(seq: number, format: string): string {
-  assertNonNegativeInteger(seq, 'seq');
+  assertReplaySeq(seq);
   const sanitizedFormat = sanitizeFilenameComponent(format, 'format');
   const extension = recordingExtension(sanitizedFormat);
   return `recording-${String(seq)}-${sanitizedFormat}.${extension}`;
@@ -118,8 +127,77 @@ export function artifactPath(sessionDir: string, filename: string): string {
   return resolvedArtifactPath;
 }
 
+function sessionNotFoundError(sessionDirectory: string, cause: unknown) {
+  const sessionId = basename(sessionDirectory);
+  return makeCliError(ERROR_CODES.SESSION_NOT_FOUND, {
+    message: `Session "${sessionId}" was not found: its folder ${sessionDirectory} no longer exists.`,
+    details: { sessionId, sessionDir: sessionDirectory },
+    cause,
+  });
+}
+
 export async function ensureArtifactsDir(sessionDir: string): Promise<string> {
   const directory = artifactsDir(sessionDir);
-  await mkdir(directory, { recursive: true });
+
+  try {
+    await mkdir(directory);
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      throw sessionNotFoundError(dirname(directory), error);
+    }
+
+    if (!hasErrorCode(error, 'EEXIST')) {
+      throw error;
+    }
+
+    const stats = await stat(directory).catch(async (statError: unknown) => {
+      const removed = await sessionNotFoundIfRemoved(sessionDir, statError);
+      if (removed !== statError) {
+        throw removed;
+      }
+      if (hasErrorCode(statError, 'ENOENT')) {
+        return undefined;
+      }
+      const errno = (statError as NodeJS.ErrnoException).code ?? 'unknown';
+      throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+        message: `Failed to check artifacts path ${directory} (${errno}).`,
+        details: { path: directory, errno },
+        cause: statError,
+      });
+    });
+    if (stats?.isDirectory() !== true) {
+      throw makeCliError(ERROR_CODES.STORAGE_WRITE_ERROR, {
+        message: `Artifacts path ${directory} is not a folder.`,
+        details: { path: directory },
+      });
+    }
+  }
+
   return directory;
+}
+
+/**
+ * Returns SESSION_NOT_FOUND for an ENOENT from a write under the session
+ * folder when gc removed that folder, and any other error unchanged. APFS
+ * answers EINVAL instead of ENOENT to a link or rename into a folder that
+ * another process removes during the call, so EINVAL counts too.
+ */
+export async function sessionNotFoundIfRemoved(
+  sessionDir: string,
+  error: unknown,
+): Promise<unknown> {
+  assertAbsolutePath(sessionDir, 'sessionDir');
+
+  if (!hasErrorCode(error, 'ENOENT') && !hasErrorCode(error, 'EINVAL')) {
+    return error;
+  }
+
+  try {
+    await stat(sessionDir);
+    return error;
+  } catch (statError) {
+    return hasErrorCode(statError, 'ENOENT')
+      ? sessionNotFoundError(resolve(sessionDir), error)
+      : error;
+  }
 }

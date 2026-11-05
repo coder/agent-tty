@@ -1,19 +1,30 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createHomeRegistry,
   normalizeHomePath,
+  readHomeRegistry,
   resolveHomeRegistryPath,
+  upsertHome,
   type HomeRegistry,
 } from '../../../src/storage/homeRegistry.js';
 
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     temporaryDirectories
       .splice(0)
@@ -98,14 +109,69 @@ describe('HomeRegistry store', () => {
     await registry.upsert('/homes/alpha');
     await registry.upsert('/homes/beta');
 
-    expect(await registry.forget('/homes/alpha')).toBe(true);
+    expect(await registry.forget('/homes/alpha')).toBe('/homes/alpha');
     expect((await registry.read()).map((entry) => entry.path)).toEqual([
       '/homes/beta',
     ]);
 
-    expect(await registry.forget('/homes/does-not-exist')).toBe(false);
+    expect(await registry.forget('/homes/does-not-exist')).toBeNull();
     expect((await registry.read()).map((entry) => entry.path)).toEqual([
       '/homes/beta',
+    ]);
+  });
+
+  it('forgets a removed Home by the symlinked path it was created through', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-')));
+    temporaryDirectories.push(root);
+    await mkdir(join(root, 'real', 'home'), { recursive: true });
+    await symlink(join(root, 'real'), join(root, 'link'));
+    const registry = createHomeRegistry({
+      registryPath: await tempRegistryPath(),
+    });
+    await registry.upsert(join(root, 'link', 'home'));
+    await rm(join(root, 'real', 'home'), { recursive: true });
+
+    expect(await registry.forget(join(root, 'link', 'home'))).toBe(
+      join(root, 'real', 'home'),
+    );
+    expect(await registry.read()).toEqual([]);
+  });
+
+  it('forgets a removed Home by its stored path after its parent became a symlink', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-')));
+    temporaryDirectories.push(root);
+    await mkdir(join(root, 'data', 'homeB'), { recursive: true });
+    const registry = createHomeRegistry({
+      registryPath: await tempRegistryPath(),
+    });
+    await registry.upsert(join(root, 'data', 'homeB'));
+    await rm(join(root, 'data'), { recursive: true });
+    await mkdir(join(root, 'data2'));
+    await symlink(join(root, 'data2'), join(root, 'data'));
+
+    expect(await registry.forget(join(root, 'data', 'homeB'))).toBe(
+      join(root, 'data', 'homeB'),
+    );
+    expect(await registry.read()).toEqual([]);
+  });
+
+  it('forgets only the entry stored under the path as written when the canonical path is registered too', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-')));
+    temporaryDirectories.push(root);
+    await mkdir(join(root, 'data', 'homeB'), { recursive: true });
+    const registry = createHomeRegistry({
+      registryPath: await tempRegistryPath(),
+    });
+    await registry.upsert(join(root, 'data', 'homeB'));
+    await rm(join(root, 'data'), { recursive: true });
+    await mkdir(join(root, 'data2', 'homeB'), { recursive: true });
+    await symlink(join(root, 'data2'), join(root, 'data'));
+    await registry.upsert(join(root, 'data2', 'homeB'));
+
+    await registry.forget(join(root, 'data', 'homeB'));
+
+    expect((await registry.read()).map((entry) => entry.path)).toEqual([
+      join(root, 'data2', 'homeB'),
     ]);
   });
 
@@ -125,6 +191,42 @@ describe('HomeRegistry store', () => {
     await writeFile(registryPath, '{ not valid json', 'utf8');
 
     expect(await registry.read()).toEqual([]);
+  });
+
+  it('drops only the invalid entry and keeps the valid Homes on upsert', async () => {
+    const stateHome = await mkdtemp(join(tmpdir(), 'agent-tty-state-'));
+    temporaryDirectories.push(stateHome);
+    vi.stubEnv('XDG_STATE_HOME', stateHome);
+    const registryPath = join(stateHome, 'agent-tty', 'homes.json');
+    await mkdir(join(stateHome, 'agent-tty'), { recursive: true });
+    await writeFile(
+      registryPath,
+      JSON.stringify({
+        version: 1,
+        homes: [
+          { path: '/homes/alpha', lastSeenAt: '2020-01-02T00:00:00.000Z' },
+          { path: '/homes/broken' },
+          { path: '/homes/beta', lastSeenAt: '2020-01-01T00:00:00.000Z' },
+        ],
+      }),
+      'utf8',
+    );
+
+    expect(await readHomeRegistry()).toEqual([
+      { path: '/homes/alpha', lastSeenAt: '2020-01-02T00:00:00.000Z' },
+      { path: '/homes/beta', lastSeenAt: '2020-01-01T00:00:00.000Z' },
+    ]);
+
+    await upsertHome('/homes/gamma');
+
+    const written = JSON.parse(await readFile(registryPath, 'utf8')) as {
+      homes: Array<{ path: string }>;
+    };
+    expect(written.homes.map((entry) => entry.path)).toEqual([
+      '/homes/gamma',
+      '/homes/alpha',
+      '/homes/beta',
+    ]);
   });
 
   it('writes atomically and survives concurrent upserts without corruption', async () => {

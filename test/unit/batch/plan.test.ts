@@ -40,6 +40,38 @@ describe('parseBatchPlan', () => {
       ).toEqual([{ kind: 'sendKeys', keys: ['Escape', 'ctrl+c', 'Enter'] }]);
     });
 
+    it('parses mouse steps with cell coordinates and modifiers', () => {
+      expect(
+        parse([
+          {
+            mouse: {
+              action: 'press',
+              button: 'left',
+              row: 4,
+              col: 9,
+              modifiers: { ctrl: true },
+            },
+          },
+          { mouse: { action: 'move', row: 5, col: 10 } },
+        ]).steps,
+      ).toEqual([
+        {
+          kind: 'mouse',
+          input: {
+            action: 'press',
+            button: 'left',
+            row: 4,
+            col: 9,
+            modifiers: { ctrl: true },
+          },
+        },
+        {
+          kind: 'mouse',
+          input: { action: 'move', row: 5, col: 10, modifiers: {} },
+        },
+      ]);
+    });
+
     it('parses a run step with noWait defaulting to false (Waited Run)', () => {
       expect(parse([{ run: 'echo hi' }]).steps).toEqual([
         {
@@ -79,10 +111,57 @@ describe('parseBatchPlan', () => {
       expect(step).toMatchObject({ kind: 'wait', timeoutMs: undefined });
     });
 
-    it('defaults an absent wait timeout to 600s (parity with the wait command)', () => {
+    it('defaults an absent wait timeout to 30s (parity with the wait command)', () => {
       const step = parse([{ wait: { screenStableMs: 1000 } }]).steps[0];
-      expect(step).toMatchObject({ kind: 'wait', timeoutMs: 600_000 });
+      expect(step).toMatchObject({ kind: 'wait', timeoutMs: 30_000 });
     });
+
+    it.each([
+      [
+        { screenStableMs: 29_800 },
+        'Batch step 1 wait screenStableMs 29800 cannot finish within the default timeout of 30000 ms. It needs more than 30000 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Set a larger "timeout", or "timeout": 0 to wait without a limit.',
+      ],
+      [
+        { screenStableMs: 5000, timeout: 2000 },
+        'Batch step 1 wait screenStableMs 5000 cannot finish within its timeout of 2000 ms. It needs more than 5200 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Set a larger "timeout", or "timeout": 0 to wait without a limit.',
+      ],
+      [
+        { screenStableMs: 1800, timeout: 2000 },
+        'Batch step 1 wait screenStableMs 1800 cannot finish within its timeout of 2000 ms. It needs more than 2000 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Set a larger "timeout", or "timeout": 0 to wait without a limit.',
+      ],
+      [
+        { screenStableMs: 1, timeout: 202 },
+        'Batch step 1 wait screenStableMs 1 cannot finish within its timeout of 202 ms. It needs more than 400 ms, because the stable clock starts at the first render poll (every 200 ms) and a later poll must confirm it. Set a larger "timeout", or "timeout": 0 to wait without a limit.',
+      ],
+    ])(
+      'rejects a screenStableMs its timeout cannot fit: %o',
+      (wait, message) => {
+        expect(() => parse([{ type: 'x' }, { wait }])).toThrow(
+          expect.objectContaining({
+            code: ERROR_CODES.INVALID_INPUT,
+            message,
+            details: { stepIndex: 1 },
+          }),
+        );
+      },
+    );
+
+    it.each([
+      { screenStableMs: 29_799 },
+      { screenStableMs: 1799, timeout: 2000 },
+      { screenStableMs: 1, timeout: 401 },
+    ])('accepts a screenStableMs its timeout can fit: %o', (wait) => {
+      expect(parse([{ wait }]).steps[0]).toMatchObject({ kind: 'wait' });
+    });
+
+    it.each([0, 60_000])(
+      'accepts a long screenStableMs with an explicit timeout %d',
+      (timeout) => {
+        const step = parse([{ wait: { screenStableMs: 30_000, timeout } }])
+          .steps[0];
+        expect(step).toMatchObject({ kind: 'wait' });
+      },
+    );
 
     it('compiles a wait regex condition', () => {
       const step = parse([{ wait: { regex: '\\d+ items' } }]).steps[0];
@@ -195,7 +274,7 @@ describe('parseBatchPlan', () => {
         expect.objectContaining({
           code: ERROR_CODES.INVALID_INPUT,
           message:
-            'Batch step 0 must have exactly one of type|paste|sendKeys|run|wait; found none',
+            'Batch step 0 must have exactly one of type|paste|sendKeys|mouse|run|wait; found none',
           details: { stepIndex: 0 },
         }),
       );
@@ -206,7 +285,7 @@ describe('parseBatchPlan', () => {
         expect.objectContaining({
           code: ERROR_CODES.INVALID_INPUT,
           message:
-            'Batch step 0 must have exactly one of type|paste|sendKeys|run|wait; found type, wait',
+            'Batch step 0 must have exactly one of type|paste|sendKeys|mouse|run|wait; found type, wait',
           details: { stepIndex: 0 },
         }),
       );
@@ -256,6 +335,46 @@ describe('parseBatchPlan', () => {
       expect(() => parse([{ sendKeys: ['Enter', 'BOGUS'] }])).toThrow(
         expect.objectContaining({ code: ERROR_CODES.INVALID_KEYS }),
       );
+    });
+  });
+
+  describe('mouse validation', () => {
+    it('classifies invalid mouse batch steps', () => {
+      const invalid = [
+        { mouse: { action: 'press', row: 0, col: 0 } },
+        { mouse: { action: 'move', button: 'left', row: 0, col: 0 } },
+        { mouse: { action: 'drag', button: 'left', row: 0, col: 0 } },
+        { mouse: { action: 'press', button: 'left', row: -1, col: 0 } },
+        {
+          mouse: {
+            action: 'press',
+            button: 'left',
+            row: 0,
+            col: 0,
+            extra: true,
+          },
+        },
+        {
+          mouse: {
+            action: 'press',
+            button: 'left',
+            row: 0,
+            col: 0,
+            rendererName: 'libghostty-vt',
+          },
+        },
+      ];
+
+      expect(
+        invalid.map((step) => {
+          try {
+            parse([step]);
+            return false;
+          } catch {
+            return true;
+          }
+        }),
+      ).toEqual(invalid.map(() => true));
     });
   });
 

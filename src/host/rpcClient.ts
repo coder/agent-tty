@@ -8,6 +8,7 @@ import {
   type ProtocolErrorCode,
 } from '../protocol/errors.js';
 import {
+  MAX_RPC_RESPONSE_CHARS,
   RpcMethodSchemas,
   RpcRequestSchema,
   RpcResponseSchema,
@@ -19,11 +20,12 @@ import {
   makeAbortError,
   throwIfAborted,
 } from '../util/abort.js';
+import { legacySocketPath } from '../storage/sessionPaths.js';
 import { invariant } from '../util/assert.js';
 import { ResourceScope } from '../util/resourceScope.js';
+import { isOwnLegacySocket, socketRootExists } from './socketRoot.js';
 
 const DEFAULT_TIMEOUT_MS = 5_000;
-const MAX_RPC_BUFFER_BYTES = 1_048_576;
 const HOST_UNREACHABLE_SOCKET_CODES = new Set([
   'ECONNREFUSED',
   'ENOENT',
@@ -89,15 +91,72 @@ function toTransportCliError(
   });
 }
 
-function toResponseCliError(code: string, message: string): CliError {
+function toResponseCliError(
+  code: string,
+  message: string,
+  details: Record<string, unknown> | undefined,
+): CliError {
   if (isProtocolErrorCode(code)) {
-    return makeCliError(code, { message });
+    return makeCliError(code, { message, ...(details && { details }) });
   }
 
-  return new CliError(code, message);
+  return new CliError(code, message, { ...(details && { details }) });
+}
+
+function isMissingSocket(error: unknown): boolean {
+  return (
+    error instanceof CliError &&
+    error.code === ERROR_CODES.HOST_UNREACHABLE &&
+    error.details.errno === 'ENOENT'
+  );
 }
 
 export async function sendRpc(
+  socketPath: string,
+  method: string,
+  params?: Record<string, unknown>,
+  timeoutMs?: number,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  throwIfAborted(signal);
+  // A host that an older version started listens at the old path. Hosts of
+  // 0.5.0 and earlier listen there, so remove this fallback in 0.7.0.
+  const oldSocketPath = legacySocketPath(socketPath);
+  if (oldSocketPath === null) {
+    return await sendRpcAt(socketPath, method, params, timeoutMs, signal);
+  }
+  // A missing root, or one that another user holds, has no socket of ours.
+  let rootError: unknown = toTransportCliError(
+    Object.assign(new Error(`connect ENOENT ${socketPath}`), {
+      code: 'ENOENT',
+    }),
+    socketPath,
+    method,
+    timeoutMs ?? DEFAULT_TIMEOUT_MS,
+  );
+  let rootUsable = false;
+  try {
+    rootUsable = await socketRootExists();
+  } catch (error) {
+    rootError = error;
+  }
+  if (rootUsable) {
+    try {
+      return await sendRpcAt(socketPath, method, params, timeoutMs, signal);
+    } catch (error) {
+      if (!isMissingSocket(error)) {
+        throw error;
+      }
+      rootError = error;
+    }
+  }
+  if (!(await isOwnLegacySocket(oldSocketPath))) {
+    throw rootError;
+  }
+  return await sendRpcAt(oldSocketPath, method, params, timeoutMs, signal);
+}
+
+async function sendRpcAt(
   socketPath: string,
   method: string,
   params?: Record<string, unknown>,
@@ -174,25 +233,33 @@ export async function sendRpc(
         return;
       }
 
-      if (buffer.length + chunk.length > MAX_RPC_BUFFER_BYTES) {
+      if (buffer.length + chunk.length > MAX_RPC_RESPONSE_CHARS) {
+        // Only an older host, without the server's response cap, gets here.
+        // A retry gets the same size, so this is not RPC_ERROR (retryable).
         settlers.reject(
-          makeCliError(ERROR_CODES.RPC_ERROR, {
-            message: 'RPC response exceeds maximum buffer size.',
-            details: { method, socketPath },
+          makeCliError(ERROR_CODES.PROTOCOL_ERROR, {
+            message: `RPC response is over the ${String(MAX_RPC_RESPONSE_CHARS)}-character limit.`,
+            details: {
+              method,
+              socketPath,
+              maxResponseChars: MAX_RPC_RESPONSE_CHARS,
+            },
           }),
         );
         return;
       }
 
-      buffer += chunk;
-      const newlineIndex = buffer.indexOf('\n');
+      // Scan only the new chunk: the buffer before it has no newline, and a
+      // rescan of the whole buffer after every chunk is quadratic.
+      const newlineIndex = chunk.indexOf('\n');
 
       if (newlineIndex < 0) {
+        buffer += chunk;
         return;
       }
 
       responseHandled = true;
-      const line = buffer.slice(0, newlineIndex);
+      const line = buffer + chunk.slice(0, newlineIndex);
 
       try {
         const rawResponse = JSON.parse(line) as unknown;
@@ -258,7 +325,11 @@ export async function sendRpc(
         }
 
         settlers.reject(
-          toResponseCliError(response.error.code, response.error.message),
+          toResponseCliError(
+            response.error.code,
+            response.error.message,
+            response.error.details,
+          ),
         );
       } catch (error) {
         settlers.reject(

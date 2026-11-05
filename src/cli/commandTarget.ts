@@ -5,10 +5,12 @@ import { invariant } from '../util/assert.js';
 import { readManifestIfExists } from '../storage/manifests.js';
 import {
   manifestPath as resolveManifestPath,
-  sessionDir,
   socketPath as resolveSocketPath,
 } from '../storage/sessionPaths.js';
-import { assertSessionCommandable } from './sessionGuards.js';
+import {
+  assertSessionCommandable,
+  checkedSessionDir,
+} from './sessionGuards.js';
 
 export interface ResolveCommandTargetOptions {
   home: string;
@@ -46,7 +48,7 @@ function assertRunningManifest(
 export async function resolveCommandTarget(
   options: ResolveCommandTargetOptions,
 ): Promise<CommandTarget> {
-  const sessionDirectory = sessionDir(options.home, options.sessionId);
+  const sessionDirectory = checkedSessionDir(options.home, options.sessionId);
   const resolvedManifestPath = resolveManifestPath(sessionDirectory);
   const manifest = await readManifestIfExists(resolvedManifestPath);
 

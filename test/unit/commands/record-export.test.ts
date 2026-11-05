@@ -14,6 +14,8 @@ import process from 'node:process';
 
 import type * as FsPromises from 'node:fs/promises';
 
+import type * as HomeModule from '../../../src/storage/home.js';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
@@ -28,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   eventLogPath: vi.fn(),
   writeTextFileAtomic: vi.fn(),
   appendArtifactWithRollback: vi.fn(),
+  fileIdentity: vi.fn(),
   // Test-internal delegate used by the appendArtifactWithRollback mock.
   appendArtifact: vi.fn(),
   createArtifactEntry: vi.fn(),
@@ -38,6 +41,7 @@ const mocks = vi.hoisted(() => ({
   loadPackageMetadata: vi.fn(),
   readFile: vi.fn(),
   stat: vi.fn(),
+  rename: vi.fn(),
 }));
 
 vi.mock('../../../src/cli/output.js', () => ({
@@ -53,7 +57,8 @@ vi.mock('../../../src/storage/manifests.js', () => ({
   writeTextFileAtomic: mocks.writeTextFileAtomic,
 }));
 
-vi.mock('../../../src/storage/home.js', () => ({
+vi.mock('../../../src/storage/home.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof HomeModule>()),
   resolveHome: mocks.resolveHome,
 }));
 
@@ -66,6 +71,7 @@ vi.mock('../../../src/storage/sessionPaths.js', () => ({
 vi.mock('../../../src/storage/artifactManifest.js', () => ({
   appendArtifactWithRollback: mocks.appendArtifactWithRollback,
   createArtifactEntry: mocks.createArtifactEntry,
+  fileIdentity: mocks.fileIdentity,
 }));
 
 vi.mock('../../../src/storage/artifactPaths.js', () => ({
@@ -88,6 +94,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
     ...actual,
     stat: mocks.stat,
     readFile: mocks.readFile,
+    rename: mocks.rename,
   };
 });
 
@@ -145,6 +152,7 @@ async function createTemporaryDirectory(prefix: string): Promise<string> {
 describe('record export command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.rename.mockResolvedValue(undefined);
     mocks.resolveHome.mockReturnValue('/tmp/agent-tty');
     mocks.sessionDir.mockImplementation(
       (_home: string, sessionId: string) =>
@@ -183,7 +191,16 @@ describe('record export command', () => {
       (sessionDirectory: string, filename: string) =>
         `${sessionDirectory}/artifacts/${filename}`,
     );
-    mocks.writeTextFileAtomic.mockResolvedValue(undefined);
+    // Runs the hook with a temp path, as the real write does before its
+    // rename.
+    mocks.writeTextFileAtomic.mockImplementation(
+      async (options: {
+        path: string;
+        beforeRename?: (temporaryPath: string) => Promise<void>;
+      }) => {
+        await options.beforeRename?.(`${options.path}.tmp-test`);
+      },
+    );
     mocks.appendArtifactWithRollback.mockImplementation(
       async (options: {
         sessionDir: string;
@@ -203,6 +220,9 @@ describe('record export command', () => {
       },
     );
     mocks.appendArtifact.mockResolvedValue(undefined);
+    mocks.fileIdentity.mockImplementation((path: string) =>
+      Promise.resolve(`identity of ${path}`),
+    );
     mocks.createArtifactEntry.mockImplementation((entry: unknown) => ({
       id: 'artifact-01',
       createdAt: '2026-03-19T12:00:04.000Z',
@@ -273,6 +293,8 @@ describe('record export command', () => {
       contents: expectedContents,
       writeErrorMessage:
         'Failed to write record export artifact at /tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast.',
+      createParentFolders: false,
+      beforeRename: expect.any(Function) as unknown,
     });
     expect(mocks.createArtifactEntry).toHaveBeenCalledWith({
       kind: 'recording',
@@ -305,6 +327,9 @@ describe('record export command', () => {
       sessionDir: '/tmp/agent-tty/sessions/session-01',
       rollbackArtifactPath:
         '/tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast',
+      // The temp file's identity, which the rename keeps.
+      outputFileIdentity:
+        'identity of /tmp/agent-tty/sessions/session-01/artifacts/recording-2-asciicast.cast.tmp-test',
     });
     expect(appendCall[0].entry).toMatchObject({
       kind: 'recording',
@@ -413,16 +438,25 @@ describe('record export command', () => {
         payload: { cols: 100, rows: 30 },
       },
     ]);
-    expect(generateWebmExportArgs.outputPath).toBe(
+    expect(generateWebmExportArgs.outputPath).toMatch(
+      /^\/tmp\/agent-tty\/sessions\/session-01\/artifacts\/recording-1-webm\.webm\.tmp-[^/]+\.webm$/u,
+    );
+    expect(mocks.rename).toHaveBeenCalledWith(
+      generateWebmExportArgs.outputPath,
       '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm',
+    );
+    // The temp file's identity, which the rename keeps.
+    expect(mocks.appendArtifactWithRollback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outputFileIdentity: `identity of ${generateWebmExportArgs.outputPath}`,
+      }),
     );
     expect(generateWebmExportArgs.rendererName).toBe('ghostty-web');
     expect(mocks.writeTextFileAtomic).not.toHaveBeenCalled();
-    expect(mocks.stat).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm',
-    );
+    // The bytes and the hash come from the temp file, before the rename.
+    expect(mocks.stat).toHaveBeenCalledWith(generateWebmExportArgs.outputPath);
     expect(mocks.readFile).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm',
+      generateWebmExportArgs.outputPath,
     );
 
     expect(mocks.createArtifactEntry).toHaveBeenCalledTimes(1);
@@ -481,6 +515,45 @@ describe('record export command', () => {
     expect(emitSuccessArgs.result.durationMs).toBe(1_500);
   });
 
+  it('reports the glyphs that the video drew as boxes, in the result and the human output', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+    const webmContent = Buffer.alloc(64, 0x42);
+    mocks.generateWebmExport.mockResolvedValue({
+      capturedAtSeq: 1,
+      durationMs: 1_500,
+      outputEventCount: 1,
+      resizeEventCount: 1,
+      cols: 80,
+      rows: 24,
+      profileName: 'reference-dark',
+      timingMode: 'recorded',
+      rendererBackend: 'ghostty-web',
+      missingGlyphs: [{ codePoint: 'U+0378' }],
+      missingGlyphsTruncated: true,
+    });
+    mocks.stat.mockResolvedValue({ size: webmContent.byteLength });
+    mocks.readFile.mockResolvedValue(webmContent);
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+      format: 'webm',
+    });
+
+    const [output] = mocks.emitSuccess.mock.calls[0] as [
+      { result: Record<string, unknown>; lines: string[] },
+    ];
+    expect(output.result).toMatchObject({
+      missingGlyphs: [{ codePoint: 'U+0378' }],
+      missingGlyphsTruncated: true,
+    });
+    expect(output.lines.slice(-2)).toEqual([
+      'Missing glyphs (drawn as boxes): U+0378',
+      'Glyph check incomplete',
+    ]);
+  });
+
   it('requests rollback for default asciicast artifacts when manifest append fails', async () => {
     const sessionDirectory = await createTemporaryDirectory(
       'agent-tty-record-export-append-asciicast-',
@@ -502,8 +575,13 @@ describe('record export command', () => {
     );
     mocks.recordingFilename.mockReturnValue('recording-2-asciicast.cast');
     mocks.writeTextFileAtomic.mockImplementation(
-      async (options: { path: string; contents: string }) => {
+      async (options: {
+        path: string;
+        contents: string;
+        beforeRename?: (temporaryPath: string) => Promise<void>;
+      }) => {
         await mkdir(dirname(options.path), { recursive: true });
+        await options.beforeRename?.(`${options.path}.tmp-test`);
         await writeFile(options.path, options.contents, 'utf8');
       },
     );
@@ -522,6 +600,50 @@ describe('record export command', () => {
       expect.objectContaining({ rollbackArtifactPath: artifactFile }),
     );
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('describes the WebM it wrote even when another write replaces the file after the rename', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+    const finalPath =
+      '/tmp/agent-tty/sessions/session-01/artifacts/recording-1-webm.webm';
+    const written = Buffer.alloc(100, 0x41);
+    const replaced = Buffer.alloc(200, 0x42);
+    mocks.generateWebmExport.mockResolvedValue({
+      capturedAtSeq: 1,
+      durationMs: 1_500,
+      outputEventCount: 1,
+      resizeEventCount: 1,
+      cols: 80,
+      rows: 24,
+      profileName: 'reference-dark',
+      timingMode: 'recorded',
+      rendererBackend: 'ghostty-web',
+    });
+    // After the rename, the path holds another export's bytes.
+    mocks.stat.mockImplementation((path: string) =>
+      Promise.resolve({
+        size: path === finalPath ? replaced.length : written.length,
+      }),
+    );
+    mocks.readFile.mockImplementation((path: string) =>
+      Promise.resolve(path === finalPath ? replaced : written),
+    );
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+    });
+
+    expect(mocks.emitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: expect.objectContaining({
+          bytes: written.length,
+          sha256: createHash('sha256').update(written).digest('hex'),
+        }) as unknown,
+      }),
+    );
   });
 
   it('requests rollback for default webm artifacts when manifest append fails', async () => {
@@ -582,6 +704,252 @@ describe('record export command', () => {
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
+  it('replaces an --out symlink with the WebM instead of writing through it', async () => {
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-webm-link-',
+    );
+    const linkTarget = join(workspaceDirectory, 'session.json');
+    const out = join(workspaceDirectory, 'proof.webm');
+    await writeFile(linkTarget, 'session record');
+    await symlink(linkTarget, out);
+    const webmContent = Buffer.from('webm bytes');
+    const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
+    mocks.rename.mockImplementation(fs.rename);
+    mocks.generateWebmExport.mockImplementation(
+      async (options: { outputPath: string }) => {
+        await writeFile(options.outputPath, webmContent);
+        return {
+          capturedAtSeq: 1,
+          durationMs: 1_500,
+          outputEventCount: 1,
+          resizeEventCount: 1,
+          cols: 80,
+          rows: 24,
+          profileName: 'reference-dark',
+          timingMode: 'recorded',
+          rendererBackend: 'ghostty-web',
+        };
+      },
+    );
+    mocks.stat.mockResolvedValue({ size: webmContent.byteLength });
+    mocks.readFile.mockResolvedValue(webmContent);
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+      out,
+    });
+
+    expect(await fs.readFile(linkTarget, 'utf8')).toBe('session record');
+    expect((await fs.lstat(out)).isSymbolicLink()).toBe(false);
+    expect((await fs.readFile(out)).equals(webmContent)).toBe(true);
+    expect((await fs.readdir(workspaceDirectory)).sort()).toEqual([
+      'proof.webm',
+      'session.json',
+    ]);
+  });
+
+  it('rejects a WebM --out path that does not end in .webm before rendering', async () => {
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-webm-suffix-',
+    );
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'webm',
+        out: join(workspaceDirectory, 'proof.mp4'),
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.EXPORT_ERROR });
+    expect(mocks.generateWebmExport).not.toHaveBeenCalled();
+  });
+
+  it.each(['render', 'rename'] as const)(
+    'removes the WebM temp file when the %s step fails',
+    async (failingStep) => {
+      const workspaceDirectory = await createTemporaryDirectory(
+        'agent-tty-record-export-webm-temp-',
+      );
+      const stepError = new Error(`${failingStep} failed`);
+      mocks.generateWebmExport.mockImplementation(
+        async (options: { outputPath: string }) => {
+          await writeFile(options.outputPath, 'partial webm');
+          if (failingStep === 'render') {
+            throw stepError;
+          }
+          return {
+            capturedAtSeq: 1,
+            durationMs: 1_500,
+            outputEventCount: 1,
+            resizeEventCount: 1,
+            cols: 80,
+            rows: 24,
+            profileName: 'reference-dark',
+            timingMode: 'recorded',
+            rendererBackend: 'ghostty-web',
+          };
+        },
+      );
+      if (failingStep === 'rename') {
+        mocks.rename.mockRejectedValue(stepError);
+      }
+
+      await expect(
+        runRecordExportCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          format: 'webm',
+          out: join(workspaceDirectory, 'proof.webm'),
+        }),
+      ).rejects.toMatchObject({ code: ERROR_CODES.EXPORT_ERROR });
+      expect(mocks.generateWebmExport).toHaveBeenCalledTimes(1);
+      const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
+      expect(await fs.readdir(workspaceDirectory)).toEqual([]);
+    },
+  );
+
+  it('refuses the WebM when the --out folder is swapped for a link during the render', async () => {
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-webm-swap-',
+    );
+    const exportsDirectory = join(workspaceDirectory, 'exports');
+    const elsewhereDirectory = join(workspaceDirectory, 'elsewhere');
+    await mkdir(exportsDirectory);
+    await mkdir(elsewhereDirectory);
+    mocks.generateWebmExport.mockImplementation(
+      async (options: { outputPath: string }) => {
+        const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
+        await fs.rename(exportsDirectory, join(workspaceDirectory, 'moved'));
+        await symlink(elsewhereDirectory, exportsDirectory);
+        await writeFile(options.outputPath, 'webm bytes');
+        return {
+          capturedAtSeq: 1,
+          durationMs: 1_500,
+          outputEventCount: 1,
+          resizeEventCount: 1,
+          cols: 80,
+          rows: 24,
+          profileName: 'reference-dark',
+          timingMode: 'recorded',
+          rendererBackend: 'ghostty-web',
+        };
+      },
+    );
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'webm',
+        out: join(exportsDirectory, 'proof.webm'),
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
+      message: expect.stringContaining(
+        'was replaced while the command ran',
+      ) as unknown,
+    });
+    expect(mocks.rename).not.toHaveBeenCalled();
+    const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
+    expect(await fs.readdir(elsewhereDirectory)).toEqual([]);
+    expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
+  });
+
+  // Hashing a large WebM takes time. The folder check runs after it, so a
+  // swap during the hash cannot slip in before the rename.
+  it('refuses the WebM when the --out folder is swapped for a link while it hashes the file', async () => {
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-webm-hash-swap-',
+    );
+    const exportsDirectory = join(workspaceDirectory, 'exports');
+    const elsewhereDirectory = join(workspaceDirectory, 'elsewhere');
+    await mkdir(exportsDirectory);
+    await mkdir(elsewhereDirectory);
+    const written = Buffer.from('webm bytes');
+    mocks.generateWebmExport.mockImplementation(
+      async (options: { outputPath: string }) => {
+        await writeFile(options.outputPath, written);
+        return {
+          capturedAtSeq: 1,
+          durationMs: 1_500,
+          outputEventCount: 1,
+          resizeEventCount: 1,
+          cols: 80,
+          rows: 24,
+          profileName: 'reference-dark',
+          timingMode: 'recorded',
+          rendererBackend: 'ghostty-web',
+        };
+      },
+    );
+    mocks.stat.mockResolvedValue({ size: written.length });
+    mocks.readFile.mockImplementation(async () => {
+      const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
+      await fs.rename(exportsDirectory, join(workspaceDirectory, 'moved'));
+      await symlink(elsewhereDirectory, exportsDirectory);
+      return written;
+    });
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'webm',
+        out: join(exportsDirectory, 'proof.webm'),
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
+      message: expect.stringContaining(
+        'was replaced while the command ran',
+      ) as unknown,
+    });
+    expect(mocks.readFile).toHaveBeenCalledTimes(1);
+    expect(mocks.rename).not.toHaveBeenCalled();
+    expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
+  });
+
+  it('refuses the asciicast when the --out folder is replaced before the rename', async () => {
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-cast-swap-',
+    );
+    const exportsDirectory = join(workspaceDirectory, 'exports');
+    await mkdir(exportsDirectory);
+    mocks.writeTextFileAtomic.mockImplementation(
+      async (options: {
+        path: string;
+        beforeRename?: (temporaryPath: string) => Promise<void>;
+      }) => {
+        const fs = await vi.importActual<typeof FsPromises>('node:fs/promises');
+        await fs.rename(exportsDirectory, join(workspaceDirectory, 'moved'));
+        await mkdir(exportsDirectory);
+        await options.beforeRename?.(`${options.path}.tmp-test`);
+      },
+    );
+
+    await expect(
+      runRecordExportCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+        format: 'asciicast',
+        out: join(exportsDirectory, 'session.cast'),
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
+      message: expect.stringContaining(
+        'was replaced while the command ran',
+      ) as unknown,
+    });
+    expect(mocks.appendArtifactWithRollback).not.toHaveBeenCalled();
+  });
+
   it('preserves explicit output artifacts when manifest append fails', async () => {
     const workspaceDirectory = await createTemporaryDirectory(
       'agent-tty-record-export-explicit-out-',
@@ -592,8 +960,13 @@ describe('record export command', () => {
     });
 
     mocks.writeTextFileAtomic.mockImplementation(
-      async (options: { path: string; contents: string }) => {
+      async (options: {
+        path: string;
+        contents: string;
+        beforeRename?: (temporaryPath: string) => Promise<void>;
+      }) => {
         await mkdir(dirname(options.path), { recursive: true });
+        await options.beforeRename?.(`${options.path}.tmp-test`);
         await writeFile(options.path, options.contents, 'utf8');
       },
     );
@@ -918,10 +1291,13 @@ describe('record export command', () => {
     });
   });
 
-  it('rejects output paths whose parent directory does not exist', async () => {
-    const workspaceDirectory = await createTemporaryDirectory(
-      'agent-tty-record-export-missing-parent-',
+  it('rejects output paths inside session storage', async () => {
+    const home = await createTemporaryDirectory(
+      'agent-tty-record-export-home-',
     );
+    const sessionDirectory = join(home, 'sessions', 'session-01');
+    await mkdir(join(sessionDirectory, 'artifacts'), { recursive: true });
+    mocks.sessionDir.mockReturnValue(sessionDirectory);
 
     await expect(
       runRecordExportCommand({
@@ -929,11 +1305,34 @@ describe('record export command', () => {
         json: false,
         sessionId: 'session-01',
         format: 'asciicast',
-        out: join(workspaceDirectory, 'missing', 'custom.cast'),
+        out: join(sessionDirectory, 'artifacts', 'manifest.json'),
       }),
     ).rejects.toMatchObject({
       code: ERROR_CODES.EXPORT_ERROR,
     });
+    expect(mocks.writeTextFileAtomic).not.toHaveBeenCalled();
+  });
+
+  it('creates missing parent folders of --out', async () => {
+    const workspaceDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-missing-parent-',
+    );
+    const out = join(workspaceDirectory, 'missing', 'custom.cast');
+
+    await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: false,
+      sessionId: 'session-01',
+      format: 'asciicast',
+      out,
+    });
+
+    expect(mocks.writeTextFileAtomic).toHaveBeenCalledWith(
+      expect.objectContaining({ path: out }),
+    );
+    await expect(access(join(workspaceDirectory, 'missing'))).resolves.toBe(
+      undefined,
+    );
   });
 
   it('rejects invalid formats', async () => {

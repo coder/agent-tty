@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BatchPlan } from '../../../src/batch/plan.js';
 import type { StepDriver } from '../../../src/batch/stepDriver.js';
 import type {
+  MouseInput,
+  MouseResult,
   RunResult,
   WaitForRenderResult,
 } from '../../../src/protocol/messages.js';
@@ -15,6 +17,7 @@ type DriverCall =
   | { verb: 'type'; text: string }
   | { verb: 'paste'; text: string }
   | { verb: 'sendKeys'; keys: string[] }
+  | { verb: 'mouse'; action: string; row: number; col: number }
   | { verb: 'run'; command: string; noWait: boolean }
   | { verb: 'wait'; afterSeq: number | undefined };
 
@@ -73,6 +76,19 @@ function createFakeDriver(options: FakeDriverOptions = {}): FakeDriver {
     sendKeys: vi.fn((keys: string[]): Promise<number> => {
       calls.push({ verb: 'sendKeys', keys });
       return Promise.resolve(nextInputSeq());
+    }),
+    mouse: vi.fn((input: MouseInput): Promise<MouseResult> => {
+      calls.push({
+        verb: 'mouse',
+        action: input.action,
+        row: input.row,
+        col: input.col,
+      });
+      return Promise.resolve({
+        reported: true,
+        bytesWritten: 6,
+        seq: nextInputSeq(),
+      });
     }),
     run: vi.fn((command: string, noWait: boolean): Promise<RunResult> => {
       calls.push({ verb: 'run', command, noWait });
@@ -133,6 +149,30 @@ describe('executeBatch', () => {
 
     const waitCall = calls.find((call) => call.verb === 'wait');
     expect(waitCall).toEqual({ verb: 'wait', afterSeq: 7 });
+  });
+
+  it('drives mouse steps and threads their sequence into the following wait', async () => {
+    const { driver, calls } = createFakeDriver({ inputSeqs: [17] });
+    const result = await executeBatch({
+      plan: plan([
+        { mouse: { action: 'move', row: 4, col: 9 } },
+        { wait: { text: 'hovered' } },
+      ]),
+      driver,
+      keepGoing: false,
+    });
+
+    expect(calls).toEqual([
+      { verb: 'mouse', action: 'move', row: 4, col: 9 },
+      { verb: 'wait', afterSeq: 17 },
+    ]);
+    expect(result.steps[0]).toMatchObject({
+      kind: 'mouse',
+      status: 'completed',
+      seq: 17,
+      reported: true,
+      bytesWritten: 6,
+    });
   });
 
   it('records the threaded seq as the wait step waitBaseline', async () => {
@@ -400,7 +440,10 @@ describe('executeBatch', () => {
         waitResults: [{ matched: false, timedOut: true, capturedAtSeq: 5 }],
       });
       const result = await executeBatch({
-        plan: plan([{ type: 'go' }, { wait: { text: 'never' } }]),
+        plan: plan([
+          { type: 'go' },
+          { wait: { text: 'never', timeout: 1000 } },
+        ]),
         driver,
         keepGoing: false,
       });
@@ -412,7 +455,28 @@ describe('executeBatch', () => {
         timedOut: true,
         capturedAtSeq: 5,
         waitBaseline: 3,
-        error: { code: 'WAIT_TIMEOUT' },
+        error: {
+          code: 'WAIT_TIMEOUT',
+          message: 'Render wait at step 1 timed out after 1000 ms.',
+        },
+      });
+    });
+
+    it('names the default timeout of a wait step without a timeout', async () => {
+      const { driver } = createFakeDriver({
+        waitResults: [{ matched: false, timedOut: true, capturedAtSeq: 5 }],
+      });
+      const result = await executeBatch({
+        plan: plan([{ wait: { text: 'never' } }]),
+        driver,
+        keepGoing: false,
+      });
+
+      expect(result.steps[0]).toMatchObject({
+        error: {
+          code: 'WAIT_TIMEOUT',
+          message: 'Render wait at step 0 timed out after 30000 ms.',
+        },
       });
     });
 
@@ -429,8 +493,32 @@ describe('executeBatch', () => {
       expect(result.steps[0]).toMatchObject({
         kind: 'wait',
         status: 'failed',
-        error: { code: 'WAIT_TIMEOUT' },
+        error: {
+          code: 'WAIT_TIMEOUT',
+          message:
+            'Render wait at step 0 timed out before its condition was met.',
+        },
       });
+    });
+
+    it('records a renderer error from the wait with its own code and no timedOut', async () => {
+      const { driver } = createFakeDriver();
+      driver.wait = () =>
+        Promise.reject(
+          makeCliError('RPC_ERROR', { message: 'renderer failed' }),
+        );
+      const result = await executeBatch({
+        plan: plan([{ wait: { text: 'never', timeout: 1000 } }]),
+        driver,
+        keepGoing: false,
+      });
+
+      expect(result.steps[0]).toMatchObject({
+        kind: 'wait',
+        status: 'failed',
+        error: { code: 'RPC_ERROR', message: 'renderer failed' },
+      });
+      expect(result.steps[0]).not.toHaveProperty('timedOut');
     });
   });
 
@@ -574,6 +662,8 @@ describe('executeBatch', () => {
         type: () => Promise.reject(new TypeError('boom')),
         paste: () => Promise.resolve(1),
         sendKeys: () => Promise.resolve(1),
+        mouse: () =>
+          Promise.resolve({ reported: true, bytesWritten: 1, seq: 1 }),
         run: () => Promise.resolve({ accepted: true, seq: 1 }),
         wait: () =>
           Promise.resolve({ matched: true, timedOut: false, capturedAtSeq: 1 }),
@@ -603,6 +693,8 @@ describe('executeBatch', () => {
           ),
         paste: () => Promise.resolve(1),
         sendKeys: () => Promise.resolve(1),
+        mouse: () =>
+          Promise.resolve({ reported: true, bytesWritten: 1, seq: 1 }),
         run: () => Promise.resolve({ accepted: true, seq: 1 }),
         wait: () =>
           Promise.resolve({ matched: true, timedOut: false, capturedAtSeq: 1 }),

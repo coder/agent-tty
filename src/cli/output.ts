@@ -2,10 +2,13 @@ import { writeSync } from 'node:fs';
 import process from 'node:process';
 
 import type { CommandEnvelope, CommandError } from '../protocol/envelope.js';
+import type { CliError } from './errors.js';
+
 import {
   createErrorEnvelope,
   createSuccessEnvelope,
 } from '../protocol/envelope.js';
+import { exitCodeForError } from './exitCodes.js';
 
 const ANSI_ESCAPE_PATTERN = new RegExp(
   String.raw`[\u001B\u009B][[\]()#;?]*(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]|(?:[\dA-PR-TZcf-nq-uy=><~]))`,
@@ -13,6 +16,7 @@ const ANSI_ESCAPE_PATTERN = new RegExp(
 );
 
 let colorEnabled = true;
+let jsonEnvelopeWritten = false;
 
 const STDOUT_FD = 1;
 
@@ -28,14 +32,19 @@ export function setColorEnabled(enabled: boolean): void {
   colorEnabled = enabled;
 }
 
-export function writeJsonEnvelope<TResult>(
-  envelope: CommandEnvelope<TResult>,
+export function writeJsonEnvelope<TResult, TErrorResult = never>(
+  envelope: CommandEnvelope<TResult, TErrorResult>,
 ): void {
   process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+  jsonEnvelopeWritten = true;
 }
 
 export function writeHumanLines(lines: readonly string[]): void {
   process.stdout.write(`${formatHumanText(lines.join('\n'))}\n`);
+}
+
+export function writeHumanErrorLines(lines: readonly string[]): void {
+  process.stderr.write(`${formatHumanText(lines.join('\n'))}\n`);
 }
 
 interface SuccessOutputOptions {
@@ -55,6 +64,7 @@ export function formatSuccessOutput(options: SuccessOutputOptions): string {
 
 export function emitSuccess(options: SuccessOutputOptions): void {
   process.stdout.write(formatSuccessOutput(options));
+  jsonEnvelopeWritten ||= options.json;
 }
 
 /**
@@ -85,19 +95,57 @@ export function writeStdoutSync(text: string): void {
 
 export function emitSuccessSync(options: SuccessOutputOptions): void {
   writeStdoutSync(formatSuccessOutput(options));
+  jsonEnvelopeWritten ||= options.json;
 }
 
 export function emitFailure(options: {
   command: string;
   json: boolean;
   error: CommandError;
+  result?: unknown;
 }): void {
   if (options.json) {
-    writeJsonEnvelope(createErrorEnvelope(options.command, options.error));
+    writeJsonEnvelope(
+      createErrorEnvelope(options.command, options.error, options.result),
+    );
     return;
   }
 
   process.stderr.write(
     `${formatHumanText(`${options.error.code}: ${options.error.message}`)}\n`,
   );
+}
+
+export function argvHasFlag(flag: string): boolean {
+  const optionsEnd = process.argv.indexOf('--');
+  return process.argv
+    .slice(0, optionsEnd === -1 ? undefined : optionsEnd)
+    .includes(flag);
+}
+
+export function emitCliError(
+  commandName: string,
+  error: CliError,
+  json: boolean,
+): void {
+  emitFailure({
+    command: commandName,
+    json: json && !jsonEnvelopeWritten,
+    error: {
+      code: error.code,
+      message: error.message,
+      retryable: error.retryable,
+      details: error.details,
+    },
+    result: error.result,
+  });
+  process.exitCode = exitCodeForError(error.code);
+}
+
+export function exitAfterOutputFlush(): void {
+  process.stdout.write('', () => {
+    process.stderr.write('', () => {
+      process.exit();
+    });
+  });
 }

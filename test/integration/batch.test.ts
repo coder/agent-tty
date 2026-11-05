@@ -1,6 +1,8 @@
 import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -22,6 +24,10 @@ let sessionId = '';
 function testEnv(): Record<string, string> {
   return { AGENT_TTY_HOME: testHome };
 }
+
+type FailedBatchEnvelope = CommandErrorEnvelope<BatchResult> & {
+  result: BatchResult;
+};
 
 describe('batch command integration', { timeout: 45_000 }, () => {
   beforeEach(() => {
@@ -91,6 +97,23 @@ describe('batch command integration', { timeout: 45_000 }, () => {
     expect(envelope.ok).toBe(false);
     expect(envelope.error.code).toBe('INVALID_INPUT');
     expect(envelope.error.message).toContain('mutually exclusive');
+  });
+
+  it('rejects a wait step whose screenStableMs cannot fit its timeout', () => {
+    const steps = JSON.stringify([
+      { wait: { screenStableMs: 5000, timeout: 2000 } },
+    ]);
+    const result = runCli(
+      ['batch', 'some-session', steps, '--json'],
+      testEnv(),
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe('');
+
+    const envelope = JSON.parse(result.stdout) as CommandErrorEnvelope;
+    expect(envelope.error.code).toBe('INVALID_INPUT');
+    expect(envelope.error.details).toEqual({ stepIndex: 0 });
   });
 
   it('rejects neither inline steps nor --file with INVALID_INPUT', () => {
@@ -196,10 +219,14 @@ describe('batch command integration', { timeout: 45_000 }, () => {
     expect(result.status).toBe(11);
     expect(result.stderr).toBe('');
 
-    // The per-step envelope is still emitted (doctor pattern): a step failure
-    // never routes through emitFailure, so steps[] is preserved.
-    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<BatchResult>;
-    expect(envelope.ok).toBe(true);
+    const envelope = JSON.parse(result.stdout) as FailedBatchEnvelope;
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error).toEqual({
+      code: 'WAIT_TIMEOUT',
+      message: 'Render wait at step 0 timed out after 1000 ms.',
+      retryable: false,
+      details: { sessionId, stepIndex: 0 },
+    });
     expect(envelope.result.completedCount).toBe(0);
     expect(envelope.result.failedIndices).toEqual([0]);
     expect(envelope.result.steps).toHaveLength(2);
@@ -211,6 +238,68 @@ describe('batch command integration', { timeout: 45_000 }, () => {
       timedOut: true,
       error: { code: 'WAIT_TIMEOUT' },
     });
+    expect(typeStep).toMatchObject({ kind: 'type', status: 'not-run' });
+  });
+
+  it('prints the per-step lines on stdout when a fail-fast batch fails without --json', async () => {
+    sessionId = createSession(testHome, [
+      '/bin/sh',
+      '-c',
+      "printf 'Ready\\n'; exec cat",
+    ]);
+    await sleep(500);
+
+    const steps = JSON.stringify([
+      { wait: { text: 'never-appears', timeout: 1000 } },
+      { type: 'unreached' },
+    ]);
+
+    const result = runCli(['batch', sessionId, steps], testEnv());
+
+    expect(result.status).toBe(11);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('[1] type not-run');
+    expect(result.stdout).toContain(
+      'failed at step 0: WAIT_TIMEOUT: Render wait at step 0 timed out after 1000 ms.',
+    );
+  });
+
+  it('fails a wait step with the renderer error, not WAIT_TIMEOUT, when every render poll fails', () => {
+    const preload = pathToFileURL(
+      resolve('test/fixtures/fail-chromium-launch.ts'),
+    );
+    sessionId = createSession(testHome, undefined, {
+      env: {
+        NODE_OPTIONS: [
+          process.env.NODE_OPTIONS ?? '',
+          `--import=${preload.href}`,
+        ].join(' '),
+      },
+    });
+    const steps = JSON.stringify([
+      { wait: { text: 'never-appears', timeout: 20000 } },
+      { type: 'unreached' },
+    ]);
+
+    const result = runCli(
+      ['--renderer', 'ghostty-web', 'batch', sessionId, steps, '--json'],
+      testEnv(),
+      30_000,
+    );
+
+    expect(result.status, result.stderr).toBe(9);
+    const envelope = JSON.parse(result.stdout) as FailedBatchEnvelope;
+    expect(envelope.error).toMatchObject({
+      code: 'RPC_ERROR',
+      details: { sessionId, stepIndex: 0 },
+    });
+    const [waitStep, typeStep] = envelope.result.steps;
+    expect(waitStep).toMatchObject({
+      kind: 'wait',
+      status: 'failed',
+      error: { code: 'RPC_ERROR' },
+    });
+    expect(waitStep).not.toHaveProperty('timedOut');
     expect(typeStep).toMatchObject({ kind: 'type', status: 'not-run' });
   });
 
