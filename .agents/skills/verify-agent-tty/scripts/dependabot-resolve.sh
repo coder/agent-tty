@@ -3,8 +3,9 @@
 # checkout: `pnpm update <dep> --lockfile-only` with Dependabot's 7-day
 # cooldown as the minimum release age, on copies of package.json,
 # pnpm-lock.yaml and pnpm-workspace.yaml, against an empty pnpm store. A
-# warm store reuses locked versions and skips pnpm's age and trust checks,
-# so only an empty store shows what Dependabot sees. Needs the npm registry.
+# store that already holds the locked packages skips pnpm's trust check, so
+# only an empty store shows what Dependabot sees. Needs the npm registry and
+# the pnpm version that package.json's packageManager field pins.
 #
 #   .agents/skills/verify-agent-tty/scripts/dependabot-resolve.sh [dep@version ...]
 #
@@ -17,6 +18,12 @@ pnpm=$(cd "$repo" && { mise which pnpm 2>/dev/null || command -v pnpm; }) || {
   echo "dependabot-resolve.sh: pnpm is not on PATH; run 'mise install' first" >&2
   exit 2
 }
+want=$(sed -n 's/^ *"packageManager": "pnpm@\([^"]*\)".*/\1/p' "$repo/package.json")
+have=$(cd "$repo" && "$pnpm" --version 2>/dev/null)
+if [ -z "$want" ] || [ "$have" != "$want" ]; then
+  echo "dependabot-resolve.sh: $pnpm is pnpm ${have:-unknown}, package.json pins ${want:-nothing}" >&2
+  exit 2
+fi
 [ "$#" -gt 0 ] || set -- commander@latest zod@latest vitest@latest
 work=$(mktemp -d "${TMPDIR:-/tmp}/dependabot-resolve-XXXXXX") || exit 2
 trap 'rm -rf "$work"' EXIT

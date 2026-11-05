@@ -36,7 +36,8 @@ trustPolicyExclude:
   - '@octokit/endpoint@9.0.6'
   # semver 5.7.2 (2023) is a backport release without provenance, published
   # after 7.5.1 had it. release-please reaches it through
-  # conventional-changelog-writer > meow > read-pkg-up > normalize-package-data.
+  # conventional-changelog-writer > meow > read-pkg-up > read-pkg >
+  # normalize-package-data.
   # A fresh resolve (Dependabot's `pnpm update` on an empty store) refuses it
   # as a trust downgrade, and then every npm update fails.
   - 'semver@5.7.2'
