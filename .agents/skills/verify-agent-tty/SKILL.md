@@ -75,15 +75,16 @@ It then copies each session's `session.json`, `events.jsonl` and `artifacts/` in
 
 ## Helpers
 
-All scripts take the run's `env.sh` path, except `start-run.sh` and `stale-dist.sh`:
+All scripts take the run's `env.sh` path, except `start-run.sh`, `stale-dist.sh` and `dependabot-resolve.sh`:
 
-| Script                         | Use                                                                               |
-| ------------------------------ | --------------------------------------------------------------------------------- |
-| `scripts/start-run.sh [name]`  | Sync deps with the lockfile, build, make the run folder, print the `env.sh` path. |
-| `scripts/stale-dist.sh`        | Print why `dist/` is not a complete, current build of `src/`, or nothing.         |
-| `scripts/doctor.sh <env.sh>`   | Check that the run is worth driving. Exit 0 or 1.                                 |
-| `scripts/run-pids.sh <env.sh>` | Print the PIDs this run started. Exit 2: no `/proc`. Exit 3: ledger error.        |
-| `scripts/cleanup.sh <env.sh>`  | Tear the run down and keep the evidence.                                          |
+| Script                                            | Use                                                                                                                                                                                |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/start-run.sh [name]`                     | Sync deps with the lockfile, build, make the run folder, print the `env.sh` path.                                                                                                  |
+| `scripts/stale-dist.sh`                           | Print why `dist/` is not a complete, current build of `src/`, or nothing.                                                                                                          |
+| `scripts/doctor.sh <env.sh>`                      | Check that the run is worth driving. Exit 0 or 1.                                                                                                                                  |
+| `scripts/run-pids.sh <env.sh>`                    | Print the PIDs this run started. Exit 2: no `/proc`. Exit 3: ledger error.                                                                                                         |
+| `scripts/cleanup.sh <env.sh>`                     | Tear the run down and keep the evidence.                                                                                                                                           |
+| `scripts/dependabot-resolve.sh [dep@version ...]` | Replay Dependabot's npm resolve on an empty pnpm store. Run it after a change to `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml` or `.github/dependabot.yml`. Exit 0 or 1. |
 
 ## Keep the map honest
 
