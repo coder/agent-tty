@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -54,14 +54,18 @@ describe('npm run clean', () => {
       await writeFile(join(dir, target), 'stale');
     }
 
-    execFileSync('sh', ['-c', script], {
-      cwd: dir,
-      env: {
-        ...process.env,
-        PATH: `${join(repoRoot, 'node_modules', '.bin')}${delimiter}${process.env.PATH ?? ''}`,
-      },
-      stdio: 'pipe',
-    });
+    // npm runs scripts through /bin/sh, or cmd.exe on Windows; execSync
+    // picks the same shell. The variable can be spelled Path or PATH, and a
+    // shell can carry both, so prepend the bin folder to each spelling.
+    const bin = join(repoRoot, 'node_modules', '.bin');
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    const pathKeys = Object.keys(env).filter(
+      (key) => key.toUpperCase() === 'PATH',
+    );
+    for (const key of pathKeys.length > 0 ? pathKeys : ['PATH']) {
+      env[key] = `${bin}${delimiter}${env[key] ?? ''}`;
+    }
+    execSync(script, { cwd: dir, env, stdio: 'pipe' });
 
     for (const target of ['dist', 'coverage', ...buildInfoFiles()]) {
       expect(existsSync(join(dir, target)), `${target} removed`).toBe(false);
