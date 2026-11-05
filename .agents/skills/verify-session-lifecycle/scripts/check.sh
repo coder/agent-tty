@@ -166,7 +166,7 @@ TERMINAL=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
   console.log("{" + c.Terminal.map((s) => JSON.stringify(s)).join(", ") + "}");
 ' "$OUT/facts.json")
-GUARDS="GcSkipsNonCollectable GcFinalCheck GcKeepsLiveGroup GcProbesUnseenGroup GcFreezesUnseenGroup ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid CreateRecordsHost FreezesUnseenGroup UnsharedGroupReadsUnknown HostChecksCreateFailed HostPollsCreateFailed CreateRetriesMarker ForceSkipsUnreadableGroup"
+GUARDS="GcSkipsNonCollectable GcFinalCheck GcKeepsLiveGroup GcProbesUnseenGroup GcFreezesUnseenGroup ReconcileSkipsTerminal ReconcileSkipsLiveHost CreateRecordsHostPid HostWaitsForManifest ReconcileRereads HostSerializesWrites HostStopsAfterTerminalWrite ShutdownChecksCommandable DestroyRecordsDestroyed DestroyKeepsExitCode ManifestWriteNeedsFolder KillsProgramGroup ProbeCountsDeniedGroup HostWaitsForGroup ReconcileWaitsForGroup ReRunsInNewSession InsideCheckReadsEnv RecordsProgramSync ProvesGroupOwnership DestroyStopsLeftovers FallbackNeedsFolder ReconcileRepairsDestroyed ReconcileRepairsMarked CreateStopsOnGiveUp TokenNamesProgram ReusedIdReadsGone ProvesHostPid CreateRecordsHost FreezesUnseenGroup UnsharedGroupReadsUnknown HostChecksCreateFailed HostPollsCreateFailed CreateRetriesMarker ForceSkipsUnreadableGroup WaitProbesUnseenGroup"
 # One "Guard=TRUE|FALSE" word per guard, read from the code by facts.mjs.
 FACTS_LINE=$(node -e '
   const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).constants;
@@ -195,6 +195,10 @@ UNSEEN=FALSE
 # ZOMBIES: whether, with UNSEEN, the scans show zombies of the program's
 # group, as under a PID 1 that never reaps.
 ZOMBIES=FALSE
+# MISSES: whether, with UNSEEN, no freeze of stopProgramGroup brings a
+# member into view, as when a SIGCONT from another process comes before
+# each judgement.
+MISSES=FALSE
 # OTHER: whether destroy, list and gc run in another pid space than the host.
 OTHER=FALSE
 # WIN32: whether SIGTERM ends the host at once, as on Windows.
@@ -224,6 +228,7 @@ write_run() {
     done
     echo "  Token = $TOKEN"
     echo "  Unseen = $UNSEEN"
+    echo "  FreezeMisses = $MISSES"
     echo "  ZombiesInView = $ZOMBIES"
     echo "  OtherPidSpace = $OTHER"
     echo "  Win32 = $WIN32"
@@ -283,13 +288,20 @@ write_run mutant-ShutdownBothChecks violated TerminalIsFinal "ShutdownChecksComm
 # group is frozen.
 UNSEEN=TRUE
 write_run current-unseen pass "$RULES" "" "the code with a program that no scan shows: every rule holds"
-write_run mutant-FreezesUnseenGroup-unseen violated DestroyedProgramStopped "FreezesUnseenGroup=FALSE" "without the freeze, the kill finds no member in view, and destroy records destroyed while a fork chain runs" DestroyedProgramStopped
+# The wait probes the group that no scan shows, so the freeze and the probe
+# each keep destroy from recording destroyed while the chain runs.
+write_run mutant-UnseenBothGuards-unseen violated DestroyedProgramStopped "FreezesUnseenGroup=FALSE WaitProbesUnseenGroup=FALSE" "with neither the freeze nor the wait's probe, the kill finds no member in view, and destroy records destroyed while a fork chain runs" DestroyedProgramStopped
 write_run mutant-GcProbesUnseenGroup-unseen violated RemovedSessionStopped "GcProbesUnseenGroup=FALSE" "without the probe, gc removes program.json while a fork chain that the program left runs" RemovedSessionStopped
 # Under a PID 1 that never reaps, the chain also leaves zombies in view.
 # With every guard, that changes nothing, so current-unseen covers it.
 ZOMBIES=TRUE
 write_run mutant-GcFreezesUnseenGroup-unseen-zombies violated RemovedSessionStopped "GcFreezesUnseenGroup=FALSE" "without the freeze, gc reads a fork chain behind its zombies ended and removes program.json while it runs" RemovedSessionStopped
 ZOMBIES=FALSE
+# Every freeze misses the chain. The wait then times out.
+MISSES=TRUE
+write_run current-unseen-misses pass "$RULES" "" "the code with a fork chain that every freeze misses: every rule holds"
+write_run mutant-WaitProbesUnseenGroup-unseen-misses violated DestroyedProgramStopped "WaitProbesUnseenGroup=FALSE" "without the probe, the wait after a missed freeze reads the chain ended, and destroy records destroyed while it runs" DestroyedProgramStopped
+MISSES=FALSE
 UNSEEN=FALSE
 
 # destroy, list and gc run without /proc, or in another pid namespace or on

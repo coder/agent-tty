@@ -704,10 +704,12 @@ describe('a program group without a token', () => {
     expect(isProgramGroupAlive(group)).toBe(true);
   });
 
+  // ['ok', []]: no scan shows a member while the probes find the id, as for
+  // a fork chain whose members end before a scan reads them.
   it.each([
     ['ok', ['Z', 'X'], false],
     ['ok', ['Z', 'S'], true],
-    ['ok', [], false],
+    ['ok', [], true],
     ['EPERM', ['Z'], false],
     ['EPERM', ['R'], true],
     ['EPERM', [], true],
@@ -721,6 +723,24 @@ describe('a program group without a token', () => {
       expect(isProgramGroupAlive(group)).toBe(alive);
     },
   );
+
+  // The probe can find processes that are reaped before the scans. The
+  // probe after the scans then finds none.
+  it('on linux, reads a group ended when no scan shows a member and the second probe finds none', () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    procShowsGroup();
+    let probes = 0;
+    vi.spyOn(process, 'kill').mockImplementation(() => {
+      probes += 1;
+      if (probes > 1) {
+        throw errno('ESRCH');
+      }
+      return true;
+    });
+
+    expect(isProgramGroupAlive(group)).toBe(false);
+    expect(probes).toBe(2);
+  });
 
   // A process whose main thread called pthread_exit shows Z while another
   // of its threads runs.
@@ -1444,6 +1464,23 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     expect(kill).not.toHaveBeenCalled();
   });
 
+  // A member that job control stopped would resume at the SIGCONT after a
+  // freeze, so a group that shows one gets no SIGSTOP before its first
+  // freeze, also beside a running member without an autogroup.
+  it('sends no signal to a group with a stopped member and a running member that shows no autogroup', () => {
+    procShowsTokenGroup('T', 'S');
+    const tokenRead = autogroupFile.read;
+    autogroupFile.read = (file) =>
+      file === '/proc/100/autogroup' || file === '/proc/101/autogroup'
+        ? ''
+        : (tokenRead?.(file) ?? null);
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+    stopProgramGroup(group);
+
+    expect(kill).not.toHaveBeenCalled();
+  });
+
   // The witness of a judgement can end before it is read again.
   it('freezes a group whose witness ends before it is read again, and kills it once a stopped member carries the token', () => {
     procShowsTokenGroup('S');
@@ -1454,8 +1491,9 @@ describe('a program group with a token, as a faked /proc shows it', () => {
         if (pid !== '100') {
           return live.get(pid);
         }
-        // Each judgement reads the member once, and the read of the witness
-        // after it finds the member ended.
+        // The judgement reads the member, the read of the witness after it
+        // finds the member ended, and the scan for a stopped member before
+        // the freeze reads it running.
         reads += 1;
         return reads % 2 === 0 ? errno('ENOENT') : live.get(pid);
       }
@@ -1464,7 +1502,7 @@ describe('a program group with a token, as a faked /proc shows it', () => {
 
     stopProgramGroup(group);
 
-    expect(reads).toBe(2);
+    expect(reads).toBe(3);
     expect(kill.mock.calls).toEqual([
       [-CHILD_PID, 'SIGSTOP'],
       [-CHILD_PID, 'SIGKILL'],
@@ -1700,6 +1738,16 @@ describe('a program group with a token, as a faked /proc shows it', () => {
     probeEnds('ok');
 
     expect(isProgramGroupAlive(group)).toBe(false);
+  });
+
+  // A fork chain whose members end before a scan reads them: a freeze that
+  // misses it, as after a SIGCONT from elsewhere, leaves the wait to the
+  // probe, which still finds the id.
+  it('is alive while no scan shows a member and the probe finds the id', () => {
+    procShowsTokenGroup();
+    probeEnds('ok');
+
+    expect(isProgramGroupAlive(group)).toBe(true);
   });
 
   it('is not alive when /proc hides other users and the probe finds no process', () => {

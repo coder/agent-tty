@@ -1273,14 +1273,33 @@ function ownershipFacts() {
       signalParam === "signal: 'SIGSTOP' | 'SIGCONT'" &&
       !stray,
     FreezesUnseenGroup: freezeFacts(stop.body),
+    WaitProbesUnseenGroup: waitProbeFacts(),
   };
+}
+
+// isProcessGroupAlive, which every wait reads through isProgramGroupAlive,
+// probes the group again when its probe found the group but no scan showed
+// a member, live or zombie, and reads the group alive while that probe finds
+// it. Without the second probe it reads such a group ended.
+function waitProbeFacts() {
+  const module = 'src/host/programGroup.ts';
+  const alive = requireDeclaration(module, 'isProcessGroupAlive').body
+    .statements;
+  return (
+    normalize(alive.at(-1)?.getText() ?? '') ===
+      'return groupHasLiveProcess(pgid) ?? probeFindsGroup(pgid);' &&
+    normalize(requireDeclaration(module, 'probeFindsGroup').body.getText()) ===
+      "{ try { process.kill(processGroupTarget(pgid), 0); return true; } catch (error) { if (hasErrorCode(error, 'ESRCH')) { return false; } if (hasErrorCode(error, 'EPERM')) { return true; } throw error; } }"
+  );
 }
 
 // In stopProgramGroup's loop, each judgement that gets no kill and is not
 // unproven sends SIGSTOP to the group and judges again: gone, unknown, and
 // owned with a witness that ended before its read. So a member that a scan
 // never shows, or that ends between two reads, stops and stays in view,
-// while /proc names this process by its pid. The finally block sends a
+// while /proc names this process by its pid. Before the first freeze, a
+// group that shows a stopped member gets none, so the SIGCONT cannot resume
+// a member that job control stopped. The finally block sends a
 // frozen group that got no kill SIGCONT, also when a scan throws.
 function freezeFacts(body) {
   const guarded = body.statements.find(ts.isTryStatement);
@@ -1300,13 +1319,14 @@ function freezeFacts(body) {
     before.at(-2) === 'let frozen = false;' &&
     before.at(-1) === 'let killed = false;' &&
     guarded.tryBlock.statements.length === 1 &&
-    st.length === 7 &&
+    st.length === 8 &&
     st[1] ===
       "if ( judgement.verdict === 'unproven' || (judgement.verdict === 'unknown' && !judgement.running) ) { return; }" &&
     st[2].startsWith("if (judgement.verdict === 'owned') {") &&
     st.slice(3).join('\n') ===
       [
         'if (!procShowsOwnPidSpace()) { return; }',
+        'if (!frozen && showsStoppedMember(group.pid)) { return; }',
         "frozen = signalProcessGroup(group.pid, 'SIGSTOP') || frozen;",
         'if (!frozen) { return; }',
         'Atomics.wait(settleCell, 0, 0, STOP_SETTLE_MS);',
@@ -1558,7 +1578,10 @@ function frozenJudgesTwice() {
     judged.catchClause === undefined &&
     judged.finallyBlock !== undefined &&
     statementsOf(judged.tryBlock).join('\n') ===
-      'verdict = judgeLiveGroup(group).verdict;' &&
+      [
+        'Atomics.wait(settleCell, 0, 0, STOP_SETTLE_MS);',
+        'verdict = judgeLiveGroup(group).verdict;',
+      ].join('\n') &&
     statementsOf(judged.finallyBlock).join('\n') ===
       "signalProcessGroup(group.pid, 'SIGCONT');" &&
     normalize(decides?.getText() ?? '') ===

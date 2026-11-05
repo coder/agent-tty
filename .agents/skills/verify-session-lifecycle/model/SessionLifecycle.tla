@@ -137,6 +137,9 @@ CONSTANTS
     ProvesHostPid,          \* lifecycle.ts, hostRecord.ts: destroy --force
                             \*   kills the host only while its pid shows the
                             \*   boot id and start time that host.json holds
+    WaitProbesUnseenGroup,  \* programGroup.ts: isProcessGroupAlive probes
+                            \*   the group again when no scan shows a member,
+                            \*   and reads it alive while the probe finds it
     FreezesUnseenGroup,     \* programGroup.ts: stopProgramGroup sends
                             \*   SIGSTOP to a group that no scan shows and
                             \*   judges it again
@@ -150,6 +153,10 @@ CONSTANTS
     Unseen,                 \* the environment: no scan of /proc shows a
                             \*   live process of the program, as for a fork
                             \*   chain whose processes each live about 2 ms
+    FreezeMisses,           \* the environment: with Unseen, no freeze of
+                            \*   stopProgramGroup brings a member into view,
+                            \*   as when a SIGCONT from another process comes
+                            \*   before each judgement
     ZombiesInView,          \* the environment: with Unseen, the scans show
                             \*   zombies of the program's group, as under a
                             \*   PID 1 that never reaps
@@ -173,6 +180,7 @@ CONSTANTS
 ASSUME MaxListReconciles \in 1..3
 ASSUME Token \in BOOLEAN
 ASSUME Unseen \in BOOLEAN
+ASSUME FreezeMisses \in BOOLEAN
 ASSUME ZombiesInView \in BOOLEAN
 ASSUME OtherPidSpace \in BOOLEAN
 ASSUME Win32 \in BOOLEAN
@@ -197,7 +205,8 @@ ASSUME \A b \in {GcSkipsNonCollectable, GcFinalCheck, GcKeepsLiveGroup,
                  ReconcileRepairsDestroyed, ReconcileRepairsMarked,
                  TokenNamesProgram,
                  ReusedIdReadsGone, ProvesHostPid, CreateRecordsHost,
-                 FreezesUnseenGroup, UnsharedGroupReadsUnknown} : b \in BOOLEAN
+                 FreezesUnseenGroup, WaitProbesUnseenGroup,
+                 UnsharedGroupReadsUnknown} : b \in BOOLEAN
 
 Readers == {"gc", "list"}   \* the two processes that run reconcileSession
 \* The group that a kill went through, and that the wait after it probes:
@@ -394,7 +403,8 @@ NoKill == UNCHANGED <<prog, left, hitUnrelated>>
 ProvenKill ==
     IF ~TokenNamesProgram THEN NoKill
     ELSE IF ProvesGroupOwnership /\ reused THEN NoKill
-    ELSE IF Unseen /\ ~FreezesUnseenGroup /\ ~reused /\ ~foreign THEN NoKill
+    ELSE IF Unseen /\ (~FreezesUnseenGroup \/ FreezeMisses) /\ ~reused
+            /\ ~foreign THEN NoKill
     ELSE KillsGroupId
 
 \* Without a token, readProgramGroup falls back to the childPid of the
@@ -426,8 +436,14 @@ GroupAlive == prog \/ foreign
 \* isProcessGroupAlive probes kill(-pgid, 0): every process with that group
 \* id reads alive, also one of an unrelated group that took it. EPERM, when
 \* every process left belongs to another user, reads alive only with
-\* ProbeCountsDeniedGroup.
-ProbeSees == prog \/ left \/ reused \/ (ProbeCountsDeniedGroup /\ foreign)
+\* ProbeCountsDeniedGroup. When the probe finds the group, the scans after it
+\* decide: with Unseen they show no process of the program, and with
+\* WaitProbesUnseenGroup a second probe that still finds the group reads it
+\* alive. Scans that show only zombies read the group ended either way.
+ProbeFindsUnseen == WaitProbesUnseenGroup /\ ~ZombiesInView
+ProbeSees ==
+    \/ (prog \/ left) /\ (~Unseen \/ ProbeFindsUnseen)
+    \/ reused \/ (ProbeCountsDeniedGroup /\ foreign)
 
 \* isProgramGroupAlive in waitForProcessesToExit, for the group that the
 \* kill before it went through. With a token it reads the group alive while
@@ -441,15 +457,22 @@ ProbeSees == prog \/ left \/ reused \/ (ProbeCountsDeniedGroup /\ foreign)
 \* TokenNamesProgram no member carries the recorded autogroup, so the group
 \* reads gone. Without ReusedIdReadsGone a group that took the id reads
 \* alive, because its members carry another autogroup. With Unseen the scans
-\* show no process of the program, and the probe after them reads the
-\* group gone, since the wait does not freeze it.
-GroupSeen(kind) ==
+\* show no process of the program, so the group reads gone, and the probe
+\* after them decides (ProbeFindsUnseen). GroupJudged leaves out that probe
+\* of a group with a token: gc judges such a group with its own probe
+\* (GcSeesGroup).
+GroupJudged(kind) ==
     /\ KillsProgramGroup
     /\ \/ kind = "proven" /\ TokenNamesProgram
           /\ (((prog \/ left) /\ ~Unseen) \/ foreign)
        \/ kind = "proven" /\ ~ReusedIdReadsGone /\ reused
        \/ kind = "bare" /\ ProbeSees
        \/ kind = "numeric" /\ FallbackReaches /\ ProbeSees
+
+GroupSeen(kind) ==
+    \/ GroupJudged(kind)
+    \/ /\ KillsProgramGroup /\ kind = "proven"
+       /\ Unseen /\ ProbeFindsUnseen /\ (prog \/ left)
 
 \* The group as destroy and reconcile see it. With OtherPidSpace no scan and
 \* no probe of theirs shows the program's processes: a group with a token
@@ -1240,7 +1263,7 @@ GcReadsReconciled ==
 \* often.
 GcSeesGroup ==
     /\ ~OtherPidSpace /\ ~Refused
-    /\ \/ GroupSeen("proven")
+    /\ \/ GroupJudged("proven")
        \/ /\ GcProbesUnseenGroup /\ Unseen /\ (prog \/ left)
           /\ (~ZombiesInView \/ GcFreezesUnseenGroup)
 
