@@ -513,6 +513,18 @@ describe('captureGridFrames', () => {
       steppedBackAt: 2,
     },
     {
+      name: 'the first of two steps, with events after it',
+      events: [
+        { seq: 0, ts: isoAt(0), type: 'output', payload: { data: 'a' } },
+        { seq: 1, ts: isoAt(1_000), type: 'marker', payload: { label: 'm' } },
+        { seq: 2, ts: isoAt(500), type: 'output', payload: { data: 'b' } },
+        { seq: 3, ts: isoAt(2_000), type: 'marker', payload: { label: 'n' } },
+        { seq: 4, ts: isoAt(1_500), type: 'output', payload: { data: 'c' } },
+        { seq: 5, ts: isoAt(3_000), type: 'marker', payload: { label: 'o' } },
+      ],
+      steppedBackAt: 2,
+    },
+    {
       name: 'the last event',
       events: [
         { seq: 0, ts: isoAt(1_000), type: 'output', payload: { data: 'a' } },
