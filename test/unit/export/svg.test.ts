@@ -1,3 +1,5 @@
+import { constants } from 'node:buffer';
+
 import { describe, expect, it } from 'vitest';
 
 import type { SvgGridFrame } from '../../../src/export/svg.js';
@@ -388,6 +390,12 @@ describe('renderGridFramesToSvg', () => {
     const markSvg = render('a\u1ab0');
     expect(markSvg).not.toContain(notoSymbols);
     expect(markSvg).not.toContain(notoMath);
+
+    // Noto Sans Symbols 2 also covers U+2630, but Symbols Nerd Font draws it
+    // first. 日 is in no bundled face, so the cluster needs no Noto face.
+    const trigramSvg = render('\u2630日');
+    expect(trigramSvg).not.toContain(notoSymbols);
+    expect(trigramSvg).not.toContain(notoMath);
   });
 
   it('draws every printable ASCII glyph from the primary face in one run', () => {
@@ -514,6 +522,7 @@ describe('renderGridFramesToSvg', () => {
         maxOutputLength,
       });
 
+    expect(MAX_SVG_OUTPUT_LENGTH).toBeLessThan(constants.MAX_STRING_LENGTH);
     const svg = render(MAX_SVG_OUTPUT_LENGTH);
     expect(render(svg.length)).toBe(svg);
     expect(() => render(svg.length - 1)).toThrow(

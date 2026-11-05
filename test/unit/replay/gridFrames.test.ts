@@ -17,7 +17,11 @@ import type {
 } from '../../../src/protocol/schemas.js';
 
 import { renderGridFramesToSvg } from '../../../src/export/svg.js';
-import { captureGridFrames } from '../../../src/replay/gridFrames.js';
+import {
+  MAX_ANIMATED_GRID_CELLS,
+  captureGridFrames,
+  defaultMaxGridCells,
+} from '../../../src/replay/gridFrames.js';
 import { resolveProfile } from '../../../src/renderer/profiles.js';
 
 // The cursor-forward column test replays through the real libghostty-vt
@@ -455,6 +459,41 @@ describe('captureGridFrames', () => {
     expect(backend.disposed).toBe(true);
   });
 
+  it('derives the default cell budget from the V8 heap limit', async () => {
+    // Three distinct 4x2 frames retain 8 cells each; a 20-cell budget admits
+    // two frames and must trip on the third instead of exhausting memory.
+    const events: EventRecord[] = [
+      { seq: 0, ts: isoAt(0), type: 'output', payload: { data: 'a' } },
+      { seq: 1, ts: isoAt(1_000), type: 'output', payload: { data: 'b' } },
+      { seq: 2, ts: isoAt(2_000), type: 'output', payload: { data: 'c' } },
+    ];
+    const backend = new FakeGridBackend(
+      new Map([
+        [0, 'a'],
+        [1, 'ab'],
+        [2, 'abc'],
+      ]),
+    );
+
+    await expect(
+      captureGridFrames(
+        {
+          sessionId: SESSION_ID,
+          manifest: createSessionRecord(),
+          events,
+          profile: PROFILE,
+          mode: 'timeline',
+        },
+        { backendFactory: () => backend, heapSizeLimit: 20 * 400 },
+      ),
+    ).rejects.toMatchObject({
+      code: 'EXPORT_ERROR',
+      message:
+        'Recording has too many distinct frames for animated SVG export. Use a still SVG export (drop --animate) or a WebM export instead.',
+    });
+    expect(backend.disposed).toBe(true);
+  });
+
   it('synthesizes a blank frame for an empty event log without a backend', async () => {
     const capture = await captureGridFrames(
       {
@@ -513,5 +552,13 @@ describe('captureGridFrames', () => {
       message: expect.stringContaining('@coder/libghostty-vt-node') as string,
     });
     expect(backend.disposed).toBe(true);
+  });
+
+  describe('defaultMaxGridCells', () => {
+    it('caps the cell budget on a large heap and shrinks it on a small one', () => {
+      expect(defaultMaxGridCells(8 * 1024 ** 3)).toBe(MAX_ANIMATED_GRID_CELLS);
+      expect(defaultMaxGridCells(2 * 1024 ** 3)).toBe(5_368_709);
+      expect(defaultMaxGridCells(1)).toBe(1);
+    });
   });
 });

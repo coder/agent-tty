@@ -17,7 +17,11 @@ import {
 } from '../../export/webm.js';
 import { captureGridFrames } from '../../replay/gridFrames.js';
 import { readEventLogRecords } from '../../storage/eventLogCodec.js';
-import { hashProfile, resolveProfile } from '../../renderer/profiles.js';
+import {
+  getBuiltinProfile,
+  hashProfile,
+  resolveProfile,
+} from '../../renderer/profiles.js';
 import { CliError } from '../errors.js';
 import { checkedSessionDir } from '../sessionGuards.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
@@ -135,7 +139,17 @@ function resolveRenderProfileName(
     });
   }
 
-  return requestResult.data.profile;
+  const profile = requestResult.data.profile;
+  if (profile !== undefined && getBuiltinProfile(profile) === undefined) {
+    throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+      message: `unknown render profile: ${profile}`,
+      details: {
+        profile,
+      },
+    });
+  }
+
+  return profile;
 }
 
 async function resolveOutputPath(

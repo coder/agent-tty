@@ -1,3 +1,5 @@
+import { getHeapStatistics } from 'node:v8';
+
 import { buildReplayInput } from '../host/replay.js';
 import type {
   EventRecord,
@@ -29,6 +31,27 @@ const DEFAULT_FINAL_FRAME_HOLD_MS = 1_000;
  */
 export const MAX_ANIMATED_GRID_CELLS = 20_000_000;
 
+/**
+ * A retained cell costs about 140 bytes of process memory in a measured
+ * 10,000-frame capture. This leaves room for the SVG text that the cells
+ * become, so the budget shrinks on a small heap instead of crashing Node.
+ */
+const HEAP_BYTES_PER_RETAINED_CELL = 400;
+
+export function defaultMaxGridCells(heapSizeLimit: number): number {
+  invariant(
+    Number.isFinite(heapSizeLimit) && heapSizeLimit > 0,
+    'heap size limit must be positive',
+  );
+  return Math.max(
+    1,
+    Math.min(
+      MAX_ANIMATED_GRID_CELLS,
+      Math.floor(heapSizeLimit / HEAP_BYTES_PER_RETAINED_CELL),
+    ),
+  );
+}
+
 export type GridFrameMode = 'final' | 'timeline';
 
 export interface GridFrame {
@@ -50,7 +73,7 @@ export interface CaptureGridFramesOptions {
   /** `final` captures only the last frame; `timeline` captures every boundary. */
   mode: GridFrameMode;
   finalFrameHoldMs?: number;
-  /** Retained-cell budget override; defaults to MAX_ANIMATED_GRID_CELLS. */
+  /** Retained-cell budget override; defaults to defaultMaxGridCells of the heap limit. */
   maxGridCells?: number;
 }
 
@@ -80,6 +103,8 @@ export interface GridFrameDeps {
     sessionId: string,
     profile: RenderProfileConfig,
   ) => RendererBackend | Promise<RendererBackend>;
+  /** The V8 heap limit in bytes; defaults to getHeapStatistics(). */
+  heapSizeLimit?: number;
 }
 
 interface FrameBoundary {
@@ -236,7 +261,11 @@ export async function captureGridFrames(
     Number.isInteger(finalFrameHoldMs) && finalFrameHoldMs > 0,
     'finalFrameHoldMs must be a positive integer',
   );
-  const maxGridCells = options.maxGridCells ?? MAX_ANIMATED_GRID_CELLS;
+  const maxGridCells =
+    options.maxGridCells ??
+    defaultMaxGridCells(
+      deps?.heapSizeLimit ?? getHeapStatistics().heap_size_limit,
+    );
   invariant(
     Number.isInteger(maxGridCells) && maxGridCells > 0,
     'maxGridCells must be a positive integer',

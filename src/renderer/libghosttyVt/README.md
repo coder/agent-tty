@@ -29,7 +29,7 @@ This directory holds the `libghostty-vt` renderer backend. `LibghosttyVtBackend`
 - Native snapshots must have positive dimensions, a cursor inside the grid, a boolean `cursorVisible` and `isAltScreen`, at most `rows` visible lines, and strictly increasing line rows [backend.ts:assertNativeSnapshot].
 - `encodeMouse` throws a `RangeError` that names the grid size for a cell outside the current `cols` by `rows` grid. A binding without `encodeMouse` still boots and renders, and `encodeMouse` then fails an assertion [backend.ts:LibghosttyVtBackend.encodeMouse].
 - Doc comment: visible lines are padded to `rows` so the Screen Hash agrees with the `ghostty-web` backend [backend.ts:padVisibleLinesToRows].
-- Doc comment: `cells[col]` is the cell at terminal column `col`. A wide glyph adds spacer cells that keep its style (coder/agent-tty#112) [backend.ts:mapNativeCells].
+- Doc comment: `cells[col]` is the cell at terminal column `col`. A wide glyph adds spacer cells that keep its style (coder/agent-tty#112). The leading cell of a wide glyph carries `width` (2 or more), and its spacer cells have `char: ''` and no `width` [backend.ts:mapNativeCells].
 
 ## Side Effects
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory converts a session's event log into recording exports. `generateAsciicast` builds an asciicast v2 recording as a string and leaves the file write to the caller. `generateWebmExport` replays the events into a video-capable renderer backend (by default `GhosttyWebBackend`, which runs headless Chromium) and saves the recorded WebM video at the requested path.
+This directory converts a session's event log into recording exports. `generateAsciicast` builds an asciicast v2 recording as a string and leaves the file write to the caller. `generateWebmExport` replays the events into a video-capable renderer backend (by default `GhosttyWebBackend`, which runs headless Chromium) and saves the recorded WebM video at the requested path. `renderGridFramesToSvg` turns styled grid frames into SVG text, still or animated, and leaves the file write to the caller.
 
 ## Interface
 

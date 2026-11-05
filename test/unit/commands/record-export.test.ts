@@ -821,6 +821,27 @@ describe('record export command', () => {
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
   });
 
+  it.each(['svg', 'webm'])(
+    'rejects an unknown render profile for %s before it renders',
+    async (format) => {
+      await expect(
+        runRecordExportCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          format,
+          profile: 'bogus',
+        }),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.INVALID_INPUT,
+        message: 'unknown render profile: bogus',
+      });
+      expect(mocks.captureGridFrames).not.toHaveBeenCalled();
+      expect(mocks.generateWebmExport).not.toHaveBeenCalled();
+      expect(mocks.emitSuccess).not.toHaveBeenCalled();
+    },
+  );
+
   it('reports the glyphs that the video drew as boxes, in the result and the human output', async () => {
     mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
     const webmContent = Buffer.alloc(64, 0x42);
