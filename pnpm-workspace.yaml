@@ -6,12 +6,13 @@
 # resolver falls back to an older match), and reject versions whose publish
 # trust evidence weakens between releases.
 minimumReleaseAge: 1440
-# Our own packages skip the age check. Dependabot runs pnpm with its 7-day
-# cooldown as the minimum release age, and pnpm applies that age to every
-# locked package, so one @coder/* release younger than 7 days made every npm
-# version update fail.
+# Dependabot runs pnpm with its 7-day cooldown as the minimum release age, and
+# pnpm applies that age to every locked package: while one locked release is
+# younger than 7 days, every npm version update fails. Exclude only such
+# exact versions, so newer releases of the same package stay behind both
+# age checks.
 minimumReleaseAgeExclude:
-  - '@coder/*'
+  - '@coder/libghostty-vt-node@0.1.0-beta.7'
 trustPolicy: no-downgrade
 
 # Resolve optional platform dependencies for every platform devs and CI use,

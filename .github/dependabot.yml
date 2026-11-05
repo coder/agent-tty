@@ -5,11 +5,12 @@ updates:
   # pnpm-workspace.yaml's 1-day minimumReleaseAge, so version updates never
   # propose a release pnpm would refuse to resolve. Dependabot passes the
   # cooldown to pnpm as its minimum release age, which pnpm checks against
-  # every locked package: minimumReleaseAgeExclude must cover our own
-  # packages, which we often lock within 7 days of their release. Dependabot
-  # also resolves on an empty store, where pnpm's trust check sees every
-  # locked package. .agents/skills/verify-agent-tty/scripts/dependabot-resolve.sh
-  # replays that resolve.
+  # every locked package: a locked release younger than 7 days needs an
+  # exact-version minimumReleaseAgeExclude entry in pnpm-workspace.yaml.
+  # Dependabot also resolves on an empty store, where pnpm's trust check sees
+  # every locked package.
+  # .agents/skills/verify-agent-tty/scripts/dependabot-resolve.sh replays that
+  # resolve.
   - package-ecosystem: npm
     directory: /
     schedule:
