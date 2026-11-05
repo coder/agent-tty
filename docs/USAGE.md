@@ -298,7 +298,7 @@ SVG export renders styled grid frames from the event log through the native `lib
 
 Animated SVG capture retains every distinct frame's styled grid in memory, so it is bounded by a total-cell budget (20M cells, roughly 10,000 distinct 80x24 frames, adapting to terminal size); recordings that exceed it fail with a clear error suggesting a still SVG or WebM export instead.
 
-SVG exports always embed the pinned JetBrains Mono latin subset and additionally embed the Symbols Nerd Font Mono face when the rendered content needs it. Glyphs outside both faces (notably CJK and most emoji) render via the viewer's monospace fallback, mirroring the reference renderer's own system-font fallback for the same glyphs. Text content and layout metrics stay deterministic even when fallback glyph shapes vary: every text run is pinned to the terminal grid via `textLength`, so columns never shift.
+SVG exports always embed the pinned JetBrains Mono latin subset. They also embed Symbols Nerd Font Mono, Noto Sans Symbols 2 and Noto Sans Math, each only when a rendered glyph needs it. The SVG uses the same font stack as the reference renderer, so a glyph outside the first two faces renders with the viewer's `monospace` font first, and with an embedded Noto face when that font lacks it. Glyphs in no bundled face (notably CJK and most emoji) render with the viewer's fonts. Text content and layout metrics stay deterministic even when fallback glyph shapes vary: every text run is pinned to the terminal grid via `textLength`, so columns never shift.
 
 SVG export has known fidelity limits, because the native backend's snapshot cells do not yet carry every attribute ([coder/libghostty-vt-node#15](https://github.com/coder/libghostty-vt-node/issues/15)):
 

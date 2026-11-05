@@ -1,10 +1,12 @@
 import type { SnapshotCell } from '../protocol/schemas.js';
 import type { RenderProfileConfig } from '../renderer/types.js';
 import {
+  BUNDLED_FONT_ASSETS,
   BUNDLED_PRIMARY_FONT_ASSET,
   BUNDLED_SYMBOLS_FONT_ASSET,
   type BundledFontAsset,
 } from '../renderer/bundledFont.js';
+import { readFontFile } from '../renderer/fontCoverage.js';
 import { invariant } from '../util/assert.js';
 
 /**
@@ -65,114 +67,55 @@ interface StyleRun {
 }
 
 /**
- * Both bundled fonts are licensed under the SIL Open Font License 1.1 (see
+ * All bundled fonts are licensed under the SIL Open Font License 1.1 (see
  * src/renderer/ghosttyWeb/assets/FONT-LICENSE.txt); embedded SVGs carry this
  * attribution as an XML comment.
  */
 const FONT_LICENSE_COMMENT =
-  '<!-- Embedded fonts (SIL Open Font License 1.1): JetBrains Mono by JetBrains s.r.o. (https://github.com/JetBrains/JetBrainsMono); Symbols Nerd Font Mono by the Nerd Fonts contributors (https://github.com/ryanoasis/nerd-fonts), embedded only when glyphs covered by the symbols face are present. -->';
+  '<!-- Embedded fonts (SIL Open Font License 1.1): JetBrains Mono by JetBrains s.r.o. (https://github.com/JetBrains/JetBrainsMono); Symbols Nerd Font Mono by the Nerd Fonts contributors (https://github.com/ryanoasis/nerd-fonts) and Noto Sans Symbols 2 and Noto Sans Math by the Noto Project Authors (https://github.com/notofonts), each embedded only when glyphs it covers are present. -->';
 
-/**
- * Exact cmap coverage of the pinned JetBrainsMono-Regular-latin.woff2 asset
- * (dumped offline from the checked-in file's format-4 cmap: 229 code points).
- * The asset is hash-pinned via bundledFont.ts, so these ranges are stable.
- *
- * Explicit boundary: glyphs outside BOTH bundled faces — notably CJK and
- * most emoji — render via the viewer's monospace fallback. This is kept
- * deliberately: the pinned render profiles bundle no CJK face (a suitable
- * one is tens of MB), and converting glyphs to paths would require a
- * font-shaping dependency. The reference ghostty-web PNG/WebM path has the
- * same boundary (same two faces, then Chromium/system-font fallback). Layout
- * stays deterministic regardless: text runs are pinned to the terminal grid
- * via textLength, so fallback glyph shapes vary but columns never shift.
- */
-const PRIMARY_LATIN_SUBSET_RANGES: ReadonlyArray<readonly [number, number]> = [
-  [0x0d, 0x0d],
-  [0x20, 0x7e],
-  [0xa0, 0xff],
-  [0x102, 0x102],
-  [0x131, 0x131],
-  [0x152, 0x153],
-  [0x2bc, 0x2bc],
-  [0x2c6, 0x2c6],
-  [0x2da, 0x2da],
-  [0x2dc, 0x2dc],
-  [0x300, 0x301],
-  [0x303, 0x304],
-  [0x308, 0x309],
-  [0x323, 0x323],
-  [0x2013, 0x2014],
-  [0x2018, 0x201a],
-  [0x201c, 0x201e],
-  [0x2022, 0x2022],
-  [0x2026, 0x2026],
-  [0x2032, 0x2033],
-  [0x2039, 0x203a],
-  [0x2044, 0x2044],
-  [0x20ac, 0x20ac],
-  [0x2122, 0x2122],
-  [0x2191, 0x2191],
-  [0x2193, 0x2193],
-  [0x2212, 0x2212],
-  [0x2215, 0x2215],
-  [0xfeff, 0xfeff],
-];
-
-function isCoveredByPrimaryLatinSubset(codePoint: number): boolean {
-  for (const [start, end] of PRIMARY_LATIN_SUBSET_RANGES) {
-    if (codePoint >= start && codePoint <= end) {
-      return true;
-    }
-  }
-  return false;
+interface FaceCoverage {
+  asset: BundledFontAsset;
+  coverage: ReadonlySet<number>;
 }
 
-/**
- * Exact cmap coverage of the pinned SymbolsNerdFontMono-Regular.ttf asset
- * (dumped offline from the checked-in file's format-12 cmap: 10,410 code
- * points in 28 contiguous ranges). The asset is hash-pinned via
- * bundledFont.ts, so these ranges are stable. To regenerate: parse the TTF
- * table directory for the `cmap` table, pick the format-12 subtable, and
- * collapse its sequential map groups into [start, end] pairs.
- */
-const SYMBOLS_FACE_RANGES: ReadonlyArray<readonly [number, number]> = [
-  [0x23fb, 0x23fe],
-  [0x2630, 0x2630],
-  [0x2665, 0x2665],
-  [0x26a1, 0x26a1],
-  [0x276c, 0x2771],
-  [0x2b58, 0x2b58],
-  [0xe000, 0xe00a],
-  [0xe0a0, 0xe0a3],
-  [0xe0b0, 0xe0c8],
-  [0xe0ca, 0xe0ca],
-  [0xe0cc, 0xe0d2],
-  [0xe0d4, 0xe0d4],
-  [0xe0d6, 0xe0d7],
-  [0xe200, 0xe2a9],
-  [0xe300, 0xe3e3],
-  [0xe5fa, 0xe6b8],
-  [0xe700, 0xe8ef],
-  [0xea60, 0xea88],
-  [0xea8a, 0xea8c],
-  [0xea8f, 0xeac7],
-  [0xeac9, 0xeac9],
-  [0xeacc, 0xeb09],
-  [0xeb0b, 0xeb4e],
-  [0xeb50, 0xec1e],
-  [0xed00, 0xefce],
-  [0xf000, 0xf381],
-  [0xf400, 0xf533],
-  [0xf0001, 0xf1af0],
-];
+interface BundledFaceCoverage {
+  primary: FaceCoverage;
+  symbols: FaceCoverage;
+  /** The bundled faces that the reference font stack lists after `monospace`. */
+  fallbacks: readonly FaceCoverage[];
+}
 
-function isCoveredBySymbolsFace(codePoint: number): boolean {
-  for (const [start, end] of SYMBOLS_FACE_RANGES) {
-    if (codePoint >= start && codePoint <= end) {
-      return true;
-    }
+let bundledFaceCoverage: BundledFaceCoverage | undefined;
+
+/**
+ * Coverage comes from each pinned asset's own cmap, read once on first use.
+ *
+ * Explicit boundary: glyphs outside the primary and symbols faces (notably
+ * CJK and most emoji) render via the viewer's fonts, the same as the
+ * reference renderer's host `monospace` font. The reference stack then lists
+ * the bundled Noto Sans Symbols 2 and Noto Sans Math faces, so the SVG embeds
+ * those for glyphs they cover. Layout stays deterministic regardless: text
+ * runs are pinned to the terminal grid via textLength, so fallback glyph
+ * shapes vary but columns never shift.
+ */
+function faceCoverage(): BundledFaceCoverage {
+  if (bundledFaceCoverage === undefined) {
+    const read = (asset: BundledFontAsset): FaceCoverage => ({
+      asset,
+      coverage: readFontFile(asset.buffer).coverage,
+    });
+    bundledFaceCoverage = {
+      primary: read(BUNDLED_PRIMARY_FONT_ASSET),
+      symbols: read(BUNDLED_SYMBOLS_FONT_ASSET),
+      fallbacks: BUNDLED_FONT_ASSETS.filter(
+        (asset) =>
+          asset !== BUNDLED_PRIMARY_FONT_ASSET &&
+          asset !== BUNDLED_SYMBOLS_FONT_ASSET,
+      ).map(read),
+    };
   }
-  return false;
+  return bundledFaceCoverage;
 }
 
 /**
@@ -184,14 +127,15 @@ function isCoveredBySymbolsFace(codePoint: number): boolean {
  * code point classifies as 'system' since the fallback font shapes it.
  */
 function classifyGlyphFace(char: string): GlyphFace {
+  const { primary, symbols } = faceCoverage();
   let sawSymbolsGlyph = false;
   for (const character of char) {
     const codePoint = character.codePointAt(0);
     invariant(codePoint !== undefined, 'iterated character must exist');
-    if (isCoveredByPrimaryLatinSubset(codePoint)) {
+    if (primary.coverage.has(codePoint)) {
       continue;
     }
-    if (isCoveredBySymbolsFace(codePoint)) {
+    if (symbols.coverage.has(codePoint)) {
       sawSymbolsGlyph = true;
       continue;
     }
@@ -201,25 +145,58 @@ function classifyGlyphFace(char: string): GlyphFace {
 }
 
 /**
- * The symbols face is embedded only when a rendered glyph actually resolves
- * to it; 'system' glyphs (covered by neither bundled face) gain nothing from
- * embedding, so they no longer trigger the 2.5 MB payload.
+ * The bundled faces that a rendered glyph can resolve to, in stack order. The
+ * symbols face joins when a glyph classifies as 'symbols'. A fallback face
+ * joins when it covers a code point of a 'system' glyph, since the viewer
+ * reaches it only when its own `monospace` font lacks that code point.
  */
-function framesContainSymbolsGlyph(frames: readonly SvgGridFrame[]): boolean {
+function embeddedFontAssets(
+  frames: readonly SvgGridFrame[],
+): BundledFontAsset[] {
+  const { primary, symbols, fallbacks } = faceCoverage();
+  let needsSymbols = false;
+  const neededFallbacks = new Set<FaceCoverage>();
   for (const frame of frames) {
     for (const cells of frame.lines) {
       for (const cell of cells) {
-        if (classifyGlyphFace(cell.char) === 'symbols') {
-          return true;
+        const face = classifyGlyphFace(cell.char);
+        if (face === 'symbols') {
+          needsSymbols = true;
+        } else if (face === 'system') {
+          for (const character of cell.char) {
+            const codePoint = character.codePointAt(0);
+            invariant(codePoint !== undefined, 'iterated character must exist');
+            for (const fallback of fallbacks) {
+              if (fallback.coverage.has(codePoint)) {
+                neededFallbacks.add(fallback);
+              }
+            }
+          }
         }
       }
     }
   }
-  return false;
+  return [
+    primary.asset,
+    ...(needsSymbols ? [symbols.asset] : []),
+    ...fallbacks
+      .filter((fallback) => neededFallbacks.has(fallback))
+      .map((fallback) => fallback.asset),
+  ];
 }
 
-function renderFontFace(asset: BundledFontAsset, format: string): string {
+const FONT_FORMAT_BY_CONTENT_TYPE: Readonly<Record<string, string>> = {
+  'font/woff2': 'woff2',
+  'font/ttf': 'truetype',
+};
+
+function renderFontFace(asset: BundledFontAsset): string {
   invariant(asset.buffer.byteLength > 0, 'bundled font asset must have bytes');
+  const format = FONT_FORMAT_BY_CONTENT_TYPE[asset.contentType];
+  invariant(
+    format !== undefined,
+    `bundled font content type ${asset.contentType} has no CSS font format`,
+  );
   const dataUri = `data:${asset.contentType};base64,${asset.buffer.toString('base64')}`;
   return `@font-face{font-family:"${asset.family}";src:url(${dataUri}) format("${format}");font-weight:${asset.weight};font-style:${asset.style};}`;
 }
@@ -227,17 +204,13 @@ function renderFontFace(asset: BundledFontAsset, format: string): string {
 /**
  * Standalone SVGs must carry their fonts so glyphs render identically without
  * locally installed fonts. The 21 KB JetBrains Mono latin subset is always
- * embedded; the 2.5 MB Symbols Nerd Font is embedded only when a rendered
- * frame contains a glyph the symbols face actually covers, keeping ordinary
- * exports small. Both are base64 of checked-in asset bytes, so output stays
- * deterministic.
+ * embedded; the 2.5 MB Symbols Nerd Font and the Noto fallback faces are
+ * embedded only when a rendered frame contains a glyph they cover, keeping
+ * ordinary exports small. All are base64 of checked-in asset bytes, so output
+ * stays deterministic.
  */
 function renderFontStyleElement(frames: readonly SvgGridFrame[]): string {
-  const fontFaces = [renderFontFace(BUNDLED_PRIMARY_FONT_ASSET, 'woff2')];
-  if (framesContainSymbolsGlyph(frames)) {
-    fontFaces.push(renderFontFace(BUNDLED_SYMBOLS_FONT_ASSET, 'truetype'));
-  }
-  return `<style>${fontFaces.join('\n')}</style>`;
+  return `<style>${embeddedFontAssets(frames).map(renderFontFace).join('\n')}</style>`;
 }
 
 const XML_ESCAPES: Record<string, string> = {

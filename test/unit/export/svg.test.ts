@@ -348,6 +348,39 @@ describe('renderGridFramesToSvg', () => {
     expect(cjkSvg).not.toContain('data:font/ttf');
   });
 
+  it('embeds a Noto fallback face only for glyphs it covers', () => {
+    const notoSymbols =
+      '@font-face{font-family:"Noto Sans Symbols 2";src:url(data:font/woff2;base64,';
+    const notoMath =
+      '@font-face{font-family:"Noto Sans Math";src:url(data:font/woff2;base64,';
+    const render = (char: string) =>
+      renderGridFramesToSvg({
+        profile: PROFILE,
+        frames: [makeFrame({ lines: [[cell(char)]] })],
+        animate: false,
+      });
+
+    const plainSvg = render('x');
+    expect(plainSvg).not.toContain(notoSymbols);
+    expect(plainSvg).not.toContain(notoMath);
+
+    // U+2801 BRAILLE PATTERN DOTS-1 is only in Noto Sans Symbols 2.
+    const brailleSvg = render('\u2801');
+    expect(brailleSvg).toContain(notoSymbols);
+    expect(brailleSvg).not.toContain(notoMath);
+    expect(brailleSvg).not.toContain('data:font/ttf');
+
+    // U+1D400 MATHEMATICAL BOLD CAPITAL A is only in Noto Sans Math.
+    const mathSvg = render('\u{1d400}');
+    expect(mathSvg).toContain(notoMath);
+    expect(mathSvg).not.toContain(notoSymbols);
+
+    // CJK is in no bundled face, so it embeds no fallback face.
+    const cjkSvg = render('漢');
+    expect(cjkSvg).not.toContain(notoSymbols);
+    expect(cjkSvg).not.toContain(notoMath);
+  });
+
   it('preserves columns across zero-style gap padding cells', () => {
     // Cursor-forward gaps (e.g. ESC[10C) surface as unstyled empty cells; the
     // glyph after the gap must render at its true column, not stretched from
