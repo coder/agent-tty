@@ -87,7 +87,7 @@ mise install
 mise run bootstrap
 ```
 
-If `mise` is unavailable but `pnpm` is available:
+If `mise` is unavailable but pnpm 10 is available (the `packageManager` version in `package.json`; pnpm 11 and later refuse it):
 
 ```sh
 pnpm install
