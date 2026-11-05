@@ -1413,6 +1413,64 @@ describe('a program group with a token, as a faked /proc shows it', () => {
       });
   }
 
+  // A member that a scan shows can end before its autogroup read, so the
+  // judgement reads unknown. A stopped member cannot end.
+  it('freezes a group whose member ends before its autogroup read, and kills it once a stopped member carries the token', () => {
+    procShowsTokenGroup('S');
+    const tokenRead = autogroupFile.read;
+    autogroupFile.read = (file) =>
+      file === '/proc/100/autogroup' ? '' : (tokenRead?.(file) ?? null);
+    const kill = stopShowsMember();
+
+    stopProgramGroup(group);
+
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGKILL'],
+    ]);
+  });
+
+  // A stopped member cannot end, so /proc refused its autogroup. A SIGCONT
+  // would resume a group that job control stopped.
+  it('sends no signal to a stopped group whose member shows no autogroup', () => {
+    procShowsTokenGroup('T');
+    const tokenRead = autogroupFile.read;
+    autogroupFile.read = (file) =>
+      file === '/proc/100/autogroup' ? '' : (tokenRead?.(file) ?? null);
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+    stopProgramGroup(group);
+
+    expect(kill).not.toHaveBeenCalled();
+  });
+
+  // The witness of a judgement can end before it is read again.
+  it('freezes a group whose witness ends before it is read again, and kills it once a stopped member carries the token', () => {
+    procShowsTokenGroup('S');
+    const live = procHooks.stat as Map<string, string | Error>;
+    let reads = 0;
+    procHooks.stat = new (class extends Map<string, string | Error> {
+      override get(pid: string): string | Error | undefined {
+        if (pid !== '100') {
+          return live.get(pid);
+        }
+        // Each judgement reads the member once, and the read of the witness
+        // after it finds the member ended.
+        reads += 1;
+        return reads % 2 === 0 ? errno('ENOENT') : live.get(pid);
+      }
+    })(live);
+    const kill = stopShowsMember();
+
+    stopProgramGroup(group);
+
+    expect(reads).toBe(2);
+    expect(kill.mock.calls).toEqual([
+      [-CHILD_PID, 'SIGSTOP'],
+      [-CHILD_PID, 'SIGKILL'],
+    ]);
+  });
+
   it('freezes a group that no scan shows and kills it once a stopped member carries the token', () => {
     procShowsTokenGroup();
     const kill = stopShowsMember();
@@ -1712,7 +1770,21 @@ describe.runIf(capturesToken)('a program group with a token', () => {
 
       stopProgramGroup(record);
 
-      expect(kill).not.toHaveBeenCalled();
+      // A running member without an autogroup can be a member of a fork
+      // chain that ended between two reads, so the group gets SIGSTOP. Its
+      // stopped member still shows no autogroup, so /proc refuses it, and
+      // the group gets SIGCONT. A SIGSTOP takes effect only when the kernel
+      // runs the member, so under load a judgement can still read it
+      // running, and it gets another SIGSTOP.
+      const stops = kill.mock.calls.filter(
+        ([, signal]) => signal === 'SIGSTOP',
+      ).length;
+      expect(stops).toBeGreaterThanOrEqual(1);
+      expect(stops).toBeLessThanOrEqual(5);
+      expect(kill.mock.calls).toEqual([
+        ...Array.from({ length: stops }, () => [-pid, 'SIGSTOP']),
+        [-pid, 'SIGCONT'],
+      ]);
       expect(isProgramGroupAlive(record)).toBe(true);
       expect(() => process.kill(-pid, 0)).not.toThrow();
     },
