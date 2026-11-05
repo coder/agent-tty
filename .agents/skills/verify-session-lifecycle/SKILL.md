@@ -47,7 +47,7 @@ Yes, when the diff changes any of these:
 - `src/host/manifestWriter.ts` `createSerialManifestWriter`.
 - `src/cli/commands/gc.ts` `gcSessions` and `defaultDependencies`, `src/cli/commands/create.ts` `runCreateCommand` with `waitForReadyHost`, `writeMarkerOrLog` and `hostRuns`, and `src/cli/commands/destroy.ts` `runDestroyCommand` with `rerunInNewSession`.
 - `src/host/sessionState.ts` `setDimensions`, `requestDestroy`, `recordDestroyed` and `recordExit`, `src/host/eventLog.ts` `EventLog.open`, `src/host/rpcServer.ts` `listen` and `close`, `src/host/rpcClient.ts` `toTransportCliError` (which socket errors read as `HOST_UNREACHABLE`).
-- `src/host/hostRecord.ts`: `captureHost`, `writeHostRecord`, `readHostRecord`, `pidExists`, `judgeHost`, `inPidNamespace`, `readTimeNamespace`, `inTimeNamespace`, `readMachineId`, `inHostPidSpace` and `sharesHostPids`.
+- `src/host/hostRecord.ts`: `captureHost`, `writeHostRecord`, `readHostRecord` with its `readHostRecordOrThrow`, `pidExists`, `judgeHost`, `inPidNamespace`, `readTimeNamespace`, `inTimeNamespace`, `readMachineId`, `inHostPidSpace` and `sharesHostPids`.
 - `src/storage/manifests.ts` `readValidatedJsonFile`, `replaceFileAtomic`, `replaceFileAtomicSync`, `writeValidatedJsonFileSync`, `writeManifest`, `writeDestroyMarker` and `writeCreateFailedMarker` with `writeEmptyMarker`.
 - The `SESSION_STATUS_POLICIES` table in `src/protocol/sessionStatusPolicy.ts`.
 - Any new or removed call to `writeManifest`, `persistManifest`, `replaceFileAtomic`, `writeValidatedJsonFile`, `writeTextFileAtomic`, `manifestPath`, `reconcileSession`, `writeProgramRecord` or `stopProgramGroup` (also through an import alias), or a recursive `rm` (one with `recursive: true`, whatever its argument is named), anywhere in `src/`.
