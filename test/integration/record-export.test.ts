@@ -1,5 +1,12 @@
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, readFile, realpath } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import process from 'node:process';
@@ -7,10 +14,16 @@ import process from 'node:process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { readArtifactManifest } from '../../src/storage/artifactManifest.js';
-import { sessionDir } from '../../src/storage/sessionPaths.js';
+import { writeManifest } from '../../src/storage/manifests.js';
+import {
+  eventLogPath,
+  manifestPath,
+  sessionDir,
+} from '../../src/storage/sessionPaths.js';
 import {
   cleanupHome,
   createSession,
+  createTestSessionRecord,
   destroySession,
   runCli,
   type SuccessEnvelope,
@@ -82,6 +95,26 @@ function parseAsciicast(contents: string): unknown[] {
     .trim()
     .split('\n')
     .map((line) => JSON.parse(line) as unknown);
+}
+
+// An exited session whose program printed nothing: its event log is empty.
+// Both PIDs are null, so cleanup signals no process.
+async function createEmptySession(testHome: string): Promise<string> {
+  const sessionId = 'session-empty';
+  const sessionDirectory = sessionDir(testHome, sessionId);
+  await mkdir(sessionDirectory, { recursive: true });
+  await writeManifest(
+    manifestPath(sessionDirectory),
+    createTestSessionRecord({
+      sessionId,
+      status: 'exited',
+      hostPid: null,
+      childPid: null,
+      exitCode: 0,
+    }),
+  );
+  await writeFile(eventLogPath(sessionDirectory), '', 'utf8');
+  return sessionId;
 }
 
 describe('record export integration', { timeout: 120_000 }, () => {
@@ -250,6 +283,90 @@ describe('record export integration', { timeout: 120_000 }, () => {
       }),
     );
     expect(contents).toContain('done');
+  });
+
+  it('exports an empty event log as a header-only asciicast at seq -1', async () => {
+    const sessionId = await createEmptySession(testHome);
+
+    const exportResult = runCli(
+      ['record', 'export', sessionId, '--format', 'asciicast', '--json'],
+      { AGENT_TTY_HOME: testHome },
+      15_000,
+    );
+    expect(exportResult.status).toBe(0);
+    expect(exportResult.stderr).toBe('');
+
+    const envelope = JSON.parse(
+      exportResult.stdout,
+    ) as SuccessEnvelope<RecordExportResult>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.capturedAtSeq).toBe(-1);
+    expect(basename(envelope.result.artifactPath)).toBe(
+      'recording--1-asciicast.cast',
+    );
+    const lines = parseAsciicast(
+      await readFile(envelope.result.artifactPath, 'utf8'),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toEqual(
+      expect.objectContaining({ version: 2, width: 80, height: 24 }),
+    );
+
+    const artifactManifest = await readJsonFile<{
+      artifacts: Array<{ filename: string; capturedAtSeq: number }>;
+    }>(join(testHome, 'sessions', sessionId, 'artifacts', 'manifest.json'));
+    expect(artifactManifest.artifacts.at(-1)).toEqual(
+      expect.objectContaining({
+        filename: 'recording--1-asciicast.cast',
+        capturedAtSeq: -1,
+      }),
+    );
+  });
+
+  // Like snapshot and screenshot of a session that printed nothing (#235),
+  // WebM export succeeds: a blank video of the session's size at seq -1.
+  it('exports an empty event log as a blank webm video at seq -1', async () => {
+    const sessionId = await createEmptySession(testHome);
+
+    const exportResult = runCli(
+      ['record', 'export', sessionId, '--format', 'webm', '--json'],
+      { AGENT_TTY_HOME: testHome },
+      120_000,
+    );
+    expect(exportResult.status).toBe(0);
+    expect(exportResult.stderr).toBe('');
+
+    const envelope = JSON.parse(
+      exportResult.stdout,
+    ) as SuccessEnvelope<RecordExportResult>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result.format).toBe('webm');
+    expect(envelope.result.capturedAtSeq).toBe(-1);
+    expect(envelope.result.durationMs).toBe(0);
+    expect(basename(envelope.result.artifactPath)).toBe(
+      'recording--1-webm.webm',
+    );
+    expect(envelope.result.bytes).toBeGreaterThan(0);
+    const contents = await readFile(envelope.result.artifactPath);
+    expect(contents.byteLength).toBe(envelope.result.bytes);
+    expect(createHash('sha256').update(contents).digest('hex')).toBe(
+      envelope.result.sha256,
+    );
+
+    const artifactManifest = await readJsonFile<{
+      artifacts: Array<{
+        kind: string;
+        filename: string;
+        capturedAtSeq: number;
+      }>;
+    }>(join(testHome, 'sessions', sessionId, 'artifacts', 'manifest.json'));
+    expect(artifactManifest.artifacts.at(-1)).toEqual(
+      expect.objectContaining({
+        kind: 'video',
+        filename: 'recording--1-webm.webm',
+        capturedAtSeq: -1,
+      }),
+    );
   });
 
   it('exports webm video for running sessions', async () => {
