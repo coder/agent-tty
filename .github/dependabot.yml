@@ -3,7 +3,10 @@ updates:
   # pnpm project (Dependabot detects pnpm from pnpm-lock.yaml and the
   # packageManager field). The 7-day cooldown (zizmor's minimum) also exceeds
   # pnpm-workspace.yaml's 1-day minimumReleaseAge, so version updates never
-  # propose a release pnpm would refuse to resolve.
+  # propose a release pnpm would refuse to resolve. Dependabot passes the
+  # cooldown to pnpm as its minimum release age, which pnpm checks against
+  # every locked package: minimumReleaseAgeExclude must cover our own
+  # packages, which we often lock within 7 days of their release.
   - package-ecosystem: npm
     directory: /
     schedule:

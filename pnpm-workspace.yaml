@@ -6,6 +6,12 @@
 # resolver falls back to an older match), and reject versions whose publish
 # trust evidence weakens between releases.
 minimumReleaseAge: 1440
+# Our own packages skip the age check. Dependabot runs pnpm with its 7-day
+# cooldown as the minimum release age, and pnpm applies that age to every
+# locked package, so one @coder/* release younger than 7 days made every npm
+# version update fail.
+minimumReleaseAgeExclude:
+  - '@coder/*'
 trustPolicy: no-downgrade
 
 # Resolve optional platform dependencies for every platform devs and CI use,
