@@ -522,6 +522,30 @@ describe('renderGridFramesToSvg', () => {
     expect(defaultMaxSvgOutputLength(1)).toBe(1);
   });
 
+  it('keeps every element and line break across output chunks', () => {
+    const rows = 40;
+    const cols = 50;
+    const svg = renderGridFramesToSvg({
+      profile: PROFILE,
+      frames: [
+        makeFrame({
+          cols,
+          rows,
+          lines: Array.from({ length: rows }, (_, row) =>
+            Array.from({ length: cols }, (_, col) =>
+              cell('x', { fg: (row + col) % 2 === 0 ? '#ff0000' : '#00ff00' }),
+            ),
+          ),
+        }),
+      ],
+      animate: false,
+    });
+
+    expect(countOccurrences(svg, '<text ')).toBe(rows * cols);
+    expect(svg).not.toContain('\n\n');
+    expect(svg.endsWith('</svg>\n')).toBe(true);
+  });
+
   it('stops with a clear export error when the output passes its length budget', () => {
     const render = (heapSizeLimit: number) =>
       renderGridFramesToSvg({

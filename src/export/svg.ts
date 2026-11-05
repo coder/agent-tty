@@ -65,10 +65,13 @@ export interface SvgRenderOptions {
 export const MAX_SVG_OUTPUT_LENGTH = 2 ** 28;
 
 /**
- * The text lives on the heap twice during the final join, beside the frames.
- * Eight heap bytes per character keeps a dense animation inside a small heap.
+ * The text lives on the heap as flat chunks and once more in the final join,
+ * beside the frames. Eight heap bytes per character keeps a dense animation
+ * inside a small heap.
  */
 const HEAP_BYTES_PER_OUTPUT_CHARACTER = 8;
+
+const SVG_LINES_PER_CHUNK = 1024;
 
 export function defaultMaxSvgOutputLength(heapSizeLimit: number): number {
   invariant(
@@ -654,7 +657,11 @@ export function renderGridFramesToSvg(options: SvgRenderOptions): string {
   const width = formatSvgNumber(canvasCols * SVG_CELL_WIDTH);
   const height = formatSvgNumber(canvasRows * SVG_CELL_HEIGHT);
 
-  const lines: string[] = [];
+  // Each template-literal element is a V8 cons string of several hundred
+  // bytes. Joining them into chunks keeps flat text on the heap, so the
+  // budget's bytes-per-character estimate holds for dense frames.
+  const chunks: string[] = [];
+  let lines: string[] = [];
   let outputLength = 0;
   // Element lists are appended one-by-one rather than push(...spread): a
   // dense frame can produce enough elements to exceed V8's argument limit.
@@ -668,6 +675,10 @@ export function renderGridFramesToSvg(options: SvgRenderOptions): string {
       });
     }
     lines.push(line);
+    if (lines.length === SVG_LINES_PER_CHUNK) {
+      chunks.push(lines.join('\n'));
+      lines = [];
+    }
   };
   for (const line of [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="${escapeXml(profile.fontFamily)}" font-size="${formatSvgNumber(profile.fontSize)}" fill="${escapeXml(profile.foregroundColor)}">`,
@@ -719,5 +730,8 @@ export function renderGridFramesToSvg(options: SvgRenderOptions): string {
   }
 
   push('</svg>');
-  return `${lines.join('\n')}\n`;
+  if (lines.length > 0) {
+    chunks.push(lines.join('\n'));
+  }
+  return `${chunks.join('\n')}\n`;
 }
