@@ -1833,11 +1833,21 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
       vi.stubEnv('XDG_STATE_HOME', join(testHome, 'state'));
       let pgid = 0;
       try {
-        const sessionId = createSession(testHome, [
-          '/bin/sh',
-          '-c',
-          'trap "" HUP; sleep 300 & exit 0',
-        ]);
+        // A host that a loaded machine does not run for a while after it
+        // spawns the program reads the program's session after it exited.
+        const sessionId = createSession(
+          testHome,
+          ['/bin/sh', '-c', 'trap "" HUP; sleep 300 & exit 0'],
+          {
+            env: {
+              AGENT_TTY_TEST_STALL_AFTER_SPAWN_MS: '200',
+              NODE_OPTIONS: [
+                process.env.NODE_OPTIONS ?? '',
+                `--import=${pathToFileURL(resolve('test/fixtures/stall-after-spawn.ts')).href}`,
+              ].join(' '),
+            },
+          },
+        );
         pgid = inspectSession(testHome, sessionId).childPid as number;
         const deadline = Date.now() + 10_000;
         while (inspectSession(testHome, sessionId).status !== 'exited') {
