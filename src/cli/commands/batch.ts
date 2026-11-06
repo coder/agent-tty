@@ -8,7 +8,6 @@ import type { BatchPlan } from '../../batch/plan.js';
 import type { BatchResult, BatchStepRecord } from '../../batch/result.js';
 
 import { resolveCommandTarget } from '../commandTarget.js';
-import { readEventLogStopForTimeout } from '../eventLogStop.js';
 import { exitCodeForError } from '../exitCodes.js';
 import { emitFailure, emitSuccess, emitSuccessSync } from '../output.js';
 import { executeBatch } from '../../batch/executor.js';
@@ -317,8 +316,6 @@ export async function runBatchCommand(options: CommandOptions): Promise<void> {
         driver,
         keepGoing: options.keepGoing,
         assertCommandable,
-        readEventLogStop: () =>
-          readEventLogStopForTimeout(target.sessionDirectory),
         onStep,
       }),
   );

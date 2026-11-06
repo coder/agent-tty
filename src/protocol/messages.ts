@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 import type {
+  EventLogStop as EventLogStopType,
+  EventLogStopReason as EventLogStopReasonType,
   MissingGlyph as MissingGlyphType,
   RecordedMissingGlyph as RecordedMissingGlyphType,
   RecordDiffLine as RecordDiffLineType,
@@ -13,6 +15,7 @@ import type {
 } from './schemas.js';
 
 import {
+  EventLogStopSchema,
   RendererRuntimeSummarySchema,
   ScreenshotParamsSchema,
   ScreenshotResultSchema,
@@ -28,6 +31,8 @@ import {
 import { RendererNameSchema } from '../renderer/names.js';
 
 export {
+  EventLogStopReasonSchema,
+  EventLogStopSchema,
   MissingGlyphSchema,
   RecordedMissingGlyphSchema,
   RecordDiffLineSchema,
@@ -200,22 +205,6 @@ export const ArtifactHealthSummarySchema = z
   .strict();
 export type ArtifactHealthSummary = z.infer<typeof ArtifactHealthSummarySchema>;
 
-// Why the event log stopped taking records (see `EventLog.queueAppend`):
-// `bytes` when the file reached its size limit, `events` when it reached its
-// entry limit.
-export const EventLogStopReasonSchema = z.enum(['bytes', 'events']);
-export type EventLogStopReason = z.infer<typeof EventLogStopReasonSchema>;
-
-// Read from the stop marker that the host writes into `events.jsonl`: the
-// `seq` of that marker and the limit it names.
-export const EventLogStopSchema = z
-  .object({
-    reason: EventLogStopReasonSchema,
-    seq: z.number().int().nonnegative(),
-  })
-  .strict();
-export type EventLogStop = z.infer<typeof EventLogStopSchema>;
-
 export const InspectResultSchema = z
   .object({
     session: SessionRecordSchema,
@@ -231,17 +220,24 @@ export const InspectResultSchema = z
     // mode (`usedOfflineReplay === true` or the session is not live-host
     // eligible).
     host: HostInfoSchema.optional(),
-    // Populated in both live and offline-replay modes from a `stat()` on the
-    // session's `events.jsonl`. Absent only when the event log file is
-    // missing on disk (e.g. a session that crashed before its first write).
+    // Populated in both live and offline-replay modes: the bytes that one
+    // read of the session's `events.jsonl` returned, the same read that
+    // counts `eventCount` and finds `eventLogStop`. Absent only when the
+    // event log file is missing on disk (e.g. a session that crashed before
+    // its first write).
     eventLogBytes: z.number().int().nonnegative().optional(),
     // Present only when the stored event log holds the stop marker, so
     // later events (and so later output) are missing from every snapshot,
-    // wait and export. Read from `events.jsonl`, in live and offline modes.
+    // wait and export. Read from `events.jsonl` in one pass with
+    // `eventCount`, in live and offline modes.
     eventLogStop: EventLogStopSchema.optional(),
   })
   .strict();
 export type InspectResult = z.infer<typeof InspectResultSchema>;
+
+export type EventLogStopReason = EventLogStopReasonType;
+
+export type EventLogStop = EventLogStopType;
 
 export type ReplayTimingMode = ReplayTimingModeType;
 

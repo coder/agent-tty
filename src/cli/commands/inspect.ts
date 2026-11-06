@@ -12,11 +12,6 @@ import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
 import { describeEventLogStop } from '../eventLogStop.js';
 
-import {
-  countEventLogEntries,
-  readEventLogStop,
-  statEventLogBytes,
-} from '../../host/eventLog.js';
 import { isMarkedDestroyed, reconcileSession } from '../../host/lifecycle.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import {
@@ -28,6 +23,7 @@ import { deriveTerminationCategory } from '../../protocol/terminationCategory.js
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
 import { emitSuccess } from '../output.js';
 import { computeArtifactHealth } from '../../storage/artifactHealth.js';
+import { scanEventLog } from '../../storage/eventLogCodec.js';
 import { readManifest, readManifestIfExists } from '../../storage/manifests.js';
 import {
   eventLogPath,
@@ -265,9 +261,12 @@ export async function runInspectCommand(
   }
 
   const eventLogFile = eventLogPath(sessionDirectory);
-  const eventCount = await countEventLogEntries(eventLogFile);
-  const eventLogBytes = await statEventLogBytes(eventLogFile);
-  const eventLogStop = await readEventLogStop(eventLogFile);
+  // One read gives the count, the size and the stop, so a live host that
+  // writes the stop marker meanwhile cannot make them disagree.
+  const eventLogScan = await scanEventLog(eventLogFile);
+  const eventCount = eventLogScan?.entryCount ?? 0;
+  const eventLogBytes = eventLogScan?.byteCount;
+  const eventLogStop = eventLogScan?.stop;
   const uptime = computeUptime(session);
   let artifacts: ArtifactHealthSummary | undefined;
   try {

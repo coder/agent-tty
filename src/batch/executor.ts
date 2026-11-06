@@ -9,7 +9,6 @@ import type { StepDriver } from './stepDriver.js';
 
 import { CliError } from '../cli/errors.js';
 import { eventLogStopTimeoutNote } from '../cli/eventLogStop.js';
-import type { EventLogStop } from '../protocol/messages.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { unreachable } from '../util/assert.js';
 import { unreachedStepRecord } from './result.js';
@@ -21,10 +20,6 @@ export interface ExecuteBatchOptions {
   // Re-check commandability around each Render Wait (rejecting with a CliError)
   // so a Session that dies mid-Batch fails the wait rather than racing it.
   assertCommandable?: () => Promise<void>;
-  // Where the session's stored event log stopped, if it did. A Render Wait
-  // that times out reads it, so its error can say that later output is not
-  // seen.
-  readEventLogStop?: () => Promise<EventLogStop | undefined>;
   onStep?: (record: BatchStepRecord) => void;
 }
 
@@ -72,14 +67,7 @@ function classifyRunOutcome(run: {
 export async function executeBatch(
   opts: ExecuteBatchOptions,
 ): Promise<BatchResult> {
-  const {
-    plan,
-    driver,
-    keepGoing,
-    assertCommandable,
-    readEventLogStop,
-    onStep,
-  } = opts;
+  const { plan, driver, keepGoing, assertCommandable, onStep } = opts;
 
   const steps: BatchStepRecord[] = [];
   const failedIndices: number[] = [];
@@ -118,7 +106,6 @@ export async function executeBatch(
         lastInputSeq,
         startedAt,
         assertCommandable,
-        readEventLogStop,
       );
     } catch (error) {
       const cliError =
@@ -152,7 +139,6 @@ async function runStep(
   lastInputSeq: number | undefined,
   startedAt: number,
   assertCommandable: (() => Promise<void>) | undefined,
-  readEventLogStop: ExecuteBatchOptions['readEventLogStop'],
 ): Promise<BatchStepRecord> {
   switch (step.kind) {
     case 'type': {
@@ -207,7 +193,6 @@ async function runStep(
         lastInputSeq,
         startedAt,
         assertCommandable,
-        readEventLogStop,
       );
     default:
       return unreachable(step, `batch step kind dispatch at index ${index}`);
@@ -266,7 +251,6 @@ async function runWaitStep(
   lastInputSeq: number | undefined,
   startedAt: number,
   assertCommandable: (() => Promise<void>) | undefined,
-  readEventLogStop: ExecuteBatchOptions['readEventLogStop'],
 ): Promise<WaitStepRecord> {
   await assertCommandable?.();
 
@@ -293,7 +277,6 @@ async function runWaitStep(
   // A timed-out wait (equivalently an unmatched result) is not a thrown error
   // from the driver, so classify it here as a failed step with its own code.
   if (result.timedOut || !result.matched) {
-    const eventLogStop = await readEventLogStop?.();
     return {
       index,
       durationMs: Date.now() - startedAt,
@@ -307,9 +290,10 @@ async function runWaitStep(
             result.timedOut && step.timeoutMs !== undefined
               ? `Render wait at step ${String(index)} timed out after ${String(step.timeoutMs)} ms.`
               : `Render wait at step ${String(index)} timed out before its condition was met.`,
-            ...(eventLogStop === undefined
+            // The host sends the stop with a timed-out result.
+            ...(result.eventLogStop === undefined
               ? []
-              : [eventLogStopTimeoutNote(eventLogStop)]),
+              : [eventLogStopTimeoutNote(result.eventLogStop)]),
           ].join(' '),
         }),
       ),

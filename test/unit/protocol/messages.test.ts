@@ -357,7 +357,7 @@ describe('RPC message schemas', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts an event log stop with either reason and keeps it minimal', () => {
+  it('accepts an event log stop with each reason and keeps it minimal', () => {
     const inspect = (eventLogStop: unknown) =>
       InspectResultSchema.safeParse({
         session: createSessionRecord(),
@@ -373,6 +373,7 @@ describe('RPC message schemas', () => {
 
     expect(inspect({ reason: 'bytes', seq: 0 })).toBe(true);
     expect(inspect({ reason: 'events', seq: 249_998 })).toBe(true);
+    expect(inspect({ reason: 'unknown', seq: 3 })).toBe(true);
     expect(inspect({ reason: 'entries', seq: 4 })).toBe(false);
     expect(inspect({ reason: 'bytes', seq: -1 })).toBe(false);
     expect(inspect({ reason: 'bytes', seq: 1.5 })).toBe(false);
@@ -805,6 +806,34 @@ describe('RPC message schemas', () => {
         capturedAtSeq: 7,
       }).success,
     ).toBe(true);
+  });
+
+  it('accepts a timed-out waitForRender result that carries the event log stop', () => {
+    const timedOut = { matched: false, timedOut: true, capturedAtSeq: 7 };
+    const withStop = (eventLogStop: unknown) => ({ ...timedOut, eventLogStop });
+
+    expect(WaitForRenderResultSchema.safeParse(timedOut).success).toBe(true);
+    for (const reason of ['bytes', 'events', 'unknown']) {
+      const result = withStop({ reason, seq: 7 });
+      expect(WaitForRenderResultSchema.safeParse(result).success).toBe(true);
+      // The host validates every RPC result against this schema.
+      expect(
+        RpcMethodSchemas.waitForRender.result.safeParse(result).success,
+      ).toBe(true);
+    }
+    expect(
+      WaitForRenderResultSchema.safeParse(withStop({ reason: 'bytes' }))
+        .success,
+    ).toBe(false);
+    expect(
+      WaitForRenderResultSchema.safeParse(withStop({ reason: 'x', seq: 7 }))
+        .success,
+    ).toBe(false);
+    expect(
+      WaitForRenderResultSchema.safeParse(
+        withStop({ reason: 'bytes', seq: 7, limit: 1 }),
+      ).success,
+    ).toBe(false);
   });
 
   it('accepts valid record diff results', () => {

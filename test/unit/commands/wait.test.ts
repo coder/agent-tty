@@ -1,6 +1,3 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,7 +10,6 @@ const mocks = vi.hoisted(() => ({
   readManifestIfExists: vi.fn(),
   resolveHome: vi.fn(),
   sessionDir: vi.fn(),
-  eventLogPath: vi.fn(),
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
   withOfflineReplayRenderer: vi.fn(),
@@ -41,7 +37,6 @@ vi.mock('../../../src/storage/home.js', () => ({
 
 vi.mock('../../../src/storage/sessionPaths.js', () => ({
   sessionDir: mocks.sessionDir,
-  eventLogPath: mocks.eventLogPath,
   manifestPath: mocks.manifestPath,
   socketPath: mocks.socketPath,
 }));
@@ -108,13 +103,14 @@ function createOptions(
 
 function mockOfflineReplaySnapshot(
   snapshotOverrides: Parameters<typeof createTestSemanticSnapshot>[0] = {},
+  events: unknown[] = [],
 ): void {
   mocks.withOfflineReplayRenderer.mockImplementation(
     async (
       _options: unknown,
       run: (context: {
         manifest: ReturnType<typeof createSessionRecord>;
-        replayInput: Record<string, never>;
+        replayInput: { events: unknown[] };
         backend: {
           snapshot: (options?: unknown) => Promise<unknown>;
         };
@@ -128,7 +124,7 @@ function mockOfflineReplaySnapshot(
 
       return run({
         manifest: createSessionRecord('exited', 0),
-        replayInput: {},
+        replayInput: { events },
         backend: mockBackend,
       });
     },
@@ -145,9 +141,6 @@ describe('wait command', () => {
     );
     mocks.manifestPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/session.json`,
-    );
-    mocks.eventLogPath.mockImplementation(
-      (sessionDirectory: string) => `${sessionDirectory}/events.jsonl`,
     );
     mocks.socketPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
@@ -648,40 +641,31 @@ describe('wait command', () => {
     });
   });
 
-  describe('when the stored event log stopped', () => {
+  describe('when the event log stopped', () => {
     const renderTimeout = { matched: false, timedOut: true, capturedAtSeq: 1 };
+    const stopped = { reason: 'bytes', seq: 1 };
     const stopNote =
       'The event log stopped at seq 1 (byte limit), so output after it is not seen.';
-    let tempDir = '';
-    let eventLogFile = '';
+    const plainTimeout = 'Wait timed out before its condition was met.';
 
-    function recordLine(seq: number, type: string, payload: object): string {
-      return `${JSON.stringify({
-        seq,
+    const stopMarker = (seq: number, label: string) => ({
+      seq,
+      ts: '2026-03-19T12:00:00.000Z',
+      type: 'marker',
+      payload: { label },
+    });
+    const stopEvents = [
+      {
+        seq: 0,
         ts: '2026-03-19T12:00:00.000Z',
-        type,
-        payload,
-      })}\n`;
-    }
-
-    beforeEach(async () => {
-      tempDir = await mkdtemp(join(tmpdir(), 'agent-tty-wait-stop-'));
-      eventLogFile = join(tempDir, 'events.jsonl');
-      await writeFile(
-        eventLogFile,
-        recordLine(0, 'output', { data: 'hello' }) +
-          recordLine(1, 'marker', {
-            label:
-              'agent-tty: event log limit reached (52428800 bytes); later events are not recorded',
-          }),
-        'utf8',
-      );
-      mocks.eventLogPath.mockReturnValue(eventLogFile);
-    });
-
-    afterEach(async () => {
-      await rm(tempDir, { recursive: true, force: true });
-    });
+        type: 'output',
+        payload: { data: 'hello' },
+      },
+      stopMarker(
+        1,
+        'agent-tty: event log limit reached (52428800 bytes); later events are not recorded',
+      ),
+    ];
 
     it.each([
       ['--text', { text: 'later' }, 30_000],
@@ -690,36 +674,37 @@ describe('wait command', () => {
       ['--cursor-row', { cursorRow: 3 }, 30_000],
       ['--after-seq', { text: 'later', afterSeq: 0 }, 30_000],
     ])(
-      'names the stop in the WAIT_TIMEOUT of a %s wait',
+      'names the stop that the host reports in the WAIT_TIMEOUT of a %s wait',
       async (_flag, flags, timeoutMs) => {
-        mocks.sendRpc.mockResolvedValue(renderTimeout);
+        const result = { ...renderTimeout, eventLogStop: stopped };
+        mocks.sendRpc.mockResolvedValue(result);
 
         await expect(
           runWaitCommand(createOptions(flags)),
         ).rejects.toMatchObject({
           code: ERROR_CODES.WAIT_TIMEOUT,
-          message: `Wait timed out before its condition was met. ${stopNote}`,
+          message: `${plainTimeout} ${stopNote}`,
           details: {
             sessionId: 'session-01',
             timeoutMs,
-            eventLogStop: { reason: 'bytes', seq: 1 },
+            eventLogStop: stopped,
           },
-          result: renderTimeout,
+          result,
         });
-        expect(mocks.eventLogPath).toHaveBeenCalledWith(
-          '/tmp/agent-tty/sessions/session-01',
-        );
       },
     );
 
     it('names the stop under --json too', async () => {
-      mocks.sendRpc.mockResolvedValue(renderTimeout);
+      mocks.sendRpc.mockResolvedValue({
+        ...renderTimeout,
+        eventLogStop: stopped,
+      });
 
       await expect(
         runWaitCommand(createOptions({ json: true, text: 'later' })),
       ).rejects.toMatchObject({
         code: ERROR_CODES.WAIT_TIMEOUT,
-        message: `Wait timed out before its condition was met. ${stopNote}`,
+        message: `${plainTimeout} ${stopNote}`,
       });
     });
 
@@ -728,7 +713,7 @@ describe('wait command', () => {
       try {
         mocks.sendRpc.mockImplementation(() => {
           vi.advanceTimersByTime(1000);
-          return Promise.resolve(renderTimeout);
+          return Promise.resolve({ ...renderTimeout, eventLogStop: stopped });
         });
 
         await expect(
@@ -740,6 +725,40 @@ describe('wait command', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it.each([
+      ['bytes', 'byte limit'],
+      ['events', 'event limit'],
+      ['unknown', 'reason unknown'],
+    ])('words the %s reason as "%s"', async (reason, words) => {
+      mocks.sendRpc.mockResolvedValue({
+        ...renderTimeout,
+        eventLogStop: { reason, seq: 7 },
+      });
+
+      await expect(
+        runWaitCommand(createOptions({ text: 'later' })),
+      ).rejects.toMatchObject({
+        message: `${plainTimeout} The event log stopped at seq 7 (${words}), so output after it is not seen.`,
+        details: { eventLogStop: { reason, seq: 7 } },
+      });
+    });
+
+    it('keeps the plain WAIT_TIMEOUT when the host reports no stop', async () => {
+      mocks.sendRpc.mockResolvedValue(renderTimeout);
+
+      const error = (await runWaitCommand(
+        createOptions({ text: 'later' }),
+      ).catch((caught: unknown) => caught)) as {
+        message: string;
+        details: object;
+      };
+      expect(error.message).toBe(plainTimeout);
+      expect(error.details).toEqual({
+        sessionId: 'session-01',
+        timeoutMs: 30_000,
+      });
     });
 
     it('leaves a wait that matched as it is', async () => {
@@ -756,7 +775,6 @@ describe('wait command', () => {
       expect(mocks.emitSuccess).toHaveBeenCalledWith(
         expect.objectContaining({ command: 'wait', result }),
       );
-      expect(mocks.eventLogPath).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -776,45 +794,91 @@ describe('wait command', () => {
           sessionId: 'session-01',
           timeoutMs: 1000,
         });
-        expect(mocks.eventLogPath).not.toHaveBeenCalled();
       },
     );
 
-    it('keeps the plain WAIT_TIMEOUT when the log has not stopped', async () => {
-      await writeFile(
-        eventLogFile,
-        recordLine(0, 'output', { data: 'hello' }),
-        'utf8',
-      );
-      mocks.sendRpc.mockResolvedValue(renderTimeout);
-
-      const error = (await runWaitCommand(
-        createOptions({ text: 'later' }),
-      ).catch((caught: unknown) => caught)) as {
-        message: string;
-        details: object;
-      };
-      expect(error.message).toBe(
-        'Wait timed out before its condition was met.',
-      );
-      expect(error.details).toEqual({
-        sessionId: 'session-01',
-        timeoutMs: 30_000,
+    describe('offline, after the host became unreachable', () => {
+      beforeEach(() => {
+        mocks.sendRpc.mockRejectedValue(
+          makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+            message: 'Session host is unreachable.',
+          }),
+        );
       });
-    });
 
-    it.each([
-      ['is missing', () => join(tempDir, 'missing', 'events.jsonl')],
-      ['cannot be read', () => join(eventLogFile, 'events.jsonl')],
-    ])('keeps the plain WAIT_TIMEOUT when the log %s', async (_case, path) => {
-      mocks.eventLogPath.mockReturnValue(path());
-      mocks.sendRpc.mockResolvedValue(renderTimeout);
+      it('names the stop of the replayed events when the snapshot does not satisfy the wait', async () => {
+        mockOfflineReplaySnapshot(
+          {
+            capturedAtSeq: 1,
+            visibleLines: [{ row: 0, text: 'hello' }],
+          },
+          stopEvents,
+        );
 
-      await expect(
-        runWaitCommand(createOptions({ text: 'later' })),
-      ).rejects.toMatchObject({
-        code: ERROR_CODES.WAIT_TIMEOUT,
-        message: 'Wait timed out before its condition was met.',
+        await expect(
+          runWaitCommand(createOptions({ text: 'later' })),
+        ).rejects.toMatchObject({
+          code: ERROR_CODES.REPLAY_ERROR,
+          message: `Session host became unreachable during render wait, and the latest offline snapshot did not satisfy the requested wait condition. ${stopNote}`,
+          details: {
+            text: 'later',
+            capturedAtSeq: 1,
+            visibleLines: ['hello'],
+            eventLogStop: stopped,
+          },
+        });
+      });
+
+      it('names a stop whose label names no limit', async () => {
+        mockOfflineReplaySnapshot({ capturedAtSeq: 0 }, [
+          stopMarker(0, 'agent-tty: event log limit reached (soon)'),
+        ]);
+
+        const error = (await runWaitCommand(
+          createOptions({ text: 'later' }),
+        ).catch((caught: unknown) => caught)) as {
+          message: string;
+          details: object;
+        };
+        expect(
+          error.message.endsWith(
+            'The event log stopped at seq 0 (reason unknown), so output after it is not seen.',
+          ),
+        ).toBe(true);
+        expect(error.details).toMatchObject({
+          eventLogStop: { reason: 'unknown', seq: 0 },
+        });
+      });
+
+      it('keeps the plain REPLAY_ERROR when the replayed events hold no stop', async () => {
+        mockOfflineReplaySnapshot(
+          { capturedAtSeq: 0, visibleLines: [{ row: 0, text: 'hello' }] },
+          [stopEvents[0]],
+        );
+
+        const error = (await runWaitCommand(
+          createOptions({ text: 'later' }),
+        ).catch((caught: unknown) => caught)) as {
+          message: string;
+          details: object;
+        };
+        expect(error.message).not.toContain('event log');
+        expect(error.details).not.toHaveProperty('eventLogStop');
+      });
+
+      it('does not name the stop when the snapshot satisfies the wait', async () => {
+        mockOfflineReplaySnapshot(
+          { capturedAtSeq: 1, visibleLines: [{ row: 0, text: 'hello' }] },
+          stopEvents,
+        );
+
+        await runWaitCommand(createOptions({ text: 'hello' }));
+
+        const emitted = mocks.emitSuccess.mock.calls[0] as [
+          { command: string; result: object },
+        ];
+        expect(emitted[0].command).toBe('wait');
+        expect(emitted[0].result).not.toHaveProperty('eventLogStop');
       });
     });
   });

@@ -4,9 +4,7 @@ import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 
 const mocks = vi.hoisted(() => ({
   computeArtifactHealth: vi.fn(),
-  countEventLogEntries: vi.fn(),
-  readEventLogStop: vi.fn(),
-  statEventLogBytes: vi.fn(),
+  scanEventLog: vi.fn(),
   deriveTerminationCategory: vi.fn(),
   emitSuccess: vi.fn(),
   reconcileSession: vi.fn(),
@@ -20,14 +18,24 @@ const mocks = vi.hoisted(() => ({
   socketPath: vi.fn(),
 }));
 
+// What `scanEventLog` returns for a log of `entryCount` records that has not
+// stopped.
+function scanOf(
+  entryCount: number,
+  overrides: {
+    byteCount?: number;
+    stop?: { reason: string; seq: number };
+  } = {},
+) {
+  return { entryCount, byteCount: 1024, stop: undefined, ...overrides };
+}
+
 vi.mock('../../../src/cli/output.js', () => ({
   emitSuccess: mocks.emitSuccess,
 }));
 
-vi.mock('../../../src/host/eventLog.js', () => ({
-  countEventLogEntries: mocks.countEventLogEntries,
-  readEventLogStop: mocks.readEventLogStop,
-  statEventLogBytes: mocks.statEventLogBytes,
+vi.mock('../../../src/storage/eventLogCodec.js', () => ({
+  scanEventLog: mocks.scanEventLog,
 }));
 
 vi.mock('../../../src/host/lifecycle.js', () => ({
@@ -135,9 +143,7 @@ describe('inspect command', () => {
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
     );
     mocks.computeArtifactHealth.mockResolvedValue(DEFAULT_ARTIFACT_HEALTH);
-    mocks.countEventLogEntries.mockResolvedValue(2);
-    mocks.readEventLogStop.mockResolvedValue(undefined);
-    mocks.statEventLogBytes.mockResolvedValue(undefined);
+    mocks.scanEventLog.mockResolvedValue(scanOf(2));
     mocks.deriveTerminationCategory.mockReturnValue('running');
     mocks.readManifestIfExists.mockResolvedValue(
       createSessionRecord('running'),
@@ -164,7 +170,7 @@ describe('inspect command', () => {
       '/tmp/agent-tty/sessions/session-01/rpc.sock',
       'inspect',
     );
-    expect(mocks.countEventLogEntries).toHaveBeenCalledWith(
+    expect(mocks.scanEventLog).toHaveBeenCalledWith(
       '/tmp/agent-tty/sessions/session-01/events.jsonl',
     );
     expect(mocks.computeArtifactHealth).toHaveBeenCalledWith(
@@ -232,9 +238,6 @@ describe('inspect command', () => {
       sessionId: 'session-01',
     });
 
-    expect(mocks.readEventLogStop).toHaveBeenCalledWith(
-      '/tmp/agent-tty/sessions/session-01/events.jsonl',
-    );
     const emitted = getLastEmitSuccessPayload() as {
       result: object;
       lines: string[];
@@ -246,11 +249,14 @@ describe('inspect command', () => {
   it.each([
     ['bytes', 'byte limit'],
     ['events', 'event limit'],
+    ['unknown', 'reason unknown'],
   ] as const)(
     'reports the stop of the stored log with the %s reason, from a live host',
     async (reason, words) => {
       mocks.sendRpc.mockResolvedValue({ session: createSessionRecord() });
-      mocks.readEventLogStop.mockResolvedValue({ reason, seq: 41 });
+      mocks.scanEventLog.mockResolvedValue(
+        scanOf(42, { stop: { reason, seq: 41 } }),
+      );
 
       await runInspectCommand({
         context: TEST_CONTEXT,
@@ -276,7 +282,9 @@ describe('inspect command', () => {
       }),
     );
     mocks.readManifest.mockResolvedValue(createSessionRecord('exited'));
-    mocks.readEventLogStop.mockResolvedValue({ reason: 'bytes', seq: 7 });
+    mocks.scanEventLog.mockResolvedValue(
+      scanOf(8, { stop: { reason: 'bytes', seq: 7 } }),
+    );
 
     await runInspectCommand({
       context: TEST_CONTEXT,
@@ -289,6 +297,53 @@ describe('inspect command', () => {
     };
     expect(emitted.result.usedOfflineReplay).toBe(true);
     expect(emitted.result.eventLogStop).toEqual({ reason: 'bytes', seq: 7 });
+  });
+
+  it('takes the count, the size and the stop from one read of the log', async () => {
+    mocks.sendRpc.mockResolvedValue({ session: createSessionRecord() });
+    mocks.scanEventLog.mockResolvedValue(
+      scanOf(8, { byteCount: 5000, stop: { reason: 'events', seq: 7 } }),
+    );
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    expect(mocks.scanEventLog).toHaveBeenCalledTimes(1);
+    const { result } = getLastEmitSuccessPayload() as {
+      result: {
+        eventCount: number;
+        lastEventSeq: number;
+        eventLogBytes: number;
+        eventLogStop: { seq: number };
+      };
+    };
+    expect(result).toMatchObject({
+      eventCount: 8,
+      lastEventSeq: 7,
+      eventLogBytes: 5000,
+      eventLogStop: { reason: 'events', seq: 7 },
+    });
+    // The stop marker is one of the counted records.
+    expect(result.eventLogStop.seq).toBeLessThanOrEqual(result.lastEventSeq);
+  });
+
+  it('shows an empty log and no size when the log file is missing', async () => {
+    mocks.sendRpc.mockResolvedValue({ session: createSessionRecord() });
+    mocks.scanEventLog.mockResolvedValue(undefined);
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    const { result } = getLastEmitSuccessPayload() as { result: object };
+    expect(result).toMatchObject({ eventCount: 0, lastEventSeq: undefined });
+    expect(result).not.toHaveProperty('eventLogBytes');
+    expect(result).not.toHaveProperty('eventLogStop');
   });
 
   it('treats exiting sessions as live-host renderer runtime', async () => {
@@ -339,7 +394,7 @@ describe('inspect command', () => {
       new Error('EACCES: permission denied'),
     );
     mocks.sendRpc.mockResolvedValueOnce({ session: liveSession });
-    mocks.countEventLogEntries.mockResolvedValueOnce(5);
+    mocks.scanEventLog.mockResolvedValueOnce(scanOf(5));
     mocks.deriveTerminationCategory.mockReturnValueOnce('running');
 
     await runInspectCommand({
@@ -424,7 +479,7 @@ describe('inspect command', () => {
     expect(mocks.readManifest).toHaveBeenCalledWith(
       '/tmp/agent-tty/sessions/session-01/session.json',
     );
-    expect(mocks.countEventLogEntries).toHaveBeenCalledWith(
+    expect(mocks.scanEventLog).toHaveBeenCalledWith(
       '/tmp/agent-tty/sessions/session-01/events.jsonl',
     );
     expect(mocks.computeArtifactHealth).toHaveBeenCalledWith(
@@ -491,7 +546,7 @@ describe('inspect command', () => {
       ...failedSession,
       status: 'destroyed',
     });
-    mocks.countEventLogEntries.mockResolvedValueOnce(3);
+    mocks.scanEventLog.mockResolvedValueOnce(scanOf(3));
 
     await runInspectCommand({
       context: TEST_CONTEXT,
@@ -517,7 +572,7 @@ describe('inspect command', () => {
         message: 'disk full',
       }),
     );
-    mocks.countEventLogEntries.mockResolvedValueOnce(3);
+    mocks.scanEventLog.mockResolvedValueOnce(scanOf(3));
 
     await runInspectCommand({
       context: TEST_CONTEXT,
@@ -542,7 +597,7 @@ describe('inspect command', () => {
         code: 'EPERM',
       }),
     );
-    mocks.countEventLogEntries.mockResolvedValueOnce(3);
+    mocks.scanEventLog.mockResolvedValueOnce(scanOf(3));
 
     await runInspectCommand({
       context: TEST_CONTEXT,
@@ -559,7 +614,7 @@ describe('inspect command', () => {
   it('reports offline replay renderer runtime for exited sessions', async () => {
     const exitedSession = createSessionRecord('exited');
     mocks.readManifestIfExists.mockResolvedValueOnce(exitedSession);
-    mocks.countEventLogEntries.mockResolvedValueOnce(3);
+    mocks.scanEventLog.mockResolvedValueOnce(scanOf(3));
     mocks.deriveTerminationCategory.mockReturnValueOnce('clean-exit');
 
     await runInspectCommand({
@@ -599,7 +654,7 @@ describe('inspect command', () => {
   it('reports offline replay renderer runtime for destroying sessions', async () => {
     const destroyingSession = createSessionRecord('destroying');
     mocks.readManifestIfExists.mockResolvedValueOnce(destroyingSession);
-    mocks.countEventLogEntries.mockResolvedValueOnce(4);
+    mocks.scanEventLog.mockResolvedValueOnce(scanOf(4));
     mocks.deriveTerminationCategory.mockReturnValueOnce('destroyed');
 
     await runInspectCommand({
@@ -638,7 +693,7 @@ describe('inspect command', () => {
 
   it('omits last event sequence from human output when the event log is empty', async () => {
     const liveSession = createSessionRecord('running');
-    mocks.countEventLogEntries.mockResolvedValue(0);
+    mocks.scanEventLog.mockResolvedValue(scanOf(0));
     mocks.sendRpc.mockResolvedValue({ session: liveSession });
 
     await runInspectCommand({
@@ -791,7 +846,7 @@ describe('inspect command', () => {
   it('surfaces eventLogBytes in both live and offline modes', async () => {
     const liveSession = createSessionRecord('running');
     mocks.sendRpc.mockResolvedValue({ session: liveSession });
-    mocks.statEventLogBytes.mockResolvedValue(4096);
+    mocks.scanEventLog.mockResolvedValue(scanOf(2, { byteCount: 4096 }));
 
     await runInspectCommand({
       context: TEST_CONTEXT,
@@ -813,7 +868,7 @@ describe('inspect command', () => {
       }),
     );
     mocks.readManifest.mockResolvedValue(reconciledSession);
-    mocks.statEventLogBytes.mockResolvedValue(8192);
+    mocks.scanEventLog.mockResolvedValue(scanOf(2, { byteCount: 8192 }));
 
     await runInspectCommand({
       context: TEST_CONTEXT,

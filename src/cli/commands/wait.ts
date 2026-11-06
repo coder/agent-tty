@@ -9,10 +9,7 @@ import type { SemanticSnapshot } from '../../renderer/types.js';
 import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
 
-import {
-  eventLogStopTimeoutNote,
-  readEventLogStopForTimeout,
-} from '../eventLogStop.js';
+import { eventLogStopTimeoutNote } from '../eventLogStop.js';
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
@@ -32,6 +29,7 @@ import {
 import { computeScreenHash } from '../../renderer/canonicalScreen.js';
 import { isTerminalSessionStatus } from '../../protocol/sessionStatusPolicy.js';
 import { withOfflineReplayRenderer } from '../../replay/offlineReplay.js';
+import { findEventLogStop } from '../../storage/eventLogCodec.js';
 import { readManifestIfExists } from '../../storage/manifests.js';
 import { manifestPath, socketPath } from '../../storage/sessionPaths.js';
 import {
@@ -164,18 +162,19 @@ function timeoutMessage(
   return `Wait timed out after ${String(timeoutMs)} ms.`;
 }
 
-// Only render waits pass `eventLogStop`: they read the stored event log, so
-// output after the log stopped is not seen. The message says so, and
-// `details` carries the same facts.
+// A render wait reads the event log, so output after the log stopped is not
+// seen. The host sends `eventLogStop` with a timed-out result. The message
+// says so, and `details` carries the same facts.
 function throwIfTimedOut(
   result: WaitResult | WaitForRenderResult,
   options: CommandOptions,
   timeoutMs: number,
   elapsedMs: number,
-  eventLogStop?: EventLogStop,
 ): void {
   if (result.timedOut) {
     const message = timeoutMessage(options, timeoutMs, elapsedMs);
+    const eventLogStop =
+      'eventLogStop' in result ? result.eventLogStop : undefined;
     throw makeCliError(ERROR_CODES.WAIT_TIMEOUT, {
       message:
         eventLogStop === undefined
@@ -191,9 +190,12 @@ function throwIfTimedOut(
   }
 }
 
+// `eventLogStop` comes from the events that the replay read, so the message
+// names the stop that the snapshot was built from.
 function buildOfflineRenderWaitResult(
   preparedCondition: PreparedRenderWaitCondition,
   snapshot: SemanticSnapshot,
+  eventLogStop: EventLogStop | undefined,
 ): WaitForRenderResult {
   const match = matchRenderWaitSnapshot(preparedCondition, snapshot);
 
@@ -211,9 +213,13 @@ function buildOfflineRenderWaitResult(
     };
   }
 
+  const message =
+    'Session host became unreachable during render wait, and the latest offline snapshot did not satisfy the requested wait condition.';
   throw makeCliError(ERROR_CODES.REPLAY_ERROR, {
     message:
-      'Session host became unreachable during render wait, and the latest offline snapshot did not satisfy the requested wait condition.',
+      eventLogStop === undefined
+        ? message
+        : `${message} ${eventLogStopTimeoutNote(eventLogStop)}`,
     details: {
       text: preparedCondition.text,
       regex: preparedCondition.regex,
@@ -226,6 +232,7 @@ function buildOfflineRenderWaitResult(
       cursorRow: match.cursorRow,
       cursorCol: match.cursorCol,
       visibleLines: match.visibleLines,
+      ...(eventLogStop === undefined ? {} : { eventLogStop }),
     },
   });
 }
@@ -237,9 +244,13 @@ async function runOfflineRenderWait(
 ): Promise<WaitForRenderResult> {
   return await withOfflineReplayRenderer(
     { sessionDir: sessionDirectory, rendererName },
-    async ({ backend }) => {
+    async ({ backend, replayInput }) => {
       const snapshot = await backend.snapshot({ includeScrollback: false });
-      return buildOfflineRenderWaitResult(preparedCondition, snapshot);
+      return buildOfflineRenderWaitResult(
+        preparedCondition,
+        snapshot,
+        findEventLogStop(replayInput.events),
+      );
     },
   );
 }
@@ -391,15 +402,11 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       });
     }
     const result: WaitForRenderResult = parsedResult.data;
-    const elapsedMs = performance.now() - startedAt;
     throwIfTimedOut(
       result,
       options,
       effectiveTimeout,
-      elapsedMs,
-      result.timedOut
-        ? await readEventLogStopForTimeout(sessionDirectory)
-        : undefined,
+      performance.now() - startedAt,
     );
 
     emitSuccess({

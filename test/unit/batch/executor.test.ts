@@ -480,21 +480,23 @@ describe('executeBatch', () => {
       });
     });
 
-    it('names where the stored event log stopped in the message of a timed-out wait', async () => {
+    it('names where the host reports that its event log stopped in the message of a timed-out wait', async () => {
       const { driver } = createFakeDriver({
-        waitResults: [{ matched: false, timedOut: true, capturedAtSeq: 5 }],
+        waitResults: [
+          {
+            matched: false,
+            timedOut: true,
+            capturedAtSeq: 5,
+            eventLogStop: { reason: 'events', seq: 5 },
+          },
+        ],
       });
-      const readEventLogStop = vi.fn(() =>
-        Promise.resolve({ reason: 'events' as const, seq: 5 }),
-      );
       const result = await executeBatch({
         plan: plan([{ wait: { text: 'never', timeout: 1000 } }]),
         driver,
         keepGoing: false,
-        readEventLogStop,
       });
 
-      expect(readEventLogStop).toHaveBeenCalledTimes(1);
       expect(result.steps[0]).toMatchObject({
         status: 'failed',
         timedOut: true,
@@ -506,23 +508,37 @@ describe('executeBatch', () => {
       });
     });
 
-    it('reads the stored event log only for a wait that failed', async () => {
-      const { driver } = createFakeDriver({ waitResults: [MATCHED_WAIT] });
-      const readEventLogStop = vi.fn(() =>
-        Promise.resolve({ reason: 'bytes' as const, seq: 5 }),
-      );
+    it('names a stop in each timed-out wait of a keep-going batch', async () => {
+      const stopped = {
+        matched: false,
+        timedOut: true,
+        capturedAtSeq: 5,
+        eventLogStop: { reason: 'bytes' as const, seq: 5 },
+      };
+      const { driver } = createFakeDriver({
+        waitResults: [stopped, stopped],
+      });
       const result = await executeBatch({
-        plan: plan([{ wait: { text: 'there' } }]),
+        plan: plan([
+          { wait: { text: 'one', timeout: 1000 } },
+          { wait: { text: 'two', timeout: 1000 } },
+        ]),
         driver,
-        keepGoing: false,
-        readEventLogStop,
+        keepGoing: true,
       });
 
-      expect(result.steps[0]).toMatchObject({ status: 'completed' });
-      expect(readEventLogStop).not.toHaveBeenCalled();
+      expect(result.failedIndices).toEqual([0, 1]);
+      expect(
+        result.steps.map((step) =>
+          step.status === 'failed' ? step.error?.message : undefined,
+        ),
+      ).toEqual([
+        'Render wait at step 0 timed out after 1000 ms. The event log stopped at seq 5 (byte limit), so output after it is not seen.',
+        'Render wait at step 1 timed out after 1000 ms. The event log stopped at seq 5 (byte limit), so output after it is not seen.',
+      ]);
     });
 
-    it('keeps the message of a timed-out wait when the log has not stopped', async () => {
+    it('keeps the message of a timed-out wait when the host reports no stop', async () => {
       const { driver } = createFakeDriver({
         waitResults: [{ matched: false, timedOut: true, capturedAtSeq: 5 }],
       });
@@ -530,7 +546,6 @@ describe('executeBatch', () => {
         plan: plan([{ wait: { text: 'never', timeout: 1000 } }]),
         driver,
         keepGoing: false,
-        readEventLogStop: () => Promise.resolve(undefined),
       });
 
       expect(result.steps[0]).toMatchObject({

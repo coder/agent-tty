@@ -1200,10 +1200,14 @@ export async function runHost(
                   // Best-effort snapshot for timeout reporting.
                 }
 
+                // The host's own log tells whether it stopped, so the wait
+                // does not depend on what the file holds yet.
+                const eventLogStop = eventLog.getStop();
                 return {
                   matched: false,
                   timedOut: true,
                   capturedAtSeq: latestCapturedAtSeq,
+                  ...(eventLogStop === undefined ? {} : { eventLogStop }),
                 };
               },
             }),
