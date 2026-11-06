@@ -150,6 +150,8 @@ Useful flags:
 
 On timeout, a standalone `wait` exits `11` and prints an error envelope: `ok: false`, `error.code: "WAIT_TIMEOUT"`, and the wait result under `result` (`timedOut: true`, and `matched: false` for render waits). Without `--json`, it prints `WAIT_TIMEOUT: <message>` to stderr. When the wait lasted its whole timeout, the message names it, for example `Wait timed out after 30000 ms (the default; pass --timeout <ms>, or --timeout 0 to wait without a limit).` Inside `batch`, a timed-out `wait` step is a step failure with the same `WAIT_TIMEOUT` exit code under fail-fast, and its message names the step's timeout, for example `Render wait at step 0 timed out after 1000 ms.`
 
+A render wait reads the session's event log. When that log has stopped at its limit (see [the event log limit](TROUBLESHOOTING.md#a-recording-ends-early-or-an-export-names-the-event-log-limit)), a timed-out render wait adds `The event log stopped at seq 41 (byte limit), so output after it is not seen.` to its message, with and without `--json`, and `error.details.eventLogStop` holds `{ "reason": "bytes", "seq": 41 }`. The host reports the stop with its timeout result, so a wait that times out at the moment the log stops names it too. A `batch` `wait` step adds the same sentence to its message. On an exited session, `wait` replays the stored log, and a wait that the replayed screen does not satisfy fails with `REPLAY_ERROR`. Its message ends with the same sentence, and `error.details.eventLogStop` carries the same facts. `reason` is `unknown` when the stop marker names no limit, and the sentence then reads `(reason unknown)`. `--idle-ms` and `--exit` waits do not read the log, so they add nothing. A wait that matches is not changed.
+
 `WAIT_TIMEOUT` only means that the timeout ran out. When 10 render polls in a row fail (about 3 s, for example because the renderer cannot start), a render `wait` stops with the renderer's error instead, also with `--timeout 0`: the same `error.code` and exit code that `snapshot` gives for that failure, usually `RPC_ERROR` (exit `9`, `retryable: true`), and no `result`. A `batch` `wait` step fails with that code, and its step record has no `timedOut`. Fewer failed polls in a row are retried.
 
 ### Echo-Match
@@ -324,6 +326,16 @@ agent-tty record diff <session-id> <session-id> --at-seq-a 0 --json
 - Human output is a unified-style diff with `---`/`+++` headers naming each side's session, sequence, and hash prefix.
 - The line diff is LCS-minimal for any realistic screen. As a bounded-memory safeguard, when the differing region (after matching the common prefix and suffix) is so large that the product of its two side lengths exceeds a 4,000,000-cell budget (for example 1,000 × 4,001 lines), that region degrades to a plain delete-then-add block instead of a minimal diff — `identical`, both `screenHash` values, and full-screen reconstruction remain exact; only diff minimality is reduced.
 - The command works entirely offline from `events.jsonl`; sessions may be running or exited. The exit code is `0` whether or not the screens differ — automation should read `identical` from the JSON result.
+
+## `inspect`
+
+```bash
+agent-tty inspect <session-id> --json
+```
+
+`inspect` prints the session record and what the Home holds for it: `eventCount`, `lastEventSeq`, `eventLogBytes`, `artifacts`, `terminationCategory`, `rendererRuntime` and, for a live host, `host`.
+
+`eventLogStop` appears only when the session's event log stopped at its limit (see [the event log limit](TROUBLESHOOTING.md#a-recording-ends-early-or-an-export-names-the-event-log-limit)). It is `{ "reason": "bytes" | "events" | "unknown", "seq": <n> }`: `reason` names the limit that stopped the log (52,428,800 bytes, or 250,000 events, or `unknown` when the marker names no limit), and `seq` is the `seq` of the marker that the host wrote when it stopped. Events after that `seq` are not recorded, so snapshots, waits and exports show the session as it was then. `inspect` reads `eventCount`, `eventLogBytes` and the field in one read of `events.jsonl`, so they describe the same bytes, and a live session and an exited one report the same. It reads logs that are over the size limit that other commands read. The field is absent for a log that has not stopped. Without `--json`, one line reports it, for example `Event Log Stopped: at seq 41 (byte limit); later events are not recorded`.
 
 ## `destroy`
 
