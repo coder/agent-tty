@@ -357,6 +357,30 @@ describe('RPC message schemas', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts an event log stop with either reason and keeps it minimal', () => {
+    const inspect = (eventLogStop: unknown) =>
+      InspectResultSchema.safeParse({
+        session: createSessionRecord(),
+        eventCount: 2,
+        uptime: 1000,
+        rendererRuntime: {
+          backend: 'ghostty-web',
+          mode: 'live-host',
+          status: 'healthy',
+        },
+        eventLogStop,
+      }).success;
+
+    expect(inspect({ reason: 'bytes', seq: 0 })).toBe(true);
+    expect(inspect({ reason: 'events', seq: 249_998 })).toBe(true);
+    expect(inspect({ reason: 'entries', seq: 4 })).toBe(false);
+    expect(inspect({ reason: 'bytes', seq: -1 })).toBe(false);
+    expect(inspect({ reason: 'bytes', seq: 1.5 })).toBe(false);
+    expect(inspect({ reason: 'bytes' })).toBe(false);
+    expect(inspect({ seq: 4 })).toBe(false);
+    expect(inspect({ reason: 'bytes', seq: 4, limit: 52_428_800 })).toBe(false);
+  });
+
   it('requires rendererRuntime on inspect results', () => {
     const result = InspectResultSchema.safeParse({
       session: createSessionRecord(),

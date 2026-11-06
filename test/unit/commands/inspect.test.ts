@@ -5,6 +5,7 @@ import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 const mocks = vi.hoisted(() => ({
   computeArtifactHealth: vi.fn(),
   countEventLogEntries: vi.fn(),
+  readEventLogStop: vi.fn(),
   statEventLogBytes: vi.fn(),
   deriveTerminationCategory: vi.fn(),
   emitSuccess: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock('../../../src/cli/output.js', () => ({
 
 vi.mock('../../../src/host/eventLog.js', () => ({
   countEventLogEntries: mocks.countEventLogEntries,
+  readEventLogStop: mocks.readEventLogStop,
   statEventLogBytes: mocks.statEventLogBytes,
 }));
 
@@ -134,6 +136,7 @@ describe('inspect command', () => {
     );
     mocks.computeArtifactHealth.mockResolvedValue(DEFAULT_ARTIFACT_HEALTH);
     mocks.countEventLogEntries.mockResolvedValue(2);
+    mocks.readEventLogStop.mockResolvedValue(undefined);
     mocks.statEventLogBytes.mockResolvedValue(undefined);
     mocks.deriveTerminationCategory.mockReturnValue('running');
     mocks.readManifestIfExists.mockResolvedValue(
@@ -218,6 +221,74 @@ describe('inspect command', () => {
     );
     expect(emitted.lines).not.toContain('Offline Replay: yes');
     expect(emitted.lines).not.toContain('Termination: running');
+  });
+
+  it('leaves eventLogStop and its line out when the stored log has not stopped', async () => {
+    mocks.sendRpc.mockResolvedValue({ session: createSessionRecord() });
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    expect(mocks.readEventLogStop).toHaveBeenCalledWith(
+      '/tmp/agent-tty/sessions/session-01/events.jsonl',
+    );
+    const emitted = getLastEmitSuccessPayload() as {
+      result: object;
+      lines: string[];
+    };
+    expect(emitted.result).not.toHaveProperty('eventLogStop');
+    expect(emitted.lines.join('\n')).not.toContain('Event Log Stopped');
+  });
+
+  it.each([
+    ['bytes', 'byte limit'],
+    ['events', 'event limit'],
+  ] as const)(
+    'reports the stop of the stored log with the %s reason, from a live host',
+    async (reason, words) => {
+      mocks.sendRpc.mockResolvedValue({ session: createSessionRecord() });
+      mocks.readEventLogStop.mockResolvedValue({ reason, seq: 41 });
+
+      await runInspectCommand({
+        context: TEST_CONTEXT,
+        json: true,
+        sessionId: 'session-01',
+      });
+
+      const emitted = getLastEmitSuccessPayload() as {
+        result: { eventLogStop?: unknown };
+        lines: string[];
+      };
+      expect(emitted.result.eventLogStop).toEqual({ reason, seq: 41 });
+      expect(emitted.lines).toContain(
+        `Event Log Stopped: at seq 41 (${words}); later events are not recorded`,
+      );
+    },
+  );
+
+  it('reports the stop of the stored log when the host is unreachable', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'Session host is unreachable.',
+      }),
+    );
+    mocks.readManifest.mockResolvedValue(createSessionRecord('exited'));
+    mocks.readEventLogStop.mockResolvedValue({ reason: 'bytes', seq: 7 });
+
+    await runInspectCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+    });
+
+    const emitted = getLastEmitSuccessPayload() as {
+      result: { usedOfflineReplay?: boolean; eventLogStop?: unknown };
+    };
+    expect(emitted.result.usedOfflineReplay).toBe(true);
+    expect(emitted.result.eventLogStop).toEqual({ reason: 'bytes', seq: 7 });
   });
 
   it('treats exiting sessions as live-host renderer runtime', async () => {

@@ -20,6 +20,7 @@ import {
   EVENT_LOG_TAIL_RESERVE_ENTRIES,
   EventLog,
   MAX_EVENT_BUFFER_ENTRIES,
+  readEventLogStop,
   statEventLogBytes,
 } from '../../../src/host/eventLog.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
@@ -116,6 +117,207 @@ describe('statEventLogBytes', () => {
     await expect(statEventLogBytes(childOfFile)).rejects.toMatchObject({
       code: 'ENOTDIR',
     });
+  });
+});
+
+describe('readEventLogStop', () => {
+  const LIMIT = EVENT_LOG_TAIL_RESERVE_BYTES * 2;
+
+  beforeEach(async () => {
+    // oxfmt-ignore
+    tempDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-event-log-')));
+    eventLogPath = join(tempDir, 'events.jsonl');
+  });
+
+  afterEach(async () => {
+    if (tempDir.length > 0) {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  function recordLine(
+    seq: number,
+    type: 'output' | 'marker' | 'exit',
+    payload: Record<string, unknown>,
+  ): string {
+    return `${JSON.stringify({
+      seq,
+      ts: '2026-03-19T12:00:00.000Z',
+      type,
+      payload,
+    })}\n`;
+  }
+
+  /** Stops a log with a real writer, then ends it with the exit record. */
+  async function writeStoppedLog(
+    options: { maxBytes: number } | { maxEntries: number },
+  ): Promise<void> {
+    await writeFile(eventLogPath, '', 'utf8');
+    const eventLog = await EventLog.open(eventLogPath, options);
+    try {
+      for (let index = 0; index < 1000; index += 1) {
+        await eventLog.append('output', { data: `line ${String(index)}\r\n` });
+        if (eventLog.getEvents().some((event) => event.type === 'marker')) {
+          break;
+        }
+      }
+      await eventLog.append('exit', { exitCode: 0, exitSignal: null });
+    } finally {
+      await eventLog.close();
+    }
+  }
+
+  /** Whether `EventLog.open` keeps the file at `eventLogPath` stopped. */
+  async function reopenStays(options: {
+    maxBytes: number;
+  }): Promise<'stopped' | 'open'> {
+    const eventLog = await EventLog.open(eventLogPath, options);
+    try {
+      const before = eventLog.getEvents().length;
+      await eventLog.append('output', { data: 'after the reopen' });
+      return eventLog.getEvents().length === before ? 'stopped' : 'open';
+    } finally {
+      await eventLog.close();
+    }
+  }
+
+  it('returns undefined when the event log file is missing or empty', async () => {
+    await expect(readEventLogStop(eventLogPath)).resolves.toBeUndefined();
+
+    await writeFile(eventLogPath, '', 'utf8');
+    await expect(readEventLogStop(eventLogPath)).resolves.toBeUndefined();
+  });
+
+  it('returns the seq of the stop marker and the byte limit that the writer named', async () => {
+    await writeStoppedLog({ maxBytes: LIMIT });
+
+    const records = await readEventLogRecords(eventLogPath);
+    const marker = records.at(-2);
+    expect(marker?.type).toBe('marker');
+    await expect(readEventLogStop(eventLogPath)).resolves.toEqual({
+      reason: 'bytes',
+      seq: marker?.seq,
+    });
+  });
+
+  it('returns the event limit that the writer named', async () => {
+    const maxEntries = 20;
+    await writeStoppedLog({ maxEntries });
+
+    await expect(readEventLogStop(eventLogPath)).resolves.toEqual({
+      reason: 'events',
+      seq: maxEntries - EVENT_LOG_TAIL_RESERVE_ENTRIES,
+    });
+  });
+
+  it('returns undefined for a log that has not stopped', async () => {
+    const eventLog = await EventLog.open(eventLogPath, { maxBytes: LIMIT });
+    try {
+      await eventLog.append('output', { data: 'hello' });
+      await eventLog.append('marker', { label: 'a user marker' });
+      await eventLog.append('exit', { exitCode: 0, exitSignal: null });
+    } finally {
+      await eventLog.close();
+    }
+
+    await expect(readEventLogStop(eventLogPath)).resolves.toBeUndefined();
+  });
+
+  it('does not take output or another marker for the stop marker', async () => {
+    await writeFile(
+      eventLogPath,
+      [
+        recordLine(0, 'output', {
+          data: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (8192 bytes)`,
+        }),
+        recordLine(1, 'marker', {
+          label: 'event log limit reached (8192 bytes)',
+        }),
+        recordLine(2, 'marker', {
+          label: `note: ${EVENT_LOG_LIMIT_LABEL_PREFIX} (8192 bytes)`,
+        }),
+      ].join(''),
+      'utf8',
+    );
+
+    await expect(readEventLogStop(eventLogPath)).resolves.toBeUndefined();
+  });
+
+  it('skips a last line that the host has not finished writing', async () => {
+    const line = recordLine(1, 'marker', {
+      label: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (8192 bytes); later events are not recorded`,
+    });
+    await writeFile(
+      eventLogPath,
+      `${recordLine(0, 'output', { data: 'x' })}${line.slice(0, 60)}`,
+      'utf8',
+    );
+
+    await expect(readEventLogStop(eventLogPath)).resolves.toBeUndefined();
+  });
+
+  it('reads the marker of a log that is over the size limit that commands read', async () => {
+    await writeFile(
+      eventLogPath,
+      recordLine(0, 'marker', {
+        label: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (${String(MAX_EVENT_LOG_SIZE)} bytes); later events are not recorded`,
+      }),
+      'utf8',
+    );
+    // Sparse padding: an older version wrote past the limit.
+    await truncate(eventLogPath, MAX_EVENT_LOG_SIZE + 1024);
+
+    await expect(readEventLogStop(eventLogPath)).resolves.toEqual({
+      reason: 'bytes',
+      seq: 0,
+    });
+  });
+
+  it('fails on a marker with the reserved prefix that names no limit', async () => {
+    await writeFile(
+      eventLogPath,
+      recordLine(0, 'marker', {
+        label: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (soon)`,
+      }),
+      'utf8',
+    );
+
+    await expect(readEventLogStop(eventLogPath)).rejects.toThrow(
+      'stop marker label must name its limit',
+    );
+  });
+
+  it('rejects empty file paths and rethrows other read errors', async () => {
+    await expect(readEventLogStop('')).rejects.toThrow();
+
+    const blocker = join(tempDir, 'blocker');
+    await writeFile(blocker, 'x', 'utf8');
+    await expect(
+      readEventLogStop(join(blocker, 'events.jsonl')),
+    ).rejects.toMatchObject({ code: 'ENOTDIR' });
+  });
+
+  it('agrees with EventLog.open on whether a log has stopped', async () => {
+    // A stopped log: both see the stop.
+    await writeStoppedLog({ maxBytes: LIMIT });
+    expect(await readEventLogStop(eventLogPath)).not.toBeUndefined();
+    expect(await reopenStays({ maxBytes: LIMIT })).toBe('stopped');
+
+    // A log with look-alikes only: neither sees a stop.
+    await writeFile(
+      eventLogPath,
+      [
+        recordLine(0, 'output', {
+          data: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (8192 bytes)`,
+        }),
+        recordLine(1, 'marker', {
+          label: 'event log limit reached (8192 bytes)',
+        }),
+      ].join(''),
+      'utf8',
+    );
+    expect(await readEventLogStop(eventLogPath)).toBeUndefined();
+    expect(await reopenStays({ maxBytes: LIMIT })).toBe('open');
   });
 });
 

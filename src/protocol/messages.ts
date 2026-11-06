@@ -200,6 +200,22 @@ export const ArtifactHealthSummarySchema = z
   .strict();
 export type ArtifactHealthSummary = z.infer<typeof ArtifactHealthSummarySchema>;
 
+// Why the event log stopped taking records (see `EventLog.queueAppend`):
+// `bytes` when the file reached its size limit, `events` when it reached its
+// entry limit.
+export const EventLogStopReasonSchema = z.enum(['bytes', 'events']);
+export type EventLogStopReason = z.infer<typeof EventLogStopReasonSchema>;
+
+// Read from the stop marker that the host writes into `events.jsonl`: the
+// `seq` of that marker and the limit it names.
+export const EventLogStopSchema = z
+  .object({
+    reason: EventLogStopReasonSchema,
+    seq: z.number().int().nonnegative(),
+  })
+  .strict();
+export type EventLogStop = z.infer<typeof EventLogStopSchema>;
+
 export const InspectResultSchema = z
   .object({
     session: SessionRecordSchema,
@@ -219,6 +235,10 @@ export const InspectResultSchema = z
     // session's `events.jsonl`. Absent only when the event log file is
     // missing on disk (e.g. a session that crashed before its first write).
     eventLogBytes: z.number().int().nonnegative().optional(),
+    // Present only when the stored event log holds the stop marker, so
+    // later events (and so later output) are missing from every snapshot,
+    // wait and export. Read from `events.jsonl`, in live and offline modes.
+    eventLogStop: EventLogStopSchema.optional(),
   })
   .strict();
 export type InspectResult = z.infer<typeof InspectResultSchema>;

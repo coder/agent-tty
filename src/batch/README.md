@@ -15,7 +15,7 @@ This directory parses and runs a Batch: an ordered JSON list of `type`, `paste`,
 - `buildPartialBatchResult(plan, recorded)` completes a result for a batch that stopped early [result.ts:buildPartialBatchResult].
 - `StepDriver`: `type`, `paste` and `sendKeys` return the event seq. `mouse` returns a `MouseResult`. `run` returns a `RunResult`. `wait(condition, afterSeq, timeoutMs)` returns a `WaitForRenderResult` [stepDriver.ts:StepDriver].
 - `createRpcStepDriver(socketPath, rendererName?)` returns a `StepDriver` backed by the session host RPC [stepDriver.ts:createRpcStepDriver].
-- `ExecuteBatchOptions`: `plan`, `driver`, `keepGoing`, and optional `assertCommandable` and `onStep` callbacks [executor.ts:ExecuteBatchOptions].
+- `ExecuteBatchOptions`: `plan`, `driver`, `keepGoing`, and optional `assertCommandable`, `readEventLogStop` and `onStep` callbacks. `readEventLogStop` returns where the session's stored event log stopped, or `undefined` [executor.ts:ExecuteBatchOptions].
 - `executeBatch(opts)` runs the plan and returns a `BatchResult` [executor.ts:executeBatch].
 
 ## Invariants
@@ -32,7 +32,7 @@ This directory parses and runs a Batch: an ordered JSON list of `type`, `paste`,
 - A non-wait step that produced a seq, failed or not, becomes the `afterSeq` baseline for the next wait [executor.ts:executeBatch].
 - A thrown error that is not a `CliError` becomes an `INTERNAL_ERROR` failed record [executor.ts:reframeAsInternalError].
 - A waited `run` that does not complete fails with `WAIT_TIMEOUT` or `SESSION_NOT_RUNNING` [executor.ts:runRunStep].
-- A `wait` that times out or does not match fails with `WAIT_TIMEOUT` [executor.ts:runWaitStep]. When it timed out, the message names the step's timeout in ms. A `wait` whose RPC rejects (for example after repeated renderer failures) fails with that error's code [executor.ts:executeBatch].
+- A `wait` that times out or does not match fails with `WAIT_TIMEOUT` [executor.ts:runWaitStep]. When it timed out, the message names the step's timeout in ms. A failed `wait` step calls `readEventLogStop`. When the log has stopped, the message ends with `The event log stopped at seq <n> (<byte limit|event limit>), so output after it is not seen.` A matched `wait` never calls it. A `wait` whose RPC rejects (for example after repeated renderer failures) fails with that error's code [executor.ts:executeBatch].
 - All record schemas are `.strict()` [result.ts:BatchResultSchema].
 - `buildPartialBatchResult` marks the first unrecorded step `interrupted` and the rest `not-run` [result.ts:buildPartialBatchResult].
 - `createRpcStepDriver` asserts a non-empty `socketPath` and validates every RPC response with its result schema [stepDriver.ts:createRpcStepDriver].

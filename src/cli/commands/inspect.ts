@@ -10,9 +10,11 @@ import type { SessionRecord, SessionStatus } from '../../protocol/schemas.js';
 
 import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
+import { describeEventLogStop } from '../eventLogStop.js';
 
 import {
   countEventLogEntries,
+  readEventLogStop,
   statEventLogBytes,
 } from '../../host/eventLog.js';
 import { isMarkedDestroyed, reconcileSession } from '../../host/lifecycle.js';
@@ -147,6 +149,12 @@ function formatSessionLines(result: InspectResult): string[] {
     lines.push(`Event Log Bytes: ${String(result.eventLogBytes)}`);
   }
 
+  if (result.eventLogStop !== undefined) {
+    lines.push(
+      `Event Log Stopped: ${describeEventLogStop(result.eventLogStop)}; later events are not recorded`,
+    );
+  }
+
   lines.push(`Uptime: ${String(uptime)}ms`);
 
   if (result.host !== undefined) {
@@ -259,6 +267,7 @@ export async function runInspectCommand(
   const eventLogFile = eventLogPath(sessionDirectory);
   const eventCount = await countEventLogEntries(eventLogFile);
   const eventLogBytes = await statEventLogBytes(eventLogFile);
+  const eventLogStop = await readEventLogStop(eventLogFile);
   const uptime = computeUptime(session);
   let artifacts: ArtifactHealthSummary | undefined;
   try {
@@ -294,6 +303,7 @@ export async function runInspectCommand(
     rendererRuntime,
     ...(host !== undefined ? { host } : {}),
     ...(eventLogBytes !== undefined ? { eventLogBytes } : {}),
+    ...(eventLogStop !== undefined ? { eventLogStop } : {}),
   };
 
   emitSuccess({

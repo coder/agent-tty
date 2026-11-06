@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   readManifestIfExists: vi.fn(),
   resolveHome: vi.fn(),
   sessionDir: vi.fn(),
+  eventLogPath: vi.fn(),
   manifestPath: vi.fn(),
   socketPath: vi.fn(),
   withOfflineReplayRenderer: vi.fn(),
@@ -37,6 +41,7 @@ vi.mock('../../../src/storage/home.js', () => ({
 
 vi.mock('../../../src/storage/sessionPaths.js', () => ({
   sessionDir: mocks.sessionDir,
+  eventLogPath: mocks.eventLogPath,
   manifestPath: mocks.manifestPath,
   socketPath: mocks.socketPath,
 }));
@@ -140,6 +145,9 @@ describe('wait command', () => {
     );
     mocks.manifestPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/session.json`,
+    );
+    mocks.eventLogPath.mockImplementation(
+      (sessionDirectory: string) => `${sessionDirectory}/events.jsonl`,
     );
     mocks.socketPath.mockImplementation(
       (sessionDirectory: string) => `${sessionDirectory}/rpc.sock`,
@@ -636,6 +644,177 @@ describe('wait command', () => {
         code: ERROR_CODES.WAIT_TIMEOUT,
         message: 'Wait timed out before its condition was met.',
         details: { sessionId: 'session-01', timeoutMs: 30000 },
+      });
+    });
+  });
+
+  describe('when the stored event log stopped', () => {
+    const renderTimeout = { matched: false, timedOut: true, capturedAtSeq: 1 };
+    const stopNote =
+      'The event log stopped at seq 1 (byte limit), so output after it is not seen.';
+    let tempDir = '';
+    let eventLogFile = '';
+
+    function recordLine(seq: number, type: string, payload: object): string {
+      return `${JSON.stringify({
+        seq,
+        ts: '2026-03-19T12:00:00.000Z',
+        type,
+        payload,
+      })}\n`;
+    }
+
+    beforeEach(async () => {
+      tempDir = await mkdtemp(join(tmpdir(), 'agent-tty-wait-stop-'));
+      eventLogFile = join(tempDir, 'events.jsonl');
+      await writeFile(
+        eventLogFile,
+        recordLine(0, 'output', { data: 'hello' }) +
+          recordLine(1, 'marker', {
+            label:
+              'agent-tty: event log limit reached (52428800 bytes); later events are not recorded',
+          }),
+        'utf8',
+      );
+      mocks.eventLogPath.mockReturnValue(eventLogFile);
+    });
+
+    afterEach(async () => {
+      await rm(tempDir, { recursive: true, force: true });
+    });
+
+    it.each([
+      ['--text', { text: 'later' }, 30_000],
+      ['--regex', { regex: 'later.*' }, 30_000],
+      ['--screen-stable-ms', { screenStableMs: 1000, timeout: 5000 }, 5000],
+      ['--cursor-row', { cursorRow: 3 }, 30_000],
+      ['--after-seq', { text: 'later', afterSeq: 0 }, 30_000],
+    ])(
+      'names the stop in the WAIT_TIMEOUT of a %s wait',
+      async (_flag, flags, timeoutMs) => {
+        mocks.sendRpc.mockResolvedValue(renderTimeout);
+
+        await expect(
+          runWaitCommand(createOptions(flags)),
+        ).rejects.toMatchObject({
+          code: ERROR_CODES.WAIT_TIMEOUT,
+          message: `Wait timed out before its condition was met. ${stopNote}`,
+          details: {
+            sessionId: 'session-01',
+            timeoutMs,
+            eventLogStop: { reason: 'bytes', seq: 1 },
+          },
+          result: renderTimeout,
+        });
+        expect(mocks.eventLogPath).toHaveBeenCalledWith(
+          '/tmp/agent-tty/sessions/session-01',
+        );
+      },
+    );
+
+    it('names the stop under --json too', async () => {
+      mocks.sendRpc.mockResolvedValue(renderTimeout);
+
+      await expect(
+        runWaitCommand(createOptions({ json: true, text: 'later' })),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.WAIT_TIMEOUT,
+        message: `Wait timed out before its condition was met. ${stopNote}`,
+      });
+    });
+
+    it('adds the note after the timeout that a human message names', async () => {
+      vi.useFakeTimers({ toFake: ['Date', 'performance'] });
+      try {
+        mocks.sendRpc.mockImplementation(() => {
+          vi.advanceTimersByTime(1000);
+          return Promise.resolve(renderTimeout);
+        });
+
+        await expect(
+          runWaitCommand(createOptions({ text: 'later', timeout: 1000 })),
+        ).rejects.toMatchObject({
+          code: ERROR_CODES.WAIT_TIMEOUT,
+          message: `Wait timed out after 1000 ms. ${stopNote}`,
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('leaves a wait that matched as it is', async () => {
+      const result = {
+        matched: true,
+        timedOut: false,
+        matchedText: 'hello',
+        capturedAtSeq: 1,
+      };
+      mocks.sendRpc.mockResolvedValue(result);
+
+      await runWaitCommand(createOptions({ text: 'hello' }));
+
+      expect(mocks.emitSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({ command: 'wait', result }),
+      );
+      expect(mocks.eventLogPath).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['--idle-ms', { idleMs: 500, timeout: 1000 }],
+      ['--exit', { waitForExit: true, timeout: 1000 }],
+    ])(
+      'leaves the WAIT_TIMEOUT of a %s wait as it is',
+      async (_flag, flags) => {
+        mocks.sendRpc.mockResolvedValue({ timedOut: true });
+
+        const error = (await runWaitCommand(createOptions(flags)).catch(
+          (caught: unknown) => caught,
+        )) as { code: string; message: string; details: object };
+        expect(error.code).toBe(ERROR_CODES.WAIT_TIMEOUT);
+        expect(error.message).not.toContain('event log');
+        expect(error.details).toEqual({
+          sessionId: 'session-01',
+          timeoutMs: 1000,
+        });
+        expect(mocks.eventLogPath).not.toHaveBeenCalled();
+      },
+    );
+
+    it('keeps the plain WAIT_TIMEOUT when the log has not stopped', async () => {
+      await writeFile(
+        eventLogFile,
+        recordLine(0, 'output', { data: 'hello' }),
+        'utf8',
+      );
+      mocks.sendRpc.mockResolvedValue(renderTimeout);
+
+      const error = (await runWaitCommand(
+        createOptions({ text: 'later' }),
+      ).catch((caught: unknown) => caught)) as {
+        message: string;
+        details: object;
+      };
+      expect(error.message).toBe(
+        'Wait timed out before its condition was met.',
+      );
+      expect(error.details).toEqual({
+        sessionId: 'session-01',
+        timeoutMs: 30_000,
+      });
+    });
+
+    it.each([
+      ['is missing', () => join(tempDir, 'missing', 'events.jsonl')],
+      ['cannot be read', () => join(eventLogFile, 'events.jsonl')],
+    ])('keeps the plain WAIT_TIMEOUT when the log %s', async (_case, path) => {
+      mocks.eventLogPath.mockReturnValue(path());
+      mocks.sendRpc.mockResolvedValue(renderTimeout);
+
+      await expect(
+        runWaitCommand(createOptions({ text: 'later' })),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.WAIT_TIMEOUT,
+        message: 'Wait timed out before its condition was met.',
       });
     });
   });

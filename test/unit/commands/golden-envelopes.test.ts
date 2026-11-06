@@ -1305,6 +1305,27 @@ describe('JSON envelope contracts', () => {
     expect(InspectResultSchema.safeParse(result).success).toBe(true);
   });
 
+  it('locks the inspect success envelope shape when the event log stopped', () => {
+    const result = InspectResultSchema.parse({
+      session: createSessionRecord(),
+      eventCount: 250_000,
+      uptime: 1_000,
+      lastEventSeq: 249_999,
+      terminationCategory: 'running',
+      usedOfflineReplay: false,
+      rendererRuntime: {
+        backend: 'ghostty-web',
+        mode: 'live-host',
+        status: 'healthy',
+      },
+      eventLogBytes: 21_400_000,
+      eventLogStop: { reason: 'events', seq: 249_998 },
+    });
+
+    expectLockedSuccessEnvelope('inspect', result);
+    expect(result.eventLogStop).toEqual({ reason: 'events', seq: 249_998 });
+  });
+
   it('accepts inspect result with offline renderer runtime', () => {
     const result = {
       session: createSessionRecord(),

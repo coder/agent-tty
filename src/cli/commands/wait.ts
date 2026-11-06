@@ -1,4 +1,5 @@
 import type {
+  EventLogStop,
   WaitForRenderResult,
   WaitResult,
 } from '../../protocol/messages.js';
@@ -8,6 +9,10 @@ import type { SemanticSnapshot } from '../../renderer/types.js';
 import { CliError } from '../errors.js';
 import type { CommandContext } from '../context.js';
 
+import {
+  eventLogStopTimeoutNote,
+  readEventLogStopForTimeout,
+} from '../eventLogStop.js';
 import { emitSuccess } from '../output.js';
 import { sendRpc } from '../../host/rpcClient.js';
 import { ERROR_CODES, makeCliError } from '../../protocol/errors.js';
@@ -159,16 +164,28 @@ function timeoutMessage(
   return `Wait timed out after ${String(timeoutMs)} ms.`;
 }
 
+// Only render waits pass `eventLogStop`: they read the stored event log, so
+// output after the log stopped is not seen. The message says so, and
+// `details` carries the same facts.
 function throwIfTimedOut(
   result: WaitResult | WaitForRenderResult,
   options: CommandOptions,
   timeoutMs: number,
   elapsedMs: number,
+  eventLogStop?: EventLogStop,
 ): void {
   if (result.timedOut) {
+    const message = timeoutMessage(options, timeoutMs, elapsedMs);
     throw makeCliError(ERROR_CODES.WAIT_TIMEOUT, {
-      message: timeoutMessage(options, timeoutMs, elapsedMs),
-      details: { sessionId: options.sessionId, timeoutMs },
+      message:
+        eventLogStop === undefined
+          ? message
+          : `${message} ${eventLogStopTimeoutNote(eventLogStop)}`,
+      details: {
+        sessionId: options.sessionId,
+        timeoutMs,
+        ...(eventLogStop === undefined ? {} : { eventLogStop }),
+      },
       result,
     });
   }
@@ -374,11 +391,15 @@ export async function runWaitCommand(options: CommandOptions): Promise<void> {
       });
     }
     const result: WaitForRenderResult = parsedResult.data;
+    const elapsedMs = performance.now() - startedAt;
     throwIfTimedOut(
       result,
       options,
       effectiveTimeout,
-      performance.now() - startedAt,
+      elapsedMs,
+      result.timedOut
+        ? await readEventLogStopForTimeout(sessionDirectory)
+        : undefined,
     );
 
     emitSuccess({

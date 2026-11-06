@@ -5,6 +5,7 @@ import { createInterface } from 'node:readline';
 
 import { z } from 'zod';
 
+import type { EventLogStop, EventLogStopReason } from '../protocol/messages.js';
 import {
   EventRecordSchema,
   InputMouseEventPayloadSchema,
@@ -155,9 +156,6 @@ export interface EventLogOptions {
   readonly maxEntries?: number;
 }
 
-/** The limit that stopped the log. */
-type StopReason = 'bytes' | 'entries';
-
 interface PreparedRecord {
   readonly record: EventRecord;
   readonly line: string;
@@ -243,12 +241,35 @@ function deriveNextSeq(records: readonly EventRecord[]): number {
   return lastRecord.seq + 1;
 }
 
+/**
+ * The label of the stop marker. It names the limit that stopped the log, as
+ * `(<n> bytes)` or `(<n> events)`, and `stopReasonOf` reads it back.
+ */
+function stopLabel(reason: EventLogStopReason, limit: number): string {
+  return `${EVENT_LOG_LIMIT_LABEL_PREFIX} (${String(limit)} ${reason}); later events are not recorded`;
+}
+
 /** True for the marker that `recordStop` writes when the log stops. */
-function isStopMarker(record: EventRecord): boolean {
+function isStopMarker(
+  record: EventRecord,
+): record is Extract<EventRecord, { type: 'marker' }> {
   return (
     record.type === 'marker' &&
     record.payload.label.startsWith(EVENT_LOG_LIMIT_LABEL_PREFIX)
   );
+}
+
+function stopReasonOf(label: string): EventLogStopReason {
+  const reason = /^ \(\d+ (bytes|events)\)/.exec(
+    label.slice(EVENT_LOG_LIMIT_LABEL_PREFIX.length),
+  )?.[1];
+  // Only `recordStop` writes this label, and the prefix is reserved, so a
+  // label without its limit is a log that agent-tty did not write.
+  invariant(
+    reason === 'bytes' || reason === 'events',
+    `stop marker label must name its limit: ${label}`,
+  );
+  return reason;
 }
 
 /**
@@ -270,6 +291,63 @@ export async function statEventLogBytes(
 
     throw error;
   }
+}
+
+/**
+ * Returns where the stored log stopped: the `seq` of its stop marker and the
+ * limit that the marker names. Returns `undefined` when the log holds no stop
+ * marker or does not exist. It finds the marker with `isStopMarker`, the check
+ * that `EventLog.open` uses to start a reopened log stopped, so both agree.
+ *
+ * It reads the file as it is on disk and skips a line that is not a whole
+ * record, such as the one the live host is writing right now. It does not
+ * enforce the size limit, so it also reads a log that older versions wrote
+ * past it.
+ */
+export async function readEventLogStop(
+  filePath: string,
+): Promise<EventLogStop | undefined> {
+  assertFilePath(filePath);
+
+  let stop: EventLogStop | undefined;
+
+  try {
+    const lineReader = createInterface({
+      input: createReadStream(filePath, { encoding: 'utf8' }),
+      crlfDelay: Infinity,
+    });
+
+    for await (const line of lineReader) {
+      // Only a line that holds the prefix can be the stop marker. An output
+      // record that printed the same text passes this check and fails
+      // `isStopMarker`. JSON keeps the prefix as written.
+      if (stop !== undefined || !line.includes(EVENT_LOG_LIMIT_LABEL_PREFIX)) {
+        continue;
+      }
+
+      let parsedLine: unknown;
+      try {
+        parsedLine = JSON.parse(line) as unknown;
+      } catch {
+        continue;
+      }
+      const record = EventRecordSchema.safeParse(parsedLine);
+      if (record.success && isStopMarker(record.data)) {
+        stop = {
+          reason: stopReasonOf(record.data.payload.label),
+          seq: record.data.seq,
+        };
+      }
+    }
+  } catch (error: unknown) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      return undefined;
+    }
+
+    throw error;
+  }
+
+  return stop;
 }
 
 export async function countEventLogEntries(filePath: string): Promise<number> {
@@ -540,7 +618,7 @@ export class EventLog {
   private findStopReason(
     type: EventLogEventType,
     bytes: number,
-  ): StopReason | undefined {
+  ): EventLogStopReason | undefined {
     const reserveBytes = type === 'exit' ? 0 : EVENT_LOG_TAIL_RESERVE_BYTES;
     const reserveEntries = type === 'exit' ? 0 : EVENT_LOG_TAIL_RESERVE_ENTRIES;
 
@@ -548,7 +626,7 @@ export class EventLog {
       return 'bytes';
     }
     if (this.eventBuffer.length + 1 > this.maxEntries - reserveEntries) {
-      return 'entries';
+      return 'events';
     }
     return undefined;
   }
@@ -560,15 +638,14 @@ export class EventLog {
    * reached: bytes or events. It goes into the reserves, so it fits unless a
    * log that this host did not write already filled them before it opened.
    */
-  private recordStop(reason: StopReason): void {
+  private recordStop(reason: EventLogStopReason): void {
     this.stopped = true;
 
-    const limit =
-      reason === 'bytes'
-        ? `${String(this.maxBytes)} bytes`
-        : `${String(this.maxEntries)} events`;
     const stop = this.prepareRecord('marker', {
-      label: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (${limit}); later events are not recorded`,
+      label: stopLabel(
+        reason,
+        reason === 'bytes' ? this.maxBytes : this.maxEntries,
+      ),
     });
     if (
       stop.bytes > this.maxBytes - this.fileBytes ||
