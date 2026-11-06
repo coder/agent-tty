@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  ReplayProgress,
   VideoCapableRendererBackend,
   VideoRecordingOptions,
 } from '../../../src/renderer/backend.js';
@@ -25,8 +26,9 @@ vi.mock('../../../src/renderer/profiles.js', () => ({
 
 import {
   generateWebmExport,
-  WebmReplayTimeoutError,
+  WebmReplayStallError,
 } from '../../../src/export/webm.js';
+import { GhosttyWebBackend } from '../../../src/renderer/ghosttyWeb/index.js';
 
 function createManifest(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
@@ -259,6 +261,7 @@ describe('generateWebmExport', () => {
         mode: 'recorded',
         finalFrameHoldMs: 1_000,
       },
+      expect.any(Function),
     );
     expect(mockBackend.finalizeVideo).toHaveBeenCalledWith(
       '/tmp/exports/recording-1-webm.webm',
@@ -381,6 +384,7 @@ describe('generateWebmExport', () => {
         minFrameHoldMs: 100,
         finalFrameHoldMs: 1_000,
       },
+      expect.any(Function),
     );
     expect(result.timingMode).toBe('accelerated');
   });
@@ -403,6 +407,7 @@ describe('generateWebmExport', () => {
     expect(mockBackend.replayWithTiming).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'session-01' }),
       { mode: 'max-speed', minFrameHoldMs: 16, finalFrameHoldMs: 500 },
+      expect.any(Function),
     );
     expect(result.timingMode).toBe('max-speed');
   });
@@ -424,6 +429,7 @@ describe('generateWebmExport', () => {
     expect(mockBackend.replayWithTiming).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'session-01' }),
       { mode: 'recorded', finalFrameHoldMs: 1_000 },
+      expect.any(Function),
     );
     expect(result.timingMode).toBe('recorded');
   });
@@ -453,6 +459,7 @@ describe('generateWebmExport', () => {
     expect(mockBackend.replayWithTiming).toHaveBeenCalledWith(
       emptyInput,
       expect.anything(),
+      expect.any(Function),
     );
     expect(result).toMatchObject({
       capturedAtSeq: -1,
@@ -496,7 +503,7 @@ describe('generateWebmExport', () => {
     expect(mockBackend.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('times out replay and still disposes the backend', async () => {
+  it('stops a replay that makes no progress and still disposes the backend', async () => {
     const replayWithTiming = vi.fn(
       (): Promise<ReturnType<typeof createReplayState>> =>
         new Promise(() => undefined),
@@ -514,11 +521,11 @@ describe('generateWebmExport', () => {
         },
         {
           backendFactory: () => mockBackend.backend,
-          replayTimeoutMs: 1,
+          stallWindowMs: 1,
         },
       ),
     ).rejects.toThrow(
-      'WebM replay timed out after 1 ms (planned duration 2500 ms at recorded timing)',
+      'WebM replay stalled: the renderer made no progress for 1 ms (last event seq -1, recorded timing)',
     );
 
     expect(mockBackend.finalizeVideo).not.toHaveBeenCalled();
@@ -550,54 +557,39 @@ describe('generateWebmExport', () => {
   });
 });
 
-describe('generateWebmExport replay deadline', () => {
-  const FIVE_MINUTES_MS = 5 * 60 * 1000;
-  const BASE_TIME_MS = Date.parse('2026-03-19T12:00:00.000Z');
+describe('generateWebmExport stall watchdog', () => {
+  const WINDOW_MS = 5 * 60 * 1000;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 
-  // Two output events, `spanMs` apart: the recording's whole length.
-  function useRecordingOfLength(spanMs: number): void {
-    mocks.buildReplayInput.mockReturnValue({
-      sessionId: 'session-01',
-      initialCols: 80,
-      initialRows: 24,
-      events: [
-        {
-          seq: 0,
-          type: 'output',
-          ts: new Date(BASE_TIME_MS).toISOString(),
-          payload: { data: 'start\n' },
-        },
-        {
-          seq: 1,
-          type: 'output',
-          ts: new Date(BASE_TIME_MS + spanMs).toISOString(),
-          payload: { data: 'end\n' },
-        },
-      ],
-      targetSeq: 1,
+  type ReplayScript = (
+    onProgress: (progress: ReplayProgress) => void,
+  ) => Promise<ReturnType<typeof createReplayState>>;
+
+  function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
     });
   }
 
-  // Starts an export whose replay runs on fake timers. It takes `replayMs` of
-  // fake time, or never ends when `replayMs` is null.
+  // Starts an export whose replay is `script`, on fake timers. The script
+  // acts as the renderer: it reports progress and takes fake time.
   async function startExport(
-    timingMode: 'recorded' | 'accelerated' | 'max-speed',
-    replayMs: number | null,
+    script: ReplayScript,
+    timingMode: 'recorded' | 'accelerated' | 'max-speed' = 'recorded',
   ) {
     let markReplayStarted: () => void = () => undefined;
     const replayStarted = new Promise<void>((resolve) => {
       markReplayStarted = resolve;
     });
     const replayWithTiming = vi.fn(
-      (): Promise<ReturnType<typeof createReplayState>> => {
+      (
+        _input: unknown,
+        _timing: unknown,
+        onProgress?: (progress: ReplayProgress) => void,
+      ) => {
         markReplayStarted();
-        return new Promise((resolve) => {
-          if (replayMs !== null) {
-            setTimeout(() => {
-              resolve(createReplayState());
-            }, replayMs);
-          }
-        });
+        return script(onProgress ?? (() => undefined));
       },
     );
     const mockBackend = createMockBackend({ replayWithTiming });
@@ -628,70 +620,411 @@ describe('generateWebmExport replay deadline', () => {
   }
 
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.useFakeTimers();
+    mocks.resolveProfile.mockReturnValue({
+      name: 'reference-dark',
+      theme: 'dark',
+      fontFamily: 'monospace',
+      fontSize: 16,
+      cursorStyle: 'block',
+      backgroundColor: '#000000',
+      foregroundColor: '#ffffff',
+    });
+    mocks.buildReplayInput.mockReturnValue({
+      sessionId: 'session-01',
+      initialCols: 80,
+      initialRows: 24,
+      events: createEvents(),
+      targetSeq: 1,
+    });
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('gives a recording of more than 5 minutes the time that its plan needs', async () => {
-    useRecordingOfLength(6 * 60 * 1000);
-    // The replay waits out the recorded gap, then holds the final frame.
-    const { outcome, mockBackend } = await startExport(
-      'recorded',
-      6 * 60 * 1000 + 1_000,
-    );
+  it('keeps a replay going while it reports progress for longer than the window', async () => {
+    const { outcome, mockBackend } = await startExport(async (onProgress) => {
+      for (let seq = 0; seq < 5; seq += 1) {
+        await sleep(WINDOW_MS - 60_000);
+        onProgress({ seq, scheduledWaitMs: 0 });
+      }
+      return createReplayState();
+    });
 
-    await vi.advanceTimersByTimeAsync(6 * 60 * 1000 + 1_000);
-    const { result, error } = await outcome;
-
-    expect(error).toBeUndefined();
-    expect(result?.durationMs).toBe(6 * 60 * 1000);
-    expect(mockBackend.finalizeVideo).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps the deadline within the longest delay that a timer runs', async () => {
-    useRecordingOfLength(30 * 24 * 60 * 60 * 1000);
-    const { outcome } = await startExport('recorded', 60_000);
-
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(5 * (WINDOW_MS - 60_000));
     const { error } = await outcome;
 
     expect(error).toBeUndefined();
+    expect(mockBackend.finalizeVideo).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    // The deadline is the planned duration plus 5 minutes. The plan is the
-    // recorded gap and the final frame hold, with the gap cut by the mode.
-    { timingMode: 'recorded', plannedDurationMs: 6 * 60 * 1000 + 1_000 },
-    { timingMode: 'accelerated', plannedDurationMs: 400 + 1_000 },
-    { timingMode: 'max-speed', plannedDurationMs: 500 },
-  ] as const)(
-    'stops a hung $timingMode replay once its plan and 5 minutes have passed',
-    async ({ timingMode, plannedDurationMs }) => {
-      useRecordingOfLength(6 * 60 * 1000);
-      const deadlineMs = plannedDurationMs + FIVE_MINUTES_MS;
+  it('does not count a multi-day wait on the timing schedule as a stall', async () => {
+    const { outcome, mockBackend } = await startExport(async (onProgress) => {
+      onProgress({ seq: 0, scheduledWaitMs: 20 * DAY_MS });
+      await sleep(20 * DAY_MS);
+      onProgress({ seq: 1, scheduledWaitMs: 0 });
+      return createReplayState();
+    });
+
+    await vi.advanceTimersByTimeAsync(20 * DAY_MS);
+    const { error } = await outcome;
+
+    expect(error).toBeUndefined();
+    expect(mockBackend.finalizeVideo).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts no timer that runs longer than a timer can, for a wait of 30 days', async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const { outcome, mockBackend } = await startExport(async (onProgress) => {
+      onProgress({ seq: 0, scheduledWaitMs: 30 * DAY_MS });
+      await sleep(15 * DAY_MS);
+      await sleep(15 * DAY_MS);
+      onProgress({ seq: 1, scheduledWaitMs: 0 });
+      return createReplayState();
+    });
+
+    await vi.advanceTimersByTimeAsync(30 * DAY_MS);
+    const { error } = await outcome;
+
+    expect(error).toBeUndefined();
+    expect(mockBackend.finalizeVideo).toHaveBeenCalledTimes(1);
+    const delays = setTimeoutSpy.mock.calls.map((call) => Number(call[1]));
+    expect(delays.length).toBeGreaterThan(0);
+    expect(Math.max(...delays)).toBeLessThanOrEqual(MAX_TIMER_DELAY_MS);
+  });
+
+  it.each(['recorded', 'accelerated', 'max-speed'] as const)(
+    'stops a hung %s replay once the window has passed since its last progress',
+    async (timingMode) => {
       const { outcome, mockBackend, isSettled } = await startExport(
+        async (onProgress) => {
+          await sleep(1_000);
+          onProgress({ seq: 7, scheduledWaitMs: 0 });
+          return new Promise(() => undefined);
+        },
         timingMode,
-        null,
       );
 
-      await vi.advanceTimersByTimeAsync(deadlineMs - 1);
+      await vi.advanceTimersByTimeAsync(1_000 + WINDOW_MS - 1);
       expect(isSettled()).toBe(false);
 
       await vi.advanceTimersByTimeAsync(1);
       const { error } = await outcome;
 
-      expect(error).toBeInstanceOf(WebmReplayTimeoutError);
+      expect(error).toBeInstanceOf(WebmReplayStallError);
       expect(error).toMatchObject({
-        timeoutMs: deadlineMs,
-        plannedDurationMs,
+        stallWindowMs: WINDOW_MS,
+        lastSeq: 7,
         timingMode,
-        message: `WebM replay timed out after ${String(deadlineMs)} ms (planned duration ${String(plannedDurationMs)} ms at ${timingMode} timing)`,
+        message: `WebM replay stalled: the renderer made no progress for ${String(WINDOW_MS)} ms (last event seq 7, ${timingMode} timing)`,
       });
       expect(mockBackend.finalizeVideo).not.toHaveBeenCalled();
       expect(mockBackend.dispose).toHaveBeenCalledTimes(1);
     },
   );
+
+  it('stops a replay that reports nothing, naming no event', async () => {
+    const { outcome, isSettled } = await startExport(
+      () => new Promise(() => undefined),
+    );
+
+    await vi.advanceTimersByTimeAsync(WINDOW_MS - 1);
+    expect(isSettled()).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    const { error } = await outcome;
+
+    expect(error).toBeInstanceOf(WebmReplayStallError);
+    expect(error).toMatchObject({ stallWindowMs: WINDOW_MS, lastSeq: -1 });
+  });
+
+  it('starts the window after a scheduled wait, not before it', async () => {
+    const { outcome, isSettled } = await startExport((onProgress) => {
+      onProgress({ seq: 3, scheduledWaitMs: 2 * DAY_MS });
+      return new Promise(() => undefined);
+    });
+
+    await vi.advanceTimersByTimeAsync(2 * DAY_MS + WINDOW_MS - 1);
+    expect(isSettled()).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    const { error } = await outcome;
+
+    expect(error).toBeInstanceOf(WebmReplayStallError);
+    expect(error).toMatchObject({ stallWindowMs: WINDOW_MS, lastSeq: 3 });
+  });
+
+  it('leaves no timer behind when the replay succeeds', async () => {
+    const { outcome } = await startExport((onProgress) => {
+      onProgress({ seq: 0, scheduledWaitMs: DAY_MS });
+      return Promise.resolve(createReplayState());
+    });
+
+    const { error } = await outcome;
+
+    expect(error).toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('leaves no timer behind when the replay fails', async () => {
+    const replayError = new Error('replay failed');
+    const { outcome } = await startExport((onProgress) => {
+      onProgress({ seq: 0, scheduledWaitMs: DAY_MS });
+      return Promise.reject(replayError);
+    });
+
+    const { error } = await outcome;
+
+    expect(error).toBe(replayError);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('starts no timer when a replay that already stalled reports again', async () => {
+    let reportLate: (progress: ReplayProgress) => void = () => undefined;
+    const { outcome } = await startExport((onProgress) => {
+      reportLate = onProgress;
+      return new Promise(() => undefined);
+    });
+
+    await vi.advanceTimersByTimeAsync(WINDOW_MS);
+    const { error } = await outcome;
+    expect(error).toBeInstanceOf(WebmReplayStallError);
+
+    reportLate({ seq: 9, scheduledWaitMs: DAY_MS });
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    { seq: 0.5, scheduledWaitMs: 0, message: 'seq must be an integer' },
+    { seq: -2, scheduledWaitMs: 0, message: 'seq must be an integer' },
+    { seq: 0, scheduledWaitMs: -1, message: 'scheduledWaitMs must be' },
+    { seq: 0, scheduledWaitMs: Number.NaN, message: 'scheduledWaitMs must be' },
+  ])(
+    'rejects a progress report of seq $seq and wait $scheduledWaitMs',
+    async ({ seq, scheduledWaitMs, message }) => {
+      const { outcome } = await startExport((onProgress) => {
+        onProgress({ seq, scheduledWaitMs });
+        return Promise.resolve(createReplayState());
+      });
+
+      const { error } = await outcome;
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(message);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+});
+
+// These tests run the real GhosttyWebBackend replay loop with its renderer
+// bridge replaced by a stub that takes fake time. They check that the loop
+// reports progress where the watchdog needs it.
+describe('generateWebmExport stall watchdog with the ghostty-web replay loop', () => {
+  const BASE_TIME_MS = Date.parse('2026-03-19T12:00:00.000Z');
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const WINDOW_MS = 5 * 60 * 1000;
+
+  type ReplayEvent = {
+    seq: number;
+    type: 'output' | 'input_text';
+    ts: string;
+    payload: { data: string };
+  };
+
+  function event(
+    seq: number,
+    offsetMs: number,
+    type: ReplayEvent['type'] = 'output',
+  ): ReplayEvent {
+    return {
+      seq,
+      type,
+      ts: new Date(BASE_TIME_MS + offsetMs).toISOString(),
+      payload: { data: `e${String(seq)}` },
+    };
+  }
+
+  // Exports `events` with the real replay loop. Each bridge call takes
+  // `bridgeCostMs` of fake time. Returns how long the replay took in fake
+  // time, or the error that stopped it.
+  async function exportWithRealReplayLoop(
+    events: ReplayEvent[],
+    timingMode: 'recorded' | 'accelerated' | 'max-speed',
+    bridgeCostMs: number,
+    runForMs: number,
+  ): Promise<{ replayMs: number | undefined; error: unknown }> {
+    mocks.buildReplayInput.mockReturnValue({
+      sessionId: 'session-01',
+      initialCols: 80,
+      initialRows: 24,
+      events,
+      targetSeq: events.length - 1,
+    });
+    let markReplayStarted: () => void = () => undefined;
+    const replayStarted = new Promise<void>((resolve) => {
+      markReplayStarted = resolve;
+    });
+    let finalizedAtMs: number | undefined;
+    let startedAtMs = 0;
+    const outcome = generateWebmExport(
+      {
+        sessionId: 'session-01',
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
+        manifest: createManifest(),
+        events: [],
+        outputPath: '/tmp/exports/recording-1-webm.webm',
+        timingMode,
+      },
+      {
+        backendFactory: (_rendererName, sessionId, profile, videoOptions) => {
+          const backend = new GhosttyWebBackend(
+            sessionId,
+            profile,
+            videoOptions,
+          );
+          Object.assign(backend as object, {
+            boot: () => Promise.resolve(),
+            isBooted: true,
+            page: { isClosed: () => false },
+            resizeBridge: () => {
+              startedAtMs = Date.now();
+              markReplayStarted();
+              return Promise.resolve();
+            },
+            writeBatchBridge: () =>
+              new Promise<void>((resolve) => {
+                setTimeout(resolve, bridgeCostMs);
+              }),
+            notePaintedGraphemes: () => Promise.resolve(),
+            checkPaintedGlyphs: () => Promise.resolve({}),
+            readHarnessSnapshot: () =>
+              Promise.resolve({
+                cols: 80,
+                rows: 24,
+                cursorRow: 0,
+                cursorCol: 0,
+                isAltScreen: false,
+                visibleLines: [],
+              }),
+            recordedMissingGlyphs: () => Promise.resolve({}),
+            finalizeVideo: () => {
+              finalizedAtMs = Date.now();
+              return Promise.resolve();
+            },
+            dispose: () => Promise.resolve(),
+          });
+          return backend;
+        },
+      },
+    ).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    await replayStarted;
+    await vi.advanceTimersByTimeAsync(runForMs);
+    const error = await outcome;
+
+    return {
+      replayMs:
+        finalizedAtMs === undefined ? undefined : finalizedAtMs - startedAtMs,
+      error,
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    mocks.resolveProfile.mockReturnValue({
+      name: 'reference-dark',
+      theme: 'dark',
+      fontFamily: 'monospace',
+      fontSize: 16,
+      cursorStyle: 'block',
+      backgroundColor: '#000000',
+      foregroundColor: '#ffffff',
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    { label: '6 minutes', gapMs: 6 * 60 * 1000 },
+    { label: '20 days', gapMs: 20 * DAY_MS },
+  ])(
+    'exports a recording with a gap of $label at recorded timing',
+    async ({ gapMs }) => {
+      const { replayMs, error } = await exportWithRealReplayLoop(
+        [event(0, 0), event(1, gapMs)],
+        'recorded',
+        0,
+        gapMs + 60_000,
+      );
+
+      expect(error).toBeUndefined();
+      expect(replayMs).toBeGreaterThan(gapMs);
+    },
+  );
+
+  it.each([
+    { timingMode: 'accelerated', eventCount: 7_401, bridgeCostMs: 50 },
+    { timingMode: 'max-speed', eventCount: 39_001, bridgeCostMs: 15 },
+  ] as const)(
+    'exports a dense $timingMode recording whose replay runs far past its plan',
+    async ({ timingMode, eventCount, bridgeCostMs }) => {
+      // An input event after each output event forces a flush, and each flush
+      // holds the frame, so the replay takes minutes for a recording that
+      // spans seconds.
+      const events = Array.from({ length: eventCount }, (_, seq) =>
+        event(seq, seq, seq % 2 === 0 ? 'output' : 'input_text'),
+      );
+      const { replayMs, error } = await exportWithRealReplayLoop(
+        events,
+        timingMode,
+        bridgeCostMs,
+        60 * 60 * 1000,
+      );
+
+      expect(error).toBeUndefined();
+      expect(replayMs).toBeGreaterThan(WINDOW_MS);
+    },
+  );
+
+  it('exports a max-speed recording whose output goes to the renderer in one flush', async () => {
+    // One flush is 40 bridge calls of 21 s each, 14 minutes in all. Each
+    // call is progress.
+    const events = Array.from({ length: 39_001 }, (_, seq) => event(seq, seq));
+    const { replayMs, error } = await exportWithRealReplayLoop(
+      events,
+      'max-speed',
+      21_000,
+      60 * 60 * 1000,
+    );
+
+    expect(error).toBeUndefined();
+    expect(replayMs).toBeGreaterThan(WINDOW_MS);
+  });
+
+  it('stops a replay whose renderer call hangs and names the last event it reached', async () => {
+    const events = [event(0, 0), event(1, 10), event(2, 20, 'input_text')];
+    const { replayMs, error } = await exportWithRealReplayLoop(
+      events,
+      'recorded',
+      // A bridge call that outlasts the window.
+      2 * WINDOW_MS,
+      60 * 60 * 1000,
+    );
+
+    expect(replayMs).toBeUndefined();
+    expect(error).toBeInstanceOf(WebmReplayStallError);
+    expect(error).toMatchObject({
+      stallWindowMs: WINDOW_MS,
+      timingMode: 'recorded',
+    });
+  });
 });

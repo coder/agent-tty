@@ -102,11 +102,27 @@ export type ReplayTimingOptions =
   | RecordedTimingOptions
   | MaxSpeedTimingOptions;
 
+/** One report that a timed replay makes to its caller. */
+export interface ReplayProgress {
+  /** Seq of the last event that the replay reached, or -1 before the first. */
+  seq: number;
+  /**
+   * How long the replay waits on its timing schedule right after this report.
+   * A caller that watches for stalls must not count that wait.
+   */
+  scheduledWaitMs: number;
+}
+
 export interface VideoCapableRendererBackend extends RendererBackend {
-  /** Replay events with controlled timing for video capture. */
+  /**
+   * Replay events with controlled timing for video capture. `onProgress`
+   * runs before each wait on the timing schedule and after each batch of
+   * output that the replay writes to the renderer.
+   */
   replayWithTiming(
     input: ReplayInput,
     timing: ReplayTimingOptions,
+    onProgress?: (progress: ReplayProgress) => void,
   ): Promise<ReplayState>;
 
   /** Finalize and save the video recording to the given path. */

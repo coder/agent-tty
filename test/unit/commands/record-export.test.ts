@@ -20,7 +20,7 @@ import type * as HomeModule from '../../../src/storage/home.js';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { WebmReplayTimeoutError } from '../../../src/export/webm.js';
+import { WebmReplayStallError } from '../../../src/export/webm.js';
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 import { EventLogTooLargeError } from '../../../src/storage/eventLogCodec.js';
 
@@ -1662,34 +1662,47 @@ describe('record export command', () => {
     },
   );
 
-  it('names the timeout and the planned duration when the WebM replay times out', async () => {
-    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
-    mocks.generateWebmExport.mockRejectedValue(
-      new WebmReplayTimeoutError(661_000, 361_000, 'recorded'),
-    );
+  it.each([
+    {
+      lastSeq: 1_234,
+      timingMode: 'recorded',
+      position: 'after event 1234',
+    },
+    {
+      lastSeq: -1,
+      timingMode: 'max-speed',
+      position: 'at the start of the replay',
+    },
+  ] as const)(
+    'names the stall window and the last event when the WebM replay stalls ($position)',
+    async ({ lastSeq, timingMode, position }) => {
+      mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+      mocks.generateWebmExport.mockRejectedValue(
+        new WebmReplayStallError(300_000, lastSeq, timingMode),
+      );
 
-    await expect(
-      runRecordExportCommand({
-        context: TEST_CONTEXT,
-        json: true,
-        sessionId: 'session-01',
-        format: 'webm',
-      }),
-    ).rejects.toMatchObject({
-      code: ERROR_CODES.EXPORT_ERROR,
-      message:
-        'Failed to export session "session-01" as webm: the replay timed out after 661 s. The recording plans 361 s at recorded timing.',
-      details: {
-        sessionId: 'session-01',
-        format: 'webm',
-        replayTimeoutMs: 661_000,
-        plannedDurationMs: 361_000,
-        timingMode: 'recorded',
-      },
-    });
-    expect(mocks.generateWebmExport).toHaveBeenCalledTimes(1);
-    expect(mocks.emitSuccess).not.toHaveBeenCalled();
-  });
+      await expect(
+        runRecordExportCommand({
+          context: TEST_CONTEXT,
+          json: true,
+          sessionId: 'session-01',
+          format: 'webm',
+        }),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.EXPORT_ERROR,
+        message: `Failed to export session "session-01" as webm: the renderer made no progress for 300 s ${position} (${timingMode} timing).`,
+        details: {
+          sessionId: 'session-01',
+          format: 'webm',
+          stallWindowMs: 300_000,
+          lastSeq,
+          timingMode,
+        },
+      });
+      expect(mocks.generateWebmExport).toHaveBeenCalledTimes(1);
+      expect(mocks.emitSuccess).not.toHaveBeenCalled();
+    },
+  );
 
   it('keeps the generic message for other WebM export failures', async () => {
     mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');

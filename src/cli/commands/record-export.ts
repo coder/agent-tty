@@ -13,7 +13,7 @@ import { generateAsciicast } from '../../export/asciicast.js';
 import { renderGridFramesToSvg } from '../../export/svg.js';
 import {
   generateWebmExport,
-  WebmReplayTimeoutError,
+  WebmReplayStallError,
   type WebmExportResult,
 } from '../../export/webm.js';
 import { captureGridFrames } from '../../replay/gridFrames.js';
@@ -597,15 +597,19 @@ export async function runRecordExportCommand(
       });
     }
 
-    if (error instanceof WebmReplayTimeoutError) {
+    if (error instanceof WebmReplayStallError) {
+      const position =
+        error.lastSeq >= 0
+          ? `after event ${String(error.lastSeq)}`
+          : 'at the start of the replay';
       throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
-        message: `Failed to export session "${options.sessionId}" as ${format}: the replay timed out after ${String(error.timeoutMs / 1000)} s. The recording plans ${String(error.plannedDurationMs / 1000)} s at ${error.timingMode} timing.`,
+        message: `Failed to export session "${options.sessionId}" as ${format}: the renderer made no progress for ${String(error.stallWindowMs / 1000)} s ${position} (${error.timingMode} timing).`,
         details: {
           sessionId: options.sessionId,
           format,
           out: options.out,
-          replayTimeoutMs: error.timeoutMs,
-          plannedDurationMs: error.plannedDurationMs,
+          stallWindowMs: error.stallWindowMs,
+          lastSeq: error.lastSeq,
           timingMode: error.timingMode,
         },
         cause: error,
