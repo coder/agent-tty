@@ -11,6 +11,7 @@ import {
 } from '../protocol/schemas.js';
 import type {
   RecordedGlyphFields,
+  ReplayProgress,
   ReplayTimingOptions,
   VideoCapableRendererBackend,
   VideoRecordingOptions,
@@ -25,7 +26,14 @@ import { resolveProfile } from '../renderer/profiles.js';
 import type { RenderProfileConfig, ReplayState } from '../renderer/types.js';
 import { invariant, unreachable } from '../util/assert.js';
 
-const REPLAY_TIMEOUT_MS = 5 * 60 * 1000;
+// The replay fails when the renderer makes no progress for this long. A bridge
+// call writes at most 1000 output chunks, and the longest one that a measured
+// export made took 22 s on a loaded host. The window is the old fixed limit on
+// the whole replay, so an export that fit before still fits. Boot and finalize
+// run outside the watchdog.
+const REPLAY_STALL_WINDOW_MS = 5 * 60 * 1000;
+// Node runs a timer with a longer delay after 1 ms.
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 // maxGapMs/minFrameHoldMs are tuned for watchability: shorter clamps make the
 // video flicker because every idle gap collapses to a near-instant cut.
 const ACCELERATED_TIMING: ReplayTimingOptions = Object.freeze({
@@ -50,6 +58,28 @@ function buildReplayTimingOptions(mode: ReplayTimingMode): ReplayTimingOptions {
   }
 }
 
+export class WebmReplayStallError extends Error {
+  public readonly stallWindowMs: number;
+  // Seq of the last event that the replay reached, or -1 when it had reached
+  // none before it stalled.
+  public readonly lastSeq: number;
+  public readonly timingMode: ReplayTimingMode;
+
+  public constructor(
+    stallWindowMs: number,
+    lastSeq: number,
+    timingMode: ReplayTimingMode,
+  ) {
+    super(
+      `WebM replay stalled: the renderer made no progress for ${String(stallWindowMs)} ms (last event seq ${String(lastSeq)}, ${timingMode} timing)`,
+    );
+    this.name = 'WebmReplayStallError';
+    this.stallWindowMs = stallWindowMs;
+    this.lastSeq = lastSeq;
+    this.timingMode = timingMode;
+  }
+}
+
 export interface WebmExportOptions {
   sessionId: string;
   sessionDir: string;
@@ -69,7 +99,7 @@ export interface WebmExportDeps {
     profile: RenderProfileConfig,
     videoOptions: VideoRecordingOptions,
   ) => VideoCapableRendererBackend;
-  replayTimeoutMs?: number;
+  stallWindowMs?: number;
 }
 
 export interface WebmExportResult extends RecordedGlyphFields {
@@ -106,27 +136,66 @@ function parseTimestamp(timestamp: string, label: string): number {
   return parsedTimestamp;
 }
 
-async function replayWithTimeout(
+// Fails the replay when the renderer makes no progress for `stallWindowMs`.
+// The replay reports progress (see ReplayProgress) and each report restarts the
+// window. A wait on the timing schedule is not a stall, so the window starts
+// after that wait. A timer runs at most MAX_TIMER_DELAY_MS, so a longer span
+// is a chain of timers.
+async function replayWithStallWatchdog(
   backend: VideoCapableRendererBackend,
   replayInput: ReturnType<typeof buildReplayInput>,
   timingOptions: ReplayTimingOptions,
-  timeoutMs: number,
+  stallWindowMs: number,
 ): Promise<ReplayState> {
-  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let lastSeq = -1;
+  let done = false;
+  let rejectStall: (error: WebmReplayStallError) => void = () => undefined;
+  const stalled = new Promise<never>((_, reject) => {
+    rejectStall = reject;
+  });
 
+  const arm = (remainingMs: number): void => {
+    const delayMs = Math.min(remainingMs, MAX_TIMER_DELAY_MS);
+    timer = setTimeout(() => {
+      if (remainingMs > delayMs) {
+        arm(remainingMs - delayMs);
+        return;
+      }
+      done = true;
+      rejectStall(
+        new WebmReplayStallError(stallWindowMs, lastSeq, timingOptions.mode),
+      );
+    }, delayMs);
+  };
+  const onProgress = (progress: ReplayProgress): void => {
+    // A replay that outlives its failure must not start a timer again.
+    if (done) {
+      return;
+    }
+    invariant(
+      Number.isInteger(progress.seq) && progress.seq >= -1,
+      'replay progress seq must be an integer of at least -1',
+    );
+    invariant(
+      Number.isFinite(progress.scheduledWaitMs) &&
+        progress.scheduledWaitMs >= 0,
+      'replay progress scheduledWaitMs must be a non-negative number',
+    );
+    clearTimeout(timer);
+    lastSeq = progress.seq;
+    arm(progress.scheduledWaitMs + stallWindowMs);
+  };
+
+  arm(stallWindowMs);
   try {
     return await Promise.race([
-      backend.replayWithTiming(replayInput, timingOptions),
-      new Promise<never>((_, reject) => {
-        timeoutHandle = setTimeout(() => {
-          reject(new Error('WebM replay timed out after 5 minutes'));
-        }, timeoutMs);
-      }),
+      backend.replayWithTiming(replayInput, timingOptions, onProgress),
+      stalled,
     ]);
   } finally {
-    if (timeoutHandle !== undefined) {
-      clearTimeout(timeoutHandle);
-    }
+    done = true;
+    clearTimeout(timer);
   }
 }
 
@@ -187,11 +256,11 @@ export async function generateWebmExport(
       requestedRendererName === 'libghostty-vt'
         ? 'ghostty-web'
         : requestedRendererName;
-    const replayTimeoutMs = deps?.replayTimeoutMs ?? REPLAY_TIMEOUT_MS;
+    const stallWindowMs = deps?.stallWindowMs ?? REPLAY_STALL_WINDOW_MS;
 
     invariant(
-      replayTimeoutMs > 0,
-      'replayTimeoutMs must be a positive number when provided',
+      Number.isFinite(stallWindowMs) && stallWindowMs > 0,
+      'stallWindowMs must be a positive number when provided',
     );
     backend = backendFactory(
       videoRendererName,
@@ -202,11 +271,11 @@ export async function generateWebmExport(
 
     await backend.boot();
 
-    const replayState = await replayWithTimeout(
+    const replayState = await replayWithStallWatchdog(
       backend,
       replayInput,
       timingOptions,
-      replayTimeoutMs,
+      stallWindowMs,
     );
     const missingGlyphs = await backend.recordedMissingGlyphs();
     await backend.finalizeVideo(options.outputPath);

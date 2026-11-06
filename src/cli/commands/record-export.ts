@@ -13,6 +13,7 @@ import { generateAsciicast } from '../../export/asciicast.js';
 import { renderGridFramesToSvg } from '../../export/svg.js';
 import {
   generateWebmExport,
+  WebmReplayStallError,
   type WebmExportResult,
 } from '../../export/webm.js';
 import { captureGridFrames } from '../../replay/gridFrames.js';
@@ -591,6 +592,25 @@ export async function runRecordExportCommand(
           out: options.out,
           eventLogBytes: error.size,
           maxEventLogBytes: error.maxSize,
+        },
+        cause: error,
+      });
+    }
+
+    if (error instanceof WebmReplayStallError) {
+      const position =
+        error.lastSeq >= 0
+          ? `after event ${String(error.lastSeq)}`
+          : 'at the start of the replay';
+      throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
+        message: `Failed to export session "${options.sessionId}" as ${format}: the renderer made no progress for ${String(error.stallWindowMs / 1000)} s ${position} (${error.timingMode} timing).`,
+        details: {
+          sessionId: options.sessionId,
+          format,
+          out: options.out,
+          stallWindowMs: error.stallWindowMs,
+          lastSeq: error.lastSeq,
+          timingMode: error.timingMode,
         },
         cause: error,
       });

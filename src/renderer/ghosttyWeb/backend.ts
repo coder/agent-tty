@@ -30,6 +30,7 @@ import {
 } from '../../util/resourceScope.js';
 import type {
   RecordedGlyphFields,
+  ReplayProgress,
   ReplayTimingOptions,
   ScreenshotOptions,
   SnapshotOptions,
@@ -508,6 +509,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   public async replayWithTiming(
     input: ReplayInput,
     timing: ReplayTimingOptions,
+    onProgress?: (progress: ReplayProgress) => void,
   ): Promise<ReplayState> {
     const page = this.requireOperationalPage('replayWithTiming()');
 
@@ -664,9 +666,10 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         return;
       }
 
-      await this.flushOutputBatch(page, pendingOutputChunks, () =>
-        this.notePaintedGraphemes(page),
-      );
+      await this.flushOutputBatch(page, pendingOutputChunks, async () => {
+        await this.notePaintedGraphemes(page);
+        onProgress?.({ seq: highestProcessedSeq, scheduledWaitMs: 0 });
+      });
       pendingOutputChunks = [];
       pendingSinceTimestampMs = null;
       await waitForDelay(resolvedMinFrameHoldMs);
@@ -719,14 +722,14 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         }
         // Waiting for the event's place on the schedule lets frame holds and
         // bridge calls use up time that the recording spent idle.
-        await waitForDelay(
-          Math.max(
-            0,
-            Math.round(
-              scheduledElapsedMs - (performance.now() - scheduleStartedAtMs),
-            ),
+        const scheduledWaitMs = Math.max(
+          0,
+          Math.round(
+            scheduledElapsedMs - (performance.now() - scheduleStartedAtMs),
           ),
         );
+        onProgress?.({ seq: highestProcessedSeq, scheduledWaitMs });
+        await waitForDelay(scheduledWaitMs);
       }
       previousProcessedEventTimestampMs = eventTimestampMs;
 
