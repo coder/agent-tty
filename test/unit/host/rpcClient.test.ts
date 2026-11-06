@@ -282,6 +282,77 @@ describe('sendRpc response cap with keep-alives', () => {
     tempDir = '';
   });
 
+  // A host that writes each chunk that `chunksFor(id)` returns in a write of
+  // its own, 20 ms apart, once it has seen the request.
+  async function listenChunks(
+    chunksFor: (id: string) => string[],
+  ): Promise<net.Server> {
+    const server = net.createServer((socket) => {
+      socket.on('error', () => undefined);
+      socket.once('data', (request: Buffer) => {
+        const { id } = JSON.parse(request.toString('utf8')) as { id: string };
+        void (async () => {
+          for (const chunk of chunksFor(id)) {
+            socket.write(chunk);
+            await setTimeout(20);
+          }
+          socket.end();
+        })();
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(join(tempDir, 'rpc.sock'), () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
+    return server;
+  }
+
+  it('keeps the spaces at the start of a chunk inside the response', async () => {
+    const server = await listenChunks((id) => [
+      ' ',
+      ' ',
+      `{"id":${JSON.stringify(id)},"ok":true,"result":"a`,
+      '  b"}\n',
+    ]);
+    try {
+      const result = await sendRpc(
+        join(tempDir, 'rpc.sock'),
+        'ping',
+        {},
+        5_000,
+      );
+
+      expect(result).toBe('a  b');
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('takes a newline ahead of the response as an empty response line', async () => {
+    // Only a space is a keep-alive. A newline ends the line, so the response
+    // that follows it is never read.
+    const server = await listenChunks((id) => [
+      ' ',
+      '\n',
+      `{"id":${JSON.stringify(id)},"ok":true,"result":"a"}\n`,
+    ]);
+    try {
+      const error = await sendRpc(
+        join(tempDir, 'rpc.sock'),
+        'ping',
+        {},
+        5_000,
+      ).catch((rejection: unknown) => rejection);
+
+      expect(error).toMatchObject({ code: 'RPC_ERROR' });
+    } finally {
+      await close(server);
+    }
+  });
+
   // A host that writes `keepAlives` spaces and then a success response line of
   // `lineChars` characters, newline included. `sent.resultChars` is the length
   // of the result in that line, once the host has seen the request.
