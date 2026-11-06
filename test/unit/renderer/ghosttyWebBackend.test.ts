@@ -522,7 +522,7 @@ describe('GhosttyWebBackend unit guards', () => {
       (backend: GhosttyWebBackend, input: ReplayInput) =>
         backend.replayWithTiming(input, {
           mode: 'max-speed',
-          minFrameHoldMs: 16,
+          minFrameHoldMs: 0,
           finalFrameHoldMs: 0,
         }),
     ],

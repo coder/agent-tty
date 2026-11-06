@@ -706,7 +706,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           'replay event timestamps must be ordered non-decreasingly',
         );
         scheduledElapsedMs += computeInterEventDelay(interEventDelayMs);
-        // Output shows once its batch is a frame hold old, unless the replay
+        // Output shows once its batch is a frame hold old (and at least 1 ms:
+        // events with one timestamp are one moment), unless the replay
         // runs behind the schedule: then batches grow until it catches up, so
         // slow flushes lower the frame rate instead of stretching the video.
         // Max-speed has no schedule to fall behind. It flushes every frame
@@ -718,7 +719,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         if (
           pendingSinceTimestampMs !== null &&
           eventTimestampMs - pendingSinceTimestampMs >=
-            resolvedMinFrameHoldMs &&
+            Math.max(1, resolvedMinFrameHoldMs) &&
           (timing.mode === 'max-speed' ||
             performance.now() - scheduleStartedAtMs <= scheduledElapsedMs)
         ) {

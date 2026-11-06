@@ -770,7 +770,7 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       (renderer: GhosttyWebBackend, input: ReplayInput) =>
         renderer.replayWithTiming(input, {
           mode: 'max-speed',
-          minFrameHoldMs: 16,
+          minFrameHoldMs: 0,
           finalFrameHoldMs: 0,
         }),
     ],
