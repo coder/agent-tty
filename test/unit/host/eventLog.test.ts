@@ -862,6 +862,30 @@ describe('EventLog size limit', () => {
     ]);
   });
 
+  it('does not treat other markers as the stop record when it opens a log', async () => {
+    const first = await EventLog.open(eventLogPath, { maxBytes: LIMIT });
+    try {
+      await first.append('output', { data: 'prompt$ ' });
+      await first.append('marker', { label: 'checkpoint' });
+    } finally {
+      await first.close();
+    }
+
+    const reopened = await EventLog.open(eventLogPath, { maxBytes: LIMIT });
+    try {
+      await expect(reopened.append('output', { data: 'ok' })).resolves.toBe(2);
+      await reopened.readAll();
+
+      expect(reopened.getEvents().map((event) => event.type)).toEqual([
+        'output',
+        'marker',
+        'output',
+      ]);
+    } finally {
+      await reopened.close();
+    }
+  });
+
   it('refuses a log of blank lines that leaves no room for a stop record', async () => {
     // No record, so a dropped append would have no seq to report.
     await writeFile(eventLogPath, '\n'.repeat(LIMIT), 'utf8');
