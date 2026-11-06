@@ -730,15 +730,16 @@ describe('HostRendererManager replay progress', () => {
     // The third call of `replayTo` fails once, as when the page crashes.
     backendFactory = vi.fn(() => {
       const backend = createReplayingBackend();
-      const replay = backend.replayToMock.getMockImplementation();
-      expect(replay).toBeDefined();
+      const replay = backend.replayTo.bind(backend);
       let calls = 0;
-      backend.replayToMock.mockImplementation((input: ReplayInput) => {
+      const replayToMock = vi.fn((input: ReplayInput): Promise<ReplayState> => {
         calls += 1;
         return calls === 3
           ? Promise.reject(new Error('page crashed'))
-          : (replay as typeof backend.replayTo)(input);
+          : replay(input);
       });
+      backend.replayTo = replayToMock;
+      backend.replayToMock = replayToMock;
       backends.push(backend);
       return backend;
     });
@@ -768,7 +769,9 @@ describe('HostRendererManager replay progress', () => {
 
     // The retry does not start over, and it is not one call that replays all
     // the events that are left: it has slices, and the last has the input.
-    const retryInputs = replayCalls.slice(3).map(([input]) => input);
+    const retryInputs = replayCalls
+      .slice(3)
+      .map(([input]) => input as ReplayInput);
     expect(retryInputs.length).toBeGreaterThan(1);
     expect(retryInputs[0]?.events[0]?.seq).toBe(replayedBeforeRetry);
     expect(retryInputs[0]?.events.length).toBeLessThan(

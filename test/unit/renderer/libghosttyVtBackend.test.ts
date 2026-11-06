@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { LibghosttyVtBackend } from '../../../src/renderer/libghosttyVt/backend.js';
+import type { ScreenshotOptions } from '../../../src/renderer/backend.js';
 import type { LibghosttyVtNativeModule } from '../../../src/renderer/libghosttyVt/backend.js';
 import { iterateInRangeReplayEvents } from '../../../src/renderer/replayEvents.js';
 import type {
@@ -677,16 +678,16 @@ describe('LibghosttyVtBackend', () => {
     // ends at the last event that it replays.
     const steps: string[] = [];
     let lastSeq = -1;
-    fallback.bootMock.mockImplementation(() => {
+    const bootMock = vi.fn((): Promise<void> => {
       steps.push('boot');
       return Promise.resolve();
     });
-    fallback.replayToMock.mockImplementation((input: ReplayInput) => {
+    const replayToMock = vi.fn((input: ReplayInput): Promise<ReplayState> => {
       steps.push('replay');
       for (const event of iterateInRangeReplayEvents(input, lastSeq)) {
         lastSeq = event.seq;
       }
-      return Promise.resolve<ReplayState>({
+      return Promise.resolve({
         lastSeq,
         cols: input.initialCols,
         rows: input.initialRows,
@@ -694,27 +695,17 @@ describe('LibghosttyVtBackend', () => {
         cursorCol: 0,
       });
     });
-    fallback.screenshotMock.mockImplementation(
-      (outputPath: string, options?: { onReplayProgress?: () => void }) => {
+    const screenshot = fallback.screenshot.bind(fallback);
+    const screenshotMock = vi.fn(
+      (outputPath: string, options?: ScreenshotOptions) => {
         steps.push('screenshot');
         expect(options?.onReplayProgress).toBeTypeOf('function');
-        return Promise.resolve({
-          sessionId: 'session-01',
-          capturedAtSeq: 299,
-          profileName: 'reference-dark',
-          cols: 10,
-          rows: 4,
-          artifactPath: outputPath,
-          pngSizeBytes: 4,
-          cursorVisible: false,
-          rendererBackend: 'ghostty-web',
-          pixelWidth: 80,
-          pixelHeight: 64,
-          sha256: 'a'.repeat(64),
-          renderProfileHash: 'b'.repeat(64),
-        });
+        return screenshot(outputPath, options);
       },
     );
+    fallback.boot = bootMock;
+    fallback.replayTo = replayToMock;
+    fallback.screenshot = screenshotMock;
     const backend = createBackend(fixture, { fallbackFactory: () => fallback });
     const replayInput = createReplayInput({
       targetSeq: 299,
@@ -735,7 +726,7 @@ describe('LibghosttyVtBackend', () => {
     });
 
     // The first report follows the boot. Each `replayTo` call has one.
-    const replayCalls = fallback.replayToMock.mock.calls.length;
+    const replayCalls = replayToMock.mock.calls.length;
     expect(replayCalls).toBeGreaterThan(2);
     expect(steps).toEqual([
       'boot',
@@ -747,9 +738,7 @@ describe('LibghosttyVtBackend', () => {
       'screenshot',
     ]);
     // The slices hold the events once, and the last call has the input.
-    const inputs = fallback.replayToMock.mock.calls.map(
-      ([input]) => input as ReplayInput,
-    );
+    const inputs = replayToMock.mock.calls.map(([input]) => input);
     expect(inputs.at(-1)).toBe(replayInput);
     expect(
       inputs.slice(0, -1).every((input) => input.events.length < 300),
