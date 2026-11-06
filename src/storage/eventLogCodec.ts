@@ -192,8 +192,8 @@ export interface EventLogScan {
 /**
  * Reads the file once and returns what it holds. All three results describe
  * the same bytes: the file as it was when the scan measured it, so a live
- * host that appends meanwhile cannot make them disagree. Returns `undefined` when
- * the file does not exist.
+ * host that appends meanwhile cannot make them disagree. Returns `undefined`
+ * when the file does not exist.
  *
  * `stop` is the first stop marker that a replay would reach: the scan parses
  * lines with the codec of `parseEventLogContent`, and it stops looking at the
