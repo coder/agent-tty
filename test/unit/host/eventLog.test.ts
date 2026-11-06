@@ -247,13 +247,36 @@ describe('readEventLogStop', () => {
     const line = recordLine(1, 'marker', {
       label: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (8192 bytes); later events are not recorded`,
     });
+    // Cut inside the label, so the half line still holds the prefix.
+    const half = line.slice(
+      0,
+      line.indexOf(EVENT_LOG_LIMIT_LABEL_PREFIX) +
+        EVENT_LOG_LIMIT_LABEL_PREFIX.length +
+        4,
+    );
     await writeFile(
       eventLogPath,
-      `${recordLine(0, 'output', { data: 'x' })}${line.slice(0, 60)}`,
+      `${recordLine(0, 'output', { data: 'x' })}${half}`,
       'utf8',
     );
 
     await expect(readEventLogStop(eventLogPath)).resolves.toBeUndefined();
+  });
+
+  it('returns the first stop marker when a file holds more than one', async () => {
+    const label = (limit: string): string =>
+      `${EVENT_LOG_LIMIT_LABEL_PREFIX} (${limit}); later events are not recorded`;
+    await writeFile(
+      eventLogPath,
+      recordLine(0, 'marker', { label: label('8192 bytes') }) +
+        recordLine(1, 'marker', { label: label('20 events') }),
+      'utf8',
+    );
+
+    await expect(readEventLogStop(eventLogPath)).resolves.toEqual({
+      reason: 'bytes',
+      seq: 0,
+    });
   });
 
   it('reads the marker of a log that is over the size limit that commands read', async () => {
