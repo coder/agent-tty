@@ -65,7 +65,7 @@
     "version:json": "tsx src/cli/main.ts version --json"
   },
   "devDependencies": {
-    "@types/node": "25.5.0",
+    "@types/node": "26.6.6",
     "@types/react": "^19.2.16",
     "oxfmt": "0.47.0",
     "oxlint": "1.62.0",
