@@ -1,6 +1,5 @@
 import { open, readFile, stat } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
-import { createInterface } from 'node:readline';
 
 import {
   EventRecordSchema,
@@ -229,40 +228,56 @@ export async function scanEventLog(
     let previousSeq: number | undefined;
     let searching = true;
 
-    if (size > 0) {
-      const lineReader = createInterface({
-        input: file.createReadStream({
-          encoding: 'utf8',
-          start: 0,
-          end: size - 1,
-          autoClose: false,
-        }),
-        crlfDelay: Infinity,
-      });
+    const readLine = (rawLine: string): void => {
+      const line = rawLine.trim();
+      if (line.length === 0) {
+        return;
+      }
 
-      for await (const rawLine of lineReader) {
-        const line = rawLine.trim();
-        if (line.length === 0) {
-          continue;
-        }
+      entryCount += 1;
+      if (!searching) {
+        return;
+      }
 
-        entryCount += 1;
-        if (!searching) {
-          continue;
-        }
-
-        try {
-          const record = parseEventLogLine(line, entryCount);
-          assertSeqFollows(previousSeq, record.seq);
-          previousSeq = record.seq;
-          if (isEventLogStopMarker(record)) {
-            stop = stopOfMarker(record);
-            searching = false;
-          }
-        } catch {
+      try {
+        const record = parseEventLogLine(line, entryCount);
+        assertSeqFollows(previousSeq, record.seq);
+        previousSeq = record.seq;
+        if (isEventLogStopMarker(record)) {
+          stop = stopOfMarker(record);
           searching = false;
         }
+      } catch {
+        searching = false;
       }
+    };
+
+    if (size > 0) {
+      // Split on '\n' only, as parseEventLogContent does. readline also
+      // splits on U+2028 and U+2029, which JSON.stringify writes raw. The
+      // pieces of a long line are joined once, when its newline arrives.
+      let pending: string[] = [];
+      for await (const chunk of file.createReadStream({
+        encoding: 'utf8',
+        start: 0,
+        end: size - 1,
+        autoClose: false,
+      })) {
+        const text = chunk as string;
+        let start = 0;
+        let newline = text.indexOf('\n', start);
+        while (newline !== -1) {
+          pending.push(text.slice(start, newline));
+          readLine(pending.join(''));
+          pending = [];
+          start = newline + 1;
+          newline = text.indexOf('\n', start);
+        }
+        if (start < text.length) {
+          pending.push(text.slice(start));
+        }
+      }
+      readLine(pending.join(''));
     }
 
     return { entryCount, byteCount: size, stop };

@@ -256,6 +256,20 @@ describe('scanEventLog', () => {
     expect(await reopenStays()).toBe('stopped');
   });
 
+  it('reports a stop marker whose limit is not closed with the reason unknown', async () => {
+    await writeFile(
+      eventLogPath,
+      recordLine(0, 'marker', {
+        label: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (9 bytes`,
+      }),
+      'utf8',
+    );
+
+    await expect(scanEventLog(eventLogPath)).resolves.toMatchObject({
+      stop: { reason: 'unknown', seq: 0 },
+    });
+  });
+
   it('reads a log that is over the size limit that replay reads', async () => {
     await writeFile(eventLogPath, stopLine(0), 'utf8');
     // Sparse padding: an older version wrote past the limit.
@@ -277,6 +291,10 @@ describe('scanEventLog', () => {
     it.each([
       ['a line that is not JSON', `${output(0)}not json\n${stopLine(2)}`],
       [
+        'a line that is not JSON, with a marker whose seq follows',
+        `${output(0)}not json\n${stopLine(1)}`,
+      ],
+      [
         'a line that is not an event record',
         `${output(0)}{"seq":1,"type":"nope"}\n${stopLine(2)}`,
       ],
@@ -294,6 +312,25 @@ describe('scanEventLog', () => {
       // The lines are still counted.
       expect(scan?.entryCount).toBe(content.split('\n').length - 1);
     });
+
+    it.each(['\u2028', '\u2029'])(
+      'reads an output that holds %j as one record, as replay does',
+      async (separator) => {
+        await writeFile(
+          eventLogPath,
+          `${recordLine(0, 'output', { data: `before${separator}after` })}${stopLine(1)}`,
+          'utf8',
+        );
+
+        await expect(readEventLogRecords(eventLogPath)).resolves.toHaveLength(
+          2,
+        );
+        await expect(scanEventLog(eventLogPath)).resolves.toMatchObject({
+          entryCount: 2,
+          stop: { reason: 'bytes', seq: 1 },
+        });
+      },
+    );
 
     it('reports the stop of a log that replay accepts', async () => {
       await writeFile(eventLogPath, `${output(0)}${output(1)}${stopLine(2)}`);
