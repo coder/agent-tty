@@ -5,7 +5,7 @@ import {
   countEventsThrough,
   nextSliceSize,
   replayInSlices,
-} from '../../../src/host/replaySlices.js';
+} from '../../../src/renderer/replaySlices.js';
 import { iterateInRangeReplayEvents } from '../../../src/renderer/replayEvents.js';
 import type { ReplayInput, ReplayState } from '../../../src/renderer/types.js';
 

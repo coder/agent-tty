@@ -725,6 +725,7 @@ export async function runHost(
             profileName: profile.name,
             expectedSessionId: sessionId,
             ...(showCursor === undefined ? {} : { showCursor }),
+            onReplayProgress: context.keepAlive,
           }),
         context.keepAlive,
       );

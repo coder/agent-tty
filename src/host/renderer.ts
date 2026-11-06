@@ -4,9 +4,9 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import type { RendererBackend } from '../renderer/backend.js';
 import type { RendererName } from '../renderer/names.js';
 import { hashProfile } from '../renderer/profiles.js';
+import { replayInSlices } from '../renderer/replaySlices.js';
 import type { RenderProfileConfig, ReplayInput } from '../renderer/types.js';
 import { invariant } from '../util/assert.js';
-import { replayInSlices } from './replaySlices.js';
 
 interface HostRendererManagerOptions {
   sessionId: string;

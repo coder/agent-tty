@@ -139,6 +139,23 @@ describe(
       expect(snapshotOutcome.elapsedMs).toBeGreaterThan(CLIENT_WAIT_MS);
     });
 
+    it('answers a libghostty-vt screenshot, which replays the log in a second renderer, for longer than the client waits', async () => {
+      await createSlowSession(PRINT_LINES_COMMAND, {}, PRINTED_LINES);
+
+      const outcome = await runCliAsync(
+        testHome,
+        ['screenshot', sessionId, '--renderer', 'libghostty-vt'],
+        90_000,
+      );
+
+      expect(outcome.code, outcome.stdout).toBe(0);
+      expect(JSON.parse(outcome.stdout)).toMatchObject({
+        ok: true,
+        result: { rendererBackend: 'ghostty-web' },
+      });
+      expect(outcome.elapsedMs).toBeGreaterThan(CLIENT_WAIT_MS);
+    });
+
     it('still ends with HOST_TIMEOUT when the replay stops moving', async () => {
       // The renderer finishes two slices and then stops.
       await createSlowSession(

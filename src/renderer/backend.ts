@@ -18,6 +18,13 @@ export interface SnapshotOptions {
 
 export interface ScreenshotOptions {
   showCursor?: boolean;
+  /**
+   * Called each time a backend that replays the log inside `screenshot()` (the
+   * libghostty-vt one, in a second renderer) has booted that renderer or
+   * finished a slice of the replay. It lets a caller that waits for the
+   * screenshot tell that the replay moves forward.
+   */
+  onReplayProgress?: () => void;
 }
 
 export interface RendererBackend {

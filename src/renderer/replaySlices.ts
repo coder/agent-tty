@@ -1,5 +1,5 @@
-import type { RendererBackend } from '../renderer/backend.js';
-import type { ReplayInput, ReplayState } from '../renderer/types.js';
+import type { RendererBackend } from './backend.js';
+import type { ReplayInput, ReplayState } from './types.js';
 import { invariant } from '../util/assert.js';
 
 // A replay of a long log can take minutes, and a caller sees nothing of it
