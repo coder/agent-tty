@@ -572,6 +572,29 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
         return grid;
       }
 
+      // Adds the graphemes on the screen to the set that the missing-glyph
+      // check of a recorded replay probes. The cap bounds the set.
+      function notePaintedGraphemes(cap) {
+        assertPositiveInteger(
+          cap,
+          'notePaintedGraphemes() cap must be a positive integer',
+        );
+        window.__agentTtyPainted ??= { seen: new Set(), complete: true };
+        const painted = window.__agentTtyPainted;
+        for (const row of getCellGraphemes()) {
+          for (const grapheme of row) {
+            if (grapheme === '' || painted.seen.has(grapheme)) {
+              continue;
+            }
+            if (painted.seen.size < cap) {
+              painted.seen.add(grapheme);
+            } else {
+              painted.complete = false;
+            }
+          }
+        }
+      }
+
       function getSnapshotPayload(options) {
         invariant(
           options === undefined ||
@@ -657,7 +680,7 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
           });
           updateDocumentState();
         },
-        async writeBatch(chunks, endsFlush = true) {
+        async writeBatch(chunks, endsFlush = true, paintedCap = null) {
           const terminal = getReadyTerminal();
           invariant(
             Array.isArray(chunks) && chunks.length > 0,
@@ -666,6 +689,10 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
           invariant(
             typeof endsFlush === 'boolean',
             'writeBatch() endsFlush must be a boolean',
+          );
+          invariant(
+            paintedCap === null || Number.isInteger(paintedCap),
+            'writeBatch() paintedCap must be null or an integer',
           );
           for (const chunk of chunks) {
             assertStringValue(chunk, 'writeBatch() chunks must be strings');
@@ -683,7 +710,7 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
             state.heldChunks.push(chunk);
           }
           if (!endsFlush) {
-            return;
+            return null;
           }
 
           const flush = state.heldChunks;
@@ -696,6 +723,29 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
             terminal.write(flush[lastIndex], resolve);
           });
           updateDocumentState();
+
+          // The caller asks to note the painted graphemes of a recorded
+          // replay here, so a flush costs one page call and not two. A failed
+          // note must not fail the flush: the call returns its message, and
+          // the caller then drops the missing-glyph fields of the export.
+          if (paintedCap === null) {
+            return null;
+          }
+          try {
+            notePaintedGraphemes(paintedCap);
+            return null;
+          } catch (error) {
+            return error instanceof Error ? error.message : String(error);
+          }
+        },
+        // A flush that failed in the middle leaves its earlier calls' chunks
+        // held. The caller drops them, so that a retry starts from the screen
+        // as the failed flush found it.
+        discardHeldChunks() {
+          state.heldChunks = [];
+        },
+        notePaintedGraphemes(cap) {
+          notePaintedGraphemes(cap);
         },
         getSnapshot(options) {
           return getSnapshotPayload(options);

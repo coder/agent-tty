@@ -939,6 +939,122 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     expect(await visibleFirstRow()).toBe('abcdef');
   });
 
+  // HostRendererManager keeps the backend after a failed replay and retries
+  // from the same seq. The page held the chunks of the calls before the one
+  // that failed, so a retry that started with a resize was refused for good.
+  it('runs a retry that starts with a resize after a page call failed in the middle of a flush', async () => {
+    await backend.boot();
+    // One character per event, so a chunk that is lost, repeated or moved
+    // changes the text on the screen. 2501 characters fill 32 rows of 80
+    // columns.
+    const characters = Array.from({ length: 2_501 }, (_, index) =>
+      'abcdefghijklmnopqrstuvwxyz0123456789'.charAt((index * 7) % 36),
+    );
+    const outputs = (firstSeq: number): ReplayInput['events'] =>
+      characters.map((character, index) => ({
+        seq: firstSeq + index,
+        ts: timestampFor(0),
+        type: 'output' as const,
+        payload: { data: character },
+      }));
+    const writeBatchBridge = (
+      backend as unknown as {
+        writeBatchBridge: (...args: unknown[]) => Promise<void>;
+      }
+    ).writeBatchBridge.bind(backend);
+    let pageCalls = 0;
+    Object.assign(backend as object, {
+      writeBatchBridge: async (...args: unknown[]) => {
+        pageCalls += 1;
+        if (pageCalls === 2) {
+          throw new Error('page call failed');
+        }
+        await writeBatchBridge(...args);
+      },
+    });
+
+    await expect(
+      backend.replayTo(createReplayInput(outputs(0))),
+    ).rejects.toThrow('page call failed');
+
+    Object.assign(backend as object, { writeBatchBridge });
+    await backend.replayTo(
+      createReplayInput(
+        [
+          {
+            seq: 0,
+            ts: timestampFor(0),
+            type: 'resize',
+            payload: { cols: 80, rows: 40 },
+          },
+          ...outputs(1),
+        ],
+        { initialRows: 24 },
+      ),
+    );
+
+    const expectedRows = Array.from({ length: 32 }, (_, row) =>
+      characters.slice(row * 80, (row + 1) * 80).join(''),
+    );
+    const screenRows = (await backend.snapshot()).visibleLines.map(
+      (line) => line.text,
+    );
+    expect(screenRows.slice(0, 32)).toEqual(expectedRows);
+  });
+
+  // A flush of 1001 chunks takes two page calls, and the glyph that it paints
+  // comes with its last chunk. The next flush erases it.
+  it('records the glyphs that a flush painted, in the page call that ends the flush', async () => {
+    await backend.boot();
+    const { page } = backend as unknown as { page: Page };
+    const pageFunctions: string[] = [];
+    const evaluate = page.evaluate.bind(page) as (
+      ...args: unknown[]
+    ) => Promise<unknown>;
+    Object.assign(page, {
+      evaluate: (pageFunction: unknown, ...rest: unknown[]) => {
+        pageFunctions.push(String(pageFunction));
+        return evaluate(pageFunction, ...rest);
+      },
+    });
+
+    await backend.replayWithTiming(
+      createReplayInput([
+        ...Array.from({ length: 1_000 }, (_, seq) => ({
+          seq,
+          ts: timestampFor(0),
+          type: 'output' as const,
+          payload: { data: 'x' },
+        })),
+        {
+          seq: 1_000,
+          ts: timestampFor(0),
+          type: 'output' as const,
+          payload: { data: '\u0378' },
+        },
+        {
+          seq: 1_001,
+          ts: timestampFor(1),
+          type: 'output' as const,
+          payload: { data: '\u001b[2J\u001b[Hok' },
+        },
+      ]),
+      { mode: 'max-speed', minFrameHoldMs: 16, finalFrameHoldMs: 200 },
+    );
+
+    await expect(backend.recordedMissingGlyphs()).resolves.toEqual({
+      missingGlyphs: [{ codePoint: 'U+0378' }],
+    });
+    // 1001 chunks take 2 calls, the next flush takes 1. None of them has a
+    // call of its own for the note.
+    expect(
+      pageFunctions.filter((source) => source.includes('writeBatch')),
+    ).toHaveLength(3);
+    expect(
+      pageFunctions.filter((source) => source.includes('notePaintedGraphemes')),
+    ).toHaveLength(0);
+  });
+
   it('allows dispose to be called more than once', async () => {
     await backend.boot();
 
