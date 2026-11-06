@@ -854,6 +854,17 @@ describe('EventLog size limit', () => {
       await reopened.close();
     }
 
+    // A log whose last record is the exit record after the stop also stays
+    // stopped.
+    const again = await EventLog.open(eventLogPath, { maxBytes: LIMIT });
+    try {
+      await expect(again.append('output', { data: 'ok' })).resolves.toBe(2);
+      await again.readAll();
+      expect(stopRecords(again)).toHaveLength(1);
+    } finally {
+      await again.close();
+    }
+
     const stored = await readEventLogRecords(eventLogPath);
     expect(stored.map((event) => event.type)).toEqual([
       'output',
@@ -867,17 +878,22 @@ describe('EventLog size limit', () => {
     try {
       await first.append('output', { data: 'prompt$ ' });
       await first.append('marker', { label: 'checkpoint' });
+      // Names the limit, but without the stop record's prefix.
+      await first.append('marker', {
+        label: 'event log limit reached (8192 bytes)',
+      });
     } finally {
       await first.close();
     }
 
     const reopened = await EventLog.open(eventLogPath, { maxBytes: LIMIT });
     try {
-      await expect(reopened.append('output', { data: 'ok' })).resolves.toBe(2);
+      await expect(reopened.append('output', { data: 'ok' })).resolves.toBe(3);
       await reopened.readAll();
 
       expect(reopened.getEvents().map((event) => event.type)).toEqual([
         'output',
+        'marker',
         'marker',
         'output',
       ]);
@@ -891,7 +907,9 @@ describe('EventLog size limit', () => {
     await writeFile(eventLogPath, '\n'.repeat(LIMIT), 'utf8');
     await expect(
       EventLog.open(eventLogPath, { maxBytes: LIMIT }),
-    ).rejects.toThrow('holds no record');
+    ).rejects.toThrow(
+      `event log ${eventLogPath} holds no record, and its ${String(LIMIT)} bytes leave less than ${String(EVENT_LOG_TAIL_RESERVE_BYTES)} bytes free under the ${String(LIMIT)}-byte limit`,
+    );
 
     await writeFile(
       eventLogPath,
