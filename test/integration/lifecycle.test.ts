@@ -103,6 +103,24 @@ interface GcResult {
 
 let testHome = '';
 
+// The host captures the session token only while the program runs, so a
+// program that would exit at once first waits until program.json is in
+// place. A capture that still found no token leaves gc and destroy nothing
+// to prove, so a test of their group check skips then.
+function untilRecorded(): string {
+  return `until [ -f "${testHome}/sessions/$AGENT_TTY_SESSION_ID/program.json" ]; do sleep 0.01; done`;
+}
+
+async function recordsToken(sessionId: string): Promise<boolean> {
+  const record = JSON.parse(
+    await readFile(
+      join(testHome, 'sessions', sessionId, 'program.json'),
+      'utf8',
+    ),
+  ) as { bootId: unknown };
+  return record.bootId !== null;
+}
+
 // Many tests spend 5 to 15 s in real waits and CLI starts, and a loaded
 // runner takes up to three times as long.
 describe('lifecycle integration', { timeout: 60_000 }, () => {
@@ -947,24 +965,6 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
       }
       expect(isGroupAlive(pgid)).toBe(true);
       return sessionId;
-    }
-
-    // The host captures the session token only while the program runs, so a
-    // program that would exit at once first waits until program.json is in
-    // place. A capture that still found no token leaves gc nothing to prove,
-    // so a test of gc's group check skips then.
-    function untilRecorded(): string {
-      return `until [ -f "${testHome}/sessions/$AGENT_TTY_SESSION_ID/program.json" ]; do sleep 0.01; done`;
-    }
-
-    async function recordsToken(sessionId: string): Promise<boolean> {
-      const record = JSON.parse(
-        await readFile(
-          join(testHome, 'sessions', sessionId, 'program.json'),
-          'utf8',
-        ),
-      ) as { bootId: unknown };
-      return record.bootId !== null;
     }
 
     it('destroy ends it within the destroy wait', async () => {
@@ -1824,20 +1824,25 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
   // An exited session has no host to end it, so its leftover needs a destroy
   // from a process that can read /proc.
   // In another pid namespace no probe finds the leftover either.
-  it.runIf(capturesToken).each([
+  it.runIf(capturesToken).for<[string, string]>([
     ['in the pid namespace of the host', '0'],
     ['in another pid namespace', '1'],
   ])(
     'destroy of an exited session from a CLI that sees no /proc, %s, names /proc while its leftover runs',
-    async (_, otherPids) => {
+    async ([, otherPids], { skip }) => {
       vi.stubEnv('XDG_STATE_HOME', join(testHome, 'state'));
       let pgid = 0;
       try {
         // A host that a loaded machine does not run for a while after it
-        // spawns the program reads the program's session after it exited.
+        // spawns the program would read the program's session after the
+        // program exited, so the program waits for the record.
         const sessionId = createSession(
           testHome,
-          ['/bin/sh', '-c', 'trap "" HUP; sleep 300 & exit 0'],
+          [
+            '/bin/sh',
+            '-c',
+            `trap "" HUP; sleep 300 & ${untilRecorded()}; exit 0`,
+          ],
           {
             env: {
               AGENT_TTY_TEST_STALL_AFTER_SPAWN_MS: '200',
@@ -1853,6 +1858,9 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
         while (inspectSession(testHome, sessionId).status !== 'exited') {
           expect(Date.now()).toBeLessThan(deadline);
           await sleep(50);
+        }
+        if (!(await recordsToken(sessionId))) {
+          skip('the host captured no session token');
         }
         expect(isGroupAlive(pgid)).toBe(true);
         const preload = pathToFileURL(resolve('test/fixtures/no-proc.ts')).href;
