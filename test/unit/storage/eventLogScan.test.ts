@@ -332,6 +332,26 @@ describe('scanEventLog', () => {
       },
     );
 
+    it.each([
+      ['a line longer than one read chunk', 'x', 200_000],
+      ['a 3-byte character on every read chunk boundary', '\u20ac', 70_000],
+      ['a 4-byte character on every read chunk boundary', '\u{1f600}', 70_000],
+    ])('reads %s as one record', async (_case, unit, count) => {
+      const data = unit.repeat(count);
+      await writeFile(
+        eventLogPath,
+        `${recordLine(0, 'output', { data })}${stopLine(1)}`,
+        'utf8',
+      );
+
+      const records = await readEventLogRecords(eventLogPath);
+      expect(records[0]?.payload).toEqual({ data });
+      await expect(scanEventLog(eventLogPath)).resolves.toMatchObject({
+        entryCount: 2,
+        stop: { reason: 'bytes', seq: 1 },
+      });
+    });
+
     it('reports the stop of a log that replay accepts', async () => {
       await writeFile(eventLogPath, `${output(0)}${output(1)}${stopLine(2)}`);
 
